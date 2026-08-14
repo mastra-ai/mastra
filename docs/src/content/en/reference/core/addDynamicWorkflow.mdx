@@ -46,6 +46,8 @@ await mastra.addDynamicWorkflow(
   },
   {
     authorId: authenticatedUser.id,
+    waitTimeoutMs: 5_000,
+    signal: request.signal,
   },
 )
 
@@ -67,7 +69,7 @@ const result = await run.start({ inputData: { name: 'Ada' } })
     name: 'options',
     type: 'DynamicWorkflowRegistrationOptions',
     description:
-      'Trusted persistence metadata supplied by the host. Use `authorId` for a verified author identity that must not come from the workflow definition.',
+      'Trusted persistence metadata supplied by the host. Use `authorId` for a verified author identity that must not come from the workflow definition. `waitTimeoutMs` and `signal` limit queue admission only; after admission, persistence completes even if either later expires.',
     isOptional: true,
   },
 ]}
@@ -81,7 +83,7 @@ A promise that resolves once the definition is validated, registered, and persis
 
 - The definition is fully validated (structure, references, schema flow) before anything is mutated. Agents, tools, and workflows referenced by the graph must already be registered on the instance.
 - Adding a definition with an existing ID replaces both the stored definition and the live registration. In-flight runs keep the graph they started with.
-- `options.authorId` is stored on the definition in the same write and becomes immutable. When replacing an existing definition, omitting `options.authorId` retains its stored author, while using a different author fails with an ownership conflict. It records a verified author but doesn't restrict reads, writes, or execution by itself. Enforce access before calling this method.
+- `options.authorId` is stored on the definition in the same write and becomes immutable. When replacing an existing definition, omitting `options.authorId` retains its stored author, while using a different author fails with an ownership conflict. It records a verified author but doesn't restrict access by itself. Authorize registration and every later read, update, deletion, and execution at the server boundary.
 - Without a storage adapter that supports the `workflowDefinitions` domain, the workflow is still validated and registered in memory, but the definition is lost on restart.
 - To add a root workflow together with helper workflows it nests, use [`addDynamicWorkflows()`](/reference/core/addDynamicWorkflows).
 

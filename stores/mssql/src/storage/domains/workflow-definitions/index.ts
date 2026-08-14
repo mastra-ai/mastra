@@ -12,10 +12,24 @@ import type {
   UpdateWorkflowDefinitionInput,
   WorkflowDefinition,
 } from '@mastra/core/storage';
-import type sql from 'mssql';
+import sql from 'mssql';
 
 import { MssqlDB, resolveMssqlConfig } from '../../db';
 import type { MssqlDomainConfig } from '../../db';
+
+function isDeadlockVictim(error: unknown): boolean {
+  const seen = new Set<object>();
+  let current: unknown = error;
+  while (current && typeof current === 'object' && !seen.has(current)) {
+    seen.add(current);
+    const candidate = current as { number?: number; code?: number | string; cause?: unknown };
+    if (candidate.number === 1205 || candidate.code === 1205 || candidate.code === 'EREQUEST') {
+      if (candidate.number === 1205 || String((current as { message?: string }).message).includes('1205')) return true;
+    }
+    current = candidate.cause;
+  }
+  return false;
+}
 import { getSchemaName, getTableName } from '../utils';
 
 function parseJson(value: unknown, column: string, rowId: unknown): unknown {
@@ -132,8 +146,64 @@ export class WorkflowDefinitionsMSSQL extends WorkflowDefinitionsStorage {
   }
 
   async upsert(input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput): Promise<WorkflowDefinition> {
+    return this.applyUpsert(input);
+  }
+
+  async upsertMany(
+    inputs: readonly (CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput)[],
+  ): Promise<WorkflowDefinition[]> {
+    if (inputs.length === 0) return [];
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.upsertManyTransaction(inputs);
+      } catch (error) {
+        if (!isDeadlockVictim(error) || attempt >= 2) throw error;
+        await new Promise(resolve => setTimeout(resolve, 10 * 2 ** attempt));
+      }
+    }
+  }
+
+  private async upsertManyTransaction(
+    inputs: readonly (CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput)[],
+  ): Promise<WorkflowDefinition[]> {
+    const transaction = this.pool.transaction();
+    try {
+      await transaction.begin();
+      const definitions: WorkflowDefinition[] = [];
+      for (const input of inputs) definitions.push(await this.applyUpsert(input, transaction));
+      await transaction.commit();
+      return definitions;
+    } catch (error) {
+      try {
+        await transaction.rollback();
+      } catch {
+        // Preserve the persistence error that caused the rollback.
+      }
+      throw error;
+    }
+  }
+
+  private async loadDefinition(id: string, transaction?: sql.Transaction): Promise<WorkflowDefinition | null> {
+    if (!transaction) return this.get(id);
+    const tableName = getTableName({
+      indexName: TABLE_WORKFLOW_DEFINITIONS,
+      schemaName: getSchemaName(this.schema),
+    });
+    const request = new sql.Request(transaction);
+    request.input('workflowDefinitionId', id);
+    const result = await request.query(
+      `SELECT * FROM ${tableName} WITH (UPDLOCK, HOLDLOCK) WHERE [id] = @workflowDefinitionId`,
+    );
+    const row = result.recordset[0] as Record<string, unknown> | undefined;
+    return row ? rowToDefinition(row) : null;
+  }
+
+  private async applyUpsert(
+    input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput,
+    transaction?: sql.Transaction,
+  ): Promise<WorkflowDefinition> {
     const now = new Date();
-    const existing = await this.get(input.id);
+    const existing = await this.loadDefinition(input.id, transaction);
 
     if (!existing) {
       if (!('inputSchema' in input) || input.inputSchema === undefined)
@@ -159,26 +229,27 @@ export class WorkflowDefinitionsMSSQL extends WorkflowDefinitionsStorage {
         updatedAt: now,
       };
       try {
-        await this.db.insert({ tableName: TABLE_WORKFLOW_DEFINITIONS, record });
+        await this.db.insert({ tableName: TABLE_WORKFLOW_DEFINITIONS, record, transaction });
       } catch (error) {
         // A concurrent upsert may have created the row after our existence
         // check; fall back to updating it so the upsert stays idempotent.
-        if (!(await this.get(input.id))) throw error;
-        return this.applyUpdate(input, now);
+        if (!(await this.loadDefinition(input.id, transaction))) throw error;
+        return this.applyUpdate(input, now, transaction);
       }
-      const created = await this.get(input.id);
+      const created = await this.loadDefinition(input.id, transaction);
       if (!created) throw new Error(`Failed to persist workflow definition "${input.id}".`);
       return created;
     }
 
-    return this.applyUpdate(input, now);
+    return this.applyUpdate(input, now, transaction);
   }
 
   private async applyUpdate(
     input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput,
     now: Date,
+    transaction?: sql.Transaction,
   ): Promise<WorkflowDefinition> {
-    const existing = await this.get(input.id);
+    const existing = await this.loadDefinition(input.id, transaction);
     if (!existing) throw new Error(`Failed to update workflow definition "${input.id}".`);
     assertWorkflowDefinitionAuthor(existing, input);
 
@@ -193,8 +264,8 @@ export class WorkflowDefinitionsMSSQL extends WorkflowDefinitionsStorage {
     if ('graph' in input && input.graph !== undefined) data.graph = input.graph;
     if ('status' in input && input.status !== undefined) data.status = input.status;
     const keys = { id: input.id, ...(input.authorId !== undefined ? { authorId: input.authorId } : {}) };
-    await this.db.update({ tableName: TABLE_WORKFLOW_DEFINITIONS, keys, data });
-    const updated = await this.get(input.id);
+    await this.db.update({ tableName: TABLE_WORKFLOW_DEFINITIONS, keys, data, transaction });
+    const updated = await this.loadDefinition(input.id, transaction);
     if (!updated) throw new Error(`Failed to update workflow definition "${input.id}".`);
     assertWorkflowDefinitionAuthor(updated, input);
     return updated;

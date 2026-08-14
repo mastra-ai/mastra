@@ -4826,6 +4826,7 @@ export class Mastra<
       }
       await Promise.race(blockers);
       admitted = true;
+      clearTimeout(waitWarning);
       return await operation();
     } finally {
       if (timeout) clearTimeout(timeout);
@@ -4918,9 +4919,9 @@ export class Mastra<
    *   caller's accepted live registration. Unrelated ids proceed independently.
    * - `waitTimeoutMs` and `signal` apply before admission. A rejected waiter
    *   performs no registry or storage mutation; admitted writes are fully awaited.
-   * - Storage writes happen last. A storage-level failure mid-bundle is the
-   *   one residual window where rows can be partially written; the registry is
-   *   still rolled back, and the orphaned rows are inert until the next boot.
+   * - Storage writes happen last through the workflow-definition store's
+   *   atomic bundle contract. A failure leaves both storage and the live
+   *   registry exactly as they were before registration began.
    *
    * `addDynamicWorkflow()` is the single-member case.
    *
@@ -5042,19 +5043,19 @@ export class Mastra<
         }
 
         if (store) {
-          for (const { normalized } of ordered) {
-            await store.upsert({
-              id: normalized.id,
-              description: normalized.description,
-              metadata: normalized.metadata,
-              inputSchema: normalized.inputSchema,
-              outputSchema: normalized.outputSchema,
-              stateSchema: normalized.stateSchema,
-              requestContextSchema: normalized.requestContextSchema,
-              graph: normalized.graph,
-              ...(options?.authorId !== undefined ? { authorId: options.authorId } : {}),
-            });
-          }
+          const inputs = ordered.map(({ normalized }) => ({
+            id: normalized.id,
+            description: normalized.description,
+            metadata: normalized.metadata,
+            inputSchema: normalized.inputSchema,
+            outputSchema: normalized.outputSchema,
+            stateSchema: normalized.stateSchema,
+            requestContextSchema: normalized.requestContextSchema,
+            graph: normalized.graph,
+            ...(options?.authorId !== undefined ? { authorId: options.authorId } : {}),
+          }));
+          if (inputs.length === 1) await store.upsert(inputs[0]!);
+          else await store.upsertMany(inputs);
         }
       } catch (error) {
         restoreRegistry();

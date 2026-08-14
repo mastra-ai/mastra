@@ -85,6 +85,20 @@ export function createWorkflowDefinitionsTests({ storage }: WorkflowDefinitionsT
       expect(updated).toMatchObject({ authorId: 'author-1', description: 'renamed' });
     });
 
+    it('atomically rejects a bundle when any member conflicts with an existing owner', async () => {
+      await store.upsert({ ...baseInput('owned'), authorId: 'author-2' });
+
+      await expect(
+        store.upsertMany([
+          { ...baseInput('new-member'), authorId: 'author-1' },
+          { ...baseInput('owned'), description: 'forged update', authorId: 'author-1' },
+        ]),
+      ).rejects.toThrow();
+
+      expect(await store.get('new-member')).toBeNull();
+      expect(await store.get('owned')).toMatchObject({ authorId: 'author-2', description: 'workflow owned' });
+    });
+
     it('does not let an author claim a legacy unowned row', async () => {
       await store.upsert(baseInput('wf-1'));
 

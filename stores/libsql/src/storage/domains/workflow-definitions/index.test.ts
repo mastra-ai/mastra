@@ -103,6 +103,21 @@ describe('WorkflowDefinitionsLibSQL', () => {
     expect(fetched?.updatedAt.getTime()).toBe(created.updatedAt.getTime());
   });
 
+  it('rolls back every member when one bundle member conflicts', async () => {
+    const wd = (await store.getStore('workflowDefinitions'))!;
+    await wd.upsert({ id: 'owned', description: 'winner', inputSchema, outputSchema, graph, authorId: 'author-2' });
+
+    await expect(
+      wd.upsertMany([
+        { id: 'new-member', inputSchema, outputSchema, graph, authorId: 'author-1' },
+        { id: 'owned', description: 'forged', authorId: 'author-1' },
+      ]),
+    ).rejects.toBeInstanceOf(WorkflowDefinitionOwnershipConflictError);
+
+    expect(await wd.get('new-member')).toBeNull();
+    expect(await wd.get('owned')).toMatchObject({ authorId: 'author-2', description: 'winner' });
+  });
+
   it('does not update a different owner after a delete-and-recreate race', async () => {
     const wd = (await store.getStore('workflowDefinitions'))!;
     await wd.upsert({

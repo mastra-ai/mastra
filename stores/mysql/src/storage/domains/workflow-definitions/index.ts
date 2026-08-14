@@ -2,6 +2,7 @@ import {
   TABLE_WORKFLOW_DEFINITIONS,
   WORKFLOW_DEFINITIONS_SCHEMA,
   assertWorkflowDefinitionAuthor,
+  hasErrorCode,
   WorkflowDefinitionsStorage,
 } from '@mastra/core/storage';
 import type {
@@ -11,11 +12,17 @@ import type {
   UpdateWorkflowDefinitionInput,
   WorkflowDefinition,
 } from '@mastra/core/storage';
-import type { Pool, RowDataPacket } from 'mysql2/promise';
+import type { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise';
 
 import type { StoreOperationsMySQL } from '../operations';
 import { generateTableSQL } from '../operations';
-import { formatTableName, quoteIdentifier, transformFromSqlRow } from '../utils';
+import {
+  formatTableName,
+  prepareInsertOnlyStatement,
+  prepareUpdateStatement,
+  quoteIdentifier,
+  transformFromSqlRow,
+} from '../utils';
 
 function rowToDefinition(row: Record<string, unknown>): WorkflowDefinition {
   const transformed = transformFromSqlRow<Record<string, unknown>>({
@@ -75,8 +82,35 @@ export class WorkflowDefinitionsMySQL extends WorkflowDefinitionsStorage {
   }
 
   async upsert(input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput): Promise<WorkflowDefinition> {
+    return this.applyUpsert(input);
+  }
+
+  async upsertMany(
+    inputs: readonly (CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput)[],
+  ): Promise<WorkflowDefinition[]> {
+    if (inputs.length === 0) return [];
+    return this.operations.withTransaction(async connection => {
+      const definitions: WorkflowDefinition[] = [];
+      for (const input of inputs) definitions.push(await this.applyUpsert(input, connection));
+      return definitions;
+    });
+  }
+
+  private async loadDefinition(id: string, connection?: PoolConnection): Promise<WorkflowDefinition | null> {
+    if (!connection) return this.get(id);
+    const [rows] = await connection.execute<RowDataPacket[]>(
+      `SELECT * FROM ${formatTableName(TABLE_WORKFLOW_DEFINITIONS, this.database)} WHERE ${quoteIdentifier('id', 'column name')} = ? FOR UPDATE`,
+      [id],
+    );
+    return rows.length ? rowToDefinition(rows[0] as Record<string, unknown>) : null;
+  }
+
+  private async applyUpsert(
+    input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput,
+    connection?: PoolConnection,
+  ): Promise<WorkflowDefinition> {
     const now = new Date();
-    const existing = await this.get(input.id);
+    const existing = await this.loadDefinition(input.id, connection);
 
     if (!existing) {
       if (!('inputSchema' in input) || input.inputSchema === undefined)
@@ -105,26 +139,37 @@ export class WorkflowDefinitionsMySQL extends WorkflowDefinitionsStorage {
         // insertOnly: a plain INSERT so a concurrent create is detected as a
         // duplicate-key error instead of ON DUPLICATE KEY UPDATE silently
         // clobbering the winning row (and its createdAt).
-        await this.operations.insertOnly({ tableName: TABLE_WORKFLOW_DEFINITIONS, record });
+        if (connection) {
+          const statement = prepareInsertOnlyStatement({
+            tableName: TABLE_WORKFLOW_DEFINITIONS,
+            record,
+            database: this.database,
+          });
+          await connection.execute(statement.sql, statement.args);
+        } else {
+          await this.operations.insertOnly({ tableName: TABLE_WORKFLOW_DEFINITIONS, record });
+        }
       } catch (error) {
         // A concurrent upsert may have created the row after our existence
         // check; fall back to updating it so the upsert stays idempotent.
-        if (!(await this.get(input.id))) throw error;
-        return this.applyUpdate(input, now);
+        if (!hasErrorCode(error, new Set([1062, 'ER_DUP_ENTRY']))) throw error;
+        if (!(await this.loadDefinition(input.id, connection))) throw error;
+        return this.applyUpdate(input, now, connection);
       }
-      const created = await this.get(input.id);
+      const created = await this.loadDefinition(input.id, connection);
       if (!created) throw new Error(`Failed to persist workflow definition "${input.id}".`);
       return created;
     }
 
-    return this.applyUpdate(input, now);
+    return this.applyUpdate(input, now, connection);
   }
 
   private async applyUpdate(
     input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput,
     now: Date,
+    connection?: PoolConnection,
   ): Promise<WorkflowDefinition> {
-    const existing = await this.get(input.id);
+    const existing = await this.loadDefinition(input.id, connection);
     if (!existing) throw new Error(`Failed to update workflow definition "${input.id}".`);
     assertWorkflowDefinitionAuthor(existing, input);
 
@@ -139,8 +184,18 @@ export class WorkflowDefinitionsMySQL extends WorkflowDefinitionsStorage {
     if ('graph' in input && input.graph !== undefined) data.graph = input.graph;
     if ('status' in input && input.status !== undefined) data.status = input.status;
     const keys = { id: input.id, ...(input.authorId !== undefined ? { authorId: input.authorId } : {}) };
-    await this.operations.update({ tableName: TABLE_WORKFLOW_DEFINITIONS, keys, data });
-    const updated = await this.get(input.id);
+    if (connection) {
+      const statement = prepareUpdateStatement({
+        tableName: TABLE_WORKFLOW_DEFINITIONS,
+        updates: data,
+        keys,
+        database: this.database,
+      });
+      await connection.execute(statement.sql, statement.args);
+    } else {
+      await this.operations.update({ tableName: TABLE_WORKFLOW_DEFINITIONS, keys, data });
+    }
+    const updated = await this.loadDefinition(input.id, connection);
     if (!updated) throw new Error(`Failed to update workflow definition "${input.id}".`);
     assertWorkflowDefinitionAuthor(updated, input);
     return updated;

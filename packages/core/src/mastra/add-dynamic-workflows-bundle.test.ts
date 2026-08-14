@@ -191,18 +191,14 @@ describe('Mastra.addDynamicWorkflows', () => {
    * member has already been hydrated and live-registered — so they are the
    * ones that actually exercise the registry rollback.
    */
-  it('unregisters every member when persistence fails partway through the bundle', async () => {
+  it('unregisters every member when atomic bundle persistence fails', async () => {
     const storage = new InMemoryStore({ id: 'bundle-rollback-persist' });
     const mastra = new Mastra({ logger: false, tools: { 'lookup-customer': lookupCustomer } as any, storage });
 
     const store = (await storage.getStore('workflowDefinitions'))!;
-    const realUpsert = store.upsert.bind(store);
-    let upserts = 0;
-    store.upsert = (async (definition: Parameters<typeof realUpsert>[0]) => {
-      upserts += 1;
-      if (upserts === 2) throw new Error('storage exploded mid-bundle');
-      return realUpsert(definition);
-    }) as typeof store.upsert;
+    store.upsertMany = (async () => {
+      throw new Error('storage rejected bundle');
+    }) as typeof store.upsertMany;
 
     await expect(
       mastra.addDynamicWorkflows([
@@ -210,7 +206,7 @@ describe('Mastra.addDynamicWorkflows', () => {
         helperDefinition('lookup-second-customer', 'email2'),
         rootDefinition,
       ]),
-    ).rejects.toThrow('storage exploded mid-bundle');
+    ).rejects.toThrow('storage rejected bundle');
 
     // All three were registered before the write failed; none may survive it.
     expect(() => mastra.getWorkflow('lookup-first-customer')).toThrow();
@@ -226,9 +222,9 @@ describe('Mastra.addDynamicWorkflows', () => {
     const original = mastra.getWorkflow('lookup-first-customer');
 
     const store = (await storage.getStore('workflowDefinitions'))!;
-    store.upsert = (async () => {
+    store.upsertMany = (async () => {
       throw new Error('storage exploded on replace');
-    }) as typeof store.upsert;
+    }) as typeof store.upsertMany;
 
     await expect(
       mastra.addDynamicWorkflows([
@@ -338,14 +334,14 @@ describe('Mastra.addDynamicWorkflows', () => {
     const storage = new InMemoryStore({ id: 'bundle-concurrent-owner-conflict' });
     const mastra = new Mastra({ logger: false, tools: { 'lookup-customer': lookupCustomer } as any, storage });
     const store = (await storage.getStore('workflowDefinitions'))!;
-    const realUpsert = store.upsert.bind(store);
+    const realUpsertMany = store.upsertMany.bind(store);
 
     let releaseFirstUpsert!: () => void;
     const firstUpsertEntered = new Promise<void>(resolve => {
       releaseFirstUpsert = resolve;
     });
     let upsertCalls = 0;
-    store.upsert = (async definition => {
+    store.upsertMany = (async definitions => {
       upsertCalls += 1;
       if (upsertCalls === 1) {
         releaseFirstUpsert();
@@ -354,8 +350,8 @@ describe('Mastra.addDynamicWorkflows', () => {
         // replace its registry slots and win storage before this write resumes.
         await new Promise<void>(resolve => setTimeout(resolve, 0));
       }
-      return realUpsert(definition);
-    }) as typeof store.upsert;
+      return realUpsertMany(definitions);
+    }) as typeof store.upsertMany;
 
     const winner = mastra.addDynamicWorkflows(
       [

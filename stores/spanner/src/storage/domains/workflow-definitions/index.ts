@@ -1,4 +1,4 @@
-import type { Database } from '@google-cloud/spanner';
+import type { Database, Transaction } from '@google-cloud/spanner';
 import {
   TABLE_WORKFLOW_DEFINITIONS,
   WORKFLOW_DEFINITIONS_SCHEMA,
@@ -98,8 +98,48 @@ export class WorkflowDefinitionsSpanner extends WorkflowDefinitionsStorage {
   }
 
   async upsert(input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput): Promise<WorkflowDefinition> {
+    return this.applyUpsert(input);
+  }
+
+  async upsertMany(
+    inputs: readonly (CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput)[],
+  ): Promise<WorkflowDefinition[]> {
+    if (inputs.length === 0) return [];
+    let definitions: WorkflowDefinition[] = [];
+    await this.db.runWithAbortRetry(() =>
+      this.database.runTransactionAsync(async transaction => {
+        try {
+          definitions = [];
+          for (const input of inputs) definitions.push(await this.applyUpsert(input, transaction));
+          await transaction.commit();
+        } catch (error) {
+          await transaction.rollback().catch(rollbackError => {
+            throw new AggregateError([error, rollbackError], 'Transaction and rollback both failed');
+          });
+          throw error;
+        }
+      }),
+    );
+    return definitions;
+  }
+
+  private async loadDefinition(id: string, transaction?: Transaction): Promise<WorkflowDefinition | null> {
+    if (!transaction) return this.get(id);
+    const [rows] = await transaction.run({
+      sql: `SELECT * FROM ${quoteIdent(TABLE_WORKFLOW_DEFINITIONS, 'table name')} WHERE ${quoteIdent('id', 'column name')} = @id LIMIT 1`,
+      params: { id },
+      json: true,
+    });
+    const row = (rows as Array<Record<string, any>>)[0];
+    return row ? rowToDefinition(row) : null;
+  }
+
+  private async applyUpsert(
+    input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput,
+    transaction?: Transaction,
+  ): Promise<WorkflowDefinition> {
     const now = new Date();
-    const existing = await this.get(input.id);
+    const existing = await this.loadDefinition(input.id, transaction);
 
     if (!existing) {
       if (!('inputSchema' in input) || input.inputSchema === undefined)
@@ -125,26 +165,27 @@ export class WorkflowDefinitionsSpanner extends WorkflowDefinitionsStorage {
         updatedAt: now,
       };
       try {
-        await this.db.insert({ tableName: TABLE_WORKFLOW_DEFINITIONS, record });
+        await this.db.insert({ tableName: TABLE_WORKFLOW_DEFINITIONS, record, transaction });
       } catch (error) {
         // A concurrent upsert may have created the row after our existence
         // check; fall back to updating it so the upsert stays idempotent.
-        if (!(await this.get(input.id))) throw error;
-        return this.applyUpdate(input, now);
+        if (!(await this.loadDefinition(input.id, transaction))) throw error;
+        return this.applyUpdate(input, now, transaction);
       }
-      const created = await this.get(input.id);
+      const created = await this.loadDefinition(input.id, transaction);
       if (!created) throw new Error(`Failed to persist workflow definition "${input.id}".`);
       return created;
     }
 
-    return this.applyUpdate(input, now);
+    return this.applyUpdate(input, now, transaction);
   }
 
   private async applyUpdate(
     input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput,
     now: Date,
+    transaction?: Transaction,
   ): Promise<WorkflowDefinition> {
-    const existing = await this.get(input.id);
+    const existing = await this.loadDefinition(input.id, transaction);
     if (!existing) throw new Error(`Failed to update workflow definition "${input.id}".`);
     assertWorkflowDefinitionAuthor(existing, input);
 
@@ -159,8 +200,8 @@ export class WorkflowDefinitionsSpanner extends WorkflowDefinitionsStorage {
     if ('graph' in input && input.graph !== undefined) data.graph = input.graph;
     if ('status' in input && input.status !== undefined) data.status = input.status;
     const keys = { id: input.id, ...(input.authorId !== undefined ? { authorId: input.authorId } : {}) };
-    await this.db.update({ tableName: TABLE_WORKFLOW_DEFINITIONS, keys, data });
-    const updated = await this.get(input.id);
+    await this.db.update({ tableName: TABLE_WORKFLOW_DEFINITIONS, keys, data, transaction });
+    const updated = await this.loadDefinition(input.id, transaction);
     if (!updated) throw new Error(`Failed to update workflow definition "${input.id}".`);
     assertWorkflowDefinitionAuthor(updated, input);
     return updated;

@@ -136,6 +136,20 @@ export abstract class WorkflowDefinitionsStorage extends StorageDomain {
   }
 
   abstract upsert(input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput): Promise<WorkflowDefinition>;
+
+  /**
+   * Atomically create or update a related set of workflow definitions.
+   *
+   * Implementations must apply every ownership comparison and write in one
+   * storage transaction: either every returned definition is durable or none
+   * of the inputs has changed storage. The result order matches the input
+   * order. This is the persistence boundary used by dynamic workflow bundles,
+   * whose members may reference each other and therefore cannot safely become
+   * visible one row at a time.
+   */
+  abstract upsertMany(
+    inputs: readonly (CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput)[],
+  ): Promise<WorkflowDefinition[]>;
   abstract get(id: string): Promise<WorkflowDefinition | null>;
   abstract list(args?: ListWorkflowDefinitionsInput): Promise<ListWorkflowDefinitionsOutput>;
   abstract delete(id: string): Promise<void>;

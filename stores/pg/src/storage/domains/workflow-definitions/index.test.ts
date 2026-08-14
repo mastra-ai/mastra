@@ -1,3 +1,4 @@
+import { WorkflowDefinitionOwnershipConflictError } from '@mastra/core/storage';
 import { Pool } from 'pg';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -64,6 +65,20 @@ describe('WorkflowDefinitionsPG', () => {
     expect(updated.description).toBe('renamed');
     expect(updated.createdAt.getTime()).toBe(created.createdAt.getTime());
     expect(updated.updatedAt.getTime()).toBeGreaterThanOrEqual(created.updatedAt.getTime());
+  });
+
+  it('rolls back every member when one bundle member conflicts', async () => {
+    await store.upsert({ ...baseInput, id: 'owned', description: 'winner', authorId: 'author-2' });
+
+    await expect(
+      store.upsertMany([
+        { ...baseInput, id: 'new-member', authorId: 'author-1' },
+        { id: 'owned', description: 'forged', authorId: 'author-1' },
+      ]),
+    ).rejects.toBeInstanceOf(WorkflowDefinitionOwnershipConflictError);
+
+    expect(await store.get('new-member')).toBeNull();
+    expect(await store.get('owned')).toMatchObject({ authorId: 'author-2', description: 'winner' });
   });
 
   it('lists workflows, filters by status, and archives via update', async () => {

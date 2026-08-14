@@ -129,7 +129,7 @@ When a root workflow references helper workflows that aren't registered yet, add
 await mastra.addDynamicWorkflows([rootDefinition, helperDefinition])
 ```
 
-Mastra validates the bundle as a unit and determines the registration order from the dependencies. If validation fails, none of the definitions are registered.
+Mastra validates the bundle as a unit and determines the registration order from the dependencies. It atomically persists all members through the workflow-definitions storage domain, so validation or storage failure leaves neither partial rows nor partial registration.
 
 ### Manage definitions over HTTP
 
