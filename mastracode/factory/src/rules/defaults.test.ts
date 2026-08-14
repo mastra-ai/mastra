@@ -595,6 +595,46 @@ describe('defaultFactoryRules', () => {
       expect(await rule?.(commentContext({ board: 'review' }))).toBeUndefined();
       expect(await rule?.(commentContext({ issueComment: undefined }))).toBeUndefined();
     });
+
+    it('wakes on the review verdict Factory had to post as a comment on its own pull request', async () => {
+      // GitHub refuses a self-review, so on Factory-authored PRs the verdict
+      // arrives as a comment under Factory's own login. It is the handoff, so it
+      // has to survive the self-loop guard.
+      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestCommentCreated?.onEvent;
+      const decision = await rule?.(
+        commentContext({
+          actor: { type: 'github', login: 'factory[bot]', trusted: true, factoryAuthored: true },
+          issueComment: {
+            id: 556,
+            body: '**Verdict: Request changes**\n\n## Findings\n\nThe retry loop never terminates.',
+            url: 'https://github.test/acme/repo/pull/17#issuecomment-556',
+            author: 'factory[bot]',
+          },
+        }),
+      );
+      expect(decision).toMatchObject({ type: 'sendMessage', role: 'work', priority: 'high' });
+    });
+
+    it('ignores a Factory verdict that approves, and a verdict only quoted in the body', async () => {
+      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestCommentCreated?.onEvent;
+      const factoryActor = { type: 'github', login: 'factory[bot]', trusted: true, factoryAuthored: true } as const;
+      expect(
+        await rule?.(
+          commentContext({
+            actor: factoryActor,
+            issueComment: { id: 557, body: '**Verdict: Approve**\n\nLooks good.', author: 'factory[bot]' },
+          }),
+        ),
+      ).toBeUndefined();
+      expect(
+        await rule?.(
+          commentContext({
+            actor: factoryActor,
+            issueComment: { id: 558, body: 'Pushed the fixes.\n\n> Verdict: request changes', author: 'factory[bot]' },
+          }),
+        ),
+      ).toBeUndefined();
+    });
   });
 
   describe('pullRequestReviewRequested', () => {

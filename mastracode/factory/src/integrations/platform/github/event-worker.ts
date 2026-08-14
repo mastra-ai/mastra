@@ -11,7 +11,7 @@ import type { GithubRepositoryPermission } from '../../github/integration.js';
 import type { GithubIssueReconciler } from '../../github/issue-reconciler.js';
 import type { GithubPullRequestReconciler, ReconcileRepository } from '../../github/rules.js';
 import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from '../../github/subscriptions.js';
-import { dispatchGithubWebhook } from '../../github/webhook.js';
+import { dispatchGithubWebhook, isFactoryAppSender } from '../../github/webhook.js';
 import type {
   GithubWebhookDispatchIntegration,
   GithubWebhookNotification,
@@ -470,6 +470,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
     const sender = notification.metadata.sender;
     const repository = notification.metadata.repository;
     if (!sender || !repository) return false;
+    if (isFactoryAppSender(sender, this.#github.slug)) return true;
     if (AUTHORIZED_BOTS.has(sender)) return true;
 
     const abortController = new AbortController();

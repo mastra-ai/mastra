@@ -187,6 +187,22 @@ describe('dispatchGithubWebhook', () => {
     expect(getRepositoryCollaboratorPermission).not.toHaveBeenCalled();
   });
 
+  it("admits Factory's own app login, which GitHub forces review verdicts through", async () => {
+    // GitHub refuses to let an app review its own pull request, so on
+    // Factory-authored PRs the verdict is posted as a comment under this login.
+    // Gating it out would strand the review handoff.
+    const listSubscriptions = vi.fn(async () => []);
+    const github = { ...githubWithSessionRow(null), slug: 'mastra-platform' };
+    const verdict = parsed('issue_comment', 'created', {
+      sender: { login: 'mastra-platform[bot]', type: 'Bot' },
+    });
+
+    await expect(dispatchGithubWebhook(verdict, { controller: {} as never, github, listSubscriptions })).resolves.toEqual(
+      { delivered: 0, failed: 0, ignored: false },
+    );
+    expect(getRepositoryCollaboratorPermission).not.toHaveBeenCalled();
+  });
+
   it('delivers with per-target dedupe, exact scope/thread resume, and no delivery overrides', async () => {
     const sendA = vi.fn(async () => ({ record: { id: 'n-a' }, decision: { action: 'deliver' } }));
     const sendB = vi.fn(async () => ({ record: { id: 'n-b' }, decision: { action: 'deliver' } }));

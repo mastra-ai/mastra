@@ -71,6 +71,8 @@ export type FactorySessionOwner = { userId: string; orgId: string };
  * much is common to both.
  */
 export interface GithubWebhookDispatchIntegration {
+  /** App slug, used to recognize Factory's own bot identity. */
+  readonly slug?: string;
   readonly integrationStorage: GithubSubscriptionStorage;
   readonly sourceControlStorage: {
     sessions: { getBySessionId(sessionId: string): Promise<FactorySessionOwner | null> };
@@ -365,14 +367,27 @@ const AUTHOR_GATED_KINDS = new Set([
   'review-dismissed',
 ]);
 
+/**
+ * Recognizes Factory's own GitHub App identity. GitHub forbids an app from
+ * reviewing a pull request it authored, so `factory-review` falls back to
+ * posting its verdict as a comment under this login. Those comments have to
+ * clear the author gate for the review handoff to reach the authoring agent;
+ * the rules layer still decides which of them are worth acting on.
+ */
+export function isFactoryAppSender(sender: string | undefined, slug: string | undefined): boolean {
+  if (!sender || !slug) return false;
+  return sender.toLowerCase() === `${slug.toLowerCase()}[bot]`;
+}
+
 async function isAuthorizedGithubSender(
   notification: GithubWebhookNotification,
-  github: Pick<GithubWebhookDispatchIntegration, 'getRepositoryCollaboratorPermission'> | undefined,
+  github: Pick<GithubWebhookDispatchIntegration, 'getRepositoryCollaboratorPermission' | 'slug'> | undefined,
 ): Promise<boolean> {
   if (!AUTHOR_GATED_KINDS.has(notification.kind)) return true;
   const sender = notification.metadata.sender;
   const repository = notification.metadata.repository;
   if (!sender || !repository) return false;
+  if (isFactoryAppSender(sender, github?.slug)) return true;
   const normalizedSender = sender.toLowerCase();
   if (notification.metadata.senderType?.toLowerCase() === 'bot' || normalizedSender.endsWith('[bot]')) {
     return AUTHORIZED_BOTS.has(normalizedSender);

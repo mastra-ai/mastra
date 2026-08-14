@@ -298,6 +298,31 @@ function addressReviewFeedback(context: FactoryGithubRuleContext) {
   } as const;
 }
 
+/**
+ * Detects the `factory-review` handoff verdict in a comment body.
+ *
+ * GitHub forbids an app from reviewing a pull request it authored, so on
+ * Factory-authored PRs the review skill falls back to posting its verdict as a
+ * plain comment. That comment is the only signal the authoring agent gets, so
+ * it has to be readable back out. The skill's handoff contract puts the verdict
+ * on the first line (`Verdict: request changes`), so only that line is
+ * inspected — a verdict quoted later in the findings must not count.
+ */
+function requestsChangesVerdict(body: string | undefined): boolean {
+  const firstLine = body
+    ?.split('\n')
+    .map(line => line.trim())
+    .find(line => line.length > 0);
+  if (!firstLine) return false;
+  // Tolerate the markdown the skill wraps the line in (`**Verdict: ...**`).
+  const normalized = firstLine
+    .replaceAll(/[*_`#>\s]+/g, ' ')
+    .trim()
+    .toLowerCase();
+  if (!normalized.startsWith('verdict:')) return false;
+  return normalized.includes('request changes') || normalized.includes('changes requested');
+}
+
 function addressPullRequestComment(context: FactoryGithubRuleContext) {
   if (!context.item || !context.pullRequest || !context.issueComment) return;
   // Provenance binds the comment to the Work item that authored the PR — the
@@ -306,10 +331,18 @@ function addressPullRequestComment(context: FactoryGithubRuleContext) {
   if (context.board !== 'work') return;
   if (context.pullRequest.state !== 'open' || context.pullRequest.merged) return;
   // `factoryAuthored` is one bit for the whole Factory, so Factory's own
-  // comments are indistinguishable between roles — waking on them would let the
-  // Work agent's own progress comments wake itself in a loop. Factory's review
-  // verdict reaches the author through the Review run's handoff, not GitHub.
-  if (context.actor.type === 'github' && context.actor.factoryAuthored) return;
+  // comments are indistinguishable between roles — waking on all of them would
+  // let the Work agent's own progress comments wake itself in a loop. The one
+  // exception is the review verdict the Review run had to post as a comment
+  // because GitHub refused a self-review: that is the handoff, and it only ever
+  // asks for changes once per review, so it cannot sustain a loop.
+  if (
+    context.actor.type === 'github' &&
+    context.actor.factoryAuthored &&
+    !requestsChangesVerdict(context.issueComment.body)
+  ) {
+    return;
+  }
   return {
     type: 'sendMessage',
     idempotencyKey: `${context.ingress.id}:address-pull-request-comment`,
