@@ -1,4 +1,6 @@
 import { createClient } from '@clickhouse/client';
+import { PulseStorageExporter } from '@mastra/core/pulse';
+import type { PulseRecord } from '@mastra/core/storage';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { PulseStorageClickhouse } from './index';
 
@@ -153,5 +155,119 @@ describe('PulseStorageClickhouse (live)', () => {
 
     const filtered = await store.listFlows({ filter: { status: 'aborted' } });
     expect(filtered.flows).toHaveLength(1);
+  });
+
+  /**
+   * Flow-index experiment (behind `pulse.flowIndex`): the same rows written
+   * once through the real exporter land in the raw tables AND the versioned
+   * `flows` index. The FINAL index read must match the derived read
+   * (status/duration/cost), and running → completed must be visible across
+   * two flushes.
+   */
+  it('maintains the flows index through the exporter and matches derived reads', async ctx => {
+    if (!available) return ctx.skip();
+    const store = makeStore();
+    await store.init();
+    await store.dangerouslyClearAll();
+    expect(store.supportsFlowIndex()).toBe(true);
+
+    // Recent timestamps so unterminated flows read as running (not stale)
+    // on BOTH paths — derived staleness keys off pulse timestamps.
+    const B = Date.now() - 15_000;
+    const ts = (ms: number) => new Date(B + ms);
+    const exporter = new PulseStorageExporter({ storage: store, flowIndex: true, flushIntervalMs: 600_000 });
+    let n = 0;
+    const emit = (o: Partial<PulseRecord>) =>
+      exporter.onPulseEvent({
+        type: 'pulse',
+        record: {
+          id: `x${++n}`,
+          timestamp: ts(0),
+          seq: n,
+          type: 'state',
+          surface: 'agent',
+          action: 'run_started',
+          traceId: 'flow-a',
+          threadId: 't-a',
+          spanId: 'root',
+          source: 'span',
+          metadata: { entityName: 'support' },
+          ...o,
+        } as PulseRecord,
+      });
+
+    // Flush 1: flow-a has only its root start → the index says running.
+    emit({ timestamp: ts(0) });
+    await exporter.flush();
+    const mid = await store.listFlowsFromIndex();
+    expect(mid.flows.map(f => `${f.flowId}:${f.status}`)).toEqual(['flow-a:running']);
+
+    // Flush 2: flow-a completes (bridge-folded cost), flow-b fails,
+    // flow-c completes then a session abort overrides it.
+    emit({
+      spanId: 'gen',
+      parentSpanId: 'root',
+      surface: 'model',
+      action: 'generate_completed',
+      type: 'output',
+      data: { total_output_tokens: 42, cost_usd: 0.0004 },
+      timestamp: ts(400),
+    });
+    emit({ action: 'run_completed', type: 'output', timestamp: ts(1000) });
+    emit({ traceId: 'flow-b', threadId: 't-b', metadata: undefined, timestamp: ts(2000) });
+    emit({
+      traceId: 'flow-b',
+      threadId: 't-b',
+      metadata: undefined,
+      action: 'run_failed',
+      type: 'error',
+      level: 'error',
+      timestamp: ts(2500),
+    });
+    emit({ traceId: 'flow-c', threadId: 't-c', metadata: undefined, timestamp: ts(3000) });
+    emit({
+      traceId: 'flow-c',
+      threadId: 't-c',
+      metadata: undefined,
+      action: 'run_completed',
+      type: 'output',
+      timestamp: ts(3600),
+    });
+    emit({
+      traceId: '',
+      threadId: 't-c',
+      spanId: undefined,
+      source: 'session',
+      surface: 'run_control',
+      action: 'abort_completed',
+      metadata: undefined,
+      timestamp: ts(3800),
+    });
+    await exporter.shutdown();
+
+    const derived = await store.listFlows();
+    const indexed = await store.listFlowsFromIndex();
+    expect(indexed.total).toBe(derived.total);
+    expect(derived.flows.map(f => `${f.flowId}:${f.status}`)).toEqual([
+      'flow-c:aborted',
+      'flow-b:failed',
+      'flow-a:completed',
+    ]);
+    for (const d of derived.flows) {
+      const i = indexed.flows.find(f => f.flowId === d.flowId)!;
+      expect(i, `index row for ${d.flowId}`).toBeDefined();
+      expect(`${i.flowId}:${i.status}`).toBe(`${d.flowId}:${d.status}`);
+      expect(i.durationMs).toBe(d.durationMs);
+      expect(i.threadId).toBe(d.threadId);
+      expect(i.pulseCount).toBe(d.pulseCount);
+      expect(i.entityName).toBe(d.entityName);
+      expect(i.startedAt.getTime()).toBe(d.startedAt.getTime());
+      if (d.costUsd == null) expect(i.costUsd).toBeUndefined();
+      else expect(i.costUsd).toBeCloseTo(d.costUsd, 8);
+    }
+
+    const aborted = await store.listFlowsFromIndex({ filter: { status: 'aborted' } });
+    expect(aborted.flows.map(f => f.flowId)).toEqual(['flow-c']);
+    expect(aborted.total).toBe(1);
   });
 });

@@ -2,6 +2,7 @@ import type { ClickHouseClient } from '@clickhouse/client';
 import { PulseStorage } from '@mastra/core/storage';
 import type {
   FlowDetail,
+  FlowIndexRow,
   FlowStatus,
   FlowSummary,
   FlowTimelineEntry,
@@ -61,6 +62,27 @@ const RELATIONSHIPS_DDL = `CREATE TABLE IF NOT EXISTS relationships (
   trace_id   String
 ) ENGINE = MergeTree ORDER BY (trace_id, timestamp, seq)`;
 
+/**
+ * Materialized flow-summary index (experimental, behind `pulse.flowIndex`).
+ * Versioned upserts: ReplacingMergeTree keeps the highest `version` per
+ * `flow_id`; reads use FINAL. `stale` is intentionally NOT a stored status —
+ * the index cannot self-expire, so staleness is presented at read time from
+ * `updated_at`.
+ */
+const FLOWS_DDL = `CREATE TABLE IF NOT EXISTS flows (
+  flow_id     String,
+  version     UInt64,
+  started_at  DateTime64(3),
+  ended_at    Nullable(DateTime64(3)),
+  status      Enum8('running' = 1, 'completed' = 2, 'failed' = 3, 'aborted' = 4),
+  duration_ms Nullable(Int64),
+  thread_id   String,
+  entity_name LowCardinality(String),
+  pulse_count UInt64,
+  cost_usd    Nullable(Float64),
+  updated_at  DateTime64(3)
+) ENGINE = ReplacingMergeTree(version) ORDER BY flow_id`;
+
 function chTime(d: Date): string {
   return d.toISOString().replace('T', ' ').replace('Z', '');
 }
@@ -109,6 +131,33 @@ function toRelationshipRow(r: PulseRelationshipRecord) {
   };
 }
 
+function toFlowIndexRow(r: FlowIndexRow) {
+  return {
+    flow_id: r.flowId,
+    version: r.version,
+    started_at: chTime(r.startedAt),
+    ended_at: r.endedAt ? chTime(r.endedAt) : null,
+    status: r.status,
+    duration_ms: r.durationMs ?? null,
+    thread_id: r.threadId ?? '',
+    entity_name: r.entityName ?? '',
+    pulse_count: r.pulseCount,
+    cost_usd: r.costUsd ?? null,
+    updated_at: chTime(new Date()),
+  };
+}
+
+interface FlowIndexReadRow {
+  flow_id: string;
+  started_at: string;
+  duration_ms: number | string | null;
+  thread_id: string;
+  entity_name: string;
+  pulse_count: number | string;
+  cost_usd: number | null;
+  presented_status: FlowStatus;
+}
+
 interface FlowAggRow {
   flow_id: string;
   thread: string;
@@ -133,6 +182,7 @@ export class PulseStorageClickhouse extends PulseStorage {
   async init(): Promise<void> {
     await this.client.command({ query: PULSES_DDL });
     await this.client.command({ query: RELATIONSHIPS_DDL });
+    await this.client.command({ query: FLOWS_DDL });
   }
 
   async batchCreatePulses(records: PulseRecord[]): Promise<void> {
@@ -152,6 +202,87 @@ export class PulseStorageClickhouse extends PulseStorage {
   async dangerouslyClearAll(): Promise<void> {
     await this.client.command({ query: 'TRUNCATE TABLE IF EXISTS pulses' });
     await this.client.command({ query: 'TRUNCATE TABLE IF EXISTS relationships' });
+    await this.client.command({ query: 'TRUNCATE TABLE IF EXISTS flows' });
+  }
+
+  supportsFlowIndex(): boolean {
+    return true;
+  }
+
+  async upsertFlowSummaries(rows: FlowIndexRow[]): Promise<void> {
+    if (!rows.length) return;
+    await this.client.insert({ table: 'flows', values: rows.map(toFlowIndexRow), format: 'JSONEachRow' });
+  }
+
+  async listFlowsFromIndex(args: ListFlowsArgs = {}): Promise<ListFlowsResult> {
+    const { filter, pagination } = args;
+    const page = pagination?.page ?? 0;
+    const perPage = pagination?.perPage ?? 40;
+
+    const conditions: string[] = [];
+    const params: Record<string, unknown> = {};
+    if (filter?.status) {
+      conditions.push(`presented_status = {var_status:String}`);
+      params.var_status = filter.status;
+    }
+    if (filter?.threadId) {
+      conditions.push(`thread_id = {var_thread:String}`);
+      params.var_thread = filter.threadId;
+    }
+    if (filter?.entityName) {
+      conditions.push(`entity_name = {var_entity:String}`);
+      params.var_entity = filter.entityName;
+    }
+    if (filter?.fromDate) {
+      conditions.push(`started_at >= {var_from:DateTime64(3)}`);
+      params.var_from = chTime(filter.fromDate);
+    }
+    if (filter?.toDate) {
+      conditions.push(`started_at <= {var_to:DateTime64(3)}`);
+      params.var_to = chTime(filter.toDate);
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    // Read-side stale presentation: a running row not upserted for longer
+    // than the threshold is served as stale (the index cannot self-expire).
+    const presented = `
+      SELECT flow_id, started_at, duration_ms, thread_id, entity_name, pulse_count, cost_usd,
+             if(status = 'running' AND dateDiff('second', updated_at, now64(3)) > ${STALE_THRESHOLD_S},
+                'stale', toString(status)) AS presented_status
+      FROM flows FINAL`;
+
+    const [pageResult, countResult] = await Promise.all([
+      this.client.query({
+        query: `SELECT * FROM (${presented}) ${where}
+                ORDER BY started_at DESC
+                LIMIT ${perPage} OFFSET ${page * perPage}`,
+        query_params: params,
+        format: 'JSONEachRow',
+      }),
+      this.client.query({
+        query: `SELECT count() AS total FROM (${presented}) ${where}`,
+        query_params: params,
+        format: 'JSONEachRow',
+      }),
+    ]);
+
+    const rows = await pageResult.json<FlowIndexReadRow>();
+    const counts = await countResult.json<{ total: string | number }>();
+    const total = counts[0]?.total ?? 0;
+
+    return {
+      flows: rows.map(r => ({
+        flowId: r.flow_id,
+        threadId: r.thread_id || undefined,
+        startedAt: parseTs(r.started_at),
+        durationMs: r.duration_ms != null ? Number(r.duration_ms) : null,
+        status: r.presented_status,
+        pulseCount: Number(r.pulse_count),
+        costUsd: r.cost_usd != null ? Number(r.cost_usd) : undefined,
+        entityName: r.entity_name || undefined,
+      })),
+      total: Number(total),
+    };
   }
 
   /** Derived flow summaries (SQL mirror of the in-memory rules). */
@@ -166,8 +297,17 @@ export class PulseStorageClickhouse extends PulseStorage {
           GROUP BY thread_id
         ),
         costs AS (
-          SELECT trace_id, sum(toFloat64OrZero(JSONExtractRaw(data, 'estimated_cost_usd'))) AS cost_usd
-          FROM pulses WHERE source = 'metric' AND trace_id != ''
+          /* Dual-read: bridge-folded cost on semantic model pulses (cost_usd)
+             plus legacy metric-lane rows (estimated_cost_usd). */
+          SELECT trace_id,
+                 sum(
+                   multiIf(
+                     source = 'span', toFloat64OrZero(JSONExtractRaw(data, 'cost_usd')),
+                     source = 'metric', toFloat64OrZero(JSONExtractRaw(data, 'estimated_cost_usd')),
+                     0
+                   )
+                 ) AS cost_usd
+          FROM pulses WHERE trace_id != '' AND source IN ('span', 'metric')
           GROUP BY trace_id
         )
         SELECT p.trace_id AS flow_id,
