@@ -494,6 +494,33 @@ describe('SourceControlStorage', () => {
     await expect(github.sessions.markFirstMeaningfulExec({ sessionId: 'missing-session' })).resolves.toBeUndefined();
   });
 
+  it('records materialized_at write-once via sessions.markMaterialized', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const session = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000005',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-000000000005',
+      baseBranch: 'main',
+    });
+    expect(session.materializedAt).toBeNull();
+
+    await github.sessions.markMaterialized({ id: session.id });
+    const marked = await github.sessions.getBySessionId(session.sessionId);
+    expect(marked?.materializedAt).toBeInstanceOf(Date);
+
+    // A resume (second markMaterialized call) must not move the timestamp:
+    // the guarded update only matches rows where the column is still NULL.
+    // Without this, `materialize_s = materialized_at - created_at` counts the
+    // entire idle-and-resume duration as initial-materialize latency.
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await github.sessions.markMaterialized({ id: session.id });
+    const again = await github.sessions.getBySessionId(session.sessionId);
+    expect(again?.materializedAt?.getTime()).toBe(marked!.materializedAt!.getTime());
+  });
+
   it('clears every owned source-control collection', async () => {
     const project = await createProject();
     const link = await linkRepository({ factoryProjectId: project.id });
