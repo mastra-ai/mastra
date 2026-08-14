@@ -207,6 +207,9 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
 
   /**
    * set a value with strict typing if `Values` is a Record and the key exists in it.
+   *
+   * Declared schema keys stay strictly typed. For runtime-only keys that are not part of
+   * `Values` (for example reserved middleware keys), use {@link setRaw}.
    */
   public set<K extends (Values extends Record<string, any> ? keyof Values : string)>(
     key: K,
@@ -217,7 +220,22 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
   }
 
   /**
+   * Set a runtime-only key that is not part of the declared `Values` schema.
+   *
+   * The runtime store is an open map: schema validation checks declared keys and
+   * passes undeclared keys through. Use this when writing infrastructure keys
+   * (for example `mastra__resourceId`) or other values that intentionally omit
+   * from `requestContextSchema`.
+   */
+  public setRaw(key: string, value: unknown): void {
+    this.registry.set(key, value);
+  }
+
+  /**
    * Get a value with its type
+   *
+   * Declared schema keys stay strictly typed. For runtime-only keys that are not part of
+   * `Values` (for example reserved middleware keys), use {@link getRaw}.
    */
   public get<
     K extends (Values extends Record<string, any> ? keyof Values : string),
@@ -227,16 +245,44 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
   }
 
   /**
+   * Get a runtime-only key that is not part of the declared `Values` schema.
+   *
+   * Returns `unknown` because the schema does not describe these keys — narrow
+   * the result at the call site.
+   */
+  public getRaw(key: string): unknown {
+    return this.registry.get(key);
+  }
+
+  /**
    * Check if a key exists in the container
+   *
+   * Declared schema keys stay strictly typed. For runtime-only keys, use {@link hasRaw}.
    */
   public has<K extends (Values extends Record<string, any> ? keyof Values : string)>(key: K): boolean {
     return this.registry.has(key);
   }
 
   /**
+   * Check whether a runtime-only key exists in the open map.
+   */
+  public hasRaw(key: string): boolean {
+    return this.registry.has(key);
+  }
+
+  /**
    * Delete a value by key
+   *
+   * Declared schema keys stay strictly typed. For runtime-only keys, use {@link deleteRaw}.
    */
   public delete<K extends (Values extends Record<string, any> ? keyof Values : string)>(key: K): boolean {
+    return this.registry.delete(key);
+  }
+
+  /**
+   * Delete a runtime-only key from the open map.
+   */
+  public deleteRaw(key: string): boolean {
     return this.registry.delete(key);
   }
 
