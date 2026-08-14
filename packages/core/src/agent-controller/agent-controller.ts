@@ -12,6 +12,7 @@ import { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
 import type { TracingContext, TracingOptions } from '../observability';
+import { attachSessionPulseForwarder } from '../pulse';
 import { RequestContext } from '../request-context';
 import type { MastraCompositeStore } from '../storage/base';
 import type { MemoryStorage } from '../storage/domains/memory/base';
@@ -225,6 +226,12 @@ export class AgentController<TState = {}> {
    * (e.g. {@link setResourceId}) preserve the session's registry scope.
    */
   readonly #sessionScopes = new WeakMap<Session<TState>, string>();
+  /**
+   * Per-session pulse-forwarder unsubscribe hooks (experimental). Populated in
+   * {@link #wireSession} when the registered Mastra has a PulseBus; called
+   * during {@link deleteSession} so a torn-down session stops forwarding.
+   */
+  readonly #pulseForwarderDetach = new WeakMap<Session<TState>, () => void>();
   private availableModelsCache: AvailableModel[] | null = null;
   private availableModelsCacheTime: number = 0;
   readonly #instructions?: string;
@@ -393,6 +400,24 @@ export class AgentController<TState = {}> {
       session.model.set({ modelId: initialModelId });
     } else if (defaultMode.defaultModelId) {
       session.model.set({ modelId: defaultMode.defaultModelId });
+    }
+
+    // Native session → pulse forwarding (experimental): when the registered
+    // Mastra has pulse configured, every session gets one internal subscriber
+    // translating session facts (approvals, abort outcomes, follow-ups,
+    // mode/model switches) onto the PulseBus. No emit site changes; nothing
+    // attaches when pulse is not configured.
+    const pulseBus = this.getMastra()?.pulseBus;
+    if (pulseBus) {
+      this.#pulseForwarderDetach.set(
+        session,
+        attachSessionPulseForwarder({
+          session,
+          bus: pulseBus,
+          getThreadId: () => session.thread.getId(),
+          getResourceId: () => session.identity.getResourceId(),
+        }),
+      );
     }
 
     return session;
@@ -745,6 +770,8 @@ export class AgentController<TState = {}> {
       // tolerantPromise is set synchronously below before this microtask runs.
       this.#sessionDeletionPromises.set(session, deletion.tolerantPromise!);
       session.abort();
+      this.#pulseForwarderDetach.get(session)?.();
+      this.#pulseForwarderDetach.delete(session);
       session.thread.cleanupSubscription();
       try {
         await session.thread.clearAndReleaseLock();

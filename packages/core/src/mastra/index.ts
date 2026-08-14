@@ -48,6 +48,8 @@ import type {
 import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../observability';
 import { initContextStorage } from '../observability/context-storage';
 import type { Processor } from '../processors';
+import { PulseBridge, PulseBus, PulseStorageExporter } from '../pulse';
+import type { PulseConfig } from '../pulse';
 import type { AgentScheduleHandler } from '../schedules/define';
 import { metadataEqual, targetsEqual } from '../schedules/row-diff';
 import { Schedules } from '../schedules/schedules';
@@ -328,6 +330,23 @@ export interface Config<
    * to customize it.
    */
   observability?: ObservabilityEntrypoint;
+
+  /**
+   * Pulse — experimental event-first observability. When configured, Mastra
+   * constructs a dedicated {@link PulseBus}, bridges observability events onto
+   * it (spans, folded token/cost metrics, logs, scores, feedback), forwards
+   * AgentController session facts natively, and batches records into the
+   * `pulse` storage domain (or the explicit `storage` / `exporters` given).
+   * Nothing pulse-related is constructed when this is absent.
+   *
+   * @example
+   * ```typescript
+   * new Mastra({
+   *   pulse: {}, // writes through storage.getStore('pulse')
+   * })
+   * ```
+   */
+  pulse?: PulseConfig;
 
   /**
    * Custom ID generator function for creating unique identifiers.
@@ -675,6 +694,8 @@ export class Mastra<
   #hiddenWorkflowKeys = new Set<string>();
   #observability: ObservabilityEntrypoint;
   #observabilityExplicit = false;
+  #pulseBus?: PulseBus;
+  #pulseBridge?: PulseBridge;
   #onScorerHook?: ReturnType<typeof createOnScorerHook>;
   #tts?: TTTS;
   #deployer?: MastraDeployer;
@@ -1236,6 +1257,26 @@ export class Mastra<
   }
 
   /**
+   * The pulse event bus, present only when `pulse` is configured (experimental).
+   * Producers (the span bridge, session forwarders) emit onto it; writers
+   * (storage exporter, custom exporters) drain it.
+   */
+  get pulseBus(): PulseBus | undefined {
+    return this.#pulseBus;
+  }
+
+  /**
+   * Register the pulse span bridge on the current default observability
+   * instance. Re-run when the observability entrypoint is replaced (fs-routed
+   * observability) so the bridge follows the active instance.
+   */
+  #registerPulseBridge(): void {
+    if (!this.#pulseBridge) return;
+    const defaultInstance = this.#observability.getDefaultInstance?.();
+    defaultInstance?.registerExporter?.(this.#pulseBridge);
+  }
+
+  /**
    * Creates a new Mastra instance with the provided configuration.
    *
    * The constructor initializes all the components specified in the config, sets up
@@ -1481,6 +1522,31 @@ export class Mastra<
     // can look up code-defined agents, editor config, etc. when needed
     // (e.g. filesystem code-mode snapshot filtering).
     storage?.__registerMastra?.(this as unknown as Parameters<NonNullable<typeof storage.__registerMastra>>[0]);
+
+    // Pulse (experimental event-first observability): constructed ONLY when
+    // `pulse` is configured — unconfigured instances build no bus, bridge, or
+    // writer and behave byte-identically to stock Mastra.
+    if (config?.pulse) {
+      this.#pulseBus = new PulseBus();
+      // `getStore('pulse')` is async (composite stores may init lazily), so
+      // the writer takes a provider it resolves memoized on first flush —
+      // the same deferred-init seam other storage consumers use (e.g. the
+      // schedules domain resolves `getStore('schedules')` at call time).
+      this.#pulseBus.registerExporter(
+        new PulseStorageExporter({
+          storage: config.pulse.storage ?? (async () => await this.#storage?.getStore('pulse')),
+          batchSize: config.pulse.batchSize,
+          flushIntervalMs: config.pulse.flushIntervalMs,
+          flowIndex: config.pulse.flowIndex,
+          onDrop: event => this.#pulseBus?.emitDropEvent(event),
+        }),
+      );
+      for (const exporter of config.pulse.exporters ?? []) {
+        this.#pulseBus.registerExporter(exporter);
+      }
+      this.#pulseBridge = new PulseBridge({ bus: this.#pulseBus });
+      this.#registerPulseBridge();
+    }
 
     // Register the editor after storage is assigned so code mode can overlay
     // filesystem-backed editor storage while preserving app storage domains.
@@ -2859,6 +2925,9 @@ export class Mastra<
     const rawLogger = this.#logger instanceof DualLogger ? this.#logger.baseLogger : this.#logger;
     this.#observability.setLogger({ logger: rawLogger as any });
     this.#observability.setMastraContext({ mastra: this as any });
+    // The pulse bridge was registered against the previous (possibly no-op)
+    // entrypoint's default instance — follow the replacement.
+    this.#registerPulseBridge();
   }
 
   /**
@@ -6532,6 +6601,13 @@ export class Mastra<
     }
     // Shutdown observability registry, exporters, etc...
     await this.#observability.shutdown();
+
+    // Pulse drains AFTER observability: the observability shutdown pushes its
+    // remaining span/metric events through the bridge onto the pulse bus, and
+    // only then can the pulse writers flush everything (R5 ordering).
+    if (this.#pulseBus) {
+      await this.#pulseBus.shutdown();
+    }
 
     this.#logger?.info('Mastra shutdown completed');
   }
