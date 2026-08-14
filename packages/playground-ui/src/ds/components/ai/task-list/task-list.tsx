@@ -47,7 +47,10 @@ export const TaskListProgress = ({ tasks, className, ...props }: TaskListProgres
               {...props}
             >
               {tasks.map(task => (
-                <span key={task.id} className={cn('h-full w-1 min-w-px shrink rounded-full', barColors[task.status])} />
+                <span
+                  key={task.id}
+                  className={cn('h-full w-0.5 min-w-px shrink rounded-full', barColors[task.status])}
+                />
               ))}
             </span>
           }
