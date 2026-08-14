@@ -109,7 +109,7 @@ async function entityDetail(
 
 describe('KnowledgeRoutes', () => {
   // 1
-  it('returns entities and derived wikilink/parent edges from seeded facts', async () => {
+  it('returns entities and wikilink edges (owner entity → mentioned entity) from seeded facts', async () => {
     const h = await createHarness();
     const service = await entity(h.knowledge, 'Payments Service', h.projectScope, 'service');
     const runbook = await entity(h.knowledge, 'Deploy Runbook', h.projectScope, 'doc');

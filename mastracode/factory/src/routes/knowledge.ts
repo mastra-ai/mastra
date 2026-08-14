@@ -78,7 +78,12 @@ export interface KnowledgeGraphEdge {
   source: string;
   /** The wikilink-resolved entity. */
   target: string;
-  type: 'wikilink' | 'parent';
+  /**
+   * Always 'wikilink': the fact's `parentEntityId` is the edge SOURCE, so the
+   * plan's "parent link" collapses into the wikilink edge — entities carry no
+   * separate parent field to derive a second edge type from.
+   */
+  type: 'wikilink';
   /** The fact whose text produced the edge. */
   factId: string;
 }

@@ -114,7 +114,7 @@ export type EntityFlowNode = Node<{
   focused: boolean;
 }>;
 
-export type KnowledgeFlowEdge = Edge<{ factId: string; linkType: 'wikilink' | 'parent' }>;
+export type KnowledgeFlowEdge = Edge<{ factId: string; linkType: 'wikilink' }>;
 
 /**
  * Map an (already filtered) payload slice into React Flow nodes/edges.
