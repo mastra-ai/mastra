@@ -1,5 +1,5 @@
 ---
-title: "Skills | Agents"
+title: "Agent skills"
 description: "Give agents reusable skills directly in code, without a full workspace."
 packages:
   - "@mastra/core"
@@ -9,7 +9,7 @@ packages:
 
 Skills are reusable instructions that teach agents how to perform specific tasks. They follow the [Agent Skills specification](https://agentskills.io).
 
-You can attach skills directly to an agent through its `skills` config, or configure them on a [workspace](/docs/workspace/overview). Attach them to the agent when the skills belong to that specific agent and you want to define them in code with no workspace required. Use a workspace when you want skills discovered from the filesystem and shared across every agent that uses it. This page covers the agent-level approach, defining skills in code and loading them from files, plus resolving them per request.
+You can attach skills directly to an agent through its `skills` config, or configure them on a [workspace](/docs/workspace/skills). Attach them to the agent when the skills belong to that specific agent and you want to define them in code with no workspace required. Use a workspace when you want skills discovered from the filesystem and shared across every agent that uses it. This page covers the agent-level approach, defining skills in code and loading them from files, plus resolving them per request.
 
 ## When to use agent-level skills
 
@@ -131,7 +131,21 @@ export const agent = new Agent({
 })
 ```
 
-The resolver function receives `{ requestContext }` and returns a `SkillInput[]` array or a `Promise<SkillInput[]>`.
+The resolver function receives `{ requestContext, tracingContext }` and returns a `SkillInput[]` array or a `Promise<SkillInput[]>`.
+
+The resolver runs once per `RequestContext`. During an agent execution it runs inside a `resolve-skills` span, and `tracingContext.currentSpan` lets you create child spans for your own work, the same way tools do. The resolver also runs on metadata reads such as `agent.listSkills()` and the server's agent endpoints, where no span exists and `tracingContext.currentSpan` is `undefined`, so keep it fast and guard any span usage:
+
+```typescript title="src/mastra/agents/index.ts"
+skills: async ({ requestContext, tracingContext }) => {
+  const span = tracingContext?.currentSpan?.createChildSpan({
+    type: 'generic',
+    name: 'entitlements-lookup',
+  })
+  const skills = await fetchSkillsFor(requestContext.get('userId'))
+  span?.end()
+  return skills
+}
+```
 
 See [Request Context](/docs/server/request-context) for more on using request context with agents and workflows.
 

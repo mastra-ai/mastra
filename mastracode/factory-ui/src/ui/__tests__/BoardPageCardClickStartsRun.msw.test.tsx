@@ -41,11 +41,24 @@ const issueWorkItem = {
   updatedAt: '2026-07-18T00:00:00.000Z',
 };
 
+const linearWorkItem = {
+  ...issueWorkItem,
+  id: 'linear-item-1',
+  externalSource: {
+    integrationId: 'linear',
+    type: 'issue',
+    externalId: 'linear:linear-issue-1',
+    url: 'https://linear.app/acme/issue/ENG-42/fix-intake-sync',
+  },
+  title: 'ENG-42: Fix intake sync',
+  metadata: { identifier: 'ENG-42' },
+};
+
 /**
  * Stubs the board's data endpoints and captures run-start requests. The run
  * start never resolves, keeping the test on the board (no thread navigation).
  */
-function stubBoardEndpoints({ issues = [] as object[] } = {}) {
+function stubBoardEndpoints({ issues = [] as object[], workItems = [issueWorkItem] as object[] } = {}) {
   const startRequests: Array<Record<string, unknown>> = [];
 
   server.use(
@@ -73,9 +86,7 @@ function stubBoardEndpoints({ issues = [] as object[] } = {}) {
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
-      HttpResponse.json({ workItems: [issueWorkItem] }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () => HttpResponse.json({ workItems })),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
       HttpResponse.json({ decisions: [] }),
     ),
@@ -90,11 +101,16 @@ function stubBoardEndpoints({ issues = [] as object[] } = {}) {
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
-    // The label-filtered (auto-triaged) feed stays empty; the plain feed
+    // The label-filtered (status: auto-triaged) feed stays empty; the plain feed
     // serves the candidate under test.
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, ({ request }) =>
-      HttpResponse.json({ issues: new URL(request.url).searchParams.has('label') ? [] : issues, nextPage: null }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, ({ request }) => {
+      const label = new URL(request.url).searchParams.get('label');
+      if (label && label !== 'status: auto-triaged') {
+        return HttpResponse.error();
+      }
+
+      return HttpResponse.json({ issues: label ? [] : issues, nextPage: null });
+    }),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
     http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, () => HttpResponse.json({ ok: true })),
     http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
@@ -128,12 +144,35 @@ describe('Board card click starts the default run', () => {
 
     await waitFor(() => expect(startRequests).toHaveLength(1));
     expect(startRequests[0]).toMatchObject({
+      destinationStage: 'triage',
       invocation: { type: 'skill', skillName: 'factory-triage' },
-      workItem: { id: 'item-1', role: 'plan' },
+      workItem: { id: 'item-1', role: 'triage' },
     });
   });
 
-  it('starts the default run with its invocation when a candidate card title is clicked', async () => {
+  it('starts a persisted Linear Triage item with the Linear kickoff invocation', async () => {
+    const { startRequests } = stubBoardEndpoints({ workItems: [linearWorkItem] });
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    await user.click(await screen.findByRole('button', { name: 'Investigate ENG-42: Fix intake sync' }));
+
+    await waitFor(() => expect(startRequests).toHaveLength(1));
+    expect(startRequests[0]).toMatchObject({
+      destinationStage: 'planning',
+      invocation: {
+        type: 'skill',
+        skillName: 'factory-triage',
+        arguments: expect.stringContaining(
+          `Linear issue ENG-42 (https://linear.app/acme/issue/ENG-42/fix-intake-sync)\n\n` +
+            `Start by fetching the issue's full details (description and comments) with the linear_get_issue tool.`,
+        ),
+      },
+      workItem: { id: 'linear-item-1', role: 'plan' },
+    });
+  });
+
+  it('starts the default run with its invocation when a candidate card is clicked', async () => {
     const { startRequests } = stubBoardEndpoints({
       issues: [
         {
@@ -151,12 +190,15 @@ describe('Board card click starts the default run', () => {
     const user = userEvent.setup();
     renderWorkBoard();
 
-    await user.click(await screen.findByRole('button', { name: 'Issue: Crash on logout' }));
+    // Same click target and same wording as a filed card: the candidate names
+    // the run it starts, not the record it happens to create.
+    await user.click(await screen.findByRole('button', { name: 'Investigate Crash on logout' }));
 
     await waitFor(() => expect(startRequests).toHaveLength(1));
     expect(startRequests[0]).toMatchObject({
+      destinationStage: 'triage',
       invocation: { type: 'skill', skillName: 'factory-triage' },
-      workItem: { role: 'plan' },
+      workItem: { role: 'triage' },
     });
   });
 });

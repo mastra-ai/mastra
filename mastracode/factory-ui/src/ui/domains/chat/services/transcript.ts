@@ -1,9 +1,5 @@
-import type {
-  AgentControllerEvent,
-  KnownAgentControllerEvent,
-  AgentControllerTaskSnapshot,
-  AgentControllerOMProgress,
-} from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerTaskSnapshot, AgentControllerOMProgress } from '@mastra/client-js';
+import { isKnownAgentControllerEvent } from '@mastra/client-js';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
 
 import { stripAnsi } from './ansi';
@@ -203,7 +199,7 @@ type Action =
   | { type: 'clearPending' }
   | { type: 'localNotice'; text: string; level: 'info' | 'error' }
   | { type: 'resolvePrompt'; id: string }
-  | { type: 'prependOlder'; messages: MastraDBMessage[] }
+  | { type: 'mergeWindow'; messages: MastraDBMessage[] }
   | {
       type: 'reset';
       threadId?: string;
@@ -257,8 +253,8 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
           ),
         ],
       };
-    case 'prependOlder':
-      return prependOlderMessages(state, action.messages);
+    case 'mergeWindow':
+      return mergeServerWindow(state, action.messages);
     case 'clearPending':
       return { ...state, pending: false };
     case 'localNotice':
@@ -272,8 +268,8 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
   }
 }
 
-function applyEvent(state: TranscriptState, raw: AgentControllerEvent): TranscriptState {
-  const event = raw as KnownAgentControllerEvent;
+function applyEvent(state: TranscriptState, event: AgentControllerEvent): TranscriptState {
+  if (!isKnownAgentControllerEvent(event)) return state;
   switch (event.type) {
     case 'agent_start':
       // Reset the rate at the start of a new turn (not at the end) so the last
@@ -606,28 +602,170 @@ function persistedSuspensionPrompts(message: MastraDBMessage): SuspensionPrompt[
 }
 
 /**
- * Prepend older history messages to the front of the timeline. `messages` is the
- * newest-N window from a grown history fetch (oldest-first). We keep only the
- * portion strictly older than the oldest message already on screen — anchored on
- * the first existing message entry's id — and prepend those. The overlapping tail
- * of the fetch (messages we already have, including any that streamed in live and
- * later persisted) is discarded, so nothing double-renders. If no anchor is found
- * (e.g. the transcript has no message entries yet) the full window is seeded.
+ * Reconcile the persisted newest-N window (oldest-first) with the timeline.
+ * On-screen messages are anchors — they keep their position, live tool state and
+ * streaming flag; the rest are inserted where the window puts them. Insertion
+ * runs both ways: load-more delivers older history, revalidation after a route
+ * revisit delivers everything the run produced meanwhile.
  */
-function prependOlderMessages(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
+function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
   if (messages.length === 0) return state;
 
-  const firstMessageEntry = state.entries.find(e => e.kind === 'message');
-  const anchorId = firstMessageEntry?.kind === 'message' ? firstMessageEntry.id : undefined;
+  const reconciled = reconcileToolResults(adoptCoveringWindowCopies(state, messages), messages);
 
-  const anchorIndex = anchorId != null ? messages.findIndex(m => m.id === anchorId) : -1;
-  // Older messages are everything before the anchor; if the anchor isn't in this
-  // window (transcript had no message entries, or the window didn't reach it),
-  // treat the whole window as older history to seed.
-  const olderMessages = anchorIndex === -1 ? messages : messages.slice(0, anchorIndex);
-  if (olderMessages.length === 0) return state;
+  // Streamed turns adopt the loop's persisted message id (#21185), so window
+  // copies normally match by id; the shared-toolCallId fallback covers paths
+  // that can still diverge (retries, resume, older servers) — inserting such a
+  // window message would duplicate a turn reconcileToolResults heals in place.
+  const entryToolCallIds = reconciled.entries.map(entry =>
+    entry.kind === 'message' && entry.message.role === 'assistant'
+      ? new Set(toolCallIdsOf(entry.message.content.parts))
+      : undefined,
+  );
+  const matchesEntry = (entryIndex: number, message: MastraDBMessage): boolean => {
+    const entry = reconciled.entries[entryIndex];
+    if (entry.kind !== 'message') return false;
+    if (entry.id === message.id) return true;
+    if (message.role !== 'assistant') return false;
+    const toolCallIds = entryToolCallIds[entryIndex];
+    if (!toolCallIds || toolCallIds.size === 0) return false;
+    return toolCallIdsOf(message.content.parts).some(toolCallId => toolCallIds.has(toolCallId));
+  };
+  const onScreenIndexFor = (message: MastraDBMessage, from: number): number => {
+    for (let entryIndex = from; entryIndex < reconciled.entries.length; entryIndex++) {
+      if (matchesEntry(entryIndex, message)) return entryIndex;
+    }
+    return -1;
+  };
 
-  return { ...state, entries: [...messagesToEntries(olderMessages), ...state.entries] };
+  if (messages.every(message => onScreenIndexFor(message, 0) !== -1)) return reconciled;
+
+  const entries: TimelineEntry[] = [];
+  let cursor = 0;
+  let missing: MastraDBMessage[] = [];
+
+  for (const message of messages) {
+    if (onScreenIndexFor(message, 0) === -1) {
+      missing.push(message);
+      continue;
+    }
+    // Out-of-order anchor (the window disagrees with the timeline): leave it
+    // where the timeline put it rather than moving rendered content around.
+    const anchorIndex = onScreenIndexFor(message, cursor);
+    if (anchorIndex === -1) continue;
+    entries.push(...reconciled.entries.slice(cursor, anchorIndex), ...messagesToEntries(missing));
+    missing = [];
+    cursor = anchorIndex;
+  }
+  entries.push(...reconciled.entries.slice(cursor), ...messagesToEntries(missing));
+
+  return { ...reconciled, entries };
+}
+
+function toolCallIdsOf(parts: MastraMessagePart[]): string[] {
+  return parts.flatMap(part => {
+    const toolCallId = toolCallIdForPart(part);
+    return toolCallId === undefined ? [] : [toolCallId];
+  });
+}
+
+type ToolInvocationMessagePart = Extract<MastraMessagePart, { type: 'tool-invocation' }>;
+
+export function isTerminalInvocationState(state: ToolInvocationMessagePart['toolInvocation']['state']): boolean {
+  return state === 'result' || state === 'output-error' || state === 'output-denied';
+}
+
+/**
+ * Adopt the persisted copy of a streamed turn when it strictly extends what is
+ * on screen. When the run ends inside an SSE gap the refetched window is the
+ * only carrier of the turn's trailing parts (text after the last tool result) —
+ * reconcileToolResults alone would heal the tool but drop that text. Adoption
+ * only fires when nothing on screen would be lost; a live turn ahead of the
+ * snapshot fails the prefix check and keeps its streamed parts.
+ */
+function adoptCoveringWindowCopies(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
+  let changed = false;
+  const entries = state.entries.map(entry => {
+    if (entry.kind !== 'message' || entry.message.role !== 'assistant') return entry;
+    const onScreenParts = entry.message.content.parts;
+    const toolCallIds = new Set(toolCallIdsOf(onScreenParts));
+    const copy = messages.find(
+      message =>
+        message.role === 'assistant' &&
+        (message.id === entry.id ||
+          (toolCallIds.size > 0 && toolCallIdsOf(message.content.parts).some(id => toolCallIds.has(id)))),
+    );
+    if (!copy) return entry;
+    const covers = windowCopyCovers(onScreenParts, copy.content.parts);
+    const identical = covers && windowCopyCovers(copy.content.parts, onScreenParts);
+    if (!covers || identical) return entry;
+    changed = true;
+    return {
+      ...entry,
+      message: { ...entry.message, content: { ...entry.message.content, parts: copy.content.parts } },
+    };
+  });
+
+  return changed ? { ...state, entries } : state;
+}
+
+/**
+ * True when adopting `persisted` loses nothing from `onScreen`: parts match
+ * positionally, text may only extend, tool parts keep their toolCallId and
+ * never regress from a terminal state. Snapshot streams mirror the same
+ * MessageList that persists, so positional comparison is sound.
+ */
+function windowCopyCovers(onScreen: MastraMessagePart[], persisted: MastraMessagePart[]): boolean {
+  if (persisted.length < onScreen.length) return false;
+  return onScreen.every((part, index) => {
+    const counterpart = persisted[index];
+    if (part.type === 'text' && counterpart.type === 'text') return counterpart.text.startsWith(part.text);
+    if (part.type === 'tool-invocation' && counterpart.type === 'tool-invocation') {
+      if (part.toolInvocation.toolCallId !== counterpart.toolInvocation.toolCallId) return false;
+      return (
+        !isTerminalInvocationState(part.toolInvocation.state) ||
+        isTerminalInvocationState(counterpart.toolInvocation.state)
+      );
+    }
+    return JSON.stringify(counterpart) === JSON.stringify(part);
+  });
+}
+
+/**
+ * Fold terminal tool results from the refetched window into entries already on
+ * screen. The stream can lose a `tool_end` (SSE drop — the server does not
+ * replay missed events), leaving an on-screen part stuck at `call` and its row
+ * spinning forever. Terminal states never regress, so the server copy wins;
+ * everything else (streamed text, live overlay) is left alone.
+ */
+function reconcileToolResults(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
+  const serverTerminalParts = new Map<string, ToolInvocationMessagePart>();
+  for (const message of messages) {
+    for (const part of message.content.parts) {
+      if (part.type !== 'tool-invocation') continue;
+      if (!isTerminalInvocationState(part.toolInvocation.state)) continue;
+      serverTerminalParts.set(part.toolInvocation.toolCallId, part);
+    }
+  }
+  if (serverTerminalParts.size === 0) return state;
+
+  let changed = false;
+  const entries = state.entries.map(entry => {
+    if (entry.kind !== 'message' || entry.message.role !== 'assistant') return entry;
+    let entryChanged = false;
+    const parts = entry.message.content.parts.map(part => {
+      if (part.type !== 'tool-invocation' || isTerminalInvocationState(part.toolInvocation.state)) return part;
+      const serverPart = serverTerminalParts.get(part.toolInvocation.toolCallId);
+      if (!serverPart) return part;
+      entryChanged = true;
+      return serverPart;
+    });
+    if (!entryChanged) return entry;
+    changed = true;
+    return { ...entry, message: { ...entry.message, content: { ...entry.message.content, parts } } };
+  });
+
+  return changed ? { ...state, entries } : state;
 }
 
 /**
@@ -904,16 +1042,18 @@ function toolPart(tool: ToolCall): MastraMessagePart {
     };
   }
 
-  return {
-    type: 'tool-invocation',
-    toolInvocation: {
-      state: 'result',
-      toolCallId: tool.toolCallId,
-      toolName: tool.toolName,
-      args: tool.args,
-      result: tool.result,
-    },
+  // isError mirrors what core stamps on persisted result invocations
+  // (session-run-engine) — without it the terminal-state render precedence
+  // would read a failed live tool as a bare successful `result`.
+  const toolInvocation: ToolInvocationMessagePart['toolInvocation'] & { isError?: boolean } = {
+    state: 'result',
+    toolCallId: tool.toolCallId,
+    toolName: tool.toolName,
+    args: tool.args,
+    result: tool.result,
+    ...(tool.status === 'error' ? { isError: true } : {}),
   };
+  return { type: 'tool-invocation', toolInvocation };
 }
 
 function pushPrompt(state: TranscriptState, prompt: PromptEntry): TranscriptState {

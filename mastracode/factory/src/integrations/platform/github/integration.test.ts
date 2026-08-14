@@ -173,7 +173,7 @@ describe('PlatformGithubIntegration', () => {
           labels: ['bug'],
         }),
       ],
-      nextCursor: null,
+      nextCursor: '2',
     });
     await expect(
       integration.versionControl.listPullRequests({ connection: installationConnection, sourceId: 'acme/app' }),
@@ -182,6 +182,29 @@ describe('PlatformGithubIntegration', () => {
       nextCursor: null,
     });
     expect(String(fetchImpl.mock.calls[0]?.[0])).toContain('label=bug%2Curgent');
+  });
+
+  it('continues platform issue pagination after a short filtered page and stops on an empty page', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = new URL(String(input));
+      return json({ issues: url.searchParams.get('page') === '1' ? [issue] : [] });
+    });
+    const integration = createIntegration(fetchImpl);
+    const connection = { type: 'app-installation' as const, installationId: 7 };
+
+    const firstPage = await integration.intake.listIssues({
+      connection,
+      sourceIds: ['acme/app'],
+      cursor: '1',
+    });
+    const secondPage = await integration.intake.listIssues({
+      connection,
+      sourceIds: ['acme/app'],
+      cursor: firstPage.nextCursor ?? undefined,
+    });
+
+    expect(firstPage).toMatchObject({ issues: [expect.objectContaining({ id: '12' })], nextCursor: '2' });
+    expect(secondPage).toEqual({ issues: [], nextCursor: null });
   });
 
   it('fetches issue details, creates comments, and preserves not-found semantics', async () => {
@@ -727,9 +750,54 @@ describe('PlatformGithubIntegration', () => {
       mode: 'platform',
       endpointHost: 'platform.example.com',
       polling: { enabled: true },
-      reconcile: { enabled: true },
+      reconcile: {
+        pullRequests: { enabled: true },
+        issues: { enabled: true },
+      },
     });
     expect(JSON.stringify(integration.diagnostics())).not.toContain(config.accessToken);
+  });
+
+  it('maps pull request relevance from the Platform reconcile response', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      json({
+        title: 'Ship intake',
+        html_url: 'https://github.com/acme/app/pull/34',
+        state: 'closed',
+        draft: false,
+        merged: true,
+        created_at: '2026-07-01T00:00:00Z',
+        user: { login: 'ada' },
+        assignees: [{ login: 'linus' }],
+        requested_reviewers: [{ login: 'margaret' }],
+        labels: [{ name: 'bug' }, 'urgent'],
+        merged_by: { login: 'grace' },
+        head: { ref: 'feat/intake' },
+        base: { ref: 'main' },
+      }),
+    );
+    const integration = createIntegration(fetchImpl);
+
+    await expect(
+      integration.fetchPullRequestState({ installationId: 7, repository: 'acme/app', number: 34 }),
+    ).resolves.toEqual({
+      title: 'Ship intake',
+      url: 'https://github.com/acme/app/pull/34',
+      state: 'closed',
+      draft: false,
+      merged: true,
+      assignees: ['linus'],
+      requestedReviewers: ['margaret'],
+      labels: ['bug', 'urgent'],
+      headBranch: 'feat/intake',
+      baseBranch: 'main',
+      author: 'ada',
+      createdAt: '2026-07-01T00:00:00Z',
+      mergedBy: 'grace',
+    });
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe(
+      'https://platform.example.com/v1/server/github/repos/acme/app/pulls/34',
+    );
   });
 
   it('attaches GitHub rules to polled issue ingress', async () => {
@@ -1007,6 +1075,11 @@ describe('PlatformGithubIntegration', () => {
     expect(() => new PlatformGithubIntegration()).toThrow(/MASTRA_PLATFORM_SECRET_KEY/);
   });
 
+  it('exposes an explicitly configured GitHub App slug to webhook rules', () => {
+    expect(new PlatformGithubIntegration({ slug: 'factory-app' }).slug).toBe('factory-app');
+    expect(new PlatformGithubIntegration().slug).toBeUndefined();
+  });
+
   it('can disable polling and resolves collaborator permissions through the platform API', async () => {
     vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_ENABLED', 'false');
     vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS', '9000');
@@ -1029,11 +1102,14 @@ describe('PlatformGithubIntegration', () => {
       mode: 'platform',
       endpointHost: 'platform.example.com',
       polling: { enabled: false, intervalMs: 9_000 },
-      reconcile: { enabled: false },
+      reconcile: {
+        pullRequests: { enabled: false },
+        issues: { enabled: false },
+      },
     });
   });
 
-  it('keeps the reconcile worker alive when polling is disabled but reconcile stays enabled', () => {
+  it('keeps the reconciliation worker alive when polling is disabled', () => {
     vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_ENABLED', 'false');
     const integration = createIntegration();
 
@@ -1041,7 +1117,26 @@ describe('PlatformGithubIntegration', () => {
     expect(workers).toHaveLength(1);
     expect(integration.diagnostics()).toMatchObject({
       polling: { enabled: false },
-      reconcile: { enabled: true },
+      reconcile: {
+        pullRequests: { enabled: true },
+        issues: { enabled: true },
+      },
+    });
+  });
+
+  it('allows issue reconciliation to override a disabled legacy reconcile switch', () => {
+    vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_ENABLED', 'false');
+    vi.stubEnv('MASTRA_PLATFORM_GITHUB_RECONCILE_ENABLED', 'false');
+    vi.stubEnv('MASTRACODE_PLATFORM_GITHUB_ISSUE_RECONCILE_ENABLED', 'true');
+    const integration = createIntegration();
+
+    const workers = integration.workers({ controller: {}, storage: { generic: {} } } as unknown as IntegrationContext);
+    expect(workers).toHaveLength(1);
+    expect(integration.diagnostics()).toMatchObject({
+      reconcile: {
+        pullRequests: { enabled: false },
+        issues: { enabled: true },
+      },
     });
   });
 
@@ -1245,132 +1340,5 @@ describe('PlatformGithubIntegration', () => {
     });
   });
 
-  describe('runIssueTriage wiring', () => {
-    async function buildTriageApp(options: {
-      constructorRunIssueTriage?: (input: any) => Promise<any>;
-      controller?: object | undefined;
-    }) {
-      const seed = await createPlatformStorageForTests();
-      const fetchImpl = vi.fn<typeof fetch>(async input => {
-        const url = String(input);
-        // addIssueLabels calls the platform label endpoint
-        if (url.includes('/labels')) return json({ labels: ['auto-triaged'] });
-        throw new Error(`Unexpected fetch: ${url}`);
-      });
-      // Stub fetch BEFORE constructing the integration — PlatformApiClient
-      // captures `globalThis.fetch` at construction time.
-      vi.stubGlobal('fetch', fetchImpl);
-      const integration = options.constructorRunIssueTriage
-        ? new PlatformGithubIntegration({ runIssueTriage: options.constructorRunIssueTriage })
-        : new PlatformGithubIntegration();
 
-      const sourceControl = seed.sourceControl.forIntegration('github');
-      const project = await seed.projects.create({
-        orgId: 'org-1',
-        userId: 'user-1',
-        input: { name: 'Test App' },
-      });
-      const installation = await sourceControl.installations.upsert({
-        orgId: 'org-1',
-        connectedByUserId: 'user-1',
-        externalId: '7',
-      });
-      const repository = await sourceControl.repositories.upsert({
-        orgId: 'org-1',
-        input: { installationId: installation.id, externalId: '101', slug: 'acme/app', defaultBranch: 'main' },
-      });
-      const connection = await sourceControl.connections.create({
-        orgId: 'org-1',
-        factoryProjectId: project.id,
-        installationId: installation.id,
-        createdByUserId: 'user-1',
-      });
-      const projectRepository = await sourceControl.projectRepositories.link({
-        orgId: 'org-1',
-        connectionId: connection.id,
-        repositoryId: repository.id,
-        createdByUserId: 'user-1',
-        sandboxProvider: 'local',
-        sandboxWorkdir: '/tmp/app',
-      });
-
-      const context = {
-        auth: fakeAuth(),
-        fleet: { enabled: true },
-        storage: {
-          generic: seed.integrations.forIntegration('github'),
-          sourceControl,
-          projects: seed.projects,
-          intake: seed.intake,
-        },
-        controller: options.controller,
-        stateSigner: {},
-      } as unknown as IntegrationContext;
-      integration.initialize?.({ storage: context.storage.generic, projects: context.storage.projects });
-      integration.versionControl.initialize({ storage: sourceControl });
-
-      const app = new Hono();
-      app.use('*', async (c, next) => {
-        c.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
-        await next();
-      });
-      mountApiRoutes(app as never, integration.routes(context));
-
-      return { app, projectRepository };
-    }
-
-    function triageRequest(projectRepositoryId: string) {
-      return [
-        `/web/github/projects/${projectRepositoryId}/issues/42/triage`,
-        {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            title: 'Fix the bug',
-            url: 'https://github.com/acme/app/issues/42',
-            labels: ['bug'],
-          }),
-        },
-      ] as const;
-    }
-
-    it('derives runIssueTriage from the controller when no explicit option is given', async () => {
-      const createSession = vi.fn(async () => {
-        throw new Error('mock-createSession-called');
-      });
-      const { app, projectRepository } = await buildTriageApp({
-        controller: { createSession },
-      });
-
-      const res = await app.request(...triageRequest(projectRepository.id));
-      // The route attempted the controller-derived runner (which invokes
-      // runGithubIssueTriage → controller.createSession) rather than
-      // returning 503 triage_unavailable.
-      expect(res.status).not.toBe(503);
-      expect(createSession).toHaveBeenCalledOnce();
-    });
-
-    it('uses an explicit constructor runIssueTriage over the controller default', async () => {
-      const explicitRunner = vi.fn(async () => ({ threadId: 'explicit-thread' }));
-      const { app, projectRepository } = await buildTriageApp({
-        constructorRunIssueTriage: explicitRunner,
-        controller: {}, // controller present but the explicit option should win
-      });
-
-      const res = await app.request(...triageRequest(projectRepository.id));
-      expect(res.status).toBe(202);
-      expect(explicitRunner).toHaveBeenCalledOnce();
-      await expect(res.json()).resolves.toMatchObject({ ok: true, threadId: 'explicit-thread' });
-    });
-
-    it('returns 503 triage_unavailable when neither controller nor option is provided', async () => {
-      const { app, projectRepository } = await buildTriageApp({
-        controller: undefined,
-      });
-
-      const res = await app.request(...triageRequest(projectRepository.id));
-      expect(res.status).toBe(503);
-      await expect(res.json()).resolves.toEqual({ error: 'triage_unavailable' });
-    });
-  });
 });

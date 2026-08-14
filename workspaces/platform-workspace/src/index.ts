@@ -6,5 +6,14 @@ export {
   SandboxDestroyedError,
   type PlatformSandboxOptions,
   type PlatformSandboxNetworkIsolation,
+  type SandboxAddressRegistry,
 } from './sandbox.js';
 export { platformFilesystemProvider, platformSandboxProvider } from './provider.js';
+export {
+  execViaPrivateNetwork,
+  PrivateNetExecHttpError,
+  type PrivateNetExecOptions,
+  type PrivateNetExecResult,
+  type PrivateNetFetch,
+} from './private-net-exec.js';
+export { InProcessSandboxAddressRegistry } from './address-registry.js';

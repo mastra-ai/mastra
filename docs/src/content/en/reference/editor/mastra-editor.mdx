@@ -10,24 +10,17 @@ packages:
 
 The `MastraEditor` class sets up the editor system. Pass it to the `Mastra` constructor to turn on editor features like prompt blocks, agent code override, versioning, and tool providers.
 
-See the [Editor overview](/docs/editor/overview) for an introduction to what the editor does.
+See [Editor](/docs/editor/overview) for an introduction to what the editor does.
 
 ## Usage example
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 import { MastraEditor } from '@mastra/editor'
-import { ComposioToolProvider } from '@mastra/editor/providers/composio'
 
 export const mastra = new Mastra({
   agents: {/* your agents */},
-  editor: new MastraEditor({
-    toolProviders: {
-      composio: new ComposioToolProvider({
-        apiKey: process.env.COMPOSIO_API_KEY!,
-      }),
-    },
-  }),
+  editor: new MastraEditor(),
 })
 ```
 
@@ -100,7 +93,7 @@ export const mastra = new Mastra({
     name: 'source',
     type: "'code' | 'db'",
     description:
-      "Where agent overrides are stored. With 'db', overrides live in the configured storage backend and Studio shows the save and publish flow. With 'code', overrides live as per-agent JSON files on disk (routed through a local FilesystemStore) and Studio shows filesystem actions. See the Editor overview for the difference.",
+      "Where agent overrides are stored. With 'db', overrides live in the configured storage backend and Studio shows the save and publish flow. With 'code', overrides live as per-agent JSON files on disk (routed through a local FilesystemStore) and Studio shows filesystem actions. See [Editor storage options](/docs/editor/overview#choose-where-changes-are-stored) for the difference.",
     isOptional: true,
     defaultValue: "'db'",
   },
@@ -126,12 +119,12 @@ Each provider field above takes a record keyed by provider id. See the per-provi
 
 ## Agent Builder
 
-The `builder` field enables the [Agent Builder](/docs/agent-builder/overview), a browser-based UI for creating and editing stored agents. See:
+The `builder` field enables the [Agent Builder](https://agent-builder.mastra.ai/), a browser-based UI for creating and editing stored agents. See:
 
-- [Agent Builder overview](/docs/agent-builder/overview): Concepts and getting started.
-- [AgentBuilderOptions](/reference/editor/agent-builder/agent-builder-options): Full options schema.
-- [BuilderAgentDefaults](/reference/editor/agent-builder/builder-agent-defaults): Admin-pinned defaults for new agents.
-- [builder.configuration.agent.models](/reference/editor/agent-builder/builder-models): Model allowlist and default model.
+- [Agent Builder overview](https://agent-builder.mastra.ai/): Concepts and getting started.
+- [AgentBuilderOptions](https://agent-builder.mastra.ai/reference/agent-builder-options): Full options schema.
+- [BuilderAgentDefaults](https://agent-builder.mastra.ai/reference/builder-agent-defaults): Admin-pinned defaults for new agents.
+- [builder.configuration.agent.models](https://agent-builder.mastra.ai/reference/builder-models): Model allowlist and default model.
 
 ### Registering the Builder agent
 
@@ -152,7 +145,7 @@ export const mastra = new Mastra({
 
 The key name (`builderAgent`) is conventional. Any key works. The `@mastra/editor/ee` subpath is gated by the Mastra Enterprise Edition license at runtime.
 
-See the [Agent Builder overview](/docs/agent-builder/overview#prerequisites) for the full setup checklist.
+See the [Agent Builder overview](https://agent-builder.mastra.ai/#prerequisites) for the full setup checklist.
 
 ## Namespaces
 
@@ -187,7 +180,7 @@ All namespaces extend a shared CRUD base class, so they expose the same `create`
             name: 'update',
             type: '(input: StorageUpdateAgentInput) => Promise<Agent>',
             description:
-              'Partially update a stored agent. Creates a new draft version with the provided snapshot fields (instructions, tools, memory, and so on) and invalidates the cache. Set memory to null to disable memory.',
+              'Partially update a stored agent. Creates a version from the provided snapshot fields, assigns it to activeVersionId, and invalidates the cache. Set memory to null to disable memory.',
           },
           {
             name: 'delete',
@@ -427,6 +420,24 @@ All namespaces extend a shared CRUD base class, so they expose the same `create`
 ]}
 />
 
+### Agent namespace examples
+
+Create a stored override for an existing code-defined agent:
+
+```typescript title="src/scripts/seed-agent.ts"
+import { mastra } from '../mastra'
+
+const editor = mastra.getEditor()!
+
+await editor.agent.create({
+  id: 'support-agent',
+  instructions: 'You are a friendly support agent for Acme.',
+  tools: {
+    search_kb: { description: 'Search the Acme knowledge base' },
+  },
+})
+```
+
 ## Methods
 
 ### Provider access
@@ -474,3 +485,5 @@ const source = mastra.getEditor()?.getSource()
 ```
 
 Returns: `'code' | 'db' | undefined`
+
+When `source` is omitted, Editor uses the configured database storage even though `getSource()` returns `undefined`. See [Editor storage options](/docs/editor/overview#choose-where-changes-are-stored) for the storage workflows and [code-source versioning](/reference/editor/versioning#code-source) for activation and Git history behavior.

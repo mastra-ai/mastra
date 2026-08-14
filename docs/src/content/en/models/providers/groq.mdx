@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "groq/canopylabs/orpheus-arabic-saudi"
+  model: "groq/allam-2-7b"
 });
 
 // Generate a response
@@ -39,6 +39,18 @@ for await (const chunk of stream) {
 
 <ProviderModelsTable
   models={[
+  {
+    "model": "groq/allam-2-7b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 4096,
+    "maxOutput": 4096,
+    "inputCost": null,
+    "outputCost": null
+  },
   {
     "model": "groq/canopylabs/orpheus-arabic-saudi",
     "imageInput": false,
@@ -112,18 +124,6 @@ for await (const chunk of stream) {
     "outputCost": 0.79
   },
   {
-    "model": "groq/meta-llama/llama-4-scout-17b-16e-instruct",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 0.11,
-    "outputCost": 0.34
-  },
-  {
     "model": "groq/meta-llama/llama-prompt-guard-2-22m",
     "imageInput": false,
     "audioInput": false,
@@ -184,16 +184,16 @@ for await (const chunk of stream) {
     "outputCost": 0.3
   },
   {
-    "model": "groq/qwen/qwen3-32b",
-    "imageInput": false,
+    "model": "groq/qwen/qwen3.6-27b",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 131072,
-    "maxOutput": 40960,
-    "inputCost": 0.29,
-    "outputCost": 0.59
+    "maxOutput": 16384,
+    "inputCost": 0.6,
+    "outputCost": 3
   },
   {
     "model": "groq/whisper-large-v3",
@@ -232,7 +232,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.groq.com/openai/v1",
-    id: "groq/canopylabs/orpheus-arabic-saudi",
+    id: "groq/allam-2-7b",
     apiKey: process.env.GROQ_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -251,7 +251,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "groq/whisper-large-v3-turbo"
-      : "groq/canopylabs/orpheus-arabic-saudi";
+      : "groq/allam-2-7b";
   }
 });
 ```

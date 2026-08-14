@@ -1,11 +1,11 @@
 ---
-title: "Tracing | Observability"
+title: "Traces | Observability"
 description: "Record and inspect hierarchical execution for agents, workflows, tools, and model calls."
 packages:
   - "@mastra/observability"
 ---
 
-# Tracing
+# Traces
 
 Tracing is the observability signal that records how a request moves through agents, workflows, tools, and model calls. Mastra represents each operation as a span and groups related spans into a trace so you can inspect the full execution path.
 
@@ -26,9 +26,8 @@ This page focuses on trace-specific concepts: span hierarchy, sampling, metadata
 
 To get started with tracing, configure observability in your Mastra instance and run an agent or workflow. You can configure behavior through the following features:
 
-- [Configuration](/docs/observability/config): Base observability config and multiple configs, plus serverless flushing
-- [Storage](/docs/observability/storage): Storage routing for traces, logs, and metrics
-- [Integrations overview](/docs/observability/integrations/overview): Exporters, bridges, and processors
+- [Configuration](/docs/observability/overview#configuration): Base observability config and multiple configs, plus serverless flushing
+- [Storage](/docs/observability/overview#storage): Storage routing for traces, logs, and metrics
 
 ## Sampling strategies
 
@@ -156,7 +155,7 @@ Per-call `tracingOptions.metadata.environment` always takes precedence, so indiv
 
 ### Automatic metadata from `RequestContext`
 
-Instead of manually adding metadata to each span, you can configure Mastra to automatically extract values from RequestContext and attach them as metadata to all spans in a trace. This is useful for consistently tracking user identifiers, environment information, feature flags, or any request-scoped data across your entire trace.
+Instead of manually adding metadata to each span, you can configure Mastra to automatically extract values from RequestContext and attach them as metadata to all spans in a trace. This is useful for consistently tracking user identifiers and environment information, along with feature flags or other request-scoped data across your entire trace.
 
 #### Configuration-level extraction
 
@@ -337,7 +336,7 @@ const result = await agent.generate([{ role: 'user', content: 'Sensitive operati
 })
 ```
 
-For more fine-grained control over sensitive data, consider using the [Sensitive Data Filter](/docs/observability/integrations/processors/sensitive-data-filter) processor, which can redact specific fields (like passwords, tokens, and keys) while preserving the rest of the input/output.
+For more fine-grained control over sensitive data, consider using the [Sensitive Data Filter](/reference/observability/tracing/processors/sensitive-data-filter) processor, which can redact specific fields (like passwords, tokens, and keys) while preserving the rest of the input/output.
 
 #### Child spans and metadata extraction
 
@@ -370,7 +369,7 @@ You get fine-grained control over which child spans include RequestContext metad
 
 ## Creating child spans
 
-Child spans allow you to track fine-grained operations within your workflow steps or tools. They provide visibility into sub-operations like database queries, API calls, file operations, or complex calculations. This hierarchical structure helps you identify performance bottlenecks and understand the exact sequence of operations.
+Child spans allow you to track fine-grained operations within your workflow steps or tools. They provide visibility into sub-operations like database queries and API calls, as well as file operations or complex calculations. This hierarchical structure helps you identify performance bottlenecks and understand the exact sequence of operations.
 
 Create child spans inside a tool call or workflow step to track specific operations:
 
@@ -427,7 +426,7 @@ Span processors transform, filter, or enrich trace data before it's exported. Th
 
 #### Built-in processors
 
-- [Sensitive Data Filter](/docs/observability/integrations/processors/sensitive-data-filter) redacts sensitive information. It's enabled in the default observability config.
+- [Sensitive Data Filter](/reference/observability/tracing/processors/sensitive-data-filter) redacts sensitive information. It's enabled in the default observability config.
 
 #### Creating custom processors
 
@@ -469,8 +468,6 @@ Processors are executed in the order they're defined, allowing you to chain mult
 - Filtering out spans based on criteria
 - Normalizing data formats
 - Enriching spans with business context
-
-For the broader exporter, bridge, and processor model, see [Integrations overview](/docs/observability/integrations/overview).
 
 ## Span filtering
 
@@ -690,7 +687,7 @@ export const mastra = new Mastra({
 
 ### Use cases
 
-**Increasing limits for debugging**: If your agents or tools work with large documents, API responses, or data structures, increase these limits to capture more context in your traces:
+**Increasing limits for debugging**: Increase these limits to capture more context for large documents and API responses, as well as other data structures:
 
 ```ts prettier:false
 serializationOptions: {

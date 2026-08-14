@@ -1,8 +1,8 @@
 ---
-title: "Reference: CLI commands | CLI"
+title: 'Reference: CLI commands | CLI'
 description: Documentation for the Mastra CLI to develop, build, and start your project.
 packages:
-  - "mastra"
+  - 'mastra'
 ---
 
 # CLI commands
@@ -109,7 +109,7 @@ or `"anthropic/..."` model selections.
 
 ## `mastra factory dev`
 
-Starts a development server for [Agent Builder](/docs/agent-builder/overview) development. It uses the same dev runtime and flags as [`mastra dev`](#mastra-dev) and writes to the same `.mastra/output` directory.
+Starts a development server for [Agent Builder](https://agent-builder.mastra.ai/) development. It uses the same dev runtime and flags as [`mastra dev`](#mastra-dev) and writes to the same `.mastra/output` directory.
 
 ```bash
 npx mastra factory dev
@@ -159,7 +159,7 @@ MASTRA_CONCURRENCY=2 mastra build
 
 ## `mastra start`
 
-:::info
+:::note
 
 You need to run `mastra build` before using `mastra start`.
 
@@ -209,9 +209,74 @@ Custom output directory. Defaults to `.mastra/output`.
 
 Enable debug logging during the build.
 
+## `mastra experiment build`
+
+Builds a standalone companion worker that runs experiments without exposing an HTTP server. The worker loads your exported `Mastra` instance and accepts versioned newline-delimited JSON (NDJSON) protocol messages on standard input. It writes protocol events to standard output.
+
+```bash
+mastra experiment build [options]
+```
+
+The command writes the worker to `.mastra/experiment-worker` by default. The directory contains the executable entry point, production dependencies, and `experiment-worker-manifest.json`. Treat standard output as protocol-only output. Worker diagnostics are written to standard error.
+
+### Artifact contract
+
+`experiment-worker-manifest.json` identifies the artifact as `mastra-experiment-worker` version `1` and provides:
+
+- The CLI version, creation time, and unique build ID embedded in the executable.
+- Supported protocol and dataset canonicalization versions.
+- The executable, arguments, and working directory required to launch the worker.
+- The dependency manifest and generated lockfile paths.
+- A sorted SHA-256 digest for each artifact file.
+- A SHA-256 content digest derived from those file paths and digests.
+
+The content digest excludes `experiment-worker-manifest.json` to avoid a self-referential digest. Package the manifest with the rest of the directory. Use an outer package digest when the manifest itself must be attested.
+
+### Protocol contract
+
+The worker implements the pinned experiment companion-worker protocol version `1`. It reads strict UTF-8 NDJSON frames from standard input and requires every frame, including the last one, to end with a newline. Frames larger than 1 MiB, malformed or truncated frames, unsupported protocol or canonicalization versions, and messages that don't match the active experiment correlation are rejected as protocol failures.
+
+A run request must match the artifact's embedded build ID and include the ordered dataset item count and SHA-256 attestation. The worker emits contiguous sequence numbers starting at `0`, timer-driven heartbeats, awaited experiment lifecycle events, and exactly one terminal event. Cancellation must match the active protocol version and experiment ID, plus the job ID, attempt, and idempotency key.
+
+Protocol exit codes are:
+
+| Code | Meaning |
+| - | - |
+| `0` | Completed |
+| `10` | Completed with item errors |
+| `20` | Fatal failure |
+| `21` | Retryable failure |
+| `30` | Cancelled |
+| `31` | Timed out |
+| `70` | Protocol failure |
+
+### Packet field handling
+
+The worker passes target identity, ordered inline dataset items, scorer IDs, concurrency, timeout, experiment metadata, request context, tool mocks, and cancellation to `runExperiment`. Scorer versions and artifact provenance are retained as experiment metadata. Scorer code provenance is enforced by artifact admission rather than runtime scorer lookup.
+
+Version `1` uses deterministic undeclared-tool denial. Non-empty network allowlists and secret references are rejected with a policy failure because network enforcement and secret materialization belong to the process sandbox. Dataset item source and expected-trajectory fields are preserved as item metadata when passed to `runExperiment`.
+
+### Flags
+
+#### `--dir`
+
+Path to your Mastra source directory. Defaults to `src/mastra`.
+
+#### `--root`
+
+Project root directory. Defaults to the current directory.
+
+#### `--output-dir`
+
+Custom artifact directory. Relative paths are resolved from the project root. Defaults to `.mastra/experiment-worker`.
+
+#### `--debug`
+
+Enable debug logging during the build.
+
 ## `mastra worker start`
 
-:::info
+:::note
 
 You need to run `mastra worker build` or `mastra build` before using `mastra worker start`.
 
@@ -477,7 +542,7 @@ Emit machine-readable JSON.
 
 Provisions and attaches a managed database, then polls until it's ready. Provisioning errors are printed with the provider's error detail.
 
-By default the database is scoped to a single environment: pass an environment argument to pick it, or omit the argument to have the CLI pick for you. When the project has one environment, that environment is used. When it has several, the CLI prompts you to select one interactively; in non-interactive contexts (CI, `--json`) an environment argument is required. Pass `--shared` to attach a project-scoped database that's shared by every environment instead.
+By default, the database is scoped to a single environment. Pass an environment argument to select it. If you omit the argument, the CLI uses the project's only environment or prompts you when several are available. In non-interactive contexts (CI, `--json`) an environment argument is required. Pass `--shared` to attach a project-scoped database that's shared by every environment instead.
 
 Environment-scoped databases inherit their provider region from the environment. Shared databases accept `--region`.
 
@@ -558,7 +623,7 @@ Emit machine-readable JSON.
 
 ## `mastra studio deploy`
 
-:::info
+:::note
 
 `mastra studio deploy` continues to work but is superseded by [`mastra deploy`](#mastra-deploy), which supports environments (`--env staging`, `--env production`) on a single project. New setups should use `mastra deploy`.
 
@@ -680,7 +745,7 @@ Creates a new project through an interactive prompt. This command doesn't accept
 
 ## `mastra server deploy`
 
-:::info
+:::note
 
 `mastra server deploy` continues to work but is superseded by [`mastra deploy`](#mastra-deploy), which deploys a single project to multiple environments instead of separate Studio and Server commands. New setups should use `mastra deploy`.
 
@@ -754,7 +819,7 @@ Lists all environment variables for the linked project. Values are partially mas
 
 ### `mastra server env set`
 
-Sets an environment variable. The CLI reads the current map, applies the change, and uploads the result.
+Sets an environment variable. The CLI reads the current map and applies the change before uploading the result.
 
 ```bash
 mastra server env set <key> <value>
@@ -980,13 +1045,13 @@ Runs database migrations to update your storage schema. This command is useful w
 The command bundles your project and connects to your configured storage backend. It then executes any pending migrations. Currently supports:
 
 - **Duplicate spans migration**: Removes duplicate `(traceId, spanId)` entries and adds a unique constraint to ensure data integrity.
-- **ClickHouse legacy-to-vNext span migration**: Copies historical spans from the legacy `mastra_ai_spans` table to the vNext `mastra_span_events` schema. Runs in batches to stay within memory limits. See the [ClickHouse storage reference](/reference/storage/clickhouse#migrating-from-legacy-to-vnext) for details.
+- **ClickHouse legacy-to-vNext span migration**: Copies historical spans from the legacy `mastra_ai_spans` table to the vNext `mastra_span_events` schema. Runs in batches to stay within memory limits. See the [ClickHouse storage reference](/integrations/databases/clickhouse#migrating-from-legacy-to-vnext) for details.
 
 ```bash
 mastra migrate
 ```
 
-See the [Storage migration guide](/guides/migrations/upgrade-to-v1/storage#duplicate-spans-migration) for details on when migrations are needed.
+See the [Storage migration guide](/reference/migrations/upgrade-to-v1/storage#duplicate-spans-migration) for details on when migrations are needed.
 
 It accepts [common flags][common-flags].
 
@@ -1163,7 +1228,7 @@ mastra api agent get <agentId>
 
 #### `mastra api agent run`
 
-Runs an agent with JSON input. Use command help to see examples for text prompts, chat messages, and memory thread options.
+Runs an agent with JSON input. Use command help to see examples for text prompts and chat messages, including memory thread options.
 
 ```bash
 mastra api agent run <agentId> <input>
@@ -1307,7 +1372,7 @@ mastra api thread get <threadId>
 
 #### `mastra api thread create`
 
-Creates a memory thread. Pass one JSON input object; the CLI splits fields such as `agentId` into query parameters when required by the server route.
+Creates a memory thread. Pass one JSON input object. The CLI splits fields such as `agentId` into query parameters when required by the server route.
 
 ```bash
 mastra api thread create <input>

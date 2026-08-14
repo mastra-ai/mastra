@@ -52,8 +52,11 @@ export async function getCreateVersionTag(version: string): Promise<string> {
     const tag = selectMatchingDistTag(version, stdout);
     if (tag) return tag;
   } catch {
-    // Fall through to the documented latest fallback.
+    // Fall through to the version-derived prerelease channel or latest.
   }
+
+  const prereleaseChannel = getPrereleaseChannel(version);
+  if (prereleaseChannel) return prereleaseChannel;
 
   console.error('We could not resolve the create-mastra version tag, falling back to "latest"');
   return 'latest';

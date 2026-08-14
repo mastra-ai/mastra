@@ -342,8 +342,10 @@ export class BraintrustExporter extends TrackingExporter<
     }
 
     // Handle thread data accumulation for MODEL_STEP and tool spans.
-    // PROVIDER_TOOL_CALL is excluded: those spans parent under AGENT_RUN, so
-    // findModelGenerationAncestor never finds a MODEL_GENERATION to merge into.
+    // PROVIDER_TOOL_CALL is excluded: provider results are not merged into the
+    // reconstructed thread output. Since @mastra/core parents these spans under
+    // the delivering MODEL_STEP, findModelGenerationAncestor would now succeed,
+    // so accumulating them is possible as a follow-up.
     if (span.type === SpanType.MODEL_STEP) {
       this.accumulateModelStepData(span, traceData);
     } else if (span.type === SpanType.TOOL_CALL || span.type === SpanType.MCP_TOOL_CALL) {

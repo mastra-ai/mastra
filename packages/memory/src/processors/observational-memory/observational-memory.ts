@@ -1,4 +1,5 @@
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { resolveModelConfig } from '@mastra/core/llm';
@@ -20,7 +21,7 @@ import {
   OBSERVATIONAL_MEMORY_DEFAULTS,
   OBSERVATION_CONTEXT_PROMPT,
   OBSERVATION_CONTEXT_INSTRUCTIONS,
-  OBSERVATION_RETRIEVAL_INSTRUCTIONS,
+  getRetrievalInstructions,
 } from './constants';
 
 /**
@@ -201,6 +202,7 @@ import {
   findLastCompletedObservationBoundary,
   getUnobservedParts,
   getBufferedChunks,
+  getObservableMessages,
   stripThreadTags,
 } from './message-utils';
 import { ModelByInputTokens } from './model-by-input-tokens';
@@ -287,6 +289,11 @@ export class ObservationalMemory {
   readonly scope: 'resource' | 'thread';
   /** Whether retrieval-mode observation groups are enabled. */
   readonly retrieval: boolean;
+  /** Scope the recall tool was registered with — controls which retrieval instructions are injected. */
+  readonly retrievalScope: 'thread' | 'resource';
+  /** Application-provided guidance appended after the native retrieval instructions. */
+  private retrievalInstructions?: string;
+  private retrievalSearch: boolean;
   private observationConfig: ResolvedObservationConfig;
   private reflectionConfig: ResolvedReflectionConfig;
   private onDebugEvent?: (event: ObservationDebugEvent) => void;
@@ -341,6 +348,15 @@ export class ObservationalMemory {
   private locks = new Map<string, Promise<void>>();
 
   /**
+   * Initial record lookup/creation promises keyed by the effective storage scope.
+   * Concurrent callers share the full read-or-create operation so a stale read
+   * cannot create another generation-zero record after the first insert finishes.
+   * Entries are removed after both success and failure so later calls always
+   * re-read storage and transient failures can be retried.
+   */
+  private recordInitializations = new Map<string, Promise<ObservationalMemoryRecord>>();
+
+  /**
    * Acquire a lock for the given key, execute the callback, then release.
    * If a lock is already held, waits for it to be released before acquiring.
    */
@@ -393,6 +409,9 @@ export class ObservationalMemory {
     this.storage = config.storage;
     this.scope = config.scope ?? 'thread';
     this.retrieval = Boolean(config.retrieval);
+    this.retrievalScope = typeof config.retrieval === 'object' ? (config.retrieval.scope ?? 'resource') : 'resource';
+    this.retrievalInstructions = typeof config.retrieval === 'object' ? config.retrieval.instructions : undefined;
+    this.retrievalSearch = typeof config.retrieval === 'object' && Boolean(config.retrieval.vector);
     this.onIndexObservations = config.onIndexObservations;
     this.hooks = config.hooks;
     this.mastra = config.mastra;
@@ -1060,13 +1079,29 @@ export class ObservationalMemory {
    */
   async getOrCreateRecord(threadId: string, resourceId?: string): Promise<ObservationalMemoryRecord> {
     const ids = this.getStorageIds(threadId, resourceId);
-    let record = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
+    // Storage adapters identify thread-scoped records by threadId alone and
+    // resource-scoped records by resourceId alone. The single-flight key must
+    // mirror that identity so optional resourceId differences cannot split a
+    // thread-scoped initialization into separate operations.
+    const initializationKey = ids.threadId === null ? `resource:${ids.resourceId}` : `thread:${ids.threadId}`;
+    const pendingInitialization = this.recordInitializations.get(initializationKey);
+    if (pendingInitialization) {
+      return pendingInitialization;
+    }
 
-    if (!record) {
+    // Defer the storage read to the next microtask so the complete operation is
+    // registered before any adapter code runs. This prevents an already-started
+    // read from returning a stale null after another caller has finished inserting.
+    const initialization = Promise.resolve().then(async () => {
+      const record = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
+      if (record) {
+        return record;
+      }
+
       // Capture the timezone used for Observer date formatting
       const observedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-      record = await this.storage.initializeObservationalMemory({
+      return this.storage.initializeObservationalMemory({
         threadId: ids.threadId,
         resourceId: ids.resourceId,
         scope: this.scope,
@@ -1077,9 +1112,16 @@ export class ObservationalMemory {
         },
         observedTimezone,
       });
-    }
+    });
+    this.recordInitializations.set(initializationKey, initialization);
 
-    return record;
+    try {
+      return await initialization;
+    } finally {
+      if (this.recordInitializations.get(initializationKey) === initialization) {
+        this.recordInitializations.delete(initializationKey);
+      }
+    }
   }
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -1121,7 +1163,7 @@ export class ObservationalMemory {
     resourceId?: string,
   ): Promise<void> {
     if (!messageList) return;
-    const allMsgs = messageList.get.all.db();
+    const allMsgs = getObservableMessages(messageList);
     // Find the last assistant message to attach the marker to
     for (let i = allMsgs.length - 1; i >= 0; i--) {
       const msg = allMsgs[i];
@@ -1609,7 +1651,7 @@ export class ObservationalMemory {
     }
 
     const messages = [
-      `${OBSERVATION_CONTEXT_PROMPT}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}${retrieval ? `\n\n${OBSERVATION_RETRIEVAL_INSTRUCTIONS}` : ''}`,
+      `${OBSERVATION_CONTEXT_PROMPT}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}${retrieval ? `\n\n${getRetrievalInstructions(this.retrievalScope, this.retrievalInstructions, this.retrievalSearch)}` : ''}`,
     ];
 
     // Add unobserved context from other threads (resource scope only)
@@ -1696,10 +1738,15 @@ export class ObservationalMemory {
     // fall back to a resource-keyed record which causes deadlocks when
     // multiple threads share the same resourceId.
     if (this.scope === 'thread') {
-      throw new Error(
-        `ObservationalMemory (scope: 'thread') requires a threadId, but none was found in RequestContext or MessageList. ` +
+      throw new MastraError({
+        id: 'OBSERVATIONAL_MEMORY_THREAD_ID_REQUIRED',
+        domain: ErrorDomain.MASTRA_MEMORY,
+        category: ErrorCategory.USER,
+        details: { status: 400 },
+        text:
+          `ObservationalMemory (scope: 'thread') requires a threadId, but none was found in RequestContext or MessageList. ` +
           `Ensure the agent is configured with Memory and a valid threadId is provided.`,
-      );
+      });
     }
 
     return null;
@@ -2253,8 +2300,11 @@ ${formattedMessages}
     messages: MastraDBMessage[];
     observedMessageIds?: string[];
     retentionFloor?: number;
+    /** Message ids that must never be removed (e.g. the in-flight turn's pending messages). */
+    preserveMessageIds?: string[];
   }): Promise<string[]> {
     const { threadId, resourceId, messages, observedMessageIds, retentionFloor } = opts;
+    const preserveSet = opts.preserveMessageIds?.length ? new Set(opts.preserveMessageIds) : null;
 
     const record = await this.getOrCreateRecord(threadId, resourceId);
     const effectiveObservedIds =
@@ -2277,6 +2327,10 @@ ${formattedMessages}
 
     for (const msg of messages) {
       if (!msg?.id || msg.id === 'om-continuation' || !observedSet.has(msg.id)) continue;
+      if (preserveSet?.has(msg.id)) {
+        skipped += 1;
+        continue;
+      }
 
       const unobservedParts = getUnobservedParts(msg);
       const totalParts = msg.content?.parts?.length ?? 0;
@@ -2340,10 +2394,14 @@ ${formattedMessages}
     messages: MessageList | MastraDBMessage[];
     observedMessageIds?: string[];
     retentionFloor?: number;
+    /** Message ids that must never be removed (e.g. the in-flight turn's pending messages). */
+    preserveMessageIds?: string[];
   }): Promise<MastraDBMessage[]> {
-    const { threadId, resourceId, observedMessageIds, retentionFloor } = opts;
+    const { threadId, resourceId, observedMessageIds, retentionFloor, preserveMessageIds } = opts;
     const messageList = this.isMessageList(opts.messages) ? opts.messages : undefined;
-    const allMsgs: MastraDBMessage[] = messageList ? messageList.get.all.db() : (opts.messages as MastraDBMessage[]);
+    const allMsgs: MastraDBMessage[] = messageList
+      ? getObservableMessages(messageList)
+      : (opts.messages as MastraDBMessage[]);
 
     let markerIdx = -1;
     let markerMsg: MastraDBMessage | null = null;
@@ -2369,6 +2427,7 @@ ${formattedMessages}
         messages: allMsgs,
         observedMessageIds,
         retentionFloor,
+        preserveMessageIds,
       });
 
       if (messageList) {
@@ -2386,9 +2445,10 @@ ${formattedMessages}
       const idsToRemove: string[] = [];
       const messagesToSave: MastraDBMessage[] = [];
 
+      const preserveSet = preserveMessageIds?.length ? new Set(preserveMessageIds) : null;
       for (let i = 0; i < markerIdx; i++) {
         const msg = allMsgs[i];
-        if (msg?.id && msg.id !== 'om-continuation') {
+        if (msg?.id && msg.id !== 'om-continuation' && !preserveSet?.has(msg.id)) {
           idsToRemove.push(msg.id);
           messagesToSave.push(msg);
         }
@@ -2396,11 +2456,16 @@ ${formattedMessages}
 
       messagesToSave.push(markerMsg);
 
-      const unobservedParts = getUnobservedParts(markerMsg);
-      if (unobservedParts.length === 0) {
-        if (markerMsg.id) idsToRemove.push(markerMsg.id);
-      } else if (unobservedParts.length < (markerMsg.content?.parts?.length ?? 0)) {
-        markerMsg.content.parts = unobservedParts;
+      // The marker anchor itself may be an in-flight message (e.g. the step-0
+      // seeded response message) — preserved ids must never be trimmed or removed.
+      const preserveMarker = Boolean(markerMsg.id && preserveSet?.has(markerMsg.id));
+      if (!preserveMarker) {
+        const unobservedParts = getUnobservedParts(markerMsg);
+        if (unobservedParts.length === 0) {
+          if (markerMsg.id) idsToRemove.push(markerMsg.id);
+        } else if (unobservedParts.length < (markerMsg.content?.parts?.length ?? 0)) {
+          markerMsg.content.parts = unobservedParts;
+        }
       }
 
       if (messageList) {
@@ -2519,7 +2584,14 @@ ${formattedMessages}
     const { threadId, resourceId, unobservedContextBlocks } = opts;
     const record = opts.record ?? (await this.getOrCreateRecord(threadId, resourceId));
 
-    if (!record.activeObservations) return undefined;
+    if (!record.activeObservations) {
+      // Resource-scoped recall can browse and search other threads even before any
+      // observation group exists, so the actor still needs to know how to use it.
+      if (this.retrieval && this.retrievalScope === 'resource') {
+        return [getRetrievalInstructions(this.retrievalScope, this.retrievalInstructions, this.retrievalSearch)];
+      }
+      return undefined;
+    }
 
     // Read thread metadata for continuation hints
     const thread = await this.storage.getThreadById({ threadId });
@@ -3373,9 +3445,9 @@ ${formattedMessages}
         const oldTitle = thread.title?.trim();
         const newTitle = chunkThreadTitle?.trim();
         const shouldUpdateThreadTitle = !!newTitle && newTitle.length >= 3 && newTitle !== oldTitle;
-        await this.storage.updateThread({
+        await this.storage.patchThread({
           id: threadId,
-          title: shouldUpdateThreadTitle ? newTitle : (thread.title ?? ''),
+          ...(shouldUpdateThreadTitle ? { title: newTitle } : {}),
           metadata: newMetadata,
         });
       }
@@ -3493,6 +3565,8 @@ ${formattedMessages}
     threadId: string;
     resourceId?: string;
     messages?: MastraDBMessage[];
+    /** Live MessageList for the in-flight turn — lets markers land on the pending assistant message. */
+    messageList?: MessageList;
     hooks?: ObserveHooks;
     /** Which pipeline path initiated this cycle; defaults to 'manual'. */
     trigger?: ObserveTrigger;
@@ -3546,6 +3620,7 @@ ${formattedMessages}
           threadId,
           resourceId,
           messages: unobservedMessages,
+          messageList: opts.messageList,
           reflectionHooks,
           agent: opts.agent,
           requestContext,
@@ -3647,9 +3722,8 @@ ${formattedMessages}
           threadTitle: metadataUpdate.threadTitle ?? previousOmMetadata?.threadTitle,
           extracted: { ...(previousOmMetadata?.extracted ?? {}), ...(metadataUpdate.extracted ?? {}) },
         });
-        await this.storage.updateThread({
+        await this.storage.patchThread({
           id: threadId,
-          title: thread.title ?? '',
           metadata: newMetadata,
         });
       }

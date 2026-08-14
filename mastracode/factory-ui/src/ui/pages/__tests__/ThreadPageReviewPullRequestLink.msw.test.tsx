@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
+import type { PullRequestSubscription } from '../../domains/factory/services/githubSubscriptions';
 import { createAppRoutes } from '../../router';
 
 const FACTORY_ID = 'fp-1';
@@ -14,6 +15,15 @@ const THREAD_ID = 'thread-1';
 const PULL_REQUEST_NUMBER = 20338;
 const PULL_REQUEST_URL = `https://github.com/mastra-ai/mastra/pull/${PULL_REQUEST_NUMBER}`;
 const PULL_REQUEST_ACCESSIBLE_NAME = `Open open mastra-ai/mastra pull request ${PULL_REQUEST_NUMBER}`;
+const OTHER_PULL_REQUEST_NUMBER = 20339;
+const OTHER_PULL_REQUEST_URL = `https://github.com/mastra-ai/mastra/pull/${OTHER_PULL_REQUEST_NUMBER}`;
+const OTHER_PULL_REQUEST_ACCESSIBLE_NAME = `Open open mastra-ai/mastra pull request ${OTHER_PULL_REQUEST_NUMBER}`;
+const MALFORMED_PULL_REQUEST_NUMBER = 20340;
+const MALFORMED_PULL_REQUEST_URL = `https://github.com/mastra-ai/mastra/pull/${MALFORMED_PULL_REQUEST_NUMBER}`;
+const NON_POSITIVE_PULL_REQUEST_URL = 'https://github.com/mastra-ai/mastra/pull/0';
+const MIXED_CASE_REPO_SLUG = 'Mastra-AI/Mastra';
+const MIXED_CASE_PULL_REQUEST_URL = `https://github.com/${MIXED_CASE_REPO_SLUG}/pull/${PULL_REQUEST_NUMBER}`;
+const MIXED_CASE_ACCESSIBLE_NAME = `Open open ${MIXED_CASE_REPO_SLUG} pull request ${PULL_REQUEST_NUMBER}`;
 const AC = `${TEST_BASE_URL}/api/agent-controller/code`;
 
 const workspaceSession = {
@@ -31,16 +41,20 @@ const workspaceSession = {
   updatedAt: '2026-07-29T00:00:00.000Z',
 };
 
-const pullRequestSubscriptions = {
-  subscriptions: [
-    {
-      id: 'subscription-1',
-      repoFullName: 'mastra-ai/mastra',
-      pullRequestNumber: PULL_REQUEST_NUMBER,
-      status: 'open',
-      url: PULL_REQUEST_URL,
-    },
-  ],
+const pullRequestSubscription: PullRequestSubscription = {
+  id: 'subscription-1',
+  repoFullName: 'mastra-ai/mastra',
+  pullRequestNumber: PULL_REQUEST_NUMBER,
+  status: 'open',
+  url: PULL_REQUEST_URL,
+};
+
+const otherPullRequestSubscription: PullRequestSubscription = {
+  id: 'subscription-2',
+  repoFullName: 'mastra-ai/mastra',
+  pullRequestNumber: OTHER_PULL_REQUEST_NUMBER,
+  status: 'open',
+  url: OTHER_PULL_REQUEST_URL,
 };
 
 function createWireWorkItem(type: 'pull-request' | 'issue') {
@@ -78,10 +92,7 @@ function createWireWorkItem(type: 'pull-request' | 'issue') {
   };
 }
 
-function stubThreadRoute(
-  workItem: ReturnType<typeof createWireWorkItem>,
-  subscriptions: typeof pullRequestSubscriptions,
-) {
+function stubThreadRoute(workItem: ReturnType<typeof createWireWorkItem>, subscriptions: unknown[]) {
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
@@ -153,7 +164,7 @@ function stubThreadRoute(
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
       HttpResponse.json({ workItems: [workItem] }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json(subscriptions)),
+    http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions })),
   );
 }
 
@@ -166,20 +177,29 @@ function renderThreadRoute() {
 
 describe('ThreadPage pull request link placement', () => {
   describe('when the current Factory session reviews a pull request', () => {
-    it('shows the pull request in the Factory session header and not in the composer', async () => {
-      stubThreadRoute(createWireWorkItem('pull-request'), pullRequestSubscriptions);
+    it('shows the active review and other subscriptions in the header but not the composer', async () => {
+      stubThreadRoute(createWireWorkItem('pull-request'), [otherPullRequestSubscription]);
       renderThreadRoute();
 
       const factorySession = await screen.findByRole('region', { name: 'Factory session' });
       const composer = await screen.findByRole('region', { name: 'Thread composer' });
-      const link = await within(factorySession).findByRole('link', { name: PULL_REQUEST_ACCESSIBLE_NAME });
+      const activeReviewLink = await within(factorySession).findByRole('link', {
+        name: PULL_REQUEST_ACCESSIBLE_NAME,
+      });
+      const otherSubscriptionLink = within(factorySession).getByRole('link', {
+        name: OTHER_PULL_REQUEST_ACCESSIBLE_NAME,
+      });
 
-      expect(link).toHaveAttribute('href', PULL_REQUEST_URL);
+      expect(activeReviewLink).toHaveAttribute('href', PULL_REQUEST_URL);
+      expect(otherSubscriptionLink).toHaveAttribute('href', OTHER_PULL_REQUEST_URL);
       expect(within(composer).queryByRole('link', { name: PULL_REQUEST_ACCESSIBLE_NAME })).not.toBeInTheDocument();
+      expect(
+        within(composer).queryByRole('link', { name: OTHER_PULL_REQUEST_ACCESSIBLE_NAME }),
+      ).not.toBeInTheDocument();
     });
 
-    it('shows one link to the reviewed pull request', async () => {
-      stubThreadRoute(createWireWorkItem('pull-request'), pullRequestSubscriptions);
+    it('does not duplicate the active review when it is already subscribed', async () => {
+      stubThreadRoute(createWireWorkItem('pull-request'), [pullRequestSubscription]);
       renderThreadRoute();
 
       const factorySession = await screen.findByRole('region', { name: 'Factory session' });
@@ -190,11 +210,93 @@ describe('ThreadPage pull request link placement', () => {
 
       expect(pullRequestLinks).toHaveLength(1);
     });
+
+    it('drops a malformed subscription and keeps the valid ones', async () => {
+      stubThreadRoute(createWireWorkItem('pull-request'), [
+        {
+          ...otherPullRequestSubscription,
+          id: 'subscription-invalid',
+          pullRequestNumber: MALFORMED_PULL_REQUEST_NUMBER,
+          url: `https://github.com/mastra-ai/mastra/pull/${MALFORMED_PULL_REQUEST_NUMBER}`,
+          status: 'draft',
+        },
+        otherPullRequestSubscription,
+      ]);
+      renderThreadRoute();
+
+      const factorySession = await screen.findByRole('region', { name: 'Factory session' });
+      const validLinks = await within(factorySession).findAllByRole('link', {
+        name: OTHER_PULL_REQUEST_ACCESSIBLE_NAME,
+      });
+
+      expect(validLinks).toHaveLength(1);
+      const malformedLinks = within(factorySession)
+        .queryAllByRole('link')
+        .filter(link => link.getAttribute('href') === MALFORMED_PULL_REQUEST_URL);
+      expect(malformedLinks).toHaveLength(0);
+    });
+
+    it('drops a subscription whose pull request number is not positive', async () => {
+      stubThreadRoute(createWireWorkItem('pull-request'), [
+        {
+          ...otherPullRequestSubscription,
+          id: 'subscription-zero',
+          pullRequestNumber: 0,
+          url: NON_POSITIVE_PULL_REQUEST_URL,
+        },
+        otherPullRequestSubscription,
+      ]);
+      renderThreadRoute();
+
+      const factorySession = await screen.findByRole('region', { name: 'Factory session' });
+      await within(factorySession).findByRole('link', { name: OTHER_PULL_REQUEST_ACCESSIBLE_NAME });
+      const nonPositiveLinks = within(factorySession)
+        .queryAllByRole('link')
+        .filter(link => link.getAttribute('href') === NON_POSITIVE_PULL_REQUEST_URL);
+
+      expect(nonPositiveLinks).toHaveLength(0);
+    });
+
+    it('does not duplicate the active review when the subscription spells the repository differently', async () => {
+      stubThreadRoute(createWireWorkItem('pull-request'), [
+        {
+          ...pullRequestSubscription,
+          repoFullName: MIXED_CASE_REPO_SLUG,
+          url: MIXED_CASE_PULL_REQUEST_URL,
+        },
+      ]);
+      renderThreadRoute();
+
+      const factorySession = await screen.findByRole('region', { name: 'Factory session' });
+      await within(factorySession).findByRole('link', { name: MIXED_CASE_ACCESSIBLE_NAME });
+      const activeReviewLinks = within(factorySession)
+        .getAllByRole('link')
+        .filter(link => link.getAttribute('href')?.endsWith(`/pull/${PULL_REQUEST_NUMBER}`));
+
+      expect(activeReviewLinks).toHaveLength(1);
+    });
+
+    it('still shows the active review when the subscriptions request fails', async () => {
+      // the subscriptions stub is overridden below — only the 500 matters here
+      stubThreadRoute(createWireWorkItem('pull-request'), []);
+      server.use(http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => new HttpResponse(null, { status: 500 })));
+      renderThreadRoute();
+
+      const factorySession = await screen.findByRole('region', { name: 'Factory session' });
+      const activeReviewLink = await within(factorySession).findByRole('link', {
+        name: PULL_REQUEST_ACCESSIBLE_NAME,
+      });
+
+      expect(activeReviewLink).toHaveAttribute('href', PULL_REQUEST_URL);
+      expect(
+        within(factorySession).queryByRole('link', { name: OTHER_PULL_REQUEST_ACCESSIBLE_NAME }),
+      ).not.toBeInTheDocument();
+    });
   });
 
   describe('when the current Factory session is ordinary work', () => {
     it('keeps the pull request in the composer and out of the Factory session header', async () => {
-      stubThreadRoute(createWireWorkItem('issue'), pullRequestSubscriptions);
+      stubThreadRoute(createWireWorkItem('issue'), [pullRequestSubscription]);
       renderThreadRoute();
 
       const factorySession = await screen.findByRole('region', { name: 'Factory session' });

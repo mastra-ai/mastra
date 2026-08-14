@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { Agent } from '../agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../agent/message-list/state/types';
+import type { ActiveThreadRun } from '../agent/thread-stream-runtime';
 import type { AgentInstructions, ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import { AgentControllerChannels } from '../channels/agent-controller-channels';
@@ -38,6 +39,9 @@ import type {
   AgentControllerMode,
   AgentControllerRequestContext,
   AgentControllerRequestStateUpdater,
+  AgentControllerSessionCreatedListener,
+  AgentControllerSessionCreatedOptions,
+  AgentControllerSessionDeletedListener,
   AgentControllerThread,
   ModelAuthStatus,
   ToolCategory,
@@ -195,6 +199,32 @@ export class AgentController<TState = {}> {
    * that session's model/mode/state instead of an arbitrary one.
    */
   readonly #sessionsByResource = new Map<string, Promise<Session<TState>>>();
+  readonly #sessionCreatedListeners: Array<{
+    listener: AgentControllerSessionCreatedListener<TState>;
+    blocking: boolean;
+  }> = [];
+  readonly #sessionDeletedListeners: AgentControllerSessionDeletedListener<TState>[] = [];
+  /**
+   * In-progress deletions keyed by registry key, so {@link createSession} can
+   * wait for a concurrent deletion to finish before returning a (torn-down)
+   * session. Set synchronously before any await so the flag is visible to
+   * concurrent callers.
+   */
+  readonly #deletionsInProgress = new Map<string, Promise<void>>();
+  /**
+   * Sessions currently being torn down, so {@link setResourceId} can refuse to
+   * re-key a dying session and {@link createSession} can avoid returning one.
+   * Populated inside the deletion IIFE after `await pending` resolves the
+   * session.
+   */
+  readonly #sessionsBeingDeleted = new WeakSet<Session<TState>>();
+  /**
+   * Per-session deletion promise (rejection-tolerant), keyed by the Session
+   * object so {@link createSession} and {@link setResourceId} can wait on a
+   * deletion they discovered via {@link #sessionsBeingDeleted} without knowing
+   * the original registry key.
+   */
+  readonly #sessionDeletionPromises = new WeakMap<Session<TState>, Promise<void>>();
   /**
    * The scope each live session was created under, so re-keying operations
    * (e.g. {@link setResourceId}) preserve the session's registry scope.
@@ -246,6 +276,87 @@ export class AgentController<TState = {}> {
 
     this.workspace = config.workspace;
     this.browser = config.browser;
+  }
+
+  /**
+   * Subscribe to process-local notifications for newly materialized sessions.
+   * Cached `createSession()` calls do not notify listeners again.
+   *
+   * Async listeners are fire-and-forget by default. Pass `blocking: true` to
+   * make `createSession()` await the listener before resolving — for setup that
+   * must land before the caller can start a run (e.g. seeding session state
+   * from storage). Blocking listeners run sequentially in registration order,
+   * before fire-and-forget listeners are notified. Failures are isolated and
+   * logged, never thrown — session creation stays best-effort with respect to
+   * listener setup. A blocking listener must not call `createSession()` for
+   * the same `(resourceId, scope)` it is initializing: that lookup awaits the
+   * in-flight creation that is awaiting the listener, which deadlocks.
+   */
+  onSessionCreated(
+    listener: AgentControllerSessionCreatedListener<TState>,
+    options?: AgentControllerSessionCreatedOptions,
+  ): () => void {
+    const entry = { listener, blocking: options?.blocking === true };
+    this.#sessionCreatedListeners.push(entry);
+    return () => {
+      const index = this.#sessionCreatedListeners.indexOf(entry);
+      if (index !== -1) {
+        this.#sessionCreatedListeners.splice(index, 1);
+      }
+    };
+  }
+
+  async #notifySessionCreated(session: Session<TState>): Promise<void> {
+    const entries = [...this.#sessionCreatedListeners];
+    // Blocking listeners complete sequentially, in registration order, before
+    // fire-and-forget listeners can observe the session.
+    for (const { listener, blocking } of entries) {
+      if (!blocking) continue;
+      try {
+        await listener(session);
+      } catch (error) {
+        console.error('Error in session-created listener:', error);
+      }
+    }
+    for (const { listener, blocking } of entries) {
+      if (blocking) continue;
+      try {
+        const result = listener(session);
+        if (result && typeof result === 'object' && 'catch' in result) {
+          (result as Promise<void>).catch(error => console.error('Error in session-created listener:', error));
+        }
+      } catch (error) {
+        console.error('Error in session-created listener:', error);
+      }
+    }
+  }
+
+  /**
+   * Subscribe to process-local notifications after live sessions are torn
+   * down. Fires even when teardown cleanup fails — the session is
+   * deregistered either way.
+   */
+  onSessionDeleted(listener: AgentControllerSessionDeletedListener<TState>): () => void {
+    this.#sessionDeletedListeners.push(listener);
+    return () => {
+      const index = this.#sessionDeletedListeners.indexOf(listener);
+      if (index !== -1) {
+        this.#sessionDeletedListeners.splice(index, 1);
+      }
+    };
+  }
+
+  #notifySessionDeleted(session: Session<TState>): void {
+    for (const listener of [...this.#sessionDeletedListeners]) {
+      try {
+        const result = listener(session);
+        if (result && typeof result === 'object' && 'catch' in result) {
+          (result as Promise<void>).catch(error => console.error('Error in session-deleted listener:', error));
+        }
+      } catch (error) {
+        console.error('Error in session-deleted listener:', error);
+      }
+    }
   }
 
   /**
@@ -381,54 +492,101 @@ export class AgentController<TState = {}> {
     const effectiveOwnerId = ownerId ?? this.config.id;
     const registryKey = sessionRegistryKey(effectiveResourceId, scope);
 
-    // Get-or-create: a (resourceId, scope) pair maps to exactly one durable
-    // session per AgentController. Asking for the same resource+scope twice returns
-    // the same session, so a user/thread always resumes their own session and
-    // notification delivery reuses it rather than spawning a split-brain
-    // duplicate. Cache the in-flight promise so concurrent calls for the same
-    // resource+scope resolve to one session.
-    const existing = this.#sessionsByResource.get(registryKey);
-    if (existing) {
-      const session = await existing;
-      // An exact thread binding is part of the createSession contract
-      // ("existing threads are resumed; missing threads are created with this
-      // id"), so honor it on cached sessions too. Without this, whichever
-      // request creates the session first wins: a thread-agnostic caller (SSE
-      // subscribe, message listing) racing ahead of an exact-thread create
-      // would leave the session bound to a different thread and the requested
-      // thread never created.
-      if (threadId && session.thread.getId() !== threadId) {
-        const existingThread = await session.thread.getById({ threadId });
-        if (existingThread) {
-          if (existingThread.resourceId !== effectiveResourceId) {
-            throw new Error(`Thread not found: ${threadId}`);
-          }
-          await session.thread.switch({ threadId });
-        } else {
-          await session.thread.create({ id: threadId });
-        }
-      }
-      return session;
-    }
+    // Get-or-create loop: a (resourceId, scope) pair maps to exactly one
+    // durable session per AgentController. Asking for the same resource+scope
+    // twice returns the same session, so a user/thread always resumes their own
+    // session and notification delivery reuses it rather than spawning a
+    // split-brain duplicate. Cache the in-flight promise so concurrent calls
+    // for the same resource+scope resolve to one session.
+    //
+    // The loop also serializes against concurrent deleteSession: if a deletion
+    // is in progress (or starts during an await), wait for it to finish, then
+    // retry so the caller gets a fresh session instead of a torn-down one.
+    for (;;) {
+      // Wait for any in-progress deletion before looking up the registry.
+      let pendingDeletion = this.#deletionsInProgress.get(registryKey);
+      if (pendingDeletion) await pendingDeletion;
 
-    const creation = this.#createSessionForResource(effectiveOwnerId, effectiveSessionId, effectiveResourceId, tags, {
-      scope,
-      threadId,
-      workspace,
-      browser,
-      requestContext,
-    });
-    this.#sessionsByResource.set(registryKey, creation);
-    try {
-      const session = await creation;
-      if (scope !== undefined) this.#sessionScopes.set(session, scope);
-      return session;
-    } catch (error) {
-      // Don't cache a failed creation — let the next call retry.
-      if (this.#sessionsByResource.get(registryKey) === creation) {
-        this.#sessionsByResource.delete(registryKey);
+      const existing = this.#sessionsByResource.get(registryKey);
+      if (existing) {
+        const session = await existing;
+        // A deletion may have started during the await — either for this key
+        // (tracked in #deletionsInProgress) or for a previous key if
+        // setResourceId re-registered the session (tracked in
+        // #sessionsBeingDeleted + #sessionDeletionPromises).
+        pendingDeletion = this.#deletionsInProgress.get(registryKey);
+        if (pendingDeletion) {
+          await pendingDeletion;
+          continue;
+        }
+        if (this.#sessionsBeingDeleted.has(session)) {
+          const sessionDeletion = this.#sessionDeletionPromises.get(session);
+          if (sessionDeletion) await sessionDeletion;
+          // Evict the dead session's registry entry so the retry finds a
+          // fresh slot instead of the same dead session forever.
+          this.#sessionsByResource.delete(registryKey);
+          continue;
+        }
+        // An exact thread binding is part of the createSession contract
+        // ("existing threads are resumed; missing threads are created with this
+        // id"), so honor it on cached sessions too. Without this, whichever
+        // request creates the session first wins: a thread-agnostic caller (SSE
+        // subscribe, message listing) racing ahead of an exact-thread create
+        // would leave the session bound to a different thread and the requested
+        // thread never created.
+        if (threadId && session.thread.getId() !== threadId) {
+          const existingThread = await session.thread.getById({ threadId });
+          if (existingThread) {
+            if (existingThread.resourceId !== effectiveResourceId) {
+              throw new Error(`Thread not found: ${threadId}`);
+            }
+            await session.thread.switch({ threadId });
+          } else {
+            await session.thread.create({ id: threadId });
+          }
+        }
+        // A deletion may have started during the thread-rebinding awaits.
+        pendingDeletion = this.#deletionsInProgress.get(registryKey);
+        if (pendingDeletion) {
+          await pendingDeletion;
+          continue;
+        }
+        if (this.#sessionsBeingDeleted.has(session)) {
+          const sessionDeletion = this.#sessionDeletionPromises.get(session);
+          if (sessionDeletion) await sessionDeletion;
+          // Evict the dead session's registry entry so the retry finds a
+          // fresh slot instead of the same dead session forever.
+          this.#sessionsByResource.delete(registryKey);
+          continue;
+        }
+        return session;
       }
-      throw error;
+
+      const creation = this.#createSessionForResource(effectiveOwnerId, effectiveSessionId, effectiveResourceId, tags, {
+        scope,
+        threadId,
+        workspace,
+        browser,
+        requestContext,
+      });
+      this.#sessionsByResource.set(registryKey, creation);
+      try {
+        const session = await creation;
+        // A deletion may have started during creation.
+        pendingDeletion = this.#deletionsInProgress.get(registryKey);
+        if (pendingDeletion) {
+          await pendingDeletion;
+          continue;
+        }
+        if (scope !== undefined) this.#sessionScopes.set(session, scope);
+        return session;
+      } catch (error) {
+        // Don't cache a failed creation — let the next call retry.
+        if (this.#sessionsByResource.get(registryKey) === creation) {
+          this.#sessionsByResource.delete(registryKey);
+        }
+        throw error;
+      }
     }
   }
 
@@ -522,7 +680,7 @@ export class AgentController<TState = {}> {
           initialState,
           stateSchema: this.config.stateSchema,
         },
-        workspace: workspaceToConnect as Workspace,
+        workspace: workspaceToConnect,
         browser: browserToConnect,
       }),
     );
@@ -557,30 +715,17 @@ export class AgentController<TState = {}> {
         await session.thread.create({ id: overrides.threadId });
       }
     } else {
-      // Bring the session online with a current thread. Selection is tag-aware so
-      // worktrees sharing a resourceId each resume their own thread without
-      // claiming threads owned by another scope. A thread is a candidate only when
-      // its metadata matches every provided tag; with no tags every thread
-      // qualifies. Tags default to the controller-global state when omitted.
-      const selectionTags: Record<string, string> = {};
-      if (tags && Object.keys(tags).length > 0) {
-        Object.assign(selectionTags, tags);
-      } else {
-        const projectPath = (this.config.initialState as any)?.projectPath as string | undefined;
-        if (projectPath) selectionTags.projectPath = projectPath;
-      }
-      const tagEntries = Object.entries(selectionTags);
+      // Same scope `thread.create()` stamps, matched strictly: a thread outside
+      // this session's scope — including one carrying no scope at all — belongs
+      // to nobody here and must not be auto-resumed.
+      const scopeEntries = Object.entries(session.getThreadScope());
 
       const threads = await session.thread.list();
-      const candidates =
-        tagEntries.length > 0
-          ? threads.filter(t => {
-              const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
-              return tagEntries.every(([key, value]) => metadata[key] === value);
-            })
-          : threads;
+      const candidates = threads.filter(t => {
+        const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
+        return scopeEntries.every(([key, value]) => metadata[key] === value);
+      });
 
-      // Resume the most recent same-resource candidate, or create a new thread.
       if (candidates.length === 0) {
         await session.thread.create();
       } else {
@@ -592,6 +737,7 @@ export class AgentController<TState = {}> {
       }
     }
 
+    await this.#notifySessionCreated(session);
     return session;
   }
 
@@ -604,6 +750,57 @@ export class AgentController<TState = {}> {
    */
   async getSessionByResource(resourceId: string, scope?: string): Promise<Session<TState> | undefined> {
     return this.#sessionsByResource.get(sessionRegistryKey(resourceId, scope));
+  }
+
+  /**
+   * Tear down the live session registered for a resource and optional scope.
+   * This only removes runtime state; persisted threads and messages remain.
+   * Returns `false` when no live session is registered.
+   */
+  async deleteSession({ resourceId, scope }: { resourceId: string; scope?: string }): Promise<boolean> {
+    const registryKey = sessionRegistryKey(resourceId, scope);
+
+    // Don't start a second deletion for the same key.
+    if (this.#deletionsInProgress.has(registryKey)) return false;
+
+    const pending = this.#sessionsByResource.get(registryKey);
+    if (!pending) return false;
+
+    // Track the deletion by registry key and set it synchronously, before any
+    // await, so a concurrent createSession that resumes from `await existing`
+    // sees the flag and waits instead of returning a session being torn down.
+    const deletion: { tolerantPromise?: Promise<void> } = {};
+    const deletionPromise = (async () => {
+      const session = await pending;
+      this.#sessionsBeingDeleted.add(session);
+      // tolerantPromise is set synchronously below before this microtask runs.
+      this.#sessionDeletionPromises.set(session, deletion.tolerantPromise!);
+      session.abort();
+      session.thread.cleanupSubscription();
+      try {
+        await session.thread.clearAndReleaseLock();
+      } finally {
+        // Notify inside the finally: even when lock release fails the session
+        // is deregistered for good, and listeners mirror the registry.
+        await this.#dropSessionFromRegistry(registryKey, session);
+        this.#notifySessionDeleted(session);
+      }
+    })();
+    // Waiters only need to know when teardown finished, not why it failed.
+    // Without this, a clearAndReleaseLock rejection would propagate to every
+    // createSession caller that happened to await the in-progress deletion.
+    const tolerantPromise = deletionPromise.then(
+      () => undefined,
+      () => undefined,
+    );
+    deletion.tolerantPromise = tolerantPromise;
+    this.#deletionsInProgress.set(registryKey, tolerantPromise);
+    try {
+      await deletionPromise;
+      return true;
+    } finally {
+      this.#deletionsInProgress.delete(registryKey);
+    }
   }
 
   // ===========================================================================
@@ -653,10 +850,11 @@ export class AgentController<TState = {}> {
   }
 
   /**
-   * Eagerly resolve the workspace. For dynamic workspaces (factory function),
-   * this triggers resolution against the given session's request context and
-   * caches the result so {@link getWorkspace} returns it. Useful for code paths
-   * outside the request flow (e.g. slash commands).
+   * The workspace this session runs against, for code paths outside the request
+   * flow (e.g. slash commands). Sessions resolve their workspace once at
+   * creation — dynamic factories included — so this returns that instance
+   * rather than re-resolving, and only falls back to the factory for a session
+   * created without one.
    */
   async resolveWorkspace({
     session,
@@ -665,11 +863,11 @@ export class AgentController<TState = {}> {
     session: Session<TState>;
     requestContext?: RequestContext;
   }): Promise<Workspace | undefined> {
+    const sessionWorkspace = session.getWorkspace();
+    if (sessionWorkspace) return sessionWorkspace;
     if (typeof this.workspace !== 'function') return this.workspace ?? undefined;
     const ctx = await this.buildRequestContext(session, requestContext);
-    const resolved = await this.workspace({ requestContext: ctx, mastra: this.getMastra() });
-    this.workspace = resolved;
-    return resolved ?? undefined;
+    return (await this.workspace({ requestContext: ctx, mastra: this.getMastra() })) ?? undefined;
   }
 
   /**
@@ -710,19 +908,7 @@ export class AgentController<TState = {}> {
   setBrowser(browser: MastraBrowser | undefined): void {
     this.browser = browser;
 
-    // Collect unique agents: shared backing agent + any deprecated mode.agent
-    // instances so all receive the browser (signal providers may be attached to
-    // any of them).
-    const agents = new Set<Agent<any, any, any, any>>();
-    if (this.config.agent) {
-      agents.add(this.config.agent);
-    }
-    for (const mode of this.config.modes) {
-      if (mode.agent || !this.config.agent) {
-        agents.add(this.getAgentForMode(mode));
-      }
-    }
-    for (const agent of agents) {
+    for (const agent of this.backingAgents()) {
       agent.setBrowser(browser);
     }
   }
@@ -791,18 +977,7 @@ export class AgentController<TState = {}> {
 
     // Propagate harness-level Mastra, memory, workspace, browser, and pubsub
     // to the agent(s) that back each mode (after workspace init).
-    // Collect unique agents: shared backing agent + any deprecated mode.agent
-    // instances so all receive runtime services.
-    const agents = new Set<Agent<any, any, any, any>>();
-    if (this.config.agent) {
-      agents.add(this.config.agent);
-    }
-    for (const mode of this.config.modes) {
-      if (mode.agent || !this.config.agent) {
-        agents.add(this.getAgentForMode(mode));
-      }
-    }
-    for (const agent of agents) {
+    for (const agent of this.backingAgents()) {
       this.propagateRuntimeServicesToAgent(agent);
     }
 
@@ -1153,9 +1328,13 @@ export class AgentController<TState = {}> {
     this.#channels = channels;
     channels.__setController(this);
 
-    // Attach to every already-constructed backing agent: shared backing agent
-    // + any deprecated per-mode agent instances. Lazily-built mode agents
-    // receive channels on first run via `propagateRuntimeServicesToAgent`.
+    for (const agent of this.backingAgents()) {
+      agent.setChannels(channels);
+    }
+  }
+
+  /** The distinct agents backing this controller: the shared one plus any deprecated per-mode agent. */
+  private backingAgents(): Set<Agent<any, any, any, any>> {
     const agents = new Set<Agent<any, any, any, any>>();
     if (this.config.agent) {
       agents.add(this.config.agent);
@@ -1165,9 +1344,7 @@ export class AgentController<TState = {}> {
         agents.add(this.getAgentForMode(mode));
       }
     }
-    for (const agent of agents) {
-      agent.setChannels(channels);
-    }
+    return agents;
   }
 
   private getAgentForMode(mode: AgentControllerMode): Agent<any, any, any, any> {
@@ -1258,6 +1435,16 @@ export class AgentController<TState = {}> {
     return this.propagateRuntimeServicesToAgent(this.getAgentForMode(mode), session);
   }
 
+  listActiveThreadRuns(): ActiveThreadRun[] {
+    const byRunId = new Map<string, ActiveThreadRun>();
+    for (const agent of this.backingAgents()) {
+      for (const run of this.propagateRuntimeServicesToAgent(agent).listActiveThreadRuns()) {
+        byRunId.set(run.runId, run);
+      }
+    }
+    return [...byRunId.values()];
+  }
+
   /**
    * Check if the current model's provider has authentication configured.
    * Delegates to the {@link GatewayManager} auth chain (the same resolution
@@ -1340,9 +1527,30 @@ export class AgentController<TState = {}> {
    * lives on the session (`session.identity`); the AgentController orchestrates the
    * surrounding teardown — dropping the current thread subscription and clearing
    * the active thread — since those are AgentController-owned.
+   *
+   * If a deletion is in progress for the session's current resource (or starts
+   * during the re-key), the session is being torn down and re-keying is skipped
+   * — the deletion's {@link #dropSessionFromRegistry} cleans up all keys.
    */
   async setResourceId(session: Session<TState>, { resourceId }: { resourceId: string }): Promise<void> {
+    // If the session was already deleted (or deletion is in progress), don't
+    // re-key it — a dead session must never be registered under a new key.
+    if (this.#sessionsBeingDeleted.has(session)) return;
+
     const previousResourceId = session.identity.getResourceId();
+    const scope = this.#sessionScopes.get(session);
+    const oldKey = sessionRegistryKey(previousResourceId, scope);
+    const newKey = sessionRegistryKey(resourceId, scope);
+
+    // Wait for any in-progress deletion on the old key before touching the
+    // session. If the session was deleted while we waited, skip re-keying
+    // entirely — the session is dead and the deletion already cleaned up.
+    const oldDeletion = this.#deletionsInProgress.get(oldKey);
+    if (oldDeletion) {
+      await oldDeletion;
+      if (this.#sessionsBeingDeleted.has(session)) return;
+    }
+
     session.thread.cleanupSubscription();
     session.identity.setResourceId({ resourceId });
     const releasePreviousThreadLock = session.thread.clearAndReleaseLock();
@@ -1352,20 +1560,60 @@ export class AgentController<TState = {}> {
     // becomes the authoritative owner of the target resource, replacing any
     // prior session registered there. The session keeps its creation scope, so
     // a scoped session re-keys under the same scope on the new resource.
-    const scope = this.#sessionScopes.get(session);
-    const dropPreviousResource = this.#dropSessionFromRegistry(sessionRegistryKey(previousResourceId, scope), session);
-    this.#sessionsByResource.set(sessionRegistryKey(resourceId, scope), Promise.resolve(session));
+    const dropPreviousResource = this.#dropSessionFromRegistry(oldKey, session);
+    // Re-check that a deletion didn't start during the awaits above. If it
+    // did, the session is being torn down — don't register it under the new
+    // key; the deletion's #dropSessionFromRegistry cleans up all keys.
+    if (this.#sessionsBeingDeleted.has(session)) {
+      await releasePreviousThreadLock;
+      await dropPreviousResource;
+      const postDeletion = this.#deletionsInProgress.get(newKey) ?? this.#deletionsInProgress.get(oldKey);
+      if (postDeletion) await postDeletion;
+      return;
+    }
+    this.#sessionsByResource.set(newKey, Promise.resolve(session));
     await releasePreviousThreadLock;
     await dropPreviousResource;
+
+    // A deletion may have started during the awaits. If so, the deletion's
+    // #dropSessionFromRegistry already drops the new key (via the session's
+    // current resourceId), but wait for it to finish so the caller sees a
+    // consistent state.
+    const postDeletion = this.#deletionsInProgress.get(newKey);
+    if (postDeletion) await postDeletion;
   }
 
-  /** Remove `registryKey` from the registry only if it still resolves to `session`. */
+  /**
+   * Remove `registryKey` from the registry only if it still resolves to
+   * `session`. When the session is being torn down (tracked in
+   * {@link #sessionsBeingDeleted}), also checks the session's current
+   * resourceId (which may differ if {@link setResourceId} re-keyed the session
+   * during deletion) and drops that key too, so an aborted session can't be
+   * re-resolved by a subsequent {@link createSession} call.
+   */
   async #dropSessionFromRegistry(registryKey: string, session: Session<TState>): Promise<void> {
     const pending = this.#sessionsByResource.get(registryKey);
-    if (!pending) return;
-    const resolved = await pending.catch(() => undefined);
-    if (resolved === session && this.#sessionsByResource.get(registryKey) === pending) {
-      this.#sessionsByResource.delete(registryKey);
+    if (pending) {
+      const resolved = await pending.catch(() => undefined);
+      if (resolved === session && this.#sessionsByResource.get(registryKey) === pending) {
+        this.#sessionsByResource.delete(registryKey);
+      }
+    }
+    // When tearing down a session, also drop from the session's current
+    // resourceId key, which may differ if setResourceId re-keyed the session
+    // during deletion. Skip this for non-deletion calls (setResourceId itself
+    // drops the old key and registers the new one — we must not undo that).
+    if (!this.#sessionsBeingDeleted.has(session)) return;
+    const scope = this.#sessionScopes.get(session);
+    const currentKey = sessionRegistryKey(session.identity.getResourceId(), scope);
+    if (currentKey !== registryKey) {
+      const currentPending = this.#sessionsByResource.get(currentKey);
+      if (currentPending) {
+        const currentResolved = await currentPending.catch(() => undefined);
+        if (currentResolved === session && this.#sessionsByResource.get(currentKey) === currentPending) {
+          this.#sessionsByResource.delete(currentKey);
+        }
+      }
     }
   }
 

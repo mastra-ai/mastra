@@ -18,6 +18,7 @@ import {
   paginationQuerySchema,
   tenancyQuerySchema,
   listItemsQuerySchema,
+  listExperimentsQuerySchema,
   createDatasetBodySchema,
   updateDatasetBodySchema,
   addItemBodySchema,
@@ -589,7 +590,7 @@ export const LIST_ALL_EXPERIMENTS_ROUTE = createRoute({
   method: 'GET',
   path: '/experiments',
   responseType: 'json',
-  queryParamSchema: paginationQuerySchema,
+  queryParamSchema: listExperimentsQuerySchema,
   responseSchema: listExperimentsResponseSchema,
   summary: 'List all experiments',
   description: 'Returns a paginated list of all experiments across all datasets',
@@ -598,7 +599,7 @@ export const LIST_ALL_EXPERIMENTS_ROUTE = createRoute({
   handler: async ({ mastra, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { page, perPage } = params;
+      const { page, perPage, experimentSetId, comparisonId, variantId, trialIndex } = params;
       const storage = mastra.getStorage();
       if (!storage) {
         throw new HTTPException(500, { message: 'Storage not configured' });
@@ -608,6 +609,10 @@ export const LIST_ALL_EXPERIMENTS_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Experiments storage not available' });
       }
       const result = await experimentsStore.listExperiments({
+        experimentSetId,
+        comparisonId,
+        variantId,
+        trialIndex,
         pagination: { page: page ?? 0, perPage: perPage ?? 20 },
       });
       return { experiments: result.experiments, pagination: result.pagination };
@@ -656,7 +661,7 @@ export const LIST_EXPERIMENTS_ROUTE = createRoute({
   path: '/datasets/:datasetId/experiments',
   responseType: 'json',
   pathParamSchema: datasetIdPathParams,
-  queryParamSchema: paginationQuerySchema,
+  queryParamSchema: listExperimentsQuerySchema,
   responseSchema: listExperimentsResponseSchema,
   summary: 'List experiments for dataset',
   description: 'Returns a paginated list of experiments for the dataset',
@@ -665,9 +670,16 @@ export const LIST_EXPERIMENTS_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { page, perPage } = params;
+      const { page, perPage, experimentSetId, comparisonId, variantId, trialIndex } = params;
       const ds = await mastra.datasets.get({ id: datasetId });
-      const result = await ds.listExperiments({ page: page ?? 0, perPage: perPage ?? 10 });
+      const result = await ds.listExperiments({
+        page: page ?? 0,
+        perPage: perPage ?? 10,
+        experimentSetId,
+        comparisonId,
+        variantId,
+        trialIndex,
+      });
       return { experiments: result.experiments, pagination: result.pagination };
     } catch (error) {
       if (error instanceof MastraError) {
@@ -696,19 +708,39 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
       const {
         targetType,
         targetId,
+        name,
+        description,
+        metadata,
         scorerIds,
         version,
         agentVersion,
         maxConcurrency,
+        provenance,
+        grouping,
         requestContext: rawRequestContext,
         versions,
       } = params as {
         targetType: 'agent' | 'workflow' | 'scorer';
         targetId: string;
+        name?: string;
+        description?: string;
+        metadata?: Record<string, unknown>;
         scorerIds?: string[];
         version?: number;
         agentVersion?: string;
         maxConcurrency?: number;
+        provenance?: {
+          source?: string;
+          sourceId?: string;
+          sourceVersion?: string;
+          metadata?: Record<string, unknown>;
+        };
+        grouping?: {
+          experimentSetId?: string;
+          comparisonId?: string;
+          variantId?: string;
+          trialIndex?: number;
+        };
         requestContext?: Record<string, unknown> | RequestContext;
         versions?: { agents?: Record<string, { versionId: string } | { status: 'draft' | 'published' }> };
       };
@@ -719,10 +751,15 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
       const result = await ds.startExperimentAsync({
         targetType,
         targetId,
+        name,
+        description,
+        metadata,
         scorers: scorerIds,
         version,
         agentVersion,
         maxConcurrency,
+        provenance,
+        grouping,
         requestContext,
         versions,
       });

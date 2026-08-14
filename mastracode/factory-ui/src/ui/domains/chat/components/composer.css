@@ -36,12 +36,34 @@
   --composer-spotlight: var(--chat-mode-color, var(--accent1));
   --composer-spotlight-x: 50%;
   --composer-spotlight-y: 50%;
+  --composer-spotlight-strength: 0;
 
   @apply ring-border2/40 isolate border-0 ring-1 ring-inset;
 }
 
 .composer-spotlight:focus-within {
   @apply ring-border2;
+}
+
+/* The ring wrapper owns the edge and the mode colour; the box keeps only its glow. */
+.composer-ring {
+  --composer-ring-color: var(--chat-mode-color, var(--accent1));
+}
+
+.composer-ring .composer-spotlight {
+  @apply ring-0;
+}
+
+/* Ring owns the edge, spotlight the interior: the box clips at its own radius, so
+   the surface runs flush to the clip instead of insetting for a gone border. */
+.composer-ring .composer-spotlight-surface {
+  inset: 0;
+  border-radius: 22px;
+}
+
+/* Spotlight owns idle, spinning ring owns the run — never both at once. */
+.composer-ring[data-busy='true'] .composer-spotlight {
+  --composer-spotlight-strength: 0;
 }
 
 .composer-spotlight::before,
@@ -55,7 +77,7 @@
     transparent 75%
   );
   filter: blur(12px);
-  opacity: 0;
+  opacity: var(--composer-spotlight-strength);
   transition: opacity 200ms;
   content: '';
 }
@@ -84,9 +106,8 @@
 }
 
 @media (hover: hover) {
-  .composer-spotlight:hover::before,
-  .composer-spotlight:hover .composer-spotlight-surface::before {
-    opacity: 1;
+  .composer-spotlight:hover {
+    --composer-spotlight-strength: 1;
   }
 }
 

@@ -23,7 +23,7 @@ vi.mock('commander', () => {
     description: any;
     option: any;
     requiredOption: any;
-    parse: any;
+    parseAsync: any;
     help: any;
 
     constructor() {
@@ -36,7 +36,7 @@ vi.mock('commander', () => {
       this.description = vi.fn().mockReturnThis();
       this.option = vi.fn().mockReturnThis();
       this.requiredOption = vi.fn().mockReturnThis();
-      this.parse = vi.fn();
+      this.parseAsync = vi.fn().mockResolvedValue(undefined);
       this.help = vi.fn();
     }
   }

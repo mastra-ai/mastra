@@ -7,6 +7,7 @@
  */
 export { AgentController } from './agent-controller';
 export { Session } from './session';
+export type { SessionBeforeAgentEndListener } from './session';
 export {
   askUserTool,
   assignTaskIds,
@@ -35,6 +36,7 @@ export type {
   AgentControllerRequestState,
   AgentControllerRequestStateUpdater,
   AgentControllerRequestStateUpdateResult,
+  AgentControllerSessionDeletedListener,
   AgentControllerStateSchema,
   AgentControllerSubagent,
   AgentControllerSubagentHistoryEntry,

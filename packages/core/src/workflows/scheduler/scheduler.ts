@@ -186,7 +186,7 @@ export class Scheduler extends MastraBase {
     const predicate = this.#config.isTargetReady;
     if (!predicate) return true;
 
-    if (predicate(schedule.target)) {
+    if (await predicate(schedule.target)) {
       this.#missingWorkflowCounts.delete(schedule.id);
       return true;
     }

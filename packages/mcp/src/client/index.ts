@@ -10,6 +10,8 @@ export type {
   RequireToolApprovalFn,
   RequireToolApprovalContext,
   ToolAnnotations,
+  SerializableMCPToolDefinition,
+  SerializableMCPToolCatalog,
 } from './types';
 export * from './client';
 export * from './configuration';

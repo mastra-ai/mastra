@@ -322,6 +322,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
             stateType: issue.stateType ?? '',
             priorityLabel: issue.priority ?? '',
             assignee: issue.assignee,
+            creator: issue.author,
             team: issue.source,
             labels: issue.labels,
             createdAt: issue.createdAt,

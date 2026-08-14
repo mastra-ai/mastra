@@ -5,7 +5,7 @@
 import { Container, Markdown, Text, truncateToWidth, visibleWidth } from '@earendil-works/pi-tui';
 import type { MarkdownTheme } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
-import { BOX_INDENT_STR, getMarkdownTheme, mastra, tintHex, theme } from '../theme.js';
+import { BOX_INDENT_STR, getMarkdownTheme, getThemeGeneration, mastra, tintHex, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 
 /**
@@ -18,11 +18,14 @@ function stripAnsi(s: string): string {
 /**
  * A renderable wrapper that adds a thin box-drawing border sized to content.
  */
-class BorderedBox {
+export class BorderedBox {
   private child: { render(width: number): string[]; invalidate?(): void };
   private pending: boolean;
   private borderColor?: string;
   private label?: string;
+  private cachedLines?: string[];
+  private cachedWidth?: number;
+  private cachedThemeGeneration?: number;
 
   constructor(
     child: { render(width: number): string[]; invalidate?(): void },
@@ -35,10 +38,26 @@ class BorderedBox {
   }
 
   invalidate() {
+    this.cachedLines = undefined;
+    this.cachedWidth = undefined;
+    this.cachedThemeGeneration = undefined;
     this.child.invalidate?.();
   }
 
   render(width: number): string[] {
+    // Content is fixed after construction, so measuring/trimming/padding every
+    // line each frame is wasted work on long threads. Cache by (width, theme).
+    if (this.cachedLines && this.cachedWidth === width && this.cachedThemeGeneration === getThemeGeneration()) {
+      return this.cachedLines;
+    }
+    const result = this.renderUncached(width);
+    this.cachedLines = result;
+    this.cachedWidth = width;
+    this.cachedThemeGeneration = getThemeGeneration();
+    return result;
+  }
+
+  private renderUncached(width: number): string[] {
     const borderColor = (s: string) =>
       this.borderColor
         ? chalk.hex(this.borderColor)(s)

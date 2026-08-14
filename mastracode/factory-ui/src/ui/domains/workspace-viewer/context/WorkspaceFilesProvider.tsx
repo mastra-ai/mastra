@@ -9,21 +9,25 @@ import { WorkspaceFilesContext } from './WorkspaceFilesContext';
 
 /** Owns the box the card measures itself against, and shares its state with the session header. */
 export function WorkspaceFilesProvider({ children }: { children: ReactNode }) {
-  const { workspacePath } = useThreadWorkspacePath();
+  const { workspacePath, threadId } = useThreadWorkspacePath();
   const chatRef = useRef<HTMLDivElement>(null);
   const canDock = useWiderThan(chatRef, DOCK_MIN_REM);
   const [toggled, setToggled] = useState<{ whileDocked: boolean; open: boolean }>();
   const [viewingFile, setViewingFile] = useState(false);
 
   // Toggle records the layout it was made in — crossing the threshold discards it, so a popover
-  // left open closes itself and the docked card comes back.
-  const open = toggled?.whileDocked === canDock ? toggled.open : canDock;
+  // left open closes itself instead of reopening as a docked card.
+  // TODO(COR-1075): dock open by default again once file names and metadata come from the
+  // database — today the first paint would list the pod and wake a sandbox nobody asked for.
+  const open = toggled?.whileDocked === canDock ? toggled.open : false;
   const setOpen = (next: boolean) => setToggled({ whileDocked: canDock, open: next });
 
   const claimsSpace = open && canDock && Boolean(workspacePath);
 
   return (
-    <WorkspaceFilesContext.Provider value={{ open, setOpen, workspacePath, viewingFile, setViewingFile, canDock }}>
+    <WorkspaceFilesContext.Provider
+      value={{ open, setOpen, workspacePath, threadId, viewingFile, setViewingFile, canDock }}
+    >
       <div
         ref={chatRef}
         className={cn(

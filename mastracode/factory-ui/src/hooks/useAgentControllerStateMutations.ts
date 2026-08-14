@@ -37,10 +37,17 @@ export function useSetAgentControllerStateMutation({
 }
 
 export function useSwitchAgentControllerModeMutation(args: AgentControllerMutationArgs) {
+  const queryClient = useQueryClient();
   const { session } = createAgentControllerClient(args);
 
   return useMutation({
     mutationFn: (modeId: string) => requireAgentControllerSession(session).switchMode(modeId),
+    // returning the invalidation keeps isPending true until the refetched state carries the new mode
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.agentControllerConnectionState(args.agentControllerId, args.resourceId, args.scope),
+        exact: true,
+      }),
   });
 }
 

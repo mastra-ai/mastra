@@ -48,6 +48,8 @@ You can send a follow-up message in the same thread during an agent response str
 
 Use [Editor](/docs/editor/overview) to let non-technical team members iterate on agents and version every change, plus run experiments without redeploying.
 
+Use [Agent Builder](https://agent-builder.mastra.ai) to create and manage fully stored agents through a separate browser-based interface.
+
 ### Workflows
 
 Visualize your workflow as a graph and run it step by step with a custom input. During execution, the interface updates in real time to show the active step and the path taken.
@@ -72,7 +74,7 @@ Run tools on their own to observe behavior and test them before assigning them t
 
 Browse the files in your agent's workspace filesystem using a built-in file browser. Switch between workspace mounts, create directories, and view file contents with syntax highlighting. Writable workspaces allow directory creation and file deletion; read-only workspaces are labeled accordingly. The Skills tab lists all discovered skills with their instructions, references, and metadata. Install community skills from [skills.sh](https://skills.sh) or remove existing ones.
 
-See [workspaces](/docs/workspace/overview) for configuration details.
+See [workspaces](/docs/workspace/sandbox) for configuration details.
 
 ### Request context
 
@@ -92,13 +94,13 @@ The Scorers tab displays the results of your agent's scorers as they run. When m
 
 Create and manage collections of test cases to evaluate your agents and workflows. Import items from CSV or JSON and define input and ground-truth schemas, plus pin to specific versions so you can reproduce experiments exactly. Run experiments with [scorers](/docs/evals/overview) to compare quality across prompts, models, or code changes.
 
-See [datasets overview](/docs/evals/datasets/overview) for the full API and versioning details.
+See [datasets overview](/docs/datasets/overview) for the full API and versioning details.
 
 ### Experiments
 
 Run all items in a dataset against an agent, workflow, or scorer and collect the results in one place. Select a target, optionally attach scorers, and trigger the experiment. The results view shows each item's input, output, status, and individual score breakdowns. Compare two experiments side by side to measure the impact of prompt, model, or code changes.
 
-See [datasets overview](/docs/evals/datasets/overview) for setup details.
+See [datasets overview](/docs/datasets/overview) for setup details.
 
 ## Observability
 

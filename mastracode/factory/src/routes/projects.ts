@@ -75,6 +75,10 @@ function parseUpdateInput(value: unknown): UpdateFactoryProjectInput | null {
     if (typeof input.slackWorkItemsEnabled !== 'boolean') return null;
     patch.slackWorkItemsEnabled = input.slackWorkItemsEnabled;
   }
+  if (input.autoRunEnabled !== undefined) {
+    if (typeof input.autoRunEnabled !== 'boolean') return null;
+    patch.autoRunEnabled = input.autoRunEnabled;
+  }
   return Object.keys(patch).length > 0 ? patch : null;
 }
 

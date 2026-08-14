@@ -11,7 +11,7 @@ packages:
 
 The `Mastra` class is the central orchestrator in any Mastra application, managing agents, workflows, storage, logging, observability, and more. Typically, you create a single instance of `Mastra` to coordinate your application.
 
-Think of `Mastra` as a top-level registry where you register agents, workflows, tools, and other components that need to be accessible throughout your application.
+`Mastra` is the top-level registry where you register agents, workflows, tools, and other components that need to be accessible throughout your application.
 
 ## Usage example
 
@@ -239,7 +239,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
     name: 'versions',
     type: 'VersionOverrides',
     description:
-      'Global version overrides for sub-agent delegation. When a supervisor agent delegates to a sub-agent, these overrides determine which stored version of that sub-agent to use instead of the code-defined default. Requires the editor package to be configured. See [Sub-agent versioning](/docs/editor/overview#sub-agent-versioning) for details.',
+      'Global version overrides for sub-agent delegation. When a supervisor agent delegates to a sub-agent, these overrides determine which stored version of that sub-agent to use instead of the code-defined default. Requires the editor package to be configured. See [Editor versioning](/docs/editor/overview#versioning) for details.',
     isOptional: true,
     properties: [
       {

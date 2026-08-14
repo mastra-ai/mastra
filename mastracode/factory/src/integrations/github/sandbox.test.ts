@@ -176,10 +176,11 @@ describe('ensureProjectSandbox', () => {
     await ensureProjectSandbox(makeRow({ sandboxId: 'railway-vm-existing' }));
 
     expect(calls).toEqual([
-      expect.objectContaining({ env: { GH_TOKEN: 'install-token' } }),
+      expect.objectContaining({ env: { GH_TOKEN: 'install-token' }, actingUserId: 'user-1' }),
       expect.objectContaining({
         providerSandboxId: 'railway-vm-existing',
         env: { GH_TOKEN: 'install-token' },
+        actingUserId: 'user-1',
       }),
     ]);
   });
@@ -348,6 +349,82 @@ describe('materializeRepo', () => {
     expect(err.code).toBe('egress-blocked');
   });
 
+  it('surfaces the clone failure when the token scrub throws on a missing workdir', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script === 'git --version') return OK;
+      if (script.includes('git clone')) {
+        return { exitCode: 128, stdout: '', stderr: 'fatal: unable to access: Could not resolve host: github.com' };
+      }
+      if (script.startsWith('test -d')) return { exitCode: 1, stdout: '', stderr: '' };
+      if (script.includes('remote set-url origin')) {
+        throw new Error('Command failed with ENOENT: The "cwd" option is invalid');
+      }
+      return OK;
+    });
+    const err = await materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok').catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(err.code).toBe('egress-blocked');
+    expect(err.message).not.toContain('additionally');
+  });
+
+  it('reports a failed scrub when the failed clone left the checkout behind', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script === 'git --version') return OK;
+      if (script.includes('git clone')) {
+        return { exitCode: 128, stdout: '', stderr: 'warning: Clone succeeded, but checkout failed.' };
+      }
+      if (script.startsWith('test -d')) return OK;
+      if (script.includes('remote set-url origin')) {
+        return { exitCode: 255, stdout: '', stderr: 'error: could not lock config file .git/config' };
+      }
+      return OK;
+    });
+    const err = await materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok-secret').catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(err.code).toBe('clone-failed');
+    expect(err.message).toMatch(/checkout failed.*Failed to scrub installation token/s);
+  });
+
+  it('surfaces a failed scrub over the pull failure once the token reached the remote', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('remote get-url origin')) {
+        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
+      }
+      if (script.includes('pull --ff-only')) {
+        return { exitCode: 128, stdout: '', stderr: 'fatal: unable to access: Could not resolve host: github.com' };
+      }
+      // The scrub resets to the tokenless URL; only the auth set-url carries the token.
+      if (script.includes('remote set-url origin') && !script.includes('x-access-token')) {
+        return { exitCode: 255, stdout: '', stderr: 'error: could not lock config file .git/config' };
+      }
+      return OK;
+    });
+    const err = await materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok-secret').catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(err.code).toBe('egress-blocked');
+    expect(err.message).toContain('Failed to scrub installation token');
+  });
+
+  it('surfaces a throwing scrub as a token error once the token reached the remote', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('remote get-url origin')) {
+        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
+      }
+      if (script.includes('pull --ff-only')) {
+        return { exitCode: 128, stdout: '', stderr: 'fatal: unable to access: Could not resolve host: github.com' };
+      }
+      if (script.includes('remote set-url origin') && !script.includes('x-access-token')) {
+        throw new Error('sandbox connection lost');
+      }
+      return OK;
+    });
+    const err = await materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok-secret').catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(err.code).toBe('egress-blocked');
+    expect(err.message).toContain('Failed to scrub installation token');
+    expect(err.message).toContain('sandbox connection lost');
+  });
+
   it('refuses to run git when the default branch is not git-ref-safe', async () => {
     const sandbox = new FakeSandbox();
     const err = await materializeRepo(
@@ -454,6 +531,33 @@ describe('materializeRepo', () => {
     expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
   });
 
+  it('keeps a dirty checkout as-is when pull.rebase turns the refusal into rebase wording', async () => {
+    // Same dirty checkout, different git config: with `pull.rebase` set, git
+    // refuses in rebase's words rather than merge's. It is still the session's
+    // own uncommitted work — keep it, never discard it to force the pull.
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('remote get-url origin')) {
+        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
+      }
+      if (script.includes('pull --ff-only')) {
+        return {
+          exitCode: 1,
+          stdout: '',
+          stderr:
+            'error: cannot pull with rebase: Your index contains uncommitted changes.\nerror: Please commit or stash them.\n',
+        };
+      }
+      return OK;
+    });
+
+    await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok');
+
+    const joined = sandbox.calls.join('\n');
+    expect(joined).not.toContain('git clone');
+    expect(joined).not.toMatch(/rebase|reset --hard|stash|checkout --|clean -/);
+    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
+  });
+
   it('treats a session branch without an upstream as materialized on re-open', async () => {
     // Session branches are created from FETCH_HEAD and have no tracking
     // branch; `git pull` then exits with "no tracking information".
@@ -473,6 +577,56 @@ describe('materializeRepo', () => {
 
     await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok');
 
+    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
+  });
+
+  it('keeps a checkout when the upstream branch was deleted after merge', async () => {
+    // Session branch was auto-deleted on the remote after its PR merged;
+    // `git pull` reports the configured upstream ref is gone. The checkout
+    // is intact (and the work is already integrated) — keep it as-is.
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('remote get-url origin')) {
+        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
+      }
+      if (script.includes('pull --ff-only')) {
+        return {
+          exitCode: 1,
+          stdout: '',
+          stderr:
+            "Your configuration specifies to merge with the ref 'refs/heads/factory/issue-1'\nfrom the remote, but no such ref was fetched.\n",
+        };
+      }
+      return OK;
+    });
+
+    await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok');
+
+    const joined = sandbox.calls.join('\n');
+    expect(joined).not.toContain('git clone');
+    expect(joined).not.toMatch(/rebase|reset --hard/);
+    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
+  });
+
+  it('keeps a checkout when git cannot find the remote ref', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('remote get-url origin')) {
+        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
+      }
+      if (script.includes('pull --ff-only')) {
+        return {
+          exitCode: 1,
+          stdout: '',
+          stderr: "fatal: couldn't find remote ref refs/heads/factory/issue-1\n",
+        };
+      }
+      return OK;
+    });
+
+    await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok');
+
+    const joined = sandbox.calls.join('\n');
+    expect(joined).not.toContain('git clone');
+    expect(joined).not.toMatch(/rebase|reset --hard/);
     expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
   });
 
@@ -507,10 +661,11 @@ describe('materializeRepo', () => {
     expect(dbUpdates.some(u => 'materializedAt' in u)).toBe(false);
   });
 
-  it('surfaces the pull failure (not the scrub failure) when both fail', async () => {
-    // Regression: the scrub in the `finally` used to throw over the in-flight
-    // clone/pull error, hiding the actionable failure (e.g. "cannot change to
-    // <workdir>") behind "Failed to scrub installation token".
+  it('reports the pull failure first and the scrub failure alongside when both fail', async () => {
+    // Regression: the scrub used to throw over the in-flight clone/pull
+    // error, hiding the actionable failure behind "Failed to scrub
+    // installation token". The pull failure keeps the lead — but the token
+    // reached the remote, so the failed scrub is reported too, not swallowed.
     const sandbox = new FakeSandbox(script => {
       if (script === 'git --version') return OK;
       if (script.includes('remote get-url origin')) {
@@ -529,8 +684,8 @@ describe('materializeRepo', () => {
       e => e,
     );
     expect(err).toBeInstanceOf(MaterializeError);
-    expect(String(err.message)).toContain('not a fast-forward');
-    expect(String(err.message)).not.toContain('scrub');
+    expect(err.code).toBe('pull-failed');
+    expect(String(err.message)).toMatch(/not a fast-forward.*Failed to scrub installation token/s);
   });
 
   it('surfaces a scrub failure on the success path when the remote reset fails', async () => {
@@ -796,6 +951,24 @@ describe('withInstallToken', () => {
     expect(scrub).not.toContain('tok-secret');
   });
 
+  it('rethrows the error fn threw when the scrub also fails', async () => {
+    const sandbox = new FakeSandbox(script =>
+      script.includes('remote set-url origin') && !script.includes('x-access-token')
+        ? { exitCode: 255, stdout: '', stderr: 'error: could not lock config file .git/config' }
+        : OK,
+    );
+    const primary = new WorktreeError('git worktree add failed', 'worktree-failed');
+
+    const err = await withInstallToken(sandbox, '/workspace/hello', 'octocat/hello', 'tok-secret', async () => {
+      throw primary;
+    }).catch(e => e);
+
+    // Routes map WorktreeError and MaterializeError to different responses.
+    expect(err).toBe(primary);
+    expect(err.code).toBe('worktree-failed');
+    expect(err.message).toMatch(/git worktree add failed.*Failed to scrub installation token/s);
+  });
+
   it('rejects a malformed repo full name before touching the remote', async () => {
     const sandbox = new FakeSandbox();
     const err = await withInstallToken(sandbox, '/workspace/hello', 'evil; whoami', 'tok', async () => undefined).catch(
@@ -841,6 +1014,22 @@ describe('pushBranch', () => {
     const scrub = sandbox.calls.filter(c => c.includes('remote set-url origin')).at(-1);
     expect(scrub).toContain('https://github.com/octocat/hello.git');
     expect(scrub).not.toContain('tok-secret');
+  });
+
+  it('keeps the push failure and its classification when the scrub also fails', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('push -u origin')) {
+        return { exitCode: 128, stdout: '', stderr: 'fatal: unable to access: Could not resolve host: github.com' };
+      }
+      if (script.includes('remote set-url origin') && !script.includes('x-access-token')) {
+        return { exitCode: 255, stdout: '', stderr: 'error: could not lock config file .git/config' };
+      }
+      return OK;
+    });
+    const err = await pushBranch(sandbox, '/workspace/hello', 'feat/x', 'tok-secret', 'octocat/hello').catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(err.code).toBe('egress-blocked');
+    expect(err.message).toMatch(/could not reach github\.com.*Failed to scrub installation token/s);
   });
 
   it('classifies an egress failure during push', async () => {
@@ -1093,6 +1282,100 @@ describe('sh transport retry', () => {
 
     expect(err.status).toBe(404);
     expect(sandbox.calls).toHaveLength(1);
+  });
+});
+
+describe('git transfer retry', () => {
+  // A git command that reaches github.com and then loses the connection exits
+  // non-zero rather than throwing, so the `sh` transport retry above never sees
+  // it. One HTTP/2 hiccup used to permanently fail opening a workspace.
+  const HTTP2_GLITCH = {
+    exitCode: 128,
+    stdout: '',
+    stderr: "fatal: unable to access 'https://github.com/octocat/hello.git/': Error in the HTTP2 framing layer",
+  };
+
+  it('retries a clone that lost the connection mid-transfer and succeeds', async () => {
+    vi.useFakeTimers();
+    try {
+      let clones = 0;
+      const sandbox = new FakeSandbox(script => {
+        if (script.includes('git clone')) return ++clones === 1 ? HTTP2_GLITCH : OK;
+        return OK;
+      });
+
+      const pending = materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok');
+      await vi.advanceTimersByTimeAsync(2000);
+      await pending;
+
+      expect(clones).toBe(2);
+      // The dead attempt leaves a partial directory that git refuses to clone
+      // into, so the retry has to clear it first.
+      const cloneCalls = sandbox.calls.filter(call => call.includes('git clone'));
+      const wipe = sandbox.calls.findIndex(call => call.startsWith('rm -rf'));
+      expect(cloneCalls).toHaveLength(2);
+      expect(wipe).toBeGreaterThan(sandbox.calls.indexOf(cloneCalls[0]!));
+      expect(wipe).toBeLessThan(sandbox.calls.lastIndexOf(cloneCalls[1]!));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('gives up and reports the clone failure once the retries are exhausted', async () => {
+    vi.useFakeTimers();
+    try {
+      const sandbox = new FakeSandbox(script => (script.includes('git clone') ? HTTP2_GLITCH : OK));
+
+      const pending = materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok').catch(e => e);
+      await vi.advanceTimersByTimeAsync(10_000);
+      const err = await pending;
+
+      expect(err).toBeInstanceOf(MaterializeError);
+      expect(err.code).toBe('clone-failed');
+      expect(sandbox.calls.filter(call => call.includes('git clone'))).toHaveLength(3); // initial + 2 retries
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not retry a refusal, which would only fail slower', async () => {
+    // Bad credentials, a missing repo, or blocked egress are settled answers:
+    // the user needs them now, not in six seconds.
+    const sandbox = new FakeSandbox(script =>
+      script.includes('git clone')
+        ? { exitCode: 128, stdout: '', stderr: 'fatal: Authentication failed for https://github.com/octocat/hello/' }
+        : OK,
+    );
+
+    const err = await materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok').catch(e => e);
+
+    expect(err.code).toBe('clone-failed');
+    expect(sandbox.calls.filter(call => call.includes('git clone'))).toHaveLength(1);
+  });
+
+  it('retries a pull that lost the connection mid-transfer', async () => {
+    vi.useFakeTimers();
+    try {
+      let pulls = 0;
+      const sandbox = new FakeSandbox(script => {
+        // An origin pointing at this repo sends materialize down the pull path.
+        if (script.includes('remote get-url origin')) {
+          return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
+        }
+        if (script.includes('pull --ff-only')) return ++pulls === 1 ? HTTP2_GLITCH : OK;
+        return OK;
+      });
+
+      const pending = materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok');
+      await vi.advanceTimersByTimeAsync(2000);
+      await pending;
+
+      expect(pulls).toBe(2);
+      // Nothing to clean up between pull attempts — the checkout is intact.
+      expect(sandbox.calls.some(call => call.startsWith('rm -rf'))).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

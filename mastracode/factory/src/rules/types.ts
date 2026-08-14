@@ -11,6 +11,11 @@ export type FactoryRuleSource = (typeof FACTORY_RULE_SOURCES)[number];
 
 export const FACTORY_GITHUB_EVENTS = [
   'issueOpened',
+  'issueEdited',
+  'issueClosed',
+  'issueCommentCreated',
+  'issueCommentEdited',
+  'issueCommentDeleted',
   'pullRequestOpened',
   'pullRequestUpdated',
   'pullRequestReviewRequested',
@@ -19,7 +24,7 @@ export const FACTORY_GITHUB_EVENTS = [
 ] as const;
 export type FactoryGithubEventName = (typeof FACTORY_GITHUB_EVENTS)[number];
 
-export const FACTORY_LINEAR_EVENTS = ['issueObserved'] as const;
+export const FACTORY_LINEAR_EVENTS = ['issueObserved', 'issueClosed'] as const;
 export type FactoryLinearEventName = (typeof FACTORY_LINEAR_EVENTS)[number];
 
 export type FactoryRuleJsonValue =
@@ -97,17 +102,44 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
   deliveryId: string;
   factory: { createdAt: string };
   repository: { id: number; fullName: string };
-  issue?: { number: number; title: string; url: string; createdAt?: string };
+  issue?: {
+    number: number;
+    title: string;
+    url: string;
+    createdAt?: string;
+    updatedAt?: string;
+    assignees?: string[];
+    labels?: string[];
+    state?: 'open' | 'closed';
+    /** GitHub close reason: `completed`, `not_planned`, or `duplicate`. */
+    stateReason?: string;
+  };
+  issueChange?: { title: boolean; body: boolean };
+  issueComment?: {
+    id: number;
+    body?: string;
+    url?: string;
+    author?: string;
+    authorType?: string;
+    createdAt?: string;
+    updatedAt?: string;
+  };
   pullRequest?: {
     number: number;
     title: string;
     url: string;
     createdAt?: string;
     state: 'open' | 'closed';
+    draft: boolean;
     merged: boolean;
+    assignees?: string[];
+    requestedReviewers?: string[];
+    labels?: string[];
     headBranch: string;
     baseBranch: string;
   };
+  /** Present on `pullRequestReviewRequested`: who review was (re-)requested from. */
+  reviewRequest?: { reviewer: string; factoryReviewer: boolean };
 }
 
 export interface FactoryLinearRuleContext extends FactoryRuleContextBase {
@@ -124,6 +156,7 @@ export interface FactoryLinearRuleContext extends FactoryRuleContextBase {
     stateType: string;
     priorityLabel: string;
     assignee: string | null;
+    creator: string | null;
     team: string | null;
     labels: readonly string[];
     createdAt: string;
@@ -222,6 +255,7 @@ export interface FactoryInvokeSkillDecision extends FactoryCommitDecisionBase {
   skillName: string;
   arguments?: string;
   precedingMessage?: string;
+  cancelInFlight?: boolean;
 }
 
 export interface FactorySendMessageDecision extends FactoryCommitDecisionBase {

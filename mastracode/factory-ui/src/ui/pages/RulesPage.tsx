@@ -9,6 +9,8 @@ import {
   Check,
   CircleCheck,
   CircleDashed,
+  CirclePause,
+  CircleSlash,
   CircleX,
   Clock,
   ListFilter,
@@ -18,7 +20,7 @@ import {
 } from 'lucide-react';
 import { Fragment, useState } from 'react';
 
-import { useFactoryDecisionHistory, useRetryFactoryDecision } from '../../hooks/useFactoryDecisions';
+import { useFactoryDecisionAction, useFactoryDecisionHistory } from '../../hooks/useFactoryDecisions';
 import { relativeTime } from '../../lib/date/relativeTime';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../domains/factory/services/decisions';
@@ -32,16 +34,29 @@ const DECISION_GROUPS: ReadonlyArray<{
 }> = [
   { key: 'all', label: 'All effects', icon: ListFilter, statuses: undefined },
   { key: 'active', label: 'Active', icon: CircleDashed, statuses: ['pending', 'leased', 'retry'] },
+  { key: 'proposed', label: 'Awaiting approval', icon: CirclePause, statuses: ['proposed'] },
   { key: 'failed', label: 'Failed', icon: CircleX, statuses: ['failed'] },
   { key: 'succeeded', label: 'Succeeded', icon: CircleCheck, statuses: ['succeeded'] },
 ];
 
 const STATUS_ICON: Record<FactoryDecisionStatus, { icon: LucideIcon; className: string }> = {
   pending: { icon: CircleDashed, className: 'text-accent1' },
+  proposed: { icon: CirclePause, className: 'text-accent6' },
+  dismissed: { icon: CircleSlash, className: 'text-icon3' },
   leased: { icon: CircleDashed, className: 'text-accent1' },
   retry: { icon: CircleDashed, className: 'text-accent1' },
   succeeded: { icon: CircleCheck, className: 'text-green' },
   failed: { icon: CircleX, className: 'text-red' },
+};
+
+const STATUS_LABEL: Record<FactoryDecisionStatus, string> = {
+  pending: 'queued',
+  proposed: 'awaiting approval',
+  dismissed: 'dismissed',
+  leased: 'running',
+  retry: 'retrying',
+  succeeded: 'done',
+  failed: 'failed',
 };
 
 /** Rule decisions and their durable queued effects for the active Factory. */
@@ -54,7 +69,10 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
   const decisionFilter = DECISION_GROUPS.find(entry => entry.key === decisionGroup);
   const decisionStatuses = decisionFilter?.statuses;
   const decisionsQuery = useFactoryDecisionHistory(factoryProjectId, decisionGroup, decisionStatuses);
-  const retryDecision = useRetryFactoryDecision(factoryProjectId);
+  const retryDecision = useFactoryDecisionAction(factoryProjectId, 'retry');
+  const approveDecision = useFactoryDecisionAction(factoryProjectId, 'approve');
+  const dismissDecision = useFactoryDecisionAction(factoryProjectId, 'dismiss');
+  const mutationError = [retryDecision, approveDecision, dismissDecision].find(mutation => mutation.isError)?.error;
 
   if (decisionsQuery.isError) {
     const message =
@@ -90,6 +108,12 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
         </ButtonsGroup>
       </div>
 
+      {mutationError !== undefined && (
+        <Notice variant="destructive">
+          {mutationError instanceof Error ? mutationError.message : 'Rule action failed'}
+        </Notice>
+      )}
+
       {decisionsQuery.isPending ? (
         <SkeletonRows label="Loading rule decisions" rows={4} rowClassName="h-16 w-full" />
       ) : decisions.length === 0 ? (
@@ -121,7 +145,11 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
                   <DecisionRow
                     decision={decision}
                     retrying={retryDecision.isPending && retryDecision.variables === decision.id}
+                    approving={approveDecision.isPending && approveDecision.variables === decision.id}
+                    dismissing={dismissDecision.isPending && dismissDecision.variables === decision.id}
                     onRetry={() => retryDecision.mutate(decision.id)}
+                    onApprove={() => approveDecision.mutate(decision.id)}
+                    onDismiss={() => dismissDecision.mutate(decision.id)}
                   />
                 </Fragment>
               ))}
@@ -147,13 +175,25 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
 function DecisionRow({
   decision,
   retrying,
+  approving,
+  dismissing,
   onRetry,
+  onApprove,
+  onDismiss,
 }: {
   decision: FactoryDecisionSummary;
   retrying: boolean;
+  approving: boolean;
+  dismissing: boolean;
   onRetry: () => void;
+  onApprove: () => void;
+  onDismiss: () => void;
 }) {
-  const active = decision.status === 'pending' || decision.status === 'leased' || decision.status === 'retry';
+  const active =
+    decision.status === 'pending' ||
+    decision.status === 'leased' ||
+    decision.status === 'retry' ||
+    decision.status === 'proposed';
   const { icon: StatusIcon, className: statusIconClass } = STATUS_ICON[decision.status];
   const metrics: ReadonlyArray<{ icon: LucideIcon; label: string; value: string }> = [
     { icon: Repeat, label: 'attempts', value: String(decision.attempts) },
@@ -178,7 +218,7 @@ function DecisionRow({
                 decision.status === 'failed' ? 'text-error' : active ? 'text-accent1' : 'text-icon5',
               )}
             >
-              {decision.status}
+              {STATUS_LABEL[decision.status]}
             </span>
           </div>
           <div className="text-ui-xs leading-ui-xs text-icon3 flex flex-wrap items-center gap-x-3 gap-y-0.5">
@@ -195,6 +235,16 @@ function DecisionRow({
             </Txt>
           ) : null}
         </div>
+        {decision.status === 'proposed' ? (
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" disabled={approving || dismissing} onClick={onDismiss}>
+              {dismissing ? 'Dismissing…' : 'Dismiss'}
+            </Button>
+            <Button size="sm" disabled={approving || dismissing} onClick={onApprove}>
+              {approving ? 'Starting…' : 'Run'}
+            </Button>
+          </div>
+        ) : null}
         {decision.status === 'failed' ? (
           <Button variant="outline" size="sm" disabled={retrying} onClick={onRetry}>
             {retrying ? 'Retrying…' : 'Retry'}

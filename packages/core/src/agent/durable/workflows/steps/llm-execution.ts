@@ -12,6 +12,8 @@ import { injectBackgroundTaskPrompt } from '../../../../loop/shared/inject-backg
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../../../loop/shared/merge-llm-call-headers';
 import { buildMessagesFromChunks } from '../../../../loop/workflows/agentic-execution/build-messages-from-chunks';
 import type { CollectedChunk } from '../../../../loop/workflows/agentic-execution/build-messages-from-chunks';
+import { endPendingProviderToolSpan } from '../../../../loop/workflows/agentic-execution/provider-tool-spans';
+import type { PendingProviderToolCall } from '../../../../loop/workflows/agentic-execution/provider-tool-spans';
 import type { Mastra } from '../../../../mastra';
 import type {
   SpanType,
@@ -21,7 +23,7 @@ import type {
   AnySpan,
 } from '../../../../observability';
 import { EntityType } from '../../../../observability';
-import { getStepAvailableToolNames } from '../../../../observability/utils';
+import { getRootExportSpan, getStepAvailableToolNames } from '../../../../observability/utils';
 import type { CachedLLMStepResponse } from '../../../../processors';
 import { PrepareStepProcessor } from '../../../../processors/processors/prepare-step';
 import { ProcessorRunner } from '../../../../processors/runner';
@@ -39,6 +41,7 @@ import { createStep } from '../../../../workflows/workflow';
 import { MessageList } from '../../../message-list';
 import { TripWire } from '../../../trip-wire';
 import { isSupportedLanguageModel } from '../../../utils';
+import { ensureRemoteAbortListener } from '../../abort-transport';
 import { DurableStepIds } from '../../constants';
 import { endRunSpansWithError, globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent, emitStepStartEvent } from '../../stream-adapter';
@@ -83,6 +86,10 @@ const durableLLMInputSchema = z.object({
   options: z.any(),
   state: z.any(),
   messageId: z.string(),
+  // JSON-safe request context snapshot, forwarded from iteration state so the
+  // rebuild-from-Mastra path resolves the model and tools with the caller's
+  // context rather than an empty one.
+  requestContextEntries: z.record(z.string(), z.any()).optional(),
   // Agent span data for model span parenting
   agentSpanData: z.any().optional(),
   // Model span data (ONE span for entire agent run, created before workflow)
@@ -167,6 +174,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         runId,
         agentId,
         input: typedInput,
+        requestContext,
         logger,
       });
 
@@ -185,6 +193,23 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         llmRequestInputProcessors: resolvedLlmRequestInputProcessors,
         outputProcessors: resolvedOutputProcessors,
       } = resolved;
+
+      // 1a-bis. Become responsive to abort requests from other processes. The
+      // caller that owns `abort()` may live on a different pod entirely, so
+      // without this the run has no way to hear it. Must happen before the
+      // abort check below so a request that arrives mid-step is honoured.
+      // A transport failure here costs remote abortability, not the run itself,
+      // so it is logged rather than thrown.
+      if (pubsub) {
+        try {
+          await ensureRemoteAbortListener(pubsub, runId);
+        } catch (error) {
+          logger?.warn?.('Failed to subscribe to cross-process abort requests', {
+            runId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
 
       // 1b. Check for abort signal before doing any work. If the signal is
       // already aborted (e.g. pre-aborted before the loop starts), return a
@@ -714,7 +739,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // (which may carry only a toolCallId, no toolName) can still find the
             // tool resolved during the preceding `tool-call-input-streaming-start`.
             const resolvedToolByCallId = new Map<string, CoreTool>();
-            const providerToolSpansByToolCallId = new Map<string, { span: AnySpan; ended: boolean }>();
+            const pendingProviderToolCallsByToolCallId = new Map<string, PendingProviderToolCall>();
+            // Guards against a re-delivered tool-result minting a second span for the same call.
+            const materializedProviderToolCallIds = new Set<string>();
 
             const resolveToolDef = (toolName: string): CoreTool | undefined => {
               const directTool = (currentTools as unknown as Record<string, CoreTool> | undefined)?.[toolName];
@@ -821,7 +848,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               return { toolDef };
             };
 
-            const injectProviderToolObservability = ({
+            const resolveAgentRunFallback = (span: AnySpan): AnySpan =>
+              span.type === ('agent_run' as string)
+                ? span
+                : (((span as any).findParent?.('agent_run') ?? span) as AnySpan);
+
+            const recordProviderToolCall = ({
               toolCallId,
               toolName,
               args,
@@ -837,47 +869,24 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               const toolDef = resolveToolDef(toolName);
               const inferredProviderExecuted = inferProviderExecuted(providerExecuted, toolDef);
               if (!inferredProviderExecuted) return;
-              const existingEntry = providerToolSpansByToolCallId.get(toolCallId);
+              const existingEntry = pendingProviderToolCallsByToolCallId.get(toolCallId);
               if (existingEntry) {
-                if (args !== undefined && existingEntry.span.input === undefined) {
-                  (existingEntry.span as any).update?.({ input: args });
+                if (args !== undefined && existingEntry.args === undefined) {
+                  existingEntry.args = args;
                 }
                 return;
               }
 
-              try {
-                const parentSpan =
-                  tracingContext.currentSpan.type === ('agent_run' as string)
-                    ? tracingContext.currentSpan
-                    : ((tracingContext.currentSpan as any).findParent?.('agent_run') ?? tracingContext.currentSpan);
-
-                const span = (parentSpan as any).createChildSpan?.({
-                  type: 'provider_tool_call',
-                  name: `provider_tool: '${toolName}'`,
-                  entityType: EntityType.TOOL,
-                  entityId: toolName,
-                  entityName: toolName,
-                  attributes: {
-                    toolType: 'provider-tool',
-                    toolDescription: (toolDef as { description?: string } | undefined)?.description,
-                    toolCallId,
-                  },
-                  metadata: { toolCallId },
-                  ...(args !== undefined ? { input: args } : {}),
-                });
-
-                if (span) {
-                  providerToolSpansByToolCallId.set(toolCallId, { span: span as AnySpan, ended: false });
-                }
-              } catch (err) {
-                logger?.warn?.('[ProviderToolObservability] failed to create PROVIDER_TOOL_CALL span', {
-                  error: err instanceof Error ? err.message : String(err),
-                  toolName,
-                });
-              }
+              pendingProviderToolCallsByToolCallId.set(toolCallId, {
+                toolName,
+                args,
+                startTime: new Date(),
+                toolDescription: (toolDef as { description?: string } | undefined)?.description,
+                fallbackParentSpan: resolveAgentRunFallback(tracingContext.currentSpan),
+              });
             };
 
-            const cleanupToolObservabilitySpans = () => {
+            const cleanupToolObservabilitySpans = (flushPendingProviderToolCalls: boolean) => {
               for (const [toolCallId, entry] of clientToolObservabilityByToolCallId.entries()) {
                 if (!entry.ended) {
                   const parsedArgs = parseClientToolArgsFromDeltas(toolCallId);
@@ -887,13 +896,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               }
               clientToolArgsTextByToolCallId.clear();
 
-              for (const [, entry] of providerToolSpansByToolCallId.entries()) {
-                if (!entry.ended) {
-                  entry.span.end();
-                  entry.ended = true;
+              if (flushPendingProviderToolCalls) {
+                for (const [toolCallId, pending] of pendingProviderToolCallsByToolCallId.entries()) {
+                  endPendingProviderToolSpan({ toolCallId, pending, parentSpan: pending.fallbackParentSpan, logger });
                 }
               }
-              providerToolSpansByToolCallId.clear();
+              pendingProviderToolCallsByToolCallId.clear();
             };
 
             // 8. Start MODEL_STEP span at the beginning of LLM execution
@@ -1051,6 +1059,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   stepStartEmitted = true;
                   await emitStepStartEvent(pubsub, runId, {
                     stepId: DurableStepIds.LLM_EXECUTION,
+                    messageId: currentMessageId,
                     request,
                     warnings,
                   });
@@ -1103,7 +1112,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   if (toolInputStartToolDef) {
                     resolvedToolByCallId.set(rawChunk.payload.toolCallId, toolInputStartToolDef);
                   }
-                  injectProviderToolObservability({
+                  recordProviderToolCall({
                     toolCallId: rawChunk.payload.toolCallId,
                     toolName: rawChunk.payload.toolName,
                     providerExecuted: rawChunk.payload.providerExecuted,
@@ -1128,7 +1137,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     providerExecuted: rawChunk.payload.providerExecuted,
                     payload: (clientChunk as any).payload as Record<string, unknown> & { observability?: unknown },
                   });
-                  injectProviderToolObservability({
+                  recordProviderToolCall({
                     toolCallId: rawChunk.payload.toolCallId,
                     toolName: rawChunk.payload.toolName,
                     args: rawChunk.payload.args,
@@ -1233,16 +1242,24 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
                   case 'tool-result': {
                     const payload = rawChunk.payload as any;
-                    // Close PROVIDER_TOOL_CALL span if one was opened for this tool call
-                    const providerEntry = providerToolSpansByToolCallId.get(payload.toolCallId);
-                    if (providerEntry && !providerEntry.ended) {
-                      providerEntry.span.end({
-                        output: payload.result,
-                        attributes: { success: !payload.isError },
+                    // The result determines which MODEL_STEP owns the provider tool call, so
+                    // the PROVIDER_TOOL_CALL span is created now, backdated to the tool-call chunk.
+                    const pending = pendingProviderToolCallsByToolCallId.get(payload.toolCallId);
+                    if (pending) {
+                      endPendingProviderToolSpan({
+                        toolCallId: payload.toolCallId,
+                        pending,
+                        parentSpan: modelSpanTracker?.getTracingContext()?.currentSpan ?? pending.fallbackParentSpan,
+                        result: { output: payload.result, isError: payload.isError },
+                        logger,
                       });
-                      providerEntry.ended = true;
-                    } else if (!providerEntry && tracingContext?.currentSpan) {
-                      // Deferred result: no span was opened in this step invocation.
+                      pendingProviderToolCallsByToolCallId.delete(payload.toolCallId);
+                      materializedProviderToolCallIds.add(payload.toolCallId);
+                    } else if (
+                      tracingContext?.currentSpan &&
+                      !materializedProviderToolCallIds.has(payload.toolCallId)
+                    ) {
+                      // Deferred result: the call arrived in a previous step invocation.
                       // Only create a synthetic span if this is actually a provider-executed tool.
                       const resultToolDef2 = resolveToolDef(payload.toolName);
                       const isProviderExec = inferProviderExecuted(payload.providerExecuted, resultToolDef2);
@@ -1266,20 +1283,24 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                           if (spanInput !== undefined) break;
                         }
                       }
-                      injectProviderToolObservability({
+                      // startTime is result time, not the call time: the call was observed in a
+                      // previous invocation whose in-memory state (including its timestamp) does
+                      // not survive the invocation boundary.
+                      endPendingProviderToolSpan({
                         toolCallId: payload.toolCallId,
-                        toolName: payload.toolName,
-                        args: spanInput,
-                        providerExecuted: true,
+                        pending: {
+                          toolName: payload.toolName,
+                          args: spanInput,
+                          startTime: new Date(),
+                          toolDescription: (resultToolDef2 as { description?: string } | undefined)?.description,
+                        },
+                        parentSpan:
+                          modelSpanTracker?.getTracingContext()?.currentSpan ??
+                          resolveAgentRunFallback(tracingContext.currentSpan),
+                        result: { output: payload.result, isError: payload.isError },
+                        logger,
                       });
-                      const deferredEntry = providerToolSpansByToolCallId.get(payload.toolCallId);
-                      if (deferredEntry && !deferredEntry.ended) {
-                        deferredEntry.span.end({
-                          output: payload.result,
-                          attributes: { success: !payload.isError },
-                        });
-                        deferredEntry.ended = true;
-                      }
+                      materializedProviderToolCallIds.add(payload.toolCallId);
                     }
                     break;
                   }
@@ -1307,17 +1328,27 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   case 'error': {
                     const payload = rawChunk.payload as any;
                     const errorMessage = payload?.error?.message || payload?.message || 'LLM execution error';
-                    const errorObj = new Error(errorMessage);
+                    const errorObj = new Error(errorMessage, { cause: payload?.error ?? payload });
+                    // Keep the producer's stack so crashes stay attributable to their real throw site.
+                    if (typeof payload?.error?.stack === 'string') {
+                      errorObj.stack = payload.error.stack;
+                    }
+                    // Retain the producer's error name so classification (e.g. AbortError) survives transport.
+                    if (typeof payload?.error?.name === 'string' && payload.error.name) {
+                      errorObj.name = payload.error.name;
+                    }
                     // DON'T emit error event here - we might have fallback models to try
                     // Error event will be emitted after all models are exhausted
                     throw errorObj;
                   }
                 }
               }
-              // Clean up any unclosed observability spans after successful stream completion
-              cleanupToolObservabilitySpans();
+              // Clean up any unclosed observability spans after successful stream completion.
+              // Pending provider tool calls are only flushed on terminal steps — when the loop
+              // continues, the deferred result creates the real span in a later invocation.
+              cleanupToolObservabilitySpans(!(toolCalls.length > 0 && finishReason !== 'stop'));
             } catch (error) {
-              cleanupToolObservabilitySpans();
+              cleanupToolObservabilitySpans(true);
               logger?.error?.('Error processing LLM stream', { error, runId });
 
               const errorObj = error instanceof Error ? error : new Error(String(error));
@@ -1508,13 +1539,20 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // persisted assistant message carries the same content.metadata
             // (modelId/provider): prefer the static model, fall back to the
             // response-metadata chunk.
+            // The traceId link (#19891) mirrors it too: message rows carry no traceId
+            // column, so this metadata is the only way a stored assistant message can
+            // be correlated back to its trace.
             const responseModelId = currentModel.modelId ?? responseMetadata?.modelId;
+            const responseTraceId = getRootExportSpan(
+              modelSpanTracker?.getTracingContext()?.currentSpan ?? tracingContext?.currentSpan,
+            )?.externalTraceId;
             const responseModelMetadata =
-              responseModelId || currentModel.provider
+              responseModelId || currentModel.provider || responseTraceId
                 ? {
                     metadata: {
                       ...(responseModelId ? { modelId: responseModelId } : {}),
                       ...(currentModel.provider ? { provider: currentModel.provider } : {}),
+                      ...(responseTraceId ? { traceId: responseTraceId } : {}),
                     },
                   }
                 : undefined;
@@ -1823,7 +1861,16 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
           type: 'error',
           runId,
           from: ChunkFrom.AGENT,
-          payload: { error: fatalError },
+          // Serialize explicitly: a raw Error JSON-stringifies to `{}` on plain
+          // transports, which destroys the producer stack and makes crashes
+          // unattributable on the consumer side.
+          payload: {
+            error: {
+              message: fatalError.message,
+              stack: fatalError.stack,
+              name: fatalError.name,
+            },
+          },
         });
 
         // Emit step-finish so MastraModelOutput resolves finishReason to 'error'

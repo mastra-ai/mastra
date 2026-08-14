@@ -1,0 +1,87 @@
+---
+title: "Reference: Tool configuration | Editor"
+description: "Reference for Editor tool sources, providers, descriptions, conditions, MCP clients, and resolution order."
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+  - "@mastra/mcp"
+---
+
+# Tool configuration
+
+Editor stores tool selections as part of an agent version. A stored configuration can add registered tools and tools from integration providers, as well as tools from Model Context Protocol (MCP) clients.
+
+See [Editor tools](/docs/editor/overview#tools) for the Studio workflow and common uses.
+
+## Tool sources
+
+| Source | Description |
+| - | - |
+| Registered tools | Tools registered in the Mastra runtime tool registry |
+| MCP clients | Tools exposed by stored local or remote MCP server configurations |
+| Integration tools | Tools resolved by legacy integration-provider configuration |
+| [Tool providers](/reference/editor/tool-provider) | Tools resolved by providers registered on `MastraEditor`, such as Composio or Arcade |
+
+Code-defined agents keep their existing tools. The [`editor` override setting](/reference/agents/agent#editor-overrides) controls whether Editor can add and remove tools or only change descriptions.
+
+## Description overrides
+
+Each selected tool can store an agent-specific description. The description changes what the model sees without modifying the original tool definition.
+
+In description-only mode, Editor applies overrides only to tools that already exist on the code-defined agent. For MCP tools, an agent-level description takes priority over the description stored on the MCP client.
+
+If two sources resolve the same tool ID, the later source replaces the complete earlier tool, including its description. See [Resolution order](#resolution-order).
+
+## Conditional tool sets
+
+Editor can store conditional variants for the `tools`, `mcpClients`, `integrationTools`, and `toolProviders` fields. At runtime, matching variants are shallow-merged based on request-context values.
+
+The rule language uses the same operators and nesting behavior as [prompt block display conditions](/reference/editor/prompt-blocks#display-conditions).
+
+Conditions apply to a tool field variant or MCP client reference. Per-tool `rules` values in stored tool entries aren't evaluated by the current Editor resolver.
+
+## Stored MCP clients
+
+The `editor.mcp` namespace manages reusable MCP client configurations. See the [`mcp` namespace](/reference/editor/mastra-editor#namespaces) for CRUD method signatures.
+
+`@mastra/mcp` is an optional peer dependency of `@mastra/editor`. Install it before configuring stored MCP clients so Editor can load their tools at runtime:
+
+```bash npm2yarn
+npm install @mastra/mcp
+```
+
+### Transports
+
+| Transport | Stored configuration |
+| - | - |
+| `stdio` | `command` with optional `args`, `env`, and `timeout` |
+| HTTP | `url` with optional `timeout` |
+
+Stored HTTP definitions don't accept arbitrary headers. When the reserved `mastra__authToken` value is present in request context, Editor forwards it as an `Authorization: Bearer` header.
+
+### Filtering
+
+MCP tools can be allowlisted at two levels:
+
+1. **Server level**: The stored server's `tools` map limits tools for every agent that uses the client.
+1. **Agent level**: The agent's MCP client reference limits the remaining tools for that agent.
+
+Agent-level tool names can use namespaced or bare names. An explicit empty `tools` map selects all tools. With the current resolver, omitting `tools` from an agent-level MCP reference selects none.
+
+### Namespacing
+
+MCP tools use `serverName_toolName` IDs to avoid conflicts. A `search` tool from the `docs` server becomes `docs_search`.
+
+## Resolution order
+
+Editor merges tool records in the following order. Later records replace earlier records with the same ID.
+
+1. Code-defined tools
+1. Registered stored tools
+1. MCP tools
+1. Legacy integration tools
+1. V1 tool-provider tools
+
+Standalone stored agents use the same order without code-defined tools. Static code-agent overrides stop after legacy integration tools.
+
+Use unique tool IDs across sources when possible. A collision replaces the complete earlier tool rather than merging its fields.

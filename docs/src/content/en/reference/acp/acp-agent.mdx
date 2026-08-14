@@ -193,7 +193,7 @@ export const claudeCodeAgent = new AcpAgent({
 
 #### `generate(messages, options?)`
 
-Sends the prompt to the ACP agent, buffers text chunks from the ACP response, and returns a Mastra subagent generate result.
+Sends the prompt to the ACP agent and buffers text chunks from the response before returning a Mastra subagent generate result.
 
 ```typescript
 const result = await codeAgent.generate('Inspect the repository and summarize the test setup')
@@ -322,6 +322,6 @@ Use this callback to enforce local policy or inspect the permission title. It ca
 - [Agent Client Protocol docs](/docs/agents/acp)
 - [createACPTool() reference](/reference/acp/create-acp-tool)
 - [Agent reference](/reference/agents/agent)
-- [Subagents](/docs/agents/supervisor-agents)
+- [Subagents](/docs/capabilities/subagents)
 - [Agent Client Protocol introduction](https://agentclientprotocol.com/overview/introduction)
 - [Agent Client Protocol schema](https://agentclientprotocol.com/protocol/schema)

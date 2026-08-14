@@ -1,6 +1,7 @@
 import type { SpanRecord } from '@mastra/core/storage';
 import { format } from 'date-fns';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
+import { formatSpanDuration } from '../utils/span-utils';
 import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
 
 const KV = DataDetailsPanel.KeyValueList;
@@ -19,8 +20,7 @@ export interface SpanDetailsViewProps {
  * full-width span view with scoring tab + prev/next nav, use `SpanDataPanelView`.
  */
 export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetailsViewProps) {
-  const durationMs =
-    span?.startedAt && span?.endedAt ? new Date(span.endedAt).getTime() - new Date(span.startedAt).getTime() : null;
+  const duration = formatSpanDuration(span?.startedAt, span?.endedAt);
 
   return (
     <DataDetailsPanel>
@@ -56,10 +56,10 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
                 <KV.Value>{format(new Date(span.endedAt), 'MMM dd, HH:mm:ss.SSS')}</KV.Value>
               </>
             )}
-            {durationMs != null && (
+            {duration && (
               <>
                 <KV.Key>Duration</KV.Key>
-                <KV.Value>{durationMs < 1000 ? `${durationMs}ms` : `${(durationMs / 1000).toFixed(2)}s`}</KV.Value>
+                <KV.Value>{duration}</KV.Value>
               </>
             )}
           </KV>

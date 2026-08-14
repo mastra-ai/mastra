@@ -1,0 +1,14 @@
+{
+  "name": "experiment-worker-postgres-fixture",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mastra/core": "experiment-worker-e2e-test",
+    "@mastra/pg": "experiment-worker-e2e-test",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "mastra": "experiment-worker-e2e-test"
+  }
+}

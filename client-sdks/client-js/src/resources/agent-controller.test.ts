@@ -2,7 +2,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, beforeEach, it, vi } from 'vitest';
 
 import { MastraClient } from '../client';
-import { agentControllerMessageText } from './agent-controller';
+import { agentControllerMessageText, isKnownAgentControllerEvent } from './agent-controller';
 import type { AgentControllerEvent, KnownAgentControllerEvent } from './agent-controller';
 
 global.fetch = vi.fn();
@@ -241,6 +241,13 @@ describe('AgentController Resource', () => {
     expect(JSON.parse(init.body as string)).toEqual({ threadId: 't-1' });
   });
 
+  it('lists active runs controller-wide', async () => {
+    mockJson({ runs: [{ runId: 'run-1', resourceId: 'user-1', threadId: 't-1' }] });
+    const runs = await client.getAgentController('code').listActiveRuns();
+    expect(runs).toEqual([{ runId: 'run-1', resourceId: 'user-1', threadId: 't-1' }]);
+    expect(lastCall()[0]).toBe('http://localhost:4111/api/agent-controller/code/active-runs');
+  });
+
   it('hydrates message timestamps returned by listMessages without mutating the source payload', async () => {
     const sourceMessages = [
       {
@@ -297,7 +304,9 @@ describe('AgentController Resource', () => {
       .getAgentController('code')
       .session('user-1')
       .subscribe({
-        onEvent: e => received.push(e as KnownAgentControllerEvent),
+        onEvent: e => {
+          if (isKnownAgentControllerEvent(e)) received.push(e);
+        },
       });
 
     // Allow the async pump to drain the (already-closed) stream.

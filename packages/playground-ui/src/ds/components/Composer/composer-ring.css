@@ -1,0 +1,80 @@
+/* All three must be registered: an unregistered custom property is a raw token,
+   it cannot be interpolated by a transition or a keyframe. */
+@property --composer-ring-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+/* Offset rather than a second driver of the angle: the spin picks up from
+   wherever the pointer left the arc instead of snapping back to 0deg. */
+@property --composer-ring-spin {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@property --composer-ring-strength {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
+.composer-ring {
+  --composer-ring-color: var(--accent1);
+
+  position: relative;
+  border-radius: 23px;
+  padding: 1px;
+  background-color: color-mix(in oklab, var(--border2) 40%, transparent);
+  background-image: conic-gradient(
+    from calc(var(--composer-ring-angle) + var(--composer-ring-spin) - 60deg),
+    transparent 0deg,
+    color-mix(in oklab, var(--composer-ring-color) calc(var(--composer-ring-strength) * 100%), transparent) 60deg,
+    transparent 120deg
+  );
+  transition:
+    --composer-ring-strength 320ms ease-out,
+    box-shadow 320ms ease-out;
+}
+
+/* The ring is the composer's only edge. */
+.composer-ring > [data-slot='composer-box'] {
+  border-color: transparent;
+}
+
+.composer-ring:focus-within {
+  background-color: var(--border2);
+}
+
+/* The arc tracks the cursor, so it lights on hover only — focus brightens the edge instead. */
+.composer-ring:hover {
+  --composer-ring-strength: 0.4;
+}
+
+.composer-ring[data-busy='true'] {
+  --composer-ring-strength: 0.65;
+
+  animation: composer-ring-spin 2.4s linear infinite;
+  box-shadow: 0 4px 20px -4px color-mix(in oklab, var(--composer-ring-color) 12%, transparent);
+}
+
+@keyframes composer-ring-spin {
+  from {
+    --composer-ring-spin: 0deg;
+  }
+
+  to {
+    --composer-ring-spin: 360deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-ring {
+    transition: none;
+  }
+
+  .composer-ring[data-busy='true'] {
+    animation: none;
+  }
+}

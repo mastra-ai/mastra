@@ -1,4 +1,5 @@
 import type * as authStudioModule from '@mastra/auth-studio';
+import { AgentControllerChannels } from '@mastra/core/channels';
 import { RequestContext } from '@mastra/core/request-context';
 import type { AuthInitContext, IMastraAuthProvider } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
@@ -14,6 +15,10 @@ import type { FactoryIntegration, IntegrationContext } from './integrations/base
 import type * as surfaceModule from './routes/surface.js';
 import type * as tenantCredentialsModule from './routes/tenant-credentials.js';
 import { defaultFactoryRules, DEFAULT_FACTORY_RULE_VERSION } from './rules/defaults.js';
+import type * as dispatcherModule from './rules/dispatcher.js';
+import type { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
+import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
+import type { SourceControlStorage } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import { getFactoryWorkspace } from './workspace.js';
 /** A real in-memory FactoryStorage with init spied for boot-order assertions. */
@@ -31,8 +36,18 @@ function fakeStorage(): LibSQLFactoryStorage {
  * mocked — full-boot coverage lives in `../mastra/index.test.ts`.
  */
 
+const controllerMock = {
+  onSessionCreated: vi.fn(),
+  setChannels: vi.fn(),
+};
+
+const sessionNotifierStub = {
+  onSessionCreated: () => () => {},
+  onSessionDeleted: () => () => {},
+};
+
 const prepareMock = vi.fn(async (config: Record<string, unknown>) => ({
-  base: '/agents',
+  base: { controller: controllerMock },
   mastraArgs: { __capturedConfig: config },
   finalize: vi.fn(async () => {}),
 }));
@@ -40,6 +55,20 @@ const prepareMock = vi.fn(async (config: Record<string, unknown>) => ({
 vi.mock('@mastra/code-sdk', () => ({
   prepareAgentControllerMount: (config: Record<string, unknown>) => prepareMock(config),
 }));
+
+const dispatcherOptions = vi.hoisted(
+  () => [] as Array<ConstructorParameters<typeof dispatcherModule.FactoryDecisionDispatcher>[0]>,
+);
+vi.mock('./rules/dispatcher', async importOriginal => {
+  const actual = await importOriginal<typeof dispatcherModule>();
+  class TrackedFactoryDecisionDispatcher extends actual.FactoryDecisionDispatcher {
+    constructor(options: ConstructorParameters<typeof actual.FactoryDecisionDispatcher>[0]) {
+      super(options);
+      dispatcherOptions.push(options);
+    }
+  }
+  return { ...actual, FactoryDecisionDispatcher: TrackedFactoryDecisionDispatcher };
+});
 
 // The default-auth path constructs `MastraAuthStudio` internally (no service
 // locator to peek at), so capture every instance the factory creates and let
@@ -125,7 +154,7 @@ async function prepareIntegrationContext(config: ConstructorParameters<typeof Ma
     integrations: [...(config.integrations ?? []), fakeIntegration({ id: 'context-probe', routes })],
   });
   const buildApiRoutes = prepared.buildApiRoutes as (deps: object) => unknown;
-  buildApiRoutes({ controller: {}, authStorage: {} });
+  buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} });
   expect(routes).toHaveBeenCalledOnce();
   return routes.mock.calls[0]![0];
 }
@@ -133,6 +162,7 @@ async function prepareIntegrationContext(config: ConstructorParameters<typeof Ma
 beforeEach(() => {
   vi.clearAllMocks();
   studioInstances.length = 0;
+  dispatcherOptions.length = 0;
 });
 
 describe('MastraFactory constructor', () => {
@@ -160,6 +190,75 @@ describe('MastraFactory.prepare', () => {
     expect(prepareMock).toHaveBeenCalledOnce();
   });
 
+  it('registers a blocking session-created listener that seeds stored OM settings', async () => {
+    const storage = fakeStorage();
+    const factory = new MastraFactory({ storage });
+    await factory.prepare();
+
+    const blockingCall = controllerMock.onSessionCreated.mock.calls.find(
+      call => (call[1] as { blocking?: boolean } | undefined)?.blocking === true,
+    );
+    expect(blockingCall).toBeDefined();
+
+    // Seed the owner's web session row and stored memory settings through the
+    // same storage domains the factory registered.
+    await storage.init();
+    const sourceControl = storage.getDomain<SourceControlStorage>('source-control').forIntegration('github');
+    const project = await storage
+      .getDomain<FactoryProjectsStorage>('projects')
+      .create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Mastra' } });
+    const installation = await sourceControl.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: '123',
+    });
+    const repository = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, externalId: '456', slug: 'mastra-ai/mastra', defaultBranch: 'main' },
+    });
+    const connection = await sourceControl.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    const projectRepository = await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection.id,
+      repositoryId: repository.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/mastra',
+    });
+    await sourceControl.sessions.create({
+      sessionId: 'session-1',
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-1',
+      baseBranch: 'main',
+    });
+    await storage.getDomain<MemorySettingsStorage>('memory-settings').patch({
+      orgId: 'org-1',
+      userId: 'user-1',
+      patch: { observerModelId: 'anthropic/claude-haiku-4-5', reflectorModelId: 'anthropic/claude-haiku-4-5' },
+    });
+
+    const session = {
+      identity: { getResourceId: () => 'session-1' },
+      om: {
+        observer: { modelId: () => undefined, switchModel: vi.fn().mockResolvedValue(undefined) },
+        reflector: { modelId: () => undefined, switchModel: vi.fn().mockResolvedValue(undefined) },
+      },
+      state: { get: () => ({}), set: vi.fn().mockResolvedValue(undefined) },
+    };
+
+    await (blockingCall![0] as (session: unknown) => Promise<void>)(session);
+
+    expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
+    expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
+  });
+
   it('constructs an enabled sandbox fleet from the configured machine', async () => {
     const sandbox = new LocalSandbox({ workingDirectory: '/tmp/mc-factory-test' });
     const ctx = await prepareIntegrationContext({ storage: fakeStorage(), sandbox: { machine: sandbox } });
@@ -169,7 +268,7 @@ describe('MastraFactory.prepare', () => {
 
   it('threads conservative versioned Factory rules when the slot is omitted', async () => {
     const prepared = await prepareFactory({ storage: fakeStorage() });
-    (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: {}, authStorage: {} });
+    (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
     expect(assembleFactoryApiRoutesSpy).toHaveBeenCalledOnce();
     const rules = assembleFactoryApiRoutesSpy.mock.calls[0]![0].rules;
     expect(rules?.version).toBe(DEFAULT_FACTORY_RULE_VERSION);
@@ -188,11 +287,23 @@ describe('MastraFactory.prepare', () => {
       overrides: { tools: { submit_plan: { onResult } } },
     });
     const prepared = await prepareFactory({ storage: fakeStorage(), rules });
-    (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: {}, authStorage: {} });
+    (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
     expect(assembleFactoryApiRoutesSpy).toHaveBeenCalledOnce();
     const threaded = assembleFactoryApiRoutesSpy.mock.calls[0]![0].rules;
     expect(threaded).toBe(rules);
     expect(threaded.tools.submit_plan?.onResult).toBe(onResult);
+  });
+
+  it('forwards the configured dispatcher concurrency cap to the decision dispatcher', async () => {
+    const prepared = await prepareFactory({ storage: fakeStorage(), dispatcher: { maxInFlight: 7 } });
+    (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
+
+    const onFactoryRuntime = assembleFactoryApiRoutesSpy.mock.calls[0]![0].onFactoryRuntime;
+    expect(onFactoryRuntime).toBeTypeOf('function');
+    onFactoryRuntime?.({ transitionService: {} as never });
+
+    expect(dispatcherOptions).toHaveLength(1);
+    expect(dispatcherOptions[0]?.maxInFlight).toBe(7);
   });
 
   it('registers and initializes factory domains through the storage lifecycle', async () => {
@@ -210,6 +321,7 @@ describe('MastraFactory.prepare', () => {
       'queue-health',
       'integrations',
       'projects',
+      'filesystem',
       'source-control',
       'channel-identity',
     ]);
@@ -298,6 +410,14 @@ describe('MastraFactory.prepare', () => {
     expect(config.storageBackend).toBe('pg');
   });
 
+  it('keeps the host machine out of every session it mounts', async () => {
+    // On the controller, not per session — `createSession` clones
+    // `initialState` on every path, webhook recreation included.
+    const config = await prepareFactory({ storage: fakeStorage() });
+    expect(config.initialState).toMatchObject({ skipGlobalInstructions: true });
+    expect(config.disableSettingsOmSeed).toBe(true);
+  });
+
   it('installs a Web Factory session workspace resolver instead of changing the SDK default', async () => {
     const config = await prepareFactory({ storage: fakeStorage() });
     expect(config.workspace).toEqual(expect.any(Function));
@@ -352,7 +472,7 @@ describe('MastraFactory.prepare', () => {
   it('folds the provider /auth/* routes into buildApiRoutes when auth is configured', async () => {
     const config = await prepareFactory({ storage: fakeStorage(), auth: fakeProvider() });
     const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
-    const paths = buildApiRoutes({ controller: {}, authStorage: {} }).map(r => r.path);
+    const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
     expect(paths).toContain('/auth/login');
     expect(paths).toContain('/auth/callback');
     expect(paths).toContain('/auth/logout');
@@ -395,10 +515,36 @@ describe('MastraFactory.prepare', () => {
     await expect(extraTools({ requestContext })).resolves.toEqual({});
   });
 
+  it('serves the not-registered /web/channel-accounts stub when no slack integration is registered', async () => {
+    const config = await prepareFactory({ storage: fakeStorage() });
+    const buildApiRoutes = config.buildApiRoutes as (
+      deps: object,
+    ) => Array<{ path: string; method: string; handler: (c: unknown) => unknown }>;
+    const routes = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} });
+    const stub = routes.find(r => r.path === '/web/channel-accounts');
+    expect(stub).toBeDefined();
+    expect(stub!.method).toBe('GET');
+    const json = vi.fn((payload: unknown) => payload);
+    stub!.handler({ json } as never);
+    expect(json).toHaveBeenCalledWith({ accounts: [], canConnect: false, reason: 'not_registered' });
+  });
+
+  it('does not mount the /web/channel-accounts stub when a slack integration is registered', async () => {
+    // A registered slack integration owns the path via its own connect
+    // routes — the stub colliding with them would shadow the real answer.
+    const config = await prepareFactory({
+      storage: fakeStorage(),
+      integrations: [fakeIntegration({ id: 'slack' })],
+    });
+    const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+    const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
+    expect(paths).not.toContain('/web/channel-accounts');
+  });
+
   it('omits auth routes when auth is explicitly disabled (auth: null)', async () => {
     const config = await prepareFactory({ storage: fakeStorage(), auth: null });
     const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
-    const paths = buildApiRoutes({ controller: {}, authStorage: {} }).map(r => r.path);
+    const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
     expect(paths.some(p => p.startsWith('/auth/'))).toBe(false);
   });
 
@@ -464,7 +610,7 @@ describe('MastraFactory.prepare', () => {
     expect(provider).toBeDefined();
     expect(provider?.name).toBe('mastra-studio');
     const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
-    const paths = buildApiRoutes({ controller: {}, authStorage: {} }).map(r => r.path);
+    const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
     expect(paths).toContain('/auth/login');
     expect(paths).toContain('/auth/callback');
     expect(paths).toContain('/auth/logout');
@@ -584,7 +730,7 @@ describe('MastraFactory.prepare audit-capable integrations', () => {
   it('mounts audit domain routes without an audit integration', async () => {
     const config = await prepareFactory({ storage: fakeStorage() });
     const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
-    const paths = buildApiRoutes({ controller: {}, authStorage: {} }).map(r => r.path);
+    const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
     expect(paths).toContain('/web/factory/projects/:id/audit');
     expect(paths).not.toContain('/web/audit/portal-link');
   });
@@ -600,7 +746,7 @@ describe('MastraFactory.prepare audit-capable integrations', () => {
       ],
     });
     const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
-    const paths = buildApiRoutes({ controller: {}, authStorage: {} }).map(r => r.path);
+    const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
     expect(paths).toContain('/web/factory/projects/:id/audit');
     expect(paths).toContain('/web/audit/portal-link');
   });
@@ -625,7 +771,7 @@ describe('MastraFactory.prepare audit-capable integrations', () => {
           : [],
       });
       const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
-      const paths = buildApiRoutes({ controller: {}, authStorage: {} }).map(r => r.path);
+      const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
       expect(paths.includes('/web/audit/portal-link')).toBe(expectsPortal);
     },
   );
@@ -667,7 +813,7 @@ describe('MastraFactory.prepare integrations', () => {
       integrations: [fakeIntegration({ id: 'custom', routes })],
     });
     const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
-    const paths = buildApiRoutes({ controller: {}, authStorage: {} }).map(r => r.path);
+    const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
     expect(paths).toContain('/web/custom/status');
     const ctx = routes.mock.calls[0]![0];
     expect(ctx.stateSigner).toBeDefined();
@@ -678,7 +824,7 @@ describe('MastraFactory.prepare integrations', () => {
   it('mounts disabled status stubs when no integrations are registered', async () => {
     const config = await prepareFactory({ storage: fakeStorage() });
     const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
-    const paths = buildApiRoutes({ controller: {}, authStorage: {} }).map(r => r.path);
+    const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
     expect(paths).toContain('/web/github/status');
     expect(paths).toContain('/web/linear/status');
   });
@@ -762,6 +908,20 @@ describe('MastraFactory.prepare integrations', () => {
     expect(ctx.storage.sourceControl).toBeDefined();
   });
 
+  it('exposes the source-control owner on the routes context when github is registered', async () => {
+    const ctx = await prepareIntegrationContext({
+      storage: fakeStorage(),
+      integrations: [fakeIntegration({ id: 'github' })],
+    });
+    expect(ctx.storage.sourceControlOwner).toBeDefined();
+    expect(ctx.storage.sourceControlOwner!.integrationId).toBe('github');
+  });
+
+  it('omits the source-control owner from the routes context when github is absent', async () => {
+    const ctx = await prepareIntegrationContext({ storage: fakeStorage() });
+    expect(ctx.storage.sourceControlOwner).toBeUndefined();
+  });
+
   it('does not collect workers from integrations that are not ready', async () => {
     const storage = fakeStorage();
     vi.spyOn(storage, 'isDomainReady').mockReturnValue(false);
@@ -791,17 +951,21 @@ describe('MastraFactory.prepare integrations', () => {
     function withController() {
       const setChannels = vi.fn();
       prepareMock.mockResolvedValueOnce({
-        base: { controller: { setChannels } },
+        base: { controller: { onSessionCreated: vi.fn(), setChannels } },
         mastraArgs: {},
         finalize: vi.fn(async () => {}),
       } as never);
       return setChannels;
     }
 
-    it("attaches a ready integration's channels to the mounted controller", async () => {
+    /** Minimal valid FactoryChannelsConfig (config-form adapter entry). */
+    function fakeChannelsConfig() {
+      return { adapters: { fake: { adapter: { name: 'fake' } as never } } };
+    }
+
+    it("constructs an AgentControllerChannels from a ready integration's config and attaches it", async () => {
       const setChannels = withController();
-      const channelsInstance = { __channels: true } as never;
-      const channels = vi.fn((_ctx: IntegrationContext) => channelsInstance);
+      const channels = vi.fn((_ctx: IntegrationContext) => fakeChannelsConfig());
       const factory = new MastraFactory({
         storage: fakeStorage(),
         integrations: [fakeIntegration({ id: 'chat-platform', channels })],
@@ -809,12 +973,42 @@ describe('MastraFactory.prepare integrations', () => {
 
       await factory.prepare();
 
-      expect(setChannels).toHaveBeenCalledWith(channelsInstance);
+      // Integrations return a CONFIG; the factory owns instance construction.
+      expect(setChannels).toHaveBeenCalledOnce();
+      expect(setChannels.mock.calls[0]![0]).toBeInstanceOf(AgentControllerChannels);
       // Channels get the same context shape as routes()/workers(), plus the
       // storage domain only a channel integration needs.
       const ctx = channels.mock.calls[0]![0];
       expect(ctx.storage.channelIdentity).toBeDefined();
       expect(ctx.auth).toBeDefined();
+    });
+
+    it('exposes the source-control owner on the channels context when github is registered', async () => {
+      withController();
+      const channels = vi.fn((_ctx: IntegrationContext) => fakeChannelsConfig());
+      const factory = new MastraFactory({
+        storage: fakeStorage(),
+        integrations: [fakeIntegration({ id: 'github' }), fakeIntegration({ id: 'chat-platform', channels })],
+      });
+
+      await factory.prepare();
+
+      const ctx = channels.mock.calls[0]![0];
+      expect(ctx.storage.sourceControlOwner).toBeDefined();
+      expect(ctx.storage.sourceControlOwner!.integrationId).toBe('github');
+    });
+
+    it('omits the source-control owner from the channels context when github is absent', async () => {
+      withController();
+      const channels = vi.fn((_ctx: IntegrationContext) => fakeChannelsConfig());
+      const factory = new MastraFactory({
+        storage: fakeStorage(),
+        integrations: [fakeIntegration({ id: 'chat-platform', channels })],
+      });
+
+      await factory.prepare();
+
+      expect(channels.mock.calls[0]![0].storage.sourceControlOwner).toBeUndefined();
     });
 
     it('leaves the controller alone when no integration provides channels', async () => {

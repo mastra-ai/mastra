@@ -1,7 +1,13 @@
 import { visibleWidth } from '@earendil-works/pi-tui';
 import { describe, expect, it, vi } from 'vitest';
 
-import { PlanApprovalInlineComponent, PlanResultComponent } from '../plan-approval-inline.js';
+import { applyThemeMode, getThemeMode } from '../../theme.js';
+import {
+  PlanApprovalInlineComponent,
+  PlanContentBox,
+  PlanDiffBox,
+  PlanResultComponent,
+} from '../plan-approval-inline.js';
 
 describe('PlanApprovalInlineComponent', () => {
   it('includes a goal option and calls onGoal when selected', () => {
@@ -168,6 +174,55 @@ describe('PlanApprovalInlineComponent', () => {
     const selectList = (component as any).selectList;
     const values = selectList.items.map((item: { value: string }) => item.value);
     expect(values).toEqual(['approve', 'goal', 'changes']);
+  });
+
+  describe.each([
+    ['PlanContentBox', () => new PlanContentBox('# Title\n\nSome plan body that wraps when narrow enough.')],
+    ['PlanDiffBox', () => new PlanDiffBox('Build the feature\nRun tests', 'Build the feature\nAdd tests')],
+  ])('%s render caching', (_name, create) => {
+    it('returns the identical cached array on repeated renders at the same width', () => {
+      const box = create();
+      const first = box.render(80);
+      const second = box.render(80);
+      // Same reference proves no recompute happened (markdown lex + wrap skipped).
+      expect(second).toBe(first);
+    });
+
+    it('recomputes when the width changes and re-caches at the new width', () => {
+      const box = create();
+      const wide = box.render(80);
+      const narrow = box.render(42);
+      expect(narrow).not.toBe(wide);
+      for (const line of narrow) {
+        expect(visibleWidth(line)).toBeLessThanOrEqual(42);
+      }
+      expect(box.render(42)).toBe(narrow);
+      // Byte-identity contract: cached output equals a fresh instance's output.
+      expect(narrow).toEqual(create().render(42));
+      expect(box.render(80)).toEqual(create().render(80));
+    });
+
+    it('recomputes after invalidate()', () => {
+      const box = create();
+      const first = box.render(80);
+      box.invalidate();
+      const second = box.render(80);
+      expect(second).not.toBe(first);
+      expect(second).toEqual(first);
+    });
+
+    it('recomputes when the theme changes', () => {
+      const originalMode = getThemeMode();
+      const box = create();
+      const first = box.render(80);
+      try {
+        applyThemeMode(originalMode === 'dark' ? 'light' : 'dark');
+        const second = box.render(80);
+        expect(second).not.toBe(first);
+      } finally {
+        applyThemeMode(originalMode);
+      }
+    });
   });
 
   it('renders persisted requested changes below the plan', () => {

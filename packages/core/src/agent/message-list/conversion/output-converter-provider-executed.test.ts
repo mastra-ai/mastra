@@ -38,7 +38,7 @@ describe('sanitizeV5UIMessages — provider-executed tool handling', () => {
       }),
     ]);
 
-    const result = sanitizeV5UIMessages([msg], true);
+    const result = sanitizeV5UIMessages([msg], 'prompt');
 
     // Message should be dropped entirely — its only part was filtered out
     expect(result).toHaveLength(0);
@@ -55,7 +55,7 @@ describe('sanitizeV5UIMessages — provider-executed tool handling', () => {
       }),
     ]);
 
-    const result = sanitizeV5UIMessages([msg], true);
+    const result = sanitizeV5UIMessages([msg], 'prompt');
 
     // Deferred provider tool should be kept — the provider API needs to see
     // the server_tool_use block in the conversation history
@@ -74,7 +74,7 @@ describe('sanitizeV5UIMessages — provider-executed tool handling', () => {
       }),
     ]);
 
-    const result = sanitizeV5UIMessages([msg], true);
+    const result = sanitizeV5UIMessages([msg], 'prompt');
 
     expect(result).toHaveLength(1);
     expect(result[0]!.parts).toHaveLength(1);
@@ -92,7 +92,7 @@ describe('sanitizeV5UIMessages — provider-executed tool handling', () => {
       }),
     ]);
 
-    const result = sanitizeV5UIMessages([msg], true);
+    const result = sanitizeV5UIMessages([msg], 'prompt');
 
     expect(result).toHaveLength(1);
     expect(result[0]!.parts).toHaveLength(1);
@@ -125,7 +125,7 @@ describe('sanitizeV5UIMessages — provider-executed tool handling', () => {
       }),
     ]);
 
-    const result = sanitizeV5UIMessages([msg], true);
+    const result = sanitizeV5UIMessages([msg], 'prompt');
 
     expect(result).toHaveLength(1);
     expect(result[0]!.parts).toHaveLength(2);
@@ -147,7 +147,7 @@ describe('sanitizeV5UIMessages — provider-executed tool handling', () => {
       } as any),
     ]);
 
-    const result = sanitizeV5UIMessages([msg], true);
+    const result = sanitizeV5UIMessages([msg], 'prompt');
 
     expect(result).toHaveLength(1);
     expect(result[0]!.parts).toHaveLength(1);
@@ -174,7 +174,7 @@ describe('sanitizeV5UIMessages — provider-executed tool handling', () => {
       }),
     ]);
 
-    const result = sanitizeV5UIMessages([msg], true);
+    const result = sanitizeV5UIMessages([msg], 'prompt');
 
     expect(result).toHaveLength(1);
     expect(result[0]!.parts).toHaveLength(2);
@@ -202,7 +202,7 @@ describe('sanitizeV5UIMessages — provider-executed tool handling', () => {
     ]);
 
     // Without filterIncompleteToolCalls, both should be kept (only input-streaming is filtered)
-    const result = sanitizeV5UIMessages([msg], false);
+    const result = sanitizeV5UIMessages([msg], 'response');
 
     expect(result).toHaveLength(1);
     expect(result[0]!.parts).toHaveLength(2);
@@ -275,7 +275,7 @@ describe('sanitizeV5UIMessages — orphaned provider-executed tool calls (issue 
     const modelMessages = aiV5UIMessagesToAIV5ModelMessages(
       [user, assistantWithOrphan, followUp],
       [],
-      /* filterIncompleteToolCalls */ true,
+      /* mode */ 'prompt',
     );
 
     // Walk all assistant content parts and collect tool-call / tool-result IDs.
@@ -333,7 +333,7 @@ describe('sanitizeV5UIMessages — orphaned provider-executed tool calls (issue 
     const modelMessages = aiV5UIMessagesToAIV5ModelMessages(
       [user, assistantWithOrphan, followUp],
       [],
-      /* filterIncompleteToolCalls */ true,
+      /* mode */ 'prompt',
     );
 
     const orphanCallIds: string[] = [];
@@ -385,7 +385,7 @@ describe('sanitizeV5UIMessages — orphaned provider-executed tool calls (issue 
     const modelMessages = aiV5UIMessagesToAIV5ModelMessages(
       [user, earlierAssistantWithStaleProviderCall, laterAssistant],
       [],
-      /* filterIncompleteToolCalls */ true,
+      /* mode */ 'prompt',
     );
 
     const orphanCallIds: string[] = [];
@@ -440,7 +440,7 @@ describe('sanitizeV5UIMessages — orphaned provider-executed tool calls (issue 
 
     const result = sanitizeV5UIMessages(
       [user, assistantWithDeferredProviderCall, trailingAssistantThatSanitizesAway],
-      true,
+      'prompt',
     );
 
     expect(result).toHaveLength(2);
@@ -674,7 +674,7 @@ describe('sanitizeV5UIMessages — empty text part filtering', () => {
       parts: [{ type: 'text', text: '' }],
     };
 
-    const result = sanitizeV5UIMessages([userMsgWithEmptyText], true);
+    const result = sanitizeV5UIMessages([userMsgWithEmptyText], 'prompt');
 
     // User message with only empty text should be removed entirely
     expect(result).toHaveLength(0);
@@ -690,7 +690,7 @@ describe('sanitizeV5UIMessages — empty text part filtering', () => {
       ],
     };
 
-    const result = sanitizeV5UIMessages([userMsgWithMixedParts], true);
+    const result = sanitizeV5UIMessages([userMsgWithMixedParts], 'prompt');
 
     expect(result).toHaveLength(1);
     expect(result[0]!.parts).toHaveLength(1);
@@ -704,7 +704,7 @@ describe('sanitizeV5UIMessages — empty text part filtering', () => {
       parts: [{ type: 'text', text: '   ' }],
     };
 
-    const result = sanitizeV5UIMessages([userMsgWithWhitespace], true);
+    const result = sanitizeV5UIMessages([userMsgWithWhitespace], 'prompt');
 
     // User message with only whitespace text should be removed
     expect(result).toHaveLength(0);
@@ -717,7 +717,7 @@ describe('sanitizeV5UIMessages — empty text part filtering', () => {
       parts: [{ type: 'text', text: '' }],
     };
 
-    const result = sanitizeV5UIMessages([assistantMsgWithEmptyText], true);
+    const result = sanitizeV5UIMessages([assistantMsgWithEmptyText], 'prompt');
 
     // Assistant message with only empty text should be preserved as placeholder
     expect(result).toHaveLength(1);
@@ -749,7 +749,7 @@ describe('sanitizeV5UIMessages — duplicate OpenAI-compatible itemId merging', 
   it('should merge text parts with the same OpenAI itemId', () => {
     const msg = makeMessage([makeTextPart('Hello ', 'msg_abc123'), makeTextPart('world!', 'msg_abc123')]);
 
-    const result = sanitizeV5UIMessages([msg], false);
+    const result = sanitizeV5UIMessages([msg], 'response');
 
     expect(result).toHaveLength(1);
     expect(result[0]!.parts).toHaveLength(1);
@@ -764,7 +764,7 @@ describe('sanitizeV5UIMessages — duplicate OpenAI-compatible itemId merging', 
       makeTextPart('Part 3.', 'msg_abc123'),
     ]);
 
-    const result = sanitizeV5UIMessages([msg], false);
+    const result = sanitizeV5UIMessages([msg], 'response');
 
     expect(result).toHaveLength(1);
     expect(result[0]!.parts).toHaveLength(1);
@@ -777,7 +777,7 @@ describe('sanitizeV5UIMessages — duplicate OpenAI-compatible itemId merging', 
       makeTextPart('Azure!', 'msg_azure123', 'azure'),
     ]);
 
-    const result = sanitizeV5UIMessages([msg], false);
+    const result = sanitizeV5UIMessages([msg], 'response');
 
     expect(result).toHaveLength(1);
     expect(result[0]!.parts).toHaveLength(1);
@@ -791,7 +791,7 @@ describe('sanitizeV5UIMessages — duplicate OpenAI-compatible itemId merging', 
       makeTextPart('Azure', 'msg_shared', 'azure'),
     ]);
 
-    const result = sanitizeV5UIMessages([msg], false);
+    const result = sanitizeV5UIMessages([msg], 'response');
 
     expect(result).toHaveLength(1);
     expect(result[0]!.parts).toHaveLength(2);
@@ -809,7 +809,7 @@ describe('sanitizeV5UIMessages — duplicate OpenAI-compatible itemId merging', 
       makeTextPart('the answer is 42.', 'msg_websearch_001'),
     ]);
 
-    const result = sanitizeV5UIMessages([msg], false);
+    const result = sanitizeV5UIMessages([msg], 'response');
 
     expect(result).toHaveLength(1);
     expect(result[0]!.parts).toHaveLength(2);
@@ -823,7 +823,7 @@ describe('sanitizeV5UIMessages — duplicate OpenAI-compatible itemId merging', 
       makeTextPart('Second response.', 'msg_def456'),
     ]);
 
-    const result = sanitizeV5UIMessages([msg], false);
+    const result = sanitizeV5UIMessages([msg], 'response');
 
     expect(result).toHaveLength(1);
     expect(result[0]!.parts).toHaveLength(2);
@@ -834,7 +834,7 @@ describe('sanitizeV5UIMessages — duplicate OpenAI-compatible itemId merging', 
   it('should not merge text parts without itemIds', () => {
     const msg = makeMessage([makeTextPart('No metadata 1. '), makeTextPart('No metadata 2.')]);
 
-    const result = sanitizeV5UIMessages([msg], false);
+    const result = sanitizeV5UIMessages([msg], 'response');
 
     expect(result).toHaveLength(1);
     expect(result[0]!.parts).toHaveLength(2);
@@ -848,7 +848,7 @@ describe('sanitizeV5UIMessages — duplicate OpenAI-compatible itemId merging', 
       makeTextPart('Without itemId.'),
     ]);
 
-    const result = sanitizeV5UIMessages([msg], false);
+    const result = sanitizeV5UIMessages([msg], 'response');
 
     expect(result).toHaveLength(1);
     expect(result[0]!.parts).toHaveLength(4);
@@ -866,7 +866,7 @@ describe('sanitizeV5UIMessages — duplicate OpenAI-compatible itemId merging', 
       makeTextPart('This was confirmed by multiple studies.', 'msg_websearch_001'),
     ]);
 
-    const result = sanitizeV5UIMessages([msg], false);
+    const result = sanitizeV5UIMessages([msg], 'response');
 
     expect(result).toHaveLength(1);
     expect(result[0]!.parts).toHaveLength(1);

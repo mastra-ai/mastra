@@ -76,23 +76,23 @@ Before submitting a PR, make sure to:
    pnpm run lint:prose && pnpm run validate
    ```
 
-6. **Add redirect** (optional) - If you've renamed or deleted a doc, add a redirect to `vercel.redirects.json` and run `pnpm run generate-vercel-redirects` to update the generated `vercel.json`.
+6. **Add redirect** (optional): If you've renamed or deleted a doc, add a redirect to `vercel.redirects.json` and run `pnpm run generate-vercel-redirects` to update the generated `vercel.json`.
 
 ## Documentation structure
 
 The Mastra documentation is organized into several sections:
 
-- **docs/** - Main documentation (`src/content/en/docs/`)
-- **guides/** - Step-by-step guides (`src/content/en/guides/`)
-- **reference/** - API reference documentation (`src/content/en/reference/`)
-- **models/** - Model provider documentation (`src/content/en/models/`). These docs are auto-generated and should not be edited manually.
-- **course/** - Tutorial and course content (`src/course/`)
+- **docs/**: Main documentation (`src/content/en/docs/`)
+- **guides/**: Step-by-step guides (`src/content/en/guides/`)
+- **reference/**: API reference documentation (`src/content/en/reference/`)
+- **models/**: Model provider documentation (`src/content/en/models/`). These docs are auto-generated and should not be edited manually.
+- **course/**: Tutorial and course content (`src/course/`)
 
-All documentation should be written in English and placed in the appropriate section under `docs/src/content/en/`.
+All documentation should be written in English and placed in the appropriate section under `src/content/en/`. English is the only supported language and there are no plans to support other languages at this time.
 
 ## Editing content
 
-All documentation content is located in `/src`. Mastra's documentation content is written in a variation of Markdown called MDX, which allows embedding React components directly in content. The site also supports GitHub Flavored Markdown, adding support for tables and task lists.
+All documentation content is located in `src/content/en`. Mastra's documentation content is written in a variation of Markdown called MDX, which allows embedding React components directly in content. The site also supports GitHub Flavored Markdown, adding support for tables and task lists.
 
 ### File metadata
 
@@ -208,12 +208,6 @@ Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
 
 :::
 
-:::info
-
-Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
-
-:::
-
 :::warning
 
 Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
@@ -225,7 +219,15 @@ Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
 Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
 
 :::
+
+:::beta
+
+Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
+
+:::
 ```
+
+`info` is an alias for `note` and renders identically, so prefer `note`.
 
 ### `<Tabs>`
 

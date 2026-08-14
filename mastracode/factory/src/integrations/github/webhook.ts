@@ -1,19 +1,19 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { NotificationPriority } from '@mastra/core/notifications';
+import { RequestContext } from '@mastra/core/request-context';
 import type { Context } from 'hono';
-import type { GithubIntegration } from './integration.js';
-import type { GithubIssueTriageInput, GithubIssueTriageResult } from './issue-triage.js';
+import type { GithubIntegration, GithubRepositoryPermission } from './integration.js';
 import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from './subscriptions.js';
-import type { GithubSignalSubscriptionRow, GithubWebhookPullRequestTarget } from './subscriptions.js';
-
-export type GithubIssueTriageRunInput = GithubIssueTriageInput;
-export type GithubIssueTriageRunResult = GithubIssueTriageResult;
+import type {
+  GithubSignalSubscriptionRow,
+  GithubSubscriptionStorage,
+  GithubWebhookPullRequestTarget,
+} from './subscriptions.js';
 
 export interface GithubWebhookHandlerOptions {
   /** Integration providing webhook-secret verification + collaborator permission checks. */
   github: GithubIntegration;
-  runIssueTriage?: (input: GithubIssueTriageRunInput) => Promise<GithubIssueTriageRunResult>;
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
 }
 
@@ -59,14 +59,36 @@ export interface GithubWebhookNotification {
   payload: Record<string, unknown>;
 }
 
+/** The Factory session row fields a woken session has to run as. */
+export type FactorySessionOwner = { userId: string; orgId: string };
+
+/**
+ * The integration surface this dispatch uses. Narrow on purpose: the GitHub App
+ * integration and the platform-backed one are unrelated classes, and only this
+ * much is common to both.
+ */
+export interface GithubWebhookDispatchIntegration {
+  readonly integrationStorage: GithubSubscriptionStorage;
+  readonly sourceControlStorage: {
+    sessions: { getBySessionId(sessionId: string): Promise<FactorySessionOwner | null> };
+  };
+  getRepositoryCollaboratorPermission(
+    installationId: number,
+    repoFullName: string,
+    username: string,
+    signal?: AbortSignal,
+  ): Promise<GithubRepositoryPermission | undefined>;
+}
+
 export interface GithubWebhookDispatchDependencies {
   controller: MountedMastraCode['controller'];
   /**
    * Integration used by the default sender-authorization check (collaborator
-   * permission lookup). Author-gated notifications fail closed when neither
-   * this nor an `isAuthorizedSender` override is supplied.
+   * permission lookup) and to resolve the owner of a session being recreated.
+   * Author-gated notifications fail closed when neither this nor an
+   * `isAuthorizedSender` override is supplied.
    */
-  github?: GithubIntegration;
+  github?: GithubWebhookDispatchIntegration;
   listSubscriptions?: (
     target: GithubWebhookPullRequestTarget,
     options?: { includeTerminal?: boolean },
@@ -143,34 +165,6 @@ function getNumber(value: unknown): number | undefined {
 
 function getBoolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
-}
-
-function getLabels(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map(label => (typeof label === 'string' ? label : getString(getObject(label)?.name)))
-    .filter((label): label is string => Boolean(label));
-}
-
-function getIssueTriageRunInput(parsed: ParsedGithubWebhook): GithubIssueTriageRunInput | null {
-  if (parsed.event !== 'issues' || getString(parsed.payload.action) !== 'opened') return null;
-  const repository = getString(getObject(parsed.payload.repository)?.full_name);
-  const issue = getObject(parsed.payload.issue);
-  const sender = getString(getObject(parsed.payload.sender)?.login);
-  const installationId = getNumber(getObject(parsed.payload.installation)?.id);
-  const issueNumber = getNumber(issue?.number);
-  const issueTitle = getString(issue?.title);
-  const issueUrl = getString(issue?.html_url);
-  if (!repository || !installationId || !issueNumber || !issueTitle || !issueUrl) return null;
-  return {
-    repository,
-    issueNumber,
-    issueTitle,
-    issueUrl,
-    labels: getLabels(issue?.labels),
-    sender,
-    installationId,
-  };
 }
 
 export function normalizeGithubWebhookMetadata(parsed: ParsedGithubWebhook): GithubWebhookMetadata {
@@ -314,6 +308,7 @@ export function classifyGithubWebhook(parsed: ParsedGithubWebhook): GithubWebhoo
 async function resolveSubscriptionSession(
   controller: MountedMastraCode['controller'],
   subscription: GithubSignalSubscriptionRow,
+  github?: GithubWebhookDispatchIntegration,
 ) {
   const { sessionId, resourceId, threadId } = subscription;
   if (!sessionId || !resourceId || !threadId) {
@@ -327,12 +322,23 @@ async function resolveSubscriptionSession(
       projectRepositoryId: subscription.data.projectRepositoryId,
       ...(scope ? { worktreePath: scope } : {}),
     };
+    // Creating the session resolves its workspace, which authorizes the caller
+    // against the Factory session row — no signed-in user, so run as its owner.
+    // The controller resource is the Factory project for scoped sessions; the
+    // persisted Factory session is keyed by the subscription's session ID.
+    const sessionRow = await github?.sourceControlStorage.sessions.getBySessionId(sessionId);
+    if (!sessionRow) {
+      throw new Error(`GitHub subscription ${subscription.id} has no Factory session ${sessionId} to run as.`);
+    }
+    const requestContext = new RequestContext();
+    requestContext.set('user', { workosId: sessionRow.userId, organizationId: sessionRow.orgId });
     session = await controller.createSession({
       id: sessionId,
-      ownerId: subscription.data.ownerId,
+      ownerId: sessionRow.userId,
       resourceId,
       scope,
       tags,
+      requestContext,
     });
   }
   if (session.thread.getId() !== threadId) {
@@ -358,7 +364,7 @@ const AUTHOR_GATED_KINDS = new Set([
 
 async function isAuthorizedGithubSender(
   notification: GithubWebhookNotification,
-  github: GithubIntegration | undefined,
+  github: Pick<GithubWebhookDispatchIntegration, 'getRepositoryCollaboratorPermission'> | undefined,
 ): Promise<boolean> {
   if (!AUTHOR_GATED_KINDS.has(notification.kind)) return true;
   const sender = notification.metadata.sender;
@@ -434,7 +440,7 @@ export async function dispatchGithubWebhook(
 
   for (const subscription of subscriptions) {
     try {
-      const session = await resolveSubscriptionSession(dependencies.controller, subscription);
+      const session = await resolveSubscriptionSession(dependencies.controller, subscription, dependencies.github);
       const result = await session.sendNotificationSignal({
         source: 'github',
         kind: notification.kind,
@@ -486,18 +492,6 @@ export async function handleGithubWebhook(
 
   if (options.ingestFactoryEvent) {
     await options.ingestFactoryEvent(parsed);
-  } else {
-    const issueTriageRun = getIssueTriageRunInput(parsed);
-    if (issueTriageRun && options.runIssueTriage) {
-      void options.runIssueTriage(issueTriageRun).catch((error: unknown) => {
-        console.error('[GitHub Webhook] Failed to run issue triage', {
-          deliveryId: metadata.deliveryId,
-          repository: metadata.repository,
-          issueNumber: metadata.issueNumber,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      });
-    }
   }
 
   if (!options.controller) {

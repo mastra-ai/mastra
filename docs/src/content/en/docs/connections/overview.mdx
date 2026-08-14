@@ -1,0 +1,109 @@
+---
+title: "Connections"
+description: Connect Mastra to remote agents, coding agents, provider software development kit runtimes, and external tools and resources.
+packages:
+  - "@mastra/core"
+  - "@mastra/acp"
+  - "@mastra/claude"
+  - "@mastra/cursor"
+  - "@mastra/openai"
+  - "@mastra/mcp"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# Connections
+
+Connections let Mastra work with remote agents, coding agents, provider software development kit (SDK) runtimes, and external tools and resources. Choose a connection type based on which system owns the agent runtime and what you need to exchange.
+
+- [**Agent-to-Agent (A2A)**](/docs/agents/a2a): Expose or consume remote agents across service, framework, vendor, and language boundaries.
+- [**Agent Client Protocol (ACP)**](/docs/agents/acp): Run compatible coding-agent processes as Mastra tools or subagents.
+- [**SDK agents**](/docs/agents/sdk-agents): Register Claude, Cursor, or OpenAI SDK-backed agents while the provider SDK retains control of the runtime, tools, permissions, and agent loop.
+- [**Model Context Protocol (MCP)**](/docs/mcp/overview): Connect agents to external tools and resources, or expose Mastra agents, tools, workflows, prompts, and resources to MCP-compatible systems.
+
+## When to use connections
+
+Use connections when you need to:
+
+- Delegate work to an agent running in another service or runtime.
+- Run a coding agent against a project workspace.
+- Add a provider-native agent without replacing its SDK runtime or agent loop.
+- Connect agents to external tools and resources or publish Mastra capabilities to other systems.
+
+## Get started
+
+Start with the boundary you need to cross. Use [A2A](/docs/agents/a2a) for remote agent endpoints, [ACP](/docs/agents/acp) for coding-agent processes, [SDK agents](/docs/agents/sdk-agents) for provider-owned runtimes, or [MCP](/docs/mcp/overview) for tools and resources.
+
+<Tabs>
+  <TabItem value="a2a" label="A2A">
+    ```typescript
+    import { A2AAgent } from '@mastra/core/a2a'
+
+    const agent = new A2AAgent({
+      url: 'https://agent.example.com/.well-known/agent-card.json',
+    })
+
+    const result = await agent.generate('Summarize the latest report')
+    console.log(result.text)
+    ```
+  </TabItem>
+
+  <TabItem value="acp" label="ACP">
+    ```typescript
+    import { AcpAgent } from '@mastra/acp'
+
+    const agent = new AcpAgent({
+      id: 'coding-agent',
+      description: 'Inspects and edits code',
+      command: 'claude',
+      args: ['--acp'],
+      persistSession: false,
+    })
+
+    const result = await agent.generate('Review this project')
+    console.log(result.text)
+    ```
+  </TabItem>
+
+  <TabItem value="sdk-agents" label="SDK agents">
+    ```typescript
+    import { OpenAISDKAgent } from '@mastra/openai'
+
+    const agent = new OpenAISDKAgent({
+      id: 'openai-agent',
+      description: 'Answers project questions',
+      sdkOptions: {
+        name: 'Project assistant',
+        model: '__AI_SDK_OPENAI_MODEL_BASE__',
+      },
+    })
+
+    const result = await agent.generate('Explain agent loops in one sentence')
+    console.log(result.text)
+    ```
+  </TabItem>
+
+  <TabItem value="mcp" label="MCP">
+    ```typescript
+    import { MCPClient } from '@mastra/mcp'
+
+    const client = new MCPClient({
+      id: 'wikipedia-client',
+      servers: {
+        wikipedia: {
+          command: 'npx',
+          args: ['-y', 'wikipedia-mcp'],
+        },
+      },
+    })
+
+    try {
+      const tools = await client.listTools()
+      console.log(Object.keys(tools))
+    } finally {
+      await client.disconnect()
+    }
+    ```
+  </TabItem>
+</Tabs>

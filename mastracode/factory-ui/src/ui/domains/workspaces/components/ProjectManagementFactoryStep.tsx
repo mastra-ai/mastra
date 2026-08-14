@@ -1,9 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { LinearIcon } from '@mastra/playground-ui/icons/LinearIcon';
 
 import { useLinearStatusQuery } from '../../../../hooks/useLinearData';
-import { LinearIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 
 export interface ProjectManagementFactoryStepProps {
@@ -38,7 +38,7 @@ export function ProjectManagementFactoryStep({ onConnect, onContinue }: ProjectM
               {linearStatus.data?.reason !== 'missing_config' &&
                 linearStatus.data?.reason !== 'organization_required' && (
                   <Button variant="primary" onClick={onConnect}>
-                    <LinearIcon />
+                    <LinearIcon className="size-4" />
                     {linearStatus.data?.reason === 'not_connected' ? 'Connect Linear' : 'Reconnect Linear'}
                   </Button>
                 )}

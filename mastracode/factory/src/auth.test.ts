@@ -124,16 +124,51 @@ describe('mountFactoryAuth gate (enabled)', () => {
     expect(await res.text()).toBe('ok');
   });
 
+  it('forwards the platform deploy-auth /login landing to /signin with its query intact', async () => {
+    mockAuthenticate.mockResolvedValue(null);
+    const { app } = buildApp();
+
+    const res = await app.request('/login?error=access_denied&error_description=You%20do%20not%20have%20access', {
+      headers: { Accept: 'text/html' },
+    });
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe(
+      '/signin?error=access_denied&error_description=You%20do%20not%20have%20access',
+    );
+  });
+
   it('lets unauthenticated requests fetch static assets and metadata needed by the sign-in page', async () => {
     mockAuthenticate.mockResolvedValue(null);
     const { app } = buildApp();
 
-    for (const path of ['/assets/app.js', '/manifest.webmanifest', '/mastra.svg']) {
+    for (const path of [
+      '/assets/app.js',
+      '/manifest.webmanifest',
+      '/mastra.svg',
+      '/favicon-session-initializing.svg',
+      '/favicon-session-working.svg',
+      '/favicon-session-awaiting.svg',
+      '/favicon-session-error.svg',
+    ]) {
       const res = await app.request(path, { headers: { Accept: '*/*' } });
       expect(res.status).toBe(200);
       expect(await res.text()).toBe('ok');
     }
     expect(mockAuthenticate).not.toHaveBeenCalled();
+  });
+
+  it('keeps auth on other /favicon-session- paths and on non-GET favicon requests', async () => {
+    mockAuthenticate.mockResolvedValue(null);
+    const { app } = buildApp();
+
+    const unknownAsset = await app.request('/favicon-session-admin/config.json', { headers: { Accept: '*/*' } });
+    expect(unknownAsset.status).toBe(401);
+
+    const written = await app.request('/favicon-session-working.svg', {
+      method: 'POST',
+      headers: { Accept: '*/*' },
+    });
+    expect(written.status).toBe(401);
   });
 
   it('returns 401 JSON for unauthenticated /api requests', async () => {
@@ -262,18 +297,53 @@ describe('mountFactoryAuth gate (enabled)', () => {
     expect(res.status).toBe(401);
   });
 
-  it('stashes the authenticated user on the context for downstream routes', async () => {
-    mockAuthenticate.mockResolvedValue({ workosId: 'user_123', email: 'user@example.com', name: 'User' });
+  it('stashes flat-provider avatar URLs on the context for downstream routes', async () => {
+    mockAuthenticate.mockResolvedValue({
+      workosId: 'user_123',
+      email: 'user@example.com',
+      name: 'User',
+      avatarUrl: 'https://avatars.example/user.png',
+    });
     const app = new Hono();
     mountFactoryAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
     app.get('/web/whoami', c => {
       const user = getFactoryAuthUser(c);
-      return c.json({ userId: getFactoryAuthUserId(user) });
+      return c.json({ userId: getFactoryAuthUserId(user), avatarUrl: user?.avatarUrl });
     });
 
     const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ userId: 'user_123' });
+    expect(await res.json()).toEqual({ userId: 'user_123', avatarUrl: 'https://avatars.example/user.png' });
+  });
+
+  it('stashes session-provider avatar URLs on the context for downstream routes', async () => {
+    mockAuthenticate.mockResolvedValue({
+      session: { activeOrganizationId: 'org_123' },
+      user: {
+        id: 'user_123',
+        email: 'user@example.com',
+        name: 'User',
+        avatarUrl: 'https://avatars.example/user.png',
+      },
+    });
+    const app = new Hono();
+    mountFactoryAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
+    app.get('/web/whoami', c => {
+      const user = getFactoryAuthUser(c);
+      return c.json({
+        userId: getFactoryAuthUserId(user),
+        organizationId: getFactoryAuthOrgId(user),
+        avatarUrl: user?.avatarUrl,
+      });
+    });
+
+    const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      userId: 'user_123',
+      organizationId: 'org_123',
+      avatarUrl: 'https://avatars.example/user.png',
+    });
   });
 });
 
@@ -354,6 +424,19 @@ describe('mountFactoryAuth /auth routes (enabled)', () => {
     const res = await app.request('/auth/callback');
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toBe('/auth/login');
+    expect(mockHandleCallback).not.toHaveBeenCalled();
+  });
+
+  it('surfaces an IdP denial on /signin, keeping the intended destination for a retry', async () => {
+    const { app } = buildApp();
+    const state = `uuid-1|${encodeURIComponent('/dashboard')}`;
+    const res = await app.request(
+      `/auth/callback?error=access_denied&error_description=You%20do%20not%20have%20access&state=${state}`,
+    );
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe(
+      '/signin?error=access_denied&error_description=You+do+not+have+access&returnTo=%2Fdashboard',
+    );
     expect(mockHandleCallback).not.toHaveBeenCalled();
   });
 

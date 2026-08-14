@@ -158,6 +158,66 @@ describe('GoogleSchemaCompatLayer', () => {
   });
 
   describe('processToJSONSchema — OpenAPI 3.0 compat (issue #17057)', () => {
+    it('rewrites typeless z.any() properties into a permissive anyOf (issue #17325)', () => {
+      // z.any() serialises to `{}` (no type), which Gemini rejects via OpenRouter even when
+      // the property is optional, producing a misleading "required[0]: property is not defined"
+      // error for valid required properties like `prompt`. The property must stay in the schema
+      // (the model is expected to fill it, e.g. `resumeData` for tool suspend/resume), so it is
+      // rewritten into a permissive anyOf instead of dropped.
+      const schema = z.object({
+        prompt: z.string().describe('Prompt for the sub-agent'),
+        threadId: z.string().nullish().describe('Thread ID'),
+        suspendedToolRunId: z.string().nullable().optional().describe('Suspended run ID'),
+        resumeData: z.any().optional().describe('Resume data'),
+      });
+
+      const result = layer.processToJSONSchema(schema) as Record<string, any>;
+
+      // Valid required + optional typed properties survive.
+      expect(result.properties.prompt.type).toBe('string');
+      expect(result.required).toContain('prompt');
+      expect(result.properties.threadId).toBeDefined();
+      expect(result.properties.suspendedToolRunId).toBeDefined();
+
+      // The typeless property is kept and given a Gemini-compatible permissive shape.
+      const resumeData = result.properties.resumeData;
+      expect(resumeData).toBeDefined();
+      expect(resumeData.type).toBeUndefined();
+      expect(resumeData.nullable).toBe(true);
+      expect(resumeData.anyOf.map((v: any) => v.type)).toEqual([
+        'string',
+        'number',
+        'integer',
+        'boolean',
+        'object',
+        'array',
+      ]);
+      expect(resumeData.description).toBe('Resume data');
+    });
+
+    it('gives the permissive anyOf array branch a Gemini-valid items schema', () => {
+      // z.any() accepts array values too. Gemini's OpenAPI 3.0 schema requires `items`
+      // whenever `type: 'array'` is present, so the array branch needs its own permissive
+      // items schema — without it, an array-valued resumeData would fail Gemini's schema
+      // validation even though the top-level property allows it.
+      const schema = z.object({
+        resumeData: z.any().optional().describe('Resume data'),
+      });
+
+      const result = layer.processToJSONSchema(schema) as Record<string, any>;
+      const arrayBranch = result.properties.resumeData.anyOf.find((v: any) => v.type === 'array');
+
+      expect(arrayBranch).toBeDefined();
+      expect(arrayBranch.items).toBeDefined();
+      expect(arrayBranch.items.anyOf.map((v: any) => v.type)).toEqual([
+        'string',
+        'number',
+        'integer',
+        'boolean',
+        'object',
+      ]);
+    });
+
     it('rewrites oneOf to anyOf for discriminated unions', () => {
       const schema = z.object({
         event: z.discriminatedUnion('kind', [
@@ -266,10 +326,11 @@ describe('GoogleSchemaCompatLayer', () => {
       expect((result as any).properties.value.nullable).toBe(true);
     });
 
-    it('drops type and nullable for multi-non-null type arrays', () => {
+    it('rewrites multi-non-null type arrays into a nullable anyOf', () => {
       // Gemini can't represent `type: ['string', 'number', 'null']` as a single
-      // OpenAPI 3.0 type. Drop `type` and don't emit a bare `nullable: true`,
-      // which is meaningless on its own.
+      // OpenAPI 3.0 type. Emit an `anyOf` of the per-type variants (the shape Gemini
+      // accepts) plus `nullable: true` for the null member, rather than dropping
+      // `type` and leaving the property typeless.
       const result = applyCompatLayer({
         schema: {
           type: 'object',
@@ -281,8 +342,36 @@ describe('GoogleSchemaCompatLayer', () => {
         mode: 'jsonSchema',
       });
 
-      expect((result as any).properties.value.type).toBeUndefined();
-      expect((result as any).properties.value.nullable).toBeUndefined();
+      const value = (result as any).properties.value;
+      expect(value.type).toBeUndefined();
+      expect(value.nullable).toBe(true);
+      expect(value.anyOf.map((v: any) => v.type)).toEqual(['string', 'number']);
+    });
+
+    it('types a required multi-type property instead of leaving it typeless', () => {
+      // A required property with a multi-type array (e.g. from a raw JSON Schema / MCP
+      // tool) is exempt from the optional-strip, so before this fix it reached Gemini
+      // typeless and still triggered the INVALID_ARGUMENT 400.
+      const result = applyCompatLayer({
+        schema: {
+          type: 'object',
+          properties: {
+            resumeData: {
+              description: 'Resume data',
+              type: ['string', 'number', 'integer', 'boolean', 'object', 'null'],
+            },
+          },
+          required: ['resumeData'],
+        } as any,
+        compatLayers: [layer],
+        mode: 'jsonSchema',
+      });
+
+      const resumeData = (result as any).properties.resumeData;
+      expect(resumeData.type).toBeUndefined();
+      expect(resumeData.nullable).toBe(true);
+      expect(resumeData.anyOf.map((v: any) => v.type)).toEqual(['string', 'number', 'integer', 'boolean', 'object']);
+      expect((result as any).required).toContain('resumeData');
     });
   });
 });

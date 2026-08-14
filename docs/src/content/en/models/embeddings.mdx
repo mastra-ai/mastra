@@ -12,14 +12,14 @@ Mastra's model router supports embedding models using the same `provider/model` 
 ## Quickstart
 
 ```typescript
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
-import { embedMany } from "ai";
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
+import { embedMany } from 'ai'
 
 // Generate embeddings
 const { embeddings } = await embedMany({
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-  values: ["Hello world", "Semantic search is powerful"],
-});
+  model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
+  values: ['Hello world', 'Semantic search is powerful'],
+})
 ```
 
 ## Supported models
@@ -31,7 +31,7 @@ const { embeddings } = await embedMany({
 - `text-embedding-ada-002` - 1536 dimensions, 8191 max tokens
 
 ```typescript
-const embedder = new ModelRouterEmbeddingModel("openai/text-embedding-3-small");
+const embedder = new ModelRouterEmbeddingModel('openai/text-embedding-3-small')
 ```
 
 ### Google
@@ -39,7 +39,7 @@ const embedder = new ModelRouterEmbeddingModel("openai/text-embedding-3-small");
 - `gemini-embedding-001` - 768 dimensions, 2048 max tokens
 
 ```typescript
-const embedder = new ModelRouterEmbeddingModel("google/gemini-embedding-001");
+const embedder = new ModelRouterEmbeddingModel('google/gemini-embedding-001')
 ```
 
 ### VoyageAI
@@ -64,29 +64,29 @@ npm install @mastra/voyageai
 - `voyage-multimodal-3.5` - 1024 dimensions, supports text + images
 
 ```typescript
-import { voyage, voyageEmbedding } from "@mastra/voyageai";
+import { voyage, voyageEmbedding } from '@mastra/voyageai'
 
 // Use default model (voyage-3.5)
 const { embeddings } = await voyage.doEmbed({
-  values: ["Hello world"],
-});
+  values: ['Hello world'],
+})
 
 // Use specific model (voyage-3-large)
 const largeEmbeddings = await voyage.large.doEmbed({
-  values: ["More complex content"],
-});
+  values: ['More complex content'],
+})
 
 // Custom configuration
 const customModel = voyageEmbedding({
-  model: "voyage-3.5",
-  inputType: "query", // or 'document'
+  model: 'voyage-3.5',
+  inputType: 'query', // or 'document'
   outputDimension: 512, // 256, 512, 1024, or 2048
-  baseUrl: "https://ai.mongodb.com/v1", // Optional: custom endpoint (e.g. MongoDB-hosted Voyage)
-});
+  baseUrl: 'https://ai.mongodb.com/v1', // Optional: custom endpoint (e.g. MongoDB-hosted Voyage)
+})
 
 const { embeddings: customEmbeddings } = await customModel.doEmbed({
-  values: ["Custom configuration example"],
-});
+  values: ['Custom configuration example'],
+})
 ```
 
 **VoyageAI with MongoDB:**
@@ -94,48 +94,48 @@ const { embeddings: customEmbeddings } = await customModel.doEmbed({
 VoyageAI works seamlessly with MongoDB Atlas Vector Search:
 
 ```typescript
-import { voyage } from "@mastra/voyageai";
-import { MongoDBVector } from "@mastra/mongodb";
+import { voyage } from '@mastra/voyageai'
+import { MongoDBVector } from '@mastra/mongodb'
 
 const mongoVector = new MongoDBVector({
-  id: "mongodb-vector",
+  id: 'mongodb-vector',
   uri: process.env.MONGODB_URI,
   dbName: process.env.MONGODB_DB_NAME,
-});
+})
 
 // Create index matching VoyageAI dimensions
 await mongoVector.createIndex({
-  indexName: "documents",
+  indexName: 'documents',
   dimension: 1024, // voyage-3.5 default
-});
+})
 
 // Generate and store embeddings
 const { embeddings } = await voyage.doEmbed({
-  values: chunks.map((chunk) => chunk.text),
-});
+  values: chunks.map(chunk => chunk.text),
+})
 
 await mongoVector.upsert({
-  indexName: "documents",
+  indexName: 'documents',
   vectors: embeddings,
-  metadata: chunks.map((chunk) => ({ text: chunk.text })),
-});
+  metadata: chunks.map(chunk => ({ text: chunk.text })),
+})
 ```
 
 **Multimodal embeddings (text + images):**
 
 ```typescript
-import { voyage } from "@mastra/voyageai";
+import { voyage } from '@mastra/voyageai'
 
 const { embeddings } = await voyage.multimodal.doEmbed({
   values: [
     {
       content: [
-        { type: "text", text: "Product description" },
-        { type: "image_url", image_url: "https://example.com/image.jpg" },
+        { type: 'text', text: 'Product description' },
+        { type: 'image_url', image_url: 'https://example.com/image.jpg' },
       ],
     },
   ],
-});
+})
 ```
 
 For more details, see the [MongoDB + VoyageAI integration guide](/reference/vectors/mongodb#vector-embeddings-with-voyageai).
@@ -160,14 +160,14 @@ VOYAGE_API_KEY=pa-...
 You can use any OpenAI-compatible embedding endpoint with a custom URL:
 
 ```typescript
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
 
 const embedder = new ModelRouterEmbeddingModel({
-  providerId: "ollama",
-  modelId: "nomic-embed-text",
-  url: "http://localhost:11434/v1",
-  apiKey: "not-needed", // Some providers don't require API keys
-});
+  providerId: 'ollama',
+  modelId: 'nomic-embed-text',
+  url: 'http://localhost:11434/v1',
+  apiKey: 'not-needed', // Some providers don't require API keys
+})
 ```
 
 ## Usage with Memory
@@ -175,22 +175,22 @@ const embedder = new ModelRouterEmbeddingModel({
 The embedding model router integrates seamlessly with Mastra's memory system:
 
 ```typescript
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+import { Memory } from '@mastra/memory'
+import { Agent } from '@mastra/core/agent'
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
 
 const agent = new Agent({
-  id: "my-agent",
-  name: "my-agent",
-  instructions: "You are a helpful assistant",
-  model: "openai/gpt-5.1",
+  id: 'my-agent',
+  name: 'my-agent',
+  instructions: 'You are a helpful assistant',
+  model: 'openai/gpt-5.1',
   memory: new Memory({
-    embedder: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+    embedder: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
   }),
-});
+})
 ```
 
-:::info
+:::note
 
 The `embedder` field accepts:
 
@@ -205,14 +205,14 @@ The `embedder` field accepts:
 Use embedding models for document chunking and retrieval:
 
 ```typescript
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
-import { embedMany } from "ai";
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
+import { embedMany } from 'ai'
 
 // Embed document chunks
 const { embeddings } = await embedMany({
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-  values: chunks.map((chunk) => chunk.text),
-});
+  model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
+  values: chunks.map(chunk => chunk.text),
+})
 
 // Store embeddings in your vector database
 await vectorStore.upsert(
@@ -221,7 +221,7 @@ await vectorStore.upsert(
     vector: embeddings[i],
     metadata: chunk.metadata,
   })),
-);
+)
 ```
 
 ## TypeScript Support
@@ -229,13 +229,13 @@ await vectorStore.upsert(
 The model router provides full TypeScript autocomplete for embedding model IDs:
 
 ```typescript
-import type { EmbeddingModelId } from "@mastra/core";
+import type { EmbeddingModelId } from '@mastra/core'
 
 // Type-safe embedding model selection
-const modelId: EmbeddingModelId = "openai/text-embedding-3-small";
+const modelId: EmbeddingModelId = 'openai/text-embedding-3-small'
 //                                  ^ Autocomplete shows all supported models
 
-const embedder = new ModelRouterEmbeddingModel(modelId);
+const embedder = new ModelRouterEmbeddingModel(modelId)
 ```
 
 ## Error handling
@@ -244,9 +244,9 @@ The model router validates provider and model IDs at construction time:
 
 ```typescript
 try {
-  const embedder = new ModelRouterEmbeddingModel("invalid/model");
+  const embedder = new ModelRouterEmbeddingModel('invalid/model')
 } catch (error) {
-  console.error(error.message);
+  console.error(error.message)
   // "Unknown provider: invalid. Available providers: openai, google"
 }
 ```
@@ -255,12 +255,10 @@ Missing API keys are also caught early:
 
 ```typescript
 try {
-  const embedder = new ModelRouterEmbeddingModel(
-    "openai/text-embedding-3-small",
-  );
+  const embedder = new ModelRouterEmbeddingModel('openai/text-embedding-3-small')
   // Throws if OPENAI_API_KEY is not set
 } catch (error) {
-  console.error(error.message);
+  console.error(error.message)
   // "API key not found for provider openai. Set OPENAI_API_KEY environment variable."
 }
 ```
@@ -268,5 +266,5 @@ try {
 ## Next Steps
 
 - [Memory & Semantic Recall](/docs/memory/semantic-recall): Use embeddings for agent memory
-- [RAG & Chunking](/docs/rag/chunking-and-embedding): Build retrieval-augmented generation systems
-- [Vector Databases](/docs/rag/vector-databases): Store and query embeddings
+- [RAG & Chunking](/reference/rag/chunking-and-embedding): Build retrieval-augmented generation systems
+- [Vector Databases](/reference/rag/vector-databases): Store and query embeddings

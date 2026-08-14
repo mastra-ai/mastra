@@ -4,28 +4,21 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-overrides:
-  '@mastra/core': link:../../../packages/core
-  '@mastra/deployer-vercel': link:../../../deployers/vercel
-  '@mastra/editor': link:../../../packages/editor
-  '@mastra/memory': link:../../../packages/memory
-  mastra: link:../../../packages/cli
-
 importers:
 
   .:
     dependencies:
       '@mastra/core':
-        specifier: link:../../core
+        specifier: link:../../../packages/core
         version: link:../../core
       '@mastra/deployer-vercel':
         specifier: link:../../../deployers/vercel
         version: link:../../../deployers/vercel
       '@mastra/editor':
-        specifier: link:../../editor
+        specifier: link:../../../packages/editor
         version: link:../../editor
       '@mastra/memory':
-        specifier: link:../../memory
+        specifier: link:../../../packages/memory
         version: link:../../memory
       hono:
         specifier: ^4.12.8
@@ -38,7 +31,7 @@ importers:
         specifier: 22.19.15
         version: 22.19.15
       mastra:
-        specifier: link:../../cli
+        specifier: link:../../../packages/cli
         version: link:../../cli
       turbo:
         specifier: ^2.9.12

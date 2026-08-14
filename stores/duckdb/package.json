@@ -1,6 +1,6 @@
 {
   "name": "@mastra/duckdb",
-  "version": "1.5.2",
+  "version": "1.6.1",
   "description": "DuckDB vector store provider for Mastra - embedded high-performance vector storage with HNSW indexing",
   "type": "module",
   "main": "dist/index.js",
@@ -47,7 +47,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.57.0-0 <2.0.0-0"
   },
   "files": [
     "dist",

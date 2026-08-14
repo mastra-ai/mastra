@@ -28,11 +28,14 @@ export interface QueueHealthSelection {
   bucket: AgeBucket;
 }
 
+/** `anchor` is the clicked cell, so the drill-down can open on it. */
+export type QueueHealthSelect = (selection: QueueHealthSelection | null, anchor?: HTMLElement) => void;
+
 export interface QueueHealthChartProps {
   health: QueueHealth;
   thresholdsSeconds: number[];
   selected: QueueHealthSelection | null;
-  onSelect: (selection: QueueHealthSelection | null) => void;
+  onSelect: QueueHealthSelect;
 }
 
 function boundLabel(seconds: number): string {
@@ -154,7 +157,7 @@ function Segment({
   selected: QueueHealthSelection | null;
   fade: string;
   onHover: (bucket: AgeBucket | null) => void;
-  onSelect: (selection: QueueHealthSelection | null) => void;
+  onSelect: QueueHealthSelect;
   className: string;
 }) {
   const isSelected = sameSelection(selected, stage, bucket);
@@ -172,7 +175,7 @@ function Segment({
             onMouseEnter={() => onHover(bucket)}
             onFocus={() => onHover(bucket)}
             onBlur={() => onHover(null)}
-            onClick={() => onSelect(isSelected ? null : { stage, bucket })}
+            onClick={event => onSelect(isSelected ? null : { stage, bucket }, event.currentTarget)}
             className={[
               'focus-visible:outline-accent1 h-full min-w-1 basis-0 cursor-pointer transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2',
               BUCKET_COLOR[bucket],
@@ -204,7 +207,7 @@ function Legend({
   selected: QueueHealthSelection | null;
   focused: AgeBucket | null;
   onHover: (bucket: AgeBucket | null) => void;
-  onSelect: (selection: QueueHealthSelection | null) => void;
+  onSelect: QueueHealthSelect;
 }) {
   return (
     <ul
@@ -225,7 +228,7 @@ function Legend({
               onMouseLeave={() => onHover(null)}
               onFocus={() => onHover(bucket)}
               onBlur={() => onHover(null)}
-              onClick={() => onSelect(isSelected ? null : { stage: null, bucket })}
+              onClick={event => onSelect(isSelected ? null : { stage: null, bucket }, event.currentTarget)}
               className="group hover:bg-surface4 aria-pressed:bg-surface4 focus-visible:outline-accent1 flex w-full items-center gap-2.5 rounded-lg p-2 text-left transition-colors focus-visible:outline-2 disabled:pointer-events-none disabled:opacity-40"
             >
               <span
@@ -268,7 +271,7 @@ function StageRow({
   selected: QueueHealthSelection | null;
   fade: (bucket: AgeBucket) => string;
   onHover: (bucket: AgeBucket | null) => void;
-  onSelect: (selection: QueueHealthSelection | null) => void;
+  onSelect: QueueHealthSelect;
 }) {
   return (
     <li className="hover:bg-surface4 grid grid-cols-[6.5rem_1fr_auto] items-center gap-3 rounded-md px-2 py-2 transition-colors">
