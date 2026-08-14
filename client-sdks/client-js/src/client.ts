@@ -269,7 +269,7 @@ export class MastraClient extends BaseResource {
 
   /**
    * Lists the agent controllers hosted on the connected Mastra instance.
-   * @returns Promise containing an array of agent controller identifiers
+   * @returns Promise containing one record per agent controller, carrying its id
    */
   public async listAgentControllers(): Promise<AgentControllerInfo[]> {
     const body = await this.request<{ agentControllers: AgentControllerInfo[] }>('/agent-controller');
