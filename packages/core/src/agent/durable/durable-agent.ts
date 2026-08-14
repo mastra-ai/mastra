@@ -2659,25 +2659,42 @@ export class DurableAgent<
 
     // Track cleanup state to avoid double cleanup
     let cleanedUp = false;
+    let terminalCompleted = false;
+    let abortPending = false;
+    let cleanupRequested = false;
     let autoCleanupTimer: ReturnType<typeof setTimeout> | null = null;
+    let streamCleanup: (() => void) | undefined;
+
+    const performCleanup = () => {
+      if (autoCleanupTimer) {
+        clearTimeout(autoCleanupTimer);
+        autoCleanupTimer = null;
+      }
+      if (cleanedUp) return;
+
+      streamCleanup?.();
+      this.#runRegistry.cleanup(runId);
+      globalRunRegistry.delete(runId);
+      this.#clearPubsubTopic(runId);
+      cleanedUp = true;
+    };
 
     const scheduleAutoCleanup = () => {
       if (autoCleanupTimer || cleanedUp || this.#cleanupTimeoutMs === 0) return;
-      autoCleanupTimer = setTimeout(() => {
-        if (!cleanedUp) {
-          this.#runRegistry.cleanup(runId);
-          globalRunRegistry.delete(runId);
-          this.#clearPubsubTopic(runId);
-          cleanedUp = true;
-        }
-      }, this.#cleanupTimeoutMs);
+      autoCleanupTimer = setTimeout(performCleanup, this.#cleanupTimeoutMs);
     };
 
-    const {
-      output,
-      cleanup: streamCleanup,
-      ready,
-    } = createDurableAgentStream<TOutput>({
+    const completeTerminalLifecycle = () => {
+      terminalCompleted = true;
+      abortPending = false;
+      if (cleanupRequested) {
+        performCleanup();
+      } else {
+        scheduleAutoCleanup();
+      }
+    };
+
+    const stream = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
       runId,
       messageId: crypto.randomUUID(),
@@ -2695,32 +2712,33 @@ export class DurableAgent<
       experimentalTransform: options?.experimentalTransform,
       onStepFinish: options?.onStepFinish,
       onFinish: options?.onFinish,
-      onStreamFinished: scheduleAutoCleanup,
+      onStreamFinished: completeTerminalLifecycle,
       onError: async error => {
-        await options?.onError?.(error);
-        scheduleAutoCleanup();
+        try {
+          await options?.onError?.(error);
+        } finally {
+          completeTerminalLifecycle();
+        }
       },
+      onAbort: completeTerminalLifecycle,
       onSuspended: options?.onSuspended,
       structuredOutput: this.#runRegistry.get(runId)?.structuredOutput as any,
       outputProcessors: this.#runRegistry.get(runId)?.outputProcessors,
       messageList: globalRunRegistry.get(runId)?.messageList ?? this.#runRegistry.getMessageList(runId),
     });
+    const { output, ready } = stream;
+    streamCleanup = stream.cleanup;
 
     // Wait for subscription to be ready
     await ready;
 
     const cleanup = () => {
-      if (autoCleanupTimer) {
-        clearTimeout(autoCleanupTimer);
-        autoCleanupTimer = null;
+      if (abortPending) {
+        cleanupRequested = true;
+        scheduleAutoCleanup();
+        return;
       }
-      if (!cleanedUp) {
-        streamCleanup();
-        this.#runRegistry.cleanup(runId);
-        globalRunRegistry.delete(runId);
-        this.#clearPubsubTopic(runId);
-        cleanedUp = true;
-      }
+      performCleanup();
     };
 
     // observe() doesn't own the run's lifecycle, but the returned `abort` can
@@ -2729,6 +2747,7 @@ export class DurableAgent<
     // the process actually executing it — the common case for observe(), which
     // exists precisely to watch runs this process did not start.
     const abort = async (reason?: unknown) => {
+      abortPending = !terminalCompleted;
       const controller = (globalRunRegistry.get(runId) ?? this.#runRegistry.get(runId))?.abortController;
       if (controller && !controller.signal.aborted) {
         controller.abort(reason);
