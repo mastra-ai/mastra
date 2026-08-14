@@ -3,8 +3,8 @@
  * It is in a separate file to avoid including local-pkg in runtime code.
  */
 
-import { realpathSync, statSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { statSync } from 'node:fs';
+import { dirname, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readJSON } from 'fs-extra/esm';
 import { getPackageInfo } from 'local-pkg';
@@ -20,75 +20,43 @@ import { getPackageName } from './utils';
  * (only ENOENT) and local-pkg then logs the raw error to the console. Using the file's directory
  * as the base avoids this while resolving identically.
  */
-function toParentDirectory(parentPath: string): string {
-  // Resolve against the current working directory so that a non-absolute path (a virtual rollup
-  // module id for example) cannot make the lookup below return a relative package root.
-  const fsPath = resolve(parentPath.startsWith('file://') ? fileURLToPath(parentPath) : parentPath);
+function toParentDirectoryUrl(parentPath: string): string {
+  let fsPath = resolve(parentPath.startsWith('file://') ? fileURLToPath(parentPath) : parentPath);
 
   try {
     if (statSync(fsPath).isFile()) {
-      return dirname(fsPath);
+      fsPath = dirname(fsPath);
     }
   } catch {
     // non-existent paths are used as-is
   }
 
-  return fsPath;
-}
-
-/**
- * Find the package directory in the closest `node_modules` directory.
- *
- * This is the directory lookup that Node does for a bare import, and the `package.json` in that
- * directory is then read straight from disk.
- *
- * local-pkg instead resolves the `<packageName>/package.json` subpath, which the package's
- * `exports` map can block. A package that does not export `./package.json` (execa 9 for example)
- * is not found that way, and local-pkg can then select a different copy of the package, which
- * pins the wrong version in the built `package.json`.
- *
- * The result is a real path, because `node_modules` entries are symlinks in pnpm and workspace
- * layouts. Callers match this path against rollup module ids, which rollup resolves to real paths.
- */
-function findPackageInNodeModules(packageName: string, parentDirectory: string): string | null {
-  let directory = parentDirectory;
-
-  while (true) {
-    const candidate = join(directory, 'node_modules', ...packageName.split('/'));
-    try {
-      if (statSync(join(candidate, 'package.json')).isFile()) {
-        return realpathSync(candidate);
-      }
-    } catch {
-      // keep looking in the parent directory
-    }
-
-    const parent = dirname(directory);
-    if (parent === directory) {
-      return null;
-    }
-    directory = parent;
-  }
+  // Keep the trailing separator. Without it, URL resolution treats the directory name as a file
+  // and starts package lookup from its parent directory.
+  return pathToFileURL(`${fsPath}${sep}`).href;
 }
 
 /**
  * Get package root path
  */
 export async function getPackageRootPath(packageName: string, parentPath?: string): Promise<string | null> {
-  const parentDirectory = parentPath ? toParentDirectory(parentPath) : process.cwd();
+  let rootPath: string | null;
 
-  const rootPath = findPackageInNodeModules(packageName, parentDirectory);
-  if (rootPath) {
-    return rootPath;
-  }
-
-  // fallback for layouts without a `node_modules` directory, for example a linked workspace package
   try {
-    const pkg = await getPackageInfo(packageName, { paths: [pathToFileURL(parentDirectory).href] });
-    return pkg?.rootPath ?? null;
+    let options: { paths?: string[] } | undefined = undefined;
+    if (parentPath) {
+      options = {
+        paths: [toParentDirectoryUrl(parentPath)],
+      };
+    }
+
+    const pkg = await getPackageInfo(packageName, options);
+    rootPath = pkg?.rootPath ?? null;
   } catch {
-    return null;
+    rootPath = null;
   }
+
+  return rootPath;
 }
 
 async function readPackageMetadata(

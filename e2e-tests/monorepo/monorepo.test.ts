@@ -491,9 +491,8 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
         }
       }
 
-      // `unicorn-magic` does not expose `./package.json` through its exports map. The
-      // automatic version resolution must still read the version from the copy installed
-      // for the app (0.4.0), not from the workspace root copy (0.2.0) (#18849).
+      // Automatic version resolution must read the copy installed for the app (0.4.0),
+      // not the older copy installed at the workspace root (0.2.0) (#18849).
       expect(dependencies['unicorn-magic']).toBe('0.4.0');
     });
   });
