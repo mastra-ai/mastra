@@ -1006,6 +1006,7 @@ export class DurableAgent<
       messageList,
       recoverAgentSpan,
       registryEntry: {
+        mastra: this.#mastra,
         model,
         memory,
         saveQueueManager,
