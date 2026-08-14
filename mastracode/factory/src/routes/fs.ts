@@ -487,7 +487,10 @@ async function sessionSandbox(
   if (!fleet.enabled || !session.sandboxId || !session.sandboxWorkdir) return null;
   let sandbox: Awaited<ReturnType<SandboxFleet['reattachSandbox']>>;
   try {
-    sandbox = await fleet.reattachSandbox(session.sandboxId, { workingDirectory: session.sandboxWorkdir });
+    sandbox = await fleet.reattachSandbox(session.sandboxId, {
+      workingDirectory: session.sandboxWorkdir,
+      actingUserId: session.userId,
+    });
   } catch {
     // Sandbox is gone (idle GC) or unreachable. Degrade to an empty view
     // rather than surfacing a 500 from a file-viewer panel.

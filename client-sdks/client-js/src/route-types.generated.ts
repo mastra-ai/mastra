@@ -19953,6 +19953,36 @@ export interface GetAgentControllerControllerIdModels_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /agent-controller/:controllerId/active-runs
+// ============================================================================
+export type GetAgentControllerControllerIdActiveRuns_PathParams = GetAgentControllerControllerIdModes_PathParams;
+
+export type GetAgentControllerControllerIdActiveRuns_Response = {
+  runs: {
+    runId: string;
+    resourceId?: string | undefined;
+    threadId: string;
+  }[];
+};
+
+export type GetAgentControllerControllerIdActiveRuns_Request = Simplify<
+  (GetAgentControllerControllerIdActiveRuns_PathParams extends never
+    ? {}
+    : { params: GetAgentControllerControllerIdActiveRuns_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentControllerControllerIdActiveRuns_RouteContract {
+  pathParams: GetAgentControllerControllerIdActiveRuns_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetAgentControllerControllerIdActiveRuns_Request;
+  response: GetAgentControllerControllerIdActiveRuns_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: POST /agent-controller/:controllerId/sessions
 // ============================================================================
 export type PostAgentControllerControllerIdSessions_PathParams = GetAgentControllerControllerIdModes_PathParams;
@@ -21657,6 +21687,7 @@ export interface RouteTypes {
   'GET /agent-controller': GetAgentController_RouteContract;
   'GET /agent-controller/:controllerId/modes': GetAgentControllerControllerIdModes_RouteContract;
   'GET /agent-controller/:controllerId/models': GetAgentControllerControllerIdModels_RouteContract;
+  'GET /agent-controller/:controllerId/active-runs': GetAgentControllerControllerIdActiveRuns_RouteContract;
   'POST /agent-controller/:controllerId/sessions': PostAgentControllerControllerIdSessions_RouteContract;
   'GET /agent-controller/:controllerId/sessions/:resourceId': GetAgentControllerControllerIdSessionsResourceId_RouteContract;
   'GET /agent-controller/:controllerId/sessions/:resourceId/threads': GetAgentControllerControllerIdSessionsResourceIdThreads_RouteContract;
@@ -21758,6 +21789,9 @@ export interface Client {
   };
   '/agent-controller': {
     GET: GetAgentController_RouteContract;
+  };
+  '/agent-controller/:controllerId/active-runs': {
+    GET: GetAgentControllerControllerIdActiveRuns_RouteContract;
   };
   '/agent-controller/:controllerId/models': {
     GET: GetAgentControllerControllerIdModels_RouteContract;
