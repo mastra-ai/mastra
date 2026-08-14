@@ -68,6 +68,7 @@ import { McpServerPage } from './pages/mcps/[serverId]';
 import MCPServerToolExecutor from './pages/mcps/tool';
 import Metrics from './pages/metrics';
 import PromptBlocks from './pages/prompt-blocks';
+import Pulse from './pages/pulse';
 import RequestContext from './pages/request-context';
 import Resources from './pages/resources';
 import Scorers from './pages/scorers';
@@ -132,6 +133,7 @@ declare global {
     MASTRA_EXPERIMENTAL_UI?: string;
     MASTRA_AGENT_SIGNALS?: string;
     MASTRA_SIGNALS_UI?: string;
+    MASTRA_PULSE_UI?: string;
     MASTRA_ORGANIZATION_ID?: string;
     MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT?: string;
   }
@@ -387,6 +389,9 @@ export const routes: RouteObject[] = [
           { id: 'signals-agent', Component: SignalsEntityCrumb, heading: 'Agent' },
         ]),
       },
+      // Experimental Pulse read model — sidebar entry is flag-gated (MASTRA_PULSE_UI),
+      // the route itself always resolves, mirroring /intelligence.
+      { path: '/pulse', element: <Pulse />, handle: navHandle('/pulse') },
       { path: '/traces', element: <Traces />, handle: navHandle('/traces') },
       {
         path: '/traces/:traceId',
