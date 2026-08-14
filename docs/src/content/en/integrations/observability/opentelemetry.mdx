@@ -76,7 +76,12 @@ new OtelExporter({
 })
 ```
 
-For Sentry-specific span mapping and AI monitoring attributes, use Mastra's dedicated [Sentry exporter](/integrations/observability/sentry).
+See [Sentry's OTLP documentation](https://docs.sentry.io/concepts/otlp/) for endpoint setup, supported signals, and current ingestion limits.
+
+Choose an exporter based on your setup:
+
+- `OtelExporter`: Sends vendor-neutral traces and logs over OTLP. Use it with an existing OpenTelemetry pipeline or when you want backend portability.
+- [`SentryExporter`](/integrations/observability/sentry): Uses the Sentry SDK to map Mastra span types to Sentry operations, add AI monitoring attributes, and capture span errors as Sentry issues.
 
 #### MLflow
 
