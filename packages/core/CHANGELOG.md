@@ -1,5 +1,68 @@
 # @mastra/core
 
+## 1.60.0-alpha.1
+
+### Minor Changes
+
+- Client-executed tools (tools without a server-side `execute`) now fire their `onOutput` lifecycle hook when the browser returns the tool result on a follow-up request. Previously `onOutput` only fired after a server-side `execute`, so client tools never reported their output. ([#21377](https://github.com/mastra-ai/mastra/pull/21377))
+
+  ```ts
+  const agent = new Agent({
+    // ...
+    tools: {
+      browserTool: createTool({
+        id: 'browserTool',
+        description: 'Runs in the browser',
+        inputSchema: z.object({ query: z.string() }),
+        // No execute — the client runs the tool. This hook now fires when
+        // the client sends the result back.
+        onOutput: async ({ toolCallId, output }) => {
+          console.log('client tool resolved', toolCallId, output);
+        },
+      }),
+    },
+  });
+  ```
+
+  The hook fires for trailing tool results that match a raw tool call from the preceding assistant message, so the follow-up request must include both (as `@mastra/client-js` does automatically). This works with standard, legacy, and durable agents, including requests with a same-name serialized `clientTools` entry. The callback receives `{ toolCallId, toolName, output, abortSignal }`. Because the input is client-provided, treat the output as untrusted data. Delivery is at least once, and the hook does not fire when an input processor rejects the request. Keep hooks idempotent.
+
+### Patch Changes
+
+- Fixed the `tail` parameter of the workspace `execute_command` and `get_process_output` tools rejecting numeric strings. Models sometimes send number parameters as strings, for example `"10"` instead of `10`. The `timeout` parameter already tolerated this, but `tail` failed validation and the command never ran, wasting a turn. In observed cases the model then fabricated a success result instead of retrying. Numeric strings are now coerced to numbers for `tail` in both tools. ([#21493](https://github.com/mastra-ai/mastra/pull/21493))
+
+- Fixed generated streams to preserve provider metadata on text and file events. ([#21441](https://github.com/mastra-ai/mastra/pull/21441))
+
+- Added public read-only thread query methods on `AgentController` and a `initStorage()` method that initializes storage without provisioning a workspace. Use these to read threads or messages without paying the workspace/sandbox startup cost that `createSession` incurs. ([#21474](https://github.com/mastra-ai/mastra/pull/21474))
+
+  ```ts
+  // Before: had to create a session (which called Workspace.init() -> sandbox.start())
+  const session = await controller.createSession({ resourceId });
+  const threads = await session.thread.list();
+
+  // After: read directly from storage, no session, no workspace
+  const threads = await controller.queryThreads({ resourceId });
+  const messages = await controller.queryThreadMessages({ threadId, limit: 50 });
+  const thread = await controller.queryThreadById({ threadId });
+  ```
+
+  `queryThreads`, `queryThreadById`, and `queryThreadMessages` were already used internally; they are now part of the public `AgentController` API. Each lazily calls `initStorage()`, so callers don't need to pre-init.
+
+- Added a `blocking` option to `AgentController.onSessionCreated`. Blocking listeners are awaited before `createSession()` resolves, so hosts can seed session state (for example observational-memory settings loaded from storage) before the caller can start a run. Blocking listeners run sequentially in registration order before fire-and-forget listeners are notified. Listener failures remain isolated and logged; default (non-blocking) listeners keep their fire-and-forget behavior. ([#21423](https://github.com/mastra-ai/mastra/pull/21423))
+
+  ```ts
+  controller.onSessionCreated(
+    async session => {
+      // Runs before createSession() resolves for a newly materialized session.
+      const settings = await loadSettings(session.identity.getResourceId());
+      if (settings) await session.state.set(settings);
+    },
+    { blocking: true },
+  );
+
+  // Default listeners stay fire-and-forget.
+  controller.onSessionCreated(session => audit(session));
+  ```
+
 ## 1.59.1-alpha.0
 
 ### Patch Changes

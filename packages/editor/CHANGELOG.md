@@ -1,5 +1,15 @@
 # @mastra/editor
 
+## 0.13.14-alpha.0
+
+### Patch Changes
+
+- Fixed Composio tool results not being validated. Resolved Composio tools now keep the output schema supplied by Composio, so tool results are checked against it: real API responses (including null or extra fields) still pass, while structurally invalid output is rejected instead of being silently returned. This also lets Composio tools be used with APIs that require an output schema, like createStep(tool). ([#21511](https://github.com/mastra-ai/mastra/pull/21511))
+
+- Updated dependencies [[`15101bb`](https://github.com/mastra-ai/mastra/commit/15101bb53c0d934f31af6b8813b88191e382a5e5), [`c2c3deb`](https://github.com/mastra-ai/mastra/commit/c2c3debcf670c7082d0a5e553aa99818a864698c), [`33374ba`](https://github.com/mastra-ai/mastra/commit/33374ba359e4fb13eaa918ae925fe167a3c55414), [`c5f964d`](https://github.com/mastra-ai/mastra/commit/c5f964d3f77064e978f8066ec506eed77ba5c63c), [`f8f653f`](https://github.com/mastra-ai/mastra/commit/f8f653f10980d01a73706cc3c8689ca5e40ce808)]:
+  - @mastra/core@1.60.0-alpha.1
+  - @mastra/mcp@1.16.0
+
 ## 0.13.13
 
 ### Patch Changes

@@ -1,3 +1,5 @@
+import { FACTORY_RULE_STAGES } from '@mastra/factory/rules/types';
+
 import { describe, expect, it } from 'vitest';
 
 import { boardStages, currentItemStageLabel, itemAppearsInStage } from './boardStages';
@@ -23,6 +25,21 @@ function workItem(source: WorkItemSource, stages: string[]): WorkItem {
     updatedAt: '2026-07-01T00:00:00.000Z',
   };
 }
+
+describe('boardStages', () => {
+  it('uses the canonical stage order for the work board', () => {
+    expect(boardStages('work').map(stage => stage.id)).toEqual(FACTORY_RULE_STAGES);
+  });
+
+  it('selects and labels the review board columns', () => {
+    expect(boardStages('review')).toEqual([
+      { id: 'intake', label: 'Intake' },
+      { id: 'review', label: 'Reviewing' },
+      { id: 'done', label: 'Done' },
+      { id: 'canceled', label: 'Canceled' },
+    ]);
+  });
+});
 
 describe('currentItemStageLabel', () => {
   it('reads the furthest column the item sits in', () => {
