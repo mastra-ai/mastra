@@ -63,7 +63,9 @@ export async function ensureProjectSandbox(options: {
   onProgress?: ProgressFn;
 }): Promise<MaterializationSandbox> {
   const { fleet, row, storage, token, onProgress } = options;
-  return fleet.ensureSandbox(bindingStore(row, storage), { GH_TOKEN: token }, onProgress);
+  return fleet.ensureSandbox(bindingStore(row, storage), { GH_TOKEN: token }, onProgress, {
+    actingUserId: row.userId,
+  });
 }
 
 /**
@@ -406,17 +408,7 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
     // config. The scrub must never hide the actionable failure, but once the
     // token reached the remote its own failure can't stay silent either:
     // report both, primary cause and classification first.
-    try {
-      await scrubRemote(sandbox, workdir, repo, tokenInRemote);
-    } catch (scrubError) {
-      const primaryMessage = primary instanceof Error ? primary.message : String(primary);
-      const scrubMessage = scrubError instanceof Error ? scrubError.message : String(scrubError);
-      throw new MaterializeError(
-        `${primaryMessage} — additionally: ${scrubMessage}`,
-        primary instanceof MaterializeError ? primary.code : 'pull-failed',
-      );
-    }
-    throw primary;
+    throw await scrubbedFailure(sandbox, workdir, repo, tokenInRemote, primary, 'pull-failed');
   }
 
   // 3b. Success — the token is in the remote and the workdir has a `.git`, so
@@ -595,6 +587,33 @@ async function scrubRemote(
 }
 
 /**
+ * Scrub after `primary` already failed and return the error to throw. A failed
+ * scrub is appended to `primary` rather than replacing it, so the caller gets
+ * the error it would have had without the scrub — same class, same `code` —
+ * carrying the leaked-token warning in its message.
+ */
+async function scrubbedFailure(
+  sandbox: MaterializationSandbox,
+  workdir: string,
+  repoFullName: string,
+  tokenInRemote: boolean,
+  primary: unknown,
+  fallback: MaterializeError['code'],
+): Promise<unknown> {
+  try {
+    await scrubRemote(sandbox, workdir, repoFullName, tokenInRemote);
+    return primary;
+  } catch (scrubError) {
+    const scrubMessage = scrubError instanceof Error ? scrubError.message : String(scrubError);
+    if (!(primary instanceof Error)) {
+      return new MaterializeError(`${String(primary)} — additionally: ${scrubMessage}`, fallback);
+    }
+    primary.message = `${primary.message} — additionally: ${scrubMessage}`;
+    return primary;
+  }
+}
+
+/**
  * True when a failed `git pull --ff-only` on re-open just means the current
  * branch can't be fast-forwarded — not that anything is broken. The shared
  * workdir is routinely left on a session's working branch, which may have
@@ -649,8 +668,8 @@ function classifyGitFailure(
 //
 // These helpers let the sandbox author and push commits safely. The install
 // token is short-lived, minted per-operation server-side, injected only into
-// the temporary remote URL inside the sandbox, and always scrubbed in a
-// `finally` so it never persists in `.git/config`.
+// the temporary remote URL inside the sandbox, and always scrubbed afterwards
+// so it never persists in `.git/config`.
 // ---------------------------------------------------------------------------
 
 /**
@@ -714,13 +733,15 @@ export async function configureGitIdentity(
 
 /**
  * Temporarily rewrite `origin` to a tokenized URL, run `fn` (e.g. a push), and
- * **always** scrub the remote back to the tokenless URL in a `finally`. The
- * token therefore only ever lives in the remote URL for the duration of the
+ * **always** scrub the remote back to the tokenless URL afterwards. The token
+ * therefore only ever lives in the remote URL for the duration of the
  * operation and is never left in the VM's git config.
  *
- * Once the tokenized URL is installed the scrub must succeed — a leaked token
- * is a hard error that outranks even `fn`'s own failure. Only a failed
- * set-url (the token never reached the remote) downgrades it to best-effort.
+ * Once the tokenized URL is installed a failed scrub may leave the token
+ * persisted, so it is always surfaced: on its own after a successful `fn`,
+ * appended to `fn`'s own error otherwise — `fn`'s error is never replaced.
+ * Only a failed set-url (the token never reached the remote) downgrades the
+ * scrub to best-effort.
  */
 export async function withInstallToken<T>(
   sandbox: MaterializationSandbox,
@@ -743,14 +764,16 @@ export async function withInstallToken<T>(
     throw new MaterializeError(`Failed to set git remote: ${setUrl.stderr.trim()}`, 'push-failed');
   }
 
+  let result: T;
   try {
-    return await fn();
-  } finally {
-    // Always restore the tokenless remote. The workdir has a `.git` (we just
-    // rewrote its remote) so a scrub failure means the token may still persist
-    // — surface it.
-    await scrubRemote(sandbox, workdir, repoFullName, true);
+    result = await fn();
+  } catch (primary) {
+    throw await scrubbedFailure(sandbox, workdir, repoFullName, true, primary, 'push-failed');
   }
+  // Restore the tokenless remote. The workdir has a `.git` (we just rewrote
+  // its remote) so a scrub failure means the token may still persist — surface it.
+  await scrubRemote(sandbox, workdir, repoFullName, true);
+  return result;
 }
 
 /**

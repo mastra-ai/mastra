@@ -453,6 +453,24 @@ const resourceIds = await controller.getKnownResourceIds(session)
 
 Returns: `Promise<string[]>`
 
+#### `listActiveThreadRuns()`
+
+List every run in flight on this controller, across all resources and threads. The list comes from in-process run tracking, so it covers runs started by the current process and doesn't create or touch a session.
+
+```typescript
+const runs = controller.listActiveThreadRuns()
+```
+
+Returns: `ActiveThreadRun[]`
+
+```typescript
+interface ActiveThreadRun {
+  runId: string
+  resourceId?: string
+  threadId: string
+}
+```
+
 ### Lifecycle
 
 #### `init()`
