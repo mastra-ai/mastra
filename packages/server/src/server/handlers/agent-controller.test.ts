@@ -15,6 +15,7 @@ import {
   STREAM_AGENT_CONTROLLER_SESSION_ROUTE,
   GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE,
   LIST_AGENT_CONTROLLER_MODES_ROUTE,
+  LIST_AGENT_CONTROLLER_ACTIVE_RUNS_ROUTE,
   LIST_AGENT_CONTROLLER_THREADS_ROUTE,
   SWITCH_AGENT_CONTROLLER_MODE_ROUTE,
   DELETE_AGENT_CONTROLLER_THREAD_ROUTE,
@@ -785,6 +786,26 @@ describe('agent-controller routes', () => {
         expect(res.threads.filter(t => t.id !== busy.id).every(t => t.state === 'idle')).toBe(true);
       } finally {
         spy.mockRestore();
+      }
+    });
+
+    it('lists active runs controller-wide without creating a session', async () => {
+      const controller = mastra.getAgentController('code')!;
+      const createSession = vi.spyOn(controller, 'createSession');
+      const spy = vi
+        .spyOn(Agent.prototype, 'listActiveThreadRuns')
+        .mockReturnValue([{ runId: 'run-1', resourceId: 'workspace-a', threadId: 'thread-a' }]);
+      try {
+        const res = await LIST_AGENT_CONTROLLER_ACTIVE_RUNS_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+        } as any);
+
+        expect(res).toEqual({ runs: [{ runId: 'run-1', resourceId: 'workspace-a', threadId: 'thread-a' }] });
+        expect(createSession).not.toHaveBeenCalled();
+      } finally {
+        spy.mockRestore();
+        createSession.mockRestore();
       }
     });
   });

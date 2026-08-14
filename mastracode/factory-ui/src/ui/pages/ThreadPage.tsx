@@ -30,9 +30,11 @@ import { useHandoffPrompt } from '../domains/chat/hooks/useHandoffPrompt';
 import { useRouteThreadSync } from '../../hooks/useRouteThreadSync';
 import { useFactoryQuery } from '../../hooks/useFactories';
 
+import '../domains/chat/components/chat-enter.css';
+
 // The docked workspace card claims room on the end edge; the shell pads its own
 // scroller by it, so the column stays centred on what is left.
-const threadShellClass = `flex-1 ${chatColumnClass} [--chat-inset-end:var(--workspace-files-inset,0px)] md:[--chat-gutter:1.25rem]`;
+const threadShellClass = `chat-surface-enter flex-1 ${chatColumnClass} [--chat-inset-end:var(--workspace-files-inset,0px)] md:[--chat-gutter:1.25rem]`;
 
 export function ThreadPage() {
   const { factoryId, threadId } = useParams<{ factoryId: string; threadId?: string }>();
