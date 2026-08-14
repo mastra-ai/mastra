@@ -163,6 +163,18 @@ export function WorkItemCard({
     onCreateSession,
   });
   const threadSession = itemThreadSession(sessions);
+  const proposedRunLabel =
+    proposal === undefined
+      ? undefined
+      : (runSpec?.actions.find(action => action.role === proposal.role)?.label ??
+        defaultRunAction?.label ??
+        'Start run');
+  // A run parked on a PR that has since closed or merged is dead work nobody
+  // needs to answer. It stays in the menu so it can still be dismissed, but it
+  // does not get to claim the status row and ask for a decision.
+  const proposalNeedsAnswer =
+    proposal !== undefined &&
+    (item.source !== 'github-pr' || ['open', 'draft'].includes(pullRequestStatusForItem(item)));
 
   const relatedItems = relatedWorkItems(item, allItems);
   const labels = metadataLabels(item.metadata);
@@ -172,6 +184,10 @@ export function WorkItemCard({
       threadSession !== undefined
         ? { label: 'Open session', affordance: 'open' }
         : { label: primaryAction.label, affordance: 'run' },
+    proposal:
+      proposal === undefined || proposedRunLabel === undefined || !proposalNeedsAnswer
+        ? undefined
+        : { label: proposedRunLabel, decisionId: proposal.id },
     moving:
       evaluatingStage === undefined
         ? undefined
@@ -277,7 +293,7 @@ export function WorkItemCard({
                   disabled={runDisabled || approvingDecisionId === proposal.id}
                   onClick={() => onApproveProposal(proposal.id)}
                 >
-                  {actionIcon(runSpec?.actions.find(action => action.role === proposal.role)?.label ?? 'Start run')}
+                  {actionIcon(proposedRunLabel ?? 'Start run')}
                   <span>{approvingDecisionId === proposal.id ? 'Starting…' : 'Start suggested run'}</span>
                 </DropdownMenu.Item>
               )}
@@ -360,8 +376,12 @@ export function WorkItemCard({
           <WorkItemActivity activity={activity} actors={activityPage?.actors ?? {}} />
           <CardStatus
             status={status}
+            onApprove={
+              status.kind === 'waiting' && !runDisabled ? () => onApproveProposal(status.decisionId) : undefined
+            }
+            approving={status.kind === 'waiting' && approvingDecisionId === status.decisionId}
             onRetry={retryDecisionId === undefined ? undefined : () => onRetryDecision(retryDecisionId)}
-            retrying={retryDecisionId !== undefined && retryDecisionId === retryingDecisionId}
+            retrying={retryDecisionId !== undefined && retryingDecisionId === retryDecisionId}
           />
         </div>
       </article>

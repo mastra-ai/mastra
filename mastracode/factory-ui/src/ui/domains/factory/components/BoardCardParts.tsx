@@ -2,7 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { MessageSquare, Play, TriangleAlert } from 'lucide-react';
+import { MessageSquare, Play, Sparkles, TriangleAlert } from 'lucide-react';
 import type { ReactElement } from 'react';
 
 import type { BoardCardStatus } from '../boardCardStatus';
@@ -51,10 +51,15 @@ export const REVEAL_ON_CARD_HOVER =
 /** The card's one status row: a hover hint when idle, a live region once something is happening. */
 export function CardStatus({
   status,
+  onApprove,
+  approving,
   onRetry,
   retrying,
 }: {
   status: BoardCardStatus;
+  /** Releases the parked run; omitted when nothing is waiting. */
+  onApprove?: () => void;
+  approving?: boolean;
   /** Re-queues the failed rule effect; omitted when nothing is retryable. */
   onRetry?: () => void;
   retrying?: boolean;
@@ -69,6 +74,34 @@ export function CardStatus({
         <Icon size={11} aria-hidden />
         {status.label}
       </span>
+    );
+  }
+
+  // A parked run is the one idle state the card cannot whisper: it needs the
+  // user, so it stays lit without a hover and carries its own button. The
+  // button sits above the card's click overlay so a card that already links to
+  // a session can still release it.
+  if (status.kind === 'waiting') {
+    return (
+      <div className="flex w-full items-center justify-between gap-2">
+        <span role="status" aria-live="polite" className="text-ui-xs text-accent6 flex min-w-0 items-center gap-1.5">
+          <Sparkles size={11} aria-hidden className="shrink-0" />
+          <span className="truncate">Suggested: {status.label}</span>
+        </span>
+        {onApprove && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="relative z-20 shrink-0"
+            disabled={approving}
+            aria-label={`Start suggested run: ${status.label}`}
+            onClick={onApprove}
+          >
+            {approving ? 'Starting…' : 'Start'}
+          </Button>
+        )}
+      </div>
     );
   }
 

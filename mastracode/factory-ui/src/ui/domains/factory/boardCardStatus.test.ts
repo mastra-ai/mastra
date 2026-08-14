@@ -75,6 +75,25 @@ describe('boardCardStatus', () => {
     });
   });
 
+  it('asks for the parked run once nothing is moving on its own', () => {
+    expect(
+      boardCardStatus({
+        idle: { label: 'Open session', affordance: 'open' },
+        proposal: { label: 'Re-review', decisionId: 'decision-9' },
+      }),
+    ).toEqual({ kind: 'waiting', label: 'Re-review', decisionId: 'decision-9' });
+  });
+
+  it('lets an effect the server is already working through outrank the parked run', () => {
+    expect(
+      boardCardStatus({
+        idle: IDLE,
+        proposal: { label: 'Re-review', decisionId: 'decision-9' },
+        decision: decision({ type: 'transition', status: 'pending' }),
+      }),
+    ).toEqual({ kind: 'busy', label: 'Moving this card automatically…' });
+  });
+
   it('falls back to the click affordance when nothing is in flight', () => {
     expect(boardCardStatus({ idle: { label: 'Open session', affordance: 'open' } })).toEqual({
       kind: 'idle',

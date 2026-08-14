@@ -97,14 +97,29 @@ const buildingWorkItem = {
   },
 };
 
+/** A Review card whose pull request has since closed: its parked run is moot. */
+const closedPullRequestWorkItem = {
+  ...workItem,
+  externalSource: { ...workItem.externalSource, type: 'pull-request', externalId: 'github-pr:1' },
+  stages: ['review'],
+  metadata: { number: 1, state: 'closed' },
+};
+
 function stubBoardEndpoints({
   withLiveSession = false,
   building = false,
-}: { withLiveSession?: boolean; building?: boolean } = {}) {
+  closedPullRequest = false,
+}: { withLiveSession?: boolean; building?: boolean; closedPullRequest?: boolean } = {}) {
   const settled: string[] = [];
   const startRequests: unknown[] = [];
   let status: 'proposed' | 'pending' | 'dismissed' = 'proposed';
-  const item = building ? buildingWorkItem : withLiveSession ? liveSessionWorkItem : workItem;
+  const item = closedPullRequest
+    ? closedPullRequestWorkItem
+    : building
+      ? buildingWorkItem
+      : withLiveSession
+        ? liveSessionWorkItem
+        : workItem;
   const sessions = withLiveSession || building ? [userSession] : [];
 
   server.use(
@@ -188,9 +203,13 @@ function stubBoardEndpoints({
   return { settled, startRequests };
 }
 
-function renderWorkBoard() {
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
+function renderBoard(board: 'work' | 'review' = 'work') {
+  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/${board}`] });
   renderWithProviders(<RouterProvider router={router} />);
+}
+
+function renderWorkBoard() {
+  renderBoard('work');
 }
 
 describe('Board card with a proposed run', () => {
@@ -232,6 +251,36 @@ describe('Board card with a proposed run', () => {
 
     await waitFor(() => expect(settled).toEqual(['approve']));
     expect(startRequests).toHaveLength(0);
+  });
+
+  it('says a run is waiting on a card that would otherwise look idle', async () => {
+    const { settled, startRequests } = stubBoardEndpoints({ withLiveSession: true });
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    // Without the badge this card reads as a plain link to its session, so the
+    // parked run is only discoverable by opening the menu on a hunch.
+    const card = await screen.findByRole('article', { name: 'Fix login bug' });
+    expect(await within(card).findByText('Suggested: Build')).toBeVisible();
+
+    await user.click(within(card).getByRole('button', { name: 'Start suggested run: Build' }));
+
+    await waitFor(() => expect(settled).toEqual(['approve']));
+    expect(startRequests).toHaveLength(0);
+  });
+
+  it('stops asking about a run parked on a pull request that already closed', async () => {
+    const { settled } = stubBoardEndpoints({ closedPullRequest: true });
+    const user = userEvent.setup();
+    renderBoard('review');
+
+    const card = await screen.findByRole('article', { name: 'Fix login bug' });
+    expect(within(card).queryByText(/^Suggested:/)).toBeNull();
+
+    // Still reachable from the menu so the dead run can be cleared away.
+    await user.click(within(card).getByRole('button', { name: 'Actions for Fix login bug' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Dismiss suggested run' }));
+    await waitFor(() => expect(settled).toEqual(['dismiss']));
   });
 
   it('still offers the Building run when the plan already filled the work session slot', async () => {

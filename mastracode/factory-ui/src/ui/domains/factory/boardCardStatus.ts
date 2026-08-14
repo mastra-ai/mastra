@@ -5,12 +5,15 @@ import type { FactoryDecisionSummary } from './services/decisions';
 /** A card has one status row, so every announcement it could make resolves to one of these. */
 export type BoardCardStatus =
   | { kind: 'idle'; label: string; affordance: 'open' | 'run' }
+  | { kind: 'waiting'; label: string; decisionId: string }
   | { kind: 'busy'; label: string }
   | { kind: 'error'; label: string; detail?: string; retryDecisionId?: string };
 
 export interface BoardCardStatusInput {
   /** What clicking the card does when nothing is happening. */
   idle: { label: string; affordance: 'open' | 'run' };
+  /** Run a rule parked on this card, held until someone releases it. */
+  proposal?: { label: string; decisionId: string };
   /** Destination of an in-flight stage move. */
   moving?: { stage: string; label: string };
   /** Runs whose start mutation is in flight, newest intent first. */
@@ -73,5 +76,9 @@ export function boardCardStatus(input: BoardCardStatusInput): BoardCardStatus {
     };
   }
   if (decision) return { kind: 'busy', label: automationCopy(decision.type).busy };
+  // Nothing is moving on its own, so a parked run is the card's live question.
+  if (input.proposal) {
+    return { kind: 'waiting', label: input.proposal.label, decisionId: input.proposal.decisionId };
+  }
   return { kind: 'idle', ...input.idle };
 }
