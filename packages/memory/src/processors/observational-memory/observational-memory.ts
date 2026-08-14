@@ -3246,6 +3246,12 @@ ${formattedMessages}
     checkThreshold?: boolean;
     /** Messages to use for threshold check (in-memory). If omitted, loads from storage. */
     messages?: MastraDBMessage[];
+    /**
+     * Freshly-counted pending token count from the caller (e.g. getStatus().pendingTokens).
+     * Prefer this over the persisted record field, which can lag behind the live message list
+     * (unbuffered tool-result batches added in the current turn).
+     */
+    pendingTokens?: number;
     /** Current actor model for provider-change activation checks. */
     currentModel?: ObservationModelContext;
     /** Stream writer for emitting activation markers to the UI. */
@@ -3367,9 +3373,10 @@ ${formattedMessages}
     const bufferActivation = this.observationConfig.bufferActivation ?? 0.7;
     const activationRatio = resolveActivationRatio(bufferActivation, messageTokensThreshold);
 
-    // Estimate current pending tokens from chunks
+    // Prefer caller-provided pending tokens (live message list) over the persisted
+    // field / buffered-chunk sum, which can under-count the unbuffered tail.
     const totalChunkMessageTokens = freshChunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
-    const currentPendingTokens = freshRecord.pendingMessageTokens || totalChunkMessageTokens;
+    const currentPendingTokens = opts.pendingTokens ?? freshRecord.pendingMessageTokens ?? totalChunkMessageTokens;
 
     const forceMaxActivation = !!(
       this.observationConfig.blockAfter && currentPendingTokens >= this.observationConfig.blockAfter

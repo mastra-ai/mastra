@@ -279,7 +279,11 @@ export class ObservationStep {
           // by identity (the token-based retention floor resolves to 0 for sync-only,
           // resource-scope, and explicit `bufferActivation: 1` configs, so it cannot be
           // relied on to keep them). Step > 0 semantics are unchanged.
-          const observedIds = obsResult.activatedMessageIds ?? obsResult.record.observedMessageIds ?? [];
+          // Activation does not write observedMessageIds (by design); sync observe does.
+          // When both run, cleanup needs the union so the freshly observed tail is pruned.
+          const observedIds = Array.from(
+            new Set([...(obsResult.activatedMessageIds ?? []), ...(obsResult.record.observedMessageIds ?? [])]),
+          );
           const minRemaining = resolveRetentionFloor(
             om.getObservationConfig().bufferActivation ?? 1,
             statusSnapshot.threshold,
@@ -372,8 +376,9 @@ export class ObservationStep {
 
   /**
    * Run the full threshold observation pipeline:
-   * waitForBuffering → re-check → activate → reflect → observe (sync fallback when
-   * buffered activation did not happen)
+   * waitForBuffering → re-check → activate → reflect → re-check → observe
+   * (sync observe runs when activation did not happen, or when a partial
+   * buffered activation left the live unobserved tail above threshold)
    */
   private async runThresholdObservation(): Promise<{
     succeeded: boolean;
@@ -407,22 +412,33 @@ export class ObservationStep {
       return { succeeded: false, record: freshStatus.record };
     }
 
+    let activationResult:
+      | {
+          activated: boolean;
+          record: any;
+          activatedMessageIds?: string[];
+        }
+      | undefined;
+
     // Try activation first if buffered chunks exist
     if (freshStatus.canActivate) {
-      const activation = await om.activate({
+      activationResult = await om.activate({
         threadId,
         resourceId,
         messages: observableMessages,
+        // Fresh pending count from getStatus — activate() must not size the
+        // swap from stale persisted pendingMessageTokens / buffered-chunk sums.
+        pendingTokens: freshStatus.pendingTokens,
         currentModel: this.turn.actorModelContext,
         writer: this.turn.writer,
         messageList,
       });
 
-      if (activation.activated) {
+      if (activationResult.activated) {
         // Check reflection after activation — use maybeReflect so that a
         // completed buffered reflection is activated instantly instead of
         // running a redundant sync reflection from scratch.
-        const postActivationRecord = activation.record;
+        const postActivationRecord = activationResult.record;
         await om.reflector.maybeReflect({
           record: postActivationRecord,
           observationTokens: postActivationRecord.observationTokenCount ?? 0,
@@ -436,11 +452,22 @@ export class ObservationStep {
           reflectionHooks: om.composeHooks(undefined, { threadId, resourceId, trigger: 'turn-sync' }),
         });
 
-        return {
-          succeeded: true,
-          record: activation.record,
-          activatedMessageIds: activation.activatedMessageIds,
-        };
+        // Partial activation may leave the live unobserved tail above threshold
+        // (e.g. a small buffered chunk activated while a large tool-result batch
+        // remains unbuffered). Re-check before returning success.
+        const postActivationStatus = await om.getStatus({
+          threadId,
+          resourceId,
+          messages: observableMessages,
+        });
+
+        if (!postActivationStatus.shouldObserve) {
+          return {
+            succeeded: true,
+            record: activationResult.record,
+            activatedMessageIds: activationResult.activatedMessageIds,
+          };
+        }
       }
     }
 
@@ -508,6 +535,7 @@ export class ObservationStep {
     return {
       succeeded: obsResult.observed,
       record: obsResult.record,
+      activatedMessageIds: activationResult?.activatedMessageIds,
       observerExchange: om.observer.lastExchange,
     };
   }
