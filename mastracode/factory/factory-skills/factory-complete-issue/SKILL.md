@@ -13,8 +13,10 @@ Parse the issue URL or number from `$ARGUMENTS`, then read its current state and
 - `status: auto-triaged`
 - `status: needs approval`
 
-Use `gh issue edit` to remove the listed triage labels and, if the issue is open, add `status: pending-close` when it is not already present. Do not add `status: pending-close` if the issue is already closed, and do not modify any other labels or issue fields. Then post this comment unless the issue already has it:
+Use `gh issue edit` to remove the listed triage labels. If the issue is open, add `status: pending-close` when it is not already present and post this comment unless the issue already has it:
 
 > This issue has now been marked as done.
+
+If the issue is already closed, do not add `status: pending-close` or post the comment. Do not modify any other labels or issue fields.
 
 Do not close, reopen, or assign the issue, and do not request another Factory transition.
