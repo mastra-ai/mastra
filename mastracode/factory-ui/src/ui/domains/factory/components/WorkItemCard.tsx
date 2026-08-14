@@ -165,6 +165,7 @@ export function WorkItemCard({
     onCreateSession,
   });
   const threadSession = itemThreadSession(sessions);
+
   const relatedItems = relatedWorkItems(item, allItems);
   const labels = metadataLabels(item.metadata);
   const activity = workItemActivity(item, activityPage);
@@ -262,6 +263,17 @@ export function WorkItemCard({
                 >
                   {actionIcon(reReviewAction.label)}
                   <span>{pendingRunRoles.has(reReviewAction.role) ? 'Starting…' : 'Re-review'}</span>
+                </DropdownMenu.Item>
+              )}
+              {/* Once the card has a live session it renders as a link, so the
+                  menu is the only place left to release a proposed run. */}
+              {proposal !== undefined && (
+                <DropdownMenu.Item
+                  disabled={runDisabled || approvingDecisionId === proposal.id}
+                  onClick={() => onApproveProposal(proposal.id)}
+                >
+                  {actionIcon(runSpec?.actions.find(action => action.role === proposal.role)?.label ?? 'Start run')}
+                  <span>{approvingDecisionId === proposal.id ? 'Starting…' : 'Start suggested run'}</span>
                 </DropdownMenu.Item>
               )}
               {proposal !== undefined && (
