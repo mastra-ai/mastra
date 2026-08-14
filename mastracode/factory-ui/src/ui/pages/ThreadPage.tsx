@@ -21,7 +21,7 @@ import { EmptyThreadState } from '../domains/chat/components/EmptyThreadState';
 import { GoalPanel } from '../domains/chat/components/GoalPanel';
 import { TaskPanel } from '../domains/chat/components/TaskPanel';
 import { PageTitle } from '../domains/chat/components/PageTitle';
-import { SessionFaviconInitializing } from '../domains/chat/components/SessionFavicon';
+import { SessionFavicon } from '../domains/chat/components/SessionFavicon';
 import { Transcript } from '../domains/chat/components/Transcript';
 import { TranscriptHistoryLoader } from '../domains/chat/components/TranscriptHistoryLoader';
 import { ThreadRailLayer } from '../domains/chat/components/ThreadRailLayer';
@@ -44,13 +44,13 @@ export function ThreadPage() {
   const resolvingSession = factoryQuery.isPending || workspace.isPending;
 
   return (
-    <>
-      {resolvingSession && <SessionFaviconInitializing />}
-      <ChatLayout
-        sidebar={<Sidebar />}
-        main={
-          resolvingSession ? (
-            // bare bar stands in — the session header needs WorkspaceFilesProvider
+    <ChatLayout
+      sidebar={<Sidebar />}
+      main={
+        resolvingSession ? (
+          // bare bar stands in — the session header needs WorkspaceFilesProvider
+          <>
+            <SessionFavicon state="initializing" />
             <ChatShell className="flex-1">
               <ChatShell.Bar>
                 <ChatHeader />
@@ -59,17 +59,17 @@ export function ThreadPage() {
                 <Spinner aria-label="Loading session" className="text-icon3" />
               </div>
             </ChatShell>
-          ) : (
-            <ChatSessionBoundary threadId={threadId}>
-              <PageTitle />
-              <WorkspaceFilesProvider>
-                <ThreadPageMain workspacePath={workspace.workspacePath} threadId={workspace.threadId} />
-              </WorkspaceFilesProvider>
-            </ChatSessionBoundary>
-          )
-        }
-      />
-    </>
+          </>
+        ) : (
+          <ChatSessionBoundary threadId={threadId}>
+            <PageTitle />
+            <WorkspaceFilesProvider>
+              <ThreadPageMain workspacePath={workspace.workspacePath} threadId={workspace.threadId} />
+            </WorkspaceFilesProvider>
+          </ChatSessionBoundary>
+        )
+      }
+    />
   );
 }
 

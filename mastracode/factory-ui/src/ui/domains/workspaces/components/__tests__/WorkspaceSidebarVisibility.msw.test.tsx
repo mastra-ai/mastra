@@ -1,0 +1,93 @@
+/**
+ * The sidebar only lists five sessions before collapsing the rest behind
+ * "Show N more". A session the user just started is still materializing, so it
+ * has to keep its slot until it is ready — otherwise it disappears the moment
+ * it is created.
+ */
+import { screen } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
+import { MemoryRouter, Route, Routes } from 'react-router';
+import { describe, expect, it } from 'vitest';
+
+import { server } from '../../../../../../e2e/ui/msw-server';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
+import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
+import type { FactoryUserSession } from '../../services/github';
+import { WorkspacesSection } from '../WorkspacesSection';
+
+const factoryProjectId = 'factory-project-1';
+const projectRepositoryId = 'github-project-1';
+const resourceId = 'resource-1';
+const activeSessionId = 'work-session-1';
+
+function makeSession(index: number, overrides: Partial<FactoryUserSession> = {}): FactoryUserSession {
+  const day = String(20 - index).padStart(2, '0');
+  return {
+    id: `workspace-row-${index}`,
+    sessionId: `work-session-${index}`,
+    projectRepositoryId,
+    orgId: 'org-1',
+    userId: 'user-1',
+    branch: `factory/task-${index}`,
+    baseBranch: 'main',
+    sandboxId: null,
+    sandboxWorkdir: null,
+    materializedAt: `2026-07-${day}T00:00:00.000Z`,
+    createdAt: `2026-07-${day}T00:00:00.000Z`,
+    updatedAt: `2026-07-${day}T00:00:00.000Z`,
+    ...overrides,
+  };
+}
+
+function stubSessions(sessions: FactoryUserSession[]) {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
+      HttpResponse.json({ sessions }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryProjectId}/work-items`, () =>
+      HttpResponse.json({ workItems: [] }),
+    ),
+    http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/${resourceId}/threads`, () =>
+      HttpResponse.json({ threads: [] }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
+  );
+}
+
+function renderSection() {
+  return renderWithProviders(
+    <MemoryRouter initialEntries={[`/factories/${factoryProjectId}/workspaces/${activeSessionId}`]}>
+      <ChatSessionContext.Provider
+        value={{
+          resourceId,
+          sessionEnabled: true,
+          resourceReady: true,
+          sandboxReady: true,
+          sandboxPreparing: false,
+          sandboxProgress: undefined,
+          resourceEnabled: true,
+          factorySessionState: { factoryProjectId, projectRepositoryId },
+          baseUrl: TEST_BASE_URL,
+          kind: 'factory',
+        }}
+      >
+        <Routes>
+          <Route path="/factories/:factoryId/workspaces/:sessionId" element={<WorkspacesSection />} />
+        </Routes>
+      </ChatSessionContext.Provider>
+    </MemoryRouter>,
+  );
+}
+
+describe('Workspace sidebar visibility', () => {
+  it('keeps a session that has not materialized yet visible past the five-row cut', async () => {
+    const sessions = [1, 2, 3, 4, 5].map(index => makeSession(index));
+    stubSessions([...sessions, makeSession(6, { materializedAt: null })]);
+
+    const { client } = renderSection();
+    await waitForMutationsIdle(client);
+
+    expect(await screen.findByRole('button', { name: 'factory/task-6' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show 1 more' })).toBeInTheDocument();
+  });
+});

@@ -12,7 +12,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import { createAppRoutes } from '../../router';
 
 const FACTORY_ID = 'fp-1';
@@ -110,9 +110,11 @@ function stubBase({ workItems, threads }: { workItems: unknown[]; threads: unkno
   );
 }
 
-function renderRoute(path: string) {
+async function renderRoute(path: string) {
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [path] });
-  return renderWithProviders(<RouterProvider router={router} />);
+  const rendered = renderWithProviders(<RouterProvider router={router} />);
+  await waitForMutationsIdle(rendered.client);
+  return rendered;
 }
 
 afterEach(() => {
@@ -154,7 +156,7 @@ describe('ThreadPage document title', () => {
       ],
       threads: [{ id: THREAD_ID, title: 'A different title that must lose to the PR number' }],
     });
-    renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`);
+    await renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`);
 
     await waitFor(() => expect(document.title).toBe('#1567 | Mastra Factory'));
   });
@@ -164,7 +166,7 @@ describe('ThreadPage document title', () => {
       workItems: [],
       threads: [{ id: THREAD_ID, title: 'Investigate Pricing Bug' }],
     });
-    renderRoute(`/factories/${FACTORY_ID}/user/threads/${THREAD_ID}`);
+    await renderRoute(`/factories/${FACTORY_ID}/user/threads/${THREAD_ID}`);
 
     await waitFor(() => expect(document.title).toBe('Investigate Pricing Bug | Mastra Factory'));
   });
@@ -203,7 +205,7 @@ describe('ThreadPage document title', () => {
       ],
       threads: [{ id: THREAD_ID, title: 'Fix flaky login' }],
     });
-    renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`);
+    await renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`);
 
     await waitFor(() => expect(document.title).toBe('#42 | Mastra Factory'));
   });
@@ -242,7 +244,7 @@ describe('ThreadPage document title', () => {
       ],
       threads: [{ id: THREAD_ID, title: 'A thread title Linear should win over' }],
     });
-    renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`);
+    await renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`);
 
     await waitFor(() => expect(document.title).toBe('COR-210 | Mastra Factory'));
   });
@@ -252,7 +254,7 @@ describe('ThreadPage document title', () => {
       workItems: [],
       threads: [{ id: THREAD_ID }],
     });
-    renderRoute(`/factories/${FACTORY_ID}/user/threads/${THREAD_ID}`);
+    await renderRoute(`/factories/${FACTORY_ID}/user/threads/${THREAD_ID}`);
 
     // Give the session boundary a chance to resolve so we know we've reached
     // the branch that mounts <PageTitle/>; without a title/PR number the hook

@@ -100,17 +100,18 @@ export function WorkspacesSection() {
       },
     ];
   });
+  // A row the user must not lose sight of: the one they're in, one still
+  // materializing, one the agent is running, or one waiting on them.
+  const mustStayVisible = (row: (typeof rows)[number] | undefined) =>
+    Boolean(row && (row.active || row.initializing || row.running || row.attention));
   const latestRows = (review: boolean) => {
     const sorted = [...rows.filter(row => row.review === review)].sort(
       (a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt.localeCompare(a.updatedAt),
     );
     const visible = sorted.slice(0, 5);
-    for (const pinned of sorted.slice(5).filter(row => row.active || row.running || row.attention)) {
+    for (const pinned of sorted.slice(5).filter(mustStayVisible)) {
       let replaceIndex = visible.length - 1;
-      while (
-        replaceIndex >= 0 &&
-        (visible[replaceIndex]?.active || visible[replaceIndex]?.running || visible[replaceIndex]?.attention)
-      ) {
+      while (replaceIndex >= 0 && mustStayVisible(visible[replaceIndex])) {
         replaceIndex -= 1;
       }
       if (replaceIndex >= 0) visible[replaceIndex] = pinned;

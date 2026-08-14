@@ -18,19 +18,6 @@ function setFavicon(href: string) {
   favicon.href = href;
 }
 
-/**
- * Pins the browser favicon to the purple "initializing" indicator while
- * mounted. Mount alongside the session prepare stepper so favicon and stepper
- * share exactly the same visibility condition.
- */
-export function SessionFaviconInitializing() {
-  useEffect(() => {
-    setFavicon(FAVICONS.initializing);
-    return () => setFavicon(DEFAULT_FAVICON);
-  }, []);
-  return null;
-}
-
 export interface SessionFaviconProps {
   /**
    * `null` leaves the default Mastra favicon in place (used when no session is
@@ -40,15 +27,16 @@ export interface SessionFaviconProps {
 }
 
 /**
- * Reflects live session state in the favicon: purple while initializing, green
- * while the agent is working, red on error, blue when it's the user's turn.
+ * Sole writer of the browser favicon: amber while the session initializes,
+ * green while the agent is working, red on error, blue when it's the user's
+ * turn. Mount exactly one per route branch — two mounted at once race each
+ * other's cleanup and leave the default icon behind.
  */
 export function SessionFavicon({ state }: SessionFaviconProps) {
   useEffect(() => {
     setFavicon(state ? FAVICONS[state] : DEFAULT_FAVICON);
+    return () => setFavicon(DEFAULT_FAVICON);
   }, [state]);
-
-  useEffect(() => () => setFavicon(DEFAULT_FAVICON), []);
 
   return null;
 }

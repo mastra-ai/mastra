@@ -19,6 +19,7 @@ export function ChatTranscriptProvider({
   children,
   threadId,
   initialMessages,
+  messagesInitializing = false,
   hasMoreHistory = false,
   isLoadingMoreHistory = false,
   loadMoreHistory,
@@ -26,6 +27,7 @@ export function ChatTranscriptProvider({
   children: ReactNode;
   threadId?: string;
   initialMessages?: MastraDBMessage[];
+  messagesInitializing?: boolean;
   hasMoreHistory?: boolean;
   isLoadingMoreHistory?: boolean;
   loadMoreHistory?: () => void;
@@ -55,7 +57,12 @@ export function ChatTranscriptProvider({
   return (
     <ChatConnectionProvider onEvent={onEvent}>
       <ChatRuntimeValueProvider runtime={runtime}>
-        <ChatTranscriptValueProvider threadId={threadId} transcriptApi={transcriptApi} loadMore={loadMore}>
+        <ChatTranscriptValueProvider
+          threadId={threadId}
+          transcriptApi={transcriptApi}
+          loadMore={loadMore}
+          messagesInitializing={messagesInitializing}
+        >
           {children}
         </ChatTranscriptValueProvider>
       </ChatRuntimeValueProvider>
@@ -83,19 +90,43 @@ function ChatRuntimeValueProvider({ children, runtime }: { children: ReactNode; 
   );
 }
 
+// Mirrors the in-page precedence of `ChatMessageBoundary` so the favicon and
+// what's on screen never disagree: failure first, then the prepare stepper.
+function faviconStateFor({
+  threadId,
+  sessionError,
+  initializing,
+  connectionError,
+  busy,
+}: {
+  threadId: string | undefined;
+  sessionError: boolean;
+  initializing: boolean;
+  connectionError: boolean;
+  busy: boolean;
+}): SessionFaviconState | null {
+  if (sessionError) return 'error';
+  if (initializing) return 'initializing';
+  if (!threadId) return null;
+  if (connectionError) return 'error';
+  return busy ? 'working' : 'awaiting';
+}
+
 function ChatTranscriptValueProvider({
   children,
   threadId,
   transcriptApi,
   loadMore,
+  messagesInitializing,
 }: {
   children: ReactNode;
   threadId?: string;
   transcriptApi: ReturnType<typeof useAgentControllerTranscript>;
   loadMore: LoadMoreHistory;
+  messagesInitializing: boolean;
 }) {
   const connection = useChatConnection();
-  const { sessionError } = useChatSessionContext();
+  const { sessionError, sandboxPreparing } = useChatSessionContext();
   const { transcript, reset, localUser, resolvePrompt, clearPending, pushNotice } = transcriptApi;
   const effectiveThreadId = transcript.threadId ?? threadId ?? connection.createdThreadId;
 
@@ -117,13 +148,13 @@ function ChatTranscriptValueProvider({
     loadMore,
   };
 
-  const faviconState: SessionFaviconState | null = !effectiveThreadId
-    ? null
-    : sessionError || connection.status === 'error'
-      ? 'error'
-      : busy
-        ? 'working'
-        : 'awaiting';
+  const faviconState = faviconStateFor({
+    threadId: effectiveThreadId,
+    sessionError: Boolean(sessionError),
+    initializing: sandboxPreparing || messagesInitializing,
+    connectionError: connection.status === 'error',
+    busy,
+  });
 
   return (
     <ChatTranscriptContext.Provider value={transcriptValue}>

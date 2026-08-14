@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { OverlaysProvider } from '../../../../lib/overlays';
+import { ChatMessageBoundary } from '../../context/ChatSessionProvider';
 import { ChatSessionTestProvider } from '../../context/ChatSessionTestProvider';
 import { FACTORY_ID, SESSION_ID, stubPreparingSession } from './composer-session-test-fixture';
 
@@ -12,7 +13,10 @@ function faviconHref() {
   return document.querySelector<HTMLLinkElement>('link[rel~="icon"]')?.getAttribute('href');
 }
 
-function renderDeferredThread() {
+// `deferUntilMessagesReady={false}` mirrors `ThreadPage`: the transcript
+// provider stays mounted through preparation, which is where a second favicon
+// writer used to fight it.
+function renderThread() {
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`]}>
       <Routes>
@@ -20,9 +24,11 @@ function renderDeferredThread() {
           path="/factories/:factoryId/user/threads/:threadId"
           element={
             <MainSidebarProvider storageKey="favicon-integration-test">
-              <ChatSessionTestProvider threadId={SESSION_ID} userScoped>
+              <ChatSessionTestProvider threadId={SESSION_ID} userScoped deferUntilMessagesReady={false}>
                 <OverlaysProvider>
-                  <div data-testid="thread-body">ready</div>
+                  <ChatMessageBoundary>
+                    <div data-testid="thread-body">ready</div>
+                  </ChatMessageBoundary>
                 </OverlaysProvider>
               </ChatSessionTestProvider>
             </MainSidebarProvider>
@@ -41,7 +47,7 @@ describe('Session favicon tracks the session lifecycle', () => {
   describe('when the session prepare stepper is showing', () => {
     it('shows the purple initializing indicator', async () => {
       const session = stubPreparingSession({ ensurePending: true });
-      renderDeferredThread();
+      renderThread();
 
       await waitFor(() => expect(screen.getByTestId('session-prepare-steps')).toBeInTheDocument());
       expect(faviconHref()).toBe('/favicon-session-initializing.svg');
@@ -54,7 +60,7 @@ describe('Session favicon tracks the session lifecycle', () => {
   describe('when the workspace is ready and the agent is idle', () => {
     it('flips to the blue awaiting-user indicator', async () => {
       const session = stubPreparingSession();
-      const { client } = renderDeferredThread();
+      const { client } = renderThread();
 
       session.finishWorkspace();
       await waitForMutationsIdle(client);

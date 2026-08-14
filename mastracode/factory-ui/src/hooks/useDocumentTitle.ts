@@ -11,10 +11,9 @@ const DEFAULT_TITLE = 'Mastra Factory';
  */
 export function useDocumentTitle(title: string | undefined): void {
   useEffect(() => {
-    const previous = document.title;
     document.title = title ? `${title} | ${DEFAULT_TITLE}` : DEFAULT_TITLE;
     return () => {
-      document.title = previous;
+      document.title = DEFAULT_TITLE;
     };
   }, [title]);
 }

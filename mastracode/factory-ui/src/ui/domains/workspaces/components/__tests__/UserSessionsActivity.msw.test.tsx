@@ -11,7 +11,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { FactoryUserSession } from '../../services/github';
 import { UserSessionsSection } from '../UserSessionsSection';
 
@@ -94,7 +94,8 @@ describe('User sessions sidebar activity', () => {
     stubProjectAndSessions([makeSession({ sessionId: 'sess-1', branch: 'user/feature-a' })]);
     stubActiveSessions(new Set(['sess-1']));
 
-    renderSection();
+    const { client } = renderSection();
+    await waitForMutationsIdle(client);
 
     await screen.findByRole('status', { name: 'Agent working in feature-a' });
   });
@@ -103,7 +104,8 @@ describe('User sessions sidebar activity', () => {
     stubProjectAndSessions([makeSession({ sessionId: 'sess-2', branch: 'user/feature-b', materializedAt: null })]);
     stubActiveSessions(new Set());
 
-    renderSection();
+    const { client } = renderSection();
+    await waitForMutationsIdle(client);
 
     await screen.findByRole('status', { name: 'Initializing feature-b' });
   });
@@ -112,7 +114,8 @@ describe('User sessions sidebar activity', () => {
     stubProjectAndSessions([makeSession({ sessionId: 'sess-3', branch: 'user/feature-c' })]);
     stubActiveSessions(new Set());
 
-    renderSection();
+    const { client } = renderSection();
+    await waitForMutationsIdle(client);
 
     const row = (await screen.findByRole('button', { name: 'feature-c' })).closest('li');
     expect(row).not.toBeNull();

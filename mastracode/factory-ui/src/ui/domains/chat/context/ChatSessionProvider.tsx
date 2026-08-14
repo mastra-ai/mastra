@@ -17,7 +17,6 @@ import { ChatModelsProvider } from './ChatModelsProvider';
 import { ChatModesProvider } from './ChatModesProvider';
 import { ChatSessionContext } from './ChatSessionContext';
 import { ChatTranscriptProvider } from './ChatTranscriptProvider';
-import { SessionFaviconInitializing } from '../components/SessionFavicon';
 import { SessionPrepareSteps } from '../components/SessionPrepareSteps';
 import { useChatSessionContext } from './useChatSessionContext';
 
@@ -191,6 +190,7 @@ export function ChatSessionBoundary({
       key={`${resourceId}:${threadId ?? 'draft'}`}
       threadId={threadId}
       initialMessages={messagesQuery.data}
+      messagesInitializing={messages.isPending}
       hasMoreHistory={messagesQuery.hasMore}
       isLoadingMoreHistory={messagesQuery.isLoadingMore}
       loadMoreHistory={messagesQuery.loadMore}
@@ -223,14 +223,7 @@ export function ChatMessageBoundary({ children }: { children: ReactNode }) {
   // them under one loader keeps the composer's spinning ring continuously
   // meaningful through the whole preparing window.
   const messagesInitializing = Boolean(value.threadId) && value.isPending;
-  if (sandboxPreparing || messagesInitializing) {
-    return (
-      <>
-        <SessionFaviconInitializing />
-        <SessionPrepareSteps />
-      </>
-    );
-  }
+  if (sandboxPreparing || messagesInitializing) return <SessionPrepareSteps />;
 
   if (value.threadId && value.error) return <ChatMessageFallback {...value} />;
 

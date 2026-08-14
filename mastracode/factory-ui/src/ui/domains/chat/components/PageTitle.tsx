@@ -4,22 +4,23 @@ import { useDocumentTitle } from '../../../../hooks/useDocumentTitle';
 import { useAgentControllerThreads } from '../../../../hooks/useAgentControllerThreads';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { workItemIdentifier } from '../../factory/services/relationships';
+import type { WorkItem } from '../../factory/services/workItems';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 
+function identifierForThread(workItems: WorkItem[] | undefined, sessionId?: string, threadId?: string) {
+  if (!sessionId || !threadId) return undefined;
+  const item = workItems?.find(candidate =>
+    Object.values(candidate.sessions).some(session => session.sessionId === sessionId && session.threadId === threadId),
+  );
+  return item ? workItemIdentifier(item) : undefined;
+}
+
 /**
- * Drives `document.title` for the current thread.
- *
- * - Sessions linked to an external work item → the item's canonical identifier
- *   (`#1567` for GitHub PRs and issues, `ENG-123` for Linear) so tab titles
- *   sort at a glance next to a stack of numbered work.
- * - Everything else (user sessions, sessions with no linked work item) → the
- *   thread's own title.
- *
- * The hook falls back to the default app title while data is still loading or
- * when no signal is available yet, so tab titles never flicker through
- * placeholders. Mounted only inside a resolved session, so unmounting on
- * navigation restores the default title automatically.
+ * Drives `document.title` for the current thread: the linked work item's
+ * canonical identifier (`#1567` on GitHub, `ENG-123` on Linear), else the
+ * thread's own title, else the default app title while data loads — so a wall
+ * of session tabs stays identifiable without flickering through placeholders.
  */
 export function PageTitle() {
   const { factoryId, sessionId, threadId } = useParams<{
@@ -39,20 +40,9 @@ export function PageTitle() {
     enabled: resourceReady,
   });
 
-  const identifier = (() => {
-    if (!sessionId || !threadId) return undefined;
-    const item = workItems.data?.find(candidate =>
-      Object.values(candidate.sessions).some(
-        session => session.sessionId === sessionId && session.threadId === threadId,
-      ),
-    );
-    return item ? workItemIdentifier(item) : undefined;
-  })();
-
+  const identifier = identifierForThread(workItems.data, sessionId, threadId);
   const threadTitle = threadsQuery.data?.find(thread => thread.id === threadId)?.title?.trim();
 
-  const title = identifier ?? threadTitle ?? undefined;
-
-  useDocumentTitle(title);
+  useDocumentTitle(identifier ?? threadTitle);
   return null;
 }
