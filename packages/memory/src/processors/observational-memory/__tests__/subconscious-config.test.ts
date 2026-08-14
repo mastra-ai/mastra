@@ -92,7 +92,7 @@ describe('Subconscious configuration', () => {
     const memory = new Memory({
       storage: new InMemoryStore(),
       ...semanticInfrastructure,
-      options: { observationalMemory: { model, subconscious } },
+      options: { observationalMemory: { model, experimental_subconscious: subconscious } },
     });
 
     const extractors = getExtractors(memory);
@@ -107,7 +107,7 @@ describe('Subconscious configuration', () => {
       () =>
         new Memory({
           storage: new InMemoryStore(),
-          options: { observationalMemory: { model, subconscious: new Subconscious() } },
+          options: { observationalMemory: { model, experimental_subconscious: new Subconscious() } },
         }),
     ).toThrow(/requires a vector store/);
   });
@@ -116,7 +116,7 @@ describe('Subconscious configuration', () => {
     const memory = new Memory({
       storage: new InMemoryStore(),
       ...semanticInfrastructure,
-      options: { observationalMemory: { model, subconscious: new Subconscious() } },
+      options: { observationalMemory: { model, experimental_subconscious: new Subconscious() } },
     });
     const originalGetStore = memory.storage.getStore.bind(memory.storage);
     vi.spyOn(memory.storage, 'getStore').mockImplementation(async name =>
@@ -124,6 +124,21 @@ describe('Subconscious configuration', () => {
     );
 
     await expect(memory.omEngine).rejects.toThrow(/Knowledge storage domain is not available/);
+  });
+
+  it('rejects the stable-looking configuration key at the type boundary', () => {
+    const memory = new Memory({
+      storage: new InMemoryStore(),
+      options: {
+        observationalMemory: {
+          model,
+          // @ts-expect-error Subconscious is intentionally experimental.
+          subconscious: new Subconscious(),
+        },
+      },
+    });
+
+    expect(getExtractors(memory)).toEqual([]);
   });
 
   it('does not alter observational memory when Subconscious is absent', () => {

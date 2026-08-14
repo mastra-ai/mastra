@@ -55,6 +55,11 @@ function resolveAgent(
   };
 }
 
+/**
+ * Configures experimental autonomous knowledge extraction and reflection.
+ *
+ * @experimental This API may change without notice.
+ */
 export class Subconscious {
   readonly config: Readonly<SubconsciousConfig>;
   readonly resolved: Readonly<ResolvedSubconsciousConfig>;
