@@ -12,6 +12,7 @@ Parse the issue URL or number from `$ARGUMENTS`, then read its current labels. R
 - `status: needs triage`
 - `status: auto-triaged`
 - `status: needs approval`
+- `status: pending-close`
 
 Use `gh issue edit <issue> --remove-label <label>` for each present label. Then post this comment unless the issue already has it:
 
