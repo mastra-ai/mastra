@@ -390,12 +390,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       const ghCliToken = (await getGithubPat(() => github.integrationStorage, session.orgId, patKind)) ?? token;
 
       const ensureSandbox = () =>
-        fleet.ensureSandbox(
-          binding,
-          { GH_TOKEN: ghCliToken },
-          undefined,
-          isLocalSandbox ? { workingDirectory: workdir } : {},
-        );
+        fleet.ensureSandbox(binding, { GH_TOKEN: ghCliToken }, undefined, {
+          ...(isLocalSandbox ? { workingDirectory: workdir } : {}),
+          actingUserId: userId,
+        });
       const runMaterialize = (target: Awaited<ReturnType<typeof ensureSandbox>>) =>
         materializeRepo({
           row: { id: session.id, sandboxWorkdir: workdir, materializedAt: session.materializedAt },

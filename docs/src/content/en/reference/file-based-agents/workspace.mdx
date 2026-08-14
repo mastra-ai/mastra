@@ -13,9 +13,9 @@ Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
-A [workspace](/docs/workspace/overview) gives an agent filesystem access and command execution. File-based agents get a default workspace automatically when discovered through `mastra dev` or `mastra build`, so they can read and write files and run shell commands without extra configuration.
+A [workspace](/docs/workspace/sandbox) assembles capabilities such as filesystem access and command execution. The configured backends determine which tools are available. File-based agents get a default workspace automatically when discovered through `mastra dev` or `mastra build`. This default includes filesystem access and command execution, so agents can read and write files and run shell commands without extra configuration.
 
-Use this page for the file-based convention. For workspace providers, tools, search, lifecycle, and sandbox details, see [Workspaces](/docs/workspace/overview).
+Use this page for the file-based convention. For workspace providers, tools, search, lifecycle, and sandbox details, see [Sandbox](/docs/workspace/sandbox).
 
 ## Default workspace
 
@@ -24,7 +24,22 @@ Without `workspace.ts`, a file-based agent gets a default [`Workspace`](/referen
 - [`LocalFilesystem`](/reference/workspace/local-filesystem) rooted at the agent's bundled workspace directory.
 - [`LocalSandbox`](/reference/workspace/local-sandbox) with the same working directory.
 
-This gives the agent file tools and shell tools automatically. The default workspace is per agent; subagents get nested workspace directories under their parent agent's workspace path.
+This gives the agent file tools and shell tools automatically. The default workspace is per agent. Subagents get nested workspace directories under their parent agent's workspace path.
+
+## Disable the default workspace
+
+Set `workspace` to `undefined` in `config.ts` to create the agent without a workspace:
+
+```typescript title="src/mastra/agents/weather/config.ts"
+import { agentConfig } from '@mastra/core/agent'
+
+export default agentConfig({
+  model: '__GATEWAY_OPENAI_MODEL__',
+  workspace: undefined,
+})
+```
+
+The agent doesn't receive the automatic file and shell tools when you disable the workspace.
 
 ## Quickstart
 
@@ -59,7 +74,7 @@ Customize the workspace when the default local directory isn't enough. Common re
 - Add workspace search with BM25 or vector search.
 - Share one workspace across multiple agents.
 
-For provider patterns and runtime behavior, see the [workspace overview](/docs/workspace/overview), [sandbox guide](/docs/workspace/sandbox), and [workspace search](/docs/workspace/search).
+For provider patterns and runtime behavior, see the [sandbox guide](/docs/workspace/sandbox) and [workspace search](/docs/workspace/search).
 
 ## Runtime boundary
 
@@ -82,4 +97,4 @@ The files are copied into the bundled workspace path, where workspace file tools
 
 ## Precedence with config
 
-`config.workspace` wins over `workspace.ts`; otherwise the default file-based workspace is used. See [`config.ts` precedence](/reference/file-based-agents/config#precedence) for the full merge table.
+`config.workspace` wins over `workspace.ts`, including when you set it to `undefined`. Otherwise, Mastra uses the default file-based workspace. See [`config.ts` precedence](/reference/file-based-agents/config#precedence) for the full merge table.

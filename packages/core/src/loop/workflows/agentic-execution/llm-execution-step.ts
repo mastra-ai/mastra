@@ -1094,10 +1094,9 @@ function executeStreamWithFallbackModels<T>(
       }
     }
     if (typeof finalResult === 'undefined') {
-      const lastErrMsg = lastError instanceof Error ? lastError.message : String(lastError);
-      const errorMessage = `Exhausted all fallback models. Last error: ${lastErrMsg}`;
-      logger?.error(errorMessage);
-      throw new Error(errorMessage, { cause: lastError });
+      const fatalError = lastError ?? new Error('Exhausted all fallback models without receiving a result.');
+      logger?.error('Exhausted all fallback models.', fatalError);
+      throw fatalError;
     }
     return finalResult;
   };

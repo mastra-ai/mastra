@@ -169,14 +169,15 @@ export interface ObservationConfig {
   activateOnProviderChange?: boolean;
 
   /**
-   * Token threshold above which synchronous (blocking) observation is forced.
-   * Between `messageTokens` and `blockAfter`, only async buffering/activation is used.
-   * Above `blockAfter`, a synchronous observation runs as a last resort.
+   * Token threshold above which buffered activation is allowed to overshoot the
+   * retention target. Crossing `blockAfter` does not trigger a blocking observation;
+   * a synchronous observation runs when `messageTokens` is reached and buffered
+   * activation did not happen.
    *
    * Accepts either:
-   * - A multiplier (1 < value < 2): multiplied by `messageTokens`.
+   * - A multiplier (1 ≤ value < 100): multiplied by `messageTokens`.
    *   e.g. `blockAfter: 1.5` with `messageTokens: 20_000` → blocks at 30,000.
-   * - An absolute token count (≥ 2): must be greater than `messageTokens`.
+   * - An absolute token count (≥ 100): must be greater than `messageTokens`.
    *
    * Only relevant when `bufferTokens` is set.
    * If not set, synchronous observation is never used when async buffering is enabled.
@@ -289,14 +290,15 @@ export interface ReflectionConfig {
   providerOptions?: ProviderOptions;
 
   /**
-   * Token threshold above which synchronous (blocking) reflection is forced.
-   * Between `observationTokens` and `blockAfter`, only async buffering/activation is used.
-   * Above `blockAfter`, a synchronous reflection runs as a last resort.
+   * Token threshold above which synchronous reflection is used as a last resort.
+   * Between `observationTokens` and `blockAfter`, only async buffering/activation
+   * is used. Above `blockAfter`, a synchronous reflection runs when no buffered
+   * reflection is ready to activate.
    *
    * Accepts either:
-   * - A multiplier (1 < value < 2): multiplied by `observationTokens`.
+   * - A multiplier (1 ≤ value < 100): multiplied by `observationTokens`.
    *   e.g. `blockAfter: 1.5` with `observationTokens: 30_000` → blocks at 45,000.
-   * - An absolute token count (≥ 2): must be greater than `observationTokens`.
+   * - An absolute token count (≥ 100): must be greater than `observationTokens`.
    *
    * Only relevant when `bufferActivation` is set.
    * If not set, synchronous reflection is never used when async reflection is enabled.

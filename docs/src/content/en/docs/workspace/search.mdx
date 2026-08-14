@@ -7,9 +7,39 @@ packages:
 
 # Search and indexing
 
-**Added in:** `@mastra/core@1.1.0`
-
 Search lets agents find relevant content in indexed workspace files. When an agent needs to answer a question or find information, it can search the indexed content instead of reading every file.
+
+Search works with both [`mounts`](/docs/workspace/filesystem#mounts) and a [workspace-only filesystem](/docs/workspace/filesystem#workspace-only-filesystem). With `mounts`, paths from every mounted filesystem are available through one composite filesystem. With `filesystem`, search uses that provider directly. In both cases, queries search the workspace index rather than reading live files on demand.
+
+## When to use search
+
+Use workspace search when your agent needs to:
+
+- Find exact terms, filenames, or error messages with BM25 keyword search
+- Find conceptually related content with vector search
+- Combine keyword and semantic results with hybrid search
+- Search a large set of files without reading each file in full
+- Index content from files, databases, or APIs
+
+## Quickstart
+
+Enable BM25 search, index content, and query it through the workspace:
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  bm25: true,
+})
+
+await workspace.index('/docs/guide.md', 'Reset passwords from the account settings page.')
+
+const results = await workspace.search('password reset')
+console.log(results)
+```
+
+This configuration also gives agents tools for searching and indexing workspace content.
 
 ## How it works
 
@@ -100,7 +130,7 @@ When the provider supports batching (for example, OpenAI's `embedMany`), pass an
 The following example replaces the single-text embedder with a batched one. The embedder function takes an array and returns an array of embeddings in the same order, plus carries two extra properties:
 
 - `batch: true`: marks the function as batch-capable. Without this property, Mastra calls it one text at a time.
-- `maxBatchSize`: the largest array the provider accepts in one call. Mastra splits larger requests into chunks of this size and sends them in parallel. Set this to your provider's documented limit (for example, 2048 for OpenAI, 96 for Cohere, 128 for Voyage). Omit it to send every pending text in one request.
+- `maxBatchSize`: the largest array the provider accepts in one call. Mastra splits larger requests into chunks of this size and sends them in parallel. Set this to your provider's documented limit. For example, OpenAI accepts 2048 and Cohere accepts 96. Voyage accepts 128. Omit it to send every pending text in one request.
 
 ```typescript title="src/mastra/workspaces.ts"
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
@@ -186,6 +216,8 @@ Manual indexing is useful when:
 ### Auto-indexing
 
 Configure `autoIndexPaths` to automatically index files when the workspace initializes. Each entry can be a directory path (indexed recursively) or a glob pattern for selective indexing.
+
+`autoIndexPaths` works with a static `filesystem` or with `mounts`. For mounts, include the mount prefix in each path, such as `/docs/**/*.md`. Resolver-backed filesystems aren't auto-indexed during workspace initialization because the provider is only selected for a request; index their content manually instead.
 
 ```typescript
 const workspace = new Workspace({
@@ -283,10 +315,26 @@ interface SearchResult {
 
 ## Agent tools
 
-When you configure search on a workspace, agents receive tools for searching and indexing content. See [workspace class reference](/reference/workspace/workspace-class#search-tools) for details.
+When you configure search on a workspace, agents receive `mastra_workspace_search` and `mastra_workspace_index` tools. Use `WORKSPACE_TOOLS.SEARCH` constants to configure them independently. For example, remove indexing when the agent should search existing content without changing the index:
+
+```typescript title="src/mastra/workspaces.ts"
+import { LocalFilesystem, Workspace, WORKSPACE_TOOLS } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  bm25: true,
+  tools: {
+    [WORKSPACE_TOOLS.SEARCH.INDEX]: {
+      enabled: false,
+    },
+  },
+})
+```
+
+See [workspace class reference](/reference/workspace/workspace-class#search-tools) for the complete tool list and [`WorkspaceToolsConfig`](/reference/workspace/workspace-class#tool-configuration) for shared settings.
 
 ## Related
 
-- [Workspace overview](/docs/workspace/overview)
+- [Sandbox](/docs/workspace/sandbox)
 - [RAG overview](/reference/rag/overview)
 - [Workspace class reference](/reference/workspace/workspace-class)

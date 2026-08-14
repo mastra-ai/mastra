@@ -155,7 +155,7 @@ Per-call `tracingOptions.metadata.environment` always takes precedence, so indiv
 
 ### Automatic metadata from `RequestContext`
 
-Instead of manually adding metadata to each span, you can configure Mastra to automatically extract values from RequestContext and attach them as metadata to all spans in a trace. This is useful for consistently tracking user identifiers, environment information, feature flags, or any request-scoped data across your entire trace.
+Instead of manually adding metadata to each span, you can configure Mastra to automatically extract values from RequestContext and attach them as metadata to all spans in a trace. This is useful for consistently tracking user identifiers and environment information, along with feature flags or other request-scoped data across your entire trace.
 
 #### Configuration-level extraction
 
@@ -369,7 +369,7 @@ You get fine-grained control over which child spans include RequestContext metad
 
 ## Creating child spans
 
-Child spans allow you to track fine-grained operations within your workflow steps or tools. They provide visibility into sub-operations like database queries, API calls, file operations, or complex calculations. This hierarchical structure helps you identify performance bottlenecks and understand the exact sequence of operations.
+Child spans allow you to track fine-grained operations within your workflow steps or tools. They provide visibility into sub-operations like database queries and API calls, as well as file operations or complex calculations. This hierarchical structure helps you identify performance bottlenecks and understand the exact sequence of operations.
 
 Create child spans inside a tool call or workflow step to track specific operations:
 
@@ -687,7 +687,7 @@ export const mastra = new Mastra({
 
 ### Use cases
 
-**Increasing limits for debugging**: If your agents or tools work with large documents, API responses, or data structures, increase these limits to capture more context in your traces:
+**Increasing limits for debugging**: Increase these limits to capture more context for large documents and API responses, as well as other data structures:
 
 ```ts prettier:false
 serializationOptions: {

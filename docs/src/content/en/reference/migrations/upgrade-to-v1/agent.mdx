@@ -7,7 +7,7 @@ packages:
 
 # Agent class
 
-The Agent class has been updated with reorganized voice methods, updated property access patterns, and streamlined streaming APIs.
+The Agent class has been updated with reorganized voice methods and property access patterns, plus streamlined streaming APIs.
 
 ## Changed
 
@@ -63,7 +63,7 @@ npx @mastra/codemod@latest v1/runtime-context .
 
 ### Direct property access to getter methods
 
-Direct property access to `agent.llm`, `agent.tools`, and `agent.instructions` is deprecated. This change provides better encapsulation and consistency with the broader API design.
+Direct property access to `agent.llm`, `agent.tools`, and `agent.instructions` is deprecated. The accessors improve encapsulation and align with the broader API design.
 
 To migrate, replace property access with the corresponding getter methods.
 
@@ -151,7 +151,7 @@ npx @mastra/codemod@latest v1/agent-processor-methods .
 
 Mastra v1 continues to accept both Zod v3 and Zod v4 schemas in public agent APIs that take structured output schemas. This includes methods such as `agent.generateLegacy()` and `agent.streamLegacy()` and the related option types.
 
-If you already pass Zod schemas to agent APIs, no migration is required for Zod version compatibility. Keep your existing schema imports:
+Existing Zod schemas passed to agent APIs don't require migration for Zod version compatibility. Keep your existing schema imports:
 
 ```ts
 import { z as z3 } from 'zod/v3'
