@@ -4,7 +4,13 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { DefaultObservabilityInstance } from '../instances';
 import { getExternalParentId } from './base';
-import { deepClean, DEFAULT_DEEP_CLEAN_OPTIONS, isSerializedMap, reconstructSerializedMap } from './serialization';
+import {
+  deepClean,
+  DEFAULT_DEEP_CLEAN_OPTIONS,
+  FRAMEWORK_PAYLOAD_KEYS_TO_STRIP,
+  isSerializedMap,
+  reconstructSerializedMap,
+} from './serialization';
 
 // Simple test exporter for capturing events
 class TestExporter implements ObservabilityExporter {
@@ -634,6 +640,46 @@ describe('Span', () => {
     });
   });
 
+  it('keeps user-authored keys on tool spans, strips framework result keys on model spans', () => {
+    const tracing = new DefaultObservabilityInstance({
+      serviceName: 'test-tracing',
+      name: 'test-instance',
+      sampling: { type: SamplingStrategyType.ALWAYS },
+      exporters: [testExporter],
+    });
+
+    // A planner tool whose args legitimately contain `steps` and `validate`.
+    // These must round-trip into the trace, not be silently deleted.
+    const toolSpan = tracing.startSpan({
+      type: SpanType.TOOL_CALL,
+      name: "tool: 'planTrip'",
+      input: {
+        plan: {
+          title: 'Weekend trip',
+          steps: [{ id: 'fly' }, { id: 'stay' }],
+          validate: true,
+        },
+      },
+    });
+    expect(toolSpan.input).toEqual({
+      plan: {
+        title: 'Weekend trip',
+        steps: [{ id: 'fly' }, { id: 'stay' }],
+        validate: true,
+      },
+    });
+
+    // A framework model span still strips the verbose AI-SDK result artifacts.
+    const modelSpan = tracing.startSpan({
+      type: SpanType.MODEL_GENERATION,
+      name: 'llm-call',
+    });
+    modelSpan.end({
+      output: { text: 'hi', steps: [{ big: 'history' }], providerMetadata: { cache: 1 } },
+    });
+    expect(modelSpan.output).toEqual({ text: 'hi' });
+  });
+
   describe('deepClean', () => {
     it('should preserve Date objects as-is', () => {
       const date = new Date('2024-01-15T12:30:00.000Z');
@@ -678,20 +724,40 @@ describe('Span', () => {
       expect(result.self).toBe('[Circular]');
     });
 
-    it('should strip specified keys', () => {
+    it('preserves all keys by default — no depth-blind stripping of user data', () => {
+      // These are common domain words the old default silently deleted from
+      // user payloads (e.g. a planner tool with a `steps` array).
       const input = {
         name: 'test',
-        logger: { level: 'info' },
-        tracingContext: { traceId: '123' },
+        steps: [{ id: 'fly' }, { id: 'stay' }],
+        validate: true,
+        providerMetadata: { note: 'user data' },
+        nested: { steps: ['keep me too'] },
         data: 'keep this',
       };
 
       const result = deepClean(input);
 
+      expect(result).toEqual(input);
+    });
+
+    it('strips only the keys listed in keysToStrip, at every depth', () => {
+      const input = {
+        name: 'test',
+        steps: 'framework',
+        nested: { steps: 'framework', keep: 1 },
+        data: 'keep this',
+      };
+
+      const result = deepClean(input, {
+        ...DEFAULT_DEEP_CLEAN_OPTIONS,
+        keysToStrip: FRAMEWORK_PAYLOAD_KEYS_TO_STRIP,
+      });
+
       expect(result.name).toBe('test');
       expect(result.data).toBe('keep this');
-      expect(result.logger).toBeUndefined();
-      expect(result.tracingContext).toBeUndefined();
+      expect(result.steps).toBeUndefined();
+      expect(result.nested).toEqual({ keep: 1 });
     });
 
     it("should honor an object's serializeForSpan() method so private fields are not walked", () => {
@@ -963,16 +1029,24 @@ describe('Span', () => {
       expect(result.map.__truncated).toBe('3 more keys omitted');
     });
 
-    it('should strip matching string Map keys before truncation', () => {
+    it('keeps all string Map keys by default; strips only keysToStrip before truncation', () => {
       const map = new Map<any, any>([
-        ['logger', 'omit'],
+        ['steps', 'kept-by-default'],
         ['visible', 1],
         [2, 'keep-number-key'],
       ]);
 
-      const result = deepClean({ map });
+      // Default: nothing stripped — the map key round-trips.
+      const kept = deepClean({ map });
+      expect(kept.map.__map_entries).toEqual([
+        ['string', 'steps', 'kept-by-default'],
+        ['string', 'visible', 1],
+        ['number', 2, 'keep-number-key'],
+      ]);
 
-      expect(result.map.__map_entries).toEqual([
+      // Explicit keysToStrip: matching string keys removed.
+      const stripped = deepClean({ map }, { ...DEFAULT_DEEP_CLEAN_OPTIONS, keysToStrip: new Set(['steps']) });
+      expect(stripped.map.__map_entries).toEqual([
         ['string', 'visible', 1],
         ['number', 2, 'keep-number-key'],
       ]);

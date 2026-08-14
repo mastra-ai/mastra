@@ -20,7 +20,22 @@ import type {
 } from '@mastra/core/observability';
 
 import { ModelSpanTracker } from '../model-tracing';
-import { deepClean, mergeSerializationOptions } from './serialization';
+import { deepClean, FRAMEWORK_PAYLOAD_KEYS_TO_STRIP, mergeSerializationOptions } from './serialization';
+
+/**
+ * Span types whose payloads are produced by the framework's LLM/model layer
+ * (not by user code). Only these strip AI-SDK result artifacts
+ * (`FRAMEWORK_PAYLOAD_KEYS_TO_STRIP`); user-authored spans (tool_call,
+ * workflow_step, mapping, …) keep every key so their input/output round-trips
+ * into the trace intact.
+ */
+const FRAMEWORK_PAYLOAD_SPAN_TYPES = new Set<SpanType>([
+  SpanType.AGENT_RUN,
+  SpanType.MODEL_GENERATION,
+  SpanType.MODEL_STEP,
+  SpanType.MODEL_INFERENCE,
+  SpanType.MODEL_CHUNK,
+]);
 import type { DeepCleanOptions } from './serialization';
 
 /** Extended span type that includes getParentSpan method available on BaseSpan instances */
@@ -187,11 +202,18 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   constructor(options: CreateSpanOptions<TType>, observabilityInstance: ObservabilityInstance) {
     // Get serialization options from observability instance config
     const observabilityConfig = observabilityInstance.getConfig();
-    this.deepCleanOptions = mergeSerializationOptions(observabilityConfig.serializationOptions);
 
     this.name = options.name;
     this.type = options.type;
     this.isInternal = isSpanInternal(this.type, options.tracingPolicy?.internal);
+
+    // Framework-produced LLM/model spans strip their verbose AI-SDK result
+    // artifacts (`steps`, provider metadata); user-authored spans strip nothing
+    // so their input/output round-trips into the trace intact.
+    const serializationOptions = mergeSerializationOptions(observabilityConfig.serializationOptions);
+    this.deepCleanOptions = FRAMEWORK_PAYLOAD_SPAN_TYPES.has(this.type)
+      ? { ...serializationOptions, keysToStrip: FRAMEWORK_PAYLOAD_KEYS_TO_STRIP }
+      : serializationOptions;
 
     // Determine up front whether this span will ever reach exporters.
     // getSpanForExport() drops these same spans before export, so we can
