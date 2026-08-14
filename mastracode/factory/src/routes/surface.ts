@@ -34,6 +34,7 @@ import { ConfigRoutes } from './config.js';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
 import { buildFsRoutes } from './fs.js';
 import { IntakeRoutes } from './intake.js';
+import { KnowledgeRoutes } from './knowledge.js';
 import { OAuthRoutes } from './oauth.js';
 import type { RouteAuth } from './route.js';
 import { SkillRoutes } from './skills.js';
@@ -442,6 +443,13 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           integrations: (deps.integrations ?? []).flatMap(({ integration }) =>
             integration.intake ? [{ id: integration.id, intake: integration.intake }] : [],
           ),
+        }).routes()
+      : []),
+    ...(deps.factoryReady
+      ? new KnowledgeRoutes({
+          auth: deps.auth,
+          projects: deps.domains.projects,
+          knowledge: async () => deps.factoryStorage?.getMastraStorage().getStore('knowledge'),
         }).routes()
       : []),
     ...(deps.factoryReady
