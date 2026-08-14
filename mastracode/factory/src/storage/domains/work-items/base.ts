@@ -315,6 +315,13 @@ export interface WorkItemRow {
   stageHistory: WorkItemStageEntry[];
   sessions: WorkItemSessions;
   metadata: Record<string, unknown> | null;
+  /**
+   * When a person first committed this item to the Factory, by starting a run
+   * on it or releasing one that was proposed. Projects that withhold auto-run
+   * are asking to decide what the Factory picks up, not to approve each step of
+   * work they already asked for, so runs on an armed item skip the gate.
+   */
+  autonomyArmedAt: Date | null;
   revision: number;
   createdBy: string;
   createdAt: Date;
@@ -363,6 +370,7 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
     stage_history: { type: 'json' },
     sessions: { type: 'json' },
     metadata: { type: 'json', nullable: true },
+    autonomy_armed_at: { type: 'timestamp', nullable: true },
     revision: { type: 'integer', default: 1 },
     created_by: { type: 'text' },
     created_at: { type: 'timestamp' },
@@ -398,6 +406,7 @@ interface WorkItemDbRow extends Record<string, unknown> {
   stage_history: WorkItemStageEntry[];
   sessions: WorkItemSessions;
   metadata: Record<string, unknown> | null;
+  autonomy_armed_at: Date | null;
   revision: number;
   created_by: string;
   created_at: Date;
@@ -420,6 +429,7 @@ function toWorkItem(row: WorkItemDbRow): WorkItemRow {
     stageHistory: row.stage_history,
     sessions: row.sessions,
     metadata: row.metadata,
+    autonomyArmedAt: row.autonomy_armed_at ?? null,
     revision: row.revision,
     createdBy: row.created_by,
     createdAt: row.created_at,
@@ -1880,6 +1890,18 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     const candidate = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
     if (!candidate) return null;
     return this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, run);
+  }
+
+  /**
+   * Record that a person committed this item to the Factory. Only the first
+   * time counts: the timestamp marks when the item stopped needing permission,
+   * so later runs must not push it forward. Bumps no revision, because arming
+   * is not a change anyone is editing against.
+   */
+  async armAutonomy({ orgId, id, now }: { orgId: string; id: string; now: Date }): Promise<void> {
+    await this.#db.updateAtomic<WorkItemDbRow>('work_items', { org_id: orgId, id }, current =>
+      current.autonomy_armed_at ? null : { autonomy_armed_at: now },
+    );
   }
 
   async delete({ orgId, id }: { orgId: string; id: string }): Promise<WorkItemRow | null> {

@@ -1160,6 +1160,49 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
   });
 
+  it('runs without approval on an item a person already started, even with automatic runs off', async () => {
+    // Withholding automatic runs decides what the Factory picks up on its own.
+    // Once a person hands it an item, the runs that carry that item to review
+    // are the same request continuing, not new work to consent to.
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: 'skill-on-armed-item',
+    });
+    await bindWorkRun(storage, item.id);
+    await storage.armAutonomy({ orgId: 'org-1', id: item.id, now: new Date('2030-01-01T00:00:00Z') });
+    const { controller, session } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => false,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+    expect(session.sendSignal).toHaveBeenCalledTimes(1);
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
+  });
+
+  it('arms an item once, so the first commitment is the one that counts', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: 'skill-arm-once',
+    });
+    const armed = new Date('2030-01-01T00:00:00Z');
+    await storage.armAutonomy({ orgId: 'org-1', id: item.id, now: armed });
+    await storage.armAutonomy({ orgId: 'org-1', id: item.id, now: new Date('2030-06-01T00:00:00Z') });
+
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ autonomyArmedAt: armed });
+  });
+
   it('never runs a dismissed proposal', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { transitionService } = await queueDecision(storage, {

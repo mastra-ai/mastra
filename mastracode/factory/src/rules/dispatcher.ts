@@ -351,7 +351,12 @@ export class FactoryDecisionDispatcher {
   /** Starting an agent run spends the project's compute and executes its code — the one effect a human owns. */
   async #needsApproval(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<boolean> {
     if (decision.type !== 'invokeSkill' || record.approvedAt !== null) return false;
-    return !(await this.#isAutoRunEnabled({ orgId: record.orgId, factoryProjectId: record.factoryProjectId }));
+    if (await this.#isAutoRunEnabled({ orgId: record.orgId, factoryProjectId: record.factoryProjectId })) return false;
+    // Withholding auto-run decides what the Factory may pick up on its own, not
+    // whether it may finish work a person already handed it. Once someone starts
+    // an item, the runs that carry it to review are that same request continuing.
+    const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
+    return item?.autonomyArmedAt == null;
   }
 
   async #executeDecision(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<void> {
