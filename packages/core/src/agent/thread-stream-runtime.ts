@@ -2011,6 +2011,8 @@ export class AgentThreadStreamRuntime {
   ): Promise<AgentThreadSubscription<OUTPUT>> {
     void agent;
     const resolvedPubSub = this.#getPubSub(pubsub);
+    const { provider: leaseProvider, isFallback: hasFallbackLeaseProvider } =
+      this.#resolveLeaseProvider(resolvedPubSub);
     const state = this.#getState(resolvedPubSub);
     const key = this.#threadKey(options.resourceId, options.threadId);
     const topic = this.#threadTopic(key);
@@ -2069,7 +2071,9 @@ export class AgentThreadStreamRuntime {
             }
             if (remoteRun.done) {
               remoteRun.closed = true;
-              controller.close();
+              try {
+                controller.close();
+              } catch {}
             }
           };
           drain();
@@ -2117,6 +2121,7 @@ export class AgentThreadStreamRuntime {
     // once its terminal control event proves it finished cleanly; failed,
     // aborted, or never-terminated (process crash) runs are dropped.
     const deferredRunsByStreamId = new Map<string, AgentThreadRunRecord<any>>();
+    const remoteRunLeaseTimers = new Map<string, ReturnType<typeof setTimeout>>();
     let currentReader: ReadableStreamDefaultReader<any> | null = null;
     let activeReaderRunId: string | null = null;
     let activeReaderStreamId: string | null = null;
@@ -2151,6 +2156,9 @@ export class AgentThreadStreamRuntime {
 
     const discardDeferredRun = (streamId: string) => {
       deferredRunsByStreamId.delete(streamId);
+      const timer = remoteRunLeaseTimers.get(streamId);
+      if (timer) clearTimeout(timer);
+      remoteRunLeaseTimers.delete(streamId);
       const remoteRun = remoteRuns.get(streamId);
       if (!remoteRun) return;
       remoteRun.parts.length = 0;
@@ -2170,6 +2178,50 @@ export class AgentThreadStreamRuntime {
       state.activeThreadRunIds.delete(key);
       state.activeThreadStreamIds.delete(key);
       if (state.remoteThreadKeysByRunId.get(runId) === key) state.remoteThreadKeysByRunId.delete(runId);
+    };
+
+    const stopRemoteRunLeaseWatch = (streamId: string) => {
+      const timer = remoteRunLeaseTimers.get(streamId);
+      if (timer) clearTimeout(timer);
+      remoteRunLeaseTimers.delete(streamId);
+    };
+
+    const startRemoteRunLeaseWatch = (runId: string, streamId: string) => {
+      if (hasFallbackLeaseProvider || remoteRunLeaseTimers.has(streamId)) return;
+
+      const checkLease = async () => {
+        remoteRunLeaseTimers.delete(streamId);
+        const remoteRun = remoteRuns.get(streamId);
+        if (done || !remoteRun || remoteRun.done) return;
+
+        const owner = await leaseProvider.getLeaseOwner(key).catch(() => undefined);
+        if (done || remoteRuns.get(streamId) !== remoteRun || remoteRun.done) return;
+        if (owner === runId) {
+          remoteRunLeaseTimers.set(
+            streamId,
+            setTimeout(() => void checkLease(), AGENT_THREAD_LEASE_TTL_MS),
+          );
+          return;
+        }
+
+        clearActiveIfCurrent(runId, streamId);
+        remoteRun.parts.push({
+          type: 'error',
+          payload: { error: new Error(`Thread run ${runId} lost its lease before publishing a terminal event`) },
+        });
+        remoteRun.done = true;
+        while (remoteRun.waiters.length) remoteRun.waiters.shift()?.();
+        while (remoteRun.finishWaiters.length) remoteRun.finishWaiters.shift()?.();
+        remoteRuns.delete(streamId);
+        seenStreamIds.delete(streamId);
+        await this.#drainPendingIdleSignals(state, resolvedPubSub, key, runId);
+        wake();
+      };
+
+      remoteRunLeaseTimers.set(
+        streamId,
+        setTimeout(() => void checkLease(), AGENT_THREAD_LEASE_TTL_MS),
+      );
     };
 
     const handleEvent = async (event: Parameters<EventCallback>[0]) => {
@@ -2270,6 +2322,7 @@ export class AgentThreadStreamRuntime {
       }
       if (data.type === 'run-failed') {
         const eventStreamId = data.streamId ?? data.runId;
+        stopRemoteRunLeaseWatch(eventStreamId);
         clearActiveIfCurrent(data.runId, data.streamId);
         if (deferredRunsByStreamId.has(eventStreamId)) {
           // Replayed failure of a run that never persisted anything — drop it.
@@ -2299,6 +2352,7 @@ export class AgentThreadStreamRuntime {
         return;
       }
       if (data.type === 'run-discarded') {
+        stopRemoteRunLeaseWatch(data.streamId);
         clearActiveIfCurrent(data.runId, data.streamId);
         localStreamIds.delete(data.streamId);
         replayedStreamIds.delete(data.streamId);
@@ -2324,6 +2378,7 @@ export class AgentThreadStreamRuntime {
       }
       if (data.type === 'run-completed' || data.type === 'run-aborted' || data.type === 'run-suspended') {
         const eventStreamId = data.streamId ?? data.runId;
+        stopRemoteRunLeaseWatch(eventStreamId);
         const deferredRecord = deferredRunsByStreamId.get(eventStreamId);
         if (deferredRecord) {
           deferredRunsByStreamId.delete(eventStreamId);
@@ -2405,6 +2460,8 @@ export class AgentThreadStreamRuntime {
     const unsubscribe = () => {
       if (done) return;
       done = true;
+      for (const timer of remoteRunLeaseTimers.values()) clearTimeout(timer);
+      remoteRunLeaseTimers.clear();
       void resolvedPubSub.unsubscribe(topic, onEvent).catch(() => {});
       // Cancel current reader so the generator's inner loop breaks.
       if (currentReader) {
@@ -2437,6 +2494,7 @@ export class AgentThreadStreamRuntime {
             activeReaderRunId = run.runId;
             activeReaderStreamId = run.streamId;
             currentRunRequestContext = run.streamOptions.requestContext;
+            if (remoteRuns.has(run.streamId)) startRemoteRunLeaseWatch(run.runId, run.streamId);
             let readerReleased = false;
             try {
               while (true) {
@@ -2481,6 +2539,7 @@ export class AgentThreadStreamRuntime {
                 cancelledByAbort = false;
               }
             } finally {
+              stopRemoteRunLeaseWatch(run.streamId);
               currentReader = null;
               activeReaderRunId = null;
               activeReaderStreamId = null;
