@@ -10,6 +10,7 @@ import type {
 import type { StopCondition as StopConditionV6 } from '@internal/ai-v6';
 import { z } from 'zod/v4';
 import type { IsTaskCompleteConfig, OnIterationCompleteHandler } from '../agent/agent.types';
+import type { ApprovalPersistenceMode } from '../agent/approval-persistence';
 import type { MessageInput, MessageList } from '../agent/message-list';
 import type { SaveQueueManager } from '../agent/save-queue';
 import type { CreatedAgentSignal } from '../agent/signals';
@@ -237,6 +238,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   downloadConcurrency?: number;
   modelSpanTracker?: IModelSpanTracker;
   requireToolApproval?: RequireToolApproval;
+  approvalPersistence?: ApprovalPersistenceMode;
   autoResumeSuspendedTools?: boolean;
   agentId: string;
   toolCallConcurrency?: ToolCallConcurrency;

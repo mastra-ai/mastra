@@ -2059,3 +2059,5 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.messageList = this.messageList.deserialize(state.messageList);
   }
 }
+
+export type SerializedMastraModelOutputState = ReturnType<MastraModelOutput['serializeState']>;

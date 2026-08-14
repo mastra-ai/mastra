@@ -18,6 +18,7 @@ import type {
   WorkflowRunState,
 } from '../../../workflows/types';
 import type { Workflow } from '../../../workflows/workflow';
+import { prepareWorkflowSnapshotForPersistence } from '../../snapshot-persistence';
 import {
   createRestartExecutionParams,
   createTimeTravelExecutionParams,
@@ -359,15 +360,15 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   /**
-   * Applies the workflow's `pruneSnapshot` option to an already-persisted snapshot.
+   * Applies the workflow's snapshot preparation options to merged state.
    *
    * The evented engine persists suspensions via merge operations
    * (`updateWorkflowResults` + `updateWorkflowState`) rather than writing a full
-   * snapshot object, so the prune hook can't intercept the write itself. Instead,
-   * after the merge completes, we load the merged snapshot, prune it, and
-   * re-persist the full row. No-op when the workflow has no `pruneSnapshot` option.
+   * snapshot object, so the hooks cannot intercept the write itself. After the
+   * merge completes, load the merged snapshot and re-persist the selected full
+   * or checkpoint representation.
    */
-  private async pruneAndRepersistSnapshot({
+  private async prepareAndRepersistSnapshot({
     workflow,
     workflowId,
     runId,
@@ -376,23 +377,30 @@ export class WorkflowEventProcessor extends EventProcessor {
     workflowId: string;
     runId: string;
   }): Promise<void> {
-    const pruneSnapshot = workflow?.options?.pruneSnapshot;
-    if (!pruneSnapshot) return;
+    const options = workflow?.options;
+    if (!options?.pruneSnapshot && !options?.prepareSnapshotForPersistence) return;
     try {
       const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
       if (!workflowsStore) return;
       const run = await workflowsStore.getWorkflowRunById({ runId, workflowName: workflowId });
       const snapshot = run?.snapshot;
       if (!snapshot || typeof snapshot === 'string') return;
-      const pruned = pruneSnapshot({ snapshot, workflowStatus: snapshot.status });
+      if ('kind' in snapshot && snapshot.kind === 'agent-approval-checkpoint') return;
+      const prepared = prepareWorkflowSnapshotForPersistence({
+        snapshot,
+        workflowStatus: snapshot.status,
+        options,
+      });
       await workflowsStore.persistWorkflowSnapshot({
         workflowName: workflowId,
         runId,
         resourceId: run?.resourceId,
-        snapshot: pruned,
+        snapshot: prepared,
       });
     } catch (error) {
-      // Pruning is a size optimization — never fail the suspension over it.
+      // User pruning stays best-effort for compatibility. Representation
+      // selection is a persistence guarantee and must not fail silently.
+      if (options.prepareSnapshotForPersistence) throw error;
       this.mastra.getLogger()?.warn?.(`Failed to prune workflow snapshot for run ${runId}: ${error}`);
     }
   }
@@ -545,9 +553,11 @@ export class WorkflowEventProcessor extends EventProcessor {
         workflowName: workflow.id,
         runId,
         resourceId,
-        snapshot: workflow?.options?.pruneSnapshot
-          ? workflow.options.pruneSnapshot({ snapshot: runningSnapshot, workflowStatus: 'running' })
-          : runningSnapshot,
+        snapshot: prepareWorkflowSnapshotForPersistence({
+          snapshot: runningSnapshot,
+          workflowStatus: 'running',
+          options: workflow?.options,
+        }),
       });
 
       if (parentWorkflow) {
@@ -1596,9 +1606,11 @@ export class WorkflowEventProcessor extends EventProcessor {
             workflowName: nestedWorkflow.id,
             runId: nestedRunId,
             resourceId: parentRun?.resourceId,
-            snapshot: nestedWorkflow?.options?.pruneSnapshot
-              ? nestedWorkflow.options.pruneSnapshot({ snapshot: pendingSnapshot, workflowStatus: 'pending' })
-              : pendingSnapshot,
+            snapshot: prepareWorkflowSnapshotForPersistence({
+              snapshot: pendingSnapshot,
+              workflowStatus: 'pending',
+              options: nestedWorkflow?.options,
+            }),
           });
         }
 
@@ -2046,7 +2058,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             ...(suspendTracingContext ? { tracingContext: suspendTracingContext } : {}),
           },
         });
-        await this.pruneAndRepersistSnapshot({ workflow, workflowId, runId });
+        await this.prepareAndRepersistSnapshot({ workflow, workflowId, runId });
       }
       await this.mastra.pubsub.publish('workflows', {
         type: 'workflow.suspend',
@@ -2440,7 +2452,7 @@ export class WorkflowEventProcessor extends EventProcessor {
                 ...(suspendTracingContext ? { tracingContext: suspendTracingContext } : {}),
               },
             });
-            await this.pruneAndRepersistSnapshot({ workflow, workflowId, runId });
+            await this.prepareAndRepersistSnapshot({ workflow, workflowId, runId });
           }
 
           await this.mastra.pubsub.publish('workflows', {
@@ -2647,7 +2659,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             ...(suspendTracingContext ? { tracingContext: suspendTracingContext } : {}),
           },
         });
-        await this.pruneAndRepersistSnapshot({ workflow, workflowId, runId });
+        await this.prepareAndRepersistSnapshot({ workflow, workflowId, runId });
       }
 
       await this.mastra.pubsub.publish('workflows', {

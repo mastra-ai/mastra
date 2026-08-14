@@ -3,6 +3,7 @@ import type { MastraLanguageModel } from '../../../llm/model/shared.types';
 import type { ToolCallConcurrency } from '../../../loop/types';
 import type { MemoryConfig } from '../../../memory/types';
 import type { CoreTool } from '../../../tools/types';
+import type { ApprovalPersistenceMode } from '../../approval-persistence';
 import type { MessageList } from '../../message-list';
 import type { AgentModelManagerConfig } from '../../types';
 import type {
@@ -210,6 +211,7 @@ export function serializeDurableOptions(options: {
   activeTools?: string[];
   modelSettings?: SerializableModelSettings | Record<string, unknown>;
   requireToolApproval?: boolean;
+  approvalPersistence?: ApprovalPersistenceMode;
   toolCallConcurrency?: ToolCallConcurrency;
   autoResumeSuspendedTools?: boolean;
   maxProcessorRetries?: number;
@@ -248,6 +250,7 @@ export function serializeDurableOptions(options: {
     activeTools: options.activeTools,
     modelSettings: serializeModelSettings(options.modelSettings),
     requireToolApproval: options.requireToolApproval,
+    approvalPersistence: options.approvalPersistence ?? 'full',
     toolCallConcurrency: options.toolCallConcurrency,
     autoResumeSuspendedTools: options.autoResumeSuspendedTools,
     maxProcessorRetries: options.maxProcessorRetries,

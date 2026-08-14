@@ -1,5 +1,9 @@
 import { z } from 'zod';
 import type { PubSub } from '../../../events/pubsub';
+import {
+  createAgentApprovalSnapshotPersistence,
+  getApprovalPersistenceFromSnapshot,
+} from '../../../loop/workflows/agent-approval-checkpoint';
 import { pruneAgentLoopSnapshot } from '../../../loop/workflows/prune-snapshot';
 import type { Mastra } from '../../../mastra';
 import { createObservabilityContext, InternalSpans } from '../../../observability';
@@ -160,6 +164,10 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
       // Agent-loop snapshots are pure resume artifacts — strip everything a
       // resume never reads before persisting.
       pruneSnapshot: pruneAgentLoopSnapshot,
+      prepareSnapshotForPersistence: createAgentApprovalSnapshotPersistence({
+        workflowId: DurableStepIds.AGENTIC_EXECUTION,
+        approvalPersistence: getApprovalPersistenceFromSnapshot,
+      }),
       validateInputs: false,
       sharePubsub: true,
       // Internal durable-agent execution plumbing — hide workflow spans;
@@ -301,6 +309,10 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
         // Agent-loop snapshots are pure resume artifacts — strip everything a
         // resume never reads before persisting.
         pruneSnapshot: pruneAgentLoopSnapshot,
+        prepareSnapshotForPersistence: createAgentApprovalSnapshotPersistence({
+          workflowId: DurableStepIds.AGENTIC_LOOP,
+          approvalPersistence: getApprovalPersistenceFromSnapshot,
+        }),
         validateInputs: false,
         // Internal durable-agent execution plumbing — see singleIterationWorkflow.
         tracingPolicy: {

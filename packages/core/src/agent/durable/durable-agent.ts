@@ -4,6 +4,10 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { CachingPubSub } from '../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
+import {
+  isAgentApprovalCheckpoint,
+  materializePersistedAgentApprovalCheckpoints,
+} from '../../loop/workflows/agent-approval-checkpoint';
 import type { Mastra } from '../../mastra';
 import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
 import { RequestContext } from '../../request-context';
@@ -77,6 +81,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   modelSettings?: AgentExecutionOptions<OUTPUT>['modelSettings'];
   /** Require approval for tool calls. Boolean (gate all / none) or a per-call function policy. */
   requireToolApproval?: AgentExecutionOptions<OUTPUT>['requireToolApproval'];
+  /** Snapshot persistence contract for tool approval. Defaults to `full`. */
+  approvalPersistence?: AgentExecutionOptions<OUTPUT>['approvalPersistence'];
   /** Automatically resume suspended tools */
   autoResumeSuspendedTools?: boolean;
   /** Maximum number of tool calls to execute concurrently, or an object with `limit`/`strategy` */
@@ -1346,10 +1352,19 @@ export class DurableAgent<
         throw new Error(`No registry entry found for run ${runId}. Cannot resume.`);
       }
 
-      const snapshot =
+      let snapshot =
         typeof persisted.snapshot === 'string'
           ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
           : persisted.snapshot;
+      if (isAgentApprovalCheckpoint(snapshot)) {
+        snapshot =
+          (await materializePersistedAgentApprovalCheckpoints({
+            workflowsStore: workflowsStore!,
+            workflowNames: [DurableStepIds.AGENTIC_LOOP, DurableStepIds.AGENTIC_EXECUTION],
+            outerWorkflowName: DurableStepIds.AGENTIC_LOOP,
+            runId,
+          })) ?? snapshot;
+      }
       if (snapshot?.status !== 'suspended') {
         throw new Error('This workflow run was not suspended');
       }
@@ -1772,10 +1787,20 @@ export class DurableAgent<
       });
     }
 
-    const snapshot =
+    let snapshot =
       typeof persisted.snapshot === 'string'
         ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
         : persisted.snapshot;
+
+    if (isAgentApprovalCheckpoint(snapshot)) {
+      snapshot =
+        (await materializePersistedAgentApprovalCheckpoints({
+          workflowsStore,
+          workflowNames: [DurableStepIds.AGENTIC_LOOP, DurableStepIds.AGENTIC_EXECUTION],
+          outerWorkflowName: DurableStepIds.AGENTIC_LOOP,
+          runId,
+        })) ?? snapshot;
+    }
 
     const workflowInput = snapshot?.context?.input as DurableAgenticWorkflowInput | undefined;
     if (!workflowInput || workflowInput.__workflowKind !== 'durable-agent') {

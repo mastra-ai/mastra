@@ -486,6 +486,14 @@ Returns: [`Promise<DurableAgentStreamResult>`](#durableagentstreamresult)
       'Require approval for tool calls. Pass `true` or `false` to gate all or none, or a function for per-call policy. Function-form policies live on the in-process run registry; cross-process resumes fall back to a `true` shadow.',
   },
   {
+    name: 'approvalPersistence',
+    type: "'full' | 'minimal'",
+    isOptional: true,
+    defaultValue: "'full'",
+    description:
+      "Controls persisted state for pre-execution tool approval. Use `'minimal'` to store an approval-only checkpoint that survives process restarts and continues through approval or decline. Runtime tool suspension continues to use full persistence. See [Agent approval](/docs/agents/agent-approval#choose-approval-snapshot-persistence).",
+  },
+  {
     name: 'autoResumeSuspendedTools',
     type: 'boolean',
     isOptional: true,

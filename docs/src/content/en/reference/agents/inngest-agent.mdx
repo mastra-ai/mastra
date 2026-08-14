@@ -425,6 +425,14 @@ Returns: `boolean`
     description: 'Require approval for all tool calls, which suspends the run until resumed.',
   },
   {
+    name: 'approvalPersistence',
+    type: "'full' | 'minimal'",
+    isOptional: true,
+    defaultValue: "'full'",
+    description:
+      "Controls persisted state for pre-execution tool approval. Use `'minimal'` to store an approval-only checkpoint that survives process restarts and continues through approval or decline. Runtime tool suspension continues to use full persistence. See [Agent approval](/docs/agents/agent-approval#choose-approval-snapshot-persistence).",
+  },
+  {
     name: 'autoResumeSuspendedTools',
     type: 'boolean',
     isOptional: true,

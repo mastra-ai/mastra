@@ -15,6 +15,7 @@ import type { MastraStreamTransformOptions } from '../stream/types';
 import type { RequireToolApproval, ToolHooks, ToolPayloadTransformPolicy } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { OutputWriter, WorkflowRunState } from '../workflows/types';
+import type { ApprovalPersistenceMode } from './approval-persistence';
 import type { MessageListInput } from './message-list';
 import type {
   AgentMemoryOption,
@@ -619,6 +620,12 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    * decide conditionally — e.g. to gate approval by a regex on the tool name.
    */
   requireToolApproval?: RequireToolApproval;
+
+  /**
+   * Controls how much workflow state is retained for durable tool approval.
+   * Defaults to `full`; `minimal` opts into the approval-only checkpoint contract.
+   */
+  approvalPersistence?: ApprovalPersistenceMode;
 
   /** Automatically resume suspended tools */
   autoResumeSuspendedTools?: boolean;

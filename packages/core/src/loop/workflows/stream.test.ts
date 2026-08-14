@@ -8,10 +8,12 @@ import type { ChunkType } from '../../stream/types';
 // invoke it directly in tests without spinning up a real agentic loop.
 let capturedOutputWriter: ((chunk: ChunkType, options?: { messageId?: string }) => Promise<void>) | undefined;
 let capturedCreateRunArgs: any;
+let capturedAgenticLoopParams: any;
 
 vi.mock('./agentic-loop', () => ({
   createAgenticLoopWorkflow: (params: any) => {
     capturedOutputWriter = params.outputWriter;
+    capturedAgenticLoopParams = params;
 
     return {
       __registerMastra: vi.fn(),
@@ -120,5 +122,25 @@ describe('workflowLoopStream', () => {
 
     expect(capturedCreateRunArgs).toBeDefined();
     expect(capturedCreateRunArgs.resourceId).toBe('user-abc-123');
+  });
+
+  it('forwards approval persistence to the internal agentic workflow', async () => {
+    const stream = workflowLoopStream({
+      messageId: 'msg-approval-persistence',
+      runId: 'run-approval-persistence',
+      startTimestamp: Date.now(),
+      agentId: 'test-agent',
+      messageList: new MessageList({ threadId: 'test-thread' }),
+      models: [{ model: {} as any, toolChoice: undefined }],
+      approvalPersistence: 'minimal',
+      _internal: {},
+      streamState: { serialize: () => ({}), deserialize: () => {} },
+      methodType: 'stream',
+    });
+
+    const reader = stream.getReader();
+    while (!(await reader.read()).done) {}
+
+    expect(capturedAgenticLoopParams.approvalPersistence).toBe('minimal');
   });
 });

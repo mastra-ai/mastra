@@ -2,10 +2,12 @@ import type { ToolSet } from '@internal/ai-sdk-v5';
 import { InternalSpans } from '../../../observability';
 import { createWorkflow } from '../../../workflows/create';
 import type { OuterLLMRun } from '../../types';
+import { createAgentApprovalSnapshotPersistence } from '../agent-approval-checkpoint';
 import { pruneAgentLoopSnapshot } from '../prune-snapshot';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
 import { createBackgroundTaskCheckStep } from './background-task-check-step';
+import { AGENTIC_EXECUTION_WORKFLOW_ID } from './constants';
 import { createGoalStep } from './goal-step';
 import { createIsTaskCompleteStep } from './is-task-complete-step';
 import { createLLMExecutionStep } from './llm-execution-step';
@@ -15,7 +17,7 @@ import { normalizeToolCallConcurrency, resolveToolCallConcurrency } from './tool
 import type { ToolCallForeachOptions } from './tool-call-concurrency';
 import { createToolCallStep } from './tool-call-step';
 
-export const AGENTIC_EXECUTION_WORKFLOW_ID = 'executionWorkflow';
+export { AGENTIC_EXECUTION_WORKFLOW_ID } from './constants';
 
 export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   models,
@@ -110,6 +112,10 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
       // resume never reads (stale suspend payloads, duplicated message
       // arrays, AI SDK step history) before persisting.
       pruneSnapshot: pruneAgentLoopSnapshot,
+      prepareSnapshotForPersistence: createAgentApprovalSnapshotPersistence({
+        workflowId: AGENTIC_EXECUTION_WORKFLOW_ID,
+        approvalPersistence: rest.approvalPersistence ?? 'full',
+      }),
       validateInputs: false,
     },
   })

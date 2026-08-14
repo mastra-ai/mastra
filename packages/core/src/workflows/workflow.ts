@@ -20,6 +20,7 @@ import type { PubSub } from '../events/pubsub';
 import type { Event } from '../events/types';
 import type { IMastraLogger } from '../logger';
 import { RegisteredLogger } from '../logger';
+import { isAgentApprovalCheckpoint } from '../loop/workflows/agent-approval-checkpoint';
 import type { Mastra } from '../mastra';
 import type { ObservabilityContext, TracingOptions, TracingPolicy } from '../observability';
 import {
@@ -57,6 +58,7 @@ import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import { validateTemplate } from './mapping-template';
 import { derivePredicateLabel, evaluatePredicate } from './predicate';
 import type { Predicate } from './predicate';
+import { prepareWorkflowSnapshotForPersistence } from './snapshot-persistence';
 import type {
   ConditionFunction,
   ExecuteFunction,
@@ -114,6 +116,19 @@ import {
 // so the execution engines can use them without importing this module.
 export { createMappingStep, createStepFromAgent, createStepFromTool } from './step-factories';
 export type { AgentStepOptions } from './step-factories';
+
+function rejectApprovalCheckpointOperation(snapshot: unknown, operation: string): void {
+  if (!isAgentApprovalCheckpoint(snapshot)) return;
+  throw new MastraError({
+    id: 'WORKFLOW_AGENT_APPROVAL_CHECKPOINT_UNSUPPORTED_OPERATION',
+    domain: ErrorDomain.MASTRA_WORKFLOW,
+    category: ErrorCategory.USER,
+    text:
+      `Workflow ${operation}() cannot consume a minimal agent approval checkpoint. ` +
+      'Continue the run with Agent.approveToolCall() or Agent.declineToolCall() instead.',
+    details: { operation },
+  });
+}
 
 /**
  * Extract the JSON-safe subset of an agent-step options bag for the in-process
@@ -1691,6 +1706,7 @@ export class Workflow<
       validateInputs: options.validateInputs ?? true,
       shouldPersistSnapshot: options.shouldPersistSnapshot ?? (() => true),
       pruneSnapshot: options.pruneSnapshot,
+      prepareSnapshotForPersistence: options.prepareSnapshotForPersistence,
       tracingPolicy: options.tracingPolicy,
       onStart: options.onStart,
       onFinish: options.onFinish,
@@ -2613,9 +2629,11 @@ export class Workflow<
         workflowName: this.id,
         runId: runIdToUse,
         resourceId: options?.resourceId,
-        snapshot: this.#options.pruneSnapshot
-          ? this.#options.pruneSnapshot({ snapshot: initialSnapshot, workflowStatus: 'pending' })
-          : initialSnapshot,
+        snapshot: prepareWorkflowSnapshotForPersistence({
+          snapshot: initialSnapshot,
+          workflowStatus: 'pending',
+          options: this.#options,
+        }),
       });
     }
 
@@ -3359,6 +3377,16 @@ export class Run<
    * This aborts any running execution and updates the workflow status to 'canceled' in storage.
    */
   async cancel() {
+    let workflowsStore;
+    let snapshot;
+    try {
+      workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+      snapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: this.workflowId, runId: this.runId });
+    } catch {
+      // Cancellation remains best-effort when storage cannot be read.
+    }
+    rejectApprovalCheckpointOperation(snapshot, 'cancel');
+
     // Abort any running execution and update in-memory status
     this.abortController.abort();
     this.workflowRunStatus = 'canceled';
@@ -3366,7 +3394,6 @@ export class Run<
     // Update workflow status in storage to 'canceled'
     // This is necessary for suspended/waiting workflows where the abort signal won't be checked
     try {
-      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
       await workflowsStore?.updateWorkflowState({
         workflowName: this.workflowId,
         runId: this.runId,
@@ -4255,6 +4282,7 @@ export class Run<
     if (!snapshot) {
       throw new Error('No snapshot found for this workflow run: ' + this.workflowId + ' ' + this.runId);
     }
+    rejectApprovalCheckpointOperation(snapshot, 'resume');
 
     if (snapshot.status !== 'suspended') {
       throw new Error('This workflow run was not suspended');
@@ -4471,6 +4499,7 @@ export class Run<
     if (!snapshot) {
       throw new Error(`Snapshot not found for run ${this.runId}`);
     }
+    rejectApprovalCheckpointOperation(snapshot, 'restart');
 
     // Parent parallel activeStepsPath can lag behind nested child completion after a crash:
     // children may already be terminal while the parent still lists them as active and
@@ -4629,6 +4658,7 @@ export class Run<
     if (!snapshot) {
       throw new Error(`Snapshot not found for run ${this.runId}`);
     }
+    rejectApprovalCheckpointOperation(snapshot, 'timeTravel');
 
     if (snapshot.status === 'running') {
       throw new Error('This workflow run is still running, cannot time travel');

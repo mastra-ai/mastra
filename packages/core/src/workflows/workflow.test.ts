@@ -225,6 +225,104 @@ createWorkflowTestSuite({
   },
 });
 
+/** Creates the minimal persisted fixture shared by unsupported-operation tests. */
+function createMinimalApprovalCheckpoint(workflowId: string, runId: string) {
+  return {
+    kind: 'agent-approval-checkpoint' as const,
+    version: 1 as const,
+    workflowId,
+    runId,
+    status: 'suspended' as const,
+    timestamp: Date.now(),
+    approvals: [
+      {
+        toolCallId: 'call-1',
+        toolName: 'approvalTool',
+        args: {},
+        resumeLabel: 'call-1',
+        stepId: 'approval-step',
+        executionPath: [0],
+        suspendPayload: { requireToolApproval: { toolCallId: 'call-1', toolName: 'approvalTool' } },
+      },
+    ],
+    routing: {
+      activePaths: [0],
+      activeStepsPath: {},
+      suspendedPaths: { 'approval-step': [0] },
+      resumeLabels: { 'call-1': { stepId: 'approval-step' } },
+      waitingPaths: {},
+    },
+    rehydration: {},
+  };
+}
+
+/** Registers a workflow run whose stored state is a minimal approval checkpoint. */
+async function createRunWithMinimalApprovalCheckpoint(id: string) {
+  const storage = new MockStore();
+  const step = createStep({
+    id: 'approval-step',
+    inputSchema: z.object({ value: z.string() }),
+    outputSchema: z.object({ value: z.string() }),
+    execute: async ({ inputData }) => inputData,
+  });
+  const workflow = createWorkflow({
+    id,
+    inputSchema: z.object({ value: z.string() }),
+    outputSchema: z.object({ value: z.string() }),
+  })
+    .then(step)
+    .commit();
+  void new Mastra({ workflows: { workflow }, storage, logger: false });
+  const runId = `${id}-run`;
+  const run = await workflow.createRun({ runId });
+  const workflowsStore = (await storage.getStore('workflows'))!;
+  const checkpoint = createMinimalApprovalCheckpoint(workflow.id, runId);
+  await workflowsStore.persistWorkflowSnapshot({ workflowName: workflow.id, runId, snapshot: checkpoint });
+  return { checkpoint, run, runId, workflow, workflowsStore };
+}
+
+describe('minimal approval checkpoint operations', () => {
+  it('rejects full workflow restart with an actionable approval-only message', async () => {
+    const { run } = await createRunWithMinimalApprovalCheckpoint('minimal-checkpoint-restart');
+
+    await expect(run.restart()).rejects.toThrow(
+      'Workflow restart() cannot consume a minimal agent approval checkpoint. Continue the run with Agent.approveToolCall() or Agent.declineToolCall() instead.',
+    );
+  });
+
+  it('rejects cancellation without consuming the approval checkpoint', async () => {
+    const { checkpoint, run, runId, workflow, workflowsStore } =
+      await createRunWithMinimalApprovalCheckpoint('minimal-checkpoint-cancel');
+
+    await expect(run.cancel()).rejects.toThrow(
+      'Workflow cancel() cannot consume a minimal agent approval checkpoint. Continue the run with Agent.approveToolCall() or Agent.declineToolCall() instead.',
+    );
+    expect(await workflowsStore.loadWorkflowSnapshot({ workflowName: workflow.id, runId })).toEqual(checkpoint);
+  });
+
+  it('still cancels when reading the stored snapshot fails', async () => {
+    const { run, workflowsStore } = await createRunWithMinimalApprovalCheckpoint('cancel-storage-read-failure');
+    vi.spyOn(workflowsStore, 'loadWorkflowSnapshot').mockRejectedValueOnce(new Error('storage unavailable'));
+
+    await expect(run.cancel()).resolves.toBeUndefined();
+    expect(run.abortController.signal.aborted).toBe(true);
+  });
+
+  it('rejects resume and time travel without consuming the approval checkpoint', async () => {
+    const { checkpoint, run, runId, workflow, workflowsStore } = await createRunWithMinimalApprovalCheckpoint(
+      'minimal-checkpoint-generic-resume',
+    );
+
+    await expect(run.resume({ resumeData: { approved: true } })).rejects.toThrow(
+      'Workflow resume() cannot consume a minimal agent approval checkpoint.',
+    );
+    await expect(run.timeTravel({ step: 'approval-step' })).rejects.toThrow(
+      'Workflow timeTravel() cannot consume a minimal agent approval checkpoint.',
+    );
+    expect(await workflowsStore.loadWorkflowSnapshot({ workflowName: workflow.id, runId })).toEqual(checkpoint);
+  });
+});
+
 // ============================================================================
 // Default Engine-Specific Tests
 // ============================================================================
