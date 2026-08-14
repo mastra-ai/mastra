@@ -17,15 +17,17 @@ import {
   ReactFlow,
   ReactFlowProvider,
   useInternalNode,
+  useReactFlow,
 } from '@xyflow/react';
 import type { EdgeProps, NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Boxes, Globe, Pin } from 'lucide-react';
-import { memo, useCallback, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { KnowledgeGraphNode, KnowledgeGraphPayload, KnowledgeRung } from '../../services/knowledge';
 import type { EntityFlowNode, KnowledgeFlowEdge, KnowledgeGraphFilters } from './graphModel';
 import { egoGraph, filterGraph, NO_FILTERS, shouldShowLabel, toFlowGraph } from './graphModel';
+import type { Arrivals } from './graphDiff';
 import { runLayout } from './layout';
 
 const RUNG_LABELS: Record<KnowledgeRung, string> = { org: 'Org', resource: 'Project', thread: 'Session' };
@@ -150,6 +152,14 @@ interface HoverCard {
 
 export interface KnowledgeGraphProps {
   payload: KnowledgeGraphPayload;
+  /** Ids that newly appeared since the previous poll (arrival animation). */
+  arrivals?: Arrivals;
+  /**
+   * Controlled ego focus (A7): when provided, the page owns focus so wikilink
+   * hops in the flyout get the same focus + cluster-zoom as a node click.
+   */
+  focusedId?: string | null;
+  onFocusChange?: (id: string | null) => void;
   onNodeClick?: (entity: KnowledgeGraphNode) => void;
   onEdgeClick?: (edge: { source: string; target: string; factId: string }) => void;
 }
@@ -211,14 +221,47 @@ export function KnowledgeGraph(props: KnowledgeGraphProps) {
   );
 }
 
-function KnowledgeGraphInner({ payload, onNodeClick, onEdgeClick }: KnowledgeGraphProps) {
+function KnowledgeGraphInner({
+  payload,
+  arrivals,
+  focusedId: controlledFocusId,
+  onFocusChange,
+  onNodeClick,
+  onEdgeClick,
+}: KnowledgeGraphProps) {
   const [filters, setFilters] = useState<KnowledgeGraphFilters>(NO_FILTERS);
   const [hover, setHover] = useState<HoverCard | null>(null);
-  /** Ego focus (Amendment A5): show only the clicked node and its neighbors. */
-  const [focusedId, setFocusedId] = useState<string | null>(null);
+  /**
+   * Ego focus (Amendment A5): show only the clicked node and its neighbors.
+   * Controlled by the page when `focusedId` is passed (A7 — flyout wikilink
+   * hops focus the graph); falls back to internal state otherwise.
+   */
+  const [internalFocusId, setInternalFocusId] = useState<string | null>(null);
+  const focusedId = controlledFocusId !== undefined ? controlledFocusId : internalFocusId;
+  const setFocusedId = useCallback(
+    (id: string | null) => {
+      setInternalFocusId(id);
+      onFocusChange?.(id);
+    },
+    [onFocusChange],
+  );
   // User-dragged positions survive re-layouts (the drag re-pins the node).
   const pinnedPositions = useRef(new Map<string, { x: number; y: number }>());
+  // Last settled CENTERS: warm-start for re-layouts so live arrivals don't
+  // jolt the whole graph, and the spawn anchor for new nodes.
+  const lastCenters = useRef(new Map<string, { x: number; y: number }>());
   const [dragVersion, setDragVersion] = useState(0);
+  const reactFlow = useReactFlow();
+
+  // Amendment A6: selecting a node glides the camera to its cluster (the ego
+  // view IS the cluster, so fitting the visible set centers the clicked
+  // entity); clearing focus fits back to the full graph.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      void reactFlow.fitView({ padding: focusedId ? 0.3 : 0.1, duration: 500 });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [focusedId, reactFlow]);
 
   const { nodes, edges } = useMemo(() => {
     let filtered = filterGraph(payload.nodes, payload.edges, filters);
@@ -229,17 +272,47 @@ function KnowledgeGraphInner({ payload, onNodeClick, onEdgeClick }: KnowledgeGra
       if (focused.nodes.some(node => node.id === focusedId)) filtered = focused;
     }
     const mapped = toFlowGraph(filtered.nodes, filtered.edges, undefined, focusedId);
+    const neighborOf = (id: string): { x: number; y: number } | undefined => {
+      for (const edge of filtered.edges) {
+        const other = edge.source === id ? edge.target : edge.target === id ? edge.source : null;
+        if (other) {
+          const center = lastCenters.current.get(other);
+          if (center) return { x: center.x + 40, y: center.y + 40 };
+        }
+      }
+      return undefined;
+    };
     const positions = runLayout(
       mapped.nodes.map(node => ({
         id: node.id,
         size: node.data.size,
         fixed: pinnedPositions.current.get(node.id),
+        // Warm start: existing nodes keep their settled spot; a brand-new node
+        // spawns near its first neighbor instead of at the spiral seed.
+        initial: lastCenters.current.get(node.id) ?? (arrivals?.nodes.has(node.id) ? neighborOf(node.id) : undefined),
       })),
       filtered.edges,
     );
+    lastCenters.current = positions;
     return toFlowGraph(filtered.nodes, filtered.edges, positions, focusedId);
     // dragVersion re-runs the layout after a drag pin.
-  }, [payload, filters, focusedId, dragVersion]);
+  }, [payload, filters, focusedId, dragVersion, arrivals]);
+
+  // Arrival animation: newly-polled nodes/edges fade-scale in with a pulse.
+  const displayNodes = useMemo(
+    () =>
+      arrivals && arrivals.nodes.size > 0
+        ? nodes.map(node => (arrivals.nodes.has(node.id) ? { ...node, className: 'knowledge-arrive' } : node))
+        : nodes,
+    [nodes, arrivals],
+  );
+  const displayEdges = useMemo(
+    () =>
+      arrivals && arrivals.edges.size > 0
+        ? edges.map(edge => (arrivals.edges.has(edge.id) ? { ...edge, className: 'knowledge-arrive' } : edge))
+        : edges,
+    [edges, arrivals],
+  );
 
   const toggleRung = useCallback((rung: KnowledgeRung) => {
     setFilters(current => {
@@ -262,6 +335,21 @@ function KnowledgeGraphInner({ payload, onNodeClick, onEdgeClick }: KnowledgeGra
       style={{ background: '#0b0b12' }}
       data-testid="knowledge-graph"
     >
+      <style>{`
+        @keyframes knowledgeArrive {
+          0% { opacity: 0; transform: scale(0.4); }
+          60% { opacity: 1; transform: scale(1.08); }
+          100% { opacity: 1; transform: scale(1); }
+        }
+        .knowledge-arrive [data-testid='knowledge-node'] {
+          animation: knowledgeArrive 0.9s ease-out;
+          box-shadow: 0 0 32px rgba(167, 139, 250, 0.7) !important;
+        }
+        .react-flow__edge.knowledge-arrive path {
+          animation: knowledgeArrive 0.9s ease-out;
+          stroke: rgba(196, 181, 253, 0.9) !important;
+        }
+      `}</style>
       <TruncationBanner payload={payload} />
       <div className="absolute top-3 left-3 z-10 flex items-center gap-2">
         {availableRungs.map(rung => (
@@ -283,8 +371,8 @@ function KnowledgeGraphInner({ payload, onNodeClick, onEdgeClick }: KnowledgeGra
       </div>
 
       <ReactFlow
-        nodes={nodes}
-        edges={edges}
+        nodes={displayNodes}
+        edges={displayEdges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView

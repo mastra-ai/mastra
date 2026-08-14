@@ -1,14 +1,52 @@
-import { screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
-import type { KnowledgeGraphPayload } from '../../domains/factory/services/knowledge';
+import type { KnowledgeEntityPayload, KnowledgeGraphPayload } from '../../domains/factory/services/knowledge';
 import { createAppRoutes } from '../../router';
 
 const FACTORY_ID = 'fp-1';
+
+const entityFixture: KnowledgeEntityPayload = {
+  entity: {
+    id: 'ent-1',
+    name: 'Payments Service',
+    kind: 'service',
+    scope: ['org:org-1', `resource:${FACTORY_ID}`],
+    rung: 'resource',
+    createdAt: '2026-08-13T00:00:00.000Z',
+    updatedAt: '2026-08-13T01:00:00.000Z',
+  },
+  facts: [
+    {
+      id: 'fact-1',
+      parentEntityId: 'ent-1',
+      relation: 'owned',
+      text: 'Payments Service uses [[Deploy Runbook]] for charging flows.',
+      scope: ['org:org-1', `resource:${FACTORY_ID}`],
+      rung: 'resource',
+      sourceThreadId: 'thread-abc-123',
+      capturedAt: '2026-08-13T02:00:00.000Z',
+      pinned: true,
+      metadata: { reason: 'Learned from a burned API call — costly to rediscover.' },
+    },
+    {
+      id: 'fact-2',
+      parentEntityId: 'ent-1',
+      relation: 'owned',
+      text: 'Deploys run nightly.',
+      scope: ['org:org-1', `resource:${FACTORY_ID}`],
+      rung: 'resource',
+      sourceThreadId: 'thread-abc-123',
+      capturedAt: '2026-08-13T03:00:00.000Z',
+      pinned: false,
+    },
+  ],
+};
 
 const graphFixture: KnowledgeGraphPayload = {
   view: 'project',
@@ -64,17 +102,48 @@ function stubKnowledgeRoute(graph: KnowledgeGraphPayload | { status: number; mes
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
       HttpResponse.json({}),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/graph`, () =>
-      'status' in graph
-        ? HttpResponse.json({ error: 'error', message: graph.message }, { status: graph.status })
-        : HttpResponse.json(graph),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/graph`, ({ request }) => {
+      if ('status' in graph)
+        return HttpResponse.json({ error: 'error', message: graph.message }, { status: graph.status });
+      const threadId = new URL(request.url).searchParams.get('threadId');
+      if (threadId === 'gone-thread')
+        return HttpResponse.json({ error: 'not_found', message: 'unknown thread' }, { status: 404 });
+      if (threadId)
+        return HttpResponse.json({
+          ...graph,
+          view: 'thread',
+          threadId,
+          nodes: [
+            ...graph.nodes,
+            {
+              id: 'ent-thread',
+              name: 'Session Scratchpad',
+              kind: 'note',
+              scope: ['org:org-1', `resource:${FACTORY_ID}`, `thread:${threadId}`],
+              rung: 'thread' as const,
+              pinned: false,
+              factCount: 1,
+              createdAt: '2026-08-13T04:00:00.000Z',
+              updatedAt: '2026-08-13T04:00:00.000Z',
+            },
+          ],
+          // Incoming edge so the thread node passes the label rule (degree >= 1).
+          edges: [
+            ...graph.edges,
+            { id: 'edge-thread', source: 'ent-1', target: 'ent-thread', type: 'wikilink' as const },
+          ],
+        });
+      return HttpResponse.json(graph);
+    }),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/entities/:entityId`, () =>
+      HttpResponse.json(entityFixture),
     ),
   );
 }
 
-function renderRoute() {
+function renderRoute(path = `/factories/${FACTORY_ID}/knowledge`) {
   const router = createMemoryRouter(createAppRoutes(), {
-    initialEntries: [`/factories/${FACTORY_ID}/knowledge`],
+    initialEntries: [path],
   });
   return renderWithProviders(<RouterProvider router={router} />);
 }
@@ -135,6 +204,92 @@ describe('KnowledgePage', () => {
     stubKnowledgeRoute({ status: 503, message: 'The knowledge storage domain is not configured.' });
     renderRoute();
 
-    expect(await screen.findByText('The knowledge storage domain is not configured.')).toBeInTheDocument();
+    // The hook retries twice before surfacing a non-404 error.
+    expect(
+      await screen.findByText('The knowledge storage domain is not configured.', undefined, { timeout: 8000 }),
+    ).toBeInTheDocument();
+  }, 15000);
+
+  it('opens the flyout on node click with memories and reasoning drill-in', async () => {
+    stubKnowledgeRoute();
+    renderRoute();
+    const user = userEvent.setup();
+
+    const nodes = await screen.findAllByTestId('knowledge-node');
+    // fireEvent (not userEvent): userEvent's mousedown trips d3-drag's nodrag
+    // handler, which reads event.view — null in jsdom.
+    fireEvent.click(nodes[0]);
+
+    const flyout = await screen.findByTestId('knowledge-flyout');
+    // Memories section resolves from the entity endpoint: fact rows with the
+    // pin badge + wikilinks rendered as references.
+    expect(await screen.findByText(/for charging flows/)).toBeInTheDocument();
+    expect(flyout).toHaveTextContent('Payments Service');
+    expect(screen.getByRole('button', { name: 'Deploy Runbook' })).toBeInTheDocument();
+    // Drill into the pinned memory → provenance + reasoning.
+    await user.click(screen.getByText(/for charging flows/));
+    const detail = await screen.findByTestId('knowledge-memory-detail');
+    expect(detail).toHaveTextContent('Captured in session');
+    expect(screen.getByTestId('knowledge-memory-reason')).toHaveTextContent(
+      'Learned from a burned API call — costly to rediscover.',
+    );
+    // The session link carries the source thread id.
+    expect(screen.getByRole('button', { name: /thread-abc-123/ })).toBeInTheDocument();
+  });
+
+  it('drills into the thread view from the session link and back via the breadcrumb', async () => {
+    stubKnowledgeRoute();
+    renderRoute();
+    const user = userEvent.setup();
+
+    const nodes = await screen.findAllByTestId('knowledge-node');
+    fireEvent.click(nodes[0]);
+    await user.click(await screen.findByText(/for charging flows/));
+    await user.click(await screen.findByRole('button', { name: /thread-abc-123/ }));
+
+    // Thread view: breadcrumb renders and the thread-scoped node appears.
+    const breadcrumb = await screen.findByRole('navigation', { name: 'Knowledge scope' });
+    expect(breadcrumb).toHaveTextContent(`session ${'thread-abc-123'.slice(0, 8)}`);
+    expect(await screen.findByText('Session Scratchpad')).toBeInTheDocument();
+    // Project baseline nodes are still present (thread view ADDS, never swaps).
+    expect(screen.getByText('Deploy Runbook')).toBeInTheDocument();
+
+    // Crumb back to the project view clears the thread state.
+    await user.click(screen.getByRole('button', { name: 'project' }));
+    await waitFor(() => expect(screen.queryByText('Session Scratchpad')).not.toBeInTheDocument());
+    expect(screen.queryByText(/session thread-a/)).not.toBeInTheDocument();
+  });
+
+  it('pushes wikilink hops onto the breadcrumb trail and clicks back through it (A7)', async () => {
+    stubKnowledgeRoute();
+    renderRoute();
+    const user = userEvent.setup();
+
+    const nodes = await screen.findAllByTestId('knowledge-node');
+    fireEvent.click(nodes[0]);
+    // Hop to the referenced entity via the memory's wikilink.
+    await user.click(await screen.findByRole('button', { name: 'Deploy Runbook' }));
+
+    // Trail: ... project › Payments Service › Deploy Runbook (last crumb inert).
+    const breadcrumb = screen.getByRole('navigation', { name: 'Knowledge scope' });
+    expect(breadcrumb).toHaveTextContent('Payments Service');
+    expect(breadcrumb).toHaveTextContent('Deploy Runbook');
+
+    // Clicking the earlier crumb returns to the previously selected node.
+    await user.click(within(breadcrumb).getByRole('button', { name: 'Payments Service' }));
+    await waitFor(() => expect(breadcrumb).not.toHaveTextContent('Deploy Runbook'));
+    expect(breadcrumb).toHaveTextContent('Payments Service');
+  });
+
+  it('renders the calm not-available state for a stale thread deep link', async () => {
+    stubKnowledgeRoute();
+    renderRoute(`/factories/${FACTORY_ID}/knowledge?thread=gone-thread`);
+
+    const gone = await screen.findByTestId('knowledge-thread-gone');
+    expect(gone).toHaveTextContent(/no longer available/i);
+    // Crumb back works from the 404 state.
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Back to the project view' }));
+    expect(await screen.findByText('Payments Service')).toBeInTheDocument();
   });
 });
