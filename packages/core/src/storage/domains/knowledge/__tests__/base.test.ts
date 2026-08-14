@@ -14,37 +14,42 @@ function createStore() {
 }
 
 describe('InMemoryKnowledgeStorage', () => {
-  it('keeps entity and page APIs separate with type-scoped uniqueness', async () => {
+  it('stores identity and optional content on one node type', async () => {
     const store = createStore();
-    const entity = await store.createEntity({ name: 'Deploy', kind: 'task', scope: resource });
-    const duplicate = await store.createEntity({ name: 'deploy', kind: 'event', scope: [...resource].reverse() });
-    const page = await store.createPage({ name: 'Deploy', body: 'Runbook for [[Deploy]]', scope: resource });
+    const node = await store.createNode({
+      name: 'Deploy',
+      kind: 'task',
+      content: 'Runbook for [[Deploy]]',
+      scope: resource,
+      resolutionScope: thread,
+    });
+    const duplicate = await store.createNode({ name: 'deploy', kind: 'event', scope: [...resource].reverse() });
 
-    expect(duplicate.id).toBe(entity.id);
-    expect(await store.getEntity(page.id)).toBeNull();
-    expect(await store.getPage(entity.id)).toBeNull();
-    expect(await store.listEntities({ scope: thread })).toEqual([expect.objectContaining({ id: entity.id })]);
-    expect(await store.listPages({ scope: thread })).toEqual([expect.objectContaining({ id: page.id })]);
-    await expect(store.createEntity({ name: 'bad', kind: 'page', scope: resource })).rejects.toThrow('reserved');
+    expect(duplicate.id).toBe(node.id);
+    expect(await store.getNode(node.id)).toEqual(expect.objectContaining({ content: 'Runbook for [[Deploy]]' }));
+    expect(await store.listNodes({ scope: thread, hasContent: true })).toEqual([
+      expect.objectContaining({ id: node.id }),
+    ]);
+    expect(await store.listNodes({ scope: thread, hasContent: false })).toEqual([]);
   });
 
   it('resolves names from narrow to broad scope without crossing siblings', async () => {
     const store = createStore();
-    const broad = await store.createEntity({ name: 'Jane', kind: 'person', scope: org });
-    const narrow = await store.createEntity({ name: 'Jane', kind: 'person', scope: resource });
-    const siblingOnly = await store.createEntity({ name: 'Marco', kind: 'person', scope: sibling });
+    const broad = await store.createNode({ name: 'Jane', kind: 'person', scope: org });
+    const narrow = await store.createNode({ name: 'Jane', kind: 'person', scope: resource });
+    const siblingOnly = await store.createNode({ name: 'Marco', kind: 'person', scope: sibling });
 
-    expect((await store.resolveEntity({ name: 'Jane', scope: thread }))?.id).toBe(narrow.id);
-    expect((await store.resolveEntity({ name: 'Jane', scope: org }))?.id).toBe(broad.id);
-    expect(await store.resolveEntity({ name: 'Marco', scope: thread })).toBeNull();
+    expect((await store.resolveNode({ name: 'Jane', scope: thread }))?.id).toBe(narrow.id);
+    expect((await store.resolveNode({ name: 'Jane', scope: org }))?.id).toBe(broad.id);
+    expect(await store.resolveNode({ name: 'Marco', scope: thread })).toBeNull();
     expect(siblingOnly.scope).toEqual(sibling);
   });
 
-  it('stamps provenance, derives mentions, and separates facts about from touching', async () => {
+  it('stamps provenance, derives mentions, and separates items about from touching', async () => {
     const store = createStore();
-    const jane = await store.createEntity({ name: 'Jane', kind: 'person', scope: resource });
-    const fact = await store.appendFact({
-      parentEntityId: jane.id,
+    const jane = await store.createNode({ name: 'Jane', kind: 'person', scope: resource });
+    const item = await store.appendItem({
+      parentNodeId: jane.id,
       text: 'Paired with [[Marco]] on [[deploy fix]].',
       scope: thread,
       sourceThreadId: 't1',
@@ -53,22 +58,22 @@ describe('InMemoryKnowledgeStorage', () => {
       resolutionScope: thread,
       defaultScope: resource,
     });
-    const marco = await store.resolveEntity({ name: 'Marco', scope: thread });
+    const marco = await store.resolveNode({ name: 'Marco', scope: thread });
 
-    expect(fact.id).toHaveLength(26);
-    expect(fact.capturedAt).toBeInstanceOf(Date);
-    expect(fact.when?.toISOString()).toBe('2026-07-01T00:00:00.000Z');
-    expect((await store.factsAbout({ entityId: jane.id, scope: thread })).facts).toHaveLength(1);
-    expect((await store.factsAbout({ entityId: marco!.id, scope: thread })).facts).toHaveLength(0);
-    expect((await store.factsTouching({ entityId: marco!.id, scope: thread })).facts[0]?.id).toBe(fact.id);
-    expect((await store.factsTouching({ entityId: marco!.id, scope: sibling })).facts).toHaveLength(0);
+    expect(item.id).toHaveLength(26);
+    expect(item.capturedAt).toBeInstanceOf(Date);
+    expect(item.when?.toISOString()).toBe('2026-07-01T00:00:00.000Z');
+    expect((await store.itemsAbout({ nodeId: jane.id, scope: thread })).items).toHaveLength(1);
+    expect((await store.itemsAbout({ nodeId: marco!.id, scope: thread })).items).toHaveLength(0);
+    expect((await store.itemsTouching({ nodeId: marco!.id, scope: thread })).items[0]?.id).toBe(item.id);
+    expect((await store.itemsTouching({ nodeId: marco!.id, scope: sibling })).items).toHaveLength(0);
   });
 
-  it('does not expose facts through a scope that cannot see their parent entity', async () => {
+  it('does not expose items through a scope that cannot see their parent node', async () => {
     const store = createStore();
-    const entity = await store.createEntity({ name: 'Resource Secret', kind: 'task', scope: resource });
-    await store.appendFact({
-      parentEntityId: entity.id,
+    const node = await store.createNode({ name: 'Resource Secret', kind: 'task', scope: resource });
+    await store.appendItem({
+      parentNodeId: node.id,
       text: 'org-visible wording',
       scope: org,
       sourceThreadId: 't1',
@@ -76,17 +81,17 @@ describe('InMemoryKnowledgeStorage', () => {
       defaultScope: resource,
     });
 
-    expect((await store.factsAbout({ entityId: entity.id, scope: org })).facts).toEqual([]);
+    expect((await store.itemsAbout({ nodeId: node.id, scope: org })).items).toEqual([]);
     expect(await store.search({ query: 'org-visible', scope: org })).toEqual([]);
-    expect((await store.factsAbout({ entityId: entity.id, scope: thread })).facts).toHaveLength(1);
+    expect((await store.itemsAbout({ nodeId: node.id, scope: thread })).items).toHaveLength(1);
   });
 
-  it('soft deletes and restores facts without losing mention relationships', async () => {
+  it('soft deletes and restores items without losing mention relationships', async () => {
     const store = createStore();
-    const jane = await store.createEntity({ name: 'Jane', kind: 'person', scope: resource });
-    const marco = await store.createEntity({ name: 'Marco', kind: 'person', scope: resource });
-    const fact = await store.appendFact({
-      parentEntityId: jane.id,
+    const jane = await store.createNode({ name: 'Jane', kind: 'person', scope: resource });
+    const marco = await store.createNode({ name: 'Marco', kind: 'person', scope: resource });
+    const item = await store.appendItem({
+      parentNodeId: jane.id,
       text: 'Works with [[Marco]].',
       scope: resource,
       sourceThreadId: 't1',
@@ -94,46 +99,46 @@ describe('InMemoryKnowledgeStorage', () => {
       defaultScope: resource,
     });
 
-    const removed = await store.removeFact({ id: fact.id, deletedBy: 'curator' });
+    const removed = await store.removeItem({ id: item.id, deletedBy: 'curator' });
     expect(removed.deletedAt).toBeInstanceOf(Date);
-    expect(await store.getFact({ id: fact.id })).toBeNull();
-    expect(await store.getFact({ id: fact.id, includeDeleted: true })).toEqual(
+    expect(await store.getItem({ id: item.id })).toBeNull();
+    expect(await store.getItem({ id: item.id, includeDeleted: true })).toEqual(
       expect.objectContaining({ deletedBy: 'curator' }),
     );
-    expect((await store.factsTouching({ entityId: marco.id, scope: thread })).facts).toHaveLength(0);
+    expect((await store.itemsTouching({ nodeId: marco.id, scope: thread })).items).toHaveLength(0);
 
-    await store.restoreFact({ id: fact.id });
-    expect((await store.factsTouching({ entityId: marco.id, scope: thread })).facts[0]?.id).toBe(fact.id);
+    await store.restoreItem({ id: item.id });
+    expect((await store.itemsTouching({ nodeId: marco.id, scope: thread })).items[0]?.id).toBe(item.id);
     expect((await store.listActivity({ scope: thread })).map(event => event.action)).toEqual(
-      expect.arrayContaining(['fact-deleted', 'fact-restored']),
+      expect.arrayContaining(['item-deleted', 'item-restored']),
     );
   });
 
   it('enforces CAS, merge tombstones, and path-compressed reads', async () => {
     const store = createStore();
-    const jane = await store.createEntity({ name: 'Jane', kind: 'person', scope: resource });
-    const duplicate = await store.createEntity({ name: 'Jane Doe', kind: 'person', scope: resource });
-    const updated = await store.updateEntity({ id: jane.id, version: jane.version, kind: 'customer' });
-    await expect(store.updateEntity({ id: jane.id, version: jane.version, kind: 'stale' })).rejects.toBeInstanceOf(
+    const jane = await store.createNode({ name: 'Jane', kind: 'person', scope: resource });
+    const duplicate = await store.createNode({ name: 'Jane Doe', kind: 'person', scope: resource });
+    const updated = await store.updateNode({ id: jane.id, version: jane.version, kind: 'customer' });
+    await expect(store.updateNode({ id: jane.id, version: jane.version, kind: 'stale' })).rejects.toBeInstanceOf(
       KnowledgeConflictError,
     );
 
-    const third = await store.createEntity({ name: 'J. Doe', kind: 'person', scope: resource });
-    await store.mergeEntities({ sourceId: duplicate.id, targetId: jane.id, sourceVersion: duplicate.version });
-    await store.mergeEntities({ sourceId: third.id, targetId: duplicate.id, sourceVersion: third.version });
-    expect(await store.getEntity(duplicate.id)).toEqual(expect.objectContaining({ mergedInto: jane.id }));
-    expect(await store.getEntity(third.id)).toEqual(expect.objectContaining({ mergedInto: jane.id }));
-    expect((await store.resolveEntity({ name: updated.name, scope: thread }))?.kind).toBe('customer');
+    const third = await store.createNode({ name: 'J. Doe', kind: 'person', scope: resource });
+    await store.mergeNodes({ sourceId: duplicate.id, targetId: jane.id, sourceVersion: duplicate.version });
+    await store.mergeNodes({ sourceId: third.id, targetId: duplicate.id, sourceVersion: third.version });
+    expect(await store.getNode(duplicate.id)).toEqual(expect.objectContaining({ mergedInto: jane.id }));
+    expect(await store.getNode(third.id)).toEqual(expect.objectContaining({ mergedInto: jane.id }));
+    expect((await store.resolveNode({ name: updated.name, scope: thread }))?.kind).toBe('customer');
   });
 
   it('reindexes documents affected by merges and deletes the old semantic scope on rescope', async () => {
     const store = createStore();
-    const target = await store.createEntity({ name: 'Jane', kind: 'person', scope: resource });
-    const duplicate = await store.createEntity({ name: 'Jane Doe', kind: 'person', scope: resource });
-    await store.createPage({ name: 'People', body: 'Contact [[Jane Doe]]', scope: resource });
-    const parent = await store.createEntity({ name: 'Project', kind: 'task', scope: resource });
-    const fact = await store.appendFact({
-      parentEntityId: parent.id,
+    const target = await store.createNode({ name: 'Jane', kind: 'person', scope: resource });
+    const duplicate = await store.createNode({ name: 'Jane Doe', kind: 'person', scope: resource });
+    await store.createNode({ kind: 'document', name: 'People', content: 'Contact [[Jane Doe]]', scope: resource });
+    const parent = await store.createNode({ name: 'Project', kind: 'task', scope: resource });
+    const item = await store.appendItem({
+      parentNodeId: parent.id,
       text: 'Owned by [[Jane Doe]]',
       scope: resource,
       sourceThreadId: 't1',
@@ -143,13 +148,13 @@ describe('InMemoryKnowledgeStorage', () => {
     });
     const beforeMerge = (await store.listSemanticOutbox()).length;
 
-    await store.mergeEntities({ sourceId: duplicate.id, targetId: target.id, sourceVersion: duplicate.version });
+    await store.mergeNodes({ sourceId: duplicate.id, targetId: target.id, sourceVersion: duplicate.version });
 
     const mergeEntries = (await store.listSemanticOutbox()).slice(beforeMerge);
-    expect(mergeEntries.map(entry => entry.documentType)).toEqual(expect.arrayContaining(['page', 'fact', 'entity']));
+    expect(mergeEntries.map(entry => entry.documentType)).toEqual(expect.arrayContaining(['node', 'item', 'node']));
 
     const beforeRescope = (await store.listSemanticOutbox()).length;
-    await store.rescopeFact({ id: fact.id, scope: org });
+    await store.rescopeItem({ id: item.id, scope: org });
     const rescopeEntries = (await store.listSemanticOutbox()).slice(beforeRescope);
     expect(rescopeEntries).toEqual([
       expect.objectContaining({ operation: 'delete', scope: resource }),
@@ -159,9 +164,9 @@ describe('InMemoryKnowledgeStorage', () => {
 
   it('enforces ceilings and monotonic curation cursors', async () => {
     const store = createStore();
-    const entity = await store.createEntity({ name: 'Secret', kind: 'task', scope: resource });
-    const fact = await store.appendFact({
-      parentEntityId: entity.id,
+    const node = await store.createNode({ name: 'Secret', kind: 'task', scope: resource });
+    const item = await store.appendItem({
+      parentNodeId: node.id,
       text: 'Private detail',
       scope: resource,
       sourceThreadId: 't1',
@@ -170,33 +175,33 @@ describe('InMemoryKnowledgeStorage', () => {
       defaultScope: resource,
     });
 
-    await expect(store.rescopeFact({ id: fact.id, scope: org })).rejects.toThrow('ceiling');
-    await store.raiseCeiling({ id: fact.id, maxScope: 'org' });
-    await expect(store.rescopeFact({ id: fact.id, scope: org })).resolves.toEqual(
+    await expect(store.rescopeItem({ id: item.id, scope: org })).rejects.toThrow('ceiling');
+    await store.raiseCeiling({ id: item.id, maxScope: 'org' });
+    await expect(store.rescopeItem({ id: item.id, scope: org })).resolves.toEqual(
       expect.objectContaining({ scope: org }),
     );
 
-    await store.advanceCurationCursor({ sourceThreadId: 't1', agent: 'curate', lastFactId: fact.id });
+    await store.advanceCurationCursor({ sourceThreadId: 't1', agent: 'curate', lastItemId: item.id });
     await expect(
-      store.advanceCurationCursor({ sourceThreadId: 't1', agent: 'curate', lastFactId: '00000000000000000000000000' }),
+      store.advanceCurationCursor({ sourceThreadId: 't1', agent: 'curate', lastItemId: '00000000000000000000000000' }),
     ).rejects.toThrow('cannot move backwards');
   });
 
-  it('paginates facts newest-first and supports semantic outbox recovery', async () => {
+  it('paginates items newest-first and supports semantic outbox recovery', async () => {
     const store = createStore();
-    const entity = await store.createEntity({ name: 'Deploy', kind: 'task', scope: resource });
-    const first = await store.appendFact({
+    const node = await store.createNode({ name: 'Deploy', kind: 'task', scope: resource });
+    const first = await store.appendItem({
       id: '01J00000000000000000000000',
-      parentEntityId: entity.id,
+      parentNodeId: node.id,
       text: 'first',
       scope: resource,
       sourceThreadId: 't1',
       resolutionScope: thread,
       defaultScope: resource,
     });
-    const second = await store.appendFact({
+    const second = await store.appendItem({
       id: '01J00000000000000000000001',
-      parentEntityId: entity.id,
+      parentNodeId: node.id,
       text: 'second',
       scope: resource,
       sourceThreadId: 't1',
@@ -204,12 +209,11 @@ describe('InMemoryKnowledgeStorage', () => {
       defaultScope: resource,
     });
 
-    const pageOne = await store.factsAbout({ entityId: entity.id, scope: thread, limit: 1 });
-    expect(pageOne.facts[0]?.id).toBe(second.id);
-    expect(pageOne.nextCursor).toBe(second.id);
+    const nodeOne = await store.itemsAbout({ nodeId: node.id, scope: thread, limit: 1 });
+    expect(nodeOne.items[0]?.id).toBe(second.id);
+    expect(nodeOne.nextCursor).toBe(second.id);
     expect(
-      (await store.factsAbout({ entityId: entity.id, scope: thread, limit: 1, after: pageOne.nextCursor })).facts[0]
-        ?.id,
+      (await store.itemsAbout({ nodeId: node.id, scope: thread, limit: 1, after: nodeOne.nextCursor })).items[0]?.id,
     ).toBe(first.id);
 
     const claimed = await store.claimSemanticOutbox({ workerId: 'one', limit: 1, now: new Date('2026-07-01') });
@@ -229,39 +233,44 @@ describe('InMemoryKnowledgeStorage', () => {
 
   it('keeps semantic outbox operations idempotent', async () => {
     const store = createStore();
-    const entity = await store.createEntity({ name: 'Deploy', kind: 'task', scope: resource });
-    const fact = await store.appendFact({
-      parentEntityId: entity.id,
+    const node = await store.createNode({ name: 'Deploy', kind: 'task', scope: resource });
+    const item = await store.appendItem({
+      parentNodeId: node.id,
       text: 'detail',
       scope: resource,
       sourceThreadId: 't1',
       resolutionScope: thread,
       defaultScope: resource,
     });
-    await store.removeFact({ id: fact.id, deletedBy: 'curator' });
+    await store.removeItem({ id: item.id, deletedBy: 'curator' });
     const count = (await store.listSemanticOutbox()).length;
-    await store.removeFact({ id: fact.id, deletedBy: 'curator' });
+    await store.removeItem({ id: item.id, deletedBy: 'curator' });
     expect(await store.listSemanticOutbox()).toHaveLength(count);
   });
 
-  it('searches visible graph and page content while excluding deleted facts', async () => {
+  it('searches visible graph and node content while excluding deleted items', async () => {
     const store = createStore();
-    const entity = await store.createEntity({ name: 'Deploy', kind: 'task', scope: resource });
-    const fact = await store.appendFact({
-      parentEntityId: entity.id,
+    const node = await store.createNode({ name: 'Deploy', kind: 'task', scope: resource });
+    const item = await store.appendItem({
+      parentNodeId: node.id,
       text: 'Use the release checklist',
       scope: thread,
       sourceThreadId: 't1',
       resolutionScope: thread,
       defaultScope: resource,
     });
-    await store.createPage({ name: 'Runbook', body: 'Release checklist details', scope: resource });
+    await store.createNode({
+      kind: 'document',
+      name: 'Runbook',
+      content: 'Release checklist details',
+      scope: resource,
+    });
 
     expect((await store.search({ query: 'release', scope: thread })).map(result => result.type)).toEqual([
-      'page',
-      'fact',
+      'node',
+      'item',
     ]);
-    await store.removeFact({ id: fact.id, deletedBy: 'curator' });
-    expect((await store.search({ query: 'release', scope: thread })).map(result => result.type)).toEqual(['page']);
+    await store.removeItem({ id: item.id, deletedBy: 'curator' });
+    expect((await store.search({ query: 'release', scope: thread })).map(result => result.type)).toEqual(['node']);
   });
 });

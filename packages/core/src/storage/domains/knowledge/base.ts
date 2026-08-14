@@ -2,47 +2,42 @@ import { randomBytes } from 'node:crypto';
 
 import { StorageDomain } from '../base';
 
+/** @experimental Knowledge APIs are experimental and may change without notice. */
 export type KnowledgeScope = string[];
+/** @experimental Knowledge APIs are experimental and may change without notice. */
 export type KnowledgeScopeLevel = 'org' | 'resource' | 'thread';
-export type KnowledgeRecordType = 'entity' | 'page';
-export type KnowledgeSemanticDocumentType = KnowledgeRecordType | 'fact';
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export type KnowledgeSemanticDocumentType = 'node' | 'item';
+/** @experimental Knowledge APIs are experimental and may change without notice. */
 export type KnowledgeSemanticOperation = 'upsert' | 'delete';
+/** @experimental Knowledge APIs are experimental and may change without notice. */
 export type KnowledgeActivityAction =
-  | 'entity-created'
-  | 'entity-updated'
-  | 'entity-merged'
-  | 'page-created'
-  | 'page-updated'
-  | 'fact-created'
-  | 'fact-deleted'
-  | 'fact-restored'
-  | 'fact-rescoped';
+  | 'node-created'
+  | 'node-updated'
+  | 'node-merged'
+  | 'item-created'
+  | 'item-deleted'
+  | 'item-restored'
+  | 'item-rescoped';
 
-export interface KnowledgeRecordBase {
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeNode {
   id: string;
+  type: 'node';
   name: string;
+  kind: string;
+  content?: string;
   scope: KnowledgeScope;
   version: number;
+  mergedInto?: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
-export interface KnowledgeEntity extends KnowledgeRecordBase {
-  type: 'entity';
-  kind: string;
-  mergedInto?: string;
-}
-
-export interface KnowledgePage extends KnowledgeRecordBase {
-  type: 'page';
-  body: string;
-}
-
-export type KnowledgeRecord = KnowledgeEntity | KnowledgePage;
-
-export interface KnowledgeFact {
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeItem {
   id: string;
-  parentEntityId: string;
+  parentNodeId: string;
   text: string;
   scope: KnowledgeScope;
   sourceThreadId: string;
@@ -53,19 +48,22 @@ export interface KnowledgeFact {
   deletedBy?: string;
 }
 
+/** @experimental Knowledge APIs are experimental and may change without notice. */
 export interface KnowledgeMention {
-  sourceType: 'fact' | 'page';
+  sourceType: 'item' | 'node';
   sourceId: string;
   recordId: string;
 }
 
+/** @experimental Knowledge APIs are experimental and may change without notice. */
 export interface KnowledgeCurationCursor {
   sourceThreadId: string;
   agent: string;
-  lastFactId: string;
+  lastItemId: string;
   updatedAt: Date;
 }
 
+/** @experimental Knowledge APIs are experimental and may change without notice. */
 export interface KnowledgeActivityEvent {
   id: string;
   action: KnowledgeActivityAction;
@@ -76,6 +74,7 @@ export interface KnowledgeActivityEvent {
   createdAt: Date;
 }
 
+/** @experimental Knowledge APIs are experimental and may change without notice. */
 export interface KnowledgeSemanticOutboxEntry {
   id: string;
   idempotencyKey: string;
@@ -92,40 +91,31 @@ export interface KnowledgeSemanticOutboxEntry {
   completedAt?: Date;
 }
 
-export interface CreateKnowledgeEntityInput {
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface CreateKnowledgeNodeInput {
   id?: string;
   name: string;
   kind: string;
+  content?: string;
   scope: KnowledgeScope;
+  resolutionScope?: KnowledgeScope;
 }
 
-export interface UpdateKnowledgeEntityInput {
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface UpdateKnowledgeNodeInput {
   id: string;
   version: number;
   name?: string;
   kind?: string;
-  scope?: KnowledgeScope;
-}
-
-export interface CreateKnowledgePageInput {
-  id?: string;
-  name: string;
-  body: string;
-  scope: KnowledgeScope;
-}
-
-export interface UpdateKnowledgePageInput {
-  id: string;
-  version: number;
-  name?: string;
-  body?: string;
+  content?: string;
   scope?: KnowledgeScope;
   resolutionScope?: KnowledgeScope;
 }
 
-export interface AppendKnowledgeFactInput {
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface AppendKnowledgeItemInput {
   id?: string;
-  parentEntityId: string;
+  parentNodeId: string;
   text: string;
   scope: KnowledgeScope;
   sourceThreadId: string;
@@ -135,23 +125,27 @@ export interface AppendKnowledgeFactInput {
   defaultScope: KnowledgeScope;
 }
 
-export interface ListKnowledgeRecordsInput {
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface ListKnowledgeNodesInput {
   scope: KnowledgeScope;
   namePrefix?: string;
   kind?: string;
+  hasContent?: boolean;
   limit?: number;
 }
 
-export interface ListKnowledgeFactsInput {
-  entityId: string;
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface ListKnowledgeItemsInput {
+  nodeId: string;
   scope: KnowledgeScope;
   after?: string;
   limit?: number;
   includeDeleted?: boolean;
 }
 
-export interface ListKnowledgeFactsOutput {
-  facts: KnowledgeFact[];
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface ListKnowledgeItemsOutput {
+  items: KnowledgeItem[];
   nextCursor?: string;
 }
 
@@ -323,44 +317,35 @@ export function knowledgeSemanticIdempotencyKey(
   return `${documentId}:${operation}:${version}`;
 }
 
+/** @experimental Knowledge APIs are experimental and may change without notice. */
 export abstract class KnowledgeStorage extends StorageDomain {
   constructor() {
     super({ component: 'STORAGE', name: 'KNOWLEDGE' });
   }
 
-  abstract createEntity(input: CreateKnowledgeEntityInput): Promise<KnowledgeEntity>;
-  abstract getEntity(id: string): Promise<KnowledgeEntity | null>;
-  abstract getEntityByName(input: { name: string; scope: KnowledgeScope }): Promise<KnowledgeEntity | null>;
-  abstract resolveEntity(input: { name: string; scope: KnowledgeScope }): Promise<KnowledgeEntity | null>;
-  abstract listEntities(input: ListKnowledgeRecordsInput): Promise<KnowledgeEntity[]>;
-  abstract updateEntity(input: UpdateKnowledgeEntityInput): Promise<KnowledgeEntity>;
-  abstract mergeEntities(input: {
-    sourceId: string;
-    targetId: string;
-    sourceVersion: number;
-  }): Promise<KnowledgeEntity>;
+  abstract createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode>;
+  abstract getNode(id: string): Promise<KnowledgeNode | null>;
+  abstract getNodeByName(input: { name: string; scope: KnowledgeScope }): Promise<KnowledgeNode | null>;
+  abstract resolveNode(input: { name: string; scope: KnowledgeScope }): Promise<KnowledgeNode | null>;
+  abstract listNodes(input: ListKnowledgeNodesInput): Promise<KnowledgeNode[]>;
+  abstract updateNode(input: UpdateKnowledgeNodeInput): Promise<KnowledgeNode>;
+  abstract mergeNodes(input: { sourceId: string; targetId: string; sourceVersion: number }): Promise<KnowledgeNode>;
 
-  abstract createPage(input: CreateKnowledgePageInput): Promise<KnowledgePage>;
-  abstract getPage(id: string): Promise<KnowledgePage | null>;
-  abstract getPageByName(input: { name: string; scope: KnowledgeScope }): Promise<KnowledgePage | null>;
-  abstract listPages(input: Omit<ListKnowledgeRecordsInput, 'kind'>): Promise<KnowledgePage[]>;
-  abstract updatePage(input: UpdateKnowledgePageInput): Promise<KnowledgePage>;
-
-  abstract appendFact(input: AppendKnowledgeFactInput): Promise<KnowledgeFact>;
-  abstract getFact(input: { id: string; includeDeleted?: boolean }): Promise<KnowledgeFact | null>;
-  abstract factsAbout(input: ListKnowledgeFactsInput): Promise<ListKnowledgeFactsOutput>;
-  abstract factsTouching(input: ListKnowledgeFactsInput): Promise<ListKnowledgeFactsOutput>;
-  abstract removeFact(input: { id: string; deletedBy: string }): Promise<KnowledgeFact>;
-  abstract restoreFact(input: { id: string }): Promise<KnowledgeFact>;
-  abstract rescopeFact(input: { id: string; scope: KnowledgeScope }): Promise<KnowledgeFact>;
-  abstract raiseCeiling(input: { id: string; maxScope?: KnowledgeScopeLevel }): Promise<KnowledgeFact>;
+  abstract appendItem(input: AppendKnowledgeItemInput): Promise<KnowledgeItem>;
+  abstract getItem(input: { id: string; includeDeleted?: boolean }): Promise<KnowledgeItem | null>;
+  abstract itemsAbout(input: ListKnowledgeItemsInput): Promise<ListKnowledgeItemsOutput>;
+  abstract itemsTouching(input: ListKnowledgeItemsInput): Promise<ListKnowledgeItemsOutput>;
+  abstract removeItem(input: { id: string; deletedBy: string }): Promise<KnowledgeItem>;
+  abstract restoreItem(input: { id: string }): Promise<KnowledgeItem>;
+  abstract rescopeItem(input: { id: string; scope: KnowledgeScope }): Promise<KnowledgeItem>;
+  abstract raiseCeiling(input: { id: string; maxScope?: KnowledgeScopeLevel }): Promise<KnowledgeItem>;
 
   abstract search(input: SearchKnowledgeInput): Promise<SearchKnowledgeResult[]>;
   abstract getCurationCursor(input: { sourceThreadId: string; agent: string }): Promise<KnowledgeCurationCursor | null>;
   abstract advanceCurationCursor(input: {
     sourceThreadId: string;
     agent: string;
-    lastFactId: string;
+    lastItemId: string;
   }): Promise<KnowledgeCurationCursor>;
   abstract listActivity(input: {
     scope: KnowledgeScope;
