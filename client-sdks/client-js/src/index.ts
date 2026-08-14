@@ -3,6 +3,12 @@ export * from './client';
 export * from './types';
 export * from './tools';
 export type {
+  ListPulseFlowsParams,
+  ListPulseFlowsResponse,
+  GetPulseFlowResponse,
+  GetPulseFlowTimelineResponse,
+} from './resources/pulse';
+export type {
   ChannelPlatformInfo,
   ChannelInstallationInfo,
   ChannelConnectOAuth,
