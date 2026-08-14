@@ -40,6 +40,7 @@ function toDatasetItem(version: DatasetItemVersion, datasetId: string, itemId: s
     groundTruth: version.groundTruth,
     expectedTrajectory: version.expectedTrajectory,
     toolMocks: version.toolMocks,
+    scorerIds: version.scorerIds,
     timeout: version.timeout,
     requestContext: version.requestContext,
     metadata: version.metadata,

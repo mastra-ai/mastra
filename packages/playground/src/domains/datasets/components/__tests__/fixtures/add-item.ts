@@ -19,3 +19,13 @@ export const createdDatasetItemWithTimeout = {
   ...createdDatasetItem,
   timeout: 15_000,
 } satisfies DatasetItem;
+
+export const createdDatasetItemWithScorers = {
+  ...createdDatasetItemWithoutMocks,
+  scorerIds: ['stored-judge'],
+} satisfies DatasetItem;
+
+export const createdDatasetItemWithEmptyScorers = {
+  ...createdDatasetItemWithoutMocks,
+  scorerIds: [],
+} satisfies DatasetItem;

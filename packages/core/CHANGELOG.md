@@ -1,5 +1,23 @@
 # @mastra/core
 
+## 1.60.0-alpha.3
+
+### Minor Changes
+
+- Added live-tail PubSub subscriptions with `startFrom: "latest"` and an explicit `supportsOffsets` capability. ([#21535](https://github.com/mastra-ai/mastra/pull/21535))
+
+  ```typescript
+  await pubsub.subscribe(topic, callback, { startFrom: 'latest' });
+  ```
+
+  The default remains `"earliest"`, and existing consumer groups keep their checkpoint.
+
+### Patch Changes
+
+- Fixed automatic tool resumption so approval-gated tools require an explicit trusted approval decision and remain suspended for ambiguous input. ([#21539](https://github.com/mastra-ai/mastra/pull/21539))
+
+- Fixed MCP-exposed agents so nested tools receive elicitation and other MCP context. (#20549) ([#21548](https://github.com/mastra-ai/mastra/pull/21548))
+
 ## 1.60.0-alpha.2
 
 ### Minor Changes

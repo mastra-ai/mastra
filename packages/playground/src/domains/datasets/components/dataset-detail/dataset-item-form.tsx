@@ -11,6 +11,7 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { MAX_EXPERIMENT_ITEM_TIMEOUT_MS } from '../../constants';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
+import { DatasetItemScorerSelector } from './dataset-item-scorer-selector';
 
 interface SchemaValidationError {
   field: 'input' | 'groundTruth' | 'toolMocks';
@@ -63,6 +64,10 @@ export interface EditModeContentProps {
   setTrajectoryValue: (value: string) => void;
   toolMocksValue: string;
   setToolMocksValue: (value: string) => void;
+  scorerOverrideEnabled: boolean;
+  setScorerOverrideEnabled: (enabled: boolean) => void;
+  selectedScorerIds: string[];
+  setSelectedScorerIds: (scorerIds: string[]) => void;
   requestContextValue: string;
   setRequestContextValue: (value: string) => void;
   validationErrors: SchemaValidationError | null;
@@ -83,6 +88,10 @@ export function EditModeContent({
   setTrajectoryValue,
   toolMocksValue,
   setToolMocksValue,
+  scorerOverrideEnabled,
+  setScorerOverrideEnabled,
+  selectedScorerIds,
+  setSelectedScorerIds,
   requestContextValue,
   setRequestContextValue,
   validationErrors,
@@ -147,6 +156,14 @@ export function EditModeContent({
           )}
         </div>
 
+        <DatasetItemScorerSelector
+          overrideEnabled={scorerOverrideEnabled}
+          onOverrideEnabledChange={setScorerOverrideEnabled}
+          selectedScorerIds={selectedScorerIds}
+          onSelectedScorerIdsChange={setSelectedScorerIds}
+          disabled={isSaving}
+        />
+
         {children}
 
         <div className="space-y-2">
@@ -198,6 +215,8 @@ export function DatasetItemEditForm({ item, onSuccess, onCancel }: DatasetItemEd
   const [toolMocksValue, setToolMocksValue] = useState(() =>
     item.toolMocks?.length ? JSON.stringify(item.toolMocks, null, 2) : '',
   );
+  const [scorerOverrideEnabled, setScorerOverrideEnabled] = useState(() => item.scorerIds !== undefined);
+  const [selectedScorerIds, setSelectedScorerIds] = useState(() => item.scorerIds ?? []);
   const [timeoutValue, setTimeoutValue] = useState(() => item.timeout?.toString() ?? '');
   const [requestContextValue, setRequestContextValue] = useState(() => formatOptionalJson(item.requestContext));
   const [validationErrors, setValidationErrors] = useState<SchemaValidationError | null>(null);
@@ -287,6 +306,13 @@ export function DatasetItemEditForm({ item, onSuccess, onCancel }: DatasetItemEd
       }
     }
 
+    let scorerIds: string[] | null | undefined;
+    if (scorerOverrideEnabled) {
+      scorerIds = selectedScorerIds;
+    } else if (item.scorerIds !== undefined) {
+      scorerIds = null;
+    }
+
     try {
       await updateItem.mutateAsync({
         datasetId: item.datasetId,
@@ -296,6 +322,7 @@ export function DatasetItemEditForm({ item, onSuccess, onCancel }: DatasetItemEd
         metadata: parsedMetadata,
         expectedTrajectory: parsedTrajectory,
         toolMocks: parsedToolMocks,
+        scorerIds,
         timeout: parsedTimeout,
         requestContext: parsedRequestContext,
       });
@@ -346,6 +373,10 @@ export function DatasetItemEditForm({ item, onSuccess, onCancel }: DatasetItemEd
       setTrajectoryValue={setTrajectoryValue}
       toolMocksValue={toolMocksValue}
       setToolMocksValue={handleToolMocksValueChange}
+      scorerOverrideEnabled={scorerOverrideEnabled}
+      setScorerOverrideEnabled={setScorerOverrideEnabled}
+      selectedScorerIds={selectedScorerIds}
+      setSelectedScorerIds={setSelectedScorerIds}
       requestContextValue={requestContextValue}
       setRequestContextValue={setRequestContextValue}
       validationErrors={validationErrors}

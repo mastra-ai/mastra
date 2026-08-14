@@ -15,6 +15,7 @@ import {
   FileInputIcon,
   FileOutputIcon,
   History,
+  ListChecksIcon,
   Pencil,
   RouteIcon,
   TagIcon,
@@ -171,6 +172,13 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
                   title="Tool Mocks"
                   icon={<WrenchIcon />}
                   codeStr={JSON.stringify(item.toolMocks ?? [], null, 2)}
+                />
+                <DataPanel.CodeSection
+                  title="Scorers"
+                  icon={<ListChecksIcon />}
+                  codeStr={
+                    item.scorerIds === undefined ? 'Inherited from dataset' : JSON.stringify(item.scorerIds, null, 2)
+                  }
                 />
                 {item.requestContext != null && (
                   <DataPanel.CodeSection

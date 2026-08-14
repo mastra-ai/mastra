@@ -18,3 +18,13 @@ export const itemWithTimeout = {
   ...baseItem,
   timeout: 15_000,
 } satisfies DatasetItem;
+
+export const itemWithScorers = {
+  ...baseItem,
+  scorerIds: ['quality'],
+} satisfies DatasetItem;
+
+export const itemWithEmptyScorers = {
+  ...baseItem,
+  scorerIds: [],
+} satisfies DatasetItem;

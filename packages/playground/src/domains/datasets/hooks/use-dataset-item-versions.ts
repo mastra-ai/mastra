@@ -10,6 +10,7 @@ export interface DatasetItemVersion {
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
   toolMocks?: DatasetItemToolMock[];
+  scorerIds?: string[];
   timeout?: number;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
@@ -40,6 +41,7 @@ export const useDatasetItemVersions = (datasetId: string, itemId: string) => {
           groundTruth: version.groundTruth,
           expectedTrajectory: version.expectedTrajectory,
           toolMocks: version.toolMocks,
+          scorerIds: version.scorerIds,
           timeout: version.timeout,
           metadata: version.metadata,
           validTo: version.validTo,
@@ -78,6 +80,7 @@ export const useDatasetItemVersion = (
         groundTruth: v.groundTruth,
         expectedTrajectory: v.expectedTrajectory,
         toolMocks: v.toolMocks,
+        scorerIds: v.scorerIds,
         timeout: v.timeout,
         metadata: v.metadata,
         validTo: v.validTo ?? null,
