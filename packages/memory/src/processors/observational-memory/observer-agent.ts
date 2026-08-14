@@ -303,8 +303,9 @@ export const OBSERVER_OUTPUT_FORMAT_BASE = buildObserverOutputFormat();
  * Build the Observer's output format.
  *
  * `extractors` distinguishes two cases that both look empty:
- * - `undefined` — the caller is on the legacy path and never opted into extractors, so the
- *   built-in continuation sections are described inline.
+ * - `undefined` — the no-arg call behind the exported defaults (OBSERVER_OUTPUT_FORMAT_BASE,
+ *   OBSERVER_SYSTEM_PROMPT, REFLECTOR_SYSTEM_PROMPT), which keep describing both built-in
+ *   sections with their historical text. Runtime callers always pass the composed list.
  * - `[]` — the caller composed extractors and every section was disabled, so no continuation
  *   sections are described at all.
  */
@@ -382,7 +383,7 @@ export const OBSERVER_GUIDELINES = `- Be specific enough for the assistant to ac
  * @param instruction - Optional custom instructions to append to the prompt
  * @param includeThreadTitle - Whether the Observer should also produce a thread title
  * @param extractors - Active extractors, used to decide which sections the prompt describes.
- *   Omit entirely for the legacy path; pass `[]` to describe no continuation sections at all.
+ *   Omitted only by the exported no-arg defaults; pass `[]` to describe no continuation sections at all.
  */
 export function buildObserverSystemPrompt(
   multiThread: boolean = false,
@@ -392,8 +393,8 @@ export function buildObserverSystemPrompt(
 ): string {
   const outputFormat = buildObserverOutputFormat(extractors);
   const customInstructions = instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : '';
-  // `undefined` extractors = legacy caller that never opted into extractors; both built-in
-  // continuation sections stay enabled on that path.
+  // Runtime callers always pass the composed extractor list; `undefined` only occurs through
+  // the exported no-arg defaults (e.g. OBSERVER_SYSTEM_PROMPT), which keep both built-in sections.
   const currentTaskEnabled =
     extractors === undefined || extractors.some(extractor => extractor.slug === 'current-task');
   const suggestedResponseEnabled =

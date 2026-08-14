@@ -41,8 +41,8 @@ export interface ReflectorResult extends BaseReflectorResult {
 export function buildReflectorSystemPrompt(instruction?: string, extractors?: readonly Extractor<any>[]): string {
   const outputFormat = buildObserverOutputFormat(extractors);
   const customInstructions = instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : '';
-  // `undefined` extractors = legacy caller that never opted into extractors; both built-in
-  // continuation sections stay enabled on that path.
+  // Runtime callers always pass the composed extractor list; `undefined` only occurs through
+  // the exported no-arg default (REFLECTOR_SYSTEM_PROMPT), which keeps both built-in sections.
   const currentTaskEnabled =
     extractors === undefined || extractors.some(extractor => extractor.slug === 'current-task');
   const suggestedResponseEnabled =
