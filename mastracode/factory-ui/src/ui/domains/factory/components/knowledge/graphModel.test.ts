@@ -90,6 +90,18 @@ describe('filterGraph', () => {
     expect(result.nodes.map(node => node.id)).toEqual(['res-pinned']);
     expect(result.edges).toHaveLength(0);
   });
+
+  it('pin filter keeps the endpoints of a pinned edge (A9: pins mark relationships)', () => {
+    const pinnedEdge: KnowledgeGraphEdge = { ...edge('org-1', 'res-1'), pinned: true };
+    const result = filterGraph(nodes, [pinnedEdge], { rungs: new Set(), pinnedOnly: true });
+    expect(result.nodes.map(node => node.id).sort()).toEqual(['org-1', 'res-1', 'res-pinned']);
+    expect(result.edges).toEqual([pinnedEdge]);
+  });
+
+  it('maps the pinned flag onto flow edges (A9)', () => {
+    const flow = toFlowGraph(nodes, [{ ...edge('org-1', 'res-1'), pinned: true }, edge('res-1', 'res-pinned')]);
+    expect(flow.edges.map(e => e.data?.pinned)).toEqual([true, false]);
+  });
 });
 
 describe('egoGraph (Amendment A5)', () => {

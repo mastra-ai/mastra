@@ -75,9 +75,18 @@ export function filterGraph(
   edges: KnowledgeGraphEdge[],
   filters: KnowledgeGraphFilters,
 ): { nodes: KnowledgeGraphNode[]; edges: KnowledgeGraphEdge[] } {
+  // A9: pins live on nodes (single-target pins) AND edges (relationship
+  // pins) — the pin filter keeps both kinds' entities.
+  const pinnedEdgeIds = new Set<string>();
+  for (const edge of edges) {
+    if (edge.pinned) {
+      pinnedEdgeIds.add(edge.source);
+      pinnedEdgeIds.add(edge.target);
+    }
+  }
   const keep = (node: KnowledgeGraphNode): boolean => {
     if (filters.rungs.size > 0 && !filters.rungs.has(node.rung)) return false;
-    if (filters.pinnedOnly && !node.pinned) return false;
+    if (filters.pinnedOnly && !node.pinned && !pinnedEdgeIds.has(node.id)) return false;
     return true;
   };
   const kept = nodes.filter(keep);
@@ -114,7 +123,7 @@ export type EntityFlowNode = Node<{
   focused: boolean;
 }>;
 
-export type KnowledgeFlowEdge = Edge<{ factId: string; linkType: 'wikilink' }>;
+export type KnowledgeFlowEdge = Edge<{ factId: string; linkType: 'wikilink'; pinned: boolean }>;
 
 /**
  * Map an (already filtered) payload slice into React Flow nodes/edges.
@@ -159,7 +168,7 @@ export function toFlowGraph(
       source: edge.source,
       target: edge.target,
       type: 'knowledgeLink',
-      data: { factId: edge.factId, linkType: edge.type },
+      data: { factId: edge.factId, linkType: edge.type, pinned: edge.pinned ?? false },
     })),
   };
 }

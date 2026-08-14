@@ -226,6 +226,9 @@ describe('KnowledgePage', () => {
     expect(await screen.findByText(/for charging flows/)).toBeInTheDocument();
     expect(flyout).toHaveTextContent('Payments Service');
     expect(screen.getByRole('button', { name: 'Deploy Runbook' })).toBeInTheDocument();
+    // A10: the pinned memory card carries the amber standout marker.
+    const memories = screen.getAllByTestId('knowledge-memory');
+    expect(memories.some(card => card.getAttribute('data-pinned') === 'true')).toBe(true);
     // Drill into the pinned memory → provenance + reasoning.
     await user.click(screen.getByText(/for charging flows/));
     const detail = await screen.findByTestId('knowledge-memory-detail');
