@@ -29,10 +29,14 @@ const COLLAPSED_ROW_COUNT = 5;
 const byPinnedThenRecent = (a: FactoryWorkspaceRow, b: FactoryWorkspaceRow) =>
   Number(b.pinned) - Number(a.pinned) || b.updatedAt.localeCompare(a.updatedAt);
 
-// Rows the user must not lose sight of: they outrank ordinary rows for the
-// visible slots.
-const mustStayVisible = (row: FactoryWorkspaceRow | undefined) =>
-  Boolean(row && (row.active || row.initializing || row.running || row.attention));
+const stillUnfolding = (row: FactoryWorkspaceRow) => row.active || row.initializing || row.running || row.attention;
+
+// Who keeps one of the collapsed slots. A pin is an explicit request, so it wins
+// over a session that merely happens to be busy.
+const bySlotPriority = (a: FactoryWorkspaceRow, b: FactoryWorkspaceRow) =>
+  Number(b.pinned) - Number(a.pinned) ||
+  Number(stillUnfolding(b)) - Number(stillUnfolding(a)) ||
+  b.updatedAt.localeCompare(a.updatedAt);
 
 function workspaceStatus(row: FactoryWorkspaceRow): SessionRowStatus | undefined {
   // An active thread means work is happening even if the workspace record has
@@ -116,17 +120,9 @@ export function WorkspacesSection() {
   });
   const latestRows = (review: boolean) => {
     const all = rows.filter(row => row.review === review).sort(byPinnedThenRecent);
-    const visible = all.slice(0, COLLAPSED_ROW_COUNT);
-    // The cap holds: a protected row takes an ordinary row's slot, and is only
-    // left out once every slot is already protected.
-    for (const protectedRow of all.slice(COLLAPSED_ROW_COUNT).filter(mustStayVisible)) {
-      let replaceIndex = visible.length - 1;
-      while (replaceIndex >= 0 && mustStayVisible(visible[replaceIndex])) {
-        replaceIndex -= 1;
-      }
-      if (replaceIndex >= 0) visible[replaceIndex] = protectedRow;
-    }
-    return { visible: visible.sort(byPinnedThenRecent), all };
+    // The cap holds either way — priority only decides which rows fill the slots.
+    const visible = [...all].sort(bySlotPriority).slice(0, COLLAPSED_ROW_COUNT).sort(byPinnedThenRecent);
+    return { visible, all };
   };
   const workRows = latestRows(false);
   const reviewRows = latestRows(true);

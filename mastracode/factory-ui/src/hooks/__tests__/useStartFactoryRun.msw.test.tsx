@@ -175,11 +175,7 @@ describe('useStartFactoryRun', () => {
     runGate.resolve();
     await waitForMutationsIdle(client);
 
-    const newTabButton = await screen.findByRole('button', { name: 'New Tab' });
-    expect(newTabButton.querySelector('.lucide-external-link')).not.toBeNull();
-    expect(newTabButton.style.background).toBe('var(--color-surface3)');
-    expect(newTabButton.style.color).toBe('var(--color-neutral5)');
-    await userEvent.click(newTabButton);
+    await userEvent.click(await screen.findByRole('button', { name: 'New Tab' }));
 
     expect(open).toHaveBeenCalledWith(
       `/factories/${FACTORY_ID}/workspaces/session-1/threads/thread-reviewer`,

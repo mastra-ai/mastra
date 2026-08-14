@@ -1,7 +1,7 @@
 import { screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
@@ -74,6 +74,10 @@ function renderSection() {
 }
 
 describe('Workspace sidebar visibility', () => {
+  beforeEach(() => {
+    localStorage.removeItem('mastracode.pinnedSessions');
+  });
+
   it('keeps a session that has not materialized yet visible past the five-row cut', async () => {
     const sessions = [1, 2, 3, 4, 5].map(index => makeSession(index));
     stubSessions([...sessions, makeSession(6, { materializedAt: null })]);
@@ -83,5 +87,17 @@ describe('Workspace sidebar visibility', () => {
 
     expect(await screen.findByRole('button', { name: 'factory/task-6' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Show 1 more' })).toBeInTheDocument();
+  });
+
+  it('never drops a pinned session to make room for a busy one', async () => {
+    const busy = [1, 2, 3, 4, 6].map(index => makeSession(index, { materializedAt: null }));
+    stubSessions([...busy, makeSession(5)]);
+    localStorage.setItem('mastracode.pinnedSessions', JSON.stringify(['work-session-5']));
+
+    const { client } = renderSection();
+    await waitForMutationsIdle(client);
+
+    expect(await screen.findByRole('button', { name: 'factory/task-5' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'factory/task-6' })).not.toBeInTheDocument();
   });
 });

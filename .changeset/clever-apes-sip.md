@@ -9,3 +9,4 @@ Added Factory session state to browser tabs and the sidebar, so a running sessio
 - Failures show on the favicon only; the sidebar has no error dot yet.
 - Tab titles show the session's identifier — `#1567` for GitHub pull requests and issues, `COR-210` for Linear — or the thread title for user sessions.
 - Board kickoff toasts gained a **New Tab** action, so a ready session opens without leaving the board.
+- Fixed a pinned session losing its sidebar slot when five other sessions were busy at once.
