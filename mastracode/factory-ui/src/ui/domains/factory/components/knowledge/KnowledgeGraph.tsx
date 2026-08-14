@@ -463,7 +463,15 @@ function KnowledgeGraphInner({
         onPaneClick={() => setFocusedId(null)}
         onEdgeClick={(_, edge) => {
           const flowEdge = edge as KnowledgeFlowEdge;
-          onEdgeClick?.({ source: flowEdge.source, target: flowEdge.target, factId: flowEdge.data?.factId ?? '' });
+          // Stub/spoke edges have a `mem:` marker on one end — the flyout
+          // needs the ENTITY end, never the synthetic memory node id.
+          const entityEnd = !flowEdge.source.startsWith('mem:')
+            ? flowEdge.source
+            : !flowEdge.target.startsWith('mem:')
+              ? flowEdge.target
+              : null;
+          if (!entityEnd) return;
+          onEdgeClick?.({ source: entityEnd, target: flowEdge.target, factId: flowEdge.data?.factId ?? '' });
         }}
         onNodeMouseEnter={(event, node) =>
           node.type === 'knowledgeMemory'
