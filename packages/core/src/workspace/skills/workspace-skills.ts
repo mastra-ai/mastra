@@ -89,6 +89,10 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   readonly #assertAvailable?: () => void;
   readonly #checkSkillFileMtime: boolean;
 
+  /** Request-scoped views for dynamic resolvers, cached by request and canonical path set. */
+  readonly #scopedByRequest = new WeakMap<object, Promise<WorkspaceSkills>>();
+  readonly #scopedByPaths = new Map<string, Promise<WorkspaceSkills>>();
+
   /** Map of skill name -> array of candidates (supports same-named skills from different sources) */
   #skills: Map<string, InternalSkill[]> = new Map();
 
@@ -120,6 +124,47 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     this.#validateOnLoad = config.validateOnLoad ?? true;
     this.#assertAvailable = config.assertAvailable;
     this.#checkSkillFileMtime = config.checkSkillFileMtime ?? false;
+  }
+
+  async getScoped(context?: SkillsContext): Promise<WorkspaceSkills> {
+    if (Array.isArray(this.#skillsResolver)) {
+      return this;
+    }
+
+    const requestContext = context?.requestContext;
+    if (requestContext && typeof requestContext === 'object') {
+      const cached = this.#scopedByRequest.get(requestContext);
+      if (cached) return cached;
+
+      const scoped = this.#createScoped(context).catch(error => {
+        this.#scopedByRequest.delete(requestContext);
+        throw error;
+      });
+      this.#scopedByRequest.set(requestContext, scoped);
+      return scoped;
+    }
+
+    return this.#createScoped(context);
+  }
+
+  async #createScoped(context?: SkillsContext): Promise<WorkspaceSkills> {
+    const paths = await this.#resolvePaths(context);
+    const key = [...paths].sort().join('\n');
+    const cached = this.#scopedByPaths.get(key);
+    if (cached) return cached;
+
+    const scoped = Promise.resolve<WorkspaceSkills>(
+      new WorkspaceSkillsImpl({
+        source: this.#source,
+        skills: paths,
+        searchEngine: this.#searchEngine,
+        validateOnLoad: this.#validateOnLoad,
+        assertAvailable: this.#assertAvailable,
+        checkSkillFileMtime: this.#checkSkillFileMtime,
+      }),
+    );
+    this.#scopedByPaths.set(key, scoped);
+    return scoped;
   }
 
   // ===========================================================================

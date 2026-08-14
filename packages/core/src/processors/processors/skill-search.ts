@@ -237,11 +237,15 @@ export class SkillSearchProcessor implements Processor<'skill-search'> {
     const { tools, messageList } = args;
     const threadId = this.getThreadId(args);
     const threadState = this.getThreadState(threadId);
-    const skills = this.skills;
+    const configuredSkills = this.skills;
 
-    if (!skills) {
+    if (!configuredSkills) {
       return { tools };
     }
+
+    const skills = configuredSkills.getScoped
+      ? await configuredSkills.getScoped({ requestContext: args.requestContext })
+      : configuredSkills;
 
     // Refresh skills on first step only
     if (args.stepNumber === 0) {
