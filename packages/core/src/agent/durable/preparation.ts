@@ -674,6 +674,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       : undefined,
     workspace,
     requestContext,
+    mcp: execOptions?.mcp,
     inputProcessors,
     llmRequestInputProcessors,
     outputProcessors,
