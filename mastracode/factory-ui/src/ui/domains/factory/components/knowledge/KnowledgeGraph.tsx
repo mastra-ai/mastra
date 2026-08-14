@@ -6,7 +6,20 @@
  * shows a summary card. Dragging a node re-pins it (the layout keeps it put).
  */
 
-import { Background, BackgroundVariant, BaseEdge, Controls, Handle, MiniMap, Position, ReactFlow, ReactFlowProvider, useInternalNode, useReactFlow, EdgeLabelRenderer } from '@xyflow/react';
+import {
+  Background,
+  BackgroundVariant,
+  BaseEdge,
+  Controls,
+  Handle,
+  MiniMap,
+  Position,
+  ReactFlow,
+  ReactFlowProvider,
+  useInternalNode,
+  useReactFlow,
+  EdgeLabelRenderer,
+} from '@xyflow/react';
 import type { EdgeProps, NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Boxes, Globe, Pin } from 'lucide-react';
@@ -44,7 +57,12 @@ function EntityNodeComponent({ data, selected }: NodeProps<EntityFlowNode>) {
   return (
     // Outer wrapper is unclipped so the pin badge can straddle the rim;
     // only the inner circle clips (it must, to keep the label inside).
-    <div data-testid="knowledge-node" data-entity-id={entity.id} className="relative" style={{ width: size, height: size }}>
+    <div
+      data-testid="knowledge-node"
+      data-entity-id={entity.id}
+      className="relative"
+      style={{ width: size, height: size }}
+    >
       {/* A11: entities never carry pin visuals — pins belong to their memory
           markers (dot / line / junction). */}
       <div
@@ -60,7 +78,7 @@ function EntityNodeComponent({ data, selected }: NodeProps<EntityFlowNode>) {
       >
         {labeled ? (
           <span
-            className="pointer-events-none line-clamp-3 max-w-[78%] leading-tight font-medium break-words text-icon6"
+            className="text-icon6 pointer-events-none line-clamp-3 max-w-[78%] leading-tight font-medium break-words"
             style={{ fontSize: nameSize }}
             title={entity.name}
           >
@@ -227,7 +245,7 @@ function TruncationBanner({ payload }: { payload: KnowledgeGraphPayload }) {
   return (
     <div
       data-testid="knowledge-truncation-banner"
-      className="pointer-events-none absolute top-2 left-1/2 z-10 -translate-x-1/2 rounded-md border border-surface5 bg-surface3/90 px-3 py-1 text-xs text-icon4"
+      className="border-surface5 bg-surface3/90 text-icon4 pointer-events-none absolute top-2 left-1/2 z-10 -translate-x-1/2 rounded-md border px-3 py-1 text-xs"
     >
       Partial view — {parts.join(' · ')}
     </div>
@@ -337,10 +355,19 @@ function KnowledgeGraphInner({
     // layout must re-settle); unchanged data freezes positions hard so
     // polls, filter toggles, and re-renders never rearrange the graph.
     const signature = [
-      payload.nodes.map(node => node.id).sort().join(','),
+      payload.nodes
+        .map(node => node.id)
+        .sort()
+        .join(','),
       memories.length > 0
-        ? memories.map(memory => memory.id).sort().join(',')
-        : payload.edges.map(edge => edge.id).sort().join(','),
+        ? memories
+            .map(memory => memory.id)
+            .sort()
+            .join(',')
+        : payload.edges
+            .map(edge => edge.id)
+            .sort()
+            .join(','),
     ].join('|');
     const dataChanged = signature !== lastSignature.current;
     lastSignature.current = signature;
@@ -465,7 +492,7 @@ function KnowledgeGraphInner({
 
   return (
     <div
-      className="relative h-full w-full overflow-hidden rounded-xl border border-surface5"
+      className="border-surface5 relative h-full w-full overflow-hidden rounded-xl border"
       style={{ background: '#0b0b12' }}
       data-testid="knowledge-graph"
     >
@@ -574,9 +601,7 @@ function KnowledgeGraphInner({
         <GraphHoverCard
           hover={hover}
           nodesById={
-            new Map(
-              nodes.flatMap(node => (node.type === 'knowledgeEntity' ? [[node.id, node as EntityFlowNode]] : [])),
-            )
+            new Map(nodes.flatMap(node => (node.type === 'knowledgeEntity' ? [[node.id, node as EntityFlowNode]] : [])))
           }
         />
       ) : null}
@@ -591,13 +616,13 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
     return (
       <div
         data-testid="knowledge-hover-card"
-        className="pointer-events-none fixed z-50 min-w-48 rounded-lg border border-surface5 bg-surface3 p-3 text-xs shadow-xl"
+        className="border-surface5 bg-surface3 pointer-events-none fixed z-50 min-w-48 rounded-lg border p-3 text-xs shadow-xl"
         style={style}
       >
         <div className="mb-1 flex items-center gap-1.5">
-          <span className="font-semibold text-icon6">{entity.name}</span>
+          <span className="text-icon6 font-semibold">{entity.name}</span>
         </div>
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-icon4">
+        <dl className="text-icon4 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
           <dt>Kind</dt>
           <dd>{entity.kind}</dd>
           <dt>Scope</dt>
@@ -619,14 +644,14 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
     return (
       <div
         data-testid="knowledge-hover-card"
-        className="pointer-events-none fixed z-50 max-w-72 rounded-lg border border-surface5 bg-surface3 p-3 text-xs shadow-xl"
+        className="border-surface5 bg-surface3 pointer-events-none fixed z-50 max-w-72 rounded-lg border p-3 text-xs shadow-xl"
         style={style}
       >
-        <div className="mb-1 flex items-center gap-1.5 text-icon6">
+        <div className="text-icon6 mb-1 flex items-center gap-1.5">
           Memory
           {memory.pinned ? <Pin size={11} className="text-amber-400" aria-label="Pinned" /> : null}
         </div>
-        <div className="leading-relaxed text-icon4">{memory.text}</div>
+        <div className="text-icon4 leading-relaxed">{memory.text}</div>
       </div>
     );
   }
@@ -637,11 +662,11 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
     return (
       <div
         data-testid="knowledge-hover-card"
-        className="pointer-events-none fixed z-50 max-w-72 rounded-lg border border-surface5 bg-surface3 p-3 text-xs shadow-xl"
+        className="border-surface5 bg-surface3 pointer-events-none fixed z-50 max-w-72 rounded-lg border p-3 text-xs shadow-xl"
         style={style}
       >
         <div className="text-icon6">{source && target ? `${source} → ${target}` : 'Memory'}</div>
-        <div className="mt-0.5 leading-relaxed text-icon4">{hover.edge.data?.text ?? 'Mentioned in a memory'}</div>
+        <div className="text-icon4 mt-0.5 leading-relaxed">{hover.edge.data?.text ?? 'Mentioned in a memory'}</div>
       </div>
     );
   }

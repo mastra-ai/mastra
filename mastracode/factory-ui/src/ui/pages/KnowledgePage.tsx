@@ -46,7 +46,7 @@ function Breadcrumb({
   onTrailClick: (index: number) => void;
 }) {
   return (
-    <nav aria-label="Knowledge scope" className="mt-1 flex flex-wrap items-center gap-1 text-xs text-icon3">
+    <nav aria-label="Knowledge scope" className="text-icon3 mt-1 flex flex-wrap items-center gap-1 text-xs">
       <button type="button" className="hover:text-icon5" onClick={onProjectClick}>
         org
       </button>
@@ -66,13 +66,13 @@ function Breadcrumb({
         <span key={`${entry.entityId}-${index}`} className="flex items-center gap-1">
           <ChevronRight size={11} />
           {index === trail.length - 1 ? (
-            <span className="max-w-44 truncate text-icon5" title={entry.name}>
+            <span className="text-icon5 max-w-44 truncate" title={entry.name}>
               {entry.name}
             </span>
           ) : (
             <button
               type="button"
-              className="max-w-44 truncate hover:text-icon5"
+              className="hover:text-icon5 max-w-44 truncate"
               title={entry.name}
               onClick={() => onTrailClick(index)}
             >
@@ -227,10 +227,10 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-4 pt-2" aria-label="Knowledge graph">
       <header className="shrink-0">
-        <Txt as="h1" variant="header-md" className="font-semibold text-icon6">
+        <Txt as="h1" variant="header-md" className="text-icon6 font-semibold">
           Knowledge Graph
         </Txt>
-        <Txt as="p" variant="ui-md" className="mt-1 text-icon3">
+        <Txt as="p" variant="ui-md" className="text-icon3 mt-1">
           Explore entities and the relationships captured by the agent over time.
         </Txt>
         <Breadcrumb

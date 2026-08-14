@@ -82,7 +82,10 @@ export function runLayout(
         }),
     )
     // Tiny memory markers repel gently; entities keep the strong spread.
-    .force('charge', forceManyBody<SimNode>().strength(node => (node.size <= 24 ? -60 : -700)))
+    .force(
+      'charge',
+      forceManyBody<SimNode>().strength(node => (node.size <= 24 ? -60 : -700)),
+    )
     .force(
       'collide',
       forceCollide<SimNode>()
