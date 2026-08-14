@@ -45,50 +45,53 @@ function EntityNodeComponent({ data, selected }: NodeProps<EntityFlowNode>) {
   const nameSize = Math.max(10, Math.min(16, Math.round(size / 9)));
   const glow = Math.round(10 + size / 5);
   return (
-    <div
-      data-testid="knowledge-node"
-      data-entity-id={entity.id}
-      className={[
-        'relative flex flex-col items-center justify-center overflow-hidden rounded-full border-2 text-center transition-shadow duration-200',
-        entity.pinned ? 'border-amber-400/80' : RUNG_RING[entity.rung],
-        selected ? 'ring-2 ring-purple-300' : '',
-      ].join(' ')}
-      style={{
-        width: size,
-        height: size,
-        background: 'radial-gradient(circle at 50% 32%, rgba(124,92,255,0.22), rgba(13,13,22,0.97) 72%)',
-        boxShadow: entity.pinned
-          ? `0 0 ${glow}px rgba(251,191,36,0.35)`
-          : `0 0 ${glow}px rgba(139,92,246,0.35)`,
-      }}
-    >
+    // Outer wrapper is unclipped so the pin badge can straddle the rim;
+    // only the inner circle clips (it must, to keep the label inside).
+    <div data-testid="knowledge-node" data-entity-id={entity.id} className="relative" style={{ width: size, height: size }}>
+      <div
+        className={[
+          'flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-full border-2 text-center transition-shadow duration-200',
+          entity.pinned ? 'border-amber-400/80' : RUNG_RING[entity.rung],
+          selected ? 'ring-2 ring-purple-300' : '',
+        ].join(' ')}
+        style={{
+          background: 'radial-gradient(circle at 50% 32%, rgba(124,92,255,0.22), rgba(13,13,22,0.97) 72%)',
+          boxShadow: entity.pinned
+            ? `0 0 ${glow}px rgba(251,191,36,0.35)`
+            : `0 0 ${glow}px rgba(139,92,246,0.35)`,
+        }}
+      >
+        {labeled ? (
+          <span
+            className="pointer-events-none line-clamp-3 max-w-[78%] leading-tight font-medium break-words text-icon6"
+            style={{ fontSize: nameSize }}
+            title={entity.name}
+          >
+            {entity.name}
+          </span>
+        ) : null}
+        {labeled && large ? (
+          <span className="mt-0.5 text-[9px] font-medium tracking-widest text-purple-300/70 uppercase">
+            {entity.kind.slice(0, 12)}
+          </span>
+        ) : null}
+      </div>
       <Handle type="target" position={Position.Top} className="!invisible" />
       <Handle type="source" position={Position.Bottom} className="!invisible" />
       {entity.pinned ? <PinBadge size={size} /> : null}
-      {labeled ? (
-        <span
-          className="pointer-events-none line-clamp-3 max-w-[78%] leading-tight font-medium break-words text-icon6"
-          style={{ fontSize: nameSize }}
-          title={entity.name}
-        >
-          {entity.name}
-        </span>
-      ) : null}
-      {labeled && large ? (
-        <span className="mt-0.5 text-[9px] font-medium tracking-widest text-purple-300/70 uppercase">
-          {entity.kind.slice(0, 12)}
-        </span>
-      ) : null}
     </div>
   );
 }
 const EntityNode = memo(EntityNodeComponent);
 
 function PinBadge({ size }: { size: number }) {
-  const offset = Math.max(2, Math.round(size * 0.08));
+  // Center the badge ON the rim at the circle's 45° top-left point
+  // (0.1464 × size from each edge); the unclipped wrapper lets it overhang.
+  const BADGE_HALF = 10;
+  const offset = Math.round(size * 0.1464) - BADGE_HALF;
   return (
     <span
-      className="absolute rounded-full bg-amber-400 p-1 text-[#1a1305] shadow-md shadow-amber-500/40"
+      className="absolute z-10 rounded-full bg-amber-400 p-1 text-[#1a1305] shadow-md shadow-amber-500/40"
       style={{ top: offset, left: offset }}
     >
       <Pin size={11} aria-label="Pinned" />
