@@ -44,7 +44,7 @@ Each route's handler receives the Hono `Context`. Within the handler you can acc
 
 ## Schema validation
 
-Use [`createRoute()`](/reference/server/create-route) in `apiRoutes` to parse and validate path parameters, query parameters, and request bodies with Zod. The schemas also infer the handler parameters and generate OpenAPI metadata.
+Use [`createRoute()`](/reference/server/create-route) in `apiRoutes` to parse and validate path and query parameters, along with request bodies, using Zod. The schemas also infer the handler parameters and generate OpenAPI metadata.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'

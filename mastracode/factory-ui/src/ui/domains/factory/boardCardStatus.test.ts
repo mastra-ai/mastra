@@ -11,6 +11,7 @@ function decision(overrides: Partial<FactoryDecisionSummary> = {}): FactoryDecis
     evaluationId: 'evaluation-1',
     workItemId: 'item-1',
     type: 'invokeSkill',
+    role: null,
     status: 'leased',
     attempts: 1,
     lastError: null,

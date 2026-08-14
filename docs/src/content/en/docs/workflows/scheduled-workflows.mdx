@@ -166,7 +166,7 @@ Deploy targets such as Fly Machines, Railway, Render, AWS ECS, GKE, or your own 
 
 ### Serverless platforms
 
-Functions-as-a-service platforms such as Vercel, Netlify, AWS Lambda, and Cloudflare Workers shut the process down after each request. Because the tick loop doesn't get a second tick, schedules declared in code don't fire on these platforms with the built-in scheduler today.
+Functions-as-a-service platforms such as Vercel, Netlify, AWS Lambda, and Cloudflare Workers shut the process down after each request, so the tick loop doesn't get a second tick and schedules declared in code don't fire with the built-in scheduler today.
 
 On these platforms, use [`@mastra/inngest`](#inngest-workflows) instead. Inngest is serverless-native and holds the cron state for you.
 

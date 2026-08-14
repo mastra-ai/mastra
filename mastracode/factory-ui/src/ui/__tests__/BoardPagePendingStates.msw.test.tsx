@@ -191,7 +191,7 @@ describe('Board card pending states', () => {
       title: 'Investigate GitHub intake failure',
       url: 'https://github.com/acme/app/issues/42',
       author: 'octocat',
-      labels: ['auto-triaged'],
+      labels: ['status: auto-triaged'],
       comments: 0,
       createdAt: '2026-08-01T00:00:00Z',
       updatedAt: '2026-08-01T00:00:00Z',

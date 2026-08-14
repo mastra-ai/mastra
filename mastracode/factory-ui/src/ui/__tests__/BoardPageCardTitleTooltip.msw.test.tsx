@@ -63,6 +63,7 @@ const failedDecision: FactoryDecisionSummary = {
   evaluationId: 'evaluation-1',
   workItemId: issueWorkItem.id,
   type: 'invokeSkill',
+  role: null,
   status: 'failed',
   attempts: 1,
   lastError: DECISION_ERROR,

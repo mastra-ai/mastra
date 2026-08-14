@@ -4,7 +4,6 @@ import type { NotificationPriority } from '@mastra/core/notifications';
 import { RequestContext } from '@mastra/core/request-context';
 import type { Context } from 'hono';
 import type { GithubIntegration, GithubRepositoryPermission } from './integration.js';
-import type { GithubIssueTriageInput, GithubIssueTriageResult } from './issue-triage.js';
 import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from './subscriptions.js';
 import type {
   GithubSignalSubscriptionRow,
@@ -12,13 +11,9 @@ import type {
   GithubWebhookPullRequestTarget,
 } from './subscriptions.js';
 
-export type GithubIssueTriageRunInput = GithubIssueTriageInput;
-export type GithubIssueTriageRunResult = GithubIssueTriageResult;
-
 export interface GithubWebhookHandlerOptions {
   /** Integration providing webhook-secret verification + collaborator permission checks. */
   github: GithubIntegration;
-  runIssueTriage?: (input: GithubIssueTriageRunInput) => Promise<GithubIssueTriageRunResult>;
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
 }
 
@@ -329,9 +324,11 @@ async function resolveSubscriptionSession(
     };
     // Creating the session resolves its workspace, which authorizes the caller
     // against the Factory session row — no signed-in user, so run as its owner.
-    const sessionRow = await github?.sourceControlStorage.sessions.getBySessionId(resourceId);
+    // The controller resource is the Factory project for scoped sessions; the
+    // persisted Factory session is keyed by the subscription's session ID.
+    const sessionRow = await github?.sourceControlStorage.sessions.getBySessionId(sessionId);
     if (!sessionRow) {
-      throw new Error(`GitHub subscription ${subscription.id} has no Factory session ${resourceId} to run as.`);
+      throw new Error(`GitHub subscription ${subscription.id} has no Factory session ${sessionId} to run as.`);
     }
     const requestContext = new RequestContext();
     requestContext.set('user', { workosId: sessionRow.userId, organizationId: sessionRow.orgId });

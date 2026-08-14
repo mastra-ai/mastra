@@ -2,14 +2,14 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Popover, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
-import { ArrowUpRight, EllipsisVertical, PencilLine, Plus, Stethoscope } from 'lucide-react';
+import { ArrowUpRight, EllipsisVertical, PencilLine, Plus } from 'lucide-react';
 import { useRef, useState } from 'react';
 
 import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
 import { boardCardStatus } from '../boardCardStatus';
 import type { BoardCandidate } from '../boardCandidates';
 import { setDragPayload } from '../boardDrag';
-import { AUTO_TRIAGED_LABEL, externalLinkLabel, hasLabel, metadataLabels } from '../boardItems';
+import { externalLinkLabel, metadataLabels } from '../boardItems';
 import type { RunAction } from '../boardRunSpecs';
 import { CardLabels, CardStatus, CardTitleTooltip, SourceTitle } from './BoardCardParts';
 import { SourceIcon, actionIcon } from './BoardIcons';
@@ -22,31 +22,25 @@ export function CandidateCard({
   candidate,
   pendingRunRoles,
   preparing,
-  triageStarting,
   disabled,
   onRun,
   onFile,
-  onTriage,
 }: {
   candidate: BoardCandidate;
   pendingRunRoles: ReadonlyMap<string, FactoryRunPhase | undefined>;
   /** Status text while the click is resolving, before the run mutation starts. */
   preparing?: string;
-  triageStarting: boolean;
   disabled: boolean;
   /** Start a run; `prompt` undefined = the action's default prompt. */
   onRun: (action: RunAction, prompt?: string) => void;
   /** File the candidate onto the board without starting a run. */
   onFile: () => void;
-  /** Run first-contact issue triage without leaving the board. */
-  onTriage?: () => void;
 }) {
   const anchorRef = useRef<HTMLElement>(null);
   const [promptOpen, setPromptOpen] = useState(false);
   const [prompt, setPrompt] = useState('');
 
   const labels = metadataLabels(candidate.metadata);
-  const showTriage = candidate.source === 'github-issue' && !hasLabel(labels, AUTO_TRIAGED_LABEL) && onTriage;
   const [defaultAction] = candidate.runActions;
   const runPending = pendingRunRoles.size > 0 || preparing !== undefined;
   const status = boardCardStatus({
@@ -131,12 +125,6 @@ export function CandidateCard({
                 <ArrowUpRight aria-hidden />
                 <span>{externalLinkLabel(candidate.source)}</span>
               </DropdownMenu.Item>
-              {showTriage && (
-                <DropdownMenu.Item disabled={triageStarting} onClick={onTriage}>
-                  <Stethoscope aria-hidden />
-                  <span>{triageStarting ? 'Starting…' : 'Triage issue'}</span>
-                </DropdownMenu.Item>
-              )}
               <DropdownMenu.Item onClick={onFile}>
                 <Plus aria-hidden />
                 <span>Add to board</span>

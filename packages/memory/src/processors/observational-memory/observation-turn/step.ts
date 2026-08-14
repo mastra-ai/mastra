@@ -372,7 +372,8 @@ export class ObservationStep {
 
   /**
    * Run the full threshold observation pipeline:
-   * waitForBuffering → re-check → activate → reflect → blockAfter gate → observe
+   * waitForBuffering → re-check → activate → reflect → observe (sync fallback when
+   * buffered activation did not happen)
    */
   private async runThresholdObservation(): Promise<{
     succeeded: boolean;

@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowUpRight, EllipsisVertical, Link2, MessagesSquare, Trash2 } from 'lucide-react';
+import { ArrowUpRight, CircleSlash, EllipsisVertical, Link2, MessagesSquare, Trash2 } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
 import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
@@ -29,6 +29,49 @@ import { BoardStageIcon, SourceIcon, actionIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 import { WorkItemActivity } from './WorkItemActivity';
 
+interface CardPrimaryAction {
+  label: string;
+  ariaLabel: string;
+  start: () => void;
+}
+
+/** A proposed run wins the click: releasing it beats starting a rival run beside it. */
+function cardPrimaryAction({
+  item,
+  runSpec,
+  runAction,
+  proposal,
+  onApproveProposal,
+  onStartRun,
+  onCreateSession,
+}: {
+  item: WorkItem;
+  runSpec?: ItemRunSpec;
+  runAction?: RunAction;
+  proposal?: FactoryDecisionSummary;
+  onApproveProposal: (decisionId: string) => void;
+  onStartRun: (spec: ItemRunSpec, action: RunAction) => void;
+  onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
+}): CardPrimaryAction {
+  if (proposal !== undefined) {
+    const proposed = runSpec?.actions.find(action => action.role === proposal.role) ?? runAction;
+    const label = proposed?.label ?? 'Start run';
+    return { label, ariaLabel: `${label} ${item.title}`, start: () => onApproveProposal(proposal.id) };
+  }
+  if (runSpec !== undefined && runAction !== undefined) {
+    return {
+      label: runAction.label,
+      ariaLabel: `${runAction.label} ${item.title}`,
+      start: () => onStartRun(runSpec, runAction),
+    };
+  }
+  return {
+    label: 'Start session',
+    ariaLabel: `Start session for ${item.title}`,
+    start: () => onCreateSession(itemSessionSpec(item)),
+  };
+}
+
 export function WorkItemCard({
   item,
   columnStage,
@@ -40,7 +83,11 @@ export function WorkItemCard({
   evaluatingStage,
   transitionReason,
   decision,
+  proposal,
+  approvingDecisionId,
   retryingDecisionId,
+  onApproveProposal,
+  onDismissProposal,
   onRetryDecision,
   pendingRunRoles,
   onCreateSession,
@@ -62,7 +109,12 @@ export function WorkItemCard({
   evaluatingStage?: string;
   transitionReason?: string;
   decision?: FactoryDecisionSummary;
+  /** Run a rule wants to start on this card, waiting for someone to release it. */
+  proposal?: FactoryDecisionSummary;
+  approvingDecisionId?: string;
   retryingDecisionId?: string;
+  onApproveProposal: (decisionId: string) => void;
+  onDismissProposal: (decisionId: string) => void;
   onRetryDecision: (decisionId: string) => void;
   pendingRunRoles: ReadonlyMap<string, FactoryRunPhase | undefined>;
   /** Card click fallback when the item has no run spec: open an empty session (no run). */
@@ -75,7 +127,8 @@ export function WorkItemCard({
 }) {
   const { factoryId = '' } = useParams<{ factoryId: string }>();
   const evaluating = evaluatingStage !== undefined;
-  const runPending = pendingRunRoles.size > 0 || preparing !== undefined;
+  const busyLabel = proposal !== undefined && approvingDecisionId === proposal.id ? 'Starting…' : preparing;
+  const runPending = pendingRunRoles.size > 0 || busyLabel !== undefined;
   const otherStages = item.stages.filter(stage => stage !== columnStage);
   const runSpec = itemRunSpec(item);
   const sessions = liveSessions(item.sessions, liveWorktreePaths);
@@ -92,6 +145,15 @@ export function WorkItemCard({
     runSpec !== undefined
       ? runSpec.actions.find(action => action.role === 'review' && action.role in sessions)
       : undefined;
+  const primaryAction = cardPrimaryAction({
+    item,
+    runSpec,
+    runAction: defaultRunAction,
+    proposal,
+    onApproveProposal,
+    onStartRun,
+    onCreateSession,
+  });
   const threadSession = itemThreadSession(sessions);
   const relatedItems = relatedWorkItems(item, allItems);
   const labels = metadataLabels(item.metadata);
@@ -100,7 +162,7 @@ export function WorkItemCard({
     idle:
       threadSession !== undefined
         ? { label: 'Open session', affordance: 'open' }
-        : { label: defaultRunAction?.label ?? 'Start session', affordance: 'run' },
+        : { label: primaryAction.label, affordance: 'run' },
     moving:
       evaluatingStage === undefined
         ? undefined
@@ -109,7 +171,7 @@ export function WorkItemCard({
       label: runSpec?.actions.find(action => action.role === role)?.label ?? 'Starting run',
       phase,
     })),
-    preparing,
+    preparing: busyLabel,
     decision,
     transitionReason,
   });
@@ -140,25 +202,14 @@ export function WorkItemCard({
             className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
           />
         ) : (
-          // Card click starts the default run (first unused action, e.g. Review
-          // for PRs) so clicking a card kicks off its work; cards with no run
-          // spec fall back to opening a plain chat session on the item's branch.
           <button
             type="button"
             draggable={false}
             disabled={runDisabled || runPending}
             aria-busy={runPending || undefined}
-            aria-label={
-              runSpec !== undefined && defaultRunAction !== undefined
-                ? `${defaultRunAction.label} ${item.title}`
-                : `Start session for ${item.title}`
-            }
+            aria-label={primaryAction.ariaLabel}
             className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
-            onClick={() =>
-              runSpec !== undefined && defaultRunAction !== undefined
-                ? onStartRun(runSpec, defaultRunAction)
-                : onCreateSession(itemSessionSpec(item))
-            }
+            onClick={primaryAction.start}
           />
         )}
         <div className="absolute top-2 right-2 z-20">
@@ -198,6 +249,12 @@ export function WorkItemCard({
                 >
                   {actionIcon(reReviewAction.label)}
                   <span>{pendingRunRoles.has(reReviewAction.role) ? 'Starting…' : 'Re-review'}</span>
+                </DropdownMenu.Item>
+              )}
+              {proposal !== undefined && (
+                <DropdownMenu.Item onClick={() => onDismissProposal(proposal.id)}>
+                  <CircleSlash aria-hidden />
+                  <span>Dismiss suggested run</span>
                 </DropdownMenu.Item>
               )}
               {item.url !== null && (

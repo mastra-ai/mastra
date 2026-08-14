@@ -311,7 +311,7 @@ const usage = session.getTokenUsage()
 
 ## Identity
 
-`session.identity` owns the stable identifiers for the conversation: the resource ID, a session `id`, and an `ownerId`. The `id` and `ownerId` are stable for the life of the session and don't change when the resource ID is switched. They mirror the `id` and `ownerId` fields on `SessionRecord` in storage.
+`session.identity` owns the stable identifiers for the conversation: the resource ID and session `id`, plus an `ownerId`. The `id` and `ownerId` are stable for the life of the session and don't change when the resource ID is switched. They mirror the `id` and `ownerId` fields on `SessionRecord` in storage.
 
 ### `session.identity.getId()`
 
