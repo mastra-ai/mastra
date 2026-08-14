@@ -42,4 +42,3 @@ export function computeArrivals(previous: DiffBaseline | null, next: DiffInput):
   if (nodes.size === 0 && edges.size === 0) return NO_ARRIVALS;
   return { nodes, edges };
 }
-
