@@ -722,7 +722,11 @@ function MessageBubble({
         return activation ? <SkillMessage activation={activation} /> : <MarkdownRenderer>{part.text}</MarkdownRenderer>;
       }
 
-      return <MarkdownRenderer className="my-3">{part.text}</MarkdownRenderer>;
+      return (
+        <MarkdownRenderer className="my-3" streaming={entry.streaming}>
+          {part.text}
+        </MarkdownRenderer>
+      );
     },
     Reasoning: (part: ReasoningPart) => (
       <div className="border-border1 my-1.5 border-l-2 pl-2.5 italic [&_p]:my-0.5">

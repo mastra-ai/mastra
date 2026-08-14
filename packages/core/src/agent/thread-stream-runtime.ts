@@ -202,6 +202,8 @@ type AgentThreadRuntimeState = {
 
 export type AgentThreadState = 'active' | 'idle';
 
+export type ActiveThreadRun = { runId: string; resourceId?: string; threadId: string };
+
 type SerializableAgentSignal = AgentSignal & Pick<CreatedAgentSignal, 'id' | 'createdAt'>;
 
 type AgentThreadStreamRuntimeEvent =
@@ -442,6 +444,12 @@ export class AgentThreadStreamRuntime {
 
   #threadKey(resourceId: string | undefined, threadId: string): string {
     return [resourceId ?? '', threadId].join(AGENT_THREAD_KEY_SEPARATOR);
+  }
+
+  #parseThreadKey(key: string): { resourceId?: string; threadId: string } {
+    const separator = key.indexOf(AGENT_THREAD_KEY_SEPARATOR);
+    const resourceId = key.slice(0, separator);
+    return { resourceId: resourceId || undefined, threadId: key.slice(separator + AGENT_THREAD_KEY_SEPARATOR.length) };
   }
 
   #threadTopic(key: string): string {
@@ -783,6 +791,18 @@ export class AgentThreadStreamRuntime {
     if (record && !this.#isThreadBlockingRun(state, record)) return undefined;
 
     return activeRunId;
+  }
+
+  /** Same predicate as {@link getActiveThreadRunId}, over every tracked thread. */
+  listActiveThreadRuns(pubsub?: PubSub): ActiveThreadRun[] {
+    const state = this.#getState(pubsub);
+    const runs: ActiveThreadRun[] = [];
+    for (const [key, runId] of state.activeThreadRunIds) {
+      const record = state.threadRunsById.get(runId);
+      if (record && !this.#isThreadBlockingRun(state, record)) continue;
+      runs.push({ runId, ...this.#parseThreadKey(key) });
+    }
+    return runs;
   }
 
   hasThreadRun(runId: string, pubsub?: PubSub): boolean {

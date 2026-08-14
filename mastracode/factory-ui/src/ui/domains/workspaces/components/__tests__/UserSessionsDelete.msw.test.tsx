@@ -73,11 +73,19 @@ describe('User sessions deletion', () => {
         sessions = sessions.filter(item => item.sessionId !== params.sessionId);
         return HttpResponse.json({ removed: true });
       }),
+      // Sidebar activity poll — return no active threads so the row stays idle.
+      http.get(`${TEST_BASE_URL}/api/agent-controller/:agentControllerId/sessions/:resourceId/threads`, () =>
+        HttpResponse.json({ threads: [] }),
+      ),
     );
 
+    // Only the sidebar activity poll is allowed to hit the threads endpoint; a stray delete-triggered
+    // thread request would signal that removing the session accidentally fired unrelated work.
     const recordThreadRequest = ({ request }: { request: Request }) => {
       const { pathname } = new URL(request.url);
-      if (pathname.includes('/threads')) threadRequests.push(`${request.method} ${pathname}`);
+      if (pathname.includes('/threads') && request.method !== 'GET') {
+        threadRequests.push(`${request.method} ${pathname}`);
+      }
     };
     server.events.on('request:start', recordThreadRequest);
     onTestFinished(() => server.events.removeListener('request:start', recordThreadRequest));
