@@ -4,10 +4,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
 import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
 import type { Theme } from '@mastra/playground-ui/components/ThemeProvider';
-import { useQueryClient } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
 import { MonitorIcon, MoonIcon, SunIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
 import { StudioConfigForm } from '@/domains/configuration/components/studio-config-form';
 import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
 
@@ -33,24 +31,6 @@ function ThemeOptionLabel({ option }: { option: (typeof THEME_OPTIONS)[number] }
 export const StudioSettingsPage = () => {
   const { baseUrl, headers, apiPrefix } = useStudioConfig();
   const { theme, setTheme } = useTheme();
-  const queryClient = useQueryClient();
-  const [saveCount, setSaveCount] = useState(0);
-
-  // Auth capabilities and permission patterns are cached from the previous
-  // headers, so the auth gate keeps the user out until they are refetched.
-  // This effect runs before the providers above adopt the saved config, so the
-  // invalidation is deferred one tick — otherwise the refetch still carries
-  // the previous headers.
-  useEffect(() => {
-    if (saveCount === 0) return;
-
-    const timeout = setTimeout(() => {
-      queryClient.invalidateQueries({ queryKey: ['auth', 'capabilities'] });
-      queryClient.invalidateQueries({ queryKey: ['permission-patterns'] });
-    }, 0);
-
-    return () => clearTimeout(timeout);
-  }, [saveCount, queryClient]);
 
   return (
     <PageLayout width="narrow">
@@ -81,10 +61,7 @@ export const StudioSettingsPage = () => {
           title="Mastra Connection"
           description="Configure the Mastra instance URL, API prefix, and request headers used by the studio."
         >
-          <StudioConfigForm
-            initialConfig={{ baseUrl, headers, apiPrefix }}
-            onSave={() => setSaveCount(count => count + 1)}
-          />
+          <StudioConfigForm initialConfig={{ baseUrl, headers, apiPrefix }} />
         </SectionCard>
       </PageLayout.MainArea>
     </PageLayout>

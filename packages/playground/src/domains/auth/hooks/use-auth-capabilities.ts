@@ -63,7 +63,7 @@ export function useAuthCapabilities() {
   const client = useMastraClient();
 
   return useQuery<AuthCapabilities>({
-    queryKey: ['auth', 'capabilities'],
+    queryKey: ['auth', 'capabilities', client.options],
     queryFn: () => makeAuthCapabilitiesRequest(client),
     staleTime: 60 * 1000, // Cache for 1 minute
     retry: false, // Don't retry auth requests

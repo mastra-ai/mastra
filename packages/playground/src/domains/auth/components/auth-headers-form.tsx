@@ -1,9 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useQueryClient } from '@tanstack/react-query';
 import { SaveIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { HeaderListFormItem } from '@/domains/configuration/components/header-list-form';
 import { HeaderListForm } from '@/domains/configuration/components/header-list-form';
 import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
@@ -18,45 +17,23 @@ import { useStudioConfig } from '@/domains/configuration/context/studio-config-s
  */
 export const AuthHeadersForm = () => {
   const { baseUrl, headers: storedHeaders, apiPrefix, setConfig } = useStudioConfig();
-  const queryClient = useQueryClient();
-  const [saveCount, setSaveCount] = useState(0);
   const [headers, setHeaders] = useState<HeaderListFormItem[]>(() =>
     Object.entries(storedHeaders).map(([name, value]) => ({ name, value })),
   );
 
-  // Auth capabilities and permission patterns are cached from the previous
-  // headers, so the auth gate keeps the user out until they are refetched. The
-  // effect runs after the saved config reaches the Mastra client, so the
-  // refetch carries the new headers and no page reload is needed.
-  //
-  // The invalidation is deferred one tick because React runs child effects
-  // first. This form is a child of the auth gate, so at effect time the gate's
-  // query observer still holds the query function built from the previous
-  // client. One tick later the observer has adopted the new headers.
-  useEffect(() => {
-    if (saveCount === 0) return;
-
-    const timeout = setTimeout(() => {
-      queryClient.invalidateQueries({ queryKey: ['auth', 'capabilities'] });
-      queryClient.invalidateQueries({ queryKey: ['permission-patterns'] });
-    }, 0);
-
-    return () => clearTimeout(timeout);
-  }, [saveCount, queryClient]);
-
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    const formData = new FormData(e.target as HTMLFormElement);
+    const formData = new FormData(e.currentTarget);
     const formHeaders: Record<string, string> = {};
     for (let i = 0; i < headers.length; i++) {
-      const headerName = formData.get(`headers.${i}.name`) as string;
-      const headerValue = formData.get(`headers.${i}.value`) as string;
+      const headerName = formData.get(`headers.${i}.name`);
+      const headerValue = formData.get(`headers.${i}.value`);
+      if (typeof headerName !== 'string' || typeof headerValue !== 'string') continue;
       formHeaders[headerName] = headerValue;
     }
 
     setConfig({ headers: formHeaders, baseUrl, apiPrefix });
-    setSaveCount(count => count + 1);
     toast.success('Headers saved');
   };
 
