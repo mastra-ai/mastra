@@ -570,6 +570,25 @@ describe('DiscordProvider.configure — cache invalidation', () => {
   });
 });
 
+/**
+ * Wrap a storage so every call takes a beat. Real durable storage is a network
+ * hop; the in-memory one resolves in a microtask, which closes the window
+ * between claiming the pending fallback and finishing the migration writes —
+ * the window the concurrency test needs open.
+ */
+function withLatency(storage: InMemoryChannelsStorage, ms = 20): InMemoryChannelsStorage {
+  return new Proxy(storage, {
+    get(target, prop) {
+      const value = Reflect.get(target, prop);
+      if (typeof value !== 'function') return value;
+      return async (...args: unknown[]) => {
+        await new Promise(resolve => setTimeout(resolve, ms));
+        return (value as (...a: unknown[]) => unknown).apply(target, args);
+      };
+    },
+  });
+}
+
 describe('DiscordProvider — storage resolution', () => {
   it('re-resolves off the in-memory fallback once Mastra attaches', async () => {
     // No storage configured and no Mastra yet → connect() falls back to memory.
@@ -634,6 +653,68 @@ describe('DiscordProvider — storage resolution', () => {
     expect(install?.webhookId).toBe('w-persisted');
     const records = await shared.listInstallations('discord');
     expect(records.filter(r => r.agentId === 'agent-1')).toHaveLength(1);
+  });
+
+  it('serializes concurrent store resolution against the fallback migration', async () => {
+    // Pre-registration connect(): no Mastra yet, so the install lands in the
+    // in-memory fallback and connect() hands its id back to the caller.
+    const provider = new DiscordProvider({ app: APP });
+    stubValidateApp();
+    await provider.connect('agent-1');
+
+    // Registration arrives with durable storage that answers at network speed —
+    // which is what stretches the migration wide enough to be raced.
+    const shared = new InMemoryChannelsStorage();
+    const mastra = {
+      getAgentById: () => undefined,
+      getServer: () => undefined,
+      getStorage: () => ({ init: async () => {}, getStore: async () => withLatency(shared) }),
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (provider as any).__attach(mastra);
+
+    // Both lookups land while the migration is still writing. Unserialized, the
+    // second finds the pending fallback already claimed by the first, skips the
+    // migration, builds a store over the still-empty durable storage, and
+    // answers null for an installation connect() already returned — in
+    // production a live interaction rejected as "Unknown webhook".
+    const [first, second] = await Promise.all([
+      provider.getInstallation('agent-1'),
+      provider.getInstallation('agent-1'),
+    ]);
+    expect(first).not.toBeNull();
+    expect(second).not.toBeNull();
+    expect(second?.id).toBe(first?.id);
+
+    // …and exactly one of them migrated: a double claim would duplicate the row.
+    const records = await shared.listInstallations('discord');
+    expect(records.filter(r => r.agentId === 'agent-1')).toHaveLength(1);
+  });
+
+  it('does not pin the store to the fallback when attach lands mid-resolution', async () => {
+    const provider = new DiscordProvider({ app: APP });
+    const shared = new InMemoryChannelsStorage();
+    const mastra = {
+      getAgentById: () => undefined,
+      getServer: () => undefined,
+      getStorage: () => ({ init: async () => {}, getStore: async () => shared }),
+    };
+
+    // A resolution started before registration (no Mastra → in-memory fallback)
+    // is still in flight when __attach switches the storage target.
+    const inFlight = provider.getInstallation('agent-1');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (provider as any).__attach(mastra);
+    expect(await inFlight).toBeNull();
+
+    // That resolution must not cache its fallback. __attach's own guard cannot
+    // catch this one — #store is still unset and #storeIsFallback still false
+    // while it runs — so caching would send every later install to memory, lost
+    // on restart, with no second attach coming to correct it.
+    stubValidateApp();
+    await provider.connect('agent-2');
+    const records = await shared.listInstallations('discord');
+    expect(records.map(r => r.agentId)).toContain('agent-2');
   });
 });
 

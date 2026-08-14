@@ -97,6 +97,20 @@ export class DiscordProvider implements ChannelProvider {
    * {@link #migrateFallback}.
    */
   #pendingMigration?: DiscordInstallStore;
+  /**
+   * The single in-flight store resolution. Concurrent callers share it rather
+   * than each running {@link #resolveStore}, so the fallback migration can't be
+   * raced: without this, a second caller reads the already-claimed
+   * {@link #pendingMigration} as absent, skips the migration, and caches a store
+   * over storage the first caller has not finished populating.
+   */
+  #storeResolution?: Promise<DiscordInstallStore | undefined>;
+  /**
+   * Bumped by every {@link __attach}. A resolution that started before an attach
+   * was built against the previous storage target, so it must not cache its
+   * result; it reports itself superseded and the caller resolves again.
+   */
+  #storeGeneration = 0;
 
   constructor(config: DiscordProviderConfig = {}) {
     this.#config = config;
@@ -111,6 +125,12 @@ export class DiscordProvider implements ChannelProvider {
    */
   __attach(mastra: Mastra): void {
     const isNewInstance = this.#mastra != null && this.#mastra !== mastra;
+    // Any attach can change the storage target, so a resolution already in
+    // flight is now stale — including the first attach, where the guard below
+    // can't see it: #store is still undefined and #storeIsFallback still false
+    // while that resolution runs, so it would sail past and pin the provider to
+    // the in-memory fallback *after* real storage became reachable.
+    this.#storeGeneration++;
     // Drop the cached store when it belongs to a superseded Mastra, and when a
     // public method (connect(), initialize(), …) ran before registration and
     // pinned the provider to the in-memory fallback — otherwise installs keep
@@ -631,12 +651,45 @@ export class DiscordProvider implements ChannelProvider {
     );
   }
 
+  /**
+   * The single entry point to the store. Every caller either gets the cached
+   * store or joins the one in-flight resolution — nobody resolves in parallel,
+   * so a caller that arrives mid-migration waits for it to finish instead of
+   * building a second store over storage that isn't populated yet.
+   */
   async #getStore(): Promise<DiscordInstallStore> {
-    if (this.#store) return this.#store;
+    // Loop rather than await once: an `__attach` landing mid-resolution
+    // supersedes it, and we then resolve again against the new storage target.
+    for (;;) {
+      if (this.#store) return this.#store;
+      // Created synchronously, so two callers can't both start a resolution.
+      const inFlight = (this.#storeResolution ??= this.#resolveStore(this.#storeGeneration));
+      let resolved: DiscordInstallStore | undefined;
+      try {
+        resolved = await inFlight;
+      } finally {
+        // Only retract our own attempt: a superseding attempt may have replaced
+        // it already, and clearing that would strand a later caller's promise.
+        if (this.#storeResolution === inFlight) this.#storeResolution = undefined;
+      }
+      if (resolved) return resolved;
+    }
+  }
+
+  /**
+   * One resolution attempt, run under {@link #getStore}'s in-flight guard — so
+   * the {@link #pendingMigration} claim below cannot be double-taken, and the
+   * migration completes before any caller sees the store.
+   *
+   * Returns `undefined` when `__attach` superseded this attempt while it ran:
+   * the storage target changed underneath it, so caching would pin the provider
+   * to a store built for the previous one.
+   */
+  async #resolveStore(generation: number): Promise<DiscordInstallStore | undefined> {
     const encryptionKey = this.#config.encryptionKey ?? process.env.MASTRA_ENCRYPTION_KEY;
     const { storage, isFallback } = await this.#resolveStorage();
-    // Claim the pending fallback before the first await below so two concurrent
-    // callers can't both migrate it.
+    // Superseded before anything was claimed — nothing to hand back.
+    if (generation !== this.#storeGeneration) return undefined;
     const pending = this.#pendingMigration;
     this.#pendingMigration = undefined;
     // Storage is still unavailable, so a new fallback would be an empty one —
@@ -648,6 +701,13 @@ export class DiscordProvider implements ChannelProvider {
     }
     const store = new DiscordInstallStore(storage, encryptionKey);
     if (pending) await this.#migrateFallback(pending, store);
+    if (generation !== this.#storeGeneration) {
+      // Superseded while migrating. Re-queue the fallback so the next attempt
+      // carries it into the new target too — #migrateFallback keeps whatever is
+      // already persisted, so replaying it is harmless.
+      if (pending && !this.#pendingMigration) this.#pendingMigration = pending;
+      return undefined;
+    }
     this.#storeIsFallback = isFallback;
     this.#store = store;
     return store;
