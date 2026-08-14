@@ -1,0 +1,151 @@
+---
+title: "CRW | Tools"
+description: "Use CRW in Mastra tools to search and scrape the web, hosted or self-hosted."
+packages:
+  - '@mastra/core'
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# CRW
+
+CRW is an open source web scraping and search engine that ships as a single binary. In this guide, you will wire CRW into Mastra tools so your agents and workflows can search and scrape live web data. Because the engine runs anywhere, the same tools work against the hosted API or against an instance you run yourself.
+
+## Prerequisites
+
+- Node.js `v22.13.0` or later installed
+- A CRW API key (get one at [https://fastcrw.com](https://fastcrw.com)), or a self-hosted instance
+- An API key from a supported [Model Provider](/models)
+- An existing Mastra project. Follow [Get started](/docs) to create one.
+
+## Installation
+
+Install the CRW SDK:
+
+```bash npm2yarn
+npm install crw-sdk
+```
+
+## Configure environment variables
+
+Create a `.env` file in your project root:
+
+```bash title=".env"
+CRW_API_KEY=crw_live_your-api-key
+# Optional: CRW_API_URL=http://localhost:3000
+```
+
+## Build the CRW tools
+
+Create a tool file that exposes CRW search and scrape to Mastra.
+
+<Steps>
+  <StepItem>
+    Create `src/mastra/tools/crw.ts` and set up CRW:
+
+    ```ts title="src/mastra/tools/crw.ts"
+    import { CrwClient } from 'crw-sdk'
+    import { createTool } from '@mastra/core/tools'
+    import { z } from 'zod'
+
+    const crw = new CrwClient({ apiKey: process.env.CRW_API_KEY! })
+
+    export const crwSearch = createTool({
+      id: 'crw-search',
+      description: 'Search the web and return top results.',
+      inputSchema: z.object({ query: z.string().min(1) }),
+      outputSchema: z.object({
+        results: z.array(
+          z.object({
+            title: z.string(),
+            url: z.string(),
+          }),
+        ),
+      }),
+      execute: async ({ query }) => {
+        const results = await crw.search(query, { limit: 3 })
+        return {
+          results: results.map(item => ({
+            title: item.title,
+            url: item.url,
+          })),
+        }
+      },
+    })
+
+    export const crwScrape = createTool({
+      id: 'crw-scrape',
+      description: 'Scrape a URL and return markdown content.',
+      inputSchema: z.object({ url: z.string().url() }),
+      outputSchema: z.object({ markdown: z.string() }),
+      execute: async ({ url }) => {
+        const result = await crw.scrape(url, {
+          formats: ['markdown'],
+          onlyMainContent: true,
+        })
+        return { markdown: result.markdown ?? '' }
+      },
+    })
+    ```
+  </StepItem>
+
+  <StepItem>
+    Create a new agent at `src/mastra/agents/web-agent.ts`:
+
+    ```ts title="src/mastra/agents/web-agent.ts"
+    import { Agent } from '@mastra/core/agent'
+    import { crwSearch, crwScrape } from '../tools/crw'
+
+    export const webAgent = new Agent({
+      id: 'web-agent',
+      name: 'Web Agent',
+      instructions: 'Use CRW tools to search and scrape web pages, then summarize the results.',
+      model: '__GATEWAY_OPENAI_MODEL__',
+      tools: { crwSearch, crwScrape },
+    })
+    ```
+  </StepItem>
+
+  <StepItem>
+    Register the newly created agent in `src/mastra/index.ts` on your Mastra instance:
+
+    ```ts title="src/mastra/index.ts" {2, 5}
+    import { Mastra } from '@mastra/core'
+    import { webAgent } from './agents/web-agent'
+
+    export const mastra = new Mastra({
+      agents: { webAgent },
+    })
+    ```
+  </StepItem>
+</Steps>
+
+## Test in Studio
+
+Run the dev server and open [Studio](/docs/studio/overview):
+
+```bash
+mastra dev
+```
+
+In Studio, open the **Web Agent** and try:
+
+- "Find the latest Mastra changelog and summarize the last release."
+- "Scrape the Mastra homepage and list the main features."
+
+## Self-hosted CRW
+
+CRW is a single binary under AGPL-3.0, so you can run the engine yourself and keep the crawl on your own network. Point the client at your instance with `CRW_API_URL`:
+
+```ts title="src/mastra/tools/crw.ts"
+const crw = new CrwClient({
+  apiUrl: process.env.CRW_API_URL,
+})
+```
+
+A self-hosted instance without auth needs no key. If you would rather not run a server at all, set `CRW_LOCAL=1` and the SDK starts the engine as a local subprocess instead.
+
+## Related
+
+- [CRW documentation](https://docs.fastcrw.com)

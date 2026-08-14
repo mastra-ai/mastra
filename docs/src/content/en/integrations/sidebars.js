@@ -535,6 +535,12 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'tools/crw',
+          label: 'CRW',
+          customProps: { icon: '/img/integrations/crw.png' },
+        },
+        {
+          type: 'doc',
           id: 'tools/firecrawl',
           label: 'Firecrawl',
           customProps: { icon: '/img/integrations/firecrawl.svg' },
