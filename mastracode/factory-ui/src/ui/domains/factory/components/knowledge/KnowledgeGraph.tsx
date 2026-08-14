@@ -116,10 +116,13 @@ function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<Knowledg
         path={path}
         style={
           // A9: a pinned fact marks the RELATIONSHIP — the amber accent
-          // rides the edge, with a pin chip at the arc's midpoint.
+          // rides the edge, with a pin chip at the arc's midpoint. Edges
+          // touching a memory marker are white, echoing the Mastra logo.
           pinned
             ? { stroke: 'rgba(251,191,36,0.75)', strokeWidth: 2 }
-            : { stroke: 'rgba(139,92,246,0.4)', strokeWidth: 1.4 }
+            : source.startsWith('mem:') || target.startsWith('mem:')
+              ? { stroke: 'rgba(255,255,255,0.45)', strokeWidth: 1.2 }
+              : { stroke: 'rgba(139,92,246,0.4)', strokeWidth: 1.4 }
         }
       />
       {pinned && !source.startsWith('mem:') && !target.startsWith('mem:') ? (
@@ -156,11 +159,12 @@ function MemoryNodeComponent({ data }: NodeProps<MemoryFlowNode>) {
       data-fact-id={memory.id}
       className={[
         'flex items-center justify-center rounded-full border transition-shadow',
-        // Memories speak the theme's third color — cyan — so dots read as
-        // knowledge points, not tiny entities (purple) or pins (amber).
+        // White markers mimic the Mastra logo's nodes-and-edges M — memories
+        // read as knowledge points, distinct from entities (purple) and pins
+        // (amber).
         memory.pinned
           ? 'border-amber-300/80 bg-amber-400 text-[#1a1305] shadow-md shadow-amber-500/40'
-          : 'border-cyan-300/60 bg-cyan-400/80 shadow-[0_0_6px_rgba(34,211,238,0.55)]',
+          : 'border-white/70 bg-white/90 shadow-[0_0_6px_rgba(255,255,255,0.45)]',
       ].join(' ')}
       style={{ width: size, height: size }}
     >
