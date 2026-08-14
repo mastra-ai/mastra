@@ -28,7 +28,7 @@ export const subconsciousCaptureSchema = z.object({
           text: z.string().trim().min(1),
           scope: z.enum(['org', 'resource', 'thread']).optional(),
           when: z.string().trim().min(1).optional(),
-          reason: z.string().trim().min(1).optional(),
+          reason: z.string().trim().min(1),
         }),
       ),
     }),
@@ -52,7 +52,7 @@ const subconsciousCapturePinningSchema = z.object({
           text: z.string().trim().min(1),
           scope: z.enum(['org', 'resource', 'thread']).optional(),
           when: z.string().trim().min(1).optional(),
-          reason: z.string().trim().min(1).optional(),
+          reason: z.string().trim().min(1),
           pin: z.boolean().optional(),
         }),
       ),
@@ -73,7 +73,7 @@ Omit scope when uncertain; omitted fact scopes stay private to the current threa
 Emit when only when the conversation anchors the referred time. Resolve relative dates against the current date and use ISO 8601.
 Capture what was learned through the work, not what the session was told: skip facts that merely restate standing instructions, configured rules, or the text of the task or issue the session was handed. The exception is an explicit request from the user to remember something, which is always captured even when it duplicates an existing instruction.`;
 
-const CAPTURE_REASON_INSTRUCTIONS = `When a fact is worth keeping for a non-obvious reason, set reason to one short sentence explaining why it is worth remembering (and for pinned facts, why it must stay in context).`;
+const CAPTURE_REASON_INSTRUCTIONS = `Every fact requires a reason: the concrete why behind capturing it, in one short sentence - what it cost to learn or when it will matter again (and for pinned facts, why it must stay in context). Never write generic filler such as "seemed relevant" or "useful context".`;
 
 function clampScope(level: KnowledgeScopeLevel, ceiling?: KnowledgeScopeLevel): KnowledgeScopeLevel {
   return ceiling && SCOPE_ORDER[level] < SCOPE_ORDER[ceiling] ? ceiling : level;

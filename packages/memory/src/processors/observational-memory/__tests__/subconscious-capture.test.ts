@@ -519,7 +519,7 @@ describe('Subconscious capture-time pinning', () => {
     });
     const memory = new Memory({ storage: new InMemoryStore() });
     const resolved = await extractor.resolve(createContext(memory, { entities: [] }));
-    expect(resolved.instructions).not.toContain('set reason');
+    expect(resolved.instructions).not.toContain('Every fact requires a reason');
     expect(resolved.instructions).not.toContain('pin: true');
   });
 
@@ -531,6 +531,11 @@ describe('Subconscious capture-time pinning', () => {
     });
     const memory = new Memory({ storage: new InMemoryStore() });
     const resolved = await extractor.resolve(createContext(memory, { entities: [] }));
-    expect(resolved.instructions).toContain('set reason to one short sentence');
+    // Reason is REQUIRED on every fact (Jamie, 2026-08-13): concrete why, no filler.
+    expect(resolved.instructions).toContain('Every fact requires a reason');
+    expect(resolved.instructions).toContain('Never write generic filler');
+    const schema = z.toJSONSchema(extractor.schema) as any;
+    const factSchema = schema.properties.entities.items.properties.facts.items;
+    expect(factSchema.required).toContain('reason');
   });
 });
