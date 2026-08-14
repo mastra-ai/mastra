@@ -1,5 +1,14 @@
 # @mastra/server
 
+## 1.60.0-alpha.1
+
+### Patch Changes
+
+- Fixed `GET /agent-controller/:controllerId/sessions/:resourceId/threads` and `GET /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/messages` provisioning a workspace/sandbox on every request. Both endpoints previously routed through session creation as a side effect, stalling read-only page visits 5–17s and consuming a sandbox slot per visit. They now read from storage directly. Session creation and workspace/sandbox provisioning continue to happen on the write path as before. ([#21474](https://github.com/mastra-ai/mastra/pull/21474))
+
+- Updated dependencies [[`15101bb`](https://github.com/mastra-ai/mastra/commit/15101bb53c0d934f31af6b8813b88191e382a5e5), [`c2c3deb`](https://github.com/mastra-ai/mastra/commit/c2c3debcf670c7082d0a5e553aa99818a864698c), [`33374ba`](https://github.com/mastra-ai/mastra/commit/33374ba359e4fb13eaa918ae925fe167a3c55414), [`c5f964d`](https://github.com/mastra-ai/mastra/commit/c5f964d3f77064e978f8066ec506eed77ba5c63c), [`f8f653f`](https://github.com/mastra-ai/mastra/commit/f8f653f10980d01a73706cc3c8689ca5e40ce808)]:
+  - @mastra/core@1.60.0-alpha.1
+
 ## 1.59.1-alpha.0
 
 ### Patch Changes
