@@ -3,11 +3,9 @@ import { browserCliHandler } from '../../browser/cli-handler';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
-import { emitWorkspaceMetadata, requireSandbox } from './helpers';
+import { coerceNumericString, emitWorkspaceMetadata, requireSandbox } from './helpers';
 import { DEFAULT_TAIL_LINES, truncateOutput, sandboxToModelOutput } from './output-helpers';
 import { startWorkspaceSpan } from './tracing';
-
-const NUMERIC_TIMEOUT_STRING_REGEX = /^\d+(?:\.\d+)?$/;
 
 /**
  * Base input schema for execute_command (no background param).
@@ -18,18 +16,12 @@ export const executeCommandInputSchema = z.object({
     .string()
     .describe('The shell command to execute (e.g., "npm install", "ls -la src/", "cat file.txt | grep error")'),
   timeout: z
-    .preprocess(value => {
-      if (typeof value !== 'string') {
-        return value;
-      }
-      const trimmed = value.trim();
-      return NUMERIC_TIMEOUT_STRING_REGEX.test(trimmed) ? Number(trimmed) : value;
-    }, z.number())
+    .preprocess(coerceNumericString, z.number())
     .nullish()
     .describe('Maximum execution time in seconds. Example: 60 for 1 minute.'),
   cwd: z.string().nullish().describe('Working directory for the command'),
   tail: z
-    .number()
+    .preprocess(coerceNumericString, z.number())
     .nullish()
     .describe(
       `For foreground commands: limit output to the last N lines, similar to tail -n. Defaults to ${DEFAULT_TAIL_LINES}. Use 0 for no limit.`,
