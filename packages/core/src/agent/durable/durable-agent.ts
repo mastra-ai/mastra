@@ -41,6 +41,13 @@ const CLOSE_ON_SUSPEND = Symbol('mastra.durable.closeOnSuspend');
 const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptions');
 
 /**
+ * How many candidate `running` rows `listActiveRuns()` fetches from storage
+ * per batch. Bounds peak memory to one batch of hydrated snapshots instead of
+ * every matching row's snapshot at once (#21501).
+ */
+const LIST_ACTIVE_RUNS_STORAGE_BATCH_SIZE = 100;
+
+/**
  * Options for DurableAgent.stream()
  */
 export interface DurableAgentStreamOptions<OUTPUT = undefined> {
@@ -2479,47 +2486,64 @@ export class DurableAgent<
       });
     }
 
-    const { runs } = await workflowsStore.listWorkflowRuns({
-      workflowName: DurableStepIds.AGENTIC_LOOP,
-      status: 'running',
-      fromDate,
-      toDate,
-    });
-
+    // Filtering by agentId/threadId happens in application code because those
+    // fields only exist inside each row's `snapshot` JSON — storage adapters
+    // have no predicate for them. Fetch candidates in bounded batches so peak
+    // memory is O(batch size) hydrated snapshots instead of every `running`
+    // row's full snapshot at once (#21501). Only the small per-run summary is
+    // retained across batches; each batch's snapshots are discarded before the
+    // next fetch.
     const matchedRuns: DurableAgentActiveRun[] = [];
-    for (const run of runs) {
-      let snapshot = run.snapshot;
-      if (typeof snapshot === 'string') {
-        try {
-          snapshot = JSON.parse(snapshot) as WorkflowRunState;
-        } catch {
-          continue;
-        }
-      }
-      if (snapshot?.status !== 'running') continue;
-
-      // The persisted workflow input carries the owning agentId. Default-deny:
-      // a snapshot without an input or whose agentId does not match this agent
-      // is skipped so runs cannot leak across agents sharing the same storage.
-      const input = snapshot.context?.input as
-        | { agentId?: string; messageListState?: { memoryInfo?: { threadId?: string; resourceId?: string } } }
-        | undefined;
-      const runAgentId = input?.agentId;
-      if (runAgentId !== this.id) continue;
-
-      const memoryInfo = input?.messageListState?.memoryInfo;
-      const runThreadId = memoryInfo?.threadId;
-      const runResourceId = run.resourceId ?? memoryInfo?.resourceId;
-      if (threadId && runThreadId !== threadId) continue;
-      if (resourceId && runResourceId !== resourceId) continue;
-
-      matchedRuns.push({
-        runId: run.runId,
+    for (let storagePage = 0; ; storagePage++) {
+      const { runs, total: storageTotal } = await workflowsStore.listWorkflowRuns({
+        workflowName: DurableStepIds.AGENTIC_LOOP,
         status: 'running',
-        threadId: runThreadId,
-        resourceId: runResourceId,
-        updatedAt: run.updatedAt,
+        fromDate,
+        toDate,
+        perPage: LIST_ACTIVE_RUNS_STORAGE_BATCH_SIZE,
+        page: storagePage,
       });
+
+      for (const run of runs) {
+        let snapshot = run.snapshot;
+        if (typeof snapshot === 'string') {
+          try {
+            snapshot = JSON.parse(snapshot) as WorkflowRunState;
+          } catch {
+            continue;
+          }
+        }
+        if (snapshot?.status !== 'running') continue;
+
+        // The persisted workflow input carries the owning agentId. Default-deny:
+        // a snapshot without an input or whose agentId does not match this agent
+        // is skipped so runs cannot leak across agents sharing the same storage.
+        const input = snapshot.context?.input as
+          | { agentId?: string; messageListState?: { memoryInfo?: { threadId?: string; resourceId?: string } } }
+          | undefined;
+        const runAgentId = input?.agentId;
+        if (runAgentId !== this.id) continue;
+
+        const memoryInfo = input?.messageListState?.memoryInfo;
+        const runThreadId = memoryInfo?.threadId;
+        const runResourceId = run.resourceId ?? memoryInfo?.resourceId;
+        if (threadId && runThreadId !== threadId) continue;
+        if (resourceId && runResourceId !== resourceId) continue;
+
+        matchedRuns.push({
+          runId: run.runId,
+          status: 'running',
+          threadId: runThreadId,
+          resourceId: runResourceId,
+          updatedAt: run.updatedAt,
+        });
+      }
+
+      // A short batch means the last page. A batch larger than requested means
+      // the adapter ignored pagination and returned everything in one call —
+      // continuing would refetch the same rows forever.
+      if (runs.length !== LIST_ACTIVE_RUNS_STORAGE_BATCH_SIZE) break;
+      if ((storagePage + 1) * LIST_ACTIVE_RUNS_STORAGE_BATCH_SIZE >= storageTotal) break;
     }
 
     const total = matchedRuns.length;
