@@ -80,6 +80,13 @@ const graphFixture: KnowledgeGraphPayload = {
     // rule hides names on nodes with zero incoming memories).
     { id: 'wikilink:ent-2:ent-1', source: 'ent-2', target: 'ent-1', type: 'wikilink', factId: 'fact-2' },
   ],
+  // A11: memories drive rendering when present — a pinned line (junction
+  // marker), a reverse line, and a dot on ent-1 (factCount 3 > 1 keeps it).
+  memories: [
+    { id: 'fact-1', entityIds: ['ent-1', 'ent-2'], pinned: true, text: 'Payments Service uses Deploy Runbook.' },
+    { id: 'fact-2', entityIds: ['ent-2', 'ent-1'], pinned: false, text: 'Runbook references the service.' },
+    { id: 'fact-3', entityIds: ['ent-1'], pinned: false, text: 'Deploys run nightly.' },
+  ],
   truncated: false,
   outOfWindow: [],
   unresolvedCapped: { count: 0, names: [] },
@@ -131,6 +138,12 @@ function stubKnowledgeRoute(graph: KnowledgeGraphPayload | { status: number; mes
           edges: [
             ...graph.edges,
             { id: 'edge-thread', source: 'ent-1', target: 'ent-thread', type: 'wikilink' as const },
+          ],
+          // A11: when memories drive rendering, the same incoming connection
+          // must exist as a memory so the label rule still passes.
+          memories: [
+            ...(graph.memories ?? []),
+            { id: 'fact-thread', entityIds: ['ent-1', 'ent-thread'], pinned: false, text: 'Session note.' },
           ],
         });
       return HttpResponse.json(graph);

@@ -16,16 +16,23 @@ export interface LayoutNodeInput {
   fixed?: { x: number; y: number };
   /** Warm-start position (e.g. spawn a new node near its first neighbor). */
   initial?: { x: number; y: number };
+  /** Collision breathing room around the node (default 28; tiny memory dots use less). */
+  padding?: number;
 }
 
 export interface LayoutEdgeInput {
   source: string;
   target: string;
+  /** A11: hug links (memory dot stubs / junction spokes) stay short so memory markers cluster tight. */
+  hug?: boolean;
 }
+
+const DEFAULT_PADDING = 28;
 
 interface SimNode extends SimulationNodeDatum {
   id: string;
   size: number;
+  padding: number;
 }
 
 type SimLink = SimulationLinkDatum<SimNode>;
@@ -48,6 +55,7 @@ export function runLayout(
     return {
       id: node.id,
       size: node.size,
+      padding: node.padding ?? DEFAULT_PADDING,
       x: node.fixed?.x ?? seeded.x,
       y: node.fixed?.y ?? seeded.y,
       fx: node.fixed?.x ?? null,
@@ -55,6 +63,7 @@ export function runLayout(
     };
   });
   const ids = new Set(simNodes.map(node => node.id));
+  const hugs = new Set(edges.filter(edge => edge.hug).map(edge => `${edge.source}\u0000${edge.target}`));
   const simEdges: SimLink[] = edges
     .filter(edge => ids.has(edge.source) && ids.has(edge.target))
     .map(edge => ({ source: edge.source, target: edge.target }));
@@ -67,14 +76,17 @@ export function runLayout(
         .distance(link => {
           const source = link.source as SimNode;
           const target = link.target as SimNode;
-          return 40 + (source.size + target.size) / 2;
+          // Hug links (memory stubs/spokes) keep markers tight to their cluster.
+          const hug = hugs.has(`${source.id}\u0000${target.id}`);
+          return (hug ? 8 : 40) + (source.size + target.size) / 2;
         }),
     )
-    .force('charge', forceManyBody().strength(-700))
+    // Tiny memory markers repel gently; entities keep the strong spread.
+    .force('charge', forceManyBody<SimNode>().strength(node => (node.size <= 24 ? -60 : -700)))
     .force(
       'collide',
       forceCollide<SimNode>()
-        .radius(node => node.size / 2 + 28)
+        .radius(node => node.size / 2 + node.padding)
         .strength(1)
         .iterations(3),
     )
@@ -86,7 +98,7 @@ export function runLayout(
     .stop();
 
   simulation.tick(ticks);
-  resolveOverlaps(simNodes, 26);
+  resolveOverlaps(simNodes);
 
   const positions = new Map<string, { x: number; y: number }>();
   for (const node of simNodes) {
@@ -102,7 +114,7 @@ export function runLayout(
  * and push them apart deterministically until every pair clears its combined
  * radius plus padding. Fixed (user-dragged) nodes never move.
  */
-function resolveOverlaps(nodes: SimNode[], padding: number): void {
+function resolveOverlaps(nodes: SimNode[]): void {
   // Sorted big-first: settling the large nodes before the dots converges much
   // faster and avoids ping-pong between hub pairs.
   const order = [...nodes].sort((a, b) => b.size - a.size);
@@ -112,7 +124,9 @@ function resolveOverlaps(nodes: SimNode[], padding: number): void {
       for (let j = i + 1; j < order.length; j++) {
         const a = order[i]!;
         const b = order[j]!;
-        const minDistance = a.size / 2 + b.size / 2 + padding;
+        // Pair breathing room = the smaller of the two paddings, so tiny
+        // memory markers can nestle close without entities colliding.
+        const minDistance = a.size / 2 + b.size / 2 + Math.min(a.padding, b.padding);
         let dx = (b.x ?? 0) - (a.x ?? 0);
         let dy = (b.y ?? 0) - (a.y ?? 0);
         let distance = Math.hypot(dx, dy);
