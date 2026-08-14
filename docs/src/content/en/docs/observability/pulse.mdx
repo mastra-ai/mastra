@@ -35,43 +35,11 @@ npm install @mastra/pulse
 
 ## Configure
 
-The exporter writes to ClickHouse over HTTP. Create the tables once with `ensurePulseTables`, then register the exporter in your observability config:
-
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-import { Observability } from '@mastra/observability'
-import { PulseExporter, ensurePulseTables } from '@mastra/pulse'
-
-await ensurePulseTables({ url: 'http://localhost:8123', database: 'pulse' })
-
-export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'my-app',
-        exporters: [
-          new PulseExporter({
-            url: 'http://localhost:8123',
-            database: 'pulse',
-          }),
-        ],
-      },
-    },
-  }),
-})
-```
-
-Without `url` and `database` (or a `storage` domain, see below) the exporter disables itself and writes nothing.
-
-### Storage-domain mode
-
-Instead of a direct ClickHouse URL, the exporter can write through the `pulse` storage domain. Register a pulse store on the composite store and pass it to the exporter:
+The whole pipeline lives in `@mastra/core` behind one config key. Configuring `pulse` on Mastra constructs a dedicated PulseBus, a bridge over the observability pipeline, native AgentController session forwarding, and a batching writer into the `pulse` storage domain:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 import { MastraCompositeStore } from '@mastra/core/storage'
-import { Observability } from '@mastra/observability'
-import { PulseExporter } from '@mastra/pulse'
 import { PulseStorageClickhouse } from '@mastra/clickhouse'
 import { LibSQLStore } from '@mastra/libsql'
 
@@ -92,18 +60,36 @@ export const mastra = new Mastra({
       pulse: pulseStore,
     },
   }),
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'my-app',
-        exporters: [new PulseExporter({ storage: pulseStore })],
-      },
-    },
-  }),
+  // One switch: bridge + session forwarding + writer over the pulse domain.
+  pulse: {},
 })
 ```
 
-Registering the `pulse` domain also enables the read model: the server exposes `/api/pulse/*` endpoints and `client.pulse` in the client SDK reads derived flows from the same store.
+Without `pulse` configured, nothing is constructed — stock behavior. Registering the `pulse` domain also enables the read model: the server exposes `/api/pulse/*` endpoints and `client.pulse` in the client SDK reads derived flows from the same store.
+
+Token and cost metrics are folded into the semantic model pulses' `data` (`total_input_tokens`, `cost_usd`, …) inside the bridge — actions stay verbs; no metric-name actions are ever written.
+
+### Standalone ClickHouse writer (no composite store)
+
+Users without a composite store can register the standalone HTTP writer from `@mastra/pulse` as a pulse exporter (create the tables once with `ensurePulseTables`):
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { ClickHouseHttpPulseExporter, ensurePulseTables } from '@mastra/pulse'
+
+await ensurePulseTables({ url: 'http://localhost:8123', database: 'pulse' })
+
+export const mastra = new Mastra({
+  pulse: {
+    exporters: [
+      new ClickHouseHttpPulseExporter({
+        url: 'http://localhost:8123',
+        database: 'pulse',
+      }),
+    ],
+  },
+})
+```
 
 :::note
 Visit the [PulseExporter reference](/reference/observability/pulse-exporter) for all configuration options and the storage domain methods.
