@@ -44,8 +44,10 @@ const COMPOSIO_CONNECTION_MANAGEMENT_TOOLS = new Set(['COMPOSIO_MANAGE_CONNECTIO
  * client. Runtime (`resolveToolsVNext`) uses {@link MastraProvider} so resolved
  * tools are already in `createTool()` shape. Ordinary tools use Composio's
  * direct-tools API, while connection-management tools use a caller-scoped
- * Tool Router session. `outputSchema` is cleared because Composio returns
- * union schemas that Mastra's runtime rejects.
+ * Tool Router session. Resolved tools keep the `outputSchema` supplied by
+ * `@composio/mastra`, which pre-relaxes Composio's strict API schemas
+ * (nullable fields, extra properties, no `required`) so real third-party
+ * responses validate while structurally invalid output is still rejected.
  *
  * Allowlist filtering is layered by {@link BaseToolProvider}; this class
  * never reads `allowedToolkits` / `allowedTools` directly.
@@ -235,16 +237,6 @@ export class ComposioToolProvider extends BaseToolProvider {
     for (const [key, tool] of Object.entries(mastraTools)) {
       if (!tool) continue;
       const slug = (tool as { id?: string }).id ?? key;
-
-      // Composio returns union output schemas (`successful: true | false`) that
-      // Mastra's runtime cannot validate; clearing avoids per-tool validation
-      // errors at execute time. The property may be non-writable on some SDK
-      // versions, so we swallow assignment errors.
-      try {
-        (tool as unknown as { outputSchema: unknown }).outputSchema = undefined;
-      } catch {
-        // ignore
-      }
 
       const descOverride = opts.toolMeta?.[slug]?.description;
       if (descOverride) {

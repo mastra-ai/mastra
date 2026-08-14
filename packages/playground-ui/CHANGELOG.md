@@ -1,5 +1,51 @@
 # @mastra/playground-ui
 
+## 49.1.0-alpha.1
+
+### Minor Changes
+
+- Streamed replies now arrive one word at a time instead of in bursts. ([#21499](https://github.com/mastra-ai/mastra/pull/21499))
+
+  Chunks reach the browser unevenly — a proxy flushes, a tool call ends, the model changes pace — so a reply used to lurch: ten words at once, then nothing for a fifth of a second. `MarkdownRenderer` now paces a reply marked `streaming` itself, revealing it one word at a time at the speed the reply is actually arriving. Bursts and gaps stop reaching the page, and a change of pace reads as one rather than as a jolt.
+
+  ```tsx
+  <MarkdownRenderer streaming={part.state === 'streaming'}>{part.text}</MarkdownRenderer>
+  ```
+
+  Each word fades in as it lands, and code fades in whole — a fence or a piece of inline code appears with its background rather than a token at a time. A word fades in once and only once, so a paragraph never flickers as the rest of the reply arrives behind it.
+
+  A thread opened from history renders whole. A reply opened part-written joins it rather than retyping it, and what was already on screen when you opened it stays put: only the words landing from then on animate. Readers who ask for reduced motion get the text at once, unanimated.
+
+- Added an "lg" size variant to sidebar navigation items for taller (36px) rows. ([#21509](https://github.com/mastra-ai/mastra/pull/21509))
+
+- Replaced the task list's progress bar and "2/4 completed" label with a compact status strip in the header. One bar per task, colored by state (green completed, orange in progress, grey pending), with the exact count on hover. Frees the vertical space the progress bar used to take. ([#21507](https://github.com/mastra-ai/mastra/pull/21507))
+
+  `<TaskList>` is unchanged. The strip now derives everything from the tasks, so `TaskListCount` and `TaskListCountProps` are removed, and `TaskListProgress` takes the tasks instead of a completed/total pair. Both were reachable from `@mastra/playground-ui/components/ai/task-list`.
+
+  There is no replacement for `TaskListCount` — the count lives in the strip's tooltip. Callers of `TaskListProgress` pass the tasks they already render:
+
+  ```tsx
+  const tasks = [
+    { id: '1', content: 'Inspect code', activeForm: 'Inspecting code', status: 'completed' },
+    { id: '2', content: 'Add tests', activeForm: 'Adding tests', status: 'in_progress' },
+    { id: '3', content: 'Build package', activeForm: 'Building package', status: 'pending' },
+  ];
+
+  // Before
+  <TaskListCount completed={1} total={3} />
+  <TaskListProgress completed={1} total={3} />
+
+  // After
+  <TaskListProgress tasks={tasks} />
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`15101bb`](https://github.com/mastra-ai/mastra/commit/15101bb53c0d934f31af6b8813b88191e382a5e5), [`c2c3deb`](https://github.com/mastra-ai/mastra/commit/c2c3debcf670c7082d0a5e553aa99818a864698c), [`33374ba`](https://github.com/mastra-ai/mastra/commit/33374ba359e4fb13eaa918ae925fe167a3c55414), [`c5f964d`](https://github.com/mastra-ai/mastra/commit/c5f964d3f77064e978f8066ec506eed77ba5c63c), [`f8f653f`](https://github.com/mastra-ai/mastra/commit/f8f653f10980d01a73706cc3c8689ca5e40ce808)]:
+  - @mastra/core@1.60.0-alpha.1
+  - @mastra/client-js@1.40.1-alpha.1
+  - @mastra/react@1.4.4-alpha.1
+
 ## 49.0.1-alpha.0
 
 ### Patch Changes

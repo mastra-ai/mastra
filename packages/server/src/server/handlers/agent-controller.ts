@@ -902,11 +902,15 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, limit, tags, requestContext }) => {
+  handler: async ({ mastra, controllerId, resourceId, limit, tags }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
-      const threads = await session.thread.list();
+      // Read-only route: query storage directly instead of constructing a
+      // Session. `createSession` triggers workspace/sandbox initialization
+      // (5–17s stall, cost per provisioned sandbox) as a side effect — reads
+      // shouldn't pay that. Session creation happens on the write path.
+      // `queryThreads` lazily initializes storage (not workspace) on its own.
+      const threads = await controller.queryThreads({ resourceId });
       // A thread's metadata mixes the session scoping tags (stamped at creation,
       // e.g. `projectPath`) with internal session bookkeeping that
       // `Session.loadMetadata()` reads back (selected model/mode, observer/
@@ -939,12 +943,19 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
       const sorted = [...scoped].sort((a, b) => toTime(b) - toTime(a));
       const max = Number(limit);
       const limited = Number.isFinite(max) && max > 0 ? sorted.slice(0, max) : sorted;
-      // Thread run state comes from the agent thread-stream runtime (the same
-      // per-thread active/idle tracking the signals `ifIdle` path uses). It is
-      // keyed by resourceId + threadId, so it covers runs started by any
-      // session on this resource — including sessions scoped to other git
-      // worktrees — letting one listing report activity across all of them.
-      const agent = controller.getCurrentAgent(session);
+      // Thread run state comes from the controller-wide active-run registry,
+      // which unions per-agent active thread runs across all backing agents.
+      // Keyed by resourceId + threadId so it covers runs started by any session
+      // on this resource — including sessions scoped to other git worktrees.
+      // Using this controller-level accessor (rather than resolving an agent
+      // via a Session) keeps the read path free of session/workspace
+      // side-effects.
+      const activeThreadIds = new Set(
+        controller
+          .listActiveThreadRuns()
+          .filter(r => r.resourceId === resourceId)
+          .map(r => r.threadId),
+      );
       return {
         threads: limited.map(t => {
           const threadTags = getTags(t);
@@ -953,7 +964,7 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
             title: t.title,
             tags: Object.keys(threadTags).length > 0 ? threadTags : undefined,
             updatedAt: t.updatedAt instanceof Date ? t.updatedAt.toISOString() : undefined,
-            state: agent.getActiveThreadRunId({ resourceId, threadId: t.id }) ? ('active' as const) : ('idle' as const),
+            state: activeThreadIds.has(t.id) ? ('active' as const) : ('idle' as const),
           };
         }),
       };
@@ -1157,11 +1168,23 @@ export const LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE = createRoute({
   tags: ['AgentController', 'Threads'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, threadId, limit, requestContext }) => {
+  handler: async ({ mastra, controllerId, resourceId, threadId, limit }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
-      const messages = await session.thread.listMessages({ threadId, limit });
+      // Read-only route: query storage directly instead of constructing a
+      // Session. Session creation would trigger workspace/sandbox
+      // initialization as a side effect; reads should never pay that cost.
+      // The query methods lazily initialize storage (not workspace) on their own.
+      // The route is authorized for the URL's resourceId, but `threadId` is
+      // otherwise unscoped. Verify the thread belongs to this resource so a
+      // caller can't peek at another resource's messages by guessing an id
+      // — matches the check `session.thread.listMessages` performed via
+      // `session.thread.set` before we bypassed session construction.
+      const thread = await controller.queryThreadById({ threadId });
+      if (!thread || thread.resourceId !== resourceId) {
+        throw new Error(`Thread not found: ${threadId}`);
+      }
+      const messages = await controller.queryThreadMessages({ threadId, limit });
       return {
         messages: messages.map(m => ({
           id: m.id,

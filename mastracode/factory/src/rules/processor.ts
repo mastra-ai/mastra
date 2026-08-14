@@ -12,12 +12,13 @@ import type { FactoryRunBindingRecord, WorkItemsStorage, WorkItemRow } from '../
 import { getFactorySessionCoordinates } from './binding-context.js';
 import { resolveFactoryToolRule } from './resolve.js';
 import type { FactoryTransitionService } from './transition-service.js';
-import { FACTORY_RULE_STAGES } from './types.js';
+import { isFactoryRuleStage } from './types.js';
 import type {
   FactoryCommitDecision,
   FactoryRuleBoard,
   FactoryRuleDecision,
   FactoryRuleJsonValue,
+  FactoryRuleStage,
   FactoryRules,
   FactoryToolResultRuleContext,
 } from './types.js';
@@ -27,7 +28,7 @@ const STATE_ID = 'factory-phase';
 const RULE_TIMEOUT_MS = 5_000;
 const TRANSCRIPT_PAGE_SIZE = 50;
 const MAX_LINKED_ITEMS = 5;
-const PHASE_LABELS: Record<(typeof FACTORY_RULE_STAGES)[number], string> = {
+const PHASE_LABELS: Record<FactoryRuleStage, string> = {
   intake: 'Intake',
   triage: 'Investigating',
   planning: 'Planning',
@@ -261,7 +262,8 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     }
 
     const item = await this.options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
-    if (!item || item.stages.length !== 1 || !FACTORY_RULE_STAGES.includes(item.stages[0] as never)) return;
+    const stage = item?.stages.length === 1 ? item.stages[0] : undefined;
+    if (!item || !isFactoryRuleStage(stage)) return;
     const allItems = await this.options.storage.list({
       orgId: binding.orgId,
       factoryProjectId: binding.factoryProjectId,
@@ -270,7 +272,6 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       .filter(candidate => candidate.parentWorkItemId === item.id || item.parentWorkItemId === candidate.id)
       .slice(0, MAX_LINKED_ITEMS);
     const board = boardForItem(item);
-    const stage = item.stages[0]!;
     const value: PhaseSnapshotValue = {
       status: 'active',
       bindingId: binding.id,
@@ -289,7 +290,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       ? `\nLinked items: ${linked.map(candidate => `${workItemSource(candidate)} ${candidate.title}`).join('; ')}`
       : '';
     const snapshotContents =
-      `Factory ${board} phase: ${PHASE_LABELS[stage as keyof typeof PHASE_LABELS]} (${escapeText(stage)})\n` +
+      `Factory ${board} phase: ${PHASE_LABELS[stage]} (${escapeText(stage)})\n` +
       `Work item: ${escapeText(item.title)} (${item.id})\n` +
       `Role: ${escapeText(binding.role)}\nRevision: ${item.revision}\nRules: ${escapeText(this.options.rules.version)}\n` +
       `Use factory_transition_work_item with expectedRevision ${item.revision} to request a phase change.${escapeText(linkedText)}`;
@@ -350,7 +351,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     toolCallIds?: ReadonlySet<string>,
   ): Promise<void> {
     const item = await this.options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
-    if (!item || item.stages.length !== 1 || !FACTORY_RULE_STAGES.includes(item.stages[0] as never)) return;
+    if (!item || item.stages.length !== 1 || !isFactoryRuleStage(item.stages[0])) return;
     for (const message of messages) {
       for (const toolResult of completedToolResults(message)) {
         if (toolCallIds && !toolCallIds.has(toolResult.toolCallId)) continue;

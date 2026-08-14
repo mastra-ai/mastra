@@ -51,7 +51,7 @@ export function issueCandidate(issue: GithubIssue): BoardCandidate {
     source: 'github-issue',
     title: issue.title,
     url: issue.url,
-    meta: `#${issue.number}${issue.author ? ` · ${issue.author}` : ''} · opened ${relativeTime(issue.createdAt)}`,
+    meta: `#${issue.number}${issue.author ? ` · ${issue.author}` : ''} · ${relativeTime(issue.createdAt)}`,
     column: autoTriaged ? 'triage' : 'intake',
     runActions: needsApproval ? [approvalRunAction(ref, issue.number)] : issueRunActions(ref, { triage: true }),
     branch: `factory/issue-${issue.number}`,

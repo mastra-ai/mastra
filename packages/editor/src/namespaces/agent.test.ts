@@ -19,7 +19,7 @@ async function createEditorWithStore(agents?: Record<string, Agent>) {
 }
 
 describe('EditorAgentNamespace.update', () => {
-  it('creates a new active version when SDK updates agent snapshot fields', async () => {
+  it('creates a new draft version when SDK updates agent snapshot fields', async () => {
     const { editor, agentsStore } = await createEditorWithStore();
 
     await editor.agent.create({
@@ -29,6 +29,7 @@ describe('EditorAgentNamespace.update', () => {
       model: { provider: 'openai', name: 'gpt-4' },
       tools: {},
     });
+    const initialRecord = await agentsStore.getById('sdk-updatable-agent');
 
     const updated = await editor.agent.update({
       id: 'sdk-updatable-agent',
@@ -52,10 +53,11 @@ describe('EditorAgentNamespace.update', () => {
     expect(versionTwo?.changedFields).toEqual(['instructions', 'model', 'tools']);
 
     const record = await agentsStore.getById('sdk-updatable-agent');
-    expect(record?.activeVersionId).toBe(versionTwo?.id);
+    expect(record?.activeVersionId).toBe(initialRecord?.activeVersionId);
+    expect(record?.activeVersionId).not.toBe(versionTwo?.id);
   });
 
-  it('makes SDK config updates visible through default getById for active agents', async () => {
+  it('keeps SDK config updates in draft until they are published', async () => {
     const { editor, agentsStore } = await createEditorWithStore();
 
     await editor.agent.create({
@@ -74,13 +76,42 @@ describe('EditorAgentNamespace.update', () => {
       model: { provider: 'openai', name: 'gpt-4' },
     });
 
+    editor.agent.clearCache('published-sdk-agent');
     const defaultAgent = await editor.agent.getById('published-sdk-agent');
-    expect(await Promise.resolve(defaultAgent?.getInstructions())).toBe('TWO');
+    expect(await Promise.resolve(defaultAgent?.getInstructions())).toBe('ONE');
+    const draftAgent = await editor.agent.getById('published-sdk-agent', { status: 'draft' });
+    expect(await Promise.resolve(draftAgent?.getInstructions())).toBe('TWO');
 
     const versions = await agentsStore.listVersions({ agentId: 'published-sdk-agent' });
     const versionTwo = versions.versions.find(version => version.versionNumber === 2);
     const record = await agentsStore.getById('published-sdk-agent');
-    expect(record?.activeVersionId).toBe(versionTwo?.id);
+    expect(record?.activeVersionId).toBe(versionOne?.id);
+    expect(record?.activeVersionId).not.toBe(versionTwo?.id);
+  });
+
+  it('preserves an explicit activeVersionId while creating a new snapshot version', async () => {
+    const { editor, agentsStore } = await createEditorWithStore();
+
+    await editor.agent.create({
+      id: 'explicit-active-version-agent',
+      name: 'Explicit Active Version Agent',
+      instructions: 'ONE',
+      model: { provider: 'openai', name: 'gpt-4' },
+    });
+    const initialVersions = await agentsStore.listVersions({ agentId: 'explicit-active-version-agent' });
+    const versionOne = initialVersions.versions.find(version => version.versionNumber === 1);
+
+    await editor.agent.update({
+      id: 'explicit-active-version-agent',
+      activeVersionId: versionOne!.id,
+      instructions: 'TWO',
+    });
+
+    const versions = await agentsStore.listVersions({ agentId: 'explicit-active-version-agent' });
+    const versionTwo = versions.versions.find(version => version.versionNumber === 2);
+    const record = await agentsStore.getById('explicit-active-version-agent');
+    expect(record?.activeVersionId).toBe(versionOne?.id);
+    expect(record?.activeVersionId).not.toBe(versionTwo?.id);
   });
 
   it('updates record fields without creating a new version', async () => {

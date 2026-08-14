@@ -1,3 +1,5 @@
+import type { FactoryRuleStage } from '@mastra/factory/rules/types';
+import { isFactoryRuleStage } from '@mastra/factory/rules/types';
 import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import {
   queryOptions,
@@ -21,7 +23,6 @@ import type {
   BoardSnapshot,
   CreateWorkItemInput,
   FactoryBoard,
-  FactoryStage,
   UpdateWorkItemInput,
   WorkItem,
 } from '../ui/domains/factory/services/workItems';
@@ -126,23 +127,8 @@ type TransitionWorkItemVariables = {
   cause?: string;
 };
 
-function isFactoryStage(stage: unknown): stage is FactoryStage {
-  switch (stage) {
-    case 'intake':
-    case 'triage':
-    case 'planning':
-    case 'execute':
-    case 'review':
-    case 'done':
-    case 'canceled':
-      return true;
-    default:
-      return false;
-  }
-}
-
-function requireFactoryStage(stage: string): FactoryStage {
-  if (!isFactoryStage(stage)) throw new Error(`Unsupported Factory stage: ${stage}`);
+function requireFactoryStage(stage: string): FactoryRuleStage {
+  if (!isFactoryRuleStage(stage)) throw new Error(`Unsupported Factory stage: ${stage}`);
   return stage;
 }
 
@@ -207,12 +193,12 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
 
 interface PendingTransitionVariables {
   item: { id: string };
-  stage: FactoryStage;
+  stage: FactoryRuleStage;
 }
 
 function isPendingTransitionVariables(value: unknown): value is PendingTransitionVariables {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
-  if (!('stage' in value) || !isFactoryStage(value.stage)) return false;
+  if (!('stage' in value) || !isFactoryRuleStage(value.stage)) return false;
   if (!('item' in value) || typeof value.item !== 'object' || value.item === null || !('id' in value.item))
     return false;
   return typeof value.item.id === 'string';

@@ -6,7 +6,9 @@ import type {
   IOrganizationsProvider,
   IUserProvider,
   CredentialsResult,
+  MastraAuthRequest,
 } from '@internal/auth';
+import { getRequestHeader } from '@internal/auth';
 import type { EEUser } from '@internal/auth/ee';
 import type { MastraAuthProviderOptions } from '@internal/auth/provider';
 import { MastraAuthProvider } from '@internal/auth/provider';
@@ -18,14 +20,6 @@ import { makeSignature } from 'better-auth/crypto';
 import { getMigrations } from 'better-auth/db/migration';
 import { organization } from 'better-auth/plugins';
 
-type HonoRequestLike = {
-  raw?: Request;
-  headers?: Headers;
-  header(name: string): string | undefined;
-};
-
-type MastraAuthRequest = Request | HonoRequestLike;
-
 type BetterAuthContext = Awaited<Auth['$context']>;
 
 function tryDecode(value: string): string {
@@ -34,14 +28,6 @@ function tryDecode(value: string): string {
   } catch {
     return value;
   }
-}
-
-function getRequestHeader(request: MastraAuthRequest, name: string): string | null {
-  if (request instanceof Request) {
-    return request.headers.get(name);
-  }
-
-  return request.raw?.headers.get(name) ?? request.headers?.get(name) ?? request.header(name) ?? null;
 }
 
 /**
