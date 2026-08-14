@@ -4777,7 +4777,15 @@ export class Mastra<
     const visit = (id: string) => {
       if (visited.has(id)) return;
       if (visiting.has(id)) {
-        throw new Error(`Dynamic workflow revision has a circular nested-workflow dependency at "${id}".`);
+        const error = new MastraError({
+          id: 'MASTRA_DYNAMIC_WORKFLOW_REVISION_CIRCULAR_DEPENDENCY',
+          domain: ErrorDomain.MASTRA,
+          category: ErrorCategory.USER,
+          text: `Dynamic workflow revision has a circular nested-workflow dependency at "${id}".`,
+          details: { status: 400, rootId, workflowId: id },
+        });
+        this.#logger?.trackException(error);
+        throw error;
       }
       const definition = byId.get(id);
       if (!definition) return;
@@ -4790,9 +4798,15 @@ export class Mastra<
         }
         const registered = (this.#workflows as Record<string, AnyWorkflow>)[dependencyId];
         if (registered?.origin === 'dynamic' && registered.dynamicStorageBacked) {
-          throw new Error(
-            `Dynamic workflow revision references inactive or missing stored workflow "${dependencyId}".`,
-          );
+          const error = new MastraError({
+            id: 'MASTRA_DYNAMIC_WORKFLOW_REVISION_STORED_WORKFLOW_NOT_FOUND',
+            domain: ErrorDomain.MASTRA,
+            category: ErrorCategory.USER,
+            text: `Dynamic workflow revision references inactive or missing stored workflow "${dependencyId}".`,
+            details: { status: 404, rootId, workflowId: dependencyId },
+          });
+          this.#logger?.trackException(error);
+          throw error;
         }
       }
       visiting.delete(id);
@@ -4802,7 +4816,15 @@ export class Mastra<
 
     visit(rootId);
     if (!visited.has(rootId)) {
-      throw new Error(`Dynamic workflow definition "${rootId}" is not available in storage.`);
+      const error = new MastraError({
+        id: 'MASTRA_DYNAMIC_WORKFLOW_REVISION_ROOT_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Dynamic workflow definition "${rootId}" is not available in storage.`,
+        details: { status: 404, rootId },
+      });
+      this.#logger?.trackException(error);
+      throw error;
     }
     return ordered;
   }
@@ -4894,9 +4916,15 @@ export class Mastra<
           return { workflow: revision.root };
         }
         if (storedRun) {
-          throw new Error(
-            `Dynamic workflow run "${runId}" does not contain a pinned definition revision and cannot be resumed safely after the registered definition may have changed.`,
-          );
+          const error = new MastraError({
+            id: 'MASTRA_DYNAMIC_WORKFLOW_RESUME_REVISION_MISSING',
+            domain: ErrorDomain.MASTRA,
+            category: ErrorCategory.USER,
+            text: `Dynamic workflow run "${runId}" does not contain a pinned definition revision and cannot be resumed safely after the registered definition may have changed.`,
+            details: { status: 409, workflowId: workflow.id, runId },
+          });
+          this.#logger?.trackException(error);
+          throw error;
         }
       }
 

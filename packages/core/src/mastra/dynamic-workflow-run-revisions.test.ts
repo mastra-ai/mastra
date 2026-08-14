@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { MastraError } from '../error';
 import { InMemoryStore } from '../storage';
 import { createWorkflow } from '../workflows/create';
 import type { DynamicWorkflowGraph } from '../workflows/dynamic';
@@ -208,9 +209,12 @@ describe('dynamic workflow run revisions', () => {
       },
     });
 
-    await expect(mastra.getWorkflow('campaign').createRun({ runId: 'legacy-run' })).rejects.toThrow(
-      /does not contain a pinned definition revision/,
-    );
+    const createLegacyRun = mastra.getWorkflow('campaign').createRun({ runId: 'legacy-run' });
+    await expect(createLegacyRun).rejects.toMatchObject({
+      id: 'MASTRA_DYNAMIC_WORKFLOW_RESUME_REVISION_MISSING',
+      details: { status: 409, workflowId: 'campaign', runId: 'legacy-run' },
+    });
+    await expect(createLegacyRun).rejects.toBeInstanceOf(MastraError);
   });
 
   it('restores a pinned revision from a raw JSON string snapshot', async () => {
