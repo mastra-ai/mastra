@@ -239,6 +239,37 @@ describe('KnowledgeRoutes', () => {
     expect(threadView.pinCensus).toEqual({ resource: 2, thread: 1 });
   });
 
+  // 7b (A11): memories are first-class payload elements with per-fact entity sets
+  it('emits every windowed fact as a memory with its in-window entities, owner first; pins omit the reserved owner', async () => {
+    const h = await createHarness();
+    const owner = await entity(h.knowledge, 'Deploy Runbook', h.projectScope, 'doc');
+    const other = await entity(h.knowledge, 'Release Train', h.projectScope, 'process');
+    const third = await entity(h.knowledge, 'Rollback Plan', h.projectScope, 'doc');
+    const pinnedResource = await entity(h.knowledge, 'pinned', h.projectScope, 'system');
+    const solo = await fact(h.knowledge, owner, 'Runbook owner is the release captain.', h.projectScope, 't-1');
+    const pair = await fact(h.knowledge, owner, 'Ships on the [[Release Train]].', h.projectScope, 't-1');
+    const trio = await fact(
+      h.knowledge,
+      owner,
+      'Coordinates [[Release Train]] with [[Rollback Plan]].',
+      h.projectScope,
+      't-1',
+    );
+    const pin = await fact(h.knowledge, pinnedResource, 'Always run [[Rollback Plan]] first.', h.projectScope, 't-1');
+
+    const { body } = await graph(h);
+    const byId = new Map(body.memories.map(memory => [memory.id, memory]));
+    // Arity 1: dot material — just the owner.
+    expect(byId.get(solo.id)).toMatchObject({ entityIds: [owner.id], pinned: false });
+    // Arity 2: line material — owner first, then the wikilink target.
+    expect(byId.get(pair.id)).toMatchObject({ entityIds: [owner.id, other.id], pinned: false });
+    // Arity 3: junction material.
+    expect(byId.get(trio.id)).toMatchObject({ entityIds: [owner.id, other.id, third.id] });
+    // Pins omit the hidden reserved owner — arity from wikilink targets only.
+    expect(byId.get(pin.id)).toMatchObject({ entityIds: [third.id], pinned: true });
+    expect(byId.get(pin.id)?.text).toContain('Rollback Plan');
+  });
+
   // 8
   it('fails closed: a caller from another org cannot read the graph', async () => {
     const h = await createHarness();
