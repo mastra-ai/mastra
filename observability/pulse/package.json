@@ -1,7 +1,7 @@
 {
   "name": "@mastra/pulse",
   "version": "0.0.1-alpha.0",
-  "description": "Experimental event-first (Pulse) observability exporter for Mastra — append-only pulse/relationship rows in ClickHouse with a fully derived read model",
+  "description": "Experimental adapters for Mastra's event-first (Pulse) observability pipeline — standalone ClickHouse HTTP writer, table schema, and span backfill. The pipeline itself lives in @mastra/core (`new Mastra({ pulse })`)",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -31,9 +31,6 @@
     "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "license": "Apache-2.0",
-  "dependencies": {
-    "@mastra/observability": "workspace:*"
-  },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",

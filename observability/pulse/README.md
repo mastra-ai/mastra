@@ -1,46 +1,62 @@
 # @mastra/pulse (experimental)
 
-Event-first ("Pulse") observability exporter for Mastra — a research preview.
+Adapters for Mastra's event-first ("Pulse") observability pipeline — a
+research preview.
 
 Instead of storing spans with durations and parent pointers, Pulse writes
-**append-only instant facts** (`pulses`) and **link rows** (`relationships`) to
-ClickHouse, and derives everything smart — flows, trees, durations, status —
-at read time. Because facts land as they happen, in-flight runs are visible
-(e.g. "tool approval pending" mid-run), which span-based views structurally
-cannot show until a run ends.
+**append-only instant facts** (`pulses`) and **link rows** (`relationships`),
+and derives everything smart — flows, trees, durations, status — at read time.
+Because facts land as they happen, in-flight runs are visible (e.g. "tool
+approval pending" mid-run), which span-based views structurally cannot show
+until a run ends.
 
-The exporter consumes every ObservabilityBus event family: spans (all 30
-`SpanType`s), logs, metrics (including **cost**, which only exists on metric
-events), scores, feedback, and drop meta-events.
+**The pipeline itself lives in `@mastra/core`.** Configuring `pulse` on Mastra
+constructs a dedicated `PulseBus`, a span bridge over the observability
+pipeline (all 30 `SpanType`s, logs, scores, feedback; token/cost metrics are
+folded into the semantic model pulses' `data` — actions stay verbs), native
+AgentController session forwarding (approvals, TRUE abort outcome, follow-ups,
+mode/model switches), and a batching writer into the `pulse` storage domain.
 
-## Install & configure
+This package carries what does NOT belong in core:
+
+- `ClickHouseHttpPulseExporter` — a standalone ClickHouse writer for users
+  without a composite store carrying a pulse domain
+- `ensurePulseTables` — the ClickHouse DDL helper
+- `backfillFromObservability` — replay persisted traces into the pulse model
+
+## Configure (core-native)
 
 ```ts
 import { Mastra } from '@mastra/core';
-import { Observability } from '@mastra/observability';
-import { PulseExporter } from '@mastra/pulse';
 
 export const mastra = new Mastra({
   // ...agents, workflows...
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'my-app',
-        exporters: [
-          new PulseExporter({
-            url: 'http://localhost:8123',
-            database: 'pulse',
-            username: 'default',
-            password: '',
-          }),
-        ],
-      },
-    },
-  }),
+  // Default writer: the composite store's `pulse` domain
+  // (e.g. PulseStorageClickhouse from @mastra/clickhouse).
+  pulse: {},
 });
 ```
 
-Without `url` + `database` the exporter disables itself and writes nothing.
+Without `pulse` configured, nothing is constructed — stock behavior.
+
+### Standalone ClickHouse writer (no composite store)
+
+```ts
+import { ClickHouseHttpPulseExporter } from '@mastra/pulse';
+
+export const mastra = new Mastra({
+  pulse: {
+    exporters: [
+      new ClickHouseHttpPulseExporter({
+        url: 'http://localhost:8123',
+        database: 'pulse',
+        username: 'default',
+        password: '',
+      }),
+    ],
+  },
+});
+```
 
 ## Tables
 
@@ -67,26 +83,36 @@ attributes, trace_id` with endpoint kinds
 - status = `completed | failed | aborted | stale | running` (the session-layer
   abort fact overrides the span outcome; no terminal pulse + quiet ⇒ stale)
 - resume = `resume_of` edges stitch suspended/resumed segments
-- cost per flow = SUM over metric pulses' `data.estimated_cost_usd`
+- token/cost = the semantic model pulse's `data`
+  (`total_input_tokens, total_output_tokens, …, cost_usd`), folded from metric
+  events inside the core bridge
+
+## Backfill
+
+```ts
+import { backfillFromObservability } from '@mastra/pulse';
+
+// Through a pulse storage domain (internal bus + writer managed for you):
+await backfillFromObservability({ observability: observabilityStore, storage: pulseStore });
+
+// Or onto an existing PulseBus you own:
+await backfillFromObservability({ observability: observabilityStore, bus: mastra.pulseBus! });
+```
 
 ## Session facts
 
-Spans miss session-layer facts (approvals, TRUE abort, follow-ups). Attach the
-listener to an Agent Controller session:
-
-```ts
-import { attachPulseSession } from '@mastra/pulse';
-attachPulseSession(session, pulseExporter, { threadId, resourceId });
-```
+`attachPulseSession` is **deprecated and a no-op**: session facts are
+forwarded natively by the AgentController whenever `pulse` is configured on
+Mastra — no per-session wiring.
 
 ## Limitations (research preview)
 
-- Payloads capped (default 4KB, `payloadCapBytes`); full message arrays are
-  never exported.
+- Payloads capped in the core bridge (default 4KB, `payloadCapBytes`); full
+  message arrays are never exported.
 - `SPAN_UPDATED` events are counted but not translated (dedupe semantics open).
 - Content identity (`included_in_model_input`) and file-hash definition
-  identity require deeper emit sites and are not produced by this exporter.
+  identity require deeper emit sites and are not produced yet.
 - Buffers are in-memory: a hard crash loses the unflushed tail (by design the
   read model surfaces such flows as `stale`).
-- Uses the ClickHouse HTTP interface via global fetch (no client dependency);
-  swap to `@clickhouse/client` when productionizing.
+- The HTTP writer uses the ClickHouse HTTP interface via global fetch (no
+  client dependency); swap to `@clickhouse/client` when productionizing.

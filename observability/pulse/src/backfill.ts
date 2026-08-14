@@ -1,11 +1,17 @@
 import { TracingEventType } from '@mastra/core/observability';
-import type { PulseExporter } from './exporter';
+import { PulseBridge, PulseBus, PulseStorageExporter } from '@mastra/core/pulse';
+import type { PulseStorage } from '@mastra/core/storage';
 
 /**
  * Backfill: replay spans already persisted by the observability storage domain
- * through a {@link PulseExporter}, so historical traces gain a pulse read
- * model. Reuses the exporter's entire translation (types, surfaces,
+ * through the core {@link PulseBridge}, so historical traces gain a pulse read
+ * model. Reuses the bridge's entire translation (types, surfaces,
  * relationships) — the converter only re-synthesizes span lifecycle events.
+ *
+ * Two sinks:
+ * - `bus`: emit onto an existing PulseBus (caller owns its exporters/lifecycle)
+ * - `storage`: convenience — an internal bus + `PulseStorageExporter` are
+ *   created and shut down around the run.
  *
  * Structural inputs keep this decoupled from storage internals: pass the
  * observability store's `listTraces`/`getTrace` directly.
@@ -48,12 +54,27 @@ export interface BackfillResult {
   spans: number;
 }
 
-export async function backfillFromObservability(opts: {
+export interface BackfillOptions {
   observability: ObservabilityReadLike;
-  exporter: PulseExporter;
+  /** Existing PulseBus to emit onto. Mutually exclusive with `storage`. */
+  bus?: PulseBus;
+  /** Pulse storage to write through (an internal bus/writer is managed for you). */
+  storage?: PulseStorage;
   pageSize?: number;
   maxTraces?: number;
-}): Promise<BackfillResult> {
+}
+
+export async function backfillFromObservability(opts: BackfillOptions): Promise<BackfillResult> {
+  if (!opts.bus && !opts.storage) {
+    throw new Error('backfillFromObservability requires either `bus` or `storage`');
+  }
+  const ownsBus = !opts.bus;
+  const bus = opts.bus ?? new PulseBus();
+  if (ownsBus) {
+    bus.registerExporter(new PulseStorageExporter({ storage: opts.storage! }));
+  }
+  const bridge = new PulseBridge({ bus });
+
   const pageSize = opts.pageSize ?? 50;
   const maxTraces = opts.maxTraces ?? Infinity;
   let traces = 0;
@@ -73,18 +94,23 @@ export async function backfillFromObservability(opts: {
         if (!span.id || !span.type) continue;
         spans++;
         if (span.isEvent) {
-          await opts.exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: span as any });
+          await bridge.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: span as any });
           continue;
         }
-        await opts.exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: span as any });
+        await bridge.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: span as any });
         if (span.endTime) {
-          await opts.exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: span as any });
+          await bridge.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: span as any });
         }
       }
     }
     if (list.length < pageSize) break;
   }
 
-  await opts.exporter.flush();
+  await bridge.flush();
+  if (ownsBus) {
+    await bus.shutdown();
+  } else {
+    await bus.flush();
+  }
   return { traces, spans };
 }
