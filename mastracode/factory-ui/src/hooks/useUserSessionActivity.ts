@@ -29,7 +29,7 @@ export function useUserSessionActivity({
   const queries = useQueries({
     queries: sessionIds.map(sessionId =>
       queryOptions({
-        queryKey: queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, sessionId),
+        queryKey: queryKeys.agentControllerSessionActivity(AGENT_CONTROLLER_ID, sessionId),
         queryFn: async () => {
           const { session } = createAgentControllerClient({
             agentControllerId: AGENT_CONTROLLER_ID,
