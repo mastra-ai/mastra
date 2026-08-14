@@ -180,6 +180,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
           payload={graphQuery.data}
           arrivals={arrivals}
           focusedId={selected?.entityId ?? null}
+          focusedFactId={selected?.factId ?? null}
           onFocusChange={id => {
             // A graph click starts a fresh trail; a pane click clears it.
             if (!id) return setTrail([]);
@@ -199,6 +200,15 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
             entityId={selected.entityId}
             threadId={threadId}
             focusFactId={selected.factId}
+            onSelectMemory={factId =>
+              // Bidirectional selection: expanding a card selects the memory
+              // page-wide, so the graph lights its marker/edge up too.
+              setTrail(current =>
+                current.length === 0
+                  ? current
+                  : [...current.slice(0, -1), { ...current[current.length - 1]!, factId: factId ?? undefined }],
+              )
+            }
             onClose={() => setTrail([])}
             onOpenThread={openThread}
             onEntityRef={name => {
