@@ -1355,6 +1355,32 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     );
   }
 
+  /**
+   * Retire every proposal parked on a work item. A merged pull request (or an
+   * item closed out any other way) leaves its queued runs with nothing left to
+   * do, and they would otherwise sit on the card forever asking to be answered.
+   */
+  async dismissProposalsForWorkItem(input: {
+    orgId: string;
+    factoryProjectId: string;
+    workItemId: string;
+    dismissedAt: Date;
+  }): Promise<FactoryDeferredDecisionRecord[]> {
+    const rows = await this.#db.findMany<GovernanceDbRow>('factory_deferred_decisions', {
+      org_id: input.orgId,
+      factory_project_id: input.factoryProjectId,
+      work_item_id: input.workItemId,
+      status: 'proposed',
+    });
+    const dismissed: FactoryDeferredDecisionRecord[] = [];
+    for (const row of rows) {
+      // Re-settled atomically: an approval racing this sweep keeps the run.
+      const record = await this.dismissDeferredDecision(input.orgId, input.factoryProjectId, row.id, input.dismissedAt);
+      if (record) dismissed.push(record);
+    }
+    return dismissed;
+  }
+
   async #settleProposedDecision(
     { orgId, factoryProjectId, decisionId }: { orgId: string; factoryProjectId: string; decisionId: string },
     patch: Partial<GovernanceDbRow>,
