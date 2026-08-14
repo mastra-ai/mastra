@@ -64,6 +64,14 @@ export function boardCardStatus(input: BoardCardStatusInput): BoardCardStatus {
       detail: decision.lastError ?? undefined,
     };
   }
+  // Already failed at least once; the server retries on its own, so no button.
+  if (decision?.status === 'retry') {
+    return {
+      kind: 'error',
+      label: `${automationCopy(decision.type).failed} — retrying…`,
+      detail: decision.lastError ?? undefined,
+    };
+  }
   if (decision) return { kind: 'busy', label: automationCopy(decision.type).busy };
   return { kind: 'idle', ...input.idle };
 }

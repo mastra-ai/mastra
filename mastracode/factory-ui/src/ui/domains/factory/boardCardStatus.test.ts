@@ -60,6 +60,14 @@ describe('boardCardStatus', () => {
     });
   });
 
+  it('separates an effect the server is retrying from one it has not tried yet', () => {
+    expect(boardCardStatus({ idle: IDLE, decision: decision({ status: 'retry', lastError: 'ECONNRESET' }) })).toEqual({
+      kind: 'error',
+      label: 'Automated run could not start — retrying…',
+      detail: 'ECONNRESET',
+    });
+  });
+
   it('describes a queued rule effect in terms of what it does, not the queue', () => {
     expect(boardCardStatus({ idle: IDLE, decision: decision({ type: 'transition', status: 'pending' }) })).toEqual({
       kind: 'busy',

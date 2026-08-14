@@ -2,6 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Popover, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowUpRight, EllipsisVertical, PencilLine, Plus } from 'lucide-react';
 import { useRef, useState } from 'react';
 
@@ -140,6 +141,17 @@ export function CandidateCard({
             <span className="text-ui-smd text-icon6 min-w-0 flex-1 truncate font-semibold">
               <SourceTitle source={candidate.source} title={candidate.title} />
             </span>
+            {/* Triage reads the source before deciding, so keep it one click away. */}
+            <a
+              href={candidate.url}
+              target="_blank"
+              rel="noreferrer"
+              draggable={false}
+              aria-label={externalLinkLabel(candidate.source)}
+              className={cn('text-icon3 hover:text-icon5 relative z-20 shrink-0', REVEAL_ON_CARD_HOVER)}
+            >
+              <ArrowUpRight size={12} aria-hidden />
+            </a>
           </div>
         </div>
         <CardLabels labels={labels} />
