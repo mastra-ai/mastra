@@ -1,7 +1,23 @@
 import { describe, expect, it } from 'vitest';
 
 import type { KnowledgeGraphEdge, KnowledgeGraphNode } from '../../services/knowledge';
-import { degreeMap, egoGraph, filterGraph, NODE_SIZE_DOT, NODE_SIZE_MAX, NODE_SIZE_MIN, nodeSize, shouldShowLabel, toFlowGraph, weightedDegree } from './graphModel';
+import {
+  degreeMap,
+  deriveMemoryElements,
+  egoGraph,
+  filterGraph,
+  MEMORY_DOT_SIZE,
+  MEMORY_JUNCTION_SIZE,
+  MEMORY_PIN_SIZE,
+  memoryPairEdges,
+  NODE_SIZE_DOT,
+  NODE_SIZE_MAX,
+  NODE_SIZE_MIN,
+  nodeSize,
+  shouldShowLabel,
+  toFlowGraph,
+  weightedDegree,
+} from './graphModel';
 import { runLayout } from './layout';
 
 function entity(id: string, overrides: Partial<KnowledgeGraphNode> = {}): KnowledgeGraphNode {
@@ -98,9 +114,85 @@ describe('filterGraph', () => {
     expect(result.edges).toEqual([pinnedEdge]);
   });
 
+  it('pin filter keeps entities touched by pinned memories via pair edges (A11)', () => {
+    const pairs = memoryPairEdges([{ id: 'm1', entityIds: ['org-1', 'res-1'], pinned: true, text: 'pinned link' }]);
+    const result = filterGraph(nodes, pairs, { rungs: new Set(), pinnedOnly: true });
+    expect(result.nodes.map(node => node.id).sort()).toEqual(['org-1', 'res-1', 'res-pinned']);
+  });
+
   it('maps the pinned flag onto flow edges (A9)', () => {
     const flow = toFlowGraph(nodes, [{ ...edge('org-1', 'res-1'), pinned: true }, edge('res-1', 'res-pinned')]);
     expect(flow.edges.map(e => e.data?.pinned)).toEqual([true, false]);
+  });
+});
+
+describe('deriveMemoryElements (Amendment A11)', () => {
+  const mem = (id: string, entityIds: string[], pinned = false) => ({ id, entityIds, pinned, text: `memory ${id}` });
+
+  it('renders a single-entity memory as a dot with a hugging stub edge, entity as the edge source', () => {
+    const owner = entity('a', { factCount: 3 });
+    const { memoryNodes, memoryEdges } = deriveMemoryElements([owner], [mem('m1', ['a'])]);
+    expect(memoryNodes).toEqual([expect.objectContaining({ id: 'mem:m1', kind: 'dot', size: MEMORY_DOT_SIZE })]);
+    expect(memoryEdges).toEqual([expect.objectContaining({ id: 'mem:m1:stub', source: 'a', target: 'mem:m1' })]);
+  });
+
+  it("suppresses the dot when an unpinned memory is its entity's only fact — the circle IS the memory", () => {
+    const owner = entity('a', { factCount: 1 });
+    const { memoryNodes, memoryEdges } = deriveMemoryElements([owner], [mem('m1', ['a'])]);
+    expect(memoryNodes).toHaveLength(0);
+    expect(memoryEdges).toHaveLength(0);
+  });
+
+  it("renders a pinned single-entity memory as the pin chip even on a one-fact entity", () => {
+    const owner = entity('a', { factCount: 1 });
+    const { memoryNodes } = deriveMemoryElements([owner], [mem('m1', ['a'], true)]);
+    expect(memoryNodes).toEqual([expect.objectContaining({ kind: 'dot', size: MEMORY_PIN_SIZE })]);
+  });
+
+  it('renders a two-entity memory as the connecting line — the memory IS the edge', () => {
+    const { memoryNodes, memoryEdges } = deriveMemoryElements(
+      [entity('a'), entity('b')],
+      [mem('m1', ['a', 'b'])],
+    );
+    expect(memoryNodes).toHaveLength(0);
+    expect(memoryEdges).toEqual([expect.objectContaining({ id: 'mem:m1', source: 'a', target: 'b' })]);
+  });
+
+  it('renders a PINNED two-entity memory as a midpoint junction so the chip is collision-protected', () => {
+    const { memoryNodes, memoryEdges } = deriveMemoryElements(
+      [entity('a'), entity('b')],
+      [mem('m1', ['a', 'b'], true)],
+    );
+    expect(memoryNodes).toEqual([expect.objectContaining({ kind: 'junction', size: MEMORY_PIN_SIZE })]);
+    expect(memoryEdges.map(edge => [edge.source, edge.target])).toEqual([
+      ['a', 'mem:m1'],
+      ['b', 'mem:m1'],
+    ]);
+  });
+
+  it('renders a 3+-entity memory as a junction splitting to each entity', () => {
+    const { memoryNodes, memoryEdges } = deriveMemoryElements(
+      [entity('a'), entity('b'), entity('c')],
+      [mem('m1', ['a', 'b', 'c'])],
+    );
+    expect(memoryNodes).toEqual([
+      expect.objectContaining({ id: 'mem:m1', kind: 'junction', size: MEMORY_JUNCTION_SIZE }),
+    ]);
+    expect(memoryEdges).toHaveLength(3);
+  });
+
+  it('drops memories touching entities outside the visible set (filter/ego safety)', () => {
+    const { memoryNodes, memoryEdges } = deriveMemoryElements([entity('a')], [mem('m1', ['a', 'ghost'])]);
+    expect(memoryNodes).toHaveLength(0);
+    expect(memoryEdges).toHaveLength(0);
+  });
+
+  it('memoryPairEdges emits per-fact owner→target pairs carrying the pin flag', () => {
+    const pairs = memoryPairEdges([mem('m1', ['a', 'b', 'c'], true), mem('m2', ['a'])]);
+    expect(pairs.map(pair => [pair.source, pair.target, pair.pinned])).toEqual([
+      ['a', 'b', true],
+      ['a', 'c', true],
+    ]);
   });
 });
 

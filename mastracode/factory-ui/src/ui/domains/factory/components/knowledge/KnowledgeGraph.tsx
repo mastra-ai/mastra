@@ -13,8 +13,17 @@ import { Boxes, Globe, Pin } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { KnowledgeGraphNode, KnowledgeGraphPayload, KnowledgeRung } from '../../services/knowledge';
-import type { EntityFlowNode, KnowledgeFlowEdge, KnowledgeGraphFilters } from './graphModel';
-import { egoGraph, filterGraph, NO_FILTERS, shouldShowLabel, toFlowGraph } from './graphModel';
+import type { EntityFlowNode, KnowledgeFlowEdge, KnowledgeGraphFilters, MemoryFlowNode } from './graphModel';
+import {
+  deriveMemoryElements,
+  egoGraph,
+  filterGraph,
+  memoryPairEdges,
+  NO_FILTERS,
+  shouldShowLabel,
+  toFlowGraph,
+  toMemoryFlow,
+} from './graphModel';
 import type { Arrivals } from './graphDiff';
 import { runLayout } from './layout';
 
@@ -36,17 +45,17 @@ function EntityNodeComponent({ data, selected }: NodeProps<EntityFlowNode>) {
     // Outer wrapper is unclipped so the pin badge can straddle the rim;
     // only the inner circle clips (it must, to keep the label inside).
     <div data-testid="knowledge-node" data-entity-id={entity.id} className="relative" style={{ width: size, height: size }}>
+      {/* A11: entities never carry pin visuals — pins belong to their memory
+          markers (dot / line / junction). */}
       <div
         className={[
           'flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-full border-2 text-center transition-shadow duration-200',
-          entity.pinned ? 'border-amber-400/80' : RUNG_RING[entity.rung],
+          RUNG_RING[entity.rung],
           selected ? 'ring-2 ring-purple-300' : '',
         ].join(' ')}
         style={{
           background: 'radial-gradient(circle at 50% 32%, rgba(124,92,255,0.22), rgba(13,13,22,0.97) 72%)',
-          boxShadow: entity.pinned
-            ? `0 0 ${glow}px rgba(251,191,36,0.35)`
-            : `0 0 ${glow}px rgba(139,92,246,0.35)`,
+          boxShadow: `0 0 ${glow}px rgba(139,92,246,0.35)`,
         }}
       >
         {labeled ? (
@@ -66,26 +75,10 @@ function EntityNodeComponent({ data, selected }: NodeProps<EntityFlowNode>) {
       </div>
       <Handle type="target" position={Position.Top} className="!invisible" />
       <Handle type="source" position={Position.Bottom} className="!invisible" />
-      {entity.pinned ? <PinBadge size={size} /> : null}
     </div>
   );
 }
 const EntityNode = memo(EntityNodeComponent);
-
-function PinBadge({ size }: { size: number }) {
-  // Center the badge ON the rim at the circle's 45° top-left point
-  // (0.1464 × size from each edge); the unclipped wrapper lets it overhang.
-  const BADGE_HALF = 10;
-  const offset = Math.round(size * 0.1464) - BADGE_HALF;
-  return (
-    <span
-      className="absolute z-10 rounded-full bg-amber-400 p-1 text-[#1a1305] shadow-md shadow-amber-500/40"
-      style={{ top: offset, left: offset }}
-    >
-      <Pin size={11} aria-label="Pinned" />
-    </span>
-  );
-}
 
 function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<KnowledgeFlowEdge>) {
   // Floating edge: anchor both ends on the circle rims along the angle between
@@ -129,11 +122,13 @@ function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<Knowledg
             : { stroke: 'rgba(139,92,246,0.4)', strokeWidth: 1.4 }
         }
       />
-      {pinned ? (
+      {pinned && !source.startsWith('mem:') && !target.startsWith('mem:') ? (
         <EdgeLabelRenderer>
           <span
-            className="absolute z-10 rounded-full bg-amber-400 p-1 text-[#1a1305] shadow-md shadow-amber-500/40"
+            // Nodes always render above lines and their badges — no z lift.
+            className="absolute rounded-full bg-amber-400 p-1 text-[#1a1305] shadow-md shadow-amber-500/40"
             style={{
+              zIndex: 0,
               // Quadratic bezier midpoint: B(0.5) = 0.25·start + 0.5·control + 0.25·end
               transform: `translate(-50%, -50%) translate(${0.25 * startX + 0.5 * controlX + 0.25 * endX}px, ${0.25 * startY + 0.5 * controlY + 0.25 * endY}px)`,
             }}
@@ -147,15 +142,46 @@ function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<Knowledg
 }
 const KnowledgeLink = memo(KnowledgeLinkComponent);
 
-const nodeTypes = { knowledgeEntity: EntityNode };
+/**
+ * A11: a memory rendered as its own tiny marker — a dot beside its entity or
+ * a junction where a multi-entity memory splits. Pinned memories render as
+ * the amber pin chip itself (the marker being a layout node is what keeps
+ * the chip collision-clear of entities).
+ */
+function MemoryNodeComponent({ data }: NodeProps<MemoryFlowNode>) {
+  const { memory, size } = data;
+  return (
+    <div
+      data-testid="knowledge-memory-node"
+      data-fact-id={memory.id}
+      className={[
+        'flex items-center justify-center rounded-full border transition-shadow',
+        // Memories speak the theme's third color — cyan — so dots read as
+        // knowledge points, not tiny entities (purple) or pins (amber).
+        memory.pinned
+          ? 'border-amber-300/80 bg-amber-400 text-[#1a1305] shadow-md shadow-amber-500/40'
+          : 'border-cyan-300/60 bg-cyan-400/80 shadow-[0_0_6px_rgba(34,211,238,0.55)]',
+      ].join(' ')}
+      style={{ width: size, height: size }}
+    >
+      <Handle type="target" position={Position.Top} className="!invisible" />
+      <Handle type="source" position={Position.Bottom} className="!invisible" />
+      {memory.pinned ? <Pin size={11} aria-label="Pinned memory" /> : null}
+    </div>
+  );
+}
+const MemoryNode = memo(MemoryNodeComponent);
+
+const nodeTypes = { knowledgeEntity: EntityNode, knowledgeMemory: MemoryNode };
 const edgeTypes = { knowledgeLink: KnowledgeLink };
 
 interface HoverCard {
-  kind: 'node' | 'edge';
+  kind: 'node' | 'edge' | 'memory';
   x: number;
   y: number;
   node?: EntityFlowNode;
   edge?: KnowledgeFlowEdge;
+  memory?: MemoryFlowNode;
 }
 
 export interface KnowledgeGraphProps {
@@ -272,13 +298,18 @@ function KnowledgeGraphInner({
   }, [focusedId, reactFlow]);
 
   const { nodes, edges } = useMemo(() => {
-    let filtered = filterGraph(payload.nodes, payload.edges, filters);
+    // A11: memories are the connection source of truth when the payload
+    // carries them; logical owner→target pairs drive filters/ego/sizing.
+    const memories = payload.memories ?? [];
+    const pairEdges = memories.length > 0 ? memoryPairEdges(memories) : payload.edges;
+    let filtered = filterGraph(payload.nodes, pairEdges, filters);
     if (focusedId) {
       const focused = egoGraph(filtered.nodes, filtered.edges, focusedId);
       // A stale focus id (filtered away or gone from the payload) falls back
       // to the full view rather than an empty canvas.
       if (focused.nodes.some(node => node.id === focusedId)) filtered = focused;
     }
+    const { memoryNodes, memoryEdges } = deriveMemoryElements(filtered.nodes, memories);
     const mapped = toFlowGraph(filtered.nodes, filtered.edges, undefined, focusedId);
     const neighborOf = (id: string): { x: number; y: number } | undefined => {
       for (const edge of filtered.edges) {
@@ -291,18 +322,44 @@ function KnowledgeGraphInner({
       return undefined;
     };
     const positions = runLayout(
-      mapped.nodes.map(node => ({
-        id: node.id,
-        size: node.data.size,
-        fixed: pinnedPositions.current.get(node.id),
-        // Warm start: existing nodes keep their settled spot; a brand-new node
-        // spawns near its first neighbor instead of at the spiral seed.
-        initial: lastCenters.current.get(node.id) ?? (arrivals?.nodes.has(node.id) ? neighborOf(node.id) : undefined),
-      })),
-      filtered.edges,
+      [
+        ...mapped.nodes.map(node => ({
+          id: node.id,
+          size: node.data.size,
+          fixed: pinnedPositions.current.get(node.id),
+          // Warm start: existing nodes keep their settled spot; a brand-new
+          // node spawns near its first neighbor instead of at the spiral seed.
+          initial:
+            lastCenters.current.get(node.id) ?? (arrivals?.nodes.has(node.id) ? neighborOf(node.id) : undefined),
+        })),
+        // Memory markers: tiny padding so they nestle into their cluster,
+        // spawned beside their first entity so they never fly in from origin.
+        ...memoryNodes.map(marker => {
+          const anchor = lastCenters.current.get(marker.memory.entityIds[0] ?? '');
+          return {
+            id: marker.id,
+            size: marker.size,
+            padding: 6,
+            fixed: pinnedPositions.current.get(marker.id),
+            initial:
+              lastCenters.current.get(marker.id) ?? (anchor ? { x: anchor.x + 30, y: anchor.y + 30 } : undefined),
+          };
+        }),
+      ],
+      memories.length > 0
+        ? memoryEdges.map(edge => ({
+            source: edge.source,
+            target: edge.target,
+            // Stubs/spokes hug; entity↔entity memory lines keep normal length.
+            hug: edge.source.startsWith('mem:') || edge.target.startsWith('mem:'),
+          }))
+        : filtered.edges,
     );
     lastCenters.current = positions;
-    return toFlowGraph(filtered.nodes, filtered.edges, positions, focusedId);
+    const entityFlow = toFlowGraph(filtered.nodes, filtered.edges, positions, focusedId);
+    if (memories.length === 0) return entityFlow; // pre-A11 payload fallback
+    const memoryFlow = toMemoryFlow(memoryNodes, memoryEdges, positions);
+    return { nodes: [...entityFlow.nodes, ...memoryFlow.nodes], edges: memoryFlow.edges };
     // dragVersion re-runs the layout after a drag pin.
   }, [payload, filters, focusedId, dragVersion, arrivals]);
 
@@ -388,6 +445,14 @@ function KnowledgeGraphInner({
         proOptions={{ hideAttribution: true }}
         nodesConnectable={false}
         onNodeClick={(_, node) => {
+          // A11: a memory marker click IS a memory click — same behavior as
+          // clicking its edge (dot and stub are one unit).
+          if (node.type === 'knowledgeMemory') {
+            const memory = (node as MemoryFlowNode).data.memory;
+            const [first = '', second] = memory.entityIds;
+            onEdgeClick?.({ source: first, target: second ?? first, factId: memory.id });
+            return;
+          }
           setFocusedId(node.id);
           onNodeClick?.((node as EntityFlowNode).data.entity);
         }}
@@ -397,7 +462,9 @@ function KnowledgeGraphInner({
           onEdgeClick?.({ source: flowEdge.source, target: flowEdge.target, factId: flowEdge.data?.factId ?? '' });
         }}
         onNodeMouseEnter={(event, node) =>
-          setHover({ kind: 'node', x: event.clientX, y: event.clientY, node: node as EntityFlowNode })
+          node.type === 'knowledgeMemory'
+            ? setHover({ kind: 'memory', x: event.clientX, y: event.clientY, memory: node as MemoryFlowNode })
+            : setHover({ kind: 'node', x: event.clientX, y: event.clientY, node: node as EntityFlowNode })
         }
         onNodeMouseLeave={() => setHover(null)}
         onEdgeMouseEnter={(event, edge) =>
@@ -426,7 +493,16 @@ function KnowledgeGraphInner({
         <Controls position="bottom-right" showInteractive={false} />
       </ReactFlow>
 
-      {hover ? <GraphHoverCard hover={hover} nodesById={new Map(nodes.map(node => [node.id, node]))} /> : null}
+      {hover ? (
+        <GraphHoverCard
+          hover={hover}
+          nodesById={
+            new Map(
+              nodes.flatMap(node => (node.type === 'knowledgeEntity' ? [[node.id, node as EntityFlowNode]] : [])),
+            )
+          }
+        />
+      ) : null}
     </div>
   );
 }
@@ -443,7 +519,6 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
       >
         <div className="mb-1 flex items-center gap-1.5">
           <span className="font-semibold text-icon6">{entity.name}</span>
-          {entity.pinned ? <Pin size={11} className="text-amber-400" aria-label="Pinned" /> : null}
         </div>
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-icon4">
           <dt>Kind</dt>
@@ -462,21 +537,34 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
       </div>
     );
   }
-  if (hover.kind === 'edge' && hover.edge) {
-    const source = nodesById.get(hover.edge.source)?.data.entity.name ?? hover.edge.source;
-    const target = nodesById.get(hover.edge.target)?.data.entity.name ?? hover.edge.target;
+  if (hover.kind === 'memory' && hover.memory) {
+    const { memory } = hover.memory.data;
     return (
       <div
         data-testid="knowledge-hover-card"
-        className="pointer-events-none fixed z-50 rounded-lg border border-surface5 bg-surface3 p-3 text-xs shadow-xl"
+        className="pointer-events-none fixed z-50 max-w-72 rounded-lg border border-surface5 bg-surface3 p-3 text-xs shadow-xl"
         style={style}
       >
-        <div className="text-icon6">
-          {source} → {target}
+        <div className="mb-1 flex items-center gap-1.5 text-icon6">
+          Memory
+          {memory.pinned ? <Pin size={11} className="text-amber-400" aria-label="Pinned" /> : null}
         </div>
-        <div className="mt-0.5 text-icon4">
-          Mentioned in a memory
-        </div>
+        <div className="leading-relaxed text-icon4">{memory.text}</div>
+      </div>
+    );
+  }
+  if (hover.kind === 'edge' && hover.edge) {
+    const resolve = (id: string) => nodesById.get(id)?.data.entity.name;
+    const source = resolve(hover.edge.source);
+    const target = resolve(hover.edge.target);
+    return (
+      <div
+        data-testid="knowledge-hover-card"
+        className="pointer-events-none fixed z-50 max-w-72 rounded-lg border border-surface5 bg-surface3 p-3 text-xs shadow-xl"
+        style={style}
+      >
+        <div className="text-icon6">{source && target ? `${source} → ${target}` : 'Memory'}</div>
+        <div className="mt-0.5 leading-relaxed text-icon4">{hover.edge.data?.text ?? 'Mentioned in a memory'}</div>
       </div>
     );
   }

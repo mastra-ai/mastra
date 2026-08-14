@@ -36,11 +36,26 @@ export interface KnowledgeGraphEdge {
   pinned?: boolean;
 }
 
+/**
+ * A memory as a first-class graph element (A11): a windowed fact with the
+ * in-window entities it touches, owner first (pins omit the hidden reserved
+ * owner). Rendered by arity — 1: dot, 2: line, 3+: junction.
+ */
+export interface KnowledgeGraphMemory {
+  id: string;
+  entityIds: string[];
+  pinned: boolean;
+  /** Fact text, truncated server-side for hover cards. */
+  text: string;
+}
+
 export interface KnowledgeGraphPayload {
   view: 'project' | 'thread';
   threadId?: string;
   nodes: KnowledgeGraphNode[];
   edges: KnowledgeGraphEdge[];
+  /** Absent from pre-A11 server payloads — treat as empty. */
+  memories?: KnowledgeGraphMemory[];
   truncated: boolean;
   outOfWindow: Array<{ id: string; name: string }>;
   unresolvedCapped: { count: number; names: string[] };
