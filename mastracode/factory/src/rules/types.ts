@@ -18,6 +18,7 @@ export const FACTORY_GITHUB_EVENTS = [
   'issueCommentDeleted',
   'pullRequestOpened',
   'pullRequestUpdated',
+  'pullRequestCommentCreated',
   'pullRequestReviewRequested',
   'pullRequestReviewSubmitted',
   'pullRequestMerged',

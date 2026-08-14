@@ -80,7 +80,14 @@ function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefi
   if (parsed.event === 'issues' && action === 'closed') return 'issueClosed';
   if (parsed.event === 'issue_comment') {
     const issue = object(parsed.payload.issue);
-    if (object(issue?.pull_request)) return undefined;
+    // A comment on a PR arrives as `issue_comment` with `issue.pull_request` set.
+    // It routes to the PR's own event so it binds to the authoring Work item via
+    // provenance instead of being mistaken for a comment on an issue of the same
+    // number. Only `created` matters: edits and deletions of an existing comment
+    // are not new feedback to act on.
+    if (object(issue?.pull_request)) {
+      return action === 'created' ? 'pullRequestCommentCreated' : undefined;
+    }
     if (action === 'created') return 'issueCommentCreated';
     if (action === 'edited') return 'issueCommentEdited';
     if (action === 'deleted') return 'issueCommentDeleted';
@@ -226,8 +233,13 @@ export class GithubRules {
     const issue = object(parsed.payload.issue);
     const issueComment = object(parsed.payload.comment);
     const changes = object(parsed.payload.changes);
-    const pullRequest = object(parsed.payload.pull_request);
-    const issueNumber = number(issue?.number);
+    // A comment on a PR carries the PR under `issue` (with `pull_request` set)
+    // and has no `pull_request` payload of its own. Read the PR from `issue` in
+    // that case so provenance and `context.pullRequest` behave as they do for
+    // every other PR event, and so the number is never treated as an issue's.
+    const commentOnPullRequest = object(parsed.payload.issue)?.pull_request !== undefined;
+    const pullRequest = object(parsed.payload.pull_request) ?? (commentOnPullRequest ? issue : undefined);
+    const issueNumber = commentOnPullRequest ? undefined : number(issue?.number);
     const pullRequestNumber = number(pullRequest?.number);
     const provenance = pullRequestNumber
       ? pullRequestProvenance(
@@ -244,6 +256,13 @@ export class GithubRules {
     // sender is whoever clicked re-request, so a Factory-authored PR must not
     // brand a human requester as factory-authored.
     const reviewRequested = event === 'pullRequestReviewRequested';
+    // Provenance proves the *pull request* came from Factory, which is not the
+    // same as the sender of this event. For events where the sender is whoever
+    // reacted to the PR — re-requesting review, commenting, submitting a review
+    // — branding them from provenance would mark every human and every review
+    // bot as Factory. Only the app login identifies Factory for those.
+    const senderIsResponder =
+      reviewRequested || event === 'pullRequestCommentCreated' || event === 'pullRequestReviewSubmitted';
     const reReviewEvent = reviewRequested || event === 'pullRequestUpdated';
     const requestedReviewer = string(object(parsed.payload.requested_reviewer)?.login);
     const relatedItem = await this.#relatedItem(
@@ -260,7 +279,7 @@ export class GithubRules {
       installationId,
       repository: repositoryName,
       login,
-      factoryAuthored: (!reviewRequested && provenance !== null) || login === `${this.options.github.slug}[bot]`,
+      factoryAuthored: (!senderIsResponder && provenance !== null) || login === `${this.options.github.slug}[bot]`,
     });
     if (
       actor.type === 'github' &&

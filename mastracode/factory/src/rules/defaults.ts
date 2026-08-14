@@ -288,6 +288,30 @@ function addressReviewFeedback(context: FactoryGithubRuleContext) {
   } as const;
 }
 
+function addressPullRequestComment(context: FactoryGithubRuleContext) {
+  if (!context.item || !context.pullRequest || !context.issueComment) return;
+  // Provenance binds the comment to the Work item that authored the PR — the
+  // only session that can act on it. A Review card must not react to comments
+  // on the PR it is reviewing.
+  if (context.board !== 'work') return;
+  if (context.pullRequest.state !== 'open' || context.pullRequest.merged) return;
+  // `factoryAuthored` is one bit for the whole Factory, so Factory's own
+  // comments are indistinguishable between roles — waking on them would let the
+  // Work agent's own progress comments wake itself in a loop. Factory's review
+  // verdict reaches the author through the Review run's handoff, not GitHub.
+  if (context.actor.type === 'github' && context.actor.factoryAuthored) return;
+  return {
+    type: 'sendMessage',
+    idempotencyKey: `${context.ingress.id}:address-pull-request-comment`,
+    role: 'work',
+    priority: 'high',
+    message:
+      `${context.issueComment.author ?? 'Someone'} commented on pull request #${context.pullRequest.number} ` +
+      `(${context.issueComment.url ?? context.pullRequest.url}). Read the comment, address it if you agree, and push ` +
+      'the fixes to the PR branch. Reply on GitHub to anything you are deliberately not changing, explaining why.',
+  } as const;
+}
+
 function pullRequestClosed(context: FactoryGithubRuleContext) {
   if (!context.item || !context.pullRequest || context.pullRequest.merged) return;
   if (context.board !== 'review') return;
@@ -410,6 +434,7 @@ const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
     issueCommentDeleted: { onEvent: retriageGithubIssue },
     pullRequestOpened: { onEvent: pullRequestOpened },
     pullRequestUpdated: { onEvent: reReviewUpdatedPullRequest },
+    pullRequestCommentCreated: { onEvent: addressPullRequestComment },
     pullRequestReviewRequested: { onEvent: reReviewRequestedPullRequest },
     pullRequestReviewSubmitted: { onEvent: addressReviewFeedback },
     pullRequestMerged: { onEvent: pullRequestMerged },

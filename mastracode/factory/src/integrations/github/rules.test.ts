@@ -1083,6 +1083,79 @@ describe('GithubRules', () => {
     );
   });
 
+  it('routes a comment on a pull request back to the Work item that authored it', async () => {
+    // Comments on a PR arrive as `issue_comment` and used to be dropped at the
+    // ingress, so review feedback left as a plain comment — the fallback the
+    // review skill takes on Factory-authored PRs, where GitHub refuses a formal
+    // verdict — never reached the author.
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+    const work = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github:10:issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['execute'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    await integrationStorage.subscriptions.create({
+      orgId: 'org-1',
+      targetKey: 'factory-pr-provenance:10:17',
+      threadId: 'thread-1',
+      status: 'active',
+      data: { kind: 'factory-pr-provenance', workItemId: work.item.id },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await service.ingest({
+      event: 'issue_comment',
+      deliveryId: 'delivery-pr-comment',
+      payload: {
+        action: 'created',
+        installation: { id: 7 },
+        repository: { id: 10, full_name: 'acme/repo' },
+        sender: { login: 'reviewer' },
+        comment: {
+          id: 555,
+          body: 'This needs a null check.',
+          html_url: 'https://github.com/acme/repo/pull/17#issuecomment-555',
+          user: { login: 'reviewer' },
+        },
+        issue: {
+          number: 17,
+          title: 'PR 17',
+          html_url: 'https://github.com/acme/repo/pull/17',
+          state: 'open',
+          pull_request: { url: 'https://api.github.com/repos/acme/repo/pulls/17' },
+        },
+      },
+    });
+
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workItemId: work.item.id,
+          decision: expect.objectContaining({ type: 'sendMessage', role: 'work', priority: 'high' }),
+        }),
+      ]),
+    );
+  });
+
   it('uses verified Factory provenance to link an opened Review card and remind Work on merge', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
     const work = await workItems.upsert({

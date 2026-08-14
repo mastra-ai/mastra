@@ -524,6 +524,56 @@ describe('defaultFactoryRules', () => {
     });
   });
 
+  describe('pullRequestCommentCreated', () => {
+    function commentContext(overrides: Partial<FactoryGithubRuleContext> = {}): FactoryGithubRuleContext {
+      return {
+        ...githubContext('pullRequestCommentCreated'),
+        item,
+        board: 'work',
+        itemRevision: 5,
+        issueComment: {
+          id: 555,
+          body: 'This needs a null check.',
+          url: 'https://github.test/acme/repo/pull/17#issuecomment-555',
+          author: 'reviewer',
+        },
+        ...overrides,
+      };
+    }
+
+    it('wakes the authoring Work agent when someone comments on the pull request', async () => {
+      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestCommentCreated?.onEvent;
+      const decision = await rule?.(commentContext());
+      expect(decision).toMatchObject({
+        type: 'sendMessage',
+        idempotencyKey: 'delivery-1:address-pull-request-comment',
+        role: 'work',
+        priority: 'high',
+      });
+      expect((decision as { message: string }).message).toContain('#issuecomment-555');
+    });
+
+    it('ignores Factory-authored comments so the Work agent cannot wake itself', async () => {
+      // `factoryAuthored` cannot tell the Work role from the Review role, so
+      // reacting to Factory's own comments would let the Work agent's progress
+      // notes wake it in a loop.
+      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestCommentCreated?.onEvent;
+      expect(
+        await rule?.(
+          commentContext({
+            actor: { type: 'github', login: 'factory[bot]', trusted: true, factoryAuthored: true },
+          }),
+        ),
+      ).toBeUndefined();
+    });
+
+    it('stays quiet on the Review card and on pull requests that are no longer open', async () => {
+      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestCommentCreated?.onEvent;
+      expect(await rule?.(commentContext({ board: 'review' }))).toBeUndefined();
+      expect(await rule?.(commentContext({ issueComment: undefined }))).toBeUndefined();
+    });
+  });
+
   describe('pullRequestReviewRequested', () => {
     const prItem = {
       ...item,
