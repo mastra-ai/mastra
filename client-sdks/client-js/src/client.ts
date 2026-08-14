@@ -210,6 +210,7 @@ import type {
   CreateScheduleInput,
   UpdateScheduleInput,
   RunScheduleResponse,
+  AgentControllerInfo,
 } from './types';
 import { base64RequestContext, buildTenancyQuery, parseClientRequestContext, requestContextQueryString } from './utils';
 import { createSseJsonTransform } from './utils/stream-transforms';
@@ -270,8 +271,8 @@ export class MastraClient extends BaseResource {
    * Lists the agent controllers hosted on the connected Mastra instance.
    * @returns Promise containing an array of agent controller identifiers
    */
-  public async listAgentControllers(): Promise<{ id: string }[]> {
-    const body = await this.request<{ agentControllers: { id: string }[] }>('/agent-controller');
+  public async listAgentControllers(): Promise<AgentControllerInfo[]> {
+    const body = await this.request<{ agentControllers: AgentControllerInfo[] }>('/agent-controller');
     return body.agentControllers;
   }
 
