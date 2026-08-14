@@ -1,11 +1,11 @@
 ---
 name: factory-complete-issue
-description: Remove Factory triage labels when a GitHub issue is moved to Done
+description: Mark a GitHub issue as done and remove its triage labels
 ---
 
 # Factory Complete Issue
 
-Clean up the GitHub issue behind a Factory work item that was moved to Done.
+Mark the GitHub issue behind a completed Factory work item as done and clean up its triage labels.
 
 Parse the issue URL or number from `$ARGUMENTS`, then read its current labels. Remove any of these labels that are present:
 
@@ -13,4 +13,8 @@ Parse the issue URL or number from `$ARGUMENTS`, then read its current labels. R
 - `status: auto-triaged`
 - `status: needs approval`
 
-Use `gh issue edit <issue> --remove-label <label>` for each present label. Do not add or remove any other labels. Do not comment, close, reopen, assign, or edit the issue, and do not request another Factory transition.
+Use `gh issue edit <issue> --remove-label <label>` for each present label. Then post this comment unless the issue already has it:
+
+> This issue has now been marked as done.
+
+Do not add or remove any other labels, close, reopen, assign, or edit the issue, and do not request another Factory transition.
