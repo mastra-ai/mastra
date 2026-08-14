@@ -6,19 +6,7 @@
  * shows a summary card. Dragging a node re-pins it (the layout keeps it put).
  */
 
-import {
-  Background,
-  BackgroundVariant,
-  BaseEdge,
-  Controls,
-  Handle,
-  MiniMap,
-  Position,
-  ReactFlow,
-  ReactFlowProvider,
-  useInternalNode,
-  useReactFlow,
-} from '@xyflow/react';
+import { Background, BackgroundVariant, BaseEdge, Controls, Handle, MiniMap, Position, ReactFlow, ReactFlowProvider, useInternalNode, useReactFlow, EdgeLabelRenderer } from '@xyflow/react';
 import type { EdgeProps, NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Boxes, Globe, Pin } from 'lucide-react';
@@ -127,15 +115,34 @@ function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<Knowledg
   const controlX = (startX + endX) / 2 + -uy * bow;
   const controlY = (startY + endY) / 2 + ux * bow;
   const path = `M ${startX},${startY} Q ${controlX},${controlY} ${endX},${endY}`;
+  const pinned = data?.pinned ?? false;
   return (
-    <BaseEdge
-      id={id}
-      path={path}
-      style={{
-        stroke: 'rgba(139,92,246,0.4)',
-        strokeWidth: 1.4,
-      }}
-    />
+    <>
+      <BaseEdge
+        id={id}
+        path={path}
+        style={
+          // A9: a pinned fact marks the RELATIONSHIP — the amber accent
+          // rides the edge, with a pin chip at the arc's midpoint.
+          pinned
+            ? { stroke: 'rgba(251,191,36,0.75)', strokeWidth: 2 }
+            : { stroke: 'rgba(139,92,246,0.4)', strokeWidth: 1.4 }
+        }
+      />
+      {pinned ? (
+        <EdgeLabelRenderer>
+          <span
+            className="absolute z-10 rounded-full bg-amber-400 p-1 text-[#1a1305] shadow-md shadow-amber-500/40"
+            style={{
+              // Quadratic bezier midpoint: B(0.5) = 0.25·start + 0.5·control + 0.25·end
+              transform: `translate(-50%, -50%) translate(${0.25 * startX + 0.5 * controlX + 0.25 * endX}px, ${0.25 * startY + 0.5 * controlY + 0.25 * endY}px)`,
+            }}
+          >
+            <Pin size={11} aria-label="Pinned relationship" />
+          </span>
+        </EdgeLabelRenderer>
+      ) : null}
+    </>
   );
 }
 const KnowledgeLink = memo(KnowledgeLinkComponent);

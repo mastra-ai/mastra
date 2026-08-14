@@ -200,20 +200,35 @@ describe('KnowledgeRoutes', () => {
     expect(body.truncated).toBe(true);
   });
 
-  // 7
-  it('excludes the reserved pinned entity from nodes while pinned-fact wikilinks drive the accent, per rung', async () => {
+  // 7 (A9: multi-target pins mark their EDGES; single-target pins keep the node accent)
+  it('excludes the reserved pinned entity from nodes while pinned facts accent edges (multi-target) or nodes (single-target), per rung', async () => {
     const h = await createHarness();
     const accented = await entity(h.knowledge, 'Critical Service', h.projectScope, 'service');
+    const relA = await entity(h.knowledge, 'Deploy Runbook', h.projectScope, 'doc');
+    const relB = await entity(h.knowledge, 'Release Train', h.projectScope, 'process');
     const threadAccented = await entity(h.knowledge, 'Session Focus', h.threadScope('t-pin'));
     const pinnedResource = await entity(h.knowledge, 'pinned', h.projectScope, 'system');
     const pinnedThread = await entity(h.knowledge, 'pinned', h.threadScope('t-pin'), 'system');
+    // Single-target pin → node accent stays.
     await fact(h.knowledge, pinnedResource, 'Always check [[Critical Service]] health.', h.projectScope, 't-any');
+    // Multi-target pin → a pinned edge between the two mentioned entities, NO node accent.
+    const relPin = await fact(
+      h.knowledge,
+      pinnedResource,
+      'Ship via [[Deploy Runbook]] on the [[Release Train]].',
+      h.projectScope,
+      't-any',
+    );
     await fact(h.knowledge, pinnedThread, 'This session tracks [[Session Focus]].', h.threadScope('t-pin'), 't-pin');
 
     const defaultView = (await graph(h)).body;
     expect(defaultView.nodes.some(node => node.name === 'pinned')).toBe(false);
     expect(defaultView.nodes.find(node => node.id === accented.id)?.pinned).toBe(true);
-    expect(defaultView.pinCensus).toEqual({ resource: 1, thread: null });
+    const pinnedEdge = defaultView.edges.find(edge => edge.pinned);
+    expect(pinnedEdge).toMatchObject({ source: relA.id, target: relB.id, factId: relPin.id, pinned: true });
+    expect(defaultView.nodes.find(node => node.id === relA.id)?.pinned).toBe(false);
+    expect(defaultView.nodes.find(node => node.id === relB.id)?.pinned).toBe(false);
+    expect(defaultView.pinCensus).toEqual({ resource: 2, thread: null });
     // The thread-scoped pin is invisible in the default view.
     expect(defaultView.nodes.some(node => node.id === threadAccented.id)).toBe(false);
 
@@ -221,7 +236,7 @@ describe('KnowledgeRoutes', () => {
     expect(threadView.nodes.some(node => node.name === 'pinned')).toBe(false);
     expect(threadView.nodes.find(node => node.id === threadAccented.id)?.pinned).toBe(true);
     expect(threadView.nodes.find(node => node.id === accented.id)?.pinned).toBe(true);
-    expect(threadView.pinCensus).toEqual({ resource: 1, thread: 1 });
+    expect(threadView.pinCensus).toEqual({ resource: 2, thread: 1 });
   });
 
   // 8

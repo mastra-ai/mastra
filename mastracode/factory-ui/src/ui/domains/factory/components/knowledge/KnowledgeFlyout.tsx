@@ -96,9 +96,19 @@ function MemoryCard({
   return (
     <div
       data-testid="knowledge-memory"
+      data-pinned={fact.pinned || undefined}
       className={[
-        'rounded-lg border bg-surface3/60 transition-colors',
-        expanded ? 'border-purple-400/50' : 'border-surface5',
+        'rounded-lg border transition-colors',
+        // A10: pinned memories stand out — the same amber accent the graph
+        // uses, with a faint amber wash behind the card.
+        fact.pinned ? 'bg-amber-400/10' : 'bg-surface3/60',
+        expanded
+          ? fact.pinned
+            ? 'border-amber-400/70'
+            : 'border-purple-400/50'
+          : fact.pinned
+            ? 'border-amber-400/40'
+            : 'border-surface5',
       ].join(' ')}
     >
       <button type="button" className="w-full px-3 py-2.5 text-left" onClick={() => setExpanded(open => !open)}>

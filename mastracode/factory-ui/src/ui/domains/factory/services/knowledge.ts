@@ -32,6 +32,8 @@ export interface KnowledgeGraphEdge {
   /** Always 'wikilink' — the fact's owner entity is the edge source. */
   type: 'wikilink';
   factId: string;
+  /** Derived from a PINNED fact — the pin marks the relationship (A9). */
+  pinned?: boolean;
 }
 
 export interface KnowledgeGraphPayload {

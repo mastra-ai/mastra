@@ -64,7 +64,11 @@ export interface KnowledgeGraphNode {
   scope: KnowledgeScope;
   /** Deepest rung of the record's scope: org | resource | thread. */
   rung: 'org' | 'resource' | 'thread';
-  /** True when a non-deleted pinned fact's wikilinks reference this entity. */
+  /**
+   * True when a non-deleted pinned fact's wikilinks reference ONLY this
+   * entity (A9: multi-target pins mark their edges instead — the pin is
+   * about the relationship; a single-target pin has no edge to carry it).
+   */
   pinned: boolean;
   /** Facts owned by this entity INSIDE the snapshot window (not a total). */
   factCount: number;
@@ -86,6 +90,11 @@ export interface KnowledgeGraphEdge {
   type: 'wikilink';
   /** The fact whose text produced the edge. */
   factId: string;
+  /**
+   * True when the edge is derived from a PINNED fact linking two entities —
+   * the pin marks the relationship, so the accent lives on the edge (A9).
+   */
+  pinned?: boolean;
 }
 
 export interface KnowledgeGraphPayload {
@@ -425,13 +434,38 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             }
           }
 
-          // Pin accent: entities referenced by a pinned fact's wikilinks.
+          // Pin accents (A9): a pin marks the RELATIONSHIP, so pinned facts
+          // whose wikilinks resolve to 2+ in-window entities produce amber
+          // pinned edges (pairwise). A single-target pin has no edge to
+          // carry it, so that one entity keeps the node accent instead.
           const pinnedFacts = await this.#pinnedFacts(view, pinnedIds);
           const accented = new Set<string>();
           for (const { fact } of pinnedFacts) {
+            const targets: string[] = [];
             for (const name of parseKnowledgeWikilinks(fact.text)) {
               const target = await resolver.resolve(name, fact.scope);
-              if (target && resolver.inWindowId(target.id)) accented.add(target.id);
+              if (target && resolver.inWindowId(target.id) && !targets.includes(target.id)) {
+                targets.push(target.id);
+              }
+            }
+            if (targets.length === 1) {
+              accented.add(targets[0]!);
+              continue;
+            }
+            for (let a = 0; a < targets.length; a += 1) {
+              for (let b = a + 1; b < targets.length; b += 1) {
+                const key = `${targets[a]}\u0000${targets[b]}\u0000pin`;
+                if (edgeSeen.has(key)) continue;
+                edgeSeen.add(key);
+                edges.push({
+                  id: `pin:${fact.id}:${targets[a]}:${targets[b]}`,
+                  source: targets[a]!,
+                  target: targets[b]!,
+                  type: 'wikilink',
+                  factId: fact.id,
+                  pinned: true,
+                });
+              }
             }
           }
           const pinCensus = {
