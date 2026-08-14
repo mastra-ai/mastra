@@ -721,6 +721,51 @@ describe('createDurableAgentStream', () => {
     cleanup();
   });
 
+  it('should live-tail when resuming with a pubsub that does not support offsets', async () => {
+    const { createDurableAgentStream } = await import('../stream-adapter');
+    const subscribeSpy = vi.spyOn(pubsub, 'subscribe');
+    const subscribeFromOffsetSpy = vi.spyOn(pubsub, 'subscribeFromOffset');
+
+    const { cleanup, ready } = createDurableAgentStream({
+      pubsub,
+      runId: 'test-live-tail-resume',
+      messageId: 'msg-live-tail',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      offset: 3,
+    });
+
+    await ready;
+
+    expect(subscribeSpy).toHaveBeenCalledWith(AGENT_STREAM_TOPIC('test-live-tail-resume'), expect.any(Function), {
+      startFrom: 'latest',
+    });
+    expect(subscribeFromOffsetSpy).not.toHaveBeenCalled();
+    cleanup();
+  });
+
+  it('should use indexed replay when the pubsub supports offsets', async () => {
+    const { createDurableAgentStream } = await import('../stream-adapter');
+    vi.spyOn(pubsub, 'supportsOffsets', 'get').mockReturnValue(true);
+    const subscribeFromOffsetSpy = vi.spyOn(pubsub, 'subscribeFromOffset');
+
+    const { cleanup, ready } = createDurableAgentStream({
+      pubsub,
+      runId: 'test-offset-resume',
+      messageId: 'msg-offset',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      offset: 3,
+    });
+
+    await ready;
+
+    expect(subscribeFromOffsetSpy).toHaveBeenCalledWith(
+      AGENT_STREAM_TOPIC('test-offset-resume'),
+      3,
+      expect.any(Function),
+    );
+    cleanup();
+  });
+
   it('should unsubscribe from pubsub even when cleanup is called before subscribe resolves', async () => {
     const { createDurableAgentStream } = await import('../stream-adapter');
 
