@@ -50,6 +50,7 @@ export const FACTORY_SKILLS_SOURCE_PATH =
 const FACTORY_SKILLS_MOUNT = path.resolve(path.parse(process.cwd()).root, '__mastracode_factory_skills__');
 export const FACTORY_SKILL_NAMES = new Set([
   'configure-factory-rules',
+  'factory-complete-issue',
   'factory-plan',
   'factory-rereview',
   'factory-review',

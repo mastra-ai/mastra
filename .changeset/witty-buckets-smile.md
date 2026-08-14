@@ -1,7 +1,0 @@
----
-'@mastra/playground-ui': patch
----
-
-Reworked the markdown renderer's typography. Headings, lists, blockquotes, tables and horizontal rules now follow one consistent rhythm, list markers and task-list checkboxes render as expected, and long tables scroll instead of stretching their container.
-
-Fenced code blocks now get syntax highlighting, a copy button and a frame of their own, and yaml, diff, css, html, xml and sql joined the highlighted languages, so fences in those languages are no longer plain text.
