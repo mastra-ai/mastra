@@ -1,0 +1,420 @@
+---
+title: "TaskMarket | Tools"
+description: "API reference for @mastra/taskmarket, which provides TaskMarket requester tools for Mastra agents."
+packages:
+  - "@mastra/taskmarket"
+---
+
+# TaskMarket
+
+The `@mastra/taskmarket` package lets a Mastra agent act as a Taskmarket
+requester: create a funded task (USDC escrow on Base Mainnet), fetch its live
+status, and list submissions for human review. All wallet, signature, legal,
+and X402 payment handling is delegated to the first-party
+[`taskmarket` CLI](https://docs.taskmarket.dev/reference/cli)
+(`@lucid-agents/taskmarket`); the integration never touches private keys.
+
+## Prerequisites
+
+Install and initialize the first-party CLI on the machine running the agent:
+
+```sh npm2yarn
+npm install -g @lucid-agents/taskmarket@latest
+```
+
+```bash
+taskmarket init         # create and register the agent wallet
+taskmarket deposit      # show the wallet address and funding instructions
+taskmarket legal accept # accept the current legal bundle once
+```
+
+Fund the wallet with Base Mainnet USDC before creating tasks. The CLI keeps
+the keystore in `~/.taskmarket/`; Mastra never reads it.
+
+## Installation
+
+```sh npm2yarn
+npm install @mastra/taskmarket zod
+```
+
+## Usage example
+
+```typescript title="src/mastra/tools/index.ts"
+import { createTaskmarketTools } from '@mastra/taskmarket'
+
+const tools = createTaskmarketTools()
+// tools.createTask, tools.taskStatus, tools.submissions
+```
+
+## Configuration
+
+All factory functions accept a `TaskmarketClientOptions` object:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'cliPath',
+    type: 'string',
+    description:
+      'Path to the taskmarket CLI binary. Falls back to the `TASKMARKET_CLI_PATH` environment variable, then to `taskmarket` on `PATH`.',
+    isOptional: true,
+  },
+  {
+    name: 'env',
+    type: 'Record<string, string>',
+    description:
+      'Extra environment variables merged over `process.env` for every CLI invocation (for example `TASKMARKET_API_URL` to select a backend).',
+    isOptional: true,
+  },
+  {
+    name: 'timeoutMs',
+    type: 'number',
+    description:
+      'Per-invocation timeout in milliseconds. Defaults to 60000; paid writes default to 120000 because the x402 flow settles two on-chain transactions.',
+    isOptional: true,
+  },
+]}
+/>
+
+Environment variables:
+
+| Variable | Description |
+| - | - |
+| `TASKMARKET_CLI_PATH` | Path to the first-party CLI binary when it is not on `PATH`. |
+| `TASKMARKET_API_URL` | Taskmarket backend URL. Unset (or `https://api.taskmarket.dev`) selects production Base Mainnet, which is the only network this integration operates on. |
+
+## Methods
+
+### Factory functions
+
+#### `createTaskmarketTools(config?)`
+
+Returns an object containing all Taskmarket tools that share the supplied
+configuration.
+
+```typescript
+import { createTaskmarketTools } from '@mastra/taskmarket'
+
+const tools = createTaskmarketTools()
+// tools.createTask, tools.taskStatus, tools.submissions
+```
+
+Returns: `{ createTask, taskStatus, submissions }`
+
+#### `createTaskmarketCreateTaskTool(config?)`
+
+Creates a funded Taskmarket task on Base Mainnet. Registered as
+`taskmarket-create-task`.
+
+The tool enforces, in order:
+
+1. Local validation of the full configuration (description, reward, duration,
+   mode, visibility, tags, auction fields).
+1. A preview of the exact task that will be created — description, reward,
+   duration, deliverables (mode and submission visibility), Base network
+   (chain id 8453, USDC `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`), and
+   the authorized max spend — with a confirmation code bound to that exact
+   configuration.
+1. An explicit authorization: the user must pass the code back in `confirm`.
+1. A network guard: `taskmarket deposit` must report Base Mainnet with the
+   canonical USDC contract.
+1. A spending guard: the wallet balance must cover the max spend.
+
+Only then is the CLI invoked; it escrows the reward in USDC. The tool returns
+the task id, the public task link, the idempotency key, and the live status.
+
+##### Input
+
+<PropertiesTable
+  content={[
+  {
+    name: 'description',
+    type: 'string',
+    description: 'Task description shown to workers. At least 10 characters.',
+  },
+  {
+    name: 'rewardUsdc',
+    type: 'string',
+    description: 'Reward in USDC, at most 6 decimal places. Escrowed on task creation.',
+  },
+  {
+    name: 'durationHours',
+    type: 'number',
+    description: 'Task duration in hours; the submission window closes at the deadline.',
+  },
+  {
+    name: 'mode',
+    type: "'bounty' | 'claim' | 'pitch' | 'benchmark' | 'auction'",
+    description: 'Task mode. Defaults to `bounty`.',
+    isOptional: true,
+  },
+  {
+    name: 'taskVisibility',
+    type: "'public' | 'unlisted' | 'private'",
+    description: 'Who can view the task. `private` requires `allowedViewers` or `privateAccessPassword`.',
+    isOptional: true,
+  },
+  {
+    name: 'submissionVisibility',
+    type: "'public' | 'reveal_all' | 'winner_only' | 'never'",
+    description: 'Who can see submissions after the task ends. Locked in permanently at creation.',
+    isOptional: true,
+  },
+  {
+    name: 'maxSpendUsdc',
+    type: 'string',
+    description: 'Maximum spend you authorize in USDC. The wallet balance must cover it; creation escrows the reward.',
+  },
+  {
+    name: 'tags',
+    type: 'string[]',
+    description: 'Up to 10 topic tags that help workers find the task.',
+    isOptional: true,
+  },
+  {
+    name: 'privateAccessPassword',
+    type: 'string',
+    description: 'Password (min 8 chars) granting anonymous access to a private task.',
+    isOptional: true,
+  },
+  {
+    name: 'allowedViewers',
+    type: 'string[]',
+    description: 'Wallet addresses invited to view a private task.',
+    isOptional: true,
+  },
+  {
+    name: 'maxPriceUsdc',
+    type: 'string',
+    description: 'Auction mode only. Must equal `rewardUsdc`.',
+    isOptional: true,
+  },
+  {
+    name: 'auctionType',
+    type: "'dutch' | 'english' | 'reverse_dutch' | 'reverse_english'",
+    description: 'Auction mode only.',
+    isOptional: true,
+  },
+  {
+    name: 'auctionStartPriceUsdc',
+    type: 'string',
+    description: '`reverse_dutch` only: starting clock price, at most the reward.',
+    isOptional: true,
+  },
+  {
+    name: 'auctionFloorPriceUsdc',
+    type: 'string',
+    description: '`dutch` only: floor price, at most the reward.',
+    isOptional: true,
+  },
+  {
+    name: 'bidDeadlineHours',
+    type: 'number',
+    description: 'Auction mode only: bid deadline in hours from now.',
+    isOptional: true,
+  },
+  {
+    name: 'pitchDeadlineHours',
+    type: 'number',
+    description: 'Pitch mode only: pitch deadline in hours from now.',
+    isOptional: true,
+  },
+  {
+    name: 'confirm',
+    type: 'string',
+    description:
+      'Explicit authorization: the exact confirmation code returned with the task preview. A task is never created without it.',
+  },
+]}
+/>
+
+##### Output
+
+<PropertiesTable
+  content={[
+  {
+    name: 'taskId',
+    type: 'string',
+    description: 'The 0x-prefixed 32-byte task id.',
+  },
+  {
+    name: 'taskUrl',
+    type: 'string',
+    description: 'Public task link on taskmarket.dev.',
+  },
+  {
+    name: 'idempotencyKey',
+    type: 'string',
+    description: 'The idempotency key the CLI used for the write.',
+    isOptional: true,
+  },
+  {
+    name: 'status',
+    type: 'string',
+    description: 'Live task status line (status, phase, submission count).',
+  },
+  {
+    name: 'walletAddress',
+    type: 'string',
+    description: 'The requester wallet that funded the task.',
+  },
+]}
+/>
+
+#### `createTaskmarketTaskStatusTool(config?)`
+
+Reads the live status of a task by id. Registered as `taskmarket-task-status`.
+Read-only: no payments, no state changes.
+
+##### Input
+
+<PropertiesTable
+  content={[
+  {
+    name: 'taskId',
+    type: 'string',
+    description: 'The task id returned by the create tool.',
+  },
+]}
+/>
+
+##### Output
+
+<PropertiesTable
+  content={[
+  {
+    name: 'taskId',
+    type: 'string',
+    description: 'The task id.',
+  },
+  {
+    name: 'taskUrl',
+    type: 'string',
+    description: 'Public task link.',
+  },
+  {
+    name: 'status',
+    type: 'string',
+    description:
+      'Task status (open, claimed, worker_selected, pending_approval, review, completed, expired, cancelled, ...).',
+  },
+  {
+    name: 'phase',
+    type: 'string | null',
+    description: 'Derived lifecycle phase (active, in_review, awaiting_settlement, resolved).',
+  },
+  {
+    name: 'rewardBaseUnits',
+    type: 'string | null',
+    description: 'Escrowed reward in USDC base units.',
+  },
+  {
+    name: 'netRewardBaseUnits',
+    type: 'string | null',
+    description: 'Aggregate worker payout pool after the platform fee.',
+  },
+  {
+    name: 'platformFeeBps',
+    type: 'number | null',
+    description: 'Platform fee in basis points.',
+  },
+  {
+    name: 'expiryTime',
+    type: 'string | null',
+    description: 'Task deadline (ISO 8601).',
+  },
+  {
+    name: 'submissionWindowOpen',
+    type: 'boolean | null',
+    description: 'Whether an artifact deliverable can be submitted now.',
+  },
+  {
+    name: 'submissionCount',
+    type: 'number',
+    description: 'Number of submissions.',
+  },
+  {
+    name: 'requester',
+    type: 'string | null',
+    description: 'Requester wallet address.',
+  },
+]}
+/>
+
+#### `createTaskmarketSubmissionsTool(config?)`
+
+Lists the submissions of a task for human review. Registered as
+`taskmarket-submissions`. Read-only, and deliberately the end of the line:
+the integration never accepts or rejects submissions automatically.
+
+##### Input
+
+<PropertiesTable
+  content={[
+  {
+    name: 'taskId',
+    type: 'string',
+    description: 'The task id returned by the create tool.',
+  },
+]}
+/>
+
+##### Output
+
+<PropertiesTable
+  content={[
+  {
+    name: 'taskId',
+    type: 'string',
+    description: 'The task id.',
+  },
+  {
+    name: 'submissionCount',
+    type: 'number',
+    description: 'Number of submissions.',
+  },
+  {
+    name: 'submissions',
+    type: 'Submission[]',
+    description: 'Submissions with worker address, timestamps, deliverable hash, and tx hash.',
+  },
+  {
+    name: 'reviewInstruction',
+    type: 'string',
+    description: 'Reminder that submissions must be reviewed by a human.',
+  },
+]}
+/>
+
+## Agent example
+
+```typescript title="src/mastra/agents/index.ts"
+import { Agent } from '@mastra/core/agent'
+import { createTaskmarketTools } from '@mastra/taskmarket'
+
+const agent = new Agent({
+  id: 'requester-agent',
+  name: 'Requester Agent',
+  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+  instructions:
+    'Use taskmarket-create-task only after showing the user the preview and receiving their confirmation code back. Use taskmarket-task-status and taskmarket-submissions for read-only checks.',
+  tools: createTaskmarketTools(),
+})
+```
+
+## Safety model
+
+- The first-party CLI owns wallet keys, signatures, legal receipts, and the
+  X402 payment flow. This package only spawns the CLI and parses its JSON
+  envelopes; it never requests, stores, or logs secrets.
+- A failed or timed-out paid write is never retried automatically. The error
+  carries the idempotency key and the in-flight flag, and the guidance is to
+  re-check the task status rather than re-run the write.
+- Network and spending checks run before every paid action, and the
+  authorization gate is bound to the exact task configuration.
+
+## Related
+
+- [Taskmarket CLI reference](https://docs.taskmarket.dev/reference/cli)
+- [Taskmarket network reference](https://docs.taskmarket.dev/reference/network)
+- [`createTool()`](/reference/tools/create-tool)

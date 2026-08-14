@@ -547,6 +547,12 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'tools/taskmarket',
+          label: 'TaskMarket',
+          customProps: { icon: '/img/integrations/taskmarket.svg' },
+        },
+        {
+          type: 'doc',
           id: 'tools/tavily',
           label: 'Tavily',
           customProps: { icon: '/img/integrations/tavily.svg', customCSS: 'dark:invert' },
