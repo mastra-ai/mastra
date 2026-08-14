@@ -1,5 +1,34 @@
 # @mastra/playground-ui
 
+## 49.0.0-alpha.5
+
+### Minor Changes
+
+- Streamed markdown now renders block by block. A growing reply re-parses only the block still being written instead of the whole message on every chunk, so a long reply no longer costs more per chunk as it gets longer, and a reply that finishes streaming keeps every element it already put on screen instead of remounting. ([#21473](https://github.com/mastra-ai/mastra/pull/21473))
+
+  Half-written markdown also renders as what it is about to become: `**bold` reads as bold while its closing marker is still in flight, and a link shows its text until the URL lands, instead of flashing raw syntax on screen.
+
+  One caveat: splitting a text into blocks is deliberately conservative rather than a second full parse. Anything it cannot decide — an unclosed fence, an indented continuation, a link reference or footnote definition — is kept whole, so those replies render exactly as before and simply do not get the speedup.
+
+- Added a `streaming` prop to `MarkdownRenderer`. A reply marked as still being written fades each word in as it arrives, instead of snapping whole chunks of text into place. ([#21417](https://github.com/mastra-ai/mastra/pull/21417))
+
+  ```tsx
+  <MarkdownRenderer streaming={part.state === 'streaming'}>{part.text}</MarkdownRenderer>
+  ```
+
+  The fade is CSS on words as they land, so the text already on screen stays put while the reply grows. A word fades in once it is whole rather than one character at a time — the word still being typed is held back until its boundary arrives, so the visible text trails the stream by at most one word. One caveat: when a growing block changes shape, a paragraph turning into a list item as the next character lands, that block fades again.
+
+  Leave the prop off — the default — for text that is already settled: it renders as plain prose, with no extra markup. The animation is disabled under `prefers-reduced-motion`.
+
+  Markdown no longer sets `text-wrap: pretty`. It re-broke the last lines of a block to avoid orphans, which reran on every chunk of a streaming reply and jumped words that were already on screen onto another line.
+
+### Patch Changes
+
+- Updated dependencies [[`59d8898`](https://github.com/mastra-ai/mastra/commit/59d8898c8cb48b342fe5bcb5eee803cc8cc95060), [`a40f915`](https://github.com/mastra-ai/mastra/commit/a40f9157690d89ef13ce825cc88e30be581de5d4)]:
+  - @mastra/core@1.59.0-alpha.5
+  - @mastra/client-js@1.40.0-alpha.5
+  - @mastra/react@1.4.3-alpha.5
+
 ## 49.0.0-alpha.4
 
 ### Patch Changes

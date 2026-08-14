@@ -40,4 +40,13 @@ describe('MarkdownRenderer memoization', () => {
 
     expect(parsed).toEqual(['already **done**']);
   });
+
+  it('re-parses only the block a streamed reply is still growing', () => {
+    const { rerender } = render(<MarkdownRenderer streaming>{'First para.\n\nSecond'}</MarkdownRenderer>);
+
+    parsed.length = 0;
+    rerender(<MarkdownRenderer streaming>{'First para.\n\nSecond para.'}</MarkdownRenderer>);
+
+    expect(parsed).toEqual(['Second para.']);
+  });
 });

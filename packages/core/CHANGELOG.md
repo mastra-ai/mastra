@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 1.59.0-alpha.5
+
+### Patch Changes
+
+- Fixed file-based agents so setting `workspace` to `undefined` disables the default workspace and its automatic file and shell tools. ([#21378](https://github.com/mastra-ai/mastra/pull/21378))
+
+- Fixed schedule errors to preserve actionable HTTP statuses and retained structured agent errors after model fallback exhaustion. ([#21449](https://github.com/mastra-ai/mastra/pull/21449))
+
 ## 1.59.0-alpha.4
 
 ### Minor Changes
