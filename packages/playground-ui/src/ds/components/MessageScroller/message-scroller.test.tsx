@@ -11,6 +11,7 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from './message-scroller';
+import type { MessageScrollerDefaultScrollPosition } from './message-scroller';
 
 if (!Element.prototype.getAnimations) {
   Object.defineProperty(Element.prototype, 'getAnimations', { configurable: true, value: () => [] });
@@ -394,19 +395,33 @@ const installScrollTo = (element: HTMLElement) => {
 
 const HistoryHarness = ({
   autoScroll = false,
+  defaultScrollPosition,
   messageIds,
   onReachStart,
+  replyIds = [],
 }: {
   autoScroll?: boolean;
+  defaultScrollPosition?: MessageScrollerDefaultScrollPosition;
   messageIds: string[];
   onReachStart?: () => void;
+  replyIds?: string[];
 }) => (
-  <MessageScrollerProvider autoScroll={autoScroll} preserveScrollOnPrepend onReachStart={onReachStart}>
+  <MessageScrollerProvider
+    autoScroll={autoScroll}
+    defaultScrollPosition={defaultScrollPosition}
+    preserveScrollOnPrepend
+    onReachStart={onReachStart}
+  >
     <MessageScrollerViewport data-testid="history-viewport">
       <MessageScrollerContent>
         {messageIds.map(messageId => (
           <MessageScrollerItem key={messageId} messageId={messageId} scrollAnchor>
             <div>{messageId}</div>
+          </MessageScrollerItem>
+        ))}
+        {replyIds.map(replyId => (
+          <MessageScrollerItem key={replyId} messageId={replyId}>
+            <div>{replyId}</div>
           </MessageScrollerItem>
         ))}
       </MessageScrollerContent>
@@ -742,6 +757,30 @@ describe('MessageScroller autoScroll', () => {
     });
 
     expect(scrollTo).toHaveBeenLastCalledWith({ top: 1800, behavior: 'auto' });
+  });
+
+  it('leaves a reopened thread on the turn it restored instead of following the stream', () => {
+    stubLayout({ 'message-1': 0, 'message-2': 300 });
+    const { rerender } = render(
+      <HistoryHarness autoScroll defaultScrollPosition="last-anchor" messageIds={['message-1', 'message-2']} />,
+    );
+
+    const viewport = screen.getByTestId('history-viewport');
+    const scrollTo = installScrollTo(viewport);
+    setScrollMetrics(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 300 });
+
+    // Rows registering after the restore must not be read as the reader riding the stream.
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1400 });
+    rerender(
+      <HistoryHarness
+        autoScroll
+        defaultScrollPosition="last-anchor"
+        messageIds={['message-1', 'message-2']}
+        replyIds={['reply-1']}
+      />,
+    );
+
+    expect(scrollTo).not.toHaveBeenCalled();
   });
 
   it('lets the turn itself carry a reader who is already at the end', () => {

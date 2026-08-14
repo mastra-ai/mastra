@@ -555,6 +555,9 @@ export function MessageScrollerProvider({
 
     const applyDefaultScroll = () => {
       const lastAnchorId = getLastAnchorId();
+      // Where a thread opens decides whether it starts attached: a restored reading
+      // position has the stream below it. `scrollToEnd` takes this back when it lands.
+      followingRef.current = false;
       let didScroll = false;
       if (defaultScrollPosition === 'start') {
         didScroll = scrollToStart({ behavior: 'auto' });
