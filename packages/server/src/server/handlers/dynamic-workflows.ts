@@ -177,6 +177,7 @@ export const UPSERT_DYNAMIC_WORKFLOW_ROUTE = createRoute({
       // storage enforces that owner again in the write predicate so a
       // concurrent delete/recreate can't turn this check into a takeover.
       const existing = await Promise.all(bundle.map(member => store.get(member.id)));
+      const existingById = new Map(bundle.map((member, index) => [member.id, existing[index]] as const));
       if (existing.some(member => member && !member.authorId)) {
         // Legacy rows have no trusted owner to preserve. Administrators may
         // inspect them through GET/list, but mutation stays quarantined until
@@ -188,7 +189,7 @@ export const UPSERT_DYNAMIC_WORKFLOW_ROUTE = createRoute({
       let registrationAuthorId = principal.authorId;
       if (principal.isAdmin) {
         if (existingOwners.size > 1) throwDynamicWorkflowConflict();
-        const existingRoot = existing.at(-1);
+        const existingRoot = existingById.get(def.id);
         if (!existingRoot && existingOwners.size > 0) {
           // An existing helper must not choose the owner of a new root. Admins
           // may extend an owned root with new helpers, but creating a new root

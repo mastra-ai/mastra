@@ -169,6 +169,26 @@ describe('dynamic workflow execution ownership', () => {
     expect(otherCounts).not.toHaveProperty('owned-dynamic');
   });
 
+  it('does not cache caller-filtered dynamic counts when identity comes only from the user context', async () => {
+    const mastra = await createOwnedDynamicWorkflow();
+    const ownerContext = new RequestContext();
+    ownerContext.set(MASTRA_USER_KEY, { id: 'user-a' });
+    const otherContext = new RequestContext();
+    otherContext.set(MASTRA_USER_KEY, { id: 'user-b' });
+
+    const ownerCounts = await LIST_WORKFLOW_RUN_COUNTS_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      requestContext: ownerContext,
+    });
+    const otherCounts = await LIST_WORKFLOW_RUN_COUNTS_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      requestContext: otherContext,
+    });
+
+    expect(ownerCounts).toHaveProperty('owned-dynamic');
+    expect(otherCounts).not.toHaveProperty('owned-dynamic');
+  });
+
   it('returns a non-disclosing 404 from every ordinary dynamic workflow execution and run-control route', async () => {
     const mastra = await createOwnedDynamicWorkflow();
     const requestContext = authenticatedContext('user-b');

@@ -335,7 +335,8 @@ export const LIST_WORKFLOW_RUN_COUNTS_ROUTE = createRoute({
 
       // The shared cache holds the unscoped, unfiltered map — usable only when
       // neither per-user FGA filtering nor a resource scope applies.
-      const cacheable = !fgaProvider && !effectiveResourceId;
+      const callerAuthorId = requestContext ? getCallerAuthorId(requestContext) : null;
+      const cacheable = !fgaProvider && !effectiveResourceId && !callerAuthorId;
       if (cacheable) {
         const cached = runCountsCache.get(mastra);
         if (cached && runCountsNow() - cached.at < RUN_COUNTS_CACHE_TTL_MS) {
