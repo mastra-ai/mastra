@@ -9,6 +9,7 @@
 
 import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { IMastraLogger } from '@mastra/core/logger';
 import { createStorageErrorId, ObservabilityStorage } from '@mastra/core/storage';
 import type {
   ObservabilityStorageStrategy,
@@ -91,7 +92,6 @@ import type { ClickhouseDomainConfig } from '../../../db';
 import {
   addOnClusterToDDL,
   applyReplicationToDDL,
-  buildLocalTableReplicationError,
   isReplicationConfigured,
   isReplicatedOrSharedEngine,
 } from '../../../db/replication';
@@ -251,7 +251,8 @@ async function filterAppliedRetention(
 
 async function assertExistingTablesCompatibleWithReplication(
   client: ClickHouseClient,
-  replication?: ClickhouseReplicationConfig,
+  replication: ClickhouseReplicationConfig | undefined,
+  logger: IMastraLogger,
 ): Promise<void> {
   if (!isReplicationConfigured(replication)) return;
 
@@ -264,7 +265,10 @@ async function assertExistingTablesCompatibleWithReplication(
   const localTable = rows.find(row => !isReplicatedOrSharedEngine(row.engine));
 
   if (localTable) {
-    throw buildLocalTableReplicationError([{ name: localTable.name, engine: localTable.engine }]);
+    logger.warn(
+      `ClickHouse replication is enabled, but pre-existing observability table '${localTable.name}' uses local engine '${localTable.engine}'. ` +
+        `CREATE TABLE IF NOT EXISTS will leave existing tables untouched.`,
+    );
   }
 }
 
@@ -512,7 +516,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     }
 
     try {
-      await assertExistingTablesCompatibleWithReplication(this.#client, this.#replication);
+      await assertExistingTablesCompatibleWithReplication(this.#client, this.#replication, this.logger);
       const existingStrategy = await detectExistingDeltaCursorStrategy(this.#client);
       if (existingStrategy === 'mixed') {
         this.#deltaCursorStrategy = null;
@@ -700,10 +704,10 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override getFeatures() {
     if (!deltaPollingSupported(this.#deltaCursorStrategy)) {
-      return undefined;
+      return ['metrics', 'logs'] as const;
     }
 
-    return ['delta-polling'] as const;
+    return ['metrics', 'logs', 'delta-polling'] as const;
   }
 
   // -------------------------------------------------------------------------

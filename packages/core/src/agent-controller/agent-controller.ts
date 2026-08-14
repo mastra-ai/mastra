@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { Agent } from '../agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../agent/message-list/state/types';
+import type { ActiveThreadRun } from '../agent/thread-stream-runtime';
 import type { AgentInstructions, ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import { AgentControllerChannels } from '../channels/agent-controller-channels';
@@ -39,6 +40,7 @@ import type {
   AgentControllerRequestContext,
   AgentControllerRequestStateUpdater,
   AgentControllerSessionCreatedListener,
+  AgentControllerSessionCreatedOptions,
   AgentControllerSessionDeletedListener,
   AgentControllerThread,
   ModelAuthStatus,
@@ -197,7 +199,10 @@ export class AgentController<TState = {}> {
    * that session's model/mode/state instead of an arbitrary one.
    */
   readonly #sessionsByResource = new Map<string, Promise<Session<TState>>>();
-  readonly #sessionCreatedListeners: AgentControllerSessionCreatedListener<TState>[] = [];
+  readonly #sessionCreatedListeners: Array<{
+    listener: AgentControllerSessionCreatedListener<TState>;
+    blocking: boolean;
+  }> = [];
   readonly #sessionDeletedListeners: AgentControllerSessionDeletedListener<TState>[] = [];
   /**
    * In-progress deletions keyed by registry key, so {@link createSession} can
@@ -276,19 +281,45 @@ export class AgentController<TState = {}> {
   /**
    * Subscribe to process-local notifications for newly materialized sessions.
    * Cached `createSession()` calls do not notify listeners again.
+   *
+   * Async listeners are fire-and-forget by default. Pass `blocking: true` to
+   * make `createSession()` await the listener before resolving — for setup that
+   * must land before the caller can start a run (e.g. seeding session state
+   * from storage). Blocking listeners run sequentially in registration order,
+   * before fire-and-forget listeners are notified. Failures are isolated and
+   * logged, never thrown — session creation stays best-effort with respect to
+   * listener setup. A blocking listener must not call `createSession()` for
+   * the same `(resourceId, scope)` it is initializing: that lookup awaits the
+   * in-flight creation that is awaiting the listener, which deadlocks.
    */
-  onSessionCreated(listener: AgentControllerSessionCreatedListener<TState>): () => void {
-    this.#sessionCreatedListeners.push(listener);
+  onSessionCreated(
+    listener: AgentControllerSessionCreatedListener<TState>,
+    options?: AgentControllerSessionCreatedOptions,
+  ): () => void {
+    const entry = { listener, blocking: options?.blocking === true };
+    this.#sessionCreatedListeners.push(entry);
     return () => {
-      const index = this.#sessionCreatedListeners.indexOf(listener);
+      const index = this.#sessionCreatedListeners.indexOf(entry);
       if (index !== -1) {
         this.#sessionCreatedListeners.splice(index, 1);
       }
     };
   }
 
-  #notifySessionCreated(session: Session<TState>): void {
-    for (const listener of [...this.#sessionCreatedListeners]) {
+  async #notifySessionCreated(session: Session<TState>): Promise<void> {
+    const entries = [...this.#sessionCreatedListeners];
+    // Blocking listeners complete sequentially, in registration order, before
+    // fire-and-forget listeners can observe the session.
+    for (const { listener, blocking } of entries) {
+      if (!blocking) continue;
+      try {
+        await listener(session);
+      } catch (error) {
+        console.error('Error in session-created listener:', error);
+      }
+    }
+    for (const { listener, blocking } of entries) {
+      if (blocking) continue;
       try {
         const result = listener(session);
         if (result && typeof result === 'object' && 'catch' in result) {
@@ -706,7 +737,7 @@ export class AgentController<TState = {}> {
       }
     }
 
-    this.#notifySessionCreated(session);
+    await this.#notifySessionCreated(session);
     return session;
   }
 
@@ -877,19 +908,7 @@ export class AgentController<TState = {}> {
   setBrowser(browser: MastraBrowser | undefined): void {
     this.browser = browser;
 
-    // Collect unique agents: shared backing agent + any deprecated mode.agent
-    // instances so all receive the browser (signal providers may be attached to
-    // any of them).
-    const agents = new Set<Agent<any, any, any, any>>();
-    if (this.config.agent) {
-      agents.add(this.config.agent);
-    }
-    for (const mode of this.config.modes) {
-      if (mode.agent || !this.config.agent) {
-        agents.add(this.getAgentForMode(mode));
-      }
-    }
-    for (const agent of agents) {
+    for (const agent of this.backingAgents()) {
       agent.setBrowser(browser);
     }
   }
@@ -909,7 +928,22 @@ export class AgentController<TState = {}> {
     return this.initPromise;
   }
 
-  private async runInit(): Promise<void> {
+  /**
+   * Initialize only what read-only queries need: the storage layer (either a
+   * fresh internal Mastra wrapping the configured storage, or the inherited
+   * parent Mastra's storage). Skips workspace/sandbox provisioning entirely.
+   *
+   * Idempotent and safe to call from every read query; the underlying
+   * MastraCompositeStore init dedupes.
+   */
+  async initStorage(): Promise<void> {
+    this.#storageInitPromise ??= this.runStorageInit();
+    return this.#storageInitPromise;
+  }
+
+  #storageInitPromise?: Promise<void>;
+
+  private async runStorageInit(): Promise<void> {
     // Create an internal Mastra instance so agents have access to storage
     // (required for tool approval snapshot persistence/resume).
     // We init storage through Mastra's proxied storage so augmentWithInit
@@ -938,6 +972,13 @@ export class AgentController<TState = {}> {
       // is safe even when the parent already initialized it.
       await this.#externalMastra.getStorage()?.init();
     }
+  }
+
+  private async runInit(): Promise<void> {
+    // Storage init is a prerequisite for both reads and writes; share the same
+    // promise so a concurrent read that already triggered storage init doesn't
+    // race with the workspace init we're about to do.
+    await this.initStorage();
 
     // Initialize workspace if configured (skip for dynamic factory — resolved per-request)
     if (this.config.workspace && !this.workspaceInitialized && typeof this.workspace !== 'function') {
@@ -958,18 +999,7 @@ export class AgentController<TState = {}> {
 
     // Propagate harness-level Mastra, memory, workspace, browser, and pubsub
     // to the agent(s) that back each mode (after workspace init).
-    // Collect unique agents: shared backing agent + any deprecated mode.agent
-    // instances so all receive runtime services.
-    const agents = new Set<Agent<any, any, any, any>>();
-    if (this.config.agent) {
-      agents.add(this.config.agent);
-    }
-    for (const mode of this.config.modes) {
-      if (mode.agent || !this.config.agent) {
-        agents.add(this.getAgentForMode(mode));
-      }
-    }
-    for (const agent of agents) {
+    for (const agent of this.backingAgents()) {
       this.propagateRuntimeServicesToAgent(agent);
     }
 
@@ -1132,7 +1162,15 @@ export class AgentController<TState = {}> {
     }
   }
 
-  private async queryThreadById({ threadId }: { threadId: string }): Promise<AgentControllerThread | null> {
+  /**
+   * Read a single thread by id directly from storage, without constructing a
+   * {@link Session}. Read-only server endpoints use this so a GET request for a
+   * thread doesn't spin up a workspace/sandbox as a side effect of session
+   * creation. Returns `null` when the thread doesn't exist or no storage is
+   * configured.
+   */
+  async queryThreadById({ threadId }: { threadId: string }): Promise<AgentControllerThread | null> {
+    await this.initStorage();
     if (!this.#resolveStorage()) return null;
     const memoryStorage = await this.getMemoryStorage();
     const thread = await memoryStorage.getThreadById({ threadId });
@@ -1147,7 +1185,12 @@ export class AgentController<TState = {}> {
     };
   }
 
-  private async queryThreads({
+  /**
+   * List threads directly from storage, without constructing a {@link Session}.
+   * Read-only server endpoints use this so a GET on `/threads` doesn't spin up
+   * a workspace/sandbox as a side effect of session creation.
+   */
+  async queryThreads({
     resourceId,
     includeForkedSubagents,
     metadata,
@@ -1156,6 +1199,7 @@ export class AgentController<TState = {}> {
     includeForkedSubagents?: boolean;
     metadata?: Record<string, unknown>;
   }): Promise<AgentControllerThread[]> {
+    await this.initStorage();
     if (!this.#resolveStorage()) {
       return [];
     }
@@ -1188,13 +1232,14 @@ export class AgentController<TState = {}> {
     }));
   }
 
-  private async queryThreadMessages({
-    threadId,
-    limit,
-  }: {
-    threadId: string;
-    limit?: number;
-  }): Promise<MastraDBMessage[]> {
+  /**
+   * List messages for a thread directly from storage, without constructing a
+   * {@link Session}. Read-only server endpoints use this so a GET on a thread's
+   * messages doesn't spin up a workspace/sandbox as a side effect of session
+   * creation.
+   */
+  async queryThreadMessages({ threadId, limit }: { threadId: string; limit?: number }): Promise<MastraDBMessage[]> {
+    await this.initStorage();
     if (!this.#resolveStorage()) return [];
 
     const memoryStorage = await this.getMemoryStorage();
@@ -1320,9 +1365,13 @@ export class AgentController<TState = {}> {
     this.#channels = channels;
     channels.__setController(this);
 
-    // Attach to every already-constructed backing agent: shared backing agent
-    // + any deprecated per-mode agent instances. Lazily-built mode agents
-    // receive channels on first run via `propagateRuntimeServicesToAgent`.
+    for (const agent of this.backingAgents()) {
+      agent.setChannels(channels);
+    }
+  }
+
+  /** The distinct agents backing this controller: the shared one plus any deprecated per-mode agent. */
+  private backingAgents(): Set<Agent<any, any, any, any>> {
     const agents = new Set<Agent<any, any, any, any>>();
     if (this.config.agent) {
       agents.add(this.config.agent);
@@ -1332,9 +1381,7 @@ export class AgentController<TState = {}> {
         agents.add(this.getAgentForMode(mode));
       }
     }
-    for (const agent of agents) {
-      agent.setChannels(channels);
-    }
+    return agents;
   }
 
   private getAgentForMode(mode: AgentControllerMode): Agent<any, any, any, any> {
@@ -1423,6 +1470,16 @@ export class AgentController<TState = {}> {
     const mode = session.mode.resolve();
 
     return this.propagateRuntimeServicesToAgent(this.getAgentForMode(mode), session);
+  }
+
+  listActiveThreadRuns(): ActiveThreadRun[] {
+    const byRunId = new Map<string, ActiveThreadRun>();
+    for (const agent of this.backingAgents()) {
+      for (const run of this.propagateRuntimeServicesToAgent(agent).listActiveThreadRuns()) {
+        byRunId.set(run.runId, run);
+      }
+    }
+    return [...byRunId.values()];
   }
 
   /**

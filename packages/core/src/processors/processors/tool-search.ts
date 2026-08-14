@@ -1,4 +1,5 @@
 import { z } from 'zod/v4';
+import { parseMemoryRequestContext } from '../../memory/types';
 import { MASTRA_THREAD_ID_KEY } from '../../request-context';
 import type { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
@@ -244,9 +245,22 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
   /**
    * Get the thread ID from the request context, or undefined when no thread is active.
    * Both stores tolerate an undefined thread ID.
+   *
+   * The reserved `mastra__threadId` key is only populated by server middleware
+   * overrides, so also fall back to the memory context the agent sets after
+   * resolving the thread (covers HTTP calls that pass the thread via
+   * `memory.thread`).
    */
+  private resolveThreadId(requestContext: RequestContext | undefined): string | undefined {
+    return (
+      (requestContext?.get(MASTRA_THREAD_ID_KEY) as string | undefined) ||
+      parseMemoryRequestContext(requestContext)?.thread?.id ||
+      undefined
+    );
+  }
+
   private getThreadId(args: ProcessInputStepArgs): string | undefined {
-    return (args.requestContext?.get(MASTRA_THREAD_ID_KEY) as string | undefined) || undefined;
+    return this.resolveThreadId(args.requestContext);
   }
 
   private makeStoreContext(args: ProcessInputStepArgs): LoadedToolStoreContext {
@@ -376,7 +390,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
       );
     }
 
-    const threadId = (args?.requestContext?.get(MASTRA_THREAD_ID_KEY) as string | undefined) || undefined;
+    const threadId = this.resolveThreadId(args?.requestContext);
     const loadedNames = await this.store.getLoadedNames({ threadId, args: undefined });
     return this.getLoadedTools(this.catalogForStep(args?.tools), loadedNames, args?.requestContext);
   }

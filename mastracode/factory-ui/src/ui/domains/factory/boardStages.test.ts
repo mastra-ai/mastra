@@ -1,6 +1,8 @@
+import { FACTORY_RULE_STAGES } from '@mastra/factory/rules/types';
+
 import { describe, expect, it } from 'vitest';
 
-import { currentItemStageLabel } from './boardStages';
+import { boardStages, currentItemStageLabel, itemAppearsInStage } from './boardStages';
 import type { WorkItem, WorkItemSource } from './services/workItems';
 
 function workItem(source: WorkItemSource, stages: string[]): WorkItem {
@@ -24,6 +26,21 @@ function workItem(source: WorkItemSource, stages: string[]): WorkItem {
   };
 }
 
+describe('boardStages', () => {
+  it('uses the canonical stage order for the work board', () => {
+    expect(boardStages('work').map(stage => stage.id)).toEqual(FACTORY_RULE_STAGES);
+  });
+
+  it('selects and labels the review board columns', () => {
+    expect(boardStages('review')).toEqual([
+      { id: 'intake', label: 'Intake' },
+      { id: 'review', label: 'Reviewing' },
+      { id: 'done', label: 'Done' },
+      { id: 'canceled', label: 'Canceled' },
+    ]);
+  });
+});
+
 describe('currentItemStageLabel', () => {
   it('reads the furthest column the item sits in', () => {
     expect(currentItemStageLabel(workItem('manual', ['triage', 'execute']))).toBe('Building');
@@ -37,5 +54,14 @@ describe('currentItemStageLabel', () => {
   it('falls back to Intake when no stage belongs to the item board', () => {
     expect(currentItemStageLabel(workItem('manual', []))).toBe('Intake');
     expect(currentItemStageLabel(workItem('github-pr', ['execute']))).toBe('Intake');
+  });
+});
+
+describe('itemAppearsInStage', () => {
+  it('leaves a canceled pull request out of the queue of PRs awaiting review', () => {
+    const stages = boardStages('review');
+    const canceled = workItem('github-pr', ['canceled']);
+    expect(itemAppearsInStage(canceled, 'canceled', stages)).toBe(true);
+    expect(itemAppearsInStage(canceled, 'intake', stages)).toBe(false);
   });
 });
