@@ -285,6 +285,8 @@ export interface AgentControllerSessionState {
   modelId: string;
   /** Whether the agent is currently executing a run (for initial UI hydration). */
   running?: boolean;
+  /** Durable task list for initial UI hydration. */
+  tasks?: AgentControllerTaskSnapshot[];
   /** OM progress snapshot for the status line (initial hydration). */
   omProgress?: AgentControllerOMProgress;
   /** Cumulative token usage for the current thread. */
@@ -780,8 +782,9 @@ export class AgentControllerSession extends BaseResource {
   }
 
   /** Get the current mode, model, and thread (for initial UI hydration). */
-  state(): Promise<AgentControllerSessionState> {
-    return this.request(this.url(this.base()));
+  state(options?: { threadId?: string }): Promise<AgentControllerSessionState> {
+    const path = options?.threadId ? `${this.base()}?threadId=${encodeURIComponent(options.threadId)}` : this.base();
+    return this.request(this.url(path));
   }
 
   /** Merge key-value pairs into the session state. Existing keys not in the payload are preserved. */
