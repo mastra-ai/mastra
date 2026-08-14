@@ -396,14 +396,22 @@ function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
 function reReviewUpdatedPullRequest(context: FactoryGithubRuleContext) {
   if (!context.item || context.board !== 'review') return;
   if (!context.pullRequest || context.pullRequest.state !== 'open' || context.pullRequest.merged) return;
-  // Intake and Reviewing have not completed a review pass yet. Only a push to a
-  // card that already left Reviewing should start a fresh pass.
-  if (context.item.stages.some(stage => stage === 'intake' || stage === 'review')) return;
+  // Intake has not started a review pass yet, so a push there is just more of
+  // the code the first pass will read. A push to a card sitting in Reviewing is
+  // different: it invalidates whatever that pass is reading, so re-enter the
+  // stage to supersede it. `reviewPullRequest` cancels the stale run and picks
+  // the right skill for the entry it sees.
+  if (context.item.stages.some(stage => stage === 'intake')) return;
+  const alreadyReviewing = context.item.stages.some(stage => stage === 'review');
   return {
     type: 'transition',
     idempotencyKey: `${context.ingress.id}:re-review-updated`,
     board: 'review',
     stage: 'review',
+    // Re-entry is the point when the card is already Reviewing: the stage's
+    // entry rule is what cancels the superseded pass and starts one on the code
+    // that just landed.
+    ...(alreadyReviewing ? { reenter: true } : {}),
   } as const;
 }
 

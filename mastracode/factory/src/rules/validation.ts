@@ -220,7 +220,14 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
       };
     }
     case 'transition': {
-      assertExactKeys(value, ['type', 'idempotencyKey', 'board', 'stage', 'message'], 'Factory transition decision');
+      assertExactKeys(
+        value,
+        ['type', 'idempotencyKey', 'board', 'stage', 'message', 'reenter'],
+        'Factory transition decision',
+      );
+      if (value.reenter !== undefined && typeof value.reenter !== 'boolean') {
+        throw new FactoryRuleValidationError('Factory transition reenter must be a boolean.');
+      }
       let message: { text: string; role?: string } | undefined;
       if (value.message !== undefined) {
         if (!isPlainObject(value.message)) {
@@ -242,6 +249,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         board: enumValue(value.board, FACTORY_RULE_BOARDS, 'Factory transition board'),
         stage: enumValue(value.stage, FACTORY_RULE_STAGES, 'Factory transition stage'),
         ...(message ? { message } : {}),
+        ...(value.reenter === true ? { reenter: true } : {}),
       };
     }
     case 'upsertLinkedWorkItem': {

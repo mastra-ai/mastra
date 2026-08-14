@@ -728,13 +728,23 @@ describe('defaultFactoryRules', () => {
       });
     });
 
-    it('does nothing when the PR is still in Intake or Reviewing, is unlinked, or is not on the Review board', async () => {
+    it('supersedes the pass in flight when a push lands on a card still in Reviewing', async () => {
+      // The push invalidates whatever the running pass is reading, so it has to
+      // start over on the new head. Re-entering the stage is how that pass gets
+      // cancelled; dropping the push would strand the review on stale code.
+      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestUpdated?.onEvent;
+      expect(await rule?.(pushContext({ item: { ...prItem, stages: ['review'] } }))).toMatchObject({
+        type: 'transition',
+        board: 'review',
+        stage: 'review',
+      });
+    });
+
+    it('does nothing when the PR is still in Intake, is unlinked, or is not on the Review board', async () => {
       const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestUpdated?.onEvent;
       for (const context of [
         // Card is still in intake — a review pass has not started yet.
         pushContext({ item: { ...prItem, stages: ['intake'] } }),
-        // Card is already back in review — waking the pending pass would double-fire.
-        pushContext({ item: { ...prItem, stages: ['review'] } }),
         // No linked Review card to move.
         pushContext({ item: undefined, board: undefined, itemRevision: undefined }),
         // Card exists but is bound to the Work board (not a PR review card).

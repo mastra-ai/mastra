@@ -948,14 +948,29 @@ describe('GithubRules', () => {
       cancelInFlight: true,
     });
 
-    // A follow-up push while the card is still Reviewing is a guarded no-op: no
-    // extra transition, no duplicate skill invocation.
+    // A follow-up push while the card is still Reviewing supersedes the pass it
+    // just started, which is now reading code the push replaced. Re-entering
+    // from `review` rather than `done` means there is no completed pass left to
+    // reconcile against, so the fresh run is a plain review.
     await expect(service.ingest(pullRequest('synchronize', 'delivery-push-2'))).resolves.toEqual({
       status: 'committed',
     });
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
     const afterSecondPush = await workItems.listDeferredDecisions('org-1', project.id);
-    expect(afterSecondPush.filter(entry => entry.decision.type === 'transition')).toHaveLength(1);
-    expect(afterSecondPush.filter(entry => entry.decision.type === 'invokeSkill')).toHaveLength(1);
+    const transitions = afterSecondPush.filter(entry => entry.decision.type === 'transition');
+    expect(transitions).toHaveLength(2);
+    // Without this the transition is inert: the card is already in the stage it
+    // is being moved to, so the entry rule would never run.
+    expect(transitions.at(-1)!.decision).toMatchObject({ stage: 'review', reenter: true });
+    const reruns = afterSecondPush.filter(entry => entry.decision.type === 'invokeSkill');
+    expect(reruns).toHaveLength(2);
+    expect(reruns.at(-1)!.decision).toMatchObject({
+      type: 'invokeSkill',
+      skillName: 'factory-review',
+      role: 'review',
+      cancelInFlight: true,
+    });
   });
 
   it('ignores push events on PRs whose card has not yet completed a review pass', async () => {

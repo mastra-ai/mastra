@@ -244,6 +244,14 @@ export interface FactoryTransitionDecision extends FactoryCommitDecisionBase {
    * informational messages never fail the transition.
    */
   message?: { text: string; role?: string };
+  /**
+   * Runs the stage's entry rules even when the item is already in that stage.
+   * A transition to the current stage is normally inert, because most callers
+   * are correcting a board into a state it already holds. Re-entry is for the
+   * opposite case: the stage's work is in flight and has been invalidated, so
+   * it has to start over.
+   */
+  reenter?: boolean;
 }
 
 export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisionBase {

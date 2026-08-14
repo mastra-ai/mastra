@@ -42,6 +42,8 @@ export interface FactoryTransitionRequest {
   causalChain?: readonly FactoryRuleCausalEntry[];
   /** Internal materialization path: evaluate only the destination onEnter leaf even when already at that stage. */
   initialEntry?: boolean;
+  /** Re-runs the stage's entry rules when the item already holds that stage, to restart work the entry invalidated. */
+  reenter?: boolean;
 }
 
 export interface FactoryTransitionServiceOptions {
@@ -233,6 +235,7 @@ export class FactoryTransitionService {
             fromStage,
             toStage: request.stage,
             initialEntry: request.initialEntry,
+            reenter: request.reenter,
           })) {
             const context: FactoryStageRuleContext = Object.freeze({
               ...contextBase,

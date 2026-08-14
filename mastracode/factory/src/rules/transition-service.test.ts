@@ -174,7 +174,7 @@ describe('FactoryTransitionService', () => {
     });
 
     const result = await service.transition({
-      ...request(item, { stage: 'execute' }),
+      ...request(item, { stage: 'canceled' }),
       cause: 'board_drag',
     });
 
@@ -184,7 +184,7 @@ describe('FactoryTransitionService', () => {
         {
           type: 'sendMessage',
           role: 'work',
-          message: 'This work was moved from the triage stage to the execute stage.',
+          message: 'This work was moved from the triage stage to the canceled stage.',
           priority: 'urgent',
           idleBehavior: 'wake',
           prepareBinding: true,
