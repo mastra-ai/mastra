@@ -12,6 +12,7 @@ import { KnowledgeFlyout } from '../domains/factory/components/knowledge/Knowled
 import type { Arrivals, DiffBaseline } from '../domains/factory/components/knowledge/graphDiff';
 import { computeArrivals } from '../domains/factory/components/knowledge/graphDiff';
 import { RequestError } from '../domains/factory/services/request';
+import { useInteractionIdle } from '../domains/factory/components/knowledge/useInteractionIdle';
 
 /**
  * The Knowledge page: a live force-directed graph of the project's knowledge —
@@ -93,7 +94,11 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   const selected = trail.at(-1) ?? null;
   const setSelected = (entry: TrailEntry | null) => setTrail(entry ? [entry] : []);
 
-  const graphQuery = useKnowledgeGraph(factoryProjectId, threadId);
+  // Live updates hold while the user is exploring (moving, clicking,
+  // zooming) and resume after 10s of stillness — the layout never shifts
+  // under someone mid-interaction.
+  const { idle, onActivity } = useInteractionIdle(10_000);
+  const graphQuery = useKnowledgeGraph(factoryProjectId, threadId, { paused: !idle });
 
   // Arrival diffing: baseline per view; a view switch resets it (no mass
   // arrival animation on switch), same-view polls diff by id sets.
@@ -164,7 +169,13 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     );
   } else {
     body = (
-      <div className="relative min-h-0 flex-1" data-testid="knowledge-graph-container">
+      <div
+        className="relative min-h-0 flex-1"
+        data-testid="knowledge-graph-container"
+        onPointerDownCapture={onActivity}
+        onPointerMoveCapture={onActivity}
+        onWheelCapture={onActivity}
+      >
         <KnowledgeGraph
           payload={graphQuery.data}
           arrivals={arrivals}
