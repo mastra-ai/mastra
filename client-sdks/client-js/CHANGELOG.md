@@ -1,5 +1,63 @@
 # @mastra/client-js
 
+## 1.40.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`587f6ef`](https://github.com/mastra-ai/mastra/commit/587f6efcfc25880b93760a8607d1cd381ec612fe)]:
+  - @mastra/core@1.59.1-alpha.0
+
+## 1.40.0
+
+### Minor Changes
+
+- Added an active-runs listing for agent controllers. It reports every run currently in flight on the controller from in-memory tracking — a cheap read suited to polling activity indicators, with no session created as a side effect. ([#21353](https://github.com/mastra-ai/mastra/pull/21353))
+
+  ```ts
+  const runs = await client.getAgentController('code').listActiveRuns();
+  // [{ runId: 'run-1', resourceId: 'workspace-a', threadId: 'thread-1' }]
+  ```
+
+- Declared `bufferingMessages` and `bufferingObservations` on the `display_state_changed` event, which the server has been sending all along. They say which memory budget a background pass is working on, so a client can show that work on the budget it acts on instead of as one shared label. ([#21366](https://github.com/mastra-ai/mastra/pull/21366))
+
+  ```ts
+  client.agentController(id).streamSession(resourceId, event => {
+    if (event.type !== 'display_state_changed') return;
+    // A buffered observation is running: the message window is being read into memory.
+    // A buffered reflection is running: observations are being consolidated.
+    const { bufferingMessages, bufferingObservations } = event.displayState;
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`088e41e`](https://github.com/mastra-ai/mastra/commit/088e41e434ed05f2c674b254f1034ec46a57a7be), [`aa3e7be`](https://github.com/mastra-ai/mastra/commit/aa3e7be30f8addb0278ea74429f4df054517a287), [`d118873`](https://github.com/mastra-ai/mastra/commit/d118873cfd5074b1f814a1c169a97ca7a3a29174), [`b2f0013`](https://github.com/mastra-ai/mastra/commit/b2f0013375588d40c03c13e843b99c0ff8872ca5), [`3b541ae`](https://github.com/mastra-ai/mastra/commit/3b541ae5d410c52b80a7e381d84d021cddb9a449), [`79dd7c2`](https://github.com/mastra-ai/mastra/commit/79dd7c261ee6be1fafedd4651959394db21d2cba), [`90822db`](https://github.com/mastra-ai/mastra/commit/90822dba08fb2169c518e4a6d7f127c098eb46b8), [`898bba4`](https://github.com/mastra-ai/mastra/commit/898bba46d4806dd255a44e5dc3a3d5827eaefdfe), [`b9a28ec`](https://github.com/mastra-ai/mastra/commit/b9a28ecf7acdc0cb7a543d5b660f9fbee301df9a), [`f9aab1c`](https://github.com/mastra-ai/mastra/commit/f9aab1cfc3fda03238a7fd7bd8b794e07497878c), [`3700208`](https://github.com/mastra-ai/mastra/commit/37002080c7838267803a7e579a7d58b908d62f36), [`e31421b`](https://github.com/mastra-ai/mastra/commit/e31421bc9c11c03c6e74f447ecb5820000e2b9d7), [`8b7131e`](https://github.com/mastra-ai/mastra/commit/8b7131eb0407f58f5205e68fb27b81f026488f28), [`161258b`](https://github.com/mastra-ai/mastra/commit/161258b3473a6d0fce00a43cab59d119a49a232f), [`aece0e7`](https://github.com/mastra-ai/mastra/commit/aece0e7cb124ae1eb1230689b887f5554b9a0bf0), [`ae79e34`](https://github.com/mastra-ai/mastra/commit/ae79e34c0bd8674fc24c7524217bfc4a051c6136), [`59d8898`](https://github.com/mastra-ai/mastra/commit/59d8898c8cb48b342fe5bcb5eee803cc8cc95060), [`a6c4399`](https://github.com/mastra-ai/mastra/commit/a6c4399763590b3dae21a2c81826e89a3b1deee4), [`cf418b6`](https://github.com/mastra-ai/mastra/commit/cf418b65efb81997e9b8dc7638eee363c5d96c96), [`a40f915`](https://github.com/mastra-ai/mastra/commit/a40f9157690d89ef13ce825cc88e30be581de5d4), [`8ea8038`](https://github.com/mastra-ai/mastra/commit/8ea80386fde53d26e2c0b2060c53bc9bd9be10f3), [`be31796`](https://github.com/mastra-ai/mastra/commit/be3179624ad5f77cff5fa342cd08046bf7605283), [`79c4f82`](https://github.com/mastra-ai/mastra/commit/79c4f8295f568752eeadf8a9b50010a7d9ec06ae), [`7dafa4f`](https://github.com/mastra-ai/mastra/commit/7dafa4f670fb16ec8ff07349645a00ca12bc5794)]:
+  - @mastra/core@1.59.0
+  - @mastra/schema-compat@1.3.7
+
+## 1.40.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`59d8898`](https://github.com/mastra-ai/mastra/commit/59d8898c8cb48b342fe5bcb5eee803cc8cc95060), [`a40f915`](https://github.com/mastra-ai/mastra/commit/a40f9157690d89ef13ce825cc88e30be581de5d4)]:
+  - @mastra/core@1.59.0-alpha.5
+
+## 1.40.0-alpha.4
+
+### Minor Changes
+
+- Added an active-runs listing for agent controllers. It reports every run currently in flight on the controller from in-memory tracking — a cheap read suited to polling activity indicators, with no session created as a side effect. ([#21353](https://github.com/mastra-ai/mastra/pull/21353))
+
+  ```ts
+  const runs = await client.getAgentController('code').listActiveRuns();
+  // [{ runId: 'run-1', resourceId: 'workspace-a', threadId: 'thread-1' }]
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`79dd7c2`](https://github.com/mastra-ai/mastra/commit/79dd7c261ee6be1fafedd4651959394db21d2cba), [`b9a28ec`](https://github.com/mastra-ai/mastra/commit/b9a28ecf7acdc0cb7a543d5b660f9fbee301df9a), [`be31796`](https://github.com/mastra-ai/mastra/commit/be3179624ad5f77cff5fa342cd08046bf7605283)]:
+  - @mastra/core@1.59.0-alpha.4
+
 ## 1.40.0-alpha.3
 
 ### Patch Changes

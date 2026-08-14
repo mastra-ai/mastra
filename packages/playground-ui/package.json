@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "49.0.0-alpha.3",
+  "version": "49.0.1-alpha.0",
   "description": "Mastra Playground components",
   "sideEffects": [
     "**/*.css"
@@ -149,6 +149,7 @@
     "react-resizable-panels": "^4.7.3",
     "recharts": "^3.8.0",
     "remark-gfm": "^4.0.1",
+    "remend": "^1.3.0",
     "shiki": "^1.29.2",
     "sonner": "^2.0.7",
     "use-debounce": "^10.1.0",
