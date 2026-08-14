@@ -289,6 +289,32 @@ describe('createReplayStream', () => {
 
     expect(cancelled).toBe(true);
   });
+
+  it('should cancel the live source during history replay', async () => {
+    let cancellationCount = 0;
+    let cancellationReason: unknown;
+
+    const liveSource = new ReadableStream<string>({
+      cancel(reason) {
+        cancellationCount++;
+        cancellationReason = reason;
+      },
+    });
+
+    const stream = createReplayStream({
+      history: ['history-1', 'history-2'],
+      liveSource,
+    });
+
+    const reader = stream.getReader();
+    await expect(reader.read()).resolves.toEqual({ done: false, value: 'history-1' });
+
+    const reason = 'client disconnected';
+    await reader.cancel(reason);
+
+    expect(cancellationCount).toBe(1);
+    expect(cancellationReason).toBe(reason);
+  });
 });
 
 describe('withStreamCaching', () => {
