@@ -65,6 +65,27 @@ await run.resume({
 await weatherTool.execute({ location: 'London' }, { requestContext })
 ```
 
+### Using runtime-only keys
+
+When you provide a type or `requestContextSchema`, the `get`, `set`, `has`, and `delete` methods only accept declared keys. This catches misspelled keys and keeps declared values typed.
+
+Use `getRaw`, `setRaw`, `hasRaw`, and `deleteRaw` for infrastructure or middleware keys that aren't part of the schema. Raw values use the `unknown` type, so narrow them before use.
+
+```typescript
+const requestContext = new RequestContext<{ userId: string }>()
+
+requestContext.set('userId', 'user-123')
+requestContext.setRaw('session.cache', { hits: 0 })
+
+const cache = requestContext.getRaw('session.cache')
+
+if (typeof cache === 'object' && cache !== null && 'hits' in cache) {
+  console.log(cache.hits)
+}
+```
+
+Prefer schema-declared keys for application data. Use the raw methods only when a key must remain outside the request context schema.
+
 ### Setting values based on request headers
 
 You can populate `requestContext` in a runtime server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.

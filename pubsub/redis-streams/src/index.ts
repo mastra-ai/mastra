@@ -302,9 +302,25 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     // doesn't change semantics for already-running clusters. Stream growth is
     // bounded by the MAXLEN ~ trim applied on every publish.
     try {
-      await this.#writeClient.xGroupCreate(streamKey, group, '0', { MKSTREAM: true });
+      if (this.#streamIdleTtlMs > 0) {
+        // MKSTREAM may create an empty stream key, so the TTL must be stamped
+        // in the same MULTI — otherwise a topic that is subscribed to but
+        // never published to (e.g. a per-run control topic) has no expiry and
+        // lingers in Redis forever. When the group already exists (a sibling
+        // won the race), exec() throws a MultiErrorReply whose message does
+        // NOT contain "BUSYGROUP" — it lives in err.replies — while the
+        // PEXPIRE in the same transaction still applies, so the TTL is
+        // refreshed even on that path.
+        await this.#writeClient
+          .multi()
+          .xGroupCreate(streamKey, group, '0', { MKSTREAM: true })
+          .pExpire(streamKey, this.#streamIdleTtlMs)
+          .exec();
+      } else {
+        await this.#writeClient.xGroupCreate(streamKey, group, '0', { MKSTREAM: true });
+      }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = errorText(err);
       if (!msg.includes('BUSYGROUP')) throw err;
       this.#logger?.debug?.('redis-streams: consumer group already exists', { topic, group });
     }

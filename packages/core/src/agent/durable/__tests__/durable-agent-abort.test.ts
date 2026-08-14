@@ -105,6 +105,39 @@ describe('DurableAgent abort signal', () => {
     cleanup();
   });
 
+  it('observe().abort() still completes when cleanup is called immediately', async () => {
+    const mockModel = createAbortableModel();
+    const baseAgent = new Agent({
+      id: 'abort-observed-agent',
+      name: 'Abort Observed Agent',
+      instructions: 'Test',
+      model: mockModel as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const source = await durableAgent.stream('Go');
+    await new Promise(r => setTimeout(r, 10));
+
+    let finishReason: string | undefined;
+    const observed = await durableAgent.observe(source.runId, {
+      onFinish: result => {
+        finishReason = result.finishReason;
+      },
+    });
+
+    const sourceConsumption = source.output.consumeStream().catch(() => undefined);
+    const observedConsumption = observed.output.consumeStream().catch(() => undefined);
+
+    void observed.abort();
+    observed.cleanup();
+
+    await Promise.all([sourceConsumption, observedConsumption]);
+
+    expect(finishReason).toBe('abort');
+
+    source.cleanup();
+  });
+
   it('pre-aborted external abortSignal short-circuits the run', async () => {
     const mockModel = createAbortableModel();
     const baseAgent = new Agent({

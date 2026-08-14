@@ -717,6 +717,15 @@ export function buildAuthRoutes(provider: IMastraAuthProvider, options: { public
  */
 const SIGNATURE_VERIFYING_CHANNEL_WEBHOOK = /^\/api\/agent-controllers\/[^/]+\/channels\/slack\/webhook$/;
 
+// Fetched by tabs that may already be signed out. Enumerated, not prefix-matched,
+// so a future route under the same prefix does not inherit the pass.
+const SESSION_FAVICON_PATHS = new Set([
+  '/favicon-session-initializing.svg',
+  '/favicon-session-working.svg',
+  '/favicon-session-awaiting.svg',
+  '/favicon-session-error.svg',
+]);
+
 /**
  * Build the auth gate as a plain Hono middleware handler `(c, next)`. Protects
  * everything that is not a public `/auth/*` route: authenticated requests stash
@@ -766,7 +775,8 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
       path === '/signin' ||
       path.startsWith('/assets/') ||
       path === '/manifest.webmanifest' ||
-      path === '/mastra.svg'
+      path === '/mastra.svg' ||
+      (c.req.method === 'GET' && SESSION_FAVICON_PATHS.has(path))
     ) {
       return next();
     }

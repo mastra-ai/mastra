@@ -26,19 +26,8 @@
  * ```
  */
 
-/**
- * Default keys to strip from objects during deep cleaning.
- * These are typically internal/sensitive fields that shouldn't be traced.
- */
-export const DEFAULT_KEYS_TO_STRIP = new Set([
-  'logger',
-  'experimental_providerMetadata',
-  'providerMetadata',
-  'steps',
-  'tracingContext',
-  'execute', // Tool execute functions
-  'validate', // Schema validate functions
-]);
+const FUNCTION_KEYS_TO_STRIP = new Set(['execute', 'validate']);
+const LOGGER_METHODS = ['debug', 'info', 'warn', 'error'];
 
 export interface DeepCleanOptions {
   keysToStrip: Set<string> | string[] | Record<string, unknown>;
@@ -49,7 +38,7 @@ export interface DeepCleanOptions {
 }
 
 export const DEFAULT_DEEP_CLEAN_OPTIONS: DeepCleanOptions = Object.freeze({
-  keysToStrip: DEFAULT_KEYS_TO_STRIP,
+  keysToStrip: [],
   maxDepth: 8,
   maxStringLength: 128 * 1024, // 128KB - sufficient for large LLM prompts/responses
   maxArrayLength: 50,
@@ -70,7 +59,7 @@ export function mergeSerializationOptions(userOptions?: {
     return DEFAULT_DEEP_CLEAN_OPTIONS;
   }
   return {
-    keysToStrip: DEFAULT_KEYS_TO_STRIP,
+    keysToStrip: DEFAULT_DEEP_CLEAN_OPTIONS.keysToStrip,
     maxDepth: userOptions.maxDepth ?? DEFAULT_DEEP_CLEAN_OPTIONS.maxDepth,
     maxStringLength: userOptions.maxStringLength ?? DEFAULT_DEEP_CLEAN_OPTIONS.maxStringLength,
     maxArrayLength: userOptions.maxArrayLength ?? DEFAULT_DEEP_CLEAN_OPTIONS.maxArrayLength,
@@ -122,6 +111,78 @@ function getMapKeyType(key: unknown): string {
   }
 
   return typeof key;
+}
+
+function hasOnlyKnownKeys(value: Record<string, unknown>, keys: string[]): boolean {
+  try {
+    return Object.keys(value).every(key => keys.includes(key));
+  } catch {
+    return false;
+  }
+}
+
+function isSpanLike(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const span = value as Record<string, unknown>;
+  try {
+    return (
+      typeof span.id === 'string' &&
+      typeof span.traceId === 'string' &&
+      typeof span.type === 'string' &&
+      typeof span.name === 'string'
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isTracingContextLike(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const context = value as Record<string, unknown>;
+  if (!hasOnlyKnownKeys(context, ['currentSpan'])) {
+    return false;
+  }
+
+  try {
+    return context.currentSpan === undefined || isSpanLike(context.currentSpan);
+  } catch {
+    return false;
+  }
+}
+
+function isLoggerLike(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const logger = value as Record<string, unknown>;
+  try {
+    return LOGGER_METHODS.some(method => typeof logger[method] === 'function');
+  } catch {
+    return false;
+  }
+}
+
+function shouldStripEntry(key: string, value: unknown, stripSet: Set<string>): boolean {
+  if (stripSet.has(key)) {
+    return true;
+  }
+
+  if (key === 'tracingContext' && isTracingContextLike(value)) {
+    return true;
+  }
+
+  if (key === 'logger') {
+    return typeof value === 'function' || isLoggerLike(value);
+  }
+
+  return FUNCTION_KEYS_TO_STRIP.has(key) && typeof value === 'function';
 }
 
 function restoreSerializedMapKey(keyType: string, key: any): unknown {
@@ -307,7 +368,7 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
         let mapKeyCount = 0;
         let omittedMapEntries = 0;
         for (const [mapKey, mapVal] of val) {
-          if (typeof mapKey === 'string' && stripSet.has(mapKey)) {
+          if (typeof mapKey === 'string' && shouldStripEntry(mapKey, mapVal, stripSet)) {
             continue;
           }
 
@@ -426,17 +487,44 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
 
       // Handle objects - enforce key limit
       const cleaned: Record<string, any> = {};
-      const keys = Object.keys(val).filter(key => !stripSet.has(key));
+      let keys: string[];
+      try {
+        keys = Object.keys(val);
+      } catch (error) {
+        return formatSerializationError(error);
+      }
       let keyCount = 0;
 
       for (const key of keys) {
+        if (stripSet.has(key)) {
+          continue;
+        }
+
+        let rawValue: unknown;
+        try {
+          rawValue = (val as Record<string, unknown>)[key];
+        } catch (error) {
+          if (keyCount >= maxObjectKeys) {
+            cleaned['__truncated'] = `${keys.length - keyCount} more keys omitted`;
+            break;
+          }
+
+          cleaned[key] = formatSerializationError(error);
+          keyCount++;
+          continue;
+        }
+
+        if (shouldStripEntry(key, rawValue, stripSet)) {
+          continue;
+        }
+
         if (keyCount >= maxObjectKeys) {
           cleaned['__truncated'] = `${keys.length - keyCount} more keys omitted`;
           break;
         }
 
         try {
-          cleaned[key] = helper((val as Record<string, unknown>)[key], depth + 1);
+          cleaned[key] = helper(rawValue, depth + 1);
           keyCount++;
         } catch (error) {
           cleaned[key] = formatSerializationError(error);

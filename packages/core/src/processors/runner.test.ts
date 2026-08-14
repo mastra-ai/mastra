@@ -594,7 +594,10 @@ describe('ProcessorRunner', () => {
       await runner.runOutputProcessors(messageList);
 
       expect(receivedMessages).toHaveLength(1);
-      expect(receivedMessages[0]?.content.parts?.[0]).toEqual({ type: 'text', text: 'initial response' });
+      expect(receivedMessages[0]?.content.parts?.[0]).toMatchObject({
+        type: 'text',
+        text: 'initial response',
+      });
 
       const messages = await messageList.get.all.prompt();
       const assistantTexts = messages

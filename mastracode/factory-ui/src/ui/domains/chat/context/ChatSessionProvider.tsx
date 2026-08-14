@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import type { ReactNode } from 'react';
-import { createContext, useContext } from 'react';
+import { useContext } from 'react';
 import { useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
@@ -16,29 +16,11 @@ import { ChatCommandsProvider } from './ChatCommandsProvider';
 import { ChatModelsProvider } from './ChatModelsProvider';
 import { ChatModesProvider } from './ChatModesProvider';
 import { ChatSessionContext } from './ChatSessionContext';
+import { ChatThreadMessagesContext } from './ChatThreadMessagesContext';
+import type { ChatThreadMessagesApi } from './ChatThreadMessagesContext';
 import { ChatTranscriptProvider } from './ChatTranscriptProvider';
 import { SessionPrepareSteps } from '../components/SessionPrepareSteps';
 import { useChatSessionContext } from './useChatSessionContext';
-
-interface ChatThreadMessagesApi {
-  threadId?: string;
-  isPending: boolean;
-  error: unknown;
-}
-
-const ChatThreadMessagesContext = createContext<ChatThreadMessagesApi | null>(null);
-
-/**
- * True while the initial thread-messages fetch is in flight for the current
- * threadId. Returns false outside a `ChatSessionBoundary` (e.g. draft
- * composer routes with no thread), which keeps preparing-aware consumers
- * from treating "no boundary" as "still loading".
- */
-export function useChatMessagesInitializing(): boolean {
-  const value = useContext(ChatThreadMessagesContext);
-  if (!value) return false;
-  return Boolean(value.threadId) && value.isPending;
-}
 
 /** Stable project/API configuration for chat shell consumers such as the sidebar. */
 export function ChatSessionConfigProvider({
@@ -183,25 +165,26 @@ export function ChatSessionBoundary({
     );
   }
 
+  // Above the transcript so the favicon and the stepper read one pending state.
   return (
-    <ChatTranscriptProvider
-      // No `isPending` segment: remounting on the pending -> ready flip would drop
-      // the live SSE listener. Results merge into the reducer instead.
-      key={`${resourceId}:${threadId ?? 'draft'}`}
-      threadId={threadId}
-      initialMessages={messagesQuery.data}
-      hasMoreHistory={messagesQuery.hasMore}
-      isLoadingMoreHistory={messagesQuery.isLoadingMore}
-      loadMoreHistory={messagesQuery.loadMore}
-    >
-      <ChatModesProvider>
-        <ChatModelsProvider>
-          <ChatCommandsProvider>
-            <ChatThreadMessagesContext.Provider value={messages}>{children}</ChatThreadMessagesContext.Provider>
-          </ChatCommandsProvider>
-        </ChatModelsProvider>
-      </ChatModesProvider>
-    </ChatTranscriptProvider>
+    <ChatThreadMessagesContext.Provider value={messages}>
+      <ChatTranscriptProvider
+        // No `isPending` segment: remounting on the pending -> ready flip would drop
+        // the live SSE listener. Results merge into the reducer instead.
+        key={`${resourceId}:${threadId ?? 'draft'}`}
+        threadId={threadId}
+        initialMessages={messagesQuery.data}
+        hasMoreHistory={messagesQuery.hasMore}
+        isLoadingMoreHistory={messagesQuery.isLoadingMore}
+        loadMoreHistory={messagesQuery.loadMore}
+      >
+        <ChatModesProvider>
+          <ChatModelsProvider>
+            <ChatCommandsProvider>{children}</ChatCommandsProvider>
+          </ChatModelsProvider>
+        </ChatModesProvider>
+      </ChatTranscriptProvider>
+    </ChatThreadMessagesContext.Provider>
   );
 }
 
@@ -215,14 +198,9 @@ export function ChatMessageBoundary({ children }: { children: ReactNode }) {
   // real failure instead of an eternal skeleton or a partial-state loader.
   if (sessionError) return <ChatMessageFeedback />;
 
-  // Any pre-transcript wait — sandbox provisioning OR the initial thread
-  // messages fetch — is shown as the step loader. Splitting these into two
-  // different loaders would flicker between them on cold visits where the
-  // ensure resolves fast but the messages fetch is still in flight; keeping
-  // them under one loader keeps the composer's spinning ring continuously
-  // meaningful through the whole preparing window.
-  const messagesInitializing = Boolean(value.threadId) && value.isPending;
-  if (sandboxPreparing || messagesInitializing) return <SessionPrepareSteps />;
+  // One loader for both pre-transcript waits: a fast ensure followed by a slow
+  // messages fetch would otherwise flicker between two of them.
+  if (sandboxPreparing || value.isPending) return <SessionPrepareSteps />;
 
   if (value.threadId && value.error) return <ChatMessageFallback {...value} />;
 

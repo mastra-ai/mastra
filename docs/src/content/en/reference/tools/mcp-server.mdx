@@ -1891,6 +1891,9 @@ const calculatorTool = createTool({
     num2: z.number(),
     operation: z.enum(['add', 'subtract']),
   }),
+  mcp: {
+    _meta: { ui: { resourceUri: 'ui://calculator/main' } },
+  },
   execute: async ({ num1, num2, operation }) => {
     const result = operation === 'add' ? num1 + num2 : num1 - num2
     return {
@@ -1914,7 +1917,7 @@ const server = new MCPServer({
 })
 ```
 
-Link a tool to its app resource by setting `_meta.ui.resourceUri` on the tool to the matching `ui://` URI. The server auto-normalizes this metadata when registering tools. Visit [MCP Apps](/docs/mcp/overview) for the full app bridge API and usage patterns.
+Link a tool to its app resource by setting `mcp._meta.ui.resourceUri` in `createTool()` to the matching `ui://` URI. The server normalizes this metadata for older hosts when listing tools. Visit [MCP Apps](/docs/mcp/overview) for the full app bridge API and usage patterns.
 
 ## Related information
 
