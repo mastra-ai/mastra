@@ -1,5 +1,6 @@
 import type {
   FlowDetail,
+  FlowIndexRow,
   FlowStatus,
   FlowSummary,
   FlowTimelineEntry,
@@ -24,6 +25,8 @@ import { PulseStorage } from './base';
 export class InMemoryPulseStorage extends PulseStorage {
   #pulses: PulseRecord[] = [];
   #relationships: PulseRelationshipRecord[] = [];
+  /** Materialized flow index (experimental) — highest version per flow wins. */
+  #flowIndex = new Map<string, FlowIndexRow & { updatedAt: Date }>();
   #staleThresholdMs: number;
   #now: () => number;
 
@@ -44,6 +47,50 @@ export class InMemoryPulseStorage extends PulseStorage {
   async dangerouslyClearAll(): Promise<void> {
     this.#pulses = [];
     this.#relationships = [];
+    this.#flowIndex.clear();
+  }
+
+  supportsFlowIndex(): boolean {
+    return true;
+  }
+
+  async upsertFlowSummaries(rows: FlowIndexRow[]): Promise<void> {
+    for (const row of rows) {
+      const existing = this.#flowIndex.get(row.flowId);
+      // ReplacingMergeTree(version) semantics: highest version wins.
+      if (existing && existing.version > row.version) continue;
+      this.#flowIndex.set(row.flowId, { ...row, updatedAt: new Date(this.#now()) });
+    }
+  }
+
+  async listFlowsFromIndex(args: ListFlowsArgs = {}): Promise<ListFlowsResult> {
+    const { filter, pagination } = args;
+    const page = pagination?.page ?? 0;
+    const perPage = pagination?.perPage ?? 40;
+
+    // Stale is presented at READ time: the index cannot self-expire, so a
+    // `running` row whose last upsert is older than the threshold is stale.
+    let flows: FlowSummary[] = [...this.#flowIndex.values()].map(row => ({
+      flowId: row.flowId,
+      threadId: row.threadId,
+      startedAt: row.startedAt,
+      durationMs: row.durationMs ?? null,
+      status:
+        row.status === 'running' && this.#now() - row.updatedAt.getTime() > this.#staleThresholdMs
+          ? 'stale'
+          : row.status,
+      pulseCount: row.pulseCount,
+      costUsd: row.costUsd,
+      entityName: row.entityName,
+    }));
+    if (filter?.status) flows = flows.filter(f => f.status === filter.status);
+    if (filter?.threadId) flows = flows.filter(f => f.threadId === filter.threadId);
+    if (filter?.entityName) flows = flows.filter(f => f.entityName === filter.entityName);
+    if (filter?.fromDate) flows = flows.filter(f => f.startedAt >= filter.fromDate!);
+    if (filter?.toDate) flows = flows.filter(f => f.startedAt <= filter.toDate!);
+    flows.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
+
+    return { flows: flows.slice(page * perPage, (page + 1) * perPage), total: flows.length };
   }
 
   #spanPulsesByFlow(): Map<string, PulseRecord[]> {
@@ -93,12 +140,14 @@ export class InMemoryPulseStorage extends PulseStorage {
         ? rootEnd.timestamp.getTime() - rootStart.timestamp.getTime()
         : null;
 
+    // Cost dual-read: the core bridge folds cost into semantic model pulses
+    // (data.cost_usd); legacy captures carried it on metric-lane rows
+    // (data.estimated_cost_usd). Sum both so old databases keep reading.
     let costUsd: number | undefined;
     for (const p of this.#pulses) {
-      if (p.source === 'metric' && p.traceId === flowId) {
-        const c = p.data?.estimated_cost_usd;
-        if (typeof c === 'number') costUsd = (costUsd ?? 0) + c;
-      }
+      if (p.traceId !== flowId) continue;
+      const c = p.source === 'span' ? p.data?.cost_usd : p.source === 'metric' ? p.data?.estimated_cost_usd : undefined;
+      if (typeof c === 'number') costUsd = (costUsd ?? 0) + c;
     }
 
     return {

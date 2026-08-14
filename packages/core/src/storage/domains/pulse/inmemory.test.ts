@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { PulseRecord } from './base';
+import { PulseStorageExporter } from '../../../pulse/storage-exporter';
+import type { FlowIndexRow, PulseRecord } from './base';
 import { InMemoryPulseStorage } from './inmemory';
 
 const T0 = new Date('2026-08-14T10:00:00.000Z');
@@ -120,20 +121,18 @@ describe('InMemoryPulseStorage (derivation rules)', () => {
     expect(detail!.definitions).toEqual(['model:openai/gpt-4o-mini']);
   });
 
-  it('sums cost from metric-lane pulses', async () => {
+  it('sums cost dual-read: bridge-folded span pulses AND legacy metric-lane rows', async () => {
     const s = store();
-    await s.batchCreatePulses(completedFlow('flow-1'));
+    const rows = completedFlow('flow-1');
+    // New shape: the bridge folds cost onto the semantic model pulse.
+    rows[2] = { ...rows[2]!, data: { total_output_tokens: 42, cost_usd: 0.0002 } };
+    await s.batchCreatePulses(rows);
+    // Legacy shape: metric-lane row (old databases).
     await s.batchCreatePulses([
       pulse({
         source: 'metric',
         surface: 'model',
         action: 'mastra_output_tokens',
-        data: { estimated_cost_usd: 0.0002 },
-      }),
-      pulse({
-        source: 'metric',
-        surface: 'model',
-        action: 'mastra_input_tokens',
         data: { estimated_cost_usd: 0.0001 },
       }),
     ]);
@@ -180,5 +179,162 @@ describe('InMemoryPulseStorage (derivation rules)', () => {
     expect(page.flows[0]!.flowId).toBe('flow-4'); // most recent first
     const filtered = await s.listFlows({ filter: { threadId: 't-2' } });
     expect(filtered.flows).toHaveLength(1);
+  });
+});
+
+function indexRow(overrides: Partial<FlowIndexRow> = {}): FlowIndexRow {
+  return {
+    flowId: 'flow-1',
+    version: 1,
+    startedAt: T0,
+    status: 'completed',
+    durationMs: 1000,
+    threadId: 't-1',
+    pulseCount: 4,
+    costUsd: 0.0002,
+    ...overrides,
+  };
+}
+
+describe('InMemoryPulseStorage flow index', () => {
+  it('supports the flow index and lists upserted rows', async () => {
+    const s = store();
+    expect(s.supportsFlowIndex()).toBe(true);
+    await s.upsertFlowSummaries([indexRow()]);
+    const { flows, total } = await s.listFlowsFromIndex();
+    expect(total).toBe(1);
+    expect(flows[0]).toMatchObject({
+      flowId: 'flow-1',
+      threadId: 't-1',
+      status: 'completed',
+      durationMs: 1000,
+      pulseCount: 4,
+      costUsd: 0.0002,
+    });
+  });
+
+  it('keeps only the highest version per flow (replacing semantics)', async () => {
+    const s = store();
+    await s.upsertFlowSummaries([indexRow({ version: 1, status: 'running', durationMs: null })]);
+    await s.upsertFlowSummaries([indexRow({ version: 2, status: 'completed', durationMs: 1000 })]);
+    // A stale lower version arriving late must not win.
+    await s.upsertFlowSummaries([indexRow({ version: 1, status: 'running', durationMs: null })]);
+    const { flows } = await s.listFlowsFromIndex();
+    expect(flows).toHaveLength(1);
+    expect(flows[0]).toMatchObject({ status: 'completed', durationMs: 1000 });
+  });
+
+  it('presents quiet running rows as stale at read time', async () => {
+    let now = T0.getTime();
+    const s = new InMemoryPulseStorage({ now: () => now });
+    await s.upsertFlowSummaries([indexRow({ status: 'running', durationMs: null })]);
+    expect((await s.listFlowsFromIndex()).flows[0]!.status).toBe('running');
+
+    now = T0.getTime() + 60_000; // quiet past the 30s threshold
+    expect((await s.listFlowsFromIndex()).flows[0]!.status).toBe('stale');
+
+    // terminal rows never go stale
+    await s.upsertFlowSummaries([indexRow({ flowId: 'flow-2', version: 2, status: 'completed' })]);
+    now = T0.getTime() + 600_000;
+    const { flows } = await s.listFlowsFromIndex({ filter: { status: 'completed' } });
+    expect(flows.map(f => f.flowId)).toEqual(['flow-2']);
+  });
+
+  it('filters and paginates the index like listFlows', async () => {
+    const s = store();
+    await s.upsertFlowSummaries(
+      Array.from({ length: 5 }, (_, i) =>
+        indexRow({
+          flowId: `flow-${i}`,
+          version: i + 1,
+          startedAt: at(i * 10_000),
+          threadId: `t-${i}`,
+          entityName: i % 2 ? 'support' : 'triage',
+        }),
+      ),
+    );
+    const page = await s.listFlowsFromIndex({ pagination: { page: 0, perPage: 2 } });
+    expect(page.total).toBe(5);
+    expect(page.flows.map(f => f.flowId)).toEqual(['flow-4', 'flow-3']); // most recent first
+    expect((await s.listFlowsFromIndex({ filter: { threadId: 't-2' } })).flows).toHaveLength(1);
+    expect((await s.listFlowsFromIndex({ filter: { entityName: 'support' } })).total).toBe(2);
+    expect((await s.listFlowsFromIndex({ filter: { fromDate: at(20_000), toDate: at(30_000) } })).total).toBe(2);
+  });
+
+  /**
+   * The correctness A/B: the same records fed once through a real
+   * PulseStorageExporter (flowIndex on) land in BOTH the raw tables (derived
+   * path) and the index. The two reads must agree. Legitimate differences,
+   * excluded by construction here and documented in the experiment verdict:
+   * - legacy metric-lane cost (data.estimated_cost_usd) is summed by the
+   *   derived read but not indexed (the index is for the new pipeline where
+   *   cost is folded onto span pulses as data.cost_usd);
+   * - index staleness keys off the last UPSERT time, derived staleness off
+   *   the last pulse timestamp — equal whenever upserts follow pulses
+   *   promptly, as they do in the real writer;
+   * - pulseCount is a writer-side approximation (late pulses after the
+   *   terminal eviction bump nothing).
+   */
+  it('index results equal derived results for identical inputs through a real exporter', async () => {
+    let now = T0.getTime() + 5_000;
+    const s = new InMemoryPulseStorage({ now: () => now });
+    const exporter = new PulseStorageExporter({ storage: s, flowIndex: true, flushIntervalMs: 600_000 });
+    const emit = (records: PulseRecord[]) =>
+      records.forEach(record => exporter.onPulseEvent({ type: 'pulse', record }));
+
+    // stale flow: a lone root start that then goes quiet
+    emit([pulse({ traceId: 'flow-stale', threadId: 't-s', spanId: 'root', timestamp: at(0) })]);
+    // completed flow with bridge-folded cost on the model pulse
+    const done = completedFlow('flow-done', 't-1').map(p =>
+      p.action === 'generate_completed' ? { ...p, data: { total_output_tokens: 42, cost_usd: 0.0002 } } : p,
+    );
+    emit(done.map(p => ({ ...p, timestamp: at(2_000 + (p.timestamp.getTime() - T0.getTime())) })));
+    // failed flow: child model span errors
+    const failed = completedFlow('flow-failed', 't-2').map(p =>
+      p.action === 'generate_completed' ? { ...p, type: 'error' as const, action: 'generate_failed' } : p,
+    );
+    emit(failed.map(p => ({ ...p, timestamp: at(4_000 + (p.timestamp.getTime() - T0.getTime())) })));
+    // aborted flow: span layer completes, session abort fact overrides
+    emit(
+      completedFlow('flow-aborted', 't-3').map(p => ({
+        ...p,
+        timestamp: at(6_000 + (p.timestamp.getTime() - T0.getTime())),
+      })),
+    );
+    emit([
+      pulse({
+        traceId: '',
+        threadId: 't-3',
+        source: 'session',
+        surface: 'run_control',
+        action: 'abort_completed',
+        timestamp: at(7_500),
+      }),
+    ]);
+    await exporter.flush();
+
+    // running flow: written close to the read time, still fresh
+    now = T0.getTime() + 58_000;
+    emit([pulse({ traceId: 'flow-live', threadId: 't-l', spanId: 'root', timestamp: at(55_000) })]);
+    await exporter.flush();
+    await exporter.shutdown();
+
+    now = T0.getTime() + 60_000; // stale flow is 60s quiet; live flow 5s
+    const derived = await s.listFlows();
+    const indexed = await s.listFlowsFromIndex();
+
+    expect(indexed.total).toBe(derived.total);
+    expect(indexed.flows).toEqual(derived.flows);
+    expect(derived.flows.map(f => `${f.flowId}:${f.status}`)).toEqual([
+      'flow-live:running',
+      'flow-aborted:aborted',
+      'flow-failed:failed',
+      'flow-done:completed',
+      'flow-stale:stale',
+    ]);
+    // and the filters see the same world
+    expect(await s.listFlowsFromIndex({ filter: { status: 'aborted' } })).toEqual(
+      await s.listFlows({ filter: { status: 'aborted' } }),
+    );
   });
 });

@@ -128,6 +128,34 @@ export interface PulseStorageFeatures {
 }
 
 /**
+ * Stored statuses for the materialized flow index. `stale` is intentionally
+ * excluded: an index row cannot self-expire, so staleness is always presented
+ * at READ time (a `running` row whose last upsert is older than the stale
+ * threshold is served as `stale`).
+ */
+export type FlowIndexStatus = Exclude<FlowStatus, 'stale'>;
+
+/**
+ * One versioned row of the materialized flow-summary index (experimental,
+ * behind `pulse.flowIndex`). The writer upserts these; adapters keep only the
+ * highest `version` per `flowId` (ReplacingMergeTree semantics).
+ */
+export interface FlowIndexRow {
+  flowId: string;
+  /** Monotonically increasing per upsert; highest version wins per flow. */
+  version: number;
+  startedAt: Date;
+  endedAt?: Date;
+  status: FlowIndexStatus;
+  durationMs?: number | null;
+  threadId?: string;
+  entityName?: string;
+  /** Writer-side counter — an approximation (late pulses after eviction are missed). */
+  pulseCount: number;
+  costUsd?: number;
+}
+
+/**
  * Base class every pulse storage adapter extends. Methods throw until an
  * adapter overrides them, mirroring the other storage domains' convention.
  */
@@ -160,4 +188,22 @@ export abstract class PulseStorage extends StorageDomain {
 
   /** Remove everything (test/dev helper). */
   abstract dangerouslyClearAll(): Promise<void>;
+
+  /**
+   * Whether this adapter maintains a materialized flow-summary index
+   * (experimental). When false, `upsertFlowSummaries`/`listFlowsFromIndex`
+   * are absent and flows are always derived at read time.
+   */
+  supportsFlowIndex(): boolean {
+    return false;
+  }
+
+  /** Upsert versioned flow-index rows; highest version per flow wins. */
+  upsertFlowSummaries?(rows: FlowIndexRow[]): Promise<void>;
+
+  /**
+   * List flows from the materialized index (same filter/pagination semantics
+   * as `listFlows`; staleness presented at read time).
+   */
+  listFlowsFromIndex?(args?: ListFlowsArgs): Promise<ListFlowsResult>;
 }
