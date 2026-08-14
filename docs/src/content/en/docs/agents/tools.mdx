@@ -623,7 +623,7 @@ for await (const chunk of stream.fullStream) {
 }
 ```
 
-`askUserTool` supports free-text, single-select (`options` array), and multi-select (`selectionMode: 'multi_select'`) prompts. Pair it with `autoResumeSuspendedTools` so the agent resumes automatically from the user's next chat message. See [Automatic tool resumption](/docs/agents/agent-approval#automatic-tool-resumption) for details.
+`askUserTool` supports free-text, single-select (`options` array), and multi-select (`selectionMode: 'multi_select'`) prompts. Pair it with `autoResumeSuspendedTools` so the agent resumes automatically from the user's next chat message. See [Automatic tool resumption](/docs/agents/human-in-the-loop#automatic-tool-resumption) for details.
 
 ### Submit a plan for review
 
@@ -673,7 +673,7 @@ The [AgentController](/docs/harness/agent-controller) automatically includes all
 - [MCP overview](/docs/connections/mcp)
 - [Dynamic tool search](/reference/processors/tool-search-processor): Load tools on demand for agents with large tool libraries
 - [Tools with structured output](/docs/agents/structured-output#combine-tools-and-structured-output): Model compatibility when combining tools and structured output
-- [Agent approval](/docs/agents/agent-approval)
+- [Agent approval](/docs/agents/human-in-the-loop)
 - [`askUserTool` reference](/reference/tools/ask-user-tool)
 - [`submitPlanTool` reference](/reference/tools/submit-plan-tool)
 - [Task tools reference](/reference/tools/task-tools)

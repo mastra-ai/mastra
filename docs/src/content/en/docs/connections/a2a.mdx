@@ -228,7 +228,7 @@ A2A models human-in-the-loop (HITL) work with the `input-required` task state. W
 
 Mastra maps its agent suspension model to this state in both directions:
 
-- **As a server**: when an exposed agent suspends, the task transitions to `input-required`. This includes suspensions caused by [tool approval](/docs/agents/agent-approval) or a tool that calls `suspend()`. The task status message includes a text prompt and a data part with the structured `suspendPayload` and `resumeSchema`. A follow-up `message/send` or `message/stream` request with the same `taskId` resumes the suspended run with the provided input.
+- **As a server**: when an exposed agent suspends, the task transitions to `input-required`. This includes suspensions caused by [tool approval](/docs/agents/human-in-the-loop) or a tool that calls `suspend()`. The task status message includes a text prompt and a data part with the structured `suspendPayload` and `resumeSchema`. A follow-up `message/send` or `message/stream` request with the same `taskId` resumes the suspended run with the provided input.
 - **As a client**: when a remote task reaches `input-required` or `auth-required`, `A2AAgent` returns a suspended result with `finishReason: 'suspended'` and a `suspendPayload`. Calling `resumeGenerate()` or `resumeStream()` sends the input or credentials back to the remote task with the original `taskId`.
 
 ```typescript title="src/a2a-hitl.ts"

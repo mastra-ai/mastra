@@ -417,7 +417,7 @@
     },
     {
       "source": "/docs/agents/human-in-the-loop-with-tools",
-      "destination": "/docs/agents/agent-approval",
+      "destination": "/docs/agents/human-in-the-loop",
       "permanent": true
     },
     {
@@ -2073,6 +2073,11 @@
     {
       "source": "/docs/agents/using-tools",
       "destination": "/docs/agents/tools",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/agent-approval",
+      "destination": "/docs/agents/human-in-the-loop",
       "permanent": true
     }
   ]

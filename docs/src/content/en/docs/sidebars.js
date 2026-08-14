@@ -56,7 +56,7 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'agents/agent-approval',
+              id: 'agents/human-in-the-loop',
               label: 'Human-in-the-Loop',
             },
             {
