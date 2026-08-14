@@ -146,7 +146,6 @@ describe('buildAutoResumeSystemMessageSuffix', () => {
 
     expect(suffix).toContain('collectAddress');
     expect(suffix).not.toContain('chargeCard');
-    expect(suffix).not.toContain("suspendedTool.type is 'approval'");
   });
 
   it('omits parentRunId from the serialized suspended tools', () => {

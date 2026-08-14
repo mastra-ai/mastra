@@ -557,10 +557,12 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           typeof (workflowResumeData as Record<string, unknown>).approved === 'boolean'
             ? (workflowResumeData as { approved: boolean; reason?: string })
             : undefined;
-        // Gate the resume branch on either a live policy or a prior outer approval suspend.
+        // Gate a fresh call or a prior outer approval suspend. Once an approved tool
+        // suspends during execution for its own resume data, do not require approval again.
         // Approval decisions must come from the workflow resume boundary; model-authored
         // resumeData is untrusted and cannot grant or decline consent.
-        const approvalGated = !isDelegatedApproval && (toolRequiresApproval || suspendedForApproval);
+        const approvalGated =
+          !isDelegatedApproval && (suspendedForApproval || (toolRequiresApproval && suspendData === undefined));
 
         // Schema for tool call approval - used for both streaming and metadata
         const approvalSchema = toStandardSchema(

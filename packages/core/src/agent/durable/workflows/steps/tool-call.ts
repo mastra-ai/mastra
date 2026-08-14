@@ -633,7 +633,13 @@ export function createDurableToolCallStep() {
         await doFlush();
       };
 
-      if (requiresApproval && !approvalDecision) {
+      const suspendedForApproval =
+        suspendData != null &&
+        typeof suspendData === 'object' &&
+        (suspendData as { type?: unknown }).type === 'approval';
+      const approvalGated = suspendedForApproval || (requiresApproval && suspendData === undefined);
+
+      if (approvalGated && !approvalDecision) {
         const resumeSchema = JSON.stringify({
           type: 'object',
           properties: {
@@ -690,11 +696,10 @@ export function createDurableToolCallStep() {
         );
       }
 
-      // Check if resuming from approval — only when the tool actually requires
-      // approval.  Without the `requiresApproval` guard, generic resume data that
-      // happens to contain an `approved` field (e.g. from context.agent.suspend())
-      // would be misinterpreted as an approval response.
-      if (requiresApproval && approvalDecision) {
+      // Check if resuming from approval. Without the `approvalGated` guard,
+      // generic resume data that happens to contain an `approved` field (e.g. from
+      // context.agent.suspend()) would be misinterpreted as an approval response.
+      if (approvalGated && approvalDecision) {
         // Remove approval metadata since we're resuming (either approved or declined)
         await removeToolMetadata('approval');
 
@@ -750,18 +755,13 @@ export function createDurableToolCallStep() {
       // When an approval-gated tool is approved on resume, tag the resolved output with the
       // approval decision so it round-trips through persistence as `approval: { approved: true }`.
       const approvalGrant =
-        requiresApproval && approvalDecision?.approved === true
+        approvalGated && approvalDecision?.approved === true
           ? ({ approval: { id: toolCallId, approved: true as const } } as const)
           : undefined;
 
-      // Check if resuming from in-execution suspension
-      // Pass resumeData through to the tool so it can continue from where it left off.
-      // For approval-gated tools, only an object with an `approved` field is an
-      // approval decision; any other defined resume data is forwarded from an
-      // in-execution suspension.
-      const isResumingFromSuspension =
-        resumeData !== undefined &&
-        !(requiresApproval && typeof resumeData === 'object' && resumeData !== null && 'approved' in resumeData);
+      // Check if resuming from in-execution suspension. Once the approval gate has
+      // resolved, all later resume data belongs to the tool's own suspension schema.
+      const isResumingFromSuspension = resumeData !== undefined && !approvalGated;
 
       // Remove suspension metadata when resuming from an in-execution (non-approval-decision) suspension.
       // `isResumingFromSuspension` already excludes the approval-decision case above.
