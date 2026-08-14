@@ -57,7 +57,7 @@ for await (const chunk of stream.fullStream) {
 
 :::note
 
-Human-in-the-loop uses snapshots to capture request state. Configure a [storage provider](/docs/storage/overview) on your Mastra instance or you'll see a "snapshot not found" error.
+Human-in-the-loop uses snapshots to capture request state. Configure a [storage provider](/docs/storage) on your Mastra instance or you'll see a "snapshot not found" error.
 
 Snapshots for agent runs are minimal resume artifacts: they hold only what's needed to resume the suspended run and are deleted once the run finishes. Use [tracing](/docs/observability/overview) for the execution record and [memory](/docs/memory/overview) for the conversation history.
 
@@ -531,13 +531,13 @@ The same discovery is available over HTTP as `GET /agents/:agentId/suspended-run
 
 :::note
 
-Suspended runs only survive restarts when your Mastra instance is configured with a persistent [storage provider](/docs/storage/overview). The default in-memory store loses snapshots when the process exits.
+Suspended runs only survive restarts when your Mastra instance is configured with a persistent [storage provider](/docs/storage). The default in-memory store loses snapshots when the process exits.
 
 :::
 
 ## Tool approval: Supervisor agents
 
-A [supervisor agent](/docs/capabilities/subagents) coordinates multiple subagents using `.stream()` or `.generate()`. When a subagent calls a tool that requires approval, the request propagates up through the delegation chain and surfaces at the supervisor level:
+A [supervisor agent](/docs/subagents) coordinates multiple subagents using `.stream()` or `.generate()`. When a subagent calls a tool that requires approval, the request propagates up through the delegation chain and surfaces at the supervisor level:
 
 1. The supervisor delegates a task to a subagent.
 1. The subagent calls a tool that has `requireApproval: true` or uses `suspend()`.

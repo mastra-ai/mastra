@@ -11,7 +11,7 @@ Skills are reusable instructions that teach agents how to perform specific tasks
 
 :::note
 
-Workspace skills are discovered through a workspace and shared with every agent that uses it. To attach skills directly to one agent without requiring a workspace, use [agent skills](/docs/agents/skills).
+Workspace skills are discovered through a workspace and shared with every agent that uses it. To attach skills directly to one agent without requiring a workspace, use [agent skills](/docs/skills).
 
 :::
 
@@ -217,7 +217,7 @@ When `skillSource` is provided, it's used instead of the workspace filesystem fo
 
 You can also attach skills directly to an agent without a workspace using `createSkill()` and the agent's `skills` config. When both agent-level and workspace-level skills exist, they merge, agent-level skills take precedence on name conflicts.
 
-See [Agent skills](/docs/agents/skills) for details.
+See [Agent skills](/docs/skills) for details.
 
 ## Dynamic skills
 
@@ -238,7 +238,7 @@ const workspace = new Workspace({
 
 ## Related
 
-- [Agent skills](/docs/agents/skills)
+- [Agent skills](/docs/skills)
 - [Agent skills specification](https://agentskills.io)
 - [Sandbox](/docs/workspace/sandbox)
 - [Search and indexing](/docs/workspace/search)

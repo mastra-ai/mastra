@@ -178,7 +178,7 @@ export const weatherAgent = new Agent({
 
 ## Agents as tools
 
-Add subagents through the `agents` configuration to create a [supervisor](/docs/capabilities/subagents). Mastra converts each subagent to an `agent-<key>` tool. Include a `description` on each subagent so the supervisor knows when to delegate.
+Add subagents through the `agents` configuration to create a [supervisor](/docs/subagents). Mastra converts each subagent to an `agent-<key>` tool. Include a `description` on each subagent so the supervisor knows when to delegate.
 
 ```typescript title="src/mastra/agents/supervisor.ts"
 import { Agent } from '@mastra/core/agent'

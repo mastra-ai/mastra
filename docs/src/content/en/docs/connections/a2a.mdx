@@ -87,7 +87,7 @@ Use `A2AAgent` when another Mastra agent should delegate work to a remote agent.
 
 ## Consume A2A agents as subagents
 
-Use `A2AAgent` to wrap a remote A2A agent, then add it to a parent agent with the [supervisor agents](/docs/capabilities/subagents) pattern. Pass an explicit agent card URL when the remote server hosts multiple agents or uses a custom well-known path.
+Use `A2AAgent` to wrap a remote A2A agent, then add it to a parent agent with the [supervisor agents](/docs/subagents) pattern. Pass an explicit agent card URL when the remote server hosts multiple agents or uses a custom well-known path.
 
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'

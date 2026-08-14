@@ -247,17 +247,17 @@ const sidebars = {
       items: [
         {
           type: 'doc',
-          id: 'capabilities/subagents',
+          id: 'subagents',
           label: 'Subagents',
         },
         {
           type: 'doc',
-          id: 'agents/skills',
+          id: 'skills',
           label: 'Skills',
         },
         {
           type: 'doc',
-          id: 'capabilities/channels',
+          id: 'channels',
           label: 'Channels',
         },
         {
@@ -295,7 +295,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'browser/overview',
+          id: 'browser',
           label: 'Browser',
         },
         {
@@ -342,7 +342,7 @@ const sidebars = {
       items: [
         {
           type: 'doc',
-          id: 'storage/overview',
+          id: 'storage',
           label: 'Storage',
         },
         {

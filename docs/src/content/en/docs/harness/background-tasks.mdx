@@ -24,7 +24,7 @@ For tool calls that return quickly, foreground execution using `agent.stream()` 
 
 :::note
 
-Background tasks require a configured [storage](/docs/storage/overview) backend on the Mastra instance. Tasks are persisted so they survive process restarts.
+Background tasks require a configured [storage](/docs/storage) backend on the Mastra instance. Tasks are persisted so they survive process restarts.
 
 :::
 
@@ -395,6 +395,6 @@ These read from storage rather than the pubsub stream, so they're suitable for p
 - [`Agent.stream()` reference](/reference/streaming/agents/stream)
 - [backgroundTasks configuration reference](/reference/configuration#backgroundtasks)
 - [Durable agents](../harness/durable-agents)
-- [Supervisor agents](/docs/capabilities/subagents)
+- [Supervisor agents](/docs/subagents)
 - [Stream chunk types](/reference/streaming/ChunkType)
-- [Storage](/docs/storage/overview)
+- [Storage](/docs/storage)

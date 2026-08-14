@@ -285,13 +285,13 @@ The channel context includes:
 - `platform`: The platform identifier, `slack` for this adapter.
 - `userId` and `userName`: The sender's Slack user ID and display name.
 
-Mastra also turns this context into a short system message. The agent learns the platform and its own identity, plus whether the conversation is a direct message or a public channel. See [thread context](/docs/capabilities/channels#thread-context) in the channels overview for how to change that behavior.
+Mastra also turns this context into a short system message. The agent learns the platform and its own identity, plus whether the conversation is a direct message or a public channel. See [thread context](/docs/channels#thread-context) in the channels overview for how to change that behavior.
 
 ## Production deployment
 
 When you deploy the Mastra server, update both request URLs in the Slack app settings to the production webhook URL. The tunnel URL used for local development is temporary and changes when the tunnel restarts.
 
-Channels on serverless platforms may need `waitUntil` and shared pub/sub configuration so background responses and thread leases work across short-lived instances. See [serverless deployment](/docs/capabilities/channels#serverless-deployment) in the channels overview.
+Channels on serverless platforms may need `waitUntil` and shared pub/sub configuration so background responses and thread leases work across short-lived instances. See [serverless deployment](/docs/channels#serverless-deployment) in the channels overview.
 
 ### Idle servers
 
@@ -299,7 +299,7 @@ Platform servers scale down to idle when they aren't receiving traffic, and that
 
 ## Related
 
-- [Channels overview](/docs/capabilities/channels)
-- [More](/docs/capabilities/channels#other-adapters)
+- [Channels overview](/docs/channels)
+- [More](/docs/channels#other-adapters)
 - [Channels reference](/reference/agents/channels)
 - [Deployment overview](/docs/deployment/overview)

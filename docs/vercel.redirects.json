@@ -22,7 +22,7 @@
     },
     {
       "source": "/docs/agents/channels",
-      "destination": "/docs/capabilities/channels",
+      "destination": "/docs/channels",
       "permanent": true
     },
     {
@@ -452,7 +452,7 @@
     },
     {
       "source": "/docs/server-db/storage",
-      "destination": "/docs/storage/overview",
+      "destination": "/docs/storage",
       "permanent": true
     },
     {
@@ -637,7 +637,7 @@
     },
     {
       "source": "/docs/memory/storage/overview",
-      "destination": "/docs/storage/overview",
+      "destination": "/docs/storage",
       "permanent": true
     },
     {
@@ -662,7 +662,7 @@
     },
     {
       "source": "/docs/memory/threads-and-resources",
-      "destination": "/docs/storage/overview",
+      "destination": "/docs/storage",
       "permanent": true
     },
     {
@@ -1017,7 +1017,7 @@
     },
     {
       "source": "/docs/memory/storage",
-      "destination": "/docs/storage/overview",
+      "destination": "/docs/storage",
       "permanent": true
     },
     {
@@ -1257,7 +1257,7 @@
     },
     {
       "source": "/docs/agents/supervisor-agents",
-      "destination": "/docs/capabilities/subagents",
+      "destination": "/docs/subagents",
       "permanent": true
     },
     {
@@ -1772,7 +1772,7 @@
     },
     {
       "source": "/docs/capabilities/channels/other-adapters",
-      "destination": "/docs/capabilities/channels",
+      "destination": "/docs/channels",
       "permanent": true
     },
     {
@@ -1857,7 +1857,7 @@
     },
     {
       "source": "/docs/capabilities/channels/overview",
-      "destination": "/docs/capabilities/channels",
+      "destination": "/docs/channels",
       "permanent": true
     },
     {
@@ -2042,7 +2042,7 @@
     },
     {
       "source": "/docs/browser/recording",
-      "destination": "/docs/browser/overview#record-browser-sessions",
+      "destination": "/docs/browser#record-browser-sessions",
       "permanent": true
     },
     {
@@ -2108,6 +2108,31 @@
     {
       "source": "/docs/long-running-agents/signal-providers",
       "destination": "/docs/harness/signal-providers",
+      "permanent": true
+    },
+    {
+      "source": "/docs/capabilities/subagents",
+      "destination": "/docs/subagents",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/skills",
+      "destination": "/docs/skills",
+      "permanent": true
+    },
+    {
+      "source": "/docs/capabilities/channels",
+      "destination": "/docs/channels",
+      "permanent": true
+    },
+    {
+      "source": "/docs/browser/overview",
+      "destination": "/docs/browser",
+      "permanent": true
+    },
+    {
+      "source": "/docs/storage/overview",
+      "destination": "/docs/storage",
       "permanent": true
     }
   ]
