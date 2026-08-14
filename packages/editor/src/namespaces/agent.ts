@@ -265,23 +265,19 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       await this.ensureStoredWorkspaceRefs(providedConfig.workspace);
     }
 
-    const versionResult =
-      Object.keys(providedConfig).length > 0
-        ? await createVersionFromSnapshotUpdate<AgentVersion, CreateVersionInput, StorageAgentSnapshotType>({
-            store,
-            parentId: input.id,
-            parentIdField: 'agentId',
-            snapshotFields: AGENT_SNAPSHOT_CONFIG_FIELDS,
-            providedConfig,
-          })
-        : { versionCreated: false as const };
+    if (Object.keys(providedConfig).length > 0) {
+      await createVersionFromSnapshotUpdate<AgentVersion, CreateVersionInput, StorageAgentSnapshotType>({
+        store,
+        parentId: input.id,
+        parentIdField: 'agentId',
+        snapshotFields: AGENT_SNAPSHOT_CONFIG_FIELDS,
+        providedConfig,
+      });
+    }
 
     const recordFields = getProvidedAgentRecordFields(input);
-    if (recordFields || versionResult.versionCreated) {
-      await store.update({
-        ...(recordFields ?? { id: input.id }),
-        ...(versionResult.versionCreated ? { activeVersionId: versionResult.version.id } : {}),
-      });
+    if (recordFields) {
+      await store.update(recordFields);
     }
 
     this._cache.delete(input.id);
