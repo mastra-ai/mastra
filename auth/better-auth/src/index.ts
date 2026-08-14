@@ -102,6 +102,13 @@ interface MastraAuthBetterAuthOptions extends MastraAuthProviderOptions<BetterAu
 }
 
 /** Loose row shapes read back from better-auth's internal DB adapter. */
+/**
+ * How long a resolved `userId → orgId` mapping stays cached. Bounded so an
+ * administrator revoking a membership takes effect on new sessions within a
+ * minute, rather than persisting until process restart.
+ */
+const ORG_CACHE_TTL_MS = 60_000;
+
 interface MemberRow {
   organizationId?: string;
   role?: string;
@@ -172,10 +179,22 @@ export class MastraAuthBetterAuth
   /**
    * In-process `userId → orgId` cache, shared by `ensureOrganization` and the
    * `authenticateToken` default-org resolution. Only successes are cached, so
-   * membership-less users re-run the lookup per request, and a user removed
-   * from their org keeps the cached value for the process lifetime.
+   * membership-less users re-run the lookup per request. Entries expire after
+   * `ORG_CACHE_TTL_MS` so a membership revoked by an administrator stops being
+   * injected into new sessions within the TTL window instead of persisting for
+   * the process lifetime.
    */
-  #orgCache = new Map<string, string>();
+  #orgCache = new Map<string, { orgId: string; expiresAt: number }>();
+
+  #cachedOrgId(userId: string): string | undefined {
+    const entry = this.#orgCache.get(userId);
+    if (!entry) return undefined;
+    if (Date.now() >= entry.expiresAt) {
+      this.#orgCache.delete(userId);
+      return undefined;
+    }
+    return entry.orgId;
+  }
   /** Set from `init()`: cross-origin SPA deploys need SameSite=None; Secure cookies. */
   #crossSite = false;
   protected signUpEnabledConfig: boolean;
@@ -347,7 +366,7 @@ export class MastraAuthBetterAuth
       sortBy: { field: 'createdAt', direction: 'asc' },
     })) as MemberRow[];
     const orgId = memberships.find(m => m.organizationId)?.organizationId;
-    if (orgId) this.#orgCache.set(userId, orgId);
+    if (orgId) this.#orgCache.set(userId, { orgId, expiresAt: Date.now() + ORG_CACHE_TTL_MS });
     return orgId;
   }
 
@@ -362,7 +381,7 @@ export class MastraAuthBetterAuth
    * otherwise fail silently.
    */
   async #resolveActiveOrganizationId(userId: string): Promise<string | undefined> {
-    const cached = this.#orgCache.get(userId);
+    const cached = this.#cachedOrgId(userId);
     if (cached) return cached;
     try {
       const ctx = await this.getAuthContext();
@@ -389,7 +408,7 @@ export class MastraAuthBetterAuth
    * Best-effort: any failure is swallowed and leaves the user no-org.
    */
   async ensureOrganization(userId: string): Promise<string | undefined> {
-    const cached = this.#orgCache.get(userId);
+    const cached = this.#cachedOrgId(userId);
     if (cached) return cached;
 
     try {
@@ -464,7 +483,7 @@ export class MastraAuthBetterAuth
         if (!member) throw error;
       }
 
-      this.#orgCache.set(userId, organizationId);
+      this.#orgCache.set(userId, { orgId: organizationId, expiresAt: Date.now() + ORG_CACHE_TTL_MS });
       return organizationId;
     } catch (error) {
       console.warn(

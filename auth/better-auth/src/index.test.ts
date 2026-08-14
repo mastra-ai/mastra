@@ -149,6 +149,78 @@ describe('MastraAuthBetterAuth', () => {
       expect(findMany).toHaveBeenCalledTimes(1);
     });
 
+    it("keys the org cache by user so users cannot receive each other's organization", async () => {
+      const otherUser = { ...mockUser, id: 'user_456', email: 'other@example.com' };
+      const findMany = vi.fn(async ({ where }: { where: Array<{ field: string; value: string }> }) => {
+        const userId = where.find(w => w.field === 'userId')?.value;
+        return userId === mockUser.id ? [{ organizationId: 'org_alpha' }] : [{ organizationId: 'org_beta' }];
+      });
+      const auth = new MastraAuthBetterAuth({
+        auth: {
+          ...mockAuth,
+          $context: Promise.resolve({
+            authCookies: { sessionToken: { name: 'better-auth.session_token' } },
+            adapter: { findMany },
+          }),
+        } as any,
+      });
+
+      mockAuth.api.getSession.mockResolvedValue({
+        session: { ...mockSession, activeOrganizationId: null },
+        user: mockUser,
+      });
+      const first = await auth.authenticateToken('test-token', mockRawRequest());
+
+      mockAuth.api.getSession.mockResolvedValue({
+        session: { ...mockSession, id: 'session_456', userId: otherUser.id, activeOrganizationId: null },
+        user: otherUser,
+      });
+      const second = await auth.authenticateToken('test-token-2', mockRawRequest());
+
+      mockAuth.api.getSession.mockResolvedValue({
+        session: { ...mockSession, activeOrganizationId: null },
+        user: mockUser,
+      });
+      const firstAgain = await auth.authenticateToken('test-token', mockRawRequest());
+
+      expect(first?.session.activeOrganizationId).toBe('org_alpha');
+      expect(second?.session.activeOrganizationId).toBe('org_beta');
+      expect(firstAgain?.session.activeOrganizationId).toBe('org_alpha');
+      expect(findMany).toHaveBeenCalledTimes(2);
+    });
+
+    it('re-runs the membership lookup after the cache TTL expires', async () => {
+      vi.useFakeTimers();
+      try {
+        mockAuth.api.getSession.mockResolvedValue({
+          session: { ...mockSession, activeOrganizationId: null },
+          user: mockUser,
+        });
+        const findMany = vi.fn(async () => [{ organizationId: 'org_member' }]);
+        const auth = new MastraAuthBetterAuth({
+          auth: {
+            ...mockAuth,
+            $context: Promise.resolve({
+              authCookies: { sessionToken: { name: 'better-auth.session_token' } },
+              adapter: { findMany },
+            }),
+          } as any,
+        });
+
+        await auth.authenticateToken('test-token', mockRawRequest());
+        expect(findMany).toHaveBeenCalledTimes(1);
+
+        vi.advanceTimersByTime(61_000);
+        findMany.mockResolvedValueOnce([]);
+        const afterExpiry = await auth.authenticateToken('test-token', mockRawRequest());
+
+        expect(findMany).toHaveBeenCalledTimes(2);
+        expect(afterExpiry?.session.activeOrganizationId).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('does not mutate the session object returned by better-auth', async () => {
       const storedSession = { ...mockSession, activeOrganizationId: null };
       mockAuth.api.getSession.mockResolvedValue({ session: storedSession, user: mockUser });
