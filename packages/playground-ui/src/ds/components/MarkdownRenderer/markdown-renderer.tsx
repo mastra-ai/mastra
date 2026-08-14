@@ -53,16 +53,17 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   const components = externalLinkTarget === 'window' ? WINDOW_COMPONENTS : COMPONENTS;
   const growing = streaming || shown !== full;
 
-  const [arriving, setArriving] = useState(streaming);
-  if (growing && !arriving) setArriving(true);
+  const [joined] = useState(() =>
+    streaming ? { blocks: blocks.length, words: countWords(blocks[last] ?? '') } : undefined,
+  );
 
-  const [joined] = useState(() => ({ blocks: blocks.length, words: countWords(blocks[last] ?? '') }));
-
-  // What a block held when the reader joined, and so never animates. A block that
-  // was already whole by then holds all of itself, which is what `undefined` says:
-  // leave it as plain text. Position decides it, so it never changes under a word.
+  // What a block held when the reader joined, and so never animates. A block
+  // already whole by then holds all of itself, which is what `undefined` says:
+  // leave it as plain text, no spans at all. Position decides it, so it never
+  // changes under a word — and counting the source counts its markers too, so
+  // the boundary only ever errs towards leaving a word unanimated.
   const settledWords = (index: number): number | undefined => {
-    if (!arriving || index < joined.blocks - 1) return undefined;
+    if (!joined || index < joined.blocks - 1) return undefined;
 
     return index === joined.blocks - 1 ? joined.words : 0;
   };

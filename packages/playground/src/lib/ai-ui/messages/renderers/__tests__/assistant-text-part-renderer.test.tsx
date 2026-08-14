@@ -7,7 +7,7 @@ import { AssistantTextPartRenderer } from '../assistant-text-part-renderer';
 
 const CHUNK = `Ready. ${Array.from({ length: 40 }, (_, index) => `word${index}`).join(' ')}`;
 
-const textPart = (text: string, state?: string) => ({ type: 'text', text, state }) as TextPart;
+const textPart = (text: string, state?: TextPart['state']): TextPart => ({ type: 'text', text, state });
 
 function drain(read: () => string | null, target: string) {
   for (let frames = 0; frames < 300 && read() !== target; frames++) {
@@ -56,25 +56,29 @@ describe('AssistantTextPartRenderer', () => {
     expect(screen.getByText('all good')).not.toBeNull();
   });
 
-  it('reveals a chunk over time instead of dumping it on arrival', () => {
-    vi.useFakeTimers();
-    const { container, rerender } = render(<AssistantTextPartRenderer part={textPart('Ready.', 'streaming')} />);
+  describe('when a chunk lands on a reply that is still streaming', () => {
+    it('reveals it over time instead of dumping it on arrival', () => {
+      vi.useFakeTimers();
+      const { container, rerender } = render(<AssistantTextPartRenderer part={textPart('Ready.', 'streaming')} />);
 
-    rerender(<AssistantTextPartRenderer part={textPart(CHUNK, 'streaming')} />);
-    expect(container.textContent?.length).toBeLessThan(CHUNK.length);
+      rerender(<AssistantTextPartRenderer part={textPart(CHUNK, 'streaming')} />);
+      expect(container.textContent?.length).toBeLessThan(CHUNK.length);
 
-    drain(() => container.textContent, CHUNK);
-    expect(container.textContent).toBe(CHUNK);
+      drain(() => container.textContent, CHUNK);
+      expect(container.textContent).toBe(CHUNK);
+    });
   });
 
-  it('finishes revealing a chunk the reply ended on', () => {
-    vi.useFakeTimers();
-    const { container, rerender } = render(<AssistantTextPartRenderer part={textPart('Ready.', 'streaming')} />);
+  describe('when the reply ends on the chunk it is still revealing', () => {
+    it('finishes revealing it', () => {
+      vi.useFakeTimers();
+      const { container, rerender } = render(<AssistantTextPartRenderer part={textPart('Ready.', 'streaming')} />);
 
-    rerender(<AssistantTextPartRenderer part={textPart(CHUNK)} />);
-    expect(container.textContent?.length).toBeLessThan(CHUNK.length);
+      rerender(<AssistantTextPartRenderer part={textPart(CHUNK)} />);
+      expect(container.textContent?.length).toBeLessThan(CHUNK.length);
 
-    drain(() => container.textContent, CHUNK);
-    expect(container.textContent).toBe(CHUNK);
+      drain(() => container.textContent, CHUNK);
+      expect(container.textContent).toBe(CHUNK);
+    });
   });
 });

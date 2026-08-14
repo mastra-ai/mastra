@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import type { MastraTextPart } from '@mastra/react';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, render, screen } from '@testing-library/react';
@@ -54,6 +55,8 @@ const Providers = ({ children }: { children: ReactNode }) => {
 
 const renderRow = (message: MastraDBMessage) => render(<MessageRow message={message} />, { wrapper: Providers });
 
+const streamingText = (text: string): MastraTextPart => ({ type: 'text', text, state: 'streaming' });
+
 const omPart = (name: string, data: Record<string, unknown>) => ({
   type: `data-${name}`,
   data,
@@ -81,22 +84,23 @@ describe('MessageRow', () => {
 
   // The reveal only paces if the factory keeps the text part mounted as the
   // reply grows; a remount would show every chunk whole again.
-  it('reveals a growing reply gradually', () => {
-    vi.useFakeTimers();
-    const reply = `Ready. ${Array.from({ length: 40 }, (_, index) => `word${index}`).join(' ')}`;
-    const growing = (text: string) =>
-      baseMessage({ content: { format: 2, parts: [{ type: 'text', text, state: 'streaming' } as never] } });
+  describe('when a streaming reply grows', () => {
+    it('reveals it gradually', () => {
+      vi.useFakeTimers();
+      const reply = `Ready. ${Array.from({ length: 40 }, (_, index) => `word${index}`).join(' ')}`;
+      const growing = (text: string) => baseMessage({ content: { format: 2, parts: [streamingText(text)] } });
 
-    const { container, rerender } = render(<MessageRow message={growing('Ready.')} />, { wrapper: Providers });
-    rerender(<MessageRow message={growing(reply)} />);
+      const { container, rerender } = render(<MessageRow message={growing('Ready.')} />, { wrapper: Providers });
+      rerender(<MessageRow message={growing(reply)} />);
 
-    expect(container.textContent).not.toContain('word39');
+      expect(container.textContent).not.toContain('word39');
 
-    for (let frames = 0; frames < 300 && !container.textContent?.includes('word39'); frames++) {
-      act(() => void vi.advanceTimersByTime(16));
-    }
+      for (let frames = 0; frames < 300 && !container.textContent?.includes('word39'); frames++) {
+        act(() => void vi.advanceTimersByTime(16));
+      }
 
-    expect(container.textContent).toContain('word39');
+      expect(container.textContent).toContain('word39');
+    });
   });
 
   it('renders user text', () => {

@@ -81,6 +81,8 @@ export function useReveal(text: string, streaming: boolean): string {
 
   const [landed, setLanded] = useState(() => (streaming && !calm ? Math.max(0, words - LEAD_IN) : words));
 
+  // Winds the cursor back when a shorter reply replaces the one on screen, which
+  // no key can express: same element, same message, new text.
   const shown = calm ? words : Math.min(words, Math.max(landed, words - MAX_LAG));
   if (shown !== landed) setLanded(shown);
 
