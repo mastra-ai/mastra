@@ -1046,6 +1046,25 @@ export class ModelSpanTracker {
               break;
           }
         },
+        flush: () => {
+          // Streams can terminate without a final step-finish chunk (client
+          // abort, provider close, error mid-step). Without this, the trailing
+          // MODEL_STEP / MODEL_INFERENCE / MODEL_CHUNK spans never receive
+          // span_ended and leak as unpaired opens downstream. Close them with
+          // what we have; durable (defer) mode keeps the step open for its
+          // external owner to close via rebuildSpan(...).end().
+          this.#endChunkSpan();
+          if (this.#currentInferenceSpan) {
+            this.#currentInferenceSpan.end({
+              attributes: { completionStartTime: this.#completionStartTime },
+            });
+            this.#currentInferenceSpan = undefined;
+          }
+          if (!this.#deferStepClose && this.#currentStepSpan) {
+            this.#currentStepSpan.end({});
+            this.#currentStepSpan = undefined;
+          }
+        },
       }),
     ) as T;
   }
