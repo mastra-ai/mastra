@@ -34,6 +34,13 @@ import { Route } from './route.js';
 /** Reserved entity that anchors pinned facts (see subconscious/pinned.ts). */
 const PINNED_ENTITY_NAME = 'pinned';
 
+/** Hover-card budget for memory text shipped in the graph payload. */
+const MEMORY_TEXT_LIMIT = 240;
+
+function truncateFactText(text: string): string {
+  return text.length > MEMORY_TEXT_LIMIT ? `${text.slice(0, MEMORY_TEXT_LIMIT - 1)}…` : text;
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Window caps. Injectable at construction only — never per-request. */
@@ -97,11 +104,29 @@ export interface KnowledgeGraphEdge {
   pinned?: boolean;
 }
 
+/**
+ * A memory as a first-class graph element (A11): every fact in the window,
+ * with the in-window entities it touches. The client renders by arity —
+ * 1 entity: a small dot linked to it; 2: the connecting line; 3+: a midpoint
+ * junction splitting to each entity. Pin facts have their hidden reserved
+ * owner omitted, so their arity comes purely from wikilink targets.
+ */
+export interface KnowledgeGraphMemory {
+  /** The fact id. */
+  id: string;
+  /** Owner entity first (omitted for pins), then resolved wikilink targets. */
+  entityIds: string[];
+  pinned: boolean;
+  /** Fact text, truncated for hover cards. */
+  text: string;
+}
+
 export interface KnowledgeGraphPayload {
   view: 'project' | 'thread';
   threadId?: string;
   nodes: KnowledgeGraphNode[];
   edges: KnowledgeGraphEdge[];
+  memories: KnowledgeGraphMemory[];
   /** True when the entity or fact window cap was hit (newest-first window). */
   truncated: boolean;
   /** Wikilink targets that resolved in the store but fell outside the node window. */
@@ -411,16 +436,21 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const resolver = new WikilinkResolver(store, entities, limits.maxFallbackLookups);
 
           // Edges: owner entity (the fact's parent link) → wikilinked entity.
+          // Memories (A11): every windowed fact with its in-window entity set,
+          // owner first — the client renders dots/lines/junctions by arity.
           const edges: KnowledgeGraphEdge[] = [];
+          const memories: KnowledgeGraphMemory[] = [];
           const edgeSeen = new Set<string>();
           const factCounts = new Map<string, number>();
           for (const fact of factWindow) {
             factCounts.set(fact.parentEntityId, (factCounts.get(fact.parentEntityId) ?? 0) + 1);
+            const entityIds = [fact.parentEntityId];
             for (const name of parseKnowledgeWikilinks(fact.text)) {
               const target = await resolver.resolve(name, fact.scope);
               if (!target) continue; // dangling or capped
               if (target.id === fact.parentEntityId) continue; // self-link
               if (!resolver.inWindowId(target.id)) continue; // reported via outOfWindow
+              if (!entityIds.includes(target.id)) entityIds.push(target.id);
               const key = `${fact.parentEntityId}\u0000${target.id}`;
               if (edgeSeen.has(key)) continue;
               edgeSeen.add(key);
@@ -432,12 +462,15 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                 factId: fact.id,
               });
             }
+            memories.push({ id: fact.id, entityIds, pinned: false, text: truncateFactText(fact.text) });
           }
 
-          // Pin accents (A9): a pin marks the RELATIONSHIP, so pinned facts
-          // whose wikilinks resolve to 2+ in-window entities produce amber
-          // pinned edges (pairwise). A single-target pin has no edge to
-          // carry it, so that one entity keeps the node accent instead.
+          // Pins (A9 + A11): a pin marks its relationship, so pinned facts
+          // become pinned MEMORIES — the reserved owner entity is omitted, so
+          // arity comes purely from wikilink targets. The client renders an
+          // amber dot (1 target), line (2), or junction (3+). Pairwise pinned
+          // edges are still emitted for the 2-target case, and a 1-target pin
+          // keeps the node accent as a fallback signal.
           const pinnedFacts = await this.#pinnedFacts(view, pinnedIds);
           const accented = new Set<string>();
           for (const { fact } of pinnedFacts) {
@@ -448,6 +481,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                 targets.push(target.id);
               }
             }
+            memories.push({ id: fact.id, entityIds: targets, pinned: true, text: truncateFactText(fact.text) });
             if (targets.length === 1) {
               accented.add(targets[0]!);
               continue;
@@ -490,6 +524,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               updatedAt: entity.updatedAt.toISOString(),
             })),
             edges,
+            memories,
             truncated,
             outOfWindow: [...resolver.outOfWindow.values()],
             unresolvedCapped: { count: resolver.cappedCount, names: resolver.cappedNames },
