@@ -58,10 +58,38 @@ function decision(status: 'proposed' | 'pending' | 'dismissed') {
   };
 }
 
-function stubBoardEndpoints() {
+const SESSION_ID = 'sess-1';
+
+const liveSessionWorkItem = {
+  ...workItem,
+  stages: ['planning'],
+  sessions: {
+    triage: { sessionId: SESSION_ID, branch: 'factory/issue-1', threadId: 'thread-1', startedBy: 'user-1' },
+  },
+};
+
+const userSession = {
+  id: 'us-1',
+  sessionId: SESSION_ID,
+  projectRepositoryId: REPO_ID,
+  orgId: 'org-1',
+  userId: 'user-1',
+  title: 'Fix login bug',
+  branch: 'factory/issue-1',
+  baseBranch: 'main',
+  sandboxId: null,
+  sandboxWorkdir: null,
+  materializedAt: null,
+  createdAt: '2026-08-10T00:00:00.000Z',
+  updatedAt: '2026-08-10T00:00:00.000Z',
+};
+
+function stubBoardEndpoints({ withLiveSession = false }: { withLiveSession?: boolean } = {}) {
   const settled: string[] = [];
   const startRequests: unknown[] = [];
   let status: 'proposed' | 'pending' | 'dismissed' = 'proposed';
+  const item = withLiveSession ? liveSessionWorkItem : workItem;
+  const sessions = withLiveSession ? [userSession] : [];
 
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -89,7 +117,7 @@ function stubBoardEndpoints() {
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
-      HttpResponse.json({ workItems: [workItem] }),
+      HttpResponse.json({ workItems: [item] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
       HttpResponse.json({ decisions: [decision(status)] }),
@@ -122,7 +150,7 @@ function stubBoardEndpoints() {
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, () =>
       HttpResponse.json({ issues: [], nextPage: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
+    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => HttpResponse.json({ sessions })),
     http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, () => HttpResponse.json({ ok: true })),
   );
 
@@ -157,6 +185,21 @@ describe('Board card with a proposed run', () => {
     await user.click(await screen.findByRole('menuitem', { name: 'Dismiss suggested run' }));
 
     await waitFor(() => expect(settled).toEqual(['dismiss']));
+    expect(startRequests).toHaveLength(0);
+  });
+
+  it('releases the proposal from the menu when the card already links to a session', async () => {
+    const { settled, startRequests } = stubBoardEndpoints({ withLiveSession: true });
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    // The card body is a link to the existing session, so the primary action
+    // button never renders — the menu must still offer the suggested run.
+    const card = await screen.findByRole('article', { name: 'Fix login bug' });
+    await user.click(within(card).getByRole('button', { name: 'Actions for Fix login bug' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Start suggested run' }));
+
+    await waitFor(() => expect(settled).toEqual(['approve']));
     expect(startRequests).toHaveLength(0);
   });
 });
