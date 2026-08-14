@@ -7,7 +7,7 @@ packages:
 
 # BrowserViewer
 
-The `BrowserViewer` class provides browser automation for CLI-based tools. It launches Chrome via Playwright, exposes a Chrome DevTools Protocol (CDP) URL, and automatically injects it into CLI commands run through workspace tools.
+The `BrowserViewer` class provides browser automation for CLI-based tools. It launches Chrome through Playwright and exposes a Chrome DevTools Protocol (CDP) URL. It automatically injects that URL into CLI commands run through workspace tools.
 
 Use `BrowserViewer` when your agent drives a browser through a CLI tool like `browser-use`, `agent-browser`, or `browse`. For SDK-based browser automation, use [`AgentBrowser`](/reference/browser/agent-browser) or [`StagehandBrowser`](/reference/browser/stagehand-browser).
 
@@ -306,4 +306,4 @@ browse skills install
 
 - [BrowserViewer guide](/integrations/browsers/browser-viewer): Setup and usage walkthrough
 - [MastraBrowser](/reference/browser/mastra-browser): Base class API reference
-- [Workspace overview](/docs/workspace/overview): Workspace configuration
+- [Sandbox](/docs/workspace/sandbox): Workspace configuration

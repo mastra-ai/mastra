@@ -54,7 +54,7 @@ export const mastra = new Mastra({
 })
 ```
 
-Two Vercel-specific requirements:
+Vercel has two additional requirements:
 
 - `timeout` can't exceed the maximum sandbox lifetime of your plan, 45 minutes on Pro. A higher value fails the deploy with a 400 from the Vercel API.
 - Declare the server port in `ports`. Vercel exposes only ports declared at creation, unlike E2B and Daytona.

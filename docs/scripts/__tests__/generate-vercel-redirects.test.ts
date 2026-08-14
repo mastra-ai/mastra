@@ -6,14 +6,14 @@ describe('toLlmsTxtPath', () => {
     expect(toLlmsTxtPath('/docs/agents/overview')).toBe('/docs/agents/overview/llms.txt')
   })
 
-  test('places the suffix before a fragment', () => {
+  test('removes fragments from the generated path', () => {
     expect(toLlmsTxtPath('/docs/agent-controller/overview#sessions-and-threads')).toBe(
-      '/docs/agent-controller/overview/llms.txt#sessions-and-threads',
+      '/docs/agent-controller/overview/llms.txt',
     )
   })
 
-  test('preserves additional fragment delimiters', () => {
-    expect(toLlmsTxtPath('/docs/page#one#two')).toBe('/docs/page/llms.txt#one#two')
+  test('removes fragments with additional delimiters', () => {
+    expect(toLlmsTxtPath('/docs/page#one#two')).toBe('/docs/page/llms.txt')
   })
 
   test('removes a trailing slash before adding the suffix', () => {
@@ -22,12 +22,12 @@ describe('toLlmsTxtPath', () => {
 
   test('does not add the suffix twice', () => {
     expect(toLlmsTxtPath('/docs/agents/overview/llms.txt')).toBe('/docs/agents/overview/llms.txt')
-    expect(toLlmsTxtPath('/docs/agents/overview/llms.txt#usage')).toBe('/docs/agents/overview/llms.txt#usage')
+    expect(toLlmsTxtPath('/docs/agents/overview/llms.txt#usage')).toBe('/docs/agents/overview/llms.txt')
   })
 })
 
 describe('generateRedirects', () => {
-  test('creates fragment-safe companions for internal destinations', () => {
+  test('creates fragment-free companions for internal destinations', () => {
     expect(
       generateRedirects([
         {
@@ -44,7 +44,7 @@ describe('generateRedirects', () => {
       },
       {
         source: '/docs/agent-controller/session/llms.txt',
-        destination: '/docs/agent-controller/overview/llms.txt#sessions-and-threads',
+        destination: '/docs/agent-controller/overview/llms.txt',
         permanent: true,
       },
     ])

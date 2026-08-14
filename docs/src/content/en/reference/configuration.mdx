@@ -619,7 +619,7 @@ export const mastra = new Mastra({
 
 A Mastra workspace gives agents a persistent environment for storing files and executing commands. Agents inherit the global workspace on the `Mastra` class unless they have their own workspace configured.
 
-See the [Workspace documentation](/docs/workspace/overview) for implementation details.
+See the [Workspace documentation](/docs/workspace/sandbox) for implementation details.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -937,7 +937,7 @@ export const mastra = new Mastra({
 
 **Type:** `(err: Error, c: Context) => Response | Promise<Response>`
 
-Custom error handler called when an unhandled error occurs. Use this to customize error responses, log errors to external services like Sentry, or implement custom error formatting.
+Custom error handler called when an unhandled error occurs. Use this to customize error responses or log errors to external services such as Sentry. You can also implement custom error formatting.
 
 This hook is supported by all server adapters. The `c` parameter provides a Hono-compatible context object: for non-Hono adapters (Koa, Express, Fastify), a shim is provided with commonly used methods like `c.json()` and `c.req.path`.
 
@@ -966,7 +966,7 @@ export const mastra = new Mastra({
 
 **Type:** `(error: ZodError, context: 'query' | 'body' | 'path') => { status: number; body: unknown } | undefined`
 
-Custom handler called when a request fails Zod schema validation. Use this to customize validation error responses, change the status code, or format errors to match your API standards.
+Custom handler called when a request fails Zod schema validation. Use this to customize validation error responses and change the status code, or to format errors to match your API standards.
 
 Return a `{ status, body }` object to override the default `400` response, or `undefined` to use the default behavior. This hook is supported by all server adapters (Hono, Express, Fastify, Koa).
 
@@ -1022,7 +1022,7 @@ export const mastra = new Mastra({
 
 Base path for hosting [Studio](/docs/studio/overview). Use this to host the Studio on a sub-path of your existing application instead of the root.
 
-This is useful when integrating with existing applications, using authentication tools like Cloudflare Zero Trust that benefit from shared domains, or managing multiple services under a single domain.
+This is useful when integrating with existing applications or authentication tools such as Cloudflare Zero Trust that benefit from shared domains. It also supports managing multiple services under one domain.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'

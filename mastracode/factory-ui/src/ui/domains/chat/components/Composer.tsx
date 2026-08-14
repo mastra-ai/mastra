@@ -61,11 +61,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const { kind, resourceId, sessionEnabled, sandboxPreparing, projectPath, baseUrl, factorySessionState } =
     useChatSessionContext();
   const messagesInitializing = useChatMessagesInitializing();
-  // A single "preparing" concept from the composer's point of view: the ring
-  // must keep spinning, the placeholder must keep saying "Initializing…",
-  // and Send must stay disabled through both the sandbox provisioning phase
-  // and the post-ensure messages-fetch phase — otherwise the ring stops
-  // spinning mid-open and the user thinks the app is stuck.
   const chatPreparing = sandboxPreparing || messagesInitializing;
   const { factoryId } = useParams<{ factoryId: string }>();
   const onDraftComposer = useMatch('/factories/:factoryId/new') !== null;
@@ -94,7 +89,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const preparingThreadId = usePreparingThreadId();
   const createDraftSessionMutation = useCreateUserSessionFromDraft();
   const blocked = onUserDraft ? !factorySessionState : status !== 'ready' && !preparingThreadId;
-  // typing stays free while the mode/model catalogs load; only creating the session commits to them
   const draftConfigNotReady =
     onUserDraft && (modesLoading || modesError !== undefined || modelLoading || modelError !== undefined);
   const attachDisabled = onUserDraft || blocked || chatPreparing;
@@ -107,13 +101,12 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const suggestions = matchCommands(draft);
   const showSuggestions = suggestions.length > 0;
   const [activeSuggestion, setActiveSuggestion] = useState(0);
-  const disabled = createDraftSessionMutation.isPending || blocked;
-  const sendDisabled = disabled || draftConfigNotReady || chatPreparing;
-  // Keep the textarea fully typable while the session is preparing — the
-  // user must be able to draft a message immediately. Only Send/attach gate
-  // on chatPreparing above.
-  const textareaDisabled = chatPreparing ? false : disabled;
+  const composerDisabled = createDraftSessionMutation.isPending || blocked;
+  const sendDisabled = composerDisabled || draftConfigNotReady || chatPreparing;
+  const textareaDisabled = composerDisabled && !chatPreparing;
   const initializingPlaceholder = useInitializingPlaceholder(chatPreparing, draft.length === 0);
+  const normalPlaceholder = busy && !preparingThreadId ? 'Steer the agent…' : 'Ask Mastra Code…';
+  const placeholder = initializingPlaceholder ?? normalPlaceholder;
   const sendTitle = chatPreparing ? 'Initializing session…' : undefined;
 
   const updateDraft = (next: string) => {
@@ -294,12 +287,10 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
             onChange={e => updateDraft(e.target.value)}
             onKeyDown={onComposerKeyDown}
             onPaste={onPaste}
-            placeholder={
-              initializingPlaceholder ?? (busy && !preparingThreadId ? 'Steer the agent…' : 'Ask Mastra Code…')
-            }
+            placeholder={placeholder}
             disabled={textareaDisabled}
             maxHeight={composerVariantMaxHeight[variant]}
-            className={cn(composerVariantClass[variant], 'text-[15px]')}
+            className={composerVariantClass[variant]}
             aria-label="Message"
             aria-keyshortcuts="Shift+Tab"
           />

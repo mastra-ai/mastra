@@ -246,7 +246,7 @@ const detection = LocalSandbox.detectIsolation()
 
 ## Environment isolation
 
-By default, `LocalSandbox` only includes `PATH` in the environment. This allows commands to run while preventing accidental exposure of API keys and secrets.
+By default, `LocalSandbox` only includes `PATH` in the environment. Commands can run without accidental exposure of API keys and secrets.
 
 ```typescript
 // Default: only PATH is available (commands work, secrets protected)
@@ -323,4 +323,4 @@ This separation prevents sandboxed processes from reading or modifying their own
 - [SandboxProcessManager reference](/reference/workspace/process-manager)
 - [WorkspaceSandbox Interface](/reference/workspace/sandbox)
 - [Workspace Class](/reference/workspace/workspace-class)
-- [Workspace Overview](/docs/workspace/overview)
+- [Sandbox](/docs/workspace/sandbox)

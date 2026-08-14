@@ -270,7 +270,7 @@ jobs:
         if: steps.mdx-changes.outputs.has_changes == 'true'
         uses: vale-cli/vale-action@85f9f7f2c5f449ac0ae5b66662961bae3f77ca6a
         with:
-          version: 3.13.1 # TODO: Update to newer version
+          version: 3.17.1
           files: ${{ steps.mdx-changes.outputs.files }}
           # The default "added" filter downloads the PR diff through the GitHub
           # API, which rejects diffs larger than 20,000 lines. The files input is

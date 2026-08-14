@@ -1,8 +1,12 @@
+import { memo } from 'react';
 import type { MouseEvent, MouseEventHandler, ReactNode } from 'react';
 import Markdown from 'react-markdown';
-import type { Components, ExtraProps } from 'react-markdown';
+import type { Components, ExtraProps, Options } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remend from 'remend';
 
+import { splitBlocks } from './blocks';
+import { rehypeWordSpans } from './word-spans';
 import { CodeBlock } from '@/ds/components/CodeBlock';
 import { cn } from '@/lib/utils';
 
@@ -14,23 +18,75 @@ export interface MarkdownRendererProps {
   children: string;
   className?: string;
   externalLinkTarget?: MarkdownExternalLinkTarget;
+  /** The text is still being written: fade each word in as it lands. */
+  streaming?: boolean;
 }
 
 /**
  * Renders a markdown string. Agent output can carry attacker-influenced text
  * (file contents, tool output, web pages): react-markdown escapes raw HTML and
  * drops dangerous link schemes, so nothing here reaches the DOM as markup.
+ *
+ * react-markdown re-parses on every render, and a streaming reply re-renders
+ * its whole transcript on every delta. Memoizing spares the settled messages;
+ * rendering block by block — streaming or not — spares every block of the live
+ * one but the last, and lets a reply settle without remounting what is already
+ * on screen.
  */
-export function MarkdownRenderer({ children, className, externalLinkTarget = 'tab' }: MarkdownRendererProps) {
+export const MarkdownRenderer = memo(function MarkdownRenderer({
+  children,
+  className,
+  externalLinkTarget = 'tab',
+  streaming = false,
+}: MarkdownRendererProps) {
+  const blocks = splitBlocks(decodeEscapedNewlines(children));
+  const last = blocks.length - 1;
+  const components = externalLinkTarget === 'window' ? WINDOW_COMPONENTS : COMPONENTS;
+
   return (
-    <Markdown
-      remarkPlugins={[remarkGfm]}
-      components={externalLinkTarget === 'window' ? WINDOW_COMPONENTS : COMPONENTS}
-      className={cn('mastra-markdown', className)}
-    >
-      {decodeEscapedNewlines(children)}
+    <div className={cn('mastra-markdown', streaming && 'mastra-markdown-streaming', className)}>
+      {blocks.map((block, index) => {
+        const growing = streaming && index === last;
+
+        return (
+          <MarkdownBlock
+            key={index}
+            content={growing ? remend(block, REMEND_OPTIONS) : block}
+            rehypePlugins={wordSpansFor(streaming, growing)}
+            components={components}
+          />
+        );
+      })}
+    </div>
+  );
+});
+
+/** Keyed by position at the call site: a content key remounts on every character. */
+const MarkdownBlock = memo(function MarkdownBlock({
+  components,
+  content,
+  rehypePlugins,
+}: {
+  components: Components;
+  content: string;
+  rehypePlugins: Options['rehypePlugins'];
+}) {
+  return (
+    <Markdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={rehypePlugins} components={components}>
+      {content}
     </Markdown>
   );
+});
+
+const NO_WORD_SPANS: Options['rehypePlugins'] = [];
+const GROWING_WORD_SPANS: Options['rehypePlugins'] = [[rehypeWordSpans, { complete: false }]];
+const SETTLED_WORD_SPANS: Options['rehypePlugins'] = [[rehypeWordSpans, { complete: true }]];
+
+/** Module constants, so a block that keeps its plugins keeps its memo too. */
+function wordSpansFor(streaming: boolean, growing: boolean): Options['rehypePlugins'] {
+  if (!streaming) return NO_WORD_SPANS;
+
+  return growing ? GROWING_WORD_SPANS : SETTLED_WORD_SPANS;
 }
 
 // Agent networks emit their text with literal `\n`. Only unescape when the text
@@ -105,6 +161,13 @@ function markdownLink(externalLinkTarget: MarkdownExternalLinkTarget): NonNullab
     );
   };
 }
+
+const REMARK_PLUGINS = [remarkGfm];
+
+// Links stay text until their URL lands: remend's placeholder href would render
+// a live anchor to nowhere. No math is rendered here, so pairing `$$` would only
+// turn one literal into another.
+const REMEND_OPTIONS = { katex: false, linkMode: 'text-only' } as const;
 
 // Elements are listed one by one: react-markdown also passes its `node`, which
 // React would forward to the DOM as a stray attribute. Everything else is

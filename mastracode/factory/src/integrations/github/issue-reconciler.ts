@@ -95,9 +95,9 @@ export function createGithubIssueReconciler(
               githubRepositoryId: repository.id,
               githubIssueNumber: issueNumber,
               state: 'open' as const,
-              author: state.author,
-              assignees: state.assignees ?? [],
-              labels: state.labels ?? [],
+              ...(state.author === undefined ? {} : { author: state.author }),
+              ...(state.assignees === undefined ? {} : { assignees: state.assignees }),
+              ...(state.labels === undefined ? {} : { labels: state.labels }),
             };
 
             for (const item of items) {
@@ -106,9 +106,9 @@ export function createGithubIssueReconciler(
                 current.githubRepositoryId !== desiredMetadata.githubRepositoryId ||
                 current.githubIssueNumber !== desiredMetadata.githubIssueNumber ||
                 current.state !== desiredMetadata.state ||
-                current.author !== desiredMetadata.author ||
-                !sameStrings(current.assignees as string[] | undefined, desiredMetadata.assignees) ||
-                !sameStrings(current.labels as string[] | undefined, desiredMetadata.labels);
+                (state.author !== undefined && current.author !== state.author) ||
+                (state.assignees !== undefined && !sameStrings(current.assignees, state.assignees)) ||
+                (state.labels !== undefined && !sameStrings(current.labels, state.labels));
 
               if (!metadataChanged) continue;
 

@@ -359,6 +359,10 @@ describe('listSessionRenderedPath', () => {
     const session = makeSession();
     const listing = await listSessionRenderedPath(fleet, session, '.artifacts');
 
+    expect(fleet.reattachSandbox).toHaveBeenCalledWith('sbx-1', {
+      workingDirectory: WORKDIR,
+      actingUserId: 'user-1',
+    });
     expect(listing.workspacePath).toBe(session.sessionId);
     expect(listing.root).toBe('.artifacts');
     expect(listing.rootPath).toBe(`${WORKDIR}/.artifacts`);
