@@ -1,5 +1,23 @@
 # @mastra/factory
 
+## 0.7.1-alpha.2
+
+### Patch Changes
+
+- Fixed session materialization timing being overwritten when sessions resume. The initial-materialize timestamp is now recorded once and preserved across idle-reap, checkpoint restore, and sandbox recreation, so time-to-first-materialize measurements reflect the true initial cost. Historical metrics captured before this fix are not backfilled. ([#21520](https://github.com/mastra-ai/mastra/pull/21520))
+
+- Fixed Factory completion so moving a GitHub issue to Done marks it as pending close and removes its remaining triage status labels. ([#21515](https://github.com/mastra-ai/mastra/pull/21515))
+
+- Improved chat scrolling in the factory. Sending a message now scrolls once and parks it near the top with room under it, and the view stays on the agent's newest output — tool progress, subagents, the streamed reply — instead of standing still or jumping back up to what you just sent. ([#21523](https://github.com/mastra-ai/mastra/pull/21523))
+
+  Scroll up to read back and the chat stops following. Return to the bottom and it picks the stream up again. The jump-to-latest button no longer flickers when you send a message.
+
+  The room under the live turn is released when the run ends, so a finished conversation settles against the composer instead of leaving most of the window blank.
+
+- Updated dependencies [[`7e096f0`](https://github.com/mastra-ai/mastra/commit/7e096f02f0dddbf09b85d306458351245ed2f886), [`8f0a332`](https://github.com/mastra-ai/mastra/commit/8f0a3321bf180368d76fe7b36aa1a8f60f00b6de), [`b098de9`](https://github.com/mastra-ai/mastra/commit/b098de9d7cb9f672e0883a5c716465a3a689693d), [`ef6e295`](https://github.com/mastra-ai/mastra/commit/ef6e295b59bc25a5b61b633a89c97bcfce9fb465), [`208e1b3`](https://github.com/mastra-ai/mastra/commit/208e1b39f30f4b386e494394e9d71d96f0f90241), [`c938d34`](https://github.com/mastra-ai/mastra/commit/c938d34739936c8ecbabd67ad6a4a4396f41c4c6), [`1d9a0ea`](https://github.com/mastra-ai/mastra/commit/1d9a0ea4a9901baee6cd56737243bd6d1f631ac0), [`3667679`](https://github.com/mastra-ai/mastra/commit/3667679db057edfb086846d13369fdda4902ad65), [`49696e8`](https://github.com/mastra-ai/mastra/commit/49696e8e42f870674a0a58f5abcd22cc54dd2864), [`512100a`](https://github.com/mastra-ai/mastra/commit/512100a7d8b7e9c920f2590c6b3612f5de0d3cff), [`9ef432b`](https://github.com/mastra-ai/mastra/commit/9ef432b6faa534b57b0d182a610e13dd9a7123ff), [`b9cf308`](https://github.com/mastra-ai/mastra/commit/b9cf30846f97f99ac1906ee8a68f4f2d117b0378)]:
+  - @mastra/core@1.60.0-alpha.2
+  - @mastra/code-sdk@1.2.2-alpha.2
+
 ## 0.7.1-alpha.1
 
 ### Patch Changes
