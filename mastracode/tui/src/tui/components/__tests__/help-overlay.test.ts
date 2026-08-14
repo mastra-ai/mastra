@@ -11,6 +11,7 @@ describe('buildHelpText', () => {
     expect(text).toContain('/settings');
     expect(text).toContain('/models');
     expect(text).toContain('/skill/<name>');
+    expect(text).toMatch(/\/github\s+Subscribe in review\/working mode or sync GitHub PR signals/);
     expect(text).toMatch(/\/memory\s+Configure Observational Memory \(\/om alias\)/);
     expect(text).not.toMatch(/^\s*\/om\s+/m);
     expect(text).not.toContain('/models:pack');

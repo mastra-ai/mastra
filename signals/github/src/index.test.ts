@@ -252,8 +252,22 @@ describe('GithubSignals', () => {
       expect.objectContaining({
         type: 'reactive',
         tagName: 'system-reminder',
-        contents: expect.stringContaining('/github subscribe 17439'),
-        attributes: { type: 'github-subscription-hint' },
+        contents: expect.stringMatching(
+          /--mode review.*new commits.*authorized latest PR comments.*observable unresolved-review-state changes.*--mode working.*all actionable PR activity.*Do not subscribe for a one-off inspection\./,
+        ),
+        attributes: {
+          type: 'github-subscription-hint',
+          availableModes: 'review,working',
+          defaultMode: null,
+        },
+        metadata: {
+          github: {
+            action: 'subscriptionHint',
+            owner: 'mastra-ai',
+            repo: 'mastra',
+            number: 17439,
+          },
+        },
       }),
     );
     const savedThread = vi.mocked(threadStore.saveThread).mock.calls[0]![0].thread;
@@ -351,6 +365,13 @@ describe('GithubSignals', () => {
     expect(Object.keys(result.tools ?? {})).toEqual(
       expect.arrayContaining(['github_subscribe_pr', 'github_unsubscribe_pr']),
     );
+    const subscribeTool = (result.tools as any).github_subscribe_pr;
+    expect(subscribeTool.description).toContain('Use review mode for new commits');
+    expect(subscribeTool.description).toContain('Use working mode for all actionable PR activity');
+    expect(subscribeTool.description).toContain('Do not subscribe for a one-off inspection');
+    expect(subscribeTool.inputSchema.safeParse({ number: 42, mode: 'review' }).success).toBe(true);
+    expect(subscribeTool.inputSchema.safeParse({ number: 42, mode: 'working' }).success).toBe(true);
+    expect(subscribeTool.inputSchema.safeParse({ number: 42, mode: 'other' }).success).toBe(false);
   });
 
   it('subscribe and unsubscribe tools mutate the current thread subscription directly', async () => {
@@ -386,7 +407,14 @@ describe('GithubSignals', () => {
           messages: [],
         },
       ),
-    ).resolves.toMatchObject({ subscribed: true, owner: 'mastra-ai', repo: 'mastra', number: 17439 });
+    ).resolves.toMatchObject({
+      subscribed: true,
+      mode: 'working',
+      owner: 'mastra-ai',
+      repo: 'mastra',
+      number: 17439,
+      message: 'Subscribed to mastra-ai/mastra#17439 in working mode.',
+    });
     let savedThread = vi.mocked(threadStore.saveThread).mock.calls.at(-1)![0].thread;
     expect((savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions).toEqual([
       expect.objectContaining({ owner: 'mastra-ai', repo: 'mastra', number: 17439 }),
@@ -652,11 +680,13 @@ describe('GithubSignals', () => {
         data: expect.objectContaining({
           type: 'reactive',
           tagName: GITHUB_SYNC_STATUS_TAG,
+          contents: 'Subscribed to mastra-ai/mastra#123 in working mode.',
           attributes: expect.objectContaining({
             status: 'subscribed',
             owner: 'mastra-ai',
             repo: 'mastra',
             number: 123,
+            mode: 'working',
           }),
         }),
       }),
@@ -3851,7 +3881,11 @@ describe('GithubSignals', () => {
     const tools = toolResult.tools as Record<string, { execute: (input: unknown) => Promise<unknown> }>;
     await expect(
       tools.github_subscribe_pr!.execute({ owner: 'mastra-ai', repo: 'mastra', number: 203, mode: 'review' }),
-    ).resolves.toMatchObject({ subscribed: true, mode: 'review' });
+    ).resolves.toMatchObject({
+      subscribed: true,
+      mode: 'review',
+      message: 'Subscribed to mastra-ai/mastra#203 in review mode.',
+    });
     expect(getSavedGithubSubscriptions(threadStore)[0]).toMatchObject({ mode: 'review' });
     processor.stopAllPolling();
   });

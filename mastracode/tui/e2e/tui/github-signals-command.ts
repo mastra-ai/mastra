@@ -118,8 +118,8 @@ export const githubSignalsCommandScenario = {
     terminal.submit('Create a GitHub Signals e2e thread.');
     await runtime.waitForScreenText(/GitHub Signals thread ready/i, terminal);
 
-    terminal.submit(`/github subscribe ${prFixture.owner}/${prFixture.repo}#${prFixture.number}`);
-    await runtime.waitForScreenText(/Subscribed to mastra-ai\/mastra#17637/i, terminal, 30_000);
+    terminal.submit(`/github subscribe ${prFixture.owner}/${prFixture.repo}#${prFixture.number} --mode working`);
+    await runtime.waitForScreenText(/Subscribed to mastra-ai\/mastra#17637 in working mode/i, terminal, 30_000);
     await runtime.waitForScreenText(/notification from github/i, terminal, 30_000);
     await runtime.waitForScreenText(/CI: failure/i, terminal);
     // The notification triggers a second model turn; wait for its rendered
@@ -131,7 +131,7 @@ export const githubSignalsCommandScenario = {
     terminal.submit('/github debug');
     await runtime.waitForScreenText(/GitHub Signals debug for/i, terminal);
     await runtime.waitForScreenText(/1 subscription/i, terminal);
-    await runtime.waitForScreenText(/mastra-ai\/mastra#17637 sync=success/i, terminal);
+    await runtime.waitForScreenText(/mastra-ai\/mastra#17637 mode=working sync=success/i, terminal);
     await runtime.waitForScreenText(/ci=failure/i, terminal);
     runtime.printScreen('github subscription debug status', terminal);
   },

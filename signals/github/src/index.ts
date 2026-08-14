@@ -1453,8 +1453,8 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       message:
         terminalMessage ??
         (result.syncResult?.ok === false
-          ? `Subscribed to ${result.owner}/${result.repo}#${result.number}, but gitcrawl sync failed: ${result.syncResult.error}`
-          : `Subscribed to ${result.owner}/${result.repo}#${result.number}.`),
+          ? `Subscribed to ${result.owner}/${result.repo}#${result.number} in ${result.mode} mode, but gitcrawl sync failed: ${result.syncResult.error}`
+          : `Subscribed to ${result.owner}/${result.repo}#${result.number} in ${result.mode} mode.`),
     });
     return { tools };
   }
@@ -1496,8 +1496,12 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     await args.sendSignal?.({
       type: 'reactive',
       tagName: 'system-reminder',
-      contents: `Looks like you're working with ${repository.owner}/${repository.repo}#${evidence.number}. Use /github subscribe ${evidence.number} or the github_subscribe_pr tool to follow updates.`,
-      attributes: { type: 'github-subscription-hint' },
+      contents: `Choose whether to follow ${repository.owner}/${repository.repo}#${evidence.number}: use /github subscribe ${evidence.number} --mode review for new commits, authorized latest PR comments, and observable unresolved-review-state changes; use --mode working for all actionable PR activity. Do not subscribe for a one-off inspection.`,
+      attributes: {
+        type: 'github-subscription-hint',
+        availableModes: 'review,working',
+        defaultMode: null,
+      },
       metadata: {
         github: {
           action: 'subscriptionHint',
@@ -1537,7 +1541,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       github_subscribe_pr: createGithubTool({
         id: 'github_subscribe_pr',
         description:
-          'Subscribe this thread to a GitHub pull request. Syncs only the requested PR with gitcrawl and stores the subscription on the thread.',
+          'Subscribe this thread to a GitHub pull request. Use review mode for new commits, authorized latest PR comments, and observable unresolved-review-state changes. Use working mode for all actionable PR activity. Omitted mode defaults to working. Do not subscribe for a one-off inspection.',
         inputSchema: z.object({
           number: z.number().int().positive(),
           owner: z.string().optional(),
@@ -1576,8 +1580,8 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
             syncStatus: result.syncResult?.ok === false ? 'error' : result.syncResult ? 'success' : undefined,
             message:
               result.syncResult?.ok === false
-                ? `Subscribed to ${result.owner}/${result.repo}#${result.number}, but gitcrawl sync failed: ${result.syncResult.error}`
-                : `Subscribed to ${result.owner}/${result.repo}#${result.number}.`,
+                ? `Subscribed to ${result.owner}/${result.repo}#${result.number} in ${result.mode} mode, but gitcrawl sync failed: ${result.syncResult.error}`
+                : `Subscribed to ${result.owner}/${result.repo}#${result.number} in ${result.mode} mode.`,
           };
         },
       }),
