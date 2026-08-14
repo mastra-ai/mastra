@@ -390,6 +390,80 @@ describe('Mastra.addDynamicWorkflows', () => {
     expect(() => mastra.getWorkflow('loser-only')).toThrow();
   });
 
+  it('does not let a hung write block unrelated ids and times out an overlapping waiter before mutation', async () => {
+    const storage = new InMemoryStore({ id: 'bundle-keyed-registration-queue' });
+    const mastra = new Mastra({ logger: false, tools: { 'lookup-customer': lookupCustomer } as any, storage });
+    const store = (await storage.getStore('workflowDefinitions'))!;
+    const realUpsert = store.upsert.bind(store);
+
+    let releaseHungWrite!: () => void;
+    const hungWrite = new Promise<void>(resolve => {
+      releaseHungWrite = resolve;
+    });
+    let markHungWriteEntered!: () => void;
+    const hungWriteEntered = new Promise<void>(resolve => {
+      markHungWriteEntered = resolve;
+    });
+    const mutatedDescriptions: string[] = [];
+    store.upsert = (async definition => {
+      if (definition.id === 'blocked' && definition.description === 'first') {
+        markHungWriteEntered();
+        await hungWrite;
+      }
+      mutatedDescriptions.push(definition.description ?? '');
+      return realUpsert(definition);
+    }) as typeof store.upsert;
+
+    const first = mastra.addDynamicWorkflow(
+      { ...helperDefinition('blocked', 'email1'), description: 'first' },
+      { authorId: 'owner' },
+    );
+    await hungWriteEntered;
+
+    await expect(
+      mastra.addDynamicWorkflow(
+        { ...helperDefinition('unrelated', 'email1'), description: 'unrelated' },
+        { authorId: 'owner' },
+      ),
+    ).resolves.toBeUndefined();
+
+    await expect(
+      mastra.addDynamicWorkflow(
+        { ...helperDefinition('blocked', 'email2'), description: 'timed-out' },
+        { authorId: 'owner', waitTimeoutMs: 1 },
+      ),
+    ).rejects.toThrow(/Timed out waiting/);
+    const controller = new AbortController();
+    controller.abort(new Error('caller cancelled'));
+    await expect(
+      mastra.addDynamicWorkflow(
+        { ...helperDefinition('blocked', 'email2'), description: 'cancelled' },
+        { authorId: 'owner', signal: controller.signal },
+      ),
+    ).rejects.toThrow(/caller cancelled/);
+    expect(mutatedDescriptions).not.toContain('timed-out');
+    expect(mutatedDescriptions).not.toContain('cancelled');
+    expect(mastra.getWorkflow('blocked').description).toBe('first');
+
+    let laterSettled = false;
+    const later = mastra
+      .addDynamicWorkflow({ ...helperDefinition('blocked', 'email2'), description: 'later' }, { authorId: 'owner' })
+      .finally(() => {
+        laterSettled = true;
+      });
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
+    expect(laterSettled).toBe(false);
+
+    releaseHungWrite();
+    await first;
+    await later;
+    expect(await store.get('blocked')).toMatchObject({ description: 'later', authorId: 'owner' });
+    expect(await store.get('unrelated')).toMatchObject({ description: 'unrelated', authorId: 'owner' });
+    expect(mutatedDescriptions).not.toContain('timed-out');
+    expect(mutatedDescriptions).not.toContain('cancelled');
+    expect(mutatedDescriptions).toContain('later');
+  });
+
   it('is a no-op for an empty bundle', async () => {
     const mastra = createMastra('bundle-empty');
     await expect(mastra.addDynamicWorkflows([])).resolves.toBeUndefined();

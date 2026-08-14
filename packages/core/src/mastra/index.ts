@@ -111,6 +111,10 @@ export interface DynamicWorkflowRegistrationOptions {
    * authorize this value before registration.
    */
   authorId?: string;
+  /** Maximum time to wait for an overlapping registration already using the same workflow id(s). */
+  waitTimeoutMs?: number;
+  /** Cancels only while waiting to enter registration; admitted storage mutations are always awaited. */
+  signal?: AbortSignal;
 }
 
 /**
@@ -688,7 +692,7 @@ export class Mastra<
   #workflows: TWorkflows;
   #harnesses: Record<string, Harness<any>> = {};
   #hiddenWorkflowKeys = new Set<string>();
-  #dynamicWorkflowRegistrationTail: Promise<void> = Promise.resolve();
+  #dynamicWorkflowRegistrationTails = new Map<string, Promise<void>>();
   #observability: ObservabilityEntrypoint;
   #observabilityExplicit = false;
   #onScorerHook?: ReturnType<typeof createOnScorerHook>;
@@ -4759,22 +4763,76 @@ export class Mastra<
   }
 
   /**
-   * Runs dynamic workflow registrations one at a time so each rollback owns a
-   * stable registry snapshot. An instance-wide queue also makes overlapping
-   * bundles deadlock-free because callers never acquire per-workflow locks.
+   * Serializes only registrations with overlapping ids. All ids are reserved
+   * synchronously before waiting, so bundles cannot deadlock. Cancellation and
+   * timeout apply to queue admission only: a rejected waiter never starts a
+   * storage mutation, while an admitted mutation remains awaited to completion.
    */
-  async #serializeDynamicWorkflowRegistration<T>(operation: () => Promise<T>): Promise<T> {
-    const prior = this.#dynamicWorkflowRegistrationTail;
+  async #serializeDynamicWorkflowRegistration<T>(
+    ids: readonly string[],
+    options: DynamicWorkflowRegistrationOptions | undefined,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    if (options?.signal?.aborted) {
+      throw options.signal.reason ?? new Error('Dynamic workflow registration aborted.');
+    }
+    if (
+      options?.waitTimeoutMs !== undefined &&
+      (!Number.isFinite(options.waitTimeoutMs) || options.waitTimeoutMs < 0)
+    ) {
+      throw new Error('Dynamic workflow registration waitTimeoutMs must be a finite non-negative number.');
+    }
+    const uniqueIds = Array.from(new Set(ids)).sort();
+    const priors = uniqueIds.map(id => this.#dynamicWorkflowRegistrationTails.get(id) ?? Promise.resolve());
+    const admission = Promise.all(priors).then(() => undefined);
     let release!: () => void;
-    this.#dynamicWorkflowRegistrationTail = new Promise<void>(resolve => {
+    const slot = new Promise<void>(resolve => {
       release = resolve;
     });
+    for (const id of uniqueIds) this.#dynamicWorkflowRegistrationTails.set(id, slot);
+    void slot.then(() => {
+      for (const id of uniqueIds) {
+        if (this.#dynamicWorkflowRegistrationTails.get(id) === slot) this.#dynamicWorkflowRegistrationTails.delete(id);
+      }
+    });
 
-    await prior;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const waitWarning = setTimeout(() => {
+      this.#logger?.warn?.(`Dynamic workflow registration is waiting for ids: ${uniqueIds.join(', ')}.`);
+    }, 5_000);
+    let removeAbortListener: (() => void) | undefined;
+    let admitted = false;
     try {
+      const blockers: Promise<void>[] = [admission];
+      if (options?.signal) {
+        blockers.push(
+          new Promise<void>((_, reject) => {
+            const rejectAbort = () =>
+              reject(options.signal?.reason ?? new Error('Dynamic workflow registration aborted.'));
+            options.signal!.addEventListener('abort', rejectAbort, { once: true });
+            removeAbortListener = () => options.signal!.removeEventListener('abort', rejectAbort);
+          }),
+        );
+      }
+      if (options?.waitTimeoutMs !== undefined) {
+        blockers.push(
+          new Promise<void>((_, reject) => {
+            timeout = setTimeout(
+              () => reject(new Error(`Timed out waiting to register dynamic workflow ids: ${uniqueIds.join(', ')}.`)),
+              options.waitTimeoutMs,
+            );
+          }),
+        );
+      }
+      await Promise.race(blockers);
+      admitted = true;
       return await operation();
     } finally {
-      release();
+      if (timeout) clearTimeout(timeout);
+      clearTimeout(waitWarning);
+      removeAbortListener?.();
+      if (admitted) release();
+      else void admission.then(release, release);
     }
   }
 
@@ -4855,9 +4913,11 @@ export class Mastra<
    *   before anything is mutated.
    * - If hydration or persistence fails partway, the in-memory registry is
    *   restored to its prior state.
-   * - Registrations are serialized on this Mastra instance through validation,
+   * - Registrations with overlapping ids are serialized through validation,
    *   hydration, and persistence so one caller's rollback cannot undo another
-   *   caller's accepted live registration.
+   *   caller's accepted live registration. Unrelated ids proceed independently.
+   * - `waitTimeoutMs` and `signal` apply before admission. A rejected waiter
+   *   performs no registry or storage mutation; admitted writes are fully awaited.
    * - Storage writes happen last. A storage-level failure mid-bundle is the
    *   one residual window where rows can be partially written; the registry is
    *   still rolled back, and the orphaned rows are inert until the next boot.
@@ -4878,7 +4938,12 @@ export class Mastra<
   ): Promise<void> {
     if (defs.length === 0) return;
 
-    await this.#serializeDynamicWorkflowRegistration(async () => {
+    const serializeRegistration = this.#serializeDynamicWorkflowRegistration.bind(
+      this,
+      defs.map(def => def.id),
+      options,
+    );
+    await serializeRegistration(async () => {
       const seen = new Set<string>();
       for (const def of defs) {
         if (seen.has(def.id)) {
