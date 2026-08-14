@@ -366,6 +366,14 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
         phase: 'cloning',
         message: `Cloning ${repo} (first open can take a minute)…`,
       });
+      // The workdir holds no usable checkout of this repo, but it may not be
+      // empty: a checkpoint seed or a clone that died partway (a crashed or
+      // OOM-killed server) leaves a partial tree behind, and `git clone`
+      // refuses a non-empty destination with a non-retryable fatal. Nothing
+      // here is recoverable — `hasExistingCheckout` already ruled out a
+      // checkout of this repo — so clear it before cloning, exactly as the
+      // retry path does.
+      await sh(sandbox, `rm -rf ${shellQuote(workdir)}`);
       const clone = await gitTransfer(
         sandbox,
         `git clone --depth=1 --single-branch --branch ${shellQuote(repoInfo.defaultBranch)} ${shellQuote(authUrl)} ${shellQuote(workdir)}`,

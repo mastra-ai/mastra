@@ -331,6 +331,27 @@ describe('materializeRepo', () => {
     expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
   });
 
+  it('clears a non-empty workdir before cloning so a partial tree cannot wedge the workspace', async () => {
+    // A checkpoint seed or a clone killed partway (crashed/OOM-killed server)
+    // leaves a populated workdir with no usable checkout. `git clone` refuses
+    // a non-empty destination with a non-retryable fatal, so every later
+    // workspace operation failed with "destination path ... already exists and
+    // is not an empty directory" until the sandbox was wiped by hand.
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('remote get-url origin')) {
+        return { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository' };
+      }
+      return OK;
+    });
+    await materializeRepo(makeRow({ materializedAt: null }), makeRepoInfo(), sandbox, 'tok-abc');
+
+    const rm = sandbox.calls.findIndex(c => c.includes('rm -rf') && c.includes('/workspace/hello'));
+    const clone = sandbox.calls.findIndex(c => c.includes('git clone'));
+    expect(rm).toBeGreaterThanOrEqual(0);
+    expect(clone).toBeGreaterThan(rm);
+    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
+  });
+
   it('pulls (not clones) when the DB says first open but the workdir already holds this repo', async () => {
     // DB/disk drift: a fresh binding row (materializedAt null) over a workdir
     // that was already cloned by an earlier flow or before a dev DB reset.
@@ -1364,9 +1385,11 @@ describe('git transfer retry', () => {
       // The dead attempt leaves a partial directory that git refuses to clone
       // into, so the retry has to clear it first.
       const cloneCalls = sandbox.calls.filter(call => call.includes('git clone'));
-      const wipe = sandbox.calls.findIndex(call => call.startsWith('rm -rf'));
+      // Skip the pre-clone wipe that clears a dirty destination up front.
+      const firstClone = sandbox.calls.indexOf(cloneCalls[0]!);
+      const wipe = sandbox.calls.findIndex((call, i) => i > firstClone && call.startsWith('rm -rf'));
       expect(cloneCalls).toHaveLength(2);
-      expect(wipe).toBeGreaterThan(sandbox.calls.indexOf(cloneCalls[0]!));
+      expect(wipe).toBeGreaterThan(firstClone);
       expect(wipe).toBeLessThan(sandbox.calls.lastIndexOf(cloneCalls[1]!));
     } finally {
       vi.useRealTimers();
