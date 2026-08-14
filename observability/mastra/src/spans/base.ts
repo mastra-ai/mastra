@@ -20,6 +20,7 @@ import type {
 } from '@mastra/core/observability';
 
 import { ModelSpanTracker } from '../model-tracing';
+import { isPlainRecord, mergeMetadata as mergeSpanMetadata } from './metadata';
 import { deepClean, mergeSerializationOptions } from './serialization';
 import type { DeepCleanOptions } from './serialization';
 
@@ -71,40 +72,6 @@ function isSpanInternal(spanType: SpanType, flags?: InternalSpans): boolean {
     // Default: never internal
     default:
       return false;
-  }
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return false;
-  }
-
-  try {
-    const prototype = Object.getPrototypeOf(value);
-    return prototype === Object.prototype || prototype === null;
-  } catch {
-    return false;
-  }
-}
-
-function mergeSpanMetadata(parentMetadata: unknown, metadata: unknown): unknown {
-  if (!parentMetadata) {
-    return metadata;
-  }
-  if (!metadata) {
-    return parentMetadata;
-  }
-  if (!isPlainRecord(parentMetadata) || !isPlainRecord(metadata)) {
-    return metadata;
-  }
-
-  try {
-    const merged: Record<string, unknown> = {};
-    Object.defineProperties(merged, Object.getOwnPropertyDescriptors(parentMetadata));
-    Object.defineProperties(merged, Object.getOwnPropertyDescriptors(metadata));
-    return merged;
-  } catch {
-    return metadata;
   }
 }
 

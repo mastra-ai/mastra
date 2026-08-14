@@ -2604,6 +2604,37 @@ describe('Tracing', () => {
       expect(span.getCorrelationContext().environment).toBe('production');
     });
 
+    it('preserves non-plain metadata instead of replacing it with the injected environment', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      class SpanMetadata {
+        tenantId = 'tenant-1';
+        region = 'us-east-1';
+      }
+
+      observability.__setMastraEnvironment('production');
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'agent-1' },
+        tracingOptions: { metadata: new SpanMetadata() },
+      });
+
+      // The class-instance metadata must not be discarded in favor of
+      // `{ environment: 'production' }`; user fields are retained.
+      expect(span.metadata).toMatchObject({
+        tenantId: 'tenant-1',
+        region: 'us-east-1',
+      });
+
+      span.end();
+    });
+
     it('lets per-span metadata.environment override the Mastra-pushed environment', () => {
       const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',

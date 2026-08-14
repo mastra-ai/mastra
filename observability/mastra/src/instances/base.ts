@@ -41,41 +41,8 @@ import { emitAutoExtractedMetrics, emitTokenMetricsForUsage } from '../metrics/a
 import { CardinalityFilter } from '../metrics/cardinality';
 import { resolveModelId } from '../model-id';
 import { NoOpSpan } from '../spans';
+import { isPlainRecord, mergeMetadata } from '../spans/metadata';
 import { addUsageStats } from '../usage';
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return false;
-  }
-
-  try {
-    const prototype = Object.getPrototypeOf(value);
-    return prototype === Object.prototype || prototype === null;
-  } catch {
-    return false;
-  }
-}
-
-function mergeMetadata(parentMetadata: unknown, metadata: unknown): Record<string, any> | undefined {
-  if (!parentMetadata) {
-    return metadata as Record<string, any> | undefined;
-  }
-  if (!metadata) {
-    return parentMetadata as Record<string, any> | undefined;
-  }
-  if (!isPlainRecord(parentMetadata) || !isPlainRecord(metadata)) {
-    return metadata as Record<string, any>;
-  }
-
-  try {
-    const merged: Record<string, unknown> = {};
-    Object.defineProperties(merged, Object.getOwnPropertyDescriptors(parentMetadata));
-    Object.defineProperties(merged, Object.getOwnPropertyDescriptors(metadata));
-    return merged;
-  } catch {
-    return metadata as Record<string, any>;
-  }
-}
 
 function hasMetadataKey(metadata: unknown, key: string): boolean {
   if (!metadata || typeof metadata !== 'object') {
@@ -95,6 +62,13 @@ function injectEnvironmentMetadata(
 ): Record<string, any> | undefined {
   if (environment === undefined || hasMetadataKey(metadata, 'environment')) {
     return metadata as Record<string, any> | undefined;
+  }
+
+  // Only plain records can be merged without losing the original value's shape.
+  // A Map, Date, or class instance would otherwise be replaced by `{ environment }`,
+  // discarding all user-provided metadata.
+  if (metadata && !isPlainRecord(metadata)) {
+    return metadata as Record<string, any>;
   }
 
   return mergeMetadata(metadata, { environment });
