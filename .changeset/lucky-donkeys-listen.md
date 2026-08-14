@@ -25,11 +25,8 @@ const memory = new Memory({
 });
 ```
 
-Also fixes two prompt bugs this exposed: the Observer and Reflector prompts named
-`<current-task>` and `<suggested-response>` in their closing guidance, nesting instruction, and
-multi-thread examples unconditionally, even when the output format had already omitted them;
-and `buildObserverOutputFormat` treated an empty extractor list as "legacy caller, describe
-both sections", which would have silently re-enabled the sections it was asked to drop.
+Disabling a section removes it fully: the Observer and Reflector no longer describe or
+reference it, and a previously stored hint stops being injected into the agent's context once
+both observation and reflection disable it.
 
-Defaults are unchanged — `buildObserverSystemPrompt()` and `buildReflectorSystemPrompt()` with
-no arguments produce byte-identical prompts.
+Defaults are unchanged — existing configurations keep both sections enabled.
