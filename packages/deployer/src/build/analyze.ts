@@ -510,7 +510,6 @@ export async function analyzeBundle(
 
   const { output, fileNameToDependencyMap, usedExternals } = await bundleExternals(depsToOptimize, outputDir, {
     bundlerOptions: {
-      ...bundlerOptions,
       externalsPreset,
       mergedExternals,
       isDev,
