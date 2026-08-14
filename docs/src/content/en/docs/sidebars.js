@@ -158,32 +158,32 @@ const sidebars = {
           items: [
             {
               type: 'doc',
-              id: 'long-running-agents/durable-agents',
+              id: 'harness/durable-agents',
               label: 'Durable Agents',
             },
             {
               type: 'doc',
-              id: 'long-running-agents/background-tasks',
+              id: 'harness/background-tasks',
               label: 'Background Tasks',
             },
             {
               type: 'doc',
-              id: 'long-running-agents/goals',
+              id: 'harness/goals',
               label: 'Goals',
             },
             {
               type: 'doc',
-              id: 'long-running-agents/schedules',
+              id: 'harness/schedules',
               label: 'Schedules',
             },
             {
               type: 'doc',
-              id: 'long-running-agents/signals',
+              id: 'harness/signals',
               label: 'Signals',
             },
             {
               type: 'doc',
-              id: 'long-running-agents/signal-providers',
+              id: 'harness/signal-providers',
               label: 'Signal Providers',
             },
             {

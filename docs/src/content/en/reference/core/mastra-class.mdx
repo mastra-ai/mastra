@@ -290,7 +290,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
     name: 'backgroundTasks',
     type: 'BackgroundTaskManagerConfig',
     description:
-      'Configure [background task](/docs/long-running-agents/background-tasks) execution for agents. See [background tasks configuration reference](/reference/configuration#backgroundtasks) for all options.',
+      'Configure [background task](/docs/harness/background-tasks) execution for agents. See [background tasks configuration reference](/reference/configuration#backgroundtasks) for all options.',
     isOptional: true,
     properties: [
       {
@@ -365,7 +365,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
     name: 'recovery',
     type: 'MastraRecoveryConfig',
     description:
-      'Boot-time recovery behavior for orphaned agent and workflow runs. See [Crash recovery](/docs/long-running-agents/durable-agents#crash-recovery).',
+      'Boot-time recovery behavior for orphaned agent and workflow runs. See [Crash recovery](/docs/harness/durable-agents#crash-recovery).',
     isOptional: true,
     defaultValue: "{ durableAgents: 'off' }",
     properties: [
@@ -378,7 +378,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
             isOptional: true,
             defaultValue: "'off'",
             description:
-              "Set to `'auto'` to automatically re-drive orphaned RUNNING durable agent runs on server boot. Recovery re-issues LLM calls and re-executes tool calls, so tools must be idempotent. See [Crash recovery](/docs/long-running-agents/durable-agents#crash-recovery).",
+              "Set to `'auto'` to automatically re-drive orphaned RUNNING durable agent runs on server boot. Recovery re-issues LLM calls and re-executes tool calls, so tools must be idempotent. See [Crash recovery](/docs/harness/durable-agents#crash-recovery).",
           },
         ],
       },

@@ -187,37 +187,37 @@
     },
     {
       "source": "/docs/agents/background-tasks",
-      "destination": "/docs/long-running-agents/background-tasks",
+      "destination": "/docs/harness/background-tasks",
       "permanent": true
     },
     {
       "source": "/docs/agents/durable-agents",
-      "destination": "/docs/long-running-agents/durable-agents",
+      "destination": "/docs/harness/durable-agents",
       "permanent": true
     },
     {
       "source": "/docs/agents/goals",
-      "destination": "/docs/long-running-agents/goals",
+      "destination": "/docs/harness/goals",
       "permanent": true
     },
     {
       "source": "/docs/agents/heartbeats",
-      "destination": "/docs/long-running-agents/schedules",
+      "destination": "/docs/harness/schedules",
       "permanent": true
     },
     {
       "source": "/docs/long-running-agents/heartbeats",
-      "destination": "/docs/long-running-agents/schedules",
+      "destination": "/docs/harness/schedules",
       "permanent": true
     },
     {
       "source": "/docs/agents/signal-providers",
-      "destination": "/docs/long-running-agents/signal-providers",
+      "destination": "/docs/harness/signal-providers",
       "permanent": true
     },
     {
       "source": "/docs/agents/signals",
-      "destination": "/docs/long-running-agents/signals",
+      "destination": "/docs/harness/signals",
       "permanent": true
     },
     {
@@ -927,7 +927,7 @@
     },
     {
       "source": "/docs/streaming/background-task-streaming",
-      "destination": "/docs/long-running-agents/background-tasks",
+      "destination": "/docs/harness/background-tasks",
       "permanent": true
     },
     {
@@ -2078,6 +2078,36 @@
     {
       "source": "/docs/agents/agent-approval",
       "destination": "/docs/agents/human-in-the-loop",
+      "permanent": true
+    },
+    {
+      "source": "/docs/long-running-agents/durable-agents",
+      "destination": "/docs/harness/durable-agents",
+      "permanent": true
+    },
+    {
+      "source": "/docs/long-running-agents/background-tasks",
+      "destination": "/docs/harness/background-tasks",
+      "permanent": true
+    },
+    {
+      "source": "/docs/long-running-agents/goals",
+      "destination": "/docs/harness/goals",
+      "permanent": true
+    },
+    {
+      "source": "/docs/long-running-agents/schedules",
+      "destination": "/docs/harness/schedules",
+      "permanent": true
+    },
+    {
+      "source": "/docs/long-running-agents/signals",
+      "destination": "/docs/harness/signals",
+      "permanent": true
+    },
+    {
+      "source": "/docs/long-running-agents/signal-providers",
+      "destination": "/docs/harness/signal-providers",
       "permanent": true
     }
   ]

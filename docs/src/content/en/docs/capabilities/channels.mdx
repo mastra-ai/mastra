@@ -240,7 +240,7 @@ Vercel and AWS Lambda require `waitUntil`, since they freeze the function as soo
 
 ### Coordinate instances with a shared pub/sub
 
-Channels route messages through the agent's [signal pipeline](/docs/long-running-agents/signals), and each run acquires a lease on its thread so one run owns the conversation at a time.
+Channels route messages through the agent's [signal pipeline](/docs/harness/signals), and each run acquires a lease on its thread so one run owns the conversation at a time.
 
 The default in-memory pub/sub can't cross instance boundaries, so on serverless a follow-up message can be routed to a different instance than the one running the agent.
 

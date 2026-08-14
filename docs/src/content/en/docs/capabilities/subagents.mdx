@@ -413,7 +413,7 @@ Success criteria:
 
 ## Running subagents in the background
 
-Subagent invocations are dispatched as tool calls, so they can run as [background tasks](/docs/long-running-agents/background-tasks). This is useful when one or more delegations are long-running and you don't want them to block the parent agent's response.
+Subagent invocations are dispatched as tool calls, so they can run as [background tasks](/docs/harness/background-tasks). This is useful when one or more delegations are long-running and you don't want them to block the parent agent's response.
 
 Enable the [backgroundTasks manager](/reference/configuration#backgroundtasks) on the Mastra instance, then opt subagents in on the parent agent:
 
@@ -440,7 +440,7 @@ const stream = await parentAgent.streamUntilIdle('Research AI in education and w
 
 Use [`streamUntilIdle()`](/reference/streaming/agents/streamUntilIdle) instead of `stream()` so the stream stays open until the subagents complete and the parent agent has had a chance to respond to their results.
 
-If a subagent isn't listed under the parent agent's `backgroundTasks.tools` but has its own background-eligible tools, the parent agent still dispatches the subagent as a background task and inherits its config. See [Inheriting from the subagent](/docs/long-running-agents/background-tasks#inheriting-from-the-subagent) for details.
+If a subagent isn't listed under the parent agent's `backgroundTasks.tools` but has its own background-eligible tools, the parent agent still dispatches the subagent as a background task and inherits its config. See [Inheriting from the subagent](/docs/harness/background-tasks#inheriting-from-the-subagent) for details.
 
 ## Subagent versioning
 
@@ -461,7 +461,7 @@ Version overrides propagate automatically through delegation. See [Subagent vers
 
 ## Related
 
-- [Background tasks](/docs/long-running-agents/background-tasks)
+- [Background tasks](/docs/harness/background-tasks)
 - [Subagent versioning](/reference/editor/versioning#sub-agent-versioning)
 - [Guide: Research coordinator](https://mastra.ai/blog/build-a-research-coordinator-with-supervisor-agents)
 - [Agent.stream() reference](/reference/streaming/agents/stream)
