@@ -48,6 +48,7 @@ import type {
 } from './types';
 
 import { resolveThreadIdFromArgs } from './utils';
+import { fireClientToolOutputHooks } from './workflows/prepare-stream/client-tool-output-hooks';
 
 /**
  * Interface for accessing Agent methods needed by the legacy handler.
@@ -320,6 +321,14 @@ export class AgentLegacyHandler {
           hooks,
         });
 
+        // The legacy path has no abort signal to forward to the hook.
+        const fireClientHooks = () =>
+          fireClientToolOutputHooks({
+            messages,
+            tools: convertedTools,
+            logger: this.capabilities.logger,
+          });
+
         let messageList = new MessageList({
           threadId,
           resourceId,
@@ -366,6 +375,9 @@ export class AgentLegacyHandler {
                 tripwire: inputStepResult.tripwire,
               };
             }
+          }
+          if (!tripwire) {
+            await fireClientHooks();
           }
           return {
             messageObjects: tripwire ? [] : messageList.get.all.prompt(),
@@ -473,6 +485,10 @@ export class AgentLegacyHandler {
               threadExists: !!existingThread,
             };
           }
+        }
+
+        if (!tripwire) {
+          await fireClientHooks();
         }
 
         // Messages are already processed by __runInputProcessors and __runProcessInputStep above

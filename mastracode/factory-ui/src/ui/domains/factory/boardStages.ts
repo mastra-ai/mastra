@@ -9,10 +9,13 @@ interface BoardStage {
   label: string;
 }
 
+// Every stage a rule can send a pull request to needs a column here: without
+// one the card falls through to Intake, the queue of PRs still awaiting review.
 const REVIEW_BOARD_STAGES: ReadonlyArray<BoardStage> = [
   { id: 'intake', label: 'Intake' },
   { id: 'review', label: 'Reviewing' },
   { id: 'done', label: 'Done' },
+  { id: 'canceled', label: 'Canceled' },
 ];
 
 export function boardStages(kind: BoardKind): ReadonlyArray<BoardStage> {

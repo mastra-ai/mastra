@@ -16,6 +16,11 @@
   ],
   "redirects": [
     {
+      "source": "/docs/workspace/overview",
+      "destination": "/docs/workspace/sandbox",
+      "permanent": true
+    },
+    {
       "source": "/docs/editor/prompts",
       "destination": "/docs/editor/overview",
       "permanent": true
@@ -2058,6 +2063,11 @@
     {
       "source": "/reference/processors/cost-guard-processor",
       "destination": "/reference/processors/token-cost-control",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workspace/overview/llms.txt",
+      "destination": "/docs/workspace/sandbox/llms.txt",
       "permanent": true
     },
     {

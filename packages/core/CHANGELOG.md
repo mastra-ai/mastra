@@ -1,5 +1,156 @@
 # @mastra/core
 
+## 1.59.1-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`587f6ef`](https://github.com/mastra-ai/mastra/commit/587f6efcfc25880b93760a8607d1cd381ec612fe))
+
+## 1.59.0
+
+### Minor Changes
+
+- Fixed traces that start under an external parent span not appearing in Mastra Studio. Resumed agent and workflow runs keep their link to the suspended run's trace. ([#20499](https://github.com/mastra-ai/mastra/pull/20499))
+
+- Renamed CostGuardProcessor to TokenCostControl, improved its reliability and diagnostics, and added new budgeting options. ([#21372](https://github.com/mastra-ai/mastra/pull/21372))
+
+  **Rename**
+
+  - `CostGuardProcessor` is now `TokenCostControl` with processor id `'token-cost-control'`. The `CostGuardProcessor` export (and the `CostGuardOptions`, `CostGuardUsage`, `CostGuardBreakdownEntry`, `CostGuardTripwireMetadata`, and `CostGuardViolationDetail` types) remains available as a deprecated alias for the same class and will be removed in a future major version.
+
+  **Improvements**
+
+  - Each cost check now issues fewer queries against observability storage.
+  - Diagnostics now go through the Mastra logger, and failed cost queries now log diagnostics and allow the request to continue instead of failing silently.
+  - With the warn strategy, warnings and the onViolation callback now fire at most once per request instead of on every step.
+  - Violation messages no longer contain float precision artifacts (e.g. 0.30000000000000004 now renders as 0.3).
+
+  **New options**
+
+  - `warnAtPercent`: soft threshold that warns (without blocking) when cost reaches a percentage of the limit.
+  - `maxCost` now also accepts a function of RequestContext for per-tier or per-user budgets.
+  - New scopes `user`, `organization`, and `session` track cumulative cost per userId, organizationId, and sessionId (read from the matching RequestContext keys; traces must carry the matching span metadata).
+  - `includeBreakdown`: attaches a per-provider/model cost breakdown to violations.
+
+  ```typescript
+  const tokenCostControl = new TokenCostControl({
+    maxCost: requestContext => (requestContext?.get('tier') === 'pro' ? 10.0 : 1.0),
+    scope: 'user',
+    warnAtPercent: 80,
+    includeBreakdown: true,
+  });
+  ```
+
+- Added `Agent.listActiveThreadRuns()` and `AgentController.listActiveThreadRuns()`. They list every run currently in flight across resources and threads, from the same in-process tracking as `getActiveThreadRunId()`. ([#21353](https://github.com/mastra-ai/mastra/pull/21353))
+
+  ```ts
+  const runs = agent.listActiveThreadRuns();
+  // [{ runId: 'run-1', resourceId: 'workspace-a', threadId: 'thread-1' }]
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`088e41e`](https://github.com/mastra-ai/mastra/commit/088e41e434ed05f2c674b254f1034ec46a57a7be))
+
+- Fixed session-deleted listeners missing their notification when a session teardown failed while releasing its thread lock. The controller deregisters the session either way, so `onSessionDeleted` now always fires and listeners no longer hold on to a dead session. ([#21358](https://github.com/mastra-ai/mastra/pull/21358))
+
+- Fixed model routing to use rotated gateway API keys. ([#21364](https://github.com/mastra-ai/mastra/pull/21364))
+
+- Fixed CoreToolBuilder dropping the `~standard.jsonSchema` adapter when injecting background/resume fields onto Zod v4 tool input schemas. Invalid tool calls now return structured validation errors instead of crashing during JSON Schema conversion. ([#21187](https://github.com/mastra-ai/mastra/pull/21187))
+
+- Fixed workflow watch events re-publishing stale step state, which could grow to megabytes per event. `workflow-step-start` events spread the step's previous result into their payload, so on loops (including durable agent runs) every start event shipped the previous iteration's `output` next to a byte-identical input `payload`. On Cloudflare Workers this made the request streaming a durable agent run exceed the 128 MB isolate memory limit and fail, even though the run itself kept executing. Watch events now only carry the fields describing the current transition: the input (`payload` or `resumePayload`), timestamps, and `status` on start events, plus the fresh result on `workflow-step-result` and `workflow-step-suspended` events. A step's prior `output`, `error`, and suspend state are no longer re-published on later events. Persisted run snapshots are unchanged. ([#20661](https://github.com/mastra-ai/mastra/pull/20661))
+
+- Fixed memory growth from completed foreground workspace commands retaining process handles and their output. ([#21438](https://github.com/mastra-ai/mastra/pull/21438))
+
+- Added an option to limit language servers retained by a workspace. Workspaces remain unlimited when the option is omitted. ([#21186](https://github.com/mastra-ai/mastra/pull/21186))
+
+  ```ts
+  const workspace = new Workspace({
+    lsp: { maxOpenClients: 4 },
+  });
+  ```
+
+  When using `workspace.lsp.prepareQuery()`, call `release()` on the returned query after closing the file.
+
+- Deprecated `translationQuality` on `LanguageDetector`. The option previously selected prompt-level "Quality Level" guidance, but that behavior was removed when the language detection and translation prompts were streamlined. The option currently has no effect. ([#21199](https://github.com/mastra-ai/mastra/pull/21199))
+
+  Existing configurations keep working and keep type-checking. The option no longer appears in the processor provider's configuration schema, so configuration UIs stop offering a control that does nothing, and the reference docs now mark it as deprecated.
+
+  For model-specific speed and quality controls, use `providerOptions` when your provider supports them:
+
+  ```ts
+  new LanguageDetector({
+    model,
+    targetLanguages: ['English'],
+    strategy: 'translate',
+    providerOptions: { openai: { reasoningEffort: 'low' } },
+  });
+  ```
+
+- Send opaque acting-user subjects with Platform sandbox requests, including Factory creation and reattachment flows. ([#20754](https://github.com/mastra-ai/mastra/pull/20754))
+
+  ```typescript
+  import { PlatformSandbox } from '@mastra/platform-workspace';
+
+  const sandbox = new PlatformSandbox({
+    environmentId: 'env_abc',
+    actingUserId: auth.user.id,
+  });
+  ```
+
+- Corrected the documentation for `observation.blockAfter` on the docs pages and in the editor TSDoc. Above the threshold, buffered activation may overshoot the retention target instead of activating fewer chunks; it does not force a synchronous observation. The docs also give the correct value ranges: values from 1 up to (but not including) 100 are multipliers of `messageTokens`, and values of 100 or more are absolute token counts. No runtime behavior changed. ([#21215](https://github.com/mastra-ai/mastra/pull/21215))
+
+- Fixed output processors being skipped when the model provider throws an error. Output processors now run on failed streams with finishReason set to 'error', restoring the behavior from 1.55.0, so custom processors can observe and react to error terminals. Message history still avoids saving a user message when the provider fails before producing any output, so failed turns don't leave orphaned input in the conversation history. Cancelled (aborted) streams continue to skip output processors. Fixes #21292. ([#21370](https://github.com/mastra-ai/mastra/pull/21370))
+
+- Couple the blocking wait in get_process_output to the run's abortSignal: ProcessHandle.wait() now accepts abortSignal and kills the process on abort (the same convention the process manager applies at spawn time), and the workspace tool forwards context.abortSignal, so aborting a run no longer leaves the tool blocking on a background process. ([#21388](https://github.com/mastra-ai/mastra/pull/21388))
+
+  ```ts
+  const controller = new AbortController();
+
+  const result = await handle.wait({
+    abortSignal: controller.signal,
+  });
+
+  // controller.abort() kills the process and wait() resolves with its exit result
+  ```
+
+- Fixed an issue where multiple agents sharing one storage instance would all respond in a subscribed channel thread instead of just the agent that was mentioned. Each agent now tracks its own channel threads and subscriptions. ([#21288](https://github.com/mastra-ai/mastra/pull/21288))
+
+- Reduced persisted agent-loop snapshot size by no longer storing duplicated provider request data (measured at 24% of all persisted snapshot bytes in production). Resume behavior and step routing data are unchanged. ([#21390](https://github.com/mastra-ai/mastra/pull/21390))
+
+- Fixed runEvals TypeScript overloads for Workflow targets so they accept gates and threshold-bearing scorer entries, matching what the runtime already supports. Workflow eval runs can now produce a verdict without type errors. Fixes #21290 ([#21380](https://github.com/mastra-ai/mastra/pull/21380))
+
+- Fixed file-based agents so setting `workspace` to `undefined` disables the default workspace and its automatic file and shell tools. ([#21378](https://github.com/mastra-ai/mastra/pull/21378))
+
+- **Fixed** legacy Anthropic history that contains a thinking signature without its original thinking text is sanitized before replay, preventing invalid empty signed thinking blocks from being forwarded. ([#17602](https://github.com/mastra-ai/mastra/pull/17602))
+
+  Fixes #17457.
+
+- Fixed schedule errors to preserve actionable HTTP statuses and retained structured agent errors after model fallback exhaustion. ([#21449](https://github.com/mastra-ai/mastra/pull/21449))
+
+- Fixed gateway authentication so empty header objects fall back to API keys and are not reported as valid credentials. ([#21266](https://github.com/mastra-ai/mastra/pull/21266))
+
+- Fixed missing TypeScript declarations for the `@mastra/core/test-utils/llm-mock` entrypoint. `MastraLanguageModelV2Mock`, `createMockModel`, and `simulateReadableStream` are now fully typed when imported in consumer projects — no need for a local ambient `declare module` shim. ([#21427](https://github.com/mastra-ai/mastra/pull/21427))
+
+  ```ts
+  import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
+
+  const mockModel = new MastraLanguageModelV2Mock({
+    doGenerate: async () => ({
+      content: [{ type: 'text', text: 'stubbed response' }],
+      finishReason: 'stop',
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      warnings: [],
+    }),
+  });
+
+  // Spy arrays are typed as LanguageModelV2CallOptions[]
+  mockModel.doGenerateCalls;
+  ```
+
+- Updated dependencies [[`cf418b6`](https://github.com/mastra-ai/mastra/commit/cf418b65efb81997e9b8dc7638eee363c5d96c96)]:
+  - @mastra/schema-compat@1.3.7
+
 ## 1.59.0-alpha.5
 
 ### Patch Changes
