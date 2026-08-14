@@ -262,6 +262,32 @@ function pullRequestMerged(context: FactoryGithubRuleContext) {
   } as const;
 }
 
+function addressReviewFeedback(context: FactoryGithubRuleContext) {
+  if (!context.item || !context.pullRequest || !context.review) return;
+  // Only the Work item that authored the PR can act on the feedback. Provenance
+  // binds the event there; a Review card seeing its own posted review must not
+  // react to it (that would loop the reviewer against itself).
+  if (context.board !== 'work') return;
+  // `approved` needs no work, and `commented` (a review body with no verdict)
+  // is how a reviewer leaves notes without blocking — only a verdict that asks
+  // for changes should pull the author back in.
+  if (context.review.state.toLowerCase() !== 'changes_requested') return;
+  // The authoring thread is already subscribed to this PR (`gh pr create`
+  // subscribes automatically), so it can read the individual line comments
+  // from its own notification inbox — the message only has to wake it and
+  // point at the review.
+  return {
+    type: 'sendMessage',
+    idempotencyKey: `${context.ingress.id}:address-review-feedback`,
+    role: 'work',
+    priority: 'high',
+    message:
+      `Changes were requested on pull request #${context.pullRequest.number} (${context.review.url}). ` +
+      'Read the review comments on this PR, address the ones you agree with, and push the fixes to the PR branch. ' +
+      'Reply on GitHub to anything you are deliberately not changing, explaining why.',
+  } as const;
+}
+
 function pullRequestClosed(context: FactoryGithubRuleContext) {
   if (!context.item || !context.pullRequest || context.pullRequest.merged) return;
   if (context.board !== 'review') return;
@@ -385,6 +411,7 @@ const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
     pullRequestOpened: { onEvent: pullRequestOpened },
     pullRequestUpdated: { onEvent: reReviewUpdatedPullRequest },
     pullRequestReviewRequested: { onEvent: reReviewRequestedPullRequest },
+    pullRequestReviewSubmitted: { onEvent: addressReviewFeedback },
     pullRequestMerged: { onEvent: pullRequestMerged },
     pullRequestClosed: { onEvent: pullRequestClosed },
   },

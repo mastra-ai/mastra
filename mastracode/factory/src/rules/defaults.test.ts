@@ -475,6 +475,55 @@ describe('defaultFactoryRules', () => {
     }
   });
 
+  describe('pullRequestReviewSubmitted', () => {
+    function reviewContext(overrides: Partial<FactoryGithubRuleContext> = {}): FactoryGithubRuleContext {
+      return {
+        ...githubContext('pullRequestReviewSubmitted'),
+        item,
+        board: 'work',
+        itemRevision: 5,
+        review: {
+          id: 99,
+          state: 'changes_requested',
+          url: 'https://github.test/acme/repo/pull/17#pullrequestreview-99',
+        },
+        ...overrides,
+      };
+    }
+
+    it('wakes the authoring Work agent when changes are requested', async () => {
+      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestReviewSubmitted?.onEvent;
+      const decision = await rule?.(reviewContext());
+      expect(decision).toMatchObject({
+        type: 'sendMessage',
+        idempotencyKey: 'delivery-1:address-review-feedback',
+        role: 'work',
+        priority: 'high',
+      });
+      // The message has to carry the review URL: the agent reads the individual
+      // line comments from its own PR subscription, not from this message.
+      expect((decision as { message: string }).message).toContain('#pullrequestreview-99');
+    });
+
+    it('stays quiet for reviews that are not asking for changes', async () => {
+      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestReviewSubmitted?.onEvent;
+      for (const state of ['approved', 'commented', 'dismissed']) {
+        expect(
+          await rule?.(reviewContext({ review: { id: 99, state, url: 'https://github.test/r' } })),
+        ).toBeUndefined();
+      }
+    });
+
+    it('never fires on the Review card that posted the review', async () => {
+      // Only the PR's author can act on the feedback. Reacting on the Review
+      // card would loop the reviewer against its own output.
+      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestReviewSubmitted?.onEvent;
+      expect(await rule?.(reviewContext({ board: 'review' }))).toBeUndefined();
+      expect(await rule?.(reviewContext({ item: undefined, board: undefined }))).toBeUndefined();
+      expect(await rule?.(reviewContext({ review: undefined }))).toBeUndefined();
+    });
+  });
+
   describe('pullRequestReviewRequested', () => {
     const prItem = {
       ...item,

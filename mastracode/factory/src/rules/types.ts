@@ -19,6 +19,7 @@ export const FACTORY_GITHUB_EVENTS = [
   'pullRequestOpened',
   'pullRequestUpdated',
   'pullRequestReviewRequested',
+  'pullRequestReviewSubmitted',
   'pullRequestMerged',
   'pullRequestClosed',
 ] as const;
@@ -140,6 +141,8 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
   };
   /** Present on `pullRequestReviewRequested`: who review was (re-)requested from. */
   reviewRequest?: { reviewer: string; factoryReviewer: boolean };
+  /** Present on `pullRequestReviewSubmitted`: the review that was just posted. */
+  review?: { id: number; state: string; url: string };
 }
 
 export interface FactoryLinearRuleContext extends FactoryRuleContextBase {

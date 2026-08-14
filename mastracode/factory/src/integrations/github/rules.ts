@@ -91,6 +91,7 @@ function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefi
     return boolean(object(parsed.payload.pull_request)?.merged) ? 'pullRequestMerged' : 'pullRequestClosed';
   }
   if (parsed.event === 'pull_request' && action === 'review_requested') return 'pullRequestReviewRequested';
+  if (parsed.event === 'pull_request_review' && action === 'submitted') return 'pullRequestReviewSubmitted';
   return undefined;
 }
 
