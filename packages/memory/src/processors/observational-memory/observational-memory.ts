@@ -1719,8 +1719,7 @@ export class ObservationalMemory {
   ): { threadId: string; resourceId?: string } | null {
     // First try RequestContext (set by Memory)
     const memoryContext = requestContext?.get('MastraMemory') as
-      | { thread?: { id: string }; resourceId?: string }
-      | undefined;
+      { thread?: { id: string }; resourceId?: string } | undefined;
 
     if (memoryContext?.thread?.id) {
       return {
@@ -2597,11 +2596,18 @@ ${formattedMessages}
       return undefined;
     }
 
-    // Read thread metadata for continuation hints
+    // Read thread metadata for continuation hints. A persisted hint is only injected while a
+    // pipeline can still produce it — once observation and reflection both disable a section,
+    // a stale value stored by an earlier configuration must not keep steering the actor.
     const thread = await this.storage.getThreadById({ threadId });
     const omMetadata = getThreadOMMetadata(thread?.metadata);
-    const currentTask = omMetadata?.currentTask;
-    const suggestedResponse = omMetadata?.suggestedResponse;
+    const activeExtractors = [...this.observationConfig.extractors, ...this.reflectionConfig.extractors];
+    const currentTask = activeExtractors.some(extractor => extractor.slug === 'current-task')
+      ? omMetadata?.currentTask
+      : undefined;
+    const suggestedResponse = activeExtractors.some(extractor => extractor.slug === 'suggested-response')
+      ? omMetadata?.suggestedResponse
+      : undefined;
     const currentDate = opts.currentDate ?? new Date();
 
     return this.formatObservationsForContext(

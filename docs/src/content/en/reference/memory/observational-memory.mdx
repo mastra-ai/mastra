@@ -138,7 +138,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             name: 'continuationHints',
             type: 'boolean | { currentTask?: boolean; suggestedResponse?: boolean }',
             description:
-              'Which continuation-hint sections the Observer emits. Pass `false` to disable both, or an object to disable them individually. Agents that drive their own control flow generally want `{ suggestedResponse: false }` so memory does not compete for what the agent says next.',
+              'Which continuation-hint sections the Observer emits. Pass `false` to disable both, or an object to disable them individually. Agents that drive their own control flow generally want `{ suggestedResponse: false }` so memory does not compete for what the agent says next. A previously stored hint stops being injected into context once both observation and reflection disable its section.',
             isOptional: true,
             defaultValue: 'true',
           },
@@ -312,7 +312,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             name: 'continuationHints',
             type: 'boolean | { currentTask?: boolean; suggestedResponse?: boolean }',
             description:
-              'Which continuation-hint sections the Reflector emits. Pass `false` to disable both, or an object to disable them individually.',
+              'Which continuation-hint sections the Reflector emits. Pass `false` to disable both, or an object to disable them individually. A previously stored hint stops being injected into context once both observation and reflection disable its section.',
             isOptional: true,
             defaultValue: 'true',
           },
