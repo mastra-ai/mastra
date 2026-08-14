@@ -59,7 +59,7 @@ export function externalLinkLabel(source: WorkItemSource): string {
 
 export function workItemMeta(item: WorkItem): string {
   const author = typeof item.metadata.author === 'string' ? item.metadata.author : undefined;
-  const age = `added ${relativeTime(item.createdAt)}`;
+  const age = relativeTime(item.createdAt);
   const githubNumber = githubNumberForItem(item);
   if (githubNumber !== undefined) return `#${githubNumber}${author ? ` · ${author}` : ''} · ${age}`;
   if (item.source === 'linear-issue' && typeof item.metadata.identifier === 'string') {

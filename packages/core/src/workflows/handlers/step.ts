@@ -87,7 +87,7 @@ export async function executeStep(
     abortController,
     requestContext,
     actor,
-    skipEmits = false,
+    skipEmits: skipEmitsParam = false,
     outputWriter,
     disableScorers,
     serializedStepGraph,
@@ -95,6 +95,7 @@ export async function executeStep(
     perStep,
     ...rest
   } = params;
+  const skipEmits = skipEmitsParam || engine.options.emitStepEvents === false;
   const observabilityContext = resolveObservabilityContext(rest);
 
   const stepCallId = randomUUID();

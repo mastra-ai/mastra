@@ -30,6 +30,7 @@ import type {
   ToolsetsInput,
   ToolsInput,
 } from '../types';
+import { fireClientToolOutputHooks } from '../workflows/prepare-stream/client-tool-output-hooks';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
 import { createWorkflowInput } from './utils/serialize-state';
 import { generateDurableThreadTitle } from './workflows/finalize-run';
@@ -497,6 +498,17 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     throw new Error('Agent model not available');
   }
 
+  // Client-executed results fire only after processors accept the request and
+  // the required runtime model has resolved.
+  if (!tripwireData) {
+    await fireClientToolOutputHooks({
+      messages,
+      tools,
+      abortSignal: execOptions?.abortSignal,
+      logger,
+    });
+  }
+
   const modelList = await typedAgent.getModelList(requestContext);
 
   // 8b. Get scorers configuration
@@ -646,6 +658,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // 14. Create registry entry for non-serializable state
   const registryEntry: RunRegistryEntry = {
+    mastra,
     tools,
     saveQueueManager,
     memory,

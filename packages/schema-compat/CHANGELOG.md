@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 1.3.7
+
+### Patch Changes
+
+- Optional nested JSON Schema properties with multiple types no longer produce exponentially large OpenAI tool payloads. Payload growth now remains linear as these schemas become more deeply nested. ([#21190](https://github.com/mastra-ai/mastra/pull/21190))
+
 ## 1.3.7-alpha.0
 
 ### Patch Changes

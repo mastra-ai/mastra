@@ -515,7 +515,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
     },
     markMaterialized: async ({ id }: { id: string }) => {
       const row = this.sessionsRows.find(candidate => candidate.id === id);
-      if (row) Object.assign(row, { materializedAt: new Date(), updatedAt: new Date() });
+      if (row && row.materializedAt === null) Object.assign(row, { materializedAt: new Date(), updatedAt: new Date() });
     },
     markFirstMessage: async ({ sessionId }: { sessionId: string }) => {
       const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
