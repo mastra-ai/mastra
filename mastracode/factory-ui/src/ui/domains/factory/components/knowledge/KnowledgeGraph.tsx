@@ -305,6 +305,8 @@ function KnowledgeGraphInner({
   // Last settled CENTERS: warm-start for re-layouts so live arrivals don't
   // jolt the whole graph, and the spawn anchor for new nodes.
   const lastCenters = useRef(new Map<string, { x: number; y: number }>());
+  /** Signature of the payload's node + memory/edge id sets — detects real data changes. */
+  const lastSignature = useRef('');
   const [dragVersion, setDragVersion] = useState(0);
   const reactFlow = useReactFlow();
 
@@ -322,6 +324,18 @@ function KnowledgeGraphInner({
     // A11: memories are the connection source of truth when the payload
     // carries them; logical owner→target pairs drive filters/ego/sizing.
     const memories = payload.memories ?? [];
+    // Position capture policy: new data re-simulates WARM (entities start
+    // from their settled spots — new inbound edges change node sizes, so the
+    // layout must re-settle); unchanged data freezes positions hard so
+    // polls, filter toggles, and re-renders never rearrange the graph.
+    const signature = [
+      payload.nodes.map(node => node.id).sort().join(','),
+      memories.length > 0
+        ? memories.map(memory => memory.id).sort().join(',')
+        : payload.edges.map(edge => edge.id).sort().join(','),
+    ].join('|');
+    const dataChanged = signature !== lastSignature.current;
+    lastSignature.current = signature;
     const pairEdges = memories.length > 0 ? memoryPairEdges(memories) : payload.edges;
     let filtered = filterGraph(payload.nodes, pairEdges, filters);
     if (focusedId) {
@@ -347,12 +361,14 @@ function KnowledgeGraphInner({
         ...mapped.nodes.map(node => ({
           id: node.id,
           size: node.data.size,
-          // Position capture: a node that has ever settled STAYS there —
-          // polls, filter toggles, and re-renders must not rearrange an
-          // unchanged graph. Only brand-new nodes get simulated (spawned
-          // near their first neighbor instead of at the spiral seed).
-          fixed: pinnedPositions.current.get(node.id) ?? lastCenters.current.get(node.id),
-          initial: arrivals?.nodes.has(node.id) ? neighborOf(node.id) : undefined,
+          // Unchanged data → frozen at the settled spot. New data → the
+          // settled spot becomes the warm START and the simulation re-settles
+          // (brand-new nodes spawn near their first neighbor instead of at
+          // the spiral seed). Drag pins always win.
+          fixed:
+            pinnedPositions.current.get(node.id) ?? (dataChanged ? undefined : lastCenters.current.get(node.id)),
+          initial:
+            lastCenters.current.get(node.id) ?? (arrivals?.nodes.has(node.id) ? neighborOf(node.id) : undefined),
         })),
         // Memory markers: tiny padding so they nestle into their cluster,
         // spawned beside their first entity so they never fly in from origin.
@@ -362,9 +378,12 @@ function KnowledgeGraphInner({
             id: marker.id,
             size: marker.size,
             padding: 6,
-            // Same position capture as entities: settled markers never move.
-            fixed: pinnedPositions.current.get(marker.id) ?? lastCenters.current.get(marker.id),
-            initial: anchor ? { x: anchor.x + 30, y: anchor.y + 30 } : undefined,
+            // Same policy as entities: frozen on unchanged data, warm-started
+            // on new data.
+            fixed:
+              pinnedPositions.current.get(marker.id) ?? (dataChanged ? undefined : lastCenters.current.get(marker.id)),
+            initial:
+              lastCenters.current.get(marker.id) ?? (anchor ? { x: anchor.x + 30, y: anchor.y + 30 } : undefined),
           };
         }),
       ],
