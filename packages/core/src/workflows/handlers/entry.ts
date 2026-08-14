@@ -209,7 +209,7 @@ export async function persistStepUpdate(
       // Persist tracing context for span continuity on resume
       tracingContext,
       dynamicWorkflowDefinitions: engine.dynamicWorkflowDefinitions
-        ? structuredClone(Array.from(engine.dynamicWorkflowDefinitions))
+        ? Array.from(engine.dynamicWorkflowDefinitions)
         : undefined,
     };
 

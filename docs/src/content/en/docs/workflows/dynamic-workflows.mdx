@@ -121,6 +121,8 @@ await mastra.addDynamicWorkflow(updatedDefinition)
 
 New runs read the active definition from storage before they are created, so another Mastra instance can accept the update without leaving this instance's next run on a stale in-memory graph. Mastra persists the exact root and nested dynamic-definition closure with each run snapshot. Runs created before the update therefore continue with their original graph, including after a process restart.
 
+A custom `pruneSnapshot` hook must preserve `dynamicWorkflowDefinitions`, or the dynamic workflow run fails closed when it resumes.
+
 Runs created by an older Mastra version don't contain this pinned definition closure. After upgrading, Mastra fails closed instead of resuming one of those runs against a definition that may have changed.
 
 The pinned closure covers storage-backed dynamic definitions. A nested code-defined workflow still follows the code deployed by the host, so deploy that code compatibly while its runs can be resumed.

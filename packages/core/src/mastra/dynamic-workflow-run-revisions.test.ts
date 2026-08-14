@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { InMemoryStore } from '../storage';
 import { createWorkflow } from '../workflows/create';
@@ -52,6 +52,46 @@ function approvalWorkflow() {
   });
   return createWorkflow({
     id: 'approval-workflow',
+    inputSchema: z.object({}),
+    outputSchema: z.object({ value: z.string() }),
+    steps: [approval],
+  })
+    .then(approval)
+    .commit();
+}
+
+function codeValueWorkflow(id: string, value: string) {
+  const valueStep = createStep({
+    id: 'value',
+    inputSchema: z.object({}),
+    outputSchema: z.object({ value: z.string() }),
+    execute: async () => ({ value }),
+  });
+  return createWorkflow({
+    id,
+    inputSchema: z.object({}),
+    outputSchema: z.object({ value: z.string() }),
+    steps: [valueStep],
+  })
+    .then(valueStep)
+    .commit();
+}
+
+function countedApprovalWorkflow(onResume: () => void) {
+  const approval = createStep({
+    id: 'approval',
+    inputSchema: z.object({}),
+    outputSchema: z.object({ value: z.string() }),
+    suspendSchema: z.object({ reason: z.string() }),
+    resumeSchema: z.object({ approved: z.boolean() }),
+    execute: async ({ resumeData, suspend }) => {
+      if (!resumeData) await suspend({ reason: 'Approve' });
+      onResume();
+      return { value: 'approved' };
+    },
+  });
+  return createWorkflow({
+    id: 'counted-approval',
     inputSchema: z.object({}),
     outputSchema: z.object({ value: z.string() }),
     steps: [approval],
@@ -171,6 +211,121 @@ describe('dynamic workflow run revisions', () => {
     await expect(mastra.getWorkflow('campaign').createRun({ runId: 'legacy-run' })).rejects.toThrow(
       /does not contain a pinned definition revision/,
     );
+  });
+
+  it('restores a pinned revision from a raw JSON string snapshot', async () => {
+    const storage = new InMemoryStore({ id: 'dynamic-string-snapshot' });
+    const writer = new Mastra({ logger: false, storage });
+    await writer.addDynamicWorkflow(valueWorkflow('campaign', 'v1'));
+    await writer.getWorkflow('campaign').createRun({ runId: 'string-run' });
+
+    const workflowStore = await storage.getStore('workflows');
+    const getWorkflowRunById = workflowStore!.getWorkflowRunById.bind(workflowStore);
+    vi.spyOn(workflowStore!, 'getWorkflowRunById').mockImplementation(async args => {
+      const storedRun = await getWorkflowRunById(args);
+      return storedRun ? { ...storedRun, snapshot: JSON.stringify(storedRun.snapshot) } : null;
+    });
+
+    const reader = new Mastra({ logger: false, storage });
+    await reader.startWorkers();
+    expect(await runValue(reader, 'campaign', 'string-run')).toBe('v1');
+    await reader.stopWorkers();
+  });
+
+  it('keeps a code-defined nested workflow authoritative during refresh', async () => {
+    const storage = new InMemoryStore({ id: 'dynamic-code-precedence' });
+    const writer = new Mastra({ logger: false, storage });
+    await writer.addDynamicWorkflows([valueWorkflow('child', 'stored'), nestedRoot('root', 'child')]);
+
+    const codeChild = codeValueWorkflow('child', 'code');
+    const reader = new Mastra({ logger: false, storage, workflows: { child: codeChild } });
+    await reader.startWorkers();
+
+    expect(await runValue(reader, 'root')).toBe('code');
+    expect(reader.getWorkflow('child')).toBe(codeChild);
+    await reader.stopWorkers();
+  });
+
+  it('publishes only the requested root and reuses its unchanged materialized revision', async () => {
+    const storage = new InMemoryStore({ id: 'dynamic-root-cache' });
+    const writer = new Mastra({ logger: false, storage });
+    const reader = new Mastra({ logger: false, storage });
+    await writer.addDynamicWorkflows([valueWorkflow('child', 'v1'), nestedRoot('root', 'child')]);
+    await reader.startWorkers();
+
+    const registeredChild = reader.getWorkflow('child');
+    await reader.getWorkflow('root').createRun();
+    const firstRevision = reader.getWorkflow('root');
+    expect(reader.getWorkflow('child')).toBe(registeredChild);
+
+    await reader.getWorkflow('root').createRun();
+    expect(reader.getWorkflow('root')).toBe(firstRevision);
+
+    await writer.addDynamicWorkflow(nestedRoot('root', 'child'));
+    await reader.getWorkflow('root').createRun();
+    expect(reader.getWorkflow('root')).not.toBe(firstRevision);
+    await reader.stopWorkers();
+  });
+
+  it('refreshes unrelated dynamic roots independently', async () => {
+    const storage = new InMemoryStore({ id: 'dynamic-root-refresh-queues' });
+    const mastra = new Mastra({ logger: false, storage });
+    await mastra.addDynamicWorkflows([valueWorkflow('first', 'one'), valueWorkflow('second', 'two')]);
+
+    const definitionStore = await storage.getStore('workflowDefinitions');
+    const list = definitionStore!.list.bind(definitionStore);
+    let entered = 0;
+    let releaseFirst!: () => void;
+    const firstBlocked = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    vi.spyOn(definitionStore!, 'list').mockImplementation(async args => {
+      entered += 1;
+      if (entered === 1) await firstBlocked;
+      return list(args);
+    });
+
+    const firstRun = mastra.getWorkflow('first').createRun();
+    await vi.waitFor(() => expect(entered).toBe(1));
+    const secondRun = mastra.getWorkflow('second').createRun();
+    await vi.waitFor(() => expect(entered).toBe(2));
+    releaseFirst();
+    await Promise.all([firstRun, secondRun]);
+  });
+
+  it('shares a pinned run and serializes concurrent resumes for the same dynamic run id', async () => {
+    const storage = new InMemoryStore({ id: 'dynamic-concurrent-resume' });
+    const writer = new Mastra({
+      logger: false,
+      storage,
+      workflows: { approval: countedApprovalWorkflow(() => {}) },
+    });
+    await writer.addDynamicWorkflow(nestedRoot('campaign', 'counted-approval'));
+    const initialRun = await writer.getWorkflow('campaign').createRun({ runId: 'shared-run' });
+    expect(await initialRun.start({ inputData: {} })).toMatchObject({ status: 'suspended' });
+
+    let resumeEffects = 0;
+    const reader = new Mastra({
+      logger: false,
+      storage,
+      workflows: { approval: countedApprovalWorkflow(() => resumeEffects++) },
+    });
+    await reader.startWorkers();
+
+    const [first, second] = await Promise.all([
+      reader.getWorkflow('campaign').createRun({ runId: 'shared-run' }),
+      reader.getWorkflow('campaign').createRun({ runId: 'shared-run' }),
+    ]);
+    expect(first).toBe(second);
+
+    const resumes = await Promise.allSettled([
+      first.resume({ resumeData: { approved: true } }),
+      second.resume({ resumeData: { approved: true } }),
+    ]);
+    expect(resumes.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+    expect(resumes.filter(result => result.status === 'rejected')).toHaveLength(1);
+    expect(resumeEffects).toBe(1);
+    await reader.stopWorkers();
   });
 
   it('refreshes the full nested definition closure rather than retaining a stale child', async () => {

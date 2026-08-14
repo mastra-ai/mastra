@@ -73,7 +73,7 @@ import { readPositiveIntEnv } from '../utils';
 import type { MastraVector } from '../vector';
 import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker } from '../worker';
 import type { MastraWorker, WorkerDeps } from '../worker';
-import type { AnyWorkflow, Workflow } from '../workflows';
+import type { AnyWorkflow, Workflow, WorkflowRunState } from '../workflows';
 import { normalizeWorkflowBuilderDefinition } from '../workflows/builder';
 import type { WorkflowBuilderDefinitionInput } from '../workflows/builder';
 import type { DynamicWorkflowGraph, WorkflowRegistryIndex, WorkflowRegistrySchemas } from '../workflows/dynamic';
@@ -825,9 +825,14 @@ export class Mastra<
   // non-serializable AISpan, so it cannot ride the engine's pubsub events —
   // the event processor reads it from here, keyed by runId, instead.
   #runTracingContexts: Map<string, TracingContext> = new Map();
-  // Serializes storage-backed dynamic workflow materialization so concurrent
-  // run creation cannot publish partially refreshed dependency closures.
-  #dynamicWorkflowRefreshQueue: Promise<void> = Promise.resolve();
+  // Each root owns its refresh queue. This prevents concurrent materialization
+  // of the same registry slot without coupling unrelated dynamic workflows.
+  #dynamicWorkflowRefreshQueues = new Map<string, Promise<void>>();
+  #dynamicWorkflowRevisionCache = new Map<string, { identity: string; root: AnyWorkflow }>();
+  // A suspended dynamic run must keep one revision-local Run instance across
+  // repeated createRun({ runId }) calls. The Run cleanup removes this entry
+  // once the execution reaches a terminal state.
+  #dynamicWorkflowRuns = new Map<string, ReturnType<AnyWorkflow['__createRunPinned']>>();
   // Server cache for temporary persistence and durable agent resumable streams
   #serverCache: MastraServerCache;
   // Cache for stored agents to allow in-memory modifications (like model changes) to persist across requests
@@ -4805,44 +4810,50 @@ export class Mastra<
   async #materializeDynamicWorkflowRevision(
     rootId: string,
     definitions: readonly DynamicWorkflowGraph[],
-  ): Promise<{ root: AnyWorkflow; workflows: Map<string, AnyWorkflow> }> {
+    definitionVersions?: ReadonlyMap<string, string>,
+  ): Promise<{ root: AnyWorkflow }> {
     const ordered = this.#orderDynamicDefinitionClosure(rootId, definitions);
-    const workflows = new Map<string, AnyWorkflow>();
-
-    // Materialize every public registry member with its own dependency objects.
-    // A root run must keep the child instances from its pinned closure; sharing
-    // the public child object would let a later child refresh change that run.
-    for (const target of ordered) {
-      const closure = this.#orderDynamicDefinitionClosure(target.id, ordered);
-      const revisionMembers = new Map<string, AnyWorkflow>();
-      for (const definition of closure) {
-        const { workflow } = await rehydrateWorkflow(definition, this, {
-          resolveWorkflow: id => revisionMembers.get(id),
-        });
-        // Revision-local child objects must not refresh from storage when the
-        // pinned root executes them. They still need the owning Mastra instance
-        // and native primitives for run persistence and resume.
-        this.#prepareDynamicWorkflow(workflow as AnyWorkflow, false);
-        revisionMembers.set(definition.id, workflow as AnyWorkflow);
-      }
-      const workflow = revisionMembers.get(target.id)!;
-      workflow.__setDynamicWorkflowDefinitions?.(closure);
-      workflows.set(target.id, workflow);
+    const identity = JSON.stringify(
+      ordered.map(definition => [definition.id, definitionVersions?.get(definition.id) ?? definition]),
+    );
+    const cached = this.#dynamicWorkflowRevisionCache.get(rootId);
+    if (cached?.identity === identity) {
+      return { root: cached.root };
     }
-    return { root: workflows.get(rootId)!, workflows };
+
+    // Materialize only the requested root and its dependency closure. Nested
+    // stored definitions stay revision-local; another member is published only
+    // when it is requested as a run root itself.
+    const revisionMembers = new Map<string, AnyWorkflow>();
+    const registry = this.#workflows as Record<string, AnyWorkflow>;
+    for (const definition of ordered) {
+      const { workflow } = await rehydrateWorkflow(definition, this, {
+        resolveWorkflow: id => revisionMembers.get(id) ?? registry[id],
+      });
+      this.#prepareDynamicWorkflow(workflow as AnyWorkflow, false);
+      revisionMembers.set(definition.id, workflow as AnyWorkflow);
+    }
+    const root = revisionMembers.get(rootId)!;
+    root.__setDynamicWorkflowDefinitions?.(ordered);
+    this.#dynamicWorkflowRevisionCache.set(rootId, { identity, root });
+    return { root };
   }
 
-  async #withDynamicWorkflowRefresh<T>(operation: () => Promise<T>): Promise<T> {
-    const previous = this.#dynamicWorkflowRefreshQueue;
+  async #withDynamicWorkflowRefresh<T>(rootId: string, operation: () => Promise<T>): Promise<T> {
+    const previous = this.#dynamicWorkflowRefreshQueues.get(rootId) ?? Promise.resolve();
     let release!: () => void;
-    this.#dynamicWorkflowRefreshQueue = new Promise<void>(resolve => {
+    const current = new Promise<void>(resolve => {
       release = resolve;
     });
+    this.#dynamicWorkflowRefreshQueues.set(rootId, current);
     await previous;
     try {
       return await operation();
     } finally {
       release();
+      if (this.#dynamicWorkflowRefreshQueues.get(rootId) === current) {
+        this.#dynamicWorkflowRefreshQueues.delete(rootId);
+      }
     }
   }
 
@@ -4860,12 +4871,22 @@ export class Mastra<
     const definitionStore = await this.#storage?.getStore('workflowDefinitions');
     if (!definitionStore) return { workflow };
 
-    return this.#withDynamicWorkflowRefresh(async () => {
+    return this.#withDynamicWorkflowRefresh(workflow.id, async () => {
       if (runId) {
         const workflowStore = await this.#storage?.getStore('workflows');
         const storedRun = await workflowStore?.getWorkflowRunById({ workflowName: workflow.id, runId });
-        const snapshot = storedRun?.snapshot;
-        if (snapshot && typeof snapshot !== 'string' && snapshot.dynamicWorkflowDefinitions?.length) {
+        const storedSnapshot = storedRun?.snapshot;
+        let snapshot: WorkflowRunState | undefined;
+        if (typeof storedSnapshot === 'string') {
+          try {
+            snapshot = JSON.parse(storedSnapshot) as WorkflowRunState;
+          } catch (error) {
+            throw new Error(`Dynamic workflow run "${runId}" contains an invalid JSON snapshot.`, { cause: error });
+          }
+        } else {
+          snapshot = storedSnapshot;
+        }
+        if (snapshot?.dynamicWorkflowDefinitions?.length) {
           const revision = await this.#materializeDynamicWorkflowRevision(
             workflow.id,
             snapshot.dynamicWorkflowDefinitions,
@@ -4880,13 +4901,52 @@ export class Mastra<
       }
 
       const { definitions } = await definitionStore.list({ status: 'active' });
-      const graphs = definitions.map(definition => this.#workflowDefinitionToGraph(definition));
-      const revision = await this.#materializeDynamicWorkflowRevision(workflow.id, graphs);
-      for (const [id, member] of revision.workflows) {
-        this.#replaceDynamicWorkflow(member, id);
-      }
+      const registry = this.#workflows as Record<string, AnyWorkflow>;
+      const eligibleDefinitions = definitions.filter(
+        definition => definition.id === workflow.id || registry[definition.id]?.origin !== 'code',
+      );
+      const graphs = eligibleDefinitions.map(definition => this.#workflowDefinitionToGraph(definition));
+      const definitionVersions = new Map(
+        eligibleDefinitions.map(definition => [definition.id, new Date(definition.updatedAt).toISOString()] as const),
+      );
+      const revision = await this.#materializeDynamicWorkflowRevision(workflow.id, graphs, definitionVersions);
+      this.#replaceDynamicWorkflow(revision.root, workflow.id);
       return { workflow: revision.root };
     });
+  }
+
+  /** @internal Resolves and shares one revision-local Run for a persisted dynamic run id. */
+  public async __createDynamicWorkflowRun(
+    workflow: AnyWorkflow,
+    options?: Parameters<AnyWorkflow['__createRunPinned']>[0],
+  ): ReturnType<AnyWorkflow['__createRunPinned']> {
+    if (!options?.runId) {
+      const resolved = await this.__resolveDynamicWorkflowForRun(workflow);
+      return resolved.workflow.__createRunPinned(options);
+    }
+
+    const key = JSON.stringify([workflow.id, options.runId]);
+    const existing = this.#dynamicWorkflowRuns.get(key);
+    if (existing) return existing;
+
+    let pending!: ReturnType<AnyWorkflow['__createRunPinned']>;
+    pending = (async () => {
+      const resolved = await this.__resolveDynamicWorkflowForRun(workflow, options.runId);
+      return resolved.workflow.__createRunPinned(options, () => {
+        if (this.#dynamicWorkflowRuns.get(key) === pending) {
+          this.#dynamicWorkflowRuns.delete(key);
+        }
+      });
+    })();
+    this.#dynamicWorkflowRuns.set(key, pending);
+    try {
+      return await pending;
+    } catch (error) {
+      if (this.#dynamicWorkflowRuns.get(key) === pending) {
+        this.#dynamicWorkflowRuns.delete(key);
+      }
+      throw error;
+    }
   }
 
   /**

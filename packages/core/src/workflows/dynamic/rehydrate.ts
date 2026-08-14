@@ -12,6 +12,7 @@ import { createStepFromAgent, createStepFromTool } from '../step-factories';
 import type { SerializedSingleStepEntry, SerializedStepOptions, SingleStepEntry, StepFlowEntry } from '../types';
 import { getSingleStepEntryId } from '../utils';
 import { mapVariable, predicateToCondition } from '../workflow';
+import type { AnyWorkflow } from '../workflow';
 import { jsonSchemaToZod } from './json-schema-to-zod';
 import type { JsonSchema, JsonSchemaToZodOptions } from './json-schema-to-zod';
 import { parseMapConfig } from './mapping-config';
@@ -40,8 +41,10 @@ export interface DynamicWorkflowGraph {
  * Always destructure: `const { workflow } = await rehydrateWorkflow(...)`.
  */
 export interface RehydratedWorkflow {
-  workflow: any;
+  workflow: AnyWorkflow;
 }
+
+type ResolveWorkflow = (id: string) => AnyWorkflow | undefined;
 
 /**
  * Options controlling how `rehydrateWorkflow` handles unsupported JSON Schema
@@ -56,7 +59,7 @@ export interface RehydrateDynamicWorkflowOptions extends RehydrateWorkflowOption
    * Dynamic nested workflows resolve from the revision bundle before falling
    * back to the Mastra registry.
    */
-  resolveWorkflow?: (id: string) => any | undefined;
+  resolveWorkflow?: ResolveWorkflow;
 }
 
 export async function rehydrateWorkflow(
@@ -327,7 +330,7 @@ function rehydrateSingleEntry(
 function rehydrateMapConfig(
   cfg: Record<string, any>,
   mastra: Mastra,
-  resolveWorkflow?: (id: string) => any | undefined,
+  resolveWorkflow?: ResolveWorkflow,
 ): Record<string, any> {
   const out: Record<string, any> = {};
   for (const [key, source] of Object.entries(cfg)) {
@@ -389,7 +392,7 @@ function tryGetToolById(mastra: Mastra, id: string): any | undefined {
  * the key the workflow was registered under (`workflows: { greetingWorkflow }`
  * vs `id: 'greeting-workflow'`).
  */
-function tryGetWorkflowById(mastra: Mastra, id: string): any | undefined {
+function tryGetWorkflowById(mastra: Mastra, id: string): AnyWorkflow | undefined {
   if (!id) return undefined;
   if (typeof (mastra as any).getWorkflowById === 'function') {
     try {
@@ -406,11 +409,7 @@ function tryGetWorkflowById(mastra: Mastra, id: string): any | undefined {
   }
 }
 
-function assertWorkflowExists(
-  mastra: Mastra,
-  workflowId: string,
-  resolveWorkflow?: (id: string) => any | undefined,
-): any {
+function assertWorkflowExists(mastra: Mastra, workflowId: string, resolveWorkflow?: ResolveWorkflow): AnyWorkflow {
   const wf = resolveWorkflow?.(workflowId) ?? tryGetWorkflowById(mastra, workflowId);
   if (!wf) {
     throw new Error(

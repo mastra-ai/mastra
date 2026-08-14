@@ -2535,6 +2535,11 @@ export class Workflow<
     /** Optional pubsub instance for streaming events. If not provided, a new EventEmitterPubSub is created. */
     pubsub?: PubSub;
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>> {
+    if (this.origin === 'dynamic' && this.dynamicStorageBacked && this.#mastra) {
+      return this.#mastra.__createDynamicWorkflowRun(this as AnyWorkflow, options) as Promise<
+        Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>
+      >;
+    }
     const resolved = await this.#mastra?.__resolveDynamicWorkflowForRun(this as any, options?.runId);
     if (resolved && resolved.workflow !== this) {
       return resolved.workflow.__createRunPinned(options);
@@ -2543,12 +2548,15 @@ export class Workflow<
   }
 
   /** @internal Creates a run from this already-resolved immutable workflow revision. */
-  async __createRunPinned(options?: {
-    runId?: string;
-    resourceId?: string;
-    disableScorers?: boolean;
-    pubsub?: PubSub;
-  }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>> {
+  async __createRunPinned(
+    options?: {
+      runId?: string;
+      resourceId?: string;
+      disableScorers?: boolean;
+      pubsub?: PubSub;
+    },
+    sharedCleanup?: () => void,
+  ): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>> {
     if (this.stepFlow.length === 0) {
       throw new Error(
         'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
@@ -2583,7 +2591,11 @@ export class Workflow<
         retryConfig: this.retryConfig,
         serializedStepGraph: this.serializedStepGraph,
         disableScorers: options?.disableScorers,
-        cleanup: () => this.#runs.delete(runIdToUse),
+        cleanup: () => {
+          this.#runs.delete(runIdToUse);
+          sharedCleanup?.();
+        },
+        serializeResumes: this.origin === 'dynamic',
         tracingPolicy: this.#options?.tracingPolicy,
         workflowSteps: this.steps,
         validateInputs: this.#options?.validateInputs,
@@ -2634,7 +2646,7 @@ export class Workflow<
         error: undefined,
         timestamp: Date.now(),
         dynamicWorkflowDefinitions: this.dynamicWorkflowDefinitions
-          ? structuredClone(Array.from(this.dynamicWorkflowDefinitions))
+          ? Array.from(this.dynamicWorkflowDefinitions)
           : undefined,
       };
       await workflowsStore?.persistWorkflowSnapshot({
@@ -3323,6 +3335,8 @@ export class Run<
   protected requestContextSchema?: StandardSchemaWithJSON<any>;
 
   protected cleanup?: () => void;
+  protected serializeResumes: boolean;
+  #resumeQueue: Promise<void> = Promise.resolve();
 
   protected retryConfig?: {
     attempts?: number;
@@ -3344,6 +3358,7 @@ export class Run<
       delay?: number;
     };
     cleanup?: () => void;
+    serializeResumes?: boolean;
     serializedStepGraph: SerializedStepFlowEntry[];
     disableScorers?: boolean;
     tracingPolicy?: TracingPolicy;
@@ -3363,6 +3378,7 @@ export class Run<
     this.pubsub = params.pubsub ?? new EventEmitterPubSub();
     this.retryConfig = params.retryConfig;
     this.cleanup = params.cleanup;
+    this.serializeResumes = params.serializeResumes ?? false;
     this.disableScorers = params.disableScorers;
     this.tracingPolicy = params.tracingPolicy;
     this.workflowSteps = params.workflowSteps;
@@ -4247,6 +4263,26 @@ export class Run<
   }
 
   protected async _resume<TResume>(
+    params: Parameters<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>['_resumeUnserialized']>[0],
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    if (!this.serializeResumes) {
+      return this._resumeUnserialized(params);
+    }
+
+    const previous = this.#resumeQueue;
+    let release!: () => void;
+    this.#resumeQueue = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      return await this._resumeUnserialized(params);
+    } finally {
+      release();
+    }
+  }
+
+  protected async _resumeUnserialized<TResume>(
     params: {
       resumeData?: TResume;
       step?:
