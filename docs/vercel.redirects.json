@@ -752,7 +752,7 @@
     },
     {
       "source": "/docs/tools-mcp/advanced-usage",
-      "destination": "/docs/agents/using-tools",
+      "destination": "/docs/agents/tools",
       "permanent": true
     },
     {
@@ -762,7 +762,7 @@
     },
     {
       "source": "/docs/tools-mcp/overview",
-      "destination": "/docs/agents/using-tools",
+      "destination": "/docs/agents/tools",
       "permanent": true
     },
     {
@@ -917,7 +917,7 @@
     },
     {
       "source": "/docs/streaming/tool-streaming",
-      "destination": "/docs/agents/using-tools",
+      "destination": "/docs/agents/tools",
       "permanent": true
     },
     {
@@ -1002,7 +1002,7 @@
     },
     {
       "source": "/docs/tools/overview",
-      "destination": "/docs/agents/using-tools",
+      "destination": "/docs/agents/tools",
       "permanent": true
     },
     {
@@ -1092,7 +1092,7 @@
     },
     {
       "source": "/docs/guide/tools",
-      "destination": "/docs/agents/using-tools",
+      "destination": "/docs/agents/tools",
       "permanent": true
     },
     {
@@ -1877,7 +1877,7 @@
     },
     {
       "source": "/guides/guide/web-search",
-      "destination": "/docs/agents/using-tools",
+      "destination": "/docs/agents/tools",
       "permanent": true
     },
     {
@@ -1892,7 +1892,7 @@
     },
     {
       "source": "/guides/guide/stock-agent",
-      "destination": "/docs/agents/using-tools",
+      "destination": "/docs/agents/tools",
       "permanent": true
     },
     {
@@ -2068,6 +2068,11 @@
     {
       "source": "/docs/mcp/overview",
       "destination": "/docs/connections/mcp",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/using-tools",
+      "destination": "/docs/agents/tools",
       "permanent": true
     }
   ]

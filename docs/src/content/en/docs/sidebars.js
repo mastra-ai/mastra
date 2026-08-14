@@ -46,7 +46,7 @@ const sidebars = {
           items: [
             {
               type: 'doc',
-              id: 'agents/using-tools',
+              id: 'agents/tools',
               label: 'Tools',
             },
             {
