@@ -2,7 +2,6 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useEffect, useState } from 'react';
 import { TooltipProvider } from '../Tooltip';
 import { MarkdownRenderer } from './markdown-renderer';
-import { useSmoothText } from '@/hooks/use-smooth-text';
 
 const meta: Meta<typeof MarkdownRenderer> = {
   title: 'Composite/MarkdownRenderer',
@@ -190,22 +189,10 @@ function useReplay(reply: string): string {
   return text;
 }
 
-function CadenceColumns() {
+function ArrivingReply() {
   const arriving = useReplay(STREAMED_REPLY);
-  const revealed = useSmoothText(arriving);
 
-  return (
-    <div className="grid grid-cols-2 gap-6">
-      <div>
-        <p className="text-icon3 text-ui-xs mb-2">As it arrives</p>
-        <MarkdownRenderer streaming>{arriving}</MarkdownRenderer>
-      </div>
-      <div>
-        <p className="text-icon3 text-ui-xs mb-2">Smoothed</p>
-        <MarkdownRenderer streaming={revealed !== STREAMED_REPLY}>{revealed}</MarkdownRenderer>
-      </div>
-    </div>
-  );
+  return <MarkdownRenderer streaming={arriving !== STREAMED_REPLY}>{arriving}</MarkdownRenderer>;
 }
 
 function StreamCadence() {
@@ -220,12 +207,12 @@ function StreamCadence() {
       >
         Replay
       </button>
-      <CadenceColumns key={run} />
+      <ArrivingReply key={run} />
     </div>
   );
 }
 
-/** Both columns read the same clumpy stream, so only the cadence differs. */
+/** The clumps the replay feeds in should not be readable in the cadence that comes out. */
 export const Streaming: Story = {
   render: () => <StreamCadence />,
 };

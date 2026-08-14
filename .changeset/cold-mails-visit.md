@@ -2,16 +2,14 @@
 '@mastra/playground-ui': minor
 ---
 
-Streamed replies now render at a steady pace instead of in bursts.
+Streamed replies now arrive one word at a time instead of in bursts.
 
-Chunks reach the browser unevenly — a proxy flushes, a tool call ends, the model changes pace — and rendering each one on arrival makes a reply lurch: five words appear at once, then nothing for a fifth of a second. A new `useSmoothText` hook sits between the arriving text and the renderer and reveals it at a rate set by how far behind it is, so a burst spreads out and a gap closes rather than stalling. On a stream flushing 34 characters every 130ms, that turns 33-character jumps into 4-character steps, one per frame.
+Chunks reach the browser unevenly — a proxy flushes, a tool call ends, the model changes pace — and rendering each one on arrival makes a reply lurch: ten words at once, then nothing for a fifth of a second. `MarkdownRenderer` now buffers a reply marked `streaming` and plays it back on its own frame clock, laying down at most one word per frame. It measures the speed the reply is arriving at and plays at that speed, holding about a second of text back so a burst or a gap is absorbed rather than shown, and easing into a new speed instead of tracking one.
 
 ```tsx
-import { useSmoothText } from '@mastra/playground-ui/hooks/use-smooth-text';
-
-const revealed = useSmoothText(part.text);
-
-return <MarkdownRenderer streaming={part.streaming || revealed !== part.text}>{revealed}</MarkdownRenderer>;
+<MarkdownRenderer streaming={part.state === 'streaming'}>{part.text}</MarkdownRenderer>
 ```
 
-Whatever is on screen when the hook mounts counts as already read, so a thread opened from history renders whole. Readers who ask for reduced motion get the text at once.
+Each word fades in as it lands, and code fades in whole — a fence or a piece of inline code appears with its background rather than a token at a time. A word keeps the element it arrived in for good and never gains its entrance twice, so a paragraph that re-renders mid-reply redraws rather than replays.
+
+A thread opened from history renders whole. A reply opened part-written joins it rather than retyping it, and what was already on screen when you opened it stays put: only the words landing from then on animate. Readers who ask for reduced motion get the text at once, unanimated.

@@ -67,14 +67,14 @@ describe('AssistantTextPartRenderer', () => {
     expect(container.textContent).toBe(CHUNK);
   });
 
-  it('keeps the streaming treatment until the last word is revealed', () => {
+  it('finishes revealing a chunk the reply ended on', () => {
     vi.useFakeTimers();
     const { container, rerender } = render(<AssistantTextPartRenderer part={textPart('Ready.', 'streaming')} />);
 
     rerender(<AssistantTextPartRenderer part={textPart(CHUNK)} />);
-    expect(container.querySelector('.mastra-markdown-streaming')).not.toBeNull();
+    expect(container.textContent?.length).toBeLessThan(CHUNK.length);
 
     drain(() => container.textContent, CHUNK);
-    expect(container.querySelector('.mastra-markdown-streaming')).toBeNull();
+    expect(container.textContent).toBe(CHUNK);
   });
 });
