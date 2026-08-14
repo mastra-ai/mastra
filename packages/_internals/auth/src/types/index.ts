@@ -14,10 +14,7 @@ export type AuthorizeUserFn<TUser, TResult = Promise<boolean> | boolean> = {
   bivarianceHack(user: TUser, request: MastraAuthRequest): TResult;
 }['bivarianceHack'];
 
-function headerFromPlainObject(
-  headers: Record<string, string | string[] | undefined>,
-  name: string,
-): string | null {
+function headerFromPlainObject(headers: Record<string, string | string[] | undefined>, name: string): string | null {
   const normalizedName = name.toLowerCase();
   const matchingKey = Object.keys(headers).find(key => key.toLowerCase() === normalizedName);
   const value = matchingKey === undefined ? undefined : headers[matchingKey];
