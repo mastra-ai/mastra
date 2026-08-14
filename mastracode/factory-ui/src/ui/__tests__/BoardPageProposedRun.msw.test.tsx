@@ -84,12 +84,28 @@ const userSession = {
   updatedAt: '2026-08-10T00:00:00.000Z',
 };
 
-function stubBoardEndpoints({ withLiveSession = false }: { withLiveSession?: boolean } = {}) {
+/**
+ * An approved plan transitions the card to Building and writes the `work`
+ * session ref itself — no run ever started, but the slot looks used.
+ */
+const buildingWorkItem = {
+  ...workItem,
+  stages: ['execute'],
+  sessions: {
+    triage: { sessionId: SESSION_ID, branch: 'factory/issue-1', threadId: 'thread-1', startedBy: 'user-1' },
+    work: { sessionId: SESSION_ID, branch: 'factory/issue-1', threadId: 'thread-1', startedBy: 'user-1' },
+  },
+};
+
+function stubBoardEndpoints({
+  withLiveSession = false,
+  building = false,
+}: { withLiveSession?: boolean; building?: boolean } = {}) {
   const settled: string[] = [];
   const startRequests: unknown[] = [];
   let status: 'proposed' | 'pending' | 'dismissed' = 'proposed';
-  const item = withLiveSession ? liveSessionWorkItem : workItem;
-  const sessions = withLiveSession ? [userSession] : [];
+  const item = building ? buildingWorkItem : withLiveSession ? liveSessionWorkItem : workItem;
+  const sessions = withLiveSession || building ? [userSession] : [];
 
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -120,7 +136,10 @@ function stubBoardEndpoints({ withLiveSession = false }: { withLiveSession?: boo
       HttpResponse.json({ workItems: [item] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
-      HttpResponse.json({ decisions: [decision(status)] }),
+      HttpResponse.json({ decisions: building ? [] : [decision(status)] }),
+    ),
+    http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
+      HttpResponse.json({ session: userSession }),
     ),
     http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions/${DECISION_ID}/approve`, () => {
       settled.push('approve');
@@ -134,7 +153,19 @@ function stubBoardEndpoints({ withLiveSession = false }: { withLiveSession?: boo
     }),
     http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/runs/start`, async ({ request }) => {
       startRequests.push(await request.json());
-      return HttpResponse.json({});
+      return HttpResponse.json({
+        prepared: {
+          workItemId: ITEM_ID,
+          bindingId: 'binding-1',
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          sessionId: SESSION_ID,
+          branch: 'factory/issue-1',
+          revision: 2,
+          kickoffStatus: 'queued',
+          replayed: false,
+        },
+      });
     }),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
       HttpResponse.json({
@@ -201,5 +232,17 @@ describe('Board card with a proposed run', () => {
 
     await waitFor(() => expect(settled).toEqual(['approve']));
     expect(startRequests).toHaveLength(0);
+  });
+
+  it('still offers the Building run when the plan already filled the work session slot', async () => {
+    const { startRequests } = stubBoardEndpoints({ building: true });
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    const card = await screen.findByRole('article', { name: 'Fix login bug' });
+    await user.click(within(card).getByRole('button', { name: 'Actions for Fix login bug' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Build' }));
+
+    await waitFor(() => expect(startRequests).toHaveLength(1));
   });
 });
