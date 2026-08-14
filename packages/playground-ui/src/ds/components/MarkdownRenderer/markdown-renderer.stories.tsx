@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { useEffect, useState } from 'react';
 import { TooltipProvider } from '../Tooltip';
 import { MarkdownRenderer } from './markdown-renderer';
+import { useSmoothText } from '@/hooks/use-smooth-text';
 
 const meta: Meta<typeof MarkdownRenderer> = {
   title: 'Composite/MarkdownRenderer',
@@ -157,4 +159,73 @@ Some content here.
 
 More content after the divider.`,
   },
+};
+
+const STREAMED_REPLY = `Here is what I found in the router.
+
+The redirect runs before the session is read, so a signed-in visitor is sent to
+the login page and back again.
+
+\`\`\`ts
+if (!session) return redirect('/login');
+\`\`\`
+
+Moving the guard below the loader fixes it.`;
+
+/** Chunks land in clumps, the way a proxy flushes them, not one word at a time. */
+function useReplay(reply: string): string {
+  const [text, setText] = useState('');
+
+  useEffect(() => {
+    let landed = 0;
+    const timer = setInterval(() => {
+      landed = Math.min(reply.length, landed + 12 + Math.floor(Math.random() * 45));
+      setText(reply.slice(0, landed));
+      if (landed === reply.length) clearInterval(timer);
+    }, 130);
+
+    return () => clearInterval(timer);
+  }, [reply]);
+
+  return text;
+}
+
+function CadenceColumns() {
+  const arriving = useReplay(STREAMED_REPLY);
+  const revealed = useSmoothText(arriving);
+
+  return (
+    <div className="grid grid-cols-2 gap-6">
+      <div>
+        <p className="text-icon3 text-ui-xs mb-2">As it arrives</p>
+        <MarkdownRenderer streaming>{arriving}</MarkdownRenderer>
+      </div>
+      <div>
+        <p className="text-icon3 text-ui-xs mb-2">Smoothed</p>
+        <MarkdownRenderer streaming={revealed !== STREAMED_REPLY}>{revealed}</MarkdownRenderer>
+      </div>
+    </div>
+  );
+}
+
+function StreamCadence() {
+  const [run, setRun] = useState(0);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <button
+        type="button"
+        onClick={() => setRun(count => count + 1)}
+        className="text-icon5 border-border1 text-ui-sm self-start rounded-md border px-3 py-1"
+      >
+        Replay
+      </button>
+      <CadenceColumns key={run} />
+    </div>
+  );
+}
+
+/** Both columns read the same clumpy stream, so only the cadence differs. */
+export const Streaming: Story = {
+  render: () => <StreamCadence />,
 };

@@ -9,6 +9,7 @@ import { MessageScrollerItem } from '@mastra/playground-ui/components/MessageScr
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { startsUserTurn } from '@mastra/playground-ui/components/ThreadRail';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useSmoothText } from '@mastra/playground-ui/hooks/use-smooth-text';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageFactory } from '@mastra/react/ui';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
@@ -666,6 +667,16 @@ export function ChannelOriginBadge({ origin }: { origin: { platform: string; aut
   );
 }
 
+function AssistantText({ text, streaming }: { text: string; streaming?: boolean }) {
+  const revealed = useSmoothText(text);
+
+  return (
+    <MarkdownRenderer className="my-3" streaming={streaming || revealed !== text}>
+      {revealed}
+    </MarkdownRenderer>
+  );
+}
+
 function MessageBubble({
   entry,
   suspensions,
@@ -722,11 +733,7 @@ function MessageBubble({
         return activation ? <SkillMessage activation={activation} /> : <MarkdownRenderer>{part.text}</MarkdownRenderer>;
       }
 
-      return (
-        <MarkdownRenderer className="my-3" streaming={entry.streaming}>
-          {part.text}
-        </MarkdownRenderer>
-      );
+      return <AssistantText text={part.text} streaming={entry.streaming} />;
     },
     Reasoning: (part: ReasoningPart) => (
       <div className="border-border1 my-1.5 border-l-2 pl-2.5 italic [&_p]:my-0.5">

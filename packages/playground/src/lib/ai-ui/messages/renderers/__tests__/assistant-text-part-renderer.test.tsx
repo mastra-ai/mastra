@@ -1,9 +1,23 @@
 import type { TextPart } from '@mastra/react';
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { act, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { MessageMetadata } from '../../message-metadata';
 import { AssistantTextPartRenderer } from '../assistant-text-part-renderer';
+
+const CHUNK = `Ready. ${Array.from({ length: 40 }, (_, index) => `word${index}`).join(' ')}`;
+
+const textPart = (text: string, state?: string) => ({ type: 'text', text, state }) as TextPart;
+
+function drain(read: () => string | null, target: string) {
+  for (let frames = 0; frames < 300 && read() !== target; frames++) {
+    act(() => void vi.advanceTimersByTime(16));
+  }
+}
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('AssistantTextPartRenderer', () => {
   it('renders markdown text', () => {
@@ -40,5 +54,27 @@ describe('AssistantTextPartRenderer', () => {
 
     expect(screen.getByText('Complete')).not.toBeNull();
     expect(screen.getByText('all good')).not.toBeNull();
+  });
+
+  it('reveals a chunk over time instead of dumping it on arrival', () => {
+    vi.useFakeTimers();
+    const { container, rerender } = render(<AssistantTextPartRenderer part={textPart('Ready.', 'streaming')} />);
+
+    rerender(<AssistantTextPartRenderer part={textPart(CHUNK, 'streaming')} />);
+    expect(container.textContent?.length).toBeLessThan(CHUNK.length);
+
+    drain(() => container.textContent, CHUNK);
+    expect(container.textContent).toBe(CHUNK);
+  });
+
+  it('keeps the streaming treatment until the last word is revealed', () => {
+    vi.useFakeTimers();
+    const { container, rerender } = render(<AssistantTextPartRenderer part={textPart('Ready.', 'streaming')} />);
+
+    rerender(<AssistantTextPartRenderer part={textPart(CHUNK)} />);
+    expect(container.querySelector('.mastra-markdown-streaming')).not.toBeNull();
+
+    drain(() => container.textContent, CHUNK);
+    expect(container.querySelector('.mastra-markdown-streaming')).toBeNull();
   });
 });

@@ -1,6 +1,7 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { MarkdownRenderer, type MarkdownExternalLinkTarget } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { useSmoothText } from '@mastra/playground-ui/hooks/use-smooth-text';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { CheckCircleIcon, ChevronUpIcon } from 'lucide-react';
@@ -23,6 +24,7 @@ export interface MessageTextProps {
  */
 export const MessageText = ({ text, metadata, externalLinkTarget, streaming }: MessageTextProps) => {
   const [collapsedCompletionCheck, setCollapsedCompletionCheck] = useState(false);
+  const revealed = useSmoothText(text);
 
   if (metadata?.status === 'tripwire') {
     return <TripwireNotice reason={text} tripwire={metadata.tripwire} />;
@@ -80,8 +82,8 @@ export const MessageText = ({ text, metadata, externalLinkTarget, streaming }: M
   }
 
   return (
-    <MarkdownRenderer externalLinkTarget={externalLinkTarget} streaming={streaming}>
-      {text}
+    <MarkdownRenderer externalLinkTarget={externalLinkTarget} streaming={streaming || revealed !== text}>
+      {revealed}
     </MarkdownRenderer>
   );
 };

@@ -1,11 +1,11 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MessageRow } from '../message-row';
 import { buildGlobalOmPartsByCycleId, convertOmPartsInMastraMessage } from '@/services/om-parts-converter';
@@ -22,7 +22,10 @@ beforeEach(() => {
   server.use(...mcpEmptyHandlers);
 });
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 const Providers = ({ children }: { children: ReactNode }) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -74,6 +77,26 @@ describe('MessageRow', () => {
       }),
     );
     expect(screen.getByText('world')).toBeTruthy();
+  });
+
+  // The reveal only paces if the factory keeps the text part mounted as the
+  // reply grows; a remount would show every chunk whole again.
+  it('reveals a growing reply gradually', () => {
+    vi.useFakeTimers();
+    const reply = `Ready. ${Array.from({ length: 40 }, (_, index) => `word${index}`).join(' ')}`;
+    const growing = (text: string) =>
+      baseMessage({ content: { format: 2, parts: [{ type: 'text', text, state: 'streaming' } as never] } });
+
+    const { container, rerender } = render(<MessageRow message={growing('Ready.')} />, { wrapper: Providers });
+    rerender(<MessageRow message={growing(reply)} />);
+
+    expect(container.textContent).not.toContain('word39');
+
+    for (let frames = 0; frames < 300 && !container.textContent?.includes('word39'); frames++) {
+      act(() => void vi.advanceTimersByTime(16));
+    }
+
+    expect(container.textContent).toContain('word39');
   });
 
   it('renders user text', () => {
