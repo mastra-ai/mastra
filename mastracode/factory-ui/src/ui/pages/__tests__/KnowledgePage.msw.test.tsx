@@ -36,7 +36,12 @@ const graphFixture: KnowledgeGraphPayload = {
       updatedAt: '2026-08-13T01:00:00.000Z',
     },
   ],
-  edges: [{ id: 'wikilink:ent-1:ent-2', source: 'ent-1', target: 'ent-2', type: 'wikilink', factId: 'fact-1' }],
+  edges: [
+    { id: 'wikilink:ent-1:ent-2', source: 'ent-1', target: 'ent-2', type: 'wikilink', factId: 'fact-1' },
+    // Both entities carry an incoming edge so both render labels (the label
+    // rule hides names on nodes with zero incoming memories).
+    { id: 'wikilink:ent-2:ent-1', source: 'ent-2', target: 'ent-1', type: 'wikilink', factId: 'fact-2' },
+  ],
   truncated: false,
   outOfWindow: [],
   unresolvedCapped: { count: 0, names: [] },
@@ -75,13 +80,36 @@ function renderRoute() {
 }
 
 describe('KnowledgePage', () => {
-  it('renders the page from the graph endpoint payload', async () => {
+  it('renders graph nodes from the endpoint payload', async () => {
     stubKnowledgeRoute();
     renderRoute();
 
     expect(await screen.findByRole('region', { name: 'Knowledge graph' })).toBeInTheDocument();
-    expect(await screen.findByText(/2 entities/)).toBeInTheDocument();
-    expect(screen.getByText(/1 relationships?/)).toBeInTheDocument();
+    const nodes = await screen.findAllByTestId('knowledge-node');
+    expect(nodes).toHaveLength(2);
+    expect(screen.getByText('Payments Service')).toBeInTheDocument();
+    expect(screen.getByText('Deploy Runbook')).toBeInTheDocument();
+    // Rung + pin filter chips render.
+    expect(screen.getByRole('button', { name: 'Project' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pinned' })).toBeInTheDocument();
+    // Clean payload → no truncation banner.
+    expect(screen.queryByTestId('knowledge-truncation-banner')).not.toBeInTheDocument();
+  });
+
+  it('shows the truncation banner when the payload window was capped', async () => {
+    stubKnowledgeRoute({
+      ...graphFixture,
+      truncated: true,
+      outOfWindow: [{ id: 'ent-x', name: 'Elsewhere' }],
+      unresolvedCapped: { count: 3, names: ['Ghost'] },
+    });
+    renderRoute();
+
+    const banner = await screen.findByTestId('knowledge-truncation-banner');
+    expect(banner).toHaveTextContent(/Partial view/);
+    expect(banner).toHaveTextContent(/newest 2 entities/);
+    expect(banner).toHaveTextContent(/1 linked entities outside the window/);
+    expect(banner).toHaveTextContent(/3 links unresolved/);
   });
 
   it('shows the sidebar Knowledge entry (brain icon) under Audit log', async () => {
