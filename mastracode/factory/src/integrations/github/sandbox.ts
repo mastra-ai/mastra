@@ -294,6 +294,14 @@ export interface MaterializeRepoOptions {
   token: string;
   storage: MaterializationStore;
   onProgress?: ProgressFn;
+  /**
+   * Skip the default-branch `git pull --ff-only` when the workdir already
+   * holds a checkout. Set when the checkout was just seeded from a fresh base
+   * checkpoint (rebuilt on every default-branch push), where the pull is
+   * redundant network cost: session work happens on a branch that
+   * `checkoutSessionBranch` fetches fresh regardless.
+   */
+  skipPullOnExistingCheckout?: boolean;
 }
 
 /**
@@ -307,7 +315,7 @@ export async function materializeRepo(options: MaterializeRepoOptions): Promise<
 }
 
 async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<void> {
-  const { row: sandboxRow, repoInfo, sandbox, token, storage, onProgress } = options;
+  const { row: sandboxRow, repoInfo, sandbox, token, storage, onProgress, skipPullOnExistingCheckout } = options;
   const workdir = sandboxRow.sandboxWorkdir;
   const repo = repoInfo.repoFullName;
 
@@ -344,6 +352,9 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
   // exists. Disk is the source of truth: detect the checkout instead of
   // trusting the row.
   const alreadyMaterialized = await hasExistingCheckout(sandbox, workdir, repo);
+  process.stderr.write(
+    `[factory:timing] workspace.materialize.path ${!alreadyMaterialized ? 'clone' : skipPullOnExistingCheckout ? 'seeded-skip' : 'pull'}\n`,
+  );
 
   let tokenInRemote = false;
   try {
@@ -377,6 +388,17 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
         // disk instead of assuming the failed clone left nothing behind.
         tokenInRemote = await hasGitDir(sandbox, workdir);
         throw classifyGitFailure(clone, 'clone-failed');
+      }
+      tokenInRemote = true;
+    } else if (skipPullOnExistingCheckout) {
+      // 2b'. Checkpoint-seeded checkout: the base checkpoint is rebuilt on
+      // every default-branch push, so the seeded default branch is already at
+      // (or minutes behind) HEAD. Skip the network pull — the session branch
+      // is fetched fresh by `checkoutSessionBranch` right after — but still
+      // point origin at the token URL so that fetch can authenticate.
+      const setUrl = await sh(sandbox, `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(authUrl)}`);
+      if (setUrl.exitCode !== 0) {
+        throw new MaterializeError(`Failed to set git remote: ${setUrl.stderr}`, 'pull-failed');
       }
       tokenInRemote = true;
     } else {

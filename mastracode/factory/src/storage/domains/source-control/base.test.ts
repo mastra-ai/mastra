@@ -1,6 +1,7 @@
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { baseCheckpointIsStale } from '../../../sandbox/base-checkpoint-triggers.js';
 import { FactoryProjectsStorage } from '../projects/base.js';
 import { SourceControlStorage } from './base.js';
 import type { ProjectRepository, SourceControlStorageHandle } from './base.js';
@@ -239,6 +240,20 @@ describe('SourceControlStorage', () => {
     await github.projectRepositories.setBaseCheckpoint({ id: link.id, checkpoint: null });
     fresh = await github.projectRepositories.get({ orgId: 'org-1', id: link.id });
     expect(fresh?.baseCheckpoint).toBeNull();
+  });
+
+  it('round-trips a null setupCommandHash so no-setup-command checkpoints stay fresh', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    await github.projectRepositories.setBaseCheckpoint({
+      id: link.id,
+      checkpoint: { name: `repo-${link.id}`, sha: 'abc123', builtAt: new Date(), setupCommandHash: null },
+    });
+    const fresh = await github.projectRepositories.get({ orgId: 'org-1', id: link.id });
+    // Must stay null (not ''), otherwise baseCheckpointIsStale() compares
+    // '' !== hashSetupCommand(null) and permanently marks the checkpoint stale.
+    expect(fresh?.baseCheckpoint?.setupCommandHash).toBeNull();
+    expect(baseCheckpointIsStale(fresh!)).toBe(false);
   });
 
   it('invalidates base-checkpoint metadata when the setup command changes', async () => {

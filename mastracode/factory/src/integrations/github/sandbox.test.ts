@@ -130,8 +130,9 @@ function materializeRepo(
   repoInfo: RepoMaterializeInfo,
   sandbox: MaterializationSandbox,
   token: string,
+  skipPullOnExistingCheckout?: boolean,
 ) {
-  return materializeRepoWithStorage({ row, repoInfo, sandbox, token, storage });
+  return materializeRepoWithStorage({ row, repoInfo, sandbox, token, storage, skipPullOnExistingCheckout });
 }
 
 beforeEach(() => {
@@ -286,6 +287,25 @@ describe('materializeRepo', () => {
     expect(joined).toContain('pull --ff-only');
     expect(sandbox.calls.some(c => c.includes('git clone'))).toBe(false);
     expect(joined).toContain('https://x-access-token:tok-xyz@github.com/octocat/hello.git');
+  });
+
+  it('skips the pull on an existing checkout when seeded from a fresh base checkpoint', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('remote get-url origin')) {
+        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
+      }
+      return OK;
+    });
+    await materializeRepo(makeRow({ materializedAt: null }), makeRepoInfo(), sandbox, 'tok-xyz', true);
+
+    const joined = sandbox.calls.join('\n');
+    expect(sandbox.calls.some(c => c.includes('git clone'))).toBe(false);
+    expect(sandbox.calls.some(c => c.includes('pull --ff-only'))).toBe(false);
+    // origin still repointed at the token URL (for the session-branch fetch)…
+    expect(joined).toContain('https://x-access-token:tok-xyz@github.com/octocat/hello.git');
+    // …and scrubbed back afterwards.
+    expect(joined).toContain('https://github.com/octocat/hello.git');
+    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
   });
 
   it('re-clones when the DB says materialized but the sandbox disk was wiped', async () => {

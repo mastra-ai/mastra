@@ -675,7 +675,7 @@ function toProjectRepository(row: ProjectRepositoryDbRow): ProjectRepository {
             name: row.base_checkpoint_name,
             sha: row.base_checkpoint_sha,
             builtAt: row.base_checkpoint_built_at,
-            setupCommandHash: row.base_checkpoint_setup_hash ?? '',
+            setupCommandHash: row.base_checkpoint_setup_hash ?? null,
           }
         : null,
     createdAt: row.created_at,

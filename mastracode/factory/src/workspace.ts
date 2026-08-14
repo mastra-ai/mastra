@@ -485,13 +485,17 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           ...(isLocalSandbox ? { workingDirectory: workdir } : {}),
           actingUserId: userId,
         });
-      const runMaterialize = (target: Awaited<ReturnType<typeof ensureSandbox>>) =>
+      const runMaterialize = (target: Awaited<ReturnType<typeof ensureSandbox>>, skipPull: boolean) =>
         materializeRepo({
           row: { id: session.id, sandboxWorkdir: workdir, materializedAt: session.materializedAt },
           repoInfo: { repoFullName: repoFullName, defaultBranch: repository.defaultBranch },
           sandbox: target,
           token,
           storage: storage.sessions,
+          // A checkpoint-seeded checkout is already at (or minutes behind) the
+          // default branch HEAD — skip the redundant network pull so the first
+          // agent turn isn't stalled behind it.
+          skipPullOnExistingCheckout: skipPull,
         });
       const isGitMissing = (error: unknown) => error instanceof MaterializeError && error.code === 'git-missing';
 
@@ -509,8 +513,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         !session.materializedAt &&
         !claimedPooledSandbox &&
         (await hasExistingCheckout(sandbox, workdir, repoFullName));
+      process.stderr.write(
+        `[factory:timing] workspace.materialize.seed seeded=${seededFromBaseCheckpoint} seedName=${binding.seedCheckpointName ?? 'none'} materializedAt=${session.materializedAt ? 'set' : 'null'} pooled=${claimedPooledSandbox}\n`,
+      );
       try {
-        await runMaterialize(sandbox);
+        await runMaterialize(sandbox, seededFromBaseCheckpoint);
       } catch (error) {
         if (!isGitMissing(error)) throw error;
         // A sandbox without git was booted from a bare base image (e.g. the
@@ -521,7 +528,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         await fleet.teardownSandbox(binding, sandbox);
         sandbox = await ensureSandbox();
         try {
-          await runMaterialize(sandbox);
+          // The retry runs on a freshly provisioned VM with no checkout, so
+          // the skip flag is moot — pass false to take the normal clone path.
+          await runMaterialize(sandbox, false);
         } catch (retryError) {
           // Still bare — the provider's template is persistently broken.
           // Clear the binding so a later manual retry provisions fresh.
