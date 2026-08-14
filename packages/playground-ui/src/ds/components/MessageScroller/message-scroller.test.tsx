@@ -783,6 +783,51 @@ describe('MessageScroller autoScroll', () => {
     expect(scrollTo).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { defaultScrollPosition: 'start', landsOn: 0 },
+    { defaultScrollPosition: 'last-anchor', landsOn: 550 },
+  ] as const)(
+    'opens an asynchronously loaded transcript at its $defaultScrollPosition before following anything',
+    ({ defaultScrollPosition, landsOn }) => {
+      const frames: FrameRequestCallback[] = [];
+      vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => frames.push(callback));
+      stubLayout({ 'message-1': 0, 'message-2': 300 });
+      const { rerender } = render(
+        <HistoryHarness autoScroll defaultScrollPosition={defaultScrollPosition} messageIds={[]} />,
+      );
+
+      const viewport = screen.getByTestId('history-viewport');
+      const scrollTo = installScrollTo(viewport);
+      setScrollMetrics(viewport, { scrollHeight: 1200, clientHeight: 400, scrollTop: 250 });
+
+      rerender(
+        <HistoryHarness
+          autoScroll
+          defaultScrollPosition={defaultScrollPosition}
+          messageIds={['message-1', 'message-2']}
+        />,
+      );
+      expect(scrollTo).not.toHaveBeenCalled();
+
+      act(() => frames.shift()?.(0));
+      act(() => frames.shift()?.(16));
+      expect(scrollTo).toHaveBeenLastCalledWith({ top: landsOn, behavior: 'auto' });
+
+      scrollTo.mockClear();
+      Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1600 });
+      rerender(
+        <HistoryHarness
+          autoScroll
+          defaultScrollPosition={defaultScrollPosition}
+          messageIds={['message-1', 'message-2']}
+          replyIds={['reply-1']}
+        />,
+      );
+
+      expect(scrollTo).not.toHaveBeenCalled();
+    },
+  );
+
   it('lets the turn itself carry a reader who is already at the end', () => {
     stubLayout({ 'message-2': 300 });
     const { rerender } = render(<HistoryHarness autoScroll messageIds={['message-1']} />);
