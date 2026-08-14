@@ -11,10 +11,9 @@ import { HeaderListForm } from './header-list-form';
 
 export interface StudioConfigFormProps {
   initialConfig?: StudioConfig;
-  onSave?: () => void;
 }
 
-export const StudioConfigForm = ({ initialConfig, onSave }: StudioConfigFormProps) => {
+export const StudioConfigForm = ({ initialConfig }: StudioConfigFormProps) => {
   const { setConfig } = useStudioConfig();
   const [headers, setHeaders] = useState<HeaderListFormItem[]>(() => {
     if (!initialConfig) return [];
@@ -38,7 +37,6 @@ export const StudioConfigForm = ({ initialConfig, onSave }: StudioConfigFormProp
     }
 
     setConfig({ headers: formHeaders, baseUrl: url, apiPrefix });
-    onSave?.();
     toast.success('Configuration saved');
   };
 

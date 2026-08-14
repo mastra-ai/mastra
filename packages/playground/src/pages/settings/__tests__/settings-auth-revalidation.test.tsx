@@ -86,7 +86,6 @@ const renderSettingsPage = async () => {
       capabilityRequests.push(request.headers.get('authorization'));
       return HttpResponse.json(authenticatedCapabilities);
     }),
-    http.get(`${BASE_URL}/api/auth/permissions/patterns`, () => HttpResponse.json([])),
   );
 
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });

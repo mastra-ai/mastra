@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import type { AuthenticatedCapabilities, PublicAuthCapabilities } from '../../types';
 import { AuthRequired } from '../auth-required';
+import { RoutePermissionsGate } from '../route-permissions-gate';
 import {
   MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY,
   StudioConfigProvider,
@@ -53,7 +54,7 @@ const authenticatedCapabilities: AuthenticatedCapabilities = {
   enabled: true,
   login: null,
   user: { id: 'user-1' },
-  capabilities: { user: true, session: false, sso: false, rbac: false, acl: false },
+  capabilities: { user: true, session: false, sso: false, rbac: true, acl: false },
   access: null,
 };
 
@@ -70,9 +71,11 @@ const Harness = () => {
 
   return (
     <MastraReactProvider baseUrl={baseUrl} headers={headers} apiPrefix={apiPrefix}>
-      <AuthRequired>
-        <div>protected content</div>
-      </AuthRequired>
+      <RoutePermissionsGate baseUrl={baseUrl}>
+        <AuthRequired>
+          <div>protected content</div>
+        </AuthRequired>
+      </RoutePermissionsGate>
     </MastraReactProvider>
   );
 };
@@ -93,7 +96,11 @@ const renderAuthRequiredAt = async (pathname: string) => {
 
   // The gate renders children while capabilities load, so every assertion must
   // wait for the capabilities response to land and for React to commit it.
-  await waitFor(() => expect(queryClient.getQueryState(['auth', 'capabilities'])?.status).toBe('success'));
+  await waitFor(() =>
+    expect(queryClient.getQueryCache().findAll({ queryKey: ['auth', 'capabilities'] })[0]?.state.status).toBe(
+      'success',
+    ),
+  );
   await act(async () => {});
 
   return { queryClient };
@@ -118,6 +125,7 @@ const useNoLoginMethodHandler = () => {
  */
 const useHeaderGatedHandler = (authorization: string) => {
   const capabilityRequests: (string | null)[] = [];
+  const permissionPatternRequests: (string | null)[] = [];
 
   server.use(
     http.get(`${BASE_URL}/api/auth/capabilities`, ({ request }) => {
@@ -127,10 +135,13 @@ const useHeaderGatedHandler = (authorization: string) => {
       }
       return HttpResponse.json(noLoginMethodCapabilities);
     }),
-    http.get(`${BASE_URL}/api/auth/permissions/patterns`, () => HttpResponse.json([])),
+    http.get(`${BASE_URL}/api/auth/permission-patterns`, ({ request }) => {
+      permissionPatternRequests.push(request.headers.get('authorization'));
+      return HttpResponse.json({ patterns: [] });
+    }),
   );
 
-  return capabilityRequests;
+  return { capabilityRequests, permissionPatternRequests };
 };
 
 const saveAuthorizationHeader = (value: string) => {
@@ -207,7 +218,7 @@ describe('AuthRequired', () => {
       });
 
       it('refetches capabilities with the persisted header and unlocks children', async () => {
-        const capabilityRequests = useHeaderGatedHandler('Bearer token');
+        const { capabilityRequests } = useHeaderGatedHandler('Bearer token');
 
         await renderAuthRequiredAt('/agents');
         expect(screen.queryByText('protected content')).toBeNull();
@@ -219,6 +230,15 @@ describe('AuthRequired', () => {
 
         await waitFor(() => expect(screen.getByText('protected content')).toBeDefined());
         expect(capabilityRequests).toContain('Bearer token');
+      });
+
+      it('fetches permission patterns with the persisted header', async () => {
+        const { permissionPatternRequests } = useHeaderGatedHandler('Bearer token');
+
+        await renderAuthRequiredAt('/agents');
+        saveAuthorizationHeader('Bearer token');
+
+        await waitFor(() => expect(permissionPatternRequests).toContain('Bearer token'));
       });
     });
   });
