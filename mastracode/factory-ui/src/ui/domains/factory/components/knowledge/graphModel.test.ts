@@ -143,17 +143,14 @@ describe('deriveMemoryElements (Amendment A11)', () => {
     expect(memoryEdges).toHaveLength(0);
   });
 
-  it("renders a pinned single-entity memory as the pin chip even on a one-fact entity", () => {
+  it('renders a pinned single-entity memory as the pin chip even on a one-fact entity', () => {
     const owner = entity('a', { factCount: 1 });
     const { memoryNodes } = deriveMemoryElements([owner], [mem('m1', ['a'], true)]);
     expect(memoryNodes).toEqual([expect.objectContaining({ kind: 'dot', size: MEMORY_PIN_SIZE })]);
   });
 
   it('renders a two-entity memory as the connecting line — the memory IS the edge', () => {
-    const { memoryNodes, memoryEdges } = deriveMemoryElements(
-      [entity('a'), entity('b')],
-      [mem('m1', ['a', 'b'])],
-    );
+    const { memoryNodes, memoryEdges } = deriveMemoryElements([entity('a'), entity('b')], [mem('m1', ['a', 'b'])]);
     expect(memoryNodes).toHaveLength(0);
     expect(memoryEdges).toEqual([expect.objectContaining({ id: 'mem:m1', source: 'a', target: 'b' })]);
   });
@@ -219,10 +216,7 @@ describe('egoGraph (Amendment A5)', () => {
 
 describe('toFlowGraph', () => {
   it('maps entities to sized flow nodes and typed edges', () => {
-    const { nodes, edges } = toFlowGraph(
-      [entity('a'), entity('b')],
-      [edge('a', 'b'), edge('b', 'a')],
-    );
+    const { nodes, edges } = toFlowGraph([entity('a'), entity('b')], [edge('a', 'b'), edge('b', 'a')]);
     expect(nodes[0]).toMatchObject({ id: 'a', type: 'knowledgeEntity' });
     expect(nodes[0]!.data.size).toBeGreaterThanOrEqual(NODE_SIZE_MIN);
     expect(edges.map(e => e.data?.linkType)).toEqual(['wikilink', 'wikilink']);

@@ -6,7 +6,12 @@
 
 import type { Edge, Node } from '@xyflow/react';
 
-import type { KnowledgeGraphEdge, KnowledgeGraphMemory, KnowledgeGraphNode, KnowledgeRung } from '../../services/knowledge';
+import type {
+  KnowledgeGraphEdge,
+  KnowledgeGraphMemory,
+  KnowledgeGraphNode,
+  KnowledgeRung,
+} from '../../services/knowledge';
 
 export const NODE_SIZE_MIN = 52;
 export const NODE_SIZE_MAX = 176;
@@ -258,9 +263,7 @@ export function toMemoryFlow(
   return {
     nodes: memoryNodes.map(element => {
       const center = positions?.get(element.id);
-      const position = center
-        ? { x: center.x - element.size / 2, y: center.y - element.size / 2 }
-        : { x: 0, y: 0 };
+      const position = center ? { x: center.x - element.size / 2, y: center.y - element.size / 2 } : { x: 0, y: 0 };
       return {
         id: element.id,
         type: 'knowledgeMemory',

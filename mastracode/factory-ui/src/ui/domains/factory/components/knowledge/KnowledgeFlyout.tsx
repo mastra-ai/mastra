@@ -6,11 +6,7 @@
  * the "captured in session" link that opens the thread view (Amendment A2).
  */
 
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@mastra/playground-ui/components/Collapsible';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ChevronDown, ExternalLink, Pin, Sparkles, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -23,12 +19,12 @@ const RUNG_LABELS: Record<KnowledgeRung, string> = { org: 'Org', resource: 'Proj
 
 function SectionHeader({ title, count }: { title: string; count?: number }) {
   return (
-    <CollapsibleTrigger className="group flex w-full items-center gap-2 border-t border-surface5 px-4 py-3 text-left">
-      <span className="text-sm font-semibold text-icon6">{title}</span>
+    <CollapsibleTrigger className="group border-surface5 flex w-full items-center gap-2 border-t px-4 py-3 text-left">
+      <span className="text-icon6 text-sm font-semibold">{title}</span>
       {count !== undefined ? (
-        <span className="rounded-full bg-surface4 px-1.5 py-0.5 text-[10px] text-icon4">{count}</span>
+        <span className="bg-surface4 text-icon4 rounded-full px-1.5 py-0.5 text-[10px]">{count}</span>
       ) : null}
-      <ChevronDown size={14} className="ml-auto text-icon3 transition-transform group-data-[state=open]:rotate-180" />
+      <ChevronDown size={14} className="text-icon3 ml-auto transition-transform group-data-[state=open]:rotate-180" />
     </CollapsibleTrigger>
   );
 }
@@ -124,21 +120,19 @@ function MemoryCard({
       ].join(' ')}
     >
       <button type="button" className="w-full px-3 py-2.5 text-left" onClick={onToggle}>
-        <div className="text-xs leading-relaxed text-icon5">
+        <div className="text-icon5 text-xs leading-relaxed">
           <FactText text={fact.text} onEntityRef={onEntityRef} />
-          {fact.pinned ? (
-            <Pin size={11} className="ml-1 inline text-amber-400" aria-label="Pinned memory" />
-          ) : null}
+          {fact.pinned ? <Pin size={11} className="ml-1 inline text-amber-400" aria-label="Pinned memory" /> : null}
         </div>
-        <div className="mt-1.5 flex items-center gap-2 text-[10px] text-icon3">
+        <div className="text-icon3 mt-1.5 flex items-center gap-2 text-[10px]">
           <RungBadge rung={fact.rung} />
           {fact.relation === 'mentions' ? <span className="text-icon3">mentions</span> : null}
           <span>captured {relativeTime(fact.capturedAt)}</span>
         </div>
       </button>
       {expanded ? (
-        <div data-testid="knowledge-memory-detail" className="border-t border-surface5 px-3 py-2.5 text-[11px]">
-          <dl className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1 text-icon4">
+        <div data-testid="knowledge-memory-detail" className="border-surface5 border-t px-3 py-2.5 text-[11px]">
+          <dl className="text-icon4 grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1">
             <dt>Captured in session</dt>
             <dd>
               {fact.sourceThreadId ? (
@@ -175,13 +169,13 @@ function MemoryCard({
               <div className="mb-1 flex items-center gap-1 text-[10px] font-semibold tracking-wide text-amber-300 uppercase">
                 <Sparkles size={10} /> Reasoning
               </div>
-              <p className="text-[11px] leading-relaxed text-icon5 italic">{reason}</p>
+              <p className="text-icon5 text-[11px] leading-relaxed italic">{reason}</p>
             </div>
           ) : (
-            <p className="mt-2 text-[10px] text-icon3 italic">No capture reasoning was recorded for this memory.</p>
+            <p className="text-icon3 mt-2 text-[10px] italic">No capture reasoning was recorded for this memory.</p>
           )}
           {otherMetadata.length > 0 ? (
-            <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[10px] text-icon3">
+            <dl className="text-icon3 mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[10px]">
               {otherMetadata.map(([key, value]) => (
                 <div key={key} className="contents">
                   <dt>{key}</dt>
@@ -224,11 +218,11 @@ export function KnowledgeFlyout({
   return (
     <aside
       data-testid="knowledge-flyout"
-      className="absolute inset-y-0 right-0 z-20 flex w-[380px] flex-col overflow-hidden rounded-l-xl border-l border-surface5 bg-surface2/95 shadow-2xl backdrop-blur transition-transform duration-300"
+      className="border-surface5 bg-surface2/95 absolute inset-y-0 right-0 z-20 flex w-[380px] flex-col overflow-hidden rounded-l-xl border-l shadow-2xl backdrop-blur transition-transform duration-300"
       aria-label="Entity details"
     >
       {entityQuery.isPending ? (
-        <div className="p-4 text-sm text-icon3">Loading entity…</div>
+        <div className="text-icon3 p-4 text-sm">Loading entity…</div>
       ) : entityQuery.isError ? (
         <div className="p-4">
           <Notice variant="destructive">Unable to load this entity.</Notice>
@@ -237,9 +231,9 @@ export function KnowledgeFlyout({
         <>
           <header className="flex items-start gap-2 px-4 py-3">
             <div className="min-w-0">
-              <h2 className="truncate text-base font-semibold text-icon6">{entityQuery.data.entity.name}</h2>
+              <h2 className="text-icon6 truncate text-base font-semibold">{entityQuery.data.entity.name}</h2>
               <div className="mt-1 flex items-center gap-2">
-                <span className="rounded bg-surface4 px-1.5 py-0.5 text-[10px] text-icon4">
+                <span className="bg-surface4 text-icon4 rounded px-1.5 py-0.5 text-[10px]">
                   {entityQuery.data.entity.kind}
                 </span>
                 <RungBadge rung={entityQuery.data.entity.rung} />
@@ -248,7 +242,7 @@ export function KnowledgeFlyout({
             <button
               type="button"
               aria-label="Close details"
-              className="ml-auto rounded p-1 text-icon3 hover:text-icon6"
+              className="text-icon3 hover:text-icon6 ml-auto rounded p-1"
               onClick={onClose}
             >
               <X size={16} />
@@ -259,21 +253,21 @@ export function KnowledgeFlyout({
             <Collapsible defaultOpen>
               <SectionHeader title="Entity" />
               <CollapsibleContent>
-                <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 px-4 pb-3 text-xs text-icon4">
+                <dl className="text-icon4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 px-4 pb-3 text-xs">
                   <dt>Kind</dt>
-                  <dd className="text-right text-icon5">{entityQuery.data.entity.kind}</dd>
+                  <dd className="text-icon5 text-right">{entityQuery.data.entity.kind}</dd>
                   <dt>Scope</dt>
-                  <dd className="text-right break-all text-icon5">{entityQuery.data.entity.scope.join(' → ')}</dd>
+                  <dd className="text-icon5 text-right break-all">{entityQuery.data.entity.scope.join(' → ')}</dd>
                   <dt>Created</dt>
-                  <dd className="text-right text-icon5">
+                  <dd className="text-icon5 text-right">
                     {new Date(entityQuery.data.entity.createdAt).toLocaleString()}
                   </dd>
                   <dt>Updated</dt>
-                  <dd className="text-right text-icon5">
+                  <dd className="text-icon5 text-right">
                     {new Date(entityQuery.data.entity.updatedAt).toLocaleString()}
                   </dd>
                   <dt>Memories</dt>
-                  <dd className="text-right text-icon5">{entityQuery.data.facts.length}</dd>
+                  <dd className="text-icon5 text-right">{entityQuery.data.facts.length}</dd>
                 </dl>
               </CollapsibleContent>
             </Collapsible>
@@ -283,7 +277,7 @@ export function KnowledgeFlyout({
               <CollapsibleContent>
                 <div className="flex flex-col gap-2 px-4 pb-3">
                   {entityQuery.data.facts.length === 0 ? (
-                    <p className="text-xs text-icon3">No memories about this entity yet.</p>
+                    <p className="text-icon3 text-xs">No memories about this entity yet.</p>
                   ) : (
                     entityQuery.data.facts.map(fact => (
                       <div
