@@ -1,0 +1,157 @@
+---
+title: 'Pulse (experimental) | Observability'
+description: 'Capture observability as append-only events and derive flows, trees, durations, and status at read time.'
+packages:
+  - '@mastra/pulse'
+  - '@mastra/observability'
+  - '@mastra/core'
+---
+
+# Pulse (experimental)
+
+:::warning
+
+DRAFT — experimental research preview; API subject to spec review. Interfaces, table shapes, and semantics may change without notice.
+
+:::
+
+Pulse is an event-first observability model. Instead of storing spans with durations and parent pointers, Pulse appends instant facts (`pulses`) and link rows (`relationships`), and derives everything else at read time.
+
+Nothing derived is ever stored. Flows, span trees, durations, and status are reconstructed from the raw rows by the storage adapter when you query. Because facts land as they happen, in-flight runs are visible mid-execution, for example a pending tool approval. Span-based views can't show this until a run ends.
+
+## When to use Pulse
+
+- Inspect runs while they're still executing, not only after they finish.
+- Keep session-layer facts (tool approvals, the true abort outcome) next to span facts.
+- Experiment with the event-first storage direction on top of ClickHouse.
+
+Pulse runs alongside the existing exporters. Adding the [PulseExporter](/reference/observability/pulse-exporter) doesn't change what [MastraStorageExporter](/reference/observability/tracing/exporters/mastra-storage-exporter) or any other exporter records.
+
+## Install
+
+```bash npm2yarn
+npm install @mastra/pulse
+```
+
+## Configure
+
+The exporter writes to ClickHouse over HTTP. Create the tables once with `ensurePulseTables`, then register the exporter in your observability config:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { PulseExporter, ensurePulseTables } from '@mastra/pulse'
+
+await ensurePulseTables({ url: 'http://localhost:8123', database: 'pulse' })
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'my-app',
+        exporters: [
+          new PulseExporter({
+            url: 'http://localhost:8123',
+            database: 'pulse',
+          }),
+        ],
+      },
+    },
+  }),
+})
+```
+
+Without `url` and `database` (or a `storage` domain, see below) the exporter disables itself and writes nothing.
+
+### Storage-domain mode
+
+Instead of a direct ClickHouse URL, the exporter can write through the `pulse` storage domain. Register a pulse store on the composite store and pass it to the exporter:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { Observability } from '@mastra/observability'
+import { PulseExporter } from '@mastra/pulse'
+import { PulseStorageClickhouse } from '@mastra/clickhouse'
+import { LibSQLStore } from '@mastra/libsql'
+
+const pulseStore = new PulseStorageClickhouse({
+  url: 'http://localhost:8123',
+  username: 'default',
+  password: process.env.CLICKHOUSE_PASSWORD!,
+})
+
+export const mastra = new Mastra({
+  storage: new MastraCompositeStore({
+    id: 'composite-storage',
+    default: new LibSQLStore({
+      id: 'mastra-storage',
+      url: 'file:./mastra.db',
+    }),
+    domains: {
+      pulse: pulseStore,
+    },
+  }),
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'my-app',
+        exporters: [new PulseExporter({ storage: pulseStore })],
+      },
+    },
+  }),
+})
+```
+
+Registering the `pulse` domain also enables the read model: the server exposes `/api/pulse/*` endpoints and `client.pulse` in the client SDK reads derived flows from the same store.
+
+:::note
+Visit the [PulseExporter reference](/reference/observability/pulse-exporter) for all configuration options and the storage domain methods.
+:::
+
+## Flow status
+
+A flow is everything grouped under one trace. Its status is derived from the raw rows at read time and has five states:
+
+| Status | Meaning |
+| - | - |
+| `running` | Root started, no terminal pulse yet, recent activity |
+| `completed` | Root received its `*_completed` pulse without error |
+| `failed` | Root received a `*_failed` pulse |
+| `aborted` | The session layer recorded an abort |
+| `stale` | No terminal pulse and no activity for 30 seconds |
+
+Two rules matter here:
+
+- Session abort overrides the span outcome. The span layer records aborted runs as completed; the session-layer abort fact is authoritative, so the derived status is `aborted`.
+- Staleness is time-based. A flow with no terminal pulse goes `stale` after 30 seconds of silence. This is how crashed processes surface, since their unflushed tail is lost by design.
+
+## What gets captured
+
+The exporter consumes every observability event family and turns each into pulse rows:
+
+| Event family | What Pulse records |
+| - | - |
+| Spans | Start, end, and error facts for all span types, with capped input/output payloads. `parent_of`, `origin_of`, `resume_of`, and `uses_*` relationship rows are emitted on span end. |
+| Logs | Log messages as pulse rows. Only levels at or above the observability logger's `minLevel` reach the bus; the default is `warn`. |
+| Metrics | Metric values, including cost. Cost only exists on metric events (`estimated_cost_usd`), never on span attributes. |
+| Scores | Score results with a `scored_target` relationship to the scored span or flow |
+| Feedback | Feedback entries with a `scored_target` relationship to the target |
+| Drops | Meta-events counting observability events dropped upstream |
+
+Session-layer facts (tool approvals, the true abort outcome, follow-up queueing, mode and model switches) aren't spans. Capture them by attaching the session listener with [`attachPulseSession`](/reference/observability/pulse-exporter#attachpulsesessionsession-exporter-ids).
+
+## Limitations
+
+Pulse is a research preview. Known gaps:
+
+- Payloads are capped (4 KB by default, `payloadCapBytes`). Full message arrays are never exported.
+- `SPAN_UPDATED` events are counted but not translated. Start/end pairs cover the model; update semantics are an open spec question.
+- Content identity (`included_in_model_input`) and definition identity (file-hash based `uses_definition`) require deeper emit sites and aren't produced yet.
+- Write buffers are in-memory. A hard crash loses the unflushed tail, and the affected flows surface as `stale`.
+
+## Related
+
+- [Observability overview](/docs/observability/overview)
+- [Traces](/docs/observability/tracing/overview)
+- [PulseExporter reference](/reference/observability/pulse-exporter)

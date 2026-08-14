@@ -584,6 +584,11 @@ const sidebars = {
               id: 'observability/integrations/exporters/mastra-storage',
               label: 'Storage',
             },
+            {
+              type: 'doc',
+              id: 'observability/pulse',
+              label: 'Pulse (experimental)',
+            },
           ],
         },
         {

@@ -1,0 +1,361 @@
+---
+title: 'Reference: PulseExporter | Observability'
+description: 'API reference for PulseExporter, the experimental event-first observability exporter, plus the pulse storage domain and client methods.'
+packages:
+  - '@mastra/pulse'
+  - '@mastra/core'
+  - '@mastra/client-js'
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# PulseExporter
+
+:::warning
+
+DRAFT — experimental research preview; API subject to spec review. Interfaces, table shapes, and semantics may change without notice.
+
+:::
+
+Translates every observability event family (spans, logs, metrics, scores, feedback, drop meta-events) into append-only pulse and relationship rows. Flows, trees, durations, and status are derived at read time. See [Pulse](/docs/observability/pulse) for the concept.
+
+## Usage example
+
+Write directly to ClickHouse over HTTP:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { PulseExporter } from '@mastra/pulse'
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'my-app',
+        exporters: [
+          new PulseExporter({
+            url: 'http://localhost:8123',
+            database: 'pulse',
+          }),
+        ],
+      },
+    },
+  }),
+})
+```
+
+Or write through a registered `pulse` storage domain:
+
+```typescript
+import { PulseExporter } from '@mastra/pulse'
+import { PulseStorageClickhouse } from '@mastra/clickhouse'
+
+const pulseStore = new PulseStorageClickhouse({
+  url: 'http://localhost:8123',
+  username: 'default',
+  password: process.env.CLICKHOUSE_PASSWORD!,
+})
+
+const exporter = new PulseExporter({ storage: pulseStore })
+```
+
+When neither `storage` nor `url` plus `database` is provided, the exporter disables itself and writes nothing.
+
+## Constructor parameters
+
+```typescript prettier:false
+new PulseExporter(config: PulseExporterConfig)
+```
+
+`PulseExporterConfig` extends `BaseExporterConfig`, which includes `logger` and `logLevel`.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'storage',
+    type: 'PulseStorageLike',
+    description:
+      'Pulse storage domain to write through (e.g. `PulseStorageClickhouse` from `@mastra/clickhouse`). When set, `url` and `database` are not required.',
+    isOptional: true,
+  },
+  {
+    name: 'url',
+    type: 'string',
+    description: 'ClickHouse HTTP endpoint, e.g. `http://localhost:8123`. Required unless `storage` is set.',
+    isOptional: true,
+  },
+  {
+    name: 'database',
+    type: 'string',
+    description: 'Target ClickHouse database. Required unless `storage` is set.',
+    isOptional: true,
+  },
+  {
+    name: 'username',
+    type: 'string',
+    description: 'ClickHouse username.',
+    isOptional: true,
+    defaultValue: "'default'",
+  },
+  {
+    name: 'password',
+    type: 'string',
+    description: 'ClickHouse password.',
+    isOptional: true,
+    defaultValue: "''",
+  },
+  {
+    name: 'batchSize',
+    type: 'number',
+    description: 'Rows buffered before a size-triggered flush.',
+    isOptional: true,
+    defaultValue: '200',
+  },
+  {
+    name: 'flushIntervalMs',
+    type: 'number',
+    description: 'Time-triggered flush interval in milliseconds.',
+    isOptional: true,
+    defaultValue: '2000',
+  },
+  {
+    name: 'payloadCapBytes',
+    type: 'number',
+    description:
+      'Serialized payload cap for span input and output, in bytes. Larger payloads are truncated to a preview.',
+    isOptional: true,
+    defaultValue: '4096',
+  },
+]}
+/>
+
+## Methods
+
+### Exporter lifecycle
+
+#### `flush()`
+
+Drains buffered pulse and relationship rows to the sink. Call it in serverless environments before the runtime terminates.
+
+```typescript
+await exporter.flush()
+```
+
+#### `shutdown()`
+
+Stops the flush timer and drains remaining rows.
+
+```typescript
+await exporter.shutdown()
+```
+
+## `PulseStorage` domain
+
+The `pulse` storage domain (`@mastra/core/storage`) persists pulse rows and derives the read model. Adapters such as `PulseStorageClickhouse` extend this base class. Register it on a composite store under the `pulse` key.
+
+### Write methods
+
+#### `batchCreatePulses(records)`
+
+Appends pulse records. The domain is append-only; adapters must not update rows in place.
+
+```typescript
+await pulseStore.batchCreatePulses(records)
+```
+
+`records` is `PulseRecord[]`.
+
+#### `batchCreateRelationships(records)`
+
+Appends relationship records.
+
+```typescript
+await pulseStore.batchCreateRelationships(records)
+```
+
+`records` is `PulseRelationshipRecord[]`.
+
+### Read methods
+
+#### `listFlows(args?)`
+
+Lists derived flows, most recent first. Supports filtering by status, thread, resource, entity name, and date range, plus pagination.
+
+```typescript
+const { flows, total } = await pulseStore.listFlows({
+  filter: { status: 'running' },
+  pagination: { page: 0, perPage: 40 },
+})
+```
+
+Returns: `Promise<ListFlowsResult>` (`{ flows: FlowSummary[]; total: number }`).
+
+#### `getFlow(flowId)`
+
+Retrieves one derived flow with its span tree and referenced definition ids. Returns `null` when the flow doesn't exist.
+
+```typescript
+const flow = await pulseStore.getFlow('trace-id')
+```
+
+Returns: `Promise<FlowDetail | null>`.
+
+#### `getFlowTimeline(flowId)`
+
+Retrieves all pulses of a flow in order, with session and runtime lanes joined by thread.
+
+```typescript
+const timeline = await pulseStore.getFlowTimeline('trace-id')
+```
+
+Returns: `Promise<FlowTimelineEntry[]>`.
+
+### Utility methods
+
+#### `getFeatures()`
+
+Reports adapter capabilities. Pulse adapters are insert-only by design.
+
+```typescript
+const features = pulseStore.getFeatures()
+// { writeMode: 'insert-only' }
+```
+
+Returns: `PulseStorageFeatures`.
+
+#### `dangerouslyClearAll()`
+
+Removes every pulse and relationship row. Test and development helper only.
+
+```typescript
+await pulseStore.dangerouslyClearAll()
+```
+
+## Client methods
+
+`@mastra/client-js` exposes the read model as `client.pulse`. Endpoints return `501` unless the server has a pulse store configured and a core version with `pulse:v0` support.
+
+#### `listFlows(params?)`
+
+```typescript
+const { flows, total } = await client.pulse.listFlows({ status: 'running', page: 0, perPage: 40 })
+```
+
+Accepts `status`, `threadId`, `entityName`, `page`, and `perPage`.
+
+#### `getFlow(flowId)`
+
+```typescript
+const { flow } = await client.pulse.getFlow('trace-id')
+```
+
+#### `getFlowTimeline(flowId)`
+
+```typescript
+const { timeline } = await client.pulse.getFlowTimeline('trace-id')
+```
+
+## Helper functions
+
+#### `ensurePulseTables(options)`
+
+Creates the `pulses` and `relationships` tables (and the database) over the ClickHouse HTTP interface. Safe to call repeatedly.
+
+```typescript
+import { ensurePulseTables } from '@mastra/pulse'
+
+await ensurePulseTables({
+  url: 'http://localhost:8123',
+  database: 'pulse',
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'url',
+    type: 'string',
+    description: 'ClickHouse HTTP endpoint.',
+  },
+  {
+    name: 'database',
+    type: 'string',
+    description: 'Database to create tables in. Created if missing.',
+  },
+  {
+    name: 'username',
+    type: 'string',
+    description: 'ClickHouse username.',
+    isOptional: true,
+    defaultValue: "'default'",
+  },
+  {
+    name: 'password',
+    type: 'string',
+    description: 'ClickHouse password.',
+    isOptional: true,
+    defaultValue: "''",
+  },
+]}
+/>
+
+#### `attachPulseSession(session, exporter, ids?)`
+
+Subscribes to an Agent Controller session bus and records session-layer facts (tool approvals, the true abort outcome, follow-up queueing, mode and model switches) as pulse rows through the exporter's writer. Returns an unsubscribe function.
+
+```typescript
+import { attachPulseSession } from '@mastra/pulse'
+
+const detach = attachPulseSession(session, exporter, {
+  threadId: 'thread-1',
+  resourceId: 'user-1',
+})
+```
+
+#### `backfillFromObservability(options)`
+
+Replays spans already persisted by the observability storage domain through a `PulseExporter`, so historical traces gain a pulse read model.
+
+```typescript
+import { backfillFromObservability } from '@mastra/pulse'
+
+const result = await backfillFromObservability({
+  observability: observabilityStore,
+  exporter,
+  pageSize: 50,
+  maxTraces: 500,
+})
+// { traces: number, spans: number }
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'observability',
+    type: 'ObservabilityReadLike',
+    description: 'Object exposing `listTraces` and `getTrace`, such as the observability storage domain.',
+  },
+  {
+    name: 'exporter',
+    type: 'PulseExporter',
+    description: 'Exporter to replay the spans through.',
+  },
+  {
+    name: 'pageSize',
+    type: 'number',
+    description: 'Traces fetched per page.',
+    isOptional: true,
+    defaultValue: '50',
+  },
+  {
+    name: 'maxTraces',
+    type: 'number',
+    description: 'Upper bound on traces to backfill.',
+    isOptional: true,
+    defaultValue: 'Infinity',
+  },
+]}
+/>
+
+Returns: `Promise<BackfillResult>` (`{ traces: number; spans: number }`).

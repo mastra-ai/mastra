@@ -554,6 +554,11 @@ const sidebars = {
         },
         {
           type: 'category',
+          label: 'Pulse',
+          items: [{ type: 'doc', id: 'observability/pulse-exporter', label: 'PulseExporter' }],
+        },
+        {
+          type: 'category',
           label: 'Tracing',
           items: [
             { type: 'doc', id: 'observability/tracing/configuration', label: 'Configuration' },
