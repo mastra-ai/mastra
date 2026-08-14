@@ -20,9 +20,11 @@ export function useKnowledgeGraph(factoryProjectId: string | undefined, threadId
     queryFn: factoryProjectId
       ? ({ signal }) => fetchKnowledgeGraph(baseUrl, factoryProjectId, threadId, signal)
       : skipToken,
-    // Live: same 5s cadence as the board (useWorkItems precedent). A 404 on a
-    // thread view is terminal (stale/deleted session) — don't retry or poll it.
-    refetchInterval: query => (query.state.error ? false : 5_000),
+    // Live: same 5s cadence as the board (useWorkItems precedent). Only a 404
+    // is terminal (stale/deleted session on a thread view) — transient errors
+    // keep polling so a single hiccup never freezes live updates.
+    refetchInterval: query =>
+      query.state.error instanceof RequestError && query.state.error.status === 404 ? false : 5_000,
     refetchOnWindowFocus: true,
     retry: (failureCount, error) => !(error instanceof RequestError && error.status === 404) && failureCount < 2,
   });

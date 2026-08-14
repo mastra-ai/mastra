@@ -43,6 +43,3 @@ export function computeArrivals(previous: DiffBaseline | null, next: DiffInput):
   return { nodes, edges };
 }
 
-export function toBaseline(input: DiffInput): DiffBaseline {
-  return input;
-}

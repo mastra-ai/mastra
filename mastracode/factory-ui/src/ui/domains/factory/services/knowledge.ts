@@ -17,6 +17,7 @@ export interface KnowledgeGraphNode {
   kind: string;
   scope: string[];
   rung: KnowledgeRung;
+  /** A pinned fact's wikilinks reference this entity (the pin accent). */
   pinned: boolean;
   /** Facts owned by this entity inside the snapshot window (not a total). */
   factCount: number;
@@ -28,7 +29,8 @@ export interface KnowledgeGraphEdge {
   id: string;
   source: string;
   target: string;
-  type: 'wikilink' | 'parent';
+  /** Always 'wikilink' — the fact's owner entity is the edge source. */
+  type: 'wikilink';
   factId: string;
 }
 
@@ -54,6 +56,7 @@ export interface KnowledgeEntityFact {
   sourceThreadId: string;
   capturedAt: string;
   when?: string;
+  /** This fact IS a pin (authored under the reserved pinned entity). */
   pinned: boolean;
   metadata?: Record<string, unknown>;
 }

@@ -19,7 +19,7 @@ function entity(id: string, overrides: Partial<KnowledgeGraphNode> = {}): Knowle
   };
 }
 
-function edge(source: string, target: string, type: 'wikilink' | 'parent' = 'wikilink'): KnowledgeGraphEdge {
+function edge(source: string, target: string, type: 'wikilink' = 'wikilink'): KnowledgeGraphEdge {
   return { id: `${type}:${source}:${target}`, source, target, type, factId: 'f-1' };
 }
 
@@ -106,11 +106,11 @@ describe('toFlowGraph', () => {
   it('maps entities to sized flow nodes and typed edges', () => {
     const { nodes, edges } = toFlowGraph(
       [entity('a'), entity('b')],
-      [edge('a', 'b'), edge('b', 'a', 'parent')],
+      [edge('a', 'b'), edge('b', 'a')],
     );
     expect(nodes[0]).toMatchObject({ id: 'a', type: 'knowledgeEntity' });
     expect(nodes[0]!.data.size).toBeGreaterThanOrEqual(NODE_SIZE_MIN);
-    expect(edges.map(e => e.data?.linkType)).toEqual(['wikilink', 'parent']);
+    expect(edges.map(e => e.data?.linkType)).toEqual(['wikilink', 'wikilink']);
     expect(edges.every(e => e.type === 'knowledgeLink')).toBe(true);
   });
 

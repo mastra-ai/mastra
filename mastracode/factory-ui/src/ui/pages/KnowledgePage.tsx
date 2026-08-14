@@ -1,7 +1,7 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ChevronRight } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 
 import { useKnowledgeGraph } from '../../hooks/useKnowledgeGraph';
@@ -98,18 +98,24 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   // Arrival diffing: baseline per view; a view switch resets it (no mass
   // arrival animation on switch), same-view polls diff by id sets.
   const baseline = useRef<DiffBaseline | null>(null);
-  const arrivals = useMemo<Arrivals | undefined>(() => {
+  const nextBaseline = useMemo<DiffBaseline | undefined>(() => {
     if (!graphQuery.data) return undefined;
-    const next = {
+    return {
       viewKey: threadId ? `thread:${threadId}` : 'project',
       version: graphQuery.data.version,
       nodeIds: new Set(graphQuery.data.nodes.map(node => node.id)),
       edgeIds: new Set(graphQuery.data.edges.map(edge => edge.id)),
     };
-    const result = computeArrivals(baseline.current, next);
-    baseline.current = next;
-    return result;
   }, [graphQuery.data, threadId]);
+  const arrivals = useMemo<Arrivals | undefined>(
+    () => (nextBaseline ? computeArrivals(baseline.current, nextBaseline) : undefined),
+    [nextBaseline],
+  );
+  // Advance the baseline in an effect so a StrictMode double render or a
+  // discarded concurrent render never diffs a payload against itself.
+  useEffect(() => {
+    if (nextBaseline) baseline.current = nextBaseline;
+  }, [nextBaseline]);
 
   const openThread = (nextThreadId: string) => {
     setSelected(null);

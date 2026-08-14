@@ -124,7 +124,6 @@ function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<Knowledg
   const controlX = (startX + endX) / 2 + -uy * bow;
   const controlY = (startY + endY) / 2 + ux * bow;
   const path = `M ${startX},${startY} Q ${controlX},${controlY} ${endX},${endY}`;
-  const dashed = data?.linkType === 'parent';
   return (
     <BaseEdge
       id={id}
@@ -132,7 +131,6 @@ function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<Knowledg
       style={{
         stroke: 'rgba(139,92,246,0.4)',
         strokeWidth: 1.4,
-        strokeDasharray: dashed ? '6 4' : undefined,
       }}
     />
   );
@@ -467,7 +465,7 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
           {source} → {target}
         </div>
         <div className="mt-0.5 text-icon4">
-          {hover.edge.data?.linkType === 'parent' ? 'Parent link' : 'Mentioned in a memory'}
+          Mentioned in a memory
         </div>
       </div>
     );
