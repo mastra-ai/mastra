@@ -40,6 +40,7 @@ export const GITHUB_SYNC_STATUS_TAG = 'github-sync-status';
 export const GITHUB_SIGNALS_METADATA_KEY = 'githubSignals';
 
 export type GithubPermission = 'admin' | 'maintain' | 'write' | 'triage' | 'read' | 'none';
+export type GithubSubscriptionMode = 'working' | 'review';
 const DEFAULT_AUTHORIZED_PERMISSIONS: GithubPermission[] = ['admin', 'maintain', 'write'];
 const DEFAULT_AUTHORIZED_BOTS = ['coderabbitai[bot]', 'devin-ai-integration[bot]'];
 const PERMISSION_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -51,6 +52,7 @@ export type GithubPRSubscription = {
   owner: string;
   repo: string;
   number: number;
+  mode: GithubSubscriptionMode;
   subscribedAt: string;
   updatedAt: string;
   lastSubscribeSignalId: string;
@@ -82,7 +84,9 @@ export type GithubSignalsThreadMetadata = {
 };
 
 export type GithubPRSignalInput = number | { owner?: string; repo?: string; number: number };
-export type GithubSubscribePRSignalInput = GithubPRSignalInput;
+export type GithubSubscribePRSignalInput =
+  | number
+  | { owner?: string; repo?: string; number: number; mode?: GithubSubscriptionMode };
 export type GithubUnsubscribePRSignalInput = GithubPRSignalInput;
 
 export type GithubSignalsSyncInput = {
@@ -215,6 +219,7 @@ type GithubPRSignal = {
   owner?: string;
   repo?: string;
   number: number;
+  mode?: GithubSubscriptionMode;
 };
 
 type GithubSignalAgent = {
@@ -252,7 +257,7 @@ type GithubToolFactory = (definition: {
   description: string;
   inputSchema: z.ZodTypeAny;
   execute: (
-    input: { owner?: string; repo?: string; number: number },
+    input: { owner?: string; repo?: string; number: number; mode?: GithubSubscriptionMode },
     context?: GithubToolExecuteContext,
   ) => Promise<unknown>;
 }) => unknown;
@@ -263,6 +268,8 @@ type GithubOperationResult = {
   owner: string;
   repo: string;
   number: number;
+  mode?: GithubSubscriptionMode;
+  terminalState?: 'closed' | 'merged';
   subscription?: GithubPRSubscription;
   syncResult?: GithubSignalsSyncResult;
   removed?: boolean;
@@ -294,6 +301,14 @@ function readNumber(value: unknown): number | undefined {
   if (typeof value === 'number' && Number.isInteger(value) && value > 0) return value;
   if (typeof value === 'string' && /^\d+$/.test(value)) return Number(value);
   return undefined;
+}
+
+function normalizeGithubSubscriptionMode(value: unknown): GithubSubscriptionMode {
+  return value === 'review' ? 'review' : 'working';
+}
+
+function getGithubTerminalState(snapshot: GithubPullRequestSnapshot | undefined): 'closed' | 'merged' | undefined {
+  return snapshot?.state === 'closed' || snapshot?.state === 'merged' ? snapshot.state : undefined;
 }
 
 function stableJson(value: unknown): string {
@@ -376,6 +391,7 @@ function getGithubMetadata(threadMetadata: Record<string, unknown> | undefined):
       owner,
       repo,
       number,
+      mode: normalizeGithubSubscriptionMode(rawSubscription.mode),
       subscribedAt,
       updatedAt,
       lastSubscribeSignalId,
@@ -613,7 +629,10 @@ const githubActivityNotificationPriority: Record<GithubActivityNotificationPlan[
 };
 
 function getGithubActivityNotificationRank(notification: GithubActivityNotificationPlan): number {
-  return notification.kind === 'pull-request-activity' ? 0 : 1;
+  if (notification.kind === 'pull-request-activity') return 0;
+  if (notification.kind === 'pull-request-code-activity') return 1;
+  if (notification.kind === 'pull-request-review-activity') return 2;
+  return 3;
 }
 
 function compareGithubActivityNotifications(
@@ -638,6 +657,29 @@ function classifyGithubCommentActivityNotification(input: {
   const summary = getCommentNotificationSummary(pr, input.snapshot);
   if (!summary) return undefined;
   return { kind: 'pull-request-activity', priority: 'high', summary };
+}
+
+function classifyGithubHeadActivityNotification(input: {
+  subscription: GithubPRSubscription;
+  snapshot: GithubPullRequestSnapshot;
+}): GithubActivityNotificationPlan {
+  return {
+    kind: 'pull-request-code-activity',
+    priority: 'medium',
+    summary: `New head revision for ${getPrLabel(input.subscription, input.snapshot)}.`,
+  };
+}
+
+function classifyGithubReviewStateActivityNotification(input: {
+  subscription: GithubPRSubscription;
+  snapshot: GithubPullRequestSnapshot;
+}): GithubActivityNotificationPlan {
+  const count = input.snapshot.unresolvedReviewThreads ?? 0;
+  return {
+    kind: 'pull-request-review-activity',
+    priority: 'medium',
+    summary: `${getPrLabel(input.subscription, input.snapshot)} has ${count} unresolved review ${count === 1 ? 'thread' : 'threads'}.`,
+  };
 }
 
 function getCheckUpdatedTime(check: { updatedAt?: string }): number {
@@ -1167,6 +1209,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   static signals = {
     subscribeToPR(input: GithubSubscribePRSignalInput): AgentSignalInput {
       const normalized = typeof input === 'number' ? { number: input } : input;
+      const mode = normalizeGithubSubscriptionMode(normalized.mode);
       return {
         type: 'reactive',
         tagName: GITHUB_SUBSCRIBE_PR_TAG,
@@ -1175,11 +1218,13 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
           ...(normalized.owner ? { owner: normalized.owner } : {}),
           ...(normalized.repo ? { repo: normalized.repo } : {}),
           number: normalized.number,
+          mode,
         },
         metadata: {
           github: {
             action: 'subscribeToPR',
             ...normalized,
+            mode,
           },
         },
       };
@@ -1270,11 +1315,14 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     return this.#pollThread(input, { includeComments: true });
   }
 
-  async subscribeThreadToPR(input: GithubPollingThread & { pr: GithubPRSignalInput }): Promise<GithubOperationResult> {
+  async subscribeThreadToPR(
+    input: GithubPollingThread & { pr: GithubPRSignalInput; mode?: GithubSubscriptionMode },
+  ): Promise<GithubOperationResult> {
     const pr = typeof input.pr === 'number' ? { number: input.pr } : input.pr;
     return this.#subscribe({
       id: `github-command-subscribe-${randomUUID()}`,
       ...pr,
+      mode: normalizeGithubSubscriptionMode(input.mode),
       threadId: input.threadId,
       resourceId: input.resourceId,
     });
@@ -1392,13 +1440,21 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
 
     const result = await this.#subscribe({ ...signal, ...threadContext, abortSignal: args.abortSignal });
     if (result.alreadyProcessed) return { tools };
+    const terminalMessage = result.terminalState
+      ? `Not subscribed to ${result.owner}/${result.repo}#${result.number} in review mode because it is already ${result.terminalState}.`
+      : undefined;
     await this.#sendStatus(args, result, {
-      status: result.syncResult?.ok === false ? 'sync_error' : 'subscribed',
+      status: result.terminalState
+        ? 'not_subscribed_terminal'
+        : result.syncResult?.ok === false
+          ? 'sync_error'
+          : 'subscribed',
       action: 'subscribeToPR',
       message:
-        result.syncResult?.ok === false
+        terminalMessage ??
+        (result.syncResult?.ok === false
           ? `Subscribed to ${result.owner}/${result.repo}#${result.number}, but gitcrawl sync failed: ${result.syncResult.error}`
-          : `Subscribed to ${result.owner}/${result.repo}#${result.number}.`,
+          : `Subscribed to ${result.owner}/${result.repo}#${result.number}.`),
     });
     return { tools };
   }
@@ -1486,6 +1542,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
           number: z.number().int().positive(),
           owner: z.string().optional(),
           repo: z.string().optional(),
+          mode: z.enum(['working', 'review']).optional(),
         }),
         execute: async (input, context) => {
           const executionThreadContext = getExecutionThreadContext(context);
@@ -1494,11 +1551,25 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
             owner: input.owner,
             repo: input.repo,
             number: input.number,
+            mode: normalizeGithubSubscriptionMode(input.mode),
             threadId: executionThreadContext.threadId,
             resourceId: executionThreadContext.resourceId,
           });
+          if (result.terminalState) {
+            return {
+              subscribed: false,
+              mode: result.mode,
+              terminalState: result.terminalState,
+              reason: 'terminal',
+              owner: result.owner,
+              repo: result.repo,
+              number: result.number,
+              message: `Not subscribed to ${result.owner}/${result.repo}#${result.number} in review mode because it is already ${result.terminalState}.`,
+            };
+          }
           return {
             subscribed: true,
+            mode: result.mode,
             owner: result.owner,
             repo: result.repo,
             number: result.number,
@@ -1671,6 +1742,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         const previousContentHash = subscription.lastObservedContentHash;
         const previousThreadContentHash = subscription.lastObservedThreadContentHash;
         const previousHeadSha = subscription.lastObservedHeadSha;
+        const previousReviewStateHash = subscription.lastObservedReviewStateHash;
         const latestCommentTimestampChanged =
           !!previousGithubUpdatedAt &&
           !!snapshot?.latestCommentUpdatedAt &&
@@ -1678,10 +1750,16 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         const existingBotCommentEdited =
           latestCommentTimestampChanged && !!snapshot && isExistingBotCommentEdit(subscription, snapshot);
         const latestCommentChanged = latestCommentTimestampChanged && !existingBotCommentEdited;
+        const headChanged = !!previousHeadSha && !!snapshot?.headSha && previousHeadSha !== snapshot.headSha;
+        const reviewStateChanged =
+          !!previousReviewStateHash &&
+          !!snapshot?.reviewStateHash &&
+          previousReviewStateHash !== snapshot.reviewStateHash &&
+          (snapshot.unresolvedReviewThreads ?? 0) > 0;
         if (snapshot) applySnapshotCursor(nextSubscription, snapshot);
 
-        // First observation (no previous cursor) always counts as changed so we
-        // emit a baseline notification with the PR's current state.
+        // Working subscriptions preserve the existing baseline notification. Review subscriptions
+        // silently checkpoint their first available snapshot and begin notifying on later changes.
         const isFirstObservation = syncResult.ok && snapshot && !previousGithubUpdatedAt && !previousContentHash;
 
         const legacyAggregateChanged =
@@ -1700,17 +1778,22 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
                 snapshot.threadContentHash &&
                 previousThreadContentHash !== snapshot.threadContentHash &&
                 !existingBotCommentEdited) ||
-              (previousHeadSha && snapshot.headSha && previousHeadSha !== snapshot.headSha) ||
+              headChanged ||
               (subscription.lastObservedState && snapshot.state && subscription.lastObservedState !== snapshot.state) ||
               hasMeaningfulMergeableStateChange(subscription.lastObservedMergeableState, snapshot.mergeableState) ||
               (subscription.lastObservedCiState &&
                 snapshot.ciState &&
                 subscription.lastObservedCiState !== snapshot.ciState) ||
-              (subscription.lastObservedReviewStateHash &&
-                snapshot.reviewStateHash &&
-                subscription.lastObservedReviewStateHash !== snapshot.reviewStateHash)));
-        let shouldKeepSubscription = true;
-        if (changed && snapshot && isCurrentGeneration()) {
+              reviewStateChanged));
+        const terminalState = subscription.mode === 'review' ? getGithubTerminalState(snapshot) : undefined;
+        let shouldKeepSubscription = !terminalState;
+        if (
+          shouldKeepSubscription &&
+          changed &&
+          snapshot &&
+          !(subscription.mode === 'review' && isFirstObservation) &&
+          isCurrentGeneration()
+        ) {
           const notifications = await this.#sendActivityNotifications({
             polling: input,
             subscription,
@@ -1718,6 +1801,8 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
             previousGithubUpdatedAt,
             previousContentHash,
             latestCommentChanged,
+            headChanged,
+            reviewStateChanged,
             isCurrentGeneration,
           });
           if (!isCurrentGeneration()) return 0;
@@ -1786,6 +1871,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         owner: input.subscription.owner,
         repo: input.subscription.repo,
         number: input.subscription.number,
+        mode: input.subscription.mode,
         ...(input.snapshot.title ? { title: input.snapshot.title } : {}),
         ...(input.snapshot.state ? { state: input.snapshot.state } : {}),
         ...(input.snapshot.htmlUrl ? { url: input.snapshot.htmlUrl } : {}),
@@ -1810,6 +1896,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
           owner: input.subscription.owner,
           repo: input.subscription.repo,
           number: input.subscription.number,
+          mode: input.subscription.mode,
           title: input.snapshot.title,
           state: input.snapshot.state,
           htmlUrl: input.snapshot.htmlUrl,
@@ -2009,23 +2096,50 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     previousGithubUpdatedAt?: string;
     previousContentHash?: string;
     latestCommentChanged?: boolean;
+    headChanged?: boolean;
+    reviewStateChanged?: boolean;
     isCurrentGeneration: () => boolean;
   }): Promise<Array<{ kind: string; priority: 'medium' | 'high'; summary: string }>> {
     const agent = this.#getNotificationAgent(input.polling);
     if (!agent?.sendNotificationSignal) return [];
-    const notifications = [
-      classifyGithubActivityNotification({
-        subscription: input.subscription,
-        snapshot: input.snapshot,
-      }),
-    ];
-    if (input.latestCommentChanged && notifications[0]?.kind !== 'pull-request-activity') {
+    const notifications: Array<GithubActivityNotificationPlan | undefined> = [];
+    if (input.subscription.mode === 'review') {
+      if (input.latestCommentChanged) {
+        notifications.push(
+          classifyGithubCommentActivityNotification({
+            subscription: input.subscription,
+            snapshot: input.snapshot,
+          }),
+        );
+      }
+      if (input.headChanged) {
+        notifications.push(
+          classifyGithubHeadActivityNotification({ subscription: input.subscription, snapshot: input.snapshot }),
+        );
+      }
+      if (input.reviewStateChanged) {
+        notifications.push(
+          classifyGithubReviewStateActivityNotification({
+            subscription: input.subscription,
+            snapshot: input.snapshot,
+          }),
+        );
+      }
+    } else {
       notifications.push(
-        classifyGithubCommentActivityNotification({
+        classifyGithubActivityNotification({
           subscription: input.subscription,
           snapshot: input.snapshot,
         }),
       );
+      if (input.latestCommentChanged && notifications[0]?.kind !== 'pull-request-activity') {
+        notifications.push(
+          classifyGithubCommentActivityNotification({
+            subscription: input.subscription,
+            snapshot: input.snapshot,
+          }),
+        );
+      }
     }
 
     const sent: GithubActivityNotificationPlan[] = [];
@@ -2075,6 +2189,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   async #subscribe(
     input: GithubPRSignal & { threadId?: string; resourceId?: string; abortSignal?: AbortSignal },
   ): Promise<GithubOperationResult> {
+    const mode = normalizeGithubSubscriptionMode(input.mode);
     const { owner, repo } = await this.#resolveRepository(input);
     const { threadStore, loadedThread } = await this.#loadThread(input);
     const githubMetadata = getGithubMetadata(loadedThread.metadata);
@@ -2084,7 +2199,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     );
     const existing = existingIndex >= 0 ? githubMetadata.subscriptions[existingIndex] : undefined;
     if (existing?.lastSubscribeSignalId === input.id) {
-      return { owner, repo, number: input.number, subscription: existing, alreadyProcessed: true };
+      return { owner, repo, number: input.number, mode: existing.mode, subscription: existing, alreadyProcessed: true };
     }
 
     const now = new Date().toISOString();
@@ -2092,6 +2207,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       owner,
       repo,
       number: input.number,
+      mode,
       subscribedAt: existing?.subscribedAt ?? now,
       updatedAt: now,
       lastSubscribeSignalId: input.id,
@@ -2154,6 +2270,27 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       subscription.lastSyncStatus = 'skipped';
     }
 
+    const terminalState = mode === 'review' ? getGithubTerminalState(baselineSnapshot) : undefined;
+    if (terminalState) {
+      const subscriptions = githubMetadata.subscriptions.filter(
+        candidate => !(candidate.owner === owner && candidate.repo === repo && candidate.number === input.number),
+      );
+      await threadStore.saveThread({
+        thread: {
+          ...loadedThread,
+          id: input.threadId!,
+          resourceId: input.resourceId!,
+          createdAt: loadedThread.createdAt ?? new Date(),
+          updatedAt: new Date(),
+          metadata: setGithubMetadata(loadedThread.metadata, { subscriptions }),
+        },
+      });
+      this.#notifySubscriptionsChanged({ threadId: input.threadId!, resourceId: input.resourceId!, subscriptions });
+      if (subscriptions.length === 0)
+        this.stopPollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
+      return { owner, repo, number: input.number, mode, terminalState, syncResult };
+    }
+
     const subscriptions = [subscription];
 
     await threadStore.saveThread({
@@ -2167,7 +2304,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       },
     });
     this.#notifySubscriptionsChanged({ threadId: input.threadId!, resourceId: input.resourceId!, subscriptions });
-    if (baselineSnapshot) {
+    if (baselineSnapshot && mode === 'working') {
       await this.#sendBaselineNotification({
         threadId: input.threadId!,
         resourceId: input.resourceId!,
@@ -2177,7 +2314,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     }
     await this.startPollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
 
-    return { owner, repo, number: input.number, subscription, syncResult };
+    return { owner, repo, number: input.number, mode, subscription, syncResult };
   }
 
   async #unsubscribe(
@@ -2230,6 +2367,9 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       owner: readString(attributes.owner) ?? readString(github.owner),
       repo: readString(attributes.repo) ?? readString(github.repo),
       number,
+      ...(signal.tagName === GITHUB_SUBSCRIBE_PR_TAG
+        ? { mode: normalizeGithubSubscriptionMode(attributes.mode ?? github.mode) }
+        : {}),
     };
   }
 
@@ -2237,7 +2377,13 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     args: ProcessInputStepArgs,
     signal: GithubOperationResult,
     status: {
-      status: 'subscribed' | 'sync_error' | 'error' | 'unsubscribed' | 'not_subscribed';
+      status:
+        | 'subscribed'
+        | 'sync_error'
+        | 'error'
+        | 'unsubscribed'
+        | 'not_subscribed'
+        | 'not_subscribed_terminal';
       action: 'subscribeToPR' | 'unsubscribeFromPR';
       message: string;
     },
@@ -2251,6 +2397,8 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         owner: signal.owner,
         repo: signal.repo,
         number: signal.number,
+        ...(signal.mode ? { mode: signal.mode } : {}),
+        ...(signal.terminalState ? { terminalState: signal.terminalState } : {}),
       },
       metadata: {
         github: {
@@ -2259,6 +2407,8 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
           owner: signal.owner,
           repo: signal.repo,
           number: signal.number,
+          ...(signal.mode ? { mode: signal.mode } : {}),
+          ...(signal.terminalState ? { terminalState: signal.terminalState } : {}),
         },
       },
     });
