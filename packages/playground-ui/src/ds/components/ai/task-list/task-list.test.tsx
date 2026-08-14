@@ -20,17 +20,21 @@ describe('TaskList', () => {
   });
 
   describe('when tasks have mixed statuses', () => {
-    it('renders the completion count', () => {
-      render(<TaskList tasks={mixedTasks} />);
-
-      expect(screen.getByText('1/3 completed')).toBeTruthy();
-    });
-
     it('renders progress for the completed tasks', () => {
       render(<TaskList tasks={mixedTasks} />);
 
       expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('1');
       expect(screen.getByRole('progressbar').getAttribute('aria-valuemax')).toBe('3');
+    });
+
+    it('renders one progress bar per task, colored by status', () => {
+      render(<TaskList tasks={mixedTasks} />);
+
+      const bars = Array.from(screen.getByRole('progressbar').children).map(bar => bar.className);
+      expect(bars).toHaveLength(3);
+      expect(bars[0]).toContain('bg-positive1');
+      expect(bars[1]).toContain('bg-warning1');
+      expect(bars[2]).toContain('bg-surface6');
     });
 
     it('renders the active form instead of the task content', () => {
@@ -73,13 +77,13 @@ describe('TaskList', () => {
   describe('when the list is collapsed', () => {
     const collapse = () => fireEvent.click(screen.getByRole('button'));
 
-    it('hides the tasks while keeping the completion count', () => {
+    it('hides the tasks while keeping the progress bars', () => {
       render(<TaskList tasks={mixedTasks} />);
       collapse();
 
       expect(screen.queryByText('Inspect code')).toBeNull();
       expect(screen.queryByText('Build package')).toBeNull();
-      expect(screen.getByText('1/3 completed')).toBeTruthy();
+      expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('1');
     });
 
     it('summarizes the active task in place of the title', () => {
@@ -134,18 +138,18 @@ describe('TaskList', () => {
   });
 
   describe('when empty lists are configured to remain visible', () => {
-    it('renders an empty completion count', () => {
+    it('renders no progress bar', () => {
       render(<TaskList tasks={[]} hideWhenEmpty={false} />);
 
-      expect(screen.getByText('0/0 completed')).toBeTruthy();
+      expect(screen.getByRole('progressbar').children).toHaveLength(0);
     });
   });
 
   describe('when completed lists are configured to remain visible', () => {
-    it('renders the completed task count', () => {
+    it('renders every bar as completed', () => {
       render(<TaskList tasks={completedTasks} hideWhenComplete={false} />);
 
-      expect(screen.getByText('3/3 completed')).toBeTruthy();
+      expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('3');
     });
   });
 });

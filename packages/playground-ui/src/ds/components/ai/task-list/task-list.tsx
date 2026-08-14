@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { cn } from '@/lib/utils';
 
 export type TaskListItem = TaskItem;
@@ -19,43 +20,50 @@ export const TaskListHeader = ({ className, ...props }: ComponentProps<typeof Co
   />
 );
 
-export interface TaskListCountProps extends ComponentProps<'span'> {
-  completed: number;
-  total: number;
+const barColors: Record<TaskListItem['status'], string> = {
+  completed: 'bg-positive1',
+  in_progress: 'bg-warning1',
+  pending: 'bg-surface6',
+};
+
+export interface TaskListProgressProps extends Omit<ComponentProps<'span'>, 'children'> {
+  tasks: TaskListItem[];
 }
 
-export const TaskListCount = ({ completed, total, className, ...props }: TaskListCountProps) => (
-  <span className={cn('ml-auto shrink-0 text-ui-xs text-neutral4 tabular-nums', className)} {...props}>
-    {completed}/{total} completed
-  </span>
-);
-
-export interface TaskListProgressProps extends Omit<ComponentProps<'div'>, 'children'> {
-  completed: number;
-  total: number;
-}
-
-export const TaskListProgress = ({ completed, total, className, ...props }: TaskListProgressProps) => {
-  const percentage = total === 0 ? 0 : (completed / total) * 100;
+export const TaskListProgress = ({ tasks, className, ...props }: TaskListProgressProps) => {
+  const completed = tasks.filter(task => task.status === 'completed').length;
   return (
-    <div
-      role="progressbar"
-      aria-label="Task completion"
-      aria-valuemin={0}
-      aria-valuemax={total}
-      aria-valuenow={completed}
-      className={cn('mt-2 mb-2.5 h-1 w-full rounded-full bg-surface4', className)}
-      {...props}
-    >
-      <div className="bg-accent6 h-full rounded-full transition-all duration-300" style={{ width: `${percentage}%` }} />
-    </div>
+    <TooltipProvider delayDuration={0}>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <span
+              role="progressbar"
+              aria-label="Task completion"
+              aria-valuemin={0}
+              aria-valuemax={tasks.length}
+              aria-valuenow={completed}
+              className={cn('ml-auto flex h-4 w-fit max-w-40 shrink-0 items-center gap-1 overflow-hidden', className)}
+              {...props}
+            >
+              {tasks.map(task => (
+                <span key={task.id} className={cn('h-full w-1 min-w-px shrink rounded-full', barColors[task.status])} />
+              ))}
+            </span>
+          }
+        />
+        <TooltipContent>
+          {completed}/{tasks.length} completed
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 };
 
 const icons: Record<TaskListItem['status'], ReactNode> = {
-  completed: <CheckCircle2 className="text-positive1 size-3.5 shrink-0" />,
-  in_progress: <Loader2 className="text-warning1 size-3.5 shrink-0 motion-safe:animate-spin" />,
-  pending: <Circle className="text-neutral4 size-3.5 shrink-0" />,
+  completed: <CheckCircle2 className="size-3.5 shrink-0 text-positive1" />,
+  in_progress: <Loader2 className="size-3.5 shrink-0 text-warning1 motion-safe:animate-spin" />,
+  pending: <Circle className="size-3.5 shrink-0 text-neutral4" />,
 };
 
 const statusLabels: Record<TaskListItem['status'], string> = {
@@ -102,8 +110,8 @@ const TaskListSummary = ({ task }: { task: TaskListItem }) => (
 
 const TaskListTitle = ({ title }: { title: ReactNode }) => (
   <span className="flex min-w-0 flex-1 items-center gap-2">
-    <ListChecks className="text-accent6 size-4 shrink-0" />
-    <span className="text-ui-sm leading-ui-sm text-neutral6 truncate font-medium">{title}</span>
+    <ListChecks className="size-4 shrink-0 text-accent6" />
+    <span className="truncate text-ui-sm leading-ui-sm font-medium text-neutral6">{title}</span>
   </span>
 );
 
@@ -143,11 +151,10 @@ export const TaskList = ({
         <TaskListHeader>
           <ChevronRight className="size-3.5 shrink-0" />
           {open || !summaryTask ? <TaskListTitle title={title} /> : <TaskListSummary task={summaryTask} />}
-          <TaskListCount completed={completed} total={total} />
+          <TaskListProgress tasks={tasks} />
         </TaskListHeader>
         <CollapsibleContent>
-          <TaskListProgress completed={completed} total={total} />
-          <ScrollArea maxHeight="8rem" viewPortClassName="pr-1">
+          <ScrollArea maxHeight="8rem" viewPortClassName="pr-1" className="mt-1">
             <ul className="space-y-1">
               {tasks.map(task => (
                 <TaskListRow
