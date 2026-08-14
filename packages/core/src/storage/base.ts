@@ -13,6 +13,7 @@ import type {
   WorkflowsStorage,
   MemoryStorage,
   ObservabilityStorage,
+  PulseStorage,
   BlobStore,
   DatasetsStorage,
   ExperimentsStorage,
@@ -37,6 +38,7 @@ export type StorageDomains = {
   channels?: ChannelsStorage;
   notifications?: NotificationsStorage;
   observability?: ObservabilityStorage;
+  pulse?: PulseStorage;
   agents?: AgentsStorage;
   datasets?: DatasetsStorage;
   experiments?: ExperimentsStorage;
@@ -383,6 +385,7 @@ export class MastraCompositeStore extends MastraBase {
         workflowDefinitions: resolve('workflowDefinitions'),
         scores: resolve('scores'),
         observability: resolve('observability'),
+        pulse: resolve('pulse'),
         agents: resolve('agents'),
         datasets: resolve('datasets'),
         experiments: resolve('experiments'),
@@ -584,6 +587,7 @@ export class MastraCompositeStore extends MastraBase {
       maybeInit(this.stores.workflowDefinitions);
       maybeInit(this.stores.scores);
       maybeInit(this.stores.observability);
+      maybeInit(this.stores.pulse);
       maybeInit(this.stores.agents);
       maybeInit(this.stores.datasets);
       maybeInit(this.stores.experiments);

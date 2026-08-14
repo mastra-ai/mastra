@@ -27,4 +27,5 @@ export const coreFeatures = new Set<string>([
   'model-inference-span',
   'internal-usage-rollup',
   'json-prompt-injection:inline',
+  'pulse:v0',
 ]);

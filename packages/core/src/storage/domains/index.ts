@@ -13,6 +13,7 @@ export * from './harness';
 export * from './blobs';
 export * from './scores';
 export * from './observability';
+export * from './pulse';
 export * from './operations';
 export * from './workflows';
 export * from './workflow-definitions';
