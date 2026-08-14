@@ -1394,6 +1394,31 @@ describe('ChatChannelOutputProcessor', () => {
       expect(JSON.stringify((posts[0] as Extract<Call, { kind: 'post' }>).arg)).toContain('tool_deny:t1');
     });
 
+    it('falls back to the approval card when a custom stream renderer has no static output', async () => {
+      const toolDisplay = vi.fn((event: any) =>
+        event.kind === 'approval' ? { kind: 'stream', chunk: { type: 'task_update', id: 'approval' } } : undefined,
+      );
+      const { channels, calls, chatThread } = makeChannels({
+        streaming: false,
+        toolDisplay,
+      });
+      await drive(
+        channels,
+        [
+          { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
+          { type: 'tool-call-approval', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
+        ],
+        chatThread,
+      );
+
+      expect(toolDisplay.mock.calls.some(([event]) => event.kind === 'approval')).toBe(true);
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts).toHaveLength(1);
+      expect(calls.filter(c => c.kind === 'editMessage')).toHaveLength(0);
+      expect(JSON.stringify((posts[0] as Extract<Call, { kind: 'post' }>).arg)).toContain('tool_approve:t1');
+      expect(JSON.stringify((posts[0] as Extract<Call, { kind: 'post' }>).arg)).toContain('tool_deny:t1');
+    });
+
     it('posts running card on tool-call and edits it with the result on tool-result', async () => {
       const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(

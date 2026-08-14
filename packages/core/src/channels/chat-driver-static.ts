@@ -98,7 +98,10 @@ export async function runStaticDriver({
         }
         return result.message;
       }
-      if (result.kind === 'stream') return chunkToFallbackMessage(result.chunk);
+      if (result.kind === 'stream') {
+        const message = chunkToFallbackMessage(result.chunk);
+        return message ?? (event.kind === 'approval' ? renderBuiltInToolEvent(event, 'cards') : null);
+      }
       return null;
     }
     if (toolDisplay === 'hidden') {

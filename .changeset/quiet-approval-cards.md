@@ -9,9 +9,13 @@ Resolves https://github.com/mastra-ai/mastra/issues/21162
 Custom renderers can reuse the built-in approval and tool-event formatting:
 
 ```ts
-import { formatToolApproval, renderBuiltInToolEvent } from '@mastra/core/channels';
+import {
+  formatToolApproval,
+  renderBuiltInToolEvent,
+  type ToolDisplayFn,
+} from '@mastra/core/channels';
 
-const renderTool = event =>
+const renderTool: ToolDisplayFn = event =>
   event.kind === 'approval'
     ? formatToolApproval(event.displayName, event.argsSummary, event.toolCallId, true)
     : renderBuiltInToolEvent(event, 'cards');
