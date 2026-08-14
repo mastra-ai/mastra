@@ -2,7 +2,7 @@
 
 exports[`Subconscious knowledge write tools > keeps snapshots of all six public input schemas 1`] = `
 {
-  "knowledge_add_fact": JsonSchemaWrapper {
+  "knowledge_add_item": JsonSchemaWrapper {
     "~standard": {
       "jsonSchema": {
         "input": [Function],
@@ -13,7 +13,7 @@ exports[`Subconscious knowledge write tools > keeps snapshots of all six public 
       "version": 1,
     },
   },
-  "knowledge_merge_entities": JsonSchemaWrapper {
+  "knowledge_merge_nodes": JsonSchemaWrapper {
     "~standard": {
       "jsonSchema": {
         "input": [Function],
@@ -24,7 +24,7 @@ exports[`Subconscious knowledge write tools > keeps snapshots of all six public 
       "version": 1,
     },
   },
-  "knowledge_remove_fact": JsonSchemaWrapper {
+  "knowledge_remove_item": JsonSchemaWrapper {
     "~standard": {
       "jsonSchema": {
         "input": [Function],
@@ -35,7 +35,7 @@ exports[`Subconscious knowledge write tools > keeps snapshots of all six public 
       "version": 1,
     },
   },
-  "knowledge_rescope": JsonSchemaWrapper {
+  "knowledge_rescope_item": JsonSchemaWrapper {
     "~standard": {
       "jsonSchema": {
         "input": [Function],
@@ -46,7 +46,7 @@ exports[`Subconscious knowledge write tools > keeps snapshots of all six public 
       "version": 1,
     },
   },
-  "knowledge_update_entity": JsonSchemaWrapper {
+  "knowledge_update_node": JsonSchemaWrapper {
     "~standard": {
       "jsonSchema": {
         "input": [Function],
@@ -57,7 +57,7 @@ exports[`Subconscious knowledge write tools > keeps snapshots of all six public 
       "version": 1,
     },
   },
-  "knowledge_write_page": JsonSchemaWrapper {
+  "knowledge_write_node_content": JsonSchemaWrapper {
     "~standard": {
       "jsonSchema": {
         "input": [Function],
