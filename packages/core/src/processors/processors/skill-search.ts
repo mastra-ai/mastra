@@ -22,6 +22,7 @@
  * ```
  */
 import { z } from 'zod/v4';
+import { parseMemoryRequestContext } from '../../memory/types';
 import { MASTRA_THREAD_ID_KEY } from '../../request-context';
 import { createTool } from '../../tools';
 import type { WorkspaceSkills } from '../../workspace/skills';
@@ -135,9 +136,18 @@ export class SkillSearchProcessor implements Processor<'skill-search'> {
 
   /**
    * Get the thread ID from the request context, or use 'default' as fallback.
+   *
+   * The reserved `mastra__threadId` key is only populated by server middleware
+   * overrides, so also fall back to the memory context the agent sets after
+   * resolving the thread (covers HTTP calls that pass the thread via
+   * `memory.thread`).
    */
   private getThreadId(args: ProcessInputStepArgs): string {
-    return args.requestContext?.get(MASTRA_THREAD_ID_KEY) || 'default';
+    return (
+      (args.requestContext?.get(MASTRA_THREAD_ID_KEY) as string | undefined) ||
+      parseMemoryRequestContext(args.requestContext)?.thread?.id ||
+      'default'
+    );
   }
 
   /**
