@@ -24,7 +24,7 @@ import { relatedWorkItems, relationshipLabel, relationshipPath } from '../servic
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { workItemActivity } from '../workItemActivity';
-import { CardLabels, CardStatus, CardTitleTooltip, SourceTitle } from './BoardCardParts';
+import { CardLabels, CardStatus, CardTitleTooltip, REVEAL_ON_CARD_HOVER, SourceTitle } from './BoardCardParts';
 import { BoardStageIcon, SourceIcon, actionIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 import { WorkItemActivity } from './WorkItemActivity';
@@ -222,6 +222,7 @@ export function WorkItemCard({
                   size="icon-xs"
                   disabled={evaluating}
                   aria-label={`Actions for ${item.title}`}
+                  className={REVEAL_ON_CARD_HOVER}
                 >
                   <EllipsisVertical size={13} aria-hidden />
                 </Button>
@@ -292,7 +293,6 @@ export function WorkItemCard({
           </div>
         </div>
         <CardLabels labels={labels} />
-        <WorkItemActivity activity={activity} actors={activityPage?.actors ?? {}} />
         {threadSession !== undefined && (
           <span className="text-ui-xs text-accent1 flex items-center gap-1">
             <MessagesSquare size={11} aria-hidden />
@@ -327,11 +327,14 @@ export function WorkItemCard({
             ))}
           </div>
         )}
-        <CardStatus
-          status={status}
-          onRetry={retryDecisionId === undefined ? undefined : () => onRetryDecision(retryDecisionId)}
-          retrying={retryDecisionId !== undefined && retryDecisionId === retryingDecisionId}
-        />
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+          <WorkItemActivity activity={activity} actors={activityPage?.actors ?? {}} />
+          <CardStatus
+            status={status}
+            onRetry={retryDecisionId === undefined ? undefined : () => onRetryDecision(retryDecisionId)}
+            retrying={retryDecisionId !== undefined && retryDecisionId === retryingDecisionId}
+          />
+        </div>
       </article>
     </CardTitleTooltip>
   );

@@ -628,8 +628,8 @@ describe('Board card pending states', () => {
     const title = await screen.findByText('Slack request');
     const card = title.closest<HTMLElement>('[data-testid="work-item-card"]');
     if (!card) throw new Error('Expected the title inside its work item card');
-    expect(within(card).getByText(/^Slack · added /)).toBeInTheDocument();
-    expect(within(card).queryByText(/^Manual · added /)).not.toBeInTheDocument();
+    expect(within(card).getByText(/^Slack · /)).toBeInTheDocument();
+    expect(within(card).queryByText(/^Manual · /)).not.toBeInTheDocument();
   });
 
   it('ignores a card dropped back into its current column', async () => {

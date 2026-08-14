@@ -40,6 +40,14 @@ export function CardTitleTooltip({ title, children }: { title: string; children:
   );
 }
 
+/**
+ * Card chrome a hover can reveal: the click affordance and the actions menu.
+ * Gated on `pointer-fine` because a touch screen has no hover to reveal it
+ * with, and stays up while its menu is open.
+ */
+export const REVEAL_ON_CARD_HOVER =
+  'transition-opacity duration-200 ease-out motion-reduce:transition-none pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-within:opacity-100 pointer-fine:aria-expanded:opacity-100';
+
 /** The card's one status row: a hover hint when idle, a live region once something is happening. */
 export function CardStatus({
   status,
@@ -56,7 +64,7 @@ export function CardStatus({
     return (
       <span
         aria-hidden
-        className="text-ui-xs text-icon3 group-hover:text-icon5 group-focus-within:text-icon5 flex items-center gap-1.5 transition-colors motion-reduce:transition-none"
+        className={cn('text-ui-xs text-icon4 ml-auto flex shrink-0 items-center gap-1.5', REVEAL_ON_CARD_HOVER)}
       >
         <Icon size={11} aria-hidden />
         {status.label}
@@ -66,7 +74,11 @@ export function CardStatus({
 
   if (status.kind === 'busy') {
     return (
-      <span role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
+      <span
+        role="status"
+        aria-live="polite"
+        className="text-ui-xs text-icon4 ml-auto flex shrink-0 items-center gap-1.5"
+      >
         <Spinner size="sm" aria-hidden className="size-3" />
         {status.label}
       </span>
@@ -89,7 +101,8 @@ export function CardStatus({
   );
 
   return (
-    <div className="flex items-start justify-between gap-2">
+    // Failure text plus its Retry never share a line with anything else.
+    <div className="flex w-full items-start justify-between gap-2">
       {status.detail === undefined ? (
         message
       ) : (
@@ -137,15 +150,15 @@ export function CardLabels({ labels }: { labels: readonly string[] }) {
       {visibleLabels.map(label => (
         <span
           key={label}
-          className="border-border1 text-ui-xs text-icon4 inline-flex h-6 max-w-full items-center gap-1 rounded-full border px-2"
+          className="border-border1 text-ui-xs text-icon4 inline-flex h-5 max-w-full items-center gap-1 rounded-full border px-1.5"
           title={label}
         >
-          <span className={cn('size-1.5 shrink-0 rounded-full', labelDotClass(label))} aria-hidden />
+          <span className={cn('size-1 shrink-0 rounded-full', labelDotClass(label))} aria-hidden />
           <span className="truncate">{label}</span>
         </span>
       ))}
       {hiddenCount > 0 && (
-        <span className="border-border1 text-ui-xs text-icon3 inline-flex h-6 items-center rounded-full border px-2">
+        <span className="border-border1 text-ui-xs text-icon3 inline-flex h-5 items-center rounded-full border px-1.5">
           +{hiddenCount}
         </span>
       )}

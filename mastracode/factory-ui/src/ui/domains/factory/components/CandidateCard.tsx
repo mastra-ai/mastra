@@ -11,7 +11,7 @@ import type { BoardCandidate } from '../boardCandidates';
 import { setDragPayload } from '../boardDrag';
 import { externalLinkLabel, metadataLabels } from '../boardItems';
 import type { RunAction } from '../boardRunSpecs';
-import { CardLabels, CardStatus, CardTitleTooltip, SourceTitle } from './BoardCardParts';
+import { CardLabels, CardStatus, CardTitleTooltip, REVEAL_ON_CARD_HOVER, SourceTitle } from './BoardCardParts';
 import { SourceIcon, actionIcon } from './BoardIcons';
 
 /**
@@ -105,6 +105,7 @@ export function CandidateCard({
                   size="icon-xs"
                   disabled={disabled}
                   aria-label={`Actions for ${candidate.title}`}
+                  className={REVEAL_ON_CARD_HOVER}
                 >
                   <EllipsisVertical size={13} aria-hidden />
                 </Button>

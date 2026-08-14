@@ -43,6 +43,12 @@ describe('boardCardStatus', () => {
     ).toEqual({ kind: 'busy', label: 'Review — preparing workspace…' });
   });
 
+  it('keeps the click that is still resolving ahead of a rule effect queued behind it', () => {
+    expect(
+      boardCardStatus({ idle: IDLE, preparing: 'Preparing run…', decision: decision({ status: 'pending' }) }),
+    ).toEqual({ kind: 'busy', label: 'Preparing run…' });
+  });
+
   it('offers the retry and hides the raw failure behind the detail', () => {
     expect(
       boardCardStatus({ idle: IDLE, decision: decision({ status: 'failed', lastError: 'ENOENT: no such file' }) }),
