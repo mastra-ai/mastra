@@ -36,7 +36,7 @@ export function checkpointNameForSession(sessionId: string): string {
 
 const bundleDirectory = dirname(fileURLToPath(import.meta.url));
 const bundledFactorySkillsPath = join(bundleDirectory, 'factory-skills');
-const FACTORY_SKILLS_SOURCE_PATH =
+export const FACTORY_SKILLS_SOURCE_PATH =
   [
     // Deploy bundle: the consumer copies `factory-skills/` next to the built
     // server module (e.g. via its public/ dir).
@@ -48,7 +48,13 @@ const FACTORY_SKILLS_SOURCE_PATH =
     join(process.cwd(), 'src', 'mastra', 'public', 'factory-skills'),
   ].find(existsSync) ?? bundledFactorySkillsPath;
 const FACTORY_SKILLS_MOUNT = path.resolve(path.parse(process.cwd()).root, '__mastracode_factory_skills__');
-const FACTORY_SKILL_NAMES = new Set(['configure-factory-rules', 'factory-plan', 'factory-review', 'factory-triage']);
+export const FACTORY_SKILL_NAMES = new Set([
+  'configure-factory-rules',
+  'factory-plan',
+  'factory-rereview',
+  'factory-review',
+  'factory-triage',
+]);
 
 class FactorySkillSource implements SkillSource {
   readonly #factorySource = new LocalSkillSource({ basePath: FACTORY_SKILLS_SOURCE_PATH });
@@ -384,12 +390,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       const ghCliToken = (await getGithubPat(() => github.integrationStorage, session.orgId, patKind)) ?? token;
 
       const ensureSandbox = () =>
-        fleet.ensureSandbox(
-          binding,
-          { GH_TOKEN: ghCliToken },
-          undefined,
-          isLocalSandbox ? { workingDirectory: workdir } : {},
-        );
+        fleet.ensureSandbox(binding, { GH_TOKEN: ghCliToken }, undefined, {
+          ...(isLocalSandbox ? { workingDirectory: workdir } : {}),
+          actingUserId: userId,
+        });
       const runMaterialize = (target: Awaited<ReturnType<typeof ensureSandbox>>) =>
         materializeRepo({
           row: { id: session.id, sandboxWorkdir: workdir, materializedAt: session.materializedAt },

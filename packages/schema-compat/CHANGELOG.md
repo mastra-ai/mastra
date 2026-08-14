@@ -1,5 +1,31 @@
 # @mastra/schema-compat
 
+## 1.3.7
+
+### Patch Changes
+
+- Optional nested JSON Schema properties with multiple types no longer produce exponentially large OpenAI tool payloads. Payload growth now remains linear as these schemas become more deeply nested. ([#21190](https://github.com/mastra-ai/mastra/pull/21190))
+
+## 1.3.7-alpha.0
+
+### Patch Changes
+
+- Optional nested JSON Schema properties with multiple types no longer produce exponentially large OpenAI tool payloads. Payload growth now remains linear as these schemas become more deeply nested. ([#21190](https://github.com/mastra-ai/mastra/pull/21190))
+
+## 1.3.6
+
+### Patch Changes
+
+- Fixed OpenAI structured output requests failing when a schema uses `z.record()`. The OpenAI compatibility layer now removes the `propertyNames` keyword, which OpenAI strict mode does not permit. Requests that used to fail with "Invalid schema ... 'propertyNames' is not permitted" are now accepted. ([#20977](https://github.com/mastra-ai/mastra/pull/20977))
+
+  **Known limitation.** OpenAI strict mode cannot express an open-ended map. A `z.record()` field is still sent as a plain object with no value schema, so the model is not told what keys or values to produce. Use an explicit `z.object({ ... })` shape when you need the model to fill a map. See [#19273](https://github.com/mastra-ai/mastra/issues/19273).
+
+- Fix supervisor agent tool schemas for Gemini via OpenRouter. Properties with no Gemini-compatible type — most commonly `z.any()`, which serializes to an empty schema — are now rewritten into a permissive `anyOf` instead of being dropped. This resolves the misleading `required[N]: property is not defined` error when using Gemini models through OpenRouter as a supervisor agent (fixes #17325), while keeping fields the model is expected to fill (such as `resumeData` for tool suspend/resume) present in the tool contract. ([#17386](https://github.com/mastra-ai/mastra/pull/17386))
+
+- Fixed Zod v3 schema conversion for CommonJS consumers. ([#21147](https://github.com/mastra-ai/mastra/pull/21147))
+
+- Fixed tool execute-time input validation for Zod tools on Anthropic Claude 3.5 Haiku. The compat layer now skips string min/max checks that were removed from the model-facing JSON Schema, while preserving refinements, defaults, and other validation semantics. ([#19701](https://github.com/mastra-ai/mastra/pull/19701))
+
 ## 1.3.6-alpha.3
 
 ### Patch Changes

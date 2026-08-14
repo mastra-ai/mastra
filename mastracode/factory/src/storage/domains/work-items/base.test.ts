@@ -6,7 +6,7 @@
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, vi } from 'vitest';
 
-import { applyStageTransition, isAutomationActor, WorkItemRelationError, WorkItemsStorage } from './base.js';
+import { applyStageTransition, isAgentActor, WorkItemRelationError, WorkItemsStorage } from './base.js';
 import type { WorkItemStageEntry } from './base.js';
 
 const input = {
@@ -315,19 +315,19 @@ describe('applyStageTransition', () => {
   });
 });
 
-describe('isAutomationActor', () => {
+describe('isAgentActor', () => {
   it.each([
-    ['factory', true],
-    ['system', true],
-    ['automation', true],
-    ['factory-rule-dispatcher', true],
-    ['factory-tool-result-rule', true],
     ['agent:binding-1', true],
-    ['github:someone', true],
+    ['factory-tool-result-rule', true],
+    // The poller's actors: a machine moved the card, but no agent worked it.
+    ['factory-rule-dispatcher', false],
+    ['github:someone', false],
+    ['factory', false],
+    ['system', false],
     ['user_wos_123', false],
     ['', false],
     [undefined, false],
-  ] as const)('isAutomationActor(%j) → %s', (actor, expected) => {
-    expect(isAutomationActor(actor)).toBe(expected);
+  ] as const)('isAgentActor(%j) → %s', (actor, expected) => {
+    expect(isAgentActor(actor)).toBe(expected);
   });
 });

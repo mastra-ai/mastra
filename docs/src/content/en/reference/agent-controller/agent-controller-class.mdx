@@ -404,6 +404,31 @@ const session = await controller.getSessionByResource('project-42', 'editor-wind
 
 Returns: `Promise<Session<TState> | undefined>`
 
+#### `onSessionCreated(listener, options?)`
+
+Subscribe to process-local notifications after `createSession()` materializes a new live session. Listener errors are isolated and don't prevent other listeners from running. Call the returned function to unsubscribe.
+
+By default listeners are fire-and-forget. Pass `{ blocking: true }` to make `createSession()` await the listener before resolving the new session, so the host can prepare session state before the caller can start a run. Blocking listeners run sequentially in registration order, before fire-and-forget listeners are notified. A blocking listener must not call `createSession()` for the same `(resourceId, scope)` pair. That call would await its own hydration and deadlock.
+
+```typescript
+const unsubscribe = controller.onSessionCreated(
+  async session => {
+    const settings = await loadSettings(session.identity.getResourceId())
+    if (settings) await session.state.set(settings)
+  },
+  { blocking: true },
+)
+
+// Default listeners stay fire-and-forget.
+controller.onSessionCreated(session => {
+  console.log(`Created ${session.identity.getResourceId()}`)
+})
+```
+
+Listeners run once per newly materialized session, not for cached sessions returned by later `createSession()` calls. They run only in the current process and aren't persisted events.
+
+Returns: `() => void`
+
 #### `onSessionDeleted(listener)`
 
 Subscribe to process-local notifications after `deleteSession()` tears down a live session. Listener errors are isolated and don't prevent other listeners from running. Call the returned function to unsubscribe.
@@ -452,6 +477,24 @@ const resourceIds = await controller.getKnownResourceIds(session)
 ```
 
 Returns: `Promise<string[]>`
+
+#### `listActiveThreadRuns()`
+
+List every run in flight on this controller, across all resources and threads. The list comes from in-process run tracking, so it covers runs started by the current process and doesn't create or touch a session.
+
+```typescript
+const runs = controller.listActiveThreadRuns()
+```
+
+Returns: `ActiveThreadRun[]`
+
+```typescript
+interface ActiveThreadRun {
+  runId: string
+  resourceId?: string
+  threadId: string
+}
+```
 
 ### Lifecycle
 
@@ -662,5 +705,5 @@ await controller.stopIntervals()
 - [AgentController guide](/docs/harness/agent-controller)
 - [Session reference](/reference/agent-controller/session)
 - [Agents](/docs/agents/overview)
-- [Workspace](/docs/workspace/overview)
+- [Sandbox](/docs/workspace/sandbox)
 - [Channels](/docs/capabilities/channels)

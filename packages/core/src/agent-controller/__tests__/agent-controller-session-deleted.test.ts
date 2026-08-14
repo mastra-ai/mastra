@@ -221,4 +221,25 @@ describe('AgentController.deleteSession', () => {
     const fresh = await controller.createSession({ resourceId: 'resource-2' });
     expect(fresh).not.toBe(session);
   });
+
+  it('notifies listeners even when releasing the thread lock fails', async () => {
+    const controller = createController(new InMemoryStore(), {
+      acquire: vi.fn(),
+      release: vi.fn().mockRejectedValue(new Error('lock release failed')),
+    });
+    await controller.init();
+    const session = await controller.createSession({ resourceId: 'resource-1' });
+    const deleted = vi.fn();
+    controller.onSessionDeleted(deleted);
+
+    await expect(controller.deleteSession({ resourceId: 'resource-1' })).rejects.toThrow('lock release failed');
+
+    // The failed teardown still deregistered the session, so listeners
+    // mirroring the registry must hear about it — otherwise they hold the
+    // dead session forever.
+    expect(deleted).toHaveBeenCalledWith(session);
+    await expect(controller.getSessionByResource('resource-1')).resolves.toBeUndefined();
+    const fresh = await controller.createSession({ resourceId: 'resource-1' });
+    expect(fresh).not.toBe(session);
+  });
 });

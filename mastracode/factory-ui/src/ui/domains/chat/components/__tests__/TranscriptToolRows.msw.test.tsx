@@ -53,7 +53,7 @@ function renderEntries(entries: TimelineEntry[]) {
 }
 
 describe('TranscriptEntries tool rows', () => {
-  it('shows no status icon on success — only running and failed carry indicators', () => {
+  it('marks a running call busy instead of spinning, and leaves success unmarked', () => {
     renderEntries([
       assistantMessage('msg-1', [doneTool('call-1', 'view')]),
       assistantMessage('msg-2', [runningTool('call-2', 'execute_command', {})]),
@@ -75,10 +75,12 @@ describe('TranscriptEntries tool rows', () => {
     expect(screen.queryByLabelText('Done')).not.toBeInTheDocument();
     const doneRow = screen.getByRole('group', { name: 'Tool: view' });
     expect(within(doneRow).queryByRole('img')).not.toBeInTheDocument();
+    expect(doneRow).toHaveAttribute('aria-busy', 'false');
 
-    // Running keeps its spinner.
+    // Running carries no icon at all — the shimmering label is the cue.
     const runningRow = screen.getByRole('group', { name: 'Tool: execute_command' });
-    expect(within(runningRow).getByLabelText('Running')).toBeInTheDocument();
+    expect(runningRow).toHaveAttribute('aria-busy', 'true');
+    expect(within(runningRow).queryByRole('img')).not.toBeInTheDocument();
 
     // Failure keeps its red cross.
     const failedRow = screen.getByRole('group', { name: 'Tool: write_file' });
@@ -134,10 +136,11 @@ describe('TranscriptEntries tool rows', () => {
     ]);
 
     const group = screen.getByRole('group', { name: 'Tool group: 4 steps' });
-    expect(within(group).getByText('Run')).toBeInTheDocument();
+    expect(within(group).getByText('4 steps')).toBeInTheDocument();
     expect(within(group).getByText('pnpm test')).toBeInTheDocument();
+    expect(within(group).getByRole('img', { name: 'Read, Run' })).toBeInTheDocument();
     expect(within(group).getByText('3/4')).toBeInTheDocument();
-    expect(within(group).getByLabelText('Running')).toBeInTheDocument();
+    expect(group).toHaveAttribute('aria-busy', 'true');
   });
 
   it('does not group runs broken by prose', () => {
@@ -157,7 +160,8 @@ describe('TranscriptEntries tool rows', () => {
   it.each([
     ['ask_user', 'Question from the agent', { question: 'Which file should I edit?' }],
     ['submit_plan', 'Plan approval', { plan: { title: 'Ship the fix', content: 'Step one' } }],
-  ])('breaks a run on %s so its prompt is never swallowed by a group', (toolName, promptLabel, args) => {
+    ['skill', 'Skill: understand-issue', { name: 'understand-issue' }],
+  ])('breaks a run on %s so its card is never swallowed by a group', (toolName, promptLabel, args) => {
     renderEntries([
       assistantMessage('msg-1', [
         doneTool('call-1', 'view'),
@@ -196,6 +200,20 @@ describe('TranscriptEntries tool rows', () => {
     expect(within(question).getByText('Which file should I edit?')).toBeInTheDocument();
   });
 
+  it('ignores an ask_user still waiting for its prompt so the run around it stays one group', () => {
+    renderEntries([
+      assistantMessage('msg-1', [
+        doneTool('call-1', 'view'),
+        doneTool('call-2', 'view'),
+        runningTool('call-3', 'ask_user', {}),
+        doneTool('call-4', 'view'),
+      ]),
+    ]);
+
+    expect(screen.getByRole('group', { name: 'Tool group: 3 steps' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Question from the agent' })).not.toBeInTheDocument();
+  });
+
   it('trusts the persisted result over a stale running overlay — a lost tool_end must not spin forever', () => {
     renderEntries([
       assistantMessage('msg-1', [doneTool('call-1', 'view')], {
@@ -203,8 +221,8 @@ describe('TranscriptEntries tool rows', () => {
       }),
     ]);
 
-    expect(screen.queryByLabelText('Running')).not.toBeInTheDocument();
     const row = screen.getByRole('group', { name: 'Tool: view' });
+    expect(row).toHaveAttribute('aria-busy', 'false');
     expect(within(row).queryByRole('img')).not.toBeInTheDocument();
   });
 
@@ -225,7 +243,7 @@ describe('TranscriptEntries tool rows', () => {
 
     const row = screen.getByRole('group', { name: 'Tool: write_file' });
     expect(within(row).getByRole('img', { name: 'Failed' })).toBeInTheDocument();
-    expect(within(row).queryByLabelText('Running')).not.toBeInTheDocument();
+    expect(row).toHaveAttribute('aria-busy', 'false');
   });
 
   it.each(['output-error', 'output-denied'] as const)(
@@ -248,7 +266,7 @@ describe('TranscriptEntries tool rows', () => {
 
       const row = screen.getByRole('group', { name: 'Tool: write_file' });
       expect(within(row).getByRole('img', { name: 'Failed' })).toBeInTheDocument();
-      expect(within(row).queryByLabelText('Running')).not.toBeInTheDocument();
+      expect(row).toHaveAttribute('aria-busy', 'false');
     },
   );
 
@@ -264,7 +282,7 @@ describe('TranscriptEntries tool rows', () => {
     const userBubbleWrapper = screen.getByText('Please run the tests').closest('.items-end');
     expect(userBubbleWrapper).toHaveClass('my-3');
 
-    const assistantProse = screen.getByText('All 36 tests passed.').closest('.prose');
+    const assistantProse = screen.getByText('All 36 tests passed.').closest('.mastra-markdown');
     expect(assistantProse).toHaveClass('my-3');
   });
 });

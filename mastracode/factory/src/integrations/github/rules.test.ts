@@ -159,7 +159,7 @@ async function createLinkedIssue(
 }
 
 function pullRequest(
-  event: 'opened' | 'closed',
+  event: 'opened' | 'closed' | 'synchronize',
   deliveryId: string,
   merged = false,
   createdAt = '2030-01-01T00:00:00Z',
@@ -491,6 +491,7 @@ describe('GithubRules', () => {
       controller: controller as never,
       transitionService,
       storage: workItems,
+      isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
       primeCredentials,
       prepareBinding: async ({ record, item, role }) => {
@@ -809,7 +810,7 @@ describe('GithubRules', () => {
     ]);
   });
 
-  it('dispatches a re-review transition back into Reviewing and queues a fresh factory-review pass', async () => {
+  it('dispatches a re-review transition back into Reviewing and queues a fresh factory-rereview pass', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
     const card = await workItems.upsert({
       orgId: 'org-1',
@@ -841,6 +842,7 @@ describe('GithubRules', () => {
       controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({ storage: workItems, rules }),
       storage: workItems,
+      isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
     });
 
@@ -876,7 +878,7 @@ describe('GithubRules', () => {
       expect.arrayContaining([
         expect.objectContaining({
           workItemId: card.item.id,
-          decision: expect.objectContaining({ type: 'invokeSkill', skillName: 'factory-review', role: 'review' }),
+          decision: expect.objectContaining({ type: 'invokeSkill', skillName: 'factory-rereview', role: 'review' }),
         }),
       ]),
     );
@@ -888,6 +890,106 @@ describe('GithubRules', () => {
     const decisions = await workItems.listDeferredDecisions('org-1', project.id);
     expect(decisions.filter(entry => entry.decision.type === 'transition')).toHaveLength(1);
     expect(decisions.filter(entry => entry.decision.type === 'invokeSkill')).toHaveLength(1);
+  });
+
+  it('re-reviews a PR when a push arrives after Reviewing finished and asks the dispatcher to cancel the in-flight pass', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    const card = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        title: 'PR 17',
+        stages: ['done'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const rules = builtInFactoryRules();
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      transitionService: new FactoryTransitionService({ storage: workItems, rules }),
+      storage: workItems,
+      isAutoRunEnabled: async () => true,
+      ownerId: 'worker-1',
+    });
+
+    await expect(service.ingest(pullRequest('synchronize', 'delivery-push-1'))).resolves.toEqual({
+      status: 'committed',
+    });
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const [item] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
+    expect(item).toMatchObject({ id: card.item.id, stages: ['review'] });
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions.filter(entry => entry.decision.type === 'transition')).toHaveLength(1);
+    // The onEnter review rule sees a re-entry (from a post-intake stage) and dispatches
+    // factory-rereview, asking the dispatcher to cancel any in-flight review run first.
+    const invocations = decisions.filter(entry => entry.decision.type === 'invokeSkill');
+    expect(invocations).toHaveLength(1);
+    expect(invocations[0]!.decision).toMatchObject({
+      type: 'invokeSkill',
+      skillName: 'factory-rereview',
+      role: 'review',
+      cancelInFlight: true,
+    });
+
+    // A follow-up push while the card is still Reviewing is a guarded no-op: no
+    // extra transition, no duplicate skill invocation.
+    await expect(service.ingest(pullRequest('synchronize', 'delivery-push-2'))).resolves.toEqual({
+      status: 'committed',
+    });
+    const afterSecondPush = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(afterSecondPush.filter(entry => entry.decision.type === 'transition')).toHaveLength(1);
+    expect(afterSecondPush.filter(entry => entry.decision.type === 'invokeSkill')).toHaveLength(1);
+  });
+
+  it('ignores push events on PRs whose card has not yet completed a review pass', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        title: 'PR 17',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await expect(service.ingest(pullRequest('synchronize', 'delivery-push-intake'))).resolves.toEqual({
+      status: 'committed',
+    });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
   });
 
   it.each(['maintain', 'triage', 'read', undefined])('fails closed for GitHub permission %s', async permission => {
@@ -1540,7 +1642,11 @@ describe('createGithubPullRequestReconciler', () => {
     const context = await setup('read');
     const card = await createIssueCard(context, { number: 42 });
     const fetchIssue = vi.fn(async () => closedIssueState(42, 'not_planned'));
-    const reconcile = createReconciler(context, vi.fn(async () => undefined), fetchIssue);
+    const reconcile = createReconciler(
+      context,
+      vi.fn(async () => undefined),
+      fetchIssue,
+    );
 
     await reconcile([repositoryTarget]);
 
@@ -1563,7 +1669,11 @@ describe('createGithubPullRequestReconciler', () => {
     // No repository signal at all: ambiguous, so the sweep must not guess.
     await createIssueCard(context, { number: 44, url: null });
     const fetchIssue = vi.fn(async () => closedIssueState(42, 'completed'));
-    const reconcile = createReconciler(context, vi.fn(async () => undefined), fetchIssue);
+    const reconcile = createReconciler(
+      context,
+      vi.fn(async () => undefined),
+      fetchIssue,
+    );
 
     await expect(reconcile([repositoryTarget])).resolves.toMatchObject({ issuesChecked: 1, issuesClosed: 1 });
     expect(fetchIssue).toHaveBeenCalledTimes(1);
@@ -1593,7 +1703,11 @@ describe('createGithubPullRequestReconciler', () => {
       metadata: { githubRepositoryId: 999 },
     });
     const fetchIssue = vi.fn(async () => closedIssueState(42, 'completed'));
-    const reconcile = createReconciler(context, vi.fn(async () => undefined), fetchIssue);
+    const reconcile = createReconciler(
+      context,
+      vi.fn(async () => undefined),
+      fetchIssue,
+    );
 
     await expect(reconcile([repositoryTarget])).resolves.toMatchObject({ issuesChecked: 1, issuesClosed: 1 });
     expect(fetchIssue).toHaveBeenCalledTimes(1);
@@ -1612,7 +1726,11 @@ describe('createGithubPullRequestReconciler', () => {
     await createIssueCard(context, { number: 41, stages: ['done'] });
     await createIssueCard(context, { number: 42 });
     const fetchIssue = vi.fn(async () => ({ ...closedIssueState(42), state: 'open' as const }));
-    const reconcile = createReconciler(context, vi.fn(async () => undefined), fetchIssue);
+    const reconcile = createReconciler(
+      context,
+      vi.fn(async () => undefined),
+      fetchIssue,
+    );
 
     await expect(reconcile([repositoryTarget])).resolves.toEqual({
       repositories: 1,
@@ -1636,13 +1754,22 @@ describe('createGithubPullRequestReconciler', () => {
     });
 
     // No fetcher wired: issue cards are ignored entirely.
-    await expect(createReconciler(context, vi.fn(async () => undefined))([repositoryTarget])).resolves.toMatchObject({
+    await expect(
+      createReconciler(
+        context,
+        vi.fn(async () => undefined),
+      )([repositoryTarget]),
+    ).resolves.toMatchObject({
       failed: 0,
     });
 
     // Wired but failing: the sweep records the failure with issue context.
     await expect(
-      createReconciler(context, vi.fn(async () => undefined), fetchIssue)([repositoryTarget]),
+      createReconciler(
+        context,
+        vi.fn(async () => undefined),
+        fetchIssue,
+      )([repositoryTarget]),
     ).resolves.toMatchObject({
       failed: 1,
       errors: [

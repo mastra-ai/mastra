@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z as z3 } from 'zod/v3';
 import { z as z4 } from 'zod/v4';
 import { RequestContext } from '../../request-context';
-import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '../../schema';
+import { isStandardSchemaWithJSON, standardSchemaToJSONSchema, toStandardSchema } from '../../schema';
 import { createTool } from '../../tools';
 import { CoreToolBuilder } from './builder';
 
@@ -152,6 +152,44 @@ describe('CoreToolBuilder background override injection', () => {
   });
 
   describe('Zod v4 input schema', () => {
+    it('keeps ~standard.jsonSchema after background override injection (#21170)', async () => {
+      const baseSchema = z4.object({ query: z4.string() });
+      delete (baseSchema as { '~standard'?: { jsonSchema?: unknown } })['~standard']?.jsonSchema;
+      const wrapped = toStandardSchema(baseSchema);
+      const execute = vi.fn();
+
+      const tool = createTool({
+        id: 'v4-adapter-tool',
+        description: 'Zod v4 tool with Mastra jsonSchema adapter',
+        inputSchema: wrapped as any,
+        execute,
+      });
+
+      const builder = new CoreToolBuilder({
+        originalTool: tool,
+        options: baseOptions(),
+        backgroundTaskEnabled: true,
+      });
+
+      expect(isStandardSchemaWithJSON(tool.inputSchema)).toBe(true);
+      const json = standardSchemaToJSONSchema(tool.inputSchema as any, { io: 'input' });
+      expect(json.properties).toMatchObject({
+        query: expect.anything(),
+        _background: expect.anything(),
+      });
+
+      const built = builder.build();
+      const result = await built.execute!(
+        { query: 'docs', _background: { enabled: 'yes' } },
+        { toolCallId: 'call-1', messages: [] },
+      );
+      expect(result).toMatchObject({
+        error: true,
+        message: expect.stringContaining('Tool input validation failed'),
+      });
+      expect(execute).not.toHaveBeenCalled();
+    });
+
     it('still injects _background and accepts valid input', async () => {
       const execute = vi.fn().mockResolvedValue({ ok: true });
       const tool = createTool({

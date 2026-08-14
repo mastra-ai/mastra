@@ -15,7 +15,7 @@ Breaking changes may occur without a major version bump until the API is stable.
 
 Dynamic workflows are workflow definitions expressed as data instead of code. A definition is a JSON document that describes the workflow's schemas and step graph. Mastra validates the definition and registers it as a runnable workflow, then persists it in storage so it survives process restarts.
 
-Because a definition contains no JavaScript closures, anything that can produce JSON can author a workflow: an HTTP client, an LLM, a visual editor, or your own tooling. Once registered, a dynamic workflow runs through the same execution API as a code-defined workflow.
+Because a definition contains no JavaScript closures, anything that produces JSON can author a workflow. Sources include an HTTP client or LLM. A visual editor or your own tooling can also produce the definition. Once registered, a dynamic workflow runs through the same execution API as a code-defined workflow.
 
 ## When to use dynamic workflows
 

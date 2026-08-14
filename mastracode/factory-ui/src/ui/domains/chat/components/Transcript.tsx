@@ -4,13 +4,15 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { MessageScrollerItem } from '@mastra/playground-ui/components/MessageScroller';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { startsUserTurn } from '@mastra/playground-ui/components/ThreadRail';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageFactory } from '@mastra/react/ui';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
-import { Bell, ChevronDown, CircleDot, ExternalLink, Info, Layers, Slack } from 'lucide-react';
+import { Bell, CircleDot, ExternalLink, Info, Layers, Slack } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
@@ -23,10 +25,11 @@ import {
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { isTerminalInvocationState } from '../services/transcript';
+import { MESSAGE_HOVER, MessageMeta } from './MessageMeta';
 import { ToolCard } from './tool/ToolCard';
 import { ToolGroup, TOOL_GROUP_MIN } from './tool/ToolGroup';
 import { isTranscriptToolVisible, ToolFactory } from './ToolFactory';
-import { Markdown } from '../../../ui/Markdown';
+import { ROW_RAIL, ROW_TRIGGER, TranscriptRow } from './TranscriptRow';
 
 import type {
   ApprovalPrompt,
@@ -66,6 +69,13 @@ function stringify(v: unknown): string {
   } catch {
     return String(v);
   }
+}
+
+function messageText(parts: MessageEntry['message']['content']['parts']): string {
+  return parts
+    .flatMap(part => (part.type === 'text' ? [part.text] : []))
+    .join('\n\n')
+    .trim();
 }
 
 function lastSegment(id: string): string {
@@ -380,26 +390,11 @@ function NotificationRow({
       role="group"
       aria-label={`Notification: ${label}`}
     >
-      <CollapsibleTrigger className="hover:bg-surface2 active:bg-surface4 w-full rounded-lg text-left transition-colors">
-        <span className="flex w-full items-center gap-2 px-2 py-1.5">
-          <ChevronDown
-            size={13}
-            className={cn(
-              'shrink-0 text-icon3 transition-transform duration-150',
-              expanded ? 'rotate-0' : '-rotate-90',
-            )}
-          />
-          <span className="flex shrink-0 items-center">{icon}</span>
-          <Txt as="span" variant="ui-smd" className="text-icon5 shrink-0">
-            {label}
-          </Txt>
-          <Txt as="span" variant="ui-xs" font="mono" className="text-icon3 truncate">
-            {truncate(message, 72)}
-          </Txt>
-        </span>
+      <CollapsibleTrigger className={ROW_TRIGGER}>
+        <TranscriptRow icon={icon} label={label} detail={truncate(message, 72)} expanded={expanded} />
       </CollapsibleTrigger>
       <CollapsibleContent className="max-w-full min-w-0">
-        <div className="border-border1 bg-surface2 mt-1 flex max-w-full min-w-0 flex-col gap-2 rounded-2xl border p-2">
+        <div className={cn(ROW_RAIL, 'flex flex-col gap-2')}>
           <Txt variant="ui-sm">{message}</Txt>
           {url && (
             <a
@@ -443,27 +438,36 @@ function NotificationSummaryCard({ entry }: { entry: NotificationSummaryEntry })
   );
 }
 
+/** A gap reads `1 hour 58 minutes later — 08/11/2026, 5:21 PM GMT+2`; the phrase is the signal, the stamp is detail. */
+function TimeGap({ text }: { text: string }) {
+  const [phrase, timestamp] = text.split(' — ');
+  if (!phrase) return null;
+
+  return (
+    <div className="flex items-center gap-3 py-3" role="separator" aria-label={text}>
+      <span aria-hidden className="bg-border1 h-px flex-1" />
+      <Txt as="span" variant="ui-xs" className="text-icon3 shrink-0" title={timestamp}>
+        {phrase}
+      </Txt>
+      <span aria-hidden className="bg-border1 h-px flex-1" />
+    </div>
+  );
+}
+
+const SIGNAL_ICONS: Record<string, ReactNode> = {
+  state: <Layers size={13} className="text-purple-400" />,
+  reminder: <Info size={13} className="text-accent3" />,
+};
+
 /** Compact row for state/reminder/reactive signals, collapsible when it has details. */
 function SignalRow({ kind, label, message }: { kind: string; label: string; message: string }) {
   const [expanded, setExpanded] = useState(false);
-  const icon =
-    kind === 'state' ? (
-      <Layers size={13} className="text-purple-400" />
-    ) : kind === 'reminder' ? (
-      <Info size={13} className="text-accent3" />
-    ) : (
-      <Info size={13} className="text-icon3" />
-    );
+  const icon = SIGNAL_ICONS[kind] ?? <Info size={13} className="text-icon3" />;
 
   if (!message) {
     return (
       <div className="max-w-full min-w-0" data-signal-kind={kind} role="group" aria-label={`Signal: ${label}`}>
-        <span className="flex w-full items-center gap-2 px-2 py-1.5">
-          <span className="flex shrink-0 items-center">{icon}</span>
-          <Txt as="span" variant="ui-smd" className="text-icon5 shrink-0">
-            {label}
-          </Txt>
-        </span>
+        <TranscriptRow icon={icon} label={label} />
       </div>
     );
   }
@@ -477,26 +481,11 @@ function SignalRow({ kind, label, message }: { kind: string; label: string; mess
       role="group"
       aria-label={`Signal: ${label}`}
     >
-      <CollapsibleTrigger className="hover:bg-surface2 active:bg-surface4 w-full rounded-lg text-left transition-colors">
-        <span className="flex w-full items-center gap-2 px-2 py-1.5">
-          <ChevronDown
-            size={13}
-            className={cn(
-              'shrink-0 text-icon3 transition-transform duration-150',
-              expanded ? 'rotate-0' : '-rotate-90',
-            )}
-          />
-          <span className="flex shrink-0 items-center">{icon}</span>
-          <Txt as="span" variant="ui-smd" className="text-icon5 shrink-0">
-            {label}
-          </Txt>
-          <Txt as="span" variant="ui-xs" font="mono" className="text-icon3 truncate">
-            {truncate(message, 72)}
-          </Txt>
-        </span>
+      <CollapsibleTrigger className={ROW_TRIGGER}>
+        <TranscriptRow icon={icon} label={label} detail={truncate(message, 72)} expanded={expanded} />
       </CollapsibleTrigger>
       <CollapsibleContent className="max-w-full min-w-0">
-        <div className="border-border1 bg-surface2 mt-1 max-w-full min-w-0 rounded-2xl border p-2">
+        <div className={ROW_RAIL}>
           <Txt variant="ui-sm" className="break-words whitespace-pre-wrap">
             {message}
           </Txt>
@@ -510,7 +499,7 @@ function SignalRow({ kind, label, message }: { kind: string; label: string; mess
 // Transcript
 // ---------------------------------------------------------------------------
 
-export function Transcript() {
+export function Transcript({ tail }: { tail?: ReactNode }) {
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { transcript, resolvePrompt } = useChatTranscript();
   const hookArgs = {
@@ -538,6 +527,7 @@ export function Transcript() {
       isSubmitting={approveMutation.isPending || respondMutation.isPending}
       onApprove={onApprove}
       onRespond={onRespond}
+      tail={tail}
     />
   );
 }
@@ -547,11 +537,14 @@ export function TranscriptEntries({
   isSubmitting = false,
   onApprove,
   onRespond,
+  tail,
 }: {
   entries: TimelineEntry[];
   isSubmitting?: boolean;
   onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
+  /** Rendered inside the live turn (the activity line), so the reserved room stays under it. */
+  tail?: ReactNode;
 }) {
   const suspensions = new Map(
     entries.flatMap(entry => (entry.kind === 'suspension' ? [[entry.toolCallId, entry] as const] : [])),
@@ -591,25 +584,44 @@ export function TranscriptEntries({
     }
   };
 
+  const turnGroups: { key: string; entries: TimelineEntry[]; opensTurn: boolean }[] = [];
+  for (const entry of entries) {
+    const opensTurn = entry.kind === 'message' && startsUserTurn(entry.message);
+    if (opensTurn || turnGroups.length === 0) turnGroups.push({ key: entry.id, entries: [], opensTurn });
+    turnGroups.at(-1)?.entries.push(entry);
+  }
+
   return (
     <>
-      {entries.map(entry => {
-        const rendered = renderEntry(entry);
-        if (!rendered) return null;
-
+      {turnGroups.map((group, index) => {
+        const isLiveTurn = index === turnGroups.length - 1;
         return (
-          <MessageScrollerItem
-            key={entry.id}
-            messageId={entry.id}
-            scrollAnchor={entry.kind === 'message' && entry.message.role === 'user'}
-            // Estimated off-screen heights would make the prepend anchor restore
-            // the wrong offset — measure the real thing.
-            className="[content-visibility:visible]"
-          >
-            {rendered}
-          </MessageScrollerItem>
+          // The room a fresh turn scrolls up into is this min-height: pure layout,
+          // filled by the streaming reply. It stays after the run — collapsing it
+          // would shift the reader — and moves to the next turn with the anchor scroll.
+          <div key={group.key} className={cn('flex flex-col', isLiveTurn && group.opensTurn && 'min-h-[50cqh]')}>
+            {group.entries.map(entry => {
+              const rendered = renderEntry(entry);
+              if (!rendered) return null;
+
+              return (
+                <MessageScrollerItem
+                  key={entry.id}
+                  messageId={entry.id}
+                  scrollAnchor={entry.kind === 'message' && startsUserTurn(entry.message)}
+                  // Estimated off-screen heights would make the prepend anchor restore
+                  // the wrong offset — measure the real thing.
+                  className="[content-visibility:visible]"
+                >
+                  {rendered}
+                </MessageScrollerItem>
+              );
+            })}
+            {isLiveTurn && tail}
+          </div>
         );
       })}
+      {turnGroups.length === 0 && tail}
     </>
   );
 }
@@ -666,44 +678,39 @@ function MessageBubble({
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {
   const messageParts = entry.message.content.parts ?? [];
-  const parts = messageParts.filter(
-    part => part.type !== 'tool-invocation' || isTranscriptToolVisible(part.toolInvocation.toolName),
-  );
+  const parts = messageParts.filter(part => isRenderablePart(part, suspensions, entry.runtimeTools));
   const message =
     parts.length === messageParts.length
       ? entry.message
       : { ...entry.message, content: { ...entry.message.content, parts } };
-  const hasRenderablePart = parts.some(
-    part =>
-      (part.type === 'text' && part.text.trim().length > 0) ||
-      (part.type === 'reasoning' && part.reasoning.trim().length > 0) ||
-      part.type === 'tool-invocation' ||
-      part.type === 'file',
-  );
-
-  const lastTextPart = (() => {
-    for (let i = parts.length - 1; i >= 0; i--) {
-      if (parts[i].type === 'text') return parts[i];
-    }
-    return undefined;
-  })();
+  const hasRenderablePart = parts.length > 0;
 
   const toolGroups = collectToolGroups(parts, suspensions, entry.runtimeTools);
   const origin = channelOrigin(entry);
+  const prose = messageText(parts);
   const roles: MessageRoleRenderers = {
     User: ({ children }) => (
-      <div className="my-3 flex w-full flex-col items-end">
+      <div className={cn(MESSAGE_HOVER, 'my-3 ml-auto flex w-fit max-w-[70%] flex-col items-end')}>
         <div
-          className={`text-text1 max-w-[70%] rounded-xl px-4 py-2 break-words ${
-            entry.steer ? 'bg-warning1/10' : 'bg-surface3'
-          }`}
+          className={cn(
+            'text-text1 rounded-xl px-4 py-2 break-words',
+            entry.steer ? 'bg-warning1/10' : 'bg-neutral6/5',
+          )}
         >
           {children}
         </div>
         {origin && <ChannelOriginBadge origin={origin} />}
+        {prose ? <MessageMeta text={prose} createdAt={entry.message.createdAt} align="end" /> : null}
       </div>
     ),
-    Assistant: ({ children }) => <div className="max-w-full">{children}</div>,
+    Assistant: ({ children }) => (
+      // The trailing margin of the last part spaced this message from the next
+      // entry; the meta row inherits it as a gap unless it moves to the wrapper.
+      <div className={cn(MESSAGE_HOVER, 'max-w-full', prose && 'mb-3 [&>*:nth-last-child(2)]:mb-0')}>
+        {children}
+        {prose ? <MessageMeta text={prose} createdAt={entry.message.createdAt} align="start" /> : null}
+      </div>
+    ),
     System: ({ children }) => <div className="text-ui-sm text-icon3">{children}</div>,
     Signal: ({ children }) => <div className="text-ui-sm text-icon3">{children}</div>,
   };
@@ -712,33 +719,18 @@ function MessageBubble({
     Text: (part: TextPart) => {
       if (entry.message.role === 'user') {
         const activation = parseSkillActivation(part.text);
-        return activation ? (
-          <SkillMessage activation={activation} />
-        ) : (
-          <div className="prose">
-            <Markdown>{part.text}</Markdown>
-          </div>
-        );
+        return activation ? <SkillMessage activation={activation} /> : <MarkdownRenderer>{part.text}</MarkdownRenderer>;
       }
 
-      const showCursor = entry.streaming && part === lastTextPart;
       return (
-        <div className="prose my-3">
-          <Markdown
-            className={
-              showCursor
-                ? "[&>:last-child]:after:bg-accent1 [&>:last-child]:after:ml-0.5 [&>:last-child]:after:inline-block [&>:last-child]:after:h-[1em] [&>:last-child]:after:w-0.5 [&>:last-child]:after:animate-pulse [&>:last-child]:after:align-text-bottom [&>:last-child]:after:content-['']"
-                : undefined
-            }
-          >
-            {part.text}
-          </Markdown>
-        </div>
+        <MarkdownRenderer className="my-3" streaming={entry.streaming}>
+          {part.text}
+        </MarkdownRenderer>
       );
     },
     Reasoning: (part: ReasoningPart) => (
-      <div className="border-border1 text-ui-sm text-icon3 my-1.5 border-l-2 pl-2.5 italic [&_p]:my-0.5">
-        <Markdown>{part.reasoning}</Markdown>
+      <div className="border-border1 my-1.5 border-l-2 pl-2.5 italic [&_p]:my-0.5">
+        <MarkdownRenderer className="text-ui-sm text-icon3">{part.reasoning}</MarkdownRenderer>
       </div>
     ),
     ToolInvocation: (part: ToolInvocationPart) => {
@@ -750,7 +742,6 @@ function MessageBubble({
       const runtime = entry.runtimeTools?.[toolCallId];
       const tool = toolFromInvocationPart(part, runtime);
       const suspension = suspensions.get(tool.toolCallId);
-      if (tool.toolName === 'ask_user' && tool.status === 'running' && !suspension) return null;
       return (
         <ToolFactory
           toolName={tool.toolName}
@@ -800,6 +791,7 @@ function MessageBubble({
         <SignalRow kind="state" label={`State ${signalRow.mode}: ${signalRow.stateId}`} message={signalRow.text} />
       );
     }
+    if (signalRow.kind === 'gap') return <TimeGap text={signalRow.text} />;
     if (signalRow.kind === 'reminder') {
       return <SignalRow kind="reminder" label="System reminder" message={signalRow.text} />;
     }
@@ -833,11 +825,45 @@ function terminalInvocationStatus(invocation: ToolInvocationPart['toolInvocation
   return 'isError' in invocation && invocation.isError === true ? 'error' : 'done';
 }
 
+/** Parts that draw something: step markers and blank prose leave empty bubbles and split runs of calls. */
+function isRenderablePart(
+  part: MessageEntry['message']['content']['parts'][number],
+  suspensions: ReadonlyMap<string, SuspensionPrompt>,
+  runtimeTools: MessageEntry['runtimeTools'],
+): boolean {
+  switch (part.type) {
+    case 'text':
+      return part.text.trim().length > 0;
+    case 'reasoning':
+      return part.reasoning.trim().length > 0;
+    case 'tool-invocation':
+      return isRenderableTool(part, suspensions, runtimeTools);
+    case 'file':
+      return true;
+    default:
+      return false;
+  }
+}
+
+function isRenderableTool(
+  part: ToolInvocationPart,
+  suspensions: ReadonlyMap<string, SuspensionPrompt>,
+  runtimeTools: MessageEntry['runtimeTools'],
+): boolean {
+  const tool = toolFromInvocationPart(part, runtimeTools?.[part.toolInvocation.toolCallId]);
+  if (!isTranscriptToolVisible(tool.toolName)) return false;
+
+  const awaitingPrompt = tool.toolName === 'ask_user' && tool.status === 'running' && !suspensions.has(tool.toolCallId);
+  return !awaitingPrompt;
+}
+
+/** Tools whose own card carries the turn: a group row would swallow the prompt, the plan or the skill instructions. */
+const UNGROUPABLE_TOOLS = new Set(['ask_user', 'submit_plan', 'skill']);
+
 /**
  * Collapse runs of {@link TOOL_GROUP_MIN}+ consecutive plain tool calls into
- * groups keyed by their first toolCallId. Interactive tools (ask_user,
- * submit_plan, suspended calls) break a run — their prompt cards must render
- * inline, never swallowed by a group.
+ * groups keyed by their first toolCallId. Suspended calls break a run too —
+ * their prompt must render inline.
  */
 function collectToolGroups(
   parts: MessageEntry['message']['content']['parts'],
@@ -859,8 +885,7 @@ function collectToolGroups(
   for (const part of parts) {
     const groupable =
       part.type === 'tool-invocation' &&
-      part.toolInvocation.toolName !== 'ask_user' &&
-      part.toolInvocation.toolName !== 'submit_plan' &&
+      !UNGROUPABLE_TOOLS.has(part.toolInvocation.toolName) &&
       !suspensions.has(part.toolInvocation.toolCallId);
     if (groupable) {
       run.push(toolFromInvocationPart(part, runtimeTools?.[part.toolInvocation.toolCallId]));
@@ -1011,6 +1036,7 @@ const SUPPRESSED_STATE_SIGNAL_IDS = new Set(['tasks', 'goal']);
 
 type SignalRowView =
   | { kind: 'state'; stateId: string; mode: 'snapshot' | 'delta'; text: string }
+  | { kind: 'gap'; text: string }
   | { kind: 'reminder'; text: string }
   | { kind: 'reactive'; tagName?: string; text: string };
 
@@ -1027,6 +1053,8 @@ function signalRowView(entry: MessageEntry): SignalRowView | undefined {
 
   const tagName = typeof signal.tagName === 'string' ? signal.tagName : undefined;
   const text = signalPartsText(entry);
+  const attributes = isRecord(signal.attributes) ? signal.attributes : {};
+  const reminderKind = attributes.type === 'temporal-gap' ? 'gap' : 'reminder';
 
   if (signal.type === 'state') {
     const metadata = isRecord(signal.metadata) ? signal.metadata : {};
@@ -1040,8 +1068,8 @@ function signalRowView(entry: MessageEntry): SignalRowView | undefined {
   }
   // `normalizeSignal` maps `system-reminder` to `reactive` + `system-reminder`
   // tag before persistence, but live pre-normalized signals may carry the raw type.
-  if (signal.type === 'system-reminder') return { kind: 'reminder', text };
-  if (signal.type === 'reactive' && tagName === 'system-reminder') return { kind: 'reminder', text };
+  if (signal.type === 'system-reminder') return { kind: reminderKind, text };
+  if (signal.type === 'reactive' && tagName === 'system-reminder') return { kind: reminderKind, text };
   if (signal.type === 'reactive') return { kind: 'reactive', tagName, text };
   return undefined;
 }
@@ -1102,9 +1130,7 @@ function StatusMetadataCard({ status }: { status: StatusMetadata }) {
 function NoticeCard({ entry }: { entry: NoticeEntry }) {
   return (
     <Notice className="my-2" variant={entry.level === 'error' ? 'destructive' : 'info'}>
-      <div className="prose">
-        <Markdown>{entry.text}</Markdown>
-      </div>
+      <MarkdownRenderer className="text-current">{entry.text}</MarkdownRenderer>
     </Notice>
   );
 }

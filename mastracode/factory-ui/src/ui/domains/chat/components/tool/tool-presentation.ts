@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   Braces,
   CircleStop,
   Eye,
@@ -73,6 +74,9 @@ const TOOL_STYLES: Record<string, ToolStyle> = {
   delete: { icon: Trash2, label: 'Delete', detailKeys: ['path'] },
   delete_file: { icon: Trash2, label: 'Delete', detailKeys: ['path'] },
   mkdir: { icon: FolderPlus, label: 'New folder', detailKeys: ['path'] },
+  skill: { icon: BookOpen, label: 'Skill', detailKeys: ['name'] },
+  skill_search: { icon: BookOpen, label: 'Search skills', detailKeys: ['query'] },
+  skill_read: { icon: BookOpen, label: 'Skill file', detailKeys: ['path'] },
 };
 
 function prettifyToolName(toolName: string): string {
@@ -80,16 +84,17 @@ function prettifyToolName(toolName: string): string {
   return words ? words.charAt(0).toUpperCase() + words.slice(1) : toolName;
 }
 
+/** Agents prefix commands with `cd <workspace> &&`, which crowds out the command itself on a one-line row. */
+function withoutCdPrefix(command: string): string {
+  return command.replace(/^\s*cd\s+(?:'[^']*'|"[^"]*"|[^\s&|;]+)\s*&&\s*/, '') || command;
+}
+
 export function presentTool(toolName: string, args: unknown): ToolPresentation {
   const style = TOOL_STYLES[toolName.replace(/^mastra_workspace_/, '')];
-  if (!style) {
-    return { icon: Wrench, label: prettifyToolName(toolName) };
-  }
+  if (!style) return { icon: Wrench, label: prettifyToolName(toolName) };
+
   const detail = style.detailKeys ? firstStringArg(args, style.detailKeys) : undefined;
-  return {
-    icon: style.icon,
-    label: style.label,
-    ...(detail ? { detail } : {}),
-    ...(style.isCommand && detail ? { command: detail } : {}),
-  };
+  if (!detail) return { icon: style.icon, label: style.label };
+  if (!style.isCommand) return { icon: style.icon, label: style.label, detail };
+  return { icon: style.icon, label: style.label, detail: withoutCdPrefix(detail), command: detail };
 }

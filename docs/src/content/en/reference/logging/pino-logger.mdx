@@ -196,7 +196,7 @@ You can create custom transports using the `createCustomTransport` utility to in
 
 ### Sentry transport example
 
-Creates a custom transport using `createCustomTransport` and integrates it with a third-party logging stream such as `pino-sentry-transport`. This allows forwarding logs to an external system like Sentry for advanced monitoring and observability.
+Creates a custom transport using `createCustomTransport` and integrates it with a third-party logging stream such as `pino-sentry-transport`. The custom transport forwards logs to an external system such as Sentry for advanced monitoring and observability.
 
 ```typescript title="src/mastra/loggers/sentry-transport.ts"
 import { createCustomTransport } from '@mastra/core/loggers'

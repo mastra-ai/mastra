@@ -121,15 +121,23 @@ export const UPSERT_DYNAMIC_WORKFLOW_ROUTE = createRoute({
       // its helpers behind as orphans. Order within the bundle is derived
       // from the graphs, not from the order the client sent them in.
       const bundle = [...(dependencies ?? []), def];
-      // The Zod schema output is structurally compatible with
-      // DynamicWorkflowGraph but TS can't prove every arm:
-      //   - sleepUntil.date is an ISO string on the wire, Date on the
-      //     runtime type; the rehydrator parses it via `new Date(...)`.
-      //   - conditional/loop's `serializedConditions`/`serializedCondition`
-      //     debug labels are emitted by the fluent builder at rehydration
-      //     time; clients don't send them.
+      // The wire schema is deliberately looser than the core authoring type:
+      // it admits `mapping` entries as children of parallel/conditional/loop,
+      // which `WorkflowBuilderExecutableInnerEntry` excludes. That is not
+      // drift. Letting those through means a misplaced mapping surfaces from
+      // the validation domain as a structured `invalid-map-placement` issue —
+      // pointed at the offending path and carrying a machine-applicable
+      // `remove-workflow-step` repair action that Studio's draft UI consumes —
+      // instead of dying at the boundary as an opaque discriminated-union
+      // error. `foreach` is excluded from this on purpose: core rejects a
+      // foreach mapping body with an unstructured throw during rehydration,
+      // so there is no repairable issue to preserve and the wire schema is
+      // the better place to catch it.
+      //
       // `addDynamicWorkflows` runs a full registry pre-flight before
-      // rehydration; the cast documents this boundary.
+      // rehydration, so nothing reaches the engine unvalidated; the cast
+      // documents this boundary. Narrowing the schema to delete the cast
+      // would trade a repairable issue for a generic 400.
       await mastra.addDynamicWorkflows(bundle as Parameters<Mastra['addDynamicWorkflows']>[0]);
       return {
         ok: true as const,
