@@ -53,6 +53,7 @@ import type { ToolExecutionContext } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { PUBSUB_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
+import type { DynamicWorkflowGraph } from './dynamic';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import { validateTemplate } from './mapping-template';
 import { derivePredicateLabel, evaluatePredicate } from './predicate';
@@ -1639,6 +1640,10 @@ export class Workflow<
   public type: WorkflowType = 'default';
   /** Where this workflow came from: 'code' for statically registered workflows, 'dynamic' for workflows rehydrated from storage. Set by rehydrateWorkflow; defaults to 'code'. */
   public origin: 'code' | 'dynamic' = 'code';
+  /** Whether this dynamic workflow is authoritative in WorkflowDefinitionsStorage. */
+  public dynamicStorageBacked = false;
+  /** Exact definition closure used to materialize this dynamic workflow revision. */
+  public dynamicWorkflowDefinitions?: readonly DynamicWorkflowGraph[];
   #nestedWorkflowInput?: TInput;
   public committed: boolean = false;
   protected stepFlow: StepFlowEntry<TEngineType>[];
@@ -1723,6 +1728,12 @@ export class Workflow<
 
   get options() {
     return this.#options;
+  }
+
+  /** @internal Pins the JSON-safe definition closure used by this workflow revision. */
+  __setDynamicWorkflowDefinitions(definitions: readonly DynamicWorkflowGraph[]) {
+    this.dynamicWorkflowDefinitions = structuredClone(definitions);
+    this.executionEngine.dynamicWorkflowDefinitions = this.dynamicWorkflowDefinitions;
   }
 
   __registerMastra(mastra: Mastra) {
@@ -2524,6 +2535,20 @@ export class Workflow<
     /** Optional pubsub instance for streaming events. If not provided, a new EventEmitterPubSub is created. */
     pubsub?: PubSub;
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>> {
+    const resolved = await this.#mastra?.__resolveDynamicWorkflowForRun(this as any, options?.runId);
+    if (resolved && resolved.workflow !== this) {
+      return resolved.workflow.__createRunPinned(options);
+    }
+    return this.__createRunPinned(options);
+  }
+
+  /** @internal Creates a run from this already-resolved immutable workflow revision. */
+  async __createRunPinned(options?: {
+    runId?: string;
+    resourceId?: string;
+    disableScorers?: boolean;
+    pubsub?: PubSub;
+  }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>> {
     if (this.stepFlow.length === 0) {
       throw new Error(
         'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
@@ -2608,6 +2633,9 @@ export class Workflow<
         result: undefined,
         error: undefined,
         timestamp: Date.now(),
+        dynamicWorkflowDefinitions: this.dynamicWorkflowDefinitions
+          ? structuredClone(Array.from(this.dynamicWorkflowDefinitions))
+          : undefined,
       };
       await workflowsStore?.persistWorkflowSnapshot({
         workflowName: this.id,

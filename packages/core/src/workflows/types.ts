@@ -405,6 +405,11 @@ export interface WorkflowRunState {
    * as children of the original suspended span.
    */
   tracingContext?: WorkflowStateTracingContext;
+  /**
+   * Exact root and nested dynamic definitions used by this run. This keeps
+   * resume/restart revision-stable even after the registered definition changes.
+   */
+  dynamicWorkflowDefinitions?: import('./dynamic').DynamicWorkflowGraph[];
 }
 
 /**

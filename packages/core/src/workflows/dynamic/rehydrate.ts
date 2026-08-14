@@ -50,10 +50,19 @@ export interface RehydratedWorkflow {
  */
 export type RehydrateWorkflowOptions = JsonSchemaToZodOptions;
 
+export interface RehydrateDynamicWorkflowOptions extends RehydrateWorkflowOptions {
+  /**
+   * Internal resolution seam used when materializing an immutable run revision.
+   * Dynamic nested workflows resolve from the revision bundle before falling
+   * back to the Mastra registry.
+   */
+  resolveWorkflow?: (id: string) => any | undefined;
+}
+
 export async function rehydrateWorkflow(
   def: DynamicWorkflowGraph,
   mastra: Mastra,
-  opts?: RehydrateWorkflowOptions,
+  opts?: RehydrateDynamicWorkflowOptions,
 ): Promise<RehydratedWorkflow> {
   const inputSchema = jsonSchemaToZod(def.inputSchema, opts);
   const outputSchema = jsonSchemaToZod(def.outputSchema, opts);
@@ -75,6 +84,7 @@ export async function rehydrateWorkflow(
   }
   const built: any = wf.commit();
   built.origin = 'dynamic';
+  built.__setDynamicWorkflowDefinitions?.([def]);
   return { workflow: built };
 }
 
@@ -82,7 +92,7 @@ function applyGraphEntry(
   wf: any,
   entry: ValidatableStepFlowEntry,
   mastra: Mastra,
-  schemaOpts?: JsonSchemaToZodOptions,
+  schemaOpts?: RehydrateDynamicWorkflowOptions,
 ): void {
   switch (entry.type) {
     case 'agent':
@@ -91,7 +101,7 @@ function applyGraphEntry(
       return;
     case 'mapping': {
       const cfg = parseMapConfig(entry.mapConfig, entry.id);
-      const live = rehydrateMapConfig(cfg, mastra);
+      const live = rehydrateMapConfig(cfg, mastra, schemaOpts?.resolveWorkflow);
       wf.map(live, { id: entry.id });
       return;
     }
@@ -145,7 +155,7 @@ function applyGraphEntry(
       return;
     }
     case 'workflow': {
-      const nested = assertWorkflowExists(mastra, entry.workflowId);
+      const nested = assertWorkflowExists(mastra, entry.workflowId, schemaOpts?.resolveWorkflow);
       // A nested workflow executes as its own `Workflow`, so the engine keys its
       // result by the workflow's intrinsic id. The portable definition addresses
       // it by the declared call-site id, which is what mappings, predicates and
@@ -218,7 +228,7 @@ function rebuildAgentOptions(
     outputSchema?: Record<string, any>;
     options?: SerializedStepOptions;
   },
-  schemaOpts?: JsonSchemaToZodOptions,
+  schemaOpts?: RehydrateDynamicWorkflowOptions,
 ): Record<string, any> | undefined {
   const opts: Record<string, any> = {};
   if (entry.outputSchema) {
@@ -251,7 +261,7 @@ function rebuildToolOptions(entry: { options?: SerializedStepOptions }): Record<
 function rehydrateSingleEntry(
   entry: SerializedSingleStepEntry,
   mastra: Mastra,
-  schemaOpts?: JsonSchemaToZodOptions,
+  schemaOpts?: RehydrateDynamicWorkflowOptions,
 ): SingleStepEntry {
   switch (entry.type) {
     case 'agent': {
@@ -296,7 +306,7 @@ function rehydrateSingleEntry(
       );
     }
     case 'workflow': {
-      const nested = assertWorkflowExists(mastra, entry.workflowId);
+      const nested = assertWorkflowExists(mastra, entry.workflowId, schemaOpts?.resolveWorkflow);
       // Same call-site identity rule as top-level nested workflows: run the
       // clone under the declared id so results are keyed the way the portable
       // definition addresses them.
@@ -314,7 +324,11 @@ function rehydrateSingleEntry(
  * Rebuild the object shape that `.map()` accepts. Step sources remain workflow-local
  * step IDs because mapping execution resolves them from the run's step results.
  */
-function rehydrateMapConfig(cfg: Record<string, any>, mastra: Mastra): Record<string, any> {
+function rehydrateMapConfig(
+  cfg: Record<string, any>,
+  mastra: Mastra,
+  resolveWorkflow?: (id: string) => any | undefined,
+): Record<string, any> {
   const out: Record<string, any> = {};
   for (const [key, source] of Object.entries(cfg)) {
     if (!source || typeof source !== 'object') {
@@ -328,7 +342,7 @@ function rehydrateMapConfig(cfg: Record<string, any>, mastra: Mastra): Record<st
     } else if ('requestContextPath' in source) {
       out[key] = { requestContextPath: source.requestContextPath };
     } else if ('initData' in source && typeof source.initData === 'string') {
-      const wf = mastra.getWorkflow?.(source.initData);
+      const wf = resolveWorkflow?.(source.initData) ?? mastra.getWorkflow?.(source.initData);
       if (!wf) {
         throw new Error(`Mapping references unknown workflow init-data "${source.initData}".`);
       }
@@ -392,8 +406,12 @@ function tryGetWorkflowById(mastra: Mastra, id: string): any | undefined {
   }
 }
 
-function assertWorkflowExists(mastra: Mastra, workflowId: string): any {
-  const wf = tryGetWorkflowById(mastra, workflowId);
+function assertWorkflowExists(
+  mastra: Mastra,
+  workflowId: string,
+  resolveWorkflow?: (id: string) => any | undefined,
+): any {
+  const wf = resolveWorkflow?.(workflowId) ?? tryGetWorkflowById(mastra, workflowId);
   if (!wf) {
     throw new Error(
       `Dynamic workflow references nested workflow "${workflowId}" which is not registered on this Mastra instance.`,

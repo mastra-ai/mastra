@@ -6,6 +6,7 @@ import { RegisteredLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { Span, SpanType, TracingPolicy } from '../observability';
+import type { DynamicWorkflowGraph } from './dynamic';
 import type {
   OutputWriter,
   SerializedStepFlowEntry,
@@ -66,6 +67,8 @@ export interface ExecutionEngineOptions {
 export abstract class ExecutionEngine extends MastraBase {
   public mastra?: Mastra;
   public options: ExecutionEngineOptions;
+  /** Exact dynamic definition closure pinned to runs created by this engine. */
+  public dynamicWorkflowDefinitions?: readonly DynamicWorkflowGraph[];
   constructor({ mastra, options }: { mastra?: Mastra; options: ExecutionEngineOptions }) {
     super({ name: 'ExecutionEngine', component: RegisteredLogger.WORKFLOW });
     this.mastra = mastra;
