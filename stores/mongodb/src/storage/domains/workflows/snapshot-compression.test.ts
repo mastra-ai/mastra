@@ -101,4 +101,18 @@ describe('MongoDB Workflow Snapshot Compression (#21412)', () => {
     const decompressed = decompressSnapshot(compressed);
     expect(decompressed.context.step1.payload).toBe(twentyMbData);
   });
+
+  it('should not store compressed format if gzip+base64 expands the string size', () => {
+    // Generate a payload over threshold that compresses poorly
+    const randomChars = Array.from({ length: 300 * 1024 }, () =>
+      String.fromCharCode(Math.floor(Math.random() * 256)),
+    ).join('');
+    const incompressibleSnapshot = { data: randomChars };
+
+    const processed = compressSnapshot(incompressibleSnapshot);
+    // If compressed format is larger, compressSnapshot returns uncompressed JSON/object
+    if (typeof processed === 'string' && processed.startsWith('__gz:')) {
+      expect(processed.length).toBeLessThan(JSON.stringify(incompressibleSnapshot).length);
+    }
+  });
 });

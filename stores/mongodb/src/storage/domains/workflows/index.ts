@@ -36,8 +36,11 @@ export function compressSnapshot(snapshot: any): any {
 
   // Compress if larger than 256KB to shrink BSON size and avoid MongoDB 16MB document limit
   if (jsonStr.length > 256 * 1024) {
-    const compressed = zlib.gzipSync(Buffer.from(jsonStr, 'utf-8'));
-    return `${GZIP_PREFIX}${compressed.toString('base64')}`;
+    const compressed = `${GZIP_PREFIX}${zlib.gzipSync(Buffer.from(jsonStr, 'utf-8')).toString('base64')}`;
+    // Only use compressed representation if it is actually smaller than the raw string
+    if (compressed.length < jsonStr.length) {
+      return compressed;
+    }
   }
 
   if (typeof snapshot === 'string') {
@@ -193,61 +196,88 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     try {
       const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
-      const now = new Date();
+      const MAX_RETRIES = 10;
 
-      const existingDoc = await collection.findOne({ workflow_name: workflowName, run_id: runId });
-      let currentSnapshot: any = existingDoc ? decompressSnapshot(existingDoc.snapshot) : null;
+      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        const now = new Date();
+        const existingDoc = await collection.findOne({ workflow_name: workflowName, run_id: runId });
+        const version = existingDoc?._version ?? 0;
 
-      if (!currentSnapshot) {
-        currentSnapshot = {
-          context: {},
-          activePaths: [],
-          timestamp: Date.now(),
-          suspendedPaths: {},
-          activeStepsPath: {},
-          resumeLabels: {},
-          serializedStepGraph: [],
-          status: 'pending',
-          value: {},
-          waitingPaths: {},
-          runId: runId,
-          requestContext: {},
+        let currentSnapshot: any = existingDoc ? decompressSnapshot(existingDoc.snapshot) : null;
+
+        if (!currentSnapshot) {
+          currentSnapshot = {
+            context: {},
+            activePaths: [],
+            timestamp: Date.now(),
+            suspendedPaths: {},
+            activeStepsPath: {},
+            resumeLabels: {},
+            serializedStepGraph: [],
+            status: 'pending',
+            value: {},
+            waitingPaths: {},
+            runId: runId,
+            requestContext: {},
+          };
+        }
+
+        currentSnapshot.context = {
+          ...(currentSnapshot.context || {}),
+          [stepId]: result,
         };
+
+        if (requestContext) {
+          currentSnapshot.requestContext = {
+            ...(currentSnapshot.requestContext || {}),
+            ...requestContext,
+          };
+        }
+
+        const processedSnapshot = compressSnapshot(currentSnapshot);
+        const status = currentSnapshot.status || 'pending';
+
+        if (existingDoc) {
+          const updateRes = await collection.updateOne(
+            { workflow_name: workflowName, run_id: runId, _version: version },
+            {
+              $set: {
+                snapshot: processedSnapshot,
+                status,
+                updatedAt: now,
+                _version: version + 1,
+              },
+            },
+          );
+
+          if (updateRes.matchedCount > 0) {
+            return currentSnapshot.context || {};
+          }
+        } else {
+          try {
+            await collection.insertOne({
+              workflow_name: workflowName,
+              run_id: runId,
+              snapshot: processedSnapshot,
+              status,
+              createdAt: now,
+              updatedAt: now,
+              _version: 1,
+            });
+            return currentSnapshot.context || {};
+          } catch (err: any) {
+            // Duplicate key error on upsert race -> retry loop
+            if (err?.code === 11000) {
+              continue;
+            }
+            throw err;
+          }
+        }
       }
 
-      currentSnapshot.context = {
-        ...(currentSnapshot.context || {}),
-        [stepId]: result,
-      };
-
-      if (requestContext) {
-        currentSnapshot.requestContext = {
-          ...(currentSnapshot.requestContext || {}),
-          ...requestContext,
-        };
-      }
-
-      const processedSnapshot = compressSnapshot(currentSnapshot);
-      const status = currentSnapshot.status || 'pending';
-
-      await collection.updateOne(
-        { workflow_name: workflowName, run_id: runId },
-        {
-          $set: {
-            workflow_name: workflowName,
-            run_id: runId,
-            snapshot: processedSnapshot,
-            status,
-            updatedAt: now,
-          },
-          $setOnInsert: {
-            createdAt: now,
-          },
-        },
-        { upsert: true },
+      throw new Error(
+        `Failed to update workflow results for runId ${runId} after ${MAX_RETRIES} attempts due to concurrent updates.`,
       );
-
-      return currentSnapshot.context || {};
     } catch (error) {
       throw new MastraError(
         {
@@ -276,43 +306,54 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
   }): Promise<WorkflowRunState | undefined> {
     try {
       const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+      const MAX_RETRIES = 10;
 
-      const existingDoc = await collection.findOne({ workflow_name: workflowName, run_id: runId });
-      if (!existingDoc) {
-        return undefined;
-      }
+      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        const existingDoc = await collection.findOne({ workflow_name: workflowName, run_id: runId });
+        if (!existingDoc) {
+          return undefined;
+        }
 
-      const currentSnapshot = decompressSnapshot(existingDoc.snapshot);
-      if (!currentSnapshot || typeof currentSnapshot !== 'object' || !currentSnapshot.context) {
-        throw new MastraError({
-          id: createStorageErrorId('MONGODB', 'UPDATE_WORKFLOW_STATE', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          text: `Snapshot not found for runId ${runId}`,
-          details: { workflowName, runId },
-        });
-      }
+        const version = existingDoc._version ?? 0;
+        const currentSnapshot = decompressSnapshot(existingDoc.snapshot);
+        if (!currentSnapshot || typeof currentSnapshot !== 'object' || !currentSnapshot.context) {
+          throw new MastraError({
+            id: createStorageErrorId('MONGODB', 'UPDATE_WORKFLOW_STATE', 'FAILED'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            text: `Snapshot not found for runId ${runId}`,
+            details: { workflowName, runId },
+          });
+        }
 
-      const mergedSnapshot = {
-        ...currentSnapshot,
-        ...opts,
-      };
+        const mergedSnapshot = {
+          ...currentSnapshot,
+          ...opts,
+        };
 
-      const processedSnapshot = compressSnapshot(mergedSnapshot);
-      const status = mergedSnapshot.status || currentSnapshot.status;
+        const processedSnapshot = compressSnapshot(mergedSnapshot);
+        const status = mergedSnapshot.status || currentSnapshot.status;
 
-      await collection.updateOne(
-        { workflow_name: workflowName, run_id: runId },
-        {
-          $set: {
-            snapshot: processedSnapshot,
-            status,
-            updatedAt: new Date(),
+        const updateRes = await collection.updateOne(
+          { workflow_name: workflowName, run_id: runId, _version: version },
+          {
+            $set: {
+              snapshot: processedSnapshot,
+              status,
+              updatedAt: new Date(),
+              _version: version + 1,
+            },
           },
-        },
-      );
+        );
 
-      return mergedSnapshot;
+        if (updateRes.matchedCount > 0) {
+          return mergedSnapshot;
+        }
+      }
+
+      throw new Error(
+        `Failed to update workflow state for runId ${runId} after ${MAX_RETRIES} attempts due to concurrent updates.`,
+      );
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -359,6 +400,9 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
             snapshot: processedSnapshot,
             status: snapshot?.status,
             updatedAt: updatedAt ?? now,
+          },
+          $inc: {
+            _version: 1,
           },
           $setOnInsert: {
             createdAt: createdAt ?? now,

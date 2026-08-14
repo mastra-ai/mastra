@@ -2,6 +2,7 @@
 '@mastra/mongodb': patch
 ---
 
-Fixed MongoDB 16MB document limit crash for long workflow and agent runs by adding transparent `zlib` snapshot compression.
+Fixed MongoDB document size limit errors during long workflow and agent runs by compressing workflow snapshots.
 
 Resolves https://github.com/mastra-ai/mastra/issues/21412
+
