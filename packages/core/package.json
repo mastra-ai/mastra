@@ -381,6 +381,16 @@
         "default": "./dist/observability/index.cjs"
       }
     },
+    "./pulse": {
+      "import": {
+        "types": "./dist/pulse/index.d.ts",
+        "default": "./dist/pulse/index.js"
+      },
+      "require": {
+        "types": "./dist/pulse/index.d.ts",
+        "default": "./dist/pulse/index.cjs"
+      }
+    },
     "./processor-provider": {
       "import": {
         "types": "./dist/processor-provider/index.d.ts",
