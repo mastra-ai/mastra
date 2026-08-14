@@ -1,14 +1,30 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { initialChatRuntime, runtimeReducer } from '../runtime';
+import { initialChatRuntime, omWork, runtimeReducer } from '../runtime';
 
 describe('chat runtime reducer', () => {
+  it('tracks background memory work per budget from the display state', () => {
+    const buffering = runtimeReducer(initialChatRuntime, {
+      type: 'display_state_changed',
+      displayState: { bufferingObservations: true },
+    });
+
+    expect(omWork(buffering)).toEqual({ messages: 'idle', observations: 'background' });
+
+    const settled = runtimeReducer(buffering, {
+      type: 'display_state_changed',
+      displayState: { bufferingObservations: false },
+    });
+
+    expect(omWork(settled).observations).toBe('idle');
+  });
+
   it('keeps display-state telemetry available until newer usage arrives', () => {
     const displayState = runtimeReducer(initialChatRuntime, {
       type: 'display_state_changed',
       displayState: {
         omProgress: {
-          status: 'ready',
+          status: 'idle',
           pendingTokens: 320,
           threshold: 1000,
           thresholdPercent: 32,

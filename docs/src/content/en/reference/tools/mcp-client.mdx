@@ -8,7 +8,7 @@ packages:
 
 # MCPClient
 
-The `MCPClient` class provides a way to manage multiple MCP server connections and their tools in a Mastra application. It handles connection lifecycle, tool namespacing, and provides access to tools across all configured servers.
+The `MCPClient` class provides a way to manage multiple MCP server connections and their tools in a Mastra application. It handles connection lifecycle and tool namespacing while providing access to tools across all configured servers.
 
 ## Constructor
 
@@ -363,7 +363,7 @@ const res = await agent.stream(prompt, {
 
 Returns every server's tools as plain, serializable definitions, grouped by server name and keyed by the server's own tool name (without the `serverName_toolName` namespacing that `listTools()` applies).
 
-Unlike `listTools()`, the result contains no functions or references to a live client, so it can be passed through `JSON.stringify` and cached in Redis, a database, or a build artifact. Each definition holds the data from the MCP `tools/list` response (name, description, input schema, output schema, annotations, and `_meta`), plus the server name, version, and instructions captured at discovery time.
+Unlike `listTools()`, the result contains no functions or references to a live client, so it can be passed through `JSON.stringify` and cached in Redis or a database, as well as a build artifact. Each definition holds the data from the MCP `tools/list` response (name, description, input schema, output schema, annotations, and `_meta`), plus the server name, version, and instructions captured at discovery time.
 
 ```typescript
 const definitions = await mcp.listToolDefinitions()
@@ -1105,7 +1105,7 @@ try {
 
 Concurrent `authenticate()` calls for the same server join the pending flow. Different servers authenticate independently. With valid stored tokens the call reconnects without opening a browser.
 
-Hosts that drive the flow themselves can capture the authorization code with the exported `createOAuthCallbackServer` helper, which binds a one-shot loopback server, validates the OAuth `state` parameter, and resolves with the code. It creates a plain HTTP server, so it's only for local loopback redirects. Web applications that use an HTTPS redirect URL must host their own callback endpoint and drive the provider directly rather than using this helper:
+Hosts that drive the flow themselves can capture the authorization code with the exported `createOAuthCallbackServer` helper, which binds a one-shot loopback server and validates the OAuth `state` parameter before resolving with the code. It creates a plain HTTP server, so it's only for local loopback redirects. Web applications that use an HTTPS redirect URL must host their own callback endpoint and drive the provider directly rather than using this helper:
 
 ```typescript
 import { createOAuthCallbackServer, getCallbackUrlCandidates } from '@mastra/mcp'

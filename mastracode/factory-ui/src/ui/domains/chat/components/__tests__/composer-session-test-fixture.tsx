@@ -27,6 +27,7 @@ export const PROJECT_REPOSITORY_ID = 'repo-preparing';
 export const SESSION_ID = '20000000-0000-4000-8000-000000000003';
 
 interface PreparingSession {
+  finishEnsure: () => void;
   finishWorkspace: () => void;
   /** Push an event down the session stream; resolves once the stream is open. */
   emit: (event: AgentControllerEvent) => Promise<void>;
@@ -44,6 +45,7 @@ interface StubPreparingSessionOptions {
   failDispatch?: boolean;
   failWorkspace?: boolean;
   materialized?: boolean;
+  ensurePending?: boolean;
   /** Close the turn as soon as a message is delivered. Off when a test drives the turn itself. */
   autoAgentEnd?: boolean;
 }
@@ -64,8 +66,15 @@ export function stubPreparingSession({
   failDispatch = false,
   failWorkspace = false,
   materialized = false,
+  ensurePending = false,
   autoAgentEnd = true,
 }: StubPreparingSessionOptions = {}): PreparingSession {
+  let releaseEnsure = () => {};
+  const ensureReady = ensurePending
+    ? new Promise<void>(resolve => {
+        releaseEnsure = resolve;
+      })
+    : Promise.resolve();
   let releaseWorkspace = () => {};
   const workspaceReady = new Promise<void>(resolve => {
     releaseWorkspace = resolve;
@@ -76,6 +85,7 @@ export function stubPreparingSession({
   });
   const encoder = new TextEncoder();
   const result: PreparingSession = {
+    finishEnsure: releaseEnsure,
     finishWorkspace: releaseWorkspace,
     emit: async event => {
       const controller = await sseOpen;
@@ -150,8 +160,9 @@ export function stubPreparingSession({
       HttpResponse.json({ workItems: [] }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
-    http.post(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/ensure`, () => {
+    http.post(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/ensure`, async () => {
       result.ensureRequests += 1;
+      await ensureReady;
       return HttpResponse.json({ resourceId: SESSION_ID, sandboxId: null, sandboxWorkdir: '/workspace/preparing' });
     }),
     http.post(`${API}/sessions`, async () => {

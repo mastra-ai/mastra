@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useThemeDetail, useThemeExamples, useThemeHistory, useThemePaths } from '../hooks';
 import { SankeySignals } from '../sankey-signals';
-import { buildDrilledThemeFlow } from '../theme-drilldown-data';
+import { buildDrilledThemeFlow, findSelectionStats } from '../theme-drilldown-data';
 import {
   allThemePathsResponse,
   drilldownThemeFlowResponse,
@@ -100,6 +100,7 @@ function useFlowHandlers(onPathsRequest?: () => void) {
 
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', ChartResizeObserver);
+  vi.stubGlobal('matchMedia', () => ({ matches: true }));
   vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(800);
   vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(680);
 });
@@ -225,7 +226,7 @@ describe('Agent Learning theme drilldown hooks', () => {
             'agent',
             ['goal', 'outcome', 'behavior'],
             'opaque-snapshot-cursor',
-            'theme-101',
+            false,
           ),
         }),
         { wrapper: TestQueryProvider },
@@ -291,7 +292,7 @@ describe('Agent Learning theme drilldown hooks', () => {
       );
 
       const { result } = renderHook(
-        () => useThemePaths('support-agent', 'agent', ['goal', 'outcome', 'behavior'], 'opaque-snapshot-cursor', '101'),
+        () => useThemePaths('support-agent', 'agent', ['goal', 'outcome', 'behavior'], 'opaque-snapshot-cursor', true),
         { wrapper: TestQueryProvider },
       );
 
@@ -326,41 +327,44 @@ describe('Agent Learning theme drilldown hooks', () => {
 describe('buildDrilledThemeFlow', () => {
   describe('when paths contain the selected theme', () => {
     it('recomputes counts and keeps noise assignments in the drilled flow', () => {
-      const result = buildDrilledThemeFlow(drilldownThemeFlowResponse, allThemePathsResponse, {
-        signalName: 'goal',
-        themeId: '101',
-        label: 'Add transcript',
-      });
+      const result = buildDrilledThemeFlow(drilldownThemeFlowResponse, allThemePathsResponse, [
+        { kind: 'theme', signalName: 'goal', themeId: '101', label: 'Add transcript' },
+      ]);
 
       expect(result.snapshot.traceCount).toBe(2);
-      expect(result.stages[2]?.nodes).toEqual(
+      expect(result.stages[1]?.nodes).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ label: 'Opened workspace', traceCount: 1, stageShare: 0.5 }),
           expect.objectContaining({ kind: 'noise', traceCount: 1, stageShare: 0.5 }),
         ]),
       );
-      expect(result.links).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ traceCount: 2 }),
-          expect.objectContaining({ traceCount: 1 }),
-        ]),
-      );
+      expect(result.links).toEqual([
+        expect.objectContaining({ traceCount: 1 }),
+        expect.objectContaining({ traceCount: 1 }),
+      ]);
     });
   });
 
   describe('when the selected theme was collapsed into other in the overview', () => {
     it('renders the concrete path theme as its own node', () => {
-      const result = buildDrilledThemeFlow(drilldownThemeFlowResponse, allThemePathsResponse, {
-        signalName: 'goal',
-        themeId: '102',
-        label: 'Search transcripts',
-      });
+      const result = buildDrilledThemeFlow(drilldownThemeFlowResponse, allThemePathsResponse, [
+        { kind: 'theme', signalName: 'goal', themeId: '102', label: 'Search transcripts' },
+      ]);
 
       expect(result.snapshot.traceCount).toBe(1);
       expect(result.stages[0]?.nodes).toEqual([
-        expect.objectContaining({ kind: 'theme', themeId: '102', label: 'Search transcripts', traceCount: 1 }),
+        expect.objectContaining({ kind: 'theme', themeId: '202', label: 'Transcript located', traceCount: 1 }),
       ]);
-      expect(result.stages[0]?.nodes[0]?.nodeId).not.toBe('flow-goal-other');
+      expect(result.stages[0]?.nodes[0]?.nodeId).not.toBe('flow-outcome-other');
+    });
+  });
+
+  describe('when selection statistics are requested for an active filter', () => {
+    it('reports full coverage for a non-empty filtered flow', () => {
+      const selection = { kind: 'theme', signalName: 'goal', themeId: '101', label: 'Add transcript' } as const;
+      const result = buildDrilledThemeFlow(drilldownThemeFlowResponse, allThemePathsResponse, [selection]);
+
+      expect(findSelectionStats(result, [selection], selection)).toEqual({ traceCount: 2, stageShare: 1 });
     });
   });
 });
@@ -445,7 +449,8 @@ describe('SankeySignals drill-in', () => {
       expect(await screen.findByRole('heading', { name: 'Trend' })).not.toBeNull();
       expect(screen.queryByText(/^birth$/i)).toBeNull();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Clear theme filter' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
       expect(await screen.findByText('Save the transcript with the project.')).not.toBeNull();
     });
   });
@@ -748,12 +753,10 @@ describe('SankeySignals drill-in', () => {
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
       await waitFor(() => expect(screen.getByTestId('snapshot-summary').textContent).toContain('· 2 traces ·'));
       fireEvent.click(screen.getByRole('button', { name: 'Snapshot 3 of 4' }));
-      expect(
-        await screen.findByText(/This drill-in is unavailable for snapshots with more than 2,000 traces/),
-      ).not.toBeNull();
+      expect(await screen.findByText('Filters unavailable for this snapshot')).not.toBeNull();
 
       expect(screen.queryByLabelText('Trace signal distributions')).toBeNull();
-      expect(screen.queryByLabelText('Trace signal theme flow')).toBeNull();
+      expect(screen.getByLabelText('Trace signal theme flow')).not.toBeNull();
       expect(requestedSnapshotIds).not.toContain('older-opaque-snapshot-cursor');
     });
   });
@@ -784,6 +787,7 @@ describe('SankeySignals drill-in', () => {
       renderSignals();
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
       fireEvent.click(await screen.findByRole('button', { name: 'View theme details for Add transcript' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Clear theme filter' }));
       fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
       await screen.findByText('Save the transcript with the project.');
       fireEvent.click(screen.getByRole('button', { name: 'Snapshot 3 of 4' }));

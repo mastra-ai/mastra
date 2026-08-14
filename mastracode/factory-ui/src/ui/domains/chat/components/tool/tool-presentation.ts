@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   Braces,
   CircleStop,
   Eye,
@@ -73,6 +74,9 @@ const TOOL_STYLES: Record<string, ToolStyle> = {
   delete: { icon: Trash2, label: 'Delete', detailKeys: ['path'] },
   delete_file: { icon: Trash2, label: 'Delete', detailKeys: ['path'] },
   mkdir: { icon: FolderPlus, label: 'New folder', detailKeys: ['path'] },
+  skill: { icon: BookOpen, label: 'Skill', detailKeys: ['name'] },
+  skill_search: { icon: BookOpen, label: 'Search skills', detailKeys: ['query'] },
+  skill_read: { icon: BookOpen, label: 'Skill file', detailKeys: ['path'] },
 };
 
 function prettifyToolName(toolName: string): string {

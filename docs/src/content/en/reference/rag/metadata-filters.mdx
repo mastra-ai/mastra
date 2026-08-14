@@ -344,7 +344,7 @@ const results = await store.query({
 ### Amazon S3 Vectors
 
 - Equality values must be primitives (string/number/boolean). `null`/`undefined`, arrays, objects, and Date aren't allowed for equality. Range operators accept numbers or Date (Dates are normalized to epoch ms).
-- `$in`/`$nin` require **non-empty arrays of primitives**; Date elements are allowed and normalized to epoch ms. **Array equality** isn't supported.
+- `$in`/`$nin` require **non-empty arrays of primitives**. Date elements are allowed and normalized to epoch ms. **Array equality** isn't supported.
 - Implicit AND is canonicalized (`{a:1,b:2}` → `{$and:[{a:1},{b:2}]`). Logical operators must contain field conditions and use non-empty arrays. They may appear only at the root or within other logical operators (not inside field values).
 - Keys listed in `nonFilterableMetadataKeys` at index creation are stored but not filterable. This setting is immutable.
 - $exists requires a boolean value.

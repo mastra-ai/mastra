@@ -1,204 +1,231 @@
 ---
-title: "Sandbox | Workspace"
-description: Configure sandbox providers to give agents command execution capabilities.
+title: "Sandbox"
+description: Give agents an isolated environment for working with files and running commands.
 packages:
   - "@mastra/core"
 ---
 
+import { IntegrationGrid } from '@site/src/components/integrations/grid';
+
 # Sandbox
 
-**Added in:** `@mastra/core@1.1.0`
+Sandboxes give Mastra agents an environment for running commands and working with files. Agents can also start background processes when the selected backend supports process management; otherwise, background-process tools are unavailable.
 
-Sandbox providers give agents the ability to execute shell commands. When you configure a sandbox on a workspace, agents can run commands as part of their tasks.
+In Mastra, you attach a sandbox backend to a `Workspace`. You can use one sandbox for an application or agent, or resolve separate environments for each user, tenant, or thread.
 
-A sandbox provider executes commands in a controlled environment:
+Supported backends can FUSE-mount filesystems into the sandbox, letting you seed ephemeral environments with files and persist their output between runs.
 
-- **Command execution**: Run shell commands with arguments
-- **Background processes**: Spawn long-running processes like dev servers and watchers
-- **Working directory**: Commands run from a specific directory
-- **Environment variables**: Control what variables are available
-- **Timeouts**: Prevent long-running commands from hanging
-- **Isolation**: Optional OS-level sandboxing for security
+## When to use sandboxes?
 
-:::tip[📹 Watch]
+Sandboxes are useful for:
 
-Watch [Mastra remote sandboxes overview](https://www.youtube.com/watch?v=Ix2X-sjVXjw) to see how remote sandboxes give agents an isolated computer to work in.
+- **Coding agents and software factories**: Clone repositories and run shell, Git, build, or test workflows without giving autonomous agents access to the host system.
+- **Deep research and analysis**: Use specialized libraries to process downloaded PDFs or presentations and produce new artifacts.
+- **Long-running and parallel tasks**: Run work in separate environments without tying it to one request or sharing files and processes.
+
+## Quickstart
+
+In Mastra, a sandbox operates through a `Workspace`. Its `sandbox` backend defines where commands run.
+
+Create an agent with a workspace and sandbox:
+
+```typescript title="src/mastra/agents/coding-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { LocalSandbox, Workspace } from '@mastra/core/workspace'
+
+export const codingAgent = new Agent({
+  id: 'coding-agent',
+  name: 'Coding agent',
+  instructions: 'Use the sandbox to complete coding tasks.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  workspace: new Workspace({
+    sandbox: new LocalSandbox({
+      workingDirectory: './workspace',
+    }),
+  }),
+})
+
+await codingAgent.generate('List the files in the workspace directory')
+```
+
+:::warning
+
+`LocalSandbox` is the quickest sandbox to set up, but commands run on the host by default. Enable [native isolation](#localsandbox) whenever possible. For applications exposed to untrusted users, use a remote or container backend with a stronger isolation boundary instead.
 
 :::
 
-## Supported providers
+To use a different sandbox for each user, tenant, or thread, configure a [sandbox resolver](#multi-tenant-sandboxes) instead.
 
-- [`LocalSandbox`](/reference/workspace/local-sandbox): Executes commands on the local machine
-- [`AgentCoreRuntimeSandbox`](/integrations/sandboxes/agentcore): Executes commands in AWS Bedrock AgentCore Runtime sessions
-- [`AppleContainerSandbox`](/integrations/sandboxes/apple-container): Executes commands in local OCI Linux containers using Apple's `container` CLI
-- [`BlaxelSandbox`](/integrations/sandboxes/blaxel): Executes commands in isolated Blaxel cloud sandboxes
-- [`DaytonaSandbox`](/integrations/sandboxes/daytona): Executes commands in isolated Daytona cloud sandboxes
-- [`DockerSandbox`](/integrations/sandboxes/docker): Executes commands in long-lived Docker containers on the local machine
-- [`E2BSandbox`](/integrations/sandboxes/e2b): Executes commands in isolated E2B cloud sandboxes
-- [`ModalSandbox`](/integrations/sandboxes/modal): Executes commands in isolated Modal cloud sandboxes
-- [`PlatformSandbox`](/reference/workspace/platform-sandbox): Executes commands in a sandbox tied to a Mastra Platform environment
-- [`RailwaySandbox`](/integrations/sandboxes/railway): Executes commands in ephemeral, isolated Railway cloud sandboxes
-- [`VercelSandbox`](/integrations/sandboxes/vercel#vercel-sandbox): Executes commands in an ephemeral Vercel Sandbox Firecracker MicroVM
-- [`VercelServerlessSandbox`](/integrations/sandboxes/vercel#vercel-serverless-sandbox): Executes commands as stateless Vercel serverless functions
+## Using the sandbox
 
-## Basic usage
+Agents receive tools for the capabilities supported by the sandbox backend:
 
-Create a workspace with a sandbox and assign it to an agent. The agent can then execute shell commands:
+| Tool | Does |
+| - | - |
+| `execute_command` | Runs a shell command and returns stdout, stderr, and the exit code. Supports `background: true` when the backend can spawn long-running processes. |
+| `get_process_output` | Gets stdout, stderr, and status for a background process. Supports `tail` to limit output and `wait: true` to wait for the process to exit. This tool and `kill_process` are only added when the backend supports background processes. |
+| `kill_process` | Stops a background process and returns its recent output. |
 
-```typescript title="src/mastra/agents/dev-agent.ts"
-import { Agent } from '@mastra/core/agent'
-import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'
+You can disable or rename each tool and require approval before it runs. You can also limit how much output it adds to the model's context. See the [workspace tool configuration reference](/reference/workspace/workspace-class#tool-configuration).
 
-const workspace = new Workspace({
-  filesystem: new LocalFilesystem({
-    basePath: './workspace',
+Authored runtime functions, including tools and workflow steps, can get the live sandbox from their execution context. Start a server, watcher, notebook kernel, browser, or worker and interact with it across agent turns.
+
+```typescript title="src/mastra/tools/start-server.ts"
+import type { ProcessHandle } from '@mastra/core/sandbox'
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+export const startServerTool = createTool({
+  id: 'start-server',
+  description: 'Starts a server in the sandbox',
+  inputSchema: z.object({
+    command: z.string(),
   }),
-  sandbox: new LocalSandbox({
-    workingDirectory: './workspace',
-  }),
+  execute: async ({ command }, ctx) => {
+    const sandbox = await ctx.getSandbox()
+    const server: ProcessHandle = await sandbox.spawn({ command })
+    return { pid: server.pid }
+  },
 })
-
-const agent = new Agent({
-  id: 'dev-agent',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  instructions: 'You are a helpful development assistant.',
-  workspace,
-})
-
-// The agent now has the execute_command tool available
-const response = await agent.generate('Run `ls -la` in the workspace directory')
 ```
 
-See [`LocalSandbox` reference](/reference/workspace/local-sandbox) for configuration options including environment isolation and native OS sandboxing.
+The authored function itself runs in your application process. Only operations called through the sandbox handle run inside the sandbox.
 
-## Dynamic sandbox
+## Supported backends
 
-The `sandbox` option accepts a resolver function instead of a static instance. The resolver receives `requestContext` and returns a sandbox per request, allowing a single workspace to serve different sandboxes based on the caller's identity, role, or tenant.
+### `LocalSandbox`
+
+[`LocalSandbox`](/reference/workspace/local-sandbox) executes commands on the same machine as your Mastra application. By default, commands run directly on the host with the permissions of the application process.
+
+Enable native isolation to restrict filesystem and network access at the operating-system level:
+
+- **macOS**: Seatbelt (`sandbox-exec`)
+- **Linux**: Bubblewrap (`bwrap`)
+
+```typescript
+const sandbox = new LocalSandbox({
+  workingDirectory: './workspace',
+  isolation: 'seatbelt', // Use 'bwrap' on Linux
+  nativeSandbox: {
+    allowNetwork: false,
+    readOnlyPaths: ['./reference-data'],
+  },
+})
+```
+
+Use `LocalSandbox.detectIsolation()` to check whether Seatbelt or Bubblewrap is available on the current operating system. The `nativeSandbox` options control network access, read-only or writable paths, workspace write access, and system binaries. You can also provide a custom Seatbelt profile or Bubblewrap arguments. See [`LocalSandbox`](/reference/workspace/local-sandbox) for the full configuration.
+
+### Other backends
+
+Use a remote or container backend when commands need a stronger boundary from the host application. Each backend has its own isolation, persistence, networking, and mount behavior:
+
+<IntegrationGrid section="Sandboxes" />
+
+If Mastra doesn't support your execution backend, implement [`WorkspaceSandbox`](/reference/workspace/sandbox) to add it.
+
+## Persistent storage
+
+Some execution backends can also mount cloud filesystems through FUSE. Mounted files appear as local directories inside the sandbox, so commands such as `cat /data/report.md` or `python /data/analyze.py` can use them directly.
+
+Configure mounts on the workspace alongside the sandbox:
+
+```typescript
+import { Workspace } from '@mastra/core/workspace'
+import { DaytonaSandbox } from '@mastra/daytona'
+import { S3Filesystem } from '@mastra/s3'
+
+const workspace = new Workspace({
+  mounts: {
+    '/data': new S3Filesystem({
+      bucket: 'agent-data',
+      region: 'us-east-1',
+    }),
+  },
+  sandbox: new DaytonaSandbox(),
+})
+```
+
+The agent receives filesystem tools for the mounted storage, and commands in the sandbox can access the same files under `/data`. This lets you seed an ephemeral sandbox with existing files and persist its output after the sandbox stops.
+
+Mount support varies by sandbox backend. See [Filesystem](/docs/workspace/filesystem) for supported storage backends, detailed mount configuration, and how to mount multiple filesystems.
+
+## Multi-tenant sandboxes
+
+Use a **resolver** when each user, tenant, or thread needs a separate sandbox. Set `sandboxCacheKey` to the identity that owns the sandbox so later requests reuse the same live environment.
+
+This example creates one Daytona sandbox and one S3 storage prefix per memory thread. The S3 filesystem is also mounted at `/workspace` inside the sandbox:
 
 ```typescript title="src/mastra/workspaces.ts"
-import { Agent } from '@mastra/core/agent'
-import { Workspace, LocalSandbox } from '@mastra/core/workspace'
+import { MASTRA_THREAD_ID_KEY, type RequestContext } from '@mastra/core/request-context'
+import { Workspace } from '@mastra/core/workspace'
+import { DaytonaSandbox } from '@mastra/daytona'
+import { S3Filesystem } from '@mastra/s3'
+
+const getThreadId = (requestContext: RequestContext) => {
+  const threadId = requestContext.get(MASTRA_THREAD_ID_KEY)
+  if (typeof threadId !== 'string' || !threadId) {
+    throw new Error('A memory thread is required to use this workspace')
+  }
+
+  return threadId
+}
+
+const createThreadFilesystem = (threadId: string) =>
+  new S3Filesystem({
+    bucket: process.env.S3_BUCKET!,
+    region: process.env.S3_REGION!,
+    prefix: `threads/${threadId}`,
+  })
 
 const workspace = new Workspace({
-  // highlight-start
-  sandbox: ({ requestContext }) => {
-    const userId = requestContext.get('user-id') as string
-    return new LocalSandbox({
-      workingDirectory: `/workspaces/${userId}`,
-    })
-  },
-  // highlight-end
-})
-
-const agent = new Agent({
-  id: 'multi-tenant-agent',
-  model: 'your-provider/your-model',
-  workspace,
-})
-```
-
-Each request resolves its own sandbox at tool execution time:
-
-```typescript
-import { RequestContext } from '@mastra/core/request-context'
-
-// User Alice — commands run in /workspaces/alice
-const aliceCtx = new RequestContext([['user-id', 'alice']])
-await agent.generate('List files in cwd', { requestContext: aliceCtx })
-
-// User Bob — commands run in /workspaces/bob
-const bobCtx = new RequestContext([['user-id', 'bob']])
-await agent.generate('List files in cwd', { requestContext: bobCtx })
-```
-
-By default, workspace instructions describe the runtime sandbox with stable placeholder text. See [Workspace instructions](#workspace-instructions) to include concrete per-request details.
-
-The resolver can also be asynchronous, for example to look up tenant configuration from a database:
-
-```typescript
-const workspace = new Workspace({
+  filesystem: ({ requestContext }) => createThreadFilesystem(getThreadId(requestContext)),
   sandbox: async ({ requestContext }) => {
-    const tenant = await db.getTenant(requestContext.get('tenant-id'))
-    return new LocalSandbox({ workingDirectory: tenant.workspacePath })
+    const threadId = getThreadId(requestContext)
+    const sandbox = new DaytonaSandbox({
+      id: `thread-${threadId}`,
+      language: 'typescript',
+    })
+
+    await sandbox.start()
+    await sandbox.mount(createThreadFilesystem(threadId), '/workspace')
+    return sandbox
   },
+  sandboxCacheKey: ({ requestContext }) => getThreadId(requestContext),
 })
 ```
 
-### Lifecycle ownership
+The first request in a thread runs the resolver and starts the sandbox. Later requests with the same thread ID reuse the cached sandbox. A different thread ID creates a different sandbox and storage prefix.
 
-When the sandbox is a static instance, `workspace.init()` calls its `start()` method and `workspace.destroy()` calls its `destroy()` method. With a resolver, the workspace has no instance to manage at construction time, the caller owns the returned sandbox's lifecycle.
+Workspace-level `mounts` can't be combined with a sandbox resolver. This is a known limitation, so the example mounts the filesystem inside the resolver instead. Workspace tools resolve the filesystem and sandbox from the request context automatically.
 
-The resolver must return a sandbox that's ready to use, either already started or able to handle calls without explicit startup. The caller also owns cleanup timing for returned sandboxes.
+### Resolver ownership
 
-Cleanup can happen per request, tenant, or user. It can also be part of a long-lived sandbox pool. `workspace.destroy()` doesn't destroy resolver-returned sandboxes.
+The workspace doesn't own sandboxes returned by a resolver. Return a sandbox that's ready to use, and destroy it through your application's lifecycle code when it's no longer needed. `workspace.destroy()` doesn't destroy resolver-returned sandboxes.
 
-:::note
+Resolvers are incompatible with `mounts` and [`lsp: true`](/docs/workspace/lsp), because both require a static sandbox when the workspace is constructed. Using a resolver with `mounts` throws an `INVALID_CONFIG` error. With `lsp: true`, Mastra disables LSP and logs a warning.
 
-`sandbox` resolvers are incompatible with `mounts` and `lsp: true`. Both require a concrete sandbox instance at construction time, so combining them with a resolver throws an `INVALID_CONFIG` error (for `mounts`) or disables LSP with a warning (for `lsp: true`).
+### Tool availability
 
-:::
+With a static sandbox, Mastra knows which capabilities the backend supports and only gives the agent the corresponding tools. With a resolver-backed sandbox, the backend isn't known until a request runs, so Mastra initially makes all sandbox tools available. If the resolved backend doesn't support the tool the agent calls, the call fails with `SandboxFeatureNotSupportedError`.
 
-### Tool registration
-
-With a static sandbox, the workspace inspects the instance to decide which tools to register. With a resolver, the workspace assumes full capabilities and registers `execute_command` (with `background` support), `get_process_output`, and `kill_process`. If the resolved sandbox doesn't implement a capability, the runtime throws a clear `SandboxFeatureNotSupportedError`.
-
-### Background process continuity
-
-Background processes can outlive a single tool call, so `get_process_output` and `kill_process` must reach the same sandbox that started the process. By default, a resolved sandbox is cached per request. For continuity across follow-up requests, such as a later conversation turn, set `sandboxCacheKey` to a stable identifier. The resolved sandbox is then cached by that key instead of by request:
+For example, this resolver returns a Daytona sandbox for development requests and an AgentCore sandbox for other requests:
 
 ```typescript
 const workspace = new Workspace({
-  sandbox: ({ requestContext }) => resolveSandbox(requestContext),
-  sandboxCacheKey: ({ requestContext }) => requestContext.get('thread-id') as string,
+  sandbox: ({ requestContext }) =>
+    requestContext.get('environment') === 'development'
+      ? new DaytonaSandbox()
+      : new AgentCoreRuntimeSandbox({
+          agentRuntimeArn: process.env.AGENTCORE_RUNTIME_ARN!,
+        }),
 })
 ```
 
-Without a `sandboxCacheKey`, the resolver must return the same sandbox itself for follow-up calls that share a tenant, user, or session.
+Mastra exposes the process tools because `DaytonaSandbox` supports background processes. If a request resolves to `AgentCoreRuntimeSandbox`, one-shot commands still work, but calling `get_process_output` or `kill_process` fails with `SandboxFeatureNotSupportedError` because that backend doesn't support background processes.
 
-When a cached sandbox is no longer needed, destroy the sandbox in your own lifecycle code and call `workspace.clearSandboxCache(cacheKey)` to drop the workspace cache entry. Call `workspace.clearSandboxCache()` to clear all keyed sandbox entries.
+## Background processes
 
-### Workspace instructions
-
-Workspace instructions describe the environment in the agent's system message. With a sandbox resolver, the workspace doesn't call the resolver to build these instructions. It emits stable placeholder text, so constructing the prompt never provisions a caller-owned sandbox and the system message stays consistent across requests, which keeps prompt caching effective.
-
-To include concrete per-request sandbox details, set `instructions.dynamicSandbox` to `'resolve'`:
-
-```typescript
-const workspace = new Workspace({
-  sandbox: ({ requestContext }) => resolveSandbox(requestContext),
-  instructions: { dynamicSandbox: 'resolve' },
-})
-```
-
-`'resolve'` calls the resolver on every request, which may provision the sandbox and makes the system message request-specific. Pass a function instead to return custom text from `requestContext` without resolving the sandbox:
-
-```typescript
-const workspace = new Workspace({
-  sandbox: ({ requestContext }) => resolveSandbox(requestContext),
-  instructions: {
-    dynamicSandbox: ({ requestContext }) =>
-      `Sandbox scoped to tenant ${requestContext.get('tenant-id')}.`,
-  },
-})
-```
-
-## Agent tools
-
-When you configure a sandbox on a workspace, agents receive the `execute_command` tool for running shell commands.
-
-If your sandbox provider supports running processes in the background, the `execute_command` tool also accepts `background: true` for starting long-running processes, and two additional tools are registered:
-
-| Tool | Description |
-| - | - |
-| `execute_command` | Run a shell command. Returns stdout, stderr, and exit code. Supports `background: true` to spawn a long-running process and return a PID. |
-| `get_process_output` | Get stdout, stderr, and status of a background process by PID. Supports `tail` to limit output lines and `wait: true` to block until exit. |
-| `kill_process` | Stop a background process by PID. Returns recent output. |
-
-These tools are registered automatically. See [Workspace class reference](/reference/workspace/workspace-class#sandbox-tools) for the full tool name list.
-
-## Background process callbacks
-
-When agents start background processes through the `execute_command` tool, you can receive lifecycle callbacks for stdout, stderr, and process exit. Configure these through the `backgroundProcesses` option on the `execute_command` tool:
+When agents start background processes through `execute_command`, you can receive lifecycle callbacks for stdout, stderr, and process exit. Configure these through the `backgroundProcesses` option on its `WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND` entry:
 
 ```typescript title="src/mastra/workspaces.ts"
 import { Workspace, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace'
@@ -217,47 +244,97 @@ const workspace = new Workspace({
 })
 ```
 
-These callbacks fire for all background processes started by the agent through the `execute_command` tool.
+These callbacks fire for all background processes started by the agent through `execute_command`.
 
-### Abort signal
+By default, background processes inherit the agent's abort signal and stop when the agent disconnects. Set `abortSignal` to a custom signal, or use `null` or `false` when the process should continue after the request ends.
 
-By default, background processes inherit the agent's abort signal and are killed when the agent disconnects. Control this behavior with the `abortSignal` option:
+For the full `SandboxProcessManager` API (spawning processes programmatically and reading output, plus sending stdin), see the [`SandboxProcessManager` reference](/reference/workspace/process-manager).
 
-- **`undefined`** (default): Uses the agent's abort signal
-- **`AbortSignal`**: Uses a custom signal
-- **`null` or `false`**: Disables abort: processes persist after agent shutdown
+## Lifecycle and persistence
 
-```typescript title="src/mastra/workspaces.ts"
-import { Workspace, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace'
+Sandbox scope depends on where you assign the workspace and whether you use a resolver:
 
-const workspace = new Workspace({
-  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
-  tools: {
-    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
-      backgroundProcesses: {
-        abortSignal: null, // Processes survive agent disconnection
-      },
-    },
+| Configuration | Sandbox scope |
+| - | - |
+| Mastra-level workspace | Agents that inherit the workspace from the Mastra instance use the same sandbox. |
+| Agent-level workspace | Every request handled by that agent instance uses the same sandbox. |
+| Resource-scoped resolver | The resolver caches one sandbox for each resource ID. |
+| Thread-scoped resolver | A memory thread keeps its sandbox across requests in that thread. |
+
+A static sandbox isn't automatically scoped to the current resource or memory thread. For resource or thread scope, use a resolver and set `sandboxCacheKey` to the corresponding ID. See [Multi-tenant sandboxes](#multi-tenant-sandboxes).
+
+### Start
+
+Static sandbox backends are instantiated with your application, but their execution environment usually starts lazily on the first command. Call `workspace.init()` when you want to provision it during application startup instead.
+
+Resolver-backed sandboxes aren't started by `workspace.init()` because no backend is selected until the resolver runs. Return a sandbox that's already started or can start itself on first use.
+
+### Hooks
+
+Use `onStart`, `onStop`, and `onDestroy` to run application code during lifecycle transitions. Hooks receive the live sandbox instance:
+
+```typescript
+const sandbox = new LocalSandbox({
+  workingDirectory: './workspace',
+  onStart: ({ sandbox }) => console.log(`Started ${sandbox.id}`),
+  onStop: ({ sandbox }) => console.log(`Stopping ${sandbox.id}`),
+  onDestroy: ({ sandbox }) => console.log(`Destroying ${sandbox.id}`),
+})
+```
+
+`onStart` runs after the sandbox starts. `onStop` and `onDestroy` run before their corresponding operation.
+
+### Cleanup
+
+Sandboxes passed directly to a workspace are owned by that workspace. `mastra dev` and the generated Mastra server handle shutdown signals and destroy registered workspaces automatically. If you embed Mastra in a custom server or process, call `mastra.shutdown()` from its shutdown hook. For a standalone workspace, call `workspace.destroy()` directly. The effect of stopping or destroying the underlying environment depends on the backend.
+
+Sandboxes returned by a resolver are owned by your application. `workspace.destroy()` and `mastra.shutdown()` clear workspace references but don't destroy those resolved sandboxes. Your resolver or application lifecycle must keep track of them, call `destroy()` when their user, thread, or session ends, and then call `workspace.clearSandboxCache(cacheKey)` for keyed entries. This prevents unused compute from continuing to run and later requests from reusing a stale sandbox.
+
+### Persistence
+
+Persistence is backend-specific. Files and processes aren't guaranteed to survive when a sandbox stops or the application restarts. An idle timeout may also discard them. Some backends reconnect by sandbox ID or preserve snapshots and volumes. Others create a fresh environment.
+
+Every sandbox has an `id`, but the ID isn't a cross-backend persistence guarantee. Read the selected backend's reference before relying on reconnection or persisted state.
+
+## Network and credential safety
+
+Mastra doesn't define one network policy that applies to every sandbox backend. Defaults and supported controls vary, so check the selected backend before running untrusted code. For sensitive or production workloads, prefer blocking outbound access or allowing only the destinations the task needs. Apply that policy when you create the sandbox so it takes effect before commands run.
+
+If an agent starts a web server inside a remote sandbox, that server initially listens on a port inside the sandbox. Backends that support port exposure implement `sandbox.networking.getPortUrl()` to return a URL you can use to preview or test the server from outside the sandbox:
+
+```typescript
+const url = await sandbox.networking?.getPortUrl(8000)
+```
+
+Depending on the backend's access controls, the URL may make the service reachable to others. This inbound exposure is separate from outbound sandbox access. `LocalSandbox` with native isolation blocks network access by default unless `allowNetwork` is enabled. Without native isolation, local commands use the host network.
+
+For example, `DaytonaSandbox` allows outbound access unless you configure a restriction. Set `networkBlockAll` with a domain allowlist when the task only needs specific services:
+
+```typescript
+import { DaytonaSandbox } from '@mastra/daytona'
+
+const sandbox = new DaytonaSandbox({
+  networkBlockAll: true,
+  domainAllowList: 'registry.npmjs.org,api.github.com',
+})
+```
+
+Daytona applies these settings when it creates the sandbox. It also supports CIDR rules through `networkAllowList`. See the [Daytona integration page](/integrations/sandboxes/daytona) for full configuration details.
+
+Environment variables passed to a sandbox or command are available to code running there. Mastra doesn't provide a backend-neutral credential broker that keeps secrets outside the sandbox while authorizing its requests. Give the command only the credentials it needs, scoped to the task. Follow the selected backend's secret-management guidance.
+
+For example, pass a read-only token to the command that needs it instead of configuring it for every command in the sandbox:
+
+```typescript
+await sandbox.executeCommand('node', ['scripts/download-reports.js'], {
+  env: {
+    REPORTS_READ_TOKEN: process.env.REPORTS_READ_TOKEN,
   },
 })
 ```
 
-Use `null` or `false` for cloud sandboxes (for example, E2B, Daytona, or Modal) where processes should outlive the agent.
-
-:::note
-For the full `SandboxProcessManager` API (spawning processes programmatically and reading output, plus sending stdin), see the [`SandboxProcessManager` reference](/reference/workspace/process-manager).
-:::
-
 ## Related
 
 - [`SandboxProcessManager` reference](/reference/workspace/process-manager)
-- [`AgentCoreRuntimeSandbox` reference](/integrations/sandboxes/agentcore)
-- [`AppleContainerSandbox` reference](/integrations/sandboxes/apple-container)
-- [`DaytonaSandbox` reference](/integrations/sandboxes/daytona)
-- [`E2BSandbox` reference](/integrations/sandboxes/e2b)
-- [`LocalSandbox` reference](/reference/workspace/local-sandbox)
-- [`ModalSandbox` reference](/integrations/sandboxes/modal)
-- [`VercelSandbox` reference](/integrations/sandboxes/vercel#vercel-sandbox)
-- [`VercelServerlessSandbox` reference](/integrations/sandboxes/vercel#vercel-serverless-sandbox)
-- [Workspace overview](/docs/workspace/overview)
+- [`WorkspaceSandbox` reference](/reference/workspace/sandbox)
 - [Filesystem](/docs/workspace/filesystem)

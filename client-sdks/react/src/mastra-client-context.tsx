@@ -1,6 +1,6 @@
 import { MastraClient } from '@mastra/client-js';
 import type { ReactNode } from 'react';
-import { createContext, useContext } from 'react';
+import { createContext, useContext, useMemo } from 'react';
 
 export type MastraClientContextType = MastraClient;
 
@@ -35,7 +35,12 @@ export const MastraClientProvider = ({
   credentials = 'include',
   customFetch,
 }: MastraClientProviderProps) => {
-  const client = createMastraClient(baseUrl, headers, apiPrefix, credentials, customFetch);
+  // Consumers key per-client caches (endpoint support, capability probes) on this instance,
+  // so a fresh client each render silently resets them.
+  const client = useMemo(
+    () => createMastraClient(baseUrl, headers, apiPrefix, credentials, customFetch),
+    [baseUrl, headers, apiPrefix, credentials, customFetch],
+  );
 
   return <MastraClientContext.Provider value={client}>{children}</MastraClientContext.Provider>;
 };

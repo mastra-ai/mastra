@@ -41,6 +41,9 @@ export const queryKeys = {
     ['factory', 'metrics', githubProjectId ?? null, from, to] as const,
   factoryHealthThresholds: (githubProjectId: string | undefined) =>
     ['factory', 'health-thresholds', githubProjectId ?? null] as const,
+  /** Every decision list for a project, whatever status filter it was fetched with. */
+  factoryDecisionsRoot: (githubProjectId: string | undefined) =>
+    ['factory', 'decisions', githubProjectId ?? null] as const,
   factoryDecisions: (githubProjectId: string | undefined, statusKey: string) =>
     ['factory', 'decisions', githubProjectId ?? null, statusKey] as const,
   factoryAudit: (githubProjectId: string | undefined, group: string, actorKey?: string) =>
@@ -60,6 +63,7 @@ export const queryKeys = {
   modelPacksAll: () => ['model-packs'] as const,
   om: (resourceId: string | undefined) => ['om', resourceId ?? null] as const,
   thinkingConfig: () => ['thinking-config'] as const,
+  factorySkills: () => ['factory', 'skills'] as const,
   fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,
   artifactsList: (path: string | undefined) => ['artifacts-list', path ?? null] as const,
   workspaceRenderedList: (workspacePath: string | undefined, renderedRoot: string | undefined) =>
@@ -101,11 +105,9 @@ export const queryKeys = {
     resourceId: string | undefined,
     projectPath: string | undefined,
   ) => [...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath), 'state'] as const,
-  // Kept outside agentControllerSession for the same reason as connection:
-  // this is a lightweight activity poll, not session state to invalidate. One
-  // entry covers every worktree sharing the resource (single thread listing).
-  agentControllerActivity: (agentControllerId: string | undefined, resourceId: string | undefined) =>
-    ['agent-controller', agentControllerId ?? null, 'activity', resourceId ?? null] as const,
+  // Session state must stay out of the key: it would reset the query on navigation, and a reset reads as every run going idle.
+  agentControllerActivity: (agentControllerId: string | undefined) =>
+    ['agent-controller', agentControllerId ?? null, 'activity'] as const,
   agentControllerSettings: (
     agentControllerId: string | undefined,
     resourceId: string | undefined,

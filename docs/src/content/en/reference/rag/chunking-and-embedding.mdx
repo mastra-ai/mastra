@@ -140,7 +140,7 @@ const { embeddings } = await embedMany({
 ```
 
 :::important[Vector Database Compatibility]
-When storing embeddings, the vector database index must be configured to match the output size of your embedding model. If the dimensions don't match, you may get errors or data corruption.
+When storing embeddings, configure the vector database index to match the output size of your embedding model to avoid errors or data corruption from mismatched dimensions.
 :::
 
 ## Example: Complete pipeline

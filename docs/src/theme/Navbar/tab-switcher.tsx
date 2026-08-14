@@ -22,12 +22,6 @@ const docsTabs = [
     basePath: '/integrations',
   },
   {
-    id: 'Guides',
-    label: 'Guides',
-    href: '/guides',
-    basePath: '/guides',
-  },
-  {
     id: 'Reference',
     label: 'Reference',
     href: '/reference',

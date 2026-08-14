@@ -19,7 +19,8 @@ export function observeSessionCheckpoint(session: CheckpointCaptureSession): () 
     capture = capture.then(async () => {
       // Chat-only sessions run without a workspace; there is nothing to snapshot.
       const sandbox = session.getWorkspace()?.sandbox;
-      if (!sandbox) return;
+      // Older sandbox implementations predate `snapshot()`; skip them quietly.
+      if (typeof sandbox?.snapshot !== 'function') return;
       try {
         await sandbox.snapshot();
       } catch (error) {

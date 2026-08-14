@@ -47,8 +47,8 @@
   background-color: var(--border2);
 }
 
-.composer-ring:hover,
-.composer-ring:focus-within {
+/* The arc tracks the cursor, so it lights on hover only — focus brightens the edge instead. */
+.composer-ring:hover {
   --composer-ring-strength: 0.4;
 }
 

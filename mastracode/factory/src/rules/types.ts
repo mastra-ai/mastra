@@ -255,6 +255,7 @@ export interface FactoryInvokeSkillDecision extends FactoryCommitDecisionBase {
   skillName: string;
   arguments?: string;
   precedingMessage?: string;
+  cancelInFlight?: boolean;
 }
 
 export interface FactorySendMessageDecision extends FactoryCommitDecisionBase {
