@@ -717,11 +717,8 @@ export function buildAuthRoutes(provider: IMastraAuthProvider, options: { public
  */
 const SIGNATURE_VERIFYING_CHANNEL_WEBHOOK = /^\/api\/agent-controllers\/[^/]+\/channels\/slack\/webhook$/;
 
-/**
- * Session-state favicons the browser fetches on a tab that may already have
- * been signed out. Listed one by one rather than matched by prefix so a future
- * route under that prefix does not inherit the pass.
- */
+// Fetched by tabs that may already be signed out. Enumerated, not prefix-matched,
+// so a future route under the same prefix does not inherit the pass.
 const SESSION_FAVICON_PATHS = new Set([
   '/favicon-session-initializing.svg',
   '/favicon-session-working.svg',

@@ -19,18 +19,13 @@ function setFavicon(href: string) {
 }
 
 export interface SessionFaviconProps {
-  /**
-   * `null` leaves the default Mastra favicon in place (used when no session is
-   * open on screen).
-   */
-  state: SessionFaviconState | null;
+  /** Omitted leaves the default Mastra favicon in place. */
+  state?: SessionFaviconState;
 }
 
 /**
- * Sole writer of the browser favicon: amber while the session initializes,
- * green while the agent is working, red on error, blue when it's the user's
- * turn. Mount exactly one per route branch — two mounted at once race each
- * other's cleanup and leave the default icon behind.
+ * Sole writer of the browser favicon. Mount exactly one per route branch — two
+ * at once race each other's cleanup and leave the default icon behind.
  */
 export function SessionFavicon({ state }: SessionFaviconProps) {
   useEffect(() => {

@@ -13,13 +13,13 @@ import { ChatRuntimeContext } from './ChatRuntimeContext';
 import { ChatTranscriptContext } from './ChatTranscriptContext';
 import type { ChatTranscriptApi, LoadMoreHistory } from './ChatTranscriptContext';
 import { useChatConnection } from './useChatConnection';
+import { useChatMessagesInitializing } from './useChatMessagesInitializing';
 import { useChatSessionContext } from './useChatSessionContext';
 
 export function ChatTranscriptProvider({
   children,
   threadId,
   initialMessages,
-  messagesInitializing = false,
   hasMoreHistory = false,
   isLoadingMoreHistory = false,
   loadMoreHistory,
@@ -27,7 +27,6 @@ export function ChatTranscriptProvider({
   children: ReactNode;
   threadId?: string;
   initialMessages?: MastraDBMessage[];
-  messagesInitializing?: boolean;
   hasMoreHistory?: boolean;
   isLoadingMoreHistory?: boolean;
   loadMoreHistory?: () => void;
@@ -57,12 +56,7 @@ export function ChatTranscriptProvider({
   return (
     <ChatConnectionProvider onEvent={onEvent}>
       <ChatRuntimeValueProvider runtime={runtime}>
-        <ChatTranscriptValueProvider
-          threadId={threadId}
-          transcriptApi={transcriptApi}
-          loadMore={loadMore}
-          messagesInitializing={messagesInitializing}
-        >
+        <ChatTranscriptValueProvider threadId={threadId} transcriptApi={transcriptApi} loadMore={loadMore}>
           {children}
         </ChatTranscriptValueProvider>
       </ChatRuntimeValueProvider>
@@ -90,24 +84,23 @@ function ChatRuntimeValueProvider({ children, runtime }: { children: ReactNode; 
   );
 }
 
-// Mirrors the in-page precedence of `ChatMessageBoundary` so the favicon and
-// what's on screen never disagree: failure first, then the prepare stepper.
+// Precedence mirrors `ChatMessageBoundary` so the favicon and the screen agree.
 function faviconStateFor({
-  threadId,
+  hasThread,
   sessionError,
   initializing,
   connectionError,
   busy,
 }: {
-  threadId: string | undefined;
+  hasThread: boolean;
   sessionError: boolean;
   initializing: boolean;
   connectionError: boolean;
   busy: boolean;
-}): SessionFaviconState | null {
+}): SessionFaviconState | undefined {
   if (sessionError) return 'error';
   if (initializing) return 'initializing';
-  if (!threadId) return null;
+  if (!hasThread) return undefined;
   if (connectionError) return 'error';
   return busy ? 'working' : 'awaiting';
 }
@@ -117,16 +110,15 @@ function ChatTranscriptValueProvider({
   threadId,
   transcriptApi,
   loadMore,
-  messagesInitializing,
 }: {
   children: ReactNode;
   threadId?: string;
   transcriptApi: ReturnType<typeof useAgentControllerTranscript>;
   loadMore: LoadMoreHistory;
-  messagesInitializing: boolean;
 }) {
   const connection = useChatConnection();
   const { sessionError, sandboxPreparing } = useChatSessionContext();
+  const messagesInitializing = useChatMessagesInitializing();
   const { transcript, reset, localUser, resolvePrompt, clearPending, pushNotice } = transcriptApi;
   const effectiveThreadId = transcript.threadId ?? threadId ?? connection.createdThreadId;
 
@@ -149,7 +141,7 @@ function ChatTranscriptValueProvider({
   };
 
   const faviconState = faviconStateFor({
-    threadId: effectiveThreadId,
+    hasThread: Boolean(effectiveThreadId),
     sessionError: Boolean(sessionError),
     initializing: sandboxPreparing || messagesInitializing,
     connectionError: connection.status === 'error',

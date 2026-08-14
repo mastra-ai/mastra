@@ -46,7 +46,7 @@ describe('SessionFavicon', () => {
 
   describe('when no session is on screen', () => {
     it('keeps the normal Mastra favicon', () => {
-      renderWithProviders(<SessionFavicon state={null} />);
+      renderWithProviders(<SessionFavicon />);
 
       expect(faviconHref()).toBe('/mastra.svg');
     });

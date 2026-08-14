@@ -13,9 +13,8 @@ function faviconHref() {
   return document.querySelector<HTMLLinkElement>('link[rel~="icon"]')?.getAttribute('href');
 }
 
-// `deferUntilMessagesReady={false}` mirrors `ThreadPage`: the transcript
-// provider stays mounted through preparation, which is where a second favicon
-// writer used to fight it.
+// `deferUntilMessagesReady={false}` mirrors `ThreadPage`: the transcript provider
+// stays mounted through preparation, where a second favicon writer used to fight it.
 function renderThread() {
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`]}>

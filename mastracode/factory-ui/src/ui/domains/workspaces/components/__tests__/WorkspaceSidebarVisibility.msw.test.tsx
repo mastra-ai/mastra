@@ -1,9 +1,3 @@
-/**
- * The sidebar only lists five sessions before collapsing the rest behind
- * "Show N more". A session the user just started is still materializing, so it
- * has to keep its slot until it is ready — otherwise it disappears the moment
- * it is created.
- */
 import { screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';

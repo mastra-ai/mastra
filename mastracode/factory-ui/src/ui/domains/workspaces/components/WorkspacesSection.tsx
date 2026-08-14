@@ -100,8 +100,6 @@ export function WorkspacesSection() {
       },
     ];
   });
-  // A row the user must not lose sight of: the one they're in, one still
-  // materializing, one the agent is running, or one waiting on them.
   const mustStayVisible = (row: (typeof rows)[number] | undefined) =>
     Boolean(row && (row.active || row.initializing || row.running || row.attention));
   const latestRows = (review: boolean) => {

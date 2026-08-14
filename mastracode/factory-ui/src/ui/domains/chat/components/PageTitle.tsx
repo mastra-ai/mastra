@@ -16,12 +16,7 @@ function identifierForThread(workItems: WorkItem[] | undefined, sessionId?: stri
   return item ? workItemIdentifier(item) : undefined;
 }
 
-/**
- * Drives `document.title` for the current thread: the linked work item's
- * canonical identifier (`#1567` on GitHub, `ENG-123` on Linear), else the
- * thread's own title, else the default app title while data loads — so a wall
- * of session tabs stays identifiable without flickering through placeholders.
- */
+/** Tab title for the open thread: the linked work item's identifier (`#1567`, `ENG-123`), else the thread title. */
 export function PageTitle() {
   const { factoryId, sessionId, threadId } = useParams<{
     factoryId?: string;

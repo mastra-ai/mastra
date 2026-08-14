@@ -48,18 +48,7 @@ export function ThreadPage() {
       sidebar={<Sidebar />}
       main={
         resolvingSession ? (
-          // bare bar stands in — the session header needs WorkspaceFilesProvider
-          <>
-            <SessionFavicon state="initializing" />
-            <ChatShell className="flex-1">
-              <ChatShell.Bar>
-                <ChatHeader />
-              </ChatShell.Bar>
-              <div className="grid min-h-0 flex-1 place-items-center">
-                <Spinner aria-label="Loading session" className="text-icon3" />
-              </div>
-            </ChatShell>
-          </>
+          <ResolvingSessionMain />
         ) : (
           <ChatSessionBoundary threadId={threadId}>
             <PageTitle />
@@ -70,6 +59,25 @@ export function ThreadPage() {
         )
       }
     />
+  );
+}
+
+// Owns the favicon for this branch: the session boundary is not mounted yet, so
+// nothing else can write it. A bare bar stands in — the session header needs
+// WorkspaceFilesProvider.
+function ResolvingSessionMain() {
+  return (
+    <>
+      <SessionFavicon state="initializing" />
+      <ChatShell className="flex-1">
+        <ChatShell.Bar>
+          <ChatHeader />
+        </ChatShell.Bar>
+        <div className="grid min-h-0 flex-1 place-items-center">
+          <Spinner aria-label="Loading session" className="text-icon3" />
+        </div>
+      </ChatShell>
+    </>
   );
 }
 
