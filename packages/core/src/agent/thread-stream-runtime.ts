@@ -2194,7 +2194,17 @@ export class AgentThreadStreamRuntime {
         const remoteRun = remoteRuns.get(streamId);
         if (done || !remoteRun || remoteRun.done) return;
 
-        const owner = await leaseProvider.getLeaseOwner(key).catch(() => undefined);
+        let owner: string | undefined;
+        try {
+          owner = await leaseProvider.getLeaseOwner(key);
+        } catch {
+          if (done || remoteRuns.get(streamId) !== remoteRun || remoteRun.done) return;
+          remoteRunLeaseTimers.set(
+            streamId,
+            setTimeout(() => void checkLease(), AGENT_THREAD_LEASE_TTL_MS),
+          );
+          return;
+        }
         if (done || remoteRuns.get(streamId) !== remoteRun || remoteRun.done) return;
         if (owner === runId) {
           remoteRunLeaseTimers.set(
