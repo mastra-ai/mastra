@@ -1074,6 +1074,10 @@ async function prepareProject(options: {
     storage: github.sourceControlStorage.sandboxes,
     token: ghCliToken,
     onProgress,
+    // Seed fresh provisions from the repo's warm base checkpoint so the
+    // materialize step below finds an existing checkout and fast-forward
+    // pulls instead of cloning cold.
+    ...(project.baseCheckpoint ? { seedCheckpointName: project.baseCheckpoint.name } : {}),
   });
   // Re-read the sandbox binding so we have the freshly persisted sandboxId.
   const fresh = await github.sourceControlStorage.sandboxes.getById({ id: sandboxRow.id });

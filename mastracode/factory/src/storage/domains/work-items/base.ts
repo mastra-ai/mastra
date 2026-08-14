@@ -182,6 +182,26 @@ export interface RevokeFactoryRunBindingInput {
   revokedAt: Date;
 }
 
+export interface RevokeStaleFactoryRunBindingsInput {
+  /** Active bindings created before this instant are revoked regardless of item state. */
+  olderThan: Date;
+  now: Date;
+}
+
+/**
+ * Stages in which a bound run can still act on its work item. Mirrors the
+ * non-terminal subset of `FACTORY_RULE_STAGES` (rules/types.ts); bindings for
+ * items outside these stages are dead weight in the reconcile walk.
+ */
+const ACTIVE_RUN_BINDING_STAGES: ReadonlySet<string> = new Set(['intake', 'triage', 'planning', 'execute', 'review']);
+
+export interface RevokeFactoryRunBindingsForWorkItemInput {
+  orgId: string;
+  factoryProjectId: string;
+  workItemId: string;
+  revokedAt: Date;
+}
+
 export interface FactoryRunBindingRecord {
   id: string;
   orgId: string;
@@ -1437,6 +1457,61 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       },
     );
     return revoked && row ? toBinding(row) : null;
+  }
+
+  /**
+   * Revoke every active binding for one work item (all roles). Called from
+   * terminal-stage cleanup so completed items stop paying the reconcile walk.
+   * Returns the number of bindings revoked.
+   */
+  async revokeRunBindingsForWorkItem(input: RevokeFactoryRunBindingsForWorkItemInput): Promise<number> {
+    return this.#db.updateMany(
+      'factory_run_bindings',
+      {
+        org_id: input.orgId,
+        factory_project_id: input.factoryProjectId,
+        work_item_id: input.workItemId,
+        status: 'active',
+      },
+      { status: 'revoked', revoked_at: input.revokedAt },
+    );
+  }
+
+  /**
+   * Revoke leaked/legacy active bindings: older than `olderThan`, or whose
+   * work item is gone, malformed, or already terminal. Terminal-stage cleanup
+   * handles bindings go-forward; this sweep drains anything that slipped past
+   * it. Returns the number of bindings revoked.
+   */
+  async revokeStaleRunBindings(input: RevokeStaleFactoryRunBindingsInput): Promise<number> {
+    const bindings = await this.listActiveRunBindings();
+    const itemCache = new Map<string, WorkItemRow | null>();
+    let revoked = 0;
+    for (const binding of bindings) {
+      let stale = binding.createdAt.getTime() < input.olderThan.getTime();
+      if (!stale) {
+        const key = `${binding.orgId}:${binding.workItemId}`;
+        let item = itemCache.get(key);
+        if (item === undefined) {
+          item = await this.get({ orgId: binding.orgId, id: binding.workItemId });
+          itemCache.set(key, item);
+        }
+        stale =
+          !item ||
+          item.stages.length !== 1 ||
+          !ACTIVE_RUN_BINDING_STAGES.has(item.stages[0]!) ||
+          item.factoryProjectId !== binding.factoryProjectId;
+      }
+      if (!stale) continue;
+      const result = await this.revokeRunBinding({
+        orgId: binding.orgId,
+        factoryProjectId: binding.factoryProjectId,
+        bindingId: binding.id,
+        revokedAt: input.now,
+      });
+      if (result) revoked += 1;
+    }
+    return revoked;
   }
 
   /** Enumerate active bindings for the server-owned restart reconciler. */

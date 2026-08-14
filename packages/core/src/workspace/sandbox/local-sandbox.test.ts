@@ -1825,6 +1825,186 @@ describe('LocalSandbox', () => {
       expect(content).toBe('secret');
     });
   });
+
+  describe('checkpoints', () => {
+    let checkpointsDir: string;
+    let workDir: string;
+
+    beforeEach(async () => {
+      checkpointsDir = path.join(tempDir, '.checkpoints');
+      workDir = path.join(tempDir, 'work');
+    });
+
+    function makeSandbox(
+      options: { checkpointName?: string; seedCheckpointName?: string; workingDirectory?: string } = {},
+    ) {
+      return new LocalSandbox({
+        workingDirectory: options.workingDirectory ?? workDir,
+        checkpointsDirectory: checkpointsDir,
+        ...(options.checkpointName !== undefined && { checkpointName: options.checkpointName }),
+        ...(options.seedCheckpointName !== undefined && { seedCheckpointName: options.seedCheckpointName }),
+      });
+    }
+
+    it('reports supportsCheckpoints = true', () => {
+      expect(makeSandbox().supportsCheckpoints).toBe(true);
+    });
+
+    it('snapshot is a no-op without a checkpoint name', async () => {
+      const sb = makeSandbox();
+      await sb.start();
+      await sb.snapshot();
+      await expect(fs.stat(checkpointsDir)).rejects.toThrow();
+    });
+
+    it('snapshot persists the workdir and start seeds a new sandbox from it', async () => {
+      const sb = makeSandbox({ checkpointName: 'repo-abc' });
+      await sb.start();
+      await fs.writeFile(path.join(workDir, 'file.txt'), 'hello');
+      await fs.mkdir(path.join(workDir, 'nested'), { recursive: true });
+      await fs.writeFile(path.join(workDir, 'nested', 'deep.txt'), 'deep');
+      await sb.snapshot();
+
+      const restored = makeSandbox({
+        checkpointName: 'repo-abc',
+        workingDirectory: path.join(tempDir, 'work2'),
+      });
+      await restored.start();
+      expect(await fs.readFile(path.join(tempDir, 'work2', 'file.txt'), 'utf-8')).toBe('hello');
+      expect(await fs.readFile(path.join(tempDir, 'work2', 'nested', 'deep.txt'), 'utf-8')).toBe('deep');
+    });
+
+    it('missing checkpoint falls back to a normal empty workdir', async () => {
+      const sb = makeSandbox({ checkpointName: 'does-not-exist' });
+      await sb.start();
+      expect(await fs.readdir(workDir)).toEqual([]);
+    });
+
+    it('does not seed over a populated workdir', async () => {
+      const sb = makeSandbox({ checkpointName: 'repo-abc' });
+      await sb.start();
+      await fs.writeFile(path.join(workDir, 'from-checkpoint.txt'), 'ckpt');
+      await sb.snapshot();
+
+      const otherDir = path.join(tempDir, 'work3');
+      await fs.mkdir(otherDir, { recursive: true });
+      await fs.writeFile(path.join(otherDir, 'existing.txt'), 'keep');
+      const populated = makeSandbox({ checkpointName: 'repo-abc', workingDirectory: otherDir });
+      await populated.start();
+      expect(await fs.readdir(otherDir)).toEqual(['existing.txt']);
+    });
+
+    it('re-snapshot atomically replaces the previous checkpoint', async () => {
+      const sb = makeSandbox({ checkpointName: 'repo-abc' });
+      await sb.start();
+      await fs.writeFile(path.join(workDir, 'v1.txt'), 'one');
+      await sb.snapshot();
+      await fs.rm(path.join(workDir, 'v1.txt'));
+      await fs.writeFile(path.join(workDir, 'v2.txt'), 'two');
+      await sb.snapshot();
+
+      const entries = await fs.readdir(path.join(checkpointsDir, 'repo-abc'));
+      expect(entries).toEqual(['v2.txt']);
+      // No leftover temp dirs
+      const ckptEntries = await fs.readdir(checkpointsDir);
+      expect(ckptEntries.filter(e => e.startsWith('.tmp-'))).toEqual([]);
+    });
+
+    it('rejects unsafe checkpoint names', async () => {
+      const sb = makeSandbox({ checkpointName: '../escape' });
+      await expect(sb.start()).rejects.toThrow(/Invalid checkpoint name/);
+      const sb2 = makeSandbox({ checkpointName: 'ok-name' });
+      await sb2.start();
+      // Bypass seeding validation to hit snapshot validation directly
+      (sb2 as any)._checkpointName = '../escape';
+      await expect(sb2.snapshot()).rejects.toThrow(/Invalid checkpoint name/);
+    });
+
+    it('seeds from seedCheckpointName when the primary checkpoint has no state', async () => {
+      // Build a "base" checkpoint under a repo-level name.
+      const base = makeSandbox({ checkpointName: 'repo-base' });
+      await base.start();
+      await fs.writeFile(path.join(workDir, 'base.txt'), 'warm');
+      await base.snapshot();
+
+      // Fresh "session" sandbox: its own checkpoint doesn't exist yet, so it
+      // seeds from the base checkpoint.
+      const session = makeSandbox({
+        checkpointName: 'session-1',
+        seedCheckpointName: 'repo-base',
+        workingDirectory: path.join(tempDir, 'seed-work'),
+      });
+      await session.start();
+      expect(await fs.readFile(path.join(tempDir, 'seed-work', 'base.txt'), 'utf-8')).toBe('warm');
+
+      // Snapshots write to the session checkpoint, never the base.
+      await fs.writeFile(path.join(tempDir, 'seed-work', 'session.txt'), 's');
+      await session.snapshot();
+      expect(await fs.readdir(path.join(checkpointsDir, 'repo-base'))).toEqual(['base.txt']);
+      expect((await fs.readdir(path.join(checkpointsDir, 'session-1'))).sort()).toEqual(['base.txt', 'session.txt']);
+    });
+
+    it('prefers the primary checkpoint over the seed when both exist', async () => {
+      const base = makeSandbox({ checkpointName: 'repo-base' });
+      await base.start();
+      await fs.writeFile(path.join(workDir, 'marker.txt'), 'base');
+      await base.snapshot();
+
+      const sessionWork = path.join(tempDir, 'prefer-work');
+      const session = makeSandbox({
+        checkpointName: 'session-2',
+        seedCheckpointName: 'repo-base',
+        workingDirectory: sessionWork,
+      });
+      await session.start();
+      await fs.writeFile(path.join(sessionWork, 'marker.txt'), 'session');
+      await session.snapshot();
+
+      const resumed = makeSandbox({
+        checkpointName: 'session-2',
+        seedCheckpointName: 'repo-base',
+        workingDirectory: path.join(tempDir, 'prefer-work-2'),
+      });
+      await resumed.start();
+      expect(await fs.readFile(path.join(tempDir, 'prefer-work-2', 'marker.txt'), 'utf-8')).toBe('session');
+    });
+
+    it('missing seed checkpoint falls back to a normal empty workdir', async () => {
+      const sb = makeSandbox({ checkpointName: 'session-3', seedCheckpointName: 'nope' });
+      await sb.start();
+      expect(await fs.readdir(workDir)).toEqual([]);
+    });
+
+    it('clone propagates seedCheckpointName', async () => {
+      const base = makeSandbox({ checkpointName: 'repo-base' });
+      await base.start();
+      await fs.writeFile(path.join(workDir, 'b.txt'), 'b');
+      await base.snapshot();
+
+      const template = makeSandbox({ checkpointName: 'session-4', seedCheckpointName: 'repo-base' });
+      const cloned = template.clone({ workingDirectory: path.join(tempDir, 'clone-seed-work') });
+      await cloned.start();
+      expect(await fs.readFile(path.join(tempDir, 'clone-seed-work', 'b.txt'), 'utf-8')).toBe('b');
+    });
+
+    it('clone propagates checkpoint configuration and allows override', async () => {
+      const sb = makeSandbox({ checkpointName: 'repo-abc' });
+      await sb.start();
+      await fs.writeFile(path.join(workDir, 'a.txt'), 'a');
+      await sb.snapshot();
+
+      const cloned = sb.clone({ workingDirectory: path.join(tempDir, 'work4') });
+      await cloned.start();
+      expect(await fs.readFile(path.join(tempDir, 'work4', 'a.txt'), 'utf-8')).toBe('a');
+
+      const overridden = sb.clone({
+        workingDirectory: path.join(tempDir, 'work5'),
+        checkpointName: 'other',
+      });
+      await overridden.start();
+      expect(await fs.readdir(path.join(tempDir, 'work5'))).toEqual([]);
+    });
+  });
 });
 
 /**

@@ -24,28 +24,30 @@ export interface ChatSessionContextApi {
    */
   resourceReady: boolean;
   /**
-   * `/ensure` has succeeded and runs can execute in the sandbox. Gate any
-   * write/run consumer on this flag.
+   * Session metadata resolved and runs can be sent. Does NOT wait on the
+   * `/ensure` warm-up — the server materializes sandboxes lazily on first use.
+   * Gate any write/run consumer on this flag.
    */
   sandboxReady: boolean;
   /**
-   * `/ensure` is in flight (or not yet started because deps aren't ready) for
-   * an in-session mount. UI should show a preparing affordance while true.
+   * Session metadata is still resolving for an in-session mount. UI should
+   * show a preparing affordance while true.
    */
   sandboxPreparing: boolean;
   /**
-   * Latest SSE progress event from `/ensure`, or `undefined` before the first
-   * event arrives or when no preparation is in progress.
+   * Latest SSE progress event from the background `/ensure` warm-up, or
+   * `undefined` before the first event arrives or when no warm-up is in
+   * progress. Informational only — never blocks the chat UI.
    */
   sandboxProgress: PrepareProgress | undefined;
   resourceEnabled: boolean;
   /**
-   * Failure while preparing the session's workspace (sandbox provision /
-   * repo materialization). While set, the session never becomes enabled, so
-   * surfaces must show this error instead of an eternal loading state.
+   * Failure from the background workspace warm-up (`/ensure`). Non-fatal —
+   * the run path materializes lazily — so surfaces show it as a banner with a
+   * retry affordance rather than disabling the session.
    */
   sessionError?: Error;
-  /** Re-runs workspace preparation after a `sessionError`. */
+  /** Re-runs the workspace warm-up after a `sessionError`. */
   retrySession?: () => void;
   projectPath?: string;
   /**

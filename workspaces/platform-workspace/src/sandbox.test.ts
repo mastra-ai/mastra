@@ -1796,6 +1796,43 @@ describe('PlatformSandbox', () => {
         vi.useRealTimers();
       });
 
+      it('restarts a timed-out probe on the next exec instead of pinning the lease path', async () => {
+        vi.useFakeTimers();
+        vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+        const fetchMock = vi.fn().mockResolvedValueOnce(
+          json({
+            id: 'sbx_reprobe',
+            createdAt: '2026-06-26T00:00:00.000Z',
+            instanceUrl: 'http://[fd12::1]:47000',
+          }),
+        );
+        // Sidecar is down for the entire first probe window…
+        const privateNetFetch = vi.fn().mockRejectedValue(new Error('ECONNREFUSED'));
+        const { registry, sets } = fakeAddressRegistry();
+
+        const sandbox = new PlatformSandbox({
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          sessionId: 'sess_42',
+          fetch: fetchMock,
+          privateNetFetch,
+          addressRegistry: registry,
+        });
+        await sandbox._start();
+        await vi.advanceTimersByTimeAsync(35_000);
+        expect(sets).toEqual([]);
+
+        // …then recovers. The next exec's transport wait restarts the probe
+        // and the registry gets populated instead of leasing forever.
+        privateNetFetch.mockResolvedValue(json({ ok: true }));
+        const wait = (sandbox as any)._awaitTransportReady();
+        await vi.advanceTimersByTimeAsync(1_000);
+        await wait;
+        expect(sets).toEqual([{ sandboxId: 'sbx_reprobe', instanceUrl: 'http://[fd12::1]:47000' }]);
+        vi.useRealTimers();
+      });
+
       it('does not block start() while the probe is running', async () => {
         vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
         const fetchMock = vi.fn().mockResolvedValueOnce(

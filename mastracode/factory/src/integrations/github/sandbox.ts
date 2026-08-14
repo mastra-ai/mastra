@@ -42,9 +42,17 @@ interface RepoMaterializationBinding {
 }
 
 /** Adapt a per-(project,user) sandbox binding row to the fleet's persistence seam. */
-function bindingStore(row: ProjectRepositorySandbox, storage: SourceControlSandboxStorage): SandboxBindingStore {
+function bindingStore(
+  row: ProjectRepositorySandbox,
+  storage: SourceControlSandboxStorage,
+  seedCheckpointName?: string,
+): SandboxBindingStore {
   return {
     sandboxId: row.sandboxId,
+    // Boot-only fallback: fresh provisions seed from the repo base checkpoint
+    // (when the builder has produced one) so materialization pulls instead of
+    // cloning. Snapshots never write here.
+    ...(seedCheckpointName ? { seedCheckpointName } : {}),
     setSandboxId: id =>
       id === null ? storage.clearBinding({ id: row.id }) : storage.setSandboxId({ id: row.id, sandboxId: id }),
     clear: () => storage.clearBinding({ id: row.id }),
@@ -61,9 +69,11 @@ export async function ensureProjectSandbox(options: {
   storage: SourceControlSandboxStorage;
   token: string;
   onProgress?: ProgressFn;
+  /** Repo base checkpoint to seed a fresh provision from (boot-only). */
+  seedCheckpointName?: string;
 }): Promise<MaterializationSandbox> {
-  const { fleet, row, storage, token, onProgress } = options;
-  return fleet.ensureSandbox(bindingStore(row, storage), { GH_TOKEN: token }, onProgress, {
+  const { fleet, row, storage, token, onProgress, seedCheckpointName } = options;
+  return fleet.ensureSandbox(bindingStore(row, storage, seedCheckpointName), { GH_TOKEN: token }, onProgress, {
     actingUserId: row.userId,
   });
 }
@@ -138,7 +148,7 @@ const SH_RETRY_DELAY_MS = 2000;
  * to re-run. Hang-guard timeouts are NOT retried — the budget applies to the
  * command as a whole.
  */
-async function sh(
+export async function sh(
   sandbox: MaterializationSandbox,
   script: string,
   options: ShOptions = {},
@@ -537,7 +547,7 @@ function isBlockedByLocalWork(result: SandboxCommandResult): boolean {
  * this exact repo. Matches both the clean and token-auth URL forms; any other
  * remote (or no git dir at all) falls back to the clone path.
  */
-async function hasExistingCheckout(
+export async function hasExistingCheckout(
   sandbox: MaterializationSandbox,
   workdir: string,
   repoFullName: string,

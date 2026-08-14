@@ -28,6 +28,7 @@ import type { Intake } from '../capabilities/intake.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { RouteAuth } from '../routes/route.js';
 import type { FactoryRules } from '../rules/types.js';
+import type { BaseCheckpointTriggers } from '../sandbox/base-checkpoint-triggers.js';
 import type { SandboxFleet } from '../sandbox/fleet.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEventRow } from '../storage/domains/audit/base.js';
@@ -73,6 +74,13 @@ export interface IntegrationContext {
    * sandbox-backed routes respond 503.
    */
   fleet: SandboxFleet;
+  /**
+   * Base-checkpoint trigger surface — present when the factory constructed a
+   * builder (fleet enabled + a source-control owner registered). Integrations
+   * feed webhook events and reconcile sweeps into it so connected repos keep
+   * a warm base checkpoint.
+   */
+  baseCheckpoints?: BaseCheckpointTriggers;
   /**
    * Root factory storage backend and source of the `appDbConfigured`
    * diagnostic. Absent when the host runs without an application database.

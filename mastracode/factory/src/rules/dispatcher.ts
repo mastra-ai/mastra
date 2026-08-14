@@ -29,6 +29,15 @@ const SKILL_COMPLETION_OBSERVATION_TIMEOUT_MS = 10 * 60_000;
 // capacity until their agent run reaches a terminal state; binding preparation
 // also runs detached from the poll loop under this concurrency cap.
 const MAX_IN_FLIGHT = 25;
+// Staleness sweep: legacy/leaked active bindings (item deleted, transition
+// path bypassed, or pre-dating terminal-stage revocation) are revoked on a
+// slow cadence so the per-tick reconcile walk stays bounded.
+const STALE_BINDING_SWEEP_INTERVAL_MS = 10 * 60_000;
+const STALE_BINDING_TTL_MS = 24 * 60 * 60_000;
+// The bound-thread reconcile walk reads a cursor + messages per binding; it
+// exists to catch results missed at run end, so it runs on a slow cadence off
+// the claim path rather than on every 1s tick.
+const RECONCILE_INTERVAL_MS = 30_000;
 
 function waitForAgentEndOrTimeout(agentEnd: Promise<void>): Promise<boolean> {
   return new Promise(resolve => {
@@ -73,6 +82,12 @@ export interface FactoryDecisionDispatcherOptions {
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   maxInFlight?: number;
+  /** How often the stale-binding sweep runs. Defaults to 10 minutes. */
+  staleBindingSweepIntervalMs?: number;
+  /** Active bindings older than this are revoked by the sweep. Defaults to 24 hours. */
+  staleBindingTtlMs?: number;
+  /** How often the bound-thread reconcile walk runs. Defaults to 30 seconds. */
+  reconcileIntervalMs?: number;
 }
 
 function sanitizeDispatchError(error: unknown): string {
@@ -153,6 +168,12 @@ export class FactoryDecisionDispatcher {
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   readonly #maxInFlight: number;
+  readonly #staleBindingSweepIntervalMs: number;
+  readonly #staleBindingTtlMs: number;
+  #lastStaleBindingSweepAt?: Date;
+  readonly #reconcileIntervalMs: number;
+  #lastReconcileAt?: Date;
+  #reconcileInFlight?: Promise<void>;
   #timer?: ReturnType<typeof setInterval>;
   #activeClaim?: Promise<void>;
   readonly #inFlight = new Set<Promise<void>>();
@@ -168,6 +189,9 @@ export class FactoryDecisionDispatcher {
     this.#primeCredentials = options.primeCredentials;
     const maxInFlight = options.maxInFlight ?? MAX_IN_FLIGHT;
     this.#maxInFlight = Number.isFinite(maxInFlight) && maxInFlight > 0 ? Math.floor(maxInFlight) : MAX_IN_FLIGHT;
+    this.#staleBindingSweepIntervalMs = options.staleBindingSweepIntervalMs ?? STALE_BINDING_SWEEP_INTERVAL_MS;
+    this.#staleBindingTtlMs = options.staleBindingTtlMs ?? STALE_BINDING_TTL_MS;
+    this.#reconcileIntervalMs = options.reconcileIntervalMs ?? RECONCILE_INTERVAL_MS;
   }
 
   start(): void {
@@ -196,7 +220,8 @@ export class FactoryDecisionDispatcher {
    * decision. In-flight records stay protected from re-claim by lease renewal.
    */
   async #claimAndStart(now: Date): Promise<Array<Promise<void>>> {
-    await this.#reconcileToolResults?.();
+    await this.#maybeSweepStaleBindings(now);
+    this.#maybeReconcileToolResults(now);
     const capacity = this.#maxInFlight - this.#inFlight.size;
     if (capacity <= 0) return [];
     const limit = Math.min(BATCH_SIZE, capacity);
@@ -225,6 +250,47 @@ export class FactoryDecisionDispatcher {
       ...starts.map(start => this.#track(this.#dispatchPendingStart(start, now))),
       ...decisions.map(decision => this.#track(this.#dispatchDecision(decision, now))),
     ];
+  }
+
+  /**
+   * Throttled, coalesced, non-blocking bound-thread reconcile: dispatch
+   * claiming never waits behind cursor + message reads, and overlapping runs
+   * are skipped while one is still in flight.
+   */
+  #maybeReconcileToolResults(now: Date): void {
+    if (!this.#reconcileToolResults || this.#reconcileInFlight) return;
+    if (this.#lastReconcileAt && now.getTime() - this.#lastReconcileAt.getTime() < this.#reconcileIntervalMs) return;
+    this.#lastReconcileAt = now;
+    const run = this.#reconcileToolResults()
+      .catch(error => {
+        console.error('Factory tool-result reconcile failed', sanitizeDispatchError(error));
+      })
+      .finally(() => {
+        this.#reconcileInFlight = undefined;
+      });
+    this.#reconcileInFlight = run;
+    this.#track(run);
+  }
+
+  /** Slow-cadence revocation of leaked/legacy bindings; failures never block the claim path. */
+  async #maybeSweepStaleBindings(now: Date): Promise<void> {
+    // The first tick only anchors the cadence: sweeping at boot would race the
+    // startup reconcile that is still draining trailing tool results.
+    if (!this.#lastStaleBindingSweepAt) {
+      this.#lastStaleBindingSweepAt = now;
+      return;
+    }
+    if (now.getTime() - this.#lastStaleBindingSweepAt.getTime() < this.#staleBindingSweepIntervalMs) return;
+    this.#lastStaleBindingSweepAt = now;
+    try {
+      const revoked = await this.#storage.revokeStaleRunBindings({
+        olderThan: new Date(now.getTime() - this.#staleBindingTtlMs),
+        now,
+      });
+      if (revoked > 0) console.info(`Factory stale-binding sweep revoked ${revoked} binding(s)`);
+    } catch (error) {
+      console.error('Factory stale-binding sweep failed', sanitizeDispatchError(error));
+    }
   }
 
   #track(dispatch: Promise<void>): Promise<void> {

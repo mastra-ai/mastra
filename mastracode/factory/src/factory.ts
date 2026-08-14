@@ -56,10 +56,14 @@ import {
 import { builtInFactoryRules } from './rules/defaults.js';
 import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
 import { FactoryPhaseStateProcessor } from './rules/processor.js';
+import { createTerminalStageCleanup } from './rules/terminal-cleanup.js';
 import { createFactoryTransitionTools } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
 import type { FactoryRules } from './rules/types.js';
 import { assertFactoryRules } from './rules/validation.js';
+import type { BaseCheckpointTriggers } from './sandbox/base-checkpoint-triggers.js';
+import { createBaseCheckpointTriggers } from './sandbox/base-checkpoint-triggers.js';
+import { BaseCheckpointBuilder } from './sandbox/base-checkpoint.js';
 import { SandboxFleet } from './sandbox/fleet.js';
 import { registerSandboxReattach } from './sandbox/reattach.js';
 import { handleServerError } from './server-error.js';
@@ -401,6 +405,9 @@ export class MastraFactory {
       workItems: workItemsStorage,
       channelIdentity: channelIdentityStorage,
     };
+    // Assigned once the fleet and integrations exist below; the routes only
+    // dereference it at request time, so the late assignment is safe.
+    let baseCheckpoints: BaseCheckpointTriggers | undefined;
     const projectRoutes = new ProjectRoutes({
       auth: routeAuth,
       projects: factoryProjectsStorage,
@@ -408,6 +415,7 @@ export class MastraFactory {
       versionControlIntegrationIds: integrations
         .filter(integration => integration.versionControl)
         .map(integration => integration.id),
+      onProjectRepositoryLinked: args => baseCheckpoints?.onProjectRepositoryLinked(args),
     });
     const auditDomain = new AuditDomain({
       auth: routeAuth,
@@ -528,6 +536,20 @@ export class MastraFactory {
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
       | GithubIntegration
       | undefined;
+    // Base-checkpoint triggers: keep a warm per-repo checkpoint refreshed on
+    // repo connect, default-branch merges/pushes, and the reconcile sweep.
+    // Constructed only when a sandbox fleet and GitHub source control exist;
+    // otherwise sessions simply keep the cold clone+setup path.
+    if (githubIntegration && fleet.enabled && storage.isDomainReady('source-control')) {
+      baseCheckpoints = createBaseCheckpointTriggers({
+        builder: new BaseCheckpointBuilder({ fleet }),
+        fleet,
+        github: {
+          sourceControlStorage: sourceControlStorage.forIntegration('github'),
+          ...(githubIntegration.versionControl ? { versionControl: githubIntegration.versionControl } : {}),
+        },
+      });
+    }
     const workItemsReady = storage.isDomainReady('work-items');
     // Terminal work items release their session sandboxes back to the reuse
     // pool so the next session for the same repository/user claims a warm VM
@@ -544,11 +566,27 @@ export class MastraFactory {
               workItemId,
             })
         : undefined;
+    // Terminal-stage cleanup: ingest any trailing tool results from the item's
+    // bound threads, then revoke the bindings so completed items leave the
+    // reconcile walk (the active-binding set otherwise grows forever), and
+    // finally release the item's sandboxes. Each step is best-effort — a
+    // committed transition never fails on cleanup.
+    const onTerminalStage = workItemsReady
+      ? createTerminalStageCleanup({
+          workItems: workItemsStorage,
+          // `factoryProcessor` is assigned below in this scope; the cleanup
+          // only runs on transitions long after bootstrap completes.
+          reconcileBinding: async (binding): Promise<void> => {
+            await factoryProcessor?.reconcileBinding(binding);
+          },
+          ...(releaseTerminalSandboxes ? { releaseSandboxes: releaseTerminalSandboxes } : {}),
+        })
+      : releaseTerminalSandboxes;
     const transitionService = workItemsReady
       ? new FactoryTransitionService({
           rules,
           storage: workItemsStorage,
-          ...(releaseTerminalSandboxes ? { onTerminalStage: releaseTerminalSandboxes } : {}),
+          ...(onTerminalStage ? { onTerminalStage } : {}),
         })
       : undefined;
     const factoryProcessor = workItemsReady
@@ -724,6 +762,7 @@ export class MastraFactory {
             publicOrigin,
             stateSigner,
             fleet,
+            ...(baseCheckpoints ? { baseCheckpoints } : {}),
             factoryStorage: storage,
             integrationStorage,
             sourceControlStorage,
@@ -854,6 +893,7 @@ export class MastraFactory {
                 auth: routeAuth,
                 stateSigner,
                 fleet,
+                ...(baseCheckpoints ? { baseCheckpoints } : {}),
                 factoryStorage: storage,
                 integrationStorage,
                 sourceControlStorage,
@@ -886,6 +926,7 @@ export class MastraFactory {
               auth: routeAuth,
               stateSigner,
               fleet,
+              ...(baseCheckpoints ? { baseCheckpoints } : {}),
               factoryStorage: storage,
               integrationStorage,
               sourceControlStorage,

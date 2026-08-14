@@ -524,20 +524,41 @@ describe('getFactoryWorkspace', () => {
 });
 
 describe('GitHub session workspace preparation', () => {
+  /**
+   * Session resolution is now lazy: the sandbox materializes on first
+   * FS/sandbox operation instead of during resolution. These tests assert
+   * materialization behavior, so drive the deferred phase the way a first
+   * operation would — by touching the lazy sandbox handle.
+   */
+  function eager(resolver: (args: any) => Promise<any>) {
+    return async (args: any) => {
+      const workspace = await resolver(args);
+      if (typeof workspace?.id === 'string' && workspace.id.startsWith('mfw-')) {
+        // `start()` is intentionally a no-op on the lazy handle (metadata-only
+        // session creation must not provision); force materialization through a
+        // real sandbox operation instead.
+        await (workspace as any).sandbox.getInfo();
+      }
+      return workspace;
+    };
+  }
+
   async function createLocalFactory(rootPrefix = 'mastracode-web-local-sessions-') {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), rootPrefix));
     tempDirs.push(root);
     const machine = new LocalSandbox({ workingDirectory: root });
     const fleet = new SandboxFleet({ machine, workdirBase: root });
     (fleet as any).ensureSandbox = mocks.ensureSandbox;
+    const resolver = createWorkspaceFactory({
+      sandbox: { machine, workdir: root },
+      github: fakeGithubIntegration() as any,
+      fleet,
+      workItems: { findRunBindingBySession: mocks.findRunBindingBySession } as any,
+    });
     return {
       root,
-      workspace: createWorkspaceFactory({
-        sandbox: { machine, workdir: root },
-        github: fakeGithubIntegration() as any,
-        fleet,
-        workItems: { findRunBindingBySession: mocks.findRunBindingBySession } as any,
-      }),
+      resolver,
+      workspace: eager(resolver),
     };
   }
 
@@ -591,6 +612,44 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.runWorktreeSetup).toHaveBeenCalledTimes(2);
     expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxWorkdir).toBe(workdirA);
     expect(mocks.sessions.find(session => session.id === 'session-b')?.sandboxWorkdir).toBe(workdirB);
+  });
+
+  it('resolves bundled Factory skills without waiting on sandbox materialization (kickoff path stays lazy)', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    // Session start fires a background warm-up, so materialization *starts*;
+    // the guarantee under test is that kickoff skill resolution never awaits
+    // it. Make provisioning hang forever: skill resolution must still finish.
+    mocks.ensureSandbox.mockImplementationOnce(() => new Promise(() => {}) as any);
+
+    const workspace = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') }))!;
+    await workspace.skills?.maybeRefresh();
+    const review = await workspace.skills?.get('factory-review');
+
+    expect(review?.instructions).toContain('# Factory Review');
+    // The repo checkout never happened, so project skill roots were guarded
+    // (reported empty) instead of forcing the sandbox to exist.
+    expect(mocks.materializeRepo).not.toHaveBeenCalled();
+  });
+
+  it('delegates project skill roots to the sandbox once it is materialized', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    const workspace = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') }))!;
+    // Kickoff-order discovery: initialize skills first (project roots guarded),
+    // then materialize the sandbox the way a first real operation would.
+    await workspace.skills?.maybeRefresh();
+    await (workspace as any).sandbox.getInfo();
+    const sandbox = await mocks.ensureSandbox.mock.results[0]!.value;
+    sandbox.executeCommand.mockClear();
+
+    // With the sandbox live, the guarded fallback must pass skill discovery
+    // through to the checkout instead of reporting empty roots.
+    await workspace.skills?.refresh();
+    expect(sandbox.executeCommand).toHaveBeenCalled();
   });
 
   it('opens the session for a session-shaped auth user, whose org lives on the session half', async () => {
@@ -707,6 +766,63 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxId).toBeNull();
   });
 
+  it('revives a dead sandbox mid-session and retries the command once', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
+    const first = await mocks.ensureSandbox.mock.results[0]!.value;
+    const dead = new Error('sandbox gone');
+    dead.name = 'SandboxDestroyedError';
+    first.executeCommand.mockRejectedValueOnce(dead);
+
+    const result = await (resolved as any).sandbox.executeCommand('echo', ['hi']);
+
+    expect(result.exitCode).toBe(0);
+    // The dead handle was evicted and the full pipeline re-ran: provision
+    // (reattach → fresh), materialize, checkout — then the command retried
+    // on the revived sandbox.
+    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(2);
+    expect(mocks.materializeRepo).toHaveBeenCalledTimes(2);
+    expect(mocks.checkoutSessionBranch).toHaveBeenCalledTimes(2);
+    const second = await mocks.ensureSandbox.mock.results[1]!.value;
+    expect(second.executeCommand).toHaveBeenCalledWith('echo', ['hi'], undefined);
+  });
+
+  it('does not provision the sandbox for metadata-only resolution or workspace init', async () => {
+    // Metadata GET routes (/threads, /messages) get-or-create the controller
+    // session, which resolves the workspace and awaits `workspace.init()` —
+    // and `init()` calls `sandbox.start()`. Neither step may provision; only
+    // a real sandbox operation materializes.
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    const resolved = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    await (resolved as any).sandbox.start();
+
+    expect(mocks.ensureSandbox).not.toHaveBeenCalled();
+    expect(mocks.materializeRepo).not.toHaveBeenCalled();
+
+    await (resolved as any).sandbox.getInfo();
+    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
+  });
+
+  it('surfaces ordinary command failures without reviving the sandbox', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    const first = await mocks.ensureSandbox.mock.results[0]!.value;
+    first.executeCommand.mockRejectedValueOnce(new Error('command exited 1'));
+
+    await expect((resolved as any).sandbox.executeCommand('false')).rejects.toThrow('command exited 1');
+    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
+  });
+
   it('does not retry materialization for non git-missing failures', async () => {
     const { workspace } = await createLocalFactory();
     addProject();
@@ -749,12 +865,14 @@ describe('GitHub session workspace preparation', () => {
     const machine = { provider: 'railway' } as any;
     const fleet = new SandboxFleet({ machine, workdirBase: '/workspace' });
     (fleet as any).ensureSandbox = mocks.ensureSandbox;
-    return createWorkspaceFactory({
-      sandbox: { machine, workdir: '/workspace' },
-      github: fakeGithubIntegration() as any,
-      fleet,
-      workItems: { findRunBindingBySession: mocks.findRunBindingBySession } as any,
-    });
+    return eager(
+      createWorkspaceFactory({
+        sandbox: { machine, workdir: '/workspace' },
+        github: fakeGithubIntegration() as any,
+        fleet,
+        workItems: { findRunBindingBySession: mocks.findRunBindingBySession } as any,
+      }),
+    );
   }
 
   // A chat-only resourceId (e.g. `channel:slack:C1:170042` from an unrouted

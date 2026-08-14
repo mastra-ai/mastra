@@ -173,6 +173,12 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
    */
   async snapshot(): Promise<void> {}
 
+  /**
+   * Whether `snapshot()` persists real checkpoints. Providers overriding
+   * `snapshot()` with a real implementation should also override this to true.
+   */
+  readonly supportsCheckpoints: boolean = false;
+
   // ---------------------------------------------------------------------------
   // Lifecycle Promise Tracking (prevents race conditions)
   // ---------------------------------------------------------------------------

@@ -23,6 +23,9 @@ const SUPPORTED_GITHUB_WEBHOOK_EVENTS = new Set([
   'pull_request',
   'pull_request_review',
   'pull_request_review_comment',
+  // Direct pushes to the default branch drive base-checkpoint rebuilds. The
+  // rules engine and subscription dispatcher both ignore push events.
+  'push',
 ]);
 
 export interface GithubWebhookMetadata {

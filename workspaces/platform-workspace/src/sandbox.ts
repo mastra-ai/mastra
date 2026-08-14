@@ -411,6 +411,12 @@ export class PlatformSandbox extends MastraSandbox {
    * failed/timed out, but now coalesced via `_leaseInFlight`).
    */
   private _transportReadyPromise: Promise<void> | null = null;
+  /**
+   * The sidecar address of the most recent `start()`, kept so a timed-out
+   * probe can be restarted by a later exec ({@link _awaitTransportReady})
+   * instead of pinning the sandbox to the lease path for its lifetime.
+   */
+  private _probeTarget: { sandboxId: string; instanceUrl: string } | null = null;
 
   constructor(options: PlatformSandboxOptions = {}) {
     super({ ...options, name: 'PlatformSandbox', processes: new PlatformProcessManager() });
@@ -617,6 +623,9 @@ export class PlatformSandbox extends MastraSandbox {
     // Early execs wait for the probe (up to TRANSPORT_READY_WAIT_MS) rather
     // than all racing to the lease path independently.
     const generation = ++this._probeGeneration;
+    // Remember the probe target so a later exec can restart the probe if this
+    // one times out, instead of falling back to the lease path forever.
+    this._probeTarget = { sandboxId: json.id, instanceUrl: json.instanceUrl };
     this._transportReadyPromise = this._probeSidecarThenRegister(json.id, json.instanceUrl, generation);
   }
 
@@ -672,7 +681,13 @@ export class PlatformSandbox extends MastraSandbox {
       }
       await new Promise(r => setTimeout(r, SIDECAR_PROBE_INTERVAL_MS));
     }
-    // Sidecar never came up. Leave registry entry unset — every exec goes lease.
+    // Sidecar never came up within this probe's window. Leave the registry
+    // entry unset (execs go via lease) but clear the ready promise so a later
+    // exec can restart the probe rather than pinning this sandbox to the
+    // lease path for its lifetime.
+    if (generation === this._probeGeneration && this._transportReadyPromise) {
+      this._transportReadyPromise = null;
+    }
     this.logger.warn('platform-workspace probe timed out', {
       sandboxId,
       sessionId: this._client.sessionId,
@@ -697,9 +712,14 @@ export class PlatformSandbox extends MastraSandbox {
     if (this._sandboxId && this._addressRegistry?.get(this._sandboxId)) {
       return;
     }
-    // No probe in flight — nothing to wait for, proceed to lease path.
+    // No probe in flight. If a previous probe timed out for the current
+    // sandbox, restart it — the sidecar may just have been slow to boot, and
+    // one exec paying a short wait beats every exec going via lease forever.
     if (!this._transportReadyPromise) {
-      return;
+      const target = this._probeTarget;
+      if (!target || this._sandboxId !== target.sandboxId) return;
+      const generation = ++this._probeGeneration;
+      this._transportReadyPromise = this._probeSidecarThenRegister(target.sandboxId, target.instanceUrl, generation);
     }
     // Race the probe against a timeout. We don't want to block execs forever
     // if the sidecar is slow to boot — they can proceed via lease after a
@@ -798,8 +818,11 @@ export class PlatformSandbox extends MastraSandbox {
     const destroyedSandboxId = this._sandboxId;
     // Invalidate any in-flight probe so it doesn't re-populate the registry
     // after we've deleted the entry below. The probe checks this generation
-    // before calling set().
+    // before calling set(). Also drop the re-probe target so later execs
+    // don't restart a probe against the deleted sandbox's address.
     this._probeGeneration++;
+    this._probeTarget = null;
+    this._transportReadyPromise = null;
     await this._client.request(`/sandbox/${encodeURIComponent(destroyedSandboxId)}`, { method: 'DELETE' });
     // Clear local state so a subsequent start() creates a fresh remote sandbox
     // instead of taking the reattach branch and pointing exec at a deleted resource.
@@ -821,6 +844,9 @@ export class PlatformSandbox extends MastraSandbox {
   async snapshot(): Promise<void> {
     await this.captureCheckpoint();
   }
+
+  /** Snapshots persist real checkpoints that can seed future sandboxes. */
+  readonly supportsCheckpoints: boolean = true;
 
   /**
    * Capture the sandbox's checkpoint on demand, outside any refresh timer the

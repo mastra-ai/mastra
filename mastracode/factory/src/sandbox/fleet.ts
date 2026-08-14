@@ -47,6 +47,10 @@ export interface MaterializationSandbox {
   setEnvironmentVariable?(name: string, value: string): void;
   /** Tear down the underlying VM. Optional: providers without it are no-ops. */
   stop?(): Promise<void>;
+  /** True when the provider persists real checkpoints (snapshot is not a no-op). */
+  readonly supportsCheckpoints?: boolean;
+  /** Persist the sandbox's current state under its bound checkpoint name. */
+  snapshot?(): Promise<void>;
 }
 
 /** Options for building (or reattaching) one sandbox. */
@@ -65,6 +69,12 @@ export interface SandboxCreateOptions {
   idleTimeoutMinutes?: number;
   /** Provider checkpoint used to seed and preserve this sandbox's filesystem. */
   checkpointName?: string;
+  /**
+   * Boot-only fallback checkpoint used when `checkpointName` has no stored
+   * state yet (e.g. the repo base checkpoint for a brand-new session).
+   * Snapshots keep writing to `checkpointName`.
+   */
+  seedCheckpointName?: string;
   /** Opaque user subject attributed to provider API requests. */
   actingUserId?: string;
 }
@@ -130,6 +140,8 @@ export interface SandboxBindingStore {
   readonly sandboxId: string | null;
   /** Provider checkpoint used to seed and preserve this sandbox's filesystem. */
   readonly checkpointName?: string;
+  /** Boot-only fallback checkpoint (e.g. repo base checkpoint) for first provision. */
+  readonly seedCheckpointName?: string;
   /** Persist a freshly provisioned provider id, or clear a stale one with `null`. */
   setSandboxId(id: string | null): Promise<void>;
   /** Clear all stored sandbox state (reattach id + materialization mark) on teardown. */
@@ -185,6 +197,8 @@ function toMaterializationSandbox(
     stop: async () => {
       await (lifecycle._stop ?? sandbox.stop)?.call(sandbox);
     },
+    supportsCheckpoints: sandbox.supportsCheckpoints === true,
+    snapshot: () => sandbox.snapshot(),
   };
 }
 
@@ -379,6 +393,7 @@ export class SandboxFleet {
       ...(opts.workingDirectory ? { workingDirectory: opts.workingDirectory } : {}),
       ...(opts.idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes: opts.idleTimeoutMinutes } : {}),
       ...(opts.checkpointName ? { checkpointName: opts.checkpointName } : {}),
+      ...(opts.seedCheckpointName ? { seedCheckpointName: opts.seedCheckpointName } : {}),
       ...(opts.actingUserId ? { actingUserId: opts.actingUserId } : {}),
     });
     return toMaterializationSandbox(clone, opts.env);
@@ -473,6 +488,9 @@ export class SandboxFleet {
     const sandbox = this.#build({
       idleTimeoutMinutes,
       ...(checkpointName ? { checkpointName } : {}),
+      // Boot-only fallback seed (repo base checkpoint) — only meaningful on a
+      // fresh provision; snapshots keep writing to `checkpointName`.
+      ...(store.seedCheckpointName ? { seedCheckpointName: store.seedCheckpointName } : {}),
       ...(env ? { env } : {}),
       ...(options.workingDirectory ? { workingDirectory: options.workingDirectory } : {}),
       ...(options.actingUserId ? { actingUserId: options.actingUserId } : {}),

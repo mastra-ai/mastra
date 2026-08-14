@@ -199,6 +199,38 @@ describe('ensureProjectSandbox', () => {
     expect(factoryArgs?.idleTimeoutMinutes).toBe(15);
   });
 
+  it('seeds a fresh provision from the repo base checkpoint when provided', async () => {
+    const sandbox = new FakeSandbox();
+    let factoryArgs: { seedCheckpointName?: string } | undefined;
+    setSandboxFactory(opts => {
+      factoryArgs = opts;
+      return sandbox;
+    });
+
+    await ensureProjectSandboxWithStorage({
+      fleet,
+      row: makeRow({ sandboxId: null }),
+      storage,
+      token: 'install-token',
+      seedCheckpointName: 'repo-project-repository-1',
+    });
+
+    expect(factoryArgs?.seedCheckpointName).toBe('repo-project-repository-1');
+  });
+
+  it('omits the seed checkpoint when none is provided', async () => {
+    const sandbox = new FakeSandbox();
+    let factoryArgs: { seedCheckpointName?: string } | undefined;
+    setSandboxFactory(opts => {
+      factoryArgs = opts;
+      return sandbox;
+    });
+
+    await ensureProjectSandbox(makeRow({ sandboxId: null }));
+
+    expect(factoryArgs?.seedCheckpointName).toBeUndefined();
+  });
+
   it('re-provisions and clears the stale id when reattach to a dead sandbox fails', async () => {
     const dead = new FakeSandbox();
     dead.start = async () => {

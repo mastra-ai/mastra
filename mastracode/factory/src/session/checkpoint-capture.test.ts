@@ -21,16 +21,32 @@ function createSession(snapshot = vi.fn<() => Promise<void>>(async () => {})) {
 
 describe('observeSessionCheckpoint', () => {
   it.each(['complete', 'aborted', 'error', 'suspended'] as const)(
-    'snapshots before %s agent-end events',
+    'snapshots after %s agent-end events',
     async reason => {
       const { session, snapshot, listeners } = createSession();
       observeSessionCheckpoint(session);
 
-      await listeners[0]!({ type: 'agent_end', reason });
+      listeners[0]!({ type: 'agent_end', reason });
 
-      expect(snapshot).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => expect(snapshot).toHaveBeenCalledTimes(1));
     },
   );
+
+  it('does not block the agent-end event on snapshot completion', () => {
+    let resolveSnapshot: (() => void) | undefined;
+    const snapshot = vi.fn<() => Promise<void>>(
+      () =>
+        new Promise<void>(resolve => {
+          resolveSnapshot = resolve;
+        }),
+    );
+    const { session, listeners } = createSession(snapshot);
+    observeSessionCheckpoint(session);
+
+    // The listener must return synchronously (void) even while the snapshot is pending.
+    expect(listeners[0]!({ type: 'agent_end', reason: 'complete' })).toBeUndefined();
+    resolveSnapshot?.();
+  });
 
   it('skips snapshotting when the session has no workspace sandbox', async () => {
     const { listeners } = createSession();
@@ -43,7 +59,7 @@ describe('observeSessionCheckpoint', () => {
     };
     observeSessionCheckpoint(session);
 
-    await expect(listeners[0]!({ type: 'agent_end', reason: 'complete' })).resolves.toBeUndefined();
+    expect(listeners[0]!({ type: 'agent_end', reason: 'complete' })).toBeUndefined();
   });
 
   it('skips sandboxes that do not implement snapshot', async () => {
@@ -58,7 +74,9 @@ describe('observeSessionCheckpoint', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     observeSessionCheckpoint(session);
 
-    await expect(listeners[0]!({ type: 'agent_end', reason: 'complete' })).resolves.toBeUndefined();
+    expect(listeners[0]!({ type: 'agent_end', reason: 'complete' })).toBeUndefined();
+    // Flush the capture chain before asserting no warning was logged.
+    await new Promise(resolve => setTimeout(resolve, 0));
     expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
   });
@@ -69,9 +87,11 @@ describe('observeSessionCheckpoint', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     observeSessionCheckpoint(session);
 
-    await expect(listeners[0]!({ type: 'agent_end', reason: 'complete' })).resolves.toBeUndefined();
+    listeners[0]!({ type: 'agent_end', reason: 'complete' });
 
-    expect(warn).toHaveBeenCalledWith('[Factory checkpoint capture] Unable to snapshot sandbox.', failure);
+    await vi.waitFor(() =>
+      expect(warn).toHaveBeenCalledWith('[Factory checkpoint capture] Unable to snapshot sandbox.', failure),
+    );
     warn.mockRestore();
   });
 
@@ -89,17 +109,15 @@ describe('observeSessionCheckpoint', () => {
     const { session, listeners } = createSession(snapshot);
     observeSessionCheckpoint(session);
 
-    const first = listeners[0]!({ type: 'agent_end', reason: 'complete' });
+    listeners[0]!({ type: 'agent_end', reason: 'complete' });
     await vi.waitFor(() => expect(snapshot).toHaveBeenCalledTimes(1));
 
-    const second = listeners[0]!({ type: 'agent_end', reason: 'complete' });
+    listeners[0]!({ type: 'agent_end', reason: 'complete' });
     await Promise.resolve();
     expect(snapshot).toHaveBeenCalledTimes(1);
 
     completeFirstSnapshot?.();
-    await first;
-    await second;
-    expect(snapshot).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(snapshot).toHaveBeenCalledTimes(2));
   });
 
   it('stops snapshotting after unsubscribe', async () => {

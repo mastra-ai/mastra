@@ -223,6 +223,43 @@ describe('SourceControlStorage', () => {
     expect(firstLink.id).not.toBe(secondLink.id);
   });
 
+  it('stores, reads, and clears base-checkpoint metadata', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    expect(link.baseCheckpoint).toBeNull();
+
+    const builtAt = new Date();
+    await github.projectRepositories.setBaseCheckpoint({
+      id: link.id,
+      checkpoint: { name: `repo-${link.id}`, sha: 'abc123', builtAt, setupCommandHash: 'hash-1' },
+    });
+    let fresh = await github.projectRepositories.get({ orgId: 'org-1', id: link.id });
+    expect(fresh?.baseCheckpoint).toMatchObject({ name: `repo-${link.id}`, sha: 'abc123', setupCommandHash: 'hash-1' });
+
+    await github.projectRepositories.setBaseCheckpoint({ id: link.id, checkpoint: null });
+    fresh = await github.projectRepositories.get({ orgId: 'org-1', id: link.id });
+    expect(fresh?.baseCheckpoint).toBeNull();
+  });
+
+  it('invalidates base-checkpoint metadata when the setup command changes', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    await github.projectRepositories.setBaseCheckpoint({
+      id: link.id,
+      checkpoint: { name: `repo-${link.id}`, sha: 'abc123', builtAt: new Date(), setupCommandHash: 'hash-1' },
+    });
+
+    // Unrelated update keeps the checkpoint.
+    await github.projectRepositories.update({ orgId: 'org-1', id: link.id, input: { branch: 'develop' } });
+    let fresh = await github.projectRepositories.get({ orgId: 'org-1', id: link.id });
+    expect(fresh?.baseCheckpoint).not.toBeNull();
+
+    // Setup-command change invalidates it.
+    await github.projectRepositories.update({ orgId: 'org-1', id: link.id, input: { setupCommand: 'pnpm i' } });
+    fresh = await github.projectRepositories.get({ orgId: 'org-1', id: link.id });
+    expect(fresh?.baseCheckpoint).toBeNull();
+  });
+
   it('scopes sandboxes and worktrees to the project-repository link', async () => {
     const project = await createProject();
     const firstLink = await linkRepository({ factoryProjectId: project.id });

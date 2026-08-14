@@ -179,6 +179,103 @@ describe('FactoryDecisionDispatcher', () => {
     expect(reconcileToolResults).toHaveBeenCalledTimes(1);
   });
 
+  it('throttles the reconcile walk, coalesces overlapping runs, and never blocks claiming', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const claims = vi.spyOn(storage, 'claimPendingStarts');
+    let release!: () => void;
+    const reconcileToolResults = vi.fn(
+      () =>
+        new Promise<void>(resolve => {
+          release = resolve;
+        }),
+    );
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService: new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage }),
+      storage,
+      reconcileToolResults,
+      reconcileIntervalMs: 30_000,
+    });
+
+    const t0 = new Date('2030-01-01T00:00:00Z');
+    // The first tick fires the reconcile without awaiting it; claiming proceeds.
+    await dispatcher.runOnce(t0);
+    expect(reconcileToolResults).toHaveBeenCalledTimes(1);
+    expect(claims).toHaveBeenCalledTimes(1);
+
+    // Within the interval: no new reconcile. After the interval but with the
+    // first run still in flight: coalesced, still no new reconcile.
+    await dispatcher.runOnce(new Date(t0.getTime() + 1_000));
+    await dispatcher.runOnce(new Date(t0.getTime() + 31_000));
+    expect(reconcileToolResults).toHaveBeenCalledTimes(1);
+    expect(claims).toHaveBeenCalledTimes(3);
+
+    // Once the previous run resolves and the interval elapses, it runs again.
+    release();
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
+    await dispatcher.runOnce(new Date(t0.getTime() + 62_000));
+    expect(reconcileToolResults).toHaveBeenCalledTimes(2);
+    release();
+    await dispatcher.stop();
+  });
+
+  it('sweeps stale bindings on a slow cadence instead of every tick', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const sweep = vi.spyOn(storage, 'revokeStaleRunBindings');
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService: new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage }),
+      storage,
+      staleBindingSweepIntervalMs: 10 * 60_000,
+      staleBindingTtlMs: 24 * 60 * 60_000,
+    });
+
+    const t0 = new Date('2030-01-01T00:00:00Z');
+    // The first tick only anchors the cadence; ticks within the interval never sweep.
+    await dispatcher.runOnce(t0);
+    await dispatcher.runOnce(new Date(t0.getTime() + 1_000));
+    await dispatcher.runOnce(new Date(t0.getTime() + 9 * 60_000));
+    expect(sweep).not.toHaveBeenCalled();
+
+    // Once the cadence elapses, the sweep runs with the configured TTL cutoff.
+    const t1 = new Date(t0.getTime() + 11 * 60_000);
+    await dispatcher.runOnce(t1);
+    expect(sweep).toHaveBeenCalledExactlyOnceWith({
+      olderThan: new Date(t1.getTime() - 24 * 60 * 60_000),
+      now: t1,
+    });
+
+    // And the cadence resets: the next sweep waits another full interval.
+    await dispatcher.runOnce(new Date(t1.getTime() + 1_000));
+    expect(sweep).toHaveBeenCalledTimes(1);
+    await dispatcher.runOnce(new Date(t1.getTime() + 11 * 60_000));
+    expect(sweep).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps claiming dispatches when the stale-binding sweep fails', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const sweep = vi.spyOn(storage, 'revokeStaleRunBindings').mockRejectedValue(new Error('sweep boom'));
+    const reconcileToolResults = vi.fn(async () => {});
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService: new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage }),
+      storage,
+      reconcileToolResults,
+    });
+
+    const t0 = new Date('2030-01-01T00:00:00Z');
+    await dispatcher.runOnce(t0);
+    await expect(dispatcher.runOnce(new Date(t0.getTime() + 11 * 60_000))).resolves.toBeUndefined();
+    expect(sweep).toHaveBeenCalledTimes(1);
+    expect(reconcileToolResults).toHaveBeenCalledTimes(2);
+  });
+
   it('allows only one concurrent lease owner to claim a decision', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await queueDecision(storage, {
