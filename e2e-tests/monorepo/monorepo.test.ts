@@ -572,4 +572,35 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       timeout,
     );
   });
+
+  describe.sequential('pnpm build approvals', () => {
+    it(
+      'reports blocked native build scripts as a user configuration error',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-build-approval-test-${pkgManager}-`));
+        try {
+          await setupMonorepo(isolatedFixturePath, pkgManager);
+          const workspacePath = join(isolatedFixturePath, 'pnpm-workspace.yaml');
+          const workspace = await readFile(workspacePath, 'utf8');
+          await writeFile(workspacePath, workspace.replace('  bcrypt: true\n', ''));
+
+          await removeOutputDir(isolatedFixturePath);
+          const build = await execa(pkgManager, ['build'], {
+            cwd: join(isolatedFixturePath, 'apps', 'custom'),
+            env: process.env,
+            reject: false,
+          });
+          const output = `${build.stdout}\n${build.stderr}`;
+
+          expect(build.exitCode).not.toBe(0);
+          expect(output).toContain('pnpm blocked build scripts for: bcrypt');
+          expect(output).toContain('Add these packages to allowBuilds in pnpm-workspace.yaml and retry the build.');
+          expect(output).not.toContain('DEPLOYER_BUNDLER_BUNDLE_STAGE_FAILED');
+        } finally {
+          await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+  });
 });
