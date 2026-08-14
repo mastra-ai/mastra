@@ -302,9 +302,17 @@ function KnowledgeGraphInner({
   );
   // User-dragged positions survive re-layouts (the drag re-pins the node).
   const pinnedPositions = useRef(new Map<string, { x: number; y: number }>());
-  // Last settled CENTERS: warm-start for re-layouts so live arrivals don't
-  // jolt the whole graph, and the spawn anchor for new nodes.
+  // Last settled CENTERS of the PROJECT view: warm-start for re-layouts so
+  // live arrivals don't jolt the whole graph, the spawn anchor for new nodes,
+  // and the layout the graph returns to when focus clears. Ego runs never
+  // write here.
   const lastCenters = useRef(new Map<string, { x: number; y: number }>());
+  // Ego-view scratch positions. The focused node is forced to max size, so a
+  // cluster has to re-settle around it or the growth swallows its neighbours;
+  // those positions are meaningless outside the cluster, so they live here and
+  // are thrown away whenever focus changes.
+  const focusCenters = useRef(new Map<string, { x: number; y: number }>());
+  const lastFocusId = useRef<string | null>(null);
   /** Signature of the payload's node + memory/edge id sets — detects real data changes. */
   const lastSignature = useRef('');
   const [dragVersion, setDragVersion] = useState(0);
@@ -336,6 +344,17 @@ function KnowledgeGraphInner({
     ].join('|');
     const dataChanged = signature !== lastSignature.current;
     lastSignature.current = signature;
+    // Entering or switching focus re-simulates the cluster (the focused node
+    // grows to max size and needs room). Leaving focus does NOT: the project
+    // view restores the positions it was captured at, untouched by any ego run.
+    const viewChanged = (focusedId ?? null) !== lastFocusId.current;
+    if (viewChanged) focusCenters.current = new Map();
+    lastFocusId.current = focusedId ?? null;
+    const centers = focusedId ? focusCenters.current : lastCenters.current;
+    const resimulate = dataChanged || (viewChanged && focusedId !== undefined && focusedId !== null);
+    // Warm start: an ego run begins from wherever the nodes already sit in the
+    // project view, so the cluster expands out of its current shape.
+    const warmStart = (id: string) => centers.get(id) ?? lastCenters.current.get(id);
     const pairEdges = memories.length > 0 ? memoryPairEdges(memories) : payload.edges;
     let filtered = filterGraph(payload.nodes, pairEdges, filters);
     if (focusedId) {
@@ -365,25 +384,21 @@ function KnowledgeGraphInner({
           // settled spot becomes the warm START and the simulation re-settles
           // (brand-new nodes spawn near their first neighbor instead of at
           // the spiral seed). Drag pins always win.
-          fixed:
-            pinnedPositions.current.get(node.id) ?? (dataChanged ? undefined : lastCenters.current.get(node.id)),
-          initial:
-            lastCenters.current.get(node.id) ?? (arrivals?.nodes.has(node.id) ? neighborOf(node.id) : undefined),
+          fixed: pinnedPositions.current.get(node.id) ?? (resimulate ? undefined : centers.get(node.id)),
+          initial: warmStart(node.id) ?? (arrivals?.nodes.has(node.id) ? neighborOf(node.id) : undefined),
         })),
         // Memory markers: tiny padding so they nestle into their cluster,
         // spawned beside their first entity so they never fly in from origin.
         ...memoryNodes.map(marker => {
-          const anchor = lastCenters.current.get(marker.memory.entityIds[0] ?? '');
+          const anchor = warmStart(marker.memory.entityIds[0] ?? '');
           return {
             id: marker.id,
             size: marker.size,
             padding: 6,
             // Same policy as entities: frozen on unchanged data, warm-started
             // on new data.
-            fixed:
-              pinnedPositions.current.get(marker.id) ?? (dataChanged ? undefined : lastCenters.current.get(marker.id)),
-            initial:
-              lastCenters.current.get(marker.id) ?? (anchor ? { x: anchor.x + 30, y: anchor.y + 30 } : undefined),
+            fixed: pinnedPositions.current.get(marker.id) ?? (resimulate ? undefined : centers.get(marker.id)),
+            initial: warmStart(marker.id) ?? (anchor ? { x: anchor.x + 30, y: anchor.y + 30 } : undefined),
           };
         }),
       ],
@@ -396,10 +411,11 @@ function KnowledgeGraphInner({
           }))
         : filtered.edges,
     );
-    // MERGE into the cache — never replace it: an ego/filter subset run must
-    // not wipe the settled positions of currently-hidden nodes, or leaving
-    // the filter would rearrange everything again.
-    for (const [id, center] of positions) lastCenters.current.set(id, center);
+    // MERGE into the active cache, never replace it: a filter subset run must
+    // not wipe the settled positions of currently-hidden nodes, or leaving the
+    // filter would rearrange everything again. While focused this writes to the
+    // scratch cache, so the project layout survives the visit untouched.
+    for (const [id, center] of positions) centers.set(id, center);
     const entityFlow = toFlowGraph(filtered.nodes, filtered.edges, positions, focusedId);
     if (memories.length === 0) return entityFlow; // pre-A11 payload fallback
     const memoryFlow = toMemoryFlow(memoryNodes, memoryEdges, positions);
