@@ -311,22 +311,22 @@ const sidebars = {
           items: [
             {
               type: 'doc',
-              id: 'agents/a2a',
+              id: 'connections/a2a',
               label: 'A2A',
             },
             {
               type: 'doc',
-              id: 'agents/acp',
+              id: 'connections/acp',
               label: 'ACP',
             },
             {
               type: 'doc',
-              id: 'agents/sdk-agents',
+              id: 'connections/sdk-agents',
               label: 'SDK Agents',
             },
             {
               type: 'doc',
-              id: 'mcp/overview',
+              id: 'connections/mcp',
               label: 'MCP',
             },
           ],

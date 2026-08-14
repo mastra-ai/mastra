@@ -757,7 +757,7 @@
     },
     {
       "source": "/docs/tools-mcp/mcp-overview",
-      "destination": "/docs/mcp/overview",
+      "destination": "/docs/connections/mcp",
       "permanent": true
     },
     {
@@ -882,7 +882,7 @@
     },
     {
       "source": "/docs/mcp/publishing-mcp-server",
-      "destination": "/docs/mcp/overview",
+      "destination": "/docs/connections/mcp",
       "permanent": true
     },
     {
@@ -1262,7 +1262,7 @@
     },
     {
       "source": "/docs/mcp/mcp-apps",
-      "destination": "/docs/mcp/overview",
+      "destination": "/docs/connections/mcp",
       "permanent": true
     },
     {
@@ -1882,7 +1882,7 @@
     },
     {
       "source": "/guides/guide/publishing-mcp-server",
-      "destination": "/docs/mcp/overview",
+      "destination": "/docs/connections/mcp",
       "permanent": true
     },
     {
@@ -2048,6 +2048,26 @@
     {
       "source": "/reference/processors/cost-guard-processor",
       "destination": "/reference/processors/token-cost-control",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/a2a",
+      "destination": "/docs/connections/a2a",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/acp",
+      "destination": "/docs/connections/acp",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/sdk-agents",
+      "destination": "/docs/connections/sdk-agents",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mcp/overview",
+      "destination": "/docs/connections/mcp",
       "permanent": true
     }
   ]

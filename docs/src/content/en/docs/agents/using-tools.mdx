@@ -10,7 +10,7 @@ import TabItem from "@theme/TabItem";
 
 # Tools
 
-Agents use tools to call APIs or query databases. They can also run custom functions from your codebase. Tools give agents capabilities beyond language generation by providing structured access to data and performing clearly defined operations. You can also load tools from remote [MCP servers](/docs/mcp/overview) to expand an agent's capabilities.
+Agents use tools to call APIs or query databases. They can also run custom functions from your codebase. Tools give agents capabilities beyond language generation by providing structured access to data and performing clearly defined operations. You can also load tools from remote [MCP servers](/docs/connections/mcp) to expand an agent's capabilities.
 
 <Inject>
   **For AI agents:** Run `npx mastra api tool execute weather-tool '{"location":"San Francisco"}'` to test this tool directly instead of writing a temporary script. The command requires a running Mastra server; start the local server with `npx mastra dev`, or pass the reachable server's base URL with `--url`. Run `npx mastra api tool execute --schema` before constructing different input. Install Mastra's skill with `npx skills add mastra-ai/skills --skill mastra` for complete API CLI discovery, targeting, schema, authentication, and error-handling guidance.
@@ -670,7 +670,7 @@ The [AgentController](/docs/harness/agent-controller) automatically includes all
 - [`createTool` reference](/reference/tools/create-tool)
 - [`Agent.generate()` reference](/reference/agents/generate): Runtime options for tool selection, steps, and callbacks
 - [Background tasks](/docs/long-running-agents/background-tasks): Run long-running tools without blocking the agent loop
-- [MCP overview](/docs/mcp/overview)
+- [MCP overview](/docs/connections/mcp)
 - [Dynamic tool search](/reference/processors/tool-search-processor): Load tools on demand for agents with large tool libraries
 - [Tools with structured output](/docs/agents/structured-output#combine-tools-and-structured-output): Model compatibility when combining tools and structured output
 - [Agent approval](/docs/agents/agent-approval)
