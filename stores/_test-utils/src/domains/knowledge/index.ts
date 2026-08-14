@@ -33,6 +33,13 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       ]);
     });
 
+    it('treats scope identifiers literally when checking visibility', async () => {
+      await store.createNode({ name: 'Percent secret', kind: 'secret', scope: ['org:acme%'] });
+      await store.createNode({ name: 'Underscore secret', kind: 'secret', scope: ['org:acme_'] });
+
+      expect(await store.listNodes({ scope: ['org:acmeX', 'resource:secret'] })).toEqual([]);
+    });
+
     it('maintains mentions and soft deletes without losing them', async () => {
       const jane = await store.createNode({ name: 'Jane', kind: 'person', scope: resource });
       const marco = await store.createNode({ name: 'Marco', kind: 'person', scope: resource });

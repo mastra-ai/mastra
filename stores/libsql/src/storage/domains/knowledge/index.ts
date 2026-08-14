@@ -52,7 +52,7 @@ interface Executor {
   execute(statement: string | { sql: string; args?: InValue[] }): Promise<ResultSet>;
 }
 
-const visibleSql = `(scopeKey = ? OR ? LIKE scopeKey || char(31) || '%')`;
+const visibleSql = `(scopeKey = ? OR substr(?, 1, length(scopeKey) + 1) = scopeKey || char(31))`;
 
 function parseJson<T>(value: unknown): T {
   if (typeof value === 'string') return JSON.parse(value) as T;
