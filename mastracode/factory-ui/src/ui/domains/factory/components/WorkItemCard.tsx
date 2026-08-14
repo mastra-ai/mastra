@@ -155,6 +155,14 @@ export function WorkItemCard({
     runSpec !== undefined
       ? runSpec.actions.find(action => action.role === 'review' && action.role in sessions)
       : undefined;
+  // A card can land in a lane without its run ever starting — an approved plan
+  // transitions to Building and writes the `work` session ref itself, so the
+  // slot looks used and `runActions` filters Build out. Offer the lane's own
+  // run from the menu so the card is never a dead end.
+  const laneAction =
+    runSpec !== undefined && reReviewAction === undefined
+      ? runSpec.actions.find(action => action.stage === columnStage && action.role in sessions)
+      : undefined;
   const primaryAction = cardPrimaryAction({
     item,
     runSpec,
@@ -242,6 +250,15 @@ export function WorkItemCard({
                 >
                   {actionIcon(reReviewAction.label)}
                   <span>{pendingRunRoles.has(reReviewAction.role) ? 'Starting…' : 'Re-review'}</span>
+                </DropdownMenu.Item>
+              )}
+              {runSpec !== undefined && laneAction !== undefined && (
+                <DropdownMenu.Item
+                  disabled={runDisabled || pendingRunRoles.has(laneAction.role)}
+                  onClick={() => onRestartRun(runSpec, laneAction)}
+                >
+                  {actionIcon(laneAction.label)}
+                  <span>{pendingRunRoles.has(laneAction.role) ? 'Starting…' : laneAction.label}</span>
                 </DropdownMenu.Item>
               )}
               {/* Once the card has a live session it renders as a link, so the
