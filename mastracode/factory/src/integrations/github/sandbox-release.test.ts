@@ -168,7 +168,7 @@ describe('releaseWorkItemSandboxes', () => {
       workItemId: 'item-1',
     });
 
-    expect(fleet.reattachSandbox).toHaveBeenCalledWith('sandbox-1');
+    expect(fleet.reattachSandbox).toHaveBeenCalledWith('sandbox-1', { actingUserId: 'user-1' });
     expect(calls.some(script => script.includes('checkout -f') && script.includes('main'))).toBe(true);
     expect(calls.some(script => script.includes('reset --hard') && script.includes('clean -fdx'))).toBe(true);
     expect(storage.sandboxPoolRows).toHaveLength(1);
@@ -191,7 +191,7 @@ describe('releaseWorkItemSandboxes', () => {
       workItemId: 'item-1',
     });
 
-    expect(fleet.reattachSandbox).toHaveBeenCalledWith('sandbox-reaped');
+    expect(fleet.reattachSandbox).toHaveBeenCalledWith('sandbox-reaped', { actingUserId: 'user-1' });
     expect(storage.sandboxPoolRows).toEqual([expect.objectContaining({ sandboxId: 'sandbox-reaped' })]);
     expect((await storage.sessions.getBySessionId(session.sessionId))?.sandboxId).toBeNull();
   });

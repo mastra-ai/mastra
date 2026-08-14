@@ -1,12 +1,12 @@
 ---
-title: "Deploy Mastra to Kubernetes | Deploy"
+title: "Kubernetes | Deploy"
 description: "Deploy a Mastra application across multiple pods on Kubernetes with shared pub/sub and storage."
 ---
 
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
-# Deploy Mastra to Kubernetes
+# Kubernetes
 
 Run a Mastra application across multiple pods on [Kubernetes](https://kubernetes.io/), so it scales horizontally behind a load balancer. Because each pod is a separate process, the pods must share a pub/sub backend and a database, otherwise work started on one pod is invisible to the others.
 
@@ -22,7 +22,7 @@ Multi-pod support relies on [durable agents](/docs/long-running-agents/durable-a
 
 You'll need:
 
-- A [Mastra application](/guides/getting-started/quickstart)
+- A [Mastra application](/docs)
 - A [Kubernetes](https://kubernetes.io/docs/setup/) cluster and [`kubectl`](https://kubernetes.io/docs/tasks/tools/)
 - A container registry your cluster can pull from
 - A shared [Redis](https://redis.io/) instance, reachable from every pod
@@ -305,6 +305,5 @@ The pod that handles the approval loads the suspended run from Postgres. It then
 - [PubSub](/docs/server/pubsub)
 - [Durable agents](/docs/long-running-agents/durable-agents)
 - [Workers](/docs/deployment/workers): Split background processing into separate containers on Kubernetes
-- [Worker deployment guide](/guides/deployment/mastra-workers): Full Kubernetes manifests for orchestration, scheduler, and background task workers
 - [Mastra server](/docs/server/mastra-server)
 - [Deployment overview](/docs/deployment/overview)

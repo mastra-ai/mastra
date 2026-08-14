@@ -183,8 +183,10 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   public entityId?: string;
   /** Entity name that created the span */
   public entityName?: string;
-  /** Parent span ID (for root spans that are children of external spans) */
+  /** Parent span within this Mastra trace: a span Mastra created (the span-tree parent, or a prior Mastra span such as the suspended run a resume links back to) */
   protected parentSpanId?: string;
+  /** Parent from an external tracing system (ambient OTel / dd-trace span) that Mastra did not create; carried for external correlation, not part of Mastra's own parent/child linkage */
+  protected externalParentSpanId?: string;
   /** Deep clean options for serialization */
   protected deepCleanOptions: DeepCleanOptions;
   /**
@@ -388,6 +390,22 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     return this.parent.getParentSpanId(includeInternalSpans);
   }
 
+  /**
+   * External (foreign tracing-system) parent id to export alongside
+   * {@link getParentSpanId}. When every Mastra ancestor is dropped from
+   * export, the span is exported at the root's position, so the root's
+   * external parent must travel with it.
+   */
+  protected getExportedExternalParentSpanId(includeInternalSpans?: boolean): string | undefined {
+    if (!this.parent) {
+      return this.externalParentSpanId;
+    }
+    if (this.getParentSpan(includeInternalSpans)) {
+      return this.externalParentSpanId;
+    }
+    return (this.parent as unknown as BaseSpan).getExportedExternalParentSpanId(includeInternalSpans);
+  }
+
   /** Find the closest parent span of a specific type by walking up the parent chain */
   public findParent<T extends SpanType>(spanType: T): Span<T> | undefined {
     let current: AnySpan | undefined = this.parent;
@@ -481,6 +499,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       isEvent: this.isEvent,
       isRootSpan: this.isRootSpan,
       parentSpanId: this.getParentSpanId(includeInternalSpans),
+      externalParentSpanId: this.getExportedExternalParentSpanId(includeInternalSpans),
       // Tags are only included for root spans
       ...(this.isRootSpan && this.tags?.length ? { tags: this.tags } : {}),
     };

@@ -158,6 +158,58 @@ describe('TranscriptEntries skill rows', () => {
     expect(screen.queryByText(/&lt;\/skill&gt;/)).not.toBeInTheDocument();
   });
 
+  it('renders the agent activating a skill itself as the same row, not a raw tool card', async () => {
+    renderEntries([
+      {
+        kind: 'message',
+        id: 'msg-tool',
+        message: {
+          id: 'msg-tool',
+          role: 'assistant',
+          createdAt: CREATED_AT,
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'call-1',
+                  toolName: 'skill',
+                  args: { name: 'understand-issue' },
+                  result: SKILL_BODY,
+                },
+              },
+            ],
+          },
+        },
+      },
+    ]);
+
+    const row = screen.getByRole('group', { name: 'Skill: understand-issue' });
+    expect(within(row).queryByText(/"name"/)).not.toBeInTheDocument();
+
+    await userEvent.click(within(row).getByRole('button'));
+    expect(within(row).getByText(/Investigate the issue/)).toBeInTheDocument();
+  });
+
+  it('draws nothing for a message whose only part is a step marker', () => {
+    renderEntries([
+      {
+        kind: 'message',
+        id: 'msg-step',
+        message: {
+          id: 'msg-step',
+          role: 'user',
+          createdAt: CREATED_AT,
+          content: { format: 2, parts: [{ type: 'step-start' }] },
+        },
+      },
+    ]);
+
+    expect(document.querySelector('[data-message-id="msg-step"]')).toBeEmptyDOMElement();
+  });
+
   it('renders an ordinary user text message as a right-aligned chat bubble', () => {
     renderEntries([userMessageEntry('msg-plain', 'Hello, can you help me?')]);
 

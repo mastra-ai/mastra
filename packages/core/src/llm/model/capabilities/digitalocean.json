@@ -99,7 +99,8 @@
     "openai-gpt-oss-20b",
     "qwen-2.5-14b-instruct",
     "qwen3-coder-flash",
-    "qwen3.5-397b-a17b"
+    "qwen3.5-397b-a17b",
+    "qwen3.8-max"
   ],
   "structuredOutput": [
     "alibaba-qwen3-32b",

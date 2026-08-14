@@ -84,6 +84,7 @@ const sidebars = {
       label: 'AI SDK',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'ai-sdk/overview', label: 'Overview' },
         { type: 'doc', id: 'ai-sdk/chat-route', label: 'chatRoute()' },
         { type: 'doc', id: 'ai-sdk/handle-chat-stream', label: 'handleChatStream()' },
         { type: 'doc', id: 'ai-sdk/handle-network-stream', label: 'handleNetworkStream()' },
@@ -385,12 +386,6 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Mastra platform',
-      collapsed: true,
-      items: [{ type: 'doc', id: 'mastra-platform/api', label: 'API Reference' }],
-    },
-    {
-      type: 'category',
       label: 'Memory',
       collapsed: true,
       items: [
@@ -653,7 +648,6 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'processors/batch-parts-processor', label: 'BatchPartsProcessor' },
-        { type: 'doc', id: 'processors/cost-guard-processor', label: 'CostGuardProcessor' },
         { type: 'doc', id: 'processors/language-detector', label: 'LanguageDetector' },
         { type: 'doc', id: 'processors/message-history-processor', label: 'MessageHistory' },
         { type: 'doc', id: 'processors/moderation-processor', label: 'ModerationProcessor' },
@@ -676,6 +670,7 @@ const sidebars = {
           label: 'StreamErrorRetryProcessor',
         },
         { type: 'doc', id: 'processors/system-prompt-scrubber', label: 'SystemPromptScrubber' },
+        { type: 'doc', id: 'processors/token-cost-control', label: 'TokenCostControl' },
         { type: 'doc', id: 'processors/token-limiter-processor', label: 'TokenLimiterProcessor' },
         { type: 'doc', id: 'processors/tool-call-filter', label: 'ToolCallFilter' },
         { type: 'doc', id: 'processors/tool-search-processor', label: 'ToolSearchProcessor' },
@@ -881,9 +876,13 @@ const sidebars = {
       label: 'Voice',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'voice/overview', label: 'Overview' },
         { type: 'doc', id: 'voice/composite-voice', label: 'Composite Voice' },
         { type: 'doc', id: 'voice/voice.events', label: 'Events' },
         { type: 'doc', id: 'voice/mastra-voice', label: 'Mastra Voice' },
+        { type: 'doc', id: 'voice/speech-to-speech', label: 'Speech to Speech' },
+        { type: 'doc', id: 'voice/speech-to-text', label: 'Speech to Text' },
+        { type: 'doc', id: 'voice/text-to-speech', label: 'Text to Speech' },
         { type: 'doc', id: 'voice/voice.addInstructions', label: '.addInstructions()' },
         { type: 'doc', id: 'voice/voice.addTools', label: '.addTools()' },
         { type: 'doc', id: 'voice/voice.answer', label: '.answer()' },

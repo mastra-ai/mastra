@@ -79,7 +79,7 @@ Because the threads belong to the caller's resource, resource-scoped memory feat
 - Resource-scoped working memory updates persist to the resource, and later items in the run see updates made by earlier items.
 - Resource-scoped semantic recall can surface the resource's prior conversations to the experiment, and experiment transcripts become recallable in that resource's later conversations.
 
-This is useful when you want to evaluate an agent against a real user's accumulated context. If you don't want experiment runs touching real user state, run the experiment with a dedicated evaluation resource id instead.
+Use this approach to evaluate an agent against a real user's accumulated context. To keep experiment runs from touching real user state, use a dedicated evaluation resource id instead.
 
 Thread injection is skipped in the following cases:
 
@@ -365,7 +365,7 @@ In [Studio](/docs/studio/overview), edit a dataset item to author tool mocks as 
 ### Limitations
 
 - **No tool span for mocked calls.** A mocked call returns its output before the tool executes, so it doesn't create a tool span. Trajectory scorers backed by stored traces may therefore not see mocked tool calls. Trajectory extraction that falls back to the agent's message output still sees them, so trajectory scoring can differ depending on your observability configuration.
-- **Storage support.** Tool mocks and tool mock reports are persisted by the LibSQL, PostgreSQL, MongoDB, and Spanner adapters. The MySQL adapter doesn't support them and rejects writes that carry tool mocks or a tool mock report. All dataset storage adapters persist `unmockedToolPolicy`.
+- **Storage support.** The LibSQL, PostgreSQL, MongoDB, and Spanner adapters persist tool mocks and tool mock reports, while the MySQL adapter rejects writes that carry either one. All dataset storage adapters persist `unmockedToolPolicy`.
 
 ## Async experiments
 

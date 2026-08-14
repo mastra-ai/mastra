@@ -120,7 +120,7 @@ app.listen(3000, () => {
 
 ## Error handling
 
-The Koa adapter propagates errors from route handlers up through Koa's middleware chain, following Koa's standard error handling pattern. This means you can use regular Koa error-handling middleware:
+The Koa adapter propagates errors from route handlers up through Koa's middleware chain, following Koa's standard error handling pattern. You can use regular Koa error-handling middleware:
 
 ```typescript title="server.ts"
 const app = new Koa()
