@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Fixed `source_control_sessions.materialized_at` being overwritten on every session resume. It is now write-once, so the initial-materialize baseline used for TTFME/materialize timing is no longer corrupted when a session is resumed after Railway idle-reap, checkpoint restore, or sandbox recreate.
+Fixed session materialization timing being overwritten when sessions resume. The initial-materialize timestamp is now recorded once and preserved across idle-reap, checkpoint restore, and sandbox recreation, so time-to-first-materialize measurements reflect the true initial cost. Historical metrics captured before this fix are not backfilled.
