@@ -133,6 +133,7 @@ describe('defaultFactoryRules', () => {
     expect(rules.version).toBe('deployment-7');
     expect(rules.work.intake?.issue?.onEnter).toBeUndefined();
     expect(rules.work.triage?.issue?.onEnter).toBeTypeOf('function');
+    expect(rules.work.done?.issue?.onEnter).toBeTypeOf('function');
     expect(rules.review.intake?.pullRequest?.onEnter).toBeUndefined();
     expect(rules.review.review?.pullRequest?.onEnter).toBeTypeOf('function');
     expect(rules.tools.submit_plan?.onResult).toBeTypeOf('function');
@@ -352,6 +353,28 @@ describe('defaultFactoryRules', () => {
       type: 'invokeSkill',
       role: 'triage',
       skillName: 'factory-triage',
+    });
+  });
+
+  it('cleans up triage labels whenever a GitHub issue moves to Done', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.done?.issue?.onEnter;
+    const context = {
+      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
+      cause: 'board_drag',
+      stage: 'done',
+      fromStage: 'intake',
+      toStage: 'done',
+    } as FactoryStageRuleContext;
+
+    expect(await rule?.(context)).toMatchObject({
+      type: 'invokeSkill',
+      role: 'triage',
+      skillName: 'factory-complete-issue',
+      arguments: 'GitHub issue (https://github.test/acme/repo/issues/42)',
+    });
+    expect(await rule?.({ ...context, fromStage: 'triage' })).toMatchObject({
+      type: 'invokeSkill',
+      skillName: 'factory-complete-issue',
     });
   });
 

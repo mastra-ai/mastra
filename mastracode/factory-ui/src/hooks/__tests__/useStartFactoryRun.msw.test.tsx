@@ -10,7 +10,7 @@ import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
@@ -122,6 +122,10 @@ function startRun(current: () => ReturnType<typeof useStartFactoryRun>, role: st
   });
 }
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe('useStartFactoryRun', () => {
   it('advances the pending run phase workspace → kickoff → cleared, then offers the thread from a toast', async () => {
     const { sessionGate, runGate } = stubKickoffEndpoints();
@@ -158,6 +162,27 @@ describe('useStartFactoryRun', () => {
         `/factories/${FACTORY_ID}/workspaces/session-1/threads/thread-investigator`,
       ),
     );
+  });
+
+  it('opens a ready session in a new browser tab without leaving the board', async () => {
+    const { sessionGate, runGate } = stubKickoffEndpoints();
+    const { router, current, client } = renderStartFactoryRun();
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+
+    await waitFor(() => expect(current().enabled).toBe(true));
+    startRun(current, 'reviewer');
+    sessionGate.resolve();
+    runGate.resolve();
+    await waitForMutationsIdle(client);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'New Tab' }));
+
+    expect(open).toHaveBeenCalledWith(
+      `/factories/${FACTORY_ID}/workspaces/session-1/threads/thread-reviewer`,
+      '_blank',
+      'noopener,noreferrer',
+    );
+    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work`);
   });
 
   it('keeps the board available so several runs can be started back to back', async () => {

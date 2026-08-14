@@ -18,7 +18,7 @@ const schemaAgent = new Agent({
   id: 'repro',
   name: 'repro',
   instructions: 'hi',
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.6-sol',
   requestContextSchema: z.object({ tenantTier: z.enum(['free', 'pro']).optional() }),
 });
 declare function driveAgent(agent: Agent): Promise<void>;

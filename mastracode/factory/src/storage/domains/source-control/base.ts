@@ -479,6 +479,13 @@ export interface SourceControlStorageHandle {
     }): Promise<SourceControlSession | null>;
     create(input: CreateSourceControlSessionInput): Promise<SourceControlSession>;
     setSandbox(args: { id: string; sandboxId: string | null; sandboxWorkdir: string }): Promise<void>;
+    /**
+     * Record when the session's workspace was first materialized. Write-once:
+     * the guarded update only lands while the column is still NULL, so resumes
+     * (Railway idle-reap, checkpoint restore, sandbox recreate) do not overwrite
+     * the initial-materialize baseline that `materialize_s = materialized_at -
+     * created_at` depends on.
+     */
     markMaterialized(args: { id: string }): Promise<void>;
     /**
      * Record when the session's agent received its first user message.
@@ -1276,7 +1283,15 @@ export class SourceControlStorage extends FactoryStorageDomain {
           );
         },
         markMaterialized: async ({ id }) => {
-          await db().updateMany(SESSIONS, { id }, { materialized_at: new Date(), updated_at: new Date() });
+          // `materialized_at: null` in the filter compiles to `IS NULL`, making
+          // this a write-once update: session resumes (idle-reap, checkpoint
+          // restore, sandbox recreate) match zero rows and cannot overwrite the
+          // initial-materialize timestamp that `materialize_s` is derived from.
+          await db().updateMany(
+            SESSIONS,
+            { id, materialized_at: null },
+            { materialized_at: new Date(), updated_at: new Date() },
+          );
         },
         markFirstMessage: async ({ sessionId }) => {
           // `first_message_at: null` in the filter compiles to `IS NULL`, making

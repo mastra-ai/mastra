@@ -342,7 +342,7 @@ For more phases, including `input`, `inputDelta`, `error`, `approval`, `suspend`
 
 ## Run logic around tool calls
 
-Use `hooks` to run custom logic before and after every tool call an agent makes. Hooks apply to all tool sources: assigned tools, memory tools, toolsets, client tools, agent and workflow tools, and [workspace tools](/docs/workspace/overview#tool-hooks). Common uses include logging, auditing, input validation, and blocking specific calls.
+Use `hooks` to run custom logic before and after every tool call an agent makes. Hooks apply to all tool sources: assigned tools, memory tools, toolsets, client tools, agent and workflow tools, and [workspace tools](/reference/workspace/workspace-class#tool-hooks). Common uses include logging, auditing, input validation, and blocking specific calls.
 
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'

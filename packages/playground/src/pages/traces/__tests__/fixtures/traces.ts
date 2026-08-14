@@ -5,6 +5,9 @@ import { TraceStatus } from '@mastra/core/storage';
 type ListTracesResponse = Awaited<ReturnType<MastraClient['listTraces']>>;
 type ListBranchesResponse = Awaited<ReturnType<MastraClient['listBranches']>>;
 type MetricBreakdownResponse = Awaited<ReturnType<MastraClient['getMetricBreakdown']>>;
+type GetTraceLightResponse = Awaited<ReturnType<MastraClient['getTraceLight']>>;
+type GetBranchResponse = Awaited<ReturnType<MastraClient['getBranch']>>;
+type ListFeedbackResponse = Awaited<ReturnType<MastraClient['listFeedback']>>;
 
 const baseSystemPackages: GetSystemPackagesResponse = {
   packages: [],
@@ -43,8 +46,18 @@ export const traceList: ListTracesResponse = {
   pagination: { total: 1, page: 0, perPage: 25, hasMore: false },
 };
 
+export const traceListWithTwoTraces: ListTracesResponse = {
+  spans: [trace, { ...trace, traceId: 'trace-b', spanId: 'span-b' }],
+  pagination: { total: 2, page: 0, perPage: 25, hasMore: false },
+};
+
 export const branchList: ListBranchesResponse = {
   branches: [{ ...trace, parentSpanId: 'root-span' }],
+  pagination: { total: 1, page: 0, perPage: 25, hasMore: false },
+};
+
+export const rootBranchList: ListBranchesResponse = {
+  branches: [{ ...trace, parentSpanId: null }],
   pagination: { total: 1, page: 0, perPage: 25, hasMore: false },
 };
 
@@ -57,6 +70,26 @@ export const traceUsageBreakdown: MetricBreakdownResponse = {
       costUnit: 'usd',
     },
   ],
+};
+
+export const traceLightSpans: GetTraceLightResponse = {
+  traceId: 'trace-a',
+  spans: [{ ...trace, parentSpanId: null }],
+};
+
+export const rootBranchSpans: GetBranchResponse = {
+  traceId: 'trace-a',
+  spans: [{ ...trace, parentSpanId: null }],
+};
+
+export const subtraceBranchSpans: GetBranchResponse = {
+  traceId: 'trace-a',
+  spans: [{ ...trace, parentSpanId: 'root-span' }],
+};
+
+export const emptyFeedback: ListFeedbackResponse = {
+  feedback: [],
+  pagination: { total: 0, page: 0, perPage: 10, hasMore: false },
 };
 
 export const emptyScorers: GetScoresScorers_Response = {};
