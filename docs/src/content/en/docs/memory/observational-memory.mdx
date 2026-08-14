@@ -926,7 +926,7 @@ A pin is a knowledge fact on a reserved entity, so each pin has a stable id, its
 
 Delivery is a state signal projected by a processor. When no snapshot is in the visible context (first emission, or observational memory evicted it) the full set is emitted as a `<pinned-knowledge>` snapshot; a change while a snapshot is visible emits a `<pinned-knowledge-update>` delta carrying only that change; an unchanged turn emits nothing, so a stable pin set costs nothing after the first turn. Unpinning the last pin emits an empty snapshot so the lane clears rather than replaying stale content.
 
-`maxPins` (default 20) and `maxCharacters` (default 2000, total across the set) are enforced in the pin tools, so the set cannot grow past its budget. Pins are off by default because their cost is per turn and permanent.
+`maxPins` (default 20) and `maxCharacters` (default 2000, total across the set) are enforced in the pin tools, so the set can't grow past its budget. Pins are off by default because their cost is per turn and permanent.
 
 ### Signals, costs, and failures
 
