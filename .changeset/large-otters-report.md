@@ -15,11 +15,11 @@ Only `apiKeyEnvVar` needs action on your side. If you read it to tell whether a 
 ```ts
 const models = await client.getAgentController('my-controller').listModels();
 
-// Before: typed string | undefined, undefined at runtime
-const configured = Boolean(models[0].apiKeyEnvVar);
+// Before: typed string | undefined, undefined at runtime, so always empty
+const usable = models.filter(model => model.apiKeyEnvVar);
 
 // After
-const configured = models[0].hasApiKey;
+const usable = models.filter(model => model.hasApiKey);
 ```
 
 The thread types need no migration: `listThreads()`, `createThread()` and `cloneThread()` each infer the shape their own route returns.
