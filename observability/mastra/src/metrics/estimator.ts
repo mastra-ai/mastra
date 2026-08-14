@@ -58,7 +58,36 @@ export function estimateCosts(
     inputDetailResults.push(result);
   }
 
-  if (usage.inputDetails?.cacheWrite) {
+  const cacheWriteDetailResults: Array<{ success: boolean; costContext: CostContext }> = [];
+  if (usage.inputDetails?.cacheWrite5m) {
+    const result = estimateCostForMeter({
+      meter: PricingMeter.INPUT_CACHE_WRITE_5M_TOKENS,
+      tokenCount: usage.inputDetails.cacheWrite5m,
+      ...estimateFields,
+    });
+    results.set(TokenMetrics.INPUT_CACHE_WRITE_5M, result.costContext);
+    cacheWriteDetailResults.push(result);
+    inputDetailResults.push(result);
+  }
+  if (usage.inputDetails?.cacheWrite1h) {
+    const result = estimateCostForMeter({
+      meter: PricingMeter.INPUT_CACHE_WRITE_1H_TOKENS,
+      tokenCount: usage.inputDetails.cacheWrite1h,
+      ...estimateFields,
+    });
+    results.set(TokenMetrics.INPUT_CACHE_WRITE_1H, result.costContext);
+    cacheWriteDetailResults.push(result);
+    inputDetailResults.push(result);
+  }
+  if (cacheWriteDetailResults.length > 0) {
+    setCombinedCostContext(
+      results,
+      TokenMetrics.INPUT_CACHE_WRITE,
+      cacheWriteDetailResults,
+      pricingModel,
+      costMetadata,
+    );
+  } else if (usage.inputDetails?.cacheWrite) {
     const result = estimateCostForMeter({
       meter: PricingMeter.INPUT_CACHE_WRITE_TOKENS,
       tokenCount: usage.inputDetails.cacheWrite,
@@ -158,6 +187,26 @@ function applyErrorContextForUsage(
   for (const sample of getTokenMetricSamples(usage)) {
     results.set(sample.name, errorContext);
   }
+}
+
+function setCombinedCostContext(
+  results: Map<TokenMetrics, CostContext>,
+  metric: TokenMetrics,
+  detailResults: Array<{ success: boolean; costContext: CostContext }>,
+  pricingModel: PricingModel,
+  costMetadata: Record<string, unknown>,
+): void {
+  const estimatedCosts = detailResults
+    .map(result => result.costContext.estimatedCost)
+    .filter((value): value is number => typeof value === 'number');
+  const hasFailedCost = detailResults.some(result => !result.success);
+  results.set(metric, {
+    provider: pricingModel.provider,
+    model: pricingModel.model,
+    ...(estimatedCosts.length > 0 && { estimatedCost: estimatedCosts.reduce((sum, value) => sum + value, 0) }),
+    ...(estimatedCosts.length > 0 && { costUnit: pricingModel.currency }),
+    costMetadata: hasFailedCost ? { ...costMetadata, error: 'partial_cost' } : { ...costMetadata },
+  });
 }
 
 function setAggregateCostContext(args: {

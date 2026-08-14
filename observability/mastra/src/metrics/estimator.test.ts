@@ -95,6 +95,26 @@ describe('estimateCosts', () => {
     },
   );
 
+  it('estimates Anthropic cache writes using TTL-specific rates without double charging', () => {
+    const costs = estimateCosts(
+      {
+        provider: 'anthropic',
+        model: 'claude-sonnet-5',
+        usage: {
+          inputTokens: 2_000,
+          outputTokens: 0,
+          inputDetails: { text: 1_000, cacheWrite: 1_000, cacheWrite5m: 500, cacheWrite1h: 500 },
+        },
+      },
+      embeddedPricingRegistry,
+    );
+
+    expect(costs.get(TokenMetrics.INPUT_CACHE_WRITE_5M)?.estimatedCost).toBeCloseTo(0.00125);
+    expect(costs.get(TokenMetrics.INPUT_CACHE_WRITE_1H)?.estimatedCost).toBeCloseTo(0.002);
+    expect(costs.get(TokenMetrics.INPUT_CACHE_WRITE)?.estimatedCost).toBeCloseTo(0.00325);
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)?.estimatedCost).toBeCloseTo(0.00525);
+  });
+
   it('estimates embedded Google pricing for gemini-3.5-flash', () => {
     const costs = estimateCosts(
       {
