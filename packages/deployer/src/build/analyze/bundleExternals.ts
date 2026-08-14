@@ -464,7 +464,7 @@ export async function bundleExternals(
   depsToOptimize: Map<string, DependencyMetadata>,
   outputDir: string,
   options: {
-    bundlerOptions?: Partial<NormalizedExternals> & {
+    bundlerOptions: NormalizedExternals & {
       isDev?: boolean;
       transpilePackages?: string[];
     };
@@ -478,10 +478,10 @@ export async function bundleExternals(
     workspaceRoot = null,
     workspaceMap = new Map(),
     projectRoot = outputDir,
-    bundlerOptions = {},
+    bundlerOptions,
     platform = 'node',
   } = options;
-  const { externalsPreset = false, mergedExternals = [], transpilePackages = [], isDev = false } = bundlerOptions || {};
+  const { externalsPreset, mergedExternals, transpilePackages = [], isDev = false } = bundlerOptions;
 
   const workspacePackagesNames = Array.from(workspaceMap.keys());
   const packagesToTranspile = new Set([...transpilePackages, ...workspacePackagesNames]);

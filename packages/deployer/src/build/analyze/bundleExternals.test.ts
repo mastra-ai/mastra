@@ -432,6 +432,7 @@ describe('bundleExternals', () => {
 
     const result = await bundleExternals(depsToOptimize, testDir, {
       projectRoot: testDir,
+      bundlerOptions: normalizeExternals(undefined),
     });
 
     // Verify return structure
@@ -491,7 +492,9 @@ describe('bundleExternals', () => {
     expect(Array.from(result.fileNameToDependencyMap.values())[0]).toBe('react');
 
     // Test with minimal options
-    const result2 = await bundleExternals(depsToOptimize, testDir, {});
+    const result2 = await bundleExternals(depsToOptimize, testDir, {
+      bundlerOptions: normalizeExternals(undefined),
+    });
 
     expect(result2.output).toBeDefined();
     expect(result2.fileNameToDependencyMap).toBeInstanceOf(Map);
@@ -560,6 +563,7 @@ describe('bundleExternals', () => {
       projectRoot: join(testDir, 'app'),
       workspaceMap,
       bundlerOptions: {
+        ...normalizeExternals(undefined),
         isDev: false,
       },
     });
@@ -622,6 +626,7 @@ describe('bundleExternals', () => {
       projectRoot: join(testDir, 'app'),
       workspaceMap,
       bundlerOptions: {
+        ...normalizeExternals(undefined),
         isDev: true,
       },
     });
@@ -658,6 +663,7 @@ describe('bundleExternals', () => {
 
     const result = await bundleExternals(depsToOptimize, testDir, {
       projectRoot: testDir,
+      bundlerOptions: normalizeExternals(undefined),
     });
 
     // Validate all output chunks have .mjs extension
@@ -688,6 +694,7 @@ describe('bundleExternals', () => {
 
     const nullPathResult = await bundleExternals(depsWithNullPath, testDir, {
       projectRoot: testDir,
+      bundlerOptions: normalizeExternals(undefined),
     });
 
     expect(nullPathResult.output).toBeDefined();
@@ -709,6 +716,7 @@ describe('bundleExternals', () => {
     const mixedResult = await bundleExternals(mixedDeps, testDir, {
       workspaceRoot: testDir,
       projectRoot: join(testDir, 'app'),
+      bundlerOptions: normalizeExternals(undefined),
       workspaceMap: new Map([
         [
           '@workspace/internal',
