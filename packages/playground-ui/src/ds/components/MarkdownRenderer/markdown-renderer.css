@@ -14,7 +14,6 @@
     font-size: var(--text-ui-md);
     line-height: 1.7;
     overflow-wrap: break-word;
-    text-wrap: pretty;
   }
 
   .mastra-markdown > :first-child {
@@ -178,5 +177,37 @@
   .mastra-markdown img {
     max-width: 100%;
     border-radius: 8px;
+  }
+
+  /* Streamed words. The animation runs when a word lands, so re-parsing the
+   * growing text lights up only what is new. No transform: it is ignored on
+   * inline elements. `backwards` so no `blur(0)` survives — a word left on the
+   * filtered raster path antialiases unlike the settled text replacing it. */
+  .mastra-markdown-streaming .mastra-markdown-word {
+    animation: mastra-markdown-word-in 180ms cubic-bezier(0.2, 0, 0, 1) backwards;
+  }
+
+  /* The word still being typed. It holds its width so revealing it shifts
+   * nothing; gaining the class above is what starts its fade. */
+  .mastra-markdown-streaming .mastra-markdown-word-pending {
+    opacity: 0;
+  }
+
+  @keyframes mastra-markdown-word-in {
+    from {
+      opacity: 0;
+      filter: blur(3px);
+    }
+
+    to {
+      opacity: 1;
+      filter: blur(0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .mastra-markdown-streaming .mastra-markdown-word {
+      animation: none;
+    }
   }
 }
