@@ -221,9 +221,22 @@ export type EntityFlowNode = Node<{
   focused: boolean;
 }>;
 
-export type MemoryFlowNode = Node<{ memory: KnowledgeGraphMemory; kind: 'dot' | 'junction'; size: number }>;
+export type MemoryFlowNode = Node<{
+  memory: KnowledgeGraphMemory;
+  kind: 'dot' | 'junction';
+  size: number;
+  /** The memory currently selected (its fact is open in the flyout). */
+  focused?: boolean;
+}>;
 
-export type KnowledgeFlowEdge = Edge<{ factId: string; linkType: 'wikilink'; pinned: boolean; text?: string }>;
+export type KnowledgeFlowEdge = Edge<{
+  factId: string;
+  linkType: 'wikilink';
+  pinned: boolean;
+  text?: string;
+  /** The edge belongs to the memory currently selected in the flyout. */
+  focused?: boolean;
+}>;
 
 /** Map A11 memory elements into React Flow nodes/edges (positions from the layout). */
 export function toMemoryFlow(

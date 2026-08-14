@@ -118,11 +118,18 @@ function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<Knowledg
           // A9: a pinned fact marks the RELATIONSHIP — the amber accent
           // rides the edge, with a pin chip at the arc's midpoint. Edges
           // touching a memory marker are white, echoing the Mastra logo.
-          pinned
-            ? { stroke: 'rgba(251,191,36,0.75)', strokeWidth: 2 }
-            : source.startsWith('mem:') || target.startsWith('mem:')
-              ? { stroke: 'rgba(255,255,255,0.45)', strokeWidth: 1.2 }
-              : { stroke: 'rgba(139,92,246,0.4)', strokeWidth: 1.4 }
+          // A selected memory (open in the flyout) lights its edge up.
+          data?.focused
+            ? {
+                stroke: pinned ? 'rgba(251,191,36,1)' : 'rgba(255,255,255,0.95)',
+                strokeWidth: 2.5,
+                filter: `drop-shadow(0 0 4px ${pinned ? 'rgba(251,191,36,0.8)' : 'rgba(255,255,255,0.7)'})`,
+              }
+            : pinned
+              ? { stroke: 'rgba(251,191,36,0.75)', strokeWidth: 2 }
+              : source.startsWith('mem:') || target.startsWith('mem:')
+                ? { stroke: 'rgba(255,255,255,0.45)', strokeWidth: 1.2 }
+                : { stroke: 'rgba(139,92,246,0.4)', strokeWidth: 1.4 }
         }
       />
       {pinned && !source.startsWith('mem:') && !target.startsWith('mem:') ? (
@@ -152,11 +159,12 @@ const KnowledgeLink = memo(KnowledgeLinkComponent);
  * the chip collision-clear of entities).
  */
 function MemoryNodeComponent({ data }: NodeProps<MemoryFlowNode>) {
-  const { memory, size } = data;
+  const { memory, size, focused } = data;
   return (
     <div
       data-testid="knowledge-memory-node"
       data-fact-id={memory.id}
+      data-focused={focused || undefined}
       className={[
         'flex items-center justify-center rounded-full border transition-shadow',
         // White markers mimic the Mastra logo's nodes-and-edges M — memories
@@ -165,6 +173,12 @@ function MemoryNodeComponent({ data }: NodeProps<MemoryFlowNode>) {
         memory.pinned
           ? 'border-amber-300/80 bg-amber-400 text-[#1a1305] shadow-md shadow-amber-500/40'
           : 'border-white/70 bg-white/90 shadow-[0_0_6px_rgba(255,255,255,0.45)]',
+        // The selected memory (open in the flyout) glows hard.
+        focused
+          ? memory.pinned
+            ? 'ring-2 ring-amber-300 shadow-[0_0_14px_rgba(251,191,36,0.9)]'
+            : 'ring-2 ring-white shadow-[0_0_14px_rgba(255,255,255,0.9)]'
+          : '',
       ].join(' ')}
       style={{ width: size, height: size }}
     >
@@ -198,6 +212,8 @@ export interface KnowledgeGraphProps {
    */
   focusedId?: string | null;
   onFocusChange?: (id: string | null) => void;
+  /** The memory selected in the flyout — its edge and marker light up. */
+  focusedFactId?: string | null;
   onNodeClick?: (entity: KnowledgeGraphNode) => void;
   onEdgeClick?: (edge: { source: string; target: string; factId: string }) => void;
 }
@@ -264,6 +280,7 @@ function KnowledgeGraphInner({
   arrivals,
   focusedId: controlledFocusId,
   onFocusChange,
+  focusedFactId,
   onNodeClick,
   onEdgeClick,
 }: KnowledgeGraphProps) {
@@ -368,20 +385,29 @@ function KnowledgeGraphInner({
   }, [payload, filters, focusedId, dragVersion, arrivals]);
 
   // Arrival animation: newly-polled nodes/edges fade-scale in with a pulse.
-  const displayNodes = useMemo(
-    () =>
-      arrivals && arrivals.nodes.size > 0
-        ? nodes.map(node => (arrivals.nodes.has(node.id) ? { ...node, className: 'knowledge-arrive' } : node))
-        : nodes,
-    [nodes, arrivals],
-  );
-  const displayEdges = useMemo(
-    () =>
-      arrivals && arrivals.edges.size > 0
-        ? edges.map(edge => (arrivals.edges.has(edge.id) ? { ...edge, className: 'knowledge-arrive' } : edge))
-        : edges,
-    [edges, arrivals],
-  );
+  // Selection: the flyout's open memory lights its marker and edge(s) up.
+  const displayNodes = useMemo(() => {
+    let mapped = nodes;
+    if (arrivals && arrivals.nodes.size > 0)
+      mapped = mapped.map(node => (arrivals.nodes.has(node.id) ? { ...node, className: 'knowledge-arrive' } : node));
+    if (focusedFactId)
+      mapped = mapped.map(node =>
+        node.type === 'knowledgeMemory' && (node as MemoryFlowNode).data.memory.id === focusedFactId
+          ? { ...node, data: { ...node.data, focused: true } }
+          : node,
+      );
+    return mapped;
+  }, [nodes, arrivals, focusedFactId]);
+  const displayEdges = useMemo(() => {
+    let mapped = edges;
+    if (arrivals && arrivals.edges.size > 0)
+      mapped = mapped.map(edge => (arrivals.edges.has(edge.id) ? { ...edge, className: 'knowledge-arrive' } : edge));
+    if (focusedFactId)
+      mapped = mapped.map(edge =>
+        edge.data?.factId === focusedFactId ? { ...edge, data: { ...edge.data, focused: true } } : edge,
+      );
+    return mapped;
+  }, [edges, arrivals, focusedFactId]);
 
   const toggleRung = useCallback((rung: KnowledgeRung) => {
     setFilters(current => {

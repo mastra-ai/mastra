@@ -13,7 +13,7 @@ import {
 } from '@mastra/playground-ui/components/Collapsible';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ChevronDown, ExternalLink, Pin, Sparkles, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { useKnowledgeEntity } from '../../../../../hooks/useKnowledgeGraph';
 import type { KnowledgeEntityFact, KnowledgeRung } from '../../services/knowledge';
@@ -77,24 +77,36 @@ function relativeTime(iso: string): string {
 
 function MemoryCard({
   fact,
-  focused,
+  expanded,
+  onToggle,
   onEntityRef,
   onOpenThread,
 }: {
   fact: KnowledgeEntityFact;
-  /** An edge click SELECTS the supporting memory: expand it, not just ring it (A7). */
-  focused?: boolean;
+  /**
+   * Selection is bidirectional and single: the page owns the selected fact,
+   * so a graph edge/marker click expands exactly this card, and expanding a
+   * card selects (lights up) its memory in the graph while collapsing the
+   * others.
+   */
+  expanded: boolean;
+  onToggle: () => void;
   onEntityRef?: (name: string) => void;
   onOpenThread?: (threadId: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(focused ?? false);
+  const cardRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (focused) setExpanded(true);
-  }, [focused]);
+    if (expanded) {
+      // Bring the selected memory into view — a clicked edge or marker may
+      // back a fact deep down the list.
+      cardRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    }
+  }, [expanded]);
   const reason = typeof fact.metadata?.reason === 'string' ? fact.metadata.reason : undefined;
   const otherMetadata = Object.entries(fact.metadata ?? {}).filter(([key]) => key !== 'reason');
   return (
     <div
+      ref={cardRef}
       data-testid="knowledge-memory"
       data-pinned={fact.pinned || undefined}
       className={[
@@ -111,7 +123,7 @@ function MemoryCard({
             : 'border-surface5',
       ].join(' ')}
     >
-      <button type="button" className="w-full px-3 py-2.5 text-left" onClick={() => setExpanded(open => !open)}>
+      <button type="button" className="w-full px-3 py-2.5 text-left" onClick={onToggle}>
         <div className="text-xs leading-relaxed text-icon5">
           <FactText text={fact.text} onEntityRef={onEntityRef} />
           {fact.pinned ? (
@@ -190,6 +202,8 @@ export interface KnowledgeFlyoutProps {
   threadId?: string;
   /** Highlight the memory backing a clicked edge. */
   focusFactId?: string;
+  /** Card expand/collapse selects (or clears) the memory page-wide — the graph lights it up too. */
+  onSelectMemory?: (factId: string | null) => void;
   onClose: () => void;
   onEntityRef?: (name: string) => void;
   onOpenThread?: (threadId: string) => void;
@@ -200,6 +214,7 @@ export function KnowledgeFlyout({
   entityId,
   threadId,
   focusFactId,
+  onSelectMemory,
   onClose,
   onEntityRef,
   onOpenThread,
@@ -277,7 +292,8 @@ export function KnowledgeFlyout({
                       >
                         <MemoryCard
                           fact={fact}
-                          focused={fact.id === focusFactId}
+                          expanded={fact.id === focusFactId}
+                          onToggle={() => onSelectMemory?.(fact.id === focusFactId ? null : fact.id)}
                           onEntityRef={onEntityRef}
                           onOpenThread={onOpenThread}
                         />
