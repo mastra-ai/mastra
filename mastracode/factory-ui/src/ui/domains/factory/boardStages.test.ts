@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { currentItemStageLabel } from './boardStages';
+import { boardStages, currentItemStageLabel, itemAppearsInStage } from './boardStages';
 import type { WorkItem, WorkItemSource } from './services/workItems';
 
 function workItem(source: WorkItemSource, stages: string[]): WorkItem {
@@ -37,5 +37,14 @@ describe('currentItemStageLabel', () => {
   it('falls back to Intake when no stage belongs to the item board', () => {
     expect(currentItemStageLabel(workItem('manual', []))).toBe('Intake');
     expect(currentItemStageLabel(workItem('github-pr', ['execute']))).toBe('Intake');
+  });
+});
+
+describe('itemAppearsInStage', () => {
+  it('leaves a canceled pull request out of the queue of PRs awaiting review', () => {
+    const stages = boardStages('review');
+    const canceled = workItem('github-pr', ['canceled']);
+    expect(itemAppearsInStage(canceled, 'canceled', stages)).toBe(true);
+    expect(itemAppearsInStage(canceled, 'intake', stages)).toBe(false);
   });
 });
