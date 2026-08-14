@@ -1,5 +1,17 @@
 # mastra
 
+## 1.25.0-alpha.5
+
+### Patch Changes
+
+- Added a short entrance to the chat surface. Opening a session now fades the conversation in instead of snapping it into place the moment loading finishes, which also covers the scroll jump to the latest message. The composer rises into place as it appears. Both are disabled under `prefers-reduced-motion`. ([#21417](https://github.com/mastra-ai/mastra/pull/21417))
+
+- Preserve the external dependency build mode when projects configure bundler options. Packages listed in bundler.externals are now installed as runtime dependencies, keeping deployment manifests complete and application bundles small. Deployment environments must have registry access to install these packages, including restricted or offline environments. ([#21478](https://github.com/mastra-ai/mastra/pull/21478))
+
+- Updated dependencies [[`59d8898`](https://github.com/mastra-ai/mastra/commit/59d8898c8cb48b342fe5bcb5eee803cc8cc95060), [`a40f915`](https://github.com/mastra-ai/mastra/commit/a40f9157690d89ef13ce825cc88e30be581de5d4)]:
+  - @mastra/core@1.59.0-alpha.5
+  - @mastra/deployer@1.59.0-alpha.5
+
 ## 1.25.0-alpha.4
 
 ### Patch Changes

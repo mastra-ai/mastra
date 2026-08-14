@@ -1,5 +1,13 @@
 # @mastra/code-sdk
 
+## 1.2.1-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`c48b764`](https://github.com/mastra-ai/mastra/commit/c48b764dfbe7e2f7ee6459e8ffc9f0df7b166474), [`59d8898`](https://github.com/mastra-ai/mastra/commit/59d8898c8cb48b342fe5bcb5eee803cc8cc95060), [`a40f915`](https://github.com/mastra-ai/mastra/commit/a40f9157690d89ef13ce825cc88e30be581de5d4)]:
+  - @mastra/stagehand@0.3.3-alpha.0
+  - @mastra/core@1.59.0-alpha.5
+
 ## 1.2.1-alpha.4
 
 ### Patch Changes
