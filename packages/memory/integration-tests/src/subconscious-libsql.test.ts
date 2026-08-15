@@ -340,7 +340,12 @@ describe('Subconscious LibSQL integration', () => {
         finishReason: 'stop' as const,
         usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
         warnings: [],
-        content: [{ type: 'text' as const, text: 'Project Atlas launches January 15.' }],
+        content: [
+          {
+            type: 'text' as const,
+            text: 'Project Atlas launches January 15. Source KnowledgeItem: item-atlas-resource-launch.',
+          },
+        ],
       }),
     });
     const memory = new Memory({
@@ -364,6 +369,7 @@ describe('Subconscious LibSQL integration', () => {
       scope: ['org:acme', `resource:${resourceId}`],
     });
     await knowledge.appendItem({
+      id: 'item-atlas-resource-launch',
       parentNodeId: node.id,
       text: '[[Project Atlas]] launches January 15.',
       scope: ['org:acme', `resource:${resourceId}`],
