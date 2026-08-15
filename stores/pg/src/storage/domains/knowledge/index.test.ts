@@ -45,9 +45,9 @@ describe('PostgreSQL knowledge concurrency and indexes', () => {
     try {
       const store = new KnowledgePG({ pool, schemaName });
       await store.init();
-      const entity = await store.createEntity({ name: 'Custom schema', kind: 'test', scope: ['org:acme'] });
-      await store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastFactId: '01A' });
-      expect(await store.getEntity(entity.id)).toMatchObject({ name: 'Custom schema' });
+      const node = await store.createNode({ name: 'Custom schema', kind: 'test', scope: ['org:acme'] });
+      await store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastItemId: '01A' });
+      expect(await store.getNode(node.id)).toMatchObject({ name: 'Custom schema' });
       expect(await store.claimSemanticOutbox({ workerId: 'worker', limit: 10 })).toHaveLength(1);
       const indexes = await pool.query('SELECT indexname FROM pg_indexes WHERE schemaname=$1', [schemaName]);
       expect(indexes.rows.map(row => row.indexname)).toEqual(
@@ -65,7 +65,7 @@ describe('PostgreSQL knowledge concurrency and indexes', () => {
     await first.dangerouslyClearAll();
     await Promise.all(
       Array.from({ length: 10 }, (_, index) =>
-        first.createEntity({ name: `Claim ${index}`, kind: 'test', scope: ['org:acme'] }),
+        first.createNode({ name: `Claim ${index}`, kind: 'test', scope: ['org:acme'] }),
       ),
     );
     const claims = (
@@ -82,10 +82,10 @@ describe('PostgreSQL knowledge concurrency and indexes', () => {
     const store = createStore();
     await store.init();
     await store.dangerouslyClearAll();
-    const entity = await store.createEntity({ name: 'CAS', kind: 'test', scope: ['org:acme'] });
+    const node = await store.createNode({ name: 'CAS', kind: 'test', scope: ['org:acme'] });
     const results = await Promise.allSettled([
-      store.updateEntity({ id: entity.id, version: 1, name: 'CAS one' }),
-      store.updateEntity({ id: entity.id, version: 1, name: 'CAS two' }),
+      store.updateNode({ id: node.id, version: 1, name: 'CAS one' }),
+      store.updateNode({ id: node.id, version: 1, name: 'CAS two' }),
     ]);
     expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
     expect(results.filter(result => result.status === 'rejected')).toHaveLength(1);
@@ -96,11 +96,11 @@ describe('PostgreSQL knowledge concurrency and indexes', () => {
     await store.init();
     await store.dangerouslyClearAll();
     await Promise.allSettled([
-      store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastFactId: '01A' }),
-      store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastFactId: '01C' }),
-      store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastFactId: '01B' }),
+      store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastItemId: '01A' }),
+      store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastItemId: '01C' }),
+      store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastItemId: '01B' }),
     ]);
-    expect((await store.getCurationCursor({ sourceThreadId: 'thread', agent: 'curate' }))?.lastFactId).toBe('01C');
+    expect((await store.getCurationCursor({ sourceThreadId: 'thread', agent: 'curate' }))?.lastItemId).toBe('01C');
   });
 });
 
