@@ -338,7 +338,7 @@ describe('Board card pending states', () => {
     await waitForMutationsIdle(client);
   });
 
-  it('uses the whole card as the thread link without rendering a separate thread action', async () => {
+  it('links the whole card to its attached thread', async () => {
     stubBoardEndpoints();
     renderWorkBoard();
 
@@ -348,14 +348,11 @@ describe('Board card pending states', () => {
     expect(titleText.closest('a, button')).toBeNull();
 
     const threadLink = within(card).getByRole('link', { name: 'Open session for Fix login bug' });
-    expect(within(card).getByText('Open session')).toBeInTheDocument();
-    // The link itself is an invisible overlay — a visible indicator must tell
-    // the user this card already has a work session.
-    expect(within(card).getByText('Session · fix-login')).toBeInTheDocument();
     expect(threadLink).toHaveAttribute(
       'href',
       `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`,
     );
+    expect(within(card).getByText('Open session')).toBeInTheDocument();
     const matches = matchRoutes(createAppRoutes(), threadLink.getAttribute('href') ?? '');
     expect(matches?.at(-1)?.route.path).toBe('threads/:threadId');
   });
@@ -377,11 +374,11 @@ describe('Board card pending states', () => {
     );
     if (!started || !unstarted) throw new Error('Expected both work item cards');
 
-    // The consequence of the click differs per card, so the card has to say which one it is.
+    expect(within(started).getByRole('link', { name: 'Open session for Fix login bug' })).toBeInTheDocument();
     expect(within(started).getByText('Open session')).toBeInTheDocument();
     expect(within(started).queryByText('Start session')).not.toBeInTheDocument();
     expect(within(unstarted).getByText('Start session')).toBeInTheDocument();
-    expect(within(unstarted).queryByText('Open session')).not.toBeInTheDocument();
+    expect(within(unstarted).queryByRole('link', { name: /Open session for/ })).not.toBeInTheDocument();
   });
 
   it('acknowledges a session-starting card click while it is still resolving the session', async () => {
