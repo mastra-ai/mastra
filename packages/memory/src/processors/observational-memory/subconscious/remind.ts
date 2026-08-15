@@ -148,6 +148,9 @@ type AskToolContext = {
   mastra?: { getAgentById?(id: string): Promise<unknown> | unknown };
 };
 
+const NO_MODEL_MESSAGE =
+  'The reminder agent has no model available at tool call time. Configure a model on the Subconscious remind agent or on observational memory; the main agent model is only reachable from the observation hook.';
+
 type SignalSender = {
   sendSignal(signal: unknown, target: { threadId: string; resourceId: string }): { persisted?: Promise<void> };
 };
@@ -180,7 +183,7 @@ async function resolveSignalSender(context: AskToolContext): Promise<SignalSende
 export function createRemindAskTool(options: RemindAskToolOptions) {
   const { memory, config, omModel } = options;
 
-  const answer = async (question: string, context: AskToolContext, threadId: string) => {
+  const answer = async (question: string, context: AskToolContext, threadId: string, blocking: boolean) => {
     const scope = resolveScope({
       requestContext: context.requestContext,
       resourceId: context.agent?.resourceId,
@@ -188,9 +191,7 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
     });
     const model = await resolveSubconsciousAgentModel({ config, omModel, requestContext: context.requestContext });
     if (!model) {
-      throw new ReminderUnavailableError(
-        'The reminder agent has no model available at tool call time. Configure a model on the Subconscious remind agent or on observational memory; the main agent model is only reachable from the observation hook.',
-      );
+      throw new ReminderUnavailableError(NO_MODEL_MESSAGE);
     }
     const remindMemory = options.createRemindMemory?.();
     const agent = new Agent({
@@ -203,7 +204,10 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
     });
     const result = await agent.generate(`Current time: ${new Date().toISOString()}\n\nQuestion: ${question}`, {
       requestContext: context.requestContext,
-      abortSignal: context.abortSignal,
+      // A non-blocking answer outlives the turn that asked for it. Wiring it to that turn's abort
+      // signal would cancel the answer the moment the run finishes, leaving the caller holding a
+      // correlation id that can never resolve.
+      ...(blocking ? { abortSignal: context.abortSignal } : {}),
       maxSteps: config.maxSteps,
       ...(remindMemory
         ? { memory: { thread: remindThreadKey(threadId), resource: context.agent?.resourceId ?? threadId } }
@@ -266,7 +270,7 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
 
       if (wait) {
         try {
-          return { ok: true, answer: await answer(question, context, threadId) };
+          return { ok: true, answer: await answer(question, context, threadId, true) };
         } catch (error) {
           // Never throw out of the main agent's turn; hand it a result it can reason about.
           return { ok: false, ...describeAskFailure(error) };
@@ -283,10 +287,21 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
         };
       }
 
+      // Pre-flight the two things that fail deterministically, so a doomed question is an honest
+      // error now rather than a correlation id that never resolves.
+      try {
+        resolveScope({ requestContext: context.requestContext, resourceId, threadId });
+        if (!(await resolveSubconsciousAgentModel({ config, omModel, requestContext: context.requestContext }))) {
+          throw new ReminderUnavailableError(NO_MODEL_MESSAGE);
+        }
+      } catch (error) {
+        return { ok: false, ...describeAskFailure(error) };
+      }
+
       const correlationId = `remind-ask-${crypto.randomUUID()}`;
       void (async () => {
         try {
-          const text = await answer(question, context, threadId);
+          const text = await answer(question, context, threadId, false);
           await sendAnswerSignal(sender, {
             threadId,
             resourceId,
@@ -299,7 +314,9 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
           // No `writer.custom` survives past the tool's own turn, so a late failure reports on the
           // same signal channel the answer would have used, carrying the correlation id that names
           // the question it failed to answer.
-          await context.writer?.custom({ type: 'data-subconscious-error', data: { agent: 'remind', error: message } });
+          await Promise.resolve(
+            context.writer?.custom({ type: 'data-subconscious-error', data: { agent: 'remind', error: message } }),
+          ).catch(() => {});
           await sendAnswerSignal(sender, {
             threadId,
             resourceId,
@@ -308,7 +325,10 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
             contents: `Could not answer that question: ${message}`,
           }).catch(() => {});
         }
-      })();
+      })().catch(() => {
+        // Nothing above may reject: this lane runs after the asking turn returned, so an escaping
+        // rejection would surface as an unhandled rejection in the host process.
+      });
 
       return {
         ok: true,

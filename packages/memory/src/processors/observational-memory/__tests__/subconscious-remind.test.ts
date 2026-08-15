@@ -817,8 +817,12 @@ describe('Subconscious remind ask lane', () => {
   it('returns immediately when wait is false, before the answer settles', async () => {
     let release: (value: { text: string }) => void = () => {};
     const deferred = new Promise<{ text: string }>(resolve => (release = resolve));
+    const generateArgs: any[] = [];
     const { tools, generateSpy } = createAskTool({
-      generate: async () => deferred,
+      generate: async (_prompt, args) => {
+        generateArgs.push(args);
+        return deferred;
+      },
       createRemindMemory: () => ({}) as any,
     });
     const capture = signalCapture();
@@ -829,6 +833,8 @@ describe('Subconscious remind ask lane', () => {
       );
       expect(result.accepted).toBe(true);
       expect(capture.sent).toHaveLength(0);
+      // The answer outlives the asking turn, so it must not be tied to that turn's abort signal.
+      expect(generateArgs[0]).not.toHaveProperty('abortSignal');
       release({ text: 'Tuesday.' });
       await settle();
       expect(capture.sent).toHaveLength(1);
@@ -917,7 +923,15 @@ describe('Subconscious remind ask lane', () => {
       },
     });
     const capture = signalCapture();
-    const writer = { custom: vi.fn(async () => undefined) };
+    // A writer whose turn already ended rejects; that must not escape as an unhandled rejection.
+    const writer = {
+      custom: vi.fn(async () => {
+        throw new Error('stream closed');
+      }),
+    };
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', onUnhandled);
     try {
       const result: any = await tools.ask_memory.execute!(
         { question: 'when?', wait: false } as any,
@@ -932,7 +946,9 @@ describe('Subconscious remind ask lane', () => {
       );
       expect(capture.sent[0].attributes.correlationId).toBe(result.correlationId);
       expect(capture.sent[0].contents).toEqual(expect.anything());
+      expect(unhandled).toEqual([]);
     } finally {
+      process.off('unhandledRejection', onUnhandled);
       generateSpy.mockRestore();
     }
   });
@@ -958,7 +974,9 @@ describe('Subconscious remind ask lane', () => {
     }
   });
 
-  it('leaves the passive reminder path unregressed when the ask tool exists', async () => {
+  it('leaves the passive reminder path unregressed while a question shares its thread', async () => {
+    // The regression surface for the passive path is two writers on subconscious:<threadId>:remind
+    // at once, so hold a question open across a full passive reminder run.
     const extractor = new SubconsciousRemindExtractor({ name: 'remind', maxSteps: 3, builtIn: true });
     const context = createContext('Project Atlas launches January 15.');
     const store = await context.memory.storage.getStore('knowledge');
@@ -967,7 +985,7 @@ describe('Subconscious remind ask lane', () => {
       kind: 'project',
       scope: ['org:acme', 'resource:user-42'],
     });
-    await store.appendItem({
+    const item = await store.appendItem({
       parentNodeId: node.id,
       text: 'Project Atlas launches January 15.',
       scope: ['org:acme', 'resource:user-42'],
@@ -975,24 +993,50 @@ describe('Subconscious remind ask lane', () => {
       resolutionScope: ['org:acme', 'resource:user-42', 'thread:beta'],
       defaultScope: ['org:acme', 'resource:user-42'],
     });
-    createRemindAskTool({
+
+    let releaseAsk: (value: { text: string }) => void = () => {};
+    const pendingAsk = new Promise<{ text: string }>(resolve => (releaseAsk = resolve));
+    const tools = createRemindAskTool({
       memory: context.memory,
       config: { name: 'remind', maxSteps: 3, builtIn: true },
       omModel: createModel('unused'),
+      createRemindMemory: () => ({}) as any,
     });
+    const generateSpy = vi.spyOn(Agent.prototype, 'generate' as any);
+    generateSpy.mockImplementation((async (prompt: string) =>
+      prompt.includes('Question:') ? pendingAsk : { text: 'Project Atlas launches January 15.' }) as any);
 
-    const result = await applyExtractorHooks({
-      source: 'observer',
-      extractors: [extractor],
-      rawObservations: 'The user is scheduling Project Atlas.',
-      ...context,
-    });
+    try {
+      const askInFlight = tools.ask_memory.execute!({ question: 'when?' } as any, askContext());
 
-    expect(result.failures).toBeUndefined();
-    expect(context.sendSignal).toHaveBeenCalledOnce();
-    expect(context.sendSignal).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'reactive', tagName: 'remembered' }),
-    );
+      const result = await applyExtractorHooks({
+        source: 'observer',
+        extractors: [extractor],
+        rawObservations: 'The user is scheduling Project Atlas.',
+        ...context,
+      });
+
+      expect(result.failures).toBeUndefined();
+      expect(context.sendSignal).toHaveBeenCalledOnce();
+      expect(context.sendSignal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'reactive',
+          tagName: 'remembered',
+          contents: expect.stringContaining(item.id),
+          attributes: expect.objectContaining({
+            source: 'subconscious',
+            sourceIds: expect.stringContaining(item.id),
+            agent: 'remind',
+            threadId: 'alpha',
+          }),
+        }),
+      );
+
+      releaseAsk({ text: 'January 15.' });
+      expect(await askInFlight).toEqual(expect.objectContaining({ ok: true, answer: 'January 15.' }));
+    } finally {
+      generateSpy.mockRestore();
+    }
   });
 
   it('returns an explicit unavailable result when no model can be resolved', async () => {
