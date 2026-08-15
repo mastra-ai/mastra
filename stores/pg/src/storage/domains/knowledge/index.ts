@@ -207,7 +207,7 @@ function knowledgeIndexDDL(schemaName?: string): string[] {
     `CREATE INDEX IF NOT EXISTS idx_knowledge_activity_latest ON ${table(TABLE_KNOWLEDGE_ACTIVITY)} ("id" DESC)`,
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_outbox_idempotency ON ${table(TABLE_KNOWLEDGE_SEMANTIC_OUTBOX)} ("idempotencyKey")`,
     `CREATE INDEX IF NOT EXISTS idx_knowledge_outbox_claim ON ${table(TABLE_KNOWLEDGE_SEMANTIC_OUTBOX)} ("status", "availableAt", "createdAt")`,
-  ];
+  ].map(statement => `${statement};`);
 }
 
 export class KnowledgePG extends KnowledgeStorage {
@@ -981,6 +981,7 @@ export class KnowledgePG extends KnowledgeStorage {
         operation,
         JSON.stringify(scope),
         knowledgeScopeKey(scope),
+        now.toISOString(),
         now.toISOString(),
       ],
     });
