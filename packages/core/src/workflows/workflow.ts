@@ -1689,6 +1689,7 @@ export class Workflow<
     this.type = type ?? 'default';
     this.#options = {
       validateInputs: options.validateInputs ?? true,
+      emitStepEvents: options.emitStepEvents ?? true,
       shouldPersistSnapshot: options.shouldPersistSnapshot ?? (() => true),
       pruneSnapshot: options.pruneSnapshot,
       tracingPolicy: options.tracingPolicy,

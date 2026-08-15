@@ -1,5 +1,102 @@
 # @mastra/core
 
+## 1.60.0-alpha.3
+
+### Minor Changes
+
+- Added live-tail PubSub subscriptions with `startFrom: "latest"` and an explicit `supportsOffsets` capability. ([#21535](https://github.com/mastra-ai/mastra/pull/21535))
+
+  ```typescript
+  await pubsub.subscribe(topic, callback, { startFrom: 'latest' });
+  ```
+
+  The default remains `"earliest"`, and existing consumer groups keep their checkpoint.
+
+### Patch Changes
+
+- Fixed automatic tool resumption so approval-gated tools require an explicit trusted approval decision and remain suspended for ambiguous input. ([#21539](https://github.com/mastra-ai/mastra/pull/21539))
+
+- Fixed MCP-exposed agents so nested tools receive elicitation and other MCP context. (#20549) ([#21548](https://github.com/mastra-ai/mastra/pull/21548))
+
+## 1.60.0-alpha.2
+
+### Minor Changes
+
+- Added per-message Signal metadata to Channel handlers. Use `ctx.signalMetadata` to attach serializable, non-sensitive context that follows both idle and active message delivery: ([#21330](https://github.com/mastra-ai/mastra/pull/21330))
+
+  ```typescript
+  handlers: {
+    onDirectMessage: async (thread, message, defaultHandler, ctx) => {
+      ctx.signalMetadata.attachmentIds = ['file-1']
+      await defaultHandler(thread, message)
+    },
+  }
+  ```
+
+### Patch Changes
+
+- Fixed workspace skill resolvers so concurrent requests keep their own resolved skill set throughout execution. ([#21524](https://github.com/mastra-ai/mastra/pull/21524))
+
+- Fixed durable agents pausing between model steps by suppressing unused internal workflow step events that repeatedly serialized cumulative conversation state. ([#21529](https://github.com/mastra-ai/mastra/pull/21529))
+
+- Fixed `DurableAgent.listActiveRuns()` and `recoverActiveRuns()` loading every running run's full workflow snapshot into memory at once. Candidate runs are now fetched from storage in bounded batches of 100 rows, so discovering or recovering runs against a large backlog no longer risks exhausting process memory. Fixes [#21501](https://github.com/mastra-ai/mastra/issues/21501). ([#21518](https://github.com/mastra-ai/mastra/pull/21518))
+
+- Fixed tool search and skill search losing loaded state for HTTP requests that pass a thread via memory options. Processors now resolve the thread ID from the memory request context, and single-name load_tool results are recognized when reconstructing loaded tools from conversation messages with storage: 'context'. Fixes #21508 ([#21521](https://github.com/mastra-ai/mastra/pull/21521))
+
+- Fixed durable run recovery so a reconnecting thread subscriber receives the remaining output and terminal event of a recovered run. ([#21526](https://github.com/mastra-ai/mastra/pull/21526))
+
+  Only one recovery of a run can be active at a time. A second concurrent `durableAgent.recover(runId)` call now fails fast with the error `DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS` instead of restarting the run twice.
+
+- Fixed durable agent runs failing during shutdown by waiting for in-flight workflow persistence before closing storage. ([#21532](https://github.com/mastra-ai/mastra/pull/21532))
+
+- Fixed output processors missing response messages after a mid-run memory save (#21204). ([#21533](https://github.com/mastra-ai/mastra/pull/21533))
+
+- Preserve channel approval cards when tool output is hidden or suppressed by a custom renderer. ([#21402](https://github.com/mastra-ai/mastra/pull/21402))
+
+  Resolves https://github.com/mastra-ai/mastra/issues/21162
+
+  Custom renderers can reuse the built-in approval and tool-event formatting:
+
+  ```ts
+  import { formatToolApproval, renderBuiltInToolEvent, type ToolDisplayFn } from '@mastra/core/channels';
+
+  const renderTool: ToolDisplayFn = event =>
+    event.kind === 'approval'
+      ? formatToolApproval(event.displayName, event.argsSummary, event.toolCallId, true)
+      : renderBuiltInToolEvent(event, 'cards');
+  ```
+
+- Fixed `requestContextSchema` typing so it matches the open-map runtime without losing declared-key safety, and restored assignability of schema-typed agents to bare `Agent`. ([#21525](https://github.com/mastra-ai/mastra/pull/21525))
+
+  Declared keys on `get`/`set`/`has`/`delete` stay strictly typed (typos still fail). Runtime-only keys — including reserved middleware keys like `mastra__resourceId` — are available through `getRaw`/`setRaw`/`hasRaw`/`deleteRaw`, which return/accept `unknown` instead of forcing `as never` casts.
+
+  Also fixed generic helpers typed as `(agent: Agent) => ...` rejecting agents that declare a `requestContextSchema` (`TRequestContext` now defaults to `any` on `Agent`/`SubAgent` so the invariant generic remains assignable).
+
+  ```ts
+  const ctx = new RequestContext<{ tenantTier?: 'free' | 'pro' }>();
+  ctx.set('tenantTier', 'pro');
+  ctx.setRaw('session.cache', { hits: 0 });
+  const cache = ctx.getRaw('session.cache'); // unknown
+
+  const schemaAgent = new Agent({
+    id: 'repro',
+    name: 'repro',
+    instructions: 'hi',
+    model: 'openai/gpt-5.6-sol',
+    requestContextSchema: z.object({ tenantTier: z.enum(['free', 'pro']).optional() }),
+  });
+  declare function driveAgent(agent: Agent): Promise<void>;
+  void driveAgent(schemaAgent); // ok
+  ```
+
+  Fixes #21286
+
+- Fixed DurableAgent snapshots to prune duplicated foreach suspension data so long-running agents do not exceed storage document limits. ([#21537](https://github.com/mastra-ai/mastra/pull/21537))
+
+- Fixed observed durable run cancellation so calling `cleanup()` immediately after `abort()` no longer removes run state before terminal events and lifecycle callbacks are delivered. ([#21527](https://github.com/mastra-ai/mastra/pull/21527))
+
+  Related to https://github.com/mastra-ai/mastra/issues/21522
+
 ## 1.60.0-alpha.1
 
 ### Minor Changes

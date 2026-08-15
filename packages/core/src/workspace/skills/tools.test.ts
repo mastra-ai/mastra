@@ -57,9 +57,13 @@ function makeMetadata(overrides: Partial<SkillMetadata> = {}): SkillMetadata {
   };
 }
 
-/** Shorthand for calling tool.execute with an empty context (second arg). */
-async function exec(tool: { execute?: (...args: any[]) => any }, input: Record<string, unknown>) {
-  return tool.execute!(input, {});
+/** Shorthand for calling tool.execute with an optional context (second arg). */
+async function exec(
+  tool: { execute?: (...args: any[]) => any },
+  input: Record<string, unknown>,
+  context: Record<string, unknown> = {},
+) {
+  return tool.execute!(input, context);
 }
 
 // =============================================================================
@@ -74,6 +78,25 @@ describe('createSkillTools', () => {
     expect(tools).toHaveProperty('skill');
     expect(tools).toHaveProperty('skill_search');
     expect(tools).toHaveProperty('skill_read');
+  });
+
+  it('uses the executing request context to resolve a scoped skills view', async () => {
+    const requestContext = {};
+    const scopedSkills = createMockWorkspaceSkills({ get: vi.fn(async () => makeSkill()) });
+    const getScoped = vi.fn(async () => scopedSkills);
+    const skills = createMockWorkspaceSkills({ getScoped });
+    const tools = createSkillTools(skills);
+
+    await Promise.all([
+      exec(tools.skill, { name: 'test-skill' }, { requestContext }),
+      exec(tools.skill_search, { query: 'test' }, { requestContext }),
+      exec(tools.skill_read, { skillName: 'test-skill', path: 'references/missing.md' }, { requestContext }),
+    ]);
+
+    expect(getScoped).toHaveBeenCalledTimes(3);
+    expect(getScoped).toHaveBeenCalledWith({ requestContext });
+    expect(skills.maybeRefresh).not.toHaveBeenCalled();
+    expect(scopedSkills.maybeRefresh).toHaveBeenCalledTimes(3);
   });
 });
 

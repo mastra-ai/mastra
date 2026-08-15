@@ -1019,14 +1019,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             name: eventName,
             data: {
               inputData: resumeData,
-              initialState: snapshot?.value ?? {},
               runId,
               resourceId: resumeOptions?.resourceId,
               requestContext: snapshot?.requestContext ?? {},
-              stepResults: snapshot?.context,
               resume: {
                 steps,
-                stepResults: snapshot?.context,
                 resumePayload: resumeData,
                 resumePath: steps[0] ? snapshot?.suspendedPaths?.[steps[0]] : undefined,
               },

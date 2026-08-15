@@ -688,6 +688,10 @@ describe('InngestAgent parity surface', () => {
           }),
         }),
       );
+      const sentEvent = sendSpy.mock.calls[0]?.[0];
+      expect(sentEvent?.data).not.toHaveProperty('initialState');
+      expect(sentEvent?.data).not.toHaveProperty('stepResults');
+      expect(sentEvent?.data.resume).not.toHaveProperty('stepResults');
     } finally {
       result.cleanup();
       sendSpy.mockRestore();
