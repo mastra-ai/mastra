@@ -468,7 +468,7 @@ export abstract class Bundler extends MastraBundler {
       throw new Error(`Bundle lockfile must stay within project root: ${sourcePath}`);
     }
     const sourceStats = statSync(canonicalSourcePath);
-    if (sourceStats.isDirectory()) {
+    if (!sourceStats.isFile()) {
       throw new Error(`Bundle lockfile must be a file: ${sourcePath}`);
     }
 
