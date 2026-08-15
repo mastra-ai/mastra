@@ -1,5 +1,11 @@
 # @mastra/factory
 
+## 0.8.0-alpha.6
+
+### Minor Changes
+
+- Add per-repository worktree teardown commands and run them during terminal, explicit, and destructive Factory session cleanup. ([#21564](https://github.com/mastra-ai/mastra/pull/21564))
+
 ## 0.7.1-alpha.5
 
 ### Patch Changes
