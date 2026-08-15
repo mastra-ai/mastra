@@ -179,11 +179,14 @@ describe('Bundler bundle lockfile authority', () => {
       tempDirs.push(outsideRoot);
 
       const lockfile = pathKind === 'relative traversal' ? relative(projectRoot, outsideLockfile) : outsideLockfile;
-      const bundler = new BaseManagerBundler();
+      const bundler = new BaseManagerBundler({ lockfile });
 
-      expect(() => bundler.resolveState(projectRoot, lockfile, false)).toThrow(
-        'Bundle lockfile must stay within project root',
-      );
+      await expect(
+        bundler.runBundle('server-file', join(projectRoot, 'mastra.ts'), {
+          projectRoot,
+          outputDirectory: join(projectRoot, 'build'),
+        }),
+      ).rejects.toThrow('Bundle lockfile must stay within project root');
       expect(bundler.installs).toHaveLength(0);
     },
   );
@@ -221,10 +224,13 @@ describe('Bundler bundle lockfile authority', () => {
     tempDirs.push(outsideRoot);
     if (!(await createSymlink(outsideLockfile, linkedLockfile, 'file'))) return;
 
-    const bundler = new BaseManagerBundler();
-    expect(() => bundler.resolveState(projectRoot, 'package-lock.json', false)).toThrow(
-      'Bundle lockfile must stay within project root',
-    );
+    const bundler = new BaseManagerBundler({ lockfile: 'package-lock.json' });
+    await expect(
+      bundler.runBundle('server-file', join(projectRoot, 'mastra.ts'), {
+        projectRoot,
+        outputDirectory: join(projectRoot, 'build'),
+      }),
+    ).rejects.toThrow('Bundle lockfile must stay within project root');
     expect(bundler.installs).toHaveLength(0);
   });
 
@@ -237,10 +243,13 @@ describe('Bundler bundle lockfile authority', () => {
     tempDirs.push(outsideRoot);
     if (!(await createSymlink(outsideRoot, linkedDirectory, 'junction'))) return;
 
-    const bundler = new BaseManagerBundler();
-    expect(() => bundler.resolveState(projectRoot, 'linked-locks/package-lock.json', false)).toThrow(
-      'Bundle lockfile must stay within project root',
-    );
+    const bundler = new BaseManagerBundler({ lockfile: 'linked-locks/package-lock.json' });
+    await expect(
+      bundler.runBundle('server-file', join(projectRoot, 'mastra.ts'), {
+        projectRoot,
+        outputDirectory: join(projectRoot, 'build'),
+      }),
+    ).rejects.toThrow('Bundle lockfile must stay within project root');
     expect(bundler.installs).toHaveLength(0);
   });
 
