@@ -1,0 +1,69 @@
+{
+  "name": "@mastra/taskmarket",
+  "version": "0.1.0",
+  "description": "Taskmarket tools for Mastra agents: browse, create, and manage onchain agent tasks (USDC on Base) with a hard spending cap and explicit confirmation.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build:lib": "tsdown --silent --config tsdown.config.ts",
+    "build:watch": "pnpm build:lib --watch",
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix .",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "mastra",
+    "taskmarket",
+    "usdc",
+    "base",
+    "bounties",
+    "tools",
+    "ai-agent"
+  ],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "integrations/taskmarket"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "homepage": "https://mastra.ai",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {},
+  "peerDependencies": {
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
+    "zod": ">=3.0.0 || >=4.0.0"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
+    "@mastra/core": "workspace:*",
+    "tsdown": "0.22.9",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "zod": "catalog:"
+  }
+}

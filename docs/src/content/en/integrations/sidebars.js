@@ -551,6 +551,12 @@ const sidebars = {
           label: 'Tavily',
           customProps: { icon: '/img/integrations/tavily.svg', customCSS: 'dark:invert' },
         },
+        {
+          type: 'doc',
+          id: 'tools/taskmarket',
+          label: 'Taskmarket',
+          customProps: { icon: 'https://cdn.simpleicons.org/bitcoin?viewbox=auto&size=28' },
+        },
       ],
     },
     {
