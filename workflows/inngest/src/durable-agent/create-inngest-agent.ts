@@ -51,7 +51,7 @@ import type { MessageListInput } from '@mastra/core/agent/message-list';
 import { InMemoryServerCache } from '@mastra/core/cache';
 import type { MastraServerCache } from '@mastra/core/cache';
 import { CachingPubSub } from '@mastra/core/events';
-import type { PubSub } from '@mastra/core/events';
+import type { Event, PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import { SpanType, EntityType } from '@mastra/core/observability';
 import type { MastraModelOutput, ChunkType, FullOutput, MastraOnFinishCallback } from '@mastra/core/stream';
@@ -61,6 +61,20 @@ import type { Inngest } from 'inngest';
 import { InngestPubSub } from '../pubsub';
 import type { InngestWorkflow } from '../workflow';
 import { createInngestDurableAgenticWorkflow, InngestDurableStepIds } from './create-inngest-agentic-workflow';
+
+class InngestWorkflowCachingPubSub extends CachingPubSub {
+  override publish(
+    topic: string,
+    event: Omit<Event, 'id' | 'createdAt' | 'index'>,
+    options?: { localOnly?: boolean },
+  ): Promise<void> {
+    if (topic.startsWith('workflow.events.v2.')) {
+      return super.publish(topic, event, { ...options, localOnly: true });
+    }
+
+    return super.publish(topic, event, options);
+  }
+}
 
 /**
  * Internal sentinel used by {@link InngestAgent.generate} and
@@ -576,7 +590,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     // Ensure the agent's CachingPubSub (and its cache) is resolved so workflow
     // events and agent.stream events share the same history backend.
     getPubsub();
-    return new CachingPubSub(defaultPubsub, resolveCache());
+    return new InngestWorkflowCachingPubSub(defaultPubsub, resolveCache());
   });
 
   // Lazily resolve cache

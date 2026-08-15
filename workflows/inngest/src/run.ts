@@ -22,6 +22,7 @@ import type {
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
 import { subscribe } from 'inngest/realtime';
+import type { Realtime } from 'inngest/realtime';
 import type { InngestEngineType } from './types';
 
 export class InngestRun<
@@ -115,17 +116,15 @@ export class InngestRun<
       };
 
       // Start realtime subscription for workflow-finish event
-      let realtimeStreamPromise: ReturnType<typeof subscribe> | null = null;
+      let realtimeSubscriptionPromise: Promise<Realtime.Subscribe.CallbackSubscription> | null = null;
 
       const startRealtimeSubscription = async () => {
         try {
-          realtimeStreamPromise = subscribe(
-            {
-              channel: `workflow:${this.workflowId}:${this.runId}`,
-              topics: ['watch'],
-              app: this.inngest,
-            },
-            async (message: any) => {
+          realtimeSubscriptionPromise = subscribe({
+            channel: `workflow:${this.workflowId}:${this.runId}`,
+            topics: ['watch'],
+            app: this.inngest,
+            onMessage: async (message: any) => {
               if (resolved) return;
 
               const event = message.data;
@@ -157,14 +156,14 @@ export class InngestRun<
                 handleResult(result, 'realtime');
               }
             },
-          );
+          });
 
-          // Set unsubscribe immediately so cleanup can cancel even before await resolves
+          // Set unsubscribe immediately so cleanup can close the subscription even before setup resolves.
           unsubscribe = () => {
-            realtimeStreamPromise?.then(stream => stream.cancel().catch(() => {})).catch(() => {});
+            realtimeSubscriptionPromise?.then(subscription => subscription.close()).catch(() => {});
           };
 
-          await realtimeStreamPromise;
+          await realtimeSubscriptionPromise;
         } catch {
           // Realtime subscription failed - polling will still work as fallback
         }
