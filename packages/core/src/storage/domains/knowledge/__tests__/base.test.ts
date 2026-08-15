@@ -230,10 +230,10 @@ describe('InMemoryKnowledgeStorage', () => {
       (await store.itemsAbout({ nodeId: node.id, scope: thread, limit: 1, after: nodeOne.nextCursor })).items[0]?.id,
     ).toBe(first.id);
 
-    const sourcePage = await store.listFactsBySource({ sourceThreadId: 't1', scope: thread, limit: 1 });
-    expect(sourcePage).toMatchObject({ facts: [{ id: first.id }], nextCursor: first.id });
+    const sourcePage = await store.listItemsBySource({ sourceThreadId: 't1', scope: thread, limit: 1 });
+    expect(sourcePage).toMatchObject({ items: [{ id: first.id }], nextCursor: first.id });
     expect(
-      (await store.listFactsBySource({ sourceThreadId: 't1', scope: thread, after: sourcePage.nextCursor })).facts,
+      (await store.listItemsBySource({ sourceThreadId: 't1', scope: thread, after: sourcePage.nextCursor })).items,
     ).toEqual([expect.objectContaining({ id: second.id })]);
 
     const claimed = await store.claimSemanticOutbox({ workerId: 'one', limit: 1, now: new Date('2026-07-01') });
