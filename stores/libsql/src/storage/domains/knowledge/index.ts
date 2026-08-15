@@ -578,10 +578,16 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     lastItemId: string;
   }): Promise<KnowledgeCurationCursor> {
     const updatedAt = new Date();
-    const result = await this.#client.execute({
-      sql: `INSERT INTO "${TABLE_KNOWLEDGE_CURSORS}" (sourceThreadId,agent,lastItemId,updatedAt) VALUES (?,?,?,?) ON CONFLICT(sourceThreadId,agent) DO UPDATE SET lastItemId=excluded.lastItemId,updatedAt=excluded.updatedAt WHERE excluded.lastItemId >= "${TABLE_KNOWLEDGE_CURSORS}".lastItemId`,
-      args: [input.sourceThreadId, input.agent, input.lastItemId, updatedAt.toISOString()],
-    });
+    const result = await this.#db.executeWriteOperationWithRetry(
+      () =>
+        withClientWriteLock(this.#client, () =>
+          this.#client.execute({
+            sql: `INSERT INTO "${TABLE_KNOWLEDGE_CURSORS}" (sourceThreadId,agent,lastItemId,updatedAt) VALUES (?,?,?,?) ON CONFLICT(sourceThreadId,agent) DO UPDATE SET lastItemId=excluded.lastItemId,updatedAt=excluded.updatedAt WHERE excluded.lastItemId >= "${TABLE_KNOWLEDGE_CURSORS}".lastItemId`,
+            args: [input.sourceThreadId, input.agent, input.lastItemId, updatedAt.toISOString()],
+          }),
+        ),
+      'advance knowledge curation cursor',
+    );
     if (result.rowsAffected === 0) throw new Error('Knowledge curation cursor cannot move backwards');
     return { ...input, updatedAt };
   }
