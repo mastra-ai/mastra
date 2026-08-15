@@ -14,7 +14,7 @@ function createMemory(subconscious: Subconscious) {
   return new Memory({
     storage: new InMemoryStore(),
     ...semanticInfrastructure,
-    options: { observationalMemory: { model: 'openai/gpt-5', subconscious } },
+    options: { observationalMemory: { model: 'openai/gpt-5', experimental_subconscious: subconscious } },
   });
 }
 

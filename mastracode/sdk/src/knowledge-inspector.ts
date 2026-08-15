@@ -1,13 +1,11 @@
 import { randomBytes } from 'node:crypto';
 
 import type { Session } from '@mastra/core/agent-controller';
-import { createKnowledgeRecordCursor, isKnowledgeScopeVisible, parseKnowledgeWikilinks } from '@mastra/core/storage';
+import { createKnowledgeNodeCursor, isKnowledgeScopeVisible, parseKnowledgeWikilinks } from '@mastra/core/storage';
 import type {
   KnowledgeActivityEvent,
-  KnowledgeEntity,
-  KnowledgeFact,
-  KnowledgePage,
-  KnowledgeRecord,
+  KnowledgeItem,
+  KnowledgeNode,
   KnowledgeScope,
   KnowledgeStorage,
   MastraCompositeStore,
@@ -16,8 +14,8 @@ import type {
 import type { MastraCodeState } from './schema.js';
 
 export type KnowledgeInspectorScopeLevel = 'org' | 'resource' | 'thread';
-export type KnowledgeInspectorRecordType = 'entity' | 'page';
-export type KnowledgeInspectorEntitySort = 'relevant' | 'recent' | 'connected';
+export type KnowledgeInspectorRecordType = 'node';
+export type KnowledgeInspectorNodeSort = 'relevant' | 'recent' | 'connected';
 
 export interface KnowledgeInspectorScopeRoot {
   level: KnowledgeInspectorScopeLevel;
@@ -38,7 +36,7 @@ export interface KnowledgeInspectorScopeBadge {
 }
 
 export interface KnowledgeInspectorRelationshipCounts {
-  facts: number;
+  items: number;
   outgoing: number;
   incoming: number;
   sampled: boolean;
@@ -55,7 +53,7 @@ export interface KnowledgeInspectorRecordSummary {
   relationshipCounts?: KnowledgeInspectorRelationshipCounts;
 }
 
-export interface KnowledgeInspectorFactSummary {
+export interface KnowledgeInspectorItemSummary {
   text: string;
   scope: KnowledgeInspectorScopeBadge;
   sourceThreadId: string;
@@ -68,7 +66,7 @@ export interface KnowledgeInspectorRecordList {
   scopeLevel: KnowledgeInspectorScopeLevel;
   items: KnowledgeInspectorRecordSummary[];
   nextCursor?: string;
-  sort?: KnowledgeInspectorEntitySort;
+  sort?: KnowledgeInspectorNodeSort;
   coverage?: 'exact' | 'recent-window';
 }
 
@@ -77,31 +75,20 @@ export interface KnowledgeInspectorRelationshipPreview {
   partial: boolean;
 }
 
-export interface KnowledgeInspectorEntityDetail {
+export interface KnowledgeInspectorNodeDetail {
   identityKey: string;
   scopeLevel: KnowledgeInspectorScopeLevel;
-  entity: KnowledgeInspectorRecordSummary;
-  facts: KnowledgeInspectorFactSummary[];
-  factsNextCursor?: string;
-  incomingFacts: KnowledgeInspectorFactSummary[];
-  incomingFactsNextCursor?: string;
+  node: KnowledgeInspectorRecordSummary;
+  items: KnowledgeInspectorItemSummary[];
+  itemsNextCursor?: string;
+  incomingItems: KnowledgeInspectorItemSummary[];
+  incomingItemsNextCursor?: string;
   outgoingTargets: KnowledgeInspectorRelationshipPreview;
   incomingParents: KnowledgeInspectorRelationshipPreview;
   relationshipCounts: KnowledgeInspectorRelationshipCounts;
-}
-
-export interface KnowledgeInspectorPageLink {
-  label: string;
-  entity?: KnowledgeInspectorRecordSummary;
-}
-
-export interface KnowledgeInspectorPageDetail {
-  identityKey: string;
-  scopeLevel: KnowledgeInspectorScopeLevel;
-  page: KnowledgeInspectorRecordSummary;
-  body: string;
-  bodyTruncated: boolean;
-  links: KnowledgeInspectorPageLink[];
+  content?: string;
+  contentTruncated: boolean;
+  links: Array<{ label: string; node?: KnowledgeInspectorRecordSummary }>;
 }
 
 export interface KnowledgeInspectorActivityItem {
@@ -122,27 +109,20 @@ export interface KnowledgeInspectorActivityList {
 
 export interface KnowledgeInspector {
   getScopeTree(): Promise<KnowledgeInspectorScopeTree>;
-  listEntities(input: {
+  listNodes(input: {
     level: KnowledgeInspectorScopeLevel;
     namePrefix?: string;
     kind?: string;
-    sort?: KnowledgeInspectorEntitySort;
+    sort?: KnowledgeInspectorNodeSort;
     cursor?: string;
     limit?: number;
   }): Promise<KnowledgeInspectorRecordList>;
-  listPages(input: {
-    level: KnowledgeInspectorScopeLevel;
-    namePrefix?: string;
-    cursor?: string;
-    limit?: number;
-  }): Promise<KnowledgeInspectorRecordList>;
-  getEntity(input: {
+  getNode(input: {
     handle: string;
-    factsCursor?: string;
-    incomingFactsCursor?: string;
-    factLimit?: number;
-  }): Promise<KnowledgeInspectorEntityDetail>;
-  getPage(input: { handle: string }): Promise<KnowledgeInspectorPageDetail>;
+    itemsCursor?: string;
+    incomingItemsCursor?: string;
+    itemLimit?: number;
+  }): Promise<KnowledgeInspectorNodeDetail>;
   listActivity(input: {
     level: KnowledgeInspectorScopeLevel;
     cursor?: string;
@@ -179,19 +159,19 @@ interface HandleEntry {
 interface CursorEntry {
   identityKey: string;
   level: KnowledgeInspectorScopeLevel;
-  kind: 'entity' | 'ranked-entity' | 'page' | 'facts' | 'incoming-facts' | 'activity';
+  kind: 'node' | 'ranked-node' | 'items' | 'incoming-items' | 'activity';
   value: string;
-  filters?: { namePrefix?: string; kind?: string; sort?: KnowledgeInspectorEntitySort };
+  filters?: { namePrefix?: string; kind?: string; sort?: KnowledgeInspectorNodeSort };
   expiresAt: number;
 }
 
-interface RankedEntitySnapshot {
+interface RankedNodeSnapshot {
   offset: number;
   entries: { id: string; degree: number; counts: KnowledgeInspectorRelationshipCounts }[];
 }
 
 interface RelationshipRecords {
-  items: KnowledgeEntity[];
+  items: KnowledgeNode[];
   truncated: boolean;
 }
 
@@ -207,7 +187,7 @@ const MAX_RELATED_RECORDS = 25;
 const MAX_RANK_CANDIDATES = 50;
 const MAX_RANK_FACTS = 100;
 const RRF_K = 60;
-const MAX_PAGE_BODY_BYTES = 32 * 1024;
+const MAX_NODE_CONTENT_BYTES = 32 * 1024;
 
 function opaqueToken(): string {
   return randomBytes(24).toString('base64url');
@@ -229,13 +209,13 @@ function scopeBadge(scope: KnowledgeScope): KnowledgeInspectorScopeBadge {
   };
 }
 
-function factSummary(fact: KnowledgeFact): KnowledgeInspectorFactSummary {
+function itemSummary(item: KnowledgeItem): KnowledgeInspectorItemSummary {
   return {
-    text: fact.text,
-    scope: scopeBadge(fact.scope),
-    sourceThreadId: fact.sourceThreadId,
-    capturedAt: fact.capturedAt.toISOString(),
-    when: fact.when?.toISOString(),
+    text: item.text,
+    scope: scopeBadge(item.scope),
+    sourceThreadId: item.sourceThreadId,
+    capturedAt: item.capturedAt.toISOString(),
+    when: item.when?.toISOString(),
   };
 }
 
@@ -263,7 +243,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     this.#session = input.session;
     this.#session.subscribe(event => {
       if (event.type === 'thread_changed' || event.type === 'thread_created' || event.type === 'thread_deleted') {
-        this.#invalidateIdentity();
+        this.#invalidateIdnode();
       }
     });
   }
@@ -283,11 +263,11 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     };
   }
 
-  async listEntities(input: {
+  async listNodes(input: {
     level: KnowledgeInspectorScopeLevel;
     namePrefix?: string;
     kind?: string;
-    sort?: KnowledgeInspectorEntitySort;
+    sort?: KnowledgeInspectorNodeSort;
     cursor?: string;
     limit?: number;
   }): Promise<KnowledgeInspectorRecordList> {
@@ -296,12 +276,12 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     const limit = boundedLimit(input.limit, DEFAULT_RECORD_LIMIT, MAX_RECORD_LIMIT);
     const sort = input.sort ?? 'relevant';
     if (sort === 'recent') {
-      const cursor = this.#consumeCursor(input.cursor, binding, input.level, 'entity', {
+      const cursor = this.#consumeCursor(input.cursor, binding, input.level, 'node', {
         namePrefix: input.namePrefix,
         kind: input.kind,
         sort,
       });
-      const records = await this.#knowledge.listEntities({
+      const records = await this.#knowledge.listNodes({
         scope,
         namePrefix: input.namePrefix,
         kind: input.kind,
@@ -321,11 +301,20 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
         items,
         nextCursor:
           records.length === limit
-            ? this.#mintCursor(binding, input.level, 'entity', createKnowledgeRecordCursor(records.at(-1)!, input), {
-                namePrefix: input.namePrefix,
-                kind: input.kind,
-                sort,
-              })
+            ? this.#mintCursor(
+                binding,
+                input.level,
+                'node',
+                createKnowledgeNodeCursor(records.at(-1)!, {
+                  namePrefix: input.namePrefix,
+                  kind: input.kind,
+                }),
+                {
+                  namePrefix: input.namePrefix,
+                  kind: input.kind,
+                  sort,
+                },
+              )
             : undefined,
         sort,
         coverage: 'exact',
@@ -333,16 +322,16 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     }
 
     const filters = { namePrefix: input.namePrefix, kind: input.kind, sort };
-    const encodedSnapshot = this.#consumeCursor(input.cursor, binding, input.level, 'ranked-entity', filters);
+    const encodedSnapshot = this.#consumeCursor(input.cursor, binding, input.level, 'ranked-node', filters);
     const snapshot = encodedSnapshot
-      ? (JSON.parse(encodedSnapshot) as RankedEntitySnapshot)
-      : await this.#rankedEntitySnapshot(scope, input.namePrefix, input.kind, sort);
+      ? (JSON.parse(encodedSnapshot) as RankedNodeSnapshot)
+      : await this.#rankedNodeSnapshot(scope, input.namePrefix, input.kind, sort);
     const page = snapshot.entries.slice(snapshot.offset, snapshot.offset + limit);
     const items: KnowledgeInspectorRecordSummary[] = [];
     for (const entry of page) {
-      const entity = await this.#knowledge.getEntity(entry.id);
-      if (!entity || !isKnowledgeScopeVisible(entity.scope, scope)) continue;
-      items.push({ ...this.#recordSummary(entity, binding, input.level), relationshipCounts: entry.counts });
+      const node = await this.#knowledge.getNode(entry.id);
+      if (!node || !isKnowledgeScopeVisible(node.scope, scope)) continue;
+      items.push({ ...this.#recordSummary(node, binding, input.level), relationshipCounts: entry.counts });
     }
     const nextOffset = snapshot.offset + limit;
     await this.#assertStable(binding);
@@ -355,8 +344,8 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
           ? this.#mintCursor(
               binding,
               input.level,
-              'ranked-entity',
-              JSON.stringify({ ...snapshot, offset: nextOffset } satisfies RankedEntitySnapshot),
+              'ranked-node',
+              JSON.stringify({ ...snapshot, offset: nextOffset } satisfies RankedNodeSnapshot),
               filters,
             )
           : undefined,
@@ -365,104 +354,66 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     };
   }
 
-  async listPages(input: {
-    level: KnowledgeInspectorScopeLevel;
-    namePrefix?: string;
-    cursor?: string;
-    limit?: number;
-  }): Promise<KnowledgeInspectorRecordList> {
-    const binding = await this.#binding();
-    const scope = this.#scope(binding, input.level);
-    const limit = boundedLimit(input.limit, DEFAULT_RECORD_LIMIT, MAX_RECORD_LIMIT);
-    const cursor = this.#consumeCursor(input.cursor, binding, input.level, 'page', {
-      namePrefix: input.namePrefix,
-    });
-    const records = await this.#knowledge.listPages({ scope, namePrefix: input.namePrefix, cursor, limit });
-    await this.#assertStable(binding);
-    return {
-      identityKey: binding.identityKey,
-      scopeLevel: input.level,
-      items: records.map(record => this.#recordSummary(record, binding, input.level)),
-      nextCursor:
-        records.length === limit
-          ? this.#mintCursor(binding, input.level, 'page', createKnowledgeRecordCursor(records.at(-1)!, input), {
-              namePrefix: input.namePrefix,
-            })
-          : undefined,
-    };
-  }
-
-  async getEntity(input: {
+  async getNode(input: {
     handle: string;
-    factsCursor?: string;
-    incomingFactsCursor?: string;
-    factLimit?: number;
-  }): Promise<KnowledgeInspectorEntityDetail> {
+    itemsCursor?: string;
+    incomingItemsCursor?: string;
+    itemLimit?: number;
+  }): Promise<KnowledgeInspectorNodeDetail> {
     const binding = await this.#binding();
-    const handle = this.#readHandle(input.handle, binding, 'entity');
+    const handle = this.#readHandle(input.handle, binding, 'node');
     const scope = this.#scope(binding, handle.level);
-    const entity = await this.#knowledge.getEntity(handle.recordId);
-    this.#assertVisible(entity, scope);
-    const limit = boundedLimit(input.factLimit, DEFAULT_FACT_LIMIT, MAX_FACT_LIMIT);
-    const factsAfter = this.#consumeCursor(input.factsCursor, binding, handle.level, 'facts');
-    const incomingAfter = this.#consumeCursor(input.incomingFactsCursor, binding, handle.level, 'incoming-facts');
-    const [factsResult, incomingResult] = await Promise.all([
-      this.#knowledge.factsAbout({ entityId: entity.id, scope, after: factsAfter, limit }),
-      this.#knowledge.factsTouching({ entityId: entity.id, scope, after: incomingAfter, limit }),
+    const node = await this.#knowledge.getNode(handle.recordId);
+    this.#assertVisible(node, scope);
+    const limit = boundedLimit(input.itemLimit, DEFAULT_FACT_LIMIT, MAX_FACT_LIMIT);
+    const itemsAfter = this.#consumeCursor(input.itemsCursor, binding, handle.level, 'items');
+    const incomingAfter = this.#consumeCursor(input.incomingItemsCursor, binding, handle.level, 'incoming-items');
+    const [itemsResult, incomingResult] = await Promise.all([
+      this.#knowledge.itemsAbout({ nodeId: node.id, scope, after: itemsAfter, limit }),
+      this.#knowledge.itemsTouching({ nodeId: node.id, scope, after: incomingAfter, limit }),
     ]);
-    const incomingFacts = incomingResult.facts.filter(fact => fact.parentEntityId !== entity.id);
+    const incomingItems = incomingResult.items.filter(item => item.parentNodeId !== node.id);
+    const content = truncateUtf8(node.content ?? '', MAX_NODE_CONTENT_BYTES);
     const [outgoingTargets, incomingParents, relationship] = await Promise.all([
-      this.#outgoingTargets(entity, factsResult.facts, scope, binding, handle.level),
-      this.#incomingParents(entity, incomingFacts, scope, binding, handle.level),
-      this.#sampledRelationshipCounts(entity, scope),
+      this.#outgoingTargets(node, itemsResult.items, scope, binding, handle.level),
+      this.#incomingParents(node, incomingItems, scope, binding, handle.level),
+      this.#sampledRelationshipCounts(node, scope),
     ]);
+    const links = await Promise.all(
+      parseKnowledgeWikilinks(content.value)
+        .slice(0, MAX_RELATED_RECORDS)
+        .map(async label => {
+          const target = await this.#knowledge.resolveNode({ name: label, scope });
+          return {
+            label,
+            node: target ? this.#recordSummary(target, binding, handle.level) : undefined,
+          };
+        }),
+    );
     await this.#assertStable(binding);
     return {
       identityKey: binding.identityKey,
       scopeLevel: handle.level,
-      entity: { ...this.#recordSummary(entity, binding, handle.level), relationshipCounts: relationship.counts },
-      facts: factsResult.facts.map(factSummary),
-      factsNextCursor: factsResult.nextCursor
-        ? this.#mintCursor(binding, handle.level, 'facts', factsResult.nextCursor)
+      node: { ...this.#recordSummary(node, binding, handle.level), relationshipCounts: relationship.counts },
+      items: itemsResult.items.map(itemSummary),
+      itemsNextCursor: itemsResult.nextCursor
+        ? this.#mintCursor(binding, handle.level, 'items', itemsResult.nextCursor)
         : undefined,
-      incomingFacts: incomingFacts.map(factSummary),
-      incomingFactsNextCursor: incomingResult.nextCursor
-        ? this.#mintCursor(binding, handle.level, 'incoming-facts', incomingResult.nextCursor)
+      incomingItems: incomingItems.map(itemSummary),
+      incomingItemsNextCursor: incomingResult.nextCursor
+        ? this.#mintCursor(binding, handle.level, 'incoming-items', incomingResult.nextCursor)
         : undefined,
       outgoingTargets: {
         items: outgoingTargets.items,
-        partial: outgoingTargets.partial || Boolean(factsResult.nextCursor),
+        partial: outgoingTargets.partial || Boolean(itemsResult.nextCursor),
       },
       incomingParents: {
         items: incomingParents.items,
         partial: incomingParents.partial || Boolean(incomingResult.nextCursor),
       },
       relationshipCounts: relationship.counts,
-    };
-  }
-
-  async getPage(input: { handle: string }): Promise<KnowledgeInspectorPageDetail> {
-    const binding = await this.#binding();
-    const handle = this.#readHandle(input.handle, binding, 'page');
-    const scope = this.#scope(binding, handle.level);
-    const page = await this.#knowledge.getPage(handle.recordId);
-    this.#assertVisible(page, scope);
-    const body = truncateUtf8(page.body, MAX_PAGE_BODY_BYTES);
-    const links: KnowledgeInspectorPageLink[] = [];
-    for (const label of parseKnowledgeWikilinks(body.value).slice(0, MAX_RELATED_RECORDS)) {
-      const entity = await this.#knowledge.resolveEntity({ name: label, scope });
-      links.push({
-        label,
-        entity: entity ? this.#recordSummary(entity, binding, handle.level) : undefined,
-      });
-    }
-    await this.#assertStable(binding);
-    return {
-      identityKey: binding.identityKey,
-      scopeLevel: handle.level,
-      page: this.#recordSummary(page, binding, handle.level),
-      body: body.value,
-      bodyTruncated: body.truncated,
+      content: node.content === undefined ? undefined : content.value,
+      contentTruncated: content.truncated,
       links,
     };
   }
@@ -535,103 +486,110 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     }
   }
 
-  #assertVisible<T extends KnowledgeRecord>(record: T | null, scope: KnowledgeScope): asserts record is T {
+  #assertVisible<T extends KnowledgeNode>(record: T | null, scope: KnowledgeScope): asserts record is T {
     if (!record || !isKnowledgeScopeVisible(record.scope, scope)) {
       throw new KnowledgeInspectorError('not-visible', 'Knowledge record is not visible in the selected scope.');
     }
   }
 
   #recordSummary(
-    record: KnowledgeEntity | KnowledgePage,
+    record: KnowledgeNode,
     binding: Binding,
     level: KnowledgeInspectorScopeLevel,
   ): KnowledgeInspectorRecordSummary {
+    const type: KnowledgeInspectorRecordType = 'node';
     return {
-      handle: this.#mintHandle(binding, level, record.type, record.id),
-      type: record.type,
+      handle: this.#mintHandle(binding, level, type, record.id),
+      type,
       name: record.name,
-      kind: record.type === 'entity' ? record.kind : undefined,
+      kind: record.kind,
       scope: scopeBadge(record.scope),
       version: record.version,
       updatedAt: record.updatedAt.toISOString(),
     };
   }
 
-  async #rankedEntitySnapshot(
+  async #rankedNodeSnapshot(
     scope: KnowledgeScope,
     namePrefix: string | undefined,
     kind: string | undefined,
-    sort: Exclude<KnowledgeInspectorEntitySort, 'recent'>,
-  ): Promise<RankedEntitySnapshot> {
-    const records = await this.#knowledge.listEntities({ scope, namePrefix, kind, limit: MAX_RANK_CANDIDATES });
+    sort: Exclude<KnowledgeInspectorNodeSort, 'recent'>,
+  ): Promise<RankedNodeSnapshot> {
+    const records = await this.#knowledge.listNodes({
+      scope,
+      namePrefix,
+      kind,
+      limit: MAX_RANK_CANDIDATES,
+    });
     const ranked = await Promise.all(
-      records.map(async (entity, recencyRank) => ({
-        entity,
+      records.map(async (node, recencyRank) => ({
+        node,
         recencyRank,
-        ...(await this.#sampledRelationshipCounts(entity, scope)),
+        ...(await this.#sampledRelationshipCounts(node, scope)),
       })),
     );
     const connected = [...ranked].sort(
-      (a, b) => b.degree - a.degree || a.recencyRank - b.recencyRank || a.entity.id.localeCompare(b.entity.id),
+      (a, b) => b.degree - a.degree || a.recencyRank - b.recencyRank || a.node.id.localeCompare(b.node.id),
     );
-    const connectedRank = new Map(connected.map((entry, index) => [entry.entity.id, index]));
+    const connectedRank = new Map(connected.map((entry, index) => [entry.node.id, index]));
     const ordered =
       sort === 'connected'
         ? connected
         : [...ranked].sort((a, b) => {
-            const aScore = 1 / (RRF_K + a.recencyRank + 1) + 1 / (RRF_K + connectedRank.get(a.entity.id)! + 1);
-            const bScore = 1 / (RRF_K + b.recencyRank + 1) + 1 / (RRF_K + connectedRank.get(b.entity.id)! + 1);
-            return bScore - aScore || a.recencyRank - b.recencyRank || a.entity.id.localeCompare(b.entity.id);
+            const aScore = 1 / (RRF_K + a.recencyRank + 1) + 1 / (RRF_K + connectedRank.get(a.node.id)! + 1);
+            const bScore = 1 / (RRF_K + b.recencyRank + 1) + 1 / (RRF_K + connectedRank.get(b.node.id)! + 1);
+            return bScore - aScore || a.recencyRank - b.recencyRank || a.node.id.localeCompare(b.node.id);
           });
     return {
       offset: 0,
-      entries: ordered.map(entry => ({ id: entry.entity.id, degree: entry.degree, counts: entry.counts })),
+      entries: ordered.map(entry => ({ id: entry.node.id, degree: entry.degree, counts: entry.counts })),
     };
   }
 
   async #sampledRelationshipCounts(
-    entity: KnowledgeEntity,
+    node: KnowledgeNode,
     scope: KnowledgeScope,
   ): Promise<{ degree: number; counts: KnowledgeInspectorRelationshipCounts }> {
-    const [factsResult, touchingResult] = await Promise.all([
-      this.#knowledge.factsAbout({ entityId: entity.id, scope, limit: MAX_RANK_FACTS }),
-      this.#knowledge.factsTouching({ entityId: entity.id, scope, limit: MAX_RANK_FACTS }),
+    const [itemsResult, touchingResult] = await Promise.all([
+      this.#knowledge.itemsAbout({ nodeId: node.id, scope, limit: MAX_RANK_FACTS }),
+      this.#knowledge.itemsTouching({ nodeId: node.id, scope, limit: MAX_RANK_FACTS }),
     ]);
     const [outgoing, incoming] = await Promise.all([
-      this.#outgoingEntityRecords(entity, factsResult.facts, scope),
-      this.#incomingParentRecords(entity, touchingResult.facts, scope),
+      this.#outgoingNodeRecords(node, itemsResult.items, scope),
+      this.#incomingParentRecords(node, touchingResult.items, scope),
     ]);
-    const incomingFacts = touchingResult.facts.filter(fact => fact.parentEntityId !== entity.id);
+    const incomingItems = touchingResult.items.filter(item => item.parentNodeId !== node.id);
     const degree = new Set([...outgoing.items, ...incoming.items].map(record => record.id)).size;
     return {
       degree,
       counts: {
-        facts: factsResult.facts.length + incomingFacts.length,
+        items: itemsResult.items.length + incomingItems.length,
         outgoing: outgoing.items.length,
         incoming: incoming.items.length,
         sampled: Boolean(
-          factsResult.nextCursor || touchingResult.nextCursor || outgoing.truncated || incoming.truncated,
+          itemsResult.nextCursor || touchingResult.nextCursor || outgoing.truncated || incoming.truncated,
         ),
       },
     };
   }
 
-  async #outgoingEntityRecords(
-    current: KnowledgeEntity,
-    facts: KnowledgeFact[],
+  async #outgoingNodeRecords(
+    current: KnowledgeNode,
+    items: KnowledgeItem[],
     scope: KnowledgeScope,
   ): Promise<RelationshipRecords> {
-    const related = new Map<string, KnowledgeEntity>();
+    const related = new Map<string, KnowledgeNode>();
     let truncated = false;
-    for (const fact of facts) {
-      for (const name of parseKnowledgeWikilinks(fact.text)) {
+    const sources = [current.content ?? '', ...items.map(item => item.text)];
+    for (const source of sources) {
+      for (const name of parseKnowledgeWikilinks(source)) {
         if (related.size >= MAX_RELATED_RECORDS) {
           truncated = true;
           break;
         }
-        const entity = await this.#knowledge.resolveEntity({ name, scope });
-        if (entity && entity.id !== current.id && isKnowledgeScopeVisible(entity.scope, scope)) {
-          related.set(entity.id, entity);
+        const node = await this.#knowledge.resolveNode({ name, scope });
+        if (node && node.id !== current.id && isKnowledgeScopeVisible(node.scope, scope)) {
+          related.set(node.id, node);
         }
       }
       if (truncated) break;
@@ -640,48 +598,48 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
   }
 
   async #incomingParentRecords(
-    current: KnowledgeEntity,
-    facts: KnowledgeFact[],
+    current: KnowledgeNode,
+    items: KnowledgeItem[],
     scope: KnowledgeScope,
   ): Promise<RelationshipRecords> {
-    const related = new Map<string, KnowledgeEntity>();
+    const related = new Map<string, KnowledgeNode>();
     let truncated = false;
-    for (const fact of facts) {
-      if (fact.parentEntityId === current.id || related.has(fact.parentEntityId)) continue;
+    for (const item of items) {
+      if (item.parentNodeId === current.id || related.has(item.parentNodeId)) continue;
       if (related.size >= MAX_RELATED_RECORDS) {
         truncated = true;
         break;
       }
-      const entity = await this.#knowledge.getEntity(fact.parentEntityId);
-      if (entity && isKnowledgeScopeVisible(entity.scope, scope)) related.set(entity.id, entity);
+      const node = await this.#knowledge.getNode(item.parentNodeId);
+      if (node && isKnowledgeScopeVisible(node.scope, scope)) related.set(node.id, node);
     }
     return { items: [...related.values()], truncated };
   }
 
   async #outgoingTargets(
-    current: KnowledgeEntity,
-    facts: KnowledgeFact[],
+    current: KnowledgeNode,
+    items: KnowledgeItem[],
     scope: KnowledgeScope,
     binding: Binding,
     level: KnowledgeInspectorScopeLevel,
   ): Promise<KnowledgeInspectorRelationshipPreview> {
-    const entities = await this.#outgoingEntityRecords(current, facts, scope);
+    const entities = await this.#outgoingNodeRecords(current, items, scope);
     return {
-      items: entities.items.map(entity => this.#recordSummary(entity, binding, level)),
+      items: entities.items.map(node => this.#recordSummary(node, binding, level)),
       partial: entities.truncated,
     };
   }
 
   async #incomingParents(
-    current: KnowledgeEntity,
-    facts: KnowledgeFact[],
+    current: KnowledgeNode,
+    items: KnowledgeItem[],
     scope: KnowledgeScope,
     binding: Binding,
     level: KnowledgeInspectorScopeLevel,
   ): Promise<KnowledgeInspectorRelationshipPreview> {
-    const entities = await this.#incomingParentRecords(current, facts, scope);
+    const entities = await this.#incomingParentRecords(current, items, scope);
     return {
-      items: entities.items.map(entity => this.#recordSummary(entity, binding, level)),
+      items: entities.items.map(node => this.#recordSummary(node, binding, level)),
       partial: entities.truncated,
     };
   }
@@ -692,22 +650,14 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     binding: Binding,
     level: KnowledgeInspectorScopeLevel,
   ): Promise<KnowledgeInspectorRecordSummary | undefined> {
-    if (event.recordType === 'entity') {
-      const entity = await this.#knowledge.getEntity(event.recordId);
-      return entity && isKnowledgeScopeVisible(entity.scope, scope)
-        ? this.#recordSummary(entity, binding, level)
-        : undefined;
+    if (event.recordType === 'node') {
+      const node = await this.#knowledge.getNode(event.recordId);
+      return node && isKnowledgeScopeVisible(node.scope, scope) ? this.#recordSummary(node, binding, level) : undefined;
     }
-    if (event.recordType === 'page') {
-      const page = await this.#knowledge.getPage(event.recordId);
-      return page && isKnowledgeScopeVisible(page.scope, scope) ? this.#recordSummary(page, binding, level) : undefined;
-    }
-    const fact = await this.#knowledge.getFact({ id: event.recordId, includeDeleted: true });
-    if (!fact || !isKnowledgeScopeVisible(fact.scope, scope)) return undefined;
-    const entity = await this.#knowledge.getEntity(fact.parentEntityId);
-    return entity && isKnowledgeScopeVisible(entity.scope, scope)
-      ? this.#recordSummary(entity, binding, level)
-      : undefined;
+    const item = await this.#knowledge.getItem({ id: event.recordId, includeDeleted: true });
+    if (!item || !isKnowledgeScopeVisible(item.scope, scope)) return undefined;
+    const node = await this.#knowledge.getNode(item.parentNodeId);
+    return node && isKnowledgeScopeVisible(node.scope, scope) ? this.#recordSummary(node, binding, level) : undefined;
   }
 
   #mintHandle(
@@ -805,7 +755,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     }
   }
 
-  #invalidateIdentity(): void {
+  #invalidateIdnode(): void {
     this.#fingerprint = undefined;
     this.#identityKey = opaqueToken();
     this.#handles.clear();

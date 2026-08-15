@@ -189,39 +189,30 @@ export class KnowledgeSemanticIndexCoordinator {
   }
 
   async #loadDocument(entry: KnowledgeSemanticOutboxEntry): Promise<KnowledgeSemanticDocument | null> {
-    if (entry.documentType === 'entity') {
-      const entity = await this.#knowledge.getEntity(entry.documentId.slice('knowledge:entity:'.length));
-      if (!entity || entity.mergedInto) return null;
+    if (entry.documentType === 'node') {
+      const node = await this.#knowledge.getNode(entry.documentId.slice('knowledge:node:'.length));
+      if (!node || node.mergedInto) return null;
       return {
-        text: `${entity.name}\n${entity.kind}`,
-        name: entity.name,
-        scope: entity.scope,
-        recordId: entity.id,
-        type: 'entity',
+        text: `${node.name}\n${node.content ?? ''}`,
+        name: node.name,
+        scope: node.scope,
+        recordId: node.id,
+        type: 'node',
       };
     }
-    if (entry.documentType === 'page') {
-      const page = await this.#knowledge.getPage(entry.documentId.slice('knowledge:page:'.length));
-      if (!page) return null;
-      return {
-        text: `${page.name}\n${page.body}`,
-        name: page.name,
-        scope: page.scope,
-        recordId: page.id,
-        type: 'page',
-      };
-    }
-    const fact = await this.#knowledge.getFact({
-      id: entry.documentId.slice('knowledge:fact:'.length),
+    const item = await this.#knowledge.getItem({
+      id: entry.documentId.slice('knowledge:item:'.length),
       includeDeleted: true,
     });
-    if (!fact || fact.deletedAt) return null;
+    if (!item || item.deletedAt) return null;
+    const node = await this.#knowledge.getNode(item.parentNodeId);
+    if (!node) return null;
     return {
-      text: fact.text,
-      name: '(fact)',
-      scope: fact.scope,
-      recordId: fact.id,
-      type: 'fact',
+      text: `${node.name}\n${item.text}`,
+      name: node.name,
+      scope: item.scope,
+      recordId: node.id,
+      type: 'item',
     };
   }
 

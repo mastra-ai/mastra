@@ -116,7 +116,8 @@ type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model'
   model?: ObservationalMemoryConfig['model'];
   observation?: ObservationalMemoryConfig['observation'];
   reflection?: ObservationalMemoryConfig['reflection'];
-  subconscious?: Subconscious;
+  /** @experimental This API may change without notice. */
+  experimental_subconscious?: Subconscious;
   activateAfterIdle?: ObservationalMemoryConfig['activateAfterIdle'];
   activateOnProviderChange?: ObservationalMemoryConfig['activateOnProviderChange'];
   temporalMarkers?: boolean;
@@ -354,15 +355,15 @@ export class Memory extends MastraMemory {
     const omConfig = normalizeObservationalMemoryConfig(
       config.observationalMemory as boolean | MemoryObservationalMemoryOptions | undefined,
     );
-    if (!omConfig?.subconscious) return config;
-    if (!(omConfig.subconscious instanceof Subconscious)) {
-      throw new Error('observationalMemory.subconscious must be a Subconscious instance.');
+    if (!omConfig?.experimental_subconscious) return config;
+    if (!(omConfig.experimental_subconscious instanceof Subconscious)) {
+      throw new Error('observationalMemory.experimental_subconscious must be a Subconscious instance.');
     }
 
     const observation = (omConfig.observation ?? {}) as NonNullable<ObservationalMemoryConfig['observation']>;
     const extract = observation.extract ?? [];
     const existingSlugs = new Set(extract.map(extractor => extractor.slug));
-    const subconsciousExtractors = omConfig.subconscious
+    const subconsciousExtractors = omConfig.experimental_subconscious
       .createObservationExtractors(observation.model ?? omConfig.model)
       .filter(extractor => !existingSlugs.has(extractor.slug));
 
@@ -396,7 +397,7 @@ export class Memory extends MastraMemory {
     prompt?: string;
   }): Promise<{ outcome: 'ran' | 'no-op' | 'skipped' | 'no-model' }> {
     const omConfig = normalizeObservationalMemoryConfig(this.threadConfig.observationalMemory);
-    const subconscious = omConfig?.subconscious;
+    const subconscious = omConfig?.experimental_subconscious;
     if (!omConfig || !(subconscious instanceof Subconscious)) return { outcome: 'no-op' };
     if (this._curationsInFlight.has(options.threadId)) return { outcome: 'skipped' };
     this._curationsInFlight.add(options.threadId);
@@ -486,7 +487,7 @@ export class Memory extends MastraMemory {
         );
       }
     }
-    if (omConfig?.subconscious) {
+    if (omConfig?.experimental_subconscious) {
       if (!this.vector) {
         throw new Error('Subconscious semantic knowledge requires a vector store. Pass a `vector` option to Memory.');
       }
@@ -1872,7 +1873,7 @@ ${workingMemory}`;
       );
     }
 
-    if (omConfig.subconscious) {
+    if (omConfig.experimental_subconscious) {
       await this.getKnowledgeStore();
     }
 
@@ -1901,14 +1902,16 @@ ${workingMemory}`;
       shareTokenBudget: omConfig.shareTokenBudget,
       model: omConfig.model,
       curationCadence:
-        omConfig.subconscious instanceof Subconscious ? omConfig.subconscious.resolved.curationCadence : undefined,
+        omConfig.experimental_subconscious instanceof Subconscious
+          ? omConfig.experimental_subconscious.resolved.curationCadence
+          : undefined,
       mastra: this._mastraInstance,
       onIndexObservations,
       hooks: omConfig.hooks,
       onReflectionCommitted:
-        omConfig.subconscious instanceof Subconscious
+        omConfig.experimental_subconscious instanceof Subconscious
           ? (() => {
-              const resolved = omConfig.subconscious.resolved;
+              const resolved = omConfig.experimental_subconscious.resolved;
               const omModel = omConfig.observation?.model ?? omConfig.model;
               const curate = createCuratorHandler(
                 this,
@@ -2550,7 +2553,10 @@ Notes:
         searchEnabled: this.hasRetrievalSearch(omConfig.retrieval),
       });
     }
-    if (omConfig?.subconscious instanceof Subconscious && omConfig.subconscious.resolved.tools) {
+    if (
+      omConfig?.experimental_subconscious instanceof Subconscious &&
+      omConfig.experimental_subconscious.resolved.tools
+    ) {
       Object.assign(tools, createKnowledgeTools(this));
     }
 
@@ -3422,7 +3428,7 @@ Notes:
     const runtimeMemory = context?.get('MastraMemory') as { memoryConfig?: MemoryConfigInternal } | undefined;
     const mergedConfig = this.getMergedThreadConfig(runtimeMemory?.memoryConfig);
     const omConfig = normalizeObservationalMemoryConfig(mergedConfig.observationalMemory);
-    const subconscious = omConfig?.subconscious;
+    const subconscious = omConfig?.experimental_subconscious;
     if (!(subconscious instanceof Subconscious) || subconscious.resolved.pins === false) return null;
 
     const { PinnedStateProcessor, SUBCONSCIOUS_PINS_STATE_ID } =

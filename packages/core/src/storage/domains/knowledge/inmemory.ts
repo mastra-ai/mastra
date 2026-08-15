@@ -10,55 +10,48 @@ import {
   KnowledgeConflictError,
   KnowledgeNotFoundError,
   KnowledgeStorage,
-  parseKnowledgeRecordCursor,
+  parseKnowledgeNodeCursor,
   parseKnowledgeWikilinks,
 } from './base';
 import type {
-  AppendKnowledgeFactInput,
+  AppendKnowledgeItemInput,
   ClaimKnowledgeSemanticOutboxInput,
-  CreateKnowledgeEntityInput,
-  CreateKnowledgePageInput,
+  CreateKnowledgeNodeInput,
   KnowledgeActivityAction,
   KnowledgeActivityEvent,
   KnowledgeCurationCursor,
-  KnowledgeEntity,
-  KnowledgeFact,
+  KnowledgeNode,
+  KnowledgeItem,
   KnowledgeMention,
-  KnowledgePage,
   KnowledgeScope,
   KnowledgeSemanticDocumentType,
   KnowledgeSemanticOperation,
   KnowledgeSemanticOutboxEntry,
-  ListKnowledgeFactsBySourceInput,
-  ListKnowledgeFactsInput,
-  ListKnowledgeFactsOutput,
-  ListKnowledgeRecordsInput,
+  ListKnowledgeItemsBySourceInput,
+  ListKnowledgeItemsInput,
+  ListKnowledgeItemsOutput,
+  ListKnowledgeNodesInput,
   SearchKnowledgeInput,
   SearchKnowledgeResult,
-  UpdateKnowledgeEntityInput,
-  UpdateKnowledgePageInput,
+  UpdateKnowledgeNodeInput,
 } from './base';
 
-function cloneEntity(entity: KnowledgeEntity): KnowledgeEntity {
+function cloneNode(node: KnowledgeNode): KnowledgeNode {
   return {
-    ...entity,
-    scope: [...entity.scope],
-    createdAt: new Date(entity.createdAt),
-    updatedAt: new Date(entity.updatedAt),
+    ...node,
+    scope: [...node.scope],
+    createdAt: new Date(node.createdAt),
+    updatedAt: new Date(node.updatedAt),
   };
 }
 
-function clonePage(page: KnowledgePage): KnowledgePage {
-  return { ...page, scope: [...page.scope], createdAt: new Date(page.createdAt), updatedAt: new Date(page.updatedAt) };
-}
-
-function cloneFact(fact: KnowledgeFact): KnowledgeFact {
+function cloneItem(item: KnowledgeItem): KnowledgeItem {
   return {
-    ...fact,
-    scope: [...fact.scope],
-    capturedAt: new Date(fact.capturedAt),
-    when: fact.when ? new Date(fact.when) : undefined,
-    deletedAt: fact.deletedAt ? new Date(fact.deletedAt) : undefined,
+    ...item,
+    scope: [...item.scope],
+    capturedAt: new Date(item.capturedAt),
+    when: item.when ? new Date(item.when) : undefined,
+    deletedAt: item.deletedAt ? new Date(item.deletedAt) : undefined,
   };
 }
 
@@ -75,11 +68,9 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   async dangerouslyClearAll(): Promise<void> {
-    this.#db.knowledgeEntities.clear();
-    this.#db.knowledgeEntityKeys.clear();
-    this.#db.knowledgePages.clear();
-    this.#db.knowledgePageKeys.clear();
-    this.#db.knowledgeFacts.clear();
+    this.#db.knowledgeNodes.clear();
+    this.#db.knowledgeNodeKeys.clear();
+    this.#db.knowledgeItems.clear();
     this.#db.knowledgeMentions.clear();
     this.#db.knowledgeCursors.clear();
     this.#db.knowledgeActivity.length = 0;
@@ -87,149 +78,155 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     this.#db.knowledgeSemanticIdempotency.clear();
   }
 
-  async createEntity(input: CreateKnowledgeEntityInput): Promise<KnowledgeEntity> {
-    if (input.kind?.trim().toLocaleLowerCase() === 'page')
-      throw new Error('Entity kind "page" is reserved for knowledge pages');
+  async createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {
     const scope = canonicalizeKnowledgeScope(input.scope);
     const key = recordKey(input.name, scope);
-    const existingId = this.#db.knowledgeEntityKeys.get(key);
+    const existingId = this.#db.knowledgeNodeKeys.get(key);
     if (existingId) {
-      const terminal = this.#resolveTerminalEntity(existingId)!;
+      const terminal = this.#resolveTerminalNode(existingId)!;
       if (!isKnowledgeScopeVisible(terminal.scope, scope)) {
-        throw new Error(`Merged knowledge entity is not visible from scope: ${input.name}`);
+        throw new Error(`Merged knowledge node is not visible from scope: ${input.name}`);
       }
-      return cloneEntity(terminal);
+      return cloneNode(terminal);
     }
 
     const now = new Date();
-    const entity: KnowledgeEntity = {
+    const node: KnowledgeNode = {
       id: input.id ?? crypto.randomUUID(),
-      type: 'entity',
+      type: 'node',
       name: input.name.trim(),
       kind: input.kind,
+      content: input.content,
       scope,
       version: 1,
       createdAt: now,
       updatedAt: now,
     };
-    if (this.#db.knowledgeEntities.has(entity.id)) throw new Error(`Knowledge entity already exists: ${entity.id}`);
-    this.#db.knowledgeEntities.set(entity.id, entity);
-    this.#db.knowledgeEntityKeys.set(key, entity.id);
-    this.#recordActivity('entity-created', 'entity', entity.id, scope);
-    this.#enqueue('entity', entity.id, 'upsert', entity.version, scope);
-    return cloneEntity(entity);
+    if (this.#db.knowledgeNodes.has(node.id)) throw new Error(`Knowledge node already exists: ${node.id}`);
+    this.#db.knowledgeNodes.set(node.id, node);
+    this.#db.knowledgeNodeKeys.set(key, node.id);
+    await this.#replaceMentions('node', node.id, node.content ?? '', input.resolutionScope ?? scope, scope);
+    this.#recordActivity('node-created', 'node', node.id, scope);
+    this.#enqueue('node', node.id, 'upsert', node.version, scope);
+    return cloneNode(node);
   }
 
-  async getEntity(id: string): Promise<KnowledgeEntity | null> {
-    const entity = this.#db.knowledgeEntities.get(id);
-    return entity ? cloneEntity(entity) : null;
+  async getNode(id: string): Promise<KnowledgeNode | null> {
+    const node = this.#db.knowledgeNodes.get(id);
+    return node ? cloneNode(node) : null;
   }
 
-  async getEntityByName({ name, scope }: { name: string; scope: KnowledgeScope }): Promise<KnowledgeEntity | null> {
-    const id = this.#db.knowledgeEntityKeys.get(recordKey(name, scope));
+  async getNodeByName({ name, scope }: { name: string; scope: KnowledgeScope }): Promise<KnowledgeNode | null> {
+    const id = this.#db.knowledgeNodeKeys.get(recordKey(name, scope));
     if (!id) return null;
-    const entity = this.#db.knowledgeEntities.get(id);
-    return entity ? cloneEntity(entity) : null;
+    const node = this.#db.knowledgeNodes.get(id);
+    return node ? cloneNode(node) : null;
   }
 
-  async resolveEntity({ name, scope }: { name: string; scope: KnowledgeScope }): Promise<KnowledgeEntity | null> {
+  async resolveNode({ name, scope }: { name: string; scope: KnowledgeScope }): Promise<KnowledgeNode | null> {
     const canonical = canonicalizeKnowledgeScope(scope);
     for (let length = canonical.length; length > 0; length--) {
-      const entity = await this.getEntityByName({ name, scope: canonical.slice(0, length) });
-      if (entity) {
-        const terminal = this.#resolveTerminalEntity(entity.id)!;
-        if (isKnowledgeScopeVisible(terminal.scope, canonical)) return cloneEntity(terminal);
+      const node = await this.getNodeByName({ name, scope: canonical.slice(0, length) });
+      if (node) {
+        const terminal = this.#resolveTerminalNode(node.id)!;
+        if (isKnowledgeScopeVisible(terminal.scope, canonical)) return cloneNode(terminal);
       }
     }
     return null;
   }
 
-  async listEntities(input: ListKnowledgeRecordsInput): Promise<KnowledgeEntity[]> {
+  async listNodes(input: ListKnowledgeNodesInput): Promise<KnowledgeNode[]> {
     const queryScope = canonicalizeKnowledgeScope(input.scope);
-    const records = [...this.#db.knowledgeEntities.values()]
-      .filter(entity => !entity.mergedInto)
-      .filter(entity => isKnowledgeScopeVisible(entity.scope, queryScope))
+    const cursor = input.cursor
+      ? parseKnowledgeNodeCursor(input.cursor, {
+          namePrefix: input.namePrefix,
+          kind: input.kind,
+          hasContent: input.hasContent,
+        })
+      : undefined;
+    return [...this.#db.knowledgeNodes.values()]
+      .filter(node => !node.mergedInto)
+      .filter(node => isKnowledgeScopeVisible(node.scope, queryScope))
       .filter(
-        entity => !input.namePrefix || entity.name.toLocaleLowerCase().startsWith(input.namePrefix.toLocaleLowerCase()),
+        node => !input.namePrefix || node.name.toLocaleLowerCase().startsWith(input.namePrefix.toLocaleLowerCase()),
       )
-      .filter(entity => !input.kind || entity.kind === input.kind)
+      .filter(node => !input.kind || node.kind === input.kind)
+      .filter(node => input.hasContent === undefined || Boolean(node.content) === input.hasContent)
       .sort(
         (a, b) =>
           b.updatedAt.getTime() - a.updatedAt.getTime() ||
-          (a.name === b.name ? (a.id < b.id ? -1 : 1) : a.name < b.name ? -1 : 1),
-      );
-    const cursor = input.cursor
-      ? parseKnowledgeRecordCursor(input.cursor, { type: 'entity', namePrefix: input.namePrefix, kind: input.kind })
-      : undefined;
-    return records
+          (a.name === b.name ? a.id.localeCompare(b.id) : a.name.localeCompare(b.name)),
+      )
       .filter(
-        record =>
+        node =>
           !cursor ||
-          record.updatedAt < cursor.updatedAt ||
-          (record.updatedAt.getTime() === cursor.updatedAt.getTime() &&
-            (record.name > cursor.name || (record.name === cursor.name && record.id > cursor.id))),
+          node.updatedAt < cursor.updatedAt ||
+          (node.updatedAt.getTime() === cursor.updatedAt.getTime() &&
+            (node.name > cursor.name || (node.name === cursor.name && node.id > cursor.id))),
       )
       .slice(0, input.limit ?? 100)
-      .map(cloneEntity);
+      .map(cloneNode);
   }
 
-  async updateEntity(input: UpdateKnowledgeEntityInput): Promise<KnowledgeEntity> {
-    const existing = this.#db.knowledgeEntities.get(input.id);
-    if (!existing) throw new KnowledgeNotFoundError('entity', input.id);
+  async updateNode(input: UpdateKnowledgeNodeInput): Promise<KnowledgeNode> {
+    const existing = this.#db.knowledgeNodes.get(input.id);
+    if (!existing) throw new KnowledgeNotFoundError('node', input.id);
     if (existing.version !== input.version) throw new KnowledgeConflictError(input.id);
-    if (existing.mergedInto) throw new Error(`Cannot update merged knowledge entity: ${input.id}`);
-    if (input.kind?.trim().toLocaleLowerCase() === 'page')
-      throw new Error('Entity kind "page" is reserved for knowledge pages');
+    if (existing.mergedInto) throw new Error(`Cannot update merged knowledge node: ${input.id}`);
 
     const scope = canonicalizeKnowledgeScope(input.scope ?? existing.scope);
     const name = (input.name ?? existing.name).trim();
     const oldKey = recordKey(existing.name, existing.scope);
     const newKey = recordKey(name, scope);
-    const collision = this.#db.knowledgeEntityKeys.get(newKey);
-    if (collision && collision !== input.id) throw new Error(`Knowledge entity already exists in scope: ${name}`);
+    const collision = this.#db.knowledgeNodeKeys.get(newKey);
+    if (collision && collision !== input.id) throw new Error(`Knowledge node already exists in scope: ${name}`);
 
-    const updated: KnowledgeEntity = {
+    const updated: KnowledgeNode = {
       ...existing,
       name,
       kind: input.kind ?? existing.kind,
+      content: input.content ?? existing.content,
       scope,
       version: existing.version + 1,
       updatedAt: new Date(),
     };
     if (oldKey !== newKey) {
-      this.#db.knowledgeEntityKeys.delete(oldKey);
-      this.#db.knowledgeEntityKeys.set(newKey, input.id);
+      this.#db.knowledgeNodeKeys.delete(oldKey);
+      this.#db.knowledgeNodeKeys.set(newKey, input.id);
     }
-    this.#db.knowledgeEntities.set(input.id, updated);
-    this.#recordActivity('entity-updated', 'entity', input.id, scope);
+    this.#db.knowledgeNodes.set(input.id, updated);
+    if (input.content !== undefined || input.name !== undefined || input.scope !== undefined) {
+      await this.#replaceMentions('node', input.id, updated.content ?? '', input.resolutionScope ?? scope, scope);
+    }
+    this.#recordActivity('node-updated', 'node', input.id, scope);
     const scopeChanged = knowledgeScopeKey(existing.scope) !== knowledgeScopeKey(scope);
     if (scopeChanged) {
-      this.#enqueue('entity', input.id, 'delete', createKnowledgeUlid(), existing.scope);
-      for (const fact of this.#db.knowledgeFacts.values()) {
-        if (fact.parentEntityId !== input.id) continue;
-        this.#enqueue('fact', fact.id, 'delete', createKnowledgeUlid(), fact.scope);
-        if (!fact.deletedAt) this.#enqueue('fact', fact.id, 'upsert', createKnowledgeUlid(), fact.scope);
+      this.#enqueue('node', input.id, 'delete', createKnowledgeUlid(), existing.scope);
+      for (const item of this.#db.knowledgeItems.values()) {
+        if (item.parentNodeId !== input.id) continue;
+        this.#enqueue('item', item.id, 'delete', createKnowledgeUlid(), item.scope);
+        if (!item.deletedAt) this.#enqueue('item', item.id, 'upsert', createKnowledgeUlid(), item.scope);
       }
     }
-    this.#enqueue('entity', input.id, 'upsert', updated.version, scope);
-    return cloneEntity(updated);
+    this.#enqueue('node', input.id, 'upsert', updated.version, scope);
+    return cloneNode(updated);
   }
 
-  async mergeEntities(input: { sourceId: string; targetId: string; sourceVersion: number }): Promise<KnowledgeEntity> {
-    if (input.sourceId === input.targetId) throw new Error('Cannot merge a knowledge entity into itself');
-    const source = this.#db.knowledgeEntities.get(input.sourceId);
-    if (!source) throw new KnowledgeNotFoundError('entity', input.sourceId);
+  async mergeNodes(input: { sourceId: string; targetId: string; sourceVersion: number }): Promise<KnowledgeNode> {
+    if (input.sourceId === input.targetId) throw new Error('Cannot merge a knowledge node into itself');
+    const source = this.#db.knowledgeNodes.get(input.sourceId);
+    if (!source) throw new KnowledgeNotFoundError('node', input.sourceId);
     if (source.version !== input.sourceVersion) throw new KnowledgeConflictError(input.sourceId);
-    const target = this.#resolveTerminalEntity(input.targetId);
-    if (!target) throw new KnowledgeNotFoundError('entity', input.targetId);
+    const target = this.#resolveTerminalNode(input.targetId);
+    if (!target) throw new KnowledgeNotFoundError('node', input.targetId);
     if (!isKnowledgeScopeVisible(target.scope, source.scope)) {
-      throw new Error('Cannot merge a knowledge entity into a target that is narrower than its source scope');
+      throw new Error('Cannot merge a knowledge node into a target that is narrower than its source scope');
     }
 
-    for (const [id, fact] of this.#db.knowledgeFacts) {
-      if (fact.parentEntityId === source.id) {
-        this.#db.knowledgeFacts.set(id, { ...fact, parentEntityId: target.id });
-        this.#enqueue('fact', id, fact.deletedAt ? 'delete' : 'upsert', createKnowledgeUlid(), fact.scope);
+    for (const [id, item] of this.#db.knowledgeItems) {
+      if (item.parentNodeId === source.id) {
+        this.#db.knowledgeItems.set(id, { ...item, parentNodeId: target.id });
+        this.#enqueue('item', id, item.deletedAt ? 'delete' : 'upsert', createKnowledgeUlid(), item.scope);
       }
     }
     for (const [key, mentions] of this.#db.knowledgeMentions) {
@@ -241,136 +238,37 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         const separator = key.indexOf(':');
         const sourceType = key.slice(0, separator);
         const sourceId = key.slice(separator + 1);
-        if (sourceType === 'fact') {
-          const fact = this.#db.knowledgeFacts.get(sourceId);
-          if (fact)
-            this.#enqueue('fact', sourceId, fact.deletedAt ? 'delete' : 'upsert', createKnowledgeUlid(), fact.scope);
+        if (sourceType === 'item') {
+          const item = this.#db.knowledgeItems.get(sourceId);
+          if (item)
+            this.#enqueue('item', sourceId, item.deletedAt ? 'delete' : 'upsert', createKnowledgeUlid(), item.scope);
         } else {
-          const page = this.#db.knowledgePages.get(sourceId);
-          if (page) this.#enqueue('page', sourceId, 'upsert', createKnowledgeUlid(), page.scope);
+          const sourceNode = this.#db.knowledgeNodes.get(sourceId);
+          if (sourceNode) this.#enqueue('node', sourceId, 'upsert', createKnowledgeUlid(), sourceNode.scope);
         }
       }
     }
-    const updatedSource: KnowledgeEntity = {
+    const updatedSource: KnowledgeNode = {
       ...source,
       mergedInto: target.id,
       version: source.version + 1,
       updatedAt: new Date(),
     };
-    this.#db.knowledgeEntities.set(source.id, updatedSource);
-    this.#recordActivity('entity-merged', 'entity', source.id, source.scope);
-    this.#enqueue('entity', source.id, 'delete', updatedSource.version, source.scope);
-    this.#enqueue('entity', target.id, 'upsert', createKnowledgeUlid(), target.scope);
-    return cloneEntity(target);
+    this.#db.knowledgeNodes.set(source.id, updatedSource);
+    this.#recordActivity('node-merged', 'node', source.id, source.scope);
+    this.#enqueue('node', source.id, 'delete', updatedSource.version, source.scope);
+    this.#enqueue('node', target.id, 'upsert', createKnowledgeUlid(), target.scope);
+    return cloneNode(target);
   }
 
-  async createPage(input: CreateKnowledgePageInput): Promise<KnowledgePage> {
-    const scope = canonicalizeKnowledgeScope(input.scope);
-    const key = recordKey(input.name, scope);
-    if (this.#db.knowledgePageKeys.has(key)) throw new Error(`Knowledge page already exists in scope: ${input.name}`);
-    const now = new Date();
-    const page: KnowledgePage = {
-      id: input.id ?? crypto.randomUUID(),
-      type: 'page',
-      name: input.name.trim(),
-      body: input.body,
-      scope,
-      version: 1,
-      createdAt: now,
-      updatedAt: now,
-    };
-    if (this.#db.knowledgePages.has(page.id)) throw new Error(`Knowledge page already exists: ${page.id}`);
-    this.#db.knowledgePages.set(page.id, page);
-    this.#db.knowledgePageKeys.set(key, page.id);
-    await this.#replaceMentions('page', page.id, page.body, scope, scope);
-    this.#recordActivity('page-created', 'page', page.id, scope);
-    this.#enqueue('page', page.id, 'upsert', page.version, scope);
-    return clonePage(page);
-  }
-
-  async getPage(id: string): Promise<KnowledgePage | null> {
-    const page = this.#db.knowledgePages.get(id);
-    return page ? clonePage(page) : null;
-  }
-
-  async getPageByName({ name, scope }: { name: string; scope: KnowledgeScope }): Promise<KnowledgePage | null> {
-    const canonical = canonicalizeKnowledgeScope(scope);
-    for (let length = canonical.length; length > 0; length--) {
-      const id = this.#db.knowledgePageKeys.get(recordKey(name, canonical.slice(0, length)));
-      if (id) return clonePage(this.#db.knowledgePages.get(id)!);
-    }
-    return null;
-  }
-
-  async listPages(input: Omit<ListKnowledgeRecordsInput, 'kind'>): Promise<KnowledgePage[]> {
-    const queryScope = canonicalizeKnowledgeScope(input.scope);
-    const records = [...this.#db.knowledgePages.values()]
-      .filter(page => isKnowledgeScopeVisible(page.scope, queryScope))
-      .filter(
-        page => !input.namePrefix || page.name.toLocaleLowerCase().startsWith(input.namePrefix.toLocaleLowerCase()),
-      )
-      .sort(
-        (a, b) =>
-          b.updatedAt.getTime() - a.updatedAt.getTime() ||
-          (a.name === b.name ? (a.id < b.id ? -1 : 1) : a.name < b.name ? -1 : 1),
-      );
-    const cursor = input.cursor
-      ? parseKnowledgeRecordCursor(input.cursor, { type: 'page', namePrefix: input.namePrefix })
-      : undefined;
-    return records
-      .filter(
-        record =>
-          !cursor ||
-          record.updatedAt < cursor.updatedAt ||
-          (record.updatedAt.getTime() === cursor.updatedAt.getTime() &&
-            (record.name > cursor.name || (record.name === cursor.name && record.id > cursor.id))),
-      )
-      .slice(0, input.limit ?? 100)
-      .map(clonePage);
-  }
-
-  async updatePage(input: UpdateKnowledgePageInput): Promise<KnowledgePage> {
-    const existing = this.#db.knowledgePages.get(input.id);
-    if (!existing) throw new KnowledgeNotFoundError('page', input.id);
-    if (existing.version !== input.version) throw new KnowledgeConflictError(input.id);
-    const scope = canonicalizeKnowledgeScope(input.scope ?? existing.scope);
-    const name = (input.name ?? existing.name).trim();
-    const oldKey = recordKey(existing.name, existing.scope);
-    const newKey = recordKey(name, scope);
-    const collision = this.#db.knowledgePageKeys.get(newKey);
-    if (collision && collision !== input.id) throw new Error(`Knowledge page already exists in scope: ${name}`);
-    const updated: KnowledgePage = {
-      ...existing,
-      name,
-      body: input.body ?? existing.body,
-      scope,
-      version: existing.version + 1,
-      updatedAt: new Date(),
-    };
-    if (oldKey !== newKey) {
-      this.#db.knowledgePageKeys.delete(oldKey);
-      this.#db.knowledgePageKeys.set(newKey, input.id);
-    }
-    this.#db.knowledgePages.set(input.id, updated);
-    if (input.body !== undefined || input.scope !== undefined) {
-      await this.#replaceMentions('page', input.id, updated.body, input.resolutionScope ?? scope, scope);
-    }
-    this.#recordActivity('page-updated', 'page', input.id, scope);
-    if (knowledgeScopeKey(existing.scope) !== knowledgeScopeKey(scope)) {
-      this.#enqueue('page', input.id, 'delete', createKnowledgeUlid(), existing.scope);
-    }
-    this.#enqueue('page', input.id, 'upsert', updated.version, scope);
-    return clonePage(updated);
-  }
-
-  async appendFact(input: AppendKnowledgeFactInput): Promise<KnowledgeFact> {
-    const parent = this.#resolveTerminalEntity(input.parentEntityId);
-    if (!parent) throw new KnowledgeNotFoundError('entity', input.parentEntityId);
+  async appendItem(input: AppendKnowledgeItemInput): Promise<KnowledgeItem> {
+    const parent = this.#resolveTerminalNode(input.parentNodeId);
+    if (!parent) throw new KnowledgeNotFoundError('node', input.parentNodeId);
     const scope = canonicalizeKnowledgeScope(input.scope);
     assertKnowledgeScopeWithinCeiling(scope, input.maxScope);
-    const fact: KnowledgeFact = {
+    const item: KnowledgeItem = {
       id: input.id ?? createKnowledgeUlid(),
-      parentEntityId: parent.id,
+      parentNodeId: parent.id,
       text: input.text,
       scope,
       sourceThreadId: input.sourceThreadId,
@@ -379,114 +277,114 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       maxScope: input.maxScope,
       metadata: input.metadata,
     };
-    if (this.#db.knowledgeFacts.has(fact.id)) throw new Error(`Knowledge fact already exists: ${fact.id}`);
-    this.#db.knowledgeFacts.set(fact.id, fact);
-    await this.#replaceMentions('fact', fact.id, fact.text, input.resolutionScope, input.defaultScope);
+    if (this.#db.knowledgeItems.has(item.id)) throw new Error(`Knowledge item already exists: ${item.id}`);
+    this.#db.knowledgeItems.set(item.id, item);
+    await this.#replaceMentions('item', item.id, item.text, input.resolutionScope, input.defaultScope);
     parent.updatedAt = new Date();
-    this.#recordActivity('fact-created', 'fact', fact.id, scope, input.sourceThreadId);
-    this.#enqueue('fact', fact.id, 'upsert', fact.id, scope);
-    return cloneFact(fact);
+    this.#recordActivity('item-created', 'item', item.id, scope, input.sourceThreadId);
+    this.#enqueue('item', item.id, 'upsert', item.id, scope);
+    return cloneItem(item);
   }
 
-  async getFact({
+  async getItem({
     id,
     includeDeleted = false,
   }: {
     id: string;
     includeDeleted?: boolean;
-  }): Promise<KnowledgeFact | null> {
-    const fact = this.#db.knowledgeFacts.get(id);
-    if (!fact || (fact.deletedAt && !includeDeleted)) return null;
-    return cloneFact(fact);
+  }): Promise<KnowledgeItem | null> {
+    const item = this.#db.knowledgeItems.get(id);
+    if (!item || (item.deletedAt && !includeDeleted)) return null;
+    return cloneItem(item);
   }
 
-  async factsAbout(input: ListKnowledgeFactsInput): Promise<ListKnowledgeFactsOutput> {
+  async itemsAbout(input: ListKnowledgeItemsInput): Promise<ListKnowledgeItemsOutput> {
     const queryScope = canonicalizeKnowledgeScope(input.scope);
-    const terminal = this.#resolveTerminalEntity(input.entityId);
-    if (!terminal) return { facts: [] };
-    return this.#paginateFacts(
-      [...this.#db.knowledgeFacts.values()].filter(fact => fact.parentEntityId === terminal.id),
+    const terminal = this.#resolveTerminalNode(input.nodeId);
+    if (!terminal) return { items: [] };
+    return this.#paginateItems(
+      [...this.#db.knowledgeItems.values()].filter(item => item.parentNodeId === terminal.id),
       { ...input, scope: queryScope },
     );
   }
 
-  async factsTouching(input: ListKnowledgeFactsInput): Promise<ListKnowledgeFactsOutput> {
+  async itemsTouching(input: ListKnowledgeItemsInput): Promise<ListKnowledgeItemsOutput> {
     const queryScope = canonicalizeKnowledgeScope(input.scope);
-    const terminal = this.#resolveTerminalEntity(input.entityId);
-    if (!terminal) return { facts: [] };
-    return this.#paginateFacts(
-      [...this.#db.knowledgeFacts.values()].filter(
-        fact =>
-          fact.parentEntityId === terminal.id || this.#db.knowledgeMentions.get(`fact:${fact.id}`)?.has(terminal.id),
+    const terminal = this.#resolveTerminalNode(input.nodeId);
+    if (!terminal) return { items: [] };
+    return this.#paginateItems(
+      [...this.#db.knowledgeItems.values()].filter(
+        item =>
+          item.parentNodeId === terminal.id || this.#db.knowledgeMentions.get(`item:${item.id}`)?.has(terminal.id),
       ),
       { ...input, scope: queryScope },
     );
   }
 
-  async listFactsBySource(input: ListKnowledgeFactsBySourceInput): Promise<ListKnowledgeFactsOutput> {
+  async listItemsBySource(input: ListKnowledgeItemsBySourceInput): Promise<ListKnowledgeItemsOutput> {
     const scope = canonicalizeKnowledgeScope(input.scope);
     const limit = input.limit ?? 100;
-    const facts = [...this.#db.knowledgeFacts.values()]
+    const items = [...this.#db.knowledgeItems.values()]
       .filter(
-        fact =>
-          fact.sourceThreadId === input.sourceThreadId &&
-          isKnowledgeScopeVisible(fact.scope, scope) &&
-          (input.includeDeleted || !fact.deletedAt) &&
-          (!input.after || fact.id > input.after),
+        item =>
+          item.sourceThreadId === input.sourceThreadId &&
+          isKnowledgeScopeVisible(item.scope, scope) &&
+          (input.includeDeleted || !item.deletedAt) &&
+          (!input.after || item.id > input.after),
       )
       .sort((left, right) => left.id.localeCompare(right.id))
       .slice(0, limit + 1);
     return {
-      facts: facts.slice(0, limit).map(cloneFact),
-      nextCursor: facts.length > limit ? facts[limit - 1]?.id : undefined,
+      items: items.slice(0, limit).map(cloneItem),
+      nextCursor: items.length > limit ? items[limit - 1]?.id : undefined,
     };
   }
 
-  async removeFact({ id, deletedBy }: { id: string; deletedBy: string }): Promise<KnowledgeFact> {
-    const fact = this.#db.knowledgeFacts.get(id);
-    if (!fact) throw new KnowledgeNotFoundError('fact', id);
-    if (fact.deletedAt) return cloneFact(fact);
-    const updated = { ...fact, deletedAt: new Date(), deletedBy };
-    this.#db.knowledgeFacts.set(id, updated);
-    this.#recordActivity('fact-deleted', 'fact', id, fact.scope, fact.sourceThreadId);
-    this.#enqueue('fact', id, 'delete', updated.deletedAt.toISOString(), fact.scope);
-    return cloneFact(updated);
+  async removeItem({ id, deletedBy }: { id: string; deletedBy: string }): Promise<KnowledgeItem> {
+    const item = this.#db.knowledgeItems.get(id);
+    if (!item) throw new KnowledgeNotFoundError('item', id);
+    if (item.deletedAt) return cloneItem(item);
+    const updated = { ...item, deletedAt: new Date(), deletedBy };
+    this.#db.knowledgeItems.set(id, updated);
+    this.#recordActivity('item-deleted', 'item', id, item.scope, item.sourceThreadId);
+    this.#enqueue('item', id, 'delete', updated.deletedAt.toISOString(), item.scope);
+    return cloneItem(updated);
   }
 
-  async restoreFact({ id }: { id: string }): Promise<KnowledgeFact> {
-    const fact = this.#db.knowledgeFacts.get(id);
-    if (!fact) throw new KnowledgeNotFoundError('fact', id);
-    if (!fact.deletedAt) return cloneFact(fact);
-    const updated = { ...fact, deletedAt: undefined, deletedBy: undefined };
-    this.#db.knowledgeFacts.set(id, updated);
-    this.#recordActivity('fact-restored', 'fact', id, fact.scope, fact.sourceThreadId);
-    this.#enqueue('fact', id, 'upsert', createKnowledgeUlid(), fact.scope);
-    return cloneFact(updated);
+  async restoreItem({ id }: { id: string }): Promise<KnowledgeItem> {
+    const item = this.#db.knowledgeItems.get(id);
+    if (!item) throw new KnowledgeNotFoundError('item', id);
+    if (!item.deletedAt) return cloneItem(item);
+    const updated = { ...item, deletedAt: undefined, deletedBy: undefined };
+    this.#db.knowledgeItems.set(id, updated);
+    this.#recordActivity('item-restored', 'item', id, item.scope, item.sourceThreadId);
+    this.#enqueue('item', id, 'upsert', createKnowledgeUlid(), item.scope);
+    return cloneItem(updated);
   }
 
-  async rescopeFact({ id, scope }: { id: string; scope: KnowledgeScope }): Promise<KnowledgeFact> {
-    const fact = this.#db.knowledgeFacts.get(id);
-    if (!fact) throw new KnowledgeNotFoundError('fact', id);
+  async rescopeItem({ id, scope }: { id: string; scope: KnowledgeScope }): Promise<KnowledgeItem> {
+    const item = this.#db.knowledgeItems.get(id);
+    if (!item) throw new KnowledgeNotFoundError('item', id);
     const canonical = canonicalizeKnowledgeScope(scope);
-    assertKnowledgeScopeWithinCeiling(canonical, fact.maxScope);
-    const updated = { ...fact, scope: canonical };
-    this.#db.knowledgeFacts.set(id, updated);
-    this.#recordActivity('fact-rescoped', 'fact', id, canonical, fact.sourceThreadId);
-    if (knowledgeScopeKey(fact.scope) !== knowledgeScopeKey(canonical)) {
-      this.#enqueue('fact', id, 'delete', createKnowledgeUlid(), fact.scope);
+    assertKnowledgeScopeWithinCeiling(canonical, item.maxScope);
+    const updated = { ...item, scope: canonical };
+    this.#db.knowledgeItems.set(id, updated);
+    this.#recordActivity('item-rescoped', 'item', id, canonical, item.sourceThreadId);
+    if (knowledgeScopeKey(item.scope) !== knowledgeScopeKey(canonical)) {
+      this.#enqueue('item', id, 'delete', createKnowledgeUlid(), item.scope);
     }
-    if (!fact.deletedAt) {
-      this.#enqueue('fact', id, 'upsert', createKnowledgeUlid(), canonical);
+    if (!item.deletedAt) {
+      this.#enqueue('item', id, 'upsert', createKnowledgeUlid(), canonical);
     }
-    return cloneFact(updated);
+    return cloneItem(updated);
   }
 
-  async raiseCeiling({ id, maxScope }: { id: string; maxScope?: KnowledgeFact['maxScope'] }): Promise<KnowledgeFact> {
-    const fact = this.#db.knowledgeFacts.get(id);
-    if (!fact) throw new KnowledgeNotFoundError('fact', id);
-    const updated = { ...fact, maxScope };
-    this.#db.knowledgeFacts.set(id, updated);
-    return cloneFact(updated);
+  async raiseCeiling({ id, maxScope }: { id: string; maxScope?: KnowledgeItem['maxScope'] }): Promise<KnowledgeItem> {
+    const item = this.#db.knowledgeItems.get(id);
+    if (!item) throw new KnowledgeNotFoundError('item', id);
+    const updated = { ...item, maxScope };
+    this.#db.knowledgeItems.set(id, updated);
+    return cloneItem(updated);
   }
 
   async search(input: SearchKnowledgeInput): Promise<SearchKnowledgeResult[]> {
@@ -494,49 +392,40 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const query = input.query.trim().toLocaleLowerCase();
     if (!query) return [];
     const results: SearchKnowledgeResult[] = [];
-    for (const entity of await this.listEntities({ scope: queryScope, limit: Number.MAX_SAFE_INTEGER })) {
-      if (entity.name.toLocaleLowerCase().includes(query) || entity.kind.toLocaleLowerCase().includes(query)) {
-        results.push({
-          type: 'entity',
-          id: entity.id,
-          recordId: entity.id,
-          name: entity.name,
-          text: entity.name,
-          scope: entity.scope,
-        });
-      }
-    }
-    for (const page of await this.listPages({ scope: queryScope, limit: Number.MAX_SAFE_INTEGER })) {
-      if (page.name.toLocaleLowerCase().includes(query) || page.body.toLocaleLowerCase().includes(query)) {
-        results.push({
-          type: 'page',
-          id: page.id,
-          recordId: page.id,
-          name: page.name,
-          text: page.body,
-          scope: page.scope,
-        });
-      }
-    }
-    for (const fact of this.#db.knowledgeFacts.values()) {
+    for (const node of await this.listNodes({ scope: queryScope, limit: Number.MAX_SAFE_INTEGER })) {
       if (
-        !fact.deletedAt &&
-        isKnowledgeScopeVisible(fact.scope, queryScope) &&
-        fact.text.toLocaleLowerCase().includes(query)
+        node.name.toLocaleLowerCase().includes(query) ||
+        node.kind.toLocaleLowerCase().includes(query) ||
+        node.content?.toLocaleLowerCase().includes(query)
       ) {
-        const entity = this.#db.knowledgeEntities.get(fact.parentEntityId);
-        if (entity && !entity.mergedInto) {
-          const parentVisible = isKnowledgeScopeVisible(entity.scope, queryScope);
-          results.push({
-            type: 'fact',
-            id: fact.id,
-            recordId: parentVisible ? entity.id : fact.id,
-            name: parentVisible ? entity.name : '(private entity)',
-            text: fact.text,
-            scope: fact.scope,
-          });
-        }
+        results.push({
+          type: 'node',
+          id: node.id,
+          recordId: node.id,
+          name: node.name,
+          text: node.content ? `${node.name}\n${node.content}` : node.name,
+          scope: node.scope,
+        });
       }
+    }
+    for (const item of this.#db.knowledgeItems.values()) {
+      if (
+        item.deletedAt ||
+        !isKnowledgeScopeVisible(item.scope, queryScope) ||
+        !item.text.toLocaleLowerCase().includes(query)
+      ) {
+        continue;
+      }
+      const parent = this.#resolveTerminalNode(item.parentNodeId);
+      if (!parent) continue;
+      results.push({
+        type: 'item',
+        id: item.id,
+        recordId: parent.id,
+        name: parent.name,
+        text: item.text,
+        scope: item.scope,
+      });
     }
     return results.slice(0, input.limit ?? 20);
   }
@@ -549,11 +438,11 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   async advanceCurationCursor(input: {
     sourceThreadId: string;
     agent: string;
-    lastFactId: string;
+    lastItemId: string;
   }): Promise<KnowledgeCurationCursor> {
     const key = `${input.sourceThreadId}\u0000${input.agent}`;
     const existing = this.#db.knowledgeCursors.get(key);
-    if (existing && input.lastFactId < existing.lastFactId)
+    if (existing && input.lastItemId < existing.lastItemId)
       throw new Error('Knowledge curation cursor cannot move backwards');
     const cursor = { ...input, updatedAt: new Date() };
     this.#db.knowledgeCursors.set(key, cursor);
@@ -654,15 +543,15 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     }
   }
 
-  #resolveTerminalEntity(id: string): KnowledgeEntity | null {
-    let entity = this.#db.knowledgeEntities.get(id);
+  #resolveTerminalNode(id: string): KnowledgeNode | null {
+    let node = this.#db.knowledgeNodes.get(id);
     const seen = new Set<string>();
-    while (entity?.mergedInto) {
-      if (seen.has(entity.id)) throw new Error(`Knowledge merge cycle detected at ${entity.id}`);
-      seen.add(entity.id);
-      entity = this.#db.knowledgeEntities.get(entity.mergedInto);
+    while (node?.mergedInto) {
+      if (seen.has(node.id)) throw new Error(`Knowledge merge cycle detected at ${node.id}`);
+      seen.add(node.id);
+      node = this.#db.knowledgeNodes.get(node.mergedInto);
     }
-    return entity ?? null;
+    return node ?? null;
   }
 
   async #replaceMentions(
@@ -674,23 +563,23 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   ): Promise<void> {
     const mentions = new Set<string>();
     for (const name of parseKnowledgeWikilinks(text)) {
-      let entity = await this.resolveEntity({ name, scope: resolutionScope });
-      entity ??= await this.createEntity({ name, kind: 'entity', scope: defaultScope });
-      mentions.add(entity.id);
+      let node = await this.resolveNode({ name, scope: resolutionScope });
+      node ??= await this.createNode({ name, kind: 'node', scope: defaultScope });
+      mentions.add(node.id);
     }
     this.#db.knowledgeMentions.set(`${sourceType}:${sourceId}`, mentions);
   }
 
-  #paginateFacts(facts: KnowledgeFact[], input: ListKnowledgeFactsInput): ListKnowledgeFactsOutput {
-    const filtered = facts
-      .filter(fact => input.includeDeleted || !fact.deletedAt)
-      .filter(fact => isKnowledgeScopeVisible(fact.scope, input.scope))
-      .filter(fact => !input.after || fact.id < input.after)
+  #paginateItems(items: KnowledgeItem[], input: ListKnowledgeItemsInput): ListKnowledgeItemsOutput {
+    const filtered = items
+      .filter(item => input.includeDeleted || !item.deletedAt)
+      .filter(item => isKnowledgeScopeVisible(item.scope, input.scope))
+      .filter(item => !input.after || item.id < input.after)
       .sort((a, b) => b.id.localeCompare(a.id));
     const limit = input.limit ?? 100;
     const page = filtered.slice(0, limit);
     return {
-      facts: page.map(cloneFact),
+      items: page.map(cloneItem),
       nextCursor: filtered.length > limit ? page.at(-1)?.id : undefined,
     };
   }

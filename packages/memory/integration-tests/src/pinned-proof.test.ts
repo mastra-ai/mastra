@@ -80,7 +80,7 @@ describe('Pinned knowledge live proof', () => {
         lastMessages: 20,
         observationalMemory: {
           model,
-          subconscious: new Subconscious({ pins: true }),
+          experimental_subconscious: new Subconscious({ pins: true }),
         },
       },
     });
@@ -131,7 +131,7 @@ describe('Pinned knowledge live proof', () => {
 
     // Curator edits the pin.
     const edited = await tools.knowledge_edit_pin!.execute!(
-      { factId: pin.id, text: 'Always answer in French. Politely.' } as any,
+      { itemId: pin.id, text: 'Always answer in French. Politely.' } as any,
       {} as any,
     );
 
@@ -141,7 +141,7 @@ describe('Pinned knowledge live proof', () => {
     console.info('[proof] turn 4: edit delivered — OK');
 
     // Curator unpins.
-    await tools.knowledge_unpin!.execute!({ factId: edited.id } as any, {} as any);
+    await tools.knowledge_unpin!.execute!({ itemId: edited.id } as any, {} as any);
 
     // Turn 5: lane clears — the latest state carries no pin body.
     await agent.generate('One more thing.', turnOptions);

@@ -3,7 +3,7 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
     "properties": {
-      "entities": {
+      "nodes": {
         "type": "array",
         "items": {
           "type": "object",
@@ -20,7 +20,7 @@
               "type": "string",
               "enum": ["org", "resource", "thread"]
             },
-            "facts": {
+            "items": {
               "type": "array",
               "items": {
                 "type": "object",
@@ -47,13 +47,13 @@
               }
             }
           },
-          "required": ["name", "kind", "facts"],
+          "required": ["name", "kind", "items"],
           "additionalProperties": false
         }
       }
     },
-    "required": ["entities"],
+    "required": ["nodes"],
     "additionalProperties": false
   },
-  "instructions": "Extract durable, explicitly stated knowledge from the observations.\nReturn entities with short stable names, a freeform kind, and facts nested under the entity each fact is about.\nUse common kinds such as person, task, event, project, or organization when they fit. Never use the reserved kind page.\nSet entity scope to the narrowest level where that identity should be shared. Omit it to use the configured default scope.\nFacts must be grounded in the conversation, concise, and written as prose. Do not infer unstated information.\nWrap every named entity mentioned in fact text in [[wikilinks]].\nSet a fact scope only when the conversation establishes where it applies. Use org for organization-wide facts, resource for facts shared across this resource's conversations, and thread for conversation-private facts.\nOmit scope when uncertain; omitted fact scopes stay private to the current thread.\nEmit when only when the conversation anchors the referred time. Resolve relative dates against the current date and use ISO 8601.\nCapture what was learned through the work, not what the session was told: skip facts that merely restate standing instructions, configured rules, or the text of the task or issue the session was handed. The exception is an explicit request from the user to remember something, which is always captured even when it duplicates an existing instruction.\n\nEvery fact requires a reason: the concrete why behind capturing it, in one short sentence - what it cost to learn or when it will matter again (and for pinned facts, why it must stay in context). Never write generic filler such as \"seemed relevant\" or \"useful context\"."
+  "instructions": "Extract durable, explicitly stated knowledge from the observations.\nReturn nodes with short stable names, a freeform kind, and knowledge items nested under the node each item is about.\nUse common kinds such as person, task, event, project, organization, or document when they fit.\nSet node scope to the narrowest level where that identity and content should be shared. Omit it to use the configured default scope.\nKnowledge items must be grounded in the conversation, concise, and written as prose. Do not infer unstated information.\nWrap every named node mentioned in item text in [[wikilinks]].\nSet an item scope only when the conversation establishes where it applies. Use org for organization-wide items, resource for items shared across this resource's conversations, and thread for conversation-private items.\nOmit scope when uncertain; omitted item scopes stay private to the current thread.\nEmit when only when the conversation anchors the referred time. Resolve relative dates against the current date and use ISO 8601.\nCapture what was learned through the work, not what the session was told: skip items that merely restate standing instructions, configured rules, or the text of the task or issue the session was handed. The exception is an explicit request from the user to remember something, which is always captured even when it duplicates an existing instruction.\n\nEvery item requires a reason: the concrete why behind capturing it, in one short sentence - what it cost to learn or when it will matter again (and for pinned items, why it must stay in context). Never write generic filler such as \"seemed relevant\" or \"useful context\"."
 }
