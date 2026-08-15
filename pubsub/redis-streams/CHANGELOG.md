@@ -1,5 +1,20 @@
 # @mastra/redis-streams
 
+## 0.4.0-alpha.1
+
+### Minor Changes
+
+- Added live-tail Redis Streams subscriptions with `startFrom: "latest"`. New consumer groups skip retained entries while existing groups keep their checkpoint. Subscriptions also preserve their position when Redis recreates a missing group. ([#21535](https://github.com/mastra-ai/mastra/pull/21535))
+
+  ```typescript
+  await pubsub.subscribe(topic, callback, { startFrom: 'latest' });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`d8308a2`](https://github.com/mastra-ai/mastra/commit/d8308a2be3c07e777393d1017a381dcae3890d30), [`7aad631`](https://github.com/mastra-ai/mastra/commit/7aad631b43bc10db77d5b8c66b200d7a49d18bf2), [`1794a79`](https://github.com/mastra-ai/mastra/commit/1794a79178c418004a7261b1ad9114066f7ef01d)]:
+  - @mastra/core@1.60.0-alpha.3
+
 ## 0.3.1-alpha.0
 
 ### Patch Changes

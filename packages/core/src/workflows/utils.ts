@@ -226,6 +226,29 @@ export function getResumeLabelsByStepId(
     );
 }
 
+export function abortableSleep(duration: number, signal?: AbortSignal): Promise<void> {
+  return new Promise(resolve => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+
+    const onAbort = () => {
+      clearTimeout(timeout);
+      resolve();
+    };
+    const timeout = setTimeout(
+      () => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve();
+      },
+      Math.max(0, duration),
+    );
+
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
 export const runCountDeprecationMessage =
   "Warning: 'runCount' is deprecated and will be removed on November 4th, 2025. Please use 'retryCount' instead.";
 
