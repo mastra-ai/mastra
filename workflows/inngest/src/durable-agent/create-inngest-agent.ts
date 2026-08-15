@@ -267,6 +267,7 @@ export interface InngestAgentStreamResult<OUTPUT = undefined> {
 export interface InngestAgentResumeOptions<OUTPUT = undefined> {
   threadId?: string;
   resourceId?: string;
+  requestContext?: AgentExecutionOptions<OUTPUT>['requestContext'];
   onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
   onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
   onFinish?: MastraOnFinishCallback<OUTPUT>;
@@ -1014,6 +1015,16 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           // Find the suspended step from the snapshot
           const suspendedStepIds = snapshot?.suspendedPaths ? Object.keys(snapshot.suspendedPaths) : [];
           const steps = suspendedStepIds.length > 0 ? suspendedStepIds : [];
+          const requestContext = {
+            ...(snapshot?.requestContext ?? {}),
+            ...(resumeOptions?.requestContext?.toJSON() ?? {}),
+          };
+          const tracingOptions = snapshot?.tracingContext
+            ? {
+                traceId: snapshot.tracingContext.traceId,
+                parentSpanId: snapshot.tracingContext.spanId,
+              }
+            : undefined;
 
           await inngest.send({
             name: eventName,
@@ -1021,7 +1032,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
               inputData: resumeData,
               runId,
               resourceId: resumeOptions?.resourceId,
-              requestContext: snapshot?.requestContext ?? {},
+              requestContext,
+              tracingOptions,
               resume: {
                 steps,
                 resumePayload: resumeData,
