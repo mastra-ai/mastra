@@ -16,14 +16,14 @@ export interface LayoutNodeInput {
   fixed?: { x: number; y: number };
   /** Warm-start position (e.g. spawn a new node near its first neighbor). */
   initial?: { x: number; y: number };
-  /** Collision breathing room around the node (default 28; tiny memory dots use less). */
+  /** Collision breathing room around the node (default 28; tiny item dots use less). */
   padding?: number;
 }
 
 export interface LayoutEdgeInput {
   source: string;
   target: string;
-  /** A11: hug links (memory dot stubs / junction spokes) stay short so memory markers cluster tight. */
+  /** A11: hug links (item dot stubs / junction spokes) stay short so item markers cluster tight. */
   hug?: boolean;
 }
 
@@ -76,12 +76,12 @@ export function runLayout(
         .distance(link => {
           const source = link.source as SimNode;
           const target = link.target as SimNode;
-          // Hug links (memory stubs/spokes) keep markers tight to their cluster.
+          // Hug links (item stubs/spokes) keep markers tight to their cluster.
           const hug = hugs.has(`${source.id}\u0000${target.id}`);
           return (hug ? 8 : 40) + (source.size + target.size) / 2;
         }),
     )
-    // Tiny memory markers repel gently; entities keep the strong spread.
+    // Tiny item markers repel gently; knowledge nodes keep the strong spread.
     .force(
       'charge',
       forceManyBody<SimNode>().strength(node => (node.size <= 24 ? -60 : -700)),
@@ -128,7 +128,7 @@ function resolveOverlaps(nodes: SimNode[]): void {
         const a = order[i]!;
         const b = order[j]!;
         // Pair breathing room = the smaller of the two paddings, so tiny
-        // memory markers can nestle close without entities colliding.
+        // item markers can nestle close without knowledge nodes colliding.
         const minDistance = a.size / 2 + b.size / 2 + Math.min(a.padding, b.padding);
         let dx = (b.x ?? 0) - (a.x ?? 0);
         let dy = (b.y ?? 0) - (a.y ?? 0);
