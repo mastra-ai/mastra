@@ -38,9 +38,9 @@ function context(observations = '- Repeated deploy procedure with validation and
 
 async function seed(memory: Memory) {
   const store = (await memory.storage.getStore('knowledge'))!;
-  const entity = await store.createNode({ name: 'Project Atlas', kind: 'project', scope });
+  const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scope });
   const first = await store.appendItem({
-    parentNodeId: entity.id,
+    parentNodeId: node.id,
     text: 'Deploy Atlas by validating and publishing.',
     scope,
     sourceThreadId: 'alpha',
@@ -48,7 +48,7 @@ async function seed(memory: Memory) {
     defaultScope: scope,
   });
   const second = await store.appendItem({
-    parentNodeId: entity.id,
+    parentNodeId: node.id,
     text: 'A later deploy used validation, publishing, and a health check.',
     scope,
     sourceThreadId: 'alpha',
@@ -72,14 +72,14 @@ describe('Subconscious learner', () => {
     expect(calls).toEqual(['curate', 'learn']);
   });
 
-  it('records one scoped skill with retry-safe evidence from repeated source facts', async () => {
+  it('records one scoped skill with retry-safe evidence from repeated source knowledge items', async () => {
     const memory = new Memory({ storage: new InMemoryStore() });
     const { store, first, second } = await seed(memory);
     const state = {};
     const tool = createLearnerRecordSkillTool({
       store,
       scope,
-      pendingFacts: [first, second],
+      pendingItems: [first, second],
       parentThreadId: 'alpha',
       defaultScope: 'resource',
       maxScope: undefined,
@@ -94,7 +94,7 @@ describe('Subconscious learner', () => {
     await tool.execute?.(input, {} as any);
     await tool.execute?.(input, {} as any);
 
-    const skills = await store.listEntities({ scope, kind: 'skill' });
+    const skills = await store.listNodes({ scope, kind: 'skill' });
     expect(skills).toHaveLength(1);
     const evidence = await store.itemsAbout({ nodeId: skills[0]!.id, scope });
     expect(evidence.items).toHaveLength(2);
@@ -108,7 +108,7 @@ describe('Subconscious learner', () => {
     const tool = createLearnerRecordSkillTool({
       store,
       scope,
-      pendingFacts: [first, second],
+      pendingItems: [first, second],
       parentThreadId: 'alpha',
       defaultScope: 'resource',
       maxScope: undefined,
@@ -124,7 +124,7 @@ describe('Subconscious learner', () => {
       {} as any,
     );
 
-    expect(await store.listEntities({ scope, kind: 'skill' })).toEqual([expect.objectContaining({ id: existing.id })]);
+    expect(await store.listNodes({ scope, kind: 'skill' })).toEqual([expect.objectContaining({ id: existing.id })]);
     expect((await store.itemsAbout({ nodeId: existing.id, scope })).items).toHaveLength(2);
   });
 
@@ -134,7 +134,7 @@ describe('Subconscious learner', () => {
     const tool = createLearnerRecordSkillTool({
       store,
       scope,
-      pendingFacts: [first],
+      pendingItems: [first],
       parentThreadId: 'alpha',
       defaultScope: 'resource',
       maxScope: undefined,
@@ -143,7 +143,7 @@ describe('Subconscious learner', () => {
     await expect(
       tool.execute?.({ name: 'one-off', procedure: 'Do one thing.', sourceItemIds: [first.id] }, {} as any),
     ).resolves.toMatchObject({ error: true });
-    expect(await store.listEntities({ scope, kind: 'skill' })).toHaveLength(0);
+    expect(await store.listNodes({ scope, kind: 'skill' })).toHaveLength(0);
   });
 
   it('uses full pre-reflection observations and advances only its independent cursor after success', async () => {
