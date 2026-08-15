@@ -34,6 +34,7 @@ describe('knowledge scopes', () => {
     expect(() => canonicalizeKnowledgeScope(['thread:t1'])).toThrow('requires resource and org');
     expect(() => canonicalizeKnowledgeScope(['resource:r1'])).toThrow('requires an org');
     expect(() => canonicalizeKnowledgeScope(['org:o1', 'org:o2'])).toThrow('multiple org');
+    expect(() => canonicalizeKnowledgeScope(['org:o1\u001fresource:r1'])).toThrow('Invalid knowledge scope entry');
     expect(() => canonicalizeKnowledgeScope(['tenant:t1'])).toThrow('Invalid knowledge scope entry');
   });
 
