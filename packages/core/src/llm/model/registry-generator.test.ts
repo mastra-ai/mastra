@@ -88,4 +88,18 @@ describe('registry-generator', () => {
       await expect(fs.readFile(path.join(dir, 'capabilities', 'openai.json'), 'utf8')).resolves.toContain('gpt-4o');
     });
   });
+  it('removes the previous capabilities directory when the new generation has no capability data', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-capabilities-'));
+    tempDirs.push(dir);
+    const jsonPath = path.join(dir, 'provider-registry.json');
+    const typesPath = path.join(dir, 'provider-types.generated.d.ts');
+
+    // First generation writes capability files
+    await writeRegistryFiles(jsonPath, typesPath, {}, {}, undefined, undefined, { openai: ['gpt-4o'] });
+    await expect(fs.readFile(path.join(dir, 'capabilities', 'openai.json'), 'utf8')).resolves.toContain('gpt-4o');
+
+    // Second generation returns empty capability maps - the old directory must not survive
+    await writeRegistryFiles(jsonPath, typesPath, {}, {}, {}, {}, {});
+    await expect(fs.stat(path.join(dir, 'capabilities'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
 });
