@@ -450,7 +450,9 @@ export class ObservationStep {
         // This branch commits buffered knowledge and returns without ever
         // calling observe(), so it needs its own curation-trigger evaluation.
         // Fire-and-forget; a curation failure must never fail the turn.
-        void om.maybeTriggerCuration(threadId, resourceId, this.turn.requestContext).catch(() => {});
+        void om.maybeTriggerCuration(threadId, resourceId, this.turn.requestContext).catch(error => {
+          omDebug(`[OM:activate] curation trigger failed: ${error instanceof Error ? error.message : String(error)}`);
+        });
 
         return {
           succeeded: true,

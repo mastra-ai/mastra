@@ -3724,8 +3724,8 @@ ${formattedMessages}
    * knowledge commit — both the synchronous observe path and the async-buffer
    * activation path — so a client that never calls `Memory.runCuration` still curates.
    *
-   * Costs one bounded `listItemsBySource` read (limit = the volume threshold), never
-   * the curator's own paginated worklist. A thread with nothing pending returns before
+   * Costs two bounded reads — the curation cursor and one `listItemsBySource` page
+   * whose limit is the volume threshold — never the curator's own paginated worklist. A thread with nothing pending returns before
    * any time arithmetic and makes no model call.
    */
   async maybeTriggerCuration(
@@ -3796,7 +3796,12 @@ ${formattedMessages}
       const baseline = (cursor?.updatedAt ?? items[0]!.capturedAt).getTime();
       timeFires = now - baseline >= interval;
     }
-    if (!volumeFires && !timeFires) return;
+    if (!volumeFires && !timeFires) {
+      if (!retryAllowed) {
+        omDebug(`[OM] curation trigger backing off after an attempt that changed nothing thread=${threadId}`);
+      }
+      return;
+    }
 
     this.lastCurationAttempt.set(threadId, { at: now, lastItemId: cursor?.lastItemId ?? null });
     const result = await memory.runCuration({
@@ -3804,6 +3809,11 @@ ${formattedMessages}
       resourceId: curationResourceId,
       requestContext,
     });
+    if (result.outcome === 'skipped') {
+      // Another run already held the thread, so this attempt proves nothing about
+      // whether curation is making progress. Don't spend the backoff slot on it.
+      this.lastCurationAttempt.delete(threadId);
+    }
     omDebug(
       `[OM] curation trigger=${volumeFires ? 'volume' : 'time'} pending=${items.length} outcome=${result.outcome} thread=${threadId}`,
     );

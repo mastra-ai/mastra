@@ -12,9 +12,9 @@ In its place, two triggers the SDK evaluates itself, both **on by default**:
 - `curationThreshold` — run the curator once this many knowledge updates have accumulated past the curation cursor. Defaults to `20`.
 - `curationInterval` — run it once this many milliseconds have passed since the last completed curation, even if fewer updates are pending. Defaults to one hour.
 
-Set either to `false` to disable that trigger. `Memory.runCuration()` is unchanged and still available for hosts that want to curate at a specific moment, such as a work item changing phase.
+Set either to `false` to disable that trigger. Elapsed time still bounds retries either way: after a curation that leaves the cursor where it found it, both triggers wait one interval (one hour when the time trigger is off) before trying again, so a curator that cannot make progress cannot spend model calls in a loop. `Memory.runCuration()` is unchanged and still available for hosts that want to curate at a specific moment, such as a work item changing phase.
 
-Blast radius worth stating plainly: because the triggers are on by default, existing subconscious users will start making curation model calls they were not making before. A thread with no pending knowledge updates triggers nothing and costs nothing, no matter how much time passes. Each evaluation costs one bounded fact read, not the curator's paginated worklist.
+Blast radius worth stating plainly: because the triggers are on by default, existing subconscious users will start making curation model calls they were not making before. A thread with no pending knowledge updates triggers nothing and costs nothing, no matter how much time passes. Each evaluation costs two bounded storage reads — the curation cursor and one page of pending updates — not the curator's paginated worklist.
 
 The triggers fire on both knowledge-commit paths — synchronous observation and async-buffer activation — so clients using async buffering are covered too.
 

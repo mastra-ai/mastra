@@ -411,6 +411,45 @@ describe('curation triggers', () => {
     expect(runCuration).toHaveBeenCalledWith(expect.objectContaining({ threadId, resourceId: threadId }));
   });
 
+  it('throttles the volume trigger after a curation that changed nothing', async () => {
+    const runCuration = vi.fn(async () => ({ outcome: 'no-op' }));
+    const { om, store } = await createTriggerEngine({ threshold: 2, interval: 60_000, runCuration });
+    const threadId = 'volume-backoff-thread';
+    await seedPendingItems(store, { threadId, count: 4 });
+
+    // The cursor never advances, so the pending count stays above the threshold.
+    // Without the backoff this fires a full curator run on every observation.
+    await observeOnce(om, threadId);
+    await observeOnce(om, threadId, 1);
+    await observeOnce(om, threadId, 2);
+
+    expect(runCuration).toHaveBeenCalledOnce();
+  });
+
+  it('lets the volume trigger fire again once curation advances the cursor', async () => {
+    let store: any;
+    const runCuration = vi.fn(async ({ threadId }: any) => {
+      // A curator that actually processes its worklist advances the cursor.
+      const { items } = await store.listItemsBySource({
+        sourceThreadId: threadId,
+        scope: [`org:acme`, `resource:${threadId}`, `thread:${threadId}`],
+        limit: 1,
+      });
+      await store.advanceCurationCursor({ sourceThreadId: threadId, agent: 'curate', lastItemId: items[0]!.id });
+      return { outcome: 'ran' };
+    });
+    const engine = await createTriggerEngine({ threshold: 2, interval: 60_000, runCuration });
+    store = engine.store;
+    const threadId = 'volume-progress-thread';
+    await seedPendingItems(store, { threadId, count: 6 });
+
+    await observeOnce(engine.om, threadId);
+    await observeOnce(engine.om, threadId, 1);
+
+    // Progress lifts the backoff, so a busy thread is never throttled by it.
+    expect(runCuration).toHaveBeenCalledTimes(2);
+  });
+
   it('never fails an observation when curation throws', async () => {
     const runCuration = vi.fn(async () => {
       throw new Error('curator exploded');

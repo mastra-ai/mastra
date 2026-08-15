@@ -109,7 +109,9 @@ export interface SubconsciousConfig {
   /**
    * Milliseconds since the last completed curation after which the curator runs
    * even if fewer than `curationThreshold` updates are pending. Defaults to one
-   * hour; set `false` to disable the time trigger.
+   * hour. Set `false` to disable the time trigger — note that elapsed time still
+   * bounds retries: after a curation that leaves the cursor where it found it,
+   * both triggers wait one hour before trying again.
    */
   curationInterval?: number | false;
   maxSteps?: number;
