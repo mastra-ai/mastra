@@ -1,7 +1,7 @@
 import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
 import { join } from 'path';
 import { setupMonorepo } from './prepare';
-import { mkdtemp, mkdir, readdir, rm, readFile, writeFile } from 'fs/promises';
+import { copyFile, mkdtemp, mkdir, readdir, rm, readFile, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import getPort from 'get-port';
 import { execa, execaNode } from 'execa';
@@ -362,6 +362,53 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     }, timeout);
 
     runApiTests(port);
+  });
+
+  describe.sequential('explicit bundle lockfile', () => {
+    it(
+      'copies and consumes a real lockfile during the bundle install',
+      async () => {
+        const appDirectory = join(fixturePath, 'apps', 'custom');
+        const outputDirectory = join(appDirectory, '.mastra', 'output');
+        const configPath = join(appDirectory, 'src', 'mastra', 'index.ts');
+        const sourceLockfile = join(appDirectory, 'package-lock.json');
+        const originalConfig = await readFile(configPath, 'utf8');
+        const previousRegistry = process.env.npm_config_registry;
+        const registry = inject('registry');
+
+        try {
+          await runBuild(fixturePath);
+
+          process.env.npm_config_registry = registry;
+          await execa('npm', ['install', '--package-lock-only', '--force', '--ignore-scripts'], {
+            cwd: outputDirectory,
+            env: process.env,
+          });
+          await copyFile(join(outputDirectory, 'package-lock.json'), sourceLockfile);
+          const expectedLockfile = await readFile(sourceLockfile, 'utf8');
+
+          await writeFile(
+            configPath,
+            originalConfig.replace("externals: ['bcrypt']", "externals: ['bcrypt'], lockfile: './package-lock.json'"),
+          );
+          await runBuild(fixturePath);
+
+          expect(await readFile(join(outputDirectory, 'package-lock.json'), 'utf8')).toBe(expectedLockfile);
+          expect(
+            JSON.parse(await readFile(join(outputDirectory, 'node_modules', 'bcrypt', 'package.json'), 'utf8')),
+          ).to.MatchObject({ name: 'bcrypt' });
+        } finally {
+          await writeFile(configPath, originalConfig);
+          await rm(sourceLockfile, { force: true });
+          if (previousRegistry === undefined) {
+            delete process.env.npm_config_registry;
+          } else {
+            process.env.npm_config_registry = previousRegistry;
+          }
+        }
+      },
+      timeout,
+    );
   });
 
   describe.sequential('start', async () => {

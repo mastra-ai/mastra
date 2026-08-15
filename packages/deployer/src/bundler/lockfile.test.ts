@@ -1,6 +1,7 @@
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DepsService } from '../services';
 import { Bundler } from './index';
@@ -84,6 +85,24 @@ class LockfileTestBundler extends Bundler {
   }
 }
 
+class BaseManagerBundler extends LockfileTestBundler {
+  protected getBundleDependencyPackageManager(rootDir: string, explicitManager?: 'npm' | 'yarn' | 'pnpm' | 'bun') {
+    return Bundler.prototype.getBundleDependencyPackageManager.call(this, rootDir, explicitManager);
+  }
+}
+
+async function createSymlink(target: string, path: string, type: 'file' | 'junction'): Promise<boolean> {
+  try {
+    await symlink(target, path, type);
+    return true;
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && (error.code === 'EACCES' || error.code === 'EPERM')) {
+      return false;
+    }
+    throw error;
+  }
+}
+
 async function createBundleFixture(options: { lockfile?: string } = {}) {
   const projectRoot = join(tmpdir(), `mastra-lockfile-project-${Date.now()}-${Math.random()}`);
   await mkdir(projectRoot, { recursive: true });
@@ -137,12 +156,6 @@ describe('Bundler bundle lockfile authority', () => {
     const { projectRoot, outputDirectory } = await createBundleFixture({ lockfile: 'package-lock.json' });
     await writeFile(join(projectRoot, 'package-lock.json'), 'lock bytes\n');
 
-    class BaseManagerBundler extends LockfileTestBundler {
-      protected getBundleDependencyPackageManager(rootDir: string, explicitManager?: 'npm' | 'yarn' | 'pnpm' | 'bun') {
-        return Bundler.prototype.getBundleDependencyPackageManager.call(this, rootDir, explicitManager);
-      }
-    }
-
     const bundler = new BaseManagerBundler({ lockfile: 'package-lock.json' });
     await bundler.runBundle('server-file', join(projectRoot, 'mastra.ts'), { projectRoot, outputDirectory });
 
@@ -155,13 +168,87 @@ describe('Bundler bundle lockfile authority', () => {
     expect(bundler.getState()).toBeUndefined();
   });
 
+  it.each(['relative traversal', 'absolute outside path'] as const)(
+    'rejects an explicit lockfile with an %s before installation',
+    async pathKind => {
+      const { projectRoot } = await createBundleFixture();
+      const outsideRoot = join(tmpdir(), `mastra-lockfile-outside-${Date.now()}-${Math.random()}`);
+      const outsideLockfile = join(outsideRoot, 'package-lock.json');
+      await mkdir(outsideRoot, { recursive: true });
+      await writeFile(outsideLockfile, 'secret bytes\n');
+      tempDirs.push(outsideRoot);
+
+      const lockfile = pathKind === 'relative traversal' ? relative(projectRoot, outsideLockfile) : outsideLockfile;
+      const bundler = new BaseManagerBundler();
+
+      expect(() => bundler.resolveState(projectRoot, lockfile, false)).toThrow(
+        'Bundle lockfile must stay within project root',
+      );
+      expect(bundler.installs).toHaveLength(0);
+    },
+  );
+
+  it('accepts an absolute lockfile inside the project and stores its canonical path', async () => {
+    const { projectRoot } = await createBundleFixture();
+    const lockfile = join(projectRoot, 'package-lock.json');
+    await writeFile(lockfile, 'lock bytes\n');
+
+    const state = new BaseManagerBundler().resolveState(projectRoot, lockfile, false);
+
+    expect(state.explicitLockfile?.sourcePath).toBe(realpathSync(lockfile));
+  });
+
+  it('accepts an in-project lockfile symlink and stores its canonical path', async () => {
+    const { projectRoot } = await createBundleFixture();
+    const target = join(projectRoot, 'locks', 'package-lock.json');
+    const link = join(projectRoot, 'package-lock.json');
+    await mkdir(join(projectRoot, 'locks'), { recursive: true });
+    await writeFile(target, 'lock bytes\n');
+    if (!(await createSymlink(target, link, 'file'))) return;
+
+    const state = new BaseManagerBundler().resolveState(projectRoot, link, false);
+
+    expect(state.explicitLockfile?.sourcePath).toBe(realpathSync(target));
+  });
+
+  it('rejects a supported lockfile symlink that targets outside the project', async () => {
+    const { projectRoot } = await createBundleFixture();
+    const outsideRoot = join(tmpdir(), `mastra-lockfile-symlink-file-${Date.now()}-${Math.random()}`);
+    const outsideLockfile = join(outsideRoot, 'package-lock.json');
+    const linkedLockfile = join(projectRoot, 'package-lock.json');
+    await mkdir(outsideRoot, { recursive: true });
+    await writeFile(outsideLockfile, 'secret bytes\n');
+    tempDirs.push(outsideRoot);
+    if (!(await createSymlink(outsideLockfile, linkedLockfile, 'file'))) return;
+
+    const bundler = new BaseManagerBundler();
+    expect(() => bundler.resolveState(projectRoot, 'package-lock.json', false)).toThrow(
+      'Bundle lockfile must stay within project root',
+    );
+    expect(bundler.installs).toHaveLength(0);
+  });
+
+  it('rejects a lockfile below a symlinked directory that targets outside the project', async () => {
+    const { projectRoot } = await createBundleFixture();
+    const outsideRoot = join(tmpdir(), `mastra-lockfile-symlink-dir-${Date.now()}-${Math.random()}`);
+    const linkedDirectory = join(projectRoot, 'linked-locks');
+    await mkdir(outsideRoot, { recursive: true });
+    await writeFile(join(outsideRoot, 'package-lock.json'), 'secret bytes\n');
+    tempDirs.push(outsideRoot);
+    if (!(await createSymlink(outsideRoot, linkedDirectory, 'junction'))) return;
+
+    const bundler = new BaseManagerBundler();
+    expect(() => bundler.resolveState(projectRoot, 'linked-locks/package-lock.json', false)).toThrow(
+      'Bundle lockfile must stay within project root',
+    );
+    expect(bundler.installs).toHaveLength(0);
+  });
+
   it('uses an explicit manager when the project has no source lock', async () => {
     const projectRoot = join(tmpdir(), `mastra-lockfile-no-source-${Date.now()}-${Math.random()}`);
-    const explicitRoot = join(tmpdir(), `mastra-lockfile-explicit-${Date.now()}-${Math.random()}`);
     await mkdir(projectRoot, { recursive: true });
-    await mkdir(explicitRoot, { recursive: true });
-    tempDirs.push(projectRoot, explicitRoot);
-    await writeFile(join(explicitRoot, 'pnpm-lock.yaml'), 'lock bytes\n');
+    tempDirs.push(projectRoot);
+    await writeFile(join(projectRoot, 'pnpm-lock.yaml'), 'lock bytes\n');
 
     class NoSourceBundler extends LockfileTestBundler {
       protected getBundleDependencyPackageManager(rootDir: string, explicitManager?: 'npm' | 'yarn' | 'pnpm' | 'bun') {
@@ -169,7 +256,7 @@ describe('Bundler bundle lockfile authority', () => {
       }
     }
 
-    const state = new NoSourceBundler().resolveState(projectRoot, join(explicitRoot, 'pnpm-lock.yaml'), false);
+    const state = new NoSourceBundler().resolveState(projectRoot, 'pnpm-lock.yaml', false);
     expect(state.packageManager).toBe('pnpm');
     expect(state.frozen).toBe(true);
   });

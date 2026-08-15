@@ -1,7 +1,7 @@
 import { execSync } from 'node:child_process';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, realpathSync, statSync } from 'node:fs';
 import { copyFile, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { dirname, join, posix, resolve } from 'node:path';
+import { dirname, isAbsolute, join, posix, relative, resolve, sep } from 'node:path';
 import { MastraBundler } from '@mastra/core/bundler';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type { Config } from '@mastra/core/mastra';
@@ -33,6 +33,13 @@ export type { BundlerOptions, ExternalDependencyInfo } from '../build/types';
 export type { BundlerPlatform } from '../build/utils';
 
 export const IS_DEFAULT = Symbol('IS_DEFAULT');
+
+function isPathWithin(rootPath: string, candidatePath: string): boolean {
+  const relativePath = relative(rootPath, candidatePath);
+  return (
+    relativePath !== '' && relativePath !== '..' && !relativePath.startsWith(`..${sep}`) && !isAbsolute(relativePath)
+  );
+}
 
 const NPM_ALIAS_PREFIX = 'npm:';
 /** Characters a registry range or dist tag can contain. Protocols need `:`, git shorthand needs `/` or `#`. */
@@ -445,12 +452,23 @@ export abstract class Bundler extends MastraBundler {
     }
 
     const sourcePath = resolve(projectRoot, lockfile);
-    let sourceStats: ReturnType<typeof statSync>;
+    const projectRootPath = resolve(projectRoot);
+    if (!isPathWithin(projectRootPath, sourcePath)) {
+      throw new Error(`Bundle lockfile must stay within project root: ${sourcePath}`);
+    }
+
+    let canonicalProjectRootPath: string;
+    let canonicalSourcePath: string;
     try {
-      sourceStats = statSync(sourcePath);
+      canonicalProjectRootPath = realpathSync(projectRootPath);
+      canonicalSourcePath = realpathSync(sourcePath);
     } catch {
       throw new Error(`Bundle lockfile does not exist: ${sourcePath}`);
     }
+    if (!isPathWithin(canonicalProjectRootPath, canonicalSourcePath)) {
+      throw new Error(`Bundle lockfile must stay within project root: ${sourcePath}`);
+    }
+    const sourceStats = statSync(canonicalSourcePath);
     if (sourceStats.isDirectory()) {
       throw new Error(`Bundle lockfile must be a file: ${sourcePath}`);
     }
@@ -459,7 +477,7 @@ export abstract class Bundler extends MastraBundler {
 
     return {
       packageManager,
-      explicitLockfile: { sourcePath, basename: basename as BundleLockfileName },
+      explicitLockfile: { sourcePath: canonicalSourcePath, basename: basename as BundleLockfileName },
       frozen: true,
       generateSecondaryNpmLockfile: false,
     };
