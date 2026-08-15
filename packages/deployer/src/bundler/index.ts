@@ -298,7 +298,6 @@ export abstract class Bundler extends MastraBundler {
   protected analyzeOutputDir = '.build';
   protected outputDir = 'output';
   protected platform: BundlerPlatform = 'node';
-  protected bundleDependencyInstallState?: BundleDependencyInstallState;
 
   constructor(name: string, component: 'BUNDLER' | 'DEPLOYER' = 'BUNDLER') {
     super({ name, component });
@@ -788,8 +787,6 @@ export abstract class Bundler extends MastraBundler {
         lockfile: bundlerOptions.lockfile,
         hasPackedWorkspaceDependencies: transitiveWorkspaceDependencies.usedWorkspacePackages.size > 0,
       });
-      this.bundleDependencyInstallState = bundleDependencyInstallState;
-
       await this.writePackageJson(
         join(outputDirectory, this.outputDir),
         dependenciesToInstall,
@@ -910,8 +907,6 @@ export const tools = [${toolsExports.join(', ')}]`,
         },
         error,
       );
-    } finally {
-      this.bundleDependencyInstallState = undefined;
     }
   }
 

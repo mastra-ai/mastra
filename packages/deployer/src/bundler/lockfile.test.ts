@@ -66,10 +66,6 @@ class LockfileTestBundler extends Bundler {
     return this._bundle(serverFile, mastraEntryFile, options);
   }
 
-  getState() {
-    return this.bundleDependencyInstallState;
-  }
-
   resolveState(projectRoot: string, lockfile: string | undefined, hasPackedWorkspaceDependencies: boolean) {
     return this.resolveBundleDependencyInstallState({ projectRoot, lockfile, hasPackedWorkspaceDependencies });
   }
@@ -130,7 +126,6 @@ describe('Bundler bundle lockfile authority', () => {
     expect((bundler.installs[0]?.[3] as any).packageManager).toBe('pnpm');
     expect((bundler.installs[0]?.[3] as any).frozen).toBe(true);
     expect(await readFile(join(outputDirectory, 'output', 'pnpm-lock.yaml'), 'utf8')).toBe('lock bytes\n');
-    expect(bundler.getState()).toBeUndefined();
   });
 
   it.each(['npm', 'pnpm', 'yarn', 'bun'] as const)(
@@ -165,7 +160,6 @@ describe('Bundler bundle lockfile authority', () => {
     expect((bundler.installs[0]?.[3] as any).explicitLockfile.basename).toBe('package-lock.json');
     expect(await readFile(join(outputDirectory, 'output', 'package-lock.json'), 'utf8')).toBe('lock bytes\n');
     expect((bundler.installs[0]?.[3] as any).generateSecondaryNpmLockfile).toBe(false);
-    expect(bundler.getState()).toBeUndefined();
   });
 
   it.each(['relative traversal', 'absolute outside path'] as const)(
@@ -332,7 +326,6 @@ describe('Bundler bundle lockfile authority', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.length).toBe(3);
     expect(calls[0]?.[2]).toEqual({});
-    expect(bundler.getState()).toBeUndefined();
   });
 
   it('does not leak explicit state into a later automatic build', async () => {
@@ -344,7 +337,6 @@ describe('Bundler bundle lockfile authority', () => {
 
     expect((bundler.installs[1]?.[3] as any).explicitLockfile).toBeUndefined();
     expect((bundler.installs[1]?.[3] as any).frozen).toBe(false);
-    expect(bundler.getState()).toBeUndefined();
   });
 
   it('clears state when the frozen installer fails without a fallback', async () => {
@@ -359,6 +351,5 @@ describe('Bundler bundle lockfile authority', () => {
     await expect(
       bundler.runBundle('server-file', join(projectRoot, 'mastra.ts'), { projectRoot, outputDirectory }),
     ).rejects.toThrow('frozen install failed');
-    expect(bundler.getState()).toBeUndefined();
   });
 });
