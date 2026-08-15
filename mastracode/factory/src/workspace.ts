@@ -17,6 +17,7 @@ import { getGithubPat } from './integrations/github/pat.js';
 import type { GithubPatKind } from './integrations/github/pat.js';
 import {
   checkoutSessionBranch,
+  DEFAULT_COMMAND_TIMEOUT_MS,
   MaterializeError,
   materializeRepo,
   recycleClaimedWorkdir,
@@ -486,7 +487,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         } catch (setupError) {
           if (projectRepository.teardownCommand) {
             try {
-              await runWorktreeTeardown(sandbox, workdir, projectRepository.teardownCommand);
+              await runWorktreeTeardown(sandbox, workdir, projectRepository.teardownCommand, {
+                timeoutMs: DEFAULT_COMMAND_TIMEOUT_MS,
+              });
             } catch (teardownError) {
               console.warn('[Mastra Factory] Worktree teardown after setup failure failed', {
                 orgId: session.orgId,

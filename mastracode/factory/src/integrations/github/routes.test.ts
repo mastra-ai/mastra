@@ -451,6 +451,7 @@ vi.mock('./sandbox', () => {
     }
   }
   return {
+    DEFAULT_COMMAND_TIMEOUT_MS: 15 * 60_000,
     computeWorktreePath: (repoWorkdir: string, branch: string) =>
       `${repoWorkdir.replace(/\/+$/, '').split('/').slice(0, -1).join('/')}/worktrees/${branch.replace('/', '-')}-aeab418d`,
     ensureProjectSandbox: (opts: any) => ensureProjectSandbox(opts),
@@ -458,8 +459,8 @@ vi.mock('./sandbox', () => {
     ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
     removeWorktree: (sb: any, workdir: string, opts: any) => removeWorktree(sb, workdir, opts),
     runWorktreeSetup: (sb: any, worktreePath: string, command: string) => runWorktreeSetup(sb, worktreePath, command),
-    runWorktreeTeardown: (sb: any, worktreePath: string, command: string) =>
-      runWorktreeTeardown(sb, worktreePath, command),
+    runWorktreeTeardown: (sb: any, worktreePath: string, command: string, options?: { timeoutMs?: number }) =>
+      runWorktreeTeardown(sb, worktreePath, command, options),
     recycleClaimedWorkdir: (sb: any, workdir: string, defaultBranch: string) =>
       recycleClaimedWorkdir(sb, workdir, defaultBranch),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
@@ -1901,6 +1902,7 @@ describe('Factory session routes', () => {
       { id: 'sb-live' },
       '/workspace/hello',
       'docker compose down --remove-orphans',
+      { timeoutMs: 15 * 60_000 },
     );
     expect(invalidateSession).toHaveBeenCalledWith(sessionId);
     expect(tables.sessions).toHaveLength(0);

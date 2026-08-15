@@ -104,7 +104,7 @@ export function shellQuote(value: string): string {
  * so a wedged sandbox surfaces a failure instead of hanging the request that
  * triggered materialization forever.
  */
-const DEFAULT_COMMAND_TIMEOUT_MS = 15 * 60_000;
+export const DEFAULT_COMMAND_TIMEOUT_MS = 15 * 60_000;
 /** Branch checkout only fetches one ref — a much tighter budget applies. */
 export const CHECKOUT_COMMAND_TIMEOUT_MS = 5 * 60_000;
 

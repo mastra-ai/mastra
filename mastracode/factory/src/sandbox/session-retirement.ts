@@ -1,5 +1,5 @@
 import { cleanReleasedSandbox } from '../integrations/github/sandbox-release.js';
-import { runWorktreeTeardown } from '../integrations/github/sandbox.js';
+import { DEFAULT_COMMAND_TIMEOUT_MS, runWorktreeTeardown } from '../integrations/github/sandbox.js';
 import type {
   ProjectRepository,
   SourceControlSession,
@@ -139,7 +139,9 @@ export class SessionRetirementCoordinator {
 
         if (sandbox && projectRepository?.teardownCommand) {
           try {
-            await runWorktreeTeardown(sandbox, session.sandboxWorkdir, projectRepository.teardownCommand);
+            await runWorktreeTeardown(sandbox, session.sandboxWorkdir, projectRepository.teardownCommand, {
+              timeoutMs: DEFAULT_COMMAND_TIMEOUT_MS,
+            });
           } catch (error) {
             this.#warn('Factory worktree teardown failed', {
               orgId: session.orgId,

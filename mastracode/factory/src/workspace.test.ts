@@ -52,7 +52,9 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('./integrations/github/sandbox', async importOriginal => ({
-  // Keep the real MaterializeError so `instanceof` checks in workspace.ts work.
+  // Keep the real lifecycle constants and MaterializeError so workspace.ts uses production behavior.
+  DEFAULT_COMMAND_TIMEOUT_MS: (await importOriginal<typeof import('./integrations/github/sandbox.js')>())
+    .DEFAULT_COMMAND_TIMEOUT_MS,
   MaterializeError: (await importOriginal<typeof import('./integrations/github/sandbox.js')>()).MaterializeError,
   materializeRepo: (...args: unknown[]) => (mocks.materializeRepo as any)(...args),
   checkoutSessionBranch: (...args: unknown[]) => (mocks.checkoutSessionBranch as any)(...args),
@@ -695,6 +697,7 @@ describe('GitHub session workspace preparation', () => {
       expect.any(Object),
       expect.stringContaining('session-a'),
       'pnpm local teardown',
+      { timeoutMs: 15 * 60_000 },
     );
   });
 
