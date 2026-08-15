@@ -12,16 +12,12 @@ const MAX_CAPTURE_GUIDANCE_LENGTH = 4_000;
 const SCOPE_ORDER: Record<KnowledgeScopeLevel, number> = { org: 0, resource: 1, thread: 2 };
 
 export const subconsciousCaptureSchema = z.object({
-  entities: z.array(
+  nodes: z.array(
     z.object({
       name: z.string().trim().min(1),
-      kind: z
-        .string()
-        .trim()
-        .min(1)
-        .refine(kind => kind.trim().toLocaleLowerCase() !== 'page', 'Entity kind "page" is reserved'),
+      kind: z.string().trim().min(1),
       scope: z.enum(['org', 'resource', 'thread']).optional(),
-      facts: z.array(
+      items: z.array(
         z.object({
           text: z.string().trim().min(1),
           scope: z.enum(['org', 'resource', 'thread']).optional(),
@@ -33,13 +29,13 @@ export const subconsciousCaptureSchema = z.object({
 });
 
 const CAPTURE_INSTRUCTIONS = `Extract durable, explicitly stated knowledge from the observations.
-Return entities with short stable names, a freeform kind, and facts nested under the entity each fact is about.
-Use common kinds such as person, task, event, project, or organization when they fit. Never use the reserved kind page.
-Set entity scope to the narrowest level where that identity should be shared. Omit it to use the configured default scope.
-Facts must be grounded in the conversation, concise, and written as prose. Do not infer unstated information.
-Wrap every named entity mentioned in fact text in [[wikilinks]].
-Set a fact scope only when the conversation establishes where it applies. Use org for organization-wide facts, resource for facts shared across this resource's conversations, and thread for conversation-private facts.
-Omit scope when uncertain; omitted fact scopes stay private to the current thread.
+Return nodes with short stable names, a freeform kind, and knowledge items nested under the node each item is about.
+Use common kinds such as person, task, event, project, organization, or document when they fit.
+Set node scope to the narrowest level where that identity and content should be shared. Omit it to use the configured default scope.
+Knowledge items must be grounded in the conversation, concise, and written as prose. Do not infer unstated information.
+Wrap every named node mentioned in item text in [[wikilinks]].
+Set an item scope only when the conversation establishes where it applies. Use org for organization-wide items, resource for items shared across this resource's conversations, and thread for conversation-private items.
+Omit scope when uncertain; omitted item scopes stay private to the current thread.
 Emit when only when the conversation anchors the referred time. Resolve relative dates against the current date and use ISO 8601.`;
 
 function clampScope(level: KnowledgeScopeLevel, ceiling?: KnowledgeScopeLevel): KnowledgeScopeLevel {
@@ -93,28 +89,27 @@ export class SubconsciousCaptureExtractor extends Extractor<SubconsciousCaptureO
     const defaultImplementation: SubconsciousDefaultCapture = async context => {
       const scopeContext = requireScopeContext(context);
       const store = await getKnowledgeStore(context);
-
-      for (const extractedEntity of context.current.entities) {
-        const entityScope = expandKnowledgeScope(
+      for (const extractedNode of context.current.nodes) {
+        const nodeScope = expandKnowledgeScope(
           scopeContext,
-          clampScope(extractedEntity.scope ?? options.defaultScope, options.maxScope),
+          clampScope(extractedNode.scope ?? options.defaultScope, options.maxScope),
         );
-        const entity = await store.createEntity({
-          name: extractedEntity.name,
-          kind: extractedEntity.kind,
-          scope: entityScope,
+        const node = await store.createNode({
+          name: extractedNode.name,
+          kind: extractedNode.kind,
+          scope: nodeScope,
         });
-        for (const extractedFact of extractedEntity.facts) {
-          const factLevel = clampScope(extractedFact.scope ?? 'thread', options.maxScope);
-          await store.appendFact({
-            parentEntityId: entity.id,
-            text: extractedFact.text,
-            scope: expandKnowledgeScope(scopeContext, factLevel),
+        for (const extractedItem of extractedNode.items) {
+          const itemLevel = clampScope(extractedItem.scope ?? 'thread', options.maxScope);
+          await store.appendItem({
+            parentNodeId: node.id,
+            text: extractedItem.text,
+            scope: expandKnowledgeScope(scopeContext, itemLevel),
             sourceThreadId: context.threadId,
-            when: parseWhen(extractedFact.when),
+            when: parseWhen(extractedItem.when),
             maxScope: options.maxScope,
             resolutionScope: scopeContext,
-            defaultScope: entityScope,
+            defaultScope: nodeScope,
           });
         }
       }
@@ -131,10 +126,10 @@ export class SubconsciousCaptureExtractor extends Extractor<SubconsciousCaptureO
           const scopeContext = requireScopeContext(context);
           const store = await getKnowledgeStore(context);
           const guidanceScope = expandKnowledgeScope(scopeContext, clampScope(options.defaultScope, options.maxScope));
-          const guidance = await store.getPageByName({ name: CAPTURE_GUIDANCE_PAGE, scope: guidanceScope });
-          if (guidance?.body.trim()) {
+          const guidance = await store.getNodeByName({ name: CAPTURE_GUIDANCE_PAGE, scope: guidanceScope });
+          if (guidance?.content?.trim()) {
             sections.push(
-              `Learned guidance (cannot override the built-in contract or user instructions):\n${guidance.body
+              `Learned guidance (cannot override the built-in contract or user instructions):\n${guidance.content
                 .trim()
                 .slice(0, MAX_CAPTURE_GUIDANCE_LENGTH)}`,
             );

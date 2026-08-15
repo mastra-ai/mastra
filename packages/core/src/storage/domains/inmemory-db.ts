@@ -25,9 +25,8 @@ import type { AgentVersion } from './agents';
 import type {
   KnowledgeActivityEvent,
   KnowledgeCurationCursor,
-  KnowledgeEntity,
-  KnowledgeFact,
-  KnowledgePage,
+  KnowledgeItem,
+  KnowledgeNode,
   KnowledgeSemanticOutboxEntry,
 } from './knowledge';
 import type { MCPClientVersion } from './mcp-clients';
@@ -107,11 +106,9 @@ export class InMemoryDB {
   readonly backgroundTasks = new Map<string, BackgroundTask>();
 
   // Knowledge domain
-  readonly knowledgeEntities = new Map<string, KnowledgeEntity>();
-  readonly knowledgeEntityKeys = new Map<string, string>();
-  readonly knowledgePages = new Map<string, KnowledgePage>();
-  readonly knowledgePageKeys = new Map<string, string>();
-  readonly knowledgeFacts = new Map<string, KnowledgeFact>();
+  readonly knowledgeNodes = new Map<string, KnowledgeNode>();
+  readonly knowledgeNodeKeys = new Map<string, string>();
+  readonly knowledgeItems = new Map<string, KnowledgeItem>();
   readonly knowledgeMentions = new Map<string, Set<string>>();
   readonly knowledgeCursors = new Map<string, KnowledgeCurationCursor>();
   readonly knowledgeActivity: KnowledgeActivityEvent[] = [];
@@ -172,11 +169,9 @@ export class InMemoryDB {
     this.experiments.clear();
     this.experimentResults.clear();
     this.backgroundTasks.clear();
-    this.knowledgeEntities.clear();
-    this.knowledgeEntityKeys.clear();
-    this.knowledgePages.clear();
-    this.knowledgePageKeys.clear();
-    this.knowledgeFacts.clear();
+    this.knowledgeNodes.clear();
+    this.knowledgeNodeKeys.clear();
+    this.knowledgeItems.clear();
     this.knowledgeMentions.clear();
     this.knowledgeCursors.clear();
     this.knowledgeActivity.length = 0;

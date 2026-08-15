@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Added source-thread fact worklists for recoverable subconscious curation.
+Added source-thread KnowledgeItem worklists for recoverable Subconscious curation.

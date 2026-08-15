@@ -36,10 +36,10 @@ function context() {
 }
 
 describe('Subconscious curator', () => {
-  it('stamps provenance, enforces ceilings, uses CAS, and only soft-deletes facts', async () => {
+  it('stamps provenance, enforces ceilings, uses CAS, and only soft-deletes KnowledgeItems', async () => {
     const memory = new Memory({ storage: new InMemoryStore() });
     const store = (await memory.storage.getStore('knowledge'))!;
-    const entity = await store.createEntity({ name: 'Project Atlas', kind: 'project', scope });
+    const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scope });
     const tools = createKnowledgeWriteTools(memory, {
       scope,
       sourceThreadId: 'alpha',
@@ -47,45 +47,45 @@ describe('Subconscious curator', () => {
       maxScope: 'resource',
     });
 
-    const fact = (await tools.knowledge_add_fact!.execute?.(
-      { parentEntityId: entity.id, text: '[[Project Atlas]] launches soon.', scope: 'resource' },
+    const item = (await tools.knowledge_add_item!.execute?.(
+      { parentNodeId: node.id, text: '[[Project Atlas]] launches soon.', scope: 'resource' },
       {} as any,
     )) as any;
-    expect(fact).toMatchObject({ sourceThreadId: 'alpha', maxScope: 'resource' });
-    expect(fact.capturedAt).toBeInstanceOf(Date);
+    expect(item).toMatchObject({ sourceThreadId: 'alpha', maxScope: 'resource' });
+    expect(item.capturedAt).toBeInstanceOf(Date);
 
-    await expect(tools.knowledge_rescope!.execute?.({ factId: fact.id, scope: 'org' }, {} as any)).rejects.toThrow(
+    await expect(tools.knowledge_rescope_item!.execute?.({ itemId: item.id, scope: 'org' }, {} as any)).rejects.toThrow(
       'ceiling',
     );
     await expect(
-      tools.knowledge_update_entity!.execute?.(
-        { entityId: entity.id, expectedVersion: entity.version + 1, name: 'Atlas' },
+      tools.knowledge_update_node!.execute?.(
+        { nodeId: node.id, expectedVersion: node.version + 1, name: 'Atlas' },
         {} as any,
       ),
     ).rejects.toThrow('version');
 
-    await tools.knowledge_remove_fact!.execute?.({ factId: fact.id }, {} as any);
-    expect(await store.getFact({ id: fact.id })).toBeNull();
-    expect(await store.getFact({ id: fact.id, includeDeleted: true })).toMatchObject({
+    await tools.knowledge_remove_item!.execute?.({ itemId: item.id }, {} as any);
+    expect(await store.getItem({ id: item.id })).toBeNull();
+    expect(await store.getItem({ id: item.id, includeDeleted: true })).toMatchObject({
       deletedBy: 'subconscious:curate',
     });
-    expect(tools).not.toHaveProperty('knowledge_restore_fact');
+    expect(tools).not.toHaveProperty('knowledge_restore_item');
   });
 
   it('advances its source-thread cursor only after a successful durable run', async () => {
     const memory = new Memory({ storage: new InMemoryStore() });
     const store = (await memory.storage.getStore('knowledge'))!;
-    const entity = await store.createEntity({ name: 'Project Atlas', kind: 'project', scope });
-    const fact = await store.appendFact({
-      parentEntityId: entity.id,
+    const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scope });
+    const item = await store.appendItem({
+      parentNodeId: node.id,
       text: 'Atlas launches soon.',
       scope,
       sourceThreadId: 'alpha',
       resolutionScope: scope,
       defaultScope: scope,
     });
-    const second = await store.appendFact({
-      parentEntityId: entity.id,
+    const second = await store.appendItem({
+      parentNodeId: node.id,
       text: 'Atlas has a readiness review.',
       scope,
       sourceThreadId: 'alpha',
@@ -96,7 +96,7 @@ describe('Subconscious curator', () => {
       .spyOn(Agent.prototype, 'generate')
       .mockRejectedValueOnce(new Error('curator crashed'))
       .mockResolvedValueOnce({ text: 'No completion marker.' } as any)
-      .mockResolvedValueOnce({ text: `<curation-complete through="${fact.id}" />` } as any)
+      .mockResolvedValueOnce({ text: `<curation-complete through="${item.id}" />` } as any)
       .mockResolvedValueOnce({ text: `<curation-complete through="${second.id}" />` } as any);
     const handler = createCuratorHandler(memory, resolved());
 
@@ -106,12 +106,12 @@ describe('Subconscious curator', () => {
 
     await handler(context());
     expect(await store.getCurationCursor({ sourceThreadId: 'alpha', agent: 'curate' })).toMatchObject({
-      lastFactId: fact.id,
+      lastItemId: item.id,
     });
-    await store.removeFact({ id: second.id, deletedBy: 'subconscious:curate' });
+    await store.removeItem({ id: second.id, deletedBy: 'subconscious:curate' });
     await handler(context());
     expect(await store.getCurationCursor({ sourceThreadId: 'alpha', agent: 'curate' })).toMatchObject({
-      lastFactId: second.id,
+      lastItemId: second.id,
     });
     expect(generate).toHaveBeenLastCalledWith(
       expect.stringContaining('Committed pre-reflection observations'),
