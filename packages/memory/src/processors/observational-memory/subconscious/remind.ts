@@ -1,6 +1,10 @@
-import { Agent } from '@mastra/core/agent';
+import { Agent, createSignal } from '@mastra/core/agent';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { KnowledgeScope, KnowledgeStorage, SearchKnowledgeResult } from '@mastra/core/storage';
 import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
+import type { ToolAction } from '@mastra/core/tools';
+import { createTool } from '@mastra/core/tools';
+import type { JSONSchema7 } from 'json-schema';
 
 import type { Memory } from '../../..';
 import { Extractor } from '../extractor';
@@ -119,6 +123,211 @@ export interface SubconsciousRemindOptions {
    * identity is carried by the thread key alone, not by the instance.
    */
   createRemindMemory?: () => Memory;
+}
+
+const ASK_INSTRUCTIONS = `The main agent is asking you a direct question. This is a conversation, not an observation run: answer the question.
+
+Use everything you already remember from this conversation plus the knowledge tools. A follow-up may refer back to something discussed earlier in this thread, so resolve references against your own history before searching. Answer plainly and include source node or item IDs when the answer rests on stored knowledge. If you do not know, say so plainly instead of guessing, and never respond with ${NO_REMINDER} to a question.`;
+
+/** The reminder agent's thread key. Derived from the PARENT thread id, never from the agent id. */
+function remindThreadKey(threadId: string): string {
+  return `subconscious:${threadId}:remind`;
+}
+
+type AskToolAgentContext = {
+  agentId?: string;
+  threadId?: string;
+  resourceId?: string;
+};
+
+type AskToolContext = {
+  agent?: AskToolAgentContext;
+  requestContext?: RequestContext;
+  abortSignal?: AbortSignal;
+  writer?: { custom(chunk: { type: string; data: unknown }): Promise<unknown> | unknown };
+  mastra?: { getAgentById?(id: string): Promise<unknown> | unknown };
+};
+
+type SignalSender = {
+  sendSignal(signal: unknown, target: { threadId: string; resourceId: string }): { persisted?: Promise<void> };
+};
+
+export interface RemindAskToolOptions extends SubconsciousRemindOptions {
+  memory: Memory;
+  config: ResolvedSubconsciousAgent;
+  omModel?: ObservationalMemoryModel;
+}
+
+/**
+ * Resolve a signal sender for the late (`wait: false`) answer. The tool execute context carries no
+ * `sendSignal` of its own — the only route is the main agent instance, reached exactly the way
+ * `packages/core/src/notifications/tool.ts:53-63` reaches it.
+ */
+async function resolveSignalSender(context: AskToolContext): Promise<SignalSender | undefined> {
+  const agentId = context.agent?.agentId;
+  const getAgentById = context.mastra?.getAgentById;
+  if (!agentId || typeof getAgentById !== 'function') return undefined;
+  const agent = (await getAgentById.call(context.mastra, agentId)) as Partial<SignalSender> | undefined;
+  return typeof agent?.sendSignal === 'function' ? (agent as SignalSender) : undefined;
+}
+
+/**
+ * The reminder agent as an agent-facing tool. The main agent asks a natural language question and
+ * either waits for the answer or takes a correlation id back and receives the answer later as a
+ * signal. Both dispositions talk on the same thread the passive reminder path uses, so a question
+ * and its answer become part of the one conversation.
+ */
+export function createRemindAskTool(options: RemindAskToolOptions) {
+  const { memory, config, omModel } = options;
+
+  const answer = async (question: string, context: AskToolContext, threadId: string) => {
+    const scope = resolveScope({
+      requestContext: context.requestContext,
+      resourceId: context.agent?.resourceId,
+      threadId,
+    });
+    const model = await resolveSubconsciousAgentModel({ config, omModel, requestContext: context.requestContext });
+    if (!model) {
+      throw new ReminderUnavailableError(
+        'The reminder agent has no model available at tool call time. Configure a model on the Subconscious remind agent or on observational memory; the main agent model is only reachable from the observation hook.',
+      );
+    }
+    const remindMemory = options.createRemindMemory?.();
+    const agent = new Agent({
+      id: `subconscious-remind-${threadId}`,
+      name: 'Subconscious Remind',
+      instructions: [DEFAULT_INSTRUCTIONS, ASK_INSTRUCTIONS, config.instructions?.trim()].filter(Boolean).join('\n\n'),
+      model,
+      ...(remindMemory ? { memory: remindMemory } : {}),
+      tools: createKnowledgeTools(memory, scope),
+    });
+    const result = await agent.generate(`Current time: ${new Date().toISOString()}\n\nQuestion: ${question}`, {
+      requestContext: context.requestContext,
+      abortSignal: context.abortSignal,
+      maxSteps: config.maxSteps,
+      ...(remindMemory
+        ? { memory: { thread: remindThreadKey(threadId), resource: context.agent?.resourceId ?? threadId } }
+        : {}),
+    });
+    return result.text.trim();
+  };
+
+  const sendAnswerSignal = async (
+    sender: SignalSender,
+    args: { threadId: string; resourceId: string; correlationId: string; question: string; contents: string },
+  ) => {
+    const result = sender.sendSignal(
+      createSignal({
+        id: `__subconscious_remembered_${crypto.randomUUID()}`,
+        type: 'reactive',
+        tagName: 'remembered',
+        contents: args.contents,
+        createdAt: new Date(),
+        metadata: { origin: 'subconscious' },
+        attributes: {
+          source: 'subconscious',
+          agent: 'remind',
+          threadId: args.threadId,
+          // Names the question this answer belongs to. Without it a late answer arriving after the
+          // conversation moved on is unattributable, which is the whole point of `wait: false`.
+          correlationId: args.correlationId,
+          question: args.question,
+        },
+      }),
+      { threadId: args.threadId, resourceId: args.resourceId },
+    );
+    await result?.persisted;
+  };
+
+  const askMemory = createTool({
+    id: 'ask_memory',
+    description:
+      'Ask the reminder agent a question in natural language about what this session already knows or discussed, for example "when did that happen". It remembers this session\'s earlier reminders and questions, so follow-ups that refer back to an earlier turn resolve. Set wait to false to keep working and receive the answer later as a signal carrying the returned correlationId.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        question: { type: 'string', minLength: 1, description: 'The question, in natural language.' },
+        wait: {
+          type: 'boolean',
+          description:
+            'True (default) blocks and returns the answer. False returns immediately with a correlationId; the answer arrives later as a signal carrying the same id.',
+        },
+      },
+      required: ['question'],
+      additionalProperties: false,
+    } satisfies JSONSchema7,
+    execute: async (input, rawContext) => {
+      const { question, wait = true } = input as { question: string; wait?: boolean };
+      const context = rawContext as AskToolContext;
+      const threadId = context.agent?.threadId;
+      if (!threadId) {
+        return { ok: false, error: 'ask_memory requires an active threadId.' };
+      }
+
+      if (wait) {
+        try {
+          return { ok: true, answer: await answer(question, context, threadId) };
+        } catch (error) {
+          // Never throw out of the main agent's turn; hand it a result it can reason about.
+          return { ok: false, ...describeAskFailure(error) };
+        }
+      }
+
+      const sender = await resolveSignalSender(context);
+      const resourceId = context.agent?.resourceId;
+      if (!sender || !resourceId) {
+        return {
+          ok: false,
+          error:
+            'ask_memory cannot answer without blocking here: no signal channel is reachable from this tool call. Retry with wait set to true.',
+        };
+      }
+
+      const correlationId = `remind-ask-${crypto.randomUUID()}`;
+      void (async () => {
+        try {
+          const text = await answer(question, context, threadId);
+          await sendAnswerSignal(sender, {
+            threadId,
+            resourceId,
+            correlationId,
+            question,
+            contents: text,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          // No `writer.custom` survives past the tool's own turn, so a late failure reports on the
+          // same signal channel the answer would have used, carrying the correlation id that names
+          // the question it failed to answer.
+          await context.writer?.custom({ type: 'data-subconscious-error', data: { agent: 'remind', error: message } });
+          await sendAnswerSignal(sender, {
+            threadId,
+            resourceId,
+            correlationId,
+            question,
+            contents: `Could not answer that question: ${message}`,
+          }).catch(() => {});
+        }
+      })();
+
+      return {
+        ok: true,
+        accepted: true,
+        correlationId,
+        note: 'The answer will arrive as a remembered signal carrying this correlationId.',
+      };
+    },
+  });
+
+  return { ask_memory: askMemory } satisfies Record<string, ToolAction<any, any, any, any, any, any, any>>;
+}
+
+/** A configuration gap rather than a failure — reported as an explicit unavailable result. */
+class ReminderUnavailableError extends Error {}
+
+function describeAskFailure(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return error instanceof ReminderUnavailableError ? { unavailable: true, error: message } : { error: message };
 }
 
 export class SubconsciousRemindExtractor extends Extractor<string> {

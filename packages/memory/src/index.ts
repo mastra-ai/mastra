@@ -57,7 +57,7 @@ import {
   composeReflectionAgentHandlers,
   createLearnerHandler,
 } from './processors/observational-memory/subconscious/learn';
-import { remindThreadKey } from './processors/observational-memory/subconscious/remind';
+import { createRemindAskTool, remindThreadKey } from './processors/observational-memory/subconscious/remind';
 import { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
 import type {
   SummarizeConversationOptions,
@@ -2593,6 +2593,24 @@ Notes:
       omConfig.experimental_subconscious.resolved.tools
     ) {
       Object.assign(tools, createKnowledgeTools(this));
+
+      // The ask lane rides the same `tools` flag: a client that turned the knowledge tools off did
+      // not ask for a new agent-facing tool either.
+      const remindConfig = omConfig.experimental_subconscious.resolved.observation.find(
+        agent => agent.name === 'remind',
+      );
+      if (remindConfig) {
+        const omModel = omConfig.observation?.model ?? omConfig.model;
+        Object.assign(
+          tools,
+          createRemindAskTool({
+            memory: this,
+            config: remindConfig,
+            omModel,
+            createRemindMemory: () => this.getSubconsciousRemindMemory(omModel),
+          }),
+        );
+      }
     }
 
     return tools;

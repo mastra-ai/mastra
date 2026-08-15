@@ -1,4 +1,5 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MemoryStorage } from '@mastra/core/storage';
@@ -7,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { applyExtractorHooks } from '../extracted-values';
 import { buildExtractorOutputSections, Extractor } from '../extractor';
 import { SubconsciousRemindExtractor } from '../subconscious';
+import { createRemindAskTool } from '../subconscious/remind';
 
 function createModel(response: string) {
   return new MockLanguageModelV2({
@@ -727,5 +729,282 @@ describe('Subconscious remind', () => {
         value: expect.objectContaining({ errors: ['remind: reminder provider unavailable'] }),
       }),
     );
+  });
+});
+
+describe('Subconscious remind ask lane', () => {
+  function createAskTool(
+    options: {
+      response?: string;
+      omModel?: any;
+      createRemindMemory?: () => any;
+      generate?: (prompt: string, args: any) => Promise<{ text: string }>;
+    } = {},
+  ) {
+    const memory = { storage: new InMemoryStore(), getKnowledgeSemanticIndex: vi.fn() } as any;
+    const generateSpy = vi.spyOn(Agent.prototype, 'generate' as any);
+    if (options.generate) {
+      generateSpy.mockImplementation(options.generate as any);
+    } else {
+      generateSpy.mockImplementation((async () => ({ text: options.response ?? 'That happened on Tuesday.' })) as any);
+    }
+    const tools = createRemindAskTool({
+      memory,
+      config: { name: 'remind', maxSteps: 3, builtIn: true },
+      omModel: 'omModel' in options ? options.omModel : createModel('unused'),
+      createRemindMemory: options.createRemindMemory,
+    });
+    return { tools, generateSpy, memory };
+  }
+
+  function askContext(overrides: Record<string, unknown> = {}) {
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'acme');
+    return {
+      agent: { agentId: 'main', threadId: 'alpha', resourceId: 'user-42' },
+      requestContext,
+      ...overrides,
+    } as any;
+  }
+
+  function signalCapture() {
+    const sent: any[] = [];
+    const sender = {
+      sendSignal: vi.fn((signal: any) => {
+        sent.push(signal);
+        return { persisted: Promise.resolve() };
+      }),
+    };
+    return {
+      sent,
+      sender,
+      mastra: { getAgentById: vi.fn(async () => sender) },
+    };
+  }
+
+  async function settle() {
+    for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0));
+  }
+
+  it('returns the answer as the tool result when wait is true', async () => {
+    const { tools, generateSpy } = createAskTool({ response: 'The deploy happened on Tuesday.' });
+    try {
+      const result: any = await tools.ask_memory.execute!({ question: 'when did that happen?' } as any, askContext());
+      expect(result.ok).toBe(true);
+      expect(result.answer).toBe('The deploy happened on Tuesday.');
+    } finally {
+      generateSpy.mockRestore();
+    }
+  });
+
+  it('asks on the shared remind thread, not a thread of its own', async () => {
+    const calls: any[] = [];
+    const { tools, generateSpy } = createAskTool({
+      createRemindMemory: () => ({}) as any,
+      generate: async (_prompt, args) => {
+        calls.push(args);
+        return { text: 'Tuesday.' };
+      },
+    });
+    try {
+      await tools.ask_memory.execute!({ question: 'when?' } as any, askContext());
+      expect(calls[0]?.memory).toEqual({ thread: 'subconscious:alpha:remind', resource: 'user-42' });
+    } finally {
+      generateSpy.mockRestore();
+    }
+  });
+
+  it('returns immediately when wait is false, before the answer settles', async () => {
+    let release: (value: { text: string }) => void = () => {};
+    const deferred = new Promise<{ text: string }>(resolve => (release = resolve));
+    const { tools, generateSpy } = createAskTool({
+      generate: async () => deferred,
+      createRemindMemory: () => ({}) as any,
+    });
+    const capture = signalCapture();
+    try {
+      const result: any = await tools.ask_memory.execute!(
+        { question: 'when?', wait: false } as any,
+        askContext({ mastra: capture.mastra }),
+      );
+      expect(result.accepted).toBe(true);
+      expect(capture.sent).toHaveLength(0);
+      release({ text: 'Tuesday.' });
+      await settle();
+      expect(capture.sent).toHaveLength(1);
+    } finally {
+      generateSpy.mockRestore();
+    }
+  });
+
+  it('delivers the non-blocking answer as a remembered signal', async () => {
+    const { tools, generateSpy } = createAskTool({ response: 'Tuesday.' });
+    const capture = signalCapture();
+    try {
+      await tools.ask_memory.execute!(
+        { question: 'when?', wait: false } as any,
+        askContext({ mastra: capture.mastra }),
+      );
+      await settle();
+      expect(capture.sent[0]).toEqual(
+        expect.objectContaining({
+          type: 'reactive',
+          tagName: 'remembered',
+          attributes: expect.objectContaining({ source: 'subconscious', agent: 'remind', threadId: 'alpha' }),
+        }),
+      );
+      expect(capture.sender.sendSignal).toHaveBeenCalledWith(expect.anything(), {
+        threadId: 'alpha',
+        resourceId: 'user-42',
+      });
+    } finally {
+      generateSpy.mockRestore();
+    }
+  });
+
+  it('round-trips the correlation id from the acknowledgement to the late signal', async () => {
+    const { tools, generateSpy } = createAskTool({ response: 'Tuesday.' });
+    const capture = signalCapture();
+    try {
+      const result: any = await tools.ask_memory.execute!(
+        { question: 'when?', wait: false } as any,
+        askContext({ mastra: capture.mastra }),
+      );
+      await settle();
+      expect(result.correlationId).toBeTruthy();
+      expect(capture.sent[0].attributes.correlationId).toBe(result.correlationId);
+    } finally {
+      generateSpy.mockRestore();
+    }
+  });
+
+  it('keeps the question and the answer in the shared thread', async () => {
+    const generated: any[] = [];
+    const { tools, generateSpy } = createAskTool({
+      createRemindMemory: () => ({}) as any,
+      generate: async (prompt, args) => {
+        generated.push({ prompt, args });
+        return { text: 'Tuesday.' };
+      },
+    });
+    try {
+      await tools.ask_memory.execute!({ question: 'when did the deploy happen?' } as any, askContext());
+      expect(generated[0].prompt).toContain('when did the deploy happen?');
+      expect(generated[0].args.memory.thread).toBe('subconscious:alpha:remind');
+    } finally {
+      generateSpy.mockRestore();
+    }
+  });
+
+  it('isolates a blocking failure into an error result instead of throwing', async () => {
+    const { tools, generateSpy } = createAskTool({
+      generate: async () => {
+        throw new Error('reminder provider unavailable');
+      },
+    });
+    try {
+      const result: any = await tools.ask_memory.execute!({ question: 'when?' } as any, askContext());
+      expect(result).toEqual(expect.objectContaining({ ok: false, error: 'reminder provider unavailable' }));
+    } finally {
+      generateSpy.mockRestore();
+    }
+  });
+
+  it('reports a non-blocking failure on the signal channel carrying the correlation id', async () => {
+    const { tools, generateSpy } = createAskTool({
+      generate: async () => {
+        throw new Error('reminder provider unavailable');
+      },
+    });
+    const capture = signalCapture();
+    const writer = { custom: vi.fn(async () => undefined) };
+    try {
+      const result: any = await tools.ask_memory.execute!(
+        { question: 'when?', wait: false } as any,
+        askContext({ mastra: capture.mastra, writer }),
+      );
+      await settle();
+      expect(writer.custom).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'data-subconscious-error',
+          data: expect.objectContaining({ agent: 'remind' }),
+        }),
+      );
+      expect(capture.sent[0].attributes.correlationId).toBe(result.correlationId);
+      expect(capture.sent[0].contents).toEqual(expect.anything());
+    } finally {
+      generateSpy.mockRestore();
+    }
+  });
+
+  it('gives concurrent non-blocking questions distinct correlation ids', async () => {
+    const { tools, generateSpy } = createAskTool({
+      generate: async prompt => ({ text: prompt.includes('first') ? 'answer one' : 'answer two' }),
+    });
+    const capture = signalCapture();
+    try {
+      const context = askContext({ mastra: capture.mastra });
+      const [one, two]: any[] = await Promise.all([
+        tools.ask_memory.execute!({ question: 'the first one?', wait: false } as any, context),
+        tools.ask_memory.execute!({ question: 'the second one?', wait: false } as any, context),
+      ]);
+      await settle();
+      expect(one.correlationId).not.toBe(two.correlationId);
+      const byId = new Map(capture.sent.map(signal => [signal.attributes.correlationId, signal]));
+      expect(byId.get(one.correlationId)?.attributes.question).toBe('the first one?');
+      expect(byId.get(two.correlationId)?.attributes.question).toBe('the second one?');
+    } finally {
+      generateSpy.mockRestore();
+    }
+  });
+
+  it('leaves the passive reminder path unregressed when the ask tool exists', async () => {
+    const extractor = new SubconsciousRemindExtractor({ name: 'remind', maxSteps: 3, builtIn: true });
+    const context = createContext('Project Atlas launches January 15.');
+    const store = await context.memory.storage.getStore('knowledge');
+    const node = await store.createNode({
+      name: 'Project Atlas',
+      kind: 'project',
+      scope: ['org:acme', 'resource:user-42'],
+    });
+    await store.appendItem({
+      parentNodeId: node.id,
+      text: 'Project Atlas launches January 15.',
+      scope: ['org:acme', 'resource:user-42'],
+      sourceThreadId: 'beta',
+      resolutionScope: ['org:acme', 'resource:user-42', 'thread:beta'],
+      defaultScope: ['org:acme', 'resource:user-42'],
+    });
+    createRemindAskTool({
+      memory: context.memory,
+      config: { name: 'remind', maxSteps: 3, builtIn: true },
+      omModel: createModel('unused'),
+    });
+
+    const result = await applyExtractorHooks({
+      source: 'observer',
+      extractors: [extractor],
+      rawObservations: 'The user is scheduling Project Atlas.',
+      ...context,
+    });
+
+    expect(result.failures).toBeUndefined();
+    expect(context.sendSignal).toHaveBeenCalledOnce();
+    expect(context.sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'reactive', tagName: 'remembered' }),
+    );
+  });
+
+  it('returns an explicit unavailable result when no model can be resolved', async () => {
+    const { tools, generateSpy } = createAskTool({ omModel: undefined });
+    try {
+      const result: any = await tools.ask_memory.execute!({ question: 'when?' } as any, askContext());
+      expect(result.ok).toBe(false);
+      expect(result.unavailable).toBe(true);
+      expect(result.error).toMatch(/model/i);
+      expect(generateSpy).not.toHaveBeenCalled();
+    } finally {
+      generateSpy.mockRestore();
+    }
   });
 });
