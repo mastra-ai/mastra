@@ -340,7 +340,12 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
         updatePayload.metadata = [update.metadata];
       }
 
-      await this.upsert({ indexName: indexName, vectors: updatePayload.vectors, metadata: updatePayload.metadata });
+      await this.upsert({
+        indexName,
+        vectors: updatePayload.vectors,
+        metadata: updatePayload.metadata,
+        ids: [id],
+      });
     } catch (error) {
       throw new MastraError(
         {
@@ -387,16 +392,55 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
   }
 
   async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams): Promise<void> {
-    throw new MastraError({
-      id: createVectorErrorId('VECTORIZE', 'DELETE_VECTORS', 'NOT_SUPPORTED'),
-      text: 'deleteVectors is not yet implemented for Vectorize vector store',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.SYSTEM,
-      details: {
-        indexName,
-        ...(filter && { filter: JSON.stringify(filter) }),
-        ...(ids && { idsCount: ids.length }),
-      },
-    });
+    if (ids !== undefined && filter !== undefined) {
+      throw new MastraError({
+        id: createVectorErrorId('VECTORIZE', 'DELETE_VECTORS', 'INVALID_ARGS'),
+        text: 'ids and filter are mutually exclusive for Vectorize deleteVectors',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName, idsCount: ids.length, filter: JSON.stringify(filter) },
+      });
+    }
+
+    if (filter !== undefined) {
+      throw new MastraError({
+        id: createVectorErrorId('VECTORIZE', 'DELETE_VECTORS', 'FILTER_NOT_SUPPORTED'),
+        text: 'Deleting Vectorize vectors by metadata filter is not supported',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.SYSTEM,
+        details: { indexName, filter: JSON.stringify(filter) },
+      });
+    }
+
+    if (ids === undefined) {
+      throw new MastraError({
+        id: createVectorErrorId('VECTORIZE', 'DELETE_VECTORS', 'INVALID_ARGS'),
+        text: 'ids are required for Vectorize deleteVectors',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
+    if (ids.length === 0) {
+      return;
+    }
+
+    try {
+      await this.client.vectorize.indexes.deleteByIds(indexName, {
+        ids,
+        account_id: this.accountId,
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createVectorErrorId('VECTORIZE', 'DELETE_VECTORS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, idsCount: ids.length },
+        },
+        error,
+      );
+    }
   }
 }
