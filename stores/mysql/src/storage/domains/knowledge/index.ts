@@ -918,6 +918,7 @@ export class KnowledgeMySQL extends KnowledgeStorage {
         JSON.stringify(scope),
         knowledgeScopeKey(scope),
         now.toISOString(),
+        now.toISOString(),
       ],
     });
   }
