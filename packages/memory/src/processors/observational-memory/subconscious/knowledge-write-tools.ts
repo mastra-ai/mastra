@@ -175,7 +175,8 @@ export function createKnowledgeWriteTools(
     }),
     knowledge_write_node_content: createTool({
       id: 'knowledge_write_node_content',
-      description: 'Create or replace long-form content on a scoped knowledge node. Existing nodes require expectedVersion.',
+      description:
+        'Create or replace long-form content on a scoped knowledge node. Existing nodes require expectedVersion.',
       inputSchema: {
         type: 'object',
         properties: {
