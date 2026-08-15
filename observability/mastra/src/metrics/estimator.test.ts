@@ -115,6 +115,64 @@ describe('estimateCosts', () => {
     expect(costs.get(TokenMetrics.TOTAL_INPUT)?.estimatedCost).toBeCloseTo(0.00525);
   });
 
+  it('prices the unclassified remainder from mixed TTL-aware and aggregate-only cache writes', () => {
+    const costs = estimateCosts(
+      {
+        provider: 'anthropic',
+        model: 'claude-sonnet-5',
+        usage: {
+          inputTokens: 2_500,
+          outputTokens: 0,
+          inputDetails: { text: 1_000, cacheWrite: 1_500, cacheWrite5m: 500 },
+        },
+      },
+      embeddedPricingRegistry,
+    );
+
+    expect(costs.get(TokenMetrics.INPUT_CACHE_WRITE_5M)?.estimatedCost).toBeCloseTo(0.00125);
+    expect(costs.get(TokenMetrics.INPUT_CACHE_WRITE)?.estimatedCost).toBeCloseTo(0.00375);
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)?.estimatedCost).toBeCloseTo(0.00575);
+  });
+
+  it('prices the aggregate remainder when only the 1-hour TTL bucket is available', () => {
+    const costs = estimateCosts(
+      {
+        provider: 'anthropic',
+        model: 'claude-sonnet-5',
+        usage: {
+          inputTokens: 2_000,
+          outputTokens: 0,
+          inputDetails: { text: 1_000, cacheWrite: 1_000, cacheWrite1h: 400 },
+        },
+      },
+      embeddedPricingRegistry,
+    );
+
+    expect(costs.get(TokenMetrics.INPUT_CACHE_WRITE_1H)?.estimatedCost).toBeCloseTo(0.0016);
+    expect(costs.get(TokenMetrics.INPUT_CACHE_WRITE)?.estimatedCost).toBeCloseTo(0.0031);
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)?.estimatedCost).toBeCloseTo(0.0051);
+  });
+
+  it('clamps the unclassified cache-write remainder when TTL buckets exceed the aggregate', () => {
+    const costs = estimateCosts(
+      {
+        provider: 'anthropic',
+        model: 'claude-sonnet-5',
+        usage: {
+          inputTokens: 1_500,
+          outputTokens: 0,
+          inputDetails: { text: 1_000, cacheWrite: 500, cacheWrite5m: 400, cacheWrite1h: 300 },
+        },
+      },
+      embeddedPricingRegistry,
+    );
+
+    expect(costs.get(TokenMetrics.INPUT_CACHE_WRITE_5M)?.estimatedCost).toBeCloseTo(0.001);
+    expect(costs.get(TokenMetrics.INPUT_CACHE_WRITE_1H)?.estimatedCost).toBeCloseTo(0.0012);
+    expect(costs.get(TokenMetrics.INPUT_CACHE_WRITE)?.estimatedCost).toBeCloseTo(0.0022);
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)?.estimatedCost).toBeCloseTo(0.0042);
+  });
+
   it('estimates embedded Google pricing for gemini-3.5-flash', () => {
     const costs = estimateCosts(
       {

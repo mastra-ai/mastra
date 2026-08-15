@@ -59,23 +59,35 @@ export function estimateCosts(
   }
 
   const cacheWriteDetailResults: Array<{ success: boolean; costContext: CostContext }> = [];
-  if (usage.inputDetails?.cacheWrite5m) {
+  const cacheWrite5m = usage.inputDetails?.cacheWrite5m ?? 0;
+  const cacheWrite1h = usage.inputDetails?.cacheWrite1h ?? 0;
+  if (cacheWrite5m > 0) {
     const result = estimateCostForMeter({
       meter: PricingMeter.INPUT_CACHE_WRITE_5M_TOKENS,
-      tokenCount: usage.inputDetails.cacheWrite5m,
+      tokenCount: cacheWrite5m,
       ...estimateFields,
     });
     results.set(TokenMetrics.INPUT_CACHE_WRITE_5M, result.costContext);
     cacheWriteDetailResults.push(result);
     inputDetailResults.push(result);
   }
-  if (usage.inputDetails?.cacheWrite1h) {
+  if (cacheWrite1h > 0) {
     const result = estimateCostForMeter({
       meter: PricingMeter.INPUT_CACHE_WRITE_1H_TOKENS,
-      tokenCount: usage.inputDetails.cacheWrite1h,
+      tokenCount: cacheWrite1h,
       ...estimateFields,
     });
     results.set(TokenMetrics.INPUT_CACHE_WRITE_1H, result.costContext);
+    cacheWriteDetailResults.push(result);
+    inputDetailResults.push(result);
+  }
+  const unclassifiedCacheWrite = Math.max(0, (usage.inputDetails?.cacheWrite ?? 0) - cacheWrite5m - cacheWrite1h);
+  if (unclassifiedCacheWrite > 0) {
+    const result = estimateCostForMeter({
+      meter: PricingMeter.INPUT_CACHE_WRITE_TOKENS,
+      tokenCount: unclassifiedCacheWrite,
+      ...estimateFields,
+    });
     cacheWriteDetailResults.push(result);
     inputDetailResults.push(result);
   }
@@ -87,14 +99,6 @@ export function estimateCosts(
       pricingModel,
       costMetadata,
     );
-  } else if (usage.inputDetails?.cacheWrite) {
-    const result = estimateCostForMeter({
-      meter: PricingMeter.INPUT_CACHE_WRITE_TOKENS,
-      tokenCount: usage.inputDetails.cacheWrite,
-      ...estimateFields,
-    });
-    results.set(TokenMetrics.INPUT_CACHE_WRITE, result.costContext);
-    inputDetailResults.push(result);
   }
 
   if (usage.inputDetails?.image) {

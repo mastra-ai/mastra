@@ -615,6 +615,15 @@ describe('addUsageStats', () => {
     expect(result.outputDetails).toEqual({ text: 50, reasoning: 5, audio: 2 });
   });
 
+  it('preserves aggregate and TTL buckets when rolling up mixed cache-write usage', () => {
+    const result = addUsageStats(
+      { inputDetails: { cacheWrite: 500, cacheWrite5m: 500 } },
+      { inputDetails: { cacheWrite: 1_000 } },
+    );
+
+    expect(result.inputDetails).toEqual({ cacheWrite: 1_500, cacheWrite5m: 500 });
+  });
+
   it('preserves details from one side when the other has none', () => {
     const result = addUsageStats({ inputTokens: 10 }, { inputTokens: 5, inputDetails: { text: 5 } });
     expect(result.inputTokens).toBe(15);
