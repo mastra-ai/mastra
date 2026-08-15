@@ -86,13 +86,13 @@ describe('Subconscious remind', () => {
     });
     const context = createContext('Project Atlas launches January 15.');
     const store = await context.memory.storage.getStore('knowledge');
-    const entity = await store.createEntity({
+    const node = await store.createNode({
       name: 'Project Atlas',
       kind: 'project',
       scope: ['org:acme', 'resource:user-42'],
     });
-    const fact = await store.appendFact({
-      parentEntityId: entity.id,
+    const item = await store.appendItem({
+      parentNodeId: node.id,
       text: 'Project Atlas launches January 15.',
       scope: ['org:acme', 'resource:user-42'],
       sourceThreadId: 'alpha',
@@ -113,10 +113,10 @@ describe('Subconscious remind', () => {
       expect.objectContaining({
         type: 'reactive',
         tagName: 'remembered',
-        contents: expect.stringContaining(fact.id),
+        contents: expect.stringContaining(item.id),
         attributes: expect.objectContaining({
           source: 'subconscious',
-          sourceIds: expect.stringContaining(fact.id),
+          sourceIds: expect.stringContaining(item.id),
           agent: 'remind',
           threadId: 'alpha',
         }),

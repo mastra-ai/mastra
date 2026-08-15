@@ -29,10 +29,10 @@ describe('MongoDB knowledge concurrency and indexes', () => {
     const store = createStore();
     await store.init();
     await store.dangerouslyClearAll();
-    const entity = await store.createEntity({ name: 'CAS', kind: 'test', scope: ['org:acme'] });
+    const node = await store.createNode({ name: 'CAS', kind: 'test', scope: ['org:acme'] });
     const results = await Promise.allSettled([
-      store.updateEntity({ id: entity.id, version: 1, name: 'CAS one' }),
-      store.updateEntity({ id: entity.id, version: 1, name: 'CAS two' }),
+      store.updateNode({ id: node.id, version: 1, name: 'CAS one' }),
+      store.updateNode({ id: node.id, version: 1, name: 'CAS two' }),
     ]);
     expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
     expect(results.filter(result => result.status === 'rejected')).toHaveLength(1);
@@ -43,11 +43,11 @@ describe('MongoDB knowledge concurrency and indexes', () => {
     await store.init();
     await store.dangerouslyClearAll();
     await Promise.all([
-      store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastFactId: '01A' }),
-      store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastFactId: '01C' }),
-      store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastFactId: '01B' }),
+      store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastItemId: '01A' }),
+      store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastItemId: '01C' }),
+      store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastItemId: '01B' }),
     ]);
-    expect((await store.getCurationCursor({ sourceThreadId: 'thread', agent: 'curate' }))?.lastFactId).toBe('01C');
+    expect((await store.getCurationCursor({ sourceThreadId: 'thread', agent: 'curate' }))?.lastItemId).toBe('01C');
   });
 });
 

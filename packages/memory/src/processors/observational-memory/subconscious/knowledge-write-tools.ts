@@ -49,31 +49,31 @@ export function createKnowledgeWriteTools(
   options: KnowledgeWriteToolsOptions,
 ): Record<string, ToolAction<any, any, any>> {
   return {
-    knowledge_add_fact: createTool({
-      id: 'knowledge_add_fact',
-      description: 'Append a scoped fact to an existing entity. Provenance and capture time are stamped by code.',
+    knowledge_add_item: createTool({
+      id: 'knowledge_add_item',
+      description: 'Append a scoped item to an existing node. Provenance and capture time are stamped by code.',
       inputSchema: {
         type: 'object',
         properties: {
-          parentEntityId: { type: 'string', minLength: 1 },
+          parentNodeId: { type: 'string', minLength: 1 },
           text: { type: 'string', minLength: 1 },
           scope: scopeLevelSchema,
           when: { type: 'string' },
         },
-        required: ['parentEntityId', 'text'],
+        required: ['parentNodeId', 'text'],
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
-        const value = input as { parentEntityId: string; text: string; scope?: KnowledgeScopeLevel; when?: string };
+        const value = input as { parentNodeId: string; text: string; scope?: KnowledgeScopeLevel; when?: string };
         const store = await getStore(memory);
-        const parent = await store.getEntity(value.parentEntityId);
-        if (!parent || parent.mergedInto) throw new Error(`Knowledge entity not found: ${value.parentEntityId}`);
-        requireVisible(parent.scope, options, 'Knowledge entity');
+        const parent = await store.getNode(value.parentNodeId);
+        if (!parent || parent.mergedInto) throw new Error(`Knowledge node not found: ${value.parentNodeId}`);
+        requireVisible(parent.scope, options, 'Knowledge node');
         const scope = resolveWriteScope(options, value.scope);
         const when = value.when ? new Date(value.when) : undefined;
-        if (when && Number.isNaN(when.getTime())) throw new Error('Knowledge fact when must be a valid date.');
-        return store.appendFact({
-          parentEntityId: parent.id,
+        if (when && Number.isNaN(when.getTime())) throw new Error('KnowledgeItem when must be a valid date.');
+        return store.appendItem({
+          parentNodeId: parent.id,
           text: value.text,
           scope,
           sourceThreadId: options.sourceThreadId,
@@ -84,55 +84,55 @@ export function createKnowledgeWriteTools(
         });
       },
     }),
-    knowledge_remove_fact: createTool({
-      id: 'knowledge_remove_fact',
-      description: 'Soft-delete a visible fact. Curators cannot restore or physically erase facts.',
+    knowledge_remove_item: createTool({
+      id: 'knowledge_remove_item',
+      description: 'Soft-delete a visible item. Curators cannot restore or physically erase KnowledgeItems.',
       inputSchema: {
         type: 'object',
-        properties: { factId: { type: 'string', minLength: 1 } },
-        required: ['factId'],
+        properties: { itemId: { type: 'string', minLength: 1 } },
+        required: ['itemId'],
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
         const store = await getStore(memory);
-        const fact = await store.getFact({ id: (input as { factId: string }).factId, includeDeleted: true });
-        if (!fact) throw new Error(`Knowledge fact not found: ${(input as { factId: string }).factId}`);
-        requireVisible(fact.scope, options, 'Knowledge fact');
-        return store.removeFact({ id: fact.id, deletedBy: CURATOR_IDENTITY });
+        const item = await store.getItem({ id: (input as { itemId: string }).itemId, includeDeleted: true });
+        if (!item) throw new Error(`KnowledgeItem not found: ${(input as { itemId: string }).itemId}`);
+        requireVisible(item.scope, options, 'KnowledgeItem');
+        return store.removeItem({ id: item.id, deletedBy: CURATOR_IDENTITY });
       },
     }),
-    knowledge_update_entity: createTool({
-      id: 'knowledge_update_entity',
-      description: 'Update a visible entity name or kind using optimistic concurrency.',
+    knowledge_update_node: createTool({
+      id: 'knowledge_update_node',
+      description: 'Update a visible node name or kind using optimistic concurrency.',
       inputSchema: {
         type: 'object',
         properties: {
-          entityId: { type: 'string', minLength: 1 },
+          nodeId: { type: 'string', minLength: 1 },
           expectedVersion: { type: 'integer', minimum: 1 },
           name: { type: 'string', minLength: 1 },
-          kind: { type: 'string', minLength: 1, pattern: '^(?!\\s*[Pp][Aa][Gg][Ee]\\s*$).+' },
+          kind: { type: 'string', minLength: 1 },
         },
-        required: ['entityId', 'expectedVersion'],
+        required: ['nodeId', 'expectedVersion'],
         anyOf: [{ required: ['name'] }, { required: ['kind'] }],
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
-        const value = input as { entityId: string; expectedVersion: number; name?: string; kind?: string };
+        const value = input as { nodeId: string; expectedVersion: number; name?: string; kind?: string };
         const store = await getStore(memory);
-        const entity = await store.getEntity(value.entityId);
-        if (!entity || entity.mergedInto) throw new Error(`Knowledge entity not found: ${value.entityId}`);
-        requireVisible(entity.scope, options, 'Knowledge entity');
-        return store.updateEntity({
-          id: entity.id,
+        const node = await store.getNode(value.nodeId);
+        if (!node || node.mergedInto) throw new Error(`Knowledge node not found: ${value.nodeId}`);
+        requireVisible(node.scope, options, 'Knowledge node');
+        return store.updateNode({
+          id: node.id,
           version: value.expectedVersion,
           name: value.name,
           kind: value.kind,
         });
       },
     }),
-    knowledge_merge_entities: createTool({
-      id: 'knowledge_merge_entities',
-      description: 'Merge a visible duplicate entity into another visible entity using source-version CAS.',
+    knowledge_merge_nodes: createTool({
+      id: 'knowledge_merge_nodes',
+      description: 'Merge a visible duplicate node into another visible node using source-version CAS.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -146,72 +146,82 @@ export function createKnowledgeWriteTools(
       execute: async input => {
         const value = input as { sourceId: string; targetId: string; sourceVersion: number };
         const store = await getStore(memory);
-        const [source, target] = await Promise.all([store.getEntity(value.sourceId), store.getEntity(value.targetId)]);
-        if (!source || !target) throw new Error('Knowledge merge requires two existing entities.');
+        const [source, target] = await Promise.all([store.getNode(value.sourceId), store.getNode(value.targetId)]);
+        if (!source || !target) throw new Error('Knowledge merge requires two existing nodes.');
         requireVisible(source.scope, options, 'Knowledge merge source');
         requireVisible(target.scope, options, 'Knowledge merge target');
-        return store.mergeEntities(value);
+        return store.mergeNodes(value);
       },
     }),
-    knowledge_rescope: createTool({
-      id: 'knowledge_rescope',
-      description: 'Change a fact visibility scope without exceeding its stamped ceiling.',
+    knowledge_rescope_item: createTool({
+      id: 'knowledge_rescope_item',
+      description: 'Change a item visibility scope without exceeding its stamped ceiling.',
       inputSchema: {
         type: 'object',
-        properties: { factId: { type: 'string', minLength: 1 }, scope: scopeLevelSchema },
-        required: ['factId', 'scope'],
+        properties: { itemId: { type: 'string', minLength: 1 }, scope: scopeLevelSchema },
+        required: ['itemId', 'scope'],
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
-        const value = input as { factId: string; scope: KnowledgeScopeLevel };
+        const value = input as { itemId: string; scope: KnowledgeScopeLevel };
         const store = await getStore(memory);
-        const fact = await store.getFact({ id: value.factId });
-        if (!fact) throw new Error(`Knowledge fact not found: ${value.factId}`);
-        requireVisible(fact.scope, options, 'Knowledge fact');
+        const item = await store.getItem({ id: value.itemId });
+        if (!item) throw new Error(`KnowledgeItem not found: ${value.itemId}`);
+        requireVisible(item.scope, options, 'KnowledgeItem');
         const scope = resolveWriteScope(options, value.scope);
-        assertKnowledgeScopeWithinCeiling(scope, fact.maxScope);
-        return store.rescopeFact({ id: fact.id, scope });
+        assertKnowledgeScopeWithinCeiling(scope, item.maxScope);
+        return store.rescopeItem({ id: item.id, scope });
       },
     }),
-    knowledge_write_page: createTool({
-      id: 'knowledge_write_page',
-      description: 'Create or replace a scoped curated page. Existing pages require expectedVersion.',
+    knowledge_write_node_content: createTool({
+      id: 'knowledge_write_node_content',
+      description:
+        'Create or replace long-form content on a scoped knowledge node. Existing nodes require expectedVersion.',
       inputSchema: {
         type: 'object',
         properties: {
           name: { type: 'string', minLength: 1 },
-          body: { type: 'string', minLength: 1 },
+          kind: { type: 'string', minLength: 1 },
+          content: { type: 'string', minLength: 1 },
           scope: scopeLevelSchema,
           expectedVersion: { type: 'integer', minimum: 1 },
         },
-        required: ['name', 'body'],
+        required: ['name', 'content'],
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
         const value = input as {
           name: string;
-          body: string;
+          kind?: string;
+          content: string;
           scope?: KnowledgeScopeLevel;
           expectedVersion?: number;
         };
-        if (value.name.trim().toLowerCase() === 'capture-guidance' && value.body.length > MAX_GUIDANCE_LENGTH) {
+        if (value.name.trim().toLowerCase() === 'capture-guidance' && value.content.length > MAX_GUIDANCE_LENGTH) {
           throw new Error(`capture-guidance is limited to ${MAX_GUIDANCE_LENGTH} characters.`);
         }
         const store = await getStore(memory);
         const scope = resolveWriteScope(options, value.scope);
-        const resolvedPage = await store.getPageByName({ name: value.name, scope });
+        const resolvedNode = await store.resolveNode({ name: value.name, scope });
         const existing =
-          resolvedPage && knowledgeScopeKey(resolvedPage.scope) === knowledgeScopeKey(scope) ? resolvedPage : null;
+          resolvedNode && knowledgeScopeKey(resolvedNode.scope) === knowledgeScopeKey(scope) ? resolvedNode : null;
         if (!existing) {
           if (value.expectedVersion !== undefined)
-            throw new Error('expectedVersion is only valid for an existing page.');
-          return store.createPage({ name: value.name, body: value.body, scope });
+            throw new Error('expectedVersion is only valid for an existing node.');
+          return store.createNode({
+            name: value.name,
+            kind: value.kind ?? 'document',
+            content: value.content,
+            scope,
+            resolutionScope: options.scope,
+          });
         }
-        if (value.expectedVersion === undefined) throw new Error('Updating a page requires expectedVersion.');
-        return store.updatePage({
+        if (value.expectedVersion === undefined) throw new Error('Updating node content requires expectedVersion.');
+        return store.updateNode({
           id: existing.id,
           version: value.expectedVersion,
-          body: value.body,
+          kind: value.kind,
+          content: value.content,
           resolutionScope: options.scope,
         });
       },

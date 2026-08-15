@@ -8,7 +8,6 @@ import {
   KnowledgeSemanticIndexCoordinator,
   StaleKnowledgeSemanticIndexError,
   SubconsciousCaptureExtractor,
-  subconsciousCaptureSchema,
 } from '../subconscious';
 import type { SubconsciousCaptureHook, SubconsciousCaptureOutput } from '../subconscious';
 
@@ -26,13 +25,7 @@ function createContext(memory: Memory, current: SubconsciousCaptureOutput) {
 }
 
 describe('Subconscious capture', () => {
-  it('rejects page entity kinds case-insensitively', () => {
-    expect(() =>
-      subconsciousCaptureSchema.parse({ entities: [{ name: 'Page-like entity', kind: '\tPAGE\n', facts: [] }] }),
-    ).toThrow(/reserved/);
-  });
-
-  it('deterministically writes scoped entities, facts, mentions, provenance, and ceilings', async () => {
+  it('deterministically writes scoped nodes, items, mentions, provenance, and ceilings', async () => {
     const memory = new Memory({ storage: new InMemoryStore() });
     const extractor = new SubconsciousCaptureExtractor({
       defaultScope: 'org',
@@ -40,11 +33,11 @@ describe('Subconscious capture', () => {
       learnedGuidance: false,
     });
     const context = createContext(memory, {
-      entities: [
+      nodes: [
         {
           name: 'Project Atlas',
           kind: 'project',
-          facts: [
+          items: [
             {
               text: '[[Maya Chen]] owns [[Project Atlas]].',
               scope: 'org',
@@ -61,31 +54,32 @@ describe('Subconscious capture', () => {
     const store = (await memory.storage.getStore('knowledge'))!;
     const resourceScope = ['org:acme', 'resource:user-42'];
     const threadScope = [...resourceScope, 'thread:alpha'];
-    const atlas = await store.getEntityByName({ name: 'Project Atlas', scope: resourceScope });
-    const maya = await store.resolveEntity({ name: 'Maya Chen', scope: threadScope });
+    const atlas = await store.getNodeByName({ name: 'Project Atlas', scope: resourceScope });
+    const maya = await store.resolveNode({ name: 'Maya Chen', scope: threadScope });
     expect(atlas).toMatchObject({ kind: 'project', scope: resourceScope });
     expect(maya).toMatchObject({ scope: resourceScope });
 
-    const facts = await store.factsAbout({ entityId: atlas!.id, scope: threadScope });
-    expect(facts.facts).toHaveLength(2);
-    expect(facts.facts[0]).toMatchObject({
+    const items = await store.itemsAbout({ nodeId: atlas!.id, scope: threadScope });
+    expect(items.items).toHaveLength(2);
+    expect(items.items[0]).toMatchObject({
       sourceThreadId: 'alpha',
       maxScope: 'resource',
     });
-    expect(facts.facts.map(fact => fact.scope)).toEqual(expect.arrayContaining([resourceScope, threadScope]));
-    expect(facts.facts.find(fact => fact.when)?.when?.toISOString()).toBe('2030-01-15T00:00:00.000Z');
-    expect(facts.facts.every(fact => fact.capturedAt instanceof Date)).toBe(true);
+    expect(items.items.map(item => item.scope)).toEqual(expect.arrayContaining([resourceScope, threadScope]));
+    expect(items.items.find(item => item.when)?.when?.toISOString()).toBe('2030-01-15T00:00:00.000Z');
+    expect(items.items.every(item => item.capturedAt instanceof Date)).toBe(true);
 
-    const touchingMaya = await store.factsTouching({ entityId: maya!.id, scope: threadScope });
-    expect(touchingMaya.facts.map(fact => fact.text)).toContain('[[Maya Chen]] owns [[Project Atlas]].');
+    const touchingMaya = await store.itemsTouching({ nodeId: maya!.id, scope: threadScope });
+    expect(touchingMaya.items.map(item => item.text)).toContain('[[Maya Chen]] owns [[Project Atlas]].');
   });
 
   it('loads bounded learned guidance after user instructions', async () => {
     const memory = new Memory({ storage: new InMemoryStore() });
     const store = (await memory.storage.getStore('knowledge'))!;
-    await store.createPage({
+    await store.createNode({
       name: 'capture-guidance',
-      body: `Treat Atlas as a project.\n${'x'.repeat(5_000)}`,
+      kind: 'document',
+      content: `Treat Atlas as a project.\n${'x'.repeat(5_000)}`,
       scope: ['org:acme', 'resource:user-42'],
     });
     const extractor = new SubconsciousCaptureExtractor({
@@ -94,7 +88,7 @@ describe('Subconscious capture', () => {
       learnedGuidance: true,
     });
 
-    const resolved = await extractor.resolve(createContext(memory, { entities: [] }));
+    const resolved = await extractor.resolve(createContext(memory, { nodes: [] }));
     expect(resolved.instructions).toContain('Record pricing amounts verbatim.');
     expect(resolved.instructions).toContain('Learned guidance');
     expect(resolved.instructions.indexOf('Record pricing')).toBeLessThan(
@@ -115,35 +109,35 @@ describe('Subconscious capture', () => {
       learnedGuidance: false,
     });
     const context = createContext(memory, {
-      entities: [{ name: 'Atlas', kind: 'project', facts: [] }],
+      nodes: [{ name: 'Atlas', kind: 'project', items: [] }],
     });
 
     await extractor.onExtracted?.({ ...context, extractor });
     expect(route).toHaveBeenCalledOnce();
     const store = (await memory.storage.getStore('knowledge'))!;
     expect(
-      await store.resolveEntity({ name: 'Atlas', scope: ['org:acme', 'resource:user-42', 'thread:alpha'] }),
+      await store.resolveNode({ name: 'Atlas', scope: ['org:acme', 'resource:user-42', 'thread:alpha'] }),
     ).not.toBeNull();
   });
 
-  it('honors model-selected entity scope within the configured ceiling', async () => {
+  it('honors model-selected node scope within the configured ceiling', async () => {
     const memory = new Memory({ storage: new InMemoryStore() });
     const extractor = new SubconsciousCaptureExtractor({
       defaultScope: 'resource',
       learnedGuidance: false,
     });
     const context = createContext(memory, {
-      entities: [{ name: 'Alpha Secret', kind: 'note', scope: 'thread', facts: [] }],
+      nodes: [{ name: 'Alpha Secret', kind: 'note', scope: 'thread', items: [] }],
     });
 
     await extractor.onExtracted?.({ ...context, extractor });
 
     const store = (await memory.storage.getStore('knowledge'))!;
     expect(
-      await store.resolveEntity({ name: 'Alpha Secret', scope: ['org:acme', 'resource:user-42', 'thread:beta'] }),
+      await store.resolveNode({ name: 'Alpha Secret', scope: ['org:acme', 'resource:user-42', 'thread:beta'] }),
     ).toBeNull();
     expect(
-      await store.resolveEntity({ name: 'Alpha Secret', scope: ['org:acme', 'resource:user-42', 'thread:alpha'] }),
+      await store.resolveNode({ name: 'Alpha Secret', scope: ['org:acme', 'resource:user-42', 'thread:alpha'] }),
     ).toMatchObject({ scope: ['org:acme', 'resource:user-42', 'thread:alpha'] });
   });
 
@@ -156,7 +150,7 @@ describe('Subconscious capture', () => {
     });
     const sendStateSignal = vi.fn(async () => ({ skipped: true, reason: 'unchanged' }) as any);
     const context = createContext(memory, {
-      entities: [{ name: 'Atlas', kind: 'project', facts: [{ text: 'Atlas launches in January.' }] }],
+      nodes: [{ name: 'Atlas', kind: 'project', items: [{ text: 'Atlas launches in January.' }] }],
     });
 
     await extractor.onExtracted?.({ ...context, extractor, sendStateSignal });
@@ -184,7 +178,7 @@ describe('Subconscious capture', () => {
         threadId: 'alpha',
         resourceId: 'user-42',
         memory,
-        current: { entities: [] },
+        current: { nodes: [] },
         extractor,
       }),
     ).rejects.toThrow(/organizationId/);
@@ -228,13 +222,14 @@ describe('Knowledge semantic indexing', () => {
   it('drains durable outbox rows idempotently and deletes stale vectors', async () => {
     const memory = new Memory({ storage: new InMemoryStore() });
     const knowledge = (await memory.storage.getStore('knowledge'))!;
-    const entity = await knowledge.createEntity({
+    const node = await knowledge.createNode({
       name: 'Project Atlas',
       kind: 'project',
+      content: 'Launch plan',
       scope: ['org:acme', 'resource:user-42'],
     });
-    const fact = await knowledge.appendFact({
-      parentEntityId: entity.id,
+    const item = await knowledge.appendItem({
+      parentNodeId: node.id,
       text: '[[Maya Chen]] owns Atlas.',
       scope: ['org:acme', 'resource:user-42'],
       sourceThreadId: 'alpha',
@@ -252,23 +247,24 @@ describe('Knowledge semantic indexing', () => {
 
     expect(await coordinator.drain(['org:acme', 'resource:user-42'])).toBeGreaterThanOrEqual(2);
     expect(await coordinator.drain(['org:acme', 'resource:user-42'])).toBe(0);
-    expect(vectors.get(`knowledge:fact:${fact.id}`)?.metadata).toMatchObject({
-      document_type: 'fact',
+    expect(embedder.doEmbed).toHaveBeenCalledWith(expect.objectContaining({ values: ['Project Atlas\nLaunch plan'] }));
+    expect(vectors.get(`knowledge:item:${item.id}`)?.metadata).toMatchObject({
+      document_type: 'item',
       scope_org: 'acme',
       scope_resource: 'user-42',
     });
 
-    await knowledge.removeFact({ id: fact.id, deletedBy: 'curator' });
+    await knowledge.removeItem({ id: item.id, deletedBy: 'curator' });
     await coordinator.drain(['org:acme', 'resource:user-42']);
-    expect(vectors.has(`knowledge:fact:${fact.id}`)).toBe(false);
+    expect(vectors.has(`knowledge:item:${item.id}`)).toBe(false);
     expect(deleteVectors).toHaveBeenCalled();
   });
 
   it('keeps concurrent drains isolated by visible scope', async () => {
     const memory = new Memory({ storage: new InMemoryStore() });
     const knowledge = (await memory.storage.getStore('knowledge'))!;
-    await knowledge.createEntity({ name: 'Atlas', kind: 'project', scope: ['org:acme'] });
-    await knowledge.createEntity({ name: 'Beacon', kind: 'project', scope: ['org:beta'] });
+    await knowledge.createNode({ name: 'Atlas', kind: 'project', scope: ['org:acme'] });
+    await knowledge.createNode({ name: 'Beacon', kind: 'project', scope: ['org:beta'] });
     const { vector } = createVector();
     const embedder = {
       doEmbed: vi.fn(async () => {
@@ -285,7 +281,7 @@ describe('Knowledge semantic indexing', () => {
   it('releases failed rows and resumes them idempotently after a crash-like failure', async () => {
     const memory = new Memory({ storage: new InMemoryStore() });
     const knowledge = (await memory.storage.getStore('knowledge'))!;
-    await knowledge.createEntity({ name: 'Atlas', kind: 'project', scope: ['org:acme'] });
+    await knowledge.createNode({ name: 'Atlas', kind: 'project', scope: ['org:acme'] });
     const { vector } = createVector();
     const doEmbed = vi
       .fn<({ values }: { values: string[] }) => Promise<{ embeddings: number[][] }>>()

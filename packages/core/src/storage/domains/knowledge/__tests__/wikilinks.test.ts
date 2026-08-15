@@ -20,8 +20,8 @@ describe('knowledge wikilinks and semantic ids', () => {
   });
 
   it('builds stable typed semantic document and operation ids', () => {
-    const documentId = knowledgeSemanticDocumentId('fact', '01ABC');
-    expect(documentId).toBe('knowledge:fact:01ABC');
-    expect(knowledgeSemanticIdempotencyKey(documentId, 'upsert', 2)).toBe('knowledge:fact:01ABC:upsert:2');
+    const documentId = knowledgeSemanticDocumentId('item', '01ABC');
+    expect(documentId).toBe('knowledge:item:01ABC');
+    expect(knowledgeSemanticIdempotencyKey(documentId, 'upsert', 2)).toBe('knowledge:item:01ABC:upsert:2');
   });
 });

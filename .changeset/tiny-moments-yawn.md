@@ -2,4 +2,4 @@
 '@mastra/memory': minor
 ---
 
-Added durable subconscious curation with scoped knowledge write tools, crash-safe worklist cursors, entity merging, page synthesis, and soft fact removal.
+Added durable Subconscious curation with scoped knowledge write tools, crash-safe worklist cursors, node merging, long-form content synthesis, and soft KnowledgeItem removal.

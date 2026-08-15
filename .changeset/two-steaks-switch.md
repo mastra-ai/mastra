@@ -3,4 +3,4 @@
 '@mastra/libsql': patch
 ---
 
-Added a knowledge storage contract for scoped entities, facts, pages, and durable curation state.
+Added a knowledge storage contract for scoped, content-capable nodes, knowledge items, and durable curation state.

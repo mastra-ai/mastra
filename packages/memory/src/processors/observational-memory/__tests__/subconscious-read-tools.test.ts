@@ -52,7 +52,7 @@ async function createMemory(tools = true, ignoreFilters = false) {
     options: {
       observationalMemory: {
         model: 'google/gemini-2.5-flash',
-        subconscious: new Subconscious({ tools }),
+        experimental_subconscious: new Subconscious({ tools }),
       },
     },
   });
@@ -70,31 +70,31 @@ describe('Subconscious knowledge read tools', () => {
   it('reads and browses visible records without exposing a sibling thread', async () => {
     const memory = await createMemory();
     const store = (await memory.storage.getStore('knowledge'))!;
-    const shared = await store.createEntity({
+    const shared = await store.createNode({
       name: 'Project Atlas',
       kind: 'project',
       scope: ['org:acme', 'resource:user-42'],
     });
-    await store.createEntity({
+    await store.createNode({
       name: 'Shared Brief',
       kind: 'note',
       scope: ['org:acme', 'resource:user-42'],
     });
-    const secret = await store.createEntity({
+    const secret = await store.createNode({
       name: 'Beta Secret',
       kind: 'secret',
       scope: ['org:acme', 'resource:user-42', 'thread:beta'],
     });
-    await store.appendFact({
-      parentEntityId: shared.id,
+    await store.appendItem({
+      parentNodeId: shared.id,
       text: '[[Maya Chen]] owns Atlas.',
       scope: ['org:acme', 'resource:user-42'],
       sourceThreadId: 'alpha',
       resolutionScope: ['org:acme', 'resource:user-42', 'thread:alpha'],
       defaultScope: ['org:acme', 'resource:user-42'],
     });
-    await store.appendFact({
-      parentEntityId: secret.id,
+    await store.appendItem({
+      parentNodeId: secret.id,
       text: 'Sibling-only information.',
       scope: ['org:acme', 'resource:user-42', 'thread:beta'],
       sourceThreadId: 'beta',
@@ -103,16 +103,16 @@ describe('Subconscious knowledge read tools', () => {
     });
 
     const tools = memory.listTools();
-    const read = await tools.knowledge_read!.execute?.({ type: 'entity', name: 'Project Atlas' }, toolContext());
-    expect(read).toMatchObject({ found: true, entity: { name: 'Project Atlas' } });
-    expect((read as any).facts[0].text).toContain('Maya Chen');
-    const hidden = await tools.knowledge_read!.execute?.({ type: 'entity', name: 'Beta Secret' }, toolContext());
+    const read = await tools.knowledge_read!.execute?.({ name: 'Project Atlas' }, toolContext());
+    expect(read).toMatchObject({ found: true, node: { name: 'Project Atlas' } });
+    expect((read as any).items[0].text).toContain('Maya Chen');
+    const hidden = await tools.knowledge_read!.execute?.({ name: 'Beta Secret' }, toolContext());
     expect(hidden).toEqual({ found: false });
     const firstPage = await tools.knowledge_browse!.execute?.({ limit: 1 }, toolContext());
     expect((firstPage as any).records).toHaveLength(1);
     expect((firstPage as any).nextCursor).toBeTruthy();
-    const cursorRecord = await store.getEntity((firstPage as any).records[0].id);
-    await store.updateEntity({
+    const cursorRecord = await store.getNode((firstPage as any).records[0].id);
+    await store.updateNode({
       id: cursorRecord!.id,
       version: cursorRecord!.version,
       name: `${cursorRecord!.name} renamed`,
@@ -131,19 +131,20 @@ describe('Subconscious knowledge read tools', () => {
   it('combines lexical and semantic results while filtering sibling-private vectors even when the adapter ignores filters', async () => {
     const memory = await createMemory(true, true);
     const store = (await memory.storage.getStore('knowledge'))!;
-    await store.createEntity({ name: 'Project Atlas', kind: 'project', scope: ['org:acme', 'resource:user-42'] });
-    await store.createPage({
+    await store.createNode({ name: 'Project Atlas', kind: 'project', scope: ['org:acme', 'resource:user-42'] });
+    await store.createNode({
       name: 'Deployment runbook',
-      body: 'The cobalt rollout procedure.',
+      kind: 'document',
+      content: 'The cobalt rollout procedure.',
       scope: ['org:acme', 'resource:user-42'],
     });
-    const privateParent = await store.createEntity({
+    const privateParent = await store.createNode({
       name: 'Beta Secret',
       kind: 'secret',
       scope: ['org:acme', 'resource:user-42', 'thread:beta'],
     });
-    await store.appendFact({
-      parentEntityId: privateParent.id,
+    await store.appendItem({
+      parentNodeId: privateParent.id,
       text: 'The cobalt procedure is shared.',
       scope: ['org:acme', 'resource:user-42'],
       sourceThreadId: 'beta',
@@ -155,11 +156,11 @@ describe('Subconscious knowledge read tools', () => {
     const tools = memory.listTools();
     const result = await tools.knowledge_search!.execute?.({ query: 'cobalt rollout' }, toolContext());
     expect((result as any).results).toEqual(
-      expect.arrayContaining([expect.objectContaining({ type: 'page', name: 'Deployment runbook' })]),
+      expect.arrayContaining([expect.objectContaining({ type: 'node', name: 'Deployment runbook' })]),
     );
     expect((result as any).results.map((item: any) => item.name)).not.toContain('Beta Secret');
     expect((result as any).results).toEqual(
-      expect.arrayContaining([expect.objectContaining({ type: 'fact', name: '(private entity)' })]),
+      expect.arrayContaining([expect.objectContaining({ type: 'item', name: '(private node)' })]),
     );
     expect((result as any).results.some((item: any) => item.sources.includes('semantic'))).toBe(true);
   });
