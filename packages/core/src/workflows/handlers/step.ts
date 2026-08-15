@@ -68,6 +68,90 @@ export interface ExecuteStepParams extends ObservabilityContext {
   perStep?: boolean;
 }
 
+function getStepExecutionOperationIdentity({
+  executionContext,
+  iterationCount,
+  resumeGeneration,
+}: {
+  executionContext: ExecutionContext;
+  iterationCount?: number;
+  resumeGeneration?: number;
+}): { operationSuffix: string; persistencePhase: string } {
+  const hasRepeatedExecution =
+    iterationCount !== undefined || executionContext.foreachIndex !== undefined || resumeGeneration !== undefined;
+
+  if (!hasRepeatedExecution) {
+    return { operationSuffix: '', persistencePhase: 'start' };
+  }
+
+  const operationParts = [`path.${JSON.stringify(executionContext.executionPath)}`];
+  const persistenceParts = ['start'];
+
+  if (iterationCount !== undefined) {
+    operationParts.push(`iteration.${iterationCount}`);
+    persistenceParts.push(`iteration.${iterationCount}`);
+  }
+  if (executionContext.foreachIndex !== undefined) {
+    operationParts.push(`foreach.${executionContext.foreachIndex}`);
+    persistenceParts.push(`foreach.${executionContext.foreachIndex}`);
+  }
+  if (resumeGeneration !== undefined) {
+    operationParts.push(`resume.${resumeGeneration}`);
+    persistenceParts.push(`resume.${resumeGeneration}`);
+  }
+
+  return {
+    operationSuffix: `.${operationParts.join('.')}`,
+    persistencePhase: persistenceParts.join('.'),
+  };
+}
+
+const WRAPPED_SUSPEND_PAYLOAD_KEY = '__workflow_suspend_payload';
+
+function isObjectSuspendPayload(suspendPayload: any): suspendPayload is Record<string, any> {
+  if (suspendPayload === null || typeof suspendPayload !== 'object' || Array.isArray(suspendPayload)) {
+    return false;
+  }
+
+  const prototype = Object.getPrototypeOf(suspendPayload);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function withResumeGeneration(suspendPayload: any, resumeGeneration: number | undefined): any {
+  // Keep the generation in the snapshot-owned metadata so a replay computes the
+  // same ID, while a later external resume advances to the next occurrence.
+  if (!isObjectSuspendPayload(suspendPayload)) {
+    return {
+      [WRAPPED_SUSPEND_PAYLOAD_KEY]: suspendPayload,
+      __workflow_meta: {
+        resumeGeneration: resumeGeneration ?? 0,
+        isWrappedSuspendPayload: true,
+      },
+    };
+  }
+
+  return {
+    ...suspendPayload,
+    __workflow_meta: {
+      ...suspendPayload?.__workflow_meta,
+      resumeGeneration: resumeGeneration ?? 0,
+    },
+  };
+}
+
+function withoutWorkflowMetadata(suspendPayload: any): any {
+  if (!isObjectSuspendPayload(suspendPayload) || !('__workflow_meta' in suspendPayload)) {
+    return suspendPayload;
+  }
+
+  const { __workflow_meta, ...userSuspendData } = suspendPayload;
+  if (__workflow_meta?.isWrappedSuspendPayload) {
+    return suspendPayload[WRAPPED_SUSPEND_PAYLOAD_KEY];
+  }
+
+  return userSuspendData;
+}
+
 export async function executeStep(
   engine: DefaultExecutionEngine,
   params: ExecuteStepParams,
@@ -149,11 +233,18 @@ export async function executeStep(
     }
   }
 
-  // Filter out internal workflow metadata before exposing to step code
-  if (suspendDataToUse && '__workflow_meta' in suspendDataToUse) {
-    const { __workflow_meta, ...userSuspendData } = suspendDataToUse;
-    suspendDataToUse = userSuspendData;
-  }
+  const isResumingStep = resume?.steps[0] === step.id;
+  const resumeGeneration = isResumingStep ? (suspendDataToUse?.__workflow_meta?.resumeGeneration ?? 0) + 1 : undefined;
+  const { operationSuffix, persistencePhase } = getStepExecutionOperationIdentity({
+    executionContext,
+    iterationCount,
+    resumeGeneration,
+  });
+  const durableStepOperationId = `workflow.${workflowId}.step.${step.id}${operationSuffix}`;
+  const stepLifecycleOperationId = `workflow.${workflowId}.run.${runId}.step.${step.id}${operationSuffix}`;
+
+  // Filter out internal workflow metadata before exposing to step code.
+  suspendDataToUse = withoutWorkflowMetadata(suspendDataToUse);
 
   const startTime = resumeDataToUse ? undefined : Date.now();
   const resumeTime = resumeDataToUse ? Date.now() : undefined;
@@ -172,7 +263,7 @@ export async function executeStep(
   const stepSpan = await engine.createStepSpan({
     parentSpan: observabilityContext.tracingContext.currentSpan,
     stepId: step.id,
-    operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.start`,
+    operationId: `${stepLifecycleOperationId}.span.start`,
     options: {
       name: `workflow step: '${step.id}'`,
       type: SpanType.WORKFLOW_STEP,
@@ -185,7 +276,6 @@ export async function executeStep(
     executionContext,
   });
 
-  const operationId = `workflow.${workflowId}.run.${runId}.step.${step.id}.running_ev`;
   await engine.onStepExecutionStart({
     step,
     inputData,
@@ -193,7 +283,7 @@ export async function executeStep(
     executionContext,
     stepCallId,
     stepInfo,
-    operationId,
+    operationId: `${stepLifecycleOperationId}.running_ev`,
     skipEmits,
   });
 
@@ -209,7 +299,7 @@ export async function executeStep(
     executionContext,
     workflowStatus: 'running',
     requestContext,
-    phase: 'start',
+    phase: persistencePhase,
   });
 
   // Check if this is a nested workflow that requires special handling
@@ -230,20 +320,31 @@ export async function executeStep(
       ...observabilityContext,
       outputWriter,
       stepSpan: stepSpan as Span<SpanType.WORKFLOW_STEP> | undefined,
+      operationId: durableStepOperationId,
       perStep,
     });
 
     // If executeWorkflowStep returns a result, wrap it in StepExecutionResult
     if (workflowResult !== null) {
+      const scopedWorkflowResult =
+        workflowResult.status === 'suspended'
+          ? {
+              ...workflowResult,
+              suspendPayload: withResumeGeneration(workflowResult.suspendPayload, resumeGeneration),
+            }
+          : workflowResult;
+
       // End the step span with the nested workflow result
       if (stepSpan) {
-        if (workflowResult.status === 'failed') {
+        if (scopedWorkflowResult.status === 'failed') {
           await engine.errorStepSpan({
             span: stepSpan as Span<SpanType.WORKFLOW_STEP>,
-            operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.error`,
+            operationId: `${stepLifecycleOperationId}.span.error`,
             errorOptions: {
               error:
-                workflowResult.error instanceof Error ? workflowResult.error : new Error(String(workflowResult.error)),
+                scopedWorkflowResult.error instanceof Error
+                  ? scopedWorkflowResult.error
+                  : new Error(String(scopedWorkflowResult.error)),
               attributes: { status: 'failed' },
             },
           });
@@ -251,20 +352,22 @@ export async function executeStep(
           // For success, suspended, paused, tripwire - end the span normally
           // Only 'success' has .output, others may have suspendOutput or nothing
           const output =
-            workflowResult.status === 'success' ? workflowResult.output : (workflowResult as any).suspendOutput;
+            scopedWorkflowResult.status === 'success'
+              ? scopedWorkflowResult.output
+              : (scopedWorkflowResult as any).suspendOutput;
 
           await engine.endStepSpan({
             span: stepSpan as Span<SpanType.WORKFLOW_STEP>,
-            operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.end`,
+            operationId: `${stepLifecycleOperationId}.span.end`,
             endOptions: {
               output,
-              attributes: { status: workflowResult.status },
+              attributes: { status: scopedWorkflowResult.status },
             },
           });
         }
       }
 
-      const stepResult = { ...stepInfo, ...workflowResult } as StepResult<any, any, any, any>;
+      const stepResult = { ...stepInfo, ...scopedWorkflowResult } as StepResult<any, any, any, any>;
       return {
         result: stepResult,
         stepResults: { [step.id]: stepResult },
@@ -299,7 +402,7 @@ export async function executeStep(
   // Default engine: internal retry loop
   // Inngest engine: throws RetryAfterError for external retry handling
   const stepRetryResult = await engine.executeStepWithRetry(
-    `workflow.${workflowId}.step.${step.id}`,
+    durableStepOperationId,
     async () => {
       if (validationError) {
         throw validationError;
@@ -497,7 +600,7 @@ export async function executeStep(
     if (durableResult.suspended) {
       execResults = {
         status: 'suspended',
-        suspendPayload: durableResult.suspended.payload,
+        suspendPayload: withResumeGeneration(durableResult.suspended.payload, resumeGeneration),
         ...(durableResult.output ? { suspendOutput: durableResult.output } : {}),
         suspendedAt: Date.now(),
       };
@@ -513,7 +616,7 @@ export async function executeStep(
   delete executionContext.activeStepsPath[step.id];
 
   if (!skipEmits) {
-    const emitOperationId = `workflow.${workflowId}.run.${runId}.step.${step.id}.emit_result`;
+    const emitOperationId = `${stepLifecycleOperationId}.emit_result`;
     await engine.wrapDurableOperation(emitOperationId, async () => {
       await emitStepResultEvents({
         stepId: step.id,
@@ -531,7 +634,7 @@ export async function executeStep(
   if (execResults.status != 'failed') {
     await engine.endStepSpan({
       span: stepSpan,
-      operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.end`,
+      operationId: `${stepLifecycleOperationId}.span.end`,
       endOptions: {
         output: execResults.output,
         attributes: {

@@ -1,5 +1,6 @@
 import { MastraNonRetryableError } from '@mastra/core/error';
 import type { Mastra } from '@mastra/core/mastra';
+import { RequestContext } from '@mastra/core/request-context';
 import { Inngest, NonRetriableError } from 'inngest';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -134,14 +135,16 @@ function createNestedResumeFixture(suspendedPaths: Record<string, number[]>) {
     result: { status: 'success', result: { value: 'resumed' }, state: { count: 2 } },
     runId: nestedRunId,
   });
+  const run = vi.fn(async (_id: string, fn: () => Promise<unknown>) => fn());
   const inngestStep = {
     invoke,
-    run: vi.fn(async (_id: string, fn: () => Promise<unknown>) => fn()),
+    run,
     sleep: vi.fn(),
     sleepUntil: vi.fn(),
   };
   const engine = new InngestExecutionEngine(mastra, inngestStep as any, 0, {});
   const resumePayload = { approved: true };
+  const operationId = 'workflow.parent-workflow.step.nested-resume-workflow.path.[0].iteration.2.resume.1';
   const execute = () =>
     engine.executeWorkflowStep({
       step: nestedWorkflow as any,
@@ -163,6 +166,7 @@ function createNestedResumeFixture(suspendedPaths: Record<string, number[]>) {
       inputData: { value: 'start' },
       pubsub: { publish: vi.fn().mockResolvedValue(undefined) } as any,
       startedAt: Date.now(),
+      operationId,
     });
 
   return {
@@ -171,12 +175,74 @@ function createNestedResumeFixture(suspendedPaths: Record<string, number[]>) {
     loadWorkflowSnapshot,
     nestedRunId,
     nestedWorkflow,
+    operationId,
     resumePayload,
+    run,
     suspendedStep,
   };
 }
 
 describe('InngestExecutionEngine.executeWorkflowStep', () => {
+  it('propagates a loop-scoped operation ID to nested invoke and result persistence', async () => {
+    const inngest = new Inngest({ id: 'nested-operation-id-test' });
+    const { createWorkflow, createStep } = init(inngest);
+    const nestedStep = createStep({
+      id: 'nested-step',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      execute: async ({ inputData }) => inputData,
+    });
+    const nestedWorkflow = createWorkflow({
+      id: 'nested-workflow',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      steps: [nestedStep],
+    })
+      .then(nestedStep)
+      .commit();
+    const invoke = vi.fn().mockResolvedValue({
+      result: { status: 'success', result: { value: 'done' }, state: {} },
+      runId: 'nested-run',
+    });
+    const run = vi.fn(async (_id: string, fn: () => Promise<unknown>) => fn());
+    const engine = new InngestExecutionEngine(
+      undefined as any,
+      { invoke, run, sleep: vi.fn(), sleepUntil: vi.fn() } as any,
+      0,
+      {},
+    );
+
+    const result = await engine.executeStep({
+      workflowId: 'parent-workflow',
+      runId: 'parent-run',
+      step: nestedWorkflow as any,
+      stepResults: {},
+      executionContext: {
+        workflowId: 'parent-workflow',
+        runId: 'parent-run',
+        executionPath: [0],
+        stepExecutionPath: [],
+        activeStepsPath: {},
+        suspendedPaths: {},
+        resumeLabels: {},
+        retryConfig: { attempts: 0, delay: 0 },
+        state: {},
+      },
+      prevOutput: { value: 'start' },
+      pubsub: { publish: vi.fn().mockResolvedValue(undefined) } as any,
+      abortController: new AbortController(),
+      requestContext: new RequestContext(),
+      serializedStepGraph: [],
+      iterationCount: 2,
+      tracingContext: {},
+    });
+
+    const operationId = 'workflow.parent-workflow.step.nested-workflow.path.[0].iteration.2';
+    expect(result.result).toMatchObject({ status: 'success', output: { value: 'done' } });
+    expect(invoke).toHaveBeenCalledWith(operationId, expect.any(Object));
+    expect(run).toHaveBeenCalledWith(`${operationId}.nestedwf-results`, expect.any(Function));
+  });
+
   it('restores the suspended child path when resuming with only the nested workflow id', async () => {
     const fixture = createNestedResumeFixture({ 'suspended-child-step': [1, 0] });
     const { execute, invoke, loadWorkflowSnapshot, nestedRunId, nestedWorkflow, resumePayload, suspendedStep } =
@@ -196,6 +262,15 @@ describe('InngestExecutionEngine.executeWorkflowStep', () => {
       resumePayload,
       resumePath: [1, 0],
     });
+  });
+
+  it('uses the scoped operation ID for nested invoke and result persistence', async () => {
+    const { execute, invoke, operationId, run } = createNestedResumeFixture({ 'suspended-child-step': [1, 0] });
+
+    await execute();
+
+    expect(invoke).toHaveBeenCalledWith(operationId, expect.any(Object));
+    expect(run).toHaveBeenCalledWith(`${operationId}.nestedwf-results`, expect.any(Function));
   });
 
   it.each([
