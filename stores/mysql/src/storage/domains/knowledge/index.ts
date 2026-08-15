@@ -82,7 +82,7 @@ function createExecutor(client: Pick<Pool, 'query'> | Pick<PoolConnection, 'quer
   };
 }
 
-const visibleSql = `(scopeKey = ? OR ? LIKE CONCAT(scopeKey, char(31), '%'))`;
+const visibleSql = `(scopeKey = ? OR LEFT(?, CHAR_LENGTH(scopeKey) + 1) = CONCAT(scopeKey, char(31)))`;
 
 function parseJson<T>(value: unknown): T {
   if (typeof value === 'string') return JSON.parse(value) as T;
@@ -604,8 +604,8 @@ export class KnowledgeMySQL extends KnowledgeStorage {
           return {
             type: 'item' as const,
             id: String(row.id),
-            recordId: parentVisible ? String(row.parentNodeId) : String(row.id),
-            name: parentVisible ? String(row.name) : '(private entity)',
+            recordId: String(row.parentNodeId),
+            name: parentVisible ? String(row.name) : '(private node)',
             text: String(row.text),
             scope: parseJson<KnowledgeScope>(row.scopeJson),
           };

@@ -42,7 +42,7 @@ describe('MySQL knowledge concurrency and indexes', () => {
       await connection.query('SET FOREIGN_KEY_CHECKS=0');
       for (const table of [
         'mastra_knowledge_mentions',
-        'mastra_knowledge_facts',
+        'mastra_knowledge_items',
         'mastra_knowledge_records',
         'mastra_knowledge_cursors',
         'mastra_knowledge_activity',
