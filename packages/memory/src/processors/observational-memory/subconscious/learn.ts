@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { Agent } from '@mastra/core/agent';
-import type { KnowledgeFact, KnowledgeScope, KnowledgeStorage } from '@mastra/core/storage';
+import type { KnowledgeItem, KnowledgeScope, KnowledgeStorage } from '@mastra/core/storage';
 import { canonicalizeKnowledgeScope, expandKnowledgeScope } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
@@ -18,13 +18,13 @@ import type { ResolvedSubconsciousAgent, ResolvedSubconsciousConfig } from './ty
 
 const LEARN_AGENT = 'learn';
 const ULID_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-const DEFAULT_INSTRUCTIONS = `Learn reusable skills from the full pre-reflection observations and pending source facts.
+const DEFAULT_INSTRUCTIONS = `Learn reusable skills from the full pre-reflection observations and pending knowledge items.
 
-A skill is a repeatable procedure with ordered actions, a trigger or context, and a success or recovery outcome. Do not learn one-off events, isolated preferences, facts, or procedures supported by fewer than two distinct pending source facts. Search existing kind:skill entities by exact name before writing so updates extend one skill rather than creating duplicates.
+A skill is a repeatable procedure with ordered actions, a trigger or context, and a success or recovery outcome. Do not learn one-off events, isolated preferences, knowledge items, or procedures supported by fewer than two distinct pending knowledge items. Search existing kind:skill nodes by exact name before writing so updates extend one skill rather than creating duplicates.
 
-Use knowledge_record_skill for every skill creation or evidence update. It validates the evidence frontier and writes retry-safe evidence. You may use the other scoped knowledge tools for research and maintenance, but never restore deleted facts, invent provenance or versions, or write outside the source scope.
+Use knowledge_record_skill for every skill creation or evidence update. It validates the evidence frontier and writes retry-safe evidence. You may use the other scoped knowledge tools for research and maintenance, but never restore deleted items, invent provenance or versions, or write outside the source scope.
 
-Process pending facts in ID order. End with <learning-complete through="FACT_ID" /> naming the last pending fact you reviewed, even when no reusable skill was found. Acknowledge only facts you fully reviewed.`;
+Process pending items in ID order. End with <learning-complete through="ITEM_ID" /> naming the last pending item you reviewed, even when no reusable skill was found. Acknowledge only items you fully reviewed.`;
 
 type LearnerState = { recordedName?: string };
 
@@ -41,27 +41,27 @@ function resolveScope(context: ReflectionCommittedContext): KnowledgeScope {
 }
 
 async function readWorklist(store: KnowledgeStorage, sourceThreadId: string, scope: KnowledgeScope, after?: string) {
-  const facts: KnowledgeFact[] = [];
+  const items: KnowledgeItem[] = [];
   let cursor = after;
   do {
-    const page = await store.listFactsBySource({ sourceThreadId, scope, after: cursor, limit: 100 });
-    facts.push(...page.facts);
+    const page = await store.listItemsBySource({ sourceThreadId, scope, after: cursor, limit: 100 });
+    items.push(...page.items);
     cursor = page.nextCursor;
-  } while (cursor && facts.length < 500);
-  return { facts, hasMore: Boolean(cursor) };
+  } while (cursor && items.length < 500);
+  return { items, hasMore: Boolean(cursor) };
 }
 
-function evidenceFactId(sourceFactId: string, skillName: string): string {
-  const hash = createHash('sha256').update(`${skillName.trim().toLocaleLowerCase()}\0${sourceFactId}`).digest();
+function evidenceItemId(sourceItemId: string, skillName: string): string {
+  const hash = createHash('sha256').update(`${skillName.trim().toLocaleLowerCase()}\0${sourceItemId}`).digest();
   let suffix = '';
   for (let index = 0; index < 16; index++) suffix += ULID_ALPHABET[hash[index]! & 31];
-  return `${sourceFactId.slice(0, 10)}${suffix}`;
+  return `${sourceItemId.slice(0, 10)}${suffix}`;
 }
 
 export function createLearnerRecordSkillTool(input: {
   store: KnowledgeStorage;
   scope: KnowledgeScope;
-  pendingFacts: KnowledgeFact[];
+  pendingItems: KnowledgeItem[];
   parentThreadId: string;
   defaultScope: ResolvedSubconsciousConfig['defaultScope'];
   maxScope: ResolvedSubconsciousConfig['maxScope'];
@@ -70,23 +70,23 @@ export function createLearnerRecordSkillTool(input: {
   return createTool({
     id: 'knowledge_record_skill',
     description:
-      'Create or update one reusable skill using at least two distinct pending source facts. Evidence writes are idempotent across retries.',
+      'Create or update one reusable skill using at least two distinct pending knowledge items. Evidence writes are idempotent across retries.',
     inputSchema: {
       type: 'object',
       properties: {
         name: { type: 'string', minLength: 1 },
         procedure: { type: 'string', minLength: 1 },
-        sourceFactIds: { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 2, uniqueItems: true },
+        sourceItemIds: { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 2, uniqueItems: true },
       },
-      required: ['name', 'procedure', 'sourceFactIds'],
+      required: ['name', 'procedure', 'sourceItemIds'],
       additionalProperties: false,
     } satisfies JSONSchema7,
     execute: async raw => {
-      const value = raw as { name: string; procedure: string; sourceFactIds: string[] };
-      const sourceIds = [...new Set(value.sourceFactIds)];
-      const pending = new Map(input.pendingFacts.map(fact => [fact.id, fact]));
+      const value = raw as { name: string; procedure: string; sourceItemIds: string[] };
+      const sourceIds = [...new Set(value.sourceItemIds)];
+      const pending = new Map(input.pendingItems.map(item => [item.id, item]));
       if (sourceIds.length < 2 || sourceIds.some(id => !pending.has(id))) {
-        throw new Error('Skill evidence requires at least two distinct facts from the pending learner worklist.');
+        throw new Error('Skill evidence requires at least two distinct items from the pending learner worklist.');
       }
       const normalizedName = value.name.trim();
       if (
@@ -96,14 +96,14 @@ export function createLearnerRecordSkillTool(input: {
         throw new Error('The learner may record at most one skill per reflection.');
       }
       input.state.recordedName = normalizedName;
-      const entityScope = expandKnowledgeScope(input.scope, input.defaultScope);
-      let entity = await input.store.resolveEntity({ name: normalizedName, scope: input.scope });
-      if (entity && entity.kind !== 'skill') throw new Error(`Knowledge entity is not a skill: ${normalizedName}`);
-      entity ??= await input.store.createEntity({ name: normalizedName, kind: 'skill', scope: entityScope });
+      const nodeScope = expandKnowledgeScope(input.scope, input.defaultScope);
+      let node = await input.store.resolveNode({ name: normalizedName, scope: input.scope });
+      if (node && node.kind !== 'skill') throw new Error(`Knowledge node is not a skill: ${normalizedName}`);
+      node ??= await input.store.createNode({ name: normalizedName, kind: 'skill', scope: nodeScope });
       const evidence = [];
       for (const sourceId of sourceIds) {
-        const id = evidenceFactId(sourceId, normalizedName);
-        const existing = await input.store.getFact({ id });
+        const id = evidenceItemId(sourceId, normalizedName);
+        const existing = await input.store.getItem({ id });
         if (existing) {
           evidence.push(existing);
           continue;
@@ -111,24 +111,24 @@ export function createLearnerRecordSkillTool(input: {
         const source = pending.get(sourceId)!;
         try {
           evidence.push(
-            await input.store.appendFact({
+            await input.store.appendItem({
               id,
-              parentEntityId: entity.id,
+              parentNodeId: node.id,
               text: `Procedure: ${value.procedure.trim()} Evidence source: ${source.id}.`,
               scope: source.scope,
               sourceThreadId: `subconscious:${input.parentThreadId}:learn`,
               maxScope: source.maxScope ?? input.maxScope,
               resolutionScope: input.scope,
-              defaultScope: entityScope,
+              defaultScope: nodeScope,
             }),
           );
         } catch (error) {
-          const raced = await input.store.getFact({ id });
+          const raced = await input.store.getItem({ id });
           if (!raced) throw error;
           evidence.push(raced);
         }
       }
-      return { entity, evidence };
+      return { node, evidence };
     },
   });
 }
@@ -164,20 +164,20 @@ export function createLearnerHandler(
       store = await memory.storage.getStore('knowledge');
       if (!store) throw new Error('Subconscious learn requires a configured knowledge storage domain.');
       const cursor = await store.getCurationCursor({ sourceThreadId: context.parentThreadId, agent: LEARN_AGENT });
-      const worklist = await readWorklist(store, context.parentThreadId, scope, cursor?.lastFactId);
-      if (!worklist.facts.length) return;
+      const worklist = await readWorklist(store, context.parentThreadId, scope, cursor?.lastItemId);
+      if (!worklist.items.length) return;
       const agent = await createLearnerAgent(
         memory,
         learnerMemory,
         context,
         scope,
-        worklist.facts,
+        worklist.items,
         config,
         subconscious,
         options?.omModel,
       );
       const result = await agent.generate(
-        `Parent thread: ${context.parentThreadId}\nCurrent time: ${new Date().toISOString()}\nWorklist truncated: ${worklist.hasMore}\n\nFull pre-reflection observations:\n${context.observations}\n\nPending source facts:\n${JSON.stringify(worklist.facts)}`,
+        `Parent thread: ${context.parentThreadId}\nCurrent time: ${new Date().toISOString()}\nWorklist truncated: ${worklist.hasMore}\n\nFull pre-reflection observations:\n${context.observations}\n\nPending knowledge items:\n${JSON.stringify(worklist.items)}`,
         {
           requestContext: context.requestContext,
           abortSignal: context.abortSignal,
@@ -186,13 +186,13 @@ export function createLearnerHandler(
         },
       );
       const acknowledgedId = result.text.match(/<learning-complete\s+through=["']([^"']+)["']\s*\/>/i)?.[1];
-      if (!acknowledgedId || !worklist.facts.some(fact => fact.id === acknowledgedId)) {
-        throw new Error('Learner did not acknowledge a valid reviewed fact cursor.');
+      if (!acknowledgedId || !worklist.items.some(item => item.id === acknowledgedId)) {
+        throw new Error('Learner did not acknowledge a valid reviewed item cursor.');
       }
       await store.advanceCurationCursor({
         sourceThreadId: context.parentThreadId,
         agent: LEARN_AGENT,
-        lastFactId: acknowledgedId,
+        lastItemId: acknowledgedId,
       });
     } catch (error) {
       const message = `learn: ${error instanceof Error ? error.message : String(error)}`;
@@ -218,7 +218,7 @@ async function createLearnerAgent(
   learnerMemory: Memory,
   context: ReflectionCommittedContext,
   scope: KnowledgeScope,
-  pendingFacts: KnowledgeFact[],
+  pendingItems: KnowledgeItem[],
   config: ResolvedSubconsciousAgent,
   subconscious: ResolvedSubconsciousConfig,
   omModel?: ObservationalMemoryModel,
@@ -250,7 +250,7 @@ async function createLearnerAgent(
       knowledge_record_skill: createLearnerRecordSkillTool({
         store,
         scope,
-        pendingFacts,
+        pendingItems,
         parentThreadId: context.parentThreadId,
         defaultScope: subconscious.defaultScope,
         maxScope: subconscious.maxScope,

@@ -86,13 +86,13 @@ describe('Subconscious remind', () => {
     });
     const context = createContext('Project Atlas launches January 15.');
     const store = await context.memory.storage.getStore('knowledge');
-    const entity = await store.createEntity({
+    const node = await store.createNode({
       name: 'Project Atlas',
       kind: 'project',
       scope: ['org:acme', 'resource:user-42'],
     });
-    const fact = await store.appendFact({
-      parentEntityId: entity.id,
+    const item = await store.appendItem({
+      parentNodeId: node.id,
       text: 'Project Atlas launches January 15.',
       scope: ['org:acme', 'resource:user-42'],
       sourceThreadId: 'beta',
@@ -113,10 +113,10 @@ describe('Subconscious remind', () => {
       expect.objectContaining({
         type: 'reactive',
         tagName: 'remembered',
-        contents: expect.stringContaining(fact.id),
+        contents: expect.stringContaining(item.id),
         attributes: expect.objectContaining({
           source: 'subconscious',
-          sourceIds: expect.stringContaining(fact.id),
+          sourceIds: expect.stringContaining(item.id),
           agent: 'remind',
           threadId: 'alpha',
         }),
@@ -150,13 +150,13 @@ describe('Subconscious remind', () => {
     const context = createContext('unused');
     delete (context as any).mainAgent;
     const store = await context.memory.storage.getStore('knowledge');
-    const entity = await store.createEntity({
+    const node = await store.createNode({
       name: 'Project Atlas',
       kind: 'project',
       scope: ['org:acme', 'resource:user-42'],
     });
-    const fact = await store.appendFact({
-      parentEntityId: entity.id,
+    const item = await store.appendItem({
+      parentNodeId: node.id,
       text: 'Project Atlas launches January 15.',
       scope: ['org:acme', 'resource:user-42'],
       sourceThreadId: 'beta',
@@ -174,11 +174,11 @@ describe('Subconscious remind', () => {
     expect(result.failures).toBeUndefined();
     expect(context.sendSignal).toHaveBeenCalledOnce();
     expect(context.sendSignal).toHaveBeenCalledWith(
-      expect.objectContaining({ tagName: 'remembered', contents: expect.stringContaining(fact.id) }),
+      expect.objectContaining({ tagName: 'remembered', contents: expect.stringContaining(item.id) }),
     );
   });
 
-  it("does not echo the thread's own freshly captured facts back as reminders", async () => {
+  it("does not echo the thread's own freshly captured items back as reminders", async () => {
     const extractor = new SubconsciousRemindExtractor({
       name: 'remind',
       maxSteps: 3,
@@ -186,14 +186,14 @@ describe('Subconscious remind', () => {
     });
     const context = createContext('The launch happens January 15.');
     const store = await context.memory.storage.getStore('knowledge');
-    const entity = await store.createEntity({
+    const node = await store.createNode({
       name: 'Zeta initiative',
       kind: 'program',
       scope: ['org:acme', 'resource:user-42'],
     });
     // Captured by THIS thread, moments ago: the reminder must not whisper it back.
-    await store.appendFact({
-      parentEntityId: entity.id,
+    await store.appendItem({
+      parentNodeId: node.id,
       text: 'The launch happens January 15.',
       scope: ['org:acme', 'resource:user-42'],
       sourceThreadId: 'alpha',
@@ -212,7 +212,7 @@ describe('Subconscious remind', () => {
     expect(context.sendSignal).not.toHaveBeenCalled();
   });
 
-  it("does not echo fresh facts written by the thread's own subconscious sub-agents", async () => {
+  it("does not echo fresh items written by the thread's own subconscious sub-agents", async () => {
     const extractor = new SubconsciousRemindExtractor({
       name: 'remind',
       maxSteps: 3,
@@ -220,14 +220,14 @@ describe('Subconscious remind', () => {
     });
     const context = createContext('The launch happens January 15.');
     const store = await context.memory.storage.getStore('knowledge');
-    const entity = await store.createEntity({
+    const node = await store.createNode({
       name: 'Zeta initiative',
       kind: 'program',
       scope: ['org:acme', 'resource:user-42'],
     });
     // Written moments ago by this thread's own curator sub-thread.
-    await store.appendFact({
-      parentEntityId: entity.id,
+    await store.appendItem({
+      parentNodeId: node.id,
       text: 'The launch happens January 15.',
       scope: ['org:acme', 'resource:user-42'],
       sourceThreadId: 'subconscious:alpha:curate',
@@ -246,7 +246,7 @@ describe('Subconscious remind', () => {
     expect(context.sendSignal).not.toHaveBeenCalled();
   });
 
-  it("still reminds about the thread's own older facts once they age past the fresh window", async () => {
+  it("still reminds about the thread's own older items once they age past the fresh window", async () => {
     vi.useFakeTimers();
     try {
       const extractor = new SubconsciousRemindExtractor({
@@ -256,13 +256,13 @@ describe('Subconscious remind', () => {
       });
       const context = createContext('The launch happens January 15.');
       const store = await context.memory.storage.getStore('knowledge');
-      const entity = await store.createEntity({
+      const node = await store.createNode({
         name: 'Zeta initiative',
         kind: 'program',
         scope: ['org:acme', 'resource:user-42'],
       });
-      const fact = await store.appendFact({
-        parentEntityId: entity.id,
+      const item = await store.appendItem({
+        parentNodeId: node.id,
         text: 'The launch happens January 15.',
         scope: ['org:acme', 'resource:user-42'],
         sourceThreadId: 'alpha',
@@ -282,7 +282,7 @@ describe('Subconscious remind', () => {
       expect(result.failures).toBeUndefined();
       expect(context.sendSignal).toHaveBeenCalledOnce();
       expect(context.sendSignal).toHaveBeenCalledWith(
-        expect.objectContaining({ tagName: 'remembered', contents: expect.stringContaining(fact.id) }),
+        expect.objectContaining({ tagName: 'remembered', contents: expect.stringContaining(item.id) }),
       );
     } finally {
       vi.useRealTimers();
@@ -301,13 +301,13 @@ describe('Subconscious remind', () => {
       });
       const context = createContext('<no-reminder />');
       const store = await context.memory.storage.getStore('knowledge');
-      const entity = await store.createEntity({
+      const node = await store.createNode({
         name: 'Moon weather',
         kind: 'topic',
         scope: ['org:acme', 'resource:user-42'],
       });
-      await store.appendFact({
-        parentEntityId: entity.id,
+      await store.appendItem({
+        parentNodeId: node.id,
         text: 'The moon has no weather to speak of.',
         scope: ['org:acme', 'resource:user-42'],
         sourceThreadId: 'beta',
@@ -359,13 +359,13 @@ describe('Subconscious remind', () => {
       throw new Error('reminder provider unavailable');
     });
     const store = await context.memory.storage.getStore('knowledge');
-    const entity = await store.createEntity({
+    const node = await store.createNode({
       name: 'Project Atlas',
       kind: 'project',
       scope: ['org:acme', 'resource:user-42'],
     });
-    await store.appendFact({
-      parentEntityId: entity.id,
+    await store.appendItem({
+      parentNodeId: node.id,
       text: 'Project Atlas launches January 15.',
       scope: ['org:acme', 'resource:user-42'],
       sourceThreadId: 'beta',

@@ -22,7 +22,7 @@ function createMemory(options?: { omModel?: string | false }) {
     options: {
       observationalMemory: {
         ...(options?.omModel === false ? {} : { model: options?.omModel ?? 'openai/om-model' }),
-        subconscious: new Subconscious({ defaultScope: 'resource', maxScope: 'resource' }),
+        experimental_subconscious: new Subconscious({ defaultScope: 'resource', maxScope: 'resource' }),
       },
     },
   });
@@ -34,11 +34,11 @@ function requestContext() {
   return context;
 }
 
-async function seedFact(memory: Memory, text = 'Atlas launches soon.') {
+async function seedItem(memory: Memory, text = 'Atlas launches soon.') {
   const store = (await memory.storage.getStore('knowledge'))!;
-  const entity = await store.createEntity({ name: 'Project Atlas', kind: 'project', scope });
-  return store.appendFact({
-    parentEntityId: entity.id,
+  const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scope });
+  return store.appendItem({
+    parentNodeId: node.id,
     text,
     scope,
     sourceThreadId: 'alpha',
@@ -54,10 +54,10 @@ afterEach(() => {
 describe('Memory.runCuration', () => {
   it('runs the curate agent over the pending worklist and advances the cursor without reflection', async () => {
     const memory = createMemory();
-    const fact = await seedFact(memory);
+    const item = await seedItem(memory);
     const generate = vi
       .spyOn(Agent.prototype, 'generate')
-      .mockResolvedValue({ text: `<curation-complete through="${fact.id}" />` } as any);
+      .mockResolvedValue({ text: `<curation-complete through="${item.id}" />` } as any);
     generate.mockClear();
 
     const result = await memory.runCuration({
@@ -70,7 +70,7 @@ describe('Memory.runCuration', () => {
     expect(generate).toHaveBeenCalledOnce();
     const store = (await memory.storage.getStore('knowledge'))!;
     expect(await store.getCurationCursor({ sourceThreadId: 'alpha', agent: 'curate' })).toMatchObject({
-      lastFactId: fact.id,
+      lastItemId: item.id,
     });
   });
 
@@ -107,7 +107,7 @@ describe('Memory.runCuration', () => {
 
   it('skips when a curation for the same thread is already in flight', async () => {
     const memory = createMemory();
-    const fact = await seedFact(memory);
+    const item = await seedItem(memory);
     let release!: (value: any) => void;
     const pending = new Promise(resolve => {
       release = resolve;
@@ -126,13 +126,13 @@ describe('Memory.runCuration', () => {
 
     expect(second.outcome).toBe('skipped');
     // Resolve the dangling curation so the first call settles cleanly.
-    release({ text: `<curation-complete through="${fact.id}" />` });
+    release({ text: `<curation-complete through="${item.id}" />` });
     expect((await first).outcome).toBe('ran');
   });
 
   it('maps a missing model to the no-model outcome instead of throwing', async () => {
     const memory = createMemory({ omModel: false });
-    await seedFact(memory);
+    await seedItem(memory);
 
     const result = await memory.runCuration({
       threadId: 'alpha',

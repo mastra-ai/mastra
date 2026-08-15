@@ -27,7 +27,7 @@ function captureContext(memory: Memory, requestContext: RequestContext, resource
     memory,
     requestContext,
     current: {
-      entities: [{ name: 'Shared Entity', kind: 'note', facts: [{ text: 'The rollout region is cobalt.' }] }],
+      nodes: [{ name: 'Shared Node', kind: 'note', items: [{ text: 'The rollout region is cobalt.' }] }],
     },
   };
 }
@@ -66,7 +66,7 @@ function makeSignalArgs(
 }
 
 describe('Subconscious project scope override', () => {
-  it('capture writes entities and facts under knowledgeResourceId instead of the run resourceId', async () => {
+  it('capture writes nodes and items under knowledgeResourceId instead of the run resourceId', async () => {
     const memory = new Memory({ storage: new InMemoryStore() });
     const extractor = new SubconsciousCaptureExtractor({
       defaultScope: 'resource',
@@ -78,16 +78,14 @@ describe('Subconscious project scope override', () => {
     await extractor.onExtracted?.({ ...captureContext(memory, requestContext), extractor } as any);
 
     const store = (await memory.storage.getStore('knowledge'))!;
-    const shared = await store.getEntityByName({ name: 'Shared Entity', scope: PROJECT_SCOPE });
+    const shared = await store.getNodeByName({ name: 'Shared Node', scope: PROJECT_SCOPE });
     expect(shared).toMatchObject({ scope: PROJECT_SCOPE });
-    expect(
-      await store.getEntityByName({ name: 'Shared Entity', scope: ['org:acme', 'resource:session-a'] }),
-    ).toBeNull();
+    expect(await store.getNodeByName({ name: 'Shared Node', scope: ['org:acme', 'resource:session-a'] })).toBeNull();
 
-    const facts = await store.factsAbout({ entityId: shared!.id, scope: [...PROJECT_SCOPE, 'thread:thread-a'] });
-    expect(facts.facts).toHaveLength(1);
-    // Unscoped captured facts land at thread level; the resource rung is the project.
-    expect(facts.facts[0]!.scope).toEqual([...PROJECT_SCOPE, 'thread:thread-a']);
+    const items = await store.itemsAbout({ nodeId: shared!.id, scope: [...PROJECT_SCOPE, 'thread:thread-a'] });
+    expect(items.items).toHaveLength(1);
+    // Unscoped captured items land at thread level; the resource rung is the project.
+    expect(items.items[0]!.scope).toEqual([...PROJECT_SCOPE, 'thread:thread-a']);
   });
 
   it('capture falls back to the run resourceId when no override is present', async () => {
@@ -101,10 +99,10 @@ describe('Subconscious project scope override', () => {
     await extractor.onExtracted?.({ ...captureContext(memory, requestContextWith()), extractor } as any);
 
     const store = (await memory.storage.getStore('knowledge'))!;
-    expect(
-      await store.getEntityByName({ name: 'Shared Entity', scope: ['org:acme', 'resource:session-a'] }),
-    ).toMatchObject({ scope: ['org:acme', 'resource:session-a'] });
-    expect(await store.getEntityByName({ name: 'Shared Entity', scope: PROJECT_SCOPE })).toBeNull();
+    expect(await store.getNodeByName({ name: 'Shared Node', scope: ['org:acme', 'resource:session-a'] })).toMatchObject(
+      { scope: ['org:acme', 'resource:session-a'] },
+    );
+    expect(await store.getNodeByName({ name: 'Shared Node', scope: PROJECT_SCOPE })).toBeNull();
   });
 
   it('knowledge read tools from a different run resourceId see project-scoped knowledge under the override', async () => {
@@ -116,7 +114,7 @@ describe('Subconscious project scope override', () => {
       options: {
         observationalMemory: {
           model: 'google/gemini-2.5-flash',
-          subconscious: new Subconscious({ tools: true }),
+          experimental_subconscious: new Subconscious({ tools: true }),
         },
       },
     });
@@ -132,15 +130,15 @@ describe('Subconscious project scope override', () => {
     } as any);
 
     const tools = memory.listTools();
-    // Session B, different run resourceId, same override: the entity is visible.
-    const sharedRead = await tools.knowledge_read!.execute?.({ type: 'entity', name: 'Shared Entity' }, {
+    // Session B, different run resourceId, same override: the node is visible.
+    const sharedRead = await tools.knowledge_read!.execute?.({ name: 'Shared Node' }, {
       agent: { threadId: 'thread-b', resourceId: 'session-b' },
       requestContext: requestContextWith({ knowledgeResourceId: 'project-1' }),
     } as any);
-    expect(sharedRead).toMatchObject({ found: true, entity: { name: 'Shared Entity' } });
+    expect(sharedRead).toMatchObject({ found: true, node: { name: 'Shared Node' } });
 
     // Session B without the override: siloed, nothing found.
-    const siloedRead = await tools.knowledge_read!.execute?.({ type: 'entity', name: 'Shared Entity' }, {
+    const siloedRead = await tools.knowledge_read!.execute?.({ name: 'Shared Node' }, {
       agent: { threadId: 'thread-b', resourceId: 'session-b' },
       requestContext: requestContextWith(),
     } as any);
@@ -205,7 +203,7 @@ describe('Subconscious project scope override', () => {
   it('curate, learn, and remind resolve the worklist and search scope from the override', async () => {
     const memory = new Memory({ storage: new InMemoryStore() });
     const store = (await memory.storage.getStore('knowledge'))!;
-    const listFactsBySource = vi.spyOn(store, 'listFactsBySource');
+    const listItemsBySource = vi.spyOn(store, 'listItemsBySource');
     const search = vi.spyOn(store, 'search');
 
     const resolved = {
@@ -232,11 +230,11 @@ describe('Subconscious project scope override', () => {
 
     await createCuratorHandler(memory, resolved)(reflectionContext());
     await createLearnerHandler(memory, resolved)(reflectionContext());
-    for (const call of listFactsBySource.mock.calls) {
+    for (const call of listItemsBySource.mock.calls) {
       expect(call[0]!.scope).toContain('resource:project-1');
       expect(call[0]!.scope).not.toContain('resource:session-a');
     }
-    expect(listFactsBySource).toHaveBeenCalled();
+    expect(listItemsBySource).toHaveBeenCalled();
 
     const remind = new SubconsciousRemindExtractor({ name: 'remind', maxSteps: 3, builtIn: true } as any);
     await Promise.resolve(

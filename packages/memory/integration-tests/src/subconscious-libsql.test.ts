@@ -77,13 +77,13 @@ describe('Subconscious LibSQL integration', () => {
           type: 'text' as const,
           text: JSON.stringify({
             capture: {
-              entities:
+              nodes:
                 doGenerate.mock.calls.length === 1
                   ? [
                       {
                         name: 'Project Atlas',
                         kind: 'project',
-                        facts: [
+                        items: [
                           {
                             text: '[[Maya Chen]] owns [[Project Atlas]].',
                             reason: 'The ownership relationship determines who can answer project questions.',
@@ -98,7 +98,7 @@ describe('Subconscious LibSQL integration', () => {
                         name: 'Alpha Secret',
                         kind: 'note',
                         scope: 'thread',
-                        facts: [
+                        items: [
                           {
                             text: 'Only the alpha thread may see this.',
                             scope: 'thread',
@@ -122,7 +122,7 @@ describe('Subconscious LibSQL integration', () => {
         observationalMemory: {
           enabled: true,
           model,
-          subconscious: new Subconscious({ observation: ['capture'], reflection: [] }),
+          experimental_subconscious: new Subconscious({ observation: ['capture'], reflection: [] }),
           observation: { messageTokens: 1, bufferTokens: false, previousObserverTokens: 1_000 },
         },
       },
@@ -151,9 +151,9 @@ describe('Subconscious LibSQL integration', () => {
 
     const knowledge = (await storage.getStore('knowledge'))!;
     const scope = ['org:acme', `resource:${resourceId}`, `thread:${threadId}`];
-    const atlas = await knowledge.resolveEntity({ name: 'Project Atlas', scope });
+    const atlas = await knowledge.resolveNode({ name: 'Project Atlas', scope });
     expect(atlas).toMatchObject({ kind: 'project', scope: scope.slice(0, 2) });
-    expect((await knowledge.factsAbout({ entityId: atlas!.id, scope })).facts).toHaveLength(2);
+    expect((await knowledge.itemsAbout({ nodeId: atlas!.id, scope })).items).toHaveLength(2);
 
     const betaThreadId = randomUUID();
     await memory.createThread({ threadId: betaThreadId, resourceId, title: 'Sibling thread' });
@@ -192,11 +192,11 @@ describe('Subconscious LibSQL integration', () => {
     expect(await knowledge.listSemanticOutbox({ status: 'pending', scope })).toEqual([]);
     const indexName = (await vector.listIndexes()).find(name => name.startsWith('knowledge_documents_dimension'))!;
     const matches = await vector.query({ indexName, queryVector: [0.1, 0.2, 0.3, 0.4], topK: 20 });
-    expect(matches.map(match => match.id)).toContain(`knowledge:entity:${atlas!.id}`);
+    expect(matches.map(match => match.id)).toContain(`knowledge:node:${atlas!.id}`);
 
-    const alphaSecret = await knowledge.resolveEntity({ name: 'Alpha Secret', scope });
-    await knowledge.appendFact({
-      parentEntityId: alphaSecret!.id,
+    const alphaSecret = await knowledge.resolveNode({ name: 'Alpha Secret', scope });
+    await knowledge.appendItem({
+      parentNodeId: alphaSecret!.id,
       text: 'The shared cobalt checklist is ready.',
       scope: scope.slice(0, 2),
       sourceThreadId: threadId,
@@ -212,11 +212,11 @@ describe('Subconscious LibSQL integration', () => {
     });
     expect((search as any).results.map((item: any) => item.name)).not.toContain('Alpha Secret');
     expect((search as any).results).toEqual(
-      expect.arrayContaining([expect.objectContaining({ type: 'fact', name: '(private entity)' })]),
+      expect.arrayContaining([expect.objectContaining({ type: 'item', name: '(private node)' })]),
     );
-    const read = await tools.knowledge_read!.execute?.({ type: 'entity', name: 'Project Atlas' }, toolContext);
-    expect(read).toMatchObject({ found: true, entity: { name: 'Project Atlas' } });
-    const hidden = await tools.knowledge_read!.execute?.({ type: 'entity', name: 'Alpha Secret' }, toolContext);
+    const read = await tools.knowledge_read!.execute?.({ name: 'Project Atlas' }, toolContext);
+    expect(read).toMatchObject({ found: true, node: { name: 'Project Atlas' } });
+    const hidden = await tools.knowledge_read!.execute?.({ name: 'Alpha Secret' }, toolContext);
     expect(hidden).toEqual({ found: false });
     const browse = await tools.knowledge_browse!.execute?.({}, toolContext);
     expect((browse as any).records.map((record: any) => record.name)).not.toContain('Alpha Secret');
@@ -231,7 +231,7 @@ describe('Subconscious LibSQL integration', () => {
     await storage.init();
 
     let streamCall = 0;
-    const reminder = 'Project Atlas launches January 15. Source fact: fact-atlas-launch.';
+    const reminder = 'Project Atlas launches January 15. Source KnowledgeItem: item-atlas-launch.';
     const model = new MockLanguageModelV2({
       doStream: async () => {
         streamCall += 1;
@@ -266,7 +266,7 @@ describe('Subconscious LibSQL integration', () => {
         observationalMemory: {
           enabled: true,
           model,
-          subconscious: new Subconscious({ observation: ['remind'], reflection: [] }),
+          experimental_subconscious: new Subconscious({ observation: ['remind'], reflection: [] }),
           observation: { messageTokens: 1, bufferTokens: false, previousObserverTokens: 1_000 },
         },
       },
@@ -275,10 +275,10 @@ describe('Subconscious LibSQL integration', () => {
     const resourceId = randomUUID();
     const scope = ['org:acme', `resource:${resourceId}`, `thread:${threadId}`];
     const knowledge = (await storage.getStore('knowledge'))!;
-    const atlas = await knowledge.createEntity({ name: 'Project Atlas', kind: 'project', scope: scope.slice(0, 2) });
-    await knowledge.appendFact({
-      id: 'fact-atlas-launch',
-      parentEntityId: atlas.id,
+    const atlas = await knowledge.createNode({ name: 'Project Atlas', kind: 'project', scope: scope.slice(0, 2) });
+    await knowledge.appendItem({
+      id: 'item-atlas-launch',
+      parentNodeId: atlas.id,
       text: '[[Project Atlas]] launches January 15.',
       scope: scope.slice(0, 2),
       sourceThreadId: 'source-thread',
@@ -352,19 +352,19 @@ describe('Subconscious LibSQL integration', () => {
           enabled: true,
           model,
           scope: 'resource',
-          subconscious: new Subconscious({ observation: ['remind'], reflection: [] }),
+          experimental_subconscious: new Subconscious({ observation: ['remind'], reflection: [] }),
           observation: { messageTokens: 1, bufferTokens: false, previousObserverTokens: 1_000 },
         },
       },
     });
     const knowledge = (await storage.getStore('knowledge'))!;
-    const entity = await knowledge.createEntity({
+    const node = await knowledge.createNode({
       name: 'Project Atlas',
       kind: 'project',
       scope: ['org:acme', `resource:${resourceId}`],
     });
-    await knowledge.appendFact({
-      parentEntityId: entity.id,
+    await knowledge.appendItem({
+      parentNodeId: node.id,
       text: '[[Project Atlas]] launches January 15.',
       scope: ['org:acme', `resource:${resourceId}`],
       sourceThreadId: 'source-thread',
@@ -443,13 +443,13 @@ describe('Subconscious LibSQL integration', () => {
       warnings: [],
     }));
     const model = new MockLanguageModelV2({ doStream: streamCall as never });
-    let completionFactId = '';
+    let completionItemId = '';
     const curateGenerate = vi.fn(async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop' as const,
       usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
       warnings: [],
-      content: [{ type: 'text' as const, text: `<curation-complete through="${completionFactId}" />` }],
+      content: [{ type: 'text' as const, text: `<curation-complete through="${completionItemId}" />` }],
     }));
     const curatorModel = new MockLanguageModelV2({ doGenerate: curateGenerate as never });
     const memory = new Memory({
@@ -460,7 +460,7 @@ describe('Subconscious LibSQL integration', () => {
         observationalMemory: {
           enabled: true,
           model,
-          subconscious: new Subconscious({
+          experimental_subconscious: new Subconscious({
             observation: [],
             reflection: [{ name: 'curate', model: curatorModel }],
           }),
@@ -472,16 +472,16 @@ describe('Subconscious LibSQL integration', () => {
     await memory.createThread({ threadId, resourceId, title: 'Curator lifecycle' });
     const knowledge = (await storage.getStore('knowledge'))!;
     const scope = ['org:acme', `resource:${resourceId}`, `thread:${threadId}`];
-    const entity = await knowledge.createEntity({ name: 'Project Atlas', kind: 'project', scope });
-    const fact = await knowledge.appendFact({
-      parentEntityId: entity.id,
+    const node = await knowledge.createNode({ name: 'Project Atlas', kind: 'project', scope });
+    const item = await knowledge.appendItem({
+      parentNodeId: node.id,
       text: '[[Project Atlas]] launches soon.',
       scope,
       sourceThreadId: threadId,
       resolutionScope: scope,
       defaultScope: scope,
     });
-    completionFactId = fact.id;
+    completionItemId = item.id;
     await memory.saveMessages({ messages: [message(threadId, resourceId, 'Project Atlas launches soon.')] });
     const requestContext = new RequestContext();
     requestContext.set('organizationId', 'acme');
@@ -511,25 +511,25 @@ describe('Subconscious LibSQL integration', () => {
     expect(result.observed).toBe(true);
     expect(curateGenerate).toHaveBeenCalledOnce();
     expect(await knowledge.getCurationCursor({ sourceThreadId: threadId, agent: 'curate' })).toMatchObject({
-      lastFactId: fact.id,
+      lastItemId: item.id,
     });
-    await expect(
-      knowledge.updateEntity({ id: entity.id, version: entity.version + 1, name: 'Stale Atlas' }),
-    ).rejects.toThrow('version');
+    await expect(knowledge.updateNode({ id: node.id, version: node.version + 1, name: 'Stale Atlas' })).rejects.toThrow(
+      'version',
+    );
 
-    await knowledge.removeFact({ id: fact.id, deletedBy: 'subconscious:curate' });
-    expect(await knowledge.getFact({ id: fact.id })).toBeNull();
+    await knowledge.removeItem({ id: item.id, deletedBy: 'subconscious:curate' });
+    expect(await knowledge.getItem({ id: item.id })).toBeNull();
     await memory.drainKnowledgeSemanticIndex(scope);
     const indexName = (await vector.listIndexes()).find(name => name.startsWith('knowledge_documents_dimension'))!;
     const queryVector = (await embedder.doEmbed({ values: ['Project Atlas launch'] })).embeddings[0]!;
-    expect((await vector.query({ indexName, queryVector, topK: 20 })).some(match => match.id.endsWith(fact.id))).toBe(
+    expect((await vector.query({ indexName, queryVector, topK: 20 })).some(match => match.id.endsWith(item.id))).toBe(
       false,
     );
 
-    await knowledge.restoreFact({ id: fact.id });
+    await knowledge.restoreItem({ id: item.id });
     await memory.drainKnowledgeSemanticIndex(scope);
-    expect(await knowledge.getFact({ id: fact.id })).toMatchObject({ deletedAt: undefined, deletedBy: undefined });
-    expect((await vector.query({ indexName, queryVector, topK: 20 })).some(match => match.id.endsWith(fact.id))).toBe(
+    expect(await knowledge.getItem({ id: item.id })).toMatchObject({ deletedAt: undefined, deletedBy: undefined });
+    expect((await vector.query({ indexName, queryVector, topK: 20 })).some(match => match.id.endsWith(item.id))).toBe(
       true,
     );
   });
@@ -544,10 +544,10 @@ describe('Subconscious LibSQL integration', () => {
     const threadId = randomUUID();
     const resourceId = randomUUID();
     const scope = ['org:acme', `resource:${resourceId}`, `thread:${threadId}`];
-    const project = await knowledge.createEntity({ name: 'Project Atlas', kind: 'project', scope });
+    const project = await knowledge.createNode({ name: 'Project Atlas', kind: 'project', scope });
     const appendSource = (text: string) =>
-      knowledge.appendFact({
-        parentEntityId: project.id,
+      knowledge.appendItem({
+        parentNodeId: project.id,
         text,
         scope,
         sourceThreadId: threadId,
@@ -574,7 +574,7 @@ describe('Subconscious LibSQL integration', () => {
               input: JSON.stringify({
                 name: 'deploy-atlas-safely',
                 procedure: 'Validate, publish, then verify the health check.',
-                sourceFactIds: pendingIds,
+                sourceItemIds: pendingIds,
               }),
             },
           ],
@@ -596,7 +596,6 @@ describe('Subconscious LibSQL integration', () => {
       learnedGuidance: true,
       tools: true,
       activity: { recentUpdates: 10 },
-      pins: { maxPins: 20, maxCharacters: 2_000, capturePinning: false },
     };
     const requestContext = new RequestContext();
     requestContext.set('organizationId', 'acme');
@@ -620,13 +619,13 @@ describe('Subconscious LibSQL integration', () => {
     pendingIds = [third.id, fourth.id];
     await run();
 
-    const skills = await knowledge.listEntities({ scope, kind: 'skill' });
+    const skills = await knowledge.listNodes({ scope, kind: 'skill' });
     expect(skills).toHaveLength(1);
-    const evidence = await knowledge.factsAbout({ entityId: skills[0]!.id, scope });
-    expect(evidence.facts).toHaveLength(4);
-    expect(new Set(evidence.facts.map(fact => fact.id)).size).toBe(4);
+    const evidence = await knowledge.itemsAbout({ nodeId: skills[0]!.id, scope });
+    expect(evidence.items).toHaveLength(4);
+    expect(new Set(evidence.items.map(item => item.id)).size).toBe(4);
     expect(await knowledge.getCurationCursor({ sourceThreadId: threadId, agent: 'learn' })).toMatchObject({
-      lastFactId: fourth.id,
+      lastItemId: fourth.id,
     });
   });
 });

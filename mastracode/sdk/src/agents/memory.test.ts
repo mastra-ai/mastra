@@ -43,7 +43,7 @@ type MemoryConfig = {
       enabled: boolean;
       temporalMarkers: boolean;
       retrieval: unknown;
-      subconscious?: { config: unknown };
+      experimental_subconscious?: { config: unknown };
       scope: 'thread' | 'resource';
       activateAfterIdle: unknown;
       activateOnProviderChange: boolean;
@@ -170,7 +170,7 @@ describe('getDynamicMemory', () => {
 
     expect(config.vector).toBe(vector);
     expect(config.embedder).toBe('fastembed-small');
-    expect(config.options.observationalMemory.subconscious?.config).toEqual({
+    expect(config.options.observationalMemory.experimental_subconscious?.config).toEqual({
       defaultScope: 'resource',
       maxScope: 'resource',
       pins: true,
@@ -211,7 +211,7 @@ describe('getDynamicMemory', () => {
       'thread',
       vector,
     );
-    expect(config.options.observationalMemory.subconscious?.config).toEqual({
+    expect(config.options.observationalMemory.experimental_subconscious?.config).toEqual({
       defaultScope: 'resource',
       maxScope: 'resource',
       pins: { capturePinning: true },

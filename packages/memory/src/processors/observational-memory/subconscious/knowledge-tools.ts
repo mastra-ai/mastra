@@ -1,12 +1,11 @@
 import type {
-  KnowledgeEntity,
-  KnowledgeFact,
-  KnowledgePage,
+  KnowledgeItem,
+  KnowledgeNode,
   KnowledgeScope,
   KnowledgeStorage,
   SearchKnowledgeResult,
 } from '@mastra/core/storage';
-import { createKnowledgeRecordCursor, isKnowledgeScopeVisible } from '@mastra/core/storage';
+import { createKnowledgeNodeCursor, isKnowledgeScopeVisible } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
@@ -51,38 +50,27 @@ function normalizeLimit(limit: number | undefined): number {
   return Math.min(Math.max(limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
 }
 
-function serializeFact(fact: KnowledgeFact) {
+function serializeItem(item: KnowledgeItem) {
   return {
-    id: fact.id,
-    text: fact.text,
-    scope: fact.scope,
-    sourceThreadId: fact.sourceThreadId,
-    capturedAt: fact.capturedAt.toISOString(),
-    when: fact.when?.toISOString(),
+    id: item.id,
+    text: item.text,
+    scope: item.scope,
+    sourceThreadId: item.sourceThreadId,
+    capturedAt: item.capturedAt.toISOString(),
+    when: item.when?.toISOString(),
   };
 }
 
-function serializeEntity(entity: KnowledgeEntity) {
+function serializeNode(node: KnowledgeNode) {
   return {
-    id: entity.id,
-    type: entity.type,
-    name: entity.name,
-    kind: entity.kind,
-    scope: entity.scope,
-    version: entity.version,
-    updatedAt: entity.updatedAt.toISOString(),
-  };
-}
-
-function serializePage(page: KnowledgePage) {
-  return {
-    id: page.id,
-    type: page.type,
-    name: page.name,
-    body: page.body,
-    scope: page.scope,
-    version: page.version,
-    updatedAt: page.updatedAt.toISOString(),
+    id: node.id,
+    type: node.type,
+    name: node.name,
+    kind: node.kind,
+    content: node.content,
+    scope: node.scope,
+    version: node.version,
+    updatedAt: node.updatedAt.toISOString(),
   };
 }
 
@@ -92,45 +80,31 @@ async function loadSemanticResult(
   candidate: { id: string; score: number; metadata?: Record<string, unknown> },
 ): Promise<(SearchKnowledgeResult & { semanticScore: number }) | null> {
   const type = candidate.metadata?.document_type;
-  if (type === 'entity') {
-    const entity = await store.getEntity(candidate.id.slice('knowledge:entity:'.length));
-    if (!entity || entity.mergedInto || !isKnowledgeScopeVisible(entity.scope, scope)) return null;
+  if (type === 'node') {
+    const node = await store.getNode(candidate.id.slice('knowledge:node:'.length));
+    if (!node || node.mergedInto || !isKnowledgeScopeVisible(node.scope, scope)) return null;
     return {
-      type: 'entity',
-      id: entity.id,
-      recordId: entity.id,
-      name: entity.name,
-      text: `${entity.name}\n${entity.kind}`,
-      scope: entity.scope,
+      type: 'node',
+      id: node.id,
+      recordId: node.id,
+      name: node.name,
+      text: `${node.name}\n${node.content ?? ''}`,
+      scope: node.scope,
       semanticScore: candidate.score,
     };
   }
-  if (type === 'page') {
-    const page = await store.getPage(candidate.id.slice('knowledge:page:'.length));
-    if (!page || !isKnowledgeScopeVisible(page.scope, scope)) return null;
+  if (type === 'item') {
+    const item = await store.getItem({ id: candidate.id.slice('knowledge:item:'.length) });
+    if (!item || !isKnowledgeScopeVisible(item.scope, scope)) return null;
+    const node = await store.getNode(item.parentNodeId);
+    const parentVisible = Boolean(node && !node.mergedInto && isKnowledgeScopeVisible(node.scope, scope));
     return {
-      type: 'page',
-      id: page.id,
-      recordId: page.id,
-      name: page.name,
-      text: `${page.name}\n${page.body}`,
-      scope: page.scope,
-      semanticScore: candidate.score,
-    };
-  }
-  if (type === 'fact') {
-    const fact = await store.getFact({ id: candidate.id.slice('knowledge:fact:'.length) });
-    if (!fact || !isKnowledgeScopeVisible(fact.scope, scope)) return null;
-    const entity = await store.getEntity(fact.parentEntityId);
-    if (!entity) return null;
-    const parentVisible = isKnowledgeScopeVisible(entity.scope, scope);
-    return {
-      type: 'fact',
-      id: fact.id,
-      recordId: parentVisible ? entity.id : fact.id,
-      name: parentVisible ? entity.name : '(private entity)',
-      text: fact.text,
-      scope: fact.scope,
+      type: 'item',
+      id: item.id,
+      recordId: parentVisible ? node!.id : item.id,
+      name: parentVisible ? node!.name : '(private node)',
+      text: item.text,
+      scope: item.scope,
       semanticScore: candidate.score,
     };
   }
@@ -176,7 +150,7 @@ export function createKnowledgeTools(
   const knowledgeSearch = createTool({
     id: 'knowledge_search',
     description:
-      'Search durable scoped knowledge across entities, facts, and curated pages using lexical and semantic retrieval.',
+      'Search durable scoped knowledge across nodes and knowledge items using lexical and semantic retrieval.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -204,56 +178,47 @@ export function createKnowledgeTools(
 
   const knowledgeRead = createTool({
     id: 'knowledge_read',
-    description: 'Read an entity and its facts, facts that mention it, or a curated page by name or ID.',
+    description: 'Read a knowledge node, its content, and knowledge items about or linked to it by name or ID.',
     inputSchema: {
       type: 'object',
       properties: {
-        type: { type: 'string', enum: ['entity', 'page'] },
         id: { type: 'string', minLength: 1 },
         name: { type: 'string', minLength: 1 },
-        facts: { type: 'string', enum: ['about', 'touching'], description: 'Entity fact view. Defaults to about.' },
-        cursor: { type: 'string', minLength: 1, description: 'Return facts after this fact ULID.' },
+        items: { type: 'string', enum: ['about', 'touching'], description: 'Knowledge item view. Defaults to about.' },
+        cursor: { type: 'string', minLength: 1, description: 'Return knowledge items after this item ULID.' },
         limit: { type: 'integer', minimum: 1, maximum: MAX_LIMIT },
       },
-      required: ['type'],
       additionalProperties: false,
     } satisfies JSONSchema7,
     execute: async (input, context) => {
       const {
-        type,
         id,
         name,
-        facts = 'about',
+        items = 'about',
         cursor,
         limit: requestedLimit,
       } = input as {
-        type: 'entity' | 'page';
         id?: string;
         name?: string;
-        facts?: 'about' | 'touching';
+        items?: 'about' | 'touching';
         cursor?: string;
         limit?: number;
       };
       if (!id && !name) throw new Error('knowledge_read requires id or name.');
       const scope = fixedScope ?? resolveScope(context as KnowledgeToolContext);
       const store = await getKnowledgeStore(memory);
-      if (type === 'page') {
-        const page = id ? await store.getPage(id) : await store.getPageByName({ name: name!, scope });
-        if (!page || !isKnowledgeScopeVisible(page.scope, scope)) return { found: false };
-        return { found: true, page: serializePage(page) };
-      }
-      const entity = id ? await store.getEntity(id) : await store.resolveEntity({ name: name!, scope });
-      if (!entity || entity.mergedInto || !isKnowledgeScopeVisible(entity.scope, scope)) return { found: false };
-      const result = await (facts === 'touching' ? store.factsTouching : store.factsAbout).call(store, {
-        entityId: entity.id,
+      const node = id ? await store.getNode(id) : await store.resolveNode({ name: name!, scope });
+      if (!node || node.mergedInto || !isKnowledgeScopeVisible(node.scope, scope)) return { found: false };
+      const result = await (items === 'touching' ? store.itemsTouching : store.itemsAbout).call(store, {
+        nodeId: node.id,
         scope,
         after: cursor,
         limit: normalizeLimit(requestedLimit),
       });
       return {
         found: true,
-        entity: serializeEntity(entity),
-        facts: result.facts.map(serializeFact),
+        node: serializeNode(node),
+        items: result.items.map(serializeItem),
         nextCursor: result.nextCursor,
       };
     },
@@ -261,15 +226,14 @@ export function createKnowledgeTools(
 
   const knowledgeBrowse = createTool({
     id: 'knowledge_browse',
-    description:
-      'Browse visible entities or pages by scope and name prefix, or follow an entity’s mentions and backlinks.',
+    description: 'Browse visible knowledge nodes by scope and name prefix, or follow a node’s mentions and backlinks.',
     inputSchema: {
       type: 'object',
       properties: {
-        type: { type: 'string', enum: ['entity', 'page'], description: 'Record type to list. Defaults to entity.' },
         namePrefix: { type: 'string' },
-        kind: { type: 'string', description: 'Optional entity kind filter.' },
-        entityId: { type: 'string', minLength: 1, description: 'When set, follow facts touching this entity.' },
+        kind: { type: 'string', description: 'Optional node kind filter.' },
+        hasContent: { type: 'boolean', description: 'Filter nodes by whether they have long-form content.' },
+        nodeId: { type: 'string', minLength: 1, description: 'When set, follow knowledge items touching this node.' },
         cursor: { type: 'string', minLength: 1 },
         limit: { type: 'integer', minimum: 1, maximum: MAX_LIMIT },
       },
@@ -277,49 +241,40 @@ export function createKnowledgeTools(
     } satisfies JSONSchema7,
     execute: async (input, context) => {
       const {
-        type = 'entity',
         namePrefix,
         kind,
-        entityId,
+        hasContent,
+        nodeId,
         cursor,
         limit: requestedLimit,
       } = input as {
-        type?: 'entity' | 'page';
         namePrefix?: string;
         kind?: string;
-        entityId?: string;
+        hasContent?: boolean;
+        nodeId?: string;
         cursor?: string;
         limit?: number;
       };
       const scope = fixedScope ?? resolveScope(context as KnowledgeToolContext);
       const limit = normalizeLimit(requestedLimit);
       const store = await getKnowledgeStore(memory);
-      if (entityId) {
-        const entity = await store.getEntity(entityId);
-        if (!entity || entity.mergedInto || !isKnowledgeScopeVisible(entity.scope, scope)) return { found: false };
-        const result = await store.factsTouching({ entityId, scope, after: cursor, limit });
+      if (nodeId) {
+        const node = await store.getNode(nodeId);
+        if (!node || node.mergedInto || !isKnowledgeScopeVisible(node.scope, scope)) return { found: false };
+        const result = await store.itemsTouching({ nodeId, scope, after: cursor, limit });
         return {
           found: true,
-          entity: serializeEntity(entity),
-          facts: result.facts.map(serializeFact),
+          node: serializeNode(node),
+          items: result.items.map(serializeItem),
           nextCursor: result.nextCursor,
         };
       }
-      if (type === 'page') {
-        const pages = await store.listPages({ scope, namePrefix, cursor, limit: limit + 1 });
-        const hasMore = pages.length > limit;
-        const records = pages.slice(0, limit);
-        return {
-          records: records.map(serializePage),
-          nextCursor: hasMore ? createKnowledgeRecordCursor(records.at(-1)!, { namePrefix }) : undefined,
-        };
-      }
-      const entities = await store.listEntities({ scope, namePrefix, kind, cursor, limit: limit + 1 });
-      const hasMore = entities.length > limit;
-      const records = entities.slice(0, limit);
+      const nodes = await store.listNodes({ scope, namePrefix, kind, hasContent, cursor, limit: limit + 1 });
+      const hasMore = nodes.length > limit;
+      const records = nodes.slice(0, limit);
       return {
-        records: records.map(serializeEntity),
-        nextCursor: hasMore ? createKnowledgeRecordCursor(records.at(-1)!, { namePrefix, kind }) : undefined,
+        records: records.map(serializeNode),
+        nextCursor: hasMore ? createKnowledgeNodeCursor(records.at(-1)!, { namePrefix, kind, hasContent }) : undefined,
       };
     },
   });

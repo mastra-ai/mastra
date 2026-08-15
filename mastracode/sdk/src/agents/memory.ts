@@ -133,7 +133,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
           enabled: true,
           temporalMarkers: true,
           retrieval: vector ? { vector: true } : true,
-          subconscious: vector
+          experimental_subconscious: vector
             ? new Subconscious({
                 defaultScope: 'resource',
                 maxScope: 'resource',

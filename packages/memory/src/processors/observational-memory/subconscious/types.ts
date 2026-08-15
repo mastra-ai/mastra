@@ -9,17 +9,17 @@ export type SubconsciousBuiltInReflectionAgent = 'curate' | 'learn';
 export type SubconsciousModel = Exclude<AgentConfig['model'], undefined>;
 
 export interface SubconsciousCaptureOutput {
-  entities: Array<{
+  nodes: Array<{
     name: string;
     kind: string;
     scope?: KnowledgeScopeLevel;
-    facts: Array<{
+    items: Array<{
       text: string;
       scope?: KnowledgeScopeLevel;
       when?: string;
-      /** One short sentence: why the fact is worth keeping (or must stay pinned). Stored as fact metadata. */
+      /** One short sentence: why the KnowledgeItem is worth keeping (or must stay pinned). Stored as item metadata. */
       reason?: string;
-      /** Present only when capture-time pinning is enabled; routes the fact to the pin set. */
+      /** Present only when capture-time pinning is enabled; routes the item to the pin set. */
       pin?: boolean;
     }>;
   }>;
@@ -83,6 +83,7 @@ export type SubconsciousReflectionEntry =
   | SubconsciousBuiltInReflectionConfig
   | SubconsciousCustomReflectionConfig;
 
+/** @experimental This API may change without notice. */
 export interface SubconsciousConfig {
   observation?: SubconsciousObservationEntry[];
   reflection?: SubconsciousReflectionEntry[];

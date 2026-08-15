@@ -4,9 +4,8 @@ import type {
   KnowledgeInspector,
   KnowledgeInspectorActivityItem,
   KnowledgeInspectorActivityList,
-  KnowledgeInspectorEntityDetail,
-  KnowledgeInspectorEntitySort,
-  KnowledgeInspectorPageDetail,
+  KnowledgeInspectorNodeDetail,
+  KnowledgeInspectorNodeSort,
   KnowledgeInspectorRecordList,
   KnowledgeInspectorRecordSummary,
   KnowledgeInspectorScopeLevel,
@@ -16,13 +15,11 @@ import type {
 import { theme } from '../theme.js';
 import { truncateAnsi } from './ansi.js';
 
-export type KnowledgeBrowserSection = 'scopes' | 'entities' | 'pages' | 'activity';
-type Detail =
-  | { type: 'entity'; value: KnowledgeInspectorEntityDetail }
-  | { type: 'page'; value: KnowledgeInspectorPageDetail };
+export type KnowledgeBrowserSection = 'scopes' | 'nodes' | 'activity';
+type Detail = { type: 'node'; value: KnowledgeInspectorNodeDetail };
 type Target =
   | { type: 'record'; record: KnowledgeInspectorRecordSummary }
-  | { type: 'more-facts' }
+  | { type: 'more-items' }
   | { type: 'more-incoming' };
 
 export interface KnowledgeBrowserOptions {
@@ -31,8 +28,8 @@ export interface KnowledgeBrowserOptions {
   onClose: () => void;
 }
 
-const SECTIONS: KnowledgeBrowserSection[] = ['scopes', 'entities', 'pages', 'activity'];
-const ENTITY_SORTS: KnowledgeInspectorEntitySort[] = ['relevant', 'recent', 'connected'];
+const SECTIONS: KnowledgeBrowserSection[] = ['scopes', 'nodes', 'activity'];
+const NODE_SORTS: KnowledgeInspectorNodeSort[] = ['relevant', 'recent', 'connected'];
 const PAGE_SIZE = 12;
 const MAX_BODY_LINES = 10;
 const MIN_CONTENT_WIDTH = 20;
@@ -86,7 +83,7 @@ function countsBadge(record: KnowledgeInspectorRecordSummary): string {
   return ` · →${counts.outgoing} ←${counts.incoming}${counts.sampled ? '+' : ''}`;
 }
 
-function groupEntityRecords(records: KnowledgeInspectorRecordSummary[]): KnowledgeInspectorRecordSummary[] {
+function groupNodeRecords(records: KnowledgeInspectorRecordSummary[]): KnowledgeInspectorRecordSummary[] {
   const grouped: KnowledgeInspectorRecordSummary[] = [];
   for (const group of ROLE_GROUPS) grouped.push(...records.filter(record => graphRole(record) === group.role));
   grouped.push(...records.filter(record => graphRole(record) === undefined));
@@ -109,8 +106,8 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
   private activity: KnowledgeInspectorActivityItem[] = [];
   private nextCursor?: string;
   private query = '';
-  private entitySort: KnowledgeInspectorEntitySort = 'relevant';
-  private entityCoverage?: 'exact' | 'recent-window';
+  private nodeSort: KnowledgeInspectorNodeSort = 'relevant';
+  private nodeCoverage?: 'exact' | 'recent-window';
   private selectedIndex = 0;
   private detail?: Detail;
   private detailHistory: Detail[] = [];
@@ -202,18 +199,11 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
       this.identityKey = tree.identityKey;
       const cursor = append ? this.nextCursor : undefined;
       let result: KnowledgeInspectorRecordList | KnowledgeInspectorActivityList;
-      if (this.section === 'entities') {
-        result = await this.inspector.listEntities({
+      if (this.section === 'nodes') {
+        result = await this.inspector.listNodes({
           level: this.level,
           namePrefix: this.query || undefined,
-          sort: this.entitySort,
-          cursor,
-          limit: PAGE_SIZE,
-        });
-      } else if (this.section === 'pages') {
-        result = await this.inspector.listPages({
-          level: this.level,
-          namePrefix: this.query || undefined,
+          sort: this.nodeSort,
           cursor,
           limit: PAGE_SIZE,
         });
@@ -229,8 +219,8 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
       } else {
         const recordResult = result as KnowledgeInspectorRecordList;
         const merged = append ? [...this.records, ...recordResult.items] : recordResult.items;
-        this.records = this.section === 'entities' ? groupEntityRecords(merged) : merged;
-        if (this.section === 'entities') this.entityCoverage = recordResult.coverage;
+        this.records = groupNodeRecords(merged);
+        this.nodeCoverage = recordResult.coverage;
       }
       this.nextCursor = result.nextCursor;
       if (!append) this.selectedIndex = 0;
@@ -250,10 +240,7 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
     this.error = undefined;
     this.renderNow();
     try {
-      const detail =
-        record.type === 'entity'
-          ? ({ type: 'entity', value: await this.inspector.getEntity({ handle: record.handle }) } as const)
-          : ({ type: 'page', value: await this.inspector.getPage({ handle: record.handle }) } as const);
+      const detail = { type: 'node', value: await this.inspector.getNode({ handle: record.handle }) } as const;
       if (requestVersion !== this.requestVersion || detail.value.identityKey !== this.identityKey) return;
       if (this.detail) this.detailHistory.push(this.detail);
       else this.detailHistory = [];
@@ -283,39 +270,39 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
     ];
   }
 
-  private async loadMoreFacts(kind: 'facts' | 'incoming'): Promise<void> {
-    if (this.detail?.type !== 'entity') return;
+  private async loadMoreItems(kind: 'items' | 'incoming'): Promise<void> {
+    if (this.detail?.type !== 'node') return;
     const current = this.detail.value;
-    const cursor = kind === 'facts' ? current.factsNextCursor : current.incomingFactsNextCursor;
+    const cursor = kind === 'items' ? current.itemsNextCursor : current.incomingItemsNextCursor;
     if (!cursor) return;
     const requestVersion = ++this.requestVersion;
     this.loading = true;
     this.renderNow();
     try {
-      const next = await this.inspector.getEntity({
-        handle: current.entity.handle,
-        factsCursor: kind === 'facts' ? cursor : undefined,
-        incomingFactsCursor: kind === 'incoming' ? cursor : undefined,
+      const next = await this.inspector.getNode({
+        handle: current.node.handle,
+        itemsCursor: kind === 'items' ? cursor : undefined,
+        incomingItemsCursor: kind === 'incoming' ? cursor : undefined,
       });
       if (
         requestVersion !== this.requestVersion ||
         next.identityKey !== this.identityKey ||
-        this.detail?.type !== 'entity'
+        this.detail?.type !== 'node'
       ) {
         return;
       }
       this.detail = {
-        type: 'entity',
+        type: 'node',
         value: {
           ...next,
-          facts: kind === 'facts' ? [...current.facts, ...next.facts] : current.facts,
-          factsNextCursor: kind === 'facts' ? next.factsNextCursor : current.factsNextCursor,
-          incomingFacts:
-            kind === 'incoming' ? [...current.incomingFacts, ...next.incomingFacts] : current.incomingFacts,
-          incomingFactsNextCursor: kind === 'incoming' ? next.incomingFactsNextCursor : current.incomingFactsNextCursor,
+          items: kind === 'items' ? [...current.items, ...next.items] : current.items,
+          itemsNextCursor: kind === 'items' ? next.itemsNextCursor : current.itemsNextCursor,
+          incomingItems:
+            kind === 'incoming' ? [...current.incomingItems, ...next.incomingItems] : current.incomingItems,
+          incomingItemsNextCursor: kind === 'incoming' ? next.incomingItemsNextCursor : current.incomingItemsNextCursor,
           outgoingTargets: {
             items: this.mergeRecords(current.outgoingTargets.items, next.outgoingTargets.items),
-            partial: kind === 'facts' ? next.outgoingTargets.partial : current.outgoingTargets.partial,
+            partial: kind === 'items' ? next.outgoingTargets.partial : current.outgoingTargets.partial,
           },
           incomingParents: {
             items: this.mergeRecords(current.incomingParents.items, next.incomingParents.items),
@@ -351,15 +338,15 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
     if (this.detail) {
       const target = this.detailTargets[this.selectedIndex];
       if (target?.type === 'record') await this.openRecord(target.record);
-      else if (target?.type === 'more-facts') await this.loadMoreFacts('facts');
-      else if (target?.type === 'more-incoming') await this.loadMoreFacts('incoming');
+      else if (target?.type === 'more-items') await this.loadMoreItems('items');
+      else if (target?.type === 'more-incoming') await this.loadMoreItems('incoming');
       return;
     }
     if (this.section === 'scopes') {
       const root = this.scopeTree?.roots[this.selectedIndex];
       if (!root?.available) return;
       this.level = root.level;
-      this.section = 'entities';
+      this.section = 'nodes';
       this.selectedIndex = 0;
       await this.loadSection();
       return;
@@ -392,9 +379,9 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
     else await this.loadSection();
   }
 
-  private async cycleEntitySort(): Promise<void> {
-    const index = ENTITY_SORTS.indexOf(this.entitySort);
-    this.entitySort = ENTITY_SORTS[(index + 1) % ENTITY_SORTS.length]!;
+  private async cycleNodeSort(): Promise<void> {
+    const index = NODE_SORTS.indexOf(this.nodeSort);
+    this.nodeSort = NODE_SORTS[(index + 1) % NODE_SORTS.length]!;
     this.records = [];
     this.nextCursor = undefined;
     this.selectedIndex = 0;
@@ -409,8 +396,8 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
       void this.changeSection(-1);
     } else if (matchesKey(data, 'tab')) {
       void this.changeSection(1);
-    } else if (!this.detail && this.section === 'entities' && matchesKey(data, 'ctrl+s')) {
-      void this.cycleEntitySort();
+    } else if (!this.detail && this.section === 'nodes' && matchesKey(data, 'ctrl+s')) {
+      void this.cycleNodeSort();
     } else if (kb.matches(data, 'tui.select.up') || data === 'k') {
       this.move(-1);
     } else if (kb.matches(data, 'tui.select.down') || data === 'j') {
@@ -422,7 +409,7 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
         this.detail = this.detailHistory.pop();
         this.selectedIndex = 0;
         this.renderNow();
-      } else if (this.query && (this.section === 'entities' || this.section === 'pages')) {
+      } else if (this.query && this.section === 'nodes') {
         this.query = this.query.slice(0, -1);
         void this.loadSection();
       } else if (this.section !== 'scopes') {
@@ -430,11 +417,7 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
         this.selectedIndex = 0;
         void this.refresh();
       }
-    } else if (
-      !this.detail &&
-      (this.section === 'entities' || this.section === 'pages') &&
-      /^[\x20-\x7e]$/.test(data)
-    ) {
+    } else if (!this.detail && this.section === 'nodes' && /^[\x20-\x7e]$/.test(data)) {
       this.query += data;
       void this.loadSection();
     }
@@ -444,8 +427,7 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
 
   private breadcrumb(width: number): string {
     const scopeId = this.scopeTree?.roots.find(root => root.level === this.level)?.id ?? 'unavailable';
-    const detailName = (detail: Detail): string =>
-      detail.type === 'entity' ? detail.value.entity.name : detail.value.page.name;
+    const detailName = (detail: Detail): string => detail.value.node.name;
     const trail = this.detail ? [...this.detailHistory.map(detailName), detailName(this.detail)] : [];
     const section = this.section[0]!.toUpperCase() + this.section.slice(1);
     const suffix = ` / ${section}${trail.map(name => ` / ${name}`).join('')}`;
@@ -482,7 +464,7 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
     const lines: string[] = [];
     let lastRole: KnowledgeGraphRole | undefined | null = null;
     this.records.forEach((record, index) => {
-      if (this.section === 'entities') {
+      if (this.section === 'nodes') {
         const role = graphRole(record);
         if (role !== lastRole) {
           lastRole = role;
@@ -520,27 +502,38 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
     return truncateAnsi(`${index === this.selectedIndex ? '→' : ' '} ${text}`, width);
   }
 
-  private renderEntityDetail(detail: KnowledgeInspectorEntityDetail, width: number): string[] {
+  private renderNodeDetail(detail: KnowledgeInspectorNodeDetail, width: number): string[] {
     this.detailTargets = [];
     const counts = detail.relationshipCounts;
-    const role = graphRole(detail.entity);
-    const roleSummary = counts
-      ? `${role ? `${roleLabel(role)} · ` : ''}${counts.facts} facts · ${counts.outgoing} outgoing · ${counts.incoming} incoming${counts.sampled ? ' (sampled)' : ''}`
-      : undefined;
+    const role = graphRole(detail.node);
+    const roleSummary = `${role ? `${roleLabel(role)} · ` : ''}${counts.items} items · ${counts.outgoing} outgoing · ${counts.incoming} incoming${counts.sampled ? ' (sampled)' : ''}`;
     const lines = [
-      `${theme.bold(detail.entity.name)}  ${detail.entity.kind ?? 'entity'}  ${scopeLabel(detail.entity, this.level)}  v${detail.entity.version}`,
-      ...(roleSummary ? [theme.fg('muted', roleSummary)] : []),
-      '',
-      theme.bold(`Facts (${detail.facts.length})`),
-      ...detail.facts.slice(0, 8).map(fact => truncateAnsi(`  • ${fact.text} [${fact.scope.level}]`, width)),
+      `${theme.bold(detail.node.name)}  ${detail.node.kind ?? 'node'}  ${scopeLabel(detail.node, this.level)}  v${detail.node.version}`,
+      theme.fg('muted', roleSummary),
     ];
-    if (detail.factsNextCursor) lines.push(this.selectableLine('Load more facts…', { type: 'more-facts' }, width));
-    lines.push('', theme.bold(`Incoming (${detail.incomingFacts.length})`));
+    if (detail.content) {
+      lines.push('', theme.bold('Content'));
+      const contentLines = wrapTextWithAnsi(detail.content, Math.max(MIN_CONTENT_WIDTH, width - 2)).slice(
+        0,
+        MAX_BODY_LINES,
+      );
+      lines.push(...contentLines.map(line => truncateAnsi(`  ${line}`, width)));
+      if (detail.contentTruncated || contentLines.length === MAX_BODY_LINES) {
+        lines.push(theme.fg('muted', '  … preview truncated'));
+      }
+    }
     lines.push(
-      ...detail.incomingFacts.slice(0, 6).map(fact => truncateAnsi(`  • ${fact.text} [${fact.scope.level}]`, width)),
+      '',
+      theme.bold(`Items (${detail.items.length})`),
+      ...detail.items.slice(0, 8).map(item => truncateAnsi(`  • ${item.text} [${item.scope.level}]`, width)),
     );
-    if (detail.incomingFactsNextCursor) {
-      lines.push(this.selectableLine('Load more incoming facts…', { type: 'more-incoming' }, width));
+    if (detail.itemsNextCursor) lines.push(this.selectableLine('Load more items…', { type: 'more-items' }, width));
+    lines.push('', theme.bold(`Incoming items (${detail.incomingItems.length})`));
+    lines.push(
+      ...detail.incomingItems.slice(0, 6).map(item => truncateAnsi(`  • ${item.text} [${item.scope.level}]`, width)),
+    );
+    if (detail.incomingItemsNextCursor) {
+      lines.push(this.selectableLine('Load more incoming items…', { type: 'more-incoming' }, width));
     }
     lines.push('', theme.bold(`Outgoing links${detail.outgoingTargets.partial ? ' (partial)' : ''}`));
     for (const related of detail.outgoingTargets.items) {
@@ -567,41 +560,17 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
     return lines;
   }
 
-  private renderPageDetail(detail: KnowledgeInspectorPageDetail, width: number): string[] {
-    this.detailTargets = [];
-    const lines = [
-      `${theme.bold(detail.page.name)}  ${scopeLabel(detail.page, this.level)}  v${detail.page.version}`,
-      '',
-      theme.bold('Body'),
-    ];
-    const bodyLines = wrapTextWithAnsi(detail.body, Math.max(MIN_CONTENT_WIDTH, width - 2)).slice(0, MAX_BODY_LINES);
-    lines.push(...bodyLines.map(line => truncateAnsi(`  ${line}`, width)));
-    if (detail.bodyTruncated || bodyLines.length === MAX_BODY_LINES)
-      lines.push(theme.fg('muted', '  … preview truncated'));
-    lines.push('', theme.bold('Links'));
-    for (const link of detail.links) {
-      lines.push(
-        link.entity
-          ? this.selectableLine(`${link.label} → ${link.entity.name}`, { type: 'record', record: link.entity }, width)
-          : truncateAnsi(`  ${link.label} (unresolved)`, width),
-      );
-    }
-    if (detail.links.length === 0) lines.push(theme.fg('muted', '  No links.'));
-    return lines;
-  }
-
   render(width: number): string[] {
     const contentWidth = Math.max(MIN_CONTENT_WIDTH, width - 4);
     const lines = [this.breadcrumb(contentWidth), this.renderTabs(contentWidth), ''];
-    if (this.section === 'entities' && !this.detail) {
-      const coverage = this.entityCoverage === 'recent-window' ? ' · recent window' : '';
-      const label = this.entitySort[0]!.toUpperCase() + this.entitySort.slice(1);
+    if (this.section === 'nodes' && !this.detail) {
+      const coverage = this.nodeCoverage === 'recent-window' ? ' · recent window' : '';
+      const label = this.nodeSort[0]!.toUpperCase() + this.nodeSort.slice(1);
       lines.push(theme.fg('muted', `Sort: ${label}${coverage} · Ctrl+S change`), '');
     }
     if (this.query && !this.detail) lines.push(truncateAnsi(`Filter: ${this.query}`, contentWidth), '');
     if (this.error) lines.push(theme.fg('error', truncateAnsi(`Error: ${this.error}`, contentWidth)), '');
-    if (this.detail?.type === 'entity') lines.push(...this.renderEntityDetail(this.detail.value, contentWidth));
-    else if (this.detail?.type === 'page') lines.push(...this.renderPageDetail(this.detail.value, contentWidth));
+    if (this.detail) lines.push(...this.renderNodeDetail(this.detail.value, contentWidth));
     else if (this.section === 'scopes') lines.push(...this.renderScopes(contentWidth));
     else if (this.section === 'activity') lines.push(...this.renderActivity(contentWidth));
     else lines.push(...this.renderRecordList(contentWidth));

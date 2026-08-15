@@ -13,13 +13,13 @@ import type { ResolvedSubconsciousAgent } from './types';
 const NO_REMINDER = '<no-reminder />';
 const DEFAULT_INSTRUCTIONS = `Review the current observations and use the knowledge tools to find prior knowledge that is directly relevant now.
 
-Be selective. Treat future-dated facts as relevant when their time is imminent or useful to the current task. When the observations show whether an earlier reminder was used, tune your selectivity accordingly without storing hit/miss counters.
+Be selective. Treat future-dated items as relevant when their time is imminent or useful to the current task. When the observations show whether an earlier reminder was used, tune your selectivity accordingly without storing hit/miss counters.
 Never remind about knowledge that is already visible in the current observations or recent messages — a reminder is only valuable for knowledge the agent can no longer see. Echoing back what was just said or just captured is noise.
 If nothing is relevant, respond with exactly ${NO_REMINDER} and nothing else.
-If knowledge is relevant, return one concise reminder that explains why it matters and includes source record or fact IDs. Do not invent knowledge and do not expose knowledge outside the tools' scoped results.`;
+If knowledge is relevant, return one concise reminder that explains why it matters and includes source node or item IDs. Do not invent knowledge and do not expose knowledge outside the tools' scoped results.`;
 
-/** Own-thread facts younger than this are treated as still-in-context and excluded from reminder candidates. */
-const FRESH_OWN_FACT_WINDOW_MS = 30 * 60 * 1000;
+/** Own-thread items younger than this are treated as still-in-context and excluded from reminder candidates. */
+const FRESH_OWN_ITEM_WINDOW_MS = 30 * 60 * 1000;
 
 function resolveScope(context: {
   requestContext?: { get(key: string): unknown };
@@ -77,25 +77,25 @@ async function findReminderSources(
 }
 
 /**
- * Drop the current thread's own freshly captured facts from the candidate list. They match the
+ * Drop the current thread's own freshly captured KnowledgeItems from the candidate list. They match the
  * current observations almost perfectly (they were just distilled from them), so without this
  * guard the reminder agent mostly echoes the session's own words back at it.
  */
-async function dropFreshOwnFacts(
+async function dropFreshOwnItems(
   store: KnowledgeStorage,
   sources: SearchKnowledgeResult[],
   threadId: string,
 ): Promise<SearchKnowledgeResult[]> {
   const checks = await Promise.all(
     sources.map(async source => {
-      if (source.type !== 'fact') return true;
-      const fact = await store.getFact({ id: source.id }).catch(() => null);
-      if (!fact) return true;
-      // Facts written by the thread's own subconscious sub-agents (curate, learn, capture)
+      if (source.type !== 'item') return true;
+      const item = await store.getItem({ id: source.id }).catch(() => null);
+      if (!item) return true;
+      // KnowledgeItems written by the thread's own subconscious sub-agents (curate, learn, capture)
       // carry a `subconscious:<threadId>:<agent>` source — they are this thread's too.
       const isOwnThread =
-        fact.sourceThreadId === threadId || fact.sourceThreadId.startsWith(`subconscious:${threadId}:`);
-      const isFresh = Date.now() - new Date(fact.capturedAt).getTime() < FRESH_OWN_FACT_WINDOW_MS;
+        item.sourceThreadId === threadId || item.sourceThreadId.startsWith(`subconscious:${threadId}:`);
+      const isFresh = Date.now() - new Date(item.capturedAt).getTime() < FRESH_OWN_ITEM_WINDOW_MS;
       return !(isOwnThread && isFresh);
     }),
   );
@@ -119,7 +119,7 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
           scope = resolveScope(context);
           store = await context.memory.storage.getStore('knowledge');
           if (!store) throw new Error('Subconscious remind requires a configured knowledge storage domain.');
-          const sources = await dropFreshOwnFacts(
+          const sources = await dropFreshOwnItems(
             store,
             await findReminderSources(store, scope, context.rawObservations),
             context.threadId,

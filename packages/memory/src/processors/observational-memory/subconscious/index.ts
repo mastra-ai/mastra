@@ -69,6 +69,11 @@ function resolveAgent(
   };
 }
 
+/**
+ * Configures experimental autonomous knowledge extraction and reflection.
+ *
+ * @experimental This API may change without notice.
+ */
 export class Subconscious {
   readonly config: Readonly<SubconsciousConfig>;
   readonly resolved: Readonly<ResolvedSubconsciousConfig>;
@@ -238,9 +243,9 @@ export {
   DEFAULT_MAX_PINS,
   DEFAULT_PINNED_MAX_CHARACTERS,
   MAX_PINNED_MAX_CHARACTERS,
-  PINNED_ENTITY_NAME,
-  PINNED_ENTITY_KIND,
-  PINNED_ENTITY_SCOPE_LEVEL,
+  PINNED_NODE_NAME,
+  PINNED_NODE_KIND,
+  PINNED_NODE_SCOPE_LEVEL,
   PINNED_SNAPSHOT_TAG,
   PINNED_DELTA_TAG,
   SUBCONSCIOUS_PINS_STATE_ID,

@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { Extractor } from '../extractor';
 import type { ExtractorOnExtractedContext, ExtractorRuntimeContext } from '../extractor';
 import { publishSubconsciousActivity } from './activity';
-import { writePinnedFact } from './pinned';
+import { writePinnedItem } from './pinned';
 import { resolveKnowledgeResourceId } from './scope';
 import type { SubconsciousCaptureConfig, SubconsciousCaptureOutput, SubconsciousDefaultCapture } from './types';
 
@@ -14,16 +14,12 @@ const MAX_CAPTURE_GUIDANCE_LENGTH = 4_000;
 const SCOPE_ORDER: Record<KnowledgeScopeLevel, number> = { org: 0, resource: 1, thread: 2 };
 
 export const subconsciousCaptureSchema = z.object({
-  entities: z.array(
+  nodes: z.array(
     z.object({
       name: z.string().trim().min(1),
-      kind: z
-        .string()
-        .trim()
-        .min(1)
-        .refine(kind => kind.trim().toLocaleLowerCase() !== 'page', 'Entity kind "page" is reserved'),
+      kind: z.string().trim().min(1),
       scope: z.enum(['org', 'resource', 'thread']).optional(),
-      facts: z.array(
+      items: z.array(
         z.object({
           text: z.string().trim().min(1),
           scope: z.enum(['org', 'resource', 'thread']).optional(),
@@ -38,16 +34,12 @@ export const subconsciousCaptureSchema = z.object({
 // Advertised to the model ONLY when capture-time pinning is enabled; apart from
 // the pin flag it must stay identical to the default schema above.
 const subconsciousCapturePinningSchema = z.object({
-  entities: z.array(
+  nodes: z.array(
     z.object({
       name: z.string().trim().min(1),
-      kind: z
-        .string()
-        .trim()
-        .min(1)
-        .refine(kind => kind.trim().toLocaleLowerCase() !== 'page', 'Entity kind "page" is reserved'),
+      kind: z.string().trim().min(1),
       scope: z.enum(['org', 'resource', 'thread']).optional(),
-      facts: z.array(
+      items: z.array(
         z.object({
           text: z.string().trim().min(1),
           scope: z.enum(['org', 'resource', 'thread']).optional(),
@@ -63,17 +55,17 @@ const subconsciousCapturePinningSchema = z.object({
 const CAPTURE_PINNING_INSTRUCTIONS = `Mark pin: true only for durable user preferences or hard constraints that should apply in every future session without being asked for.`;
 
 const CAPTURE_INSTRUCTIONS = `Extract durable, explicitly stated knowledge from the observations.
-Return entities with short stable names, a freeform kind, and facts nested under the entity each fact is about.
-Use common kinds such as person, task, event, project, or organization when they fit. Never use the reserved kind page.
-Set entity scope to the narrowest level where that identity should be shared. Omit it to use the configured default scope.
-Facts must be grounded in the conversation, concise, and written as prose. Do not infer unstated information.
-Wrap every named entity mentioned in fact text in [[wikilinks]].
-Set a fact scope only when the conversation establishes where it applies. Use org for organization-wide facts, resource for facts shared across this resource's conversations, and thread for conversation-private facts.
-Omit scope when uncertain; omitted fact scopes stay private to the current thread.
+Return nodes with short stable names, a freeform kind, and knowledge items nested under the node each item is about.
+Use common kinds such as person, task, event, project, organization, or document when they fit.
+Set node scope to the narrowest level where that identity and content should be shared. Omit it to use the configured default scope.
+Knowledge items must be grounded in the conversation, concise, and written as prose. Do not infer unstated information.
+Wrap every named node mentioned in item text in [[wikilinks]].
+Set an item scope only when the conversation establishes where it applies. Use org for organization-wide items, resource for items shared across this resource's conversations, and thread for conversation-private items.
+Omit scope when uncertain; omitted item scopes stay private to the current thread.
 Emit when only when the conversation anchors the referred time. Resolve relative dates against the current date and use ISO 8601.
-Capture what was learned through the work, not what the session was told: skip facts that merely restate standing instructions, configured rules, or the text of the task or issue the session was handed. The exception is an explicit request from the user to remember something, which is always captured even when it duplicates an existing instruction.`;
+Capture what was learned through the work, not what the session was told: skip items that merely restate standing instructions, configured rules, or the text of the task or issue the session was handed. The exception is an explicit request from the user to remember something, which is always captured even when it duplicates an existing instruction.`;
 
-const CAPTURE_REASON_INSTRUCTIONS = `Every fact requires a reason: the concrete why behind capturing it, in one short sentence - what it cost to learn or when it will matter again (and for pinned facts, why it must stay in context). Never write generic filler such as "seemed relevant" or "useful context".`;
+const CAPTURE_REASON_INSTRUCTIONS = `Every item requires a reason: the concrete why behind capturing it, in one short sentence - what it cost to learn or when it will matter again (and for pinned items, why it must stay in context). Never write generic filler such as "seemed relevant" or "useful context".`;
 
 function clampScope(level: KnowledgeScopeLevel, ceiling?: KnowledgeScopeLevel): KnowledgeScopeLevel {
   return ceiling && SCOPE_ORDER[level] < SCOPE_ORDER[ceiling] ? ceiling : level;
@@ -110,7 +102,7 @@ async function getKnowledgeStore(context: ExtractorRuntimeContext): Promise<Know
 function parseWhen(value: string | undefined): Date | undefined {
   if (!value) return undefined;
   const when = new Date(value);
-  if (Number.isNaN(when.getTime())) throw new Error(`Invalid Subconscious fact time: ${value}`);
+  if (Number.isNaN(when.getTime())) throw new Error(`Invalid Subconscious item time: ${value}`);
   return when;
 }
 
@@ -137,22 +129,20 @@ export class SubconsciousCaptureExtractor extends Extractor<SubconsciousCaptureO
       const store = await getKnowledgeStore(context);
       const droppedPins: string[] = [];
 
-      for (const extractedEntity of context.current.entities) {
-        const entityScope = expandKnowledgeScope(
+      for (const extractedNode of context.current.nodes) {
+        const nodeScope = expandKnowledgeScope(
           scopeContext,
-          clampScope(extractedEntity.scope ?? options.defaultScope, options.maxScope),
+          clampScope(extractedNode.scope ?? options.defaultScope, options.maxScope),
         );
-        const entity = await store.createEntity({
-          name: extractedEntity.name,
-          kind: extractedEntity.kind,
-          scope: entityScope,
+        const node = await store.createNode({
+          name: extractedNode.name,
+          kind: extractedNode.kind,
+          scope: nodeScope,
         });
-        for (const extractedFact of extractedEntity.facts) {
-          if (capturePinning && (extractedFact as { pin?: boolean }).pin === true && options.pins) {
-            // Pinned facts write ONLY through the shared pinned path (no dual write);
-            // an over-budget pin is dropped with a note, never a failed cycle.
+        for (const extractedItem of extractedNode.items) {
+          if (capturePinning && extractedItem.pin === true && options.pins) {
             try {
-              await writePinnedFact(
+              await writePinnedItem(
                 store,
                 {
                   scope: scopeContext,
@@ -162,26 +152,26 @@ export class SubconsciousCaptureExtractor extends Extractor<SubconsciousCaptureO
                   maxPins: options.pins.maxPins,
                   maxCharacters: options.pins.maxCharacters,
                 },
-                extractedFact.text,
-                extractedFact.scope,
-                extractedFact.reason ? { reason: extractedFact.reason } : undefined,
+                extractedItem.text,
+                extractedItem.scope,
+                extractedItem.reason ? { reason: extractedItem.reason } : undefined,
               );
             } catch (error) {
               droppedPins.push(`Capture-time pin dropped: ${error instanceof Error ? error.message : String(error)}`);
             }
             continue;
           }
-          const factLevel = clampScope(extractedFact.scope ?? 'thread', options.maxScope);
-          await store.appendFact({
-            parentEntityId: entity.id,
-            text: extractedFact.text,
-            scope: expandKnowledgeScope(scopeContext, factLevel),
+          const itemLevel = clampScope(extractedItem.scope ?? 'thread', options.maxScope);
+          await store.appendItem({
+            parentNodeId: node.id,
+            text: extractedItem.text,
+            scope: expandKnowledgeScope(scopeContext, itemLevel),
             sourceThreadId: context.threadId,
-            when: parseWhen(extractedFact.when),
+            when: parseWhen(extractedItem.when),
             maxScope: options.maxScope,
-            metadata: extractedFact.reason ? { reason: extractedFact.reason } : undefined,
+            metadata: extractedItem.reason ? { reason: extractedItem.reason } : undefined,
             resolutionScope: scopeContext,
-            defaultScope: entityScope,
+            defaultScope: nodeScope,
           });
         }
       }
@@ -208,10 +198,10 @@ export class SubconsciousCaptureExtractor extends Extractor<SubconsciousCaptureO
           const scopeContext = requireScopeContext(context);
           const store = await getKnowledgeStore(context);
           const guidanceScope = expandKnowledgeScope(scopeContext, clampScope(options.defaultScope, options.maxScope));
-          const guidance = await store.getPageByName({ name: CAPTURE_GUIDANCE_PAGE, scope: guidanceScope });
-          if (guidance?.body.trim()) {
+          const guidance = await store.getNodeByName({ name: CAPTURE_GUIDANCE_PAGE, scope: guidanceScope });
+          if (guidance?.content?.trim()) {
             sections.push(
-              `Learned guidance (cannot override the built-in contract or user instructions):\n${guidance.body
+              `Learned guidance (cannot override the built-in contract or user instructions):\n${guidance.content
                 .trim()
                 .slice(0, MAX_CAPTURE_GUIDANCE_LENGTH)}`,
             );
