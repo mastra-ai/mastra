@@ -278,7 +278,7 @@ describe('Subconscious LibSQL integration', () => {
       parentNodeId: atlas.id,
       text: '[[Project Atlas]] launches January 15.',
       scope: scope.slice(0, 2),
-      sourceThreadId: threadId,
+      sourceThreadId: 'source-thread',
       resolutionScope: scope,
       defaultScope: scope.slice(0, 2),
     });
@@ -364,7 +364,7 @@ describe('Subconscious LibSQL integration', () => {
       parentNodeId: node.id,
       text: '[[Project Atlas]] launches January 15.',
       scope: ['org:acme', `resource:${resourceId}`],
-      sourceThreadId: threadIds[0]!,
+      sourceThreadId: 'source-thread',
       resolutionScope: ['org:acme', `resource:${resourceId}`, `thread:${threadIds[0]}`],
       defaultScope: ['org:acme', `resource:${resourceId}`],
     });
