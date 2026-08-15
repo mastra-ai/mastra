@@ -1,0 +1,124 @@
+/**
+ * Sidebar activity dot for user sessions.
+ *
+ * Unlike factory workspaces, user sessions each own their own `resourceId`
+ * (=== `sessionId`), so activity is polled per session. This suite pins down
+ * the three-state indicator (initializing / working / idle) for those rows.
+ */
+import { screen } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
+import { MemoryRouter, Route, Routes } from 'react-router';
+import { describe, expect, it } from 'vitest';
+
+import { server } from '../../../../../../e2e/ui/msw-server';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
+import type { FactoryUserSession } from '../../services/github';
+import { UserSessionsSection } from '../UserSessionsSection';
+
+const factoryId = 'fp-1';
+const projectRepositoryId = 'ghp-1';
+
+function makeSession(
+  overrides: Partial<FactoryUserSession> & Pick<FactoryUserSession, 'sessionId' | 'branch'>,
+): FactoryUserSession {
+  return {
+    id: `row-${overrides.sessionId}`,
+    projectRepositoryId,
+    orgId: 'org-1',
+    userId: 'user-1',
+    baseBranch: 'main',
+    sandboxId: null,
+    sandboxWorkdir: null,
+    materializedAt: '2026-07-20T00:00:00.000Z',
+    createdAt: '2026-07-20T00:00:00.000Z',
+    updatedAt: '2026-07-20T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+function stubProjectAndSessions(sessions: FactoryUserSession[]) {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+      HttpResponse.json({ projects: [{ id: factoryId, name: 'Mastra' }] }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/source-control-connections`, () =>
+      HttpResponse.json({
+        connections: [
+          {
+            id: 'conn-1',
+            installationId: 'inst-7',
+            repositories: [
+              {
+                id: projectRepositoryId,
+                branch: 'main',
+                sandboxWorkdir: '/workspace/hello',
+                repository: { slug: 'octo/hello', defaultBranch: 'main' },
+              },
+            ],
+          },
+        ],
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
+      HttpResponse.json({ sessions }),
+    ),
+  );
+}
+
+function stubActiveSessions(activeIds: Set<string>) {
+  server.use(
+    http.get(`${TEST_BASE_URL}/api/agent-controller/:agentControllerId/sessions/:resourceId/threads`, ({ params }) => {
+      const resourceId = String(params.resourceId);
+      if (activeIds.has(resourceId)) {
+        return HttpResponse.json({
+          threads: [{ id: `${resourceId}-thread`, state: 'active', tags: {}, createdAt: '2026-07-20T00:00:00.000Z' }],
+        });
+      }
+      return HttpResponse.json({ threads: [] });
+    }),
+  );
+}
+
+function renderSection() {
+  return renderWithProviders(
+    <MemoryRouter initialEntries={[`/factories/${factoryId}`]}>
+      <Routes>
+        <Route path="/factories/:factoryId" element={<UserSessionsSection />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+describe('User sessions sidebar activity', () => {
+  it('lights the working dot when the session has an active thread', async () => {
+    stubProjectAndSessions([makeSession({ sessionId: 'sess-1', branch: 'user/feature-a' })]);
+    stubActiveSessions(new Set(['sess-1']));
+
+    const { client } = renderSection();
+    await waitForMutationsIdle(client);
+
+    await screen.findByRole('status', { name: 'Agent working in feature-a' });
+  });
+
+  it('shows the initializing dot for a session that has not materialized yet', async () => {
+    stubProjectAndSessions([makeSession({ sessionId: 'sess-2', branch: 'user/feature-b', materializedAt: null })]);
+    stubActiveSessions(new Set());
+
+    const { client } = renderSection();
+    await waitForMutationsIdle(client);
+
+    await screen.findByRole('status', { name: 'Initializing feature-b' });
+  });
+
+  it('leaves an idle materialized session without a status dot', async () => {
+    stubProjectAndSessions([makeSession({ sessionId: 'sess-3', branch: 'user/feature-c' })]);
+    stubActiveSessions(new Set());
+
+    const { client } = renderSection();
+    await waitForMutationsIdle(client);
+
+    const row = (await screen.findByRole('button', { name: 'feature-c' })).closest('li');
+    expect(row).not.toBeNull();
+    expect(row?.querySelector('[role="status"]')).toBeNull();
+  });
+});

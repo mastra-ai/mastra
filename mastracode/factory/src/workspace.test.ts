@@ -271,6 +271,7 @@ describe('getFactoryWorkspace', () => {
 
     expect(assetNames).toEqual([
       'configure-factory-rules',
+      'factory-complete-issue',
       'factory-plan',
       'factory-rereview',
       'factory-review',

@@ -346,6 +346,7 @@ function BoardContent({
                       key={candidate.sourceKey}
                       candidate={candidate}
                       pendingRunRoles={runs.pendingRolesForSource(candidate.sourceKey)}
+                      preparing={runs.preparingForSource(candidate.sourceKey)}
                       disabled={!runs.enabled}
                       onRun={(action, prompt) => runs.startCandidateRun(candidate, action, prompt)}
                       onFile={() => items.handleDrop({ kind: 'candidate', candidate }, candidate.column)}

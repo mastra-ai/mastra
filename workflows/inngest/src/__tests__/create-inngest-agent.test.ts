@@ -656,6 +656,10 @@ describe('InngestAgent parity surface', () => {
         userId: 'user-1',
         organizationId: 'org-1',
       },
+      tracingContext: {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+      },
     });
     const mastra = {
       getStorage: () => ({
@@ -664,7 +668,11 @@ describe('InngestAgent parity surface', () => {
     };
     (durableAgent as any).__setMastra(mastra);
 
-    const result = await durableAgent.resume(runId, { answer: 'approved' });
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'org-2');
+    requestContext.set('requestId', 'request-1');
+
+    const result = await durableAgent.resume(runId, { answer: 'approved' }, { requestContext });
     try {
       const deadline = Date.now() + 1_000;
       let entry = globalRunRegistry.get(runId);
@@ -683,11 +691,20 @@ describe('InngestAgent parity surface', () => {
           data: expect.objectContaining({
             requestContext: {
               userId: 'user-1',
-              organizationId: 'org-1',
+              organizationId: 'org-2',
+              requestId: 'request-1',
+            },
+            tracingOptions: {
+              traceId: 'trace-1',
+              parentSpanId: 'span-1',
             },
           }),
         }),
       );
+      const sentEvent = sendSpy.mock.calls[0]?.[0];
+      expect(sentEvent?.data).not.toHaveProperty('initialState');
+      expect(sentEvent?.data).not.toHaveProperty('stepResults');
+      expect(sentEvent?.data.resume).not.toHaveProperty('stepResults');
     } finally {
       result.cleanup();
       sendSpy.mockRestore();
