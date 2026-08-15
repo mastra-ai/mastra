@@ -183,13 +183,22 @@ async function resolveSignalSender(context: AskToolContext): Promise<SignalSende
 export function createRemindAskTool(options: RemindAskToolOptions) {
   const { memory, config, omModel } = options;
 
-  const answer = async (question: string, context: AskToolContext, threadId: string, blocking: boolean) => {
+  const resolveModel = (context: AskToolContext) =>
+    resolveSubconsciousAgentModel({ config, omModel, requestContext: context.requestContext });
+
+  const answer = async (
+    question: string,
+    context: AskToolContext,
+    threadId: string,
+    blocking: boolean,
+    preResolvedModel?: Awaited<ReturnType<typeof resolveModel>>,
+  ) => {
     const scope = resolveScope({
       requestContext: context.requestContext,
       resourceId: context.agent?.resourceId,
       threadId,
     });
-    const model = await resolveSubconsciousAgentModel({ config, omModel, requestContext: context.requestContext });
+    const model = preResolvedModel ?? (await resolveModel(context));
     if (!model) {
       throw new ReminderUnavailableError(NO_MODEL_MESSAGE);
     }
@@ -289,11 +298,11 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
 
       // Pre-flight the two things that fail deterministically, so a doomed question is an honest
       // error now rather than a correlation id that never resolves.
+      let model: Awaited<ReturnType<typeof resolveModel>>;
       try {
         resolveScope({ requestContext: context.requestContext, resourceId, threadId });
-        if (!(await resolveSubconsciousAgentModel({ config, omModel, requestContext: context.requestContext }))) {
-          throw new ReminderUnavailableError(NO_MODEL_MESSAGE);
-        }
+        model = await resolveModel(context);
+        if (!model) throw new ReminderUnavailableError(NO_MODEL_MESSAGE);
       } catch (error) {
         return { ok: false, ...describeAskFailure(error) };
       }
@@ -301,7 +310,7 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
       const correlationId = `remind-ask-${crypto.randomUUID()}`;
       void (async () => {
         try {
-          const text = await answer(question, context, threadId, false);
+          const text = await answer(question, context, threadId, false, model);
           await sendAnswerSignal(sender, {
             threadId,
             resourceId,
