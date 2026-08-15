@@ -75,6 +75,10 @@ function canonicalName(name: string): string {
   return name.trim().toLocaleLowerCase();
 }
 
+function escapeLikePattern(value: string): string {
+  return value.replaceAll('=', '==').replaceAll('%', '=%').replaceAll('_', '=_');
+}
+
 function parseNode(row: Record<string, unknown>): KnowledgeNode {
   return {
     id: String(row.id),
@@ -274,8 +278,8 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     const clauses = [`type = 'node'`, 'mergedInto IS NULL', visibleSql];
     const args: InValue[] = [key, key];
     if (input.namePrefix) {
-      clauses.push('canonicalName LIKE ?');
-      args.push(`${canonicalName(input.namePrefix)}%`);
+      clauses.push("canonicalName LIKE ? ESCAPE '='");
+      args.push(`${escapeLikePattern(canonicalName(input.namePrefix))}%`);
     }
     if (input.kind) {
       clauses.push('kind = ?');
@@ -550,10 +554,11 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   async search(input: SearchKnowledgeInput): Promise<SearchKnowledgeResult[]> {
     const scope = canonicalizeKnowledgeScope(input.scope);
     const key = knowledgeScopeKey(scope);
-    const query = `%${input.query.trim().toLocaleLowerCase()}%`;
-    if (query === '%%') return [];
+    const normalizedQuery = input.query.trim().toLocaleLowerCase();
+    if (!normalizedQuery) return [];
+    const query = `%${escapeLikePattern(normalizedQuery)}%`;
     const records = await this.#client.execute({
-      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE mergedInto IS NULL AND ${visibleSql} AND (canonicalName LIKE ? OR lower(COALESCE(kind,'')) LIKE ? OR lower(COALESCE(content,'')) LIKE ?) ORDER BY updatedAt DESC LIMIT ?`,
+      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE mergedInto IS NULL AND ${visibleSql} AND (canonicalName LIKE ? ESCAPE '=' OR lower(COALESCE(kind,'')) LIKE ? ESCAPE '=' OR lower(COALESCE(content,'')) LIKE ? ESCAPE '=') ORDER BY updatedAt DESC LIMIT ?`,
       args: [key, key, query, query, query, input.limit ?? 20],
     });
     const results: SearchKnowledgeResult[] = records.rows.map(row => ({
@@ -566,7 +571,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     }));
     if (results.length < (input.limit ?? 20)) {
       const items = await this.#client.execute({
-        sql: `SELECT f.*,json(f.scope) AS scopeJson,r.name FROM "${TABLE_KNOWLEDGE_ITEMS}" f JOIN "${TABLE_KNOWLEDGE_RECORDS}" r ON r.id=f.parentNodeId AND r.type='node' AND r.mergedInto IS NULL WHERE f.deletedAt IS NULL AND ${visibleSql.replaceAll('scopeKey', 'f.scopeKey')} AND lower(f.text) LIKE ? ORDER BY f.id DESC LIMIT ?`,
+        sql: `SELECT f.*,json(f.scope) AS scopeJson,r.name FROM "${TABLE_KNOWLEDGE_ITEMS}" f JOIN "${TABLE_KNOWLEDGE_RECORDS}" r ON r.id=f.parentNodeId AND r.type='node' AND r.mergedInto IS NULL WHERE f.deletedAt IS NULL AND ${visibleSql.replaceAll('scopeKey', 'f.scopeKey')} AND lower(f.text) LIKE ? ESCAPE '=' ORDER BY f.id DESC LIMIT ?`,
         args: [key, key, query, (input.limit ?? 20) - results.length],
       });
       results.push(
