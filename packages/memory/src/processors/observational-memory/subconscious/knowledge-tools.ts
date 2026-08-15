@@ -148,7 +148,8 @@ export function createKnowledgeTools(
 ): Record<string, ToolAction<any, any, any>> {
   const knowledgeSearch = createTool({
     id: 'knowledge_search',
-    description: 'Search durable scoped knowledge across nodes and knowledge items using lexical and semantic retrieval.',
+    description:
+      'Search durable scoped knowledge across nodes and knowledge items using lexical and semantic retrieval.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -189,7 +190,13 @@ export function createKnowledgeTools(
       additionalProperties: false,
     } satisfies JSONSchema7,
     execute: async (input, context) => {
-      const { id, name, items = 'about', cursor, limit: requestedLimit } = input as {
+      const {
+        id,
+        name,
+        items = 'about',
+        cursor,
+        limit: requestedLimit,
+      } = input as {
         id?: string;
         name?: string;
         items?: 'about' | 'touching';
@@ -232,7 +239,14 @@ export function createKnowledgeTools(
       additionalProperties: false,
     } satisfies JSONSchema7,
     execute: async (input, context) => {
-      const { namePrefix, kind, hasContent, nodeId, cursor, limit: requestedLimit } = input as {
+      const {
+        namePrefix,
+        kind,
+        hasContent,
+        nodeId,
+        cursor,
+        limit: requestedLimit,
+      } = input as {
         namePrefix?: string;
         kind?: string;
         hasContent?: boolean;
@@ -259,9 +273,7 @@ export function createKnowledgeTools(
       const records = nodes.slice(0, limit);
       return {
         records: records.map(serializeNode),
-        nextCursor: hasMore
-          ? createKnowledgeNodeCursor(records.at(-1)!, { namePrefix, kind, hasContent })
-          : undefined,
+        nextCursor: hasMore ? createKnowledgeNodeCursor(records.at(-1)!, { namePrefix, kind, hasContent }) : undefined,
       };
     },
   });
