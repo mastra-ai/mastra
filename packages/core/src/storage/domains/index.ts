@@ -23,6 +23,7 @@ export * from './datasets';
 export * from './experiments';
 export * from './background-tasks';
 export * from './schedules';
+export * from './signal-subscriptions';
 export * from './tool-provider-connections';
 export * from './notifications';
 export * from './thread-state';

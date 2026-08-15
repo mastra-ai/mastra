@@ -32,6 +32,7 @@ import type { ScoreRecord } from './observability/scores';
 import type { PromptBlockVersion } from './prompt-blocks';
 import type { Schedule, ScheduleTrigger } from './schedules/base';
 import type { ScorerDefinitionVersion } from './scorer-definitions';
+import type { StoredSignalSubscription } from './signal-subscriptions/base';
 import type { SkillVersion } from './skills';
 import type { WorkflowDefinition } from './workflow-definitions';
 import type { WorkspaceVersion } from './workspaces';
@@ -102,6 +103,9 @@ export class InMemoryDB {
   readonly schedules = new Map<string, Schedule>();
   readonly scheduleTriggers: ScheduleTrigger[] = [];
 
+  // Signal subscriptions domain
+  readonly signalSubscriptions = new Map<string, StoredSignalSubscription>();
+
   /**
    * Tool provider connections keyed by `${authorId}\u0000${providerId}\u0000${connectionId}`.
    */
@@ -154,6 +158,7 @@ export class InMemoryDB {
     this.backgroundTasks.clear();
     this.schedules.clear();
     this.scheduleTriggers.length = 0;
+    this.signalSubscriptions.clear();
     this.toolProviderConnections.clear();
   }
 }

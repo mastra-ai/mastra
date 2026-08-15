@@ -1,8 +1,10 @@
 import type { Agent } from '../agent/agent';
 import type { AgentSignalIfIdleOptions } from '../agent/types';
+import { isLeaseProvider, NoopLeaseProvider, type LeaseProvider } from '../events/pubsub';
 import type { Mastra } from '../mastra';
 import type { SendNotificationSignalInput } from '../notifications/types';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
+import type { SignalSubscriptionsStorage, StoredSignalSubscription } from '../storage/domains/signal-subscriptions';
 
 /**
  * Identifies a specific agent thread that a signal provider targets.
@@ -147,6 +149,15 @@ export abstract class SignalProvider<TId extends string = string> {
   /** Guard to prevent overlapping poll cycles */
   #isPollRunning = false;
 
+  /** Stable identity used when acquiring polling leases. */
+  readonly #pollOwner = crypto.randomUUID();
+
+  /** Leases currently held by this provider instance. */
+  readonly #heldPollLeases = new Set<string>();
+
+  /** Initialization is run once even when an agent is forked. */
+  #initialization?: Promise<void>;
+
   // ── Connection ──────────────────────────────────────────────────────
 
   /**
@@ -222,47 +233,34 @@ export abstract class SignalProvider<TId extends string = string> {
    *   (e.g., `"github:mastra-ai/mastra#123"`, `"slack:C0B01RW7A4T"`)
    * @param metadata - Optional provider-specific metadata for the subscription
    */
-  protected subscribe(
+  protected async subscribe(
     target: SignalProviderTarget,
     externalResourceId: string,
     metadata: Record<string, unknown> = {},
-  ): SignalSubscription {
+  ): Promise<SignalSubscription> {
     const key = this.#subscriptionKey(target, externalResourceId);
-    const existing = this.#subscriptions.get(key);
-    if (existing) {
-      existing.metadata = { ...existing.metadata, ...metadata };
-      return existing;
+    const existing = (await this.getSubscriptionsForThread(target)).find(
+      subscription => subscription.externalResourceId === externalResourceId,
+    );
+    const subscription: SignalSubscription = existing
+      ? { ...existing, metadata: { ...existing.metadata, ...metadata } }
+      : {
+          id: `${this.id}:${key}`,
+          providerId: this.id,
+          threadId: target.threadId,
+          resourceId: target.resourceId,
+          externalResourceId,
+          subscribedAt: new Date(),
+          metadata,
+        };
+
+    const store = await this.#getSubscriptionStore();
+    if (store) {
+      const stored = await store.upsertSubscription(this.#toStored(subscription));
+      return this.#fromStored(stored);
     }
 
-    const subscription: SignalSubscription = {
-      id: crypto.randomUUID(),
-      providerId: this.id,
-      threadId: target.threadId,
-      resourceId: target.resourceId,
-      externalResourceId,
-      subscribedAt: new Date(),
-      metadata,
-    };
-
-    this.#subscriptions.set(key, subscription);
-
-    // Update resource index
-    let resourceSet = this.#subscriptionsByResource.get(externalResourceId);
-    if (!resourceSet) {
-      resourceSet = new Set();
-      this.#subscriptionsByResource.set(externalResourceId, resourceSet);
-    }
-    resourceSet.add(key);
-
-    // Update thread index
-    const threadKey = this.#threadKey(target);
-    let threadSet = this.#subscriptionsByThread.get(threadKey);
-    if (!threadSet) {
-      threadSet = new Set();
-      this.#subscriptionsByThread.set(threadKey, threadSet);
-    }
-    threadSet.add(key);
-
+    this.#cacheSubscription(subscription);
     return subscription;
   }
 
@@ -271,89 +269,58 @@ export abstract class SignalProvider<TId extends string = string> {
    *
    * @returns `true` if a subscription was removed, `false` if none existed
    */
-  protected unsubscribe(target: SignalProviderTarget, externalResourceId: string): boolean {
-    const key = this.#subscriptionKey(target, externalResourceId);
-    const subscription = this.#subscriptions.get(key);
+  protected async unsubscribe(target: SignalProviderTarget, externalResourceId: string): Promise<boolean> {
+    const subscription = (await this.getSubscriptionsForThread(target)).find(
+      candidate => candidate.externalResourceId === externalResourceId,
+    );
     if (!subscription) return false;
 
-    this.#subscriptions.delete(key);
-
-    // Clean up resource index
-    const resourceSet = this.#subscriptionsByResource.get(externalResourceId);
-    if (resourceSet) {
-      resourceSet.delete(key);
-      if (resourceSet.size === 0) this.#subscriptionsByResource.delete(externalResourceId);
-    }
-
-    // Clean up thread index
-    const threadKey = this.#threadKey(target);
-    const threadSet = this.#subscriptionsByThread.get(threadKey);
-    if (threadSet) {
-      threadSet.delete(key);
-      if (threadSet.size === 0) this.#subscriptionsByThread.delete(threadKey);
-    }
-
+    const store = await this.#getSubscriptionStore();
+    if (store) await store.deleteSubscription(subscription.id);
+    this.#uncacheSubscription(subscription);
     return true;
   }
 
-  /**
-   * Get all active subscriptions for this provider.
-   */
-  protected getSubscriptions(): SignalSubscription[] {
-    return [...this.#subscriptions.values()];
+  /** Get all active subscriptions for this provider. */
+  protected async getSubscriptions(): Promise<SignalSubscription[]> {
+    return this.#listSubscriptions({ providerId: this.id });
   }
 
-  /**
-   * Get all subscriptions for a specific external resource.
-   *
-   * @example
-   * ```ts
-   * const subs = this.getSubscriptionsForResource('github:mastra-ai/mastra#123');
-   * for (const sub of subs) {
-   *   await this.notify({ ... }, { resourceId: sub.resourceId, threadId: sub.threadId });
-   * }
-   * ```
-   */
-  protected getSubscriptionsForResource(externalResourceId: string): SignalSubscription[] {
-    const keys = this.#subscriptionsByResource.get(externalResourceId);
-    if (!keys) return [];
-    return [...keys].map(key => this.#subscriptions.get(key)!).filter(Boolean);
+  /** Get all subscriptions for a specific external resource. */
+  protected async getSubscriptionsForResource(externalResourceId: string): Promise<SignalSubscription[]> {
+    return this.#listSubscriptions({ providerId: this.id, externalResourceId });
   }
 
-  /**
-   * Get all subscriptions for a specific thread.
-   */
-  protected getSubscriptionsForThread(target: SignalProviderTarget): SignalSubscription[] {
-    const threadKey = this.#threadKey(target);
-    const keys = this.#subscriptionsByThread.get(threadKey);
-    if (!keys) return [];
-    return [...keys].map(key => this.#subscriptions.get(key)!).filter(Boolean);
+  /** Get all subscriptions for a specific thread. */
+  protected async getSubscriptionsForThread(target: SignalProviderTarget): Promise<SignalSubscription[]> {
+    return this.#listSubscriptions({ providerId: this.id, resourceId: target.resourceId, threadId: target.threadId });
   }
 
-  /**
-   * Check if a thread is subscribed to a specific external resource.
-   */
-  protected hasSubscription(target: SignalProviderTarget, externalResourceId: string): boolean {
-    return this.#subscriptions.has(this.#subscriptionKey(target, externalResourceId));
+  /** Check if a thread is subscribed to a specific external resource. */
+  protected async hasSubscription(target: SignalProviderTarget, externalResourceId: string): Promise<boolean> {
+    return (await this.getSubscriptionsForThread(target)).some(
+      subscription => subscription.externalResourceId === externalResourceId,
+    );
   }
 
-  /**
-   * Remove all subscriptions for a thread.
-   */
-  protected unsubscribeAll(target: SignalProviderTarget): number {
-    const threadSubscriptions = this.getSubscriptionsForThread(target);
-    let removed = 0;
-    for (const sub of threadSubscriptions) {
-      if (this.unsubscribe(target, sub.externalResourceId)) removed++;
+  /** Remove all subscriptions for a thread. */
+  protected async unsubscribeAll(target: SignalProviderTarget): Promise<number> {
+    const subscriptions = await this.getSubscriptionsForThread(target);
+    const store = await this.#getSubscriptionStore();
+    if (store) {
+      await store.deleteSubscriptions({
+        providerId: this.id,
+        resourceId: target.resourceId,
+        threadId: target.threadId,
+      });
     }
-    return removed;
+    for (const subscription of subscriptions) this.#uncacheSubscription(subscription);
+    return subscriptions.length;
   }
 
-  /**
-   * Total number of active subscriptions.
-   */
-  protected get subscriptionCount(): number {
-    return this.#subscriptions.size;
+  /** Total number of active subscriptions. */
+  protected async getSubscriptionCount(): Promise<number> {
+    return (await this.getSubscriptions()).length;
   }
 
   // ── Polling ────────────────────────────────────────────────────────
@@ -384,22 +351,44 @@ export abstract class SignalProvider<TId extends string = string> {
     const interval = this.pollInterval;
     if (!interval || interval <= 0 || typeof this.poll !== 'function') return;
 
-    this.#pollTimer = setInterval(() => {
-      if (this.#isPollRunning) return;
-      const subscriptions = this.getSubscriptions();
-      if (subscriptions.length === 0) return;
-      this.#isPollRunning = true;
-      void Promise.resolve(this.poll!(subscriptions))
-        .catch(error => {
-          console.warn(`[${this.id}] poll failed:`, error);
-        })
-        .finally(() => {
-          this.#isPollRunning = false;
-        });
-    }, interval);
+    this.#pollTimer = setInterval(() => void this.#runPollCycle(), interval);
 
     // Don't let the timer keep the process alive
     this.#pollTimer.unref?.();
+  }
+
+  async #runPollCycle(): Promise<void> {
+    if (this.#isPollRunning) return;
+    this.#isPollRunning = true;
+    try {
+      const subscriptions = await this.getSubscriptions();
+      if (subscriptions.length === 0) return;
+
+      const leaseProvider = this.#getLeaseProvider();
+      const ttlMs = Math.max((this.pollInterval ?? 30_000) * 2, 1_000);
+      const byResource = new Map<string, SignalSubscription[]>();
+      for (const subscription of subscriptions) {
+        const resourceSubscriptions = byResource.get(subscription.externalResourceId) ?? [];
+        resourceSubscriptions.push(subscription);
+        byResource.set(subscription.externalResourceId, resourceSubscriptions);
+      }
+      for (const [externalResourceId, resourceSubscriptions] of byResource) {
+        const leaseKey = `signal-provider:${this.id}:${externalResourceId}`;
+        const acquired = this.#heldPollLeases.has(leaseKey)
+          ? await leaseProvider.renewLease(leaseKey, this.#pollOwner, ttlMs)
+          : (await leaseProvider.acquireLease(leaseKey, this.#pollOwner, ttlMs)).acquired;
+        if (!acquired) {
+          this.#heldPollLeases.delete(leaseKey);
+          continue;
+        }
+        this.#heldPollLeases.add(leaseKey);
+        await this.poll!(resourceSubscriptions);
+      }
+    } catch (error) {
+      console.warn(`[${this.id}] poll failed:`, error);
+    } finally {
+      this.#isPollRunning = false;
+    }
   }
 
   /**
@@ -432,12 +421,23 @@ export abstract class SignalProvider<TId extends string = string> {
    */
   start?(): Promise<void> | void;
 
+  /** @internal Awaits provider initialization before polling can begin. */
+  __initialize(): Promise<void> {
+    this.#initialization ??= Promise.resolve(this.start?.()).then(() => {
+      this.startPolling();
+    });
+    return this.#initialization;
+  }
+
   /**
    * Called on shutdown. Override to clean up resources.
-   * Default implementation stops polling and clears all subscriptions.
+   * Default implementation stops polling and clears the local fallback cache.
    */
-  stop(): void {
+  async stop(): Promise<void> {
     this.stopPolling();
+    const leaseProvider = this.#getLeaseProvider();
+    await Promise.all([...this.#heldPollLeases].map(leaseKey => leaseProvider.releaseLease(leaseKey, this.#pollOwner)));
+    this.#heldPollLeases.clear();
     this.#subscriptions.clear();
     this.#subscriptionsByResource.clear();
     this.#subscriptionsByThread.clear();
@@ -467,6 +467,75 @@ export abstract class SignalProvider<TId extends string = string> {
   }
 
   // ── Internal ───────────────────────────────────────────────────────
+
+  async #getSubscriptionStore(): Promise<SignalSubscriptionsStorage | undefined> {
+    return this.mastra?.getStorage()?.getStore('signalSubscriptions');
+  }
+
+  #getLeaseProvider(): LeaseProvider {
+    const getPubSub = this.#connectedAgent?.getPubSub;
+    const pubsub = typeof getPubSub === 'function' ? getPubSub.call(this.#connectedAgent) : undefined;
+    return isLeaseProvider(pubsub) ? pubsub : NoopLeaseProvider;
+  }
+
+  async #listSubscriptions(filter: {
+    providerId: string;
+    threadId?: string;
+    resourceId?: string;
+    externalResourceId?: string;
+  }): Promise<SignalSubscription[]> {
+    const store = await this.#getSubscriptionStore();
+    if (store) return (await store.listSubscriptions(filter)).map(subscription => this.#fromStored(subscription));
+
+    return [...this.#subscriptions.values()].filter(
+      subscription =>
+        subscription.providerId === filter.providerId &&
+        (!filter.threadId || subscription.threadId === filter.threadId) &&
+        (!filter.resourceId || subscription.resourceId === filter.resourceId) &&
+        (!filter.externalResourceId || subscription.externalResourceId === filter.externalResourceId),
+    );
+  }
+
+  #toStored(subscription: SignalSubscription): StoredSignalSubscription {
+    return {
+      ...subscription,
+      subscribedAt: subscription.subscribedAt.getTime(),
+    };
+  }
+
+  #fromStored(subscription: StoredSignalSubscription): SignalSubscription {
+    return {
+      ...subscription,
+      subscribedAt: new Date(subscription.subscribedAt),
+      metadata: subscription.metadata ?? {},
+    };
+  }
+
+  #cacheSubscription(subscription: SignalSubscription): void {
+    const target = { resourceId: subscription.resourceId, threadId: subscription.threadId };
+    const key = this.#subscriptionKey(target, subscription.externalResourceId);
+    this.#subscriptions.set(key, subscription);
+    const resourceSet = this.#subscriptionsByResource.get(subscription.externalResourceId) ?? new Set<string>();
+    resourceSet.add(key);
+    this.#subscriptionsByResource.set(subscription.externalResourceId, resourceSet);
+    const threadKey = this.#threadKey(target);
+    const threadSet = this.#subscriptionsByThread.get(threadKey) ?? new Set<string>();
+    threadSet.add(key);
+    this.#subscriptionsByThread.set(threadKey, threadSet);
+  }
+
+  #uncacheSubscription(subscription: SignalSubscription): void {
+    const target = { resourceId: subscription.resourceId, threadId: subscription.threadId };
+    const key = this.#subscriptionKey(target, subscription.externalResourceId);
+    this.#subscriptions.delete(key);
+    const resourceSet = this.#subscriptionsByResource.get(subscription.externalResourceId);
+    resourceSet?.delete(key);
+    if (resourceSet?.size === 0) this.#subscriptionsByResource.delete(subscription.externalResourceId);
+    const threadKey = this.#threadKey(target);
+    const threadSet = this.#subscriptionsByThread.get(threadKey);
+    threadSet?.delete(key);
+    if (threadSet?.size === 0) this.#subscriptionsByThread.delete(threadKey);
+  }
 
   #subscriptionKey(target: SignalProviderTarget, externalResourceId: string): string {
     return `${target.resourceId}:${target.threadId}:${externalResourceId}`;

@@ -17,8 +17,8 @@ describe('WebhookSignalProvider', () => {
     provider.connect(mockAgent as any);
   });
 
-  afterEach(() => {
-    provider.stop();
+  afterEach(async () => {
+    await provider.stop();
   });
 
   describe('constructor defaults', () => {
@@ -27,32 +27,32 @@ describe('WebhookSignalProvider', () => {
       expect(provider.name).toBe('Webhook Signals');
     });
 
-    it('accepts custom id and name', () => {
+    it('accepts custom id and name', async () => {
       const custom = new WebhookSignalProvider({ id: 'my-hooks', name: 'My Hooks' });
       expect(custom.id).toBe('my-hooks');
       expect(custom.name).toBe('My Hooks');
-      custom.stop();
+      await custom.stop();
     });
   });
 
   describe('subscribeThread / unsubscribeThread', () => {
-    it('creates and removes subscriptions', () => {
-      const sub = provider.subscribeThread(target1, 'my-org/my-repo');
+    it('creates and removes subscriptions', async () => {
+      const sub = await provider.subscribeThread(target1, 'my-org/my-repo');
       expect(sub.threadId).toBe('thread-1');
       expect(sub.externalResourceId).toBe('my-org/my-repo');
 
-      const removed = provider.unsubscribeThread(target1, 'my-org/my-repo');
+      const removed = await provider.unsubscribeThread(target1, 'my-org/my-repo');
       expect(removed).toBe(true);
     });
 
-    it('returns false when unsubscribing non-existent', () => {
-      expect(provider.unsubscribeThread(target1, 'nonexistent')).toBe(false);
+    it('returns false when unsubscribing non-existent', async () => {
+      expect(await provider.unsubscribeThread(target1, 'nonexistent')).toBe(false);
     });
   });
 
   describe('handleWebhook', () => {
     it('matches payload to subscriptions via default resource extraction', async () => {
-      provider.subscribeThread(target1, 'my-org/my-repo');
+      await provider.subscribeThread(target1, 'my-org/my-repo');
 
       const result = await provider.handleWebhook({
         body: { resource: 'my-org/my-repo', event: 'push' },
@@ -72,8 +72,29 @@ describe('WebhookSignalProvider', () => {
       );
     });
 
+    it('uses a stable delivery id for default notification deduplication', async () => {
+      const custom = new WebhookSignalProvider({
+        extractDeliveryId: request => request.headers['x-delivery-id'],
+      });
+      custom.connect(mockAgent as any);
+      await custom.subscribeThread(target1, 'resource-x');
+
+      await custom.handleWebhook({
+        body: { resource: 'resource-x' },
+        headers: { 'x-delivery-id': 'delivery-123' },
+      });
+
+      expect(mockAgent.sendNotificationSignal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          dedupeKey: 'webhook-signals:resource-x:delivery-123',
+        }),
+        { resourceId: 'user-1', threadId: 'thread-1' },
+      );
+      await custom.stop();
+    });
+
     it('matches via externalResourceId field in payload', async () => {
-      provider.subscribeThread(target1, 'resource-x');
+      await provider.subscribeThread(target1, 'resource-x');
 
       const result = await provider.handleWebhook({
         body: { externalResourceId: 'resource-x' },
@@ -84,8 +105,8 @@ describe('WebhookSignalProvider', () => {
     });
 
     it('routes to multiple subscribed threads for same resource', async () => {
-      provider.subscribeThread(target1, 'shared-resource');
-      provider.subscribeThread(target2, 'shared-resource');
+      await provider.subscribeThread(target1, 'shared-resource');
+      await provider.subscribeThread(target2, 'shared-resource');
 
       const result = await provider.handleWebhook({
         body: { resource: 'shared-resource' },
@@ -97,7 +118,7 @@ describe('WebhookSignalProvider', () => {
     });
 
     it('returns matched: 0 when no subscriptions match', async () => {
-      provider.subscribeThread(target1, 'my-org/my-repo');
+      await provider.subscribeThread(target1, 'my-org/my-repo');
 
       const result = await provider.handleWebhook({
         body: { resource: 'other-org/other-repo' },
@@ -109,7 +130,7 @@ describe('WebhookSignalProvider', () => {
     });
 
     it('returns matched: 0 when payload has no extractable resource', async () => {
-      provider.subscribeThread(target1, 'my-org/my-repo');
+      await provider.subscribeThread(target1, 'my-org/my-repo');
 
       const result = await provider.handleWebhook({
         body: { unrelated: 'data' },
@@ -120,8 +141,8 @@ describe('WebhookSignalProvider', () => {
     });
 
     it('continues on notify failure and logs warning', async () => {
-      provider.subscribeThread(target1, 'res-a');
-      provider.subscribeThread(target2, 'res-a');
+      await provider.subscribeThread(target1, 'res-a');
+      await provider.subscribeThread(target2, 'res-a');
       mockAgent.sendNotificationSignal
         .mockRejectedValueOnce(new Error('network error'))
         .mockResolvedValueOnce(undefined);
@@ -145,7 +166,7 @@ describe('WebhookSignalProvider', () => {
         extractResourceId: payload => (payload as any).repo?.fullName,
       });
       custom.connect(mockAgent as any);
-      custom.subscribeThread(target1, 'acme/widget');
+      await custom.subscribeThread(target1, 'acme/widget');
 
       const result = await custom.handleWebhook({
         body: { repo: { fullName: 'acme/widget' } },
@@ -153,7 +174,7 @@ describe('WebhookSignalProvider', () => {
       });
 
       expect(result.body).toEqual({ matched: 1 });
-      custom.stop();
+      await custom.stop();
     });
 
     it('supports returning multiple resource ids', async () => {
@@ -161,8 +182,8 @@ describe('WebhookSignalProvider', () => {
         extractResourceId: payload => (payload as any).repositories,
       });
       custom.connect(mockAgent as any);
-      custom.subscribeThread(target1, 'repo-a');
-      custom.subscribeThread(target2, 'repo-b');
+      await custom.subscribeThread(target1, 'repo-a');
+      await custom.subscribeThread(target2, 'repo-b');
 
       const result = await custom.handleWebhook({
         body: { repositories: ['repo-a', 'repo-b'] },
@@ -170,7 +191,7 @@ describe('WebhookSignalProvider', () => {
       });
 
       expect(result.body).toEqual({ matched: 2 });
-      custom.stop();
+      await custom.stop();
     });
 
     it('handles extractor returning undefined', async () => {
@@ -178,7 +199,7 @@ describe('WebhookSignalProvider', () => {
         extractResourceId: () => undefined,
       });
       custom.connect(mockAgent as any);
-      custom.subscribeThread(target1, 'res');
+      await custom.subscribeThread(target1, 'res');
 
       const result = await custom.handleWebhook({
         body: {},
@@ -186,7 +207,7 @@ describe('WebhookSignalProvider', () => {
       });
 
       expect(result.body).toEqual({ matched: 0 });
-      custom.stop();
+      await custom.stop();
     });
   });
 
@@ -202,7 +223,7 @@ describe('WebhookSignalProvider', () => {
         }),
       });
       custom.connect(mockAgent as any);
-      custom.subscribeThread(target1, 'my-repo');
+      await custom.subscribeThread(target1, 'my-repo');
 
       await custom.handleWebhook({
         body: { resource: 'my-repo', status: 'failed' },
@@ -218,7 +239,7 @@ describe('WebhookSignalProvider', () => {
         }),
         { resourceId: 'user-1', threadId: 'thread-1' },
       );
-      custom.stop();
+      await custom.stop();
     });
   });
 
@@ -239,12 +260,13 @@ describe('WebhookSignalProvider', () => {
   });
 
   describe('lifecycle', () => {
-    it('stop() clears all subscriptions', () => {
-      const first = provider.subscribeThread(target1, 'res-a');
-      provider.subscribeThread(target2, 'res-b');
-      provider.stop();
-      const recreated = provider.subscribeThread(target1, 'res-a');
-      expect(recreated.id).not.toBe(first.id);
+    it('stop() clears all subscriptions', async () => {
+      const first = await provider.subscribeThread(target1, 'res-a');
+      await provider.subscribeThread(target2, 'res-b');
+      await provider.stop();
+      const recreated = await provider.subscribeThread(target1, 'res-a');
+      expect(recreated).not.toBe(first);
+      expect(recreated.id).toBe(first.id);
     });
   });
 });

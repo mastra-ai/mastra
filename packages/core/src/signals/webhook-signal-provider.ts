@@ -29,6 +29,12 @@ export type WebhookSignalProviderOptions = {
   extractResourceId?: (payload: unknown) => string | string[] | undefined;
 
   /**
+   * Optional function to extract a stable delivery identifier from the webhook request.
+   * The default notification uses this identifier for deduplication across replicas.
+   */
+  extractDeliveryId?: (request: SignalProviderWebhookRequest) => string | undefined;
+
+  /**
    * Optional function to build the notification from a webhook payload.
    * When not provided, a default notification is built from the payload.
    */
@@ -59,7 +65,7 @@ export type WebhookSignalProviderOptions = {
  * });
  *
  * // Subscribe a thread to a resource
- * webhooks.subscribeThread(
+ * await webhooks.subscribeThread(
  *   { threadId: 'thread-1', resourceId: 'user-1' },
  *   'my-org/my-repo',
  * );
@@ -129,14 +135,14 @@ export class WebhookSignalProvider extends SignalProvider<string> {
     target: SignalProviderTarget,
     externalResourceId: string,
     metadata?: Record<string, unknown>,
-  ): SignalSubscription {
+  ): Promise<SignalSubscription> {
     return this.subscribe(target, externalResourceId, metadata);
   }
 
   /**
    * Programmatically unsubscribe a thread from an external resource.
    */
-  unsubscribeThread(target: SignalProviderTarget, externalResourceId: string): boolean {
+  unsubscribeThread(target: SignalProviderTarget, externalResourceId: string): Promise<boolean> {
     return this.unsubscribe(target, externalResourceId);
   }
 
@@ -148,6 +154,7 @@ export class WebhookSignalProvider extends SignalProvider<string> {
    */
   async handleWebhook(request: SignalProviderWebhookRequest): Promise<{ status?: number; body?: unknown }> {
     const payload = request.body;
+    const deliveryId = this.#options.extractDeliveryId?.(request);
     const resourceIds = [...new Set(this.#extractResourceIds(payload))];
 
     if (resourceIds.length === 0) {
@@ -156,9 +163,9 @@ export class WebhookSignalProvider extends SignalProvider<string> {
 
     let matched = 0;
     for (const resourceId of resourceIds) {
-      const subscriptions = this.getSubscriptionsForResource(resourceId);
+      const subscriptions = await this.getSubscriptionsForResource(resourceId);
       for (const subscription of subscriptions) {
-        const notification = this.#buildNotification(payload, subscription);
+        const notification = this.#buildNotification(payload, subscription, deliveryId);
         try {
           await this.notify(notification, {
             threadId: subscription.threadId,
@@ -193,7 +200,11 @@ export class WebhookSignalProvider extends SignalProvider<string> {
     return [];
   }
 
-  #buildNotification(payload: unknown, subscription: SignalSubscription): SendNotificationSignalInput {
+  #buildNotification(
+    payload: unknown,
+    subscription: SignalSubscription,
+    deliveryId?: string,
+  ): SendNotificationSignalInput {
     if (this.#options.buildNotification) {
       return this.#options.buildNotification(payload, subscription);
     }
@@ -204,7 +215,7 @@ export class WebhookSignalProvider extends SignalProvider<string> {
       priority: 'medium',
       summary: `Webhook event for ${subscription.externalResourceId}`,
       payload,
-      dedupeKey: `${this.id}:${subscription.externalResourceId}:${Date.now()}`,
+      dedupeKey: `${this.id}:${subscription.externalResourceId}:${deliveryId ?? Date.now()}`,
       coalesceKey: `${this.id}:${subscription.externalResourceId}`,
     };
   }
