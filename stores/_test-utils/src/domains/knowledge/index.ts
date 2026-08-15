@@ -264,6 +264,19 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(await store.listSemanticOutbox()).toEqual([]);
     });
 
+    it('paginates activity from newest to oldest without duplicates', async () => {
+      await store.createNode({ name: 'Activity one', kind: 'task', scope: resource });
+      await store.createNode({ name: 'Activity two', kind: 'task', scope: resource });
+      await store.createNode({ name: 'Activity three', kind: 'task', scope: resource });
+
+      const all = await store.listActivity({ scope: thread });
+      const first = await store.listActivity({ scope: thread, limit: 2 });
+      const second = await store.listActivity({ scope: thread, after: first.at(-1)!.id, limit: 2 });
+
+      expect(first.map(event => event.id)).toEqual(all.slice(0, 2).map(event => event.id));
+      expect(second.map(event => event.id)).toEqual(all.slice(2).map(event => event.id));
+    });
+
     it('persists activity, cursors, and recoverable semantic work', async () => {
       const node = await store.createNode({ name: 'Release', kind: 'task', scope: resource });
       await store.advanceCurationCursor({
