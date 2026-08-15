@@ -396,7 +396,7 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
           expect(await readFile(join(outputDirectory, 'package-lock.json'), 'utf8')).toBe(expectedLockfile);
           expect(
             JSON.parse(await readFile(join(outputDirectory, 'node_modules', 'bcrypt', 'package.json'), 'utf8')),
-          ).to.MatchObject({ name: 'bcrypt' });
+          ).toMatchObject({ name: 'bcrypt' });
         } finally {
           await writeFile(configPath, originalConfig);
           await rm(sourceLockfile, { force: true });

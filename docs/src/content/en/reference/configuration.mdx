@@ -724,7 +724,7 @@ export const mastra = new Mastra({
 
 **Type:** `string`
 
-Optional path to the lockfile used for the generated bundle's dependency installation. Relative paths are resolved from the project root. Supported basenames are `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, and `bun.lock`; the lockfile's basename selects the package manager used to install the bundle, which is what makes pinning an npm lockfile in a pnpm, Yarn, or Bun repo work (a locked graph plus npm's hoisted tree). Matching locks are copied byte-for-byte beside the generated manifest and installed with the manager's frozen command. Cloud deployments accept an explicit lockfile only when its basename is `package-lock.json`.
+Optional path to the lockfile used for the generated bundle's dependency installation. Generate the lockfile for the generated bundle's `package.json`, then commit it at the configured path. Relative paths are resolved from the project root. Supported basenames are `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, and `bun.lock`; the lockfile's basename selects the package manager used to install the bundle. Bundle lockfiles are copied byte-for-byte beside the generated manifest and installed with the manager's frozen command. Cloud deployments accept an explicit lockfile only when its basename is `package-lock.json`.
 
 When this option is omitted, Mastra keeps detecting the package manager from the project and performs its normal installation. The secondary npm lock is generated only after a normal npm installation, and isn't generated for explicit locks or packed workspace dependencies.
 
@@ -733,7 +733,7 @@ import { Mastra } from '@mastra/core'
 
 export const mastra = new Mastra({
   bundler: {
-    lockfile: './pnpm-lock.yaml',
+    lockfile: './bundle-lock/pnpm-lock.yaml',
   },
 })
 ```

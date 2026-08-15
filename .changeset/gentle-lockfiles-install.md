@@ -5,12 +5,12 @@
 '@mastra/deployer-netlify': patch
 ---
 
-Install generated bundle dependencies from a committed lockfile with `bundler.lockfile`. The lockfile's basename selects the package manager, the file must stay within the project, and the bundle uses the manager's frozen install command. Automatic manager detection remains unchanged when no lockfile is configured.
+Install generated bundle dependencies from a committed lockfile with `bundler.lockfile`. Generate the lockfile for the bundle's output `package.json`, keep it within the project, and use its basename to select the manager's frozen install command. Automatic manager detection remains unchanged when no lockfile is configured.
 
 ```ts
 const mastra = new Mastra({
   bundler: {
-    lockfile: './package-lock.json',
+    lockfile: './bundle-lock/package-lock.json',
   },
 });
 ```

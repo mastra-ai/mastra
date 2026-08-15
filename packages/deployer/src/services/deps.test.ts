@@ -118,7 +118,7 @@ describe('DepsService explicit lock install commands', () => {
   it.each([
     ['npm', 'npm ci --force --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false'],
     ['pnpm', 'pnpm install --frozen-lockfile --loglevel=error'],
-    ['yarn', 'yarn install --frozen-lockfile'],
+    ['yarn', 'yarn install --immutable'],
     ['bun', 'bun install --frozen-lockfile'],
   ] as const)('uses the frozen %s command', async (packageManager, command) => {
     const dir = await mkdtemp(join(tmpdir(), 'mastra-deps-command-'));

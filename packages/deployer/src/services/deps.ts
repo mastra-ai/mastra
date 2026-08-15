@@ -316,7 +316,7 @@ export class Deps extends MastraBase {
       case 'npm':
         return `${frozen ? 'ci --force' : cmd} --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false`;
       case 'yarn':
-        return `${cmd}${frozen ? ' --frozen-lockfile' : ''}`;
+        return `${cmd}${frozen ? ' --immutable' : ''}`;
       case 'pnpm':
         return `${cmd}${frozen ? ' --frozen-lockfile' : ''} --loglevel=error`;
       case 'bun':
