@@ -265,7 +265,7 @@ export function canonicalizeKnowledgeScope(scope: KnowledgeScope): KnowledgeScop
     const separator = entry.indexOf(':');
     const level = entry.slice(0, separator) as KnowledgeScopeLevel;
     const id = entry.slice(separator + 1);
-    if (separator <= 0 || !id || SCOPE_ORDER[level] === undefined) {
+    if (separator <= 0 || !id || id.includes('\u001f') || SCOPE_ORDER[level] === undefined) {
       throw new Error(`Invalid knowledge scope entry: ${entry}`);
     }
     const existing = entriesByLevel.get(level);
