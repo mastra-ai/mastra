@@ -48,10 +48,15 @@ jobs:
           # Deployer changes must include monorepo E2E coverage. This rule runs
           # before the no-test exemptions below so it applies to all contributors.
           # Keep this list separate from /tmp/changed-files so deleted tests are
-          # not restored from FETCH_HEAD. The package instructions are exempt.
-          if grep -q '^packages/deployer/' /tmp/changed-coverage-files \
+          # not restored from FETCH_HEAD. The package instructions and the
+          # generated changelog are exempt, and the automated Changesets release
+          # PR is skipped entirely: it only bumps versions and changelogs, so it
+          # can never add the E2E coverage this rule asks for.
+          if [ "${HEAD_REF#changeset-release/}" != "$HEAD_REF" ]; then
+            echo "Skipping deployer E2E coverage rule for the Changesets release PR."
+          elif grep -q '^packages/deployer/' /tmp/changed-coverage-files \
             && ! grep -q '^e2e-tests/monorepo/' /tmp/changed-coverage-files \
-            && awk '$0 ~ /^packages\/deployer\// && $0 != "packages/deployer/AGENTS.md" { found=1; exit } END { exit(found ? 0 : 1) }' \
+            && awk '$0 ~ /^packages\/deployer\// && $0 != "packages/deployer/AGENTS.md" && $0 != "packages/deployer/CHANGELOG.md" { found=1; exit } END { exit(found ? 0 : 1) }' \
               /tmp/changed-coverage-files; then
             first_deployer_file="$(
               awk '$0 ~ /^packages\/deployer\// && $0 != "packages/deployer/AGENTS.md" { print; exit }' \
@@ -100,6 +105,7 @@ jobs:
           AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
           BASE_REPOSITORY: ${{ github.repository }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
           HEAD_REPO: ${{ github.event.pull_request.head.repo.clone_url }}
           HEAD_REPO_FULL_NAME: ${{ github.event.pull_request.head.repo.full_name }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
