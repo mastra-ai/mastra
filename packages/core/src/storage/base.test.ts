@@ -119,6 +119,7 @@ describe('MastraCompositeStore — disabled domains (`false` override)', () => {
     expect(await composite.getStore('observability')).toBeUndefined();
     // Other domains still fall through to the default store.
     expect(await composite.getStore('memory')).toBe(inner.stores?.memory);
+    expect(await composite.getStore('knowledge')).toBe(inner.stores?.knowledge);
   });
 
   it('resolves a `false` domain to undefined instead of falling through to editor', async () => {
