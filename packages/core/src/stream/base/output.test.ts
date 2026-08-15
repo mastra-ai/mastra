@@ -1405,4 +1405,84 @@ describe('MastraModelOutput', () => {
       expect(output.status).toBe('failed');
     });
   });
+
+  describe('per-step reasoning', () => {
+    const reasoningStart = (runId: string, id: string): ChunkType =>
+      ({ type: 'reasoning-start', runId, from: ChunkFrom.AGENT, payload: { id } }) as ChunkType;
+    const reasoningDelta = (runId: string, id: string, text: string): ChunkType =>
+      ({ type: 'reasoning-delta', runId, from: ChunkFrom.AGENT, payload: { id, text } }) as ChunkType;
+    const reasoningEnd = (runId: string, id: string): ChunkType =>
+      ({ type: 'reasoning-end', runId, from: ChunkFrom.AGENT, payload: { id } }) as ChunkType;
+
+    it('reports only the current step reasoning, not the cumulative reasoning of all prior steps', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+
+      // Two reasoning blocks in two steps. Each step-finish should carry only its
+      // own reasoning, mirroring how `text` is scoped per step.
+      const stream = createChunkStream([
+        reasoningStart(runId, 'rs1'),
+        reasoningDelta(runId, 'rs1', 'STEP-ONE-THINKING'),
+        reasoningEnd(runId, 'rs1'),
+        createStepFinishChunk(runId),
+        reasoningStart(runId, 'rs2'),
+        reasoningDelta(runId, 'rs2', 'STEP-TWO-THINKING'),
+        reasoningEnd(runId, 'rs2'),
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+      const steps = await output.steps;
+
+      expect(steps).toHaveLength(2);
+
+      expect(steps[0]!.reasoningText).toBe('STEP-ONE-THINKING');
+      expect(steps[0]!.reasoning.map(r => r.payload.id)).toEqual(['rs1']);
+
+      // The second step must not inherit the first step's reasoning.
+      expect(steps[1]!.reasoningText).toBe('STEP-TWO-THINKING');
+      expect(steps[1]!.reasoning.map(r => r.payload.id)).toEqual(['rs2']);
+      expect(steps[1]!.reasoning[0]!.payload.text).toBe('STEP-TWO-THINKING');
+    });
+
+    it('reports empty reasoning for a step that produced none', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+
+      const stream = createChunkStream([
+        reasoningStart(runId, 'rs1'),
+        reasoningDelta(runId, 'rs1', 'ONLY-STEP-ONE'),
+        reasoningEnd(runId, 'rs1'),
+        createStepFinishChunk(runId),
+        // Second step has no reasoning at all.
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+      const steps = await output.steps;
+
+      expect(steps).toHaveLength(2);
+      expect(steps[0]!.reasoningText).toBe('ONLY-STEP-ONE');
+      expect(steps[1]!.reasoningText).toBe('');
+      expect(steps[1]!.reasoning).toEqual([]);
+    });
+  });
 });

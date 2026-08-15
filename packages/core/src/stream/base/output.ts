@@ -741,6 +741,23 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               // If step has tripwire, text should be empty (rejected response)
               const stepText = stepTripwire ? '' : self.#bufferedByStep.text;
 
+              // Per-step reasoning must not leak earlier steps. `#bufferedReasoning`
+              // and `#bufferedReasoningDetails` are run-lifetime buffers (cleared only
+              // at the run/goal boundary in `#truncateRunBuffers`), so reading them
+              // here made every step report the cumulative reasoning of all prior
+              // steps. Mirror how `stepText` uses the per-step `#bufferedByStep`
+              // buffer: take this step's reasoning deltas, and narrow the id-keyed
+              // details map to just the ids seen this step.
+              const stepReasoningText = self.#bufferedByStep.reasoning
+                .map(reasoningPart => reasoningPart.payload.text)
+                .join('');
+              const stepReasoningIds = new Set(
+                self.#bufferedByStep.reasoning.map(reasoningPart => reasoningPart.payload.id),
+              );
+              const stepReasoning = Object.values(self.#bufferedReasoningDetails).filter(detail =>
+                stepReasoningIds.has(detail.payload.id),
+              );
+
               const stepResult: LLMStepResult<OUTPUT> = {
                 stepType: self.#bufferedSteps.length === 0 ? 'initial' : 'tool-result',
                 sources: self.#bufferedByStep.sources,
@@ -757,8 +774,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 text: stepText,
                 // Include tripwire data if present
                 tripwire: stepTripwire,
-                reasoningText: self.#bufferedReasoning.map(reasoningPart => reasoningPart.payload.text).join(''),
-                reasoning: Object.values(self.#bufferedReasoningDetails),
+                reasoningText: stepReasoningText,
+                reasoning: stepReasoning,
                 get staticToolCalls() {
                   return self.#bufferedByStep.toolCalls.filter(
                     part => part.type === 'tool-call' && part.payload?.dynamic === false,
