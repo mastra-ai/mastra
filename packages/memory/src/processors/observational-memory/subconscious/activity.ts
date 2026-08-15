@@ -92,7 +92,7 @@ export async function buildSubconsciousActivitySnapshot(input: {
 
 export function renderSubconsciousActivity(snapshot: SubconsciousActivitySnapshot): string {
   const lines = snapshot.updates.map(update => {
-    const target = update.name ? `${update.type} [[${update.name}]]` : `${update.type} ${update.recordId}`;
+    const target = update.name ? `${update.type} [[${update.name}]]` : update.type;
     return `- ${update.action}: ${target}`;
   });
   const hot = snapshot.hot.map(record => `[[${record.name}]] (${record.updates})`).join(', ');
