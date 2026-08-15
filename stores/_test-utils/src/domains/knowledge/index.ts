@@ -1,4 +1,5 @@
 import type { KnowledgeStorage } from '@mastra/core/storage';
+import { createKnowledgeRecordCursor } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 const resource = ['org:acme', 'resource:mastra'];
@@ -55,6 +56,61 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(await store.search({ query: 'organization-visible', scope: ['org:acme'] })).toEqual([
         expect.objectContaining({ type: 'item', recordId: node.id, scope: ['org:acme'] }),
       ]);
+    });
+
+    it('reserves page kinds case-insensitively for page records', async () => {
+      await expect(store.createEntity({ name: 'Not a page', kind: ' Page ', scope: resource })).rejects.toThrow(
+        /reserved/,
+      );
+      const entity = await store.createEntity({ name: 'Entity', kind: 'task', scope: resource });
+      await expect(store.updateEntity({ id: entity.id, version: entity.version, kind: '\tPAGE\n' })).rejects.toThrow(
+        /reserved/,
+      );
+    });
+
+    it('applies fact visibility independently from parent entity identity scope', async () => {
+      const entity = await store.createEntity({ name: 'Resource entity', kind: 'task', scope: resource });
+      await store.appendFact({
+        parentEntityId: entity.id,
+        text: 'organization-visible fact',
+        scope: ['org:acme'],
+        sourceThreadId: 't1',
+        resolutionScope: thread,
+        defaultScope: resource,
+      });
+
+      expect((await store.factsAbout({ entityId: entity.id, scope: ['org:acme'] })).facts).toHaveLength(1);
+      expect(await store.search({ query: 'organization-visible', scope: ['org:acme'] })).toEqual([
+        expect.objectContaining({ type: 'fact', name: '(private entity)', scope: ['org:acme'] }),
+      ]);
+    });
+
+    it('paginates entities and pages with opaque record cursors', async () => {
+      await store.createEntity({ name: 'Atlas', kind: 'project', scope: resource });
+      await store.createEntity({ name: 'Beacon', kind: 'project', scope: resource });
+      await store.createPage({ name: 'Atlas page', body: 'A', scope: resource });
+      await store.createPage({ name: 'Beacon page', body: 'B', scope: resource });
+
+      const entityPage = await store.listEntities({ scope: thread, limit: 1 });
+      const nextEntityPage = await store.listEntities({
+        scope: thread,
+        cursor: createKnowledgeRecordCursor(entityPage[0]!),
+        limit: 1,
+      });
+      expect(nextEntityPage).toHaveLength(1);
+      expect(nextEntityPage[0]!.id).not.toBe(entityPage[0]!.id);
+      await expect(
+        store.listEntities({ scope: thread, namePrefix: 'A', cursor: createKnowledgeRecordCursor(entityPage[0]!) }),
+      ).rejects.toThrow(/active browse filters/);
+
+      const pagePage = await store.listPages({ scope: thread, limit: 1 });
+      const nextPagePage = await store.listPages({
+        scope: thread,
+        cursor: createKnowledgeRecordCursor(pagePage[0]!),
+        limit: 1,
+      });
+      expect(nextPagePage).toHaveLength(1);
+      expect(nextPagePage[0]!.id).not.toBe(pagePage[0]!.id);
     });
 
     it('maintains mentions and soft deletes without losing them', async () => {
@@ -203,6 +259,21 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       const first = await store.claimSemanticOutbox({ workerId: 'first', limit: 10 });
       expect(first).toHaveLength(1);
       expect(first[0]?.documentId).toBe(`knowledge:node:${node.id}`);
+      expect(await store.claimSemanticOutbox({ workerId: 'second', limit: 10 })).toEqual([]);
+
+      await store.completeSemanticOutbox({ ids: [first[0]!.id], workerId: 'first' });
+      const second = await store.claimSemanticOutbox({ workerId: 'second', limit: 10 });
+      expect(second).toHaveLength(1);
+      expect(second[0]?.documentId).toBe(first[0]?.documentId);
+    });
+
+    it('serializes semantic work for successive versions of the same document', async () => {
+      const entity = await store.createEntity({ name: 'Atlas', kind: 'task', scope: resource });
+      await store.updateEntity({ id: entity.id, version: entity.version, kind: 'project' });
+
+      const first = await store.claimSemanticOutbox({ workerId: 'first', limit: 10 });
+      expect(first).toHaveLength(1);
+      expect(first[0]?.documentId).toBe(`knowledge:entity:${entity.id}`);
       expect(await store.claimSemanticOutbox({ workerId: 'second', limit: 10 })).toEqual([]);
 
       await store.completeSemanticOutbox({ ids: [first[0]!.id], workerId: 'first' });
