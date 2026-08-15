@@ -84,15 +84,27 @@ describe('Subconscious LibSQL integration', () => {
                         name: 'Project Atlas',
                         kind: 'project',
                         items: [
-                          { text: '[[Maya Chen]] owns [[Project Atlas]].' },
-                          { text: 'The staging region is cobalt.' },
+                          {
+                            text: '[[Maya Chen]] owns [[Project Atlas]].',
+                            reason: 'The ownership relationship determines who can answer project questions.',
+                          },
+                          {
+                            text: 'The staging region is cobalt.',
+                            reason: 'The deployment region is required for later staging operations.',
+                          },
                         ],
                       },
                       {
                         name: 'Alpha Secret',
                         kind: 'note',
                         scope: 'thread',
-                        items: [{ text: 'Only the alpha thread may see this.', scope: 'thread' }],
+                        items: [
+                          {
+                            text: 'Only the alpha thread may see this.',
+                            scope: 'thread',
+                            reason: 'The secret must remain scoped to the thread where it was disclosed.',
+                          },
+                        ],
                       },
                     ]
                   : [],
