@@ -4,7 +4,7 @@ import { resolveViewportSize, DEFAULT_BROWSER_VIEWPORT } from '@mastra/core/brow
 import type { BrowserLaunchOptions } from 'agent-browser';
 import { BrowserManager } from 'agent-browser';
 import type { Firecrawl } from 'firecrawl';
-import type { FirecrawlBrowserSessionOptions } from './types';
+import type { FirecrawlBrowserSessionDeletedHook, FirecrawlBrowserSessionOptions } from './types';
 
 /**
  * Thread session with Firecrawl sandbox id for cleanup.
@@ -19,6 +19,8 @@ export interface FirecrawlAgentBrowserThreadManagerConfig extends AgentBrowserTh
   resolveWebSocketUrl: (url: string) => Promise<string>;
   /** Options for each `firecrawl.browser()` call (thread scope = one call per thread). */
   sessionOptions?: FirecrawlBrowserSessionOptions;
+  /** Callback invoked with Firecrawl's response after a hosted session is deleted. */
+  onSessionDeleted?: FirecrawlBrowserSessionDeletedHook;
 }
 
 /**
@@ -28,12 +30,23 @@ export class FirecrawlAgentBrowserThreadManager extends AgentBrowserThreadManage
   private readonly firecrawl: Firecrawl;
   private readonly resolveWebSocketUrl: (url: string) => Promise<string>;
   private readonly sessionOptions: FirecrawlBrowserSessionOptions;
+  private readonly onSessionDeleted?: FirecrawlBrowserSessionDeletedHook;
 
   constructor(config: FirecrawlAgentBrowserThreadManagerConfig) {
     super(config);
     this.firecrawl = config.firecrawl;
     this.resolveWebSocketUrl = config.resolveWebSocketUrl;
     this.sessionOptions = config.sessionOptions ?? {};
+    this.onSessionDeleted = config.onSessionDeleted;
+  }
+
+  private async deleteSession(sessionId: string, threadId: string): Promise<void> {
+    const receipt = await this.firecrawl.deleteBrowser(sessionId);
+    try {
+      await this.onSessionDeleted?.({ sessionId, threadId, receipt });
+    } catch (error) {
+      this.logger?.warn?.(`Firecrawl onSessionDeleted(${sessionId}) failed: ${error}`);
+    }
   }
 
   protected override async createSession(threadId: string): Promise<FirecrawlAgentBrowserSession> {
@@ -60,7 +73,7 @@ export class FirecrawlAgentBrowserThreadManager extends AgentBrowserThreadManage
         const err = new Error(`Firecrawl browser(): ${msg}`);
         if (createRes.id) {
           try {
-            await this.firecrawl.deleteBrowser(createRes.id);
+            await this.deleteSession(createRes.id, threadId);
           } catch (cleanupErr) {
             this.logger?.warn?.(`Firecrawl deleteBrowser(${createRes.id}) after failed browser(): ${cleanupErr}`);
           }
@@ -92,7 +105,7 @@ export class FirecrawlAgentBrowserThreadManager extends AgentBrowserThreadManage
           // ignore
         }
         try {
-          await this.firecrawl.deleteBrowser(createRes.id);
+          await this.deleteSession(createRes.id, threadId);
         } catch {
           // ignore
         }
@@ -118,7 +131,7 @@ export class FirecrawlAgentBrowserThreadManager extends AgentBrowserThreadManage
         }
         if (session.firecrawlSessionId) {
           try {
-            await this.firecrawl.deleteBrowser(session.firecrawlSessionId);
+            await this.deleteSession(session.firecrawlSessionId, threadId);
           } catch {
             // ignore
           }
@@ -142,7 +155,7 @@ export class FirecrawlAgentBrowserThreadManager extends AgentBrowserThreadManage
 
     if (session.firecrawlSessionId) {
       try {
-        await this.firecrawl.deleteBrowser(session.firecrawlSessionId);
+        await this.deleteSession(session.firecrawlSessionId, session.threadId);
       } catch {
         // ignore
       }
