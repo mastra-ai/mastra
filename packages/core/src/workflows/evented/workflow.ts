@@ -47,7 +47,8 @@ import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, Standa
 import { WorkflowRunOutput } from '../../stream/RunOutput';
 import type { ChunkType, LanguageModelUsage, ProviderMetadata } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
-import { Tool } from '../../tools/tool';
+import type { Tool } from '../../tools/tool';
+import { isMastraTool } from '../../tools/toolchecks';
 import type { ToolExecutionContext } from '../../tools/types';
 import type { DynamicArgument } from '../../types';
 import type { ExecutionEngine, ExecutionGraph } from '../../workflows/execution-engine';
@@ -140,7 +141,10 @@ export function cloneStep<TStepId extends string>(
 // ============================================
 
 function isToolStep(input: unknown): input is ToolStep<any, any, any, any, any> {
-  return input instanceof Tool;
+  // `isMastraTool` also recognizes tools by their shared marker symbol, which
+  // survives module duplication (Vite SSR) and spread copies — e.g. tools
+  // renamed by `resolveStoredToolProviders` — where `instanceof` fails.
+  return isMastraTool(input);
 }
 
 /**
@@ -160,7 +164,7 @@ function isStepParams(input: unknown): input is StepParams<any, any, any, any, a
     'id' in input &&
     'execute' in input &&
     !isAgent(input) &&
-    !(input instanceof Tool)
+    !isMastraTool(input)
   );
 }
 
@@ -175,7 +179,7 @@ function isProcessor(obj: unknown): obj is Processor {
     'id' in obj &&
     typeof (obj as any).id === 'string' &&
     !isAgent(obj) &&
-    !(obj instanceof Tool) &&
+    !isMastraTool(obj) &&
     (typeof (obj as any).processInput === 'function' ||
       typeof (obj as any).processInputStep === 'function' ||
       typeof (obj as any).processOutputStream === 'function' ||

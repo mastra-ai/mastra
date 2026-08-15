@@ -15,6 +15,7 @@ import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { createWorkflow } from '../create';
 import { DefaultExecutionEngine } from '../default';
+import { createStep as createEventedStep } from '../evented/workflow';
 import type { SerializedStepFlowEntry } from '../types';
 import { getSingleStepEntryId, getStepIds, isSingleStepEntry } from '../utils';
 import { createStep } from '../workflow';
@@ -145,6 +146,21 @@ describe('declarative step entries - construction & serialized graph shape', () 
     const entry = wf.serializedStepGraph[0] as Extract<SerializedStepFlowEntry, { type: 'tool' }>;
     expect(entry.type).toBe('tool');
     expect(entry.id).toBe('renamed-double');
+  });
+
+  it('the evented module createStep() also detects spread-copied tools', async () => {
+    // `@mastra/core/workflows/evented` exports its own `createStep` with a
+    // duplicate set of guards, so it needs the same marker-based detection.
+    const spreadCopy = { ...doubleTool, id: 'evented-renamed-double' } as unknown as typeof doubleTool;
+    const step = createEventedStep(spreadCopy);
+
+    expect(step.component).toBe('TOOL');
+    expect(step.id).toBe('evented-renamed-double');
+
+    // Without marker detection this falls through to the StepParams branch,
+    // whose execute hands the whole params object to the tool as its input.
+    const output = await step.execute({ inputData: { value: 5 } } as any);
+    expect(output).toEqual({ doubled: 10 });
   });
 
   it('agent/tool nested in .parallel() serialize as declarative child entries', () => {
