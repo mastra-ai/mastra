@@ -20,7 +20,7 @@ import {
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
-const scorerControlTestTimeout = 15_000;
+const itemInteractionTestTimeout = 15_000;
 
 const anotherItemWithTimeout = {
   ...itemWithTimeout,
@@ -127,7 +127,7 @@ describe('DatasetItemPanel', () => {
         );
         expect(screen.queryByRole('combobox')).toBeNull();
       },
-      scorerControlTestTimeout,
+      itemInteractionTestTimeout,
     );
 
     it(
@@ -144,7 +144,7 @@ describe('DatasetItemPanel', () => {
         expect(screen.getByRole('option', { name: /Stored judge/i })).not.toBeNull();
         expect(screen.queryByRole('option', { name: /Unavailable scorer/i })).toBeNull();
       },
-      scorerControlTestTimeout,
+      itemInteractionTestTimeout,
     );
 
     it(
@@ -168,7 +168,7 @@ describe('DatasetItemPanel', () => {
         await waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
         expect(capture.mock.calls[0]?.[0]).toMatchObject({ scorerIds: ['stored-judge'] });
       },
-      scorerControlTestTimeout,
+      itemInteractionTestTimeout,
     );
 
     it(
@@ -191,7 +191,7 @@ describe('DatasetItemPanel', () => {
         await waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
         expect(capture.mock.calls[0]?.[0]).toMatchObject({ scorerIds: [] });
       },
-      scorerControlTestTimeout,
+      itemInteractionTestTimeout,
     );
   });
 
@@ -217,7 +217,7 @@ describe('DatasetItemPanel', () => {
         await waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
         expect(capture.mock.calls[0]?.[0]).toMatchObject({ scorerIds: null });
       },
-      scorerControlTestTimeout,
+      itemInteractionTestTimeout,
     );
 
     it(
@@ -237,7 +237,7 @@ describe('DatasetItemPanel', () => {
         expect(await screen.findByRole('combobox')).not.toBeNull();
         expect(screen.getByRole('combobox').textContent).toContain('1 selected');
       },
-      scorerControlTestTimeout,
+      itemInteractionTestTimeout,
     );
   });
 
@@ -307,16 +307,20 @@ describe('DatasetItemPanel', () => {
   });
 
   describe('when a timeout edit is cancelled', () => {
-    it('remounts the original timeout on the next edit', async () => {
-      renderPanel(itemWithTimeout);
+    it(
+      'remounts the original timeout on the next edit',
+      async () => {
+        renderPanel(itemWithTimeout);
 
-      const timeout = await openEditForm();
-      fireEvent.change(timeout, { target: { value: '30000' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-      const reopenedTimeout = await openEditForm();
+        const timeout = await openEditForm();
+        fireEvent.change(timeout, { target: { value: '30000' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        const reopenedTimeout = await openEditForm();
 
-      expect(reopenedTimeout.value).toBe('15000');
-    });
+        expect(reopenedTimeout.value).toBe('15000');
+      },
+      itemInteractionTestTimeout,
+    );
   });
 
   describe('when a persisted timeout is blanked', () => {
