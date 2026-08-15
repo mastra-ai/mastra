@@ -124,6 +124,7 @@ export class SessionRetirementCoordinator {
       if (session.sandboxId && session.sandboxWorkdir) {
         try {
           sandbox = await this.#fleet.reattachSandbox(session.sandboxId, {
+            actingUserId: session.userId,
             ...(this.#fleet.provider === 'local' ? { workingDirectory: session.sandboxWorkdir } : {}),
           });
         } catch (error) {

@@ -123,10 +123,11 @@ describe('SessionRetirementCoordinator', () => {
       await release(input);
     };
     const invalidateSession = vi.fn(async () => calls.push('invalidate'));
+    const reattachSandbox = vi.fn(async () => sandbox(calls));
     const coordinator = new SessionRetirementCoordinator({
       fleet: {
         provider: 'railway',
-        reattachSandbox: vi.fn(async () => sandbox(calls)),
+        reattachSandbox,
         teardownSandbox: vi.fn(),
       },
       invalidateSession,
@@ -139,6 +140,7 @@ describe('SessionRetirementCoordinator', () => {
       workItemId: 'item-1',
     });
 
+    expect(reattachSandbox).toHaveBeenCalledWith('sandbox-1', { actingUserId: 'user-1' });
     expect(calls.filter(call => call.includes('pnpm local teardown'))).toHaveLength(1);
     const teardownIndex = calls.findIndex(call => call.includes('pnpm local teardown'));
     const scrubIndex = calls.findIndex(call => call.includes('checkout -f') && call.includes('clean -fdx'));
