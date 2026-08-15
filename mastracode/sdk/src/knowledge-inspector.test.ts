@@ -74,15 +74,15 @@ describe('KnowledgeInspector', () => {
   });
 
   it('derives virtual scope roots and isolates ancestor, thread, and sibling records', async () => {
-    await harness.knowledge.createEntity({ name: 'Org entity', kind: 'concept', scope: orgScope });
-    await harness.knowledge.createEntity({ name: 'Resource entity', kind: 'project', scope: resourceScope });
-    await harness.knowledge.createEntity({ name: 'Thread entity', kind: 'note', scope: threadScope });
-    await harness.knowledge.createEntity({
+    await harness.knowledge.createNode({ name: 'Org entity', kind: 'concept', scope: orgScope });
+    await harness.knowledge.createNode({ name: 'Resource entity', kind: 'project', scope: resourceScope });
+    await harness.knowledge.createNode({ name: 'Thread entity', kind: 'note', scope: threadScope });
+    await harness.knowledge.createNode({
       name: 'Sibling thread entity',
       kind: 'note',
       scope: ['org:owner-1', 'resource:project-1', 'thread:thread-2'],
     });
-    await harness.knowledge.createEntity({
+    await harness.knowledge.createNode({
       name: 'Foreign entity',
       kind: 'secret',
       scope: ['org:owner-1', 'resource:other-project'],
@@ -119,11 +119,11 @@ describe('KnowledgeInspector', () => {
   });
 
   it('ranks a stable recent window by sampled graph degree and preserves exact recent order', async () => {
-    const hub = await harness.knowledge.createEntity({ name: 'Hub', kind: 'project', scope: resourceScope });
-    await harness.knowledge.createEntity({ name: 'Leaf A', kind: 'service', scope: resourceScope });
-    await harness.knowledge.createEntity({ name: 'Leaf B', kind: 'service', scope: resourceScope });
-    await harness.knowledge.appendFact({
-      parentEntityId: hub.id,
+    const hub = await harness.knowledge.createNode({ name: 'Hub', kind: 'project', scope: resourceScope });
+    await harness.knowledge.createNode({ name: 'Leaf A', kind: 'service', scope: resourceScope });
+    await harness.knowledge.createNode({ name: 'Leaf B', kind: 'service', scope: resourceScope });
+    await harness.knowledge.appendItem({
+      parentNodeId: hub.id,
       text: 'Hub links [[Leaf A]] and [[Leaf B]].',
       scope: resourceScope,
       sourceThreadId: 'thread-1',
@@ -165,20 +165,20 @@ describe('KnowledgeInspector', () => {
   });
 
   it('marks bounded outgoing and incoming relationship previews as partial', async () => {
-    const source = await harness.knowledge.createEntity({ name: 'Source', kind: 'project', scope: resourceScope });
-    await harness.knowledge.createEntity({ name: 'Target', kind: 'project', scope: resourceScope });
+    const source = await harness.knowledge.createNode({ name: 'Source', kind: 'project', scope: resourceScope });
+    await harness.knowledge.createNode({ name: 'Target', kind: 'project', scope: resourceScope });
     const outgoingNames: string[] = [];
     for (let index = 0; index < 26; index++) {
       const name = `Outgoing ${index}`;
       outgoingNames.push(name);
-      await harness.knowledge.createEntity({ name, kind: 'service', scope: resourceScope });
-      const parent = await harness.knowledge.createEntity({
+      await harness.knowledge.createNode({ name, kind: 'service', scope: resourceScope });
+      const parent = await harness.knowledge.createNode({
         name: `Parent ${index}`,
         kind: 'project',
         scope: resourceScope,
       });
-      await harness.knowledge.appendFact({
-        parentEntityId: parent.id,
+      await harness.knowledge.appendItem({
+        parentNodeId: parent.id,
         text: `Parent ${index} references [[Target]].`,
         scope: resourceScope,
         sourceThreadId: 'thread-1',
@@ -186,8 +186,8 @@ describe('KnowledgeInspector', () => {
         defaultScope: resourceScope,
       });
     }
-    await harness.knowledge.appendFact({
-      parentEntityId: source.id,
+    await harness.knowledge.appendItem({
+      parentNodeId: source.id,
       text: outgoingNames.map(name => `[[${name}]]`).join(' '),
       scope: resourceScope,
       sourceThreadId: 'thread-1',
@@ -216,28 +216,29 @@ describe('KnowledgeInspector', () => {
   });
 
   it('returns entity and page details through opaque handles with bounded relations and content', async () => {
-    const related = await harness.knowledge.createEntity({ name: 'Related', kind: 'service', scope: resourceScope });
-    const entity = await harness.knowledge.createEntity({ name: 'Atlas', kind: 'project', scope: resourceScope });
-    const parent = await harness.knowledge.createEntity({ name: 'Portfolio', kind: 'program', scope: resourceScope });
-    await harness.knowledge.appendFact({
-      parentEntityId: entity.id,
+    const related = await harness.knowledge.createNode({ name: 'Related', kind: 'service', scope: resourceScope });
+    const entity = await harness.knowledge.createNode({ name: 'Atlas', kind: 'project', scope: resourceScope });
+    const parent = await harness.knowledge.createNode({ name: 'Portfolio', kind: 'program', scope: resourceScope });
+    await harness.knowledge.appendItem({
+      parentNodeId: entity.id,
       text: 'Atlas deploys through [[Related]].',
       scope: resourceScope,
       sourceThreadId: 'thread-1',
       resolutionScope: resourceScope,
       defaultScope: resourceScope,
     });
-    await harness.knowledge.appendFact({
-      parentEntityId: parent.id,
+    await harness.knowledge.appendItem({
+      parentNodeId: parent.id,
       text: 'Portfolio includes [[Atlas]].',
       scope: resourceScope,
       sourceThreadId: 'thread-1',
       resolutionScope: resourceScope,
       defaultScope: resourceScope,
     });
-    const page = await harness.knowledge.createPage({
+    const page = await harness.knowledge.createNode({
       name: 'Atlas brief',
-      body: `See [[Related]].\n${'x'.repeat(40 * 1024)}`,
+      kind: 'document',
+      content: `See [[Related]].\n${'x'.repeat(40 * 1024)}`,
       scope: resourceScope,
     });
 
@@ -279,8 +280,8 @@ describe('KnowledgeInspector', () => {
   });
 
   it('binds handles and cursors to the current identity, selected scope, and filters', async () => {
-    await harness.knowledge.createEntity({ name: 'Alpha', kind: 'note', scope: resourceScope });
-    await harness.knowledge.createEntity({ name: 'Beta', kind: 'note', scope: resourceScope });
+    await harness.knowledge.createNode({ name: 'Alpha', kind: 'note', scope: resourceScope });
+    await harness.knowledge.createNode({ name: 'Beta', kind: 'note', scope: resourceScope });
 
     const firstPage = await harness.inspector.listEntities({ level: 'resource', kind: 'note', limit: 1 });
     expect(firstPage.nextCursor).toBeDefined();
@@ -312,10 +313,10 @@ describe('KnowledgeInspector', () => {
   });
 
   it('rechecks direct-read visibility and enriches activity without exposing storage ids', async () => {
-    const entity = await harness.knowledge.createEntity({ name: 'Mutable', kind: 'note', scope: resourceScope });
+    const entity = await harness.knowledge.createNode({ name: 'Mutable', kind: 'note', scope: resourceScope });
     const listed = await harness.inspector.listEntities({ level: 'resource' });
     const handle = listed.items.find(item => item.name === 'Mutable')!.handle;
-    await harness.knowledge.updateEntity({
+    await harness.knowledge.updateNode({
       id: entity.id,
       version: entity.version,
       scope: ['org:owner-1', 'resource:other-project'],
@@ -324,24 +325,29 @@ describe('KnowledgeInspector', () => {
     await expect(harness.inspector.getEntity({ handle })).rejects.toBeInstanceOf(KnowledgeInspectorError);
     await expect(harness.inspector.getEntity({ handle })).rejects.toMatchObject({ code: 'not-visible' });
 
-    const privateEntity = await harness.knowledge.createEntity({
+    const privateEntity = await harness.knowledge.createNode({
       name: 'Private entity',
       kind: 'note',
       scope: threadScope,
     });
-    await harness.knowledge.appendFact({
-      parentEntityId: privateEntity.id,
+    await harness.knowledge.appendItem({
+      parentNodeId: privateEntity.id,
       text: 'Private fact with a broader activity scope.',
       scope: resourceScope,
       sourceThreadId: 'private-source-thread',
       resolutionScope: threadScope,
       defaultScope: resourceScope,
     });
-    await harness.knowledge.createPage({ name: 'Visible page', body: 'Body', scope: resourceScope });
+    await harness.knowledge.createNode({
+      name: 'Visible page',
+      kind: 'document',
+      content: 'Body',
+      scope: resourceScope,
+    });
     const activity = await harness.inspector.listActivity({ level: 'resource' });
     expect(activity.items).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ action: 'page-created', record: expect.objectContaining({ name: 'Visible page' }) }),
+        expect.objectContaining({ action: 'node-created', record: expect.objectContaining({ name: 'Visible page' }) }),
       ]),
     );
     expect(JSON.stringify(activity)).not.toContain(entity.id);
@@ -351,7 +357,7 @@ describe('KnowledgeInspector', () => {
 
   it('wraps activity pagination cursors from newest to oldest', async () => {
     for (let index = 0; index < 5; index++) {
-      await harness.knowledge.createEntity({ name: `Activity ${index}`, kind: 'note', scope: resourceScope });
+      await harness.knowledge.createNode({ name: `Activity ${index}`, kind: 'note', scope: resourceScope });
     }
 
     const first = await harness.inspector.listActivity({ level: 'resource', limit: 2 });
@@ -366,15 +372,15 @@ describe('KnowledgeInspector', () => {
   });
 
   it('rejects a response when the session scope changes during a storage read', async () => {
-    await harness.knowledge.createEntity({ name: 'Delayed', kind: 'note', scope: resourceScope });
-    const listEntities = harness.knowledge.listEntities.bind(harness.knowledge);
+    await harness.knowledge.createNode({ name: 'Delayed', kind: 'note', scope: resourceScope });
+    const listNodes = harness.knowledge.listNodes.bind(harness.knowledge);
     let releaseRead!: () => void;
     const readBlocked = new Promise<void>(resolve => {
       releaseRead = resolve;
     });
-    vi.spyOn(harness.knowledge, 'listEntities').mockImplementation(async input => {
+    vi.spyOn(harness.knowledge, 'listNodes').mockImplementation(async input => {
       await readBlocked;
-      return listEntities(input);
+      return listNodes(input);
     });
 
     const pending = harness.inspector.listEntities({ level: 'resource' });
