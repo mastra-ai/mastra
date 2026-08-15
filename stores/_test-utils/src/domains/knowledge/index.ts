@@ -239,9 +239,9 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
     });
 
     it('paginates activity from newest to oldest without duplicates', async () => {
-      await store.createEntity({ name: 'Activity one', kind: 'task', scope: resource });
-      await store.createEntity({ name: 'Activity two', kind: 'task', scope: resource });
-      await store.createEntity({ name: 'Activity three', kind: 'task', scope: resource });
+      await store.createNode({ name: 'Activity one', kind: 'task', scope: resource });
+      await store.createNode({ name: 'Activity two', kind: 'task', scope: resource });
+      await store.createNode({ name: 'Activity three', kind: 'task', scope: resource });
 
       const all = await store.listActivity({ scope: thread });
       const first = await store.listActivity({ scope: thread, limit: 2 });
