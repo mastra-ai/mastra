@@ -791,10 +791,10 @@ describe('session start (onSessionStart)', () => {
       },
       model: { switch: vi.fn(async () => {}) },
       om: {
-        observer: { switchModel: vi.fn(async () => {}) },
-        reflector: { switchModel: vi.fn(async () => {}) },
+        observer: { modelId: vi.fn(() => undefined), switchModel: vi.fn(async () => {}) },
+        reflector: { modelId: vi.fn(() => undefined), switchModel: vi.fn(async () => {}) },
       },
-      state: { set: vi.fn(async () => {}) },
+      state: { get: vi.fn(() => ({})), set: vi.fn(async () => {}) },
     };
   }
 

@@ -308,26 +308,33 @@ describe('getFactoryWorkspace', () => {
     }
 
     const triage = await read('factory-triage');
-    const markerIndex = triage.indexOf('<!-- mastra-factory-triage -->');
-    const typeIndex = triage.indexOf('**Type:**');
-    const routeIndex = triage.indexOf('**Route:**');
-    const severityIndex = triage.indexOf('**Severity:**');
-    const effortIndex = triage.indexOf('**Effort:**');
-    const impactIndex = triage.indexOf('**Impact:**');
-    const confidenceIndex = triage.indexOf('**Confidence:**');
-    const nextStepIndex = triage.indexOf('**Next step:**');
-    const understandingIndex = triage.indexOf('### Understanding');
-    const assumptionsIndex = triage.indexOf('### Assumptions');
-    const questionsIndex = triage.indexOf('### Open questions');
+    // The skill carries two marked blocks: the abbreviated pending summary and
+    // the final handoff contract. Scope the field assertions to the final one
+    // (the marked block that introduces the narrative sections) so a field
+    // present only in the pending table cannot satisfy them.
+    const markerIndex = triage.lastIndexOf('<!-- mastra-factory-triage -->', triage.indexOf('### Understanding'));
+    const handoff = triage.slice(markerIndex);
+    // The verdict is a markdown table, so each field is a bolded cell label
+    // rather than a `**Field:**` prose lead-in.
+    const typeIndex = handoff.indexOf('**Type**');
+    const routeIndex = handoff.indexOf('**Route**');
+    const severityIndex = handoff.indexOf('**Severity**');
+    const confidenceIndex = handoff.indexOf('**Confidence**');
+    const effortIndex = handoff.indexOf('**Effort**');
+    const impactIndex = handoff.indexOf('**Impact**');
+    const nextStepIndex = handoff.indexOf('**Next step**');
+    const understandingIndex = handoff.indexOf('### Understanding');
+    const assumptionsIndex = handoff.indexOf('### Assumptions');
+    const questionsIndex = handoff.indexOf('### Open questions');
 
     expect(markerIndex).toBeGreaterThanOrEqual(0);
-    expect(typeIndex).toBeGreaterThan(markerIndex);
+    expect(typeIndex).toBeGreaterThan(0);
     expect(routeIndex).toBeGreaterThan(typeIndex);
     expect(severityIndex).toBeGreaterThan(routeIndex);
-    expect(effortIndex).toBeGreaterThan(severityIndex);
+    expect(confidenceIndex).toBeGreaterThan(severityIndex);
+    expect(effortIndex).toBeGreaterThan(confidenceIndex);
     expect(impactIndex).toBeGreaterThan(effortIndex);
-    expect(confidenceIndex).toBeGreaterThan(impactIndex);
-    expect(nextStepIndex).toBeGreaterThan(confidenceIndex);
+    expect(nextStepIndex).toBeGreaterThan(impactIndex);
     expect(understandingIndex).toBeGreaterThan(nextStepIndex);
     expect(assumptionsIndex).toBeGreaterThan(understandingIndex);
     expect(questionsIndex).toBeGreaterThan(assumptionsIndex);
@@ -342,7 +349,7 @@ describe('getFactoryWorkspace', () => {
     expect(triage).toContain('Await approval');
     expect(triage).toContain('No transition / refresh');
     expect(triage).toContain('Keep the issue in its current initial stage until manually moved to planning.');
-    const labelReconciliationIndex = triage.indexOf(
+    const labelReconciliationIndex = handoff.indexOf(
       'After a GitHub comment is posted or updated, reconcile the labels',
     );
     expect(labelReconciliationIndex).toBeGreaterThan(questionsIndex);
