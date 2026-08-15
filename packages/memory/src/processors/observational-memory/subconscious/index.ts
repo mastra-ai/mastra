@@ -17,6 +17,10 @@ const BUILT_IN_OBSERVATION = new Set(['capture', 'remind']);
 const BUILT_IN_REFLECTION = new Set(['curate', 'learn']);
 const DEFAULT_MAX_STEPS = 5;
 const DEFAULT_RECENT_UPDATES = 10;
+/** Knowledge updates past the curation cursor that trigger a curation run. */
+const DEFAULT_CURATION_THRESHOLD = 20;
+/** Elapsed time since the last completed curation that triggers a curation run. */
+const DEFAULT_CURATION_INTERVAL_MS = 60 * 60 * 1000;
 const MAX_RECENT_UPDATES = 100;
 
 function entryName(entry: string | { name: string }): string {
@@ -122,10 +126,21 @@ export class Subconscious {
     }
 
     if (
-      config.curationCadence !== undefined &&
-      (!Number.isInteger(config.curationCadence) || config.curationCadence < 1)
+      config.curationThreshold !== undefined &&
+      config.curationThreshold !== false &&
+      (!Number.isInteger(config.curationThreshold) || config.curationThreshold < 1)
     ) {
-      throw new Error('Subconscious curationCadence must be a positive integer.');
+      throw new Error('Subconscious curationThreshold must be a positive integer or false.');
+    }
+
+    if (
+      config.curationInterval !== undefined &&
+      config.curationInterval !== false &&
+      (typeof config.curationInterval !== 'number' ||
+        !Number.isFinite(config.curationInterval) ||
+        config.curationInterval <= 0)
+    ) {
+      throw new Error('Subconscious curationInterval must be a positive number of milliseconds or false.');
     }
 
     this.config = Object.freeze({ ...config, observation: [...observation], reflection: [...reflection] });
@@ -142,7 +157,8 @@ export class Subconscious {
       tools: config.tools !== false,
       activity: recentUpdates === false ? false : { recentUpdates },
       pins,
-      curationCadence: config.curationCadence,
+      curationThreshold: config.curationThreshold ?? DEFAULT_CURATION_THRESHOLD,
+      curationIntervalMs: config.curationInterval ?? DEFAULT_CURATION_INTERVAL_MS,
     });
   }
 

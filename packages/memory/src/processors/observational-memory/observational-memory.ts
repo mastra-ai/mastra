@@ -218,6 +218,7 @@ import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-regis
 import type { CompressionLevel } from './reflector-agent';
 import { ReflectorRunner } from './reflector-runner';
 import { isOmReproCaptureEnabled, writeObserverExchangeReproCapture } from './repro-capture';
+import { CURATION_AGENT, resolveCurationScope } from './subconscious/curate';
 import {
   calculateDynamicThreshold,
   calculateProjectedMessageRemoval,
@@ -321,7 +322,17 @@ export class ObservationalMemory {
   private hasher = xxhash();
   private mastra?: Mastra;
   private memory?: Memory;
-  private curationCadence?: number;
+  private curationThreshold: number | false = false;
+  private curationInterval: number | false = false;
+  /**
+   * Last time a curation was *attempted* per thread, in ms. Guards the elapsed-time
+   * trigger against re-firing on every observation when a curation runs but does not
+   * advance the cursor (a `no-op`/`skipped` outcome, or a curator that emits no
+   * completion marker). Per engine instance and per process: a fresh process or a
+   * second engine over the same thread starts clean, the same boundary `runCuration`'s
+   * own in-flight guard has.
+   */
+  private lastCurationAttempt = new Map<string, number>();
 
   /**
    * Track message IDs observed during this instance's lifetime.
@@ -417,7 +428,8 @@ export class ObservationalMemory {
     this.hooks = config.hooks;
     this.mastra = config.mastra;
     this.memory = config.memory;
-    this.curationCadence = config.curationCadence;
+    this.curationThreshold = config.curationThreshold ?? false;
+    this.curationInterval = config.curationInterval ?? false;
 
     // Resolve "default" to the model default for the agent being configured.
     const resolveModel = (model: ObservationalMemoryModel | undefined, defaultModel: string) =>
@@ -3691,8 +3703,8 @@ ${formattedMessages}
 
     if (observed) {
       // Fire-and-forget; a curation failure must never fail the observation.
-      void this.maybeTriggerCadenceCuration(threadId, resourceId, record, requestContext).catch(error => {
-        omDebug(`[OM:observe] cadence curation failed: ${error instanceof Error ? error.message : String(error)}`);
+      void this.maybeTriggerCuration(threadId, resourceId, requestContext).catch(error => {
+        omDebug(`[OM:observe] curation trigger failed: ${error instanceof Error ? error.message : String(error)}`);
       });
     }
 
@@ -3700,38 +3712,73 @@ ${formattedMessages}
   }
 
   /**
-   * Count committed observation runs on the sync observe path and run the curator every
-   * `curationCadence` runs. The counter is persisted at `record.config.subconscious.observationRuns`
-   * (the OM record's config jsonb, deep-merged; threshold resolution only reads `_overrides`, so the
-   * sibling key is inert). Concurrent commits can miscount — the curator run is advisory, and the
-   * curation cursor is the real serializer. The async-buffer lane bypasses observe(); deployments
-   * that gate on this cadence (factory's resource scope) disable async buffering.
+   * Run the curator when knowledge has accumulated past the curation cursor, or when
+   * enough time has passed since the last curation. Evaluated after every committed
+   * knowledge commit — both the synchronous observe path and the async-buffer
+   * activation path — so a client that never calls `Memory.runCuration` still curates.
+   *
+   * Costs one bounded `listFactsBySource` read (limit = the volume threshold), never
+   * the curator's own paginated worklist. A thread with nothing pending returns before
+   * any time arithmetic and makes no model call.
    */
-  private async maybeTriggerCadenceCuration(
+  async maybeTriggerCuration(
     threadId: string,
     resourceId: string | undefined,
-    record: ObservationalMemoryRecord,
     requestContext?: RequestContext,
   ): Promise<void> {
-    const cadence = this.curationCadence;
+    const threshold = this.curationThreshold;
+    const interval = this.curationInterval;
     const memory = this.memory;
-    if (!cadence || cadence < 1 || !memory) return;
+    if (!memory || (threshold === false && interval === false)) return;
 
-    const config = (record.config ?? {}) as { subconscious?: { observationRuns?: number } };
-    const runs = (config.subconscious?.observationRuns ?? 0) + 1;
-    const fire = runs >= cadence;
-    await this.storage.updateObservationalMemoryConfig({
-      id: record.id,
-      config: { subconscious: { observationRuns: fire ? 0 : runs } },
+    const store = await memory.storage?.getStore('knowledge');
+    if (!store) return;
+
+    // resolveScope throws without an organizationId in the request context. A client
+    // that cannot build a knowledge scope cannot curate today either, so the trigger
+    // declines quietly rather than turning that into a thrown observation.
+    let scope;
+    try {
+      scope = resolveCurationScope({
+        parentThreadId: threadId,
+        resourceId,
+        requestContext,
+      });
+    } catch {
+      return;
+    }
+
+    const cursor = await store.getCurationCursor({ sourceThreadId: threadId, agent: CURATION_AGENT });
+    const { facts } = await store.listFactsBySource({
+      sourceThreadId: threadId,
+      scope,
+      after: cursor?.lastFactId,
+      limit: threshold === false ? 1 : threshold,
+      includeDeleted: true,
     });
-    if (!fire) return;
+    if (facts.length === 0) return;
 
+    const now = Date.now();
+    const volumeFires = threshold !== false && facts.length >= threshold;
+    let timeFires = false;
+    if (!volumeFires && interval !== false) {
+      // A thread that has never been curated has no cursor timestamp, so the oldest
+      // pending fact is the baseline — otherwise a slow trickle never fires at all.
+      const baseline = (cursor?.updatedAt ?? facts[0]!.capturedAt).getTime();
+      const lastAttempt = this.lastCurationAttempt.get(threadId) ?? 0;
+      timeFires = now - baseline >= interval && now - lastAttempt >= interval;
+    }
+    if (!volumeFires && !timeFires) return;
+
+    this.lastCurationAttempt.set(threadId, now);
     const result = await memory.runCuration({
       threadId,
       resourceId: resourceId ?? threadId,
       requestContext,
     });
-    omDebug(`[OM:observe] cadence curation outcome=${result.outcome} thread=${threadId}`);
+    omDebug(
+      `[OM] curation trigger=${volumeFires ? 'volume' : 'time'} pending=${facts.length} outcome=${result.outcome} thread=${threadId}`,
+    );
   }
 
   /**

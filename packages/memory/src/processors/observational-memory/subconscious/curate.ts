@@ -12,7 +12,7 @@ import { createPinnedTools } from './pinned';
 import { resolveKnowledgeResourceId } from './scope';
 import type { ResolvedSubconsciousAgent, ResolvedSubconsciousConfig } from './types';
 
-const CURATION_AGENT = 'curate';
+export const CURATION_AGENT = 'curate';
 const DEFAULT_INSTRUCTIONS = `Maintain durable scoped knowledge from the committed observation worklist.
 
 Use the read tools to inspect existing nodes, KnowledgeItems, mentions, backlinks, and long-form node content. Use the write tools to merge true duplicates, repair names and links, soft-delete superseded KnowledgeItems, rescope KnowledgeItems only when justified and permitted by their ceilings, and synthesize useful node content. Never restore deleted KnowledgeItems. Never invent provenance, capture timestamps, scopes, ceilings, IDs, or versions; those are enforced by code. Resolve optimistic-concurrency conflicts by reading the latest record and retrying the intended mutation. Keep the reserved capture-guidance node concise and update it only with durable guidance that will improve future capture.
@@ -21,7 +21,11 @@ Process the worklist in ID order. Every time you finish processing a KnowledgeIt
 
 export const PINNED_INSTRUCTIONS = `Maintain the pin set with knowledge_pin, knowledge_edit_pin, and knowledge_unpin. Pinned entries are delivered to the main agent on every turn, so they cost tokens permanently and must stay short. Pin only knowledge that should apply without being asked for, such as standing instructions, durable preferences, and hard constraints. Pin only knowledge that is BOTH costly to rediscover AND not the kind of thing a future agent would think to search for; anything a reminder can surface on demand does not belong in the pin set. Unpin an entry as soon as it stops being unconditionally true.`;
 
-function resolveScope(context: ReflectionCommittedContext): KnowledgeScope {
+export function resolveCurationScope(context: {
+  parentThreadId: string;
+  resourceId?: string;
+  requestContext?: ReflectionCommittedContext['requestContext'];
+}): KnowledgeScope {
   const organizationId = context.requestContext?.get('organizationId');
   if (typeof organizationId !== 'string' || !organizationId.trim()) {
     throw new Error('Subconscious curate requires organizationId in the request context.');
@@ -63,7 +67,7 @@ export function createCuratorHandler(
     let store: KnowledgeStorage | undefined;
     let scope: KnowledgeScope | undefined;
     try {
-      scope = resolveScope(context);
+      scope = resolveCurationScope(context);
       store = await memory.storage.getStore('knowledge');
       if (!store) throw new Error('Subconscious curate requires a configured knowledge storage domain.');
 

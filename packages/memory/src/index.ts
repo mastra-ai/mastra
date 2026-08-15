@@ -1901,10 +1901,14 @@ ${workingMemory}`;
       activateOnProviderChange: omConfig.activateOnProviderChange,
       shareTokenBudget: omConfig.shareTokenBudget,
       model: omConfig.model,
-      curationCadence:
+      curationThreshold:
         omConfig.experimental_subconscious instanceof Subconscious
-          ? omConfig.experimental_subconscious.resolved.curationCadence
-          : undefined,
+          ? omConfig.experimental_subconscious.resolved.curationThreshold
+          : false,
+      curationInterval:
+        omConfig.experimental_subconscious instanceof Subconscious
+          ? omConfig.experimental_subconscious.resolved.curationIntervalMs
+          : false,
       mastra: this._mastraInstance,
       onIndexObservations,
       hooks: omConfig.hooks,

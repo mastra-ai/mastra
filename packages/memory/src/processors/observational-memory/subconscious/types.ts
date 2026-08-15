@@ -102,10 +102,16 @@ export interface SubconsciousConfig {
    */
   pins?: boolean | { maxPins?: number; maxCharacters?: number; capturePinning?: boolean };
   /**
-   * Run the curator after every N committed observation runs (in addition to any
-   * caller-driven `Memory.runCuration` triggers). Off by default.
+   * Run the curator once this many knowledge updates have accumulated past the
+   * curation cursor. Defaults to 20; set `false` to disable the volume trigger.
    */
-  curationCadence?: number;
+  curationThreshold?: number | false;
+  /**
+   * Milliseconds since the last completed curation after which the curator runs
+   * even if fewer than `curationThreshold` updates are pending. Defaults to one
+   * hour; set `false` to disable the time trigger.
+   */
+  curationInterval?: number | false;
   maxSteps?: number;
 }
 
@@ -127,5 +133,6 @@ export interface ResolvedSubconsciousConfig {
   tools: boolean;
   activity: false | { recentUpdates: number };
   pins: false | { maxPins: number; maxCharacters: number; capturePinning: boolean };
-  curationCadence?: number;
+  curationThreshold: number | false;
+  curationIntervalMs: number | false;
 }

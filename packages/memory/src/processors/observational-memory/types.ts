@@ -947,10 +947,18 @@ export interface ObservationalMemoryConfig {
   memory?: Memory;
 
   /**
-   * Run the subconscious curator (via `memory.runCuration`) after every N committed
-   * observation runs on the synchronous observe path. Off by default. Requires `memory`.
+   * Run the subconscious curator (via `memory.runCuration`) once this many knowledge
+   * updates have accumulated past the curation cursor. `false` disables the volume
+   * trigger. Requires `memory`.
    */
-  curationCadence?: number;
+  curationThreshold?: number | false;
+
+  /**
+   * Run the subconscious curator when this many milliseconds have elapsed since the
+   * last completed curation, even if fewer than `curationThreshold` updates are
+   * pending. `false` disables the time trigger. Requires `memory`.
+   */
+  curationInterval?: number | false;
 
   /**
    * Enable retrieval-mode observation group metadata.
