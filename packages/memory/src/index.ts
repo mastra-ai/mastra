@@ -401,6 +401,11 @@ export class Memory extends MastraMemory {
       storage: this.storage,
       options: { observationalMemory: { model: omModel } },
     });
+    // Without the app instance the child engine cannot resolve a model that only exists in the
+    // app's registry, which would leave the remind thread with observational memory configured and
+    // unable to run. Registered on every access so a Mastra instance that arrives after the first
+    // reminder still reaches it. Curate and learn never hit this: their engine is off.
+    if (this._mastraInstance) this._remindMemory.__registerMastra(this._mastraInstance);
     return this._remindMemory;
   }
 

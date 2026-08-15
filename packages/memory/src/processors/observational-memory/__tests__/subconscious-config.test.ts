@@ -182,6 +182,13 @@ describe('Subconscious configuration', () => {
     });
 
     expect((memory as any).getSubconsciousRemindMemory(model)).toBe((memory as any).getSubconsciousRemindMemory(model));
+
+    // The child engine resolves its model through the app instance, so the parent has to hand it
+    // over — otherwise a model that only exists in the app registry never resolves on this thread.
+    const mastra = { getAgentById: vi.fn() } as any;
+    memory.__registerMastra(mastra);
+    const remindMemory = (memory as any).getSubconsciousRemindMemory(model) as Memory;
+    expect((remindMemory as any)._mastraInstance).toBe(mastra);
   });
 
   it('does not alter observational memory when Subconscious is absent', () => {
