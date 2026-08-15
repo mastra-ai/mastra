@@ -40,6 +40,12 @@ export interface TasksContextValue {
   tasks: TaskItem[];
 }
 
+export interface HistoryContextValue {
+  hasMore: boolean;
+  isLoading: boolean;
+  load: () => void | Promise<void>;
+}
+
 // NOTE: Tool/network approvals are NOT exposed here. The badge approval buttons
 // consume the existing `ToolCallProvider` (`@/services/tool-call-provider`),
 // which `ChatProvider` renders directly with `useChat`'s handlers — identical to
@@ -54,8 +60,14 @@ export const ChatRunningContext = createContext<RunningContextValue>({
 });
 export const ChatSendContext = createContext<SendContextValue>({ send: () => {} });
 export const ChatTasksContext = createContext<TasksContextValue>({ tasks: [] });
+export const ChatHistoryContext = createContext<HistoryContextValue>({
+  hasMore: false,
+  isLoading: false,
+  load: () => {},
+});
 
 export const useChatMessages = (): MastraDBMessage[] => useContext(ChatMessagesContext).messages;
 export const useChatRunning = (): RunningContextValue => useContext(ChatRunningContext);
 export const useChatSend = (): SendContextValue['send'] => useContext(ChatSendContext).send;
 export const useChatTasks = (): TaskItem[] => useContext(ChatTasksContext).tasks;
+export const useChatHistory = (): HistoryContextValue => useContext(ChatHistoryContext);

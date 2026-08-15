@@ -1128,17 +1128,24 @@ export const LIST_MESSAGES_ROUTE = createRoute({
           const effectivePage = page ?? 0;
           const effectivePerPage = perPage ?? 100;
           const offset = effectivePage * effectivePerPage;
+          const shouldGetNewestAndReverse = !orderBy;
           const result = await gwClient.listMessages(effectiveThreadId, {
             limit: effectivePerPage,
             offset,
-            order: orderBy?.direction?.toLowerCase(),
+            order: orderBy?.direction?.toLowerCase() ?? 'desc',
           });
           if (!result) {
             throw new HTTPException(404, { message: 'Thread not found' });
           }
+          const messages = result.messages.map(toLocalMessage);
+          const orderedMessages = shouldGetNewestAndReverse ? messages.toReversed() : messages;
           return {
-            messages: result.messages.map(toLocalMessage),
-            uiMessages: result.messages.map(toLocalMessage),
+            messages: orderedMessages,
+            uiMessages: orderedMessages,
+            total: result.total,
+            page: effectivePage,
+            perPage: effectivePerPage,
+            hasMore: offset + result.messages.length < result.total,
           };
         }
       }
@@ -1192,17 +1199,19 @@ export const LIST_MESSAGES_ROUTE = createRoute({
             effectiveResourceId,
           });
 
+          const shouldGetNewestAndReverse = !orderBy;
           const result = await memoryStore.listMessages({
             threadId: effectiveThreadId,
             resourceId: effectiveResourceId,
             perPage,
             page,
-            orderBy,
+            orderBy: orderBy ?? { field: 'createdAt', direction: 'DESC' },
             include,
             filter,
           });
           return {
             ...result,
+            messages: shouldGetNewestAndReverse ? result.messages.toReversed() : result.messages,
             uiMessages: null,
           };
         }
@@ -1210,7 +1219,14 @@ export const LIST_MESSAGES_ROUTE = createRoute({
 
       // Return empty messages when memory is not configured (Issue #11765)
       // This allows the playground UI to gracefully handle agents without memory
-      return { messages: [], uiMessages: [] };
+      return {
+        messages: [],
+        uiMessages: [],
+        total: 0,
+        page: page ?? 0,
+        perPage: perPage ?? 40,
+        hasMore: false,
+      };
     } catch (error) {
       return handleError(error, 'Error getting messages');
     }

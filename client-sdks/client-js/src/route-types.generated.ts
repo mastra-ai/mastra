@@ -7418,6 +7418,10 @@ export type GetMemoryThreadsThreadIdMessages_QueryParams = {
 };
 
 export type GetMemoryThreadsThreadIdMessages_Response = {
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
   messages: unknown[];
   uiMessages: unknown[] | null;
 };

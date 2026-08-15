@@ -1287,6 +1287,54 @@ describe('Memory Handlers', () => {
       });
     });
 
+    it('should return the newest storage fallback page in chronological order', async () => {
+      const threadId = 'storage-pagination-thread';
+      const resourceId = 'storage-pagination-resource';
+      const memoryStore = await storage.getStore('memory');
+      if (!memoryStore) throw new Error('Memory store not initialized');
+
+      await memoryStore.saveThread({ thread: createThread({ id: threadId, resourceId }) });
+      await memoryStore.saveMessages({
+        messages: [
+          {
+            id: 'message-oldest',
+            role: 'user',
+            createdAt: new Date('2026-08-15T00:00:00Z'),
+            threadId,
+            resourceId,
+            content: { format: 2, parts: [{ type: 'text', text: 'Oldest' }] },
+          },
+          {
+            id: 'message-middle',
+            role: 'assistant',
+            createdAt: new Date('2026-08-15T00:01:00Z'),
+            threadId,
+            resourceId,
+            content: { format: 2, parts: [{ type: 'text', text: 'Middle' }] },
+          },
+          {
+            id: 'message-newest',
+            role: 'user',
+            createdAt: new Date('2026-08-15T00:02:00Z'),
+            threadId,
+            resourceId,
+            content: { format: 2, parts: [{ type: 'text', text: 'Newest' }] },
+          },
+        ],
+      });
+      const mastra = new Mastra({ logger: false, storage });
+
+      const result = await LIST_MESSAGES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        threadId,
+        resourceId,
+        page: 0,
+        perPage: 2,
+      });
+
+      expect(result.messages.map(message => message.id)).toEqual(['message-middle', 'message-newest']);
+    });
+
     it('should reject metadata filters for gateway agents', async () => {
       vi.stubEnv('MASTRA_GATEWAY_API_KEY', 'test-gateway-key');
       vi.stubEnv('MASTRA_GATEWAY_URL', 'https://gateway.example.test');
@@ -1321,6 +1369,91 @@ describe('Memory Handlers', () => {
         fetchMock.mockRestore();
         vi.unstubAllEnvs();
       }
+    });
+
+    it('should return pagination metadata for gateway messages', async () => {
+      vi.stubEnv('MASTRA_GATEWAY_API_KEY', 'test-gateway-key');
+      vi.stubEnv('MASTRA_GATEWAY_URL', 'https://gateway.example.test');
+      const gatewayAgent = new Agent({
+        id: 'paginated-gateway-agent',
+        name: 'paginated-gateway-agent',
+        instructions: 'test-instructions',
+        model: 'mastra/openai/gpt-5-mini',
+      });
+      const mastra = new Mastra({ logger: false, agents: { 'paginated-gateway-agent': gatewayAgent } });
+      const fetchMock = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              thread: {
+                id: 'gateway-thread',
+                projectId: 'project-1',
+                resourceId: 'resource-1',
+                title: null,
+                metadata: null,
+                createdAt: '2026-08-15T00:00:00Z',
+                updatedAt: '2026-08-15T00:02:00Z',
+              },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              messages: [
+                {
+                  id: 'message-newest',
+                  threadId: 'gateway-thread',
+                  role: 'user',
+                  content: { format: 2, parts: [{ type: 'text', text: 'Newest' }] },
+                  type: 'text',
+                  createdAt: '2026-08-15T00:02:00Z',
+                },
+                {
+                  id: 'message-middle',
+                  threadId: 'gateway-thread',
+                  role: 'assistant',
+                  content: { format: 2, parts: [{ type: 'text', text: 'Middle' }] },
+                  type: 'text',
+                  createdAt: '2026-08-15T00:01:00Z',
+                },
+              ],
+              total: 3,
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+        );
+
+      try {
+        const result = await LIST_MESSAGES_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          agentId: 'paginated-gateway-agent',
+          threadId: 'gateway-thread',
+          resourceId: 'resource-1',
+          page: 0,
+          perPage: 2,
+        });
+
+        expect(result).toMatchObject({ total: 3, page: 0, perPage: 2, hasMore: true });
+      } finally {
+        fetchMock.mockRestore();
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it('should return pagination metadata when memory is not configured', async () => {
+      const mastra = new Mastra({ logger: false });
+      vi.spyOn(mastra, 'getStorage').mockReturnValue(undefined);
+      const result = await LIST_MESSAGES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        threadId: 'empty-thread',
+        page: 0,
+        perPage: 40,
+      });
+
+      expect(result).toMatchObject({ messages: [], total: 0, page: 0, perPage: 40, hasMore: false });
     });
 
     it('should preserve custom metadata in messages when loading messages with metadata', async () => {

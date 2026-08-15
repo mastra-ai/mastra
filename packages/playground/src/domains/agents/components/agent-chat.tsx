@@ -53,7 +53,13 @@ export const AgentChat = ({
   const { settings } = useAgentSettings();
   const requestContext = useMergedRequestContext();
 
-  const { data, isLoading: isMessagesLoading } = useAgentMessages({
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading: isMessagesLoading,
+  } = useAgentMessages({
     agentId: agentId,
     threadId: isNewThread ? undefined : threadId!, // Prevent fetching when thread is new
     memory: memory ?? false,
@@ -84,7 +90,7 @@ export const AgentChat = ({
     emptyMessagesRef.current = { threadId, messages: [] };
   }
 
-  const messages = data?.messages ?? emptyMessagesRef.current.messages;
+  const initialMessages = data?.initialMessages ?? emptyMessagesRef.current.messages;
   const availableSuggestedPrompts = getAvailableSuggestedPrompts({
     suggestedPrompts,
     isNewThread,
@@ -99,7 +105,12 @@ export const AgentChat = ({
       agentVersionId={agentVersionId}
       supportsMemory={supportsMemory}
       threadId={threadId}
-      initialMessages={messages}
+      initialMessages={initialMessages}
+      history={{
+        hasMore: Boolean(hasNextPage),
+        isLoading: isFetchingNextPage,
+        load: async () => (await fetchNextPage()).data?.messages ?? [],
+      }}
       refreshThreadList={refreshThreadList}
       settings={settings}
       requestContext={requestContext}
