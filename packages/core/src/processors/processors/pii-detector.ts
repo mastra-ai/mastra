@@ -8,6 +8,7 @@ import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { ObservabilityContext } from '../../observability';
 import { InternalSpans, resolveObservabilityContext } from '../../observability';
+import type { RequestContext } from '../../request-context';
 import type { PublicSchema } from '../../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { ChunkType } from '../../stream';
@@ -286,10 +287,11 @@ export class PIIDetector implements Processor<'pii-detector'> {
     args: {
       messages: MastraDBMessage[];
       abort: (reason?: string) => never;
+      requestContext?: RequestContext;
     } & Partial<ObservabilityContext>,
   ): Promise<MastraDBMessage[]> {
     try {
-      const { messages, abort, ...rest } = args;
+      const { messages, abort, requestContext, ...rest } = args;
       const observabilityContext = resolveObservabilityContext(rest);
 
       if (messages.length === 0) {
@@ -313,7 +315,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
           continue;
         }
 
-        const detectionResult = await this.detectPII(textContent, observabilityContext);
+        const detectionResult = await this.detectPII(textContent, observabilityContext, requestContext);
         const flagged = this.isPIIFlagged(detectionResult);
         await this.emitDetection(textContent, detectionResult, flagged);
 
@@ -365,11 +367,15 @@ export class PIIDetector implements Processor<'pii-detector'> {
   /**
    * Detect PII using the internal agent
    */
-  private async detectPII(content: string, observabilityContext?: ObservabilityContext): Promise<PIIDetectionResult> {
+  private async detectPII(
+    content: string,
+    observabilityContext?: ObservabilityContext,
+    requestContext?: RequestContext,
+  ): Promise<PIIDetectionResult> {
     const prompt = this.createDetectionPrompt(content);
 
     try {
-      const model = await this.detectionAgent.getModel();
+      const model = await this.detectionAgent.getModel({ requestContext });
 
       const baseDetectionSchema = z.object({
         type: z.string().describe('Type of PII detected'),
@@ -427,6 +433,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
           },
           providerOptions: this.providerOptions,
           ...observabilityContext,
+          requestContext,
         });
         if (!response.object) {
           throw new Error('Structured output returned no object');
@@ -439,6 +446,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
           temperature: 0,
           providerOptions: this.providerOptions as SharedV2ProviderOptions,
           ...observabilityContext,
+          requestContext,
         });
 
         result = response.object as PIIDetectionResult;
@@ -800,6 +808,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
     state: Record<string, any>,
     abort: (reason?: string) => never,
     observabilityContext?: ObservabilityContext,
+    requestContext?: RequestContext,
   ): Promise<ChunkType | null> {
     const buffer: string = state._piiBuffer || '';
     const firstPayloadId: string = state._piiFirstPayloadId || 'text-0';
@@ -811,7 +820,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
 
     if (!buffer) return null;
 
-    const detectionResult = await this.detectPII(buffer, observabilityContext);
+    const detectionResult = await this.detectPII(buffer, observabilityContext, requestContext);
     const flagged = this.isPIIFlagged(detectionResult);
     await this.emitDetection(buffer, detectionResult, flagged);
 
@@ -852,15 +861,16 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
       state: Record<string, any>;
       abort: (reason?: string) => never;
       writer?: { custom: (data: ChunkType) => Promise<void> };
+      requestContext?: RequestContext;
     } & Partial<ObservabilityContext>,
   ): Promise<ChunkType | null> {
-    const { part, abort, state, writer, ...rest } = args;
+    const { part, abort, state, writer, requestContext, ...rest } = args;
     const observabilityContext = resolveObservabilityContext(rest);
     try {
       // Handle non-text chunks: flush any pending LLM buffer first
       if (part.type !== 'text-delta') {
         if (this.hasLLMOnlyTypes && state._piiBuffer) {
-          const flushed = await this.flushLLMBuffer(state, abort, observabilityContext);
+          const flushed = await this.flushLLMBuffer(state, abort, observabilityContext, requestContext);
           if (flushed) {
             // Two parts to emit: flushed buffer + this non-text part.
             // Use REPROCESS_PART_KEY so the runner re-drives the non-text part.
@@ -947,7 +957,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
               : textContent;
           // Check flush threshold
           if (state._piiBuffer.length >= this.bufferSize || /[.!?]\s*$/.test(state._piiBuffer)) {
-            return this.flushLLMBuffer(state, abort, observabilityContext);
+            return this.flushLLMBuffer(state, abort, observabilityContext, requestContext);
           }
           return null; // Hold back until flush
         }
@@ -970,7 +980,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
 
       // Flush on sentence boundary or size threshold
       if (state._piiBuffer.length >= this.bufferSize || /[.!?]\s*$/.test(state._piiBuffer)) {
-        return this.flushLLMBuffer(state, abort, observabilityContext);
+        return this.flushLLMBuffer(state, abort, observabilityContext, requestContext);
       }
 
       return null; // Hold back until flush
@@ -989,10 +999,12 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
   async processOutputResult({
     messages,
     abort,
+    requestContext,
     ...rest
   }: {
     messages: MastraDBMessage[];
     abort: (reason?: string) => never;
+    requestContext?: RequestContext;
   } & Partial<ObservabilityContext>): Promise<MastraDBMessage[]> {
     const observabilityContext = resolveObservabilityContext(rest);
     try {
@@ -1017,7 +1029,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
           continue;
         }
 
-        const detectionResult = await this.detectPII(textContent, observabilityContext);
+        const detectionResult = await this.detectPII(textContent, observabilityContext, requestContext);
         const flagged = this.isPIIFlagged(detectionResult);
         await this.emitDetection(textContent, detectionResult, flagged);
 
