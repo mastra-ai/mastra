@@ -97,6 +97,10 @@ class E2BProcessHandle extends ProcessHandle {
     }
     await this._sandbox.commands.sendStdin(this._e2bHandle.pid, data);
   }
+
+  async closeStdin(): Promise<void> {
+    throw new Error('E2B SDK does not expose a way to close stdin for a running command');
+  }
 }
 
 // =============================================================================

@@ -841,6 +841,10 @@ class AppleContainerCliProcess extends ProcessHandle {
   async sendStdin(): Promise<void> {
     throw new Error('Apple container CLI runner does not support stdin');
   }
+
+  async closeStdin(): Promise<void> {
+    throw new Error('Apple container CLI runner does not support closing stdin');
+  }
 }
 
 function generateId(): string {

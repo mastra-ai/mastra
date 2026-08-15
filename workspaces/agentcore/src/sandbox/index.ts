@@ -72,6 +72,10 @@ class CommandOutputAccumulator extends ProcessHandle {
     throw new Error('AgentCore Runtime command execution does not support stdin');
   }
 
+  async closeStdin(): Promise<void> {
+    throw new Error('AgentCore Runtime command execution does not support closing stdin');
+  }
+
   async wait(): Promise<CommandResult> {
     return {
       success: this.exitCode === 0,

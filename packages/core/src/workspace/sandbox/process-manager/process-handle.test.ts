@@ -36,6 +36,8 @@ class TestProcessHandle extends ProcessHandle {
 
   async sendStdin(): Promise<void> {}
 
+  async closeStdin(): Promise<void> {}
+
   finish(): void {
     this.exitCode = 0;
     this.resolveWait({
@@ -280,6 +282,19 @@ describe('ProcessHandle output retention', () => {
 
     expect(handle.stdout).toBe('');
     expect(chunks.join('')).toBe('hello world');
+  });
+
+  it('closes stdin when the writer stream ends', async () => {
+    const handle = new TestProcessHandle();
+    const sendStdin = vi.spyOn(handle, 'sendStdin');
+    const closeStdin = vi.spyOn(handle, 'closeStdin');
+
+    await new Promise<void>((resolve, reject) => {
+      handle.writer.end('final input', err => (err ? reject(err) : resolve()));
+    });
+
+    expect(sendStdin).toHaveBeenCalledWith('final input');
+    expect(closeStdin).toHaveBeenCalledTimes(1);
   });
 });
 

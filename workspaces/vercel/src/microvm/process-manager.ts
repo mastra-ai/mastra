@@ -134,6 +134,10 @@ class VercelSandboxProcessHandle extends ProcessHandle {
   async sendStdin(_data: string): Promise<void> {
     throw new Error('VercelSandbox does not support sending stdin to running processes.');
   }
+
+  async closeStdin(): Promise<void> {
+    throw new Error('VercelSandbox does not support closing stdin for running processes.');
+  }
 }
 
 // =============================================================================

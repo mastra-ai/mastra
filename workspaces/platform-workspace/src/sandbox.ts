@@ -292,6 +292,10 @@ class PlatformProcessHandle extends ProcessHandle {
   async sendStdin(): Promise<void> {
     throw new Error('Platform sandbox command execution does not support stdin');
   }
+
+  async closeStdin(): Promise<void> {
+    throw new Error('Platform sandbox command execution does not support closing stdin');
+  }
 }
 
 class PlatformProcessManager extends SandboxProcessManager<PlatformSandbox> {

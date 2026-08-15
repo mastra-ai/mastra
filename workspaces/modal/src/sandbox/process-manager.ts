@@ -155,6 +155,10 @@ class ModalProcessHandle extends ProcessHandle {
   async sendStdin(_data: string): Promise<void> {
     throw new Error('Modal JS SDK does not expose stdin on exec() — sendStdin() is not supported');
   }
+
+  async closeStdin(): Promise<void> {
+    throw new Error('Modal JS SDK does not expose stdin on exec() — closeStdin() is not supported');
+  }
 }
 
 // =============================================================================

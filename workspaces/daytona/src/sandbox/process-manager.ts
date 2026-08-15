@@ -160,6 +160,10 @@ class DaytonaProcessHandle extends ProcessHandle {
     }
     await this._sandbox.process.sendSessionCommandInput(this.pid, this._cmdId, data);
   }
+
+  async closeStdin(): Promise<void> {
+    throw new Error('Daytona SDK does not expose a way to close stdin for a running process');
+  }
 }
 
 // =============================================================================

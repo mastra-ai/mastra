@@ -118,6 +118,10 @@ class RailwayProcessHandle extends ProcessHandle {
     // Railway's exec API does not expose stdin streaming.
     throw new Error(`${LOG_PREFIX} sending stdin is not supported by the Railway sandbox provider`);
   }
+
+  async closeStdin(): Promise<void> {
+    throw new Error(`${LOG_PREFIX} closing stdin is not supported by the Railway sandbox provider`);
+  }
 }
 
 // =============================================================================

@@ -188,6 +188,8 @@ export abstract class ProcessHandle {
   abstract kill(): Promise<boolean>;
   /** Send data to the process's stdin */
   abstract sendStdin(data: string): Promise<void>;
+  /** Close the process's stdin, signaling EOF */
+  abstract closeStdin(): Promise<void>;
 
   /**
    * Wait for the process to finish and return the result.
@@ -334,6 +336,9 @@ export abstract class ProcessHandle {
       this._writer = new Writable({
         write: (chunk, _encoding, cb) => {
           this.sendStdin(chunk.toString()).then(() => cb(), cb);
+        },
+        final: cb => {
+          this.closeStdin().then(() => cb(), cb);
         },
       });
     }

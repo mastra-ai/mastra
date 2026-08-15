@@ -147,7 +147,21 @@ class DockerProcessHandle extends ProcessHandle {
     if (!this._stdinStream) {
       throw new Error(`Process ${this.pid} was not started with stdin support`);
     }
-    this._stdinStream.write(data);
+    return new Promise<void>((resolve, reject) => {
+      this._stdinStream!.write(data, error => (error ? reject(error) : resolve()));
+    });
+  }
+
+  async closeStdin(): Promise<void> {
+    if (this._exitCode !== undefined) {
+      throw new Error(`Process ${this.pid} has already exited with code ${this._exitCode}`);
+    }
+    if (!this._stdinStream) {
+      throw new Error(`Process ${this.pid} was not started with stdin support`);
+    }
+    const stream = this._stdinStream as NodeJS.WritableStream & { writableEnded?: boolean };
+    if (stream.writableEnded) return;
+    await new Promise<void>(resolve => stream.end(resolve));
   }
 
   /** @internal Force-close the exec stream to unblock wait(). */

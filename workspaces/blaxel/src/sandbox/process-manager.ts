@@ -122,6 +122,10 @@ class BlaxelProcessHandle extends ProcessHandle {
   async sendStdin(_data: string): Promise<void> {
     throw new Error('Blaxel sandboxes do not support stdin');
   }
+
+  async closeStdin(): Promise<void> {
+    throw new Error('Blaxel sandboxes do not support closing stdin');
+  }
 }
 
 // =============================================================================
