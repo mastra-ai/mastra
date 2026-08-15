@@ -1004,7 +1004,7 @@ describe('Subconscious remind ask lane', () => {
     });
     const generateSpy = vi.spyOn(Agent.prototype, 'generate' as any);
     generateSpy.mockImplementation((async (prompt: string) =>
-      prompt.includes('Question:') ? pendingAsk : { text: 'Project Atlas launches January 15.' }) as any);
+      prompt.includes('Question:') ? pendingAsk : { text: 'Atlas ships mid January, worth checking.' }) as any);
 
     try {
       const askInFlight = tools.ask_memory.execute!({ question: 'when?' } as any, askContext());
@@ -1022,7 +1022,9 @@ describe('Subconscious remind ask lane', () => {
         expect.objectContaining({
           type: 'reactive',
           tagName: 'remembered',
-          contents: expect.stringContaining(item.id),
+          // Both halves of the signal body: the reminder the agent wrote and the source ids
+          // appended after it. Asserting only the id passes even if the reminder text is dropped.
+          contents: expect.stringContaining('Atlas ships mid January, worth checking.'),
           attributes: expect.objectContaining({
             source: 'subconscious',
             sourceIds: expect.stringContaining(item.id),
