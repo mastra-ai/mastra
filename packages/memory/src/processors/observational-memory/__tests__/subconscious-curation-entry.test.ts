@@ -394,6 +394,23 @@ describe('curation triggers', () => {
     expect(runCuration).toHaveBeenCalledOnce();
   });
 
+  it('counts the same scope the curation it triggers will read', async () => {
+    const { om, store, runCuration } = await createTriggerEngine({ threshold: 2 });
+    const threadId = 'no-resource-thread';
+    // Seeded under the thread id as the resource rung, which is what runCuration
+    // falls back to when no resourceId is supplied.
+    await seedPendingFacts(store, { threadId, count: 2 });
+
+    await om.observe({
+      threadId,
+      messages: createBulkMessages(10, threadId),
+      requestContext: requestContext(),
+    });
+    await new Promise(resolve => setTimeout(resolve, 20));
+
+    expect(runCuration).toHaveBeenCalledWith(expect.objectContaining({ threadId, resourceId: threadId }));
+  });
+
   it('no longer persists an observation-run counter', async () => {
     const { om, store } = await createTriggerEngine({ threshold: 50 });
     const threadId = 'counter-thread';

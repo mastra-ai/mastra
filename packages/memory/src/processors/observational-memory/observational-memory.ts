@@ -3737,11 +3737,15 @@ ${formattedMessages}
     // resolveScope throws without an organizationId in the request context. A client
     // that cannot build a knowledge scope cannot curate today either, so the trigger
     // declines quietly rather than turning that into a thrown observation.
+    // One resource id for both the count and the curation it triggers. runCuration
+    // falls back to the thread id, so resolving the scope from the raw resourceId
+    // would count one scope's pending knowledge and hand the curator another's.
+    const curationResourceId = resourceId ?? threadId;
     let scope;
     try {
       scope = resolveCurationScope({
         parentThreadId: threadId,
-        resourceId,
+        resourceId: curationResourceId,
         requestContext,
       });
     } catch {
@@ -3773,7 +3777,7 @@ ${formattedMessages}
     this.lastCurationAttempt.set(threadId, now);
     const result = await memory.runCuration({
       threadId,
-      resourceId: resourceId ?? threadId,
+      resourceId: curationResourceId,
       requestContext,
     });
     omDebug(
