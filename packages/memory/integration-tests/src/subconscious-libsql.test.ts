@@ -513,9 +513,9 @@ describe('Subconscious LibSQL integration', () => {
     expect(await knowledge.getCurationCursor({ sourceThreadId: threadId, agent: 'curate' })).toMatchObject({
       lastItemId: item.id,
     });
-    await expect(
-      knowledge.updateNode({ id: node.id, version: node.version + 1, name: 'Stale Atlas' }),
-    ).rejects.toThrow('version');
+    await expect(knowledge.updateNode({ id: node.id, version: node.version + 1, name: 'Stale Atlas' })).rejects.toThrow(
+      'version',
+    );
 
     await knowledge.removeItem({ id: item.id, deletedBy: 'subconscious:curate' });
     expect(await knowledge.getItem({ id: item.id })).toBeNull();
@@ -544,10 +544,10 @@ describe('Subconscious LibSQL integration', () => {
     const threadId = randomUUID();
     const resourceId = randomUUID();
     const scope = ['org:acme', `resource:${resourceId}`, `thread:${threadId}`];
-    const project = await knowledge.createEntity({ name: 'Project Atlas', kind: 'project', scope });
+    const project = await knowledge.createNode({ name: 'Project Atlas', kind: 'project', scope });
     const appendSource = (text: string) =>
-      knowledge.appendFact({
-        parentEntityId: project.id,
+      knowledge.appendItem({
+        parentNodeId: project.id,
         text,
         scope,
         sourceThreadId: threadId,
@@ -574,7 +574,7 @@ describe('Subconscious LibSQL integration', () => {
               input: JSON.stringify({
                 name: 'deploy-atlas-safely',
                 procedure: 'Validate, publish, then verify the health check.',
-                sourceFactIds: pendingIds,
+                sourceItemIds: pendingIds,
               }),
             },
           ],
@@ -619,13 +619,13 @@ describe('Subconscious LibSQL integration', () => {
     pendingIds = [third.id, fourth.id];
     await run();
 
-    const skills = await knowledge.listEntities({ scope, kind: 'skill' });
+    const skills = await knowledge.listNodes({ scope, kind: 'skill' });
     expect(skills).toHaveLength(1);
-    const evidence = await knowledge.factsAbout({ entityId: skills[0]!.id, scope });
-    expect(evidence.facts).toHaveLength(4);
-    expect(new Set(evidence.facts.map(fact => fact.id)).size).toBe(4);
+    const evidence = await knowledge.itemsAbout({ nodeId: skills[0]!.id, scope });
+    expect(evidence.items).toHaveLength(4);
+    expect(new Set(evidence.items.map(item => item.id)).size).toBe(4);
     expect(await knowledge.getCurationCursor({ sourceThreadId: threadId, agent: 'learn' })).toMatchObject({
-      lastFactId: fourth.id,
+      lastItemId: fourth.id,
     });
   });
 });
