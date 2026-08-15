@@ -303,6 +303,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         sandboxWorkdir: input.sandboxWorkdir,
         setupCommand: input.setupCommand ?? null,
         baseCheckpoint: null,
+        teardownCommand: input.teardownCommand ?? null,
         createdAt: now,
         updatedAt: now,
       };
@@ -481,6 +482,8 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
   readonly sessions = {
     list: async ({ projectRepositoryId, userId }: { projectRepositoryId: string; userId: string }) =>
       this.sessionsRows.filter(row => row.projectRepositoryId === projectRepositoryId && row.userId === userId),
+    listByProjectRepository: async ({ projectRepositoryId }: { projectRepositoryId: string }) =>
+      this.sessionsRows.filter(row => row.projectRepositoryId === projectRepositoryId),
     getBySessionId: async (sessionId: string): Promise<SourceControlSession | null> =>
       this.sessionsRows.find(row => row.sessionId === sessionId) ?? null,
     getForBranch: async ({

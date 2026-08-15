@@ -95,6 +95,7 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       base_checkpoint_sha: { type: 'text', nullable: true },
       base_checkpoint_built_at: { type: 'timestamp', nullable: true },
       base_checkpoint_setup_hash: { type: 'text', nullable: true },
+      teardown_command: { type: 'text', nullable: true },
       created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
     },
@@ -269,6 +270,7 @@ export interface ProjectRepository {
   setupCommand: string | null;
   /** Base checkpoint metadata — set by the base-checkpoint build job. */
   baseCheckpoint: ProjectRepositoryBaseCheckpoint | null;
+  teardownCommand: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -308,6 +310,7 @@ export interface LinkProjectRepositoryInput {
   sandboxProvider: string;
   sandboxWorkdir: string;
   setupCommand?: string | null;
+  teardownCommand?: string | null;
 }
 
 export interface UpdateProjectRepositoryInput {
@@ -315,6 +318,7 @@ export interface UpdateProjectRepositoryInput {
   sandboxProvider?: string;
   sandboxWorkdir?: string;
   setupCommand?: string | null;
+  teardownCommand?: string | null;
 }
 
 export interface ProjectRepositorySandbox {
@@ -496,6 +500,7 @@ export interface SourceControlStorageHandle {
   };
   readonly sessions: {
     list(args: { projectRepositoryId: string; userId: string }): Promise<SourceControlSession[]>;
+    listByProjectRepository(args: { projectRepositoryId: string }): Promise<SourceControlSession[]>;
     getBySessionId(sessionId: string): Promise<SourceControlSession | null>;
     getForBranch(args: {
       projectRepositoryId: string;
@@ -576,6 +581,7 @@ interface ProjectRepositoryDbRow extends Record<string, unknown> {
   base_checkpoint_sha: string | null;
   base_checkpoint_built_at: Date | null;
   base_checkpoint_setup_hash: string | null;
+  teardown_command: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -685,6 +691,7 @@ function toProjectRepository(row: ProjectRepositoryDbRow): ProjectRepository {
             setupCommandHash: row.base_checkpoint_setup_hash ?? null,
           }
         : null,
+    teardownCommand: row.teardown_command,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -1109,6 +1116,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
               base_checkpoint_sha: null,
               base_checkpoint_built_at: null,
               base_checkpoint_setup_hash: null,
+              teardown_command: input.teardownCommand ?? null,
               created_at: now,
               updated_at: now,
             },
@@ -1131,6 +1139,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
             patch.base_checkpoint_built_at = null;
             patch.base_checkpoint_setup_hash = null;
           }
+          if (input.teardownCommand !== undefined) patch.teardown_command = input.teardownCommand;
           await db().updateMany(PROJECT_REPOSITORIES, { id }, patch);
           return getProjectRepository({ orgId, id });
         },
@@ -1292,6 +1301,14 @@ export class SourceControlStorage extends FactoryStorageDomain {
             await db().findMany<SessionDbRow>(SESSIONS, {
               project_repository_id: projectRepositoryId,
               user_id: userId,
+            })
+          ).map(toSession);
+        },
+        listByProjectRepository: async ({ projectRepositoryId }) => {
+          if (!(await getProjectRepositoryById(projectRepositoryId))) return [];
+          return (
+            await db().findMany<SessionDbRow>(SESSIONS, {
+              project_repository_id: projectRepositoryId,
             })
           ).map(toSession);
         },

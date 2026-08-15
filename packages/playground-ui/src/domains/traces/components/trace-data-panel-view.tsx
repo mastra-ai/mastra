@@ -12,6 +12,7 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { getAllSpanIds } from '../hooks/get-all-span-ids';
 import { useDownloadTraceJson } from '../hooks/use-download-trace-json';
+import type { TraceUsageSummary } from '../trace-list-columns';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
 import { TraceKeysAndValues } from './trace-keys-and-values';
 import { TraceTimeline } from './trace-timeline';
@@ -29,6 +30,12 @@ export interface TraceDataPanelViewProps {
   traceId: string;
   /** Lightweight spans for the trace. Caller fetches via useTraceLightSpans. */
   spans: LightSpanRecord[] | undefined;
+  /**
+   * Token and estimated-cost totals for the trace (from `useTraceUsage`).
+   * Rendered in the trace summary when the panel is in the list side-panel
+   * placement; the trace page renders its own `TraceKeysAndValues` instead.
+   */
+  usage?: TraceUsageSummary;
   isLoading?: boolean;
   onClose: () => void;
   onSpanSelect?: (spanId: string | undefined) => void;
@@ -66,6 +73,7 @@ export interface TraceDataPanelViewProps {
 export function TraceDataPanelView({
   traceId,
   spans,
+  usage,
   isLoading,
   onClose,
   onSpanSelect,
@@ -131,6 +139,7 @@ export function TraceDataPanelView({
     () => (anchorSpanId ? spans?.find(s => s.spanId === anchorSpanId) : spans?.find(s => s.parentSpanId == null)),
     [spans, anchorSpanId],
   );
+  const isSubtrace = anchorSpanId !== undefined && rootSpan?.parentSpanId != null;
 
   const handleSpanClick = (id: string) => {
     const newId = selectedSpanId === id ? undefined : id;
@@ -210,7 +219,9 @@ export function TraceDataPanelView({
           <DataPanel.NoData>No spans found for this trace.</DataPanel.NoData>
         ) : (
           <DataPanel.Content>
-            {!isOnTracePage && rootSpan && <TraceKeysAndValues rootSpan={rootSpan} className="mb-6" />}
+            {!isOnTracePage && rootSpan && (
+              <TraceKeysAndValues rootSpan={rootSpan} usage={isSubtrace ? undefined : usage} className="mb-6" />
+            )}
 
             {!isOnTracePage && (onEvaluateTrace || onSaveAsDatasetItem || onAddTraceMocksToItem) && (
               <div className="mb-6 flex flex-wrap items-center justify-between gap-4">

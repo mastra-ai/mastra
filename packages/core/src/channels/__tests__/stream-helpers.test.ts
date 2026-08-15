@@ -168,6 +168,81 @@ describe('postFileAttachment', () => {
     expect(arg.files[0].filename).toBe('generated.png');
     expect(arg.files[0].mimeType).toBe('image/png');
   });
+
+  it('preserves an explicit filename from the payload (text file)', async () => {
+    const post = vi.fn().mockResolvedValue({});
+
+    await postFileAttachment({
+      chunk: {
+        type: 'file',
+        payload: { data: Buffer.from('hello').toString('base64'), mimeType: 'text/plain', filename: 'report.txt' },
+      } as any,
+      chatThread: { post },
+    });
+
+    expect(post).toHaveBeenCalledTimes(1);
+    const arg = post.mock.calls[0]![0];
+    expect(arg.files[0].filename).toBe('report.txt');
+    expect(arg.files[0].mimeType).toBe('text/plain');
+  });
+
+  it('preserves an explicit filename from the payload (PDF)', async () => {
+    const post = vi.fn().mockResolvedValue({});
+
+    await postFileAttachment({
+      chunk: {
+        type: 'file',
+        payload: {
+          data: Buffer.from('pdf-bytes').toString('base64'),
+          mimeType: 'application/pdf',
+          filename: 'contract.pdf',
+        },
+      } as any,
+      chatThread: { post },
+    });
+
+    expect(post).toHaveBeenCalledTimes(1);
+    const arg = post.mock.calls[0]![0];
+    expect(arg.files[0].filename).toBe('contract.pdf');
+    expect(arg.files[0].mimeType).toBe('application/pdf');
+  });
+
+  it('preserves an explicit filename from the payload (image)', async () => {
+    const post = vi.fn().mockResolvedValue({});
+
+    await postFileAttachment({
+      chunk: {
+        type: 'file',
+        payload: {
+          data: Buffer.from('img-bytes').toString('base64'),
+          mimeType: 'image/png',
+          filename: 'screenshot.png',
+        },
+      } as any,
+      chatThread: { post },
+    });
+
+    expect(post).toHaveBeenCalledTimes(1);
+    const arg = post.mock.calls[0]![0];
+    expect(arg.files[0].filename).toBe('screenshot.png');
+    expect(arg.files[0].mimeType).toBe('image/png');
+  });
+
+  it('falls back to generated.<ext> when no filename is provided', async () => {
+    const post = vi.fn().mockResolvedValue({});
+
+    await postFileAttachment({
+      chunk: {
+        type: 'file',
+        payload: { data: Buffer.from('data').toString('base64'), mimeType: 'application/pdf' },
+      } as any,
+      chatThread: { post },
+    });
+
+    expect(post).toHaveBeenCalledTimes(1);
+    const arg = post.mock.calls[0]![0];
+    expect(arg.files[0].filename).toBe('generated.pdf');
+  });
 });
 
 describe('extractErrorMessage', () => {

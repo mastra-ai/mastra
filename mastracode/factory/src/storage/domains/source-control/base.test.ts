@@ -210,6 +210,7 @@ describe('SourceControlStorage', () => {
       ...projectRepositoryInput,
       branch: 'main',
       setupCommand: 'pnpm install',
+      teardownCommand: 'pnpm local worktree teardown',
     });
     const secondLink = await github.projectRepositories.link({
       orgId: 'org-1',
@@ -220,7 +221,20 @@ describe('SourceControlStorage', () => {
       sandboxProvider: 'railway',
     });
 
-    expect(firstLink).toMatchObject({ repositoryId: repository.id, branch: 'main', setupCommand: 'pnpm install' });
+    expect(firstLink).toMatchObject({
+      repositoryId: repository.id,
+      branch: 'main',
+      setupCommand: 'pnpm install',
+      teardownCommand: 'pnpm local worktree teardown',
+    });
+    await github.projectRepositories.update({
+      orgId: 'org-1',
+      id: firstLink.id,
+      input: { teardownCommand: 'docker compose down --remove-orphans' },
+    });
+    expect(await github.projectRepositories.get({ orgId: 'org-1', id: firstLink.id })).toMatchObject({
+      teardownCommand: 'docker compose down --remove-orphans',
+    });
     expect(secondLink).toMatchObject({ repositoryId: repository.id, branch: 'develop', sandboxProvider: 'railway' });
     expect(firstLink.id).not.toBe(secondLink.id);
   });

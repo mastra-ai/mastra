@@ -18,10 +18,12 @@ import type { GithubPatKind } from './integrations/github/pat.js';
 import {
   checkoutSessionBranch,
   hasExistingCheckout,
+  DEFAULT_COMMAND_TIMEOUT_MS,
   MaterializeError,
   materializeRepo,
   recycleClaimedWorkdir,
   runWorktreeSetup,
+  runWorktreeTeardown,
 } from './integrations/github/sandbox.js';
 import { registerGithubPatKind, registerGithubTokenInjector } from './integrations/github/token-refresh.js';
 import { getFactorySessionAddress } from './rules/binding-context.js';
@@ -191,10 +193,51 @@ export interface CreateWorkspaceFactoryOptions {
    * review-board sessions get the reviewer PAT as `GH_TOKEN`. Optional —
    * without it every session uses the default (worker) PAT. */
   workItems?: Pick<WorkItemsStorage, 'findRunBindingBySession'>;
+  /** Runtime workspace/token registrations invalidated when a session retires. */
+  workspaceRegistry?: FactoryWorkspaceRegistry;
+}
+
+type WorkspaceUnregister = () => Promise<void> | void;
+
+/** Tracks dynamic Factory workspaces by persisted session id for retirement. */
+export class FactoryWorkspaceRegistry {
+  readonly #entries = new Map<string, Map<string, WorkspaceUnregister>>();
+  readonly #generations = new Map<string, number>();
+
+  generation(sessionId: string): number {
+    return this.#generations.get(sessionId) ?? 0;
+  }
+
+  async register(
+    sessionId: string,
+    workspaceId: string,
+    generation: number,
+    unregister: WorkspaceUnregister,
+  ): Promise<boolean> {
+    if (generation !== this.generation(sessionId)) {
+      await unregister();
+      return false;
+    }
+    const entries = this.#entries.get(sessionId) ?? new Map<string, WorkspaceUnregister>();
+    entries.set(workspaceId, unregister);
+    this.#entries.set(sessionId, entries);
+    return true;
+  }
+
+  async invalidateSession(sessionId: string): Promise<void> {
+    this.#generations.set(sessionId, this.generation(sessionId) + 1);
+    const entries = this.#entries.get(sessionId);
+    if (!entries) return;
+    this.#entries.delete(sessionId);
+    const results = await Promise.allSettled([...entries.values()].map(unregister => unregister()));
+    const failure = results.find(result => result.status === 'rejected');
+    if (failure?.status === 'rejected') throw failure.reason;
+  }
 }
 
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
   const { sandbox: sandboxConfig, github, fleet, workItems } = options;
+  const workspaceRegistry = options.workspaceRegistry ?? new FactoryWorkspaceRegistry();
   const isLocalSandbox = sandboxConfig?.machine instanceof LocalSandbox;
   type GithubTokenRegistration = {
     inject: (token: string) => void;
@@ -310,6 +353,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
 
     const extensionId = effectiveSkillExtension ? `-${effectiveSkillExtension.id}` : '';
     const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectRepository.id}-${session.id}${extensionId}`;
+    const workspaceGeneration = workspaceRegistry.generation(session.sessionId);
     const configDir = sandboxConfig.workdir ?? DEFAULT_CONFIG_DIR;
 
     const getRepositoryToken = async (): Promise<string> => {
@@ -545,25 +589,53 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         token,
         repoFullName: repoFullName,
       });
+      // A checkpoint-seeded checkout already ran the setup command during the
+      // base build, so re-running it here is pure latency.
       if (projectRepository.setupCommand && !seededFromBaseCheckpoint) {
-        await runWorktreeSetup(sandbox, workdir, projectRepository.setupCommand);
+        try {
+          await runWorktreeSetup(sandbox, workdir, projectRepository.setupCommand);
+        } catch (setupError) {
+          if (projectRepository.teardownCommand) {
+            try {
+              await runWorktreeTeardown(sandbox, workdir, projectRepository.teardownCommand, {
+                timeoutMs: DEFAULT_COMMAND_TIMEOUT_MS,
+              });
+            } catch (teardownError) {
+              console.warn('[Mastra Factory] Worktree teardown after setup failure failed', {
+                orgId: session.orgId,
+                sessionId: session.sessionId,
+                projectRepositoryId: session.projectRepositoryId,
+                error: teardownError instanceof Error ? teardownError.message.slice(-2000) : String(teardownError),
+              });
+            }
+          }
+          throw setupError;
+        }
       }
 
-      const registered: GithubTokenRegistration = {
+      const tokenRegistration: GithubTokenRegistration = {
         inject: freshToken => {
           if (!sandbox.setEnvironmentVariable) {
             throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
           }
           sandbox.setEnvironmentVariable('GH_TOKEN', freshToken);
-          registered.ghToken = freshToken;
+          tokenRegistration.ghToken = freshToken;
         },
         patKind,
         ghToken: ghCliToken,
         generation: 0,
         tokenReplacementPending: false,
       };
-      githubTokenInjectors.set(workspaceId, registered);
-      registerGithubTokenContext(registered);
+      // The session can be retired while this deferred phase is in flight.
+      // Registration happened back at construction time (the workspace exists
+      // before it materializes), so the retirement callback has already torn
+      // the workspace down — surface that to the caller instead of handing back
+      // a sandbox belonging to a dead session.
+      if (workspaceRegistry.generation(session.sessionId) !== workspaceGeneration) {
+        throw new Error(`Factory session ${session.sessionId} was retired during workspace materialization`);
+      }
+      githubTokenInjectors.set(workspaceId, tokenRegistration);
+      registerGithubTokenContext(tokenRegistration);
       return sandbox;
     };
 
@@ -686,7 +758,28 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // key collision, so concurrent first resolutions stay race-safe (the
     // deferred phase is deduped separately through `inflightMaterializations`).
     mastra?.addWorkspace(workspace, workspaceId, { source: 'mastra' });
+    // Cache synchronously with construction: the `await` below is a suspension
+    // point, and a concurrent resolution for the same session must observe this
+    // workspace rather than build a second one.
     constructedWorkspaces.set(workspaceId, workspace);
+    // Retirement is registered against the workspace itself rather than the
+    // sandbox: construction is now eager while materialization is deferred, so
+    // a session retired before its first tool call still has a workspace (and a
+    // token injector) that must be torn down.
+    const registered = await workspaceRegistry.register(
+      session.sessionId,
+      workspaceId,
+      workspaceGeneration,
+      async () => {
+        githubTokenInjectors.delete(workspaceId);
+        materializedSandboxes.delete(workspaceId);
+        constructedWorkspaces.delete(workspaceId);
+        await mastra?.removeWorkspace?.(workspaceId);
+      },
+    );
+    if (!registered) {
+      throw new Error(`Factory session ${session.sessionId} was retired during workspace materialization`);
+    }
 
     // Session start (the resolution that seeds the session's initial state)
     // warms the sandbox in the background so it materializes in parallel with

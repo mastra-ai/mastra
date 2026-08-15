@@ -181,10 +181,12 @@ export function createReplayStream<T>(options: {
       }
     },
 
-    cancel() {
+    cancel(reason) {
       if (liveReader) {
-        void liveReader.cancel();
+        return liveReader.cancel(reason);
       }
+
+      return liveSource.cancel(reason);
     },
   });
 }

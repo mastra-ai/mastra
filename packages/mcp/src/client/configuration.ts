@@ -33,8 +33,14 @@ const TOOL_DISCOVERY_MAX_ATTEMPTS = 2;
 // that narrowing on `error` also narrows `value` — Promise.all would otherwise
 // widen the two branches into independent optional props and break the fold.
 type ServerDiscoveryResult<T> =
-  | { serverName: string; value: T; error: undefined }
-  | { serverName: string; value: undefined; error: string };
+  | { serverName: string; value: T; error: undefined; duration: number }
+  | { serverName: string; value: undefined; error: string; duration: number };
+
+/** Options for aggregate discovery across configured MCP servers. */
+export interface MCPDiscoveryOptions {
+  /** Maximum time to wait for each server's discovery operation, in milliseconds. */
+  perServerTimeoutMs?: number;
+}
 
 // Matches the entire 127.0.0.0/8 range in dotted-quad form. `URL` normalizes
 // IPv4 hosts to four octets (so `127.1` becomes `127.0.0.1`), so anchoring the
@@ -1062,20 +1068,27 @@ To fix this you have three different options:
    * }
    * ```
    */
-  public async listToolsWithErrors(): Promise<{
+  public async listToolsWithErrors(options?: MCPDiscoveryOptions): Promise<{
     tools: Record<string, Tool<any, any, any, any>>;
     errors: Record<string, string>;
+    durations?: Record<string, number>;
   }> {
     this.addToInstanceCache();
     const connectedTools: Record<string, Tool<any, any, any, any>> = {};
     const errors: Record<string, string> = {};
+    const durations: Record<string, number> = {};
 
-    const settled = await this.discoverAcrossServers(serverName => this.getToolsForServer(serverName), {
-      errorId: 'MCP_CLIENT_GET_TOOLS_FAILED',
-      logMessage: 'Failed to list tools from server:',
-    });
+    const settled = await this.discoverAcrossServers(
+      serverName => this.getToolsForServer(serverName),
+      {
+        errorId: 'MCP_CLIENT_GET_TOOLS_FAILED',
+        logMessage: 'Failed to list tools from server:',
+      },
+      options,
+    );
 
-    for (const { serverName, value, error } of settled) {
+    for (const { serverName, value, error, duration } of settled) {
+      durations[serverName] = duration;
       if (error !== undefined) {
         errors[serverName] = error;
         continue;
@@ -1085,7 +1098,8 @@ To fix this you have three different options:
       }
     }
 
-    return { tools: connectedTools, errors };
+    const result = { tools: connectedTools, errors };
+    return options ? { ...result, durations } : result;
   }
 
   /**
@@ -1133,20 +1147,27 @@ To fix this you have three different options:
    * }
    * ```
    */
-  public async listToolsetsWithErrors(): Promise<{
+  public async listToolsetsWithErrors(options?: MCPDiscoveryOptions): Promise<{
     toolsets: Record<string, Record<string, Tool<any, any, any, any>>>;
     errors: Record<string, string>;
+    durations?: Record<string, number>;
   }> {
     this.addToInstanceCache();
     const connectedToolsets: Record<string, Record<string, Tool<any, any, any, any>>> = {};
     const errors: Record<string, string> = {};
+    const durations: Record<string, number> = {};
 
-    const settled = await this.discoverAcrossServers(serverName => this.getToolsForServer(serverName), {
-      errorId: 'MCP_CLIENT_GET_TOOLSETS_FAILED',
-      logMessage: 'Failed to list toolsets from server:',
-    });
+    const settled = await this.discoverAcrossServers(
+      serverName => this.getToolsForServer(serverName),
+      {
+        errorId: 'MCP_CLIENT_GET_TOOLSETS_FAILED',
+        logMessage: 'Failed to list toolsets from server:',
+      },
+      options,
+    );
 
-    for (const { serverName, value, error } of settled) {
+    for (const { serverName, value, error, duration } of settled) {
+      durations[serverName] = duration;
       if (error !== undefined) {
         errors[serverName] = error;
         continue;
@@ -1154,7 +1175,8 @@ To fix this you have three different options:
       connectedToolsets[serverName] = value;
     }
 
-    return { toolsets: connectedToolsets, errors };
+    const result = { toolsets: connectedToolsets, errors };
+    return options ? { ...result, durations } : result;
   }
 
   /**
@@ -1191,13 +1213,15 @@ To fix this you have three different options:
    * Useful when caching a catalog, since it lets you avoid persisting a partial manifest that
    * silently omits a server which happened to be down at discovery time.
    */
-  public async listToolDefinitionsWithErrors(): Promise<{
+  public async listToolDefinitionsWithErrors(options?: MCPDiscoveryOptions): Promise<{
     definitions: SerializableMCPToolCatalog;
     errors: Record<string, string>;
+    durations?: Record<string, number>;
   }> {
     this.addToInstanceCache();
     const definitions: SerializableMCPToolCatalog = {};
     const errors: Record<string, string> = {};
+    const durations: Record<string, number> = {};
 
     const settled = await this.discoverAcrossServers(
       async serverName => {
@@ -1208,9 +1232,11 @@ To fix this you have three different options:
         errorId: 'MCP_CLIENT_GET_TOOL_DEFINITIONS_FAILED',
         logMessage: 'Failed to list tool definitions from server:',
       },
+      options,
     );
 
-    for (const { serverName, value, error } of settled) {
+    for (const { serverName, value, error, duration } of settled) {
+      durations[serverName] = duration;
       if (error !== undefined) {
         errors[serverName] = error;
         continue;
@@ -1218,7 +1244,8 @@ To fix this you have three different options:
       definitions[serverName] = value;
     }
 
-    return { definitions, errors };
+    const result = { definitions, errors };
+    return options ? { ...result, durations } : result;
   }
 
   /**
@@ -1305,12 +1332,31 @@ To fix this you have three different options:
   private async discoverAcrossServers<T>(
     operation: (serverName: string) => Promise<T>,
     onError: { errorId: Uppercase<string>; logMessage: string },
+    options?: MCPDiscoveryOptions,
   ): Promise<Array<ServerDiscoveryResult<T>>> {
     const serverNames = Object.keys(this.serverConfigs);
     return Promise.all(
       serverNames.map(async (serverName): Promise<ServerDiscoveryResult<T>> => {
+        const startedAt = performance.now();
+        let timer: NodeJS.Timeout | undefined;
+
         try {
-          return { serverName, value: await operation(serverName), error: undefined };
+          const operationPromise = operation(serverName);
+          const value =
+            options?.perServerTimeoutMs === undefined
+              ? await operationPromise
+              : await Promise.race([
+                  operationPromise,
+                  new Promise<never>((_, reject) => {
+                    timer = setTimeout(
+                      () => reject(new Error(`Discovery timed out after ${options.perServerTimeoutMs}ms`)),
+                      options.perServerTimeoutMs,
+                    );
+                    timer.unref?.();
+                  }),
+                ]);
+
+          return { serverName, value, error: undefined, duration: performance.now() - startedAt };
         } catch (error) {
           const mastraError = new MastraError(
             {
@@ -1323,7 +1369,14 @@ To fix this you have three different options:
           );
           this.logger.trackException(mastraError);
           this.logger.error(onError.logMessage, { error: mastraError.toString() });
-          return { serverName, value: undefined, error: error instanceof Error ? error.message : String(error) };
+          return {
+            serverName,
+            value: undefined,
+            error: error instanceof Error ? error.message : String(error),
+            duration: performance.now() - startedAt,
+          };
+        } finally {
+          clearTimeout(timer);
         }
       }),
     );
