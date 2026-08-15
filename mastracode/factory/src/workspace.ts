@@ -50,6 +50,23 @@ export function isDeadSandboxError(error: unknown): boolean {
   return /sandbox .*(destroyed|no longer exists|not found)/i.test(error.message);
 }
 
+/**
+ * The local-provider equivalent of {@link isDeadSandboxError}: a local sandbox
+ * is just a directory, so it "dies" when that directory is removed — which
+ * session retirement does while an in-flight run still holds the handle.
+ *
+ * Node surfaces a missing `cwd` as ENOENT against the binary it tried to spawn
+ * (`spawn /bin/sh ENOENT`), which is textually identical to the shell itself
+ * being absent, and is also what a genuinely missing command reports. Probing
+ * the working directory is what separates "the sandbox is gone" from "that
+ * command does not exist", so only the former triggers a rebuild.
+ */
+export function isMissingWorkdirError(error: unknown, workdir: string | undefined): boolean {
+  if (!workdir) return false;
+  if ((error as NodeJS.ErrnoException | null)?.code !== 'ENOENT') return false;
+  return !existsSync(workdir);
+}
+
 const bundleDirectory = dirname(fileURLToPath(import.meta.url));
 const bundledFactorySkillsPath = join(bundleDirectory, 'factory-skills');
 export const FACTORY_SKILLS_SOURCE_PATH =
@@ -698,9 +715,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         try {
           return await sandbox.executeCommand(command, args, options);
         } catch (error) {
-          if (!isDeadSandboxError(error)) throw error;
+          if (!isDeadSandboxError(error) && !(isLocalSandbox && isMissingWorkdirError(error, workdir))) throw error;
           // The sandbox died mid-session (idle GC, provider destroy, broken
-          // transport). Drop the dead handle and re-run the materialization
+          // transport, or a retired local checkout removed from under us).
+          // Drop the dead handle and re-run the materialization
           // pipeline — fleet's ensureSandbox walks the revival ladder
           // (reattach → checkpoint-seeded provision → fresh clone) — then
           // retry the command once. Concurrent failures coalesce onto the

@@ -855,6 +855,54 @@ describe('GitHub session workspace preparation', () => {
     expect(second.executeCommand).toHaveBeenCalledWith('echo', ['hi'], undefined);
   });
 
+  it('revives a local session whose checkout was removed from under a running turn', async () => {
+    // Session retirement tears down the local checkout when a work item
+    // finishes, but an in-flight run still holds the sandbox handle. Every
+    // subsequent tool call then spawns into a directory that no longer
+    // exists, which Node reports as `spawn /bin/sh ENOENT` — nothing in the
+    // message says "sandbox", so this has to be classified by probing the
+    // workdir or the session wedges for the rest of the run.
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    const first = await mocks.ensureSandbox.mock.results[0]!.value;
+    const removed = Object.assign(new Error('spawn /bin/sh ENOENT'), {
+      code: 'ENOENT',
+      syscall: 'spawn /bin/sh',
+      path: '/bin/sh',
+    });
+    first.executeCommand.mockRejectedValueOnce(removed);
+
+    const result = await (resolved as any).sandbox.executeCommand('echo', ['hi']);
+
+    expect(result.exitCode).toBe(0);
+    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(2);
+    expect(mocks.materializeRepo).toHaveBeenCalledTimes(2);
+    const second = await mocks.ensureSandbox.mock.results[1]!.value;
+    expect(second.executeCommand).toHaveBeenCalledWith('echo', ['hi'], undefined);
+  });
+
+  it('surfaces a missing command without rebuilding the checkout it ran in', async () => {
+    // Same ENOENT code as a removed checkout, so the workdir is what tells
+    // the two apart. Rebuilding a healthy sandbox because the agent typed an
+    // unknown command would be an expensive way to report "not found".
+    const { root, workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    await fs.mkdir(path.join(root, 'github-sessions', 'octocat', 'hello', 'session-a'), { recursive: true });
+
+    const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    const first = await mocks.ensureSandbox.mock.results[0]!.value;
+    first.executeCommand.mockRejectedValueOnce(
+      Object.assign(new Error('spawn nope ENOENT'), { code: 'ENOENT', syscall: 'spawn nope', path: 'nope' }),
+    );
+
+    await expect((resolved as any).sandbox.executeCommand('nope')).rejects.toThrow('ENOENT');
+    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
+  });
+
   it('does not provision the sandbox for metadata-only resolution or workspace init', async () => {
     // Metadata GET routes (/threads, /messages) get-or-create the controller
     // session, which resolves the workspace and awaits `workspace.init()` —
