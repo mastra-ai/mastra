@@ -119,6 +119,15 @@ export async function processWorkflowConditional(
   // Create a proper RequestContext from the plain object passed in ProcessorArgs
   const reqContext = new RequestContext(Object.entries(requestContext ?? {}) as any);
 
+  // On restart, `executionPath` is already the branch path ([conditionalIdx, branchIdx])
+  // restored from the persisted active paths, so the re-resolved branch index has to
+  // replace the last segment instead of being appended. Appending grows a phantom
+  // third level ([conditionalIdx, branchIdx, idx]); the branch step then runs at the
+  // wrong depth and aggregateBranchResults resolves its parent via
+  // executionPath.slice(0, -1) to a level that does not exist, so the conditional's
+  // branch results never aggregate. Mirrors processWorkflowParallel above.
+  const branchPath = (idx: number) => (restart ? executionPath.slice(0, -1) : executionPath).concat([idx]);
+
   const idxs = await stepExecutor.evaluateConditions({
     workflowId,
     step,
@@ -145,14 +154,14 @@ export async function processWorkflowConditional(
   if (onlyStepToRun) {
     const onlyStepToRunId = getSingleStepEntryId(onlyStepToRun);
     const stepIndex = step.steps.findIndex(child => getSingleStepEntryId(child) === onlyStepToRunId);
-    activeStepsPath[onlyStepToRunId] = executionPath.concat([stepIndex]);
+    activeStepsPath[onlyStepToRunId] = branchPath(stepIndex);
     await pubsub.publish('workflows', {
       type: 'workflow.step.run',
       runId,
       data: {
         workflowId,
         runId,
-        executionPath: executionPath.concat([stepIndex]),
+        executionPath: branchPath(stepIndex),
         resumeSteps,
         stepResults,
         timeTravel,
@@ -172,7 +181,7 @@ export async function processWorkflowConditional(
       step.steps.map(async (child, idx) => {
         if (truthyIdxs[idx]) {
           if (child) {
-            activeStepsPath[getSingleStepEntryId(child)] = executionPath.concat([idx]);
+            activeStepsPath[getSingleStepEntryId(child)] = branchPath(idx);
           }
           return pubsub.publish('workflows', {
             type: 'workflow.step.run',
@@ -180,7 +189,7 @@ export async function processWorkflowConditional(
             data: {
               workflowId,
               runId,
-              executionPath: executionPath.concat([idx]),
+              executionPath: branchPath(idx),
               resumeSteps,
               stepResults,
               timeTravel,
@@ -202,7 +211,7 @@ export async function processWorkflowConditional(
             data: {
               workflowId,
               runId,
-              executionPath: executionPath.concat([idx]),
+              executionPath: branchPath(idx),
               resumeSteps,
               stepResults,
               prevResult: { status: 'skipped' },
