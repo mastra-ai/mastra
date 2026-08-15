@@ -501,7 +501,7 @@ function SignalRow({ kind, label, message }: { kind: string; label: string; mess
 
 export function Transcript({ tail }: { tail?: ReactNode }) {
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
-  const { transcript, resolvePrompt } = useChatTranscript();
+  const { transcript, resolvePrompt, busy } = useChatTranscript();
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
@@ -527,6 +527,7 @@ export function Transcript({ tail }: { tail?: ReactNode }) {
       isSubmitting={approveMutation.isPending || respondMutation.isPending}
       onApprove={onApprove}
       onRespond={onRespond}
+      running={busy}
       tail={tail}
     />
   );
@@ -537,12 +538,15 @@ export function TranscriptEntries({
   isSubmitting = false,
   onApprove,
   onRespond,
+  running = false,
   tail,
 }: {
   entries: TimelineEntry[];
   isSubmitting?: boolean;
   onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
+  /** Holds the room open under the live turn, and releases it when the agent stops. */
+  running?: boolean;
   /** Rendered inside the live turn (the activity line), so the reserved room stays under it. */
   tail?: ReactNode;
 }) {
@@ -584,22 +588,38 @@ export function TranscriptEntries({
     }
   };
 
+  // A turn is what you can see: the run echoes the message you sent back as a signal
+  // that draws nothing, and letting that open a turn would take the room off your bubble.
+  const drawsContent = (entry: MessageEntry): boolean =>
+    entry.message.content.parts.some(part => isRenderablePart(part, suspensions, entry.runtimeTools));
+  const opensTurn = (entry: TimelineEntry): boolean =>
+    entry.kind === 'message' && startsUserTurn(entry.message) && drawsContent(entry);
+
   const turnGroups: { key: string; entries: TimelineEntry[]; opensTurn: boolean }[] = [];
   for (const entry of entries) {
-    const opensTurn = entry.kind === 'message' && startsUserTurn(entry.message);
-    if (opensTurn || turnGroups.length === 0) turnGroups.push({ key: entry.id, entries: [], opensTurn });
-    turnGroups.at(-1)?.entries.push(entry);
+    const opens = opensTurn(entry);
+    if (!opens && turnGroups.length > 0) {
+      turnGroups.at(-1)?.entries.push(entry);
+      continue;
+    }
+    // A gap sorts above the turn it introduces but arrives after it: inside that turn the
+    // room absorbs its height, outside it shifts the transcript a beat later.
+    const previous = turnGroups.at(-1);
+    const introduction = previous && isTimeGap(previous.entries.at(-1)) ? previous.entries.splice(-1) : [];
+    turnGroups.push({ key: entry.id, entries: [...introduction, entry], opensTurn: opens });
   }
 
   return (
     <>
       {turnGroups.map((group, index) => {
         const isLiveTurn = index === turnGroups.length - 1;
+        // Every turn keeps `turn-room`: the one handing the room over closes on its curve.
+        const holdsRoom = isLiveTurn && group.opensTurn && running;
         return (
-          // The room a fresh turn scrolls up into is this min-height: pure layout,
-          // filled by the streaming reply. It stays after the run — collapsing it
-          // would shift the reader — and moves to the next turn with the anchor scroll.
-          <div key={group.key} className={cn('flex flex-col', isLiveTurn && group.opensTurn && 'min-h-[50cqh]')}>
+          <div
+            key={group.key}
+            className={cn('flex flex-col', group.opensTurn && 'turn-room', holdsRoom && 'turn-room-open')}
+          >
             {group.entries.map(entry => {
               const rendered = renderEntry(entry);
               if (!rendered) return null;
@@ -608,7 +628,7 @@ export function TranscriptEntries({
                 <MessageScrollerItem
                   key={entry.id}
                   messageId={entry.id}
-                  scrollAnchor={entry.kind === 'message' && startsUserTurn(entry.message)}
+                  scrollAnchor={opensTurn(entry)}
                   // Estimated off-screen heights would make the prepend anchor restore
                   // the wrong offset — measure the real thing.
                   className="[content-visibility:visible]"
@@ -722,7 +742,11 @@ function MessageBubble({
         return activation ? <SkillMessage activation={activation} /> : <MarkdownRenderer>{part.text}</MarkdownRenderer>;
       }
 
-      return <MarkdownRenderer className="my-3">{part.text}</MarkdownRenderer>;
+      return (
+        <MarkdownRenderer className="my-3" streaming={entry.streaming}>
+          {part.text}
+        </MarkdownRenderer>
+      );
     },
     Reasoning: (part: ReasoningPart) => (
       <div className="border-border1 my-1.5 border-l-2 pl-2.5 italic [&_p]:my-0.5">
@@ -1068,6 +1092,11 @@ function signalRowView(entry: MessageEntry): SignalRowView | undefined {
   if (signal.type === 'reactive' && tagName === 'system-reminder') return { kind: reminderKind, text };
   if (signal.type === 'reactive') return { kind: 'reactive', tagName, text };
   return undefined;
+}
+
+/** The `24 minutes later` separator, written a millisecond before the turn it introduces. */
+function isTimeGap(entry: TimelineEntry | undefined): boolean {
+  return entry?.kind === 'message' && signalRowView(entry)?.kind === 'gap';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

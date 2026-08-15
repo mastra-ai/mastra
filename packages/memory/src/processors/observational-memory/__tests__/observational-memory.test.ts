@@ -38,7 +38,6 @@ import {
   buildObserverHistoryMessage,
   buildMultiThreadObserverHistoryMessage,
   parseObserverOutput,
-  optimizeObservationsForContext,
   formatMessagesForObserver,
   hasCurrentTaskSection,
   extractCurrentTask,
@@ -3293,53 +3292,6 @@ User asked about </current-task> parsing and how it works
       const result = parseObserverOutput(text);
       expect(result.degenerate).toBe(true);
       expect(result.observations).toBe('');
-    });
-  });
-
-  describe('optimizeObservationsForContext', () => {
-    it('should strip yellow and green emojis', () => {
-      const observations = `
-- 🔴 Critical info
-- 🟡 Medium info
-- 🟢 Low info
-      `;
-
-      const optimized = optimizeObservationsForContext(observations);
-      expect(optimized).toContain('🔴 Critical info');
-      expect(optimized).not.toContain('🟡');
-      expect(optimized).not.toContain('🟢');
-    });
-
-    it('should strip anchor IDs before injecting context', () => {
-      const observations = '[O1] - 🔴 Critical info\n[O2] - 🟡 Medium info';
-      const optimized = optimizeObservationsForContext(observations);
-
-      expect(optimized).toContain('🔴 Critical info');
-      expect(optimized).toContain('- Medium info');
-      expect(optimized).not.toContain('[O1]');
-      expect(optimized).not.toContain('[O2]');
-    });
-
-    it('should preserve red emojis', () => {
-      const observations = '- 🔴 Critical user preference';
-      const optimized = optimizeObservationsForContext(observations);
-      expect(optimized).toContain('🔴');
-    });
-
-    it('should simplify arrows', () => {
-      const observations = '- Task -> completed successfully';
-      const optimized = optimizeObservationsForContext(observations);
-      expect(optimized).not.toContain('->');
-    });
-
-    it('should collapse multiple newlines', () => {
-      const observations = `Line 1
-
-
-
-Line 2`;
-      const optimized = optimizeObservationsForContext(observations);
-      expect(optimized).not.toContain('\n\n\n');
     });
   });
 });

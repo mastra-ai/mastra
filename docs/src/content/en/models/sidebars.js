@@ -291,6 +291,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/crusoe',
+          label: 'Crusoe',
+        },
+        {
+          type: 'doc',
           id: 'providers/drun',
           label: 'D.Run (China)',
         },

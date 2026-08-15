@@ -135,7 +135,7 @@ describe('sandbox option forwarding', () => {
     };
   }
 
-  it('passes provider working directory through fresh provisioning and reattach', async () => {
+  it('passes provider working directory and acting user through fresh provisioning and reattach', async () => {
     const calls: unknown[] = [];
     const sandbox = fakeSandbox();
     const subject = fleet();
@@ -151,30 +151,40 @@ describe('sandbox option forwarding', () => {
       clear: vi.fn(async () => {}),
     };
 
-    await subject.ensureSandbox(store, { GH_TOKEN: 'token' }, undefined, { workingDirectory: '/tmp/session-1' });
-    await subject.ensureSandbox(store, { GH_TOKEN: 'token' }, undefined, { workingDirectory: '/tmp/session-1' });
+    const options = { workingDirectory: '/tmp/session-1', actingUserId: 'external-user-42' };
+    await subject.ensureSandbox(store, { GH_TOKEN: 'token' }, undefined, options);
+    await subject.ensureSandbox(store, { GH_TOKEN: 'token' }, undefined, options);
 
     expect(calls).toEqual([
-      expect.objectContaining({ env: { GH_TOKEN: 'token' }, workingDirectory: '/tmp/session-1' }),
+      expect.objectContaining({
+        env: { GH_TOKEN: 'token' },
+        workingDirectory: '/tmp/session-1',
+        actingUserId: 'external-user-42',
+      }),
       expect.objectContaining({
         providerSandboxId: 'sb-1',
         env: { GH_TOKEN: 'token' },
         workingDirectory: '/tmp/session-1',
+        actingUserId: 'external-user-42',
       }),
     ]);
   });
 
-  it('passes provider working directory through direct reattach', async () => {
+  it('passes provider working directory and acting user through direct reattach', async () => {
     const factory = vi.fn(() => fakeSandbox('sb-2'));
     const subject = fleet();
     subject.setFactory(factory);
 
-    await subject.reattachSandbox('sb-2', { workingDirectory: '/tmp/session-2' });
+    await subject.reattachSandbox('sb-2', {
+      workingDirectory: '/tmp/session-2',
+      actingUserId: 'external-user-42',
+    });
 
     expect(factory).toHaveBeenCalledWith(
       expect.objectContaining({
         providerSandboxId: 'sb-2',
         workingDirectory: '/tmp/session-2',
+        actingUserId: 'external-user-42',
       }),
     );
   });
