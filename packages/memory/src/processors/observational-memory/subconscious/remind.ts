@@ -114,8 +114,7 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
           }
 
           const candidateIds = [...new Set(sources.flatMap(source => [source.id, source.recordId]))];
-          const referencedIds = candidateIds.filter(id => reminder.includes(id));
-          const sourceIds = (referencedIds.length ? referencedIds : candidateIds).slice(0, 5);
+          const sourceIds = candidateIds.filter(id => reminder.includes(id)).slice(0, 5);
           if (sourceIds.length === 0) {
             return;
           }
