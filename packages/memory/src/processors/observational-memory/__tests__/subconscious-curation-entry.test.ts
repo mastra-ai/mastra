@@ -7,6 +7,7 @@ import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Memory, Subconscious } from '../../../index';
+import { ObservationStep } from '../observation-turn/step';
 import { ObservationalMemory } from '../observational-memory';
 
 const scope = ['org:acme', 'resource:user-42', 'thread:alpha'];
@@ -403,5 +404,84 @@ describe('curation triggers', () => {
 
     const record = await om.getRecord(threadId);
     expect((record?.config as any)?.subconscious?.observationRuns).toBeUndefined();
+  });
+});
+
+// =============================================================================
+// Async-buffer activation path (turn/step level)
+//
+// Second harness, deliberately separate from the engine harness above: these
+// drive the real ObservationStep branch that commits buffered knowledge and
+// returns WITHOUT calling observe(), which is the only place the async-buffer
+// lane can trigger a curation. The OM dependency is a spy set (the model-bearing
+// collaborators), so what these prove is the hook's call site and the context it
+// passes — the trigger's own arithmetic is covered against a real store above.
+// =============================================================================
+
+function createStepMessageList(count: number) {
+  const messages = createBulkMessages(count, 'activation-thread');
+  return {
+    get: { all: { db: () => messages } },
+    makeMessageSourceChecker: () => ({ context: new Set<string>() }),
+  } as any;
+}
+
+function createStepHarness(options: { activated: boolean }) {
+  const record = { id: 'rec-activation', observationTokenCount: 0 } as any;
+  const maybeTriggerCuration = vi.fn(async () => {});
+  const observe = vi.fn(async () => ({ observed: true, reflected: false, record }));
+  const om = {
+    waitForBuffering: vi.fn(async () => {}),
+    getStatus: vi.fn(async () => ({ shouldObserve: true, canActivate: true, record })),
+    activate: vi.fn(async () => ({ activated: options.activated, record, activatedMessageIds: ['msg-1'] })),
+    observe,
+    maybeTriggerCuration,
+    composeHooks: vi.fn(() => undefined),
+    sealMessagesForBuffering: vi.fn(() => {}),
+    reflector: { maybeReflect: vi.fn(async () => {}) },
+    observer: { lastExchange: undefined },
+  } as any;
+  const turnRequestContext = requestContext();
+  const turn = {
+    om,
+    threadId: 'activation-thread',
+    resourceId: 'activation-resource',
+    messageList: createStepMessageList(4),
+    requestContext: turnRequestContext,
+    writer: undefined,
+    actorModelContext: undefined,
+    observabilityContext: undefined,
+    responseMessageId: undefined,
+  } as any;
+  const step = new ObservationStep(turn, 1);
+  return { step, om, turn, turnRequestContext, maybeTriggerCuration, observe };
+}
+
+describe('curation triggers on the async-buffer activation path', () => {
+  it('triggers curation when a buffered activation commits without observing', async () => {
+    const { step, om, turnRequestContext, maybeTriggerCuration, observe } = createStepHarness({ activated: true });
+
+    const result = await (step as any).runThresholdObservation();
+
+    expect(result.succeeded).toBe(true);
+    expect(om.activate).toHaveBeenCalledOnce();
+    // The activation branch returns without observing, so observe()'s own
+    // trigger cannot cover this turn.
+    expect(observe).not.toHaveBeenCalled();
+    expect(maybeTriggerCuration).toHaveBeenCalledOnce();
+    expect(maybeTriggerCuration).toHaveBeenCalledWith('activation-thread', 'activation-resource', turnRequestContext);
+  });
+
+  it('cannot double-fire: a step either activates or observes, never both', async () => {
+    const { step, om, maybeTriggerCuration, observe } = createStepHarness({ activated: false });
+
+    await (step as any).runThresholdObservation();
+
+    // Activation failed, so the step falls through to the sync observation block
+    // and observe()'s own trigger owns this turn. The two hooks are structurally
+    // exclusive within a step rather than merely untriggered.
+    expect(om.activate).toHaveBeenCalledOnce();
+    expect(observe).toHaveBeenCalledOnce();
+    expect(maybeTriggerCuration).not.toHaveBeenCalled();
   });
 });

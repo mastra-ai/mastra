@@ -447,6 +447,11 @@ export class ObservationStep {
           reflectionHooks: om.composeHooks(undefined, { threadId, resourceId, trigger: 'turn-sync' }),
         });
 
+        // This branch commits buffered knowledge and returns without ever
+        // calling observe(), so it needs its own curation-trigger evaluation.
+        // Fire-and-forget; a curation failure must never fail the turn.
+        void om.maybeTriggerCuration(threadId, resourceId, this.turn.requestContext).catch(() => {});
+
         return {
           succeeded: true,
           record: activation.record,
