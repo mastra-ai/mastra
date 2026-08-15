@@ -209,6 +209,9 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
 
     case 'file': {
       const pm = (value as any).providerMetadata;
+      // The streamed file part type doesn't declare a filename, but providers
+      // (e.g. Gemini) do send one for generated files — keep it when present.
+      const filename = (value as { filename?: string }).filename;
       return {
         type: 'file',
         runId: ctx.runId,
@@ -218,6 +221,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           // URL-backed generated files flatten to URL strings, which are not base64.
           base64: typeof value.data === 'string' && !isUrlString(value.data) ? value.data : undefined,
           mimeType: value.mediaType,
+          ...(filename ? { filename } : {}),
           ...(pm != null ? { providerMetadata: pm } : {}),
         },
       };

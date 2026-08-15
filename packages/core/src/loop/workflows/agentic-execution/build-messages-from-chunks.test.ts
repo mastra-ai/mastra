@@ -524,6 +524,22 @@ describe('buildMessagesFromChunks', () => {
     expect(result[0]).toMatchObject({ type: 'file', data: 'base64data', mimeType: 'image/png' });
   });
 
+  it('should preserve the original filename on file parts', () => {
+    const result = parts([
+      {
+        type: 'file',
+        payload: { data: 'base64data', mimeType: 'application/pdf', filename: 'contract.pdf' },
+      },
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      type: 'file',
+      data: 'base64data',
+      mimeType: 'application/pdf',
+      filename: 'contract.pdf',
+    });
+  });
+
   // ── step-start insertion ────────────────────────────────────
 
   it('should insert step-start between tool-invocation and text', () => {

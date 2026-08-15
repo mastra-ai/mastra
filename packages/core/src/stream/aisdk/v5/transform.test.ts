@@ -751,4 +751,52 @@ describe('convertFullStreamChunkToMastra', () => {
       }
     });
   });
+
+  describe('file chunk handling', () => {
+    it('should carry the original filename from a file part into the chunk payload', () => {
+      // The streamed file part type doesn't declare a filename, but providers
+      // send one at runtime — mirror the cast used in the transform itself.
+      const chunk: StreamPart & { filename: string } = {
+        type: 'file',
+        data: 'aGVsbG8gd29ybGQ=',
+        mediaType: 'application/pdf',
+        filename: 'contract.pdf',
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result).toEqual({
+        type: 'file',
+        runId: 'test-run-123',
+        from: ChunkFrom.AGENT,
+        payload: {
+          data: 'aGVsbG8gd29ybGQ=',
+          base64: 'aGVsbG8gd29ybGQ=',
+          mimeType: 'application/pdf',
+          filename: 'contract.pdf',
+        },
+      });
+    });
+
+    it('should omit filename from the payload when the file part has none', () => {
+      const chunk: StreamPart = {
+        type: 'file',
+        data: 'aGVsbG8gd29ybGQ=',
+        mediaType: 'text/plain',
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result).toEqual({
+        type: 'file',
+        runId: 'test-run-123',
+        from: ChunkFrom.AGENT,
+        payload: {
+          data: 'aGVsbG8gd29ybGQ=',
+          base64: 'aGVsbG8gd29ybGQ=',
+          mimeType: 'text/plain',
+        },
+      });
+    });
+  });
 });

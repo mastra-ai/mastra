@@ -229,6 +229,7 @@ export function buildMessagesFromChunks({
           type: 'file' as const,
           data: p.data,
           mimeType: p.mimeType,
+          ...(p.filename ? { filename: p.filename } : {}),
           ...(p.providerMetadata ? { providerMetadata: p.providerMetadata } : {}),
         } as MastraMessagePart);
         break;
