@@ -510,6 +510,31 @@ describe('createToolCallStep tool approval workflow', () => {
     await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
   });
 
+  it.each([{}, { approved: 'true' }])('re-suspends malformed workflow approval data: %j', async resumeData => {
+    suspend.mockResolvedValueOnce('suspended');
+
+    const result = await toolCallStep.execute(makeExecuteParams({ resumeData }));
+
+    expect(result).toBe('suspended');
+    expect(suspend).toHaveBeenCalledTimes(1);
+    expectNoToolExecution();
+  });
+
+  it('does not accept model-authored approval data', async () => {
+    suspend.mockResolvedValueOnce('suspended');
+    const inputData = makeInputData();
+
+    const result = await toolCallStep.execute(
+      makeExecuteParams({
+        inputData: { ...inputData, args: { ...inputData.args, resumeData: { approved: true } } },
+      }),
+    );
+
+    expect(result).toBe('suspended');
+    expect(suspend).toHaveBeenCalledTimes(1);
+    expectNoToolExecution();
+  });
+
   it('should not flush messages before suspending when memory is read-only', async () => {
     const flushMessages = vi.fn().mockResolvedValue(undefined);
     const readOnlyStep = createToolCallStep({

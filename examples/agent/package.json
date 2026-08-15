@@ -65,6 +65,8 @@
     "start": "npx bun src/index.ts",
     "processor-demo": "npx bun src/processor-demo.ts",
     "hitl:approval": "npx tsx src/hitl-approval-recall.ts",
+    "item-scorers:seed": "tsx src/seed-item-scorers.ts",
+    "item-scorers:run": "tsx src/run-item-scorers.ts",
     "mastra:dev": "mastra dev",
     "mastra:build": "mastra build -s",
     "mastra:start": "mastra start",

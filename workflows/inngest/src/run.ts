@@ -568,13 +568,10 @@ export class InngestRun<
         name: `workflow.${this.workflowId}`,
         data: {
           inputData: resumeDataToUse,
-          initialState: snapshot?.value ?? {},
           runId: this.runId,
           workflowId: this.workflowId,
-          stepResults: snapshot?.context as any,
           resume: {
             steps,
-            stepResults: snapshot?.context as any,
             resumePayload: resumeDataToUse,
             resumePath: steps?.[0] ? (snapshot?.suspendedPaths?.[steps?.[0]] as any) : undefined,
           },

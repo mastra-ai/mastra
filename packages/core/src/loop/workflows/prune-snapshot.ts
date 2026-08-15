@@ -44,6 +44,15 @@ function isPlainObject(value: unknown): value is Record<string, any> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function mapForeachOutput(
+  foreachOutput: unknown,
+  mapEntry: (entry: unknown) => unknown,
+): Record<string, unknown> | unknown[] | undefined {
+  if (Array.isArray(foreachOutput)) return foreachOutput.map(mapEntry);
+  if (!isPlainObject(foreachOutput)) return undefined;
+  return Object.fromEntries(Object.entries(foreachOutput).map(([index, entry]) => [index, mapEntry(entry)]));
+}
+
 /**
  * Strips the heavy agent-iteration fields from a step payload/output without
  * mutating the original object:
@@ -182,15 +191,16 @@ function pruneStepResult(result: Record<string, any>): Record<string, any> {
   // iterations stripped, still-suspended ones preserved).
   if (isPlainObject(pruned.suspendPayload)) {
     const meta = pruned.suspendPayload.__workflow_meta;
-    if (isPlainObject(meta) && isPlainObject(meta.foreachOutput)) {
-      const foreachOutput: Record<string, any> = {};
-      for (const [index, entry] of Object.entries(meta.foreachOutput)) {
-        foreachOutput[index] = pruneStepResult(entry as Record<string, any>);
+    if (isPlainObject(meta)) {
+      const foreachOutput = mapForeachOutput(meta.foreachOutput, entry =>
+        pruneStepResult(entry as Record<string, any>),
+      );
+      if (foreachOutput) {
+        pruned.suspendPayload = {
+          ...pruned.suspendPayload,
+          __workflow_meta: { ...meta, foreachOutput },
+        };
       }
-      pruned.suspendPayload = {
-        ...pruned.suspendPayload,
-        __workflow_meta: { ...meta, foreachOutput },
-      };
     }
   }
 
@@ -205,15 +215,13 @@ function stripStreamState(suspendPayload: unknown): unknown {
   const pruned = { ...suspendPayload };
   delete pruned.__streamState;
   const meta = pruned.__workflow_meta;
-  if (isPlainObject(meta) && isPlainObject(meta.foreachOutput)) {
-    const foreachOutput: Record<string, any> = {};
-    for (const [index, entry] of Object.entries(meta.foreachOutput)) {
-      foreachOutput[index] =
-        isPlainObject(entry) && 'suspendPayload' in entry
-          ? { ...entry, suspendPayload: stripStreamState(entry.suspendPayload) }
-          : entry;
-    }
-    pruned.__workflow_meta = { ...meta, foreachOutput };
+  if (isPlainObject(meta)) {
+    const foreachOutput = mapForeachOutput(meta.foreachOutput, entry =>
+      isPlainObject(entry) && 'suspendPayload' in entry
+        ? { ...entry, suspendPayload: stripStreamState(entry.suspendPayload) }
+        : entry,
+    );
+    if (foreachOutput) pruned.__workflow_meta = { ...meta, foreachOutput };
   }
   return pruned;
 }

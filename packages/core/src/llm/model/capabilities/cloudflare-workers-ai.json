@@ -9,6 +9,8 @@
   "temperature": [
     "@cf/aisingapore/gemma-sea-lion-v4-27b-it",
     "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+    "@cf/deepseek-ai/deepseek-v4-flash-0731",
+    "@cf/deepseek-ai/deepseek-v4-pro-0813",
     "@cf/google/gemma-4-26b-a4b-it",
     "@cf/ibm-granite/granite-4.0-h-micro",
     "@cf/meta/llama-3.1-8b-instruct-fp8",
@@ -31,6 +33,8 @@
     "@cf/zai-org/glm-5.2"
   ],
   "structuredOutput": [
+    "@cf/deepseek-ai/deepseek-v4-flash-0731",
+    "@cf/deepseek-ai/deepseek-v4-pro-0813",
     "@cf/google/gemma-4-26b-a4b-it",
     "@cf/moonshotai/kimi-k2.6",
     "@cf/moonshotai/kimi-k2.7-code",
