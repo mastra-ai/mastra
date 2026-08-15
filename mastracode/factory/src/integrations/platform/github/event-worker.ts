@@ -439,6 +439,15 @@ export class PlatformGithubEventWorker extends MastraWorker {
             retirePullRequestSubscription(id, status, this.#github.integrationStorage),
           github: this.#github,
           isAuthorizedSender: notification => this.#isAuthorizedSender(notification),
+          onTargetSkipped: subscription => {
+            // Routine when a subscription's thread belongs to another
+            // deployment, so this stays at debug rather than warning on a loop.
+            this.deps?.logger.debug('Platform GitHub event skipped: thread is not held here', {
+              deliveryId: event.deliveryId,
+              subscriptionId: subscription.id,
+              threadId: subscription.threadId,
+            });
+          },
           onTargetError: (subscription, error) => {
             this.deps?.logger.error('Platform GitHub event delivery failed for a subscription', {
               deliveryId: event.deliveryId,

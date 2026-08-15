@@ -101,6 +101,8 @@ export interface GithubWebhookDispatchDependencies {
   retireSubscription?: (id: string, status: 'open' | 'closed' | 'merged') => Promise<void>;
   isAuthorizedSender?: (notification: GithubWebhookNotification) => Promise<boolean>;
   onTargetError?: (subscription: GithubSignalSubscriptionRow, error: unknown) => void;
+  /** Called when a subscription names a thread this deployment does not hold. */
+  onTargetSkipped?: (subscription: GithubSignalSubscriptionRow) => void;
 }
 
 function normalizeHeader(value: string | undefined | null): string | null {
@@ -319,8 +321,23 @@ async function resolveSubscriptionSession(
   if (!sessionId || !resourceId || !threadId) {
     throw new Error(`GitHub subscription ${subscription.id} is missing its session binding.`);
   }
+  // Read the thread straight from storage before touching sessions. This answers
+  // two questions at once, and `queryThreadById` does it without constructing a
+  // session (so no workspace or sandbox is provisioned just to make the check).
+  //
+  // First: do we even have this thread? A pull request's events can reach a
+  // deployment that never owned the subscribed thread, and delivery must not
+  // fabricate a session for a thread that lives somewhere else.
+  //
+  // Second: which resource owns it? The subscription records the Factory project
+  // as its `resourceId`, but an unscoped session is registered under its own id,
+  // so the stored value routinely names a resource that does not own the thread.
+  // The thread row is the authoritative answer; the stored id is only a fallback.
+  const thread = await controller.queryThreadById({ threadId });
+  if (!thread) return undefined;
+  const ownerResourceId = thread.resourceId || resourceId;
   const scope = subscription.sessionScope || undefined;
-  let session = await controller.getSessionByResource(resourceId, scope);
+  let session = await controller.getSessionByResource(ownerResourceId, scope);
   if (!session) {
     const tags = {
       factoryProjectId: resourceId,
@@ -329,8 +346,9 @@ async function resolveSubscriptionSession(
     };
     // Creating the session resolves its workspace, which authorizes the caller
     // against the Factory session row — no signed-in user, so run as its owner.
-    // The controller resource is the Factory project for scoped sessions; the
-    // persisted Factory session is keyed by the subscription's session ID.
+    // The session is created under the resource that owns the thread, so the
+    // thread switch below resolves; the persisted Factory session is keyed by
+    // the subscription's session ID.
     const sessionRow = await github?.sourceControlStorage.sessions.getBySessionId(sessionId);
     if (!sessionRow) {
       throw new Error(`GitHub subscription ${subscription.id} has no Factory session ${sessionId} to run as.`);
@@ -340,7 +358,7 @@ async function resolveSubscriptionSession(
     session = await controller.createSession({
       id: sessionId,
       ownerId: sessionRow.userId,
-      resourceId,
+      resourceId: ownerResourceId,
       scope,
       tags,
       requestContext,
@@ -421,14 +439,14 @@ async function isAuthorizedGithubSender(
 export async function dispatchGithubWebhook(
   parsed: ParsedGithubWebhook,
   dependencies: GithubWebhookDispatchDependencies,
-): Promise<{ delivered: number; failed: number; ignored: boolean }> {
+): Promise<{ delivered: number; failed: number; skipped: number; ignored: boolean }> {
   const notification = classifyGithubWebhook(parsed);
-  if (!notification) return { delivered: 0, failed: 0, ignored: true };
+  if (!notification) return { delivered: 0, failed: 0, skipped: 0, ignored: true };
   const isAuthorizedSender =
     dependencies.isAuthorizedSender ??
     ((n: GithubWebhookNotification) => isAuthorizedGithubSender(n, dependencies.github));
   if (!(await isAuthorizedSender(notification))) {
-    return { delivered: 0, failed: 0, ignored: true };
+    return { delivered: 0, failed: 0, skipped: 0, ignored: true };
   }
 
   const target = {
@@ -455,10 +473,20 @@ export async function dispatchGithubWebhook(
   const subscriptions = await listSubscriptions(target, { includeTerminal: notification.action === 'reopened' });
   let delivered = 0;
   let failed = 0;
+  let skipped = 0;
 
   for (const subscription of subscriptions) {
     try {
       const session = await resolveSubscriptionSession(dependencies.controller, subscription, dependencies.github);
+      // No session means this deployment does not hold the subscribed thread.
+      // That is not a delivery failure, so it must not be retried or counted as
+      // one; the subscription is left untouched because the thread may exist
+      // wherever the subscription was created.
+      if (!session) {
+        skipped += 1;
+        dependencies.onTargetSkipped?.(subscription);
+        continue;
+      }
       const result = await session.sendNotificationSignal({
         source: 'github',
         kind: notification.kind,
@@ -491,7 +519,7 @@ export async function dispatchGithubWebhook(
     }
   }
 
-  return { delivered, failed, ignored: false };
+  return { delivered, failed, skipped, ignored: false };
 }
 
 export async function handleGithubWebhook(
