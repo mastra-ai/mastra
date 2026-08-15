@@ -1666,8 +1666,7 @@ export class AgentController<TState = {}> {
 
   /**
    * Load observational memory progress for the current thread.
-   * Reads the OM record and recent messages to reconstruct status,
-   * then emits an `om_status` event for the UI.
+   * Reconstructs status from the durable OM record, then emits an `om_status` event for the UI.
    */
   async loadOMProgress(session: Session<TState>): Promise<void> {
     const threadId = session.thread.getId();
@@ -1681,8 +1680,12 @@ export class AgentController<TState = {}> {
 
       const config = record.config as
         | {
-            observationThreshold?: number | { min: number; max: number };
-            reflectionThreshold?: number | { min: number; max: number };
+            observation?: { messageTokens?: number | { min: number; max: number } };
+            reflection?: { observationTokens?: number | { min: number; max: number } };
+            _overrides?: {
+              observation?: { messageTokens?: number | { min: number; max: number } };
+              reflection?: { observationTokens?: number | { min: number; max: number } };
+            };
           }
         | undefined;
 
@@ -1692,75 +1695,44 @@ export class AgentController<TState = {}> {
         return val.max;
       };
 
-      let observationThreshold = getThreshold(config?.observationThreshold, 30_000);
-      let reflectionThreshold = getThreshold(config?.reflectionThreshold, 40_000);
-
-      let messageTokens = record.pendingMessageTokens ?? 0;
-      let observationTokens = record.observationTokenCount ?? 0;
-      let bufferedObs = {
-        status: 'idle' as 'idle' | 'running' | 'complete',
-        chunks: 0,
-        messageTokens: 0,
-        projectedMessageRemoval: 0,
-        observationTokens: 0,
+      const observationThreshold = getThreshold(
+        config?._overrides?.observation?.messageTokens ?? config?.observation?.messageTokens,
+        30_000,
+      );
+      const reflectionThreshold = getThreshold(
+        config?._overrides?.reflection?.observationTokens ?? config?.reflection?.observationTokens,
+        40_000,
+      );
+      const messageTokens = record.pendingMessageTokens ?? 0;
+      const observationTokens = record.observationTokenCount ?? 0;
+      const bufferedChunks = Array.isArray(record.bufferedObservationChunks) ? record.bufferedObservationChunks : [];
+      const bufferedMessageTokens = Math.min(
+        bufferedChunks.reduce((sum, chunk) => sum + (chunk.messageTokens ?? 0), 0),
+        messageTokens,
+      );
+      const bufferedObservationTokens = bufferedChunks.reduce((sum, chunk) => sum + (chunk.tokenCount ?? 0), 0);
+      const bufferedObs = {
+        status: record.isBufferingObservation
+          ? ('running' as const)
+          : bufferedChunks.length
+            ? ('complete' as const)
+            : ('idle' as const),
+        chunks: bufferedChunks.length,
+        messageTokens: bufferedMessageTokens,
+        projectedMessageRemoval: bufferedMessageTokens,
+        observationTokens: bufferedObservationTokens,
       };
-      let bufferedRef = {
-        status: 'idle' as 'idle' | 'running' | 'complete',
-        inputObservationTokens: 0,
-        observationTokens: 0,
+      const bufferedRef = {
+        status: record.isBufferingReflection
+          ? ('running' as const)
+          : record.bufferedReflection
+            ? ('complete' as const)
+            : ('idle' as const),
+        inputObservationTokens: record.bufferedReflectionInputTokens ?? 0,
+        observationTokens: record.bufferedReflectionTokens ?? 0,
       };
-      let generationCount = 0;
-      let stepNumber = 0;
-
-      const messagesResult = await memoryStorage.listMessages({
-        threadId,
-        perPage: 70,
-        page: 0,
-        orderBy: { field: 'createdAt', direction: 'DESC' },
-      });
-      const messages = messagesResult.messages;
-      let foundStatus = false;
-      for (const msg of messages) {
-        if (msg.role !== 'assistant') continue;
-        const content = msg.content as { parts?: Array<{ type?: string; data?: Record<string, unknown> }> } | string;
-        if (typeof content === 'string' || !content?.parts) continue;
-
-        for (let i = content.parts.length - 1; i >= 0; i--) {
-          const part = content.parts[i] as { type?: string; data?: Record<string, unknown> };
-          if (part.type === 'data-om-status' && part.data?.windows) {
-            const w = part.data.windows as Record<string, Record<string, Record<string, unknown>>>;
-            messageTokens = (w.active?.messages?.tokens as number) ?? messageTokens;
-            observationTokens = (w.active?.observations?.tokens as number) ?? observationTokens;
-            const msgThresh = w.active?.messages?.threshold as number | undefined;
-            const obsThresh = w.active?.observations?.threshold as number | undefined;
-            if (msgThresh) observationThreshold = msgThresh;
-            if (obsThresh) reflectionThreshold = obsThresh;
-            const bo = w.buffered?.observations as Record<string, unknown> | undefined;
-            if (bo) {
-              bufferedObs = {
-                status: (bo.status as 'idle' | 'running' | 'complete') ?? 'idle',
-                chunks: (bo.chunks as number) ?? 0,
-                messageTokens: (bo.messageTokens as number) ?? 0,
-                projectedMessageRemoval: (bo.projectedMessageRemoval as number) ?? 0,
-                observationTokens: (bo.observationTokens as number) ?? 0,
-              };
-            }
-            const br = w.buffered?.reflection as Record<string, unknown> | undefined;
-            if (br) {
-              bufferedRef = {
-                status: (br.status as 'idle' | 'running' | 'complete') ?? 'idle',
-                inputObservationTokens: (br.inputObservationTokens as number) ?? 0,
-                observationTokens: (br.observationTokens as number) ?? 0,
-              };
-            }
-            generationCount = (part.data.generationCount as number) ?? 0;
-            stepNumber = (part.data.stepNumber as number) ?? 0;
-            foundStatus = true;
-            break;
-          }
-        }
-        if (foundStatus) break;
-      }
+      const generationCount = record.generationCount ?? 0;
+      const stepNumber = 0;
 
       session.emit({
         type: 'om_status',

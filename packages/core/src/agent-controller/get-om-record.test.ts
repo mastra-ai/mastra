@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { AgentController } from './agent-controller';
@@ -101,5 +101,76 @@ describe('AgentController.getObservationalMemoryRecord', () => {
     record = await controller.getObservationalMemoryRecord(session);
     expect(record).not.toBeNull();
     expect(record!.activeObservations).toBe('Thread A observations');
+  });
+
+  it('restores OM progress from the durable record without scanning messages', async () => {
+    const threadA = await session.thread.create();
+    const threadB = await session.thread.create();
+    const resourceId = session.identity.getResourceId();
+    const memoryStorage = (await storage.getStore('memory'))!;
+    const record = await memoryStorage.initializeObservationalMemory({
+      threadId: threadA.id,
+      resourceId,
+      scope: 'thread',
+      config: {
+        observation: { messageTokens: 12_000 },
+        reflection: { observationTokens: 24_000 },
+      },
+    });
+    Object.assign(record, {
+      pendingMessageTokens: 6_000,
+      observationTokenCount: 8_000,
+      generationCount: 3,
+      isBufferingObservation: true,
+      isBufferingReflection: false,
+      bufferedObservationChunks: [
+        {
+          id: 'chunk-1',
+          cycleId: 'cycle-1',
+          observations: 'Buffered observation',
+          tokenCount: 500,
+          messageIds: ['message-1'],
+          messageTokens: 1_500,
+          lastObservedAt: new Date(),
+          createdAt: new Date(),
+        },
+      ],
+      bufferedReflection: 'Buffered reflection',
+      bufferedReflectionInputTokens: 700,
+      bufferedReflectionTokens: 350,
+    });
+    const listMessagesSpy = vi.spyOn(memoryStorage, 'listMessages');
+    const events: any[] = [];
+    session.subscribe(event => events.push(event));
+
+    await session.thread.switch({ threadId: threadA.id });
+    await controller.loadOMProgress(session);
+
+    expect(listMessagesSpy).not.toHaveBeenCalled();
+    expect(events.find(event => event.type === 'om_status')).toMatchObject({
+      windows: {
+        active: {
+          messages: { tokens: 6_000, threshold: 12_000 },
+          observations: { tokens: 8_000, threshold: 24_000 },
+        },
+        buffered: {
+          observations: {
+            status: 'running',
+            chunks: 1,
+            messageTokens: 1_500,
+            observationTokens: 500,
+          },
+          reflection: {
+            status: 'complete',
+            inputObservationTokens: 700,
+            observationTokens: 350,
+          },
+        },
+      },
+      generationCount: 3,
+      stepNumber: 0,
+    });
+
+    await session.thread.switch({ threadId: threadB.id });
   });
 });
