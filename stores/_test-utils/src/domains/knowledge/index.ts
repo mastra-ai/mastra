@@ -43,6 +43,40 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       ).rejects.toThrow('Invalid knowledge scope entry');
     });
 
+    it('treats lexical query metacharacters literally', async () => {
+      const percent = await store.createNode({
+        name: 'Literal% node',
+        kind: 'document',
+        content: 'contains percent% text',
+        scope: resource,
+      });
+      await store.createNode({ name: 'LiteralX node', kind: 'document', content: 'control text', scope: resource });
+      const underscore = await store.createNode({
+        name: 'Under_score node',
+        kind: 'document',
+        content: 'contains under_score text',
+        scope: resource,
+      });
+      await store.createNode({ name: 'UnderXscore node', kind: 'document', content: 'control text', scope: resource });
+      const escape = await store.createNode({
+        name: 'Equal= node',
+        kind: 'document',
+        content: 'contains equal=sign text',
+        scope: resource,
+      });
+
+      expect(await store.listNodes({ scope: resource, namePrefix: 'Literal%' })).toEqual([
+        expect.objectContaining({ id: percent.id }),
+      ]);
+      expect(await store.search({ query: '%', scope: resource })).toEqual([
+        expect.objectContaining({ id: percent.id }),
+      ]);
+      expect(await store.search({ query: '_', scope: resource })).toEqual([
+        expect.objectContaining({ id: underscore.id }),
+      ]);
+      expect(await store.search({ query: '=', scope: resource })).toEqual([expect.objectContaining({ id: escape.id })]);
+    });
+
     it('applies item visibility independently from parent node identity scope', async () => {
       const node = await store.createNode({ name: 'Resource node', kind: 'task', scope: resource });
       await store.appendItem({
