@@ -228,7 +228,7 @@ describe('Subconscious LibSQL integration', () => {
     await storage.init();
 
     let streamCall = 0;
-    const reminder = 'Project Atlas launches January 15. Source fact: fact-atlas-launch.';
+    const reminder = 'Project Atlas launches January 15. Source KnowledgeItem: item-atlas-launch.';
     const model = new MockLanguageModelV2({
       doStream: async () => {
         streamCall += 1;
@@ -263,7 +263,7 @@ describe('Subconscious LibSQL integration', () => {
         observationalMemory: {
           enabled: true,
           model,
-          subconscious: new Subconscious({ observation: ['remind'], reflection: [] }),
+          experimental_subconscious: new Subconscious({ observation: ['remind'], reflection: [] }),
           observation: { messageTokens: 1, bufferTokens: false, previousObserverTokens: 1_000 },
         },
       },
@@ -272,13 +272,13 @@ describe('Subconscious LibSQL integration', () => {
     const resourceId = randomUUID();
     const scope = ['org:acme', `resource:${resourceId}`, `thread:${threadId}`];
     const knowledge = (await storage.getStore('knowledge'))!;
-    const atlas = await knowledge.createEntity({ name: 'Project Atlas', kind: 'project', scope: scope.slice(0, 2) });
-    await knowledge.appendFact({
-      id: 'fact-atlas-launch',
-      parentEntityId: atlas.id,
+    const atlas = await knowledge.createNode({ name: 'Project Atlas', kind: 'project', scope: scope.slice(0, 2) });
+    await knowledge.appendItem({
+      id: 'item-atlas-launch',
+      parentNodeId: atlas.id,
       text: '[[Project Atlas]] launches January 15.',
       scope: scope.slice(0, 2),
-      sourceThreadId: threadId,
+      sourceThreadId: 'source-thread',
       resolutionScope: scope,
       defaultScope: scope.slice(0, 2),
     });
@@ -349,22 +349,22 @@ describe('Subconscious LibSQL integration', () => {
           enabled: true,
           model,
           scope: 'resource',
-          subconscious: new Subconscious({ observation: ['remind'], reflection: [] }),
+          experimental_subconscious: new Subconscious({ observation: ['remind'], reflection: [] }),
           observation: { messageTokens: 1, bufferTokens: false, previousObserverTokens: 1_000 },
         },
       },
     });
     const knowledge = (await storage.getStore('knowledge'))!;
-    const entity = await knowledge.createEntity({
+    const node = await knowledge.createNode({
       name: 'Project Atlas',
       kind: 'project',
       scope: ['org:acme', `resource:${resourceId}`],
     });
-    await knowledge.appendFact({
-      parentEntityId: entity.id,
+    await knowledge.appendItem({
+      parentNodeId: node.id,
       text: '[[Project Atlas]] launches January 15.',
       scope: ['org:acme', `resource:${resourceId}`],
-      sourceThreadId: threadIds[0]!,
+      sourceThreadId: 'source-thread',
       resolutionScope: ['org:acme', `resource:${resourceId}`, `thread:${threadIds[0]}`],
       defaultScope: ['org:acme', `resource:${resourceId}`],
     });
