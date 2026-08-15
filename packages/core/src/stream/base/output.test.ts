@@ -714,6 +714,12 @@ describe('MastraModelOutput', () => {
           from: ChunkFrom.AGENT,
           payload: {},
         },
+        {
+          type: 'text-delta',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { text: ' post-abort provider output' },
+        },
       ] as ChunkType[]);
 
       const output = new MastraModelOutput({
@@ -735,9 +741,9 @@ describe('MastraModelOutput', () => {
       expect(finishPayload).toMatchObject({
         finishReason: 'aborted',
       });
-      // Empty defaults keep the aborted callback payload contract-complete without
-      // reconstructing partial buffered state from a mid-flight canceled stream.
-      expect(finishPayload.text).toBe('');
+      // The abort payload snapshots only text buffered before the terminal abort chunk.
+      expect(finishPayload.text).toBe('partial answer');
+      expect(finishPayload.text).not.toContain('post-abort provider output');
       expect(finishPayload.toolCalls).toEqual([]);
       expect(finishPayload.toolResults).toEqual([]);
       expect(finishPayload.steps).toEqual([]);

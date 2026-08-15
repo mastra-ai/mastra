@@ -1382,7 +1382,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         expect(abortEvent).toBeDefined();
       });
 
-      it('should not persist full response to memory when stream is aborted mid-generation', async () => {
+      it('should persist only partial response when opted in and stream is aborted mid-generation', async () => {
         if (version === 'v1') return; // Only test for v2 (VNext) path
 
         const abortController = new AbortController();
@@ -1430,8 +1430,9 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
               rawCall: { rawPrompt: null, rawSettings: {} },
               warnings: [],
               stream: new ReadableStream({
-                pull(controller) {
+                async pull(controller) {
                   if (index < allChunks.length) {
+                    await new Promise(resolve => setTimeout(resolve, 5));
                     const chunk = allChunks[index++]!;
 
                     // Fire abort after a few text-delta chunks, but keep streaming
@@ -1469,6 +1470,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
 
         const stream = await agent.stream('Write a very long essay', {
           abortSignal: abortController.signal,
+          persistPartialOnAbort: true,
           memory: {
             thread: 'abort-test-thread',
             resource: 'abort-test-resource',
@@ -1520,6 +1522,8 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
           .join('');
 
         const allPersistedText = savedText + recalledText;
+
+        expect(allPersistedText).toContain('chunk-1 ');
 
         // The persisted text should NOT contain the later chunks that were generated
         // after the abort signal fired. The model produced all 20 chunks, but chunks

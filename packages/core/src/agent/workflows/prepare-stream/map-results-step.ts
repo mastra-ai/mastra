@@ -10,6 +10,7 @@ import { StructuredOutputProcessor } from '../../../processors';
 import type { RequestContext } from '../../../request-context';
 import type { Step } from '../../../workflows/step';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
+import type { MessageList } from '../../message-list';
 import type { SaveQueueManager } from '../../save-queue';
 import { getModelOutputForTripwire } from '../../trip-wire';
 import type { AgentMethodType } from '../../types';
@@ -24,6 +25,36 @@ import {
   PROCESSOR_STATES_KEY,
 } from './run-scope-keys';
 import type { AgentCapabilities, PrepareMemoryStepOutput, PrepareToolsStepOutput } from './schema';
+
+function getPartialAssistantText(payload: { text?: string }, messageList: MessageList, streamedText: string): string {
+  if (typeof payload.text === 'string' && payload.text.trim().length > 0) {
+    return payload.text;
+  }
+
+  if (streamedText.trim().length > 0) {
+    return streamedText;
+  }
+
+  return messageList.get.response
+    .db()
+    .filter(message => message.role === 'assistant')
+    .map(message => {
+      if (typeof message.content?.content === 'string') {
+        return message.content.content;
+      }
+      if (Array.isArray(message.content?.parts)) {
+        return message.content.parts
+          .filter(
+            (part): part is { type: 'text'; text: string } => part.type === 'text' && typeof part.text === 'string',
+          )
+          .map(part => part.text)
+          .join('');
+      }
+      return '';
+    })
+    .join('')
+    .trim();
+}
 
 interface MapResultsStepOptions<OUTPUT = undefined> {
   capabilities: AgentCapabilities;
@@ -73,6 +104,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
     const convertedTools = runScope.get(CONVERTED_TOOLS_KEY);
 
     let threadCreatedByStep = false;
+    let streamedText = '';
 
     const result = {
       ...options,
@@ -321,26 +353,66 @@ export function createMapResultsStep<OUTPUT = undefined>({
           }
 
           if (payload.finishReason === 'aborted') {
-            agentSpan?.end({
-              output: {
-                status: 'aborted',
-                reason: 'abort',
-              },
-            });
+            const partialText = getPartialAssistantText(payload, messageList, streamedText);
+            if (options.persistPartialOnAbort && partialText) {
+              try {
+                await capabilities.executeOnFinish({
+                  result: { ...payload, text: partialText },
+                  outputText: partialText,
+                  thread: result.thread,
+                  threadId: result.threadId,
+                  readOnlyMemory: memoryConfig?.readOnly,
+                  resourceId,
+                  memoryConfig,
+                  requestContext,
+                  agentSpan,
+                  runId,
+                  messageList,
+                  threadExists: memoryData.threadExists || threadCreatedByStep,
+                  structuredOutput: !!options.structuredOutput?.schema,
+                  overrideScorers: options.scorers,
+                  onTitleGenerated: options.memory?.onTitleGenerated,
+                  waitUntil: options.serverless?.waitUntil,
+                });
+
+                if (saveQueueManager && result.threadId && !memoryConfig?.readOnly) {
+                  await saveQueueManager.flushMessages(messageList, result.threadId, memoryConfig);
+                }
+              } catch (e) {
+                capabilities.logger.error('Error saving partial memory on abort', {
+                  error: e,
+                  runId,
+                });
+                agentSpan?.end({
+                  output: {
+                    status: 'aborted',
+                    reason: 'abort',
+                  },
+                });
+              }
+            } else {
+              agentSpan?.end({
+                output: {
+                  status: 'aborted',
+                  reason: 'abort',
+                },
+              });
+            }
             return;
           }
 
-          // Skip memory persistence when the abort signal has fired.
-          // The LLM response may have continued after the caller disconnected,
-          // and we should not persist a partial or full response for an aborted request.
+          // Skip memory persistence when the abort signal has fired unless the caller opted in.
+          // Providers may continue after cancellation, so only the captured partial text is eligible.
           const aborted = options.abortSignal?.aborted;
+          const partialText = getPartialAssistantText(payload, messageList, streamedText);
+          const shouldPersist = !aborted || (options.persistPartialOnAbort === true && partialText.length > 0);
 
-          if (!aborted) {
+          if (shouldPersist) {
             try {
               const outputText =
                 options.structuredOutput?.schema && payload.object != null
                   ? JSON.stringify(payload.object)
-                  : (payload.text ?? '');
+                  : partialText || payload.text || '';
 
               await capabilities.executeOnFinish({
                 result: payload,
@@ -354,12 +426,16 @@ export function createMapResultsStep<OUTPUT = undefined>({
                 agentSpan: agentSpan,
                 runId,
                 messageList,
-                threadExists: memoryData.threadExists,
+                threadExists: memoryData.threadExists || threadCreatedByStep,
                 structuredOutput: !!options.structuredOutput?.schema,
                 overrideScorers: options.scorers,
                 onTitleGenerated: options.memory?.onTitleGenerated,
                 waitUntil: options.serverless?.waitUntil,
               });
+
+              if (aborted && saveQueueManager && result.threadId && !memoryConfig?.readOnly) {
+                await saveQueueManager.flushMessages(messageList, result.threadId, memoryConfig);
+              }
             } catch (e) {
               capabilities.logger.error('Error saving memory on finish', {
                 error: e,
@@ -394,7 +470,12 @@ export function createMapResultsStep<OUTPUT = undefined>({
           });
         },
         onStepFinish: result.onStepFinish,
-        onChunk: options.onChunk,
+        onChunk: async (chunk: any) => {
+          if (chunk.type === 'text-delta') {
+            streamedText += chunk.payload.text;
+          }
+          await options.onChunk?.(chunk);
+        },
         onError: options.onError,
         onAbort: options.onAbort,
         abortSignal: options.abortSignal,
