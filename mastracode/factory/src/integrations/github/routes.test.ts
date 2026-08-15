@@ -6,6 +6,7 @@ import type { CreatePullRequestInput, ListPullRequestsInput } from '../../capabi
 import type { RouteAuth } from '../../routes/route.js';
 import { mountApiRoutes } from '../../routes/test-utils.js';
 import type { SandboxFleet } from '../../sandbox/fleet.js';
+import { SessionRetirementCoordinator } from '../../sandbox/session-retirement.js';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 // Mock drizzle's `eq`/`and` so the fake DB below can honour `where` predicates.
@@ -416,6 +417,7 @@ const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: 
 }));
 const removeWorktree = vi.fn(async (_sb: any, _workdir: string, _opts: { branch: string; worktreePath: string }) => {});
 const runWorktreeSetup = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
+const runWorktreeTeardown = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
 const commitAll = vi.fn(async () => ({ committed: true }));
 const pushBranch = vi.fn(async () => {});
 const createPullRequest = vi.fn(async (_input: CreatePullRequestInput) => ({
@@ -456,6 +458,8 @@ vi.mock('./sandbox', () => {
     ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
     removeWorktree: (sb: any, workdir: string, opts: any) => removeWorktree(sb, workdir, opts),
     runWorktreeSetup: (sb: any, worktreePath: string, command: string) => runWorktreeSetup(sb, worktreePath, command),
+    runWorktreeTeardown: (sb: any, worktreePath: string, command: string) =>
+      runWorktreeTeardown(sb, worktreePath, command),
     recycleClaimedWorkdir: (sb: any, workdir: string, defaultBranch: string) =>
       recycleClaimedWorkdir(sb, workdir, defaultBranch),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
@@ -595,6 +599,7 @@ function buildApp(
   options: {
     controller?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['controller'];
     stateSigner?: typeof stateSigner | null;
+    sessionRetirement?: SessionRetirementCoordinator;
   } = {},
 ) {
   const app = new Hono();
@@ -676,6 +681,7 @@ beforeEach(() => {
   ensureWorktree.mockClear();
   removeWorktree.mockClear();
   runWorktreeSetup.mockClear();
+  runWorktreeTeardown.mockClear();
   commitAll.mockClear();
   pushBranch.mockClear();
   createPullRequest.mockClear();
@@ -1853,31 +1859,52 @@ describe('Factory session routes', () => {
     expect(tables.sessions).toHaveLength(0);
   });
 
-  it('tears down the live controller session after deleting its row and before reclaiming its sandbox', async () => {
-    seedMaterializedProject();
-    const controller = { deleteSession: vi.fn(async () => {}) } as any;
-    const app = buildApp({ workosId: 'u1' }, { controller });
+  it('runs repository teardown before reclaiming and invalidates an explicitly deleted session', async () => {
+    seedMaterializedProject({ teardownCommand: 'docker compose down --remove-orphans' });
+    const order: string[] = [];
+    const controller = {
+      deleteSession: vi.fn(async () => {
+        order.push('controller');
+        expect(tables.sessions).toHaveLength(1);
+      }),
+    } as any;
+    const invalidateSession = vi.fn(async () => {
+      order.push('invalidate');
+    });
+    const sessionRetirement = new SessionRetirementCoordinator({
+      fleet: fleet as any,
+      invalidateSession,
+    });
+    const app = buildApp({ workosId: 'u1' }, { controller, sessionRetirement });
     const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
     const sessionId = (await created.json()).session.sessionId;
-    Object.assign(
-      tables.sessions.find(row => row.sessionId === sessionId)!,
-      {
-        sandboxId: 'sb-live',
-        sandboxWorkdir: '/workspace/hello',
-      },
-    );
-    controller.deleteSession.mockImplementation(async () => {
-      expect(tables.sessions).toHaveLength(0);
-      expect(reattachSandbox).not.toHaveBeenCalled();
+    Object.assign(tables.sessions.find(row => row.sessionId === sessionId)!, {
+      sandboxId: 'sb-live',
+      sandboxWorkdir: '/workspace/hello',
+    });
+    reattachSandbox.mockImplementationOnce(async () => {
+      order.push('reattach');
+      return { id: 'sb-live' } as any;
+    });
+    runWorktreeTeardown.mockImplementationOnce(async () => {
+      order.push('teardown');
+    });
+    recycleClaimedWorkdir.mockImplementationOnce(async () => {
+      order.push('reclaim');
     });
 
     const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
 
     expect(deleted.status).toBe(200);
     expect(controller.deleteSession).toHaveBeenCalledWith({ resourceId: sessionId });
-    await vi.waitFor(() =>
-      expect(reattachSandbox).toHaveBeenCalledWith('sb-live', { actingUserId: 'u1' }),
+    expect(runWorktreeTeardown).toHaveBeenCalledWith(
+      { id: 'sb-live' },
+      '/workspace/hello',
+      'docker compose down --remove-orphans',
     );
+    expect(invalidateSession).toHaveBeenCalledWith(sessionId);
+    expect(tables.sessions).toHaveLength(0);
+    expect(order).toEqual(['controller', 'reattach', 'teardown', 'reclaim', 'invalidate']);
   });
 
   it('does not tear down a controller session for an unauthorized deletion', async () => {

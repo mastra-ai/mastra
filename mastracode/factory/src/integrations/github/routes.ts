@@ -358,7 +358,7 @@ async function ingestPolledEvents(
  */
 export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[] {
   const routes: ApiRoute[] = [];
-  const { auth, fleet, storage, github, stateSigner, controller, emitAudit } = options;
+  const { auth, fleet, storage, github, stateSigner, controller, emitAudit, sessionRetirement } = options;
   const diagnostics = () =>
     getGithubFeatureDiagnostics({ github, auth, appDbConfigured: storage !== undefined, stateSigner, fleet });
 
@@ -960,7 +960,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   );
 
   // ── Sessions / commit / push / PR ────────────────────────────────────────
-  routes.push(...buildProjectGitRoutes({ github, auth, fleet, controller, emitAudit }));
+  routes.push(...buildProjectGitRoutes({ github, auth, fleet, controller, emitAudit, sessionRetirement }));
 
   return routes;
 }
@@ -1189,12 +1189,14 @@ function buildProjectGitRoutes({
   fleet,
   controller,
   emitAudit,
+  sessionRetirement,
 }: {
   github: GithubIntegration;
   auth: RouteAuth;
   fleet: SandboxFleet;
   controller?: MountedMastraCode['controller'];
   emitAudit?: AuditEmitter['emit'];
+  sessionRetirement?: MountGithubRoutesOptions['sessionRetirement'];
 }): ApiRoute[] {
   return [
     // ── Create / list Factory sessions ──────────────────────────────────────
@@ -1332,11 +1334,6 @@ function buildProjectGitRoutes({
         if (!session || session.orgId !== resolved.tenant.orgId || session.userId !== resolved.tenant.userId) {
           return c.json({ error: 'Session not found' }, 404);
         }
-        // Answer as soon as the workspace is actually gone. Reclaiming its
-        // sandbox wakes the VM and scrubs the checkout, which takes minutes on
-        // a large repository — the caller must not sit through that for a
-        // workspace that has already been removed.
-        await github.sourceControlStorage.sessions.delete(session.id);
         try {
           await controller?.deleteSession({ resourceId: session.sessionId });
         } catch (error) {
@@ -1345,17 +1342,27 @@ function buildProjectGitRoutes({
             error,
           });
         }
-        void reclaimDeletedSessionSandbox({
-          fleet,
-          sourceControl: github.sourceControlStorage,
-          session,
-        }).catch((error: unknown) => {
-          console.error('[GitHub Sessions] Failed to reclaim sandbox for deleted session', {
+        if (sessionRetirement) {
+          await sessionRetirement.retireSession({
+            sourceControl: github.sourceControlStorage,
+            orgId: session.orgId,
             sessionId: session.sessionId,
-            sandboxId: session.sandboxId,
-            error,
+            deleteSession: true,
           });
-        });
+        } else {
+          await github.sourceControlStorage.sessions.delete(session.id);
+          void reclaimDeletedSessionSandbox({
+            fleet,
+            sourceControl: github.sourceControlStorage,
+            session,
+          }).catch((error: unknown) => {
+            console.error('[GitHub Sessions] Failed to reclaim sandbox for deleted session', {
+              sessionId: session.sessionId,
+              sandboxId: session.sandboxId,
+              error,
+            });
+          });
+        }
         return c.json({ removed: true });
       },
     }),
