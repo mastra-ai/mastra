@@ -3,6 +3,7 @@ import { createClient } from '@libsql/client';
 import { TABLE_KNOWLEDGE_RECORDS } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 
+import { withClientWriteLock } from '../../db/write-lock';
 import { KnowledgeLibSQL } from '.';
 
 createKnowledgeStorageTests(() => new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' }));
@@ -30,6 +31,43 @@ describe('KnowledgeLibSQL initialization', () => {
     } finally {
       firstClient.close();
       secondClient.close();
+    }
+  });
+
+  it('queues curation cursor writes behind a locked transaction on the same client', async () => {
+    const client = createClient({ url: 'file::memory:?cache=shared' });
+    try {
+      const store = new KnowledgeLibSQL({ client });
+      await store.init();
+      await store.dangerouslyClearAll();
+
+      let releaseLock!: () => void;
+      const lockReleased = new Promise<void>(resolve => {
+        releaseLock = resolve;
+      });
+      const lockedWrite = withClientWriteLock(client, async () => {
+        const transaction = await client.transaction('write');
+        await transaction.execute('SELECT 1');
+        await lockReleased;
+        await transaction.commit();
+      });
+
+      let cursorAdvanced = false;
+      const advance = store
+        .advanceCurationCursor({ sourceThreadId: 'thread-1', agent: 'capture', lastItemId: 'item-1' })
+        .then(() => {
+          cursorAdvanced = true;
+        });
+      await new Promise(resolve => setTimeout(resolve, 10));
+      expect(cursorAdvanced).toBe(false);
+
+      releaseLock();
+      await Promise.all([lockedWrite, advance]);
+      expect(await store.getCurationCursor({ sourceThreadId: 'thread-1', agent: 'capture' })).toEqual(
+        expect.objectContaining({ lastItemId: 'item-1' }),
+      );
+    } finally {
+      client.close();
     }
   });
 

@@ -39,6 +39,9 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       await store.createNode({ name: 'Underscore secret', kind: 'secret', scope: ['org:acme_'] });
 
       expect(await store.listNodes({ scope: ['org:acmeX', 'resource:secret'] })).toEqual([]);
+      await expect(
+        store.createNode({ name: 'Separator secret', kind: 'secret', scope: ['org:acme\u001fresource:secret'] }),
+      ).rejects.toThrow('Invalid knowledge scope entry');
     });
 
     it('applies item visibility independently from parent node identity scope', async () => {
