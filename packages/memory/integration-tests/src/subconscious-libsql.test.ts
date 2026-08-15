@@ -510,9 +510,9 @@ describe('Subconscious LibSQL integration', () => {
     expect(await knowledge.getCurationCursor({ sourceThreadId: threadId, agent: 'curate' })).toMatchObject({
       lastItemId: item.id,
     });
-    await expect(
-      knowledge.updateNode({ id: node.id, version: node.version + 1, name: 'Stale Atlas' }),
-    ).rejects.toThrow('version');
+    await expect(knowledge.updateNode({ id: node.id, version: node.version + 1, name: 'Stale Atlas' })).rejects.toThrow(
+      'version',
+    );
 
     await knowledge.removeItem({ id: item.id, deletedBy: 'subconscious:curate' });
     expect(await knowledge.getItem({ id: item.id })).toBeNull();
