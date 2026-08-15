@@ -5081,6 +5081,15 @@ export class Agent<
 
               const { resumeData, suspend } = context?.agent ?? {};
 
+              // Only resume when there is actually a suspended run to resume.
+              // resumeData is an optional field on the delegation tool schema
+              // and models fill it unprompted even when nothing is suspended;
+              // with no suspendedToolRunId the resume call has no run to load
+              // and throws AGENT_RESUME_NO_SNAPSHOT_FOUND, surfacing to the
+              // user as an opaque delegation failure (issue #21608). Fall
+              // through to the fresh generate/stream path in that case.
+              const shouldResume = Boolean(resumeData && suspendedToolRunId);
+
               // Apply messageFilter callback (runs after onDelegationStart so effectivePrompt
               // reflects any hook modifications). Falls back to full context on error.
               let filteredContextMessages = sanitizedMessages;
@@ -5170,7 +5179,7 @@ export class Agent<
                 (methodType === 'generate' || methodType === 'generateLegacy') &&
                 supportedLanguageModelSpecifications.includes(resolvedModelVersion)
               ) {
-                const generateResult = resumeData
+                const generateResult = shouldResume
                   ? await resolvedAgent.resumeGenerate(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext: subAgentRequestContext,
@@ -5262,7 +5271,7 @@ export class Agent<
                 (methodType === 'stream' || methodType === 'streamLegacy') &&
                 supportedLanguageModelSpecifications.includes(resolvedModelVersion)
               ) {
-                const streamResult = resumeData
+                const streamResult = shouldResume
                   ? await resolvedAgent.resumeStream(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext: subAgentRequestContext,
@@ -5713,10 +5722,17 @@ export class Agent<
               const run = await workflow.createRun({ runId: runIdToUse, resourceId });
               const { resumeData, suspend } = context?.agent ?? {};
 
+              // Same guard as the sub-agent delegation path (issue #21608):
+              // resumeData alone must not select the resume path when no
+              // suspended run exists -- runIdToUse is a fresh UUID in that
+              // case and resuming it would throw on a snapshot that never
+              // existed. Fall back to a fresh start.
+              const shouldResume = Boolean(resumeData && suspendedToolRunId);
+
               let result: WorkflowResult<any, any, any, any> | undefined = undefined;
 
               if (methodType === 'generate' || methodType === 'generateLegacy') {
-                if (resumeData) {
+                if (shouldResume) {
                   result = await run.resume({
                     resumeData,
                     requestContext,
@@ -5750,7 +5766,7 @@ export class Agent<
 
                 result = await streamResult.getWorkflowState();
               } else if (methodType === 'stream') {
-                const streamResult = resumeData
+                const streamResult = shouldResume
                   ? run.resumeStream({
                       resumeData,
                       requestContext,
