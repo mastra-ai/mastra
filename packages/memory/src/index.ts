@@ -363,8 +363,9 @@ export class Memory extends MastraMemory {
     const observation = (omConfig.observation ?? {}) as NonNullable<ObservationalMemoryConfig['observation']>;
     const extract = observation.extract ?? [];
     const existingSlugs = new Set(extract.map(extractor => extractor.slug));
+    const omModel = observation.model ?? omConfig.model;
     const subconsciousExtractors = omConfig.experimental_subconscious
-      .createObservationExtractors(observation.model ?? omConfig.model)
+      .createObservationExtractors(omModel, { createRemindMemory: () => this.getSubconsciousRemindMemory(omModel) })
       .filter(extractor => !existingSlugs.has(extractor.slug));
 
     return {
@@ -381,6 +382,27 @@ export class Memory extends MastraMemory {
 
   /** Threads with a curation currently in flight in this process; guards same-process double-fire only. */
   private _curationsInFlight = new Set<string>();
+
+  private _remindMemory?: Memory;
+
+  /**
+   * The Memory backing the reminder agent's own conversation, one thread per main-agent session
+   * (`subconscious:<threadId>:remind`), built lazily and shared across sessions — observational
+   * memory keys its record and its locks by thread, never by instance.
+   *
+   * Deliberately unlike the curate and learn memories, which pass `observationalMemory: false`:
+   * that kills compression and reflection to stop a regress only Subconscious could cause. Omitting
+   * `experimental_subconscious` is the narrower guard — with the key absent, the extractor injection
+   * and the reflection handlers above never run for this Memory, so its thread gets a real
+   * observational memory and spawns no nested subconscious agents.
+   */
+  private getSubconsciousRemindMemory(omModel?: ObservationalMemoryConfig['model']): Memory {
+    this._remindMemory ??= new Memory({
+      storage: this.storage,
+      options: { observationalMemory: { model: omModel } },
+    });
+    return this._remindMemory;
+  }
 
   /**
    * Run the subconscious curator directly over the pending fact worklist, without a reflection.

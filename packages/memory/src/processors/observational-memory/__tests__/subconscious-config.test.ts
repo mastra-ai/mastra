@@ -150,6 +150,40 @@ describe('Subconscious configuration', () => {
     expect(getExtractors(memory)).toEqual([]);
   });
 
+  it('builds the reminder memory with observational memory on and Subconscious omitted', () => {
+    const memory = new Memory({
+      storage: new InMemoryStore(),
+      ...semanticInfrastructure,
+      options: {
+        observationalMemory: { model, experimental_subconscious: new Subconscious() },
+      },
+    });
+
+    const remindMemory = (memory as any).getSubconsciousRemindMemory(model) as Memory;
+    const remindOm = remindMemory.getMergedThreadConfig().observationalMemory as Record<string, unknown>;
+
+    // Not the `observationalMemory: false` sledgehammer the curate and learn memories use: the
+    // reminder thread gets real compression and reflection.
+    expect(remindOm).toBeTruthy();
+    expect(remindOm).not.toBe(false);
+    expect(remindOm.model).toBe(model);
+    // Omitting the key is the entire recursion guard — no nested subconscious on this thread.
+    expect('experimental_subconscious' in remindOm).toBe(false);
+    expect(getExtractors(remindMemory)).toEqual([]);
+  });
+
+  it('reuses one reminder memory instance, since sessions are separated by thread key', () => {
+    const memory = new Memory({
+      storage: new InMemoryStore(),
+      ...semanticInfrastructure,
+      options: {
+        observationalMemory: { model, experimental_subconscious: new Subconscious() },
+      },
+    });
+
+    expect((memory as any).getSubconsciousRemindMemory(model)).toBe((memory as any).getSubconsciousRemindMemory(model));
+  });
+
   it('does not alter observational memory when Subconscious is absent', () => {
     const memory = new Memory({
       storage: new InMemoryStore(),

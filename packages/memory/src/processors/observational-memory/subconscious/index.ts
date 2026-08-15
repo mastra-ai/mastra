@@ -3,6 +3,7 @@ import type { ObservationalMemoryModel } from '../types';
 import { SubconsciousCaptureExtractor } from './capture';
 import { DEFAULT_MAX_PINS, DEFAULT_PINNED_MAX_CHARACTERS, MAX_PINNED_MAX_CHARACTERS } from './pinned';
 import { SubconsciousRemindExtractor } from './remind';
+import type { SubconsciousRemindOptions } from './remind';
 import type {
   ResolvedSubconsciousAgent,
   ResolvedSubconsciousConfig,
@@ -146,7 +147,10 @@ export class Subconscious {
     });
   }
 
-  createObservationExtractors(omModel?: ObservationalMemoryModel): Extractor<any>[] {
+  createObservationExtractors(
+    omModel?: ObservationalMemoryModel,
+    options?: SubconsciousRemindOptions,
+  ): Extractor<any>[] {
     const extractors: Extractor<any>[] = [];
     for (const entry of this.config.observation ?? []) {
       const name = entryName(entry);
@@ -163,7 +167,7 @@ export class Subconscious {
         );
       } else if (name === 'remind') {
         const resolved = this.resolved.observation.find(agent => agent.name === name);
-        if (resolved) extractors.push(new SubconsciousRemindExtractor(resolved, omModel));
+        if (resolved) extractors.push(new SubconsciousRemindExtractor(resolved, omModel, options));
       } else if (!BUILT_IN_OBSERVATION.has(name)) {
         const custom = entry as SubconsciousCustomObservationConfig;
         extractors.push(

@@ -2,6 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import type { KnowledgeScope, KnowledgeStorage, SearchKnowledgeResult } from '@mastra/core/storage';
 import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
 
+import type { Memory } from '../../..';
 import { Extractor } from '../extractor';
 import type { ObservationalMemoryModel } from '../types';
 import { publishSubconsciousActivity } from './activity';
@@ -102,8 +103,21 @@ async function dropFreshOwnItems(
   return sources.filter((_, index) => checks[index]);
 }
 
+export interface SubconsciousRemindOptions {
+  /**
+   * Returns the Memory that backs the reminder agent's own conversation. Called on demand so a
+   * session that never reminds never builds one; the owner caches the instance, and per-session
+   * identity is carried by the thread key alone, not by the instance.
+   */
+  createRemindMemory?: () => Memory;
+}
+
 export class SubconsciousRemindExtractor extends Extractor<string> {
-  constructor(config: ResolvedSubconsciousAgent, omModel?: ObservationalMemoryModel) {
+  constructor(
+    config: ResolvedSubconsciousAgent,
+    omModel?: ObservationalMemoryModel,
+    options?: SubconsciousRemindOptions,
+  ) {
     super({
       name: 'Remind',
       mode: 'hook',
@@ -132,11 +146,15 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
             requestContext: context.requestContext,
           });
           if (!model) return;
+          // One reminder conversation per main-agent session. The thread key is derived from the
+          // PARENT thread id, not from the agent id above, and matches the curate/learn convention.
+          const remindMemory = options?.createRemindMemory?.();
           const agent = new Agent({
             id: `subconscious-remind-${context.threadId}`,
             name: 'Subconscious Remind',
             instructions: [DEFAULT_INSTRUCTIONS, config.instructions?.trim()].filter(Boolean).join('\n\n'),
             model,
+            ...(remindMemory ? { memory: remindMemory } : {}),
             tools: createKnowledgeTools(context.memory, scope),
           });
           const recentMessagesSection = context.recentMessages?.trim()
@@ -148,6 +166,16 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
               requestContext: context.requestContext,
               abortSignal: context.abortSignal,
               maxSteps: config.maxSteps,
+              ...(remindMemory
+                ? {
+                    memory: {
+                      thread: `subconscious:${context.threadId}:remind`,
+                      // A reminder always has a thread; a resource is optional on the observation
+                      // path, so fall back to the thread to keep the conversation addressable.
+                      resource: context.resourceId ?? context.threadId,
+                    },
+                  }
+                : {}),
             },
           );
           const reminder = result.text.trim();

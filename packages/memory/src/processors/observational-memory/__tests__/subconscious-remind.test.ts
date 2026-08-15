@@ -390,6 +390,175 @@ describe('Subconscious remind', () => {
     expect(context.sendSignal).not.toHaveBeenCalled();
   });
 
+  describe('continuity: the reminder agent keeps one conversation per session', () => {
+    async function seedRelevantItem(context: ReturnType<typeof createContext>) {
+      const store = await context.memory.storage.getStore('knowledge');
+      const node = await store.createNode({
+        name: 'Project Atlas',
+        kind: 'project',
+        scope: ['org:acme', 'resource:user-42'],
+      });
+      return store.appendItem({
+        parentNodeId: node.id,
+        text: 'Project Atlas launches January 15.',
+        scope: ['org:acme', 'resource:user-42'],
+        sourceThreadId: 'beta',
+        resolutionScope: ['org:acme', 'resource:user-42', 'thread:beta'],
+        defaultScope: ['org:acme', 'resource:user-42'],
+      });
+    }
+
+    /** Runs the hook with `generate` stubbed, so the assertions are about wiring, not model output. */
+    async function runWithGenerateSpy(options: {
+      createRemindMemory?: () => any;
+      threadId?: string;
+      response?: string;
+    }) {
+      const { Agent } = await import('@mastra/core/agent');
+      const generateSpy = vi
+        .spyOn(Agent.prototype, 'generate' as any)
+        .mockResolvedValue({ text: options.response ?? '<no-reminder />' } as any);
+      try {
+        const extractor = new SubconsciousRemindExtractor({ name: 'remind', maxSteps: 3, builtIn: true }, undefined, {
+          createRemindMemory: options.createRemindMemory,
+        });
+        const context = createContext('unused');
+        if (options.threadId) context.threadId = options.threadId;
+        await seedRelevantItem(context);
+
+        const result = await applyExtractorHooks({
+          source: 'observer',
+          extractors: [extractor],
+          rawObservations: 'The user is scheduling Project Atlas.',
+          ...context,
+        });
+
+        // Snapshot the recorded calls before restoring — mockRestore clears them.
+        return {
+          result,
+          context,
+          calls: [...generateSpy.mock.calls] as any[][],
+          agents: [...((generateSpy.mock as any).contexts ?? [])],
+        };
+      } finally {
+        generateSpy.mockRestore();
+      }
+    }
+
+    it('generates against the shared remind thread derived from the parent thread id', async () => {
+      const remindMemory = { id: 'remind-memory' } as any;
+      const { result, calls } = await runWithGenerateSpy({ createRemindMemory: () => remindMemory });
+
+      expect(result.failures).toBeUndefined();
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.[1]).toMatchObject({
+        memory: { thread: 'subconscious:alpha:remind', resource: 'user-42' },
+      });
+    });
+
+    it('keys the thread off the parent thread id, never off the agent id', async () => {
+      const { calls } = await runWithGenerateSpy({
+        createRemindMemory: () => ({}) as any,
+        threadId: 'gamma',
+      });
+
+      const thread = (calls[0]?.[1] as any).memory.thread;
+      expect(thread).toBe('subconscious:gamma:remind');
+      // The agent id convention is `subconscious-remind-<threadId>`; confusing the two produces a
+      // thread that looks plausible and groups wrongly.
+      expect(thread).not.toContain('subconscious-remind-');
+    });
+
+    it('hands the reminder agent the memory its owner built', async () => {
+      const remindMemory = { id: 'remind-memory' } as any;
+      const createRemindMemory = vi.fn(() => remindMemory);
+      const { agents } = await runWithGenerateSpy({ createRemindMemory });
+
+      expect(createRemindMemory).toHaveBeenCalledOnce();
+      const agent = agents[0] as any;
+      expect(await agent.getMemory()).toBe(remindMemory);
+    });
+
+    it('passes the same thread on every run, so passive reminders and questions share one conversation', async () => {
+      const first = await runWithGenerateSpy({ createRemindMemory: () => ({}) as any });
+      const second = await runWithGenerateSpy({ createRemindMemory: () => ({}) as any });
+
+      expect((first.calls[0]?.[1] as any).memory.thread).toBe((second.calls[0]?.[1] as any).memory.thread);
+    });
+
+    it('omits the memory option entirely when no remind memory is available', async () => {
+      const { result, calls } = await runWithGenerateSpy({});
+
+      expect(result.failures).toBeUndefined();
+      expect(calls[0]?.[1]).not.toHaveProperty('memory');
+    });
+
+    it('still drops the thread\u2019s own fresh items when a remind memory is attached', async () => {
+      const extractor = new SubconsciousRemindExtractor({ name: 'remind', maxSteps: 3, builtIn: true }, undefined, {
+        createRemindMemory: () => ({}) as any,
+      });
+      const context = createContext('The launch happens January 15.');
+      const store = await context.memory.storage.getStore('knowledge');
+      const node = await store.createNode({
+        name: 'Zeta initiative',
+        kind: 'program',
+        scope: ['org:acme', 'resource:user-42'],
+      });
+      await store.appendItem({
+        parentNodeId: node.id,
+        text: 'The launch happens January 15.',
+        scope: ['org:acme', 'resource:user-42'],
+        sourceThreadId: 'alpha',
+        resolutionScope: ['org:acme', 'resource:user-42', 'thread:alpha'],
+        defaultScope: ['org:acme', 'resource:user-42'],
+      });
+
+      const result = await applyExtractorHooks({
+        source: 'observer',
+        extractors: [extractor],
+        rawObservations: 'The user is scheduling the launch.',
+        ...context,
+      });
+
+      // Continuity fixes repetition; freshness is a different failure and its guard must survive.
+      expect(result.failures).toBeUndefined();
+      expect(context.sendSignal).not.toHaveBeenCalled();
+    });
+
+    it('keeps the no-reminder contract when a remind memory is attached', async () => {
+      const { result, context } = await runWithGenerateSpy({ createRemindMemory: () => ({}) as any });
+
+      expect(result.failures).toBeUndefined();
+      expect(context.sendSignal).not.toHaveBeenCalled();
+    });
+
+    it('routes a remind memory construction failure into the extractor failure path', async () => {
+      const extractor = new SubconsciousRemindExtractor({ name: 'remind', maxSteps: 3, builtIn: true }, undefined, {
+        createRemindMemory: () => {
+          throw new Error('remind memory unavailable');
+        },
+      });
+      const context = createContext('Project Atlas launches January 15.');
+      await seedRelevantItem(context);
+
+      const result = await applyExtractorHooks({
+        source: 'observer',
+        extractors: [extractor],
+        rawObservations: 'The user is scheduling Project Atlas.',
+        ...context,
+      });
+
+      expect(result.failures).toEqual([{ slug: 'remind', error: 'remind memory unavailable' }]);
+      expect(context.sendSignal).not.toHaveBeenCalled();
+      expect(context.sendStateSignal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'subconscious-activity',
+          value: expect.objectContaining({ errors: ['remind: remind memory unavailable'] }),
+        }),
+      );
+    });
+  });
+
   it('isolates reminder failures from the observation lifecycle', async () => {
     const extractor = new SubconsciousRemindExtractor({
       name: 'remind',
