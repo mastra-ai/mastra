@@ -538,7 +538,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
         results.push({
           type: 'item',
           id: fact.id,
-          recordId: parentVisible ? fact.parentNodeId : fact.id,
+          recordId: fact.parentNodeId,
           name: parentVisible ? parent.name : '(private entity)',
           text: fact.text,
           scope: cloneScope(fact.scope),
