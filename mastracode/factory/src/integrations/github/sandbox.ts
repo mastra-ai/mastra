@@ -857,7 +857,7 @@ export async function commitAll(
 export class WorktreeError extends Error {
   constructor(
     message: string,
-    readonly code: 'invalid-branch' | 'worktree-failed' | 'setup-failed',
+    readonly code: 'invalid-branch' | 'worktree-failed' | 'setup-failed' | 'teardown-failed',
   ) {
     super(message);
     this.name = 'WorktreeError';
@@ -997,16 +997,50 @@ export async function ensureWorktree(
  * @param worktreePath  the server-computed worktree path the command runs in
  * @param command       the org-configured setup shell command
  */
+async function runWorktreeLifecycleCommand(
+  sandbox: MaterializationSandbox,
+  worktreePath: string,
+  command: string,
+  options: { phase: 'setup' | 'teardown'; timeoutMs?: number },
+): Promise<void> {
+  const result = await sh(sandbox, `cd ${shellQuote(worktreePath)} && { ${command}\n}`, {
+    phase: `worktree ${options.phase}`,
+    ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+  });
+  if (result.exitCode !== 0) {
+    const detail = (result.stderr.trim() || result.stdout.trim()).slice(-1800);
+    const label = options.phase === 'setup' ? 'Setup' : 'Teardown';
+    throw new WorktreeError(
+      `${label} command failed (exit ${result.exitCode}): ${detail}`,
+      options.phase === 'setup' ? 'setup-failed' : 'teardown-failed',
+    );
+  }
+}
+
 export async function runWorktreeSetup(
   sandbox: MaterializationSandbox,
   worktreePath: string,
   command: string,
 ): Promise<void> {
-  const result = await sh(sandbox, `cd ${shellQuote(worktreePath)} && { ${command}\n}`, { phase: 'worktree setup' });
-  if (result.exitCode !== 0) {
-    const detail = (result.stderr.trim() || result.stdout.trim()).slice(-2000);
-    throw new WorktreeError(`Setup command failed (exit ${result.exitCode}): ${detail}`, 'setup-failed');
-  }
+  return runWorktreeLifecycleCommand(sandbox, worktreePath, command, { phase: 'setup' });
+}
+
+/**
+ * Run the repository's best-effort teardown command from the materialized
+ * session workdir. Callers own lifecycle policy: this helper reports failures
+ * so the retirement coordinator can log them while still continuing with
+ * scrub, pooling/destruction, cache invalidation, and row deletion.
+ */
+export async function runWorktreeTeardown(
+  sandbox: MaterializationSandbox,
+  worktreePath: string,
+  command: string,
+  options: { timeoutMs?: number } = {},
+): Promise<void> {
+  return runWorktreeLifecycleCommand(sandbox, worktreePath, command, {
+    phase: 'teardown',
+    ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+  });
 }
 
 /**

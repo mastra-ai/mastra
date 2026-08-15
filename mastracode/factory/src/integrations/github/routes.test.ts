@@ -106,6 +106,7 @@ function projectRepositoryRow(row: Record<string, any>) {
     sandboxProvider: row.sandboxProvider ?? 'railway',
     sandboxWorkdir: row.sandboxWorkdir,
     setupCommand: row.setupCommand ?? null,
+    teardownCommand: row.teardownCommand ?? null,
     createdAt: now,
     updatedAt: now,
   };
@@ -1387,7 +1388,9 @@ describe('ensure (materialize)', () => {
 });
 
 // ── Phase 4: worktree / commit / push / pr git routes ─────────────────────
-function seedMaterializedProject(opts: { orgId?: string; userId?: string; setupCommand?: string | null } = {}) {
+function seedMaterializedProject(
+  opts: { orgId?: string; userId?: string; setupCommand?: string | null; teardownCommand?: string | null } = {},
+) {
   const orgId = opts.orgId ?? 'org1';
   const userId = opts.userId ?? 'u1';
   tables.projectRepositories.push(
@@ -1401,6 +1404,7 @@ function seedMaterializedProject(opts: { orgId?: string; userId?: string; setupC
       defaultBranch: 'main',
       sandboxWorkdir: '/workspace/hello',
       setupCommand: opts.setupCommand ?? null,
+      teardownCommand: opts.teardownCommand ?? null,
     }),
   );
   tables.sandboxes.push(
@@ -1595,34 +1599,54 @@ describe('project settings routes', () => {
     expect(res.status).toBe(404);
   });
 
-  it('returns the stored setup command', async () => {
-    seedMaterializedProject({ setupCommand: 'pnpm i && pnpm build' });
+  it('returns the stored lifecycle commands', async () => {
+    seedMaterializedProject({
+      setupCommand: 'pnpm i && pnpm build',
+      teardownCommand: 'docker compose down --remove-orphans',
+    });
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/settings');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ setupCommand: 'pnpm i && pnpm build' });
+    expect(await res.json()).toEqual({
+      setupCommand: 'pnpm i && pnpm build',
+      teardownCommand: 'docker compose down --remove-orphans',
+    });
   });
 
-  it('persists a trimmed setup command', async () => {
+  it('persists trimmed lifecycle commands', async () => {
     seedMaterializedProject();
     const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/settings', {
       setupCommand: '  pnpm i && pnpm build  ',
+      teardownCommand: '  docker compose down --remove-orphans  ',
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ setupCommand: 'pnpm i && pnpm build' });
+    expect(await res.json()).toEqual({
+      setupCommand: 'pnpm i && pnpm build',
+      teardownCommand: 'docker compose down --remove-orphans',
+    });
     expect(tables.projectRepositories[0].setupCommand).toBe('pnpm i && pnpm build');
+    expect(tables.projectRepositories[0].teardownCommand).toBe('docker compose down --remove-orphans');
   });
 
-  it('clears the setup command with an empty string or null', async () => {
-    seedMaterializedProject({ setupCommand: 'pnpm i' });
+  it('clears lifecycle commands with an empty string or null', async () => {
+    seedMaterializedProject({ setupCommand: 'pnpm i', teardownCommand: 'pnpm teardown' });
     const app = buildApp({ workosId: 'u1' });
-    const res = await postJson(app, '/web/github/projects/p1/settings', { setupCommand: '   ' });
-    expect(await res.json()).toEqual({ setupCommand: null });
+    const res = await postJson(app, '/web/github/projects/p1/settings', {
+      setupCommand: '   ',
+      teardownCommand: '   ',
+    });
+    expect(await res.json()).toEqual({ setupCommand: null, teardownCommand: null });
     expect(tables.projectRepositories[0].setupCommand).toBeNull();
+    expect(tables.projectRepositories[0].teardownCommand).toBeNull();
 
     tables.projectRepositories[0].setupCommand = 'pnpm i';
-    const res2 = await postJson(app, '/web/github/projects/p1/settings', { setupCommand: null });
-    expect(await res2.json()).toEqual({ setupCommand: null });
+    tables.projectRepositories[0].teardownCommand = 'pnpm teardown';
+    const res2 = await postJson(app, '/web/github/projects/p1/settings', {
+      setupCommand: null,
+      teardownCommand: null,
+    });
+    expect(await res2.json()).toEqual({ setupCommand: null, teardownCommand: null });
     expect(tables.projectRepositories[0].setupCommand).toBeNull();
+    expect(tables.projectRepositories[0].teardownCommand).toBeNull();
   });
 
   it('400s on a non-string setup command', async () => {

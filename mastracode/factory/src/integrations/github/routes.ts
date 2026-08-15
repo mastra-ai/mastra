@@ -129,6 +129,7 @@ export interface MountGithubRoutesOptions {
   emitAudit?: AuditEmitter['emit'];
   /** Factory projects domain — resolves a project's default triage model. */
   projects?: FactoryProjectsStorage;
+  sessionRetirement?: import('../../sandbox/session-retirement.js').SessionRetirementCoordinator;
   /** Authoritative Factory rule ingress for normalized, signature-verified GitHub deliveries. */
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
 }
@@ -833,7 +834,10 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
       handler: async c => {
         const loaded = await loadOrgProject({ github, auth, c: loose(c) });
         if ('response' in loaded) return loaded.response;
-        return c.json({ setupCommand: loaded.project.setupCommand });
+        return c.json({
+          setupCommand: loaded.project.setupCommand,
+          teardownCommand: loaded.project.teardownCommand,
+        });
       },
     }),
   );
@@ -847,36 +851,50 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         const loaded = await loadOrgProject({ github, auth, c: loose(c) });
         if ('response' in loaded) return loaded.response;
 
-        let body: { setupCommand?: unknown };
+        let body: { setupCommand?: unknown; teardownCommand?: unknown };
         try {
           body = await c.req.json();
         } catch {
           return c.json({ error: 'Invalid JSON body' }, 400);
         }
-        if (body.setupCommand !== null && typeof body.setupCommand !== 'string') {
-          return c.json({ error: 'Invalid setupCommand' }, 400);
+
+        const commands = ['setupCommand', 'teardownCommand'] as const;
+        for (const command of commands) {
+          const value = body[command];
+          if (value === undefined) continue;
+          if (value !== null && typeof value !== 'string') {
+            return c.json({ error: `Invalid ${command}` }, 400);
+          }
+          if (typeof value === 'string' && value.length > 2000) {
+            return c.json({ error: `${command} too long (max 2000 characters)` }, 400);
+          }
+          // Reject control characters (except newline/tab). Commands are shell
+          // scripts by design, but escape sequences and NULs can spoof logs or
+          // confuse the sandbox shell.
+          if (typeof value === 'string' && /[\0-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value)) {
+            return c.json({ error: `${command} contains control characters` }, 400);
+          }
         }
-        if (typeof body.setupCommand === 'string' && body.setupCommand.length > 2000) {
-          return c.json({ error: 'setupCommand too long (max 2000 characters)' }, 400);
-        }
-        // Reject control characters (except newline/tab). The command is a
-        // shell script by design, but escape sequences and NULs have no
-        // legitimate use and can spoof logs or confuse the sandbox shell.
-        if (typeof body.setupCommand === 'string' && /[\0-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(body.setupCommand)) {
-          return c.json({ error: 'setupCommand contains control characters' }, 400);
-        }
-        // An empty/whitespace command means "no setup step".
-        const setupCommand =
-          typeof body.setupCommand === 'string' && body.setupCommand.trim().length > 0
-            ? body.setupCommand.trim()
-            : null;
+
+        const normalizeCommand = (value: unknown): string | null | undefined => {
+          if (value === undefined) return undefined;
+          return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+        };
+        const setupCommand = normalizeCommand(body.setupCommand);
+        const teardownCommand = normalizeCommand(body.teardownCommand);
 
         await github.sourceControlStorage.projectRepositories.update({
           orgId: loaded.project.installation.orgId,
           id: loaded.project.id,
-          input: { setupCommand },
+          input: {
+            ...(setupCommand !== undefined ? { setupCommand } : {}),
+            ...(teardownCommand !== undefined ? { teardownCommand } : {}),
+          },
         });
-        return c.json({ setupCommand });
+        return c.json({
+          setupCommand: setupCommand === undefined ? loaded.project.setupCommand : setupCommand,
+          teardownCommand: teardownCommand === undefined ? loaded.project.teardownCommand : teardownCommand,
+        });
       },
     }),
   );
