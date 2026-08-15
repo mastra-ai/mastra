@@ -19,7 +19,7 @@ import type { SingleStepEntry, StepFlowEntry, StepResult } from '../types';
 import {
   validateStepInput,
   createDeprecationProxy,
-  omitPriorCompletionFields,
+  omitPriorSuspensionFields,
   runCountDeprecationMessage,
   validateStepSuspendData,
 } from '../utils';
@@ -105,7 +105,7 @@ export class StepExecutor extends MastraBase {
       resumedAt?: number;
       [key: string]: any;
     } = {
-      ...omitPriorCompletionFields((stepResults[stepId] ?? {}) as Record<string, unknown>),
+      ...stepResults[stepId],
       startedAt,
       payload: (typeof params.foreachIdx === 'number' ? params.input : inputData) ?? {},
     };
@@ -276,7 +276,7 @@ export class StepExecutor extends MastraBase {
       // Use stateUpdate if setState was called, otherwise use original state
       const finalState = stateUpdate ?? params.state;
 
-      const baseStepInfo = omitPriorCompletionFields(stepInfo) as typeof stepInfo;
+      const baseStepInfo = omitPriorSuspensionFields(stepInfo) as typeof stepInfo;
       let finalResult: StepResult<any, any, any, any> & { __state?: Record<string, any> };
       if (suspended) {
         finalResult = {
@@ -346,7 +346,7 @@ export class StepExecutor extends MastraBase {
       this.logger?.error(`Error executing step ${stepId}: ` + errorInstance?.stack);
 
       return {
-        ...(omitPriorCompletionFields(stepInfo) as typeof stepInfo),
+        ...(omitPriorSuspensionFields(stepInfo) as typeof stepInfo),
         status: 'failed',
         endedAt,
         error: errorInstance,
