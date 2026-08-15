@@ -182,7 +182,7 @@ export type RecordTypes = {
   mastra_thread_state: Record<string, any>;
   mastra_workflow_definitions: Record<string, any>;
   mastra_knowledge_records: Record<string, any>;
-  mastra_knowledge_facts: Record<string, any>;
+  mastra_knowledge_items: Record<string, any>;
   mastra_knowledge_mentions: Record<string, any>;
   mastra_knowledge_cursors: Record<string, any>;
   mastra_knowledge_activity: Record<string, any>;

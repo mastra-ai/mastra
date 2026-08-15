@@ -12,9 +12,9 @@ import type { ResolvedSubconsciousAgent, ResolvedSubconsciousConfig } from './ty
 const CURATION_AGENT = 'curate';
 const DEFAULT_INSTRUCTIONS = `Maintain durable scoped knowledge from the committed observation worklist.
 
-Use the read tools to inspect existing entities, facts, mentions, backlinks, and pages. Use the write tools to merge true duplicates, repair names and links, soft-delete superseded facts, rescope facts only when justified and permitted by their ceilings, and synthesize useful pages. Never restore deleted facts. Never invent provenance, capture timestamps, scopes, ceilings, IDs, or versions; those are enforced by code. Resolve optimistic-concurrency conflicts by reading the latest record and retrying the intended mutation. Keep the reserved capture-guidance page concise and update it only with durable guidance that will improve future capture.
+Use the read tools to inspect existing nodes, KnowledgeItems, mentions, backlinks, and long-form node content. Use the write tools to merge true duplicates, repair names and links, soft-delete superseded KnowledgeItems, rescope KnowledgeItems only when justified and permitted by their ceilings, and synthesize useful node content. Never restore deleted KnowledgeItems. Never invent provenance, capture timestamps, scopes, ceilings, IDs, or versions; those are enforced by code. Resolve optimistic-concurrency conflicts by reading the latest record and retrying the intended mutation. Keep the reserved capture-guidance node concise and update it only with durable guidance that will improve future capture.
 
-Process the worklist in ID order. Your final response must end with <curation-complete through="FACT_ID" /> using the ID of the last fact you fully processed. If you cannot finish the batch, acknowledge only the last fact you did finish. Do not emit a completion marker when no fact was fully processed.`;
+Process the worklist in ID order. Your final response must end with <curation-complete through="ITEM_ID" /> using the ID of the last KnowledgeItem you fully processed. If you cannot finish the batch, acknowledge only the last KnowledgeItem you did finish. Do not emit a completion marker when no KnowledgeItem was fully processed.`;
 
 function resolveScope(context: ReflectionCommittedContext): KnowledgeScope {
   const organizationId = context.requestContext?.get('organizationId');
@@ -29,20 +29,20 @@ function resolveScope(context: ReflectionCommittedContext): KnowledgeScope {
 }
 
 async function readWorklist(store: KnowledgeStorage, sourceThreadId: string, scope: KnowledgeScope, after?: string) {
-  const facts = [];
+  const items = [];
   let cursor = after;
   do {
-    const page = await store.listFactsBySource({
+    const page = await store.listItemsBySource({
       sourceThreadId,
       scope,
       after: cursor,
       limit: 100,
       includeDeleted: true,
     });
-    facts.push(...page.facts);
+    items.push(...page.items);
     cursor = page.nextCursor;
-  } while (cursor && facts.length < 500);
-  return { facts, hasMore: Boolean(cursor) };
+  } while (cursor && items.length < 500);
+  return { items, hasMore: Boolean(cursor) };
 }
 
 export function createCuratorHandler(
@@ -62,12 +62,12 @@ export function createCuratorHandler(
       if (!store) throw new Error('Subconscious curate requires a configured knowledge storage domain.');
 
       const cursor = await store.getCurationCursor({ sourceThreadId: context.parentThreadId, agent: CURATION_AGENT });
-      const worklist = await readWorklist(store, context.parentThreadId, scope, cursor?.lastFactId);
-      if (!worklist.facts.length && !context.observations.trim()) return;
+      const worklist = await readWorklist(store, context.parentThreadId, scope, cursor?.lastItemId);
+      if (!worklist.items.length && !context.observations.trim()) return;
 
       const agent = await createCuratorAgent(memory, curatorMemory, context, scope, config, subconscious);
       const result = await agent.generate(
-        `Parent thread: ${context.parentThreadId}\nCurrent time: ${new Date().toISOString()}\nWorklist truncated: ${worklist.hasMore}\n\nCommitted pre-reflection observations:\n${context.observations}\n\nNew fact worklist:\n${JSON.stringify(worklist.facts)}`,
+        `Parent thread: ${context.parentThreadId}\nCurrent time: ${new Date().toISOString()}\nWorklist truncated: ${worklist.hasMore}\n\nCommitted pre-reflection observations:\n${context.observations}\n\nNew KnowledgeItem worklist:\n${JSON.stringify(worklist.items)}`,
         {
           requestContext: context.requestContext,
           abortSignal: context.abortSignal,
@@ -79,15 +79,15 @@ export function createCuratorHandler(
         },
       );
 
-      if (worklist.facts.length) {
+      if (worklist.items.length) {
         const acknowledgedId = result.text.match(/<curation-complete\s+through=["']([^"']+)["']\s*\/>/i)?.[1];
-        if (!acknowledgedId || !worklist.facts.some(fact => fact.id === acknowledgedId)) {
-          throw new Error('Curator did not acknowledge a valid processed fact cursor.');
+        if (!acknowledgedId || !worklist.items.some(item => item.id === acknowledgedId)) {
+          throw new Error('Curator did not acknowledge a valid processed KnowledgeItem cursor.');
         }
         await store.advanceCurationCursor({
           sourceThreadId: context.parentThreadId,
           agent: CURATION_AGENT,
-          lastFactId: acknowledgedId,
+          lastItemId: acknowledgedId,
         });
       }
     } catch (error) {
@@ -129,7 +129,7 @@ async function createCuratorAgent(
     model,
     memory: curatorMemory,
     tools: {
-      ...createKnowledgeTools(memory, scope),
+      ...createKnowledgeTools(memory),
       ...createKnowledgeWriteTools(memory, {
         scope,
         sourceThreadId: context.parentThreadId,

@@ -21,26 +21,26 @@ async function createStore() {
 describe('Subconscious activity', () => {
   it('returns bounded ancestor-visible activity without sibling thread-private updates', async () => {
     const store = await createStore();
-    const atlas = await store.createEntity({ name: 'Project Atlas', kind: 'project', scope: resourceScope });
-    await store.appendFact({
-      parentEntityId: atlas.id,
+    const atlas = await store.createNode({ name: 'Project Atlas', kind: 'project', scope: resourceScope });
+    await store.appendItem({
+      parentNodeId: atlas.id,
       text: '[[Project Atlas]] launches in January.',
       scope: resourceScope,
       sourceThreadId: 'alpha',
       resolutionScope: alphaScope,
       defaultScope: resourceScope,
     });
-    await store.appendFact({
-      parentEntityId: atlas.id,
+    await store.appendItem({
+      parentNodeId: atlas.id,
       text: 'The private alpha code is cobalt.',
       scope: alphaScope,
       sourceThreadId: 'alpha',
       resolutionScope: alphaScope,
       defaultScope: resourceScope,
     });
-    const secret = await store.createEntity({ name: 'Alpha Secret', kind: 'note', scope: alphaScope });
-    const sharedSecretFact = await store.appendFact({
-      parentEntityId: secret.id,
+    const secret = await store.createNode({ name: 'Alpha Secret', kind: 'note', scope: alphaScope });
+    const sharedSecretItem = await store.appendItem({
+      parentNodeId: secret.id,
       text: 'A shared policy exists.',
       scope: resourceScope,
       sourceThreadId: 'alpha',
@@ -53,9 +53,9 @@ describe('Subconscious activity', () => {
     expect(snapshot.updates.map(update => update.name)).toContain('Project Atlas');
     expect(snapshot.updates.map(update => update.name)).not.toContain('Alpha Secret');
     expect(snapshot.updates.some(update => update.sourceThreadId === 'alpha')).toBe(true);
-    expect(snapshot.updates.some(update => update.recordId !== atlas.id && update.type === 'fact')).toBe(true);
+    expect(snapshot.updates.some(update => update.recordId !== atlas.id && update.type === 'item')).toBe(true);
     expect(snapshot.updates).toContainEqual(
-      expect.objectContaining({ recordId: sharedSecretFact.id, type: 'fact', name: undefined }),
+      expect.objectContaining({ recordId: sharedSecretItem.id, type: 'item', name: undefined }),
     );
     expect(snapshot.updates).toHaveLength(3);
   });
@@ -63,7 +63,7 @@ describe('Subconscious activity', () => {
   it('bounds updates and hot records, renders errors, and generates stable cache keys', async () => {
     const store = await createStore();
     for (let index = 0; index < 5; index++) {
-      await store.createEntity({ name: `Entity ${index}`, kind: 'note', scope: resourceScope });
+      await store.createNode({ name: `Node ${index}`, kind: 'note', scope: resourceScope });
     }
     const cache = new Map<string, string>();
     let emissions = 0;

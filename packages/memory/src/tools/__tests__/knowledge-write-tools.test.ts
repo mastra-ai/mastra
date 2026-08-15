@@ -9,8 +9,8 @@ const scope = ['org:acme', 'resource:user-42', 'thread:alpha'];
 async function fixture() {
   const memory = new Memory({ storage: new InMemoryStore() });
   const store = (await memory.storage.getStore('knowledge'))!;
-  const source = await store.createEntity({ name: 'Atlas Initiative', kind: 'project', scope });
-  const target = await store.createEntity({ name: 'Project Atlas', kind: 'project', scope });
+  const source = await store.createNode({ name: 'Atlas Initiative', kind: 'project', scope });
+  const target = await store.createNode({ name: 'Project Atlas', kind: 'project', scope });
   const tools = createKnowledgeWriteTools(memory, {
     scope,
     sourceThreadId: 'alpha',
@@ -26,10 +26,10 @@ describe('Subconscious knowledge write tools', () => {
     expect(Object.fromEntries(Object.entries(tools).map(([name, tool]) => [name, tool.inputSchema]))).toMatchSnapshot();
   });
 
-  it('supports CAS entity/page writes and merge tombstones', async () => {
+  it('supports CAS node/content writes and merge tombstones', async () => {
     const { store, source, target, tools } = await fixture();
-    const updated = (await tools.knowledge_update_entity!.execute?.(
-      { entityId: target.id, expectedVersion: target.version, name: 'Project Atlas Prime' },
+    const updated = (await tools.knowledge_update_node!.execute?.(
+      { nodeId: target.id, expectedVersion: target.version, name: 'Project Atlas Prime' },
       {} as any,
     )) as any;
     expect(updated).toMatchObject({ name: 'Project Atlas Prime', version: 2 });
@@ -40,38 +40,38 @@ describe('Subconscious knowledge write tools', () => {
       ),
     ).toMatchObject({ error: true, message: expect.stringMatching(/pattern/) });
 
-    const merged = (await tools.knowledge_merge_entities!.execute?.(
+    const merged = (await tools.knowledge_merge_nodes!.execute?.(
       { sourceId: source.id, targetId: target.id, sourceVersion: source.version },
       {} as any,
     )) as any;
     expect(merged).toMatchObject({ id: target.id });
-    expect(await store.getEntity(source.id)).toMatchObject({ mergedInto: target.id });
-    expect(await store.resolveEntity({ name: source.name, scope })).toMatchObject({ id: target.id });
+    expect(await store.getNode(source.id)).toMatchObject({ mergedInto: target.id });
+    expect(await store.resolveNode({ name: source.name, scope })).toMatchObject({ id: target.id });
 
-    const page = (await tools.knowledge_write_page!.execute?.(
-      { name: 'Atlas brief', body: 'Owned by [[Project Atlas Prime]].', scope: 'resource' },
+    const page = (await tools.knowledge_write_node_content!.execute?.(
+      { name: 'Atlas brief', content: 'Owned by [[Project Atlas Prime]].', scope: 'resource' },
       {} as any,
     )) as any;
     await expect(
-      tools.knowledge_write_page!.execute?.(
-        { name: page.name, body: 'Missing CAS version.', scope: 'resource' },
+      tools.knowledge_write_node_content!.execute?.(
+        { name: page.name, content: 'Missing CAS version.', scope: 'resource' },
         {} as any,
       ),
     ).rejects.toThrow('expectedVersion');
     await expect(
-      tools.knowledge_write_page!.execute?.(
-        { name: 'New page', body: 'Cannot create with a version.', scope: 'resource', expectedVersion: 1 },
+      tools.knowledge_write_node_content!.execute?.(
+        { name: 'New node', content: 'Cannot create with a version.', scope: 'resource', expectedVersion: 1 },
         {} as any,
       ),
     ).rejects.toThrow('only valid');
-    const revised = (await tools.knowledge_write_page!.execute?.(
-      { name: page.name, body: 'Launch brief for [[Project Atlas Prime]].', scope: 'resource', expectedVersion: 1 },
+    const revised = (await tools.knowledge_write_node_content!.execute?.(
+      { name: page.name, content: 'Launch brief for [[Project Atlas Prime]].', scope: 'resource', expectedVersion: 1 },
       {} as any,
     )) as any;
-    expect(revised).toMatchObject({ type: 'page', version: 2 });
+    expect(revised).toMatchObject({ type: 'node', version: 2 });
     await expect(
-      tools.knowledge_write_page!.execute?.(
-        { name: page.name, body: 'stale', scope: 'resource', expectedVersion: 1 },
+      tools.knowledge_write_node_content!.execute?.(
+        { name: page.name, content: 'stale', scope: 'resource', expectedVersion: 1 },
         {} as any,
       ),
     ).rejects.toThrow('version');
@@ -80,18 +80,18 @@ describe('Subconscious knowledge write tools', () => {
   it('bounds reserved guidance and never exposes restoration', async () => {
     const { tools } = await fixture();
     await expect(
-      tools.knowledge_write_page!.execute?.(
-        { name: ' Capture-Guidance ', body: 'x'.repeat(8_001), scope: 'resource' },
+      tools.knowledge_write_node_content!.execute?.(
+        { name: ' Capture-Guidance ', content: 'x'.repeat(8_001), scope: 'resource' },
         {} as any,
       ),
     ).rejects.toThrow('limited');
     expect(Object.keys(tools)).toEqual([
-      'knowledge_add_fact',
-      'knowledge_remove_fact',
-      'knowledge_update_entity',
-      'knowledge_merge_entities',
-      'knowledge_rescope',
-      'knowledge_write_page',
+      'knowledge_add_item',
+      'knowledge_remove_item',
+      'knowledge_update_node',
+      'knowledge_merge_nodes',
+      'knowledge_rescope_item',
+      'knowledge_write_node_content',
     ]);
   });
 });

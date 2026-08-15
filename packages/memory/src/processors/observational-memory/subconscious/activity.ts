@@ -18,14 +18,14 @@ export interface SubconsciousActivityUpdate {
   recordId: string;
   name?: string;
   targetId: string;
-  targetType: 'entity' | 'page';
+  targetType: 'node';
   sourceThreadId?: string;
   createdAt: string;
 }
 
 export interface SubconsciousActivitySnapshot {
   updates: SubconsciousActivityUpdate[];
-  hot: Array<{ type: 'entity' | 'page'; id: string; name: string; updates: number }>;
+  hot: Array<{ type: 'node'; id: string; name: string; updates: number }>;
   errors?: string[];
 }
 
@@ -33,19 +33,16 @@ async function getActivityTarget(
   store: KnowledgeStorage,
   event: KnowledgeActivityEvent,
   scope: KnowledgeScope,
-): Promise<{ id: string; name?: string; type: 'entity' | 'page' }> {
-  if (event.recordType === 'entity') {
-    return { id: event.recordId, name: (await store.getEntity(event.recordId))?.name, type: 'entity' };
+): Promise<{ id: string; name?: string; type: 'node' }> {
+  if (event.recordType === 'node') {
+    const node = await store.getNode(event.recordId);
+    if (!node || !isKnowledgeScopeVisible(node.scope, scope)) return { id: event.recordId, type: 'node' };
+    return { id: node.id, name: node.name, type: 'node' };
   }
-  if (event.recordType === 'page') {
-    return { id: event.recordId, name: (await store.getPage(event.recordId))?.name, type: 'page' };
-  }
-  const fact = await store.getFact({ id: event.recordId, includeDeleted: true });
-  const entity = fact ? await store.getEntity(fact.parentEntityId) : undefined;
-  if (!entity || !isKnowledgeScopeVisible(entity.scope, scope)) {
-    return { id: event.recordId, type: 'entity' };
-  }
-  return { id: entity.id, name: entity.name, type: 'entity' };
+  const item = await store.getItem({ id: event.recordId, includeDeleted: true });
+  const node = item ? await store.getNode(item.parentNodeId) : undefined;
+  if (!node || !isKnowledgeScopeVisible(node.scope, scope)) return { id: event.recordId, type: 'node' };
+  return { id: node.id, name: node.name, type: 'node' };
 }
 
 export async function buildSubconsciousActivitySnapshot(input: {
@@ -71,7 +68,7 @@ export async function buildSubconsciousActivitySnapshot(input: {
       };
     }),
   );
-  const hotByRecord = new Map<string, { type: 'entity' | 'page'; id: string; name: string; updates: number }>();
+  const hotByRecord = new Map<string, { type: 'node'; id: string; name: string; updates: number }>();
   for (const update of updates) {
     if (!update.name) continue;
     const key = `${update.targetType}:${update.targetId}`;
