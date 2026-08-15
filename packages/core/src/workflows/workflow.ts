@@ -3038,6 +3038,18 @@ export class Workflow<
             {} as Record<string, StepResult<any, any, any, any>>,
           );
           finalSteps = { ...finalSteps, ...updatedNestedSteps };
+
+          // Nested suspend is recorded on both the container and the flattened leaf.
+          // Demote the container in the public steps map so clients (e.g. Studio)
+          // that treat every status==='suspended' entry as a resume target only
+          // see the leaf. Keep the container entry for hierarchy; leave suspendedPaths alone.
+          const parentStep = finalSteps[step];
+          if (parentStep?.status === 'suspended') {
+            const hasSuspendedChild = Object.values(updatedNestedSteps).some(child => child?.status === 'suspended');
+            if (hasSuspendedChild) {
+              finalSteps[step] = { ...parentStep, status: 'running' };
+            }
+          }
         }
       }
     }
