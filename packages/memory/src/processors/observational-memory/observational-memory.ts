@@ -219,6 +219,13 @@ import type { CompressionLevel } from './reflector-agent';
 import { ReflectorRunner } from './reflector-runner';
 import { isOmReproCaptureEnabled, writeObserverExchangeReproCapture } from './repro-capture';
 import { CURATION_AGENT, resolveCurationScope } from './subconscious/curate';
+
+/**
+ * How long both curation triggers wait before retrying after an attempt that left the
+ * curation cursor where it found it. Only used when the elapsed-time trigger is off;
+ * otherwise the configured interval is the backoff.
+ */
+const DEFAULT_CURATION_BACKOFF_MS = 60 * 60 * 1000;
 import {
   calculateDynamicThreshold,
   calculateProjectedMessageRemoval,
@@ -325,14 +332,14 @@ export class ObservationalMemory {
   private curationThreshold: number | false = false;
   private curationInterval: number | false = false;
   /**
-   * Last time a curation was *attempted* per thread, in ms. Guards the elapsed-time
-   * trigger against re-firing on every observation when a curation runs but does not
-   * advance the cursor (a `no-op`/`skipped` outcome, or a curator that emits no
+   * Last curation attempt per thread: when it ran, and where the cursor was. Guards
+   * both triggers against re-firing on every observation when a curation runs but does
+   * not advance the cursor (a `no-op`/`skipped` outcome, or a curator that emits no
    * completion marker). Per engine instance and per process: a fresh process or a
    * second engine over the same thread starts clean, the same boundary `runCuration`'s
    * own in-flight guard has.
    */
-  private lastCurationAttempt = new Map<string, number>();
+  private lastCurationAttempt = new Map<string, { at: number; lastItemId: string | null }>();
 
   /**
    * Track message IDs observed during this instance's lifetime.
@@ -3717,7 +3724,7 @@ ${formattedMessages}
    * knowledge commit — both the synchronous observe path and the async-buffer
    * activation path — so a client that never calls `Memory.runCuration` still curates.
    *
-   * Costs one bounded `listFactsBySource` read (limit = the volume threshold), never
+   * Costs one bounded `listItemsBySource` read (limit = the volume threshold), never
    * the curator's own paginated worklist. A thread with nothing pending returns before
    * any time arithmetic and makes no model call.
    */
@@ -3731,16 +3738,21 @@ ${formattedMessages}
     const memory = this.memory;
     if (!memory || (threshold === false && interval === false)) return;
 
-    const store = await memory.storage?.getStore('knowledge');
-    if (!store) return;
-
-    // resolveScope throws without an organizationId in the request context. A client
-    // that cannot build a knowledge scope cannot curate today either, so the trigger
-    // declines quietly rather than turning that into a thrown observation.
-    // One resource id for both the count and the curation it triggers. runCuration
-    // falls back to the thread id, so resolving the scope from the raw resourceId
-    // would count one scope's pending knowledge and hand the curator another's.
+    // The curator derives its own scope from the resourceId it is handed, so the
+    // count and the run it triggers must resolve the same one. Counting under a
+    // scope the curator never works is how a trigger fires forever against an
+    // empty worklist.
     const curationResourceId = resourceId ?? threadId;
+
+    const store = await memory.storage?.getStore('knowledge');
+    if (!store) {
+      omDebug(`[OM] curation trigger declined: no knowledge storage domain thread=${threadId}`);
+      return;
+    }
+
+    // resolveCurationScope throws without an organizationId in the request context.
+    // A client that cannot build a knowledge scope cannot curate today either, so the
+    // trigger declines quietly rather than turning that into a thrown observation.
     let scope;
     try {
       scope = resolveCurationScope({
@@ -3749,39 +3761,51 @@ ${formattedMessages}
         requestContext,
       });
     } catch {
+      omDebug(`[OM] curation trigger declined: no knowledge scope thread=${threadId}`);
       return;
     }
 
     const cursor = await store.getCurationCursor({ sourceThreadId: threadId, agent: CURATION_AGENT });
-    const { facts } = await store.listFactsBySource({
+    // listItemsBySource returns oldest-first, so items[0] is the oldest pending update.
+    const { items } = await store.listItemsBySource({
       sourceThreadId: threadId,
       scope,
-      after: cursor?.lastFactId,
+      after: cursor?.lastItemId,
       limit: threshold === false ? 1 : threshold,
+      // Matches the curator's own worklist read, so the count that fires a run and
+      // the work that run receives cannot diverge.
       includeDeleted: true,
     });
-    if (facts.length === 0) return;
+    if (items.length === 0) return;
 
     const now = Date.now();
-    const volumeFires = threshold !== false && facts.length >= threshold;
+    const previous = this.lastCurationAttempt.get(threadId);
+    // A previous attempt that left the cursor exactly where it was made no progress:
+    // a no-op, a skip, or a curator that acknowledged nothing. Re-running it on the
+    // very next observation would spend a model call to learn the same thing, so both
+    // triggers back off for one interval after an attempt that changed nothing.
+    const madeProgress = previous !== undefined && previous.lastItemId !== (cursor?.lastItemId ?? null);
+    const backoff = interval === false ? DEFAULT_CURATION_BACKOFF_MS : interval;
+    const retryAllowed = previous === undefined || madeProgress || now - previous.at >= backoff;
+
+    const volumeFires = threshold !== false && items.length >= threshold && retryAllowed;
     let timeFires = false;
-    if (!volumeFires && interval !== false) {
+    if (!volumeFires && interval !== false && retryAllowed) {
       // A thread that has never been curated has no cursor timestamp, so the oldest
       // pending fact is the baseline — otherwise a slow trickle never fires at all.
-      const baseline = (cursor?.updatedAt ?? facts[0]!.capturedAt).getTime();
-      const lastAttempt = this.lastCurationAttempt.get(threadId) ?? 0;
-      timeFires = now - baseline >= interval && now - lastAttempt >= interval;
+      const baseline = (cursor?.updatedAt ?? items[0]!.capturedAt).getTime();
+      timeFires = now - baseline >= interval;
     }
     if (!volumeFires && !timeFires) return;
 
-    this.lastCurationAttempt.set(threadId, now);
+    this.lastCurationAttempt.set(threadId, { at: now, lastItemId: cursor?.lastItemId ?? null });
     const result = await memory.runCuration({
       threadId,
       resourceId: curationResourceId,
       requestContext,
     });
     omDebug(
-      `[OM] curation trigger=${volumeFires ? 'volume' : 'time'} pending=${facts.length} outcome=${result.outcome} thread=${threadId}`,
+      `[OM] curation trigger=${volumeFires ? 'volume' : 'time'} pending=${items.length} outcome=${result.outcome} thread=${threadId}`,
     );
   }
 

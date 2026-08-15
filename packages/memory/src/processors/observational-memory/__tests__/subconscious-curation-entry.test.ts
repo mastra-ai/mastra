@@ -223,30 +223,30 @@ function createMockModel(text: string) {
 /**
  * The seeded facts must carry exactly the scope resolveCurationScope builds from
  * the request context, and the same sourceThreadId as the observed thread. If they
- * diverge, listFactsBySource returns nothing and every trigger test fails as
+ * diverge, listItemsBySource returns nothing and every trigger test fails as
  * "the trigger never fired" while the implementation is fine.
  */
-async function seedPendingFacts(store: any, options: { threadId: string; count: number; organizationId?: string }) {
+async function seedPendingItems(store: any, options: { threadId: string; count: number; organizationId?: string }) {
   const orgId = options.organizationId ?? 'acme';
   const factScope = [`org:${orgId}`, `resource:${options.threadId}`, `thread:${options.threadId}`];
-  const entity = await store.createEntity({
+  const node = await store.createNode({
     name: `Entity for ${options.threadId}`,
     kind: 'entity',
     scope: factScope,
   });
   const ids: string[] = [];
   for (let i = 0; i < options.count; i++) {
-    const fact = await store.appendFact({
-      parentEntityId: entity.id,
+    const item = await store.appendItem({
+      parentNodeId: node.id,
       text: `Pending knowledge ${i} for ${options.threadId}.`,
       scope: factScope,
       sourceThreadId: options.threadId,
       resolutionScope: factScope,
       defaultScope: factScope,
     });
-    ids.push(fact.id);
+    ids.push(item.id);
   }
-  return { entity, ids };
+  return { node, ids };
 }
 
 async function createTriggerEngine(options: {
@@ -292,7 +292,7 @@ describe('curation triggers', () => {
   it('fires on accumulated knowledge volume', async () => {
     const { om, store, runCuration } = await createTriggerEngine({ threshold: 3 });
     const threadId = 'volume-thread';
-    await seedPendingFacts(store, { threadId, count: 3 });
+    await seedPendingItems(store, { threadId, count: 3 });
 
     await observeOnce(om, threadId);
 
@@ -303,7 +303,7 @@ describe('curation triggers', () => {
   it('does not fire before the threshold is met', async () => {
     const { om, store, runCuration } = await createTriggerEngine({ threshold: 5 });
     const threadId = 'under-threshold-thread';
-    await seedPendingFacts(store, { threadId, count: 3 });
+    await seedPendingItems(store, { threadId, count: 3 });
 
     await observeOnce(om, threadId);
 
@@ -313,9 +313,9 @@ describe('curation triggers', () => {
   it('fires on elapsed time when the volume threshold is unmet', async () => {
     const { om, store, runCuration } = await createTriggerEngine({ threshold: 50, interval: 20 });
     const threadId = 'time-thread';
-    const { ids } = await seedPendingFacts(store, { threadId, count: 2 });
+    const { ids } = await seedPendingItems(store, { threadId, count: 2 });
     // Curated through the first fact; one update stays pending behind the cursor.
-    await store.advanceCurationCursor({ sourceThreadId: threadId, agent: 'curate', lastFactId: ids[0]! });
+    await store.advanceCurationCursor({ sourceThreadId: threadId, agent: 'curate', lastItemId: ids[0]! });
     await new Promise(resolve => setTimeout(resolve, 40));
 
     await observeOnce(om, threadId);
@@ -326,7 +326,7 @@ describe('curation triggers', () => {
   it('falls back to the oldest pending fact when the thread has never been curated', async () => {
     const { om, store, runCuration } = await createTriggerEngine({ threshold: 50, interval: 1 });
     const threadId = 'never-curated-thread';
-    await seedPendingFacts(store, { threadId, count: 1 });
+    await seedPendingItems(store, { threadId, count: 1 });
     await new Promise(resolve => setTimeout(resolve, 5));
 
     await observeOnce(om, threadId);
@@ -347,7 +347,7 @@ describe('curation triggers', () => {
   it('fires nothing when both triggers are disabled', async () => {
     const { om, store, runCuration } = await createTriggerEngine({ threshold: false, interval: false });
     const threadId = 'disabled-thread';
-    await seedPendingFacts(store, { threadId, count: 40 });
+    await seedPendingItems(store, { threadId, count: 40 });
 
     await observeOnce(om, threadId);
 
@@ -357,8 +357,8 @@ describe('curation triggers', () => {
   it('reads pending knowledge with one bounded query', async () => {
     const { om, store } = await createTriggerEngine({ threshold: 4 });
     const threadId = 'bounded-thread';
-    await seedPendingFacts(store, { threadId, count: 4 });
-    const spy = vi.spyOn(store, 'listFactsBySource');
+    await seedPendingItems(store, { threadId, count: 4 });
+    const spy = vi.spyOn(store, 'listItemsBySource');
 
     await observeOnce(om, threadId);
 
@@ -369,8 +369,8 @@ describe('curation triggers', () => {
   it('reads a single row when only the time trigger is enabled', async () => {
     const { om, store } = await createTriggerEngine({ threshold: false, interval: 60_000 });
     const threadId = 'time-only-thread';
-    await seedPendingFacts(store, { threadId, count: 4 });
-    const spy = vi.spyOn(store, 'listFactsBySource');
+    await seedPendingItems(store, { threadId, count: 4 });
+    const spy = vi.spyOn(store, 'listItemsBySource');
 
     await observeOnce(om, threadId);
 
@@ -382,8 +382,8 @@ describe('curation triggers', () => {
     const runCuration = vi.fn(async () => ({ outcome: 'no-op' }));
     const { om, store } = await createTriggerEngine({ threshold: 50, interval: 200, runCuration });
     const threadId = 'repeat-fire-thread';
-    const { ids } = await seedPendingFacts(store, { threadId, count: 2 });
-    await store.advanceCurationCursor({ sourceThreadId: threadId, agent: 'curate', lastFactId: ids[0]! });
+    const { ids } = await seedPendingItems(store, { threadId, count: 2 });
+    await store.advanceCurationCursor({ sourceThreadId: threadId, agent: 'curate', lastItemId: ids[0]! });
     await new Promise(resolve => setTimeout(resolve, 250));
 
     // A curation that returns no-op leaves the cursor behind, so the elapsed-time
@@ -399,7 +399,7 @@ describe('curation triggers', () => {
     const threadId = 'no-resource-thread';
     // Seeded under the thread id as the resource rung, which is what runCuration
     // falls back to when no resourceId is supplied.
-    await seedPendingFacts(store, { threadId, count: 2 });
+    await seedPendingItems(store, { threadId, count: 2 });
 
     await om.observe({
       threadId,
@@ -411,10 +411,66 @@ describe('curation triggers', () => {
     expect(runCuration).toHaveBeenCalledWith(expect.objectContaining({ threadId, resourceId: threadId }));
   });
 
+  it('never fails an observation when curation throws', async () => {
+    const runCuration = vi.fn(async () => {
+      throw new Error('curator exploded');
+    });
+    const { om, store } = await createTriggerEngine({ threshold: 1, runCuration });
+    const threadId = 'throwing-curation-thread';
+    await seedPendingItems(store, { threadId, count: 2 });
+
+    const result = await observeOnce(om, threadId);
+
+    expect(result.observed).toBe(true);
+    expect(runCuration).toHaveBeenCalled();
+  });
+
+  it('never fails an observation when the knowledge domain is absent', async () => {
+    const runCuration = vi.fn(async () => ({ outcome: 'ran' }));
+    const om = new ObservationalMemory({
+      storage: new InMemoryMemory({ db: new InMemoryDB() }),
+      scope: 'thread',
+      memory: { runCuration, storage: { getStore: async () => undefined } } as any,
+      curationThreshold: 1,
+      curationInterval: 1,
+      observation: {
+        model: createMockModel('<observations>\n* Something happened\n</observations>'),
+        messageTokens: 100,
+        bufferTokens: false,
+      },
+      reflection: {
+        model: createMockModel('<observations>\n* Condensed\n</observations>'),
+        observationTokens: 50_000,
+      },
+    } as any);
+
+    const result = await observeOnce(om, 'no-knowledge-domain-thread');
+
+    expect(result.observed).toBe(true);
+    expect(runCuration).not.toHaveBeenCalled();
+  });
+
+  it('never fails an observation when the request context has no organizationId', async () => {
+    const { om, store, runCuration } = await createTriggerEngine({ threshold: 1 });
+    const threadId = 'no-org-thread';
+    await seedPendingItems(store, { threadId, count: 2 });
+
+    const result = await om.observe({
+      threadId,
+      resourceId: threadId,
+      messages: createBulkMessages(10, threadId),
+      requestContext: new RequestContext(),
+    });
+    await new Promise(resolve => setTimeout(resolve, 20));
+
+    expect(result.observed).toBe(true);
+    expect(runCuration).not.toHaveBeenCalled();
+  });
+
   it('no longer persists an observation-run counter', async () => {
     const { om, store } = await createTriggerEngine({ threshold: 50 });
     const threadId = 'counter-thread';
-    await seedPendingFacts(store, { threadId, count: 1 });
+    await seedPendingItems(store, { threadId, count: 1 });
 
     await observeOnce(om, threadId);
     await observeOnce(om, threadId, 1);
@@ -489,7 +545,7 @@ describe('curation triggers on the async-buffer activation path', () => {
     expect(maybeTriggerCuration).toHaveBeenCalledWith('activation-thread', 'activation-resource', turnRequestContext);
   });
 
-  it('cannot double-fire: a step either activates or observes, never both', async () => {
+  it('hooks the activation branch only, leaving the sync path to observe()', async () => {
     const { step, om, maybeTriggerCuration, observe } = createStepHarness({ activated: false });
 
     await (step as any).runThresholdObservation();

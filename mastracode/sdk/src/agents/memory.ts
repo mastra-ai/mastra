@@ -142,6 +142,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
                 pins: isFactory ? { capturePinning: true } : true,
                 // Factory sessions run the curator every 3 observation runs;
                 // other clients leave the cadence trigger dormant.
+                ...(isFactory ? { curationCadence: 3 } : {}),
                 // Real curation over a factory worklist needs tool room: the
                 // default 5-step budget exhausts mid-batch and the curator never
                 // reaches its cursor acknowledgment (observed live 2026-08-13).
