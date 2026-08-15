@@ -1,8 +1,7 @@
 import { visibleWidth } from '@earendil-works/pi-tui';
 import type {
   KnowledgeInspector,
-  KnowledgeInspectorEntityDetail,
-  KnowledgeInspectorPageDetail,
+  KnowledgeInspectorNodeDetail,
   KnowledgeInspectorRecordSummary,
   KnowledgeInspectorScopeTree,
 } from '@mastra/code-sdk';
@@ -23,15 +22,16 @@ const tree = (identityKey = 'identity-1'): KnowledgeInspectorScopeTree => ({
 
 function record(
   name: string,
-  type: 'entity' | 'page' = 'entity',
+  _type: 'node' = 'node',
   scope: 'org' | 'resource' | 'thread' = 'resource',
   relationshipCounts?: KnowledgeInspectorRecordSummary['relationshipCounts'],
+  kind = 'project',
 ): KnowledgeInspectorRecordSummary {
   return {
-    handle: `${type}:${name}`,
-    type,
+    handle: `node:${name}`,
+    type: 'node',
     name,
-    kind: type === 'entity' ? 'project' : undefined,
+    kind,
     scope: { level: scope, id: `${scope}-id` },
     version: 1,
     updatedAt: '2026-07-15T00:00:00.000Z',
@@ -39,65 +39,58 @@ function record(
   };
 }
 
-function entityDetail(
-  entity: KnowledgeInspectorRecordSummary,
+function nodeDetail(
+  node: KnowledgeInspectorRecordSummary,
   outgoingTargets = [] as KnowledgeInspectorRecordSummary[],
   incomingParents = [] as KnowledgeInspectorRecordSummary[],
-): KnowledgeInspectorEntityDetail {
-  const relationshipCounts = entity.relationshipCounts ?? { facts: 1, outgoing: 0, incoming: 0, sampled: false };
+  content?: string,
+): KnowledgeInspectorNodeDetail {
+  const relationshipCounts = node.relationshipCounts ?? { items: 1, outgoing: 0, incoming: 0, sampled: false };
   return {
     identityKey: 'identity-1',
     scopeLevel: 'resource' as const,
-    entity: { ...entity, relationshipCounts },
-    facts: [
+    node: { ...node, relationshipCounts },
+    items: [
       {
-        text: `${entity.name} ships Friday`,
-        scope: entity.scope,
+        text: `${node.name} ships Friday`,
+        scope: node.scope,
         sourceThreadId: 'thread-current',
         capturedAt: '2026-07-15T00:00:00.000Z',
       },
     ],
-    incomingFacts: [],
+    incomingItems: [],
     outgoingTargets: { items: outgoingTargets, partial: false },
     incomingParents: { items: incomingParents, partial: false },
     relationshipCounts,
-  };
-}
-
-function pageDetail(page: KnowledgeInspectorRecordSummary): KnowledgeInspectorPageDetail {
-  return {
-    identityKey: 'identity-1',
-    scopeLevel: 'resource' as const,
-    page,
-    body: 'Launch notes link to [[Atlas]].',
-    bodyTruncated: false,
-    links: [{ label: 'Atlas', entity: record('Atlas') }],
+    content,
+    contentTruncated: false,
+    links: outgoingTargets.map(target => ({ label: target.name, node: target })),
   };
 }
 
 function createInspector(overrides: Partial<KnowledgeInspector> = {}): KnowledgeInspector {
   const atlas = record('Atlas');
   const beta = record('Beta');
-  const page = record('Launch brief', 'page');
+  const brief = record('Launch brief', 'node', 'resource', undefined, 'document');
   return {
     getScopeTree: vi.fn(async () => tree()),
-    listEntities: vi.fn(async () => ({
+    listNodes: vi.fn(async () => ({
       identityKey: 'identity-1',
       scopeLevel: 'resource' as const,
-      items: [record('Organization policy', 'entity', 'org'), atlas],
+      items: [record('Organization policy', 'node', 'org'), atlas, brief],
     })),
-    listPages: vi.fn(async () => ({ identityKey: 'identity-1', scopeLevel: 'resource' as const, items: [page] })),
-    getEntity: vi.fn(async ({ handle }) =>
-      handle === atlas.handle ? entityDetail(atlas, [beta]) : entityDetail(beta),
-    ),
-    getPage: vi.fn(async () => pageDetail(page)),
+    getNode: vi.fn(async ({ handle }) => {
+      if (handle === atlas.handle) return nodeDetail(atlas, [beta]);
+      if (handle === brief.handle) return nodeDetail(brief, [atlas], [], 'Launch notes link to [[Atlas]].');
+      return nodeDetail(beta);
+    }),
     listActivity: vi.fn(async () => ({
       identityKey: 'identity-1',
       scopeLevel: 'resource' as const,
       items: [
         {
-          action: 'fact-created' as const,
-          recordType: 'entity' as const,
+          action: 'item-created' as const,
+          recordType: 'node' as const,
           scope: atlas.scope,
           createdAt: '2026-07-15T00:00:00.000Z',
           record: atlas,
@@ -146,12 +139,12 @@ describe('KnowledgeBrowserComponent', () => {
     browser.handleInput('\r');
     await settle();
 
-    expect(inspector.listEntities).toHaveBeenCalledWith({ level: 'resource', sort: 'relevant', limit: 12 });
+    expect(inspector.listNodes).toHaveBeenCalledWith({ level: 'resource', sort: 'relevant', limit: 12 });
     expect(text(browser)).toContain('[inherited:org]');
     expect(text(browser)).toContain('[exact:resource]');
   });
 
-  it('traverses entity connections without changing the selected scope', async () => {
+  it('traverses node connections without changing the selected scope', async () => {
     const { browser, inspector } = createBrowser();
     await settle();
     browser.handleInput('j');
@@ -165,9 +158,9 @@ describe('KnowledgeBrowserComponent', () => {
     expect(text(browser)).toContain('→ Beta');
     browser.handleInput('\r');
     await settle();
-    expect(inspector.getEntity).toHaveBeenLastCalledWith({ handle: 'entity:Beta' });
+    expect(inspector.getNode).toHaveBeenLastCalledWith({ handle: 'node:Beta' });
     expect(text(browser)).toContain('Beta ships Friday');
-    expect(text(browser)).toContain('Entities / Atlas / Beta');
+    expect(text(browser)).toContain('Nodes / Atlas / Beta');
     browser.handleInput('\x7f');
     expect(text(browser)).toContain('Atlas ships Friday');
     expect(text(browser)).toContain('resource:resource-project-alpha');
@@ -177,15 +170,15 @@ describe('KnowledgeBrowserComponent', () => {
     const atlas = record('Atlas');
     const portfolio = record('Portfolio');
     const inspector = createInspector({
-      listEntities: vi.fn(async () => ({
+      listNodes: vi.fn(async () => ({
         identityKey: 'identity-1',
         scopeLevel: 'resource' as const,
         items: [atlas],
         sort: 'relevant' as const,
         coverage: 'recent-window' as const,
       })),
-      getEntity: vi.fn(async ({ handle }) =>
-        handle === atlas.handle ? entityDetail(atlas, [], [portfolio]) : entityDetail(portfolio),
+      getNode: vi.fn(async ({ handle }) =>
+        handle === atlas.handle ? nodeDetail(atlas, [], [portfolio]) : nodeDetail(portfolio),
       ),
     });
     const { browser } = createBrowser(inspector);
@@ -200,19 +193,19 @@ describe('KnowledgeBrowserComponent', () => {
     expect(text(browser)).toContain('← Portfolio');
     browser.handleInput('\r');
     await settle();
-    expect(text(browser)).toContain('Entities / Atlas / Portfolio');
+    expect(text(browser)).toContain('Nodes / Atlas / Portfolio');
     browser.handleInput('\x7f');
     expect(text(browser)).toContain('Referenced by');
   });
 
-  it('cycles entity sorting between relevant, recent, and connected', async () => {
+  it('cycles node sorting between relevant, recent, and connected', async () => {
     const inspector = createInspector({
-      listEntities: vi.fn(async input => ({
+      listNodes: vi.fn(async input => ({
         identityKey: 'identity-1',
         scopeLevel: 'resource' as const,
         items: [
-          record(input.sort ?? 'relevant', 'entity', 'resource', {
-            facts: 4,
+          record(input.sort ?? 'relevant', 'node', 'resource', {
+            items: 4,
             outgoing: 2,
             incoming: 1,
             sampled: false,
@@ -233,7 +226,7 @@ describe('KnowledgeBrowserComponent', () => {
     browser.handleInput('\x13');
     await settle();
     expect(text(browser)).toContain('Sort: Recent');
-    expect(inspector.listEntities).toHaveBeenLastCalledWith(
+    expect(inspector.listNodes).toHaveBeenLastCalledWith(
       expect.objectContaining({ sort: 'recent', level: 'resource' }),
     );
     browser.handleInput('\x13');
@@ -241,31 +234,31 @@ describe('KnowledgeBrowserComponent', () => {
     expect(text(browser)).toContain('Sort: Connected · recent window');
   });
 
-  it('groups entities by graph role and badges rows with directional counts', async () => {
-    const bridge = record('Bridge', 'entity', 'resource', { facts: 3, outgoing: 2, incoming: 1, sampled: false });
-    const source = record('Source', 'entity', 'resource', { facts: 1, outgoing: 2, incoming: 0, sampled: false });
-    const referenced = record('Referenced', 'entity', 'resource', {
-      facts: 1,
+  it('groups nodes by graph role and badges rows with directional counts', async () => {
+    const bridge = record('Bridge', 'node', 'resource', { items: 3, outgoing: 2, incoming: 1, sampled: false });
+    const source = record('Source', 'node', 'resource', { items: 1, outgoing: 2, incoming: 0, sampled: false });
+    const referenced = record('Referenced', 'node', 'resource', {
+      items: 1,
       outgoing: 0,
       incoming: 2,
       sampled: false,
     });
-    const isolated = record('Isolated', 'entity', 'resource', { facts: 0, outgoing: 0, incoming: 0, sampled: false });
-    const sampledHub = record('Sampled hub', 'entity', 'resource', {
-      facts: 40,
+    const isolated = record('Isolated', 'node', 'resource', { items: 0, outgoing: 0, incoming: 0, sampled: false });
+    const sampledHub = record('Sampled hub', 'node', 'resource', {
+      items: 40,
       outgoing: 25,
       incoming: 25,
       sampled: true,
     });
     const inspector = createInspector({
-      listEntities: vi.fn(async () => ({
+      listNodes: vi.fn(async () => ({
         identityKey: 'identity-1',
         scopeLevel: 'resource' as const,
         items: [isolated, source, bridge, referenced, sampledHub],
         sort: 'relevant' as const,
         coverage: 'recent-window' as const,
       })),
-      getEntity: vi.fn(async () => entityDetail(bridge, [source], [referenced])),
+      getNode: vi.fn(async () => nodeDetail(bridge, [source], [referenced])),
     });
     const { browser } = createBrowser(inspector);
     await settle();
@@ -294,39 +287,47 @@ describe('KnowledgeBrowserComponent', () => {
 
     browser.handleInput('\r');
     await settle();
-    expect(text(browser)).toContain('Bridge · 3 facts · 2 outgoing · 1 incoming');
+    expect(text(browser)).toContain('Bridge · 3 items · 2 outgoing · 1 incoming');
   });
 
-  it('keeps pages separate, follows resolved page links, and leaves unresolved links as text', async () => {
-    const page = record('Launch brief', 'page');
+  it('renders content-capable nodes and follows their resolved links', async () => {
+    const atlas = record('Atlas');
+    const brief = record('Launch brief', 'node', 'resource', undefined, 'document');
     const inspector = createInspector({
-      getPage: vi.fn(async () => ({
-        ...pageDetail(page),
-        links: [{ label: 'Atlas', entity: record('Atlas') }, { label: 'Unknown' }],
+      listNodes: vi.fn(async () => ({
+        identityKey: 'identity-1',
+        scopeLevel: 'resource' as const,
+        items: [brief],
       })),
+      getNode: vi.fn(async ({ handle }) =>
+        handle === brief.handle
+          ? {
+              ...nodeDetail(brief, [atlas], [], 'Launch notes link to [[Atlas]].'),
+              links: [{ label: 'Atlas', node: atlas }, { label: 'Unknown' }],
+            }
+          : nodeDetail(atlas),
+      ),
     });
     const { browser } = createBrowser(inspector);
     await settle();
-    browser.handleInput('\t');
-    browser.handleInput('\t');
+    browser.handleInput('j');
+    browser.handleInput('\r');
+    await settle();
+    browser.handleInput('\r');
     await settle();
 
-    expect(text(browser)).toContain('Launch brief');
-    expect(text(browser)).not.toContain('Organization policy');
+    expect(text(browser)).toContain('Launch notes link to [[Atlas]].');
+    expect(text(browser)).toContain('→ Atlas');
     browser.handleInput('\r');
     await settle();
-    expect(text(browser)).toContain('Atlas → Atlas');
-    expect(text(browser)).toContain('Unknown (unresolved)');
-    browser.handleInput('\r');
-    await settle();
-    expect(inspector.getEntity).toHaveBeenCalledWith({ handle: 'entity:Atlas' });
+    expect(inspector.getNode).toHaveBeenCalledWith({ handle: 'node:Atlas' });
   });
 
   it('filters names and ignores stale async responses', async () => {
     let resolveOld!: (value: any) => void;
     const old = new Promise(resolve => (resolveOld = resolve));
     const inspector = createInspector({
-      listEntities: vi
+      listNodes: vi
         .fn()
         .mockImplementationOnce(() => old)
         .mockResolvedValueOnce({ identityKey: 'identity-1', scopeLevel: 'resource' as const, items: [record('Beta')] }),
@@ -335,13 +336,13 @@ describe('KnowledgeBrowserComponent', () => {
     await settle();
     browser.handleInput('j');
     browser.handleInput('\r');
-    while (!vi.mocked(inspector.listEntities).mock.calls.length) await settle();
+    while (!vi.mocked(inspector.listNodes).mock.calls.length) await settle();
     browser.handleInput('b');
     await settle();
     resolveOld({ identityKey: 'identity-1', scopeLevel: 'resource' as const, items: [record('Stale Atlas')] });
     await settle();
 
-    expect(inspector.listEntities).toHaveBeenLastCalledWith(
+    expect(inspector.listNodes).toHaveBeenLastCalledWith(
       expect.objectContaining({ level: 'resource', namePrefix: 'b', limit: 12 }),
     );
     expect(text(browser)).toContain('Beta');
@@ -350,7 +351,7 @@ describe('KnowledgeBrowserComponent', () => {
 
   it('loads cursor pages incrementally', async () => {
     const inspector = createInspector({
-      listEntities: vi
+      listNodes: vi
         .fn()
         .mockResolvedValueOnce({
           identityKey: 'identity-1',
@@ -369,7 +370,7 @@ describe('KnowledgeBrowserComponent', () => {
     browser.handleInput('\r');
     await settle();
 
-    expect(inspector.listEntities).toHaveBeenLastCalledWith({
+    expect(inspector.listNodes).toHaveBeenLastCalledWith({
       level: 'resource',
       sort: 'relevant',
       cursor: 'next-page',
@@ -379,17 +380,17 @@ describe('KnowledgeBrowserComponent', () => {
     expect(text(browser)).toContain('Beta');
   });
 
-  it('preserves related entities while loading more facts', async () => {
+  it('preserves related nodes while loading more items', async () => {
     const atlas = record('Atlas');
     const alpha = record('Alpha dependency');
     const beta = record('Beta dependency');
-    const first = { ...entityDetail(atlas, [alpha]), factsNextCursor: 'facts-page-2' };
+    const first = { ...nodeDetail(atlas, [alpha]), itemsNextCursor: 'items-page-2' };
     const second = {
-      ...entityDetail(atlas, [{ ...alpha, handle: 'entity:Alpha-new-handle' }, beta]),
-      facts: [{ ...entityDetail(atlas).facts[0]!, text: 'Atlas follows Beta dependency.' }],
+      ...nodeDetail(atlas, [{ ...alpha, handle: 'node:Alpha-new-handle' }, beta]),
+      items: [{ ...nodeDetail(atlas).items[0]!, text: 'Atlas follows Beta dependency.' }],
     };
     const inspector = createInspector({
-      getEntity: vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second),
+      getNode: vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second),
     });
     const { browser } = createBrowser(inspector);
     await settle();
@@ -404,10 +405,10 @@ describe('KnowledgeBrowserComponent', () => {
     browser.handleInput('\r');
     await settle();
 
-    expect(inspector.getEntity).toHaveBeenLastCalledWith({
+    expect(inspector.getNode).toHaveBeenLastCalledWith({
       handle: atlas.handle,
-      factsCursor: 'facts-page-2',
-      incomingFactsCursor: undefined,
+      itemsCursor: 'items-page-2',
+      incomingItemsCursor: undefined,
     });
     expect(text(browser).match(/Alpha dependency/g)).toHaveLength(1);
     expect(text(browser)).toContain('Beta dependency');
@@ -430,7 +431,7 @@ describe('KnowledgeBrowserComponent', () => {
 
   it('renders activity targets, empty states, loading, and errors', async () => {
     const failing = createInspector({
-      listEntities: vi.fn(async () => {
+      listNodes: vi.fn(async () => {
         throw new Error('storage unavailable');
       }),
     });
@@ -443,9 +444,8 @@ describe('KnowledgeBrowserComponent', () => {
     expect(text(browser)).toContain('Error: storage unavailable');
 
     browser.handleInput('\t');
-    browser.handleInput('\t');
     await settle();
-    expect(text(browser)).toContain('fact-created: Atlas');
+    expect(text(browser)).toContain('item-created: Atlas');
   });
 
   it('closes on escape and returns from detail with backspace', async () => {
@@ -457,7 +457,7 @@ describe('KnowledgeBrowserComponent', () => {
     browser.handleInput('j');
     browser.handleInput('\r');
     await settle();
-    expect(text(browser)).toContain('Facts (1)');
+    expect(text(browser)).toContain('Items (1)');
     browser.handleInput('\x7f');
     expect(text(browser)).toContain('Organization policy');
     browser.handleInput('\x1b');

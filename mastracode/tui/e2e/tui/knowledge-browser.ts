@@ -7,7 +7,7 @@ const SECONDARY_TITLE = 'Knowledge E2E Secondary';
 export const knowledgeBrowserScenario: McE2eScenario = {
   name: 'knowledge-browser',
   projectFixture: 'long-branch',
-  description: 'Seed scoped knowledge and traverse scopes, entities, relations, pages, activity, and a thread switch.',
+  description: 'Seed scoped knowledge and traverse scopes, nodes, relations, content, activity, and a thread switch.',
   testName: 'browses scoped Subconscious knowledge through the real TUI',
   disableMemory: false,
   async inProcessApp({ startMastraCodeApp }) {
@@ -33,45 +33,45 @@ export const knowledgeBrowserScenario: McE2eScenario = {
         const secondaryScope = [...resourceScope, `thread:${secondary.id}`];
         const foreignScope = [...orgScope, 'resource:foreign-project'];
 
-        await knowledge.createEntity({
+        await knowledge.createNode({
           id: 'kb-org-policy',
           name: 'Organization policy',
           kind: 'policy',
           scope: orgScope,
         });
-        const beta = await knowledge.createEntity({
+        const beta = await knowledge.createNode({
           id: 'kb-beta',
           name: 'Beta service',
           kind: 'service',
           scope: resourceScope,
         });
-        const atlas = await knowledge.createEntity({
+        const atlas = await knowledge.createNode({
           id: 'kb-atlas',
           name: 'Atlas launch',
           kind: 'project',
           scope: resourceScope,
         });
-        await knowledge.createEntity({
+        await knowledge.createNode({
           id: 'kb-primary-note',
           name: 'Primary thread note',
           kind: 'note',
           scope: primaryScope,
         });
-        await knowledge.createEntity({
+        await knowledge.createNode({
           id: 'kb-secondary-note',
           name: 'Secondary thread note',
           kind: 'note',
           scope: secondaryScope,
         });
-        await knowledge.createEntity({
+        await knowledge.createNode({
           id: 'kb-foreign-secret',
           name: 'Foreign project secret',
           kind: 'secret',
           scope: foreignScope,
         });
-        await knowledge.appendFact({
+        await knowledge.appendItem({
           id: '01KXKNOWLEDGEFACT0000000001',
-          parentEntityId: atlas.id,
+          parentNodeId: atlas.id,
           text: 'Atlas launch depends on [[Beta service]].',
           scope: resourceScope,
           sourceThreadId: primary.id,
@@ -79,9 +79,9 @@ export const knowledgeBrowserScenario: McE2eScenario = {
           defaultScope: resourceScope,
         });
         for (let index = 0; index < 25; index++) {
-          await knowledge.appendFact({
+          await knowledge.appendItem({
             id: `01KXKNOWLEDGEFILLER${String(index).padStart(8, '0')}`,
-            parentEntityId: atlas.id,
+            parentNodeId: atlas.id,
             text: `Atlas launch checkpoint ${index + 1} is complete.`,
             scope: resourceScope,
             sourceThreadId: primary.id,
@@ -89,19 +89,20 @@ export const knowledgeBrowserScenario: McE2eScenario = {
             defaultScope: resourceScope,
           });
         }
-        await knowledge.appendFact({
+        await knowledge.appendItem({
           id: '01KXKNOWLEDGEFACT0000000002',
-          parentEntityId: beta.id,
+          parentNodeId: beta.id,
           text: 'Beta service health checks are green.',
           scope: resourceScope,
           sourceThreadId: primary.id,
           resolutionScope: resourceScope,
           defaultScope: resourceScope,
         });
-        await knowledge.createPage({
-          id: 'kb-launch-page',
+        await knowledge.createNode({
+          id: 'kb-launch-brief',
           name: 'Atlas launch brief',
-          body: 'The launch uses [[Atlas launch]] and [[Beta service]]. [[No such entity 9fca]] remains unresolved.',
+          kind: 'document',
+          content: 'The launch uses [[Atlas launch]] and [[Beta service]]. [[No such node 9fca]] remains unresolved.',
           scope: resourceScope,
         });
       },
@@ -113,18 +114,18 @@ export const knowledgeBrowserScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Mastra Code|Project:/i, terminal);
 
     terminal.submit('/knowledge');
-    await runtime.waitForScreenText(/\[scopes\].*entities.*pages.*activity/i, terminal);
+    await runtime.waitForScreenText(/\[scopes\].*nodes.*activity/i, terminal);
     await runtime.waitForScreenText(/resource\s+project-/i, terminal);
     runtime.printScreen('knowledge scope roots', terminal);
 
     terminal.write('\x1b[B');
     terminal.write('\r');
-    await runtime.waitForScreenText(/\[entities\]/i, terminal);
+    await runtime.waitForScreenText(/\[nodes\]/i, terminal);
     await runtime.waitForScreenText(/Sort: Relevant.*recent window/i, terminal);
     await runtime.waitForScreenText(/Sources/i, terminal);
     await runtime.waitForScreenText(/Referenced only/i, terminal);
     await runtime.waitForScreenText(/Isolated/i, terminal);
-    runtime.printScreen('knowledge entity graph roles', terminal);
+    runtime.printScreen('knowledge node graph roles', terminal);
     terminal.write('\x13');
     await runtime.waitForScreenText(/Sort: Recent/i, terminal);
     terminal.write('\x13');
@@ -132,38 +133,40 @@ export const knowledgeBrowserScenario: McE2eScenario = {
     terminal.write('Atlas launch');
     await runtime.waitForScreenText(/Atlas launch.*→1 ←0.*exact:resource/i, terminal);
     await runtime.waitForScreenTextAbsent(/Foreign project secret/i, terminal);
+    terminal.write('\x1b[B');
     terminal.write('\r');
     await runtime.waitForScreenText(/Atlas launch checkpoint/i, terminal);
-    await runtime.waitForScreenText(/Source · 26 facts · 1 outgoing · 0 incoming/i, terminal);
-    await runtime.waitForScreenText(/Load more facts/i, terminal);
+    await runtime.waitForScreenText(/Source · 26 items · 1 outgoing · 0 incoming/i, terminal);
+    await runtime.waitForScreenText(/Load more items/i, terminal);
     await runtime.waitForScreenText(/Outgoing links \(partial\)/i, terminal);
     terminal.write('\r');
     await runtime.waitForScreenText(/→ Beta service/i, terminal);
     await runtime.waitForScreenTextAbsent(/Outgoing links \(partial\)/i, terminal);
-    await runtime.waitForScreenText(/Load more incoming facts/i, terminal);
+    await runtime.waitForScreenText(/Load more incoming items/i, terminal);
     terminal.write('\r');
-    await runtime.waitForScreenTextAbsent(/Load more incoming facts/i, terminal);
+    await runtime.waitForScreenTextAbsent(/Load more incoming items/i, terminal);
     terminal.write('\r');
     await runtime.waitForScreenText(/Beta service health checks are green/i, terminal);
     await runtime.waitForScreenText(/Referenced by/i, terminal);
     await runtime.waitForScreenText(/← Atlas launch/i, terminal);
     terminal.write('\r');
-    await runtime.waitForScreenText(/Entities.*Atlas launch.*Beta service.*Atlas launch/i, terminal);
+    await runtime.waitForScreenText(/Nodes.*Atlas launch.*Beta service.*Atlas launch/i, terminal);
     runtime.printScreen('knowledge directional relation traversal', terminal);
 
     terminal.write('\x7f');
-    terminal.write('\t');
-    await runtime.waitForScreenText(/\[pages\]/i, terminal);
+    terminal.write('\x7f');
+    terminal.write('\x7f');
     await runtime.waitForScreenText(/Atlas launch brief/i, terminal);
     terminal.write('\r');
-    await runtime.waitForScreenText(/Atlas launch → Atlas launch/i, terminal);
-    await runtime.waitForScreenText(/No such entity 9fca → No such entity 9fca/i, terminal);
-    runtime.printScreen('knowledge page detail', terminal);
+    await runtime.waitForScreenText(/Content/i, terminal);
+    await runtime.waitForScreenText(/The launch uses \[\[Atlas launch\]\]/i, terminal);
+    await runtime.waitForScreenText(/→ Atlas launch/i, terminal);
+    runtime.printScreen('knowledge content node detail', terminal);
 
     terminal.write('\x7f');
     terminal.write('\t');
     await runtime.waitForScreenText(/\[activity\]/i, terminal);
-    await runtime.waitForScreenText(/entity-created:|fact-created:/i, terminal);
+    await runtime.waitForScreenText(/node-created:|item-created:/i, terminal);
     runtime.printScreen('knowledge activity', terminal);
 
     terminal.write('\x1b');
@@ -178,7 +181,7 @@ export const knowledgeBrowserScenario: McE2eScenario = {
     terminal.write('\x1b[B');
     terminal.write('\x1b[B');
     terminal.write('\r');
-    await runtime.waitForScreenText(/\[entities\]/i, terminal);
+    await runtime.waitForScreenText(/\[nodes\]/i, terminal);
     terminal.write('Secondary thread note');
     await runtime.waitForScreenText(/Secondary thread note.*exact:thread/i, terminal);
     await runtime.waitForScreenTextAbsent(/Primary thread note/i, terminal);
