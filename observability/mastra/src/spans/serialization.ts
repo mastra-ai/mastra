@@ -494,9 +494,18 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
         return formatSerializationError(error);
       }
       let keyCount = 0;
+      let omittedByLimit = 0;
 
       for (const key of keys) {
         if (stripSet.has(key)) {
+          continue;
+        }
+
+        // Count what the limit actually drops; deriving it from `keys.length` would
+        // report stripped keys as truncated. Values past the limit are never read, so
+        // a strippable value beyond the limit still counts here.
+        if (keyCount >= maxObjectKeys) {
+          omittedByLimit++;
           continue;
         }
 
@@ -504,11 +513,6 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
         try {
           rawValue = (val as Record<string, unknown>)[key];
         } catch (error) {
-          if (keyCount >= maxObjectKeys) {
-            cleaned['__truncated'] = `${keys.length - keyCount} more keys omitted`;
-            break;
-          }
-
           cleaned[key] = formatSerializationError(error);
           keyCount++;
           continue;
@@ -518,11 +522,6 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
           continue;
         }
 
-        if (keyCount >= maxObjectKeys) {
-          cleaned['__truncated'] = `${keys.length - keyCount} more keys omitted`;
-          break;
-        }
-
         try {
           cleaned[key] = helper(rawValue, depth + 1);
           keyCount++;
@@ -530,6 +529,10 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
           cleaned[key] = formatSerializationError(error);
           keyCount++;
         }
+      }
+
+      if (omittedByLimit > 0) {
+        cleaned['__truncated'] = `${omittedByLimit} more keys omitted`;
       }
 
       return cleaned;

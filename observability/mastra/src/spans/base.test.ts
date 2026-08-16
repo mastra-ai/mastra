@@ -952,6 +952,52 @@ describe('Span', () => {
       });
     });
 
+    it('should not count explicitly stripped keys as truncated', () => {
+      const input = { first: 1, secret: 2, second: 3, third: 4 };
+
+      const result = deepClean(input, { ...DEFAULT_DEEP_CLEAN_OPTIONS, keysToStrip: ['secret'], maxObjectKeys: 2 });
+
+      expect(result).toEqual({
+        first: 1,
+        second: 3,
+        __truncated: '1 more keys omitted',
+      });
+    });
+
+    it('should not count runtime-shaped stripped values as truncated', () => {
+      const input = { a: 1, logger: { info() {} }, b: 2, c: 3, d: 4 };
+
+      const result = deepClean(input, { ...DEFAULT_DEEP_CLEAN_OPTIONS, maxObjectKeys: 2 });
+
+      expect(result).toEqual({
+        a: 1,
+        b: 2,
+        __truncated: '2 more keys omitted',
+      });
+    });
+
+    it('should not read values of keys omitted by maxObjectKeys', () => {
+      const input: Record<string, unknown> = { first: 1, second: 2 };
+      let reads = 0;
+
+      Object.defineProperty(input, 'third', {
+        enumerable: true,
+        get() {
+          reads++;
+          return 3;
+        },
+      });
+
+      const result = deepClean(input, { ...DEFAULT_DEEP_CLEAN_OPTIONS, maxObjectKeys: 2 });
+
+      expect(result).toEqual({
+        first: 1,
+        second: 2,
+        __truncated: '1 more keys omitted',
+      });
+      expect(reads).toBe(0);
+    });
+
     it('should not read throwing getters for explicitly stripped keys', () => {
       const input: Record<string, unknown> = {
         visible: 'ok',
