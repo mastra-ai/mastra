@@ -59,6 +59,64 @@ describe('processWorkflowConditional restart execution path depth', () => {
     expect(runs[0].data.activeStepsPath['C']).toEqual([0, 2]);
   });
 
+  it('keeps skipped-branch step.end paths at 2 levels on restart', async () => {
+    const published: any[] = [];
+    const pubsub = {
+      publish: async (_topic: string, event: any) => {
+        published.push(event);
+      },
+    } as any;
+
+    // Only branch C(2) is truthy on restart; A(0) and B(1) are skipped and emit
+    // step.end. Every path, run and end alike, must stay at 2 levels so the
+    // conditional aggregates instead of drilling into a phantom third level.
+    const step = makeConditionalStep(['A', 'B', 'C']);
+    const args = makeArgs({
+      executionPath: [0, 2],
+      restart: { activeStepsPath: { C: [0, 2] }, isParallelOrConditionalRestarted: false },
+    });
+
+    await processWorkflowConditional(args, { pubsub, stepExecutor: makeStepExecutor([2]), step });
+
+    const runs = published.filter(e => e.type === 'workflow.step.run');
+    const ends = published.filter(e => e.type === 'workflow.step.end');
+
+    expect(runs).toHaveLength(1);
+    expect(runs[0].data.executionPath).toEqual([0, 2]);
+
+    // Skipped branches A and B: paths [0, 0] and [0, 1], not [0, 2, 0] / [0, 2, 1].
+    expect(ends.map(e => e.data.executionPath).sort()).toEqual([
+      [0, 0],
+      [0, 1],
+    ]);
+    expect(ends.every(e => e.data.executionPath.length === 2)).toBe(true);
+  });
+
+  it('keeps the perStep branch path at 2 levels on restart', async () => {
+    const published: any[] = [];
+    const pubsub = {
+      publish: async (_topic: string, event: any) => {
+        published.push(event);
+      },
+    } as any;
+
+    // perStep mode publishes only the single active branch. On restart it must
+    // still resolve to the 2-level path, not append onto the restored one.
+    const step = makeConditionalStep(['A', 'B', 'C']);
+    const args = makeArgs({
+      executionPath: [0, 2],
+      perStep: true,
+      restart: { activeStepsPath: { C: [0, 2] }, isParallelOrConditionalRestarted: false },
+    });
+
+    await processWorkflowConditional(args, { pubsub, stepExecutor: makeStepExecutor([2]), step });
+
+    const runs = published.filter(e => e.type === 'workflow.step.run');
+    expect(runs).toHaveLength(1);
+    expect(runs[0].data.executionPath).toEqual([0, 2]);
+    expect(runs[0].data.activeStepsPath['C']).toEqual([0, 2]);
+  });
+
   it('appends the branch index normally on the first (non-restart) pass', async () => {
     const published: any[] = [];
     const pubsub = {
