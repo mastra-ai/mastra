@@ -95,7 +95,8 @@ async function replaceShellOutput(template: string, workingDir: string): Promise
 
 /**
  * Replace file references with file content
- * Format: @filename, @path/to/file, or @path\to\file
+ * Formats: @filename, @path/to/file, @path\to\file, @C:\path\to\file, or @C:/path/to/file
+ * Spaces, quoted paths, and glob patterns are not supported.
  */
 async function replaceFileReferences(template: string, workingDir: string): Promise<string> {
   const filePattern = /@((?:[A-Za-z]:[\\/])?[\w./\\-]+)/g;
