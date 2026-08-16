@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowUpRight, CircleSlash, EllipsisVertical, Link2, Trash2 } from 'lucide-react';
+import { ArrowUpRight, CircleSlash, EllipsisVertical, Trash2 } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
 import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
@@ -34,6 +34,7 @@ import {
 } from './BoardCardParts';
 import { BoardStageIcon, SourceIcon, actionIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
+import { RelatedWorkItemLink } from './RelatedWorkItemLink';
 import { WorkItemActivity } from './WorkItemActivity';
 
 interface CardPrimaryAction {
@@ -198,7 +199,7 @@ export function WorkItemCard({
           if (!evaluating) setDragPayload(event, { kind: 'work-item', id: item.id, fromStage: columnStage });
         }}
         className={cn(
-          'group group/card relative flex flex-col gap-3 rounded-xl border border-border1/50 bg-neutral6/5 p-3 outline-none transition-colors hover:bg-surface3',
+          'group relative flex flex-col gap-3 rounded-xl border border-border1/50 bg-neutral6/5 p-3 outline-none transition-colors hover:bg-surface3',
           evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing',
           runPending && 'opacity-70',
         )}
@@ -288,14 +289,40 @@ export function WorkItemCard({
             </DropdownMenu.Content>
           </DropdownMenu>
         </div>
-        {threadSession !== undefined && (
-          <span
-            aria-hidden
-            className="bg-accent1 pointer-events-none absolute top-2 right-2 z-20 size-2 rounded-full transition-opacity duration-200 ease-out motion-reduce:transition-none pointer-coarse:hidden pointer-fine:group-focus-within/card:opacity-0 pointer-fine:group-hover/card:opacity-0"
-          />
-        )}
         <div className="flex min-w-0 flex-col gap-1.5">
-          <span className="text-ui-xs text-icon2 truncate pr-8">{workItemMeta(item)}</span>
+          <div className="flex min-w-0 items-center gap-1.5 pr-8">
+            <span className="text-ui-xs text-icon2 min-w-0 truncate">{workItemMeta(item)}</span>
+            {threadSession !== undefined && <span aria-hidden className="bg-accent1 size-2 shrink-0 rounded-full" />}
+            {relatedItems.map(related => {
+              const relationText = relationshipLabel(related);
+              const relatedSession = itemThreadSession(liveSessions(related.sessions, liveWorktreePaths));
+
+              if (relatedSession !== undefined) {
+                return (
+                  <RelatedWorkItemLink
+                    key={related.id}
+                    item={related}
+                    href={`/factories/${factoryId}/workspaces/${relatedSession.sessionId}/threads/${relatedSession.threadId}`}
+                    external={false}
+                    live
+                    ariaLabel={`Open live session for ${relationText}: ${related.title}`}
+                  />
+                );
+              }
+
+              const external = related.url !== null;
+              return (
+                <RelatedWorkItemLink
+                  key={related.id}
+                  item={related}
+                  href={related.url ?? relationshipPath(related, factoryId)}
+                  external={external}
+                  live={false}
+                  ariaLabel={`${external ? externalLinkLabel(related.source) : `Open ${relationText}`}: ${relationText} — ${related.title}`}
+                />
+              );
+            })}
+          </div>
           <div className="flex min-w-0 items-center gap-1.5">
             {item.source === 'github-pr' ? (
               <PullRequestStatusIcon status={pullRequestStatusForItem(item)} />
@@ -308,25 +335,6 @@ export function WorkItemCard({
           </div>
         </div>
         <CardLabels labels={labels} />
-        {relatedItems.map(related => {
-          const relationText = relationshipLabel(related);
-          const relatedSession = itemThreadSession(liveSessions(related.sessions, liveWorktreePaths));
-          return (
-            <Link
-              key={related.id}
-              to={
-                relatedSession
-                  ? `/factories/${factoryId}/workspaces/${relatedSession.sessionId}/threads/${relatedSession.threadId}`
-                  : relationshipPath(related, factoryId)
-              }
-              className="text-ui-xs text-icon4 hover:text-icon6 relative flex items-center gap-1 hover:underline"
-              aria-label={`Open ${relationText}`}
-            >
-              <Link2 size={11} aria-hidden />
-              <span className="truncate">{relationText}</span>
-            </Link>
-          );
-        })}
         {otherStages.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5">
             {otherStages.map(stage => (

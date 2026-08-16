@@ -47,6 +47,23 @@ const workItem = {
   updatedAt: '2026-07-18T00:00:00.000Z',
 };
 
+const relatedPullRequest = {
+  ...workItem,
+  id: 'review-1',
+  factoryProjectId: FACTORY_ID,
+  externalSource: {
+    integrationId: 'github',
+    type: 'pull-request',
+    externalId: 'github-pr:21565',
+    url: 'https://github.com/acme/app/pull/21565',
+  },
+  parentWorkItemId: ITEM_ID,
+  title: 'Review login fix',
+  stages: ['review'],
+  sessions: {},
+  metadata: { number: 21565, state: 'open' },
+};
+
 const manualWorkItem = {
   id: 'manual-1',
   orgId: 'org-1',
@@ -355,6 +372,92 @@ describe('Board card pending states', () => {
     expect(within(card).getByText('Open session')).toBeInTheDocument();
     const matches = matchRoutes(createAppRoutes(), threadLink.getAttribute('href') ?? '');
     expect(matches?.at(-1)?.route.path).toBe('threads/:threadId');
+  });
+
+  it('shows a related PR as a compact link to the exact source item', async () => {
+    const user = userEvent.setup();
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: [workItem, relatedPullRequest] }),
+      ),
+    );
+    renderWorkBoard();
+
+    const card = await screen.findByRole('article', { name: 'Fix login bug' });
+
+    const relatedLink = within(card).getByRole('link', {
+      name: 'Open in GitHub: Review: PR #21565 — Review login fix',
+    });
+    expect(relatedLink).toHaveTextContent('PR #21565');
+    expect(relatedLink).not.toHaveTextContent('Review:');
+    expect(relatedLink).toHaveAttribute('href', relatedPullRequest.externalSource.url);
+    expect(relatedLink).toHaveAttribute('target', '_blank');
+    expect(relatedLink).not.toHaveAttribute('title');
+
+    await user.hover(relatedLink);
+    expect(await screen.findByText('Review: PR #21565 · Review login fix')).toBeVisible();
+
+    await user.unhover(relatedLink);
+    await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
+    relatedLink.focus();
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Review: PR #21565 · Review login fix');
+  });
+
+  it('marks a related PR with a live session and opens its thread', async () => {
+    const liveRelatedPullRequest = {
+      ...relatedPullRequest,
+      sessions: {
+        review: {
+          sessionId: 'review-session',
+          branch: 'review-pr',
+          threadId: 'review-thread',
+          startedBy: 'user-1',
+        },
+      },
+    };
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: [workItem, liveRelatedPullRequest] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
+        HttpResponse.json({
+          sessions: [
+            {
+              id: 'review-session-row',
+              sessionId: 'review-session',
+              projectRepositoryId: REPO_ID,
+              orgId: 'org-1',
+              userId: 'user-1',
+              branch: 'review-pr',
+              baseBranch: 'main',
+              sandboxId: null,
+              sandboxWorkdir: '/repo-review',
+              materializedAt: '2026-07-18T00:00:00.000Z',
+              createdAt: '2026-07-18T00:00:00.000Z',
+              updatedAt: '2026-07-18T00:00:00.000Z',
+            },
+          ],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    const card = await screen.findByRole('article', { name: 'Fix login bug' });
+    const relatedLink = within(card).getByRole('link', {
+      name: 'Open live session for Review: PR #21565: Review login fix',
+    });
+    expect(relatedLink).toHaveAttribute(
+      'href',
+      `/factories/${FACTORY_ID}/workspaces/review-session/threads/review-thread`,
+    );
+    expect(relatedLink).not.toHaveAttribute('target');
+    expect(relatedLink.querySelector('.lucide-message-square')).toBeInTheDocument();
+
+    await user.hover(relatedLink);
+    expect(await screen.findByText('Review: PR #21565 · Review login fix · Live session')).toBeVisible();
   });
 
   it('names the click outcome differently for cards that have a session and cards that do not', async () => {
