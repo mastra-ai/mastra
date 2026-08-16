@@ -1,5 +1,69 @@
 # @mastra/core
 
+## 1.60.0-alpha.6
+
+### Patch Changes
+
+- Fixed durable step-start events publishing full model requests. ([#21572](https://github.com/mastra-ai/mastra/pull/21572))
+
+- Rewrite system-reminder tags in Azure-bound user text and system instructions to avoid content moderation refusals while preserving stored history. ([#21599](https://github.com/mastra-ai/mastra/pull/21599))
+
+- Fixed getWorkflowRunById and getWorkflowRunSteps so nested workflows report the correct single suspended leaf step. Obsolete suspension details are removed after the step resumes or completes. (#21229) ([#21565](https://github.com/mastra-ai/mastra/pull/21565))
+
+## 1.60.0-alpha.5
+
+### Patch Changes
+
+- Fixed workflow cancellation so sleep() and sleepUntil() stop promptly without overwriting the canceled run status. ([#21570](https://github.com/mastra-ai/mastra/pull/21570))
+
+## 1.60.0-alpha.4
+
+### Minor Changes
+
+- Added optional `filename` property to `FilePayload`. When an agent emits a file chunk with a filename, the Channel layer now preserves it through to the Chat SDK adapter instead of generating a name from the MIME type. Existing file chunks without a filename continue using the `generated.<ext>` fallback. ([#21135](https://github.com/mastra-ai/mastra/pull/21135))
+
+  ```ts
+  const chunk: FilePayload = {
+    data: fileBuffer,
+    mimeType: 'text/plain',
+    filename: 'report.txt', // preserved through to the channel adapter
+  };
+  ```
+
+### Patch Changes
+
+- Fixed routed models so tool results can include images and files. (#21183) ([#21569](https://github.com/mastra-ai/mastra/pull/21569))
+
+- Fixed replay streams so disconnecting during history replay also stops the live stream. ([#21556](https://github.com/mastra-ai/mastra/pull/21556))
+
+- Fixed dataset experiments with memory-enabled agents when no resource or thread IDs are provided. ([#21552](https://github.com/mastra-ai/mastra/pull/21552))
+
+- Fixed array textStream output so it always stays valid JSON, even when the first streamed chunk already includes elements ([#21559](https://github.com/mastra-ai/mastra/pull/21559))
+
+- Restore pending tool approval state when reloading v6 UI messages. ([#17948](https://github.com/mastra-ai/mastra/pull/17948))
+
+- Fix AgentController subscriptions hanging when remote runs lose their lease ([#21540](https://github.com/mastra-ai/mastra/pull/21540))
+
+- Fixed Anthropic cache-write usage to preserve 5-minute and 1-hour token counts across streams and observability. ([#21563](https://github.com/mastra-ai/mastra/pull/21563))
+
+## 1.60.0-alpha.3
+
+### Minor Changes
+
+- Added live-tail PubSub subscriptions with `startFrom: "latest"` and an explicit `supportsOffsets` capability. ([#21535](https://github.com/mastra-ai/mastra/pull/21535))
+
+  ```typescript
+  await pubsub.subscribe(topic, callback, { startFrom: 'latest' });
+  ```
+
+  The default remains `"earliest"`, and existing consumer groups keep their checkpoint.
+
+### Patch Changes
+
+- Fixed automatic tool resumption so approval-gated tools require an explicit trusted approval decision and remain suspended for ambiguous input. ([#21539](https://github.com/mastra-ai/mastra/pull/21539))
+
+- Fixed MCP-exposed agents so nested tools receive elicitation and other MCP context. (#20549) ([#21548](https://github.com/mastra-ai/mastra/pull/21548))
+
 ## 1.60.0-alpha.2
 
 ### Minor Changes

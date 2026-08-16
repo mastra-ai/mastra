@@ -87,6 +87,7 @@ import type { Context } from '../types';
 import { toSlug } from '../utils';
 
 import { handleError } from './error';
+import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
 import {
   sanitizeBody,
   validateBody,
@@ -452,7 +453,7 @@ export async function getSerializedAgentTools(
           resolveLazySchema('inputSchema' in tool ? tool.inputSchema : undefined) as PublicSchema<unknown> | undefined,
         );
         if (inputSchema !== undefined) {
-          inputSchemaForReturn = stringify(inputSchema);
+          inputSchemaForReturn = stringify(stripInjectedToolOverrideFields(inputSchema));
         }
 
         const outputSchema = schemaToJsonSchema(

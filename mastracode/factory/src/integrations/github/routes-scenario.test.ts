@@ -88,6 +88,7 @@ function projectRepositoryRow(row: Record<string, any>) {
     sandboxProvider: 'railway',
     sandboxWorkdir: row.sandboxWorkdir,
     setupCommand: null,
+    teardownCommand: null,
     createdAt: now,
     updatedAt: now,
   };

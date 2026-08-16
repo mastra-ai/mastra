@@ -937,7 +937,8 @@ export async function executeForeach(
   const resumeTime = resume?.steps[0] === stepId ? Date.now() : undefined;
 
   const stepInfo = {
-    ...stepResults[stepId],
+    // Same as executeStep: strip prior completion/suspend fields on re-entry.
+    ...omitPriorCompletionFields((stepResults[stepId] ?? {}) as Record<string, unknown>),
     ...(resume?.steps[0] === stepId ? { resumePayload: resume?.resumePayload } : { payload: prevOutput }),
     ...(startTime ? { startedAt: startTime } : {}),
     ...(resumeTime ? { resumedAt: resumeTime } : {}),
