@@ -95,17 +95,17 @@ async function replaceShellOutput(template: string, workingDir: string): Promise
 
 /**
  * Replace file references with file content
- * Format: @filename or @path/to/file
+ * Format: @filename, @path/to/file, or @path\to\file
  */
 async function replaceFileReferences(template: string, workingDir: string): Promise<string> {
-  const filePattern = /@([\w./-]+)/g;
+  const filePattern = /@((?:[A-Za-z]:[\\/])?[\w./\\-]+)/g;
   const matches = [...template.matchAll(filePattern)];
 
   let result = template;
   for (const match of matches) {
     const [fullMatch, filePath] = match;
     try {
-      const fullPath = path.resolve(workingDir, filePath!);
+      const fullPath = resolveFileReferencePath(workingDir, filePath!);
       const content = await fs.readFile(fullPath, 'utf-8');
       result = result.replace(fullMatch, content);
     } catch {
@@ -114,6 +114,13 @@ async function replaceFileReferences(template: string, workingDir: string): Prom
   }
 
   return result;
+}
+
+function resolveFileReferencePath(workingDir: string, filePath: string): string {
+  const usesWindowsPaths = [workingDir, filePath].some(value => /^[A-Za-z]:[\\/]/.test(value) || value.includes('\\'));
+  const pathResolver = usesWindowsPaths ? path.win32 : path;
+
+  return pathResolver.resolve(workingDir, filePath);
 }
 
 /**
