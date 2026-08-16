@@ -35,7 +35,7 @@ export function registerEnvDbCommands(envCommand: Command) {
       '[environment]',
       "Environment name, slug, or ID (default: the project's only environment, or prompt if there are several)",
     )
-    .requiredOption('--kind <kind>', 'Database provider (turso, neon)')
+    .requiredOption('--kind <kind>', 'Database provider (turso, neon, redis)')
     .option(...PROJECT_OPTION)
     .option('--name <name>', 'Database name (default: derived from the project slug)')
     .option('--region <region>', 'Provider region ID (shared databases only; environment region wins otherwise)')

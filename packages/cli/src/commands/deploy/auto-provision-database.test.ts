@@ -75,6 +75,17 @@ function neonIssue(overrides: Partial<PreflightIssue> = {}): PreflightIssue {
   };
 }
 
+function redisIssue(overrides: Partial<PreflightIssue> = {}): PreflightIssue {
+  return {
+    code: 'LOCAL_STORAGE_PATH',
+    severity: 'error',
+    message: 'RedisStreamsPubSub cannot connect at runtime because REDIS_URL is not set',
+    fix: 'mastra env db create --kind redis',
+    autofix: { kind: 'create-managed-database', provider: 'redis', envVarName: 'REDIS_URL' },
+    ...overrides,
+  };
+}
+
 function unrelatedIssue(): PreflightIssue {
   return {
     code: 'MISSING_ENV_VAR',
@@ -163,6 +174,24 @@ describe('maybeAutoProvisionDatabases', () => {
     expect(result.issues.map(i => i.code)).toEqual(['MISSING_ENV_VAR']);
     expect(result.provisioned).toHaveLength(1);
     expect(result.newlyManagedEnvVarNames).toEqual(['TURSO_DATABASE_URL', 'TURSO_AUTH_TOKEN']);
+  });
+
+  it('provisions a managed Redis when the user confirms and reports REDIS_URL as newly managed', async () => {
+    confirmMock.mockResolvedValue(true);
+    attachDatabaseMock.mockResolvedValue({ id: 'db-redis-1', name: 'my-app-db', kind: 'redis' });
+    pollDatabaseUntilReadyMock.mockResolvedValue({ id: 'db-redis-1', name: 'my-app-db', kind: 'redis' });
+
+    const issues = [redisIssue()];
+    const result = await maybeAutoProvisionDatabases(issues, makeCtx());
+
+    expect(attachDatabaseMock).toHaveBeenCalledWith('t', 'org-1', 'proj-1', {
+      kind: 'redis',
+      name: 'my-app-db',
+      environmentId: 'env-prod',
+    });
+    expect(result.issues).toEqual([]);
+    expect(result.provisioned).toHaveLength(1);
+    expect(result.newlyManagedEnvVarNames).toEqual(['REDIS_URL']);
   });
 
   it('leaves the issue in place when the user declines', async () => {

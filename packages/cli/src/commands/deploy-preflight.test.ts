@@ -342,6 +342,19 @@ describe('preflightBuildOutput', () => {
       });
     });
 
+    it('attaches a create-managed-database autofix hint for REDIS_URL', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ localPaths: [{ ...guardedDetection, guardedBy: 'REDIS_URL' }] });
+
+      const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: true });
+      const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
+      expect(issue?.autofix).toEqual({
+        kind: 'create-managed-database',
+        provider: 'redis',
+        envVarName: 'REDIS_URL',
+      });
+    });
+
     it('omits the autofix hint when the guard var does not map to a known provider', async () => {
       writeBundle(`export {};`);
       writeMetadata({ localPaths: [{ ...guardedDetection, guardedBy: 'MY_CUSTOM_DB_URL' }] });
