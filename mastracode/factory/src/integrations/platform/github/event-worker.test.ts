@@ -108,6 +108,7 @@ describe('PlatformGithubEventWorker', () => {
     const dispatch = vi.fn<typeof dispatchGithubWebhook>().mockResolvedValue({
       delivered: 1,
       failed: 0,
+      skipped: 0,
       ignored: false,
     });
     const ingestFactoryEvent = vi.fn(async () => ({ status: 'committed' }));
@@ -231,12 +232,89 @@ describe('PlatformGithubEventWorker', () => {
     await resumed.stop();
   });
 
+  it('hands review feedback to the factory rules so the authoring agent is woken', async () => {
+    const settings = createSettingsStorage();
+    const dispatch = vi.fn<typeof dispatchGithubWebhook>().mockResolvedValue({
+      delivered: 1,
+      failed: 0,
+      skipped: 0,
+      ignored: false,
+    });
+    const ingestFactoryEvent = vi.fn(async () => ({ status: 'committed' }));
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith('/installations')) {
+        return json({ installations: [{ installationId: 7, usable: true, suspendedAt: null }] });
+      }
+      if (url.pathname.endsWith('/installations/7/repositories')) {
+        return json({ repositories: [{ id: 101 }] });
+      }
+      if (url.pathname.endsWith('/repositories/101/events')) {
+        if (url.searchParams.has('afterTimestamp')) {
+          return json({
+            events: [
+              {
+                id: '2000-0',
+                deliveryId: 'delivery-review',
+                event: 'pull_request_review',
+                payload: { action: 'submitted' },
+              },
+              {
+                id: '2001-0',
+                deliveryId: 'delivery-comment',
+                event: 'issue_comment',
+                payload: { action: 'created' },
+              },
+              {
+                id: '2002-0',
+                deliveryId: 'delivery-comment-edited',
+                event: 'issue_comment',
+                payload: { action: 'edited' },
+              },
+            ],
+            nextCursor: '2002-0',
+          });
+        }
+        return json({ events: [], nextCursor: null });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const worker = createWorker({
+      fetchImpl,
+      storage: settings.storage,
+      now: () => 1_000,
+      dispatch,
+      ingestFactoryEvent,
+    });
+
+    await worker.init(createDeps());
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+
+    // A submitted review and a new pull-request comment are the two ways review
+    // feedback reaches the agent that authored the branch. Comment edits stay
+    // with the subscription dispatcher — re-waking on an edit would double-fire.
+    expect(ingestFactoryEvent).toHaveBeenCalledTimes(2);
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(1, {
+      event: 'pull_request_review',
+      deliveryId: 'delivery-review',
+      payload: { action: 'submitted' },
+    });
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(2, {
+      event: 'issue_comment',
+      deliveryId: 'delivery-comment',
+      payload: { action: 'created' },
+    });
+    expect(dispatch).toHaveBeenCalledTimes(3);
+    await worker.stop();
+  });
+
   it('advances the cursor when one subscription fails so the bad target does not poison later events', async () => {
     const settings = createSettingsStorage();
     const dispatch = vi
       .fn<typeof dispatchGithubWebhook>()
-      .mockResolvedValueOnce({ delivered: 1, failed: 1, ignored: false })
-      .mockResolvedValue({ delivered: 1, failed: 0, ignored: false });
+      .mockResolvedValueOnce({ delivered: 1, failed: 1, skipped: 0, ignored: false })
+      .mockResolvedValue({ delivered: 1, failed: 0, skipped: 0, ignored: false });
     const eventCursors: string[] = [];
     const fetchImpl = vi.fn<typeof fetch>(async input => {
       const url = new URL(String(input));
@@ -310,6 +388,7 @@ describe('PlatformGithubEventWorker', () => {
     const dispatch = vi.fn<typeof dispatchGithubWebhook>().mockResolvedValue({
       delivered: 1,
       failed: 0,
+      skipped: 0,
       ignored: false,
     });
     const fetchImpl = vi.fn<typeof fetch>(async input => {
@@ -351,6 +430,7 @@ describe('PlatformGithubEventWorker', () => {
     const dispatch = vi.fn<typeof dispatchGithubWebhook>().mockResolvedValue({
       delivered: 1,
       failed: 0,
+      skipped: 0,
       ignored: false,
     });
     const eventCursors: string[] = [];

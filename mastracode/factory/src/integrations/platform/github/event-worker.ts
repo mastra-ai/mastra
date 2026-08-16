@@ -523,10 +523,12 @@ function normalizeSettings(value: PlatformGithubEventWorkerSettings | null): Pla
 
 // Events the polling worker forwards to the factory rules engine. Closures
 // let the reconciler finalize cards; `synchronize` and `review_requested` on a
-// pull request are the two triggers the review board's re-review path listens
-// for. Direct-webhook consumers ingest every parsed event; the platform path
-// gates because most other events (comments, reviews, edits) only interest the
-// subscription dispatcher, not the factory rules.
+// pull request are the triggers the review board's re-review path listens for;
+// submitted reviews and pull request comments are how review feedback reaches
+// the agent that authored the branch. Direct-webhook consumers ingest every
+// parsed event; the platform path gates because the remaining events (issue
+// edits, comment edits and deletions) only interest the subscription
+// dispatcher, not the factory rules.
 function isFactoryIngestedEvent(event: ParsedGithubWebhook): boolean {
   if ((event.event === 'issues' || event.event === 'pull_request') && event.payload.action === 'closed') {
     return true;
@@ -535,6 +537,8 @@ function isFactoryIngestedEvent(event: ParsedGithubWebhook): boolean {
     const action = event.payload.action;
     if (action === 'synchronize' || action === 'review_requested') return true;
   }
+  if (event.event === 'pull_request_review' && event.payload.action === 'submitted') return true;
+  if (event.event === 'issue_comment' && event.payload.action === 'created') return true;
   return false;
 }
 
