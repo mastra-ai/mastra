@@ -63,8 +63,9 @@ describe('native session → pulse forwarding', () => {
     });
     expect(approval!.attributes).toEqual({ toolCallId: 'c1', toolName: 'issue_refund' });
 
-    expect(byAction('agent_controller', 'agent_end')).toMatchObject({ type: 'state' });
-    expect(byAction('agent_controller', 'agent_end')!.attributes).toEqual({ reason: 'aborted' });
+    // Eric's handoff names the terminal pulse agent.run_finished.
+    expect(byAction('agent', 'run_finished')).toMatchObject({ type: 'state' });
+    expect(byAction('agent', 'run_finished')!.attributes).toEqual({ reason: 'aborted' });
     // The session-layer abort outcome is authoritative — the extra fact lands too.
     expect(byAction('run_control', 'abort_completed')).toBeDefined();
 
@@ -114,9 +115,9 @@ describe('native session → pulse forwarding', () => {
 
     const abort = storage.pulses.find(p => p.action === 'abort_completed');
     expect(abort).toBeDefined();
-    expect(abort!.runId).toBe('run-42');
-    expect(abort!.metadata?.runId).toBe('run-42');
-    expect(storage.pulses.find(p => p.action === 'agent_end')!.runId).toBe('run-42');
+    expect(abort!.runId).toBe('run-42'); // column only — no metadata copy
+    expect(abort!.metadata?.runId).toBeUndefined();
+    expect(storage.pulses.find(p => p.action === 'run_finished')!.runId).toBe('run-42');
 
     await mastra.shutdown();
   });

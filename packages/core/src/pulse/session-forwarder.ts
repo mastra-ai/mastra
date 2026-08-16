@@ -116,11 +116,8 @@ export function attachSessionPulseForwarder(options: SessionPulseForwarderOption
         surface,
         action,
         attributes: sanitizeValue(attributes) as Record<string, unknown>,
-        metadata: {
-          ...(runId ? { runId } : {}),
-          ...(threadId ? { threadId } : {}),
-          ...(resourceId ? { resourceId } : {}),
-        },
+        // runId/threadId/resourceId live ONLY as top-level columns (join
+        // keys) — no metadata duplication.
         traceId: '',
         runId,
         threadId: threadId || undefined,
@@ -140,7 +137,7 @@ export function attachSessionPulseForwarder(options: SessionPulseForwarderOption
       if (terminalRecorded.has(runId)) return;
       terminalRecorded.add(runId);
     }
-    emit('agent_controller', 'agent_end', 'state', { reason }, runId);
+    emit('agent', 'run_finished', 'state', { reason }, runId);
     if (reason === 'aborted') emit('run_control', 'abort_completed', 'state', {}, runId);
   };
 
