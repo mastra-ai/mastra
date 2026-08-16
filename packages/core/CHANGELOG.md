@@ -1,5 +1,21 @@
 # @mastra/core
 
+## 1.60.0-alpha.6
+
+### Patch Changes
+
+- Fixed durable step-start events publishing full model requests. ([#21572](https://github.com/mastra-ai/mastra/pull/21572))
+
+- Rewrite system-reminder tags in Azure-bound user text and system instructions to avoid content moderation refusals while preserving stored history. ([#21599](https://github.com/mastra-ai/mastra/pull/21599))
+
+- Fixed getWorkflowRunById and getWorkflowRunSteps so nested workflows report the correct single suspended leaf step. Obsolete suspension details are removed after the step resumes or completes. (#21229) ([#21565](https://github.com/mastra-ai/mastra/pull/21565))
+
+## 1.60.0-alpha.5
+
+### Patch Changes
+
+- Fixed workflow cancellation so sleep() and sleepUntil() stop promptly without overwriting the canceled run status. ([#21570](https://github.com/mastra-ai/mastra/pull/21570))
+
 ## 1.60.0-alpha.4
 
 ### Minor Changes

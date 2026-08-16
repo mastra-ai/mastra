@@ -152,7 +152,10 @@ describe('Board card session liveness', () => {
     renderWorkBoard();
 
     const card = await screen.findByTestId('work-item-card');
-    await waitFor(() => expect(within(card).getByText('Open session')).toBeInTheDocument());
+    await waitFor(() => {
+      expect(within(card).getByRole('link', { name: 'Open session for Fix login bug' })).toBeInTheDocument();
+      expect(within(card).getByText('Open session')).toBeInTheDocument();
+    });
 
     await user.click(await screen.findByRole('button', { name: 'Session actions for factory/issue-1' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Delete' }));
@@ -165,7 +168,9 @@ describe('Board card session liveness', () => {
     await waitFor(() =>
       expect(within(screen.getByTestId('work-item-card')).getByText('Start session')).toBeInTheDocument(),
     );
-    expect(within(screen.getByTestId('work-item-card')).queryByText('Open session')).not.toBeInTheDocument();
+    expect(
+      within(screen.getByTestId('work-item-card')).queryByRole('link', { name: /Open session for/ }),
+    ).not.toBeInTheDocument();
 
     refetchGate.resolve();
     await waitFor(() =>

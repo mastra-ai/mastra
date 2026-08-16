@@ -1,5 +1,14 @@
 # @mastra/inngest
 
+## 1.8.7-alpha.1
+
+### Patch Changes
+
+- Fixed durable Inngest streams retaining events after consumers unsubscribe and prevented internal workflow watch events from filling replay caches. ([#21572](https://github.com/mastra-ai/mastra/pull/21572))
+
+- Updated dependencies [[`0b4f108`](https://github.com/mastra-ai/mastra/commit/0b4f1089aa8d92e67c2a8e99726822c5ee410784), [`88ddc7c`](https://github.com/mastra-ai/mastra/commit/88ddc7ce01d40175f13a3228b789a906779680bd), [`a7dd322`](https://github.com/mastra-ai/mastra/commit/a7dd32247d95afc539f483ca37f4594af0387f59)]:
+  - @mastra/core@1.60.0-alpha.6
+
 ## 1.8.7-alpha.0
 
 ### Patch Changes

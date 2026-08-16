@@ -1,5 +1,21 @@
 # mastra
 
+## 1.25.1-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`0b4f108`](https://github.com/mastra-ai/mastra/commit/0b4f1089aa8d92e67c2a8e99726822c5ee410784), [`88ddc7c`](https://github.com/mastra-ai/mastra/commit/88ddc7ce01d40175f13a3228b789a906779680bd), [`a7dd322`](https://github.com/mastra-ai/mastra/commit/a7dd32247d95afc539f483ca37f4594af0387f59)]:
+  - @mastra/core@1.60.0-alpha.6
+  - @mastra/deployer@1.60.0-alpha.6
+
+## 1.25.1-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`74e5bd3`](https://github.com/mastra-ai/mastra/commit/74e5bd315b8b3a1e04cb6cf480bb0f5fc4951dc8), [`1275be5`](https://github.com/mastra-ai/mastra/commit/1275be5a05be1e5d2f8f49d8ddf3a41f8c3e2e81)]:
+  - @mastra/core@1.60.0-alpha.5
+  - @mastra/deployer@1.60.0-alpha.5
+
 ## 1.25.1-alpha.4
 
 ### Patch Changes

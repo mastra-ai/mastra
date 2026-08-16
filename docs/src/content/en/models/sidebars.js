@@ -736,6 +736,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/scnet-token-plan',
+          label: 'SCNet Token Plan',
+        },
+        {
+          type: 'doc',
           id: 'providers/scx',
           label: 'SCX.ai',
         },

@@ -743,6 +743,18 @@ export function cleanStepResult(stepResult: unknown): unknown {
  * (megabytes per event for durable agent runs). Result/suspended events get
  * their fresh completion fields from the current execution result instead.
  */
+export function omitPriorSuspensionFields<T extends Record<string, unknown>>(
+  stepInfo: T,
+): Omit<T, 'suspendedAt' | 'suspendPayload' | 'suspendOutput'> {
+  const {
+    suspendedAt: _suspendedAt,
+    suspendPayload: _suspendPayload,
+    suspendOutput: _suspendOutput,
+    ...rest
+  } = stepInfo;
+  return rest;
+}
+
 export function omitPriorCompletionFields<T extends Record<string, unknown>>(
   stepInfo: T,
 ): Omit<
