@@ -248,15 +248,22 @@ export class MemoryMySQL extends MemoryStorage {
     });
 
     if (omSchema) {
-      // Create index on lookupKey for efficient OM queries
-      // MySQL does not support CREATE INDEX IF NOT EXISTS, so catch ER_DUP_KEYNAME (errno 1061)
-      try {
-        await this.pool.execute(
-          `CREATE INDEX idx_om_lookup_key ON ${OM_TABLE_QUOTED} (${quoteIdentifier('lookupKey', 'column name')}(191))`,
-        );
-      } catch (err: any) {
-        if (err?.errno !== 1061) {
-          throw err;
+      // Create index on lookupKey for efficient OM queries. Consult the
+      // init-scoped snapshot (held by the operations domain) first so a warm
+      // boot does not re-issue DDL that is doomed to fail; the errno-1061
+      // swallow below stays as the concurrent-boot safety net.
+      const snapshot = this.operations.getInitSchemaSnapshot();
+      if (!snapshot?.indexes.has('idx_om_lookup_key')) {
+        // MySQL does not support CREATE INDEX IF NOT EXISTS, so catch ER_DUP_KEYNAME (errno 1061)
+        try {
+          await this.pool.execute(
+            `CREATE INDEX idx_om_lookup_key ON ${OM_TABLE_QUOTED} (${quoteIdentifier('lookupKey', 'column name')}(191))`,
+          );
+          snapshot?.indexes.add('idx_om_lookup_key');
+        } catch (err: any) {
+          if (err?.errno !== 1061) {
+            throw err;
+          }
         }
       }
     }
