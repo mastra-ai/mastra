@@ -1626,9 +1626,10 @@ export class AgentThreadStreamRuntime {
     void Promise.allSettled(registered ? [finished, registered] : [finished]).then(() => {
       state.watchedThreadStreamIds.delete(record.streamId);
       if (isDisabled?.()) return;
-      this.#cleanupPreparedRun(state, record.runId);
+      const ownsCurrentRecord = state.threadRunsById.get(record.runId) === record;
+      if (ownsCurrentRecord) this.#cleanupPreparedRun(state, record.runId);
 
-      if (record.output.status === 'suspended' && this.#isSuspendedRun(state, record.runId)) {
+      if (ownsCurrentRecord && record.output.status === 'suspended' && this.#isSuspendedRun(state, record.runId)) {
         record.lifecycle = 'suspended';
         // Leak fix: stamp when the run parked so the lazy TTL sweep
         // (#sweepStaleSuspendedRecords) can evict it. The record stays fully intact
@@ -1641,9 +1642,9 @@ export class AgentThreadStreamRuntime {
       }
 
       record.lifecycle = 'completed';
-      this.#clearSuspendedRun(state, record.runId);
+      if (ownsCurrentRecord) this.#clearSuspendedRun(state, record.runId);
       state.threadRunsByStreamId.delete(record.streamId);
-      if (state.threadRunsById.get(record.runId) === record) {
+      if (ownsCurrentRecord) {
         state.threadRunsById.delete(record.runId);
         state.threadKeysByRunId.delete(record.runId);
       }
@@ -1680,6 +1681,10 @@ export class AgentThreadStreamRuntime {
           // persisted message and safe to replay to fresh subscribers.
           persisted: record.output.status === 'success',
         });
+        // A later registration may reuse the durable runId under a new stream.
+        // Its record owns all run-level cleanup and the shared runtime-scoped
+        // lease token; the older stream may only publish its own terminal event.
+        if (state.threadRunsById.has(record.runId)) return;
         if (this.#hasPendingThreadWork(state, key)) {
           void this.#drainPendingSignals(state, pubsub, key, record);
         } else {
@@ -2595,7 +2600,12 @@ export class AgentThreadStreamRuntime {
         }
         // When a run is aborted, cancel the current subscriber stream reader so
         // the generator's inner loop unblocks and can yield the synthetic abort.
-        if (data.type === 'run-aborted' && activeReaderRunId === data.runId && currentReader) {
+        if (
+          data.type === 'run-aborted' &&
+          activeReaderRunId === data.runId &&
+          (data.streamId === undefined || activeReaderStreamId === data.streamId) &&
+          currentReader
+        ) {
           cancelledByAbort = true;
           try {
             void currentReader.cancel();

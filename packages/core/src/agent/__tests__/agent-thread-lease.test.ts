@@ -437,4 +437,109 @@ describe('registerRun thread lease', () => {
       subscription.unsubscribe();
     }
   });
+
+  it('keeps the current same-run lease when an older local stream completes', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const agent = { id: 'same-run-successor-agent' } as Agent<any, any, any, any>;
+    const threadId = 'same-run-successor-thread';
+    const resourceId = 'same-run-successor-resource';
+    const key = [resourceId, threadId].join(AGENT_THREAD_KEY_SEPARATOR);
+    const runId = 'same-run-successor-run';
+    const firstRun = createRun(runId);
+    const currentRun = createRun(runId);
+
+    await runtime.registerRun(
+      agent,
+      firstRun.output,
+      { memory: { thread: threadId, resource: resourceId } } as any,
+      pubsub,
+    );
+    await runtime.registerRun(
+      agent,
+      currentRun.output,
+      { memory: { thread: threadId, resource: resourceId } } as any,
+      pubsub,
+    );
+    const currentOwner = pubsub.owners.get(key);
+    expect(currentOwner).toMatch(/^mastra:agent-thread:v2:/);
+
+    firstRun.finish();
+    await pubsub.flush();
+    await nextTick();
+
+    expect(pubsub.records.get(key)).toEqual({ owner: currentOwner, metadata: runId });
+
+    currentRun.finish();
+    await waitForCondition(() => pubsub.owners.get(key) === undefined);
+  });
+
+  it('ignores an abort from an older stream while reading the current resumed stream', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const agent = { id: 'stale-abort-agent' } as Agent<any, any, any, any>;
+    const threadId = 'stale-abort-thread';
+    const resourceId = 'stale-abort-resource';
+    const key = [resourceId, threadId].join(AGENT_THREAD_KEY_SEPARATOR);
+    const topic = `agent.thread-stream.${encodeURIComponent(key)}`;
+    const runId = 'stale-abort-run';
+    const currentStreamId = 'stale-abort-stream-2';
+    const owner = 'mastra:agent-thread:v2:remote-runtime:logical-run-digest';
+    pubsub.owners.set(key, owner);
+    pubsub.records.set(key, { owner, metadata: runId });
+
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+
+    try {
+      await pubsub.publish(topic, {
+        type: 'run-registered',
+        runId,
+        data: { type: 'run-registered', runId, streamId: currentStreamId, streamSeq: 2 },
+      });
+      await pubsub.flush();
+      await waitForCondition(() => subscription.activeRunId() === runId);
+
+      const startPart = iterator.next();
+      await pubsub.publish(topic, {
+        type: 'stream-part',
+        runId,
+        data: {
+          type: 'stream-part',
+          runId,
+          streamId: currentStreamId,
+          sourceId: 'remote-runtime',
+          part: { type: 'start', runId },
+        },
+      });
+      await pubsub.flush();
+      await expect(startPart).resolves.toMatchObject({ value: { type: 'start', runId } });
+
+      const nextPart = iterator.next();
+      await pubsub.publish(topic, {
+        type: 'run-aborted',
+        runId,
+        data: { type: 'run-aborted', runId, streamId: 'stale-abort-stream-1' },
+      });
+      await pubsub.flush();
+      await pubsub.publish(topic, {
+        type: 'stream-part',
+        runId,
+        data: {
+          type: 'stream-part',
+          runId,
+          streamId: currentStreamId,
+          sourceId: 'remote-runtime',
+          part: { type: 'text-delta', runId, payload: { text: 'still live' } },
+        },
+      });
+      await pubsub.flush();
+
+      await expect(nextPart).resolves.toMatchObject({
+        value: { type: 'text-delta', runId, payload: { text: 'still live' } },
+      });
+    } finally {
+      subscription.unsubscribe();
+    }
+  });
 });
