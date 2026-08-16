@@ -332,6 +332,22 @@ export interface DelegationConfig {
    * ```
    */
   messageFilter?: (context: MessageFilterContext) => MastraDBMessage[] | Promise<MastraDBMessage[]>;
+
+  /**
+   * Controls how errors thrown by `onDelegationStart` and `onDelegationComplete`
+   * are handled.
+   *
+   * - `'warn'` (default): log the error and continue, preserving the delegation's
+   *   original behavior as if the hook had not thrown. This matches the behavior
+   *   prior to this option's introduction.
+   * - `'throw'`: a throwing `onDelegationStart` aborts the delegation before the
+   *   sub-agent is invoked, surfacing the hook's error as the tool call's error.
+   *   A throwing `onDelegationComplete` marks the delegation as failed, propagating
+   *   the hook's error the same way a failed sub-agent execution would.
+   *
+   * @default 'warn'
+   */
+  hookErrorStrategy?: 'warn' | 'throw';
 }
 /**
  * Configuration for the routing agent's behavior.

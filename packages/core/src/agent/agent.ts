@@ -4870,6 +4870,26 @@ export class Agent<
               try {
                 startResult = await delegation.onDelegationStart(delegationStartContext);
               } catch (hookError) {
+                if (delegation.hookErrorStrategy === 'throw') {
+                  const mastraError = new MastraError(
+                    {
+                      id: 'AGENT_AGENT_TOOL_EXECUTION_FAILED',
+                      domain: ErrorDomain.AGENT,
+                      category: ErrorCategory.USER,
+                      details: {
+                        agentName: this.name,
+                        subAgentName: agent.name ?? agent.id,
+                        runId: runId || '',
+                        threadId: threadId || '',
+                        resourceId: resourceId || '',
+                      },
+                      text: `[Agent:${this.name}] - onDelegationStart hook threw for ${agentName}`,
+                    },
+                    hookError,
+                  );
+                  this.logger.trackException(mastraError);
+                  throw mastraError;
+                }
                 this.logger.error('onDelegationStart hook error', { agent: this.name, error: hookError });
                 // Continue with original values on hook error
               }
@@ -5065,6 +5085,11 @@ export class Agent<
                 }
               }
             }
+
+            // Set when onDelegationComplete itself throws under the 'throw'
+            // hookErrorStrategy, so the outer catch below does not invoke the
+            // hook a second time for an error the hook already raised.
+            let completeHookAlreadyRan = false;
 
             try {
               this.logger.debug('Executing agent as tool', {
@@ -5475,14 +5500,25 @@ export class Agent<
                     }
                   }
                 } catch (hookError) {
+                  if (delegation.hookErrorStrategy === 'throw') {
+                    // Mark the delegation failed, the same way a sub-agent execution
+                    // failure would, without re-invoking onDelegationComplete for an
+                    // error the hook itself just raised (see completeHookAlreadyRan
+                    // check below).
+                    completeHookAlreadyRan = true;
+                    throw hookError;
+                  }
                   this.logger.error('onDelegationComplete hook error', { agent: this.name, error: hookError });
                 }
               }
               return result;
             } catch (err) {
               let bailed = false;
-              // Call onDelegationComplete with error if hook is provided
-              if (delegation?.onDelegationComplete) {
+              // Call onDelegationComplete with error if hook is provided, unless the
+              // error originated from onDelegationComplete itself under the 'throw'
+              // strategy above — in that case the hook already ran for this
+              // delegation and must not be invoked a second time.
+              if (delegation?.onDelegationComplete && !completeHookAlreadyRan) {
                 try {
                   const delegationCompleteContext: DelegationCompleteContext = {
                     primitiveId: agent.id,
@@ -5543,6 +5579,31 @@ export class Agent<
                     }
                   }
                 } catch (hookError) {
+                  if (delegation.hookErrorStrategy === 'throw') {
+                    // The delegation already failed (we're handling a sub-agent
+                    // execution error). The hook itself also threw while reporting
+                    // that failure — surface the hook's error as the propagated
+                    // cause instead of silently logging it, same as a sub-agent
+                    // failure would propagate.
+                    const mastraError = new MastraError(
+                      {
+                        id: 'AGENT_AGENT_TOOL_EXECUTION_FAILED',
+                        domain: ErrorDomain.AGENT,
+                        category: ErrorCategory.USER,
+                        details: {
+                          agentName: this.name,
+                          subAgentName: agent.name ?? agent.id,
+                          runId: runId || '',
+                          threadId: threadId || '',
+                          resourceId: resourceId || '',
+                        },
+                        text: `[Agent:${this.name}] - onDelegationComplete hook threw while handling a failed delegation for ${agentName}`,
+                      },
+                      hookError,
+                    );
+                    this.logger.trackException(mastraError);
+                    throw mastraError;
+                  }
                   this.logger.error('onDelegationComplete hook error on failure', {
                     agent: this.name,
                     error: hookError,
