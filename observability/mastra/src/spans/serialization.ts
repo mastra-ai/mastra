@@ -28,6 +28,8 @@
 
 const FUNCTION_KEYS_TO_STRIP = new Set(['execute', 'validate']);
 const LOGGER_METHODS = ['debug', 'info', 'warn', 'error'];
+/** Keys whose value decides the outcome in `shouldStripEntry()`. */
+const VALUE_STRIP_KEYS = new Set(['logger', 'tracingContext', ...FUNCTION_KEYS_TO_STRIP]);
 
 export interface DeepCleanOptions {
   keysToStrip: Set<string> | string[] | Record<string, unknown>;
@@ -183,6 +185,25 @@ function shouldStripEntry(key: string, value: unknown, stripSet: Set<string>): b
   }
 
   return FUNCTION_KEYS_TO_STRIP.has(key) && typeof value === 'function';
+}
+
+/**
+ * Whether an entry past the object-key limit would have been stripped anyway.
+ *
+ * The entry is dropped either way, so its value is only read for the few key names that
+ * can make it a runtime-shaped strip. That keeps the truncation count the same wherever
+ * such a key sits, without running getters on unrelated keys.
+ */
+function wouldBeStripped(key: string, val: object, stripSet: Set<string>): boolean {
+  if (!VALUE_STRIP_KEYS.has(key)) {
+    return false;
+  }
+
+  try {
+    return shouldStripEntry(key, (val as Record<string, unknown>)[key], stripSet);
+  } catch {
+    return false;
+  }
 }
 
 function restoreSerializedMapKey(keyType: string, key: any): unknown {
@@ -502,10 +523,11 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
         }
 
         // Count what the limit actually drops; deriving it from `keys.length` would
-        // report stripped keys as truncated. Values past the limit are never read, so
-        // a strippable value beyond the limit still counts here.
+        // report stripped keys as truncated.
         if (keyCount >= maxObjectKeys) {
-          omittedByLimit++;
+          if (!wouldBeStripped(key, val, stripSet)) {
+            omittedByLimit++;
+          }
           continue;
         }
 

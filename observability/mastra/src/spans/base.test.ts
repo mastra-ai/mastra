@@ -976,6 +976,17 @@ describe('Span', () => {
       });
     });
 
+    it('should count runtime-shaped stripped values the same wherever they sit', () => {
+      const before = { a: 1, logger: { info() {} }, b: 2, c: 3 };
+      const after = { a: 1, b: 2, logger: { info() {} }, c: 3 };
+      const options = { ...DEFAULT_DEEP_CLEAN_OPTIONS, maxObjectKeys: 2 };
+
+      const expected = { a: 1, b: 2, __truncated: '1 more keys omitted' };
+
+      expect(deepClean(before, options)).toEqual(expected);
+      expect(deepClean(after, options)).toEqual(expected);
+    });
+
     it('should not read values of keys omitted by maxObjectKeys', () => {
       const input: Record<string, unknown> = { first: 1, second: 2 };
       let reads = 0;
