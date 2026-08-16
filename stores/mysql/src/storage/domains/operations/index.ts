@@ -49,7 +49,8 @@ export class StoreOperationsMySQL extends StoreOperations {
   async loadInitSchemaSnapshot(): Promise<void> {
     try {
       this.schemaSnapshot = await loadSchemaSnapshot(this.pool, await this.getDatabase());
-    } catch {
+    } catch (error) {
+      console.warn('Failed to load init schema snapshot, falling back to per-object probing:', error);
       this.schemaSnapshot = null;
     }
   }
