@@ -202,7 +202,11 @@ describe('maybeAutoProvisionDatabases', () => {
 
     expect(attachDatabaseMock).toHaveBeenCalledWith('t', 'org-1', 'proj-1', {
       kind: 'redis',
+<<<<<<< HEAD
       name: 'my-app-redis',
+=======
+      name: 'my-app-db',
+>>>>>>> b86ee90b1a (feat(cli): auto-provision managed Redis at deploy when RedisStreamsPubSub is configured)
       environmentId: 'env-prod',
     });
     expect(result.issues).toEqual([]);
