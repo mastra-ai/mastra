@@ -291,6 +291,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/crusoe',
+          label: 'Crusoe',
+        },
+        {
+          type: 'doc',
           id: 'providers/drun',
           label: 'D.Run (China)',
         },
@@ -323,6 +328,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/ebcloud',
           label: 'EBCloud',
+        },
+        {
+          type: 'doc',
+          id: 'providers/edenai',
+          label: 'Eden AI',
         },
         {
           type: 'doc',
@@ -506,6 +516,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/merge-gateway',
+          label: 'Merge Gateway',
+        },
+        {
+          type: 'doc',
           id: 'providers/meta',
           label: 'Meta',
         },
@@ -683,6 +698,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/qiniu-ai',
           label: 'Qiniu',
+        },
+        {
+          type: 'doc',
+          id: 'providers/qvac',
+          label: 'QVAC',
         },
         {
           type: 'doc',

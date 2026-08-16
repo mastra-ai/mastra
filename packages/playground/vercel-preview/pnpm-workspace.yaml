@@ -1,2 +1,5 @@
 packages:
   - '.'
+
+# a dependency install script this project never needed must not fail a preview deploy
+strictDepBuilds: false

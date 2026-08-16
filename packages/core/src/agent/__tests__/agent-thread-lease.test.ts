@@ -9,7 +9,7 @@
  * Kept in its own file (rather than agent-signals.test.ts) so the suite Tyler's
  * PR shipped stays untouched.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { PubSub } from '../../events/pubsub';
 import type { LeaseRecord, LeaseRecordProvider } from '../../events/pubsub';
@@ -69,11 +69,18 @@ function createRun(runId: string) {
 class ControlledLeasePubSub extends PubSub implements LeaseRecordProvider {
   owners = new Map<string, string>();
   records = new Map<string, LeaseRecord>();
+  denyAcquire = false;
+  failAcquire = false;
+  failPublish = false;
+  failPublishAfterDelivery = false;
+  publishedTypes: string[] = [];
   #subscribers = new Map<string, Set<EventCallback>>();
   #pending = new Set<Promise<void>>();
   #index = 0;
 
   async publish(topic: string, event: any): Promise<void> {
+    if (this.failPublish) throw new Error('publish failed');
+    this.publishedTypes.push(event.type);
     const envelope = { ...event, id: `event-${this.#index}`, createdAt: new Date(), index: this.#index++ };
     const subscribers = [...(this.#subscribers.get(topic) ?? [])];
     const pending = new Promise<void>(resolve => {
@@ -84,6 +91,11 @@ class ControlledLeasePubSub extends PubSub implements LeaseRecordProvider {
     });
     this.#pending.add(pending);
     void pending.finally(() => this.#pending.delete(pending));
+    await pending;
+    if (this.failPublishAfterDelivery) {
+      this.failPublishAfterDelivery = false;
+      throw new Error('publish acknowledgement failed');
+    }
   }
 
   async subscribe(topic: string, cb: EventCallback): Promise<void> {
@@ -106,9 +118,10 @@ class ControlledLeasePubSub extends PubSub implements LeaseRecordProvider {
     _ttlMs?: number,
     metadata?: string,
   ): Promise<{ acquired: boolean; owner?: string }> {
+    if (this.failAcquire) throw new Error('acquire failed');
     const current = this.owners.get(key);
     const currentRecord = this.records.get(key);
-    if (current && (current !== owner || currentRecord?.metadata !== metadata)) {
+    if (this.denyAcquire || (current && (current !== owner || currentRecord?.metadata !== metadata))) {
       return { acquired: false, owner: current };
     }
     this.owners.set(key, owner);
@@ -257,5 +270,171 @@ describe('registerRun thread lease', () => {
     await pubsub.flush();
     await nextTick();
     expect(pubsub.owners.get(key)).toBe(legacyRunId);
+  });
+
+  it('fails strict registration closed without installing a ghost record', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const agent = { id: 'strict-conflict-agent' } as Agent<any, any, any, any>;
+    const threadId = 'strict-conflict-thread';
+    const resourceId = 'strict-conflict-resource';
+    const key = [resourceId, threadId].join(AGENT_THREAD_KEY_SEPARATOR);
+    pubsub.owners.set(key, 'other-run');
+
+    const register = () =>
+      runtime.registerRun(
+        agent,
+        {
+          runId: 'strict-conflict-run',
+          status: 'running',
+          fullStream: new ReadableStream(),
+          _waitUntilFinished: () => new Promise<void>(() => {}),
+        } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+        pubsub,
+        { strict: true },
+      )!;
+
+    await expect(register()).rejects.toThrow('thread lease is held');
+    expect(runtime.getThreadState({ threadId, resourceId }, pubsub)).toBe('idle');
+    expect(pubsub.publishedTypes).not.toContain('run-registered');
+
+    pubsub.owners.delete(key);
+    pubsub.failAcquire = true;
+    await expect(register()).rejects.toThrow('acquire failed');
+    expect(runtime.getThreadState({ threadId, resourceId }, pubsub)).toBe('idle');
+  });
+
+  it('strict rollback removes only its registration and permits a new run', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const agent = { id: 'strict-rollback-agent' } as Agent<any, any, any, any>;
+    const threadId = 'strict-rollback-thread';
+    const resourceId = 'strict-rollback-resource';
+    const key = [resourceId, threadId].join(AGENT_THREAD_KEY_SEPARATOR);
+    const neverFinishes = () => new Promise<void>(() => {});
+    const register = (runId: string) =>
+      runtime.registerRun(
+        agent,
+        { runId, status: 'running', fullStream: new ReadableStream(), _waitUntilFinished: neverFinishes } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+        pubsub,
+        { strict: true },
+      )!;
+
+    const first = await register('strict-rollback-run-1');
+    expect(runtime.getThreadState({ threadId, resourceId }, pubsub)).toBe('active');
+    await first.rollback();
+    expect(runtime.getThreadState({ threadId, resourceId }, pubsub)).toBe('idle');
+    expect(pubsub.owners.get(key)).toBeUndefined();
+
+    const second = await register('strict-rollback-run-2');
+    const secondOwner = pubsub.owners.get(key);
+    expect(secondOwner).toMatch(/^mastra:agent-thread:v2:/);
+    expect(pubsub.records.get(key)?.metadata).toBe('strict-rollback-run-2');
+    expect(runtime.getThreadState({ threadId, resourceId }, pubsub)).toBe('active');
+    await second.rollback({ releaseLease: false });
+    expect(runtime.getThreadState({ threadId, resourceId }, pubsub)).toBe('idle');
+    expect(pubsub.owners.get(key)).toBe(secondOwner);
+    await pubsub.releaseLease(key, secondOwner!, 'strict-rollback-run-2');
+  });
+
+  it('rolls strict registration back and releases its lease when publishing fails', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const agent = { id: 'strict-publish-agent' } as Agent<any, any, any, any>;
+    const threadId = 'strict-publish-thread';
+    const resourceId = 'strict-publish-resource';
+    const key = [resourceId, threadId].join(AGENT_THREAD_KEY_SEPARATOR);
+    let streamPulled = false;
+    pubsub.failPublish = true;
+
+    const registered = runtime.registerRun(
+      agent,
+      {
+        runId: 'strict-publish-run',
+        status: 'running',
+        fullStream: {
+          getReader() {
+            streamPulled = true;
+            throw new Error('strict publish failure must not start the stream');
+          },
+        },
+        _waitUntilFinished: () => new Promise<void>(() => {}),
+      } as any,
+      { memory: { thread: threadId, resource: resourceId } } as any,
+      pubsub,
+      { strict: true },
+    )!;
+
+    await expect(registered).rejects.toThrow('publish failed');
+    expect(runtime.getThreadState({ threadId, resourceId }, pubsub)).toBe('idle');
+    expect(pubsub.owners.get(key)).toBeUndefined();
+    expect(streamPulled).toBe(false);
+  });
+
+  it('discards a delivered registration when its publish acknowledgement fails', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const observer = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const agent = { id: 'strict-ack-agent' } as Agent<any, any, any, any>;
+    const threadId = 'strict-ack-thread';
+    const resourceId = 'strict-ack-resource';
+    const subscription = await observer.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+    pubsub.failPublishAfterDelivery = true;
+
+    try {
+      await expect(
+        runtime.registerRun(
+          agent,
+          {
+            runId: 'strict-ack-run',
+            status: 'running',
+            fullStream: new ReadableStream(),
+            _waitUntilFinished: () => new Promise<void>(() => {}),
+          } as any,
+          { memory: { thread: threadId, resource: resourceId } } as any,
+          pubsub,
+          { strict: true },
+        )!,
+      ).rejects.toThrow('publish acknowledgement failed');
+      await pubsub.flush();
+      await waitForCondition(() => observer.getThreadState({ threadId, resourceId }, pubsub) === 'idle');
+      expect(pubsub.publishedTypes).toEqual(['run-registered', 'run-discarded']);
+    } finally {
+      subscription.unsubscribe();
+    }
+  });
+
+  it('keeps a remote stream alive while scoped lease metadata identifies its logical run', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const agent = { id: 'scoped-remote-agent' } as Agent<any, any, any, any>;
+    const threadId = 'scoped-remote-thread';
+    const resourceId = 'scoped-remote-resource';
+    const key = [resourceId, threadId].join(AGENT_THREAD_KEY_SEPARATOR);
+    const topic = `agent.thread-stream.${encodeURIComponent(key)}`;
+    const runId = 'scoped-remote-run';
+    const owner = 'mastra:agent-thread:v2:remote-runtime:logical-run-digest';
+    pubsub.owners.set(key, owner);
+    pubsub.records.set(key, { owner, metadata: runId });
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+
+    await pubsub.publish(topic, {
+      type: 'run-registered',
+      runId,
+      data: { type: 'run-registered', runId, streamId: 'scoped-remote-stream', streamSeq: 1 },
+    });
+    await pubsub.flush();
+    await waitForCondition(() => subscription.activeRunId() === runId);
+
+    vi.useFakeTimers();
+    try {
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(subscription.activeRunId()).toBe(runId);
+    } finally {
+      vi.useRealTimers();
+      subscription.unsubscribe();
+    }
   });
 });

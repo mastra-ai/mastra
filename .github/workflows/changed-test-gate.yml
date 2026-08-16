@@ -41,8 +41,33 @@ jobs:
 
           git fetch "${HEAD_REPO}" "${HEAD_SHA}" --depth=1
           git diff --name-only --diff-filter=ACMRT "${BASE_SHA}" FETCH_HEAD \
-            | grep -E '(^|/)(test|tests|__tests__)/|\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$|\.test-d\.ts$' \
-            | sort > /tmp/changed-test-files || true
+            | sort > /tmp/changed-files
+          git diff --no-renames --name-only --diff-filter=ACMRTD "${BASE_SHA}" FETCH_HEAD \
+            | sort > /tmp/changed-coverage-files
+
+          # Deployer changes must include monorepo E2E coverage. This rule runs
+          # before the no-test exemptions below so it applies to all contributors.
+          # Keep this list separate from /tmp/changed-files so deleted tests are
+          # not restored from FETCH_HEAD. The package instructions are exempt.
+          if grep -q '^packages/deployer/' /tmp/changed-coverage-files \
+            && ! grep -q '^e2e-tests/monorepo/' /tmp/changed-coverage-files \
+            && awk '$0 ~ /^packages\/deployer\// && $0 != "packages/deployer/AGENTS.md" { found=1; exit } END { exit(found ? 0 : 1) }' \
+              /tmp/changed-coverage-files; then
+            first_deployer_file="$(
+              awk '$0 ~ /^packages\/deployer\// && $0 != "packages/deployer/AGENTS.md" { print; exit }' \
+                /tmp/changed-coverage-files
+            )"
+            escaped_deployer_file="${first_deployer_file//%/%25}"
+            escaped_deployer_file="${escaped_deployer_file//$'\r'/%0D}"
+            escaped_deployer_file="${escaped_deployer_file//$'\n'/%0A}"
+            escaped_deployer_file="${escaped_deployer_file//:/%3A}"
+            escaped_deployer_file="${escaped_deployer_file//,/%2C}"
+            echo "::error file=${escaped_deployer_file},title=Monorepo E2E coverage required::This PR changes packages/deployer/ but has no corresponding changes under e2e-tests/monorepo/. Deployer unit tests alone do not validate generated monorepo applications — add or update a monorepo E2E test. See packages/deployer/AGENTS.md for commands."
+            exit 1
+          fi
+
+          grep -E '(^|/)(test|tests|__tests__)/|\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$|\.test-d\.ts$' \
+            /tmp/changed-files | sort > /tmp/changed-test-files || true
 
           if [ ! -s /tmp/changed-test-files ]; then
             echo "has_tests=false" >> "$GITHUB_OUTPUT"

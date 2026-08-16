@@ -46,6 +46,7 @@ interface DispatcherSession extends SkillSession {
     switch(input: { threadId: string }): Promise<unknown>;
     listActiveMessages(): Promise<Array<{ id: string }>>;
   };
+  abort(): void;
   sendSignal(
     input: { id: string; type: 'user'; tagName: 'user'; contents: string },
     options: { requestContext: RequestContext; requireDelivery?: boolean },
@@ -66,6 +67,8 @@ export interface FactoryDecisionDispatcherOptions {
   transitionService: Pick<FactoryTransitionService, 'transition'>;
   storage: WorkItemsStorage;
   ownerId?: string;
+  /** `false` parks `invokeSkill` effects as `proposed`; every other effect still runs. */
+  isAutoRunEnabled: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   reconcileToolResults?: () => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
@@ -145,6 +148,7 @@ export class FactoryDecisionDispatcher {
   readonly #transitionService: Pick<FactoryTransitionService, 'transition'>;
   readonly #storage: WorkItemsStorage;
   readonly #ownerId: string;
+  readonly #isAutoRunEnabled: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   readonly #reconcileToolResults?: () => Promise<void>;
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
@@ -158,6 +162,7 @@ export class FactoryDecisionDispatcher {
     this.#transitionService = options.transitionService;
     this.#storage = options.storage;
     this.#ownerId = options.ownerId ?? `factory-dispatcher:${randomUUID()}`;
+    this.#isAutoRunEnabled = options.isAutoRunEnabled;
     this.#reconcileToolResults = options.reconcileToolResults;
     this.#prepareBinding = options.prepareBinding;
     this.#primeCredentials = options.primeCredentials;
@@ -253,6 +258,11 @@ export class FactoryDecisionDispatcher {
     try {
       const decision = validateFactoryRuleDecision(record.decision, record.causalChain.length);
       if (decision.type === 'reject') throw new Error('Deferred Factory decisions cannot reject.');
+      if (await this.#needsApproval(record, decision)) {
+        const proposed = await this.#storage.proposeDeferredDecision(leaseIdentity(record, this.#ownerId), new Date());
+        if (!proposed) throw new Error('Factory decision lease was lost before approval could be requested.');
+        return;
+      }
       await this.#withLease(
         async leaseExpiresAt =>
           this.#storage.renewDeferredDecisionLease(leaseIdentity(record, this.#ownerId), leaseExpiresAt),
@@ -270,6 +280,12 @@ export class FactoryDecisionDispatcher {
         terminal,
       });
     }
+  }
+
+  /** Starting an agent run spends the project's compute and executes its code — the one effect a human owns. */
+  async #needsApproval(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<boolean> {
+    if (decision.type !== 'invokeSkill' || record.approvedAt !== null) return false;
+    return !(await this.#isAutoRunEnabled({ orgId: record.orgId, factoryProjectId: record.factoryProjectId }));
   }
 
   async #executeDecision(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<void> {
@@ -350,6 +366,7 @@ export class FactoryDecisionDispatcher {
         await this.#switchThread(session, binding);
         const delivered = await session.thread.listActiveMessages();
         if (delivered.some(message => message.id === record.id)) return;
+        if (decision.cancelInFlight) session.abort();
         if (decision.precedingMessage) {
           await awaitNotification(
             await session.sendNotificationSignal(

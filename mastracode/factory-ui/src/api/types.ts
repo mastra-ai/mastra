@@ -78,6 +78,18 @@ export interface OMResponse {
   config: OMConfigInfo;
 }
 
+/** A bundled Factory skill (`GET /web/factory/skills`). */
+export interface FactorySkillInfo {
+  name: string;
+  description: string;
+  /** SKILL.md body with the frontmatter removed. */
+  content: string;
+}
+
+export interface FactorySkillsResponse {
+  skills: FactorySkillInfo[];
+}
+
 // ── Mutation request bodies ────────────────────────────────────────────────
 
 export interface SaveProviderKeyBody {

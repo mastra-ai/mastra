@@ -101,11 +101,16 @@ function stubBoardEndpoints({ issues = [] as object[], workItems = [issueWorkIte
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
-    // The label-filtered (auto-triaged) feed stays empty; the plain feed
+    // The label-filtered (status: auto-triaged) feed stays empty; the plain feed
     // serves the candidate under test.
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, ({ request }) =>
-      HttpResponse.json({ issues: new URL(request.url).searchParams.has('label') ? [] : issues, nextPage: null }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, ({ request }) => {
+      const label = new URL(request.url).searchParams.get('label');
+      if (label && label !== 'status: auto-triaged') {
+        return HttpResponse.error();
+      }
+
+      return HttpResponse.json({ issues: label ? [] : issues, nextPage: null });
+    }),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
     http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, () => HttpResponse.json({ ok: true })),
     http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
@@ -139,8 +144,9 @@ describe('Board card click starts the default run', () => {
 
     await waitFor(() => expect(startRequests).toHaveLength(1));
     expect(startRequests[0]).toMatchObject({
+      destinationStage: 'triage',
       invocation: { type: 'skill', skillName: 'factory-triage' },
-      workItem: { id: 'item-1', role: 'plan' },
+      workItem: { id: 'item-1', role: 'triage' },
     });
   });
 
@@ -166,7 +172,7 @@ describe('Board card click starts the default run', () => {
     });
   });
 
-  it('starts the default run with its invocation when a candidate card title is clicked', async () => {
+  it('starts the default run with its invocation when a candidate card is clicked', async () => {
     const { startRequests } = stubBoardEndpoints({
       issues: [
         {
@@ -184,12 +190,15 @@ describe('Board card click starts the default run', () => {
     const user = userEvent.setup();
     renderWorkBoard();
 
-    await user.click(await screen.findByRole('button', { name: 'Issue: Crash on logout' }));
+    // Same click target and same wording as a filed card: the candidate names
+    // the run it starts, not the record it happens to create.
+    await user.click(await screen.findByRole('button', { name: 'Investigate Crash on logout' }));
 
     await waitFor(() => expect(startRequests).toHaveLength(1));
     expect(startRequests[0]).toMatchObject({
+      destinationStage: 'triage',
       invocation: { type: 'skill', skillName: 'factory-triage' },
-      workItem: { role: 'plan' },
+      workItem: { role: 'triage' },
     });
   });
 });

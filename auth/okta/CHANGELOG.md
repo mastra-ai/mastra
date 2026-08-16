@@ -1,5 +1,42 @@
 # @mastra/auth-okta
 
+## 0.2.1-alpha.0
+
+### Patch Changes
+
+- Fixed reading request headers from Express-style plain header objects so cookie-based auth providers no longer throw and fail with a misleading 401. ([#21261](https://github.com/mastra-ai/mastra/pull/21261))
+
+  Related to https://github.com/mastra-ai/mastra/issues/21253
+
+## 0.2.0
+
+### Minor Changes
+
+- Added an `audience` option to `MastraAuthOkta` so bearer-token verification is no longer pinned to the OAuth client ID. ([#21117](https://github.com/mastra-ai/mastra/pull/21117))
+
+  Previously the provider always required `aud` to equal the client ID, which is the audience of an Okta **ID token**. Okta **access tokens** carry the authorization server's audience instead, so machine-to-machine callers (MCP clients, CI jobs, service-to-service traffic) always got a 401 on an org authorization server. Those callers have no session cookie, so bearer was their only way in.
+
+  Set `audience` (or the `OKTA_AUDIENCE` environment variable) to the audience your tokens actually carry:
+
+  ```typescript
+  // Before: only ID tokens whose aud is the client ID were accepted
+  const auth = new MastraAuthOkta({ domain, clientId, clientSecret, redirectUri });
+
+  // After: accept access tokens from an org authorization server
+  const auth = new MastraAuthOkta({
+    domain,
+    clientId,
+    clientSecret,
+    redirectUri,
+    audience: 'https://your-org.okta.com',
+  });
+
+  // Or accept both ID tokens from the browser and access tokens from services
+  const auth = new MastraAuthOkta({ /* ... */ audience: [clientId, 'api://default'] });
+  ```
+
+  The default is unchanged, so existing setups keep working.
+
 ## 0.2.0-alpha.0
 
 ### Minor Changes

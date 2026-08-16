@@ -108,7 +108,7 @@ console.log(result.analyzeStepResult) // { hasSources: true, sources: ["Wikipedi
 
 ### Agent Type for Agent Evaluation
 
-For type safety and compatibility with both live agent scoring and trace scoring, use `type: 'agent'` when creating scorers for agent evaluation. This allows you to use the same scorer for an agent and also use it to score traces:
+For type safety and compatibility with both live agent scoring and trace scoring, use `type: 'agent'` when creating scorers for agent evaluation. The same scorer can evaluate an agent and score traces:
 
 ```typescript
 const myScorer = createScorer({

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -19,7 +19,7 @@ async function createEditorWithStore(agents?: Record<string, Agent>) {
 }
 
 describe('EditorAgentNamespace.update', () => {
-  it('creates a new active version when SDK updates agent snapshot fields', async () => {
+  it('creates a new draft version when SDK updates agent snapshot fields', async () => {
     const { editor, agentsStore } = await createEditorWithStore();
 
     await editor.agent.create({
@@ -29,6 +29,7 @@ describe('EditorAgentNamespace.update', () => {
       model: { provider: 'openai', name: 'gpt-4' },
       tools: {},
     });
+    const initialRecord = await agentsStore.getById('sdk-updatable-agent');
 
     const updated = await editor.agent.update({
       id: 'sdk-updatable-agent',
@@ -52,10 +53,11 @@ describe('EditorAgentNamespace.update', () => {
     expect(versionTwo?.changedFields).toEqual(['instructions', 'model', 'tools']);
 
     const record = await agentsStore.getById('sdk-updatable-agent');
-    expect(record?.activeVersionId).toBe(versionTwo?.id);
+    expect(record?.activeVersionId).toBe(initialRecord?.activeVersionId);
+    expect(record?.activeVersionId).not.toBe(versionTwo?.id);
   });
 
-  it('makes SDK config updates visible through default getById for active agents', async () => {
+  it('keeps SDK config updates in draft until they are published', async () => {
     const { editor, agentsStore } = await createEditorWithStore();
 
     await editor.agent.create({
@@ -74,13 +76,42 @@ describe('EditorAgentNamespace.update', () => {
       model: { provider: 'openai', name: 'gpt-4' },
     });
 
+    editor.agent.clearCache('published-sdk-agent');
     const defaultAgent = await editor.agent.getById('published-sdk-agent');
-    expect(await Promise.resolve(defaultAgent?.getInstructions())).toBe('TWO');
+    expect(await Promise.resolve(defaultAgent?.getInstructions())).toBe('ONE');
+    const draftAgent = await editor.agent.getById('published-sdk-agent', { status: 'draft' });
+    expect(await Promise.resolve(draftAgent?.getInstructions())).toBe('TWO');
 
     const versions = await agentsStore.listVersions({ agentId: 'published-sdk-agent' });
     const versionTwo = versions.versions.find(version => version.versionNumber === 2);
     const record = await agentsStore.getById('published-sdk-agent');
-    expect(record?.activeVersionId).toBe(versionTwo?.id);
+    expect(record?.activeVersionId).toBe(versionOne?.id);
+    expect(record?.activeVersionId).not.toBe(versionTwo?.id);
+  });
+
+  it('preserves an explicit activeVersionId while creating a new snapshot version', async () => {
+    const { editor, agentsStore } = await createEditorWithStore();
+
+    await editor.agent.create({
+      id: 'explicit-active-version-agent',
+      name: 'Explicit Active Version Agent',
+      instructions: 'ONE',
+      model: { provider: 'openai', name: 'gpt-4' },
+    });
+    const initialVersions = await agentsStore.listVersions({ agentId: 'explicit-active-version-agent' });
+    const versionOne = initialVersions.versions.find(version => version.versionNumber === 1);
+
+    await editor.agent.update({
+      id: 'explicit-active-version-agent',
+      activeVersionId: versionOne!.id,
+      instructions: 'TWO',
+    });
+
+    const versions = await agentsStore.listVersions({ agentId: 'explicit-active-version-agent' });
+    const versionTwo = versions.versions.find(version => version.versionNumber === 2);
+    const record = await agentsStore.getById('explicit-active-version-agent');
+    expect(record?.activeVersionId).toBe(versionOne?.id);
+    expect(record?.activeVersionId).not.toBe(versionTwo?.id);
   });
 
   it('updates record fields without creating a new version', async () => {
@@ -209,5 +240,112 @@ describe('EditorAgentNamespace.update', () => {
 
     const fetched = await editor.agent.getById('code-defined-update-agent');
     expect(await fetched?.getInstructions()).toBe('Stored TWO');
+  });
+});
+
+// Regression tests for https://github.com/mastra-ai/mastra/issues/21373 —
+// an agent with `editor: { instructions: true }` cannot provide code instructions
+// (the type system forbids it), so if nothing resolves it must fail closed instead
+// of silently generating with empty instructions.
+describe('EditorAgentNamespace.applyStoredOverrides fails closed when editor exclusively owns instructions', () => {
+  function makeEditorOwnedAgent() {
+    return new Agent({
+      id: 'editor-owned-agent',
+      name: 'Editor Owned Agent',
+      editor: { instructions: true, tools: false },
+      model: 'openai/gpt-4o',
+    });
+  }
+
+  it('throws when no stored agent record exists yet', async () => {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor();
+    const codeAgent = makeEditorOwnedAgent();
+    new Mastra({ storage, editor, agents: { 'editor-owned-agent': codeAgent } });
+
+    await expect(editor.agent.applyStoredOverrides(codeAgent, { status: 'published' })).rejects.toThrow(
+      /delegates instructions to the editor/,
+    );
+  });
+
+  it('throws when the stored agent is draft-only and status: "published" is requested', async () => {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor();
+    const codeAgent = makeEditorOwnedAgent();
+    new Mastra({ storage, editor, agents: { 'editor-owned-agent': codeAgent } });
+
+    const agentsStore = await storage.getStore('agents');
+    await agentsStore?.create({
+      agent: {
+        id: 'editor-owned-agent',
+        name: 'Editor Owned Agent',
+        instructions: 'DRAFT-ONLY-INSTRUCTIONS',
+        model: { provider: 'openai', name: 'gpt-4o' },
+      },
+      // no activeVersionId set -> draft-only, never published
+    } as Record<string, unknown>);
+
+    // Draft status still resolves normally.
+    const draftResolved = await editor.agent.applyStoredOverrides(codeAgent, { status: 'draft' });
+    expect(await draftResolved.getInstructions()).toBe('DRAFT-ONLY-INSTRUCTIONS');
+
+    // Published status has nothing to resolve — must fail closed.
+    await expect(editor.agent.applyStoredOverrides(codeAgent, { status: 'published' })).rejects.toThrow(
+      /no version has been published/,
+    );
+  });
+
+  it('throws when a published record exists but carries no instructions', async () => {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor();
+    const codeAgent = makeEditorOwnedAgent();
+    new Mastra({ storage, editor, agents: { 'editor-owned-agent': codeAgent } });
+
+    const agentsStore = await storage.getStore('agents');
+    await agentsStore?.create({
+      agent: {
+        id: 'editor-owned-agent',
+        name: 'Editor Owned Agent',
+        model: { provider: 'openai', name: 'gpt-4o' },
+        // no `instructions` field at all — a published version can still be missing it.
+      },
+    } as Record<string, unknown>);
+
+    // Publish the version that `create` implicitly wrote (version 1, with no instructions).
+    const { versions } = (await agentsStore?.listVersions({ agentId: 'editor-owned-agent' })) ?? { versions: [] };
+    await agentsStore?.update({ id: 'editor-owned-agent', activeVersionId: versions[0]?.id });
+
+    await expect(editor.agent.applyStoredOverrides(codeAgent, { status: 'published' })).rejects.toThrow(
+      /has no instructions/,
+    );
+  });
+
+  it('throws when the storage adapter fails to load the stored config', async () => {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor();
+    const codeAgent = makeEditorOwnedAgent();
+    new Mastra({ storage, editor, agents: { 'editor-owned-agent': codeAgent } });
+
+    vi.spyOn(editor.agent as any, 'getStorageAdapter').mockRejectedValue(new Error('storage unavailable'));
+
+    await expect(editor.agent.applyStoredOverrides(codeAgent, { status: 'published' })).rejects.toThrow(
+      /delegates instructions to the editor/,
+    );
+  });
+
+  it('does not throw for a code-owned agent (no editor config) in the same unresolved scenarios', async () => {
+    // Sanity check: the fail-closed behavior is scoped to editor-owned instructions only.
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor();
+    const codeAgent = new Agent({
+      id: 'code-owned-agent',
+      name: 'Code Agent',
+      instructions: 'You are a code-defined agent.',
+      model: 'openai/gpt-4o',
+    });
+    new Mastra({ storage, editor, agents: { 'code-owned-agent': codeAgent } });
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent, { status: 'published' });
+    expect(result).toBe(codeAgent);
   });
 });

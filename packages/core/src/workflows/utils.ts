@@ -226,6 +226,29 @@ export function getResumeLabelsByStepId(
     );
 }
 
+export function abortableSleep(duration: number, signal?: AbortSignal): Promise<void> {
+  return new Promise(resolve => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+
+    const onAbort = () => {
+      clearTimeout(timeout);
+      resolve();
+    };
+    const timeout = setTimeout(
+      () => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve();
+      },
+      Math.max(0, duration),
+    );
+
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
 export const runCountDeprecationMessage =
   "Warning: 'runCount' is deprecated and will be removed on November 4th, 2025. Please use 'retryCount' instead.";
 
@@ -706,6 +729,50 @@ export function cleanStepResult(stepResult: unknown): unknown {
   }
 
   return cleaned;
+}
+
+/**
+ * Strips fields that describe a step's *previous* completion from a step-info
+ * object before it is published on a watch event.
+ *
+ * Step-info objects spread the step's prior result (`...stepResults[step.id]`)
+ * so persisted snapshots keep resume context (original `payload`, timestamps).
+ * Watch events must not re-publish those completion blobs: on a loop, the
+ * previous iteration's `output` is byte-identical to the next iteration's
+ * `payload`, so every `workflow-step-start` would ship the state twice
+ * (megabytes per event for durable agent runs). Result/suspended events get
+ * their fresh completion fields from the current execution result instead.
+ */
+export function omitPriorSuspensionFields<T extends Record<string, unknown>>(
+  stepInfo: T,
+): Omit<T, 'suspendedAt' | 'suspendPayload' | 'suspendOutput'> {
+  const {
+    suspendedAt: _suspendedAt,
+    suspendPayload: _suspendPayload,
+    suspendOutput: _suspendOutput,
+    ...rest
+  } = stepInfo;
+  return rest;
+}
+
+export function omitPriorCompletionFields<T extends Record<string, unknown>>(
+  stepInfo: T,
+): Omit<
+  T,
+  'output' | 'error' | 'endedAt' | 'suspendedAt' | 'suspendPayload' | 'suspendOutput' | 'tripwire' | 'nonRetryable'
+> {
+  const {
+    output: _output,
+    error: _error,
+    endedAt: _endedAt,
+    suspendedAt: _suspendedAt,
+    suspendPayload: _suspendPayload,
+    suspendOutput: _suspendOutput,
+    tripwire: _tripwire,
+    nonRetryable: _nonRetryable,
+    ...rest
+  } = stepInfo;
+  return rest;
 }
 
 /**

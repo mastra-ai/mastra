@@ -1,6 +1,6 @@
 {
   "name": "@mastra/langfuse",
-  "version": "1.4.7-alpha.7",
+  "version": "1.4.9-alpha.1",
   "description": "Langfuse observability provider for Mastra - uses official Langfuse v5 SDK",
   "type": "module",
   "main": "dist/index.js",

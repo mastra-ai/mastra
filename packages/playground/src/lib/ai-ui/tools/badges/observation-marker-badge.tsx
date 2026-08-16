@@ -152,8 +152,10 @@ const ExtractedValuesPanel = ({
                   {formatExtractedValue(value)}
                 </pre>
               ) : (
-                <div className="text-foreground/80 mt-1 text-[11px] [&_code]:rounded [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[10px]">
-                  <MarkdownRenderer>{formatExtractedValue(value)}</MarkdownRenderer>
+                <div className="mt-1 [&_code]:rounded [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[10px]">
+                  <MarkdownRenderer className="text-foreground/80 text-[11px]">
+                    {formatExtractedValue(value)}
+                  </MarkdownRenderer>
                 </div>
               )}
             </div>
@@ -355,8 +357,8 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
                     Current Task
                   </button>
                   {isTaskExpanded && (
-                    <div className="text-foreground mt-1 text-[11px] [&_code]:rounded [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[10px]">
-                      <MarkdownRenderer>{currentTask}</MarkdownRenderer>
+                    <div className="mt-1 [&_code]:rounded [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[10px]">
+                      <MarkdownRenderer className="text-foreground text-[11px]">{currentTask}</MarkdownRenderer>
                     </div>
                   )}
                 </div>
@@ -375,8 +377,10 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
                     Suggested Response
                   </button>
                   {isResponseExpanded && (
-                    <div className="text-foreground/80 mt-1 text-[11px] italic [&_code]:rounded [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[10px]">
-                      <MarkdownRenderer>{suggestedResponse}</MarkdownRenderer>
+                    <div className="mt-1 italic [&_code]:rounded [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[10px]">
+                      <MarkdownRenderer className="text-foreground/80 text-[11px]">
+                        {suggestedResponse}
+                      </MarkdownRenderer>
                     </div>
                   )}
                 </div>

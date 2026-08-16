@@ -211,7 +211,7 @@ describe('ComposioToolProvider — resolveTools', () => {
     expect(composioInstances.length).toBe(0);
   });
 
-  it('injects connectedAccountId via beforeExecute, clears outputSchema, applies description override', async () => {
+  it('injects connectedAccountId via beforeExecute, retains outputSchema, applies description override', async () => {
     const integration = new ComposioToolProvider({ apiKey: 'k' });
 
     await integration
@@ -220,10 +220,11 @@ describe('ComposioToolProvider — resolveTools', () => {
     const mastra = getMastraInstance();
     mastra.tools.get.mockClear();
 
+    const outputSchema = { type: 'object' } as unknown;
     const tool = {
       id: 'gmail.fetch_emails',
       description: 'original',
-      outputSchema: { not: 'undefined' } as unknown,
+      outputSchema,
     };
     mastra.tools.get.mockResolvedValue({ 'gmail.fetch_emails': tool });
 
@@ -235,7 +236,9 @@ describe('ComposioToolProvider — resolveTools', () => {
     });
 
     expect(Object.keys(result)).toEqual(['gmail.fetch_emails']);
-    expect((result['gmail.fetch_emails'] as unknown as typeof tool).outputSchema).toBeUndefined();
+    // The outputSchema supplied by @composio/mastra is kept: it pre-relaxes
+    // Composio's strict schemas, so Mastra can validate results against it.
+    expect((result['gmail.fetch_emails'] as unknown as typeof tool).outputSchema).toBe(outputSchema);
     expect((result['gmail.fetch_emails'] as unknown as typeof tool).description).toBe('overridden');
 
     // beforeExecute modifier was passed and injects connectionId.
@@ -372,7 +375,9 @@ describe('ComposioToolProvider — resolveTools', () => {
     });
     expect(sessionTools).toHaveBeenCalledOnce();
     expect(Object.keys(result)).toEqual(['COMPOSIO_MANAGE_CONNECTIONS']);
-    expect((result.COMPOSIO_MANAGE_CONNECTIONS as unknown as typeof manageTool).outputSchema).toBeUndefined();
+    expect((result.COMPOSIO_MANAGE_CONNECTIONS as unknown as typeof manageTool).outputSchema).toEqual({
+      type: 'object',
+    });
   });
 
   it('creates distinct sessions for two callers using the same provider', async () => {
@@ -449,8 +454,8 @@ describe('ComposioToolProvider — resolveTools', () => {
       sandbox: { enable: false },
     });
     expect(Object.keys(result)).toEqual(['GMAIL_FETCH_EMAILS', 'COMPOSIO_WAIT_FOR_CONNECTIONS']);
-    expect(gmailTool).toMatchObject({ description: 'gmail override', outputSchema: undefined });
-    expect(waitTool).toMatchObject({ description: 'wait override', outputSchema: undefined });
+    expect(gmailTool).toMatchObject({ description: 'gmail override', outputSchema: {} });
+    expect(waitTool).toMatchObject({ description: 'wait override', outputSchema: {} });
 
     const modifiers = mastra.tools.get.mock.calls[0]![2] as {
       beforeExecute: (a: { params: { connectedAccountId?: string } }) => unknown;

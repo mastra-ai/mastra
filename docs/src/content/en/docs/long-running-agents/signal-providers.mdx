@@ -134,7 +134,7 @@ ciSignals.watch({ resourceId: 'user_123', threadId: 'thread_456' }, 'acme-app-ma
 Mastra calls `poll()` on the `pollInterval` with all active subscriptions. It skips a cycle when there are no subscriptions and doesn't overlap cycles, so a slow `poll()` doesn't run concurrently with itself.
 
 :::note
-For a complete polling-provider build with notification storage, agent registration, thread subscription, and testing, follow [Building a signal provider](/guides/guide/signal-provider).
+For a complete polling-provider build with notification storage, agent registration, thread subscription, and testing, follow [Building a signal provider](https://mastra.ai/blog/building-a-signal-provider).
 :::
 
 ## Polling and webhook providers
@@ -217,7 +217,7 @@ For a production provider that watches GitHub pull requests, see the [GitHub Cha
 
 ## Related
 
-- [Guide: Building a signal provider](/guides/guide/signal-provider)
+- [Guide: Building a signal provider](https://mastra.ai/blog/building-a-signal-provider)
 - [Signals](/docs/long-running-agents/signals)
 - [Notification signals](/docs/long-running-agents/signals#notification-signals)
 - [`SignalProvider` reference](/reference/signals/signal-provider)

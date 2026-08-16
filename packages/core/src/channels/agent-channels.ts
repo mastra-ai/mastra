@@ -256,6 +256,7 @@ export class AgentChannels {
   protected async dispatchInboundMessage(args: {
     signalContents: AgentSignalContents;
     attributes: Record<string, string | undefined>;
+    signalMetadata: Record<string, unknown>;
     providerOptions: MastraProviderMetadata;
     requestContext: RequestContext;
     /** The mapped Mastra thread for the chat thread this message arrived on. */
@@ -264,12 +265,21 @@ export class AgentChannels {
     /** Set when the adapter can't render approval buttons, to avoid runs parking forever. */
     autoResumeSuspendedTools: true | undefined;
   }): Promise<void> {
-    const { signalContents, attributes, providerOptions, requestContext, memory, autoResumeSuspendedTools } = args;
+    const {
+      signalContents,
+      attributes,
+      signalMetadata,
+      providerOptions,
+      requestContext,
+      memory,
+      autoResumeSuspendedTools,
+    } = args;
 
     const result = this.agent.sendMessage(
       {
         contents: signalContents,
         attributes,
+        ...(Object.keys(signalMetadata).length > 0 ? { metadata: signalMetadata } : {}),
         providerOptions,
       },
       {
@@ -395,7 +405,7 @@ export class AgentChannels {
             'Channels require storage to be configured on the Mastra instance. Configure a storage provider like LibSQLStore.',
           );
         }
-        this.stateAdapter = new MastraStateAdapter(memoryStore);
+        this.stateAdapter = new MastraStateAdapter(memoryStore, () => this.getOwnerId());
         this.log('info', 'Using MastraStateAdapter (subscriptions persist across restarts)');
       }
 
@@ -422,12 +432,13 @@ export class AgentChannels {
       // shared instance would leak that tenant into the next message's run.
       const beginMessage = () => {
         const requestContext = new RequestContext();
+        const signalMetadata: Record<string, unknown> = {};
         const defaultHandler = (chatThread: Thread, message: Message) =>
-          this.handleChatMessage(chatThread, message, mastra, requestContext);
+          this.handleChatMessage(chatThread, message, mastra, requestContext, signalMetadata);
         // Context handed to custom handlers so they can reach the resolved Mastra
         // instance without being injected with an external accessor, and
         // contribute to the request context the run will dispatch with.
-        const handlerContext: ChannelHandlerContext = { mastra, requestContext };
+        const handlerContext: ChannelHandlerContext = { mastra, requestContext, signalMetadata };
         return { defaultHandler, handlerContext };
       };
 
@@ -1010,9 +1021,10 @@ export class AgentChannels {
     message: Message,
     mastra: Mastra,
     requestContext: RequestContext,
+    signalMetadata: Record<string, unknown>,
   ): Promise<void> {
     try {
-      await this.processChatMessage(chatThread, message, mastra, requestContext);
+      await this.processChatMessage(chatThread, message, mastra, requestContext, signalMetadata);
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       // A refused request is not a malfunction: the host decided this sender
@@ -1049,6 +1061,7 @@ export class AgentChannels {
     message: Message,
     mastra: Mastra,
     requestContext: RequestContext,
+    signalMetadata: Record<string, unknown> = {},
   ): Promise<void> {
     const platform = chatThread.adapter.name;
 
@@ -1276,6 +1289,7 @@ export class AgentChannels {
     await this.dispatchInboundMessage({
       signalContents,
       attributes,
+      signalMetadata,
       providerOptions,
       requestContext,
       thread: mastraThread,
@@ -1537,18 +1551,59 @@ export class AgentChannels {
       );
     }
 
-    const metadata = {
+    const legacyMetadata = {
       channel_platform: platform,
       channel_externalThreadId: externalThreadId,
       channel_externalChannelId: channelId,
     };
 
-    const { threads } = await memoryStore.listThreads({
+    const ownerId = this.getOwnerId();
+    if (ownerId === null) {
+      // No owner bound yet - scoping is impossible; behave exactly as before
+      // and never stamp a null owner id.
+      const { threads } = await memoryStore.listThreads({
+        filter: { metadata: legacyMetadata },
+        perPage: 1,
+      });
+      return { thread: threads[0], memoryStore, metadata: legacyMetadata };
+    }
+
+    const metadata = { ...legacyMetadata, channel_ownerId: ownerId };
+
+    // Primary lookup: threads already scoped to this agent.
+    const { threads: scoped } = await memoryStore.listThreads({
       filter: { metadata },
       perPage: 1,
     });
+    if (scoped[0]) return { thread: scoped[0], memoryStore, metadata };
 
-    return { thread: threads[0], memoryStore, metadata };
+    // Legacy fallback: pre-upgrade threads carry no channel_ownerId. Metadata
+    // filters match subsets, so this query also returns threads claimed by
+    // OTHER agents - post-filter to unclaimed rows only, oldest first so
+    // adoption deterministically picks the original thread. If a conversation
+    // somehow accumulates more than 10 candidate rows, an unclaimed one past
+    // the page could be missed and a fresh thread created - acceptable
+    // degradation.
+    const { threads: candidates } = await memoryStore.listThreads({
+      filter: { metadata: legacyMetadata },
+      perPage: 10,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+    const unclaimed = candidates.find(candidate => {
+      const candidateMeta = (candidate.metadata ?? {}) as Record<string, unknown>;
+      return !('channel_ownerId' in candidateMeta);
+    });
+    if (unclaimed) {
+      // Lazily adopt the legacy thread: the first agent to touch it claims it
+      // by stamping its own id, preserving all existing metadata.
+      const claimed = await memoryStore.patchThread({
+        id: unclaimed.id,
+        metadata: { ...((unclaimed.metadata ?? {}) as Record<string, unknown>), channel_ownerId: ownerId },
+      });
+      return { thread: claimed, memoryStore, metadata };
+    }
+
+    return { thread: undefined, memoryStore, metadata };
   }
 
   /**

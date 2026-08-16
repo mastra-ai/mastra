@@ -29,8 +29,18 @@ describe('ExperimentBundler', () => {
     return directory;
   };
 
+  const writeWorkerManifest = async (directory: string, buildId: string) => {
+    await writeFile(
+      join(directory, 'experiment-worker-manifest.json'),
+      JSON.stringify({
+        build: { buildId },
+        protocol: { versions: ['1'], datasetCanonicalizationVersion: '1' },
+      }),
+    );
+  };
+
   afterEach(async () => {
-    vi.clearAllMocks();
+    vi.restoreAllMocks();
     await Promise.all(temporaryDirectories.splice(0).map(directory => rm(directory, { recursive: true, force: true })));
   });
 
@@ -51,6 +61,20 @@ describe('ExperimentBundler', () => {
     expect(entry).toContain('process.stdout.end(resolve)');
     expect(entry).toContain('setTimeout(resolve, 5_000)');
     expect(entry).toContain('process.exit(exitCode)');
+    expect(entry).toContain("readFile(new URL('./experiment-worker-manifest.json', import.meta.url), 'utf8')");
+    expect(entry).not.toContain(bundler.buildIdentity.buildId);
+  });
+
+  it('keeps worker bundle content stable across build identities', async () => {
+    const { ExperimentBundler } = await import('./ExperimentBundler');
+    const firstBundler = new ExperimentBundler();
+    const secondBundler = new ExperimentBundler();
+
+    const firstEntry = (firstBundler as unknown as { getEntry(): string }).getEntry();
+    const secondEntry = (secondBundler as unknown as { getEntry(): string }).getEntry();
+
+    expect(firstBundler.buildIdentity.buildId).not.toBe(secondBundler.buildIdentity.buildId);
+    expect(firstEntry).toBe(secondEntry);
   });
 
   it('installs explicitly configured externals that static analysis cannot observe', async () => {
@@ -161,6 +185,96 @@ describe('ExperimentBundler', () => {
       contentDigest: expectedContentDigest,
       excludes: ['experiment-worker-manifest.json', 'node_modules'],
     });
+  });
+
+  it('evaluates Mastra configuration in a scratch directory and reports output-directory side effects', async () => {
+    const originalWorkingDirectory = process.cwd();
+    const output = await createTemporaryDirectory('mastra-experiment-worker-');
+    const { Bundler } = await import('@mastra/deployer/bundler');
+    vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockImplementationOnce(async () => {
+      expect(process.cwd()).not.toBe(originalWorkingDirectory);
+      await mkdir(join(output, 'runtime-state'));
+      await writeFile(join(output, 'mastra.db'), 'local state');
+      await writeFile(join(output, 'runtime-state', 'vector.data'), 'local state');
+      return { externals: [] };
+    });
+    const { ExperimentBundler } = await import('./ExperimentBundler');
+
+    await expect((new ExperimentBundler() as any).getUserBundlerOptions('/entry.ts', output)).rejects.toThrow(
+      'Mastra configuration initialization created or modified unexpected files in the experiment worker artifact: mastra.db, runtime-state/vector.data',
+    );
+    expect(process.cwd()).toBe(originalWorkingDirectory);
+    await expect(readFile(join(output, 'mastra.db'), 'utf8')).resolves.toBe('local state');
+    await expect(readFile(join(output, 'runtime-state', 'vector.data'), 'utf8')).resolves.toBe('local state');
+  });
+
+  it('reports files modified during Mastra configuration initialization', async () => {
+    const output = await createTemporaryDirectory('mastra-experiment-worker-');
+    await writeFile(join(output, 'package.json'), '{"type":"module"}');
+    const { Bundler } = await import('@mastra/deployer/bundler');
+    vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockImplementationOnce(async () => {
+      await writeFile(join(output, 'package.json'), '{}');
+      return { externals: [] };
+    });
+    const { ExperimentBundler } = await import('./ExperimentBundler');
+
+    await expect((new ExperimentBundler() as any).getUserBundlerOptions('/entry.ts', output)).rejects.toThrow(
+      'Mastra configuration initialization created or modified unexpected files in the experiment worker artifact: package.json',
+    );
+  });
+
+  it('reports files deleted during Mastra configuration initialization', async () => {
+    const output = await createTemporaryDirectory('mastra-experiment-worker-');
+    await writeFile(join(output, 'package.json'), '{"type":"module"}');
+    const { Bundler } = await import('@mastra/deployer/bundler');
+    vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockImplementationOnce(async () => {
+      await rm(join(output, 'package.json'));
+      return { externals: [] };
+    });
+    const { ExperimentBundler } = await import('./ExperimentBundler');
+
+    await expect((new ExperimentBundler() as any).getUserBundlerOptions('/entry.ts', output)).rejects.toThrow(
+      'Mastra configuration initialization created or modified unexpected files in the experiment worker artifact: package.json',
+    );
+  });
+
+  it('restores the working directory when Mastra configuration initialization fails', async () => {
+    const originalWorkingDirectory = process.cwd();
+    const output = await createTemporaryDirectory('mastra-experiment-worker-');
+    const { Bundler } = await import('@mastra/deployer/bundler');
+    vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockRejectedValueOnce(
+      new Error('configuration failed'),
+    );
+    const { ExperimentBundler } = await import('./ExperimentBundler');
+
+    await expect((new ExperimentBundler() as any).getUserBundlerOptions('/entry.ts', output)).rejects.toThrow(
+      'configuration failed',
+    );
+    expect(process.cwd()).toBe(originalWorkingDirectory);
+  });
+
+  it('preserves database assets included in the artifact', async () => {
+    const { ExperimentBundler } = await import('./ExperimentBundler');
+    const output = await createTemporaryDirectory('mastra-experiment-worker-');
+    const nestedDirectory = join(output, 'runtime-state');
+    await mkdir(nestedDirectory);
+    await writeFile(join(output, 'index.mjs'), '');
+    await writeFile(join(output, 'package.json'), '{}');
+    const databaseAssets = ['seed.db', 'runtime-state/seed.sqlite'];
+    await Promise.all(databaseAssets.map(path => writeFile(join(output, path), 'seed data')));
+
+    await new ExperimentBundler().writeArtifactManifest(output, '1.2.3');
+
+    const manifest = JSON.parse(await readFile(join(output, 'experiment-worker-manifest.json'), 'utf8'));
+    expect(manifest.files.map((file: { path: string }) => file.path)).toEqual([
+      'index.mjs',
+      'package.json',
+      'runtime-state/seed.sqlite',
+      'seed.db',
+    ]);
+    await Promise.all(
+      databaseAssets.map(path => expect(readFile(join(output, path), 'utf8')).resolves.toBe('seed data')),
+    );
   });
 
   it('excludes node_modules from file digests and content digest', async () => {
@@ -300,6 +414,7 @@ describe('ExperimentBundler', () => {
       .replace("import('@mastra/core/datasets')", `import(${JSON.stringify(pathToFileURL(coreModule).href)})`)
       .replace("import('#mastra')", `import(${JSON.stringify(pathToFileURL(mastraModule).href)})`);
     await writeFile(entryFile, entry);
+    await writeWorkerManifest(directory, bundler.buildIdentity.buildId);
 
     const items = [{ id: 'item-1', input: { prompt: 'hello' }, groundTruth: 'world', toolMocks: [] }];
     const canonical = canonicalize(items);
@@ -362,6 +477,7 @@ describe('ExperimentBundler', () => {
       .replace("import('@mastra/core/datasets')", `import(${JSON.stringify(pathToFileURL(coreModule).href)})`)
       .replace("import('#mastra')", `import(${JSON.stringify(pathToFileURL(mastraModule).href)})`);
     await writeFile(entryFile, entry);
+    await writeWorkerManifest(directory, bundler.buildIdentity.buildId);
 
     const experimentId = randomUUID();
     const request = {
@@ -410,6 +526,7 @@ describe('ExperimentBundler', () => {
       .replace("import('@mastra/core/datasets')", `import(${JSON.stringify(pathToFileURL(coreModule).href)})`)
       .replace("import('#mastra')", `import(${JSON.stringify(pathToFileURL(mastraModule).href)})`);
     await writeFile(entryFile, entry);
+    await writeWorkerManifest(directory, bundler.buildIdentity.buildId);
 
     const items: unknown[] = [];
     const digest = createHash('sha256').update(canonicalize(items)).digest('hex');

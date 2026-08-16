@@ -13,7 +13,7 @@ import type {
   FactoryStageRuleContext,
   FactoryTransitionResult,
 } from './types.js';
-import { FACTORY_RULE_STAGES, factoryRuleSourceForWorkItem } from './types.js';
+import { factoryRuleSourceForWorkItem, isFactoryRuleStage } from './types.js';
 import {
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
   validateFactoryRuleDecision,
@@ -91,7 +91,7 @@ function actorId(actor: FactoryRuleActor): string {
 function currentStage(stages: readonly string[]): FactoryRuleStage | undefined {
   if (stages.length !== 1) return undefined;
   const stage = stages[0];
-  return FACTORY_RULE_STAGES.includes(stage as FactoryRuleStage) ? (stage as FactoryRuleStage) : undefined;
+  return isFactoryRuleStage(stage) ? stage : undefined;
 }
 
 function workItemSource(source: ExternalWorkItemSource | null) {

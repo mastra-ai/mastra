@@ -173,6 +173,7 @@ import type { CreatedAgentSignal } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import type { SubAgent } from './subagent';
 import { agentThreadStreamRuntime } from './thread-stream-runtime';
+import type { ActiveThreadRun } from './thread-stream-runtime';
 import { TripWire } from './trip-wire';
 import type {
   AgentConfig,
@@ -541,7 +542,18 @@ export class Agent<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
   TOutput = undefined,
-  TRequestContext extends Record<string, any> | unknown = unknown,
+  /**
+   * Defaults to `any` (not `unknown`) so agents that declare a `requestContextSchema`
+   * remain assignable to the bare `Agent` type. `TRequestContext` is invariant on
+   * `Agent` (it appears in both parameter and return positions via `DynamicArgument`
+   * / private fields), so a schema-narrowed agent is not assignable to
+   * `Agent<..., unknown>` — which broke generic helpers typed as `(agent: Agent) => ...`.
+   *
+   * Construction without a schema still infers a concrete context from
+   * `requestContextSchema` when present; the `any` default only affects the
+   * unparameterized `Agent` alias used for "any agent" acceptors.
+   */
+  TRequestContext extends Record<string, any> | unknown = any,
   TEditor extends AgentEditorConfig | undefined = AgentEditorConfig | undefined,
 >
   extends MastraBase
@@ -1329,7 +1341,10 @@ export class Agent<
 
     // Resolve workspace-level skills (if configured)
     const workspace = workspaceOverride ?? (await this.getWorkspace({ requestContext: rc }));
-    const workspaceSkills = workspace?.skills;
+    const configuredWorkspaceSkills = workspace?.skills;
+    const workspaceSkills = configuredWorkspaceSkills?.getScoped
+      ? await configuredWorkspaceSkills.getScoped({ requestContext: rc })
+      : configuredWorkspaceSkills;
 
     // Merge if both exist (agent skills win on name conflicts)
     if (agentSkills && workspaceSkills) {
@@ -6025,6 +6040,20 @@ export class Agent<
       model,
     });
 
+    // Preserve `onOutput` from server-declared execute-less tools when the
+    // serialized client copy overwrites them below. Normal server-executed
+    // tools never hand hooks to client-controlled input. Copy instead of
+    // mutating so a future cache inside listClientTools cannot leak hooks
+    // across requests.
+    const serverDeclaredTools = { ...assignedTools, ...toolsetTools };
+    for (const [name, clientSideTool] of Object.entries(clientSideTools)) {
+      const serverTool = serverDeclaredTools[name];
+      if (!serverTool || serverTool.execute) continue;
+      if (!clientSideTool.onOutput && typeof serverTool.onOutput === 'function') {
+        clientSideTools[name] = { ...clientSideTool, onOutput: serverTool.onOutput };
+      }
+    }
+
     const agentTools = await this.listAgentTools({
       runId,
       resourceId,
@@ -6983,9 +7012,16 @@ export class Agent<
         ? {
             ...options.tracingOptions,
             traceId: effectiveTraceId,
-            parentSpanId: shouldUsePersistedParentSpan ? persistedTracingContext?.spanId : userProvidedParentSpanId,
           }
         : options.tracingOptions;
+
+    // The persisted resume link travels separately from tracingOptions:
+    // tracingOptions.parentSpanId is reserved for external correlation ids,
+    // while the suspended span's id is a Mastra span present in storage.
+    const resumedFromSpanId =
+      isResume && persistedTracingContext?.traceId && shouldUsePersistedParentSpan
+        ? persistedTracingContext.spanId
+        : undefined;
 
     const spanInput = isResume
       ? this.#getResumeSpanInput(resumeContext.resumeData, suspendedToolInfo)
@@ -7021,6 +7057,7 @@ export class Agent<
       tracingContext: options.tracingContext,
       requestContext,
       mastra: this.#mastra,
+      resumedFromSpanId,
     });
 
     const memory = await this.getMemory({ requestContext });
@@ -7723,6 +7760,10 @@ export class Agent<
 
   getActiveThreadRunId(options: AgentSubscribeToThreadOptions): string | undefined {
     return agentThreadStreamRuntime.getActiveThreadRunId(options, this.getPubSub());
+  }
+
+  listActiveThreadRuns(): ActiveThreadRun[] {
+    return agentThreadStreamRuntime.listActiveThreadRuns(this.getPubSub());
   }
 
   /**

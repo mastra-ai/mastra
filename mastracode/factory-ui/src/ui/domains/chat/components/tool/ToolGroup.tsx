@@ -2,7 +2,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/pla
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { X } from 'lucide-react';
+import { FoldVertical, X } from 'lucide-react';
 import { useState } from 'react';
 
 import type { ToolCall } from '../../services/transcript';
@@ -16,7 +16,7 @@ export const TOOL_GROUP_MIN = 3;
 export function ToolGroup({ tools }: { tools: ToolCall[] }) {
   const [expanded, setExpanded] = useState(false);
   const running = tools.find(tool => tool.status === 'running');
-  const live = running ? presentTool(running.toolName, running.args) : undefined;
+  const liveDetail = running ? presentTool(running.toolName, running.args).detail : undefined;
 
   return (
     <Collapsible
@@ -29,8 +29,10 @@ export function ToolGroup({ tools }: { tools: ToolCall[] }) {
     >
       <CollapsibleTrigger className={ROW_TRIGGER}>
         <TranscriptRow
-          label={live?.label ?? `${tools.length} steps`}
-          detail={live?.detail ?? actionSummary(tools)}
+          icon={<FoldVertical size={14} strokeWidth={1.75} aria-hidden className="text-icon2" />}
+          label={`${tools.length} steps`}
+          detail={liveDetail}
+          summary={<GroupKinds tools={tools} />}
           running={Boolean(running)}
           expanded={expanded}
           rule
@@ -39,7 +41,7 @@ export function ToolGroup({ tools }: { tools: ToolCall[] }) {
       </CollapsibleTrigger>
       <CollapsibleContent className="max-w-full min-w-0">
         <div className={cn(ROW_RAIL, 'py-0.5 pr-0 pl-2.5')}>
-          <ScrollArea maxHeight="18rem" autoScroll={Boolean(running)}>
+          <ScrollArea maxHeight="18rem" autoScroll={Boolean(running)} revealScrollbarOnHover={false}>
             {tools.map(tool => (
               <ToolCard key={tool.toolCallId} tool={tool} />
             ))}
@@ -66,7 +68,22 @@ function GroupProgress({ tools }: { tools: ToolCall[] }) {
   return null;
 }
 
-function actionSummary(tools: ToolCall[]): string {
-  const labels = [...new Set(tools.map(tool => presentTool(tool.toolName, tool.args).label))];
-  return labels.slice(0, 4).join(' · ');
+/** What the collapsed group holds, one glyph per distinct kind of call. */
+function GroupKinds({ tools }: { tools: ToolCall[] }) {
+  const byLabel = new Map(
+    tools.map(tool => presentTool(tool.toolName, tool.args)).map(({ label, icon }) => [label, icon]),
+  );
+  const kinds = [...byLabel].slice(0, 4);
+
+  return (
+    <span
+      role="img"
+      aria-label={kinds.map(([label]) => label).join(', ')}
+      className="flex shrink-0 items-center gap-1.5"
+    >
+      {kinds.map(([label, Kind]) => (
+        <Kind key={label} size={12} strokeWidth={1.75} className="text-icon2" />
+      ))}
+    </span>
+  );
 }

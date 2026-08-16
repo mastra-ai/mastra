@@ -1,5 +1,5 @@
 ---
-title: "PostgreSQL | Storage"
+title: "PostgreSQL | Database"
 description: Documentation for the PostgreSQL storage implementation in Mastra.
 packages:
   - "@mastra/core"
@@ -468,8 +468,9 @@ PostgreSQL storage creates composite indexes during initialization for common qu
 - `mastra_ai_spans_name_startedat_idx`: (name, startedAt DESC)
 - `mastra_ai_spans_scope_startedat_idx`: (scope, startedAt DESC)
 - `mastra_scores_trace_id_span_id_created_at_idx`: (traceId, spanId, createdAt DESC)
+- `mastra_workflow_snapshot_name_createdat_idx`: (workflow\_name, createdAt DESC)
 
-These indexes improve performance for filtered queries with sorting, including `dateRange` filters on message queries.
+These indexes improve performance for filtered queries with sorting, including `dateRange` filters on message queries and Studio's workflow runs-list.
 
 ### Configuring Indexes
 
@@ -627,7 +628,7 @@ const stats = await storage.db.one(`
 
 PostgreSQL offers different index types optimized for specific scenarios:
 
-| Index Type | Best For | Storage | Speed |
+| Index Type | Best For | Storage size | Speed |
 | - | - | - | - |
 | **btree** (default) | Range queries, sorting, general purpose | Moderate | Fast |
 | **hash** | Equality comparisons only | Small | Very fast for `=` |

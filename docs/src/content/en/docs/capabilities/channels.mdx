@@ -1,11 +1,13 @@
 ---
-title: "Channels overview"
+title: "Channels"
 description: "Channels connect Mastra agents to messaging platforms like Slack, Discord, and Telegram."
 packages:
   - "@mastra/core"
 ---
 
-# Channels overview
+import { IntegrationGrid } from '@site/src/components/integrations/grid';
+
+# Channels
 
 **Added in:** `@mastra/core@1.22.0`
 
@@ -13,13 +15,7 @@ Channels connect agents to messaging and collaboration platforms like Slack, Mic
 
 Start with the page for your platform:
 
-- [Slack](/integrations/channels/slack)
-- [Microsoft Teams](/integrations/channels/teams)
-- [Discord](/integrations/channels/discord)
-- [Telegram](/integrations/channels/telegram)
-- [WhatsApp](/integrations/channels/whatsapp)
-- [iMessage](/integrations/channels/imessage)
-- [GitHub](/integrations/channels/github)
+<IntegrationGrid section="Channels" />
 
 [Other adapters](#other-adapters) lists additional platforms. Mastra channels work with compatible [Chat SDK adapters](https://chat-sdk.dev/adapters) beyond the platforms listed here, and the same Mastra configuration pattern applies across adapters.
 
@@ -145,7 +141,7 @@ export const deleteFile = createTool({
 
 When the agent calls this tool, users see a card with the tool name, arguments, and Approve and Deny actions. The tool only executes after approval.
 
-Set `toolDisplay: 'text'` on an adapter to render tool calls as plain text instead of interactive cards. In `'hidden'` mode, `autoResumeSuspendedTools` can resume suspended tools when a later user message arrives on the same thread. This requires memory. Hidden mode only suppresses the approval buttons.
+Set `toolDisplay: 'text'` on an adapter to render tool calls as plain text instead of interactive cards. In `'hidden'` mode, `autoResumeSuspendedTools` can resume data-bearing `suspend()` flows when a later user message arrives on the same thread. This requires memory. Hidden mode only suppresses approval buttons. It doesn't turn a message into consent. Tools that require approval remain suspended until an explicit approval or decline is submitted through a UI or API action.
 
 ## Reply formatting
 
@@ -174,6 +170,39 @@ In group conversations, Mastra prefixes each message with the sender's name and 
 [Alice (@U123ABC)]: Can you help me with this?
 [Bob (@U456DEF)]: I have a question too.
 ```
+
+## Per-message Signal metadata
+
+Use `signalMetadata` in a custom Channel handler to attach structured context to one inbound message. The metadata follows the message when it starts an idle run or joins an active run.
+
+The following example attaches registered file IDs before calling the default handler:
+
+```typescript title="src/mastra/agents/your-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+export const yourAgent = new Agent({
+  id: 'your-agent',
+  name: 'Your Agent',
+  instructions: 'You are a helpful assistant.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  channels: {
+    adapters: {
+      slack: createSlackAdapter(),
+    },
+    handlers: {
+      onDirectMessage: async (thread, message, defaultHandler, ctx) => {
+        ctx.signalMetadata.attachmentIds = ['file-1']
+        await defaultHandler(thread, message)
+      },
+    },
+  },
+})
+```
+
+Add only JSON-serializable, non-sensitive values. Signal metadata may be stored in memory or sent through a shared publish-subscribe transport. It isn't added to the model prompt.
+
+Use `requestContext` for run-scoped configuration, such as credentials for a message that starts a run. Use `signalMetadata` for context that must stay attached to one message, including messages delivered to an active run.
 
 ## Multimodal content
 

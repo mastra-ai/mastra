@@ -2861,6 +2861,7 @@ describe('Agent signals', () => {
     });
     let streamCount = 0;
     const prompts: any[][] = [];
+    const handledSignalMetadata: unknown[] = [];
     const model = new MockLanguageModelV2({
       doStream: async ({ prompt }) => {
         streamCount += 1;
@@ -2895,7 +2896,24 @@ describe('Agent signals', () => {
         };
       },
     });
-    const agent = new Agent({ id: 'active-message-agent', name: 'Active Message Agent', instructions: 'Test', model });
+    const agent = new Agent({
+      id: 'active-message-agent',
+      name: 'Active Message Agent',
+      instructions: 'Test',
+      model,
+      inputProcessors: [
+        {
+          id: 'capture-active-message-metadata',
+          processInputStep: ({ messageList }) => {
+            for (const message of messageList.get.input.db()) {
+              if (message.role !== 'signal') continue;
+              const signal = message.content.metadata?.signal as Record<string, unknown> | undefined;
+              if (signal?.metadata !== undefined) handledSignalMetadata.push(signal.metadata);
+            }
+          },
+        },
+      ],
+    });
     const subscription = await agent.subscribeToThread({
       threadId: 'active-message-thread',
       resourceId: 'active-message-user',
@@ -2905,16 +2923,23 @@ describe('Agent signals', () => {
       memory: { thread: 'active-message-thread', resource: 'active-message-user' },
     });
     await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
-    const result = agent.sendMessage('Hello while active', {
-      resourceId: 'active-message-user',
-      threadId: 'active-message-thread',
-    });
+    const result = agent.sendMessage(
+      {
+        contents: 'Hello while active',
+        metadata: { channel: { attachmentId: 'file-1' } },
+      },
+      {
+        resourceId: 'active-message-user',
+        threadId: 'active-message-thread',
+      },
+    );
 
     await expect(result.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
     releaseFirst();
     await expect(stream.text).resolves.toBe('first responsemessage response');
     expect(streamCount).toBe(2);
     expect(JSON.stringify(prompts[1])).toContain('Hello while active');
+    expect(handledSignalMetadata).toContainEqual({ channel: { attachmentId: 'file-1' } });
 
     subscription.unsubscribe();
   });
@@ -4248,41 +4273,44 @@ describe('Agent signals', () => {
     }
   });
 
-  it('ends a remote wait on a terminal event before the lease deadline', async () => {
-    const pubsub = new ControlledLeasePubSub();
-    const runtime = new AgentThreadStreamRuntime();
-    const key = 'terminal-wait-resource\u0000terminal-wait-thread';
-    const topic = `agent.thread-stream.${encodeURIComponent(key)}`;
-    const runId = 'terminal-wait-run';
-    pubsub.owners.set(key, runId);
-    const subscription = await runtime.subscribeToThread(
-      { id: 'terminal-wait-owner' } as Agent<any, any, any, any>,
-      { resourceId: 'terminal-wait-resource', threadId: 'terminal-wait-thread' },
-      pubsub,
-    );
-    await pubsub.publish(topic, {
-      type: 'run-registered',
-      runId,
-      data: { type: 'run-registered', runId, streamId: 'terminal-wait-stream', streamSeq: 1 },
-    });
-    await pubsub.flush();
-    await waitForCondition(() => subscription.activeRunId() === runId);
+  it.each(['run-completed', 'run-discarded'] as const)(
+    'ends a remote wait on %s before the lease deadline',
+    async terminalType => {
+      const pubsub = new ControlledLeasePubSub();
+      const runtime = new AgentThreadStreamRuntime();
+      const key = 'terminal-wait-resource\u0000terminal-wait-thread';
+      const topic = `agent.thread-stream.${encodeURIComponent(key)}`;
+      const runId = 'terminal-wait-run';
+      pubsub.owners.set(key, runId);
+      const subscription = await runtime.subscribeToThread(
+        { id: 'terminal-wait-owner' } as Agent<any, any, any, any>,
+        { resourceId: 'terminal-wait-resource', threadId: 'terminal-wait-thread' },
+        pubsub,
+      );
+      await pubsub.publish(topic, {
+        type: 'run-registered',
+        runId,
+        data: { type: 'run-registered', runId, streamId: 'terminal-wait-stream', streamSeq: 1 },
+      });
+      await pubsub.flush();
+      await waitForCondition(() => subscription.activeRunId() === runId);
 
-    const wait = runtime.waitForCrossAgentThreadRun(
-      { id: 'terminal-wait-other' } as Agent<any, any, any, any>,
-      { memory: { resource: 'terminal-wait-resource', thread: 'terminal-wait-thread' } },
-      pubsub,
-    );
-    await pubsub.publish(topic, {
-      type: 'run-completed',
-      runId,
-      data: { type: 'run-completed', runId, streamId: 'terminal-wait-stream' },
-    });
-    await pubsub.flush();
-    await expect(wait).resolves.toBeUndefined();
-    expect(pubsub.unsubscribeCount).toBeGreaterThanOrEqual(1);
-    subscription.unsubscribe();
-  });
+      const wait = runtime.waitForCrossAgentThreadRun(
+        { id: 'terminal-wait-other' } as Agent<any, any, any, any>,
+        { memory: { resource: 'terminal-wait-resource', thread: 'terminal-wait-thread' } },
+        pubsub,
+      );
+      await pubsub.publish(topic, {
+        type: terminalType,
+        runId,
+        data: { type: terminalType, runId, streamId: 'terminal-wait-stream' },
+      });
+      await pubsub.flush();
+      await expect(wait).resolves.toBeUndefined();
+      expect(pubsub.unsubscribeCount).toBeGreaterThanOrEqual(1);
+      subscription.unsubscribe();
+    },
+  );
 
   it('routes remote abort requests to only the live lease owner', async () => {
     const pubsub = new ControlledLeasePubSub();
@@ -4413,13 +4441,22 @@ describe('Agent signals', () => {
 
     const result = senderRuntime.sendSignal(
       sender,
-      { type: 'user-message', contents: 'remote follow-up' },
+      {
+        type: 'user-message',
+        contents: 'remote follow-up',
+        metadata: { channel: { attachmentId: 'file-remote' } },
+      },
       { resourceId: 'remote-resource', threadId: 'remote-thread' },
       pubsub,
     );
 
     await expect(result.accepted).resolves.toMatchObject({ action: 'deliver' });
-    await waitForCondition(() => ownerRuntime.drainPendingSignals('remote-run-1', pubsub).length === 1);
+    let deliveredSignals: ReturnType<typeof ownerRuntime.drainPendingSignals> = [];
+    await waitForCondition(() => {
+      deliveredSignals = ownerRuntime.drainPendingSignals('remote-run-1', pubsub);
+      return deliveredSignals.length === 1;
+    });
+    expect(deliveredSignals[0]?.metadata).toEqual({ channel: { attachmentId: 'file-remote' } });
 
     finishRun();
     await waitForRemoteRun;
