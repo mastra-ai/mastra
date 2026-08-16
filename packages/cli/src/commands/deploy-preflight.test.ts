@@ -58,11 +58,32 @@ describe('preflightBuildOutput', () => {
       writeBundle(`const k = process.env.ANTHROPIC_API_KEY;\nconst u = process.env.DATABASE_URL;`);
 
       const issues = await preflightBuildOutput(tmpDir, {});
-      const missing = issues.find(i => i.code === 'MISSING_ENV_VAR');
-      expect(missing).toBeDefined();
-      expect(missing?.severity).toBe('warning');
-      expect(missing?.message).toContain('ANTHROPIC_API_KEY');
-      expect(missing?.message).toContain('DATABASE_URL');
+      const missing = issues.filter(i => i.code === 'MISSING_ENV_VAR');
+      expect(missing.length).toBeGreaterThan(0);
+      const messages = missing.map(i => i.message).join('\n');
+      expect(messages).toContain('ANTHROPIC_API_KEY');
+      expect(messages).toContain('DATABASE_URL');
+      for (const issue of missing) {
+        expect(issue.severity).toBe('warning');
+      }
+    });
+
+    it('attaches a create-managed-database autofix for provider-known env vars (REDIS_URL)', async () => {
+      writeBundle(`const url = process.env.REDIS_URL;`);
+      const issues = await preflightBuildOutput(tmpDir, {});
+      const issue = issues.find(i => i.code === 'MISSING_ENV_VAR' && i.message.includes('REDIS_URL'));
+      expect(issue?.autofix).toEqual({
+        kind: 'create-managed-database',
+        provider: 'redis',
+        envVarName: 'REDIS_URL',
+      });
+    });
+
+    it('does not attach an autofix to non-provider missing env vars', async () => {
+      writeBundle(`const k = process.env.SOME_CUSTOM_KEY;`);
+      const issues = await preflightBuildOutput(tmpDir, {});
+      const issue = issues.find(i => i.code === 'MISSING_ENV_VAR' && i.message.includes('SOME_CUSTOM_KEY'));
+      expect(issue?.autofix).toBeUndefined();
     });
 
     it('does not flag env vars present in the env file', async () => {
