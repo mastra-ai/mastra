@@ -103,6 +103,53 @@ describe('native session → pulse forwarding', () => {
     await mastra.shutdown();
   });
 
+  it('stamps the current run id on agent_end and abort_completed pulses', async () => {
+    const { mastra, storage, session } = await createPulseSession();
+
+    // Arm a run the way the engine does: the run tracker holds the id until
+    // run.reset(), which happens only after agent_end is fully dispatched.
+    session.run.setRunId({ runId: 'run-42' });
+    session.emit({ type: 'agent_end', reason: 'aborted' });
+    await mastra.pulseBus!.flush();
+
+    const abort = storage.pulses.find(p => p.action === 'abort_completed');
+    expect(abort).toBeDefined();
+    expect(abort!.runId).toBe('run-42');
+    expect(abort!.metadata?.runId).toBe('run-42');
+    expect(storage.pulses.find(p => p.action === 'agent_end')!.runId).toBe('run-42');
+
+    await mastra.shutdown();
+  });
+
+  it('captures the abort outcome when deleteSession aborts a running session', async () => {
+    const { controller, mastra, storage, session } = await createPulseSession();
+
+    // A "running" session: the engine would emit agent_end{aborted}
+    // asynchronously after deleteSession's abort() call. Simulate that exact
+    // ordering — the terminal event arrives on the next tick, after
+    // deleteSession has already returned.
+    session.run.setRunId({ runId: 'run-7' });
+    session.run.ensureAbortController();
+    const originalAbort = session.abort.bind(session);
+    session.abort = () => {
+      originalAbort();
+      queueMicrotask(() => {
+        session.emit({ type: 'agent_end', reason: 'aborted' });
+        session.run.reset();
+      });
+    };
+
+    await controller.deleteSession({ resourceId: 'user-1' });
+    await new Promise(r => setTimeout(r, 20));
+    await mastra.pulseBus!.flush();
+
+    const abort = storage.pulses.find(p => p.action === 'abort_completed');
+    expect(abort, 'abort fact must survive deleteSession').toBeDefined();
+    expect(abort!.runId).toBe('run-7');
+
+    await mastra.shutdown();
+  });
+
   it('detaches the forwarder when the session is deleted', async () => {
     const { controller, mastra, storage, session } = await createPulseSession();
 
@@ -116,6 +163,44 @@ describe('native session → pulse forwarding', () => {
     await mastra.pulseBus!.flush();
 
     expect(storage.pulses).toHaveLength(before);
+    await mastra.shutdown();
+  });
+});
+
+describe('session-lane payload safety', () => {
+  it('emitted attributes survive JSON serialization even for hostile event fields', async () => {
+    const { mastra, storage, session } = await createPulseSession();
+
+    // `reason` is copied verbatim into attributes; a cyclic object here must
+    // not produce a record that later poisons a ClickHouse-style stringify.
+    const cyclic: any = { note: 'boom', big: 10n };
+    cyclic.self = cyclic;
+    session.emit({ type: 'tool_suspension_cancelled', toolCallId: 'c9', toolName: 'x', reason: cyclic });
+    await mastra.pulseBus!.flush();
+
+    const rec = storage.pulses.find(p => p.action === 'suspension_cancelled');
+    expect(rec).toBeDefined();
+    expect(() => JSON.stringify(rec!.attributes)).not.toThrow();
+
+    await mastra.shutdown();
+  });
+});
+
+describe('late Mastra registration (standalone controller)', () => {
+  it('wires forwarders for sessions created before __registerMastra', async () => {
+    const controller = createTestController();
+    await controller.init(); // standalone: builds an internal Mastra without pulse
+    const session = await controller.createSession({ id: 's1', ownerId: 'o1', resourceId: 'user-1' });
+
+    // The parent Mastra (with pulse) arrives afterwards — the mastracode shape.
+    const storage = new RecordingPulseStorage();
+    const mastra = new Mastra({ agentControllers: { code: controller }, pulse: { storage } });
+    await new Promise(r => setTimeout(r, 0)); // let deferred wiring settle
+
+    session.emit({ type: 'tool_approval_required', toolCallId: 'c1', toolName: 'x', args: {} });
+    await mastra.pulseBus!.flush();
+
+    expect(storage.pulses.some(p => p.action === 'required')).toBe(true);
     await mastra.shutdown();
   });
 });

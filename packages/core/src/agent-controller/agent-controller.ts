@@ -13,6 +13,7 @@ import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
 import type { TracingContext, TracingOptions } from '../observability';
 import { attachSessionPulseForwarder } from '../pulse';
+import type { SessionPulseForwarderHandle } from '../pulse';
 import { RequestContext } from '../request-context';
 import type { MastraCompositeStore } from '../storage/base';
 import type { MemoryStorage } from '../storage/domains/memory/base';
@@ -231,7 +232,7 @@ export class AgentController<TState = {}> {
    * {@link #wireSession} when the registered Mastra has a PulseBus; called
    * during {@link deleteSession} so a torn-down session stops forwarding.
    */
-  readonly #pulseForwarderDetach = new WeakMap<Session<TState>, () => void>();
+  readonly #pulseForwarderDetach = new WeakMap<Session<TState>, SessionPulseForwarderHandle>();
   private availableModelsCache: AvailableModel[] | null = null;
   private availableModelsCacheTime: number = 0;
   readonly #instructions?: string;
@@ -407,20 +408,27 @@ export class AgentController<TState = {}> {
     // translating session facts (approvals, abort outcomes, follow-ups,
     // mode/model switches) onto the PulseBus. No emit site changes; nothing
     // attaches when pulse is not configured.
-    const pulseBus = this.getMastra()?.pulseBus;
-    if (pulseBus) {
-      this.#pulseForwarderDetach.set(
-        session,
-        attachSessionPulseForwarder({
-          session,
-          bus: pulseBus,
-          getThreadId: () => session.thread.getId(),
-          getResourceId: () => session.identity.getResourceId(),
-        }),
-      );
-    }
+    this.#attachPulseForwarder(session);
 
     return session;
+  }
+
+  /** Idempotent: attaches a session's pulse forwarder when a bus is available. */
+  #attachPulseForwarder(session: Session<TState>): void {
+    if (this.#pulseForwarderDetach.has(session)) return;
+    const pulseBus = this.getMastra()?.pulseBus;
+    if (!pulseBus) return;
+    this.#pulseForwarderDetach.set(
+      session,
+      attachSessionPulseForwarder({
+        session,
+        bus: pulseBus,
+        getThreadId: () => session.thread.getId(),
+        getResourceId: () => session.identity.getResourceId(),
+        // Still set when agent_end fires — run.reset() runs after dispatch.
+        getRunId: () => session.getCurrentRunId(),
+      }),
+    );
   }
 
   /**
@@ -769,9 +777,19 @@ export class AgentController<TState = {}> {
       this.#sessionsBeingDeleted.add(session);
       // tolerantPromise is set synchronously below before this microtask runs.
       this.#sessionDeletionPromises.set(session, deletion.tolerantPromise!);
+      // Capture the run id BEFORE abort/teardown: the synchronous
+      // cleanupSubscription below suppresses the engine's own
+      // agent_end{aborted} (its stream-currency guard fails after cleanup),
+      // so the controller must state the terminal abort fact itself while it
+      // still knows which run it is ending.
+      const abortedRunId = session.getCurrentRunId();
       session.abort();
-      this.#pulseForwarderDetach.get(session)?.();
-      this.#pulseForwarderDetach.delete(session);
+      const forwarder = this.#pulseForwarderDetach.get(session);
+      if (forwarder) {
+        if (abortedRunId != null) forwarder.recordAbortOutcome(abortedRunId);
+        forwarder.detach();
+        this.#pulseForwarderDetach.delete(session);
+      }
       session.thread.cleanupSubscription();
       try {
         await session.thread.clearAndReleaseLock();
@@ -884,6 +902,13 @@ export class AgentController<TState = {}> {
     if (this.#internalMastra) {
       this.#internalMastra.__unregisterHooks();
       this.#internalMastra = undefined;
+    }
+
+    // Sessions created before registration (standalone init) were wired
+    // against a Mastra with no pulse bus — attach their forwarders now that
+    // the parent may have one. Idempotent per session.
+    for (const pending of this.#sessionsByResource.values()) {
+      void pending.then(session => this.#attachPulseForwarder(session)).catch(() => {});
     }
   }
 
