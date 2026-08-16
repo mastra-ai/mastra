@@ -332,6 +332,25 @@ export interface DelegationConfig {
    * ```
    */
   messageFilter?: (context: MessageFilterContext) => MastraDBMessage[] | Promise<MastraDBMessage[]>;
+
+  /**
+   * Controls whether the parent agent grafts its own memory onto a delegated
+   * sub-agent that has no memory of its own configured.
+   *
+   * When a sub-agent has no own memory, the parent's memory instance is
+   * assigned onto the sub-agent instance itself (via an internal setter) so
+   * the delegated run can persist messages. Because Agent instances are
+   * commonly constructed once and shared across requests, this mutates
+   * shared state: concurrent delegations to the same memory-less sub-agent
+   * from supervisors bound to different callers can race on which parent's
+   * memory ends up grafted.
+   *
+   * Set to `false` to opt out — the sub-agent is left without memory instead
+   * of having the parent's memory grafted onto it.
+   *
+   * @default true
+   */
+  inheritMemory?: boolean;
 }
 /**
  * Configuration for the routing agent's behavior.

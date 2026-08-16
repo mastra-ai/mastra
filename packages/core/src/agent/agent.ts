@@ -240,6 +240,11 @@ interface StandaloneDurableWrapper {
   prepare: (...args: any[]) => any;
 }
 
+// Tracks sub-agent instances that have already had a parent's memory grafted
+// onto them via __setMemory, so the one-time graft warning below only fires
+// once per instance rather than on every delegation that reaches it.
+const delegationMemoryGraftWarned = new WeakSet<object>();
+
 const createSubAgentInputSchema = () =>
   z.object({
     prompt: z.string().describe('The prompt to send to the agent'),
@@ -4916,8 +4921,27 @@ export class Agent<
                 methodType === 'streamLegacy') &&
               supportedLanguageModelSpecifications.includes(resolvedModelVersion)
             ) {
-              if (!resolvedAgent.hasOwnMemory() && this.#memory) {
+              if (!resolvedAgent.hasOwnMemory() && this.#memory && delegation?.inheritMemory !== false) {
                 resolvedAgent.__setMemory(this.#memory as DynamicArgument<MastraMemory, TRequestContext>);
+
+                // Warn the first time this sub-agent instance is mutated by a
+                // memory graft. Agent instances are commonly constructed once
+                // and shared, so this mutation is otherwise invisible and
+                // permanent for the instance's lifetime.
+                if (!delegationMemoryGraftWarned.has(resolvedAgent)) {
+                  delegationMemoryGraftWarned.add(resolvedAgent);
+                  this.logger.warn(
+                    'Delegation grafted parent memory onto a memory-less sub-agent instance. ' +
+                      'This mutates the shared sub-agent instance for its lifetime; concurrent delegations ' +
+                      "to the same sub-agent from other parents can race on which parent's memory ends up " +
+                      "grafted. Set delegation.inheritMemory: false to opt out, or configure the sub-agent's " +
+                      'own memory to make this warning unnecessary.',
+                    {
+                      parentAgent: this.name,
+                      subAgent: resolvedAgent.name ?? resolvedAgent.id,
+                    },
+                  );
+                }
               }
             }
 
