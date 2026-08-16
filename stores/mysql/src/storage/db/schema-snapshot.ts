@@ -38,8 +38,17 @@ export interface SchemaSnapshot {
   tables: Set<string>;
   /** lowercased table name -> lowercased column names present on that table. */
   columns: Map<string, Set<string>>;
-  /** Lowercased index names present in the schema. */
+  /**
+   * `table.index` keys (both lowercased) for indexes present in the schema.
+   * MySQL index names are unique per table, not per schema, so presence is
+   * keyed the same way the STATISTICS probe matches: table plus index name.
+   */
   indexes: Set<string>;
+}
+
+/** Builds the `table.index` presence key the snapshot uses. */
+export function indexKey(table: string, index: string): string {
+  return `${table.toLowerCase()}.${index.toLowerCase()}`;
 }
 
 const lower = (value: unknown): string => String(value).toLowerCase();
@@ -84,7 +93,7 @@ export async function loadSchemaSnapshot(pool: Pool, schemaName: string | undefi
 
   const indexes = new Set<string>();
   for (const row of indexRows ?? []) {
-    indexes.add(lower(row.index_name ?? row.INDEX_NAME));
+    indexes.add(indexKey(lower(row.table_name ?? row.TABLE_NAME), lower(row.index_name ?? row.INDEX_NAME)));
   }
 
   return { schemaName, tables, columns, indexes };

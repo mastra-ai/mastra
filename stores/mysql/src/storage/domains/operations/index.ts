@@ -2,7 +2,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { StoreOperations, TABLE_CONFIGS, TABLE_SPANS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES, CreateIndexOptions } from '@mastra/core/storage';
 import type { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise';
-import { loadSchemaSnapshot } from '../../db/schema-snapshot';
+import { indexKey, loadSchemaSnapshot } from '../../db/schema-snapshot';
 import type { SchemaSnapshot } from '../../db/schema-snapshot';
 import {
   formatTableName,
@@ -41,9 +41,17 @@ export class StoreOperationsMySQL extends StoreOperations {
     this.resolvedDatabase = database ?? null;
   }
 
-  /** Loads and installs the init-scoped snapshot; a null load (no default database) leaves probing behavior unchanged. */
+  /**
+   * Loads and installs the init-scoped snapshot. A null load (no default
+   * database) or a failed load leaves the snapshot uninstalled, so init
+   * proceeds with today's per-probe behavior: correctness over optimization.
+   */
   async loadInitSchemaSnapshot(): Promise<void> {
-    this.schemaSnapshot = await loadSchemaSnapshot(this.pool, await this.getDatabase());
+    try {
+      this.schemaSnapshot = await loadSchemaSnapshot(this.pool, await this.getDatabase());
+    } catch {
+      this.schemaSnapshot = null;
+    }
   }
 
   clearInitSchemaSnapshot(): void {
@@ -328,7 +336,7 @@ export class StoreOperationsMySQL extends StoreOperations {
       // Consult the init-scoped snapshot instead of probing the server.
       const snapshot = this.schemaSnapshot;
       if (snapshot) {
-        if (snapshot.indexes.has(name.toLowerCase())) {
+        if (snapshot.indexes.has(indexKey(table, name))) {
           return; // Index already exists
         }
       } else {
@@ -390,7 +398,7 @@ export class StoreOperationsMySQL extends StoreOperations {
 
       await this.pool.execute(sql);
       // Maintain the snapshot so later domains in the same init see this index.
-      this.schemaSnapshot?.indexes.add(name.toLowerCase());
+      this.schemaSnapshot?.indexes.add(indexKey(table, name));
     } catch (error) {
       // Log but don't throw - indexes are performance optimizations
       console.warn(`Failed to create index ${name}:`, error);

@@ -58,7 +58,7 @@ describe('loadSchemaSnapshot', () => {
     expect(statements).toHaveLength(3);
     expect(snapshot?.tables.has('mastra_threads')).toBe(true);
     expect(snapshot?.columns.get('mastra_threads')).toEqual(new Set(['id', 'resourceid']));
-    expect(snapshot?.indexes.has('idx_om_lookup_key')).toBe(true);
+    expect(snapshot?.indexes.has('mastra_threads.idx_om_lookup_key')).toBe(true);
   });
 
   it('is casing agnostic about catalog result keys', async () => {
@@ -70,7 +70,7 @@ describe('loadSchemaSnapshot', () => {
     const snapshot = await loadSchemaSnapshot(pool, 'mastra');
     expect(snapshot?.tables.has('mastra_threads')).toBe(true);
     expect(snapshot?.columns.get('mastra_threads')).toEqual(new Set(['id']));
-    expect(snapshot?.indexes.has('idx_om_lookup_key')).toBe(true);
+    expect(snapshot?.indexes.has('mastra_threads.idx_om_lookup_key')).toBe(true);
   });
 });
 
@@ -112,10 +112,14 @@ describe('operations consult and maintain the init snapshot', () => {
     expect(statements[0]).toMatch(/^ALTER TABLE .* ADD COLUMN .*newCol/);
   });
 
-  it('createIndex skips indexes the snapshot knows', async () => {
+  it('createIndex skips indexes the snapshot knows, keyed per table', async () => {
     const { ops, statements } = await opsWithSnapshot(catalog);
     await ops.createIndex({ name: 'idx_om_lookup_key', table: 'mastra_threads' as any, columns: ['id'] });
     expect(statements).toEqual([]);
+    // MySQL index names are unique per table, not per schema: the same name on
+    // a different table must not be suppressed by the snapshot.
+    await ops.createIndex({ name: 'idx_om_lookup_key', table: 'mastra_messages' as any, columns: ['id'] });
+    expect(statements.some(sql => /^CREATE INDEX/i.test(sql))).toBe(true);
   });
 
   it('falls back to probing when no snapshot is installed', async () => {
