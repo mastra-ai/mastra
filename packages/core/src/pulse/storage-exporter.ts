@@ -1,6 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import { MastraBase } from '../base';
 import { RegisteredLogger } from '../logger';
 import type { FlowIndexRow, PulseRecord, PulseRelationshipRecord, PulseStorage } from '../storage/domains/pulse';
+import { nextPulseSeq } from './seq';
 import type { PulseBusEvent, PulseBusExporter, PulseDropEvent } from './types';
 
 /**
@@ -37,6 +39,8 @@ export interface PulseStorageExporterConfig {
 const RETRY_DELAY_MS = 250;
 /** Accumulator cap — oldest flows are evicted (and logged) beyond this. */
 const MAX_TRACKED_FLOWS = 10_000;
+/** Buffered-record ceiling (pulses + relationships) — o11y uses the same 10k. */
+const MAX_BUFFERED_RECORDS = 10_000;
 /**
  * Session-abort attribution window past the last span pulse — mirrors the
  * derived rule (abort_completed within [first, last + 2s] of a flow's window).
@@ -66,6 +70,8 @@ interface FlowAccumulator {
   hasError: boolean;
   rootCompleted: boolean;
   aborted: boolean;
+  /** Run ids seen on this flow's span pulses — the abort's exact join key. */
+  runIds: Set<string>;
   dirty: boolean;
   /** Terminal row already upserted in a previous flush → evict this flush. */
   terminalFlushed: boolean;
@@ -106,6 +112,14 @@ export class PulseStorageExporter extends MastraBase implements PulseBusExporter
   }
 
   onPulseEvent(event: PulseBusEvent): void {
+    // Bounded buffers (mirrors the o11y exporters' maxBufferSize): when a
+    // flush cannot keep up (storage down + retry latency), drop the oldest
+    // rather than grow without limit.
+    const buffered = this.#pulses.length + this.#relationships.length;
+    if (buffered >= MAX_BUFFERED_RECORDS) {
+      const evicted = this.#pulses.length ? this.#pulses.shift() : this.#relationships.shift();
+      if (evicted) this.#drop(1, 'buffer overflow');
+    }
     if (event.type === 'pulse') {
       this.#pulses.push(event.record);
       if (this.#flowIndex) this.#accumulate(event.record);
@@ -117,9 +131,19 @@ export class PulseStorageExporter extends MastraBase implements PulseBusExporter
 
   /** Fold one pulse into the per-flow accumulators (writer-side derivation). */
   #accumulate(record: PulseRecord): void {
-    // Session-layer abort override: attribute to every tracked flow whose
-    // window contains it — the same rule the derived read applies.
+    // Session-layer abort override. An abort carrying a runId joins EXACTLY:
+    // only the flow that contains that run is marked. Legacy rows without a
+    // runId fall back to the thread + window heuristic the derived read uses.
     if (record.source === 'session' && record.surface === 'run_control' && record.action === 'abort_completed') {
+      if (record.runId) {
+        for (const acc of this.#flows.values()) {
+          if (!acc.aborted && acc.runIds.has(record.runId)) {
+            acc.aborted = true;
+            acc.dirty = true;
+          }
+        }
+        return;
+      }
       if (!record.threadId) return;
       const ts = record.timestamp.getTime();
       for (const acc of this.#flows.values()) {
@@ -168,6 +192,7 @@ export class PulseStorageExporter extends MastraBase implements PulseBusExporter
         hasError: false,
         rootCompleted: false,
         aborted: false,
+        runIds: new Set(),
         dirty: false,
         terminalFlushed: false,
       };
@@ -178,6 +203,7 @@ export class PulseStorageExporter extends MastraBase implements PulseBusExporter
     if (record.timestamp < acc.startedAt) acc.startedAt = record.timestamp;
     if (record.timestamp > acc.lastTs) acc.lastTs = record.timestamp;
     if (!acc.threadId && record.threadId) acc.threadId = record.threadId;
+    if (record.runId) acc.runIds.add(record.runId);
     if (!acc.entityName && record.metadata?.entityName) acc.entityName = record.metadata.entityName;
     if (typeof record.data?.cost_usd === 'number') acc.costUsd = (acc.costUsd ?? 0) + record.data.cost_usd;
     if (record.type === 'error') acc.hasError = true;
@@ -258,7 +284,7 @@ export class PulseStorageExporter extends MastraBase implements PulseBusExporter
 
   #drop(count: number, reason: string): void {
     this.#dropped += count;
-    this.logger.debug(`[PulseStorageExporter] dropped ${count} records (${reason}); total dropped ${this.#dropped}`);
+    this.logger.warn(`[PulseStorageExporter] dropped ${count} records (${reason}); total dropped ${this.#dropped}`);
     this.#onDrop?.({
       type: 'drop',
       signal: 'pulse',
@@ -266,6 +292,34 @@ export class PulseStorageExporter extends MastraBase implements PulseBusExporter
       count,
       timestamp: new Date(),
       exporterName: this.name,
+    });
+  }
+
+  /**
+   * Make the hole visible in the data itself: a drop event becomes a
+   * `events_dropped` pulse row written with the NEXT successful batch. The
+   * row is queued directly (not via the bus) and never re-queues on its own
+   * failure — a drop-of-the-drop only counts, so this cannot recurse.
+   */
+  onDroppedEvent(event: PulseDropEvent): void {
+    // Merge into an already-queued drop row (there is at most one resident):
+    // during a persistent outage this aggregates counts instead of growing.
+    const queued = this.#pulses.find(p => p.source === 'drop' && p.action === 'events_dropped');
+    if (queued) {
+      queued.data = { count: (queued.data?.count ?? 0) + (event.count ?? 0) };
+      return;
+    }
+    this.#pulses.push({
+      id: randomUUID(),
+      timestamp: event.timestamp ?? new Date(),
+      seq: nextPulseSeq(),
+      type: 'system',
+      surface: 'execution',
+      action: 'events_dropped',
+      data: { count: event.count ?? 0 },
+      attributes: { reason: event.reason, exporterName: event.exporterName },
+      traceId: '',
+      source: 'drop',
     });
   }
 
@@ -297,8 +351,42 @@ export class PulseStorageExporter extends MastraBase implements PulseBusExporter
         if (attempt === 0) await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
       }
     }
-    if (count) this.#drop(count, `write failed: ${lastError?.message ?? 'unknown error'}`);
-    else this.logger.debug(`[PulseStorageExporter] flow-index upsert failed: ${lastError?.message ?? 'unknown error'}`);
+    if (!count) {
+      this.logger.debug(`[PulseStorageExporter] flow-index upsert failed: ${lastError?.message ?? 'unknown error'}`);
+      return;
+    }
+
+    // Batch failed twice. One poison record (unserializable attribute, oversized
+    // row) must not take the whole batch down — fall back to per-record writes
+    // and drop only what individually fails. Drop-marker rows are re-queued
+    // instead of counted, so the drop signal itself never inflates the count.
+    let lost = 0;
+    for (const record of pulses) {
+      if (record.source === 'drop') {
+        this.onDroppedEvent({
+          type: 'drop',
+          signal: 'pulse',
+          reason: 'requeued after batch failure',
+          count: record.data?.count ?? 0,
+          timestamp: record.timestamp,
+          exporterName: this.name,
+        });
+        continue;
+      }
+      try {
+        await storage.batchCreatePulses([record]);
+      } catch {
+        lost++;
+      }
+    }
+    for (const record of relationships) {
+      try {
+        await storage.batchCreateRelationships([record]);
+      } catch {
+        lost++;
+      }
+    }
+    if (lost) this.#drop(lost, `write failed: ${lastError?.message ?? 'unknown error'}`);
   }
 
   /** Drain buffered records; safe to call concurrently (writes are chained). */

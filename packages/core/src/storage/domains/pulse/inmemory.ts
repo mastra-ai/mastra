@@ -116,17 +116,21 @@ export class InMemoryPulseStorage extends PulseStorage {
       .find(p => !p.parentSpanId && (p.action.endsWith('_completed') || p.action.endsWith('_failed')));
 
     // Session-layer abort override: the span layer records aborted runs as
-    // completed; a run_control.abort_completed fact within the flow window wins.
-    const aborted = this.#pulses.some(
-      p =>
-        p.source === 'session' &&
-        p.surface === 'run_control' &&
-        p.action === 'abort_completed' &&
+    // completed; the session's run_control.abort_completed fact wins. Aborts
+    // that carry a runId join EXACTLY (the abort belongs to this flow iff the
+    // flow contains that run); legacy rows without one fall back to the
+    // thread + 2s-window heuristic.
+    const flowRunIds = new Set(sorted.map(p => p.runId).filter(Boolean));
+    const aborted = this.#pulses.some(p => {
+      if (p.source !== 'session' || p.surface !== 'run_control' || p.action !== 'abort_completed') return false;
+      if (p.runId) return flowRunIds.has(p.runId);
+      return Boolean(
         p.threadId &&
         p.threadId === threadId &&
         p.timestamp.getTime() >= first.timestamp.getTime() &&
         p.timestamp.getTime() <= last.timestamp.getTime() + 2_000,
-    );
+      );
+    });
 
     let status: FlowStatus;
     if (aborted) status = 'aborted';

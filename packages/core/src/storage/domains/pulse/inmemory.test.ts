@@ -338,3 +338,78 @@ describe('InMemoryPulseStorage flow index', () => {
     );
   });
 });
+
+describe('exact abort attribution (runId join)', () => {
+  /**
+   * Two runs on ONE thread inside the legacy 2s window; the abort names the
+   * FIRST run. The thread+window heuristic marks both flows aborted — the
+   * runId join must mark exactly the right one.
+   */
+  it('aborts only the flow containing the abort pulse runId', async () => {
+    const s = new InMemoryPulseStorage();
+    const runFlow = (traceId: string, runId: string, startMs: number): PulseRecord[] => [
+      pulse({
+        traceId,
+        threadId: 't-1',
+        runId,
+        spanId: `root-${runId}`,
+        action: 'run_started',
+        timestamp: at(startMs),
+      }),
+      pulse({
+        traceId,
+        threadId: 't-1',
+        runId,
+        spanId: `root-${runId}`,
+        action: 'run_completed',
+        type: 'output',
+        timestamp: at(startMs + 500),
+      }),
+    ];
+    await s.batchCreatePulses([
+      ...runFlow('flow-a', 'run-1', 0),
+      ...runFlow('flow-b', 'run-2', 700),
+      pulse({
+        traceId: '',
+        threadId: 't-1',
+        runId: 'run-1',
+        spanId: undefined,
+        source: 'session',
+        surface: 'run_control',
+        action: 'abort_completed',
+        timestamp: at(1_400),
+      }),
+    ]);
+
+    const { flows } = await s.listFlows();
+    const status = Object.fromEntries(flows.map(f => [f.flowId, f.status]));
+    expect(status['flow-a']).toBe('aborted');
+    expect(status['flow-b']).toBe('completed');
+  });
+
+  it('falls back to the thread window for legacy abort rows without runId', async () => {
+    const s = new InMemoryPulseStorage();
+    await s.batchCreatePulses([
+      pulse({ traceId: 'flow-l', threadId: 't-9', spanId: 'root', action: 'run_started', timestamp: at(0) }),
+      pulse({
+        traceId: 'flow-l',
+        threadId: 't-9',
+        spanId: 'root',
+        action: 'run_completed',
+        type: 'output',
+        timestamp: at(500),
+      }),
+      pulse({
+        traceId: '',
+        threadId: 't-9',
+        spanId: undefined,
+        source: 'session',
+        surface: 'run_control',
+        action: 'abort_completed',
+        timestamp: at(900),
+      }),
+    ]);
+    const { flows } = await s.listFlows();
+    expect(flows[0]!.status).toBe('aborted');
+  });
+});

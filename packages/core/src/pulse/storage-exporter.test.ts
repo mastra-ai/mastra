@@ -92,8 +92,10 @@ describe('PulseStorageExporter', () => {
     await exporter.shutdown();
   });
 
-  it('drops the batch after retry exhaustion and reports it via onDrop', async () => {
-    const { storage } = fakeStorage({
+  it('drops only what individually fails after retry exhaustion, reported via onDrop', async () => {
+    // Pulse writes are down; relationship writes are healthy. The per-record
+    // fallback keeps the relationship and drops only the pulse row.
+    const { storage, relationships } = fakeStorage({
       batchCreatePulses: vi.fn().mockRejectedValue(new Error('down')) as any,
     });
     const drops: PulseDropEvent[] = [];
@@ -101,9 +103,10 @@ describe('PulseStorageExporter', () => {
     exporter.onPulseEvent(pulseEvent('p1'));
     exporter.onPulseEvent(relationshipEvent('r1'));
     await exporter.flush();
-    expect(exporter.dropped).toBe(2);
+    expect(exporter.dropped).toBe(1);
+    expect(relationships.flat().map(r => r.id)).toEqual(['r1']);
     expect(drops).toHaveLength(1);
-    expect(drops[0]).toMatchObject({ type: 'drop', signal: 'pulse', count: 2, exporterName: 'pulse-storage' });
+    expect(drops[0]).toMatchObject({ type: 'drop', signal: 'pulse', count: 1, exporterName: 'pulse-storage' });
     await exporter.shutdown();
   });
 
@@ -315,5 +318,111 @@ describe('PulseStorageExporter flow index', () => {
     // the late pulse must not re-open the flow as running
     expect(upserts).toHaveLength(1);
     expect(upserts[0]![0]!.status).toBe('completed');
+  });
+});
+
+describe('exact abort attribution in the accumulators (runId join)', () => {
+  it('marks only the flow whose runId the abort names', async () => {
+    const { storage, upserts } = fakeStorage();
+    const exporter = new PulseStorageExporter({ storage, flowIndex: true });
+    // Two completed runs on one thread, inside the 2s legacy window.
+    exporter.onPulseEvent(span('flow-a', { runId: 'run-1', timestamp: at(0) }));
+    exporter.onPulseEvent(
+      span('flow-a', { runId: 'run-1', action: 'run_completed', type: 'output', timestamp: at(500) }),
+    );
+    exporter.onPulseEvent(span('flow-b', { runId: 'run-2', timestamp: at(700) }));
+    exporter.onPulseEvent(
+      span('flow-b', { runId: 'run-2', action: 'run_completed', type: 'output', timestamp: at(1200) }),
+    );
+    exporter.onPulseEvent({
+      type: 'pulse',
+      record: {
+        id: 'ab1',
+        timestamp: at(1400),
+        seq: 999,
+        type: 'state',
+        surface: 'run_control',
+        action: 'abort_completed',
+        traceId: '',
+        threadId: 't-1',
+        runId: 'run-1',
+        source: 'session',
+      },
+    });
+    await exporter.shutdown();
+
+    const rows = upserts.flat();
+    const last = (id: string) =>
+      rows
+        .filter(r => r.flowId === id)
+        .sort((a, b) => a.version - b.version)
+        .at(-1)!;
+    expect(last('flow-a').status).toBe('aborted');
+    expect(last('flow-b').status).toBe('completed');
+  });
+});
+
+describe('poison-record resilience', () => {
+  /**
+   * A ClickHouse-style adapter JSON.stringifies each record; ONE record with
+   * an unserializable attribute must not take the other records in the batch
+   * down with it. Batch fails → fall back to per-record writes → drop only
+   * the poison row.
+   */
+  it('one unserializable record drops 1 row, not the batch', async () => {
+    const serialized: string[] = [];
+    const { storage } = fakeStorage({
+      batchCreatePulses: vi.fn(async (records: PulseRecord[]) => {
+        // Atomic like a real insert: serialize everything, then commit.
+        const rows = records.map(r => JSON.stringify(r.attributes ?? {}));
+        serialized.push(...rows);
+      }) as any,
+    });
+    const exporter = new PulseStorageExporter({ storage });
+
+    const cyclic: any = { name: 'x' };
+    cyclic.self = cyclic;
+    exporter.onPulseEvent(pulseEvent('good-1'));
+    exporter.onPulseEvent({
+      type: 'pulse',
+      record: { ...pulseEvent('poison').record, attributes: { boom: 10n as any, cyclic } },
+    });
+    exporter.onPulseEvent(pulseEvent('good-2'));
+    await exporter.flush();
+
+    expect(serialized.length).toBe(2); // both good rows landed
+    expect(exporter.dropped).toBe(1); // only the poison row was dropped
+  });
+});
+
+describe('drop visibility', () => {
+  it('records an events_dropped pulse row after storage recovers', async () => {
+    let failing = true;
+    const written: PulseRecord[][] = [];
+    const { storage } = fakeStorage({
+      batchCreatePulses: vi.fn(async (records: PulseRecord[]) => {
+        if (failing) throw new Error('storage down');
+        written.push(records);
+      }) as any,
+    });
+    const exporter = new PulseStorageExporter({
+      storage,
+      onDrop: e => exporter.onDroppedEvent?.(e),
+    });
+
+    exporter.onPulseEvent(pulseEvent('lost-1'));
+    exporter.onPulseEvent(pulseEvent('lost-2'));
+    await exporter.flush(); // both write attempts fail → batch dropped
+    expect(exporter.dropped).toBe(2);
+
+    failing = false;
+    exporter.onPulseEvent(pulseEvent('after'));
+    await exporter.flush();
+
+    const all = written.flat();
+    const dropRow = all.find(r => r.action === 'events_dropped');
+    expect(dropRow, 'a drop pulse row must record the hole').toBeDefined();
+    expect(dropRow!.data?.count).toBe(2);
+    expect(dropRow!.source).toBe('drop');
   });
 });
