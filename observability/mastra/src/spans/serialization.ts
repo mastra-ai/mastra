@@ -190,20 +190,28 @@ function shouldStripEntry(key: string, value: unknown, stripSet: Set<string>): b
 /**
  * Whether an entry past the object-key limit would have been stripped anyway.
  *
- * The entry is dropped either way, so its value is only read for the few key names that
- * can make it a runtime-shaped strip. That keeps the truncation count the same wherever
- * such a key sits, without running getters on unrelated keys.
+ * The entry is dropped either way, so the value is taken from its property descriptor
+ * rather than read: a getter must not run for data that is being discarded. That keeps
+ * the truncation count the same wherever a runtime-shaped key sits. An accessor cannot
+ * be classified without invoking it, so it is left to the limit and counted.
  */
 function wouldBeStripped(key: string, val: object, stripSet: Set<string>): boolean {
   if (!VALUE_STRIP_KEYS.has(key)) {
     return false;
   }
 
+  let descriptor: PropertyDescriptor | undefined;
   try {
-    return shouldStripEntry(key, (val as Record<string, unknown>)[key], stripSet);
+    descriptor = Object.getOwnPropertyDescriptor(val, key);
   } catch {
     return false;
   }
+
+  if (!descriptor || !('value' in descriptor)) {
+    return false;
+  }
+
+  return shouldStripEntry(key, descriptor.value, stripSet);
 }
 
 function restoreSerializedMapKey(keyType: string, key: any): unknown {

@@ -1009,6 +1009,28 @@ describe('Span', () => {
       expect(reads).toBe(0);
     });
 
+    it('should not read runtime-shaped getters omitted by maxObjectKeys', () => {
+      const input: Record<string, unknown> = { first: 1, second: 2 };
+      let reads = 0;
+
+      Object.defineProperty(input, 'logger', {
+        enumerable: true,
+        get() {
+          reads++;
+          return { info() {} };
+        },
+      });
+
+      const result = deepClean(input, { ...DEFAULT_DEEP_CLEAN_OPTIONS, maxObjectKeys: 2 });
+
+      expect(result).toEqual({
+        first: 1,
+        second: 2,
+        __truncated: '1 more keys omitted',
+      });
+      expect(reads).toBe(0);
+    });
+
     it('should not read throwing getters for explicitly stripped keys', () => {
       const input: Record<string, unknown> = {
         visible: 'ok',
