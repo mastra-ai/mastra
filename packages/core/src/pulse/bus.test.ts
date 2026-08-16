@@ -148,6 +148,26 @@ describe('PulseBus', () => {
     expect(exporter.shutdown).toHaveBeenCalled();
     bus.emit(pulseEvent());
     expect(seen).toHaveLength(0); // subscribers cleared
-    expect(exporter.events).toHaveLength(1); // exporters remain routable by design
+  });
+
+  it('drops (never buffers) events emitted after shutdown', async () => {
+    // The exporter's flush timer is cleared by its shutdown — an event routed
+    // afterwards would sit in a buffer nobody drains. Emit must warn-and-drop.
+    const bus = new PulseBus();
+    const exporter = makeExporter();
+    bus.registerExporter(exporter);
+    await bus.shutdown();
+
+    bus.emit(pulseEvent());
+    expect(exporter.events).toHaveLength(0);
+  });
+
+  it('second shutdown is a no-op (exporter.shutdown runs once)', async () => {
+    const bus = new PulseBus();
+    const exporter = makeExporter();
+    bus.registerExporter(exporter);
+    await bus.shutdown();
+    await bus.shutdown();
+    expect(exporter.shutdown).toHaveBeenCalledTimes(1);
   });
 });

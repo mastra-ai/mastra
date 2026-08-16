@@ -116,3 +116,34 @@ describe('Mastra pulse wiring', () => {
     expect(storage.pulses.map(p => p.id)).toEqual(['late']);
   });
 });
+
+describe('Mastra shutdown ordering for pulse', () => {
+  /**
+   * The final pulse batch must be written BEFORE the app storage closes —
+   * otherwise a lazily-resolved `getStore('pulse')` writes into a closed
+   * store and the last batch of a short-lived process dies.
+   */
+  it('drains pulse writers before closing storage', async () => {
+    const order: string[] = [];
+    const pulseDomain = new RecordingPulseStorage();
+    const origWrite = pulseDomain.batchCreatePulses.bind(pulseDomain);
+    pulseDomain.batchCreatePulses = async records => {
+      order.push('pulse-write');
+      await origWrite(records);
+    };
+    const app = new InMemoryStore();
+    const origClose = app.close?.bind(app);
+    (app as any).close = async () => {
+      order.push('storage-close');
+      await origClose?.();
+    };
+
+    const mastra = new Mastra({ storage: app, pulse: { storage: pulseDomain } });
+    mastra.pulseBus!.emit(pulseEvent('late'));
+    await mastra.shutdown();
+
+    expect(pulseDomain.pulses.map(p => p.id)).toContain('late');
+    expect(order.indexOf('pulse-write')).toBeGreaterThanOrEqual(0);
+    expect(order.indexOf('storage-close')).toBeGreaterThan(order.indexOf('pulse-write'));
+  });
+});

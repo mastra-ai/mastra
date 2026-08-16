@@ -28,6 +28,7 @@ export class PulseBus extends MastraBase {
   #pending = new Set<Promise<void>>();
   #dropsEmittedDuringFlush = 0;
   #flushDepth = 0;
+  #isShutdown = false;
 
   constructor() {
     super({ component: RegisteredLogger.OBSERVABILITY, name: 'PulseBus' });
@@ -69,6 +70,12 @@ export class PulseBus extends MastraBase {
 
   /** Dispatch an event to exporters and subscribers synchronously. */
   emit(event: PulseBusEvent): void {
+    if (this.#isShutdown) {
+      // Exporter flush timers are dead after shutdown — routing now would
+      // buffer the event forever. Dropping loudly beats losing it silently.
+      this.logger.warn('[PulseBus] event emitted after shutdown — dropped.');
+      return;
+    }
     for (const exporter of this.#exporters) {
       try {
         this.#track(exporter.onPulseEvent(event));
@@ -134,8 +141,10 @@ export class PulseBus extends MastraBase {
     this.logger.error(`[PulseBus] flush exceeded ${MAX_FLUSH_ITERATIONS} buffer-drain iterations.`);
   }
 
-  /** Flush, shut down exporters, clear subscribers. */
+  /** Flush, shut down exporters, clear subscribers. Idempotent. */
   async shutdown(): Promise<void> {
+    if (this.#isShutdown) return;
+    this.#isShutdown = true;
     await this.flush();
     await Promise.allSettled(this.#exporters.map(e => e.shutdown()));
     this.#subscribers.clear();

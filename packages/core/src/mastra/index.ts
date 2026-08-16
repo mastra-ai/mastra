@@ -1546,6 +1546,11 @@ export class Mastra<
       }
       this.#pulseBridge = new PulseBridge({ bus: this.#pulseBus });
       this.#registerPulseBridge();
+      // Propagate the instance logger (mirrors observability's setLogger
+      // fan-out) — otherwise drops/warnings land on a default ConsoleLogger.
+      for (const component of [this.#pulseBus, this.#pulseBridge, ...this.#pulseBus.getExporters()]) {
+        (component as { __setLogger?: (l: unknown) => void }).__setLogger?.(this.#logger);
+      }
     }
 
     // Register the editor after storage is assigned so code mode can overlay
@@ -6594,11 +6599,6 @@ export class Mastra<
       }
     });
 
-    // Close storage to release OS file handles (critical on Windows: open WAL/shm
-    // handles cause EBUSY when callers try to fs.rm the storage dir after shutdown).
-    if (this.#storage?.close) {
-      await this.#storage.close();
-    }
     // Shutdown observability registry, exporters, etc...
     await this.#observability.shutdown();
 
@@ -6607,6 +6607,15 @@ export class Mastra<
     // only then can the pulse writers flush everything (R5 ordering).
     if (this.#pulseBus) {
       await this.#pulseBus.shutdown();
+    }
+
+    // Close storage LAST: both the observability storage exporter and the
+    // pulse writer flush their final batches above — closing first would send
+    // those writes into a closed store. Still released before shutdown
+    // returns, which is what the Windows EBUSY fix (open WAL/shm handles vs
+    // fs.rm) requires.
+    if (this.#storage?.close) {
+      await this.#storage.close();
     }
 
     this.#logger?.info('Mastra shutdown completed');
