@@ -20,7 +20,7 @@ import type { ItemRunSpec, RunAction } from '../boardRunSpecs';
 import { itemStageLabel, itemStageOptions } from '../boardStages';
 import type { AuditEventPage } from '../services/audit';
 import type { FactoryDecisionSummary } from '../services/decisions';
-import { relatedWorkItems, relationshipLabel, relationshipPath } from '../services/relationships';
+import { relatedWorkItems, relationshipPath } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { workItemActivity } from '../workItemActivity';
@@ -86,6 +86,7 @@ export function WorkItemCard({
   allItems,
   activityPage,
   liveWorktreePaths,
+  sessionLivenessResolved,
   runDisabled,
   preparing,
   evaluatingStage,
@@ -110,6 +111,7 @@ export function WorkItemCard({
   activityPage?: AuditEventPage;
   /** Worktrees that still exist; session refs outside this set are stale. */
   liveWorktreePaths: ReadonlySet<string>;
+  sessionLivenessResolved: boolean;
   runDisabled: boolean;
   /** Status text while the click is resolving, before the run mutation starts. */
   preparing?: string;
@@ -292,10 +294,13 @@ export function WorkItemCard({
         <div className="flex min-w-0 flex-col gap-1.5">
           <div className="flex min-w-0 items-center gap-1.5 pr-8">
             <span className="text-ui-xs text-icon2 min-w-0 truncate">{workItemMeta(item)}</span>
-            {threadSession !== undefined && <span aria-hidden className="bg-accent1 size-2 shrink-0 rounded-full" />}
+            {threadSession !== undefined && (
+              <span data-live-session-indicator aria-hidden className="bg-accent1 size-2 shrink-0 rounded-full" />
+            )}
             {relatedItems.map(related => {
-              const relationText = relationshipLabel(related);
-              const relatedSession = itemThreadSession(liveSessions(related.sessions, liveWorktreePaths));
+              const relatedSession = sessionLivenessResolved
+                ? itemThreadSession(liveSessions(related.sessions, liveWorktreePaths))
+                : undefined;
 
               if (relatedSession !== undefined) {
                 return (
@@ -303,22 +308,21 @@ export function WorkItemCard({
                     key={related.id}
                     item={related}
                     href={`/factories/${factoryId}/workspaces/${relatedSession.sessionId}/threads/${relatedSession.threadId}`}
-                    external={false}
-                    live
-                    ariaLabel={`Open live session for ${relationText}: ${related.title}`}
+                    kind="session"
                   />
                 );
               }
 
-              const external = related.url !== null;
+              if (sessionLivenessResolved && related.url !== null) {
+                return <RelatedWorkItemLink key={related.id} item={related} href={related.url} kind="external" />;
+              }
+
               return (
                 <RelatedWorkItemLink
                   key={related.id}
                   item={related}
-                  href={related.url ?? relationshipPath(related, factoryId)}
-                  external={external}
-                  live={false}
-                  ariaLabel={`${external ? externalLinkLabel(related.source) : `Open ${relationText}`}: ${relationText} — ${related.title}`}
+                  href={relationshipPath(related, factoryId)}
+                  kind="board"
                 />
               );
             })}

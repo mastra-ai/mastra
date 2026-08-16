@@ -168,7 +168,9 @@ describe('Board card session liveness', () => {
     await waitFor(() =>
       expect(within(screen.getByTestId('work-item-card')).getByText('Start session')).toBeInTheDocument(),
     );
-    expect(within(screen.getByTestId('work-item-card')).queryByRole('link', { name: /Open session for/ })).toBeNull();
+    expect(
+      within(screen.getByTestId('work-item-card')).queryByRole('link', { name: /Open session for/ }),
+    ).not.toBeInTheDocument();
 
     refetchGate.resolve();
     await waitFor(() =>

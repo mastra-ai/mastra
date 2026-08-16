@@ -63,7 +63,7 @@ export function CardIdleOverlay({ status }: { status: IdleBoardCardStatus }) {
   return (
     <IdleCardStatus
       status={status}
-      className="pointer-fine:pointer-events-none pointer-fine:absolute pointer-fine:right-3 pointer-fine:bottom-3 pointer-fine:z-20 pointer-fine:ml-0"
+      className="pointer-events-none pointer-fine:absolute pointer-fine:right-3 pointer-fine:bottom-3 pointer-fine:z-20 pointer-fine:ml-0"
     />
   );
 }
