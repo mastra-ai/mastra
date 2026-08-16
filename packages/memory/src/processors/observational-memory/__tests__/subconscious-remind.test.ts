@@ -1003,8 +1003,12 @@ describe('Subconscious remind ask lane', () => {
       createRemindMemory: () => ({}) as any,
     });
     const generateSpy = vi.spyOn(Agent.prototype, 'generate' as any);
+    // The passive reply cites the item id: the grounded-citation guard suppresses
+    // reminders that reference no candidate, and this test is about signal shape.
     generateSpy.mockImplementation((async (prompt: string) =>
-      prompt.includes('Question:') ? pendingAsk : { text: 'Atlas ships mid January, worth checking.' }) as any);
+      prompt.includes('Question:')
+        ? pendingAsk
+        : { text: `Atlas ships mid January, worth checking. (${item.id})` }) as any);
 
     try {
       const askInFlight = tools.ask_memory.execute!({ question: 'when?' } as any, askContext());
