@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TracingEventType } from '../observability';
 import type { PulseRecord, PulseRelationshipRecord } from '../storage/domains/pulse';
-import { PulseBridge } from './bridge';
+import { PulseBridge, spanPulseId } from './bridge';
 import { PulseBus } from './bus';
 import type { PulseBusEvent } from './types';
 
@@ -74,7 +74,7 @@ describe('PulseBridge span translation', () => {
       source: 'span',
     });
     expect(pulses[0]!.attributes).toMatchObject({ input: { q: 'hi' } });
-    expect(pulses[0]!.metadata).toEqual({ runId: 'run-1', threadId: 'thread-1', resourceId: 'res-1' });
+    expect(pulses[0]!.metadata).toEqual({}); // ids live in columns only — no metadata duplication
     expect(pulses[1]).toMatchObject({ type: 'output', action: 'run_completed' });
     expect(pulses[1]!.data).toEqual({ 'usage.totalTokens': 42 });
     expect(pulses[1]!.attributes).toMatchObject({ output: { a: 'yo' } });
@@ -130,13 +130,13 @@ describe('PulseBridge span translation', () => {
         metadata: { runId: 'run-2', resumed: true, resumedFromSpanId: 'suspended-span' },
       }) as any,
     });
-    // The resumed-from span lives in a previous process — its pulse id is
-    // unknowable locally, so the reference is span:-prefixed (memo item).
+    // Deterministic ids: even a previous process's pulse is addressable by
+    // computing its id — no lookups, no fallbacks.
     expect(relationships).toContainEqual(
       expect.objectContaining({
         type: 'resume_of',
-        from: { kind: 'pulse', id: 'span:resumed-root' },
-        to: { kind: 'pulse', id: 'span:suspended-span' },
+        from: { kind: 'pulse', id: spanPulseId('trace-1', 'resumed-root', 'started') },
+        to: { kind: 'pulse', id: spanPulseId('trace-1', 'suspended-span', 'started') },
       }),
     );
   });
@@ -347,7 +347,7 @@ describe('PulseBridge log/score/feedback/drop families', () => {
     expect(pulses[0]!.data).toEqual({ score: 0.9 });
     expect(relationships.find(r => r.type === 'scored_target')).toMatchObject({
       from: { kind: 'pulse', id: pulses[0]!.id },
-      to: { kind: 'pulse', id: 'span:span-9' },
+      to: { kind: 'pulse', id: spanPulseId('trace-1', 'span-9', 'started') },
     });
   });
 

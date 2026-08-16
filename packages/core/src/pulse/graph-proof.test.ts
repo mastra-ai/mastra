@@ -121,3 +121,58 @@ describe('graph proof: edges alone reconstruct the read model', () => {
     expect(origin.to).toEqual({ kind: 'flow', id: 'flow-live' });
   });
 });
+
+describe('deterministic pulse ids (cross-process identity)', () => {
+  /**
+   * A resumed run lives in a NEW process; the suspended span's pulse was
+   * written by a process that is dead. With deterministic ids the new
+   * process COMPUTES that pulse's id — no `span:` IOU, no map lookup.
+   */
+  it('a second bridge (new process) emits resume_of pointing at the exact pulse id the first bridge wrote', async () => {
+    // Process 1: the original run, suspends.
+    const bus1 = new PulseBus();
+    const pulses1: PulseRecord[] = [];
+    bus1.subscribe((e: PulseBusEvent) => {
+      if (e.type === 'pulse') pulses1.push(e.record);
+    });
+    const bridge1 = new PulseBridge({ bus: bus1 });
+    const suspended = span({ id: 'susp-root', isRootSpan: true, traceId: 'flow-r' });
+    await bridge1.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: suspended } as any);
+    const suspendedStartPulse = pulses1.find(p => p.spanId === 'susp-root' && p.action.endsWith('_started'))!;
+
+    // Process 2: fresh bridge (no shared memory), resumes the run.
+    const bus2 = new PulseBus();
+    const rels2: PulseRelationshipRecord[] = [];
+    bus2.subscribe((e: PulseBusEvent) => {
+      if (e.type === 'relationship') rels2.push(e.record);
+    });
+    const bridge2 = new PulseBridge({ bus: bus2 });
+    await bridge2.exportTracingEvent({
+      type: TracingEventType.SPAN_STARTED,
+      exportedSpan: span({
+        id: 'resumed-root',
+        isRootSpan: true,
+        traceId: 'flow-r',
+        parentSpanId: 'susp-root',
+        metadata: { resumed: true, resumedFromSpanId: 'susp-root' },
+      }) as any,
+    } as any);
+    await bridge2.exportTracingEvent({
+      type: TracingEventType.SPAN_ENDED,
+      exportedSpan: span({
+        id: 'resumed-root',
+        isRootSpan: true,
+        traceId: 'flow-r',
+        parentSpanId: 'susp-root',
+        metadata: { resumed: true, resumedFromSpanId: 'susp-root' },
+      }) as any,
+    } as any);
+
+    const resume = rels2.find(r => r.type === 'resume_of');
+    expect(resume).toBeDefined();
+    // The whole point: the NEW process addressed the OLD process's pulse
+    // by its real record id — computed, not remembered.
+    expect(resume!.to.id).toBe(suspendedStartPulse.id);
+    expect(resume!.to.id.startsWith('span:')).toBe(false);
+  });
+});
