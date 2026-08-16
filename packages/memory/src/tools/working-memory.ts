@@ -27,11 +27,15 @@ export function deepMergeWorkingMemory(
     return existing && typeof existing === 'object' ? { ...existing } : {};
   }
 
-  if (!existing || typeof existing !== 'object') {
-    return update;
-  }
-
-  const result: Record<string, unknown> = { ...existing };
+  // Start from a shallow copy of the existing object when there is one, or from
+  // an empty object on a first write / when the existing side is not a mergeable
+  // object. The update is always applied key-by-key below (rather than returned
+  // wholesale) so that `null` consistently deletes and nested objects are merged
+  // regardless of whether the target branch already existed. Returning the raw
+  // update here instead would persist its `null` placeholders as literal nulls
+  // and leak the caller's object by reference.
+  const result: Record<string, unknown> =
+    existing && typeof existing === 'object' && !Array.isArray(existing) ? { ...existing } : {};
 
   for (const key of Object.keys(update)) {
     const updateValue = update[key];
@@ -50,18 +54,15 @@ export function deepMergeWorkingMemory(
     else if (Array.isArray(updateValue)) {
       result[key] = updateValue;
     }
-    // Recursively merge nested objects
-    else if (
-      typeof updateValue === 'object' &&
-      updateValue !== null &&
-      typeof existingValue === 'object' &&
-      existingValue !== null &&
-      !Array.isArray(existingValue)
-    ) {
-      result[key] = deepMergeWorkingMemory(
-        existingValue as Record<string, unknown>,
-        updateValue as Record<string, unknown>,
-      );
+    // Recursively merge nested objects. Recurse even when there is no existing
+    // object to merge into, so `null` placeholders inside a brand-new nested
+    // object are deleted rather than persisted as literal nulls.
+    else if (typeof updateValue === 'object') {
+      const base =
+        existingValue && typeof existingValue === 'object' && !Array.isArray(existingValue)
+          ? (existingValue as Record<string, unknown>)
+          : undefined;
+      result[key] = deepMergeWorkingMemory(base, updateValue as Record<string, unknown>);
     }
     // Primitive values or new properties: just set them
     else {

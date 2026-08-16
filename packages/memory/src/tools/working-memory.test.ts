@@ -97,6 +97,34 @@ describe('deepMergeWorkingMemory', () => {
 
       expect(result).toEqual({ a: 1, c: 3 });
     });
+
+    // Strict-mode providers (e.g. OpenAI) pad omitted fields with `null`. The merge
+    // treats `null` as "delete", but on a first write there is no existing object to
+    // merge into, so the padded nulls must be dropped rather than persisted as literal
+    // nulls. Otherwise the very first working-memory write stores `{ "field": null }`.
+    it('should drop null placeholders on a first write (existing is null)', () => {
+      const result = deepMergeWorkingMemory(null, { name: 'Charlie', role: null });
+
+      expect(result).toEqual({ name: 'Charlie' });
+      expect('role' in result).toBe(false);
+    });
+
+    it('should drop null placeholders on a first write (existing is undefined)', () => {
+      const result = deepMergeWorkingMemory(undefined, { status: 'active', archivedAt: null });
+
+      expect(result).toEqual({ status: 'active' });
+      expect('archivedAt' in result).toBe(false);
+    });
+
+    it('should not return the update object by reference on a first write', () => {
+      const update = { name: 'Charlie' };
+      const result = deepMergeWorkingMemory(null, update);
+
+      // A shared reference would let a later mutation of the stored memory leak back
+      // into the caller's object (and vice versa).
+      expect(result).not.toBe(update);
+      expect(result).toEqual({ name: 'Charlie' });
+    });
   });
 
   describe('nested object merging', () => {
@@ -153,6 +181,28 @@ describe('deepMergeWorkingMemory', () => {
         name: 'Alice',
         work: { company: 'Acme', role: 'Engineer' },
       });
+    });
+
+    // A brand-new nested object can also carry `null` placeholders from strict-mode
+    // providers. Since the property is being created, there is nothing to delete, so
+    // the nulls must be dropped instead of persisted inside the new object.
+    it('should drop null placeholders inside a brand-new nested object', () => {
+      const existing = { name: 'Alice' };
+      const update = { work: { company: 'Acme', role: 'Engineer', manager: null } };
+      const result = deepMergeWorkingMemory(existing, update);
+
+      expect(result).toEqual({
+        name: 'Alice',
+        work: { company: 'Acme', role: 'Engineer' },
+      });
+    });
+
+    it('should drop null placeholders when an object replaces a non-object value', () => {
+      const existing = { profile: 'unknown' };
+      const update = { profile: { name: 'Alice', nickname: null } };
+      const result = deepMergeWorkingMemory(existing, update);
+
+      expect(result).toEqual({ profile: { name: 'Alice' } });
     });
   });
 
