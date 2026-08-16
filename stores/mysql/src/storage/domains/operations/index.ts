@@ -255,9 +255,14 @@ export class StoreOperationsMySQL extends StoreOperations {
         }
       }
       const sql = this.getCreateTableSQL(tableName, schema);
-      await connection.execute(sql);
-      // Maintain the snapshot so later domains in the same init see this table.
-      if (snapshot) {
+      const [result] = await connection.execute(sql);
+      // Maintain the snapshot so later domains in the same init see this table,
+      // but only when the CREATE actually created it. warningStatus > 0 means
+      // IF NOT EXISTS no-opped against a table the snapshot did not see (created
+      // out of band after the catalog read); leaving it out of the snapshot
+      // makes later consults fall back to probing the live catalog for it.
+      const created = (result as { warningStatus?: number } | undefined)?.warningStatus === 0;
+      if (snapshot && created) {
         const table = tableName.toLowerCase();
         snapshot.tables.add(table);
         snapshot.columns.set(table, new Set(Object.keys(schema).map(column => column.toLowerCase())));
@@ -684,14 +689,13 @@ export class StoreOperationsMySQL extends StoreOperations {
   }): Promise<void> {
     if (!ifNotExists.length) return;
 
-    const snapshot = this.schemaSnapshot;
+    // Consult the init-scoped snapshot instead of the two server probes. A
+    // table the snapshot has no columns for is treated as unknown, not absent:
+    // it may exist on the server without the snapshot having seen it (created
+    // out of band after the catalog read), so those fall through to probing.
+    const snapshotColumns = this.schemaSnapshot?.columns.get(tableName.toLowerCase());
     let existing: Set<string>;
-    if (snapshot) {
-      // Consult the init-scoped snapshot instead of the two server probes.
-      const snapshotColumns = snapshot.columns.get(tableName.toLowerCase());
-      if (!snapshotColumns) {
-        return; // Silently return if table doesn't exist (matches the probe path)
-      }
+    if (snapshotColumns) {
       existing = snapshotColumns;
     } else {
       // Check if table exists first

@@ -10,6 +10,8 @@ interface CatalogFixture {
   tables?: Row[];
   columns?: Row[];
   statistics?: Row[];
+  /** When true, DDL answers with warningStatus 1 (IF NOT EXISTS no-opped). */
+  ddlNoOps?: boolean;
 }
 
 /**
@@ -18,7 +20,8 @@ interface CatalogFixture {
  */
 function createMockPool(fixture: CatalogFixture = {}) {
   const statements: string[] = [];
-  const answer = (sql: string): Row[] => {
+  const answer = (sql: string): Row[] | Row => {
+    if (/^(CREATE|ALTER)/i.test(sql)) return { warningStatus: fixture.ddlNoOps ? 1 : 0 };
     if (/information_schema\.tables/i.test(sql) && /SELECT table_name/i.test(sql)) return fixture.tables ?? [];
     if (/information_schema\.tables/i.test(sql)) return [{ count: fixture.tables?.length ? 1 : 0 }];
     if (/information_schema\.statistics/i.test(sql)) return fixture.statistics ?? [];
@@ -120,6 +123,32 @@ describe('operations consult and maintain the init snapshot', () => {
     // a different table must not be suppressed by the snapshot.
     await ops.createIndex({ name: 'idx_om_lookup_key', table: 'mastra_messages' as any, columns: ['id'] });
     expect(statements.some(sql => /^CREATE INDEX/i.test(sql))).toBe(true);
+  });
+
+  it('does not claim columns for a table IF NOT EXISTS no-opped against', async () => {
+    // The table exists on the server but not in the snapshot (created out of
+    // band after the catalog read). CREATE TABLE IF NOT EXISTS no-ops with a
+    // warning; the snapshot must NOT be told the schema's columns are present,
+    // so a later alterTable probes the live catalog and still converges.
+    const { pool, statements } = createMockPool({
+      ddlNoOps: true,
+      tables: [{ TABLE_NAME: 'mastra_threads' }],
+      columns: [{ TABLE_NAME: 'mastra_threads', COLUMN_NAME: 'id' }],
+    });
+    const ops = new StoreOperationsMySQL({ pool, database: 'mastra' });
+    (ops as any).schemaSnapshot = {
+      schemaName: 'mastra',
+      tables: new Set<string>(),
+      columns: new Map<string, Set<string>>(),
+      indexes: new Set<string>(),
+    };
+    await ops.createTable({ tableName: 'mastra_threads' as any, schema });
+    expect(ops.getInitSchemaSnapshot()?.tables.has('mastra_threads')).toBe(false);
+    statements.length = 0;
+    const fullSchema = { ...schema, newCol: { type: 'text' } } as any;
+    await ops.alterTable({ tableName: 'mastra_threads' as any, schema: fullSchema, ifNotExists: ['newCol'] });
+    expect(statements.some(sql => /information_schema\.columns/i.test(sql))).toBe(true);
+    expect(statements.some(sql => /^ALTER TABLE .* ADD COLUMN .*newCol/.test(sql))).toBe(true);
   });
 
   it('falls back to probing when no snapshot is installed', async () => {
