@@ -1414,7 +1414,7 @@ describe('MastraModelOutput', () => {
     const reasoningEnd = (runId: string, id: string): ChunkType =>
       ({ type: 'reasoning-end', runId, from: ChunkFrom.AGENT, payload: { id } }) as ChunkType;
 
-    it('reports only the current step reasoning, not the cumulative reasoning of all prior steps', async () => {
+    it('reports only the current step reasoning to steps and onStepFinish, and keeps run-level reasoning cumulative', async () => {
       const runId = 'test-run';
       const messageList = new MessageList({ threadId: 'test-thread' });
 
@@ -1432,12 +1432,21 @@ describe('MastraModelOutput', () => {
         createFinishChunk(runId),
       ]);
 
+      const stepFinishReasoning: { text: string; ids: string[] }[] = [];
       const output = new MastraModelOutput({
         model: { modelId: 'test-model', provider: 'test', version: 'v3' },
         stream,
         messageList,
         messageId: 'msg-1',
-        options: { runId },
+        options: {
+          runId,
+          onStepFinish: async (payload: any) => {
+            stepFinishReasoning.push({
+              text: payload.reasoningText,
+              ids: payload.reasoning.map((r: any) => r.payload.id),
+            });
+          },
+        },
       });
 
       await output.consumeStream();
@@ -1452,6 +1461,58 @@ describe('MastraModelOutput', () => {
       expect(steps[1]!.reasoningText).toBe('STEP-TWO-THINKING');
       expect(steps[1]!.reasoning.map(r => r.payload.id)).toEqual(['rs2']);
       expect(steps[1]!.reasoning[0]!.payload.text).toBe('STEP-TWO-THINKING');
+
+      // onStepFinish sees the same step-local reasoning.
+      expect(stepFinishReasoning).toEqual([
+        { text: 'STEP-ONE-THINKING', ids: ['rs1'] },
+        { text: 'STEP-TWO-THINKING', ids: ['rs2'] },
+      ]);
+
+      // Run-level reasoning stays cumulative across the whole run.
+      expect(await output.reasoningText).toBe('STEP-ONE-THINKINGSTEP-TWO-THINKING');
+      expect((await output.reasoning).map(r => r.payload.id)).toEqual(['rs1', 'rs2']);
+    });
+
+    it('keeps the onStepFinish reasoning intact when a goal continuation truncates run-lifetime buffers before the step-finish', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+
+      // In-process goal runs emit the continuation goal chunk BEFORE the judged
+      // turn's step-finish. That goal boundary clears the run-lifetime reasoning
+      // buffers (and drops the judged step from the run-end `steps`), but
+      // onStepFinish still fires for that step first. Reading the run-lifetime
+      // buffers there would surface empty reasoning; the per-step buffer must
+      // still carry it.
+      const stream = createChunkStream([
+        reasoningStart(runId, 'rs1'),
+        reasoningDelta(runId, 'rs1', 'JUDGED-TURN-THINKING'),
+        reasoningEnd(runId, 'rs1'),
+        createGoalChunk(runId, { shouldContinue: true }),
+        createStepFinishChunk(runId),
+        createGoalChunk(runId, { shouldContinue: false }),
+        createFinishChunk(runId),
+      ]);
+
+      const stepFinishReasoning: { text: string; ids: string[] }[] = [];
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: {
+          runId,
+          onStepFinish: async (payload: any) => {
+            stepFinishReasoning.push({
+              text: payload.reasoningText,
+              ids: payload.reasoning.map((r: any) => r.payload.id),
+            });
+          },
+        },
+      });
+
+      await output.consumeStream();
+
+      expect(stepFinishReasoning).toEqual([{ text: 'JUDGED-TURN-THINKING', ids: ['rs1'] }]);
     });
 
     it('reports empty reasoning for a step that produced none', async () => {

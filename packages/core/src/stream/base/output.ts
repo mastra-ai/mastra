@@ -742,21 +742,42 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               const stepText = stepTripwire ? '' : self.#bufferedByStep.text;
 
               // Per-step reasoning must not leak earlier steps. `#bufferedReasoning`
-              // and `#bufferedReasoningDetails` are run-lifetime buffers (cleared only
-              // at the run/goal boundary in `#truncateRunBuffers`), so reading them
-              // here made every step report the cumulative reasoning of all prior
-              // steps. Mirror how `stepText` uses the per-step `#bufferedByStep`
-              // buffer: take this step's reasoning deltas, and narrow the id-keyed
-              // details map to just the ids seen this step.
+              // and `#bufferedReasoningDetails` are run-lifetime buffers, so reading
+              // them here made every step report the cumulative reasoning of all
+              // prior steps. Rebuild this step's reasoning from the per-step
+              // `#bufferedByStep.reasoning` buffer instead, mirroring how `stepText`
+              // uses `#bufferedByStep.text`. Aggregating the details from the per-step
+              // deltas (rather than filtering the run-lifetime details map) also keeps
+              // this correct when a goal continuation clears the run-lifetime buffers
+              // via `#truncateRunBuffers` before this step-finish lands, since the
+              // per-step buffer is untouched by that boundary. Text is joined from the
+              // deltas and details are aggregated per reasoning id, matching the
+              // run-level reasoning fields.
               const stepReasoningText = self.#bufferedByStep.reasoning
                 .map(reasoningPart => reasoningPart.payload.text)
                 .join('');
-              const stepReasoningIds = new Set(
-                self.#bufferedByStep.reasoning.map(reasoningPart => reasoningPart.payload.id),
-              );
-              const stepReasoning = Object.values(self.#bufferedReasoningDetails).filter(detail =>
-                stepReasoningIds.has(detail.payload.id),
-              );
+              const stepReasoningDetailsById = new Map<string, LLMStepResult<OUTPUT>['reasoning'][number]>();
+              for (const reasoningPart of self.#bufferedByStep.reasoning) {
+                let detail = stepReasoningDetailsById.get(reasoningPart.payload.id);
+                if (!detail) {
+                  detail = {
+                    type: 'reasoning',
+                    runId: reasoningPart.runId,
+                    from: reasoningPart.from,
+                    payload: {
+                      id: reasoningPart.payload.id,
+                      text: '',
+                      providerMetadata: reasoningPart.payload.providerMetadata,
+                    },
+                  };
+                  stepReasoningDetailsById.set(reasoningPart.payload.id, detail);
+                }
+                detail.payload.text += reasoningPart.payload.text;
+                if (reasoningPart.payload.providerMetadata) {
+                  detail.payload.providerMetadata = reasoningPart.payload.providerMetadata;
+                }
+              }
+              const stepReasoning = Array.from(stepReasoningDetailsById.values());
 
               const stepResult: LLMStepResult<OUTPUT> = {
                 stepType: self.#bufferedSteps.length === 0 ? 'initial' : 'tool-result',

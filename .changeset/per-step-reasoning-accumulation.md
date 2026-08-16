@@ -4,9 +4,9 @@
 
 Fixed per-step `reasoningText` and `reasoning` accumulating across steps for multi-step reasoning models.
 
-Each step result read the run-lifetime reasoning buffers, which are only cleared at the run boundary, so every step reported the combined reasoning of all prior steps. For a run with two reasoning steps, `steps[1].reasoningText` came back as step one's reasoning concatenated with step two's, and `steps[1].reasoning` contained both steps' reasoning entries. This corrupted `onStepFinish` callbacks, the `steps` array, and anything driven off per-step reasoning.
+In a run with more than one reasoning step, each step reported the combined reasoning of all prior steps. For two reasoning steps, `steps[1].reasoningText` came back as step one's reasoning concatenated with step two's, and `steps[1].reasoning` contained both steps' entries. The same wrong values reached the `onStepFinish` callback.
 
-Each step now reports only its own reasoning, matching how per-step `text` already worked.
+Each step and its `onStepFinish` payload now report only that step's own reasoning, matching how per-step `text` already worked. The run-level `reasoningText` and `reasoning` on the final result stay cumulative across the whole run.
 
 ```ts
 const result = await agent.stream('...'); // reasoning model, multiple steps
