@@ -857,7 +857,7 @@ await askMemory({ question: 'who owns the rollback?', wait: false })
 
 The reminder agent keeps one conversation per session, so a follow-up that refers back to something discussed earlier in the session resolves against that conversation. Passive reminders and asked questions share the same thread, which is what lets it avoid repeating itself.
 
-With `wait: false` the tool returns a `correlationId` straight away and the answer arrives afterwards as the same `remembered` signal passive reminders use, carrying that id so a late answer names the question it belongs to. The tool resolves its model from the Subconscious agent config or the observational memory model; if neither supplies one it returns an explicit unavailable result rather than an empty answer.
+With `wait: false` the tool returns a `correlationId` straight away and the answer arrives afterwards as the same `remembered` signal passive reminders use, carrying that id so a late answer names the question it belongs to. The tool resolves its model from the Subconscious agent config or the observational memory model. If neither supplies one it returns an explicit unavailable result rather than an empty answer.
 
 ## Comparing OM with other memory features
 
