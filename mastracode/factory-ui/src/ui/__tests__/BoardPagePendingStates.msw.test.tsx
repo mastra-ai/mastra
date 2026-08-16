@@ -465,8 +465,7 @@ describe('Board card pending states', () => {
       }),
     );
     const user = userEvent.setup();
-    renderWorkBoard();
-
+    const { client } = renderWorkBoard();
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
     const unresolvedLink = within(card).getByRole('link', {
       name: 'Open Review: PR #21565 — Review login fix, Open pull request',
@@ -475,6 +474,7 @@ describe('Board card pending states', () => {
     expect(unresolvedLink).not.toHaveAttribute('target');
 
     workspacesGate.resolve();
+    await waitForMutationsIdle(client);
     const relatedLink = await within(card).findByRole('link', {
       name: 'Open live session for Review: PR #21565 — Review login fix, Open pull request',
     });
