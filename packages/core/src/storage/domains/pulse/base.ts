@@ -37,15 +37,28 @@ export interface PulseRecord {
   source: string;
 }
 
+/**
+ * A relationship endpoint. `system` is meaningful only for `kind: 'external'`
+ * (which platform owns the id — Slack C123 vs Discord C123), mirroring the
+ * spec's `{ kind: 'external'; id: string; system?: string }` variant.
+ */
+export interface PulseEndpoint {
+  kind: PulseEndpointKind;
+  id: string;
+  system?: string;
+}
+
 /** One link between endpoints. Carries no payload bodies. */
 export interface PulseRelationshipRecord {
   id: string;
   timestamp: Date;
   seq: number;
   type: string;
-  from: { kind: PulseEndpointKind; id: string };
-  to: { kind: PulseEndpointKind; id: string };
+  from: PulseEndpoint;
+  to: PulseEndpoint;
   attributes?: Record<string, unknown>;
+  /** External/correlation string fields (spec parity with the Pulse record). */
+  metadata?: Record<string, string>;
   traceId: string;
 }
 

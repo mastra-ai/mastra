@@ -208,6 +208,13 @@ export class PulseBridge extends MastraBase implements ObservabilityExporter {
   #skippedUpdates = 0;
   /** Token/cost values cached per model spanId, folded at span_ended (see R2/R4). */
   #metricCache = new Map<string, { traceId: string; data: Record<string, number> }>();
+  /**
+   * spanId → the span's *_started pulse record id. The started pulse is a
+   * span's identity node in the relationship graph: every `kind:'pulse'`
+   * endpoint carries a PULSE RECORD id (one id-space — the graph joins on
+   * `pulses.id`, never on the span-id column). Bounded FIFO.
+   */
+  #startPulseIds = new Map<string, string>();
 
   constructor(config: PulseBridgeConfig) {
     super({ component: RegisteredLogger.OBSERVABILITY, name: 'PulseBridge' });
@@ -240,6 +247,38 @@ export class PulseBridge extends MastraBase implements ObservabilityExporter {
 
   #emitPulse(record: PulseRecord): void {
     this.#bus.emit({ type: 'pulse', record });
+    // Membership is an explicit edge, not a column convention: every pulse
+    // with a flow identity gets one `flow_contains` edge (flow → pulse).
+    if (record.traceId) {
+      this.#emitRelationship(
+        'flow_contains',
+        'flow',
+        record.traceId,
+        'pulse',
+        record.id,
+        record.traceId,
+        record.timestamp,
+      );
+    }
+  }
+
+  /**
+   * Resolve a span id to its started-pulse record id. Spans that started
+   * before this bridge attached (or in another process — resume) have no
+   * local pulse id; the `span:` prefix marks such references as resolvable
+   * only via the span-id column, pending the spec's cross-process identity
+   * decision (memo item).
+   */
+  #pulseRef(spanId: string): string {
+    return this.#startPulseIds.get(spanId) ?? `span:${spanId}`;
+  }
+
+  #rememberStartPulse(spanId: string, pulseId: string): void {
+    if (this.#startPulseIds.size >= 10_000) {
+      const oldest = this.#startPulseIds.keys().next().value as string;
+      this.#startPulseIds.delete(oldest);
+    }
+    this.#startPulseIds.set(spanId, pulseId);
   }
 
   #emitRelationship(
@@ -342,8 +381,9 @@ export class PulseBridge extends MastraBase implements ObservabilityExporter {
     if (span.metadata?.resumed) metadata.resumed = 'true';
     if (span.metadata?.resumedFromSpanId) metadata.resumedFromSpanId = String(span.metadata.resumedFromSpanId);
 
+    const pulseId = randomUUID();
     this.#emitPulse({
-      id: randomUUID(),
+      id: pulseId,
       timestamp: ts,
       seq: nextPulseSeq(),
       type,
@@ -363,15 +403,35 @@ export class PulseBridge extends MastraBase implements ObservabilityExporter {
       source: 'span',
     });
 
-    if (isEnd || isEventSpan) {
-      if (span.isRootSpan) this.#emitRelationship('origin_of', 'pulse', spanId, 'flow', traceId, traceId, ts);
+    // Structure edges at span START (running flows must have a tree — an
+    // end-only graph leaves in-flight runs invisible). Endpoint ids are
+    // PULSE RECORD ids; the *_started pulse is the span's identity node.
+    if (isStart || isEventSpan) {
+      if (spanId) this.#rememberStartPulse(spanId, pulseId);
+      if (span.isRootSpan) this.#emitRelationship('origin_of', 'pulse', pulseId, 'flow', traceId, traceId, ts);
       if (span.parentSpanId) {
-        this.#emitRelationship('parent_of', 'pulse', span.parentSpanId, 'pulse', spanId, traceId, ts);
+        this.#emitRelationship('parent_of', 'pulse', this.#pulseRef(span.parentSpanId), 'pulse', pulseId, traceId, ts);
       }
+    }
+
+    if (isEnd || isEventSpan) {
+      const selfRef = spanId ? this.#pulseRef(spanId) : pulseId;
       // Resumed runs start a new root in the SAME trace, parented to the
-      // suspended span — the `resume_of` semantic derives for free.
-      const resumedFrom = span.metadata?.resumedFromSpanId;
-      if (resumedFrom) this.#emitRelationship('resume_of', 'pulse', spanId, 'pulse', String(resumedFrom), traceId, ts);
+      // suspended span — the `resume_of` semantic derives for free. Root-only:
+      // children inherit resumedFromSpanId via metadata propagation, and a
+      // per-child edge would say every child "continues" the suspended span.
+      const resumedFrom = span.isRootSpan ? span.metadata?.resumedFromSpanId : undefined;
+      if (resumedFrom) {
+        this.#emitRelationship(
+          'resume_of',
+          'pulse',
+          selfRef,
+          'pulse',
+          this.#pulseRef(String(resumedFrom)),
+          traceId,
+          ts,
+        );
+      }
       if (span.type === 'model_generation' || span.type === 'model_inference') {
         const model = span.attributes?.model;
         const provider = span.attributes?.provider;
@@ -379,7 +439,7 @@ export class PulseBridge extends MastraBase implements ObservabilityExporter {
           this.#emitRelationship(
             'uses_model_settings',
             'pulse',
-            spanId,
+            selfRef,
             'definition',
             `model:${provider ?? ''}/${model}`,
             traceId,
@@ -391,7 +451,7 @@ export class PulseBridge extends MastraBase implements ObservabilityExporter {
           for (const t of tools) {
             const tn = typeof t === 'string' ? t : t?.name;
             if (tn)
-              this.#emitRelationship('uses_tool_definition', 'pulse', spanId, 'definition', `tool:${tn}`, traceId, ts);
+              this.#emitRelationship('uses_tool_definition', 'pulse', selfRef, 'definition', `tool:${tn}`, traceId, ts);
           }
         }
       }
@@ -499,7 +559,7 @@ export class PulseBridge extends MastraBase implements ObservabilityExporter {
         'pulse',
         base.id,
         score.spanId ? 'pulse' : 'flow',
-        score.spanId ?? score.traceId,
+        score.spanId ? this.#pulseRef(score.spanId) : score.traceId,
         score.traceId ?? '',
         new Date(),
       );
@@ -530,7 +590,7 @@ export class PulseBridge extends MastraBase implements ObservabilityExporter {
         'pulse',
         base.id,
         feedback.spanId ? 'pulse' : 'flow',
-        feedback.spanId ?? feedback.traceId,
+        feedback.spanId ? this.#pulseRef(feedback.spanId) : feedback.traceId,
         feedback.traceId ?? '',
         new Date(),
         { kind: 'feedback' },
@@ -575,6 +635,12 @@ export class PulseBridge extends MastraBase implements ObservabilityExporter {
 
   async flush(): Promise<void> {
     this.#drainMetricCache();
+    // Transitive drain: observability.flush() (durable engines' pre-freeze
+    // hook) reaches the bridge via the o11y bus — without this, its promise
+    // resolves while pulse rows still sit in writer buffers, and a process
+    // freeze right after loses them. The bridge is not a pulse-bus exporter,
+    // so this cannot recurse.
+    await this.#bus.flush();
   }
 
   async shutdown(): Promise<void> {

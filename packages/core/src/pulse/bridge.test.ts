@@ -80,13 +80,24 @@ describe('PulseBridge span translation', () => {
     expect(pulses[1]!.attributes).toMatchObject({ output: { a: 'yo' } });
     expect(pulses[1]!.timestamp).toEqual(span.endTime);
 
+    // One id-space: edges reference PULSE RECORD ids, never span ids.
     expect(relationships).toContainEqual(
       expect.objectContaining({
         type: 'origin_of',
-        from: { kind: 'pulse', id: 'span-1' },
+        from: { kind: 'pulse', id: pulses[0]!.id },
         to: { kind: 'flow', id: 'trace-1' },
       }),
     );
+    // Every trace-bearing pulse gets a flow_contains membership edge.
+    for (const p of pulses) {
+      expect(relationships).toContainEqual(
+        expect.objectContaining({
+          type: 'flow_contains',
+          from: { kind: 'flow', id: 'trace-1' },
+          to: { kind: 'pulse', id: p.id },
+        }),
+      );
+    }
   });
 
   it('maps errors, event spans, and parent relationships', async () => {
@@ -96,13 +107,9 @@ describe('PulseBridge span translation', () => {
       exportedSpan: makeSpan({ errorInfo: { message: 'boom' }, parentSpanId: 'parent-1' }) as any,
     });
     expect(pulses[0]).toMatchObject({ type: 'error', action: 'run_failed', level: 'error' });
-    expect(relationships).toContainEqual(
-      expect.objectContaining({
-        type: 'parent_of',
-        from: { kind: 'pulse', id: 'parent-1' },
-        to: { kind: 'pulse', id: 'span-1' },
-      }),
-    );
+    // Structure edges are emitted at span START — an end-only event carries
+    // no parent_of (the started pulse already introduced the node).
+    expect(relationships.filter(r => r.type === 'parent_of')).toHaveLength(0);
 
     await bridge.exportTracingEvent({
       type: TracingEventType.SPAN_ENDED,
@@ -123,11 +130,13 @@ describe('PulseBridge span translation', () => {
         metadata: { runId: 'run-2', resumed: true, resumedFromSpanId: 'suspended-span' },
       }) as any,
     });
+    // The resumed-from span lives in a previous process — its pulse id is
+    // unknowable locally, so the reference is span:-prefixed (memo item).
     expect(relationships).toContainEqual(
       expect.objectContaining({
         type: 'resume_of',
-        from: { kind: 'pulse', id: 'resumed-root' },
-        to: { kind: 'pulse', id: 'suspended-span' },
+        from: { kind: 'pulse', id: 'span:resumed-root' },
+        to: { kind: 'pulse', id: 'span:suspended-span' },
       }),
     );
   });
@@ -336,10 +345,9 @@ describe('PulseBridge log/score/feedback/drop families', () => {
     } as any);
     expect(pulses[0]).toMatchObject({ surface: 'eval', action: 'score_recorded', type: 'output', source: 'score' });
     expect(pulses[0]!.data).toEqual({ score: 0.9 });
-    expect(relationships[0]).toMatchObject({
-      type: 'scored_target',
+    expect(relationships.find(r => r.type === 'scored_target')).toMatchObject({
       from: { kind: 'pulse', id: pulses[0]!.id },
-      to: { kind: 'pulse', id: 'span-9' },
+      to: { kind: 'pulse', id: 'span:span-9' },
     });
   });
 
@@ -355,8 +363,7 @@ describe('PulseBridge log/score/feedback/drop families', () => {
       type: 'input',
       source: 'feedback',
     });
-    expect(relationships[0]).toMatchObject({
-      type: 'scored_target',
+    expect(relationships.find(r => r.type === 'scored_target')).toMatchObject({
       to: { kind: 'flow', id: 'trace-1' },
       attributes: { kind: 'feedback' },
     });
@@ -374,5 +381,40 @@ describe('PulseBridge log/score/feedback/drop families', () => {
     } as any);
     expect(pulses[0]).toMatchObject({ type: 'system', surface: 'execution', action: 'events_dropped', source: 'drop' });
     expect(pulses[0]!.data).toEqual({ count: 7 });
+  });
+});
+
+describe('PulseBridge flush chain (durable/serverless drain)', () => {
+  /**
+   * observability.flush() drains the o11y bus, which calls bridge.flush().
+   * That must transitively drain the PULSE bus writers too — otherwise a
+   * durable engine's flush returns while pulse rows still sit in exporter
+   * buffers, and a process freeze loses them.
+   */
+  it('flush() drains the pulse bus exporter buffers', async () => {
+    const bus = new PulseBus();
+    const written: PulseBusEvent[] = [];
+    let buffer: PulseBusEvent[] = [];
+    bus.registerExporter({
+      name: 'buffering',
+      onPulseEvent: e => {
+        buffer.push(e);
+      },
+      flush: async () => {
+        written.push(...buffer);
+        buffer = [];
+      },
+      shutdown: async () => {},
+    });
+    const bridge = new PulseBridge({ bus });
+
+    await bridge.exportTracingEvent({
+      type: TracingEventType.SPAN_STARTED,
+      exportedSpan: makeSpan(),
+    } as any);
+    expect(written).toHaveLength(0); // still buffered
+
+    await bridge.flush();
+    expect(written.length).toBeGreaterThan(0); // drained by the bridge's flush
   });
 });
