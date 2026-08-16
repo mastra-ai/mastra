@@ -271,3 +271,261 @@ describe('PulseStorageClickhouse (live)', () => {
     expect(aborted.total).toBe(1);
   });
 });
+
+describe('exact abort attribution (runId join, live)', () => {
+  it('aborts only the flow containing the abort runId; window fallback for legacy rows', async ctx => {
+    if (!available) return ctx.skip();
+    const store = makeStore();
+    await store.init();
+    await store.dangerouslyClearAll();
+
+    let n = 100;
+    const p = (o: Record<string, any>) => ({
+      id: `q${++n}`,
+      timestamp: T0,
+      seq: n,
+      type: 'state' as const,
+      surface: 'agent',
+      action: 'run_started',
+      traceId: 'x',
+      source: 'span',
+      threadId: 't-1',
+      ...o,
+    });
+
+    await store.batchCreatePulses([
+      // Two runs, one thread, inside the legacy 2s window.
+      p({ traceId: 'flow-a', runId: 'run-1', spanId: 'ra', timestamp: at(0) }),
+      p({
+        traceId: 'flow-a',
+        runId: 'run-1',
+        spanId: 'ra',
+        action: 'run_completed',
+        type: 'output',
+        timestamp: at(500),
+      }),
+      p({ traceId: 'flow-b', runId: 'run-2', spanId: 'rb', timestamp: at(700) }),
+      p({
+        traceId: 'flow-b',
+        runId: 'run-2',
+        spanId: 'rb',
+        action: 'run_completed',
+        type: 'output',
+        timestamp: at(1200),
+      }),
+      // The abort names run-1 → only flow-a may flip.
+      p({
+        traceId: '',
+        runId: 'run-1',
+        spanId: undefined,
+        source: 'session',
+        surface: 'run_control',
+        action: 'abort_completed',
+        timestamp: at(1400),
+      }),
+      // Legacy shape on another thread: no runId → window fallback still works.
+      p({ traceId: 'flow-l', threadId: 't-9', spanId: 'rl', timestamp: at(0) }),
+      p({
+        traceId: 'flow-l',
+        threadId: 't-9',
+        spanId: 'rl',
+        action: 'run_completed',
+        type: 'output',
+        timestamp: at(400),
+      }),
+      p({
+        traceId: '',
+        threadId: 't-9',
+        spanId: undefined,
+        source: 'session',
+        surface: 'run_control',
+        action: 'abort_completed',
+        timestamp: at(800),
+      }),
+    ]);
+
+    const { flows } = await store.listFlows();
+    const status = Object.fromEntries(flows.map(f => [f.flowId, f.status]));
+    expect(status['flow-a']).toBe('aborted');
+    expect(status['flow-b']).toBe('completed');
+    expect(status['flow-l']).toBe('aborted');
+  });
+});
+
+describe('status rule parity: ClickHouse must match the in-memory oracle', () => {
+  it('produces identical statuses and durations on the edge-case fixture', async ctx => {
+    if (!available) return ctx.skip();
+    const { InMemoryPulseStorage } = await import('@mastra/core/storage');
+    const ch = makeStore();
+    await ch.init();
+    await ch.dangerouslyClearAll();
+
+    // Recent timestamps: un-terminated flows read as running (not stale) on
+    // both adapters — CH staleness uses wall-clock now().
+    const B = Date.now() - 15_000;
+    const bt = (ms: number) => new Date(B + ms);
+    let n = 500;
+    const p = (o: Record<string, any>) => ({
+      id: `e${++n}`,
+      timestamp: bt(0),
+      seq: n,
+      type: 'state' as const,
+      surface: 'agent',
+      action: 'run_started',
+      traceId: 'x',
+      source: 'span',
+      ...o,
+    });
+
+    const fixture = [
+      // (1) Two flows, one thread, TWO legacy aborts (no runId) — each abort
+      // must be able to match its own flow (min-per-thread loses the 2nd).
+      p({ traceId: 'flow-w1', threadId: 't-w', spanId: 'w1', timestamp: bt(0) }),
+      p({
+        traceId: 'flow-w1',
+        threadId: 't-w',
+        spanId: 'w1',
+        action: 'run_completed',
+        type: 'output',
+        timestamp: bt(400),
+      }),
+      p({
+        traceId: '',
+        threadId: 't-w',
+        spanId: undefined,
+        source: 'session',
+        surface: 'run_control',
+        action: 'abort_completed',
+        timestamp: bt(600),
+      }),
+      p({ traceId: 'flow-w2', threadId: 't-w', spanId: 'w2', timestamp: bt(5_000) }),
+      p({
+        traceId: 'flow-w2',
+        threadId: 't-w',
+        spanId: 'w2',
+        action: 'run_completed',
+        type: 'output',
+        timestamp: bt(5_400),
+      }),
+      p({
+        traceId: '',
+        threadId: 't-w',
+        spanId: undefined,
+        source: 'session',
+        surface: 'run_control',
+        action: 'abort_completed',
+        timestamp: bt(5_600),
+      }),
+      // (2) completed then a later parentless _failed WITHOUT error type —
+      // the LAST terminal decides (countIf(completed) says completed).
+      p({ traceId: 'flow-cf', threadId: 't-c', spanId: 'c1', timestamp: bt(0) }),
+      p({
+        traceId: 'flow-cf',
+        threadId: 't-c',
+        spanId: 'c1',
+        action: 'run_completed',
+        type: 'output',
+        timestamp: bt(300),
+      }),
+      p({ traceId: 'flow-cf', threadId: 't-c', spanId: 'c1', action: 'run_failed', type: 'state', timestamp: bt(500) }),
+      // (3) unescaped LIKE wildcard: 'restarted' is NOT a *_started action —
+      // it must not become the duration's root start.
+      p({ traceId: 'flow-x', threadId: 't-x', spanId: 'x1', action: 'restarted', timestamp: bt(0) }),
+      p({ traceId: 'flow-x', threadId: 't-x', spanId: 'x1', action: 'run_started', timestamp: bt(1_000) }),
+      p({
+        traceId: 'flow-x',
+        threadId: 't-x',
+        spanId: 'x1',
+        action: 'run_completed',
+        type: 'output',
+        timestamp: bt(2_000),
+      }),
+      // (4) empty-thread abort row must match nothing.
+      p({ traceId: 'flow-e', threadId: '', spanId: 'e1', timestamp: bt(0) }),
+      p({
+        traceId: '',
+        threadId: '',
+        spanId: undefined,
+        source: 'session',
+        surface: 'run_control',
+        action: 'abort_completed',
+        timestamp: bt(100),
+      }),
+    ];
+
+    const mem = new InMemoryPulseStorage();
+    await mem.batchCreatePulses(fixture as any);
+    await ch.batchCreatePulses(fixture as any);
+
+    const memFlows = (await mem.listFlows()).flows;
+    const chFlows = (await ch.listFlows()).flows;
+    const shape = (flows: any[]) => Object.fromEntries(flows.map(f => [f.flowId, `${f.status}|dur=${f.durationMs}`]));
+    expect(shape(chFlows)).toEqual(shape(memFlows));
+    // Pin the oracle's own answers so BOTH adapters are checked, not just parity.
+    expect(shape(memFlows)).toEqual({
+      'flow-w1': 'aborted|dur=400',
+      'flow-w2': 'aborted|dur=400',
+      'flow-cf': 'running|dur=null',
+      'flow-x': 'completed|dur=1000',
+      'flow-e': 'running|dur=null',
+    });
+  });
+});
+
+describe('graph proof (live): edges join to pulses by id in SQL', () => {
+  it('reconstructs membership and tree via relationships JOIN pulses ON id', async ctx => {
+    if (!available) return ctx.skip();
+    const { PulseBridge, PulseBus } = await import('@mastra/core/pulse');
+    const store = makeStore();
+    await store.init();
+    await store.dangerouslyClearAll();
+
+    const bus = new PulseBus();
+    const exporter = new PulseStorageExporter({ storage: store, flushIntervalMs: 600_000 });
+    bus.registerExporter(exporter);
+    const bridge = new PulseBridge({ bus });
+
+    const mkSpan = (o: Record<string, any>) => ({
+      name: 'x',
+      type: 'agent_run',
+      traceId: 'flow-g',
+      startTime: at(0),
+      endTime: at(1000),
+      isRootSpan: false,
+      isEvent: false,
+      metadata: {},
+      attributes: {},
+      ...o,
+    });
+    const root = mkSpan({ id: 'root', isRootSpan: true });
+    const child = mkSpan({ id: 'child', parentSpanId: 'root', type: 'model_generation' });
+    await bridge.exportTracingEvent({ type: 'span_started', exportedSpan: root } as any);
+    await bridge.exportTracingEvent({ type: 'span_started', exportedSpan: child } as any);
+    await bridge.exportTracingEvent({ type: 'span_ended', exportedSpan: child } as any);
+    await bridge.exportTracingEvent({ type: 'span_ended', exportedSpan: root } as any);
+    await exporter.shutdown();
+
+    const client = createClient({ url: URL, username: USER, password: PASSWORD, database: DATABASE });
+    // Membership via SQL join on PULSE IDS — no trace_id column on the edge walk.
+    const membership = await client.query({
+      query: `SELECT count() AS n FROM relationships r INNER JOIN pulses p ON p.id = r.to_id
+              WHERE r.type = 'flow_contains' AND r.from_kind = 'flow' AND r.from_id = 'flow-g'`,
+      format: 'JSONEachRow',
+    });
+    const memRows = (await membership.json()) as { n: string | number }[];
+    expect(Number(memRows[0]!.n)).toBe(4); // 2 starts + 2 ends
+
+    // Tree via parent_of joined to pulses on BOTH endpoints.
+    const tree = await client.query({
+      query: `SELECT pp.span_id AS parent, pc.span_id AS child
+              FROM relationships r
+              INNER JOIN pulses pp ON pp.id = r.from_id
+              INNER JOIN pulses pc ON pc.id = r.to_id
+              WHERE r.type = 'parent_of'`,
+      format: 'JSONEachRow',
+    });
+    const treeRows = (await tree.json()) as { parent: string; child: string }[];
+    expect(treeRows.map(t => `${t.parent}->${t.child}`)).toEqual(['root->child']);
+    await client.close();
+  });
+});

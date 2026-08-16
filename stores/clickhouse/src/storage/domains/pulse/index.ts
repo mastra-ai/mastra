@@ -58,9 +58,19 @@ const RELATIONSHIPS_DDL = `CREATE TABLE IF NOT EXISTS relationships (
   from_id    String,
   to_kind    Enum8('pulse' = 1, 'flow' = 2, 'thread' = 3, 'model_input' = 4, 'content' = 5, 'definition' = 6, 'external' = 7),
   to_id      String,
+  from_system String DEFAULT '',
+  to_system   String DEFAULT '',
   attributes String,
+  metadata   String DEFAULT '{}',
   trace_id   String
 ) ENGINE = MergeTree ORDER BY (trace_id, timestamp, seq)`;
+
+/** Columns added after the first release — applied to pre-existing tables. */
+const RELATIONSHIPS_MIGRATIONS = [
+  `ALTER TABLE relationships ADD COLUMN IF NOT EXISTS from_system String DEFAULT ''`,
+  `ALTER TABLE relationships ADD COLUMN IF NOT EXISTS to_system String DEFAULT ''`,
+  `ALTER TABLE relationships ADD COLUMN IF NOT EXISTS metadata String DEFAULT '{}'`,
+];
 
 /**
  * Materialized flow-summary index (experimental, behind `pulse.flowIndex`).
@@ -126,7 +136,10 @@ function toRelationshipRow(r: PulseRelationshipRecord) {
     from_id: r.from.id,
     to_kind: r.to.kind,
     to_id: r.to.id,
+    from_system: r.from.system ?? '',
+    to_system: r.to.system ?? '',
     attributes: JSON.stringify(r.attributes ?? {}),
+    metadata: JSON.stringify(r.metadata ?? {}),
     trace_id: r.traceId,
   };
 }
@@ -182,6 +195,9 @@ export class PulseStorageClickhouse extends PulseStorage {
   async init(): Promise<void> {
     await this.client.command({ query: PULSES_DDL });
     await this.client.command({ query: RELATIONSHIPS_DDL });
+    for (const migration of RELATIONSHIPS_MIGRATIONS) {
+      await this.client.command({ query: migration });
+    }
     await this.client.command({ query: FLOWS_DDL });
   }
 
@@ -290,10 +306,22 @@ export class PulseStorageClickhouse extends PulseStorage {
     const where = flowId ? `AND p.trace_id = {var_flow:String}` : '';
     const result = await this.client.query({
       query: `
-        WITH aborts AS (
-          SELECT thread_id, min(timestamp) AS abort_ts
+        WITH exact_aborts AS (
+          /* Aborts carrying a run id join EXACTLY: the flow that contains the
+             run is the flow that was aborted — no window guessing. */
+          SELECT DISTINCT run_id
           FROM pulses
-          WHERE source = 'session' AND surface = 'run_control' AND action = 'abort_completed'
+          WHERE source = 'session' AND surface = 'run_control'
+            AND action = 'abort_completed' AND run_id != ''
+        ),
+        window_aborts AS (
+          /* Legacy fallback for abort rows without a run id: match by thread
+             within the flow window. All abort times kept — a second abort in
+             the same thread must still be able to match a later flow. */
+          SELECT thread_id, groupArray(timestamp) AS abort_times
+          FROM pulses
+          WHERE source = 'session' AND surface = 'run_control'
+            AND action = 'abort_completed' AND run_id = '' AND thread_id != ''
           GROUP BY thread_id
         ),
         costs AS (
@@ -315,22 +343,27 @@ export class PulseStorageClickhouse extends PulseStorage {
                min(p.timestamp) AS started_at,
                max(p.timestamp) AS ended_at,
                dateDiff('ms',
-                 minIf(p.timestamp, p.action LIKE '%_started' AND p.parent_span_id = ''),
-                 maxIf(p.timestamp, (p.action LIKE '%_completed' OR p.action LIKE '%_failed') AND p.parent_span_id = '')
+                 minIf(p.timestamp, endsWith(p.action, '_started') AND p.parent_span_id = ''),
+                 maxIf(p.timestamp, (endsWith(p.action, '_completed') OR endsWith(p.action, '_failed')) AND p.parent_span_id = '')
                ) AS run_ms,
                count() AS pulse_count,
                anyIf(JSONExtractString(p.metadata, 'entityName'), JSONExtractString(p.metadata, 'entityName') != '') AS entity_name,
                any(c.cost_usd) AS cost_usd,
                multiIf(
-                 any(a.abort_ts) > toDateTime64(0, 3)
-                   AND any(a.abort_ts) >= min(p.timestamp)
-                   AND any(a.abort_ts) <= max(p.timestamp) + INTERVAL 2 SECOND, 'aborted',
+                 hasAny(
+                   groupUniqArrayIf(p.run_id, p.run_id != ''),
+                   (SELECT groupUniqArray(run_id) FROM exact_aborts)
+                 )
+                   OR arrayExists(
+                     t -> t >= started_at AND t <= ended_at + INTERVAL 2 SECOND,
+                     any(a.abort_times)
+                   ), 'aborted',
                  countIf(p.type = 'error') > 0, 'failed',
-                 countIf(p.action LIKE '%_completed' AND p.parent_span_id = '') > 0, 'completed',
+                 endsWith(argMaxIf(p.action, (p.timestamp, p.seq), p.parent_span_id = '' AND (endsWith(p.action, '_completed') OR endsWith(p.action, '_failed'))), '_completed'), 'completed',
                  dateDiff('second', max(p.timestamp), now64(3)) > ${STALE_THRESHOLD_S}, 'stale',
                  'running') AS status
         FROM pulses p
-        LEFT JOIN aborts a ON a.thread_id = p.thread_id
+        LEFT JOIN window_aborts a ON a.thread_id = p.thread_id AND p.thread_id != ''
         LEFT JOIN costs c ON c.trace_id = p.trace_id
         WHERE p.source = 'span' AND p.trace_id != '' ${where}
         GROUP BY p.trace_id
@@ -380,8 +413,8 @@ export class PulseStorageClickhouse extends PulseStorage {
                any(surface) AS surface,
                replaceRegexpOne(any(action), '_(started|completed|failed)$', '') AS base,
                min(timestamp) AS t0,
-               maxIf(timestamp, action LIKE '%_completed' OR action LIKE '%_failed') AS t1,
-               countIf(action LIKE '%_completed' OR action LIKE '%_failed') AS ended,
+               maxIf(timestamp, endsWith(action, '_completed') OR endsWith(action, '_failed')) AS t1,
+               countIf(endsWith(action, '_completed') OR endsWith(action, '_failed')) AS ended,
                countIf(type = 'error') AS errs
         FROM pulses
         WHERE source = 'span' AND trace_id = {var_flow:String} AND span_id != ''
@@ -419,7 +452,7 @@ export class PulseStorageClickhouse extends PulseStorage {
     const defs = await this.client.query({
       query: `
         SELECT DISTINCT to_id FROM relationships
-        WHERE trace_id = {var_flow:String} AND to_kind = 'definition' AND type LIKE 'uses_%'`,
+        WHERE trace_id = {var_flow:String} AND to_kind = 'definition' AND startsWith(type, 'uses_')`,
       query_params: { var_flow: flowId },
       format: 'JSONEachRow',
     });
