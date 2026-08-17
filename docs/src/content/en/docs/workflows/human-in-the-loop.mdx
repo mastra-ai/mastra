@@ -13,18 +13,7 @@ Some workflows need to pause for human input before continuing. When a workflow 
 
 Human-in-the-loop (HITL) input works much like [pausing a workflow](/docs/workflows/suspend-and-resume) using `suspend()`. The key difference is that when human input is required, you can return `suspend()` with a payload that provides context or guidance to the user on how to continue.
 
-```mermaid
-flowchart LR
-  accTitle: Pausing a workflow for human input
-  accDescr: step1 either completes and moves to end, or suspends and waits for human input.
-  paused@{ shape: manual-input, label: "awaiting<br/>human input" }
-  start(( start )) -- in --> step1([step1])
-  step1 accent1@-- out --> stop(( end ))
-  step1 pending1@-. suspend .-> paused
-
-  class paused pending
-  class stop accent
-```
+![Pausing a workflow with suspend()](/img/workflows/workflows-suspend.jpg)
 
 ```typescript {12-17,22-26} title="src/mastra/workflows/test-workflow.ts"
 import { createWorkflow, createStep } from '@mastra/core/workflows'
@@ -109,17 +98,7 @@ The data returned by the step can include a reason and help the user understand 
 
 As with [restarting a workflow](/docs/workflows/suspend-and-resume#restarting-a-workflow-with-resume), use `resume()` with `resumeData` to continue a workflow after receiving input from a human. The workflow resumes from the step where it was paused.
 
-```mermaid
-flowchart LR
-  accTitle: Resuming a workflow after human input
-  accDescr: The paused step receives resume data, step1 continues, and the workflow completes at end.
-  paused@{ shape: manual-input, label: "awaiting<br/>human input" }
-  paused accent1@-. resume .-> step1([step1])
-  step1 accent2@-- out --> stop(( end ))
-
-  class paused pending
-  class stop accent
-```
+![Restarting a workflow with resume()](/img/workflows/workflows-resume.jpg)
 
 ```typescript {13}
 const workflow = mastra.getWorkflow('testWorkflow')
@@ -142,18 +121,6 @@ const handleResume = async () => {
 ### Handling human rejection with `bail()`
 
 Use `bail()` to stop workflow execution at a step without triggering an error. This can be useful when a human explicitly rejects an action. The workflow completes with a `success` status, and any logic after the call to `bail()` is skipped.
-
-```mermaid
-flowchart LR
-  accTitle: Stopping a workflow with bail
-  accDescr: After review step1 either completes at end, or stops at bail when the request is rejected.
-  start(( start )) -- in --> step1([step1])
-  step1 accent1@-. approved .-> stop(( end ))
-  step1 danger1@-. rejected .-> bailed([bail])
-
-  class bailed danger
-  class stop accent
-```
 
 ```typescript {6-10}
 const step1 = createStep({
