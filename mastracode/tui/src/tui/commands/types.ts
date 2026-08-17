@@ -2,6 +2,7 @@
  * Shared context passed to extracted slash command handlers.
  * Keeps commands decoupled from the MastraTUI class.
  */
+import type { KnowledgeInspector } from '@mastra/code-sdk';
 import type { MastraCodeAnalytics } from '@mastra/code-sdk/analytics';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import type { HookManager } from '@mastra/code-sdk/hooks/index';
@@ -21,6 +22,7 @@ export interface SlashCommandContext {
   pluginManager?: PluginManager;
   analytics?: MastraCodeAnalytics;
   authStorage?: AuthStorage;
+  knowledgeInspector?: KnowledgeInspector;
   customSlashCommands: SlashCommandMetadata[];
   showInfo: (message: string) => void;
   showError: (message: string) => void;

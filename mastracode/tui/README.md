@@ -90,6 +90,7 @@ Select a suggestion with arrow keys and press Tab to insert it.
 | `/mode`             | Switch agent mode                                                           |
 | `/subagents`        | Configure subagent model defaults                                           |
 | `/memory`           | Configure Observational Memory (`/om` alias)                                |
+| `/knowledge`        | Browse read-only Subconscious knowledge for the active project and thread   |
 | `/think`            | Set thinking level (Anthropic)                                              |
 | `/judge`            | Configure the default judge model and max attempts for goals                |
 | `/goal`             | Start or manage an autonomous goal                                          |
@@ -132,6 +133,12 @@ Mastra Code discovers the registered agents, tools, and workflows, builds a comp
 ```
 
 Run `/workflows help` for the full command reference.
+
+### Knowledge browser
+
+Use `/knowledge` to inspect the Subconscious knowledge visible to the active Mastra Code project and thread. The browser is read-only and derives its organization, resource, and thread roots from the current session—you cannot enter arbitrary scope IDs.
+
+Use Tab or Shift+Tab to move between Scopes, Entities, Pages, and Activity; arrow keys or j/k to select; Enter to browse or follow an entity relation; Backspace to return; `/` to filter entity and page lists; and Escape to close. Scope badges distinguish inherited records from records stored directly at the selected level. Switching threads resets the browser to the active resource root and refreshes its data.
 
 ### Plugins
 

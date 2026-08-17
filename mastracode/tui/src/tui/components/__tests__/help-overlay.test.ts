@@ -12,6 +12,7 @@ describe('buildHelpText', () => {
     expect(text).toContain('/models');
     expect(text).toContain('/skill/<name>');
     expect(text).toMatch(/\/memory\s+Configure Observational Memory \(\/om alias\)/);
+    expect(text).toMatch(/\/knowledge\s+Browse scoped Subconscious knowledge/);
     expect(text).not.toMatch(/^\s*\/om\s+/m);
     expect(text).not.toContain('/models:pack');
     expect(text).not.toContain('/memory-gateway');

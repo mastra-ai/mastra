@@ -364,6 +364,7 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'subagents', description: 'Configure subagent model defaults' },
     { name: 'memory', description: 'Configure Observational Memory' },
     { name: 'om', description: 'Alias for /memory' },
+    { name: 'knowledge', description: 'Browse scoped Subconscious knowledge' },
     { name: 'think', description: 'Session thinking override (off|low|medium|high|xhigh|max|default|status)' },
     { name: 'login', description: 'Login with OAuth provider' },
     { name: 'skills', description: 'List available skills' },

@@ -39,16 +39,16 @@ function context(observations = '- Repeated deploy procedure with validation and
 async function seed(memory: Memory) {
   const store = (await memory.storage.getStore('knowledge'))!;
   const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scope });
-  const first = await store.appendItem({
-    parentNodeId: node.id,
+  const first = await store.appendKnowledge({
+    node: node.id,
     text: 'Deploy Atlas by validating and publishing.',
     scope,
     sourceThreadId: 'alpha',
     resolutionScope: scope,
     defaultScope: scope,
   });
-  const second = await store.appendItem({
-    parentNodeId: node.id,
+  const second = await store.appendKnowledge({
+    node: node.id,
     text: 'A later deploy used validation, publishing, and a health check.',
     scope,
     sourceThreadId: 'alpha',
@@ -89,14 +89,14 @@ describe('Subconscious learner', () => {
     expect(learn).not.toHaveBeenCalled();
   });
 
-  it('records one scoped skill with retry-safe evidence from repeated source knowledge items', async () => {
+  it('records one scoped skill with retry-safe evidence from repeated source knowledge records', async () => {
     const memory = new Memory({ storage: new InMemoryStore() });
     const { store, first, second } = await seed(memory);
     const state = {};
     const tool = createLearnerRecordSkillTool({
       store,
       scope,
-      pendingItems: [first, second],
+      pendingRecords: [first, second],
       parentThreadId: 'alpha',
       defaultScope: 'resource',
       maxScope: undefined,
@@ -105,7 +105,7 @@ describe('Subconscious learner', () => {
     const input = {
       name: 'deploy-atlas-safely',
       procedure: 'Validate, publish, then verify the health check.',
-      sourceItemIds: [first.id, second.id],
+      sourceRecordIds: [first.id, second.id],
     };
 
     await tool.execute?.(input, {} as any);
@@ -113,9 +113,9 @@ describe('Subconscious learner', () => {
 
     const skills = await store.listNodes({ scope, kind: 'skill' });
     expect(skills).toHaveLength(1);
-    const evidence = await store.itemsAbout({ nodeId: skills[0]!.id, scope });
-    expect(evidence.items).toHaveLength(2);
-    expect(evidence.items.every(fact => fact.sourceThreadId === 'subconscious:alpha:learn')).toBe(true);
+    const evidence = await store.knowledgeAbout({ node: skills[0]!.id, scope });
+    expect(evidence.records).toHaveLength(2);
+    expect(evidence.records.every(record => record.sourceThreadId === 'subconscious:alpha:learn')).toBe(true);
   });
 
   it('updates a visible ancestor-scoped skill instead of creating a duplicate', async () => {
@@ -125,7 +125,7 @@ describe('Subconscious learner', () => {
     const tool = createLearnerRecordSkillTool({
       store,
       scope,
-      pendingItems: [first, second],
+      pendingRecords: [first, second],
       parentThreadId: 'alpha',
       defaultScope: 'resource',
       maxScope: undefined,
@@ -136,13 +136,13 @@ describe('Subconscious learner', () => {
       {
         name: existing.name,
         procedure: 'Validate, publish, then verify the health check.',
-        sourceItemIds: [first.id, second.id],
+        sourceRecordIds: [first.id, second.id],
       },
       {} as any,
     );
 
     expect(await store.listNodes({ scope, kind: 'skill' })).toEqual([expect.objectContaining({ id: existing.id })]);
-    expect((await store.itemsAbout({ nodeId: existing.id, scope })).items).toHaveLength(2);
+    expect((await store.knowledgeAbout({ node: existing.id, scope })).records).toHaveLength(2);
   });
 
   it('rejects one-off evidence before creating a skill', async () => {
@@ -151,14 +151,14 @@ describe('Subconscious learner', () => {
     const tool = createLearnerRecordSkillTool({
       store,
       scope,
-      pendingItems: [first],
+      pendingRecords: [first],
       parentThreadId: 'alpha',
       defaultScope: 'resource',
       maxScope: undefined,
       state: {},
     });
     await expect(
-      tool.execute?.({ name: 'one-off', procedure: 'Do one thing.', sourceItemIds: [first.id] }, {} as any),
+      tool.execute?.({ name: 'one-off', procedure: 'Do one thing.', sourceRecordIds: [first.id] }, {} as any),
     ).resolves.toMatchObject({ error: true });
     expect(await store.listNodes({ scope, kind: 'skill' })).toHaveLength(0);
   });
@@ -176,7 +176,7 @@ describe('Subconscious learner', () => {
     expect(await store.getCurationCursor({ sourceThreadId: 'alpha', agent: 'learn' })).toBeNull();
     await handler(context('FULL PRE-REFLECTION PROCEDURE'));
     expect(await store.getCurationCursor({ sourceThreadId: 'alpha', agent: 'learn' })).toMatchObject({
-      lastItemId: second.id,
+      lastKnowledgeId: second.id,
     });
     expect(await store.getCurationCursor({ sourceThreadId: 'alpha', agent: 'curate' })).toBeNull();
     expect(generate).toHaveBeenLastCalledWith(
