@@ -191,31 +191,57 @@ describe('createLLMMappingStep HITL behavior', () => {
     );
   });
 
-  it('should bail when SOME tools have results and SOME do not (mixed scenario)', async () => {
-    // Arrange: One tool with execute, one without (the bug scenario)
+  it('should flush completed results then bail when SOME tools have results and SOME do not (#21637)', async () => {
+    // Mixed step: server-side execute() completed + client/HITL tool still pending.
+    // Ending the turn is correct (the client tool handshake), but the completed
+    // sibling must be streamed and persisted first — otherwise it stays in `call`
+    // state and AI SDK clients deadlock waiting for output-available.
     const inputData: ToolCallOutput[] = [
       {
         toolCallId: 'call-1',
         toolName: 'updateTitle',
         args: { title: 'test' },
-        result: { success: true }, // Has result (has execute function)
+        result: { success: true },
       },
       {
         toolCallId: 'call-2',
         toolName: 'updateSummary',
         args: { summary: 'test' },
-        result: undefined, // No result (HITL, no execute function)
+        result: undefined,
       },
     ];
 
-    // Act
     const result = await llmMappingStep.execute(createExecuteParams(inputData));
 
-    // Assert: Should bail (suspend execution) because updateSummary needs HITL
     expect(bail).toHaveBeenCalled();
     expect(result.stepResult.isContinued).toBe(false);
-    // Should NOT emit tool-result chunks
-    expect(controller.enqueue).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'tool-result' }));
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-result',
+        payload: expect.objectContaining({
+          toolCallId: 'call-1',
+          toolName: 'updateTitle',
+          result: { success: true },
+        }),
+      }),
+    );
+    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-invocation',
+        toolInvocation: expect.objectContaining({
+          state: 'result',
+          toolCallId: 'call-1',
+          toolName: 'updateTitle',
+          result: { success: true },
+        }),
+      }),
+    );
+    expect(controller.enqueue).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-result',
+        payload: expect.objectContaining({ toolCallId: 'call-2' }),
+      }),
+    );
   });
 
   it('should enqueue tool-output-denied when a requireApproval tool is declined (#20880)', async () => {
