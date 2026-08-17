@@ -30,6 +30,7 @@ export function setupKeyboardShortcuts(
   state: TUIState,
   callbacks: {
     stop: () => void;
+    exit?: (exitCode: number) => void;
     doubleCtrlCMs: number;
     queueFollowUpMessage: (text: string) => void;
   },
@@ -40,7 +41,8 @@ export function setupKeyboardShortcuts(
     if (now - state.lastCtrlCTime < callbacks.doubleCtrlCMs) {
       // Double Ctrl+C → exit
       callbacks.stop();
-      process.exit(0);
+      if (callbacks.exit) callbacks.exit(0);
+      else process.exit(0);
     }
     state.lastCtrlCTime = now;
 
@@ -113,7 +115,8 @@ export function setupKeyboardShortcuts(
   // Ctrl+D - exit when editor is empty
   state.editor.onCtrlD = () => {
     callbacks.stop();
-    process.exit(0);
+    if (callbacks.exit) callbacks.exit(0);
+    else process.exit(0);
   };
 
   // Ctrl+T - toggle thinking blocks visibility
@@ -580,6 +583,7 @@ export function setupKeyHandlers(
   state: TUIState,
   callbacks: {
     stop: () => void;
+    exit?: (exitCode: number) => void;
     doubleCtrlCMs: number;
   },
 ): () => void {
@@ -588,7 +592,8 @@ export function setupKeyHandlers(
     const now = Date.now();
     if (now - state.lastCtrlCTime < callbacks.doubleCtrlCMs) {
       callbacks.stop();
-      process.exit(0);
+      if (callbacks.exit) callbacks.exit(0);
+      else process.exit(0);
     }
     state.lastCtrlCTime = now;
     if (abortActiveGoalJudge(state)) {

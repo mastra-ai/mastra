@@ -45,7 +45,8 @@ export function showThreadLockPrompt(
     } else if (answer === 'New thread') {
       // pendingNewThread is already true from the caller
     } else {
-      process.exit(0);
+      if (ctx.exit) ctx.exit(0);
+      else process.exit(0);
     }
   })();
 }

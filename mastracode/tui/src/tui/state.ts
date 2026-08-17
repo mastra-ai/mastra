@@ -146,6 +146,9 @@ export interface MastraTUIOptions {
 
   /** Optional terminal injection for in-process tests. Defaults to ProcessTerminal. */
   terminal?: Terminal;
+
+  /** Process adapter exit hook. Defaults to process.exit. */
+  exit?: (exitCode: number) => void;
 }
 
 // =============================================================================

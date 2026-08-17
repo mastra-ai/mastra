@@ -167,6 +167,23 @@ export function createProcessMemoryDiagnosticsFromEnvironment(
   }
 }
 
+export async function startConfiguredProcessMemoryDiagnostics(
+  setup: ProcessMemoryDiagnosticsSetup,
+  warn: (message: string) => void,
+): Promise<ProcessMemoryDiagnostics> {
+  if (!setup.enabled) return setup.diagnostics;
+  if (setup.error) {
+    warn(`Process memory diagnostics were not started: ${setup.error}`);
+    return setup.diagnostics;
+  }
+
+  const status = await setup.diagnostics.start();
+  if (status.state !== 'active') {
+    warn(`Process memory diagnostics were not started: ${status.error ?? 'unknown inspector error'}`);
+  }
+  return setup.diagnostics;
+}
+
 function defaultInspectorSession(): InspectorSessionAdapter {
   const session = new Session();
   return {

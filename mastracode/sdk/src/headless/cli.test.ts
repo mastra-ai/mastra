@@ -1,6 +1,29 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { hasHeadlessFlag, parseHeadlessArgs } from './cli.js';
+const lifecycleMocks = vi.hoisted(() => {
+  const order: string[] = [];
+  const diagnostics = { stop: vi.fn(async () => void order.push('diagnostics-stop')) };
+  return {
+    order,
+    diagnostics,
+    createMastraCode: vi.fn(),
+    createDiagnostics: vi.fn(() => ({ diagnostics, enabled: true, error: null })),
+    startDiagnostics: vi.fn(async () => {
+      order.push('diagnostics-start');
+      return diagnostics;
+    }),
+    runMC: vi.fn(),
+  };
+});
+
+vi.mock('../index.js', () => ({ createMastraCode: lifecycleMocks.createMastraCode }));
+vi.mock('../process-memory-diagnostics.js', () => ({
+  createProcessMemoryDiagnosticsFromEnvironment: lifecycleMocks.createDiagnostics,
+  startConfiguredProcessMemoryDiagnostics: lifecycleMocks.startDiagnostics,
+}));
+vi.mock('./run-mc.js', () => ({ runMC: lifecycleMocks.runMC }));
+
+import { hasHeadlessFlag, parseHeadlessArgs, runMCCli } from './cli.js';
 import { buildParseArgsOptions, FLAGS, renderFlagUsage } from './flags.js';
 
 function argv(...rest: string[]): string[] {
@@ -169,6 +192,78 @@ describe('parseHeadlessArgs', () => {
       resourceId: 'r-9',
       settings: './ci.json',
     });
+  });
+});
+
+describe('runMCCli process memory diagnostics lifecycle', () => {
+  const originalArgv = process.argv;
+  let exitSpy: ReturnType<typeof vi.spyOn>;
+  let stderrSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    lifecycleMocks.order.length = 0;
+    lifecycleMocks.createMastraCode.mockReset();
+    lifecycleMocks.createDiagnostics.mockClear();
+    lifecycleMocks.startDiagnostics.mockClear();
+    lifecycleMocks.diagnostics.stop.mockClear();
+    lifecycleMocks.runMC.mockReset();
+    process.argv = argv('--prompt', 'do it');
+    stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    exitSpy = vi.spyOn(process, 'exit').mockImplementation(code => {
+      lifecycleMocks.order.push(`exit-${code}`);
+      throw new Error(`EXIT:${code}`);
+    });
+  });
+
+  afterEach(() => {
+    process.argv = originalArgv;
+    exitSpy.mockRestore();
+    stderrSpy.mockRestore();
+  });
+
+  it('starts diagnostics before Mastra Code and stops them before exit', async () => {
+    const controller = {
+      getMastra: vi.fn(() => ({ stopWorkers: vi.fn(async () => void lifecycleMocks.order.push('workers-stop')) })),
+      stopIntervals: vi.fn(async () => void lifecycleMocks.order.push('intervals-stop')),
+    };
+    lifecycleMocks.createMastraCode.mockImplementation(async () => {
+      lifecycleMocks.order.push('mastracode-create');
+      return {
+        controller,
+        session: {},
+        mcpManager: {
+          hasServers: () => false,
+          disconnect: vi.fn(async () => void lifecycleMocks.order.push('mcp-stop')),
+        },
+        effectiveDefaults: {},
+        signalsPubSub: { close: vi.fn(async () => void lifecycleMocks.order.push('signals-stop')) },
+        stopPluginSignalProviders: vi.fn(() => lifecycleMocks.order.push('providers-stop')),
+      };
+    });
+    lifecycleMocks.runMC.mockReturnValue({
+      async *[Symbol.asyncIterator]() {},
+      result: Promise.resolve({ status: 'completed', exitCode: 0 }),
+    });
+
+    await expect(runMCCli('do it')).rejects.toThrow('EXIT:0');
+
+    expect(lifecycleMocks.order.indexOf('diagnostics-start')).toBeLessThan(
+      lifecycleMocks.order.indexOf('mastracode-create'),
+    );
+    expect(lifecycleMocks.order.indexOf('diagnostics-stop')).toBeGreaterThan(
+      lifecycleMocks.order.indexOf('intervals-stop'),
+    );
+    expect(lifecycleMocks.order.at(-1)).toBe('exit-0');
+    expect(lifecycleMocks.diagnostics.stop).toHaveBeenCalledOnce();
+  });
+
+  it('stops diagnostics when Mastra Code startup fails', async () => {
+    lifecycleMocks.createMastraCode.mockRejectedValue(new Error('boot failed'));
+
+    await expect(runMCCli('do it')).rejects.toThrow('EXIT:1');
+
+    expect(lifecycleMocks.diagnostics.stop).toHaveBeenCalledOnce();
+    expect(lifecycleMocks.order).toEqual(['diagnostics-start', 'diagnostics-stop', 'exit-1']);
   });
 });
 

@@ -26,6 +26,7 @@ export interface SlashCommandContext {
   showError: (message: string) => void;
   updateStatusLine: () => void;
   stop: () => void;
+  exit?: (exitCode: number) => void;
   getResolvedWorkspace: () => Workspace | undefined;
   addUserMessage: (message: MastraDBMessage) => void;
   renderExistingMessages: () => Promise<void>;
