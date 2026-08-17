@@ -68,7 +68,7 @@ describe('Subconscious pinned knowledge', () => {
     const tools = createTools(memory, { maxScope: 'thread' });
     const pinned = await tools.knowledge_pin!.execute!({ text: 'thread ceiling pin' } as any, {} as any);
     const store = await getStore(memory);
-    const entity = await store.getNode(pinned.parentNodeId);
+    const entity = await store.getNode(pinned.node);
     expect(entity!.scope).toEqual(threadScope);
     const { pins } = await listPinnedKnowledge({ store, scope: threadScope });
     expect(pins.map(pin => pin.id)).toEqual([pinned.id]);
@@ -88,11 +88,11 @@ describe('Subconscious pinned knowledge', () => {
     const memory = createMemory();
     const tools = createTools(memory);
     const pinned = await tools.knowledge_pin!.execute!({ text: 'Never force push.' } as any, {} as any);
-    await tools.knowledge_unpin!.execute!({ itemId: pinned.id } as any, {} as any);
+    await tools.knowledge_unpin!.execute!({ recordId: pinned.id } as any, {} as any);
     const store = await getStore(memory);
     const { pins } = await listPinnedKnowledge({ store, scope: threadScope });
     expect(pins).toHaveLength(0);
-    const raw = await store.getItem({ id: pinned.id, includeDeleted: true });
+    const raw = await store.getKnowledge({ id: pinned.id, includeDeleted: true });
     expect(raw?.deletedAt).toBeTruthy();
   });
 
@@ -101,7 +101,7 @@ describe('Subconscious pinned knowledge', () => {
     const tools = createTools(memory);
     const a = await tools.knowledge_pin!.execute!({ text: 'keep me' } as any, {} as any);
     const b = await tools.knowledge_pin!.execute!({ text: 'drop me' } as any, {} as any);
-    await tools.knowledge_unpin!.execute!({ itemId: b.id } as any, {} as any);
+    await tools.knowledge_unpin!.execute!({ recordId: b.id } as any, {} as any);
     const { pins } = await listPinnedKnowledge({ store: await getStore(memory), scope: threadScope });
     expect(pins.map(pin => pin.id)).toEqual([a.id]);
   });
@@ -111,7 +111,7 @@ describe('Subconscious pinned knowledge', () => {
     const tools = createTools(memory);
     const pinned = await tools.knowledge_pin!.execute!({ text: 'Speak French.' } as any, {} as any);
     const edited = await tools.knowledge_edit_pin!.execute!(
-      { itemId: pinned.id, text: 'Speak French. Loudly.' } as any,
+      { recordId: pinned.id, text: 'Speak French. Loudly.' } as any,
       {} as any,
     );
     expect(edited.id).not.toBe(pinned.id);
@@ -155,12 +155,12 @@ describe('Subconscious pinned knowledge', () => {
     const tools = createTools(memory);
     const a = await tools.knowledge_pin!.execute!({ text: 'wide pin', scope: 'resource' } as any, {} as any);
     const b = await tools.knowledge_pin!.execute!({ text: 'narrow pin', scope: 'thread' } as any, {} as any);
-    expect(a.parentNodeId).toBe(b.parentNodeId);
+    expect(a.node).toBe(b.node);
     const store = await getStore(memory);
-    const entity = await store.getNode(a.parentNodeId);
+    const entity = await store.getNode(a.node);
     expect(entity?.name).toBe(PINNED_NODE_NAME);
     const { pins, nodeId } = await listPinnedKnowledge({ store, scope: threadScope });
-    expect(nodeId).toBe(a.parentNodeId);
+    expect(nodeId).toBe(a.node);
     expect(pins).toHaveLength(2);
   });
 
