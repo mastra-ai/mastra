@@ -37,8 +37,8 @@ function requestContext() {
 async function seedItem(memory: Memory, text = 'Atlas launches soon.') {
   const store = (await memory.storage.getStore('knowledge'))!;
   const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scope });
-  return store.appendItem({
-    parentNodeId: node.id,
+  return store.appendKnowledge({
+    node: node.id,
     text,
     scope,
     sourceThreadId: 'alpha',
@@ -70,7 +70,7 @@ describe('Memory.runCuration', () => {
     expect(generate).toHaveBeenCalledOnce();
     const store = (await memory.storage.getStore('knowledge'))!;
     expect(await store.getCurationCursor({ sourceThreadId: 'alpha', agent: 'curate' })).toMatchObject({
-      lastItemId: item.id,
+      lastKnowledgeId: item.id,
     });
   });
 

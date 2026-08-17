@@ -138,7 +138,7 @@ export class KnowledgeSemanticIndexCoordinator {
           processed++;
         } catch (error) {
           await this.#knowledge.releaseSemanticOutbox({
-            ids: entries.slice(index).map(item => item.id),
+            ids: entries.slice(index).map(pendingEntry => pendingEntry.id),
             workerId: this.#workerId,
           });
           throw new StaleKnowledgeSemanticIndexError(
@@ -200,19 +200,19 @@ export class KnowledgeSemanticIndexCoordinator {
         type: 'node',
       };
     }
-    const item = await this.#knowledge.getItem({
-      id: entry.documentId.slice('knowledge:item:'.length),
+    const record = await this.#knowledge.getKnowledge({
+      id: entry.documentId.slice('knowledge:record:'.length),
       includeDeleted: true,
     });
-    if (!item || item.deletedAt) return null;
-    const node = await this.#knowledge.getNode(item.parentNodeId);
+    if (!record || record.deletedAt) return null;
+    const node = await this.#knowledge.getNode(record.node);
     if (!node) return null;
     return {
-      text: `${node.name}\n${item.text}`,
+      text: `${node.name}\n${record.text}`,
       name: node.name,
-      scope: item.scope,
+      scope: record.scope,
       recordId: node.id,
-      type: 'item',
+      type: 'record',
     };
   }
 

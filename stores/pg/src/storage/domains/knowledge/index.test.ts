@@ -38,20 +38,20 @@ describe('PostgreSQL knowledge concurrency and indexes', () => {
     }
   });
 
-  it('round-trips item timestamps as UTC regardless of the process timezone', async () => {
+  it('round-trips knowledge record timestamps as UTC regardless of the process timezone', async () => {
     const store = createStore();
     await store.init();
     const scope = ['org:tz-probe'];
     const node = await store.createNode({ name: `TZ probe ${Date.now()}`, kind: 'test', scope });
-    const appended = await store.appendItem({
-      parentNodeId: node.id,
+    const appended = await store.appendKnowledge({
+      node: node.id,
       text: 'utc round-trip probe',
       scope,
       resolutionScope: scope,
       defaultScope: scope,
       sourceThreadId: 'tz-thread',
     });
-    const read = await store.getItem({ id: appended.id });
+    const read = await store.getKnowledge({ id: appended.id });
     expect(read?.capturedAt.toISOString()).toBe(appended.capturedAt.toISOString());
     expect(Math.abs((read?.capturedAt.getTime() ?? 0) - Date.now())).toBeLessThan(60_000);
   });
@@ -64,7 +64,7 @@ describe('PostgreSQL knowledge concurrency and indexes', () => {
       const store = new KnowledgePG({ pool, schemaName });
       await store.init();
       const node = await store.createNode({ name: 'Custom schema', kind: 'test', scope: ['org:acme'] });
-      await store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastItemId: '01A' });
+      await store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastKnowledgeId: '01A' });
       expect(await store.getNode(node.id)).toMatchObject({ name: 'Custom schema' });
       expect(await store.claimSemanticOutbox({ workerId: 'worker', limit: 10 })).toHaveLength(1);
       const indexes = await pool.query('SELECT indexname FROM pg_indexes WHERE schemaname=$1', [schemaName]);
@@ -114,11 +114,11 @@ describe('PostgreSQL knowledge concurrency and indexes', () => {
     await store.init();
     await store.dangerouslyClearAll();
     await Promise.allSettled([
-      store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastItemId: '01A' }),
-      store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastItemId: '01C' }),
-      store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastItemId: '01B' }),
+      store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastKnowledgeId: '01A' }),
+      store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastKnowledgeId: '01C' }),
+      store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastKnowledgeId: '01B' }),
     ]);
-    expect((await store.getCurationCursor({ sourceThreadId: 'thread', agent: 'curate' }))?.lastItemId).toBe('01C');
+    expect((await store.getCurationCursor({ sourceThreadId: 'thread', agent: 'curate' }))?.lastKnowledgeId).toBe('01C');
   });
 });
 

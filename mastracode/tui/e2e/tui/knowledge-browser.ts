@@ -69,9 +69,9 @@ export const knowledgeBrowserScenario: McE2eScenario = {
           kind: 'secret',
           scope: foreignScope,
         });
-        await knowledge.appendItem({
+        await knowledge.appendKnowledge({
           id: '01KXKNOWLEDGEFACT0000000001',
-          parentNodeId: atlas.id,
+          node: atlas.id,
           text: 'Atlas launch depends on [[Beta service]].',
           scope: resourceScope,
           sourceThreadId: primary.id,
@@ -79,9 +79,9 @@ export const knowledgeBrowserScenario: McE2eScenario = {
           defaultScope: resourceScope,
         });
         for (let index = 0; index < 25; index++) {
-          await knowledge.appendItem({
+          await knowledge.appendKnowledge({
             id: `01KXKNOWLEDGEFILLER${String(index).padStart(8, '0')}`,
-            parentNodeId: atlas.id,
+            node: atlas.id,
             text: `Atlas launch checkpoint ${index + 1} is complete.`,
             scope: resourceScope,
             sourceThreadId: primary.id,
@@ -89,9 +89,9 @@ export const knowledgeBrowserScenario: McE2eScenario = {
             defaultScope: resourceScope,
           });
         }
-        await knowledge.appendItem({
+        await knowledge.appendKnowledge({
           id: '01KXKNOWLEDGEFACT0000000002',
-          parentNodeId: beta.id,
+          node: beta.id,
           text: 'Beta service health checks are green.',
           scope: resourceScope,
           sourceThreadId: primary.id,
@@ -166,7 +166,7 @@ export const knowledgeBrowserScenario: McE2eScenario = {
     terminal.write('\x7f');
     terminal.write('\t');
     await runtime.waitForScreenText(/\[activity\]/i, terminal);
-    await runtime.waitForScreenText(/node-created:|item-created:/i, terminal);
+    await runtime.waitForScreenText(/node-created:|record-created:/i, terminal);
     runtime.printScreen('knowledge activity', terminal);
 
     terminal.write('\x1b');

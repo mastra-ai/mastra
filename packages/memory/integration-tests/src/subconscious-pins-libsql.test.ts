@@ -59,18 +59,18 @@ describe('Subconscious pinned facts against LibSQL', () => {
     expect(pins.map(pin => pin.text)).toEqual(['Always answer in French.']);
 
     const edited = await tools.knowledge_edit_pin!.execute!(
-      { itemId: pinned.id, text: 'Always answer in French. Politely.' } as any,
+      { recordId: pinned.id, text: 'Always answer in French. Politely.' } as any,
       {} as any,
     );
     expect(edited.id).not.toBe(pinned.id);
     ({ pins } = await listPinnedKnowledge({ store, scope: threadScope }));
     expect(pins.map(pin => pin.id)).toEqual([edited.id]);
 
-    await tools.knowledge_unpin!.execute!({ itemId: edited.id } as any, {} as any);
+    await tools.knowledge_unpin!.execute!({ recordId: edited.id } as any, {} as any);
     ({ pins } = await listPinnedKnowledge({ store, scope: threadScope }));
     expect(pins).toHaveLength(0);
 
-    const rawDeleted = await store.getItem({ id: edited.id, includeDeleted: true });
+    const rawDeleted = await store.getKnowledge({ id: edited.id, includeDeleted: true });
     expect(rawDeleted?.deletedAt).toBeTruthy();
   });
 
@@ -97,8 +97,8 @@ describe('Subconscious pinned facts against LibSQL', () => {
     expect(delta).toMatchObject({ mode: 'delta' });
     expect((delta as any).delta.ops).toEqual([{ op: 'add', pin: { id: second.id, text: 'second pin' } }]);
 
-    await tools.knowledge_unpin!.execute!({ itemId: first.id } as any, {} as any);
-    await tools.knowledge_unpin!.execute!({ itemId: second.id } as any, {} as any);
+    await tools.knowledge_unpin!.execute!({ recordId: first.id } as any, {} as any);
+    await tools.knowledge_unpin!.execute!({ recordId: second.id } as any, {} as any);
     const clear = await processor.computeStateSignal(
       makeArgs({
         contextWindow: { hasSnapshot: true },

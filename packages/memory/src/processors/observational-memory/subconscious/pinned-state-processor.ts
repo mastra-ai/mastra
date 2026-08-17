@@ -8,7 +8,7 @@
  * when nothing changed and the base snapshot is still visible, emit nothing so
  * the cached prompt prefix stays stable.
  *
- * Pins are KnowledgeItems on a reserved node (see ./pinned), so each entry
+ * Pins are KnowledgeRecords on a reserved node (see ./pinned), so each entry
  * has a stable id and a delta can say exactly which pin appeared or left.
  * There is no `update` op: editing a pin is remove-plus-append in storage, so
  * an edit arrives as a `remove` of the old id and an `add` of the new one.
@@ -147,7 +147,7 @@ export class PinnedStateProcessor implements Processor<typeof SUBCONSCIOUS_PINS_
     return canonicalizeKnowledgeScope([`org:${organizationId}`, `resource:${resourceId}`, `thread:${args.threadId}`]);
   }
 
-  // One node resolve plus one paged item read per turn; memoized on the
+  // One node resolve plus one paged record read per turn; memoized on the
   // request context so multiple steps in the same turn share one read. The
   // request context can outlive the turn, so the memo is only trusted after
   // step 0: a new turn (step 0) always reads fresh and overwrites it.

@@ -91,8 +91,8 @@ describe('Subconscious remind', () => {
       kind: 'project',
       scope: ['org:acme', 'resource:user-42'],
     });
-    const item = await store.appendItem({
-      parentNodeId: node.id,
+    const record = await store.appendKnowledge({
+      node: node.id,
       text: 'Project Atlas launches January 15.',
       scope: ['org:acme', 'resource:user-42'],
       sourceThreadId: 'beta',
@@ -100,7 +100,7 @@ describe('Subconscious remind', () => {
       defaultScope: ['org:acme', 'resource:user-42'],
     });
     context.mainAgent.getModel = vi.fn(async () =>
-      createModel(`Project Atlas launches January 15. Source: ${item.id}`),
+      createModel(`Project Atlas launches January 15. Source: ${record.id}`),
     );
 
     const result = await applyExtractorHooks({
@@ -116,10 +116,10 @@ describe('Subconscious remind', () => {
       expect.objectContaining({
         type: 'reactive',
         tagName: 'remembered',
-        contents: expect.stringContaining(item.id),
+        contents: expect.stringContaining(record.id),
         attributes: expect.objectContaining({
           source: 'subconscious',
-          sourceIds: expect.stringContaining(item.id),
+          sourceIds: expect.stringContaining(record.id),
           agent: 'remind',
           threadId: 'alpha',
         }),
@@ -127,7 +127,7 @@ describe('Subconscious remind', () => {
     );
   });
 
-  it.each(['Project Atlas launches January 15.', 'Project Atlas launches January 15. Source: invented-item-id'])(
+  it.each(['Project Atlas launches January 15.', 'Project Atlas launches January 15. Source: invented-record-id'])(
     'suppresses an ungrounded reminder: %s',
     async response => {
       const extractor = new SubconsciousRemindExtractor({
@@ -142,8 +142,8 @@ describe('Subconscious remind', () => {
         kind: 'project',
         scope: ['org:acme', 'resource:user-42'],
       });
-      await store.appendItem({
-        parentNodeId: node.id,
+      await store.appendKnowledge({
+        node: node.id,
         text: 'Project Atlas launches January 15.',
         scope: ['org:acme', 'resource:user-42'],
         sourceThreadId: 'alpha',
@@ -182,10 +182,10 @@ describe('Subconscious remind', () => {
   });
 
   it('runs on the observational memory model when no main agent is available', async () => {
-    const itemId = 'item-atlas-launch';
+    const recordId = 'item-atlas-launch';
     const extractor = new SubconsciousRemindExtractor(
       { name: 'remind', maxSteps: 3, builtIn: true },
-      createModel(`Project Atlas launches January 15. Source KnowledgeItem: ${itemId}.`) as any,
+      createModel(`Project Atlas launches January 15. Source KnowledgeRecord: ${recordId}.`) as any,
     );
     const context = createContext('unused');
     delete (context as any).mainAgent;
@@ -195,9 +195,9 @@ describe('Subconscious remind', () => {
       kind: 'project',
       scope: ['org:acme', 'resource:user-42'],
     });
-    const item = await store.appendItem({
-      id: itemId,
-      parentNodeId: node.id,
+    const item = await store.appendKnowledge({
+      id: recordId,
+      node: node.id,
       text: 'Project Atlas launches January 15.',
       scope: ['org:acme', 'resource:user-42'],
       sourceThreadId: 'beta',
@@ -219,7 +219,7 @@ describe('Subconscious remind', () => {
     );
   });
 
-  it("does not echo the thread's own freshly captured items back as reminders", async () => {
+  it("does not echo the thread's own freshly captured records back as reminders", async () => {
     const extractor = new SubconsciousRemindExtractor({
       name: 'remind',
       maxSteps: 3,
@@ -233,8 +233,8 @@ describe('Subconscious remind', () => {
       scope: ['org:acme', 'resource:user-42'],
     });
     // Captured by THIS thread, moments ago: the reminder must not whisper it back.
-    await store.appendItem({
-      parentNodeId: node.id,
+    await store.appendKnowledge({
+      node: node.id,
       text: 'The launch happens January 15.',
       scope: ['org:acme', 'resource:user-42'],
       sourceThreadId: 'alpha',
@@ -267,8 +267,8 @@ describe('Subconscious remind', () => {
       scope: ['org:acme', 'resource:user-42'],
     });
     // Written moments ago by this thread's own curator sub-thread.
-    await store.appendItem({
-      parentNodeId: node.id,
+    await store.appendKnowledge({
+      node: node.id,
       text: 'The launch happens January 15.',
       scope: ['org:acme', 'resource:user-42'],
       sourceThreadId: 'subconscious:alpha:curate',
@@ -302,8 +302,8 @@ describe('Subconscious remind', () => {
         kind: 'program',
         scope: ['org:acme', 'resource:user-42'],
       });
-      const item = await store.appendItem({
-        parentNodeId: node.id,
+      const item = await store.appendKnowledge({
+        node: node.id,
         text: 'The launch happens January 15.',
         scope: ['org:acme', 'resource:user-42'],
         sourceThreadId: 'alpha',
@@ -348,8 +348,8 @@ describe('Subconscious remind', () => {
         kind: 'topic',
         scope: ['org:acme', 'resource:user-42'],
       });
-      await store.appendItem({
-        parentNodeId: node.id,
+      await store.appendKnowledge({
+        node: node.id,
         text: 'The moon has no weather to speak of.',
         scope: ['org:acme', 'resource:user-42'],
         sourceThreadId: 'beta',
@@ -406,8 +406,8 @@ describe('Subconscious remind', () => {
       kind: 'project',
       scope: ['org:acme', 'resource:user-42'],
     });
-    await store.appendItem({
-      parentNodeId: node.id,
+    await store.appendKnowledge({
+      node: node.id,
       text: 'Project Atlas launches January 15.',
       scope: ['org:acme', 'resource:user-42'],
       sourceThreadId: 'beta',
