@@ -380,6 +380,9 @@ export const getCombinedSystemPrompt = (input?: unknown): string => {
  * output (`{ text }`), task output (`{ content }`), a single assistant message
  * object, and a bare string.
  *
+ * For array outputs the final assistant message is used, so multi-step agent
+ * responses are scored on the last response rather than an intermediate one.
+ *
  * @param output - The scorer run output
  * @returns The assistant message text, or `undefined` if none can be extracted
  *
@@ -394,7 +397,18 @@ export const getCombinedSystemPrompt = (input?: unknown): string => {
  */
 export const getAssistantMessageFromRunOutput = (output?: unknown) => {
   if (typeof output === 'string') return output;
-  if (Array.isArray(output)) return getTextFromMessages(output, 'assistant');
+  if (Array.isArray(output)) {
+    const assistantMessages = output.filter(
+      message => isRecord(message) && getEffectiveMessageRole(message) === 'assistant',
+    );
+    // Prefer the last assistant message that carries text; a trailing assistant
+    // message may hold only tool-call or data parts.
+    for (let i = assistantMessages.length - 1; i >= 0; i--) {
+      const text = getTextFromValue(assistantMessages[i]);
+      if (text) return text;
+    }
+    return undefined;
+  }
   if (!isRecord(output)) return undefined;
 
   const isAssistantOutput = output.role === undefined || output.role === 'assistant';
