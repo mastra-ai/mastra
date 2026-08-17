@@ -1,3 +1,4 @@
+import { FileNotFoundError, IsDirectoryError } from '@mastra/core/workspace';
 import { describe, expect, it } from 'vitest';
 import { SandboxFilesystem } from './sandbox-filesystem.js';
 import type { SandboxCommandResult, SandboxExec } from './sandbox-filesystem.js';
@@ -25,9 +26,14 @@ class FakeSandbox implements SandboxExec {
 
 const WORKDIR = '/workspace/repo';
 
-/** The realpath containment guard script starts by assigning the target path. */
+/**
+ * The STANDALONE realpath containment guard (write paths, move/copy sources)
+ * assigns the target path and prints root + realpath. Read ops fold their
+ * containment into the same script as the operation (identified by the
+ * `case "$rp"` comparison), so they no longer match here.
+ */
 function isContainmentCheck(script: string): boolean {
-  return script.startsWith('p=');
+  return script.startsWith('p=') && script.includes(`printf '%s\\n%s'`);
 }
 
 /** Containment guard output: canonicalized root on line 1, target realpath on line 2. */
@@ -51,11 +57,7 @@ describe('SandboxFilesystem', () => {
   it('reads a file via base64 and decodes it', async () => {
     const content = 'hello world';
     const b64 = Buffer.from(content, 'utf8').toString('base64');
-    const { sandbox, fs } = makeFs(script => {
-      // The realpath containment check runs first; resolve it inside the workdir.
-      if (isContainmentCheck(script)) return realpathResult(`${WORKDIR}/src/index.ts`);
-      return { exitCode: 0, stdout: b64, stderr: '' };
-    });
+    const { sandbox, fs } = makeFs(() => ({ exitCode: 0, stdout: b64, stderr: '' }));
 
     const result = await fs.readFile('/src/index.ts', { encoding: 'utf8' });
 
@@ -63,25 +65,76 @@ describe('SandboxFilesystem', () => {
     expect(sandbox.calls.some(c => c.includes(`base64 < '${WORKDIR}/src/index.ts'`))).toBe(true);
   });
 
+  // Read-op containment is folded into the op's own script: the shell exits
+  // with a sentinel code (escape / cannot-canonicalize) BEFORE the read runs.
+  const CONTAINMENT_ESCAPE = { exitCode: 23, stdout: '', stderr: '' };
+  const CANNOT_CANONICALIZE = { exitCode: 24, stdout: '', stderr: '' };
+
   it('rejects a symlink whose realpath escapes the workspace root', async () => {
-    const { fs } = makeFs(script => {
-      if (isContainmentCheck(script)) return realpathResult('/etc/passwd');
-      return { exitCode: 0, stdout: '', stderr: '' };
-    });
+    const { fs, sandbox } = makeFs(() => CONTAINMENT_ESCAPE);
 
     await expect(fs.readFile('/link')).rejects.toThrow(/escapes workspace root \(symlink\)/);
+    // The containment comparison runs inside the same script, before the read.
+    const script = sandbox.calls[0]!;
+    expect(script.indexOf('case "$rp"')).toBeGreaterThanOrEqual(0);
+    expect(script.indexOf('case "$rp"')).toBeLessThan(script.indexOf('base64 <'));
+  });
+
+  it('escaping symlinks are rejected by every read op', async () => {
+    const { fs } = makeFs(() => CONTAINMENT_ESCAPE);
+    await expect(fs.stat('/link')).rejects.toThrow(/escapes workspace root \(symlink\)/);
+    await expect(fs.readdir('/link')).rejects.toThrow(/escapes workspace root \(symlink\)/);
+    await expect(fs.readdir('/link', { recursive: true })).rejects.toThrow(/escapes workspace root \(symlink\)/);
   });
 
   it('fails closed when an existing path cannot be canonicalized', async () => {
     // If no canonicalization tool works, skipping the check would let a
     // symlink bypass containment — the operation must fail instead.
-    const { fs, sandbox } = makeFs(script => {
-      if (isContainmentCheck(script)) return { exitCode: 1, stdout: '', stderr: '' };
-      return { exitCode: 0, stdout: '', stderr: '' };
-    });
+    const { fs } = makeFs(() => CANNOT_CANONICALIZE);
 
     await expect(fs.readFile('/link')).rejects.toThrow(/Unable to verify path stays within workspace root/);
-    expect(sandbox.calls.some(c => c.includes('base64 <'))).toBe(false);
+    await expect(fs.stat('/link')).rejects.toThrow(/Unable to verify path stays within workspace root/);
+    await expect(fs.readdir('/link')).rejects.toThrow(/Unable to verify path stays within workspace root/);
+  });
+
+  it('preserves per-op error types with the folded scripts', async () => {
+    // readFile: missing -> FileNotFoundError, directory -> IsDirectoryError
+    const { fs: missingFs } = makeFs(() => ({ exitCode: 20, stdout: '', stderr: '' }));
+    await expect(missingFs.readFile('/gone.txt')).rejects.toBeInstanceOf(FileNotFoundError);
+
+    const { fs: dirFs } = makeFs(() => ({ exitCode: 21, stdout: '', stderr: '' }));
+    await expect(dirFs.readFile('/some-dir')).rejects.toBeInstanceOf(IsDirectoryError);
+
+    // stat: missing -> FileNotFoundError (stat itself exits 1)
+    const { fs: statFs } = makeFs(() => ({ exitCode: 1, stdout: '', stderr: '' }));
+    await expect(statFs.stat('/gone.txt')).rejects.toBeInstanceOf(FileNotFoundError);
+
+    // readdir: missing -> plain Error('Directory not found: <path>'), NOT FileNotFoundError
+    const { fs: dirlessFs } = makeFs(() => ({ exitCode: 1, stdout: '', stderr: '' }));
+    const readdirError = await dirlessFs.readdir('/gone').catch((e: unknown) => e);
+    expect(readdirError).toBeInstanceOf(Error);
+    expect(readdirError).not.toBeInstanceOf(FileNotFoundError);
+    expect((readdirError as Error).message).toBe('Directory not found: /gone');
+  });
+
+  it('issues exactly one exec per read op on the happy path', async () => {
+    const b64 = Buffer.from('x', 'utf8').toString('base64');
+    const { sandbox, fs } = makeFs(script => {
+      if (script.includes('stat -c')) return { exitCode: 0, stdout: 'regular file|1|1700000000|-1\n', stderr: '' };
+      if (script.includes('base64 <')) return { exitCode: 0, stdout: b64, stderr: '' };
+      return { exitCode: 0, stdout: 'f\ta.txt\n', stderr: '' };
+    });
+
+    await fs.stat('/a.txt');
+    expect(sandbox.calls.length).toBe(1);
+
+    sandbox.calls.length = 0;
+    await fs.readFile('/a.txt');
+    expect(sandbox.calls.length).toBe(1);
+
+    sandbox.calls.length = 0;
+    await fs.readdir('/');
+    expect(sandbox.calls.length).toBe(1);
   });
 
   it('rejects a write whose parent directory is a symlink escaping the workspace', async () => {
@@ -155,10 +208,7 @@ describe('SandboxFilesystem', () => {
   });
 
   it('lists a directory and parses type/name pairs', async () => {
-    const { sandbox, fs } = makeFs(script => {
-      if (isContainmentCheck(script)) return realpathResult(WORKDIR);
-      return { exitCode: 0, stdout: 'd\tsrc\nf\tREADME.md\n', stderr: '' };
-    });
+    const { sandbox, fs } = makeFs(() => ({ exitCode: 0, stdout: 'd\tsrc\nf\tREADME.md\n', stderr: '' }));
 
     const entries = await fs.readdir('/');
 
@@ -170,10 +220,7 @@ describe('SandboxFilesystem', () => {
   });
 
   it('stats a file and returns parsed metadata', async () => {
-    const { fs } = makeFs(script => {
-      if (isContainmentCheck(script)) return realpathResult(`${WORKDIR}/a.txt`);
-      return { exitCode: 0, stdout: 'regular file|42|1700000000|-1\n', stderr: '' };
-    });
+    const { fs } = makeFs(() => ({ exitCode: 0, stdout: 'regular file|42|1700000000|-1\n', stderr: '' }));
 
     const stat = await fs.stat('/a.txt');
 
@@ -200,10 +247,7 @@ describe('SandboxFilesystem', () => {
   });
 
   it('normalizes .. segments inside an absolute workdir path', async () => {
-    const { sandbox, fs } = makeFs(script => {
-      if (isContainmentCheck(script)) return realpathResult(`${WORKDIR}/notes.txt`);
-      return { exitCode: 0, stdout: '', stderr: '' };
-    });
+    const { sandbox, fs } = makeFs(() => ({ exitCode: 0, stdout: '', stderr: '' }));
 
     await fs.readFile(`${WORKDIR}/src/../notes.txt`);
     expect(sandbox.calls.some(c => c.includes(`base64 < '${WORKDIR}/notes.txt'`))).toBe(true);
@@ -211,7 +255,6 @@ describe('SandboxFilesystem', () => {
 
   it('falls back to BSD stat when GNU stat is unavailable', async () => {
     const { fs } = makeFs(script => {
-      if (isContainmentCheck(script)) return realpathResult(`${WORKDIR}/dir`);
       // Simulate macOS: the `stat -c || stat -f` compound runs BSD output.
       if (script.includes('stat -c')) {
         expect(script).toContain('stat -f');
@@ -225,10 +268,11 @@ describe('SandboxFilesystem', () => {
   });
 
   it('lists recursively without GNU find -printf', async () => {
-    const { sandbox, fs } = makeFs(script => {
-      if (isContainmentCheck(script)) return realpathResult(WORKDIR);
-      return { exitCode: 0, stdout: `d\t${WORKDIR}/src\nf\t${WORKDIR}/src/index.ts\n`, stderr: '' };
-    });
+    const { sandbox, fs } = makeFs(() => ({
+      exitCode: 0,
+      stdout: `d\t${WORKDIR}/src\nf\t${WORKDIR}/src/index.ts\n`,
+      stderr: '',
+    }));
 
     const entries = await fs.readdir('/', { recursive: true });
 
