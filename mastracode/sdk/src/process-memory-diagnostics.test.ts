@@ -257,6 +257,8 @@ describe('ProcessMemoryDiagnostics', () => {
 
     expect(status.state).toBe('error');
     expect(status.error).toContain('inspector unavailable');
+    expect(status.outputDirectory).toBeNull();
+    expect(await readdir(harness.parentDirectory)).toEqual([]);
     expect(harness.observer.disconnect).toHaveBeenCalledOnce();
     expect(harness.inspector.disconnect).toHaveBeenCalledOnce();
   });

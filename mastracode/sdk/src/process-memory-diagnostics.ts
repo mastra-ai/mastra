@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { appendFile, chmod, mkdir, rename, writeFile } from 'node:fs/promises';
+import { appendFile, chmod, mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { Session } from 'node:inspector/promises';
 import { join } from 'node:path';
 import { PerformanceObserver, type PerformanceEntry } from 'node:perf_hooks';
@@ -548,5 +548,12 @@ export class ProcessMemoryDiagnostics {
     this.clearTimersAndObserver();
     this.disconnectInspector();
     await this.writeQueue;
+    try {
+      if (this.outputDirectory) await rm(this.outputDirectory, { recursive: true, force: true });
+    } catch (error) {
+      this.latestError = `${this.latestError} Failed to remove partial artifacts: ${errorMessage(error)}`;
+    } finally {
+      this.outputDirectory = null;
+    }
   }
 }
