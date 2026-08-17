@@ -1,6 +1,6 @@
 ---
 title: "Reference: createCodingAgent() | Coding Agent"
-description: "API reference for createCodingAgent(), which builds a coding agent with portable defaults for workspace, task signals with memory, error retries, and goal judge."
+description: "API reference for createCodingAgent(), which builds a coding agent with the essential defaults for workspace, task signals with memory, error retries, and goal judge."
 packages:
   - "@mastra/core"
 ---
@@ -9,7 +9,7 @@ packages:
 
 **Added in:** `@mastra/core@1.48.0`
 
-`createCodingAgent()` builds a coding [`Agent`](/reference/agents/agent) with portable defaults for the pieces a coding agent always needs: a local workspace, the task-list signal provider when `memory` is configured, network-retry error processors, and the goal judge prompt. Supply only `model` and `instructions` to get a working agent, or override any default.
+`createCodingAgent()` builds a coding [`Agent`](/reference/agents/agent) with the essential defaults a coding agent always needs: a local workspace, the task-list signal provider when `memory` is configured, network-retry error processors, and the goal judge prompt. Supply only `model` and `instructions` to get a working agent, or override any default.
 
 The returned value is a standard `Agent`, so it works anywhere an `Agent` does: including as the agent passed to an [`AgentController`](/reference/agent-controller/agent-controller-class). The function lives in `@mastra/core` with no hosted service behind it, and every default it fills in is a primitive you can also configure on [`new Agent()`](/reference/agents/agent) yourself.
 
