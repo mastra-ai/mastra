@@ -88,25 +88,11 @@ describe('READ_AGENT_PLAN_ROUTE', () => {
     });
   });
 
-  describe('when the plan exceeds the maximum readable size', () => {
-    it('rejects the file before reading it into the response', async () => {
+  describe('when the submitted plan is larger than 512 KiB', () => {
+    it('returns the complete plan markdown', async () => {
       const { filesystem, mastra } = await createPlanAgent();
-      const path = '.mastracode/plans/oversized.md';
-      await filesystem.writeFile(path, 'x'.repeat(512 * 1024 + 1), { recursive: true });
-
-      await expect(
-        READ_AGENT_PLAN_ROUTE.handler({
-          ...createTestServerContext({ mastra }),
-          agentId: 'plan-agent',
-          path,
-        }),
-      ).rejects.toThrow(new HTTPException(413, { message: 'Plan file exceeds the 512 KiB limit' }));
-    });
-
-    it('allows a plan at the maximum readable size', async () => {
-      const { filesystem, mastra } = await createPlanAgent();
-      const path = '.mastracode/plans/maximum.md';
-      const content = 'x'.repeat(512 * 1024);
+      const path = '.mastracode/plans/large.md';
+      const content = 'x'.repeat(512 * 1024 + 1);
       await filesystem.writeFile(path, content, { recursive: true });
 
       const result = await READ_AGENT_PLAN_ROUTE.handler({

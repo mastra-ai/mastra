@@ -7,7 +7,6 @@ import { getAgentFromSystem } from './agents';
 import { handleError } from './error';
 
 const PLANS_DIRECTORY = '.mastracode/plans/';
-const MAX_PLAN_FILE_SIZE_BYTES = 512 * 1024;
 
 function isPlanPath(path: string): boolean {
   if (!path.startsWith(PLANS_DIRECTORY)) return false;
@@ -55,11 +54,6 @@ export const READ_AGENT_PLAN_ROUTE = createRoute({
       }
       if (!(await filesystem.exists(path))) {
         throw new HTTPException(404, { message: `Plan file "${path}" not found` });
-      }
-
-      const stats = await filesystem.stat(path);
-      if (stats.size > MAX_PLAN_FILE_SIZE_BYTES) {
-        throw new HTTPException(413, { message: 'Plan file exceeds the 512 KiB limit' });
       }
 
       const content = await filesystem.readFile(path, { encoding: 'utf-8' });
