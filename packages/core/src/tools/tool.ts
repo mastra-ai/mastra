@@ -26,6 +26,44 @@ import { validateToolInput, validateToolOutput, validateToolSuspendData, validat
 export const MASTRA_TOOL_MARKER = Symbol.for('mastra.core.tool.Tool');
 
 /**
+ * Exposes schema-transformed values for one tool execution while keeping
+ * explicit mutations connected to the shared request context.
+ */
+class TransformedRequestContext extends RequestContext<Record<string, any>> {
+  readonly #source: RequestContext;
+
+  constructor(source: RequestContext, transformedValues: Record<string, unknown>) {
+    super(Object.entries({ ...source.all, ...transformedValues }));
+    this.#source = source;
+  }
+
+  public override set(key: string, value: any): void {
+    super.set(key, value);
+    this.#source.setRaw(key, value);
+  }
+
+  public override setRaw(key: string, value: unknown): void {
+    super.setRaw(key, value);
+    this.#source.setRaw(key, value);
+  }
+
+  public override delete(key: string): boolean {
+    this.#source.deleteRaw(key);
+    return super.delete(key);
+  }
+
+  public override deleteRaw(key: string): boolean {
+    this.#source.deleteRaw(key);
+    return super.deleteRaw(key);
+  }
+
+  public override clear(): void {
+    super.clear();
+    this.#source.clear();
+  }
+}
+
+/**
  * A type-safe tool that agents and workflows can call to perform specific actions.
  *
  * @template TSchemaIn - Input schema type
@@ -331,7 +369,7 @@ export class Tool<
         }
 
         // Validate request context if schema exists
-        const { error: requestContextError } = validateRequestContext(
+        const { data: validatedRequestContext, error: requestContextError } = validateRequestContext(
           this.requestContextSchema,
           context?.requestContext,
           this.id,
@@ -339,6 +377,13 @@ export class Tool<
         if (requestContextError) {
           return requestContextError as any;
         }
+
+        const executionRequestContext = this.requestContextSchema
+          ? new TransformedRequestContext(
+              context?.requestContext ?? new RequestContext(),
+              validatedRequestContext as Record<string, unknown>,
+            )
+          : context?.requestContext;
 
         let suspendData = null;
 
@@ -361,7 +406,7 @@ export class Tool<
         if (!context) {
           // No context provided - create a minimal context with requestContext
           organizedContext = {
-            requestContext: new RequestContext(),
+            requestContext: executionRequestContext ?? new RequestContext(),
             mastra: undefined,
           };
         } else {
@@ -398,7 +443,7 @@ export class Tool<
                 writableStream,
               },
               // Ensure requestContext is always present
-              requestContext: rest.requestContext || new RequestContext(),
+              requestContext: executionRequestContext ?? new RequestContext(),
             };
           } else if (isWorkflowExecution && !baseContext.workflow) {
             // Reorganize workflow context - nest workflow-specific properties under 'workflow' key
@@ -414,7 +459,7 @@ export class Tool<
                 resumeData,
               },
               // Ensure requestContext is always present
-              requestContext: rest.requestContext || new RequestContext(),
+              requestContext: executionRequestContext ?? new RequestContext(),
             };
           } else {
             // Ensure requestContext is always present even for direct execution
@@ -439,7 +484,7 @@ export class Tool<
                     },
                   }
                 : baseContext.workflow,
-              requestContext: baseContext.requestContext || new RequestContext(),
+              requestContext: executionRequestContext ?? new RequestContext(),
             };
           }
         }

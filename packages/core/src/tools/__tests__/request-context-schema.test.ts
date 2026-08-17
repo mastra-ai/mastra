@@ -172,6 +172,121 @@ describe('Tool requestContextSchema', () => {
     });
   });
 
+  describe('schema transformations', () => {
+    const dateCodec = z.codec(z.string(), z.date(), {
+      decode: value => new Date(value),
+      encode: value => value.toISOString(),
+    });
+
+    it('should pass transformed values to execute', async () => {
+      let capturedDate: unknown;
+      const tool = createTool({
+        id: 'transform-tool',
+        description: 'A test tool',
+        requestContextSchema: z.object({ date: dateCodec }),
+        execute: async (_, context) => {
+          capturedDate = context.requestContext.get('date');
+          return { success: true };
+        },
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('date', '2026-08-17T00:00:00.000Z');
+
+      await tool.execute!({}, { requestContext });
+
+      expect(capturedDate).toBeInstanceOf(Date);
+      expect((capturedDate as Date).toISOString()).toBe('2026-08-17T00:00:00.000Z');
+    });
+
+    it.each([undefined, {}])('should apply schema defaults when request context is missing', async context => {
+      let capturedMode: string | undefined;
+      const tool = createTool({
+        id: 'default-tool',
+        description: 'A test tool',
+        requestContextSchema: z.object({ mode: z.string().default('fast') }),
+        execute: async (_, { requestContext }) => {
+          capturedMode = requestContext.get('mode');
+          return { success: true };
+        },
+      });
+
+      await tool.execute!({}, context as any);
+
+      expect(capturedMode).toBe('fast');
+    });
+
+    it('should preserve values outside the schema without mutating transformed values in the source', async () => {
+      const capturedValues: Array<{ date: unknown; traceId: unknown }> = [];
+      const tool = createTool({
+        id: 'transform-tool',
+        description: 'A test tool',
+        requestContextSchema: z.object({ date: dateCodec }),
+        execute: async (_, { requestContext }) => {
+          capturedValues.push({
+            date: requestContext.get('date'),
+            traceId: requestContext.getRaw('traceId'),
+          });
+          return { success: true };
+        },
+      });
+      const requestContext = new RequestContext();
+      requestContext.set('date', '2026-08-17T00:00:00.000Z');
+      requestContext.set('traceId', 'trace-123');
+
+      await tool.execute!({}, { requestContext });
+      await tool.execute!({}, { requestContext });
+
+      expect(capturedValues).toEqual([
+        { date: new Date('2026-08-17T00:00:00.000Z'), traceId: 'trace-123' },
+        { date: new Date('2026-08-17T00:00:00.000Z'), traceId: 'trace-123' },
+      ]);
+      expect(requestContext.get('date')).toBe('2026-08-17T00:00:00.000Z');
+    });
+
+    it('should write explicit mutations through to the source request context', async () => {
+      const tool = createTool({
+        id: 'mutation-tool',
+        description: 'A test tool',
+        requestContextSchema: z.object({ date: dateCodec, mode: z.string() }),
+        execute: async (_, { requestContext }) => {
+          requestContext.set('mode', 'slow');
+          requestContext.setRaw('added', 'value');
+          requestContext.delete('date');
+          requestContext.deleteRaw('removed');
+          return { success: true };
+        },
+      });
+      const requestContext = new RequestContext();
+      requestContext.set('date', '2026-08-17T00:00:00.000Z');
+      requestContext.set('mode', 'fast');
+      requestContext.set('removed', true);
+
+      await tool.execute!({}, { requestContext });
+
+      expect(requestContext.all).toEqual({ mode: 'slow', added: 'value' });
+    });
+
+    it('should clear the source request context when execute clears its view', async () => {
+      const tool = createTool({
+        id: 'clear-tool',
+        description: 'A test tool',
+        requestContextSchema: z.object({ date: dateCodec }),
+        execute: async (_, { requestContext }) => {
+          requestContext.clear();
+          return { success: true };
+        },
+      });
+      const requestContext = new RequestContext();
+      requestContext.set('date', '2026-08-17T00:00:00.000Z');
+      requestContext.set('traceId', 'trace-123');
+
+      await tool.execute!({}, { requestContext });
+
+      expect(requestContext.size()).toBe(0);
+    });
+  });
+
   describe('combined with inputSchema validation', () => {
     it('should validate both inputSchema and requestContextSchema', async () => {
       const inputSchema = z.object({
