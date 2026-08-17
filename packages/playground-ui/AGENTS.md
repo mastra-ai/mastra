@@ -27,5 +27,7 @@ journey. Run e2e-frontend-validation for frontend changes before merging when
 applicable.
 
 This package needs both component validation and realistic UI validation.
+Always include mobile, tablet, and desktop screenshots when handing off any UI
+modification.
 Preserve design-system consistency and existing component APIs where possible.
 Do not add new `asChild` usage; prefer Base UI's native `render` prop for stronger type safety.
