@@ -478,7 +478,7 @@ Review my current git diff. Look for bugs, security issues,
 and violations of the project's coding standards.
 ```
 
-The filename (or directory structure) determines the command name. For example, `git/commit.md` becomes `/git:commit`.
+The filename (or directory structure) determines the command name. For example, `git/commit.md` becomes `/git:commit`. Mastra Code scans nested command directories but ignores directories named `node_modules`.
 
 Commands support variables like `$ARGUMENTS` for positional args, `@filename` for file content injection, and `!command` for shell command output.
 
