@@ -68,7 +68,9 @@ A promise that resolves once the definition is validated, registered, and persis
 ## Behavior
 
 - The definition is fully validated (structure, references, schema flow) before anything is mutated. Agents, tools, and workflows referenced by the graph must already be registered on the instance.
-- Adding a definition with an existing ID replaces both the stored definition and the live registration. In-flight runs keep the graph they started with.
+- Adding a definition with an existing ID replaces both the stored definition and the live registration. Storage-backed instances re-read the active root and nested definitions when creating a new run, so replicas converge without relying on an in-memory invalidation event.
+- Each run snapshot pins the exact dynamic-definition closure used to create it. A run created before an update keeps that revision through resume and restart. Legacy snapshots without a pinned revision fail closed after upgrade rather than resuming against a possibly different graph.
+- The pinned closure contains storage-backed dynamic definitions. Nested code-defined workflows continue to use the host's deployed code and must remain resume-compatible across deployments.
 - Without a storage adapter that supports the `workflowDefinitions` domain, the workflow is still validated and registered in memory, but the definition is lost on restart.
 - To add a root workflow together with helper workflows it nests, use [`addDynamicWorkflows()`](/reference/core/addDynamicWorkflows).
 

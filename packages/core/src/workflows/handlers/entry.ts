@@ -216,6 +216,9 @@ export async function persistStepUpdate(
       timestamp: Date.now(),
       // Persist tracing context for span continuity on resume
       tracingContext,
+      dynamicWorkflowDefinitions: engine.dynamicWorkflowDefinitions
+        ? Array.from(engine.dynamicWorkflowDefinitions)
+        : undefined,
     };
 
     const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
