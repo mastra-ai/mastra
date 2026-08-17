@@ -519,6 +519,10 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
           expect(dependencies[pkg]).toMatch(/^[\d^~>=<]/);
         }
       }
+
+      // Automatic version resolution must read the copy installed for the app (0.4.0),
+      // not the older copy installed at the workspace root (0.2.0) (#18849).
+      expect(dependencies['unicorn-magic']).toBe('0.4.0');
     });
   });
 

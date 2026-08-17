@@ -420,6 +420,24 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /agents/:agentId/plans/file": {
+    "method": "GET",
+    "path": "/agents/:agentId/plans/file",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [
+      "path",
+      "status",
+      "versionId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /agents/:agentId/skills/:skillName": {
     "method": "GET",
     "path": "/agents/:agentId/skills/:skillName",
@@ -5992,7 +6010,8 @@ export const API_ROUTE_METADATA = {
       "resourceId"
     ],
     "queryParams": [
-      "sessionScope"
+      "sessionScope",
+      "threadId"
     ],
     "bodyParams": [],
     "hasQuery": true,

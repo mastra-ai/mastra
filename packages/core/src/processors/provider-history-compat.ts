@@ -221,6 +221,33 @@ export function isMaybeAnthropic(
   return matchesProviderPrefix(model, 'anthropic');
 }
 
+export function isMaybeAzure(
+  model:
+    | string
+    | { provider?: string; modelId?: string }
+    | ((...args: any[]) => any)
+    | { model: any; enabled?: boolean }[]
+    | unknown,
+): boolean {
+  if (Array.isArray(model)) {
+    return model.some(entry => isMaybeAzure((entry as { model?: unknown }).model ?? entry));
+  }
+
+  if (model && typeof model === 'object') {
+    const { provider, modelId } = model as { provider?: unknown; modelId?: unknown };
+    if (typeof provider === 'string' && /^(?:azure|azure-openai)(?:\.[a-z0-9_-]+)?$/i.test(provider)) {
+      return true;
+    }
+
+    return (
+      typeof modelId === 'string' &&
+      (matchesProviderPrefix(modelId, 'azure') || matchesProviderPrefix(modelId, 'azure-openai'))
+    );
+  }
+
+  return matchesProviderPrefix(model, 'azure') || matchesProviderPrefix(model, 'azure-openai');
+}
+
 /**
  * Returns a copy of the prompt with selected `reasoning` parts stripped from
  * assistant messages. Returns `undefined` if no changes were necessary.
@@ -341,6 +368,53 @@ export const anthropicStripForeignReasoningContent: CompatRule = {
   },
 };
 
+const SYSTEM_REMINDER_OPEN_TAG = /<system-reminder(?=\s|\/?>)([^>]*)>/g;
+const SYSTEM_REMINDER_CLOSE_TAG = /<\/system-reminder>/g;
+
+function rewriteSystemReminderTags(text: string): string {
+  return text
+    .replace(SYSTEM_REMINDER_OPEN_TAG, '<memory-context$1>')
+    .replace(SYSTEM_REMINDER_CLOSE_TAG, '</memory-context>');
+}
+
+/**
+ * Azure OpenAI's content moderation can classify `<system-reminder>` wrappers
+ * in user messages as prompt injection. Rename the wrapper at the provider
+ * boundary while leaving persisted history and other providers unchanged.
+ */
+export const azureSystemReminderTransform: CompatRule = {
+  name: 'azure-system-reminder-transform',
+  applyToPrompt({ prompt, model }) {
+    if (!isMaybeAzure(model)) return undefined;
+
+    let mutated = false;
+    const next: LanguageModelV2Prompt = prompt.map(message => {
+      if (message.role === 'system') {
+        const content = rewriteSystemReminderTags(message.content);
+        if (content === message.content) return message;
+        mutated = true;
+        return { ...message, content };
+      }
+
+      if (message.role !== 'user') return message;
+
+      let messageMutated = false;
+      const content = message.content.map(part => {
+        if (part.type !== 'text') return part;
+        const text = rewriteSystemReminderTags(part.text);
+        if (text === part.text) return part;
+        mutated = true;
+        messageMutated = true;
+        return { ...part, text };
+      });
+
+      return messageMutated ? { ...message, content } : message;
+    });
+
+    return mutated ? next : undefined;
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Default rule set
 // ---------------------------------------------------------------------------
@@ -354,6 +428,7 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
   cerebrasStripReasoningContent,
   anthropicStripEmptySignedReasoningContent,
   anthropicStripForeignReasoningContent,
+  azureSystemReminderTransform,
 ];
 
 // ---------------------------------------------------------------------------

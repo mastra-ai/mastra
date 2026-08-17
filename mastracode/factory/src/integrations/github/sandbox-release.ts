@@ -20,6 +20,7 @@ export async function cleanReleasedSandbox(options: {
   sandboxId: string;
   sandboxWorkdir: string;
   actingUserId: string;
+  sandbox?: MaterializationSandbox;
 }): Promise<void> {
   try {
     const projectRepository = await options.sourceControl.projectRepositories.get({
@@ -32,9 +33,11 @@ export async function cleanReleasedSandbox(options: {
       id: projectRepository.repositoryId,
     });
     if (!repository) return;
-    const sandbox = await options.fleet.reattachSandbox(options.sandboxId, {
-      actingUserId: options.actingUserId,
-    });
+    const sandbox =
+      options.sandbox ??
+      (await options.fleet.reattachSandbox(options.sandboxId, {
+        actingUserId: options.actingUserId,
+      }));
     await recycleClaimedWorkdir(sandbox, options.sandboxWorkdir, repository.defaultBranch);
   } catch {
     // Reaped, unreachable, or wedged — the claim-side recycle is the

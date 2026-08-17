@@ -1,5 +1,50 @@
 # @mastra/memory
 
+## 1.27.0-alpha.0
+
+### Minor Changes
+
+- Added `continuationHints` to observational memory configuration, so an agent that drives its ([#20665](https://github.com/mastra-ai/mastra/pull/20665))
+  own control flow can stop memory from proposing what it says next.
+
+  `<current-task>` and `<suggested-response>` were always requested and there was no way to turn
+  them off. A `<suggested-response>` is injected into the agent's context and the continuation
+  reminder tells the agent to follow it, which makes memory a second controller competing with
+  the agent's own. Pass `false` to disable both sections, or an object to disable them
+  individually — keeping `<current-task>` while dropping `<suggested-response>` is the common
+  case.
+
+  ```ts
+  import { Memory } from '@mastra/memory';
+
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        observation: { continuationHints: { suggestedResponse: false } },
+        reflection: { continuationHints: false },
+      },
+    },
+  });
+  ```
+
+  Disabling a section removes it fully: the Observer and Reflector no longer describe or
+  reference it, and a previously stored hint stops being injected into the agent's context once
+  both observation and reflection disable it.
+
+  Defaults are unchanged — existing configurations keep both sections enabled.
+
+### Patch Changes
+
+- Fixed observational memory removing Markdown link labels from the observation ([#20665](https://github.com/mastra-ai/mastra/pull/20665))
+  context given to agents. Links shared in observations previously collapsed to
+  bare, unlabelled URLs; their label text is now preserved. Semantic tags are
+  still stripped and collapsed-item markers behave as before.
+
+- Improved observational memory step latency by reusing loaded records and token counts across repeated status checks. ([#21562](https://github.com/mastra-ai/mastra/pull/21562))
+
+- Updated dependencies [[`d7e6745`](https://github.com/mastra-ai/mastra/commit/d7e67456954863c55440ea9c49bc6ceb9949972d), [`9acb50f`](https://github.com/mastra-ai/mastra/commit/9acb50f71cec9c362f06820033f90ae6b1f8282f), [`46e9e3f`](https://github.com/mastra-ai/mastra/commit/46e9e3f73babe1bc70080a596cf2ac0b9da48519), [`3f9a190`](https://github.com/mastra-ai/mastra/commit/3f9a19057c027155867b9317294ee4ca7bd0581a), [`e8808e3`](https://github.com/mastra-ai/mastra/commit/e8808e3d8eb585a2565be53e56a7e0e1477352a4), [`d4be8c1`](https://github.com/mastra-ai/mastra/commit/d4be8c1739d22d621e3f78790e1dd5eb5ecc3589), [`a5d2eb1`](https://github.com/mastra-ai/mastra/commit/a5d2eb10347eade1ae2816d88f466c25186c54a5), [`e81744c`](https://github.com/mastra-ai/mastra/commit/e81744cd13c46619c142dc521dc0baac47607a84)]:
+  - @mastra/core@1.60.0-alpha.4
+
 ## 1.26.2
 
 ### Patch Changes

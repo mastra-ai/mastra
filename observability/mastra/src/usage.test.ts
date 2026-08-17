@@ -109,6 +109,57 @@ describe('extractUsageMetrics', () => {
       expect(result.outputDetails?.text).toBe(50);
     });
 
+    it('should preserve Anthropic cache creation TTL buckets', () => {
+      const usage: LanguageModelUsage = {
+        inputTokens: 100,
+        outputTokens: 50,
+      };
+
+      const providerMetadata: ProviderMetadata = {
+        anthropic: {
+          cacheCreation: {
+            ephemeral_5m_input_tokens: 125,
+            ephemeral_1h_input_tokens: 75,
+          },
+        },
+      };
+
+      const result = extractUsageMetrics(usage, providerMetadata);
+
+      expect(result.inputTokens).toBe(300);
+      expect(result.inputDetails?.text).toBe(100);
+      expect(result.inputDetails?.cacheWrite).toBe(200);
+      expect(result.inputDetails?.cacheWrite5m).toBe(125);
+      expect(result.inputDetails?.cacheWrite1h).toBe(75);
+    });
+
+    it('should prefer aggregated Anthropic cache creation TTL buckets', () => {
+      const usage: LanguageModelUsage = {
+        inputTokens: 300,
+        outputTokens: 50,
+        cacheCreationInputTokens: 200,
+        cacheCreationInputTokens5m: 120,
+        cacheCreationInputTokens1h: 80,
+      };
+
+      const providerMetadata: ProviderMetadata = {
+        anthropic: {
+          cacheCreationInputTokens: 30,
+          cacheCreation: {
+            ephemeral_5m_input_tokens: 20,
+            ephemeral_1h_input_tokens: 10,
+          },
+        },
+      };
+
+      const result = extractUsageMetrics(usage, providerMetadata);
+
+      expect(result.inputTokens).toBe(300);
+      expect(result.inputDetails?.cacheWrite).toBe(200);
+      expect(result.inputDetails?.cacheWrite5m).toBe(120);
+      expect(result.inputDetails?.cacheWrite1h).toBe(80);
+    });
+
     it('should handle Anthropic with only cache read tokens', () => {
       const usage: LanguageModelUsage = {
         inputTokens: 50,
@@ -562,6 +613,15 @@ describe('addUsageStats', () => {
     );
     expect(result.inputDetails).toEqual({ text: 120, cacheRead: 10, cacheWrite: 8 });
     expect(result.outputDetails).toEqual({ text: 50, reasoning: 5, audio: 2 });
+  });
+
+  it('preserves aggregate and TTL buckets when rolling up mixed cache-write usage', () => {
+    const result = addUsageStats(
+      { inputDetails: { cacheWrite: 500, cacheWrite5m: 500 } },
+      { inputDetails: { cacheWrite: 1_000 } },
+    );
+
+    expect(result.inputDetails).toEqual({ cacheWrite: 1_500, cacheWrite5m: 500 });
   });
 
   it('preserves details from one side when the other has none', () => {
