@@ -469,6 +469,24 @@ describe('MastraCompositeStore — init coverage pinning', () => {
     expect(memory.init).toHaveBeenCalledTimes(1);
     expect(synthetic.init).toHaveBeenCalledTimes(1);
   });
+
+  it('skips a stores map entry without an init function instead of throwing', async () => {
+    // Intentional behavior delta of the iteration-based init: an entry that
+    // lacks an init method is skipped, where the old roll call would have
+    // thrown a TypeError calling init on it.
+    const memory = fakeDomain();
+
+    const composite = new MastraCompositeStore({
+      id: 'outer-init-no-init-entry',
+      domains: {
+        memory: memory as unknown as NonNullable<InMemoryStore['stores']>['memory'],
+      },
+    });
+    (composite.stores as unknown as Record<string, unknown>).entryWithoutInit = {};
+
+    await expect(composite.init()).resolves.not.toThrow();
+    expect(memory.init).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('MastraCompositeStore.__registerMastra', () => {
