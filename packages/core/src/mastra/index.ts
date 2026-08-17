@@ -3378,6 +3378,7 @@ export class Mastra<
    *   *different* run's instance via an id scan.
    */
   __registerInternalWorkflow(workflow: AnyWorkflow, runId?: string) {
+    workflow.__markInternal();
     workflow.__registerMastra(this);
     workflow.__registerPrimitives({
       logger: this.getLogger(),
