@@ -336,9 +336,9 @@ export abstract class KnowledgeStorage extends StorageDomain {
 
   abstract appendKnowledge(input: AppendKnowledgeInput): Promise<KnowledgeRecord>;
   abstract getKnowledge(input: { id: string; includeDeleted?: boolean }): Promise<KnowledgeRecord | null>;
-  abstract knowledgeAbout(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput>;
-  abstract knowledgeMentioning(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput>;
-  abstract knowledgeRelatedTo(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput>;
+  abstract listKnowledgeAbout(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput>;
+  abstract listKnowledgeMentioning(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput>;
+  abstract listKnowledgeRelatedTo(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput>;
   abstract removeKnowledge(input: { id: string; deletedBy: string }): Promise<KnowledgeRecord>;
   abstract restoreKnowledge(input: { id: string }): Promise<KnowledgeRecord>;
   abstract rescopeKnowledge(input: { id: string; scope: KnowledgeScope }): Promise<KnowledgeRecord>;
