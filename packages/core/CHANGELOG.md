@@ -1,5 +1,21 @@
 # @mastra/core
 
+## 1.60.0-alpha.7
+
+### Patch Changes
+
+- Honor stored agent version overrides on direct programmatic agent calls. Version overrides supplied via `MASTRA_VERSIONS_KEY` on the requestContext, the `versions` call option, or Mastra-level `versions` defaults now resolve the called agent itself to its stored version (previously they only applied to sub-agent delegation and HTTP routes), fixing the inconsistency where published overrides were served over HTTP but silently ignored in programmatic paths. ([#21383](https://github.com/mastra-ai/mastra/pull/21383))
+
+## 1.60.0-alpha.6
+
+### Patch Changes
+
+- Fixed durable step-start events publishing full model requests. ([#21572](https://github.com/mastra-ai/mastra/pull/21572))
+
+- Rewrite system-reminder tags in Azure-bound user text and system instructions to avoid content moderation refusals while preserving stored history. ([#21599](https://github.com/mastra-ai/mastra/pull/21599))
+
+- Fixed getWorkflowRunById and getWorkflowRunSteps so nested workflows report the correct single suspended leaf step. Obsolete suspension details are removed after the step resumes or completes. (#21229) ([#21565](https://github.com/mastra-ai/mastra/pull/21565))
+
 ## 1.60.0-alpha.5
 
 ### Patch Changes

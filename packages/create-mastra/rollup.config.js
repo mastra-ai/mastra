@@ -1,6 +1,3 @@
-import * as fsPromises from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
@@ -36,18 +33,6 @@ export default defineConfig({
     }),
     nodeExternals(),
     commonjs(),
-    {
-      name: 'copy-starter-files',
-      buildEnd: async () => {
-        const mastraPath = path.dirname(fileURLToPath(import.meta.resolve('mastra/package.json')));
-
-        // Copy to dist directory instead of root
-        await fsPromises.cp(path.join(mastraPath, 'dist', 'starter-files'), './dist/starter-files', {
-          recursive: true,
-        });
-        await fsPromises.cp(path.join(mastraPath, 'dist', 'templates'), './dist/templates', { recursive: true });
-      },
-    },
   ],
   onwarn(warning, warn) {
     // Ignore specific warnings

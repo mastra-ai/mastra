@@ -18,13 +18,6 @@ export function SourceTitle({ source, title }: { source: WorkItemSource; title: 
   );
 }
 
-/**
- * Card titles are clipped to one line, so the full text is only reachable on
- * hover. The tooltip anchors to the whole card rather than the title span: in
- * `WorkItemCard` the click target is an `absolute inset-0 z-10` overlay that
- * paints over the title, so a trigger on the title itself would never see a
- * pointer event.
- */
 export function CardTitleTooltip({ title, children }: { title: string; children: ReactElement }) {
   return (
     // The app-wide provider uses a 0ms delay, which is fine for icon buttons but
@@ -48,6 +41,33 @@ export function CardTitleTooltip({ title, children }: { title: string; children:
 export const REVEAL_ON_CARD_HOVER =
   'transition-opacity duration-200 ease-out motion-reduce:transition-none pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-within:opacity-100 pointer-fine:aria-expanded:opacity-100';
 
+type IdleBoardCardStatus = Extract<BoardCardStatus, { kind: 'idle' }>;
+
+function IdleCardStatus({ status, className }: { status: IdleBoardCardStatus; className?: string }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        'text-ui-xs text-icon4 ml-auto flex shrink-0 items-center gap-1.5',
+        className,
+        REVEAL_ON_CARD_HOVER,
+      )}
+    >
+      {status.affordance === 'open' ? <MessageSquare size={11} aria-hidden /> : <Play size={11} aria-hidden />}
+      {status.label}
+    </span>
+  );
+}
+
+export function CardIdleOverlay({ status }: { status: IdleBoardCardStatus }) {
+  return (
+    <IdleCardStatus
+      status={status}
+      className="pointer-events-none pointer-fine:absolute pointer-fine:right-3 pointer-fine:bottom-3 pointer-fine:z-20 pointer-fine:ml-0"
+    />
+  );
+}
+
 /** The card's one status row: a hover hint when idle, a live region once something is happening. */
 export function CardStatus({
   status,
@@ -64,18 +84,7 @@ export function CardStatus({
   onRetry?: () => void;
   retrying?: boolean;
 }) {
-  if (status.kind === 'idle') {
-    const Icon = status.affordance === 'open' ? MessageSquare : Play;
-    return (
-      <span
-        aria-hidden
-        className={cn('text-ui-xs text-icon4 ml-auto flex shrink-0 items-center gap-1.5', REVEAL_ON_CARD_HOVER)}
-      >
-        <Icon size={11} aria-hidden />
-        {status.label}
-      </span>
-    );
-  }
+  if (status.kind === 'idle') return <IdleCardStatus status={status} />;
 
   // A parked run is the one idle state the card cannot whisper: it needs the
   // user, so it stays lit without a hover and carries its own button. The
@@ -125,7 +134,7 @@ export function CardStatus({
       className={cn(
         'text-ui-xs text-error flex min-w-0 items-start gap-1.5',
         status.detail !== undefined &&
-          'focus-visible:outline-accent1 relative z-20 cursor-help underline decoration-dotted underline-offset-2 outline-none focus-visible:outline-2',
+          'focus-visible:outline-accent1 relative cursor-help underline decoration-dotted underline-offset-2 outline-none focus-visible:outline-2',
       )}
     >
       <TriangleAlert size={11} aria-hidden className="mt-0.5 shrink-0" />
@@ -148,14 +157,7 @@ export function CardStatus({
         </Tooltip>
       )}
       {onRetry && (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="relative z-20"
-          disabled={retrying}
-          onClick={onRetry}
-        >
+        <Button type="button" variant="outline" size="sm" className="relative" disabled={retrying} onClick={onRetry}>
           {retrying ? 'Retrying…' : 'Retry'}
         </Button>
       )}
