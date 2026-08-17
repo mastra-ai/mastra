@@ -81,6 +81,7 @@ export interface FactoryApiRoutesDeps {
   /** Resolved Factory rule set, threaded from the host (no service locator). */
   rules: FactoryRules;
   factoryTransitionService?: FactoryTransitionService;
+  sessionRetirement?: import('../sandbox/session-retirement.js').SessionRetirementCoordinator;
   onFactoryRuntime?: (runtime: {
     transitionService: FactoryTransitionService;
     prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;

@@ -1086,6 +1086,8 @@ export type LanguageModelUsage = LanguageModelV2Usage & {
   reasoningTokens?: number;
   cachedInputTokens?: number;
   cacheCreationInputTokens?: number;
+  cacheCreationInputTokens5m?: number;
+  cacheCreationInputTokens1h?: number;
   /**
    * Raw usage data from the provider, preserved for advanced use cases.
    * For V3 models, contains the full nested structure:

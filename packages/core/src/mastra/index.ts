@@ -2237,10 +2237,17 @@ export class Mastra<
       throw error;
     }
 
-    return editor.agent.applyStoredOverrides(
+    const resolved = (await editor.agent.applyStoredOverrides(
       agent,
       'versionId' in version ? version : { status: version.status ?? 'published' },
-    ) as Promise<TAgent>;
+    )) as TAgent;
+
+    // Mark forks so Agent#execute doesn't try to re-resolve the version and recurse
+    if (resolved !== agent) {
+      resolved.__markStoredVersionApplied();
+    }
+
+    return resolved;
   }
 
   /**
@@ -3371,6 +3378,7 @@ export class Mastra<
    *   *different* run's instance via an id scan.
    */
   __registerInternalWorkflow(workflow: AnyWorkflow, runId?: string) {
+    workflow.__markInternal();
     workflow.__registerMastra(this);
     workflow.__registerPrimitives({
       logger: this.getLogger(),

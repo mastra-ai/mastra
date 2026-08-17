@@ -47,6 +47,23 @@ const workItem = {
   updatedAt: '2026-07-18T00:00:00.000Z',
 };
 
+const relatedPullRequest = {
+  ...workItem,
+  id: 'review-1',
+  factoryProjectId: FACTORY_ID,
+  externalSource: {
+    integrationId: 'github',
+    type: 'pull-request',
+    externalId: 'github-pr:21565',
+    url: 'https://github.com/acme/app/pull/21565',
+  },
+  parentWorkItemId: ITEM_ID,
+  title: 'Review login fix',
+  stages: ['review'],
+  sessions: {},
+  metadata: { number: 21565, state: 'open' },
+};
+
 const manualWorkItem = {
   id: 'manual-1',
   orgId: 'org-1',
@@ -338,7 +355,7 @@ describe('Board card pending states', () => {
     await waitForMutationsIdle(client);
   });
 
-  it('uses the whole card as the thread link without rendering a separate thread action', async () => {
+  it('links the whole card to its attached thread', async () => {
     stubBoardEndpoints();
     renderWorkBoard();
 
@@ -348,16 +365,130 @@ describe('Board card pending states', () => {
     expect(titleText.closest('a, button')).toBeNull();
 
     const threadLink = within(card).getByRole('link', { name: 'Open session for Fix login bug' });
-    expect(within(card).getByText('Open session')).toBeInTheDocument();
-    // The link itself is an invisible overlay — a visible indicator must tell
-    // the user this card already has a work session.
-    expect(within(card).getByText('Session · fix-login')).toBeInTheDocument();
     expect(threadLink).toHaveAttribute(
       'href',
       `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`,
     );
+    expect(within(card).getByText('Open session')).toBeInTheDocument();
+    expect(card.querySelector('[data-live-session-indicator]')).toBeInTheDocument();
     const matches = matchRoutes(createAppRoutes(), threadLink.getAttribute('href') ?? '');
     expect(matches?.at(-1)?.route.path).toBe('threads/:threadId');
+  });
+
+  it('shows a related PR as a compact link to the exact source item', async () => {
+    const user = userEvent.setup();
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: [workItem, relatedPullRequest] }),
+      ),
+    );
+    renderWorkBoard();
+
+    const card = await screen.findByRole('article', { name: 'Fix login bug' });
+
+    const relatedLink = within(card).getByRole('link', {
+      name: 'Open in GitHub: Review: PR #21565 — Review login fix, Open pull request',
+    });
+    expect(relatedLink).toHaveTextContent('PR #21565');
+    expect(relatedLink).not.toHaveTextContent('Review:');
+    expect(relatedLink).toHaveAttribute('href', relatedPullRequest.externalSource.url);
+    expect(relatedLink).toHaveAttribute('target', '_blank');
+    expect(relatedLink).not.toHaveAttribute('title');
+
+    await user.hover(relatedLink);
+    expect(await screen.findByText('Review: PR #21565 · Review login fix · Open pull request')).toBeVisible();
+
+    await user.unhover(relatedLink);
+    await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
+    relatedLink.focus();
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'Review: PR #21565 · Review login fix · Open pull request',
+    );
+  });
+
+  it('names an internal related item without repeating its title', async () => {
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: [workItem, { ...manualWorkItem, parentWorkItemId: ITEM_ID }],
+        }),
+      ),
+    );
+    renderWorkBoard();
+
+    const card = await screen.findByRole('article', { name: 'Fix login bug' });
+    const relatedLink = within(card).getByRole('link', { name: 'Open Work item: Plan onboarding' });
+    expect(relatedLink).toHaveAttribute('href', `/factories/${FACTORY_ID}/work`);
+    expect(relatedLink).not.toHaveAttribute('target');
+  });
+
+  it('keeps an unresolved related session on the board, then opens its thread once liveness resolves', async () => {
+    const workspacesGate = deferred();
+    const liveRelatedPullRequest = {
+      ...relatedPullRequest,
+      sessions: {
+        review: {
+          sessionId: 'review-session',
+          branch: 'review-pr',
+          threadId: 'review-thread',
+          startedBy: 'user-1',
+        },
+      },
+    };
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: [workItem, liveRelatedPullRequest] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, async () => {
+        await workspacesGate.promise;
+        return HttpResponse.json({
+          sessions: [
+            {
+              id: 'review-session-row',
+              sessionId: 'review-session',
+              projectRepositoryId: REPO_ID,
+              orgId: 'org-1',
+              userId: 'user-1',
+              branch: 'review-pr',
+              baseBranch: 'main',
+              sandboxId: null,
+              sandboxWorkdir: '/repo-review',
+              materializedAt: '2026-07-18T00:00:00.000Z',
+              createdAt: '2026-07-18T00:00:00.000Z',
+              updatedAt: '2026-07-18T00:00:00.000Z',
+            },
+          ],
+        });
+      }),
+    );
+    const user = userEvent.setup();
+    const { client } = renderWorkBoard();
+    const card = await screen.findByRole('article', { name: 'Fix login bug' });
+    const unresolvedLink = within(card).getByRole('link', {
+      name: 'Open Review: PR #21565 — Review login fix, Open pull request',
+    });
+    expect(unresolvedLink).toHaveAttribute('href', `/factories/${FACTORY_ID}/review`);
+    expect(unresolvedLink).not.toHaveAttribute('target');
+
+    workspacesGate.resolve();
+    await waitForMutationsIdle(client);
+    const relatedLink = await within(card).findByRole('link', {
+      name: 'Open live session for Review: PR #21565 — Review login fix, Open pull request',
+    });
+    expect(relatedLink).toHaveAttribute(
+      'href',
+      `/factories/${FACTORY_ID}/workspaces/review-session/threads/review-thread`,
+    );
+    expect(relatedLink).not.toHaveAttribute('target');
+    expect(relatedLink.querySelector('[data-live-session-indicator]')).toBeInTheDocument();
+
+    await user.hover(relatedLink);
+    expect(
+      await screen.findByText('Review: PR #21565 · Review login fix · Open pull request · Live session'),
+    ).toBeVisible();
   });
 
   it('names the click outcome differently for cards that have a session and cards that do not', async () => {
@@ -377,11 +508,13 @@ describe('Board card pending states', () => {
     );
     if (!started || !unstarted) throw new Error('Expected both work item cards');
 
-    // The consequence of the click differs per card, so the card has to say which one it is.
+    expect(within(started).getByRole('link', { name: 'Open session for Fix login bug' })).toBeInTheDocument();
     expect(within(started).getByText('Open session')).toBeInTheDocument();
+    expect(started.querySelector('[data-live-session-indicator]')).toBeInTheDocument();
     expect(within(started).queryByText('Start session')).not.toBeInTheDocument();
     expect(within(unstarted).getByText('Start session')).toBeInTheDocument();
-    expect(within(unstarted).queryByText('Open session')).not.toBeInTheDocument();
+    expect(within(unstarted).queryByRole('link', { name: /Open session for/ })).not.toBeInTheDocument();
+    expect(unstarted.querySelector('[data-live-session-indicator]')).not.toBeInTheDocument();
   });
 
   it('acknowledges a session-starting card click while it is still resolving the session', async () => {

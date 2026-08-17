@@ -202,6 +202,7 @@ export function useBoardRuns({
     // ref looks stale — a card title would render as a create button and a click
     // would mint a replacement session for a perfectly live thread.
     disabled: !enabled || !workspaces.isSuccess,
+    sessionLivenessResolved: workspaces.isSuccess,
     liveWorktreePaths,
     error: start.error,
     pendingRolesFor: (itemId: string): PendingRoles => pendingByItem.get(itemId) ?? EMPTY_PENDING_ROLES,
