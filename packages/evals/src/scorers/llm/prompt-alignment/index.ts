@@ -6,14 +6,41 @@ import {
   getAssistantMessageFromRunOutput,
   getUserMessageFromRunInput,
   getCombinedSystemPrompt,
+  getTextContentFromMastraDBMessage,
+  isScorerRunInputForAgent,
   roundToTwoDecimals,
 } from '../../utils';
-import type { ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge } from '../../utils';
+import type {
+  ScorerRunInputForAgent,
+  ScorerRunInputForLLMJudge,
+  ScorerRunOutputForLLMJudge,
+} from '../../utils';
 import { PROMPT_ALIGNMENT_INSTRUCTIONS, createAnalyzePrompt, createReasonPrompt } from './prompts';
 
 export interface PromptAlignmentOptions {
   scale?: number;
   evaluationMode?: 'user' | 'system' | 'both';
+  /**
+   * Controls whether Agent scorer runs include recent remembered messages.
+   * Defaults to the current user prompt only for backwards compatibility.
+   */
+  contextMode?: 'current' | 'conversation';
+  /**
+   * Maximum number of remembered messages included when contextMode is 'conversation'.
+   * Defaults to 10.
+   */
+  maxRememberedMessages?: number;
+}
+
+function formatConversationContext(input: ScorerRunInputForAgent, maxRememberedMessages: number) {
+  return input.rememberedMessages
+    .slice(-maxRememberedMessages)
+    .map(message => {
+      const text = getTextContentFromMastraDBMessage(message).trim();
+      return text ? `${message.role}: ${text}` : undefined;
+    })
+    .filter((message): message is string => Boolean(message))
+    .join(String.fromCharCode(10));
 }
 
 // Helper for score validation - uses refine() instead of min/max for Anthropic API compatibility
@@ -80,6 +107,8 @@ export function createPromptAlignmentScorerLLM({
 }) {
   const scale = options?.scale || 1;
   const evaluationMode = options?.evaluationMode || 'both';
+  const contextMode = options?.contextMode || 'current';
+  const maxRememberedMessages = Math.max(1, options?.maxRememberedMessages || 10);
 
   return createScorer<ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge>({
     id: 'prompt-alignment-scorer',
@@ -97,6 +126,10 @@ export function createPromptAlignmentScorerLLM({
         const userPrompt = getUserMessageFromRunInput(run.input) ?? '';
         const systemPrompt = getCombinedSystemPrompt(run.input) ?? '';
         const agentResponse = getAssistantMessageFromRunOutput(run.output) ?? '';
+        const conversationContext =
+          contextMode === 'conversation' && isScorerRunInputForAgent(run.input)
+            ? formatConversationContext(run.input, maxRememberedMessages)
+            : undefined;
 
         // Validation based on evaluation mode
         if (evaluationMode === 'user' && !userPrompt) {
@@ -117,6 +150,7 @@ export function createPromptAlignmentScorerLLM({
           systemPrompt,
           agentResponse,
           evaluationMode,
+          conversationContext,
         });
       },
     })
