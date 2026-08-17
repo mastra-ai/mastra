@@ -293,6 +293,160 @@ describe('MastraCompositeStore — close() forwarding', () => {
   });
 });
 
+describe('MastraCompositeStore — resolve semantics pinning', () => {
+  // These tests pin the constructor's per-key resolution behavior BEFORE the
+  // resolve block is made data-driven, so any semantic drift in the refactor
+  // trips a test instead of shipping silently.
+
+  it('resolves with priority: `domains` override > editor > default', async () => {
+    const defaultStore = new InMemoryStore({ id: 'default-inner' });
+    const editorStore = new InMemoryStore({ id: 'editor-inner' });
+    const overrideOwner = new InMemoryStore({ id: 'override-owner' });
+    const memoryOverride = overrideOwner.stores!.memory!;
+
+    const composite = new MastraCompositeStore({
+      id: 'outer-priority',
+      default: defaultStore,
+      editor: editorStore,
+      domains: { memory: memoryOverride },
+    });
+
+    // Overridden domain resolves to the override, not editor or default.
+    expect(await composite.getStore('memory')).toBe(memoryOverride);
+    // Editor-list domain (EDITOR_DOMAINS member) without an override resolves
+    // to the editor store's domain, not the default's.
+    expect(await composite.getStore('skills')).toBe(editorStore.stores!.skills);
+    expect(await composite.getStore('skills')).not.toBe(defaultStore.stores!.skills);
+    // Plain (non-editor) domain resolves to the default store's domain, even
+    // though an editor store is present.
+    expect(await composite.getStore('workflows')).toBe(defaultStore.stores!.workflows);
+    expect(await composite.getStore('workflows')).not.toBe(editorStore.stores!.workflows);
+  });
+
+  it('an override on an editor-list domain beats the editor store', async () => {
+    const editorStore = new InMemoryStore({ id: 'editor-inner' });
+    const overrideOwner = new InMemoryStore({ id: 'override-owner' });
+    const skillsOverride = overrideOwner.stores!.skills!;
+
+    const composite = new MastraCompositeStore({
+      id: 'outer-editor-override',
+      editor: editorStore,
+      domains: { skills: skillsOverride },
+    });
+
+    expect(await composite.getStore('skills')).toBe(skillsOverride);
+  });
+
+  it('a `false` override disables a plain domain with no fall-through', async () => {
+    const defaultStore = new InMemoryStore({ id: 'default-inner' });
+    const editorStore = new InMemoryStore({ id: 'editor-inner' });
+
+    const composite = new MastraCompositeStore({
+      id: 'outer-false-plain',
+      default: defaultStore,
+      editor: editorStore,
+      domains: { workflows: false },
+    });
+
+    expect(await composite.getStore('workflows')).toBeUndefined();
+  });
+
+  it('a `false` override disables threadState with no in-memory fallback', async () => {
+    const defaultStore = new InMemoryStore({ id: 'default-inner' });
+
+    const composite = new MastraCompositeStore({
+      id: 'outer-false-threadstate',
+      default: defaultStore,
+      domains: { threadState: false },
+    });
+
+    expect(await composite.getStore('threadState')).toBeUndefined();
+  });
+
+  it('installs the in-memory threadState fallback when no store supplies the domain', async () => {
+    const overrideOwner = new InMemoryStore({ id: 'override-owner' });
+
+    const composite = new MastraCompositeStore({
+      id: 'outer-threadstate-fallback',
+      domains: { memory: overrideOwner.stores!.memory! },
+    });
+
+    const threadState = await composite.getStore('threadState');
+    expect(threadState).toBeDefined();
+    // The fallback is the composite's own in-memory instance, not something
+    // inherited from the override owner.
+    expect(threadState).not.toBe(overrideOwner.stores!.threadState);
+  });
+});
+
+describe('MastraCompositeStore — init coverage pinning', () => {
+  // These tests pin #runInit's coverage and dedup behavior BEFORE the hand
+  // roll call is replaced with iteration.
+  type InitCapable = { init: () => Promise<void> };
+  const fakeDomain = () => ({ init: vi.fn().mockResolvedValue(undefined) });
+
+  it('init()s every domain supplied via `domains` exactly once', async () => {
+    const memory = fakeDomain();
+    const workflows = fakeDomain();
+    const skills = fakeDomain();
+
+    const composite = new MastraCompositeStore({
+      id: 'outer-init-coverage',
+      domains: {
+        memory: memory as unknown as NonNullable<InMemoryStore['stores']>['memory'],
+        workflows: workflows as unknown as NonNullable<InMemoryStore['stores']>['workflows'],
+        skills: skills as unknown as NonNullable<InMemoryStore['stores']>['skills'],
+      },
+    });
+
+    await composite.init();
+
+    expect(memory.init).toHaveBeenCalledTimes(1);
+    expect(workflows.init).toHaveBeenCalledTimes(1);
+    expect(skills.init).toHaveBeenCalledTimes(1);
+  });
+
+  it('init()s a shared domain object supplied under two keys exactly once', async () => {
+    const shared = fakeDomain();
+
+    const composite = new MastraCompositeStore({
+      id: 'outer-init-shared',
+      domains: {
+        memory: shared as unknown as NonNullable<InMemoryStore['stores']>['memory'],
+        workflows: shared as unknown as NonNullable<InMemoryStore['stores']>['workflows'],
+      },
+    });
+
+    await composite.init();
+
+    expect(shared.init).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not re-init a domain instance the parent default store already owns', async () => {
+    // Exercises both dedup paths: the parent's own init() runs, and
+    // addParentDomains marks its domain instances so the override pointing at
+    // one of them is skipped by the alreadyInitialized set.
+    const parent = new InMemoryStore({ id: 'parent-inner' });
+    const parentMemory = parent.stores!.memory!;
+    const memoryInitSpy = vi.fn().mockResolvedValue(undefined);
+    (parentMemory as unknown as InitCapable).init = memoryInitSpy;
+    const parentInitSpy = vi.spyOn(parent, 'init');
+
+    const composite = new MastraCompositeStore({
+      id: 'outer-init-parent-dedup',
+      default: parent,
+      domains: { memory: parentMemory },
+    });
+
+    await composite.init();
+
+    // The parent's own init() ran once and owns its domains; the composite
+    // must not additionally init() the parent-owned domain instance directly.
+    expect(parentInitSpy).toHaveBeenCalledTimes(1);
+    expect(memoryInitSpy).not.toHaveBeenCalled();
+  });
+});
+
 describe('MastraCompositeStore.__registerMastra', () => {
   const mastra: StorageMastraRef = { getAgentById: () => undefined };
 
