@@ -416,6 +416,20 @@ export class PlatformSandbox extends MastraSandbox {
    * failed/timed out, but now coalesced via `_leaseInFlight`).
    */
   private _transportReadyPromise: Promise<void> | null = null;
+  /**
+   * State of the most recent sidecar probe. Combined with the address
+   * registry state at fallback time, this lets the one-shot lease warn
+   * (see {@link executeCommand}) attribute a lease-path exec to a specific
+   * cold-start or degradation cause without per-exec instrumentation.
+   */
+  private _probeState: 'never-started' | 'in-flight' | 'succeeded' | 'timed-out' = 'never-started';
+  /**
+   * One-shot latch for the "exec fell through to lease path" warn. Reset
+   * to `false` whenever the address registry becomes populated (fresh
+   * `start()` or successful probe) so each degradation window produces
+   * exactly one log regardless of how many execs it spans.
+   */
+  private _leaseFallbackLogged = false;
 
   constructor(options: PlatformSandboxOptions = {}) {
     super({ ...options, name: 'PlatformSandbox', processes: new PlatformProcessManager() });
@@ -634,6 +648,9 @@ export class PlatformSandbox extends MastraSandbox {
     // Early execs wait for the probe (up to TRANSPORT_READY_WAIT_MS) rather
     // than all racing to the lease path independently.
     const generation = ++this._probeGeneration;
+    this._probeState = 'in-flight';
+    // New start() means a fresh degradation window; re-arm the one-shot warn.
+    this._leaseFallbackLogged = false;
     this._transportReadyPromise = this._probeSidecarThenRegister(json.id, json.instanceUrl, generation);
   }
 
@@ -681,6 +698,10 @@ export class PlatformSandbox extends MastraSandbox {
           // Sidecar is listening. Only populate if this probe is still current.
           if (generation === this._probeGeneration && this._sandboxId === sandboxId) {
             this._addressRegistry?.set(sandboxId, instanceUrl);
+            this._probeState = 'succeeded';
+            // Registry is warm again; re-arm the one-shot lease warn so a
+            // future eviction gets its own log.
+            this._leaseFallbackLogged = false;
           }
           return;
         }
@@ -690,6 +711,9 @@ export class PlatformSandbox extends MastraSandbox {
       await new Promise(r => setTimeout(r, SIDECAR_PROBE_INTERVAL_MS));
     }
     // Sidecar never came up. Leave registry entry unset — every exec goes lease.
+    if (generation === this._probeGeneration) {
+      this._probeState = 'timed-out';
+    }
     this.logger.warn('platform-workspace probe timed out', {
       sandboxId,
       sessionId: this._client.sessionId,
@@ -1039,6 +1063,7 @@ export class PlatformSandbox extends MastraSandbox {
     // `PlatformApiError` for other `/exec-lease` errors (404/500/501).
     // See ./direct-exec.ts and `docs/factory/direct-sandbox-connection.md`
     // in the Platform repo.
+    this._logLeaseFallbackOnce();
     const result = await this._runDirectExec(fullCommand, effectiveTimeout, options);
     // `_runDirectExec` throws on transport failure (see its jsdoc), so a
     // `null` exitCode here can only mean `timedOut: true` — the sandbox
@@ -1216,7 +1241,11 @@ export class PlatformSandbox extends MastraSandbox {
       if (error instanceof PrivateNetExecHttpError) {
         // Application-level failure from a reachable sidecar. Fall back for
         // this call, but do NOT evict the registry entry — future calls
-        // should still prefer the private-network path.
+        // should still prefer the private-network path. Stamp the one-shot
+        // lease warn with an explicit reason so the fallback in
+        // `executeCommand` (which sees `hasRegistryEntry: true`) records
+        // http-error rather than the misleading `registry-evicted`.
+        this._logLeaseFallbackOnce('private-net-http-error');
         return undefined;
       }
       // Anything else escaping is unexpected (e.g. options validation). Treat
@@ -1270,6 +1299,44 @@ export class PlatformSandbox extends MastraSandbox {
         reason,
       });
     }
+  }
+
+  /**
+   * Emit exactly one warn per degradation window when `executeCommand` falls
+   * through to the WebSocket lease path. Re-armed by `_populateAddressFromResponse`
+   * (new `start()`) and by a successful probe (`_probeSidecarThenRegister`),
+   * so a healthy sandbox that briefly loses its registry entry and recovers
+   * still gets a warn on the next degradation.
+   *
+   * The `reason` is inferred from probe state + registry state at call time,
+   * covering all four known lease-fallback triggers:
+   *   - `no-registry-configured`: platform runtime not wired for private-net.
+   *   - `instance-url-missing`: proxy returned no `instanceUrl` on start().
+   *   - `probe-in-flight`: cold-start race — probe hasn't finished yet.
+   *   - `probe-timed-out`: sidecar never came up within SIDECAR_PROBE_TIMEOUT_MS.
+   *   - `registry-evicted`: probe succeeded once but a later exec hit a
+   *     transport failure (see `_invalidateAddress`).
+   *   - `private-net-http-error`: sidecar reachable but returned non-2xx —
+   *     stamped separately by `_tryExecViaPrivateNetwork` before the
+   *     registry-preserving fallback (registry entry is still present).
+   */
+  private _logLeaseFallbackOnce(explicitReason?: 'private-net-http-error'): void {
+    if (this._leaseFallbackLogged) return;
+    this._leaseFallbackLogged = true;
+    const hasRegistryEntry = !!(this._sandboxId && this._addressRegistry?.get(this._sandboxId));
+    const reason: string = explicitReason
+      ?? (!this._addressRegistry ? 'no-registry-configured'
+        : this._probeState === 'never-started' ? 'instance-url-missing'
+        : this._probeState === 'in-flight' ? 'probe-in-flight'
+        : this._probeState === 'timed-out' ? 'probe-timed-out'
+        : 'registry-evicted');
+    this.logger.warn('platform-workspace exec using lease path', {
+      sandboxId: this._sandboxId,
+      sessionId: this._client.sessionId,
+      reason,
+      probeState: this._probeState,
+      hasRegistryEntry,
+    });
   }
 
   /**
