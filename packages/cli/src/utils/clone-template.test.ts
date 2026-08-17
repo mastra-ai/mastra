@@ -292,6 +292,26 @@ describe('clone-template', () => {
       expect(p.log.warn).toHaveBeenCalledWith('Could not update package.json: disk full');
     });
 
+    it('includes non-Error rejection details in the warning', async () => {
+      const mockExec = vi.fn().mockImplementation(async () => {
+        vol.fromJSON({ '/test-project/package.json': JSON.stringify({ name: 'template' }) });
+        return { stdout: '', stderr: '' };
+      });
+      vi.mocked(execa).mockImplementation(mockExec as never);
+      const fs = await import('node:fs/promises');
+      vi.spyOn(fs.default, 'writeFile').mockRejectedValueOnce('disk full');
+
+      const { cloneTemplate } = await import('./clone-template');
+
+      await expect(
+        cloneTemplate({
+          template: mockTemplate,
+          projectName: 'test-project',
+        }),
+      ).resolves.toBe('/test-project');
+      expect(p.log.warn).toHaveBeenCalledWith('Could not update package.json: disk full');
+    });
+
     it('should throw error if directory already exists', async () => {
       vol.fromJSON({
         '/existing-project/some-file.txt': 'content',

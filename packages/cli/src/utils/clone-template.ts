@@ -151,7 +151,7 @@ async function updatePackageJson(projectPath: string, projectName: string): Prom
     await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2), 'utf-8');
   } catch (error) {
     // It's okay if package.json doesn't exist or can't be updated
-    p.log.warn(`Could not update package.json: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    p.log.warn(`Could not update package.json: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
