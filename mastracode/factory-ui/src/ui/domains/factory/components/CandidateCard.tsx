@@ -1,44 +1,76 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { Popover, PopoverContent } from '@mastra/playground-ui/components/Popover';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowUpRight, Plus, Stethoscope } from 'lucide-react';
+import { ArrowUpRight, EllipsisVertical, PencilLine, Plus } from 'lucide-react';
+import { useRef, useState } from 'react';
 
 import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
+import { boardCardStatus } from '../boardCardStatus';
 import type { BoardCandidate } from '../boardCandidates';
 import { setDragPayload } from '../boardDrag';
-import { AUTO_TRIAGED_LABEL, externalLinkLabel, hasLabel, metadataLabels } from '../boardItems';
+import { externalLinkLabel, metadataLabels } from '../boardItems';
 import type { RunAction } from '../boardRunSpecs';
-import { CardLabels, CardTitleTooltip, SourceTitle } from './BoardCardParts';
-import { SourceIcon } from './BoardIcons';
-import { FactoryItemActions } from './FactoryItemActions';
+import { CardLabels, CardStatus, CardTitleTooltip, REVEAL_ON_CARD_HOVER, SourceTitle } from './BoardCardParts';
+import { SourceIcon, actionIcon } from './BoardIcons';
 
+/**
+ * A GitHub/Linear item with no work-item record yet. Same click target, menu
+ * and status row as a filed card: acting on it is what creates the record.
+ */
 export function CandidateCard({
   candidate,
   pendingRunRoles,
-  triageStarting,
+  preparing,
   disabled,
   onRun,
   onFile,
-  onTriage,
 }: {
   candidate: BoardCandidate;
   pendingRunRoles: ReadonlyMap<string, FactoryRunPhase | undefined>;
-  triageStarting: boolean;
+  /** Status text while the click is resolving, before the run mutation starts. */
+  preparing?: string;
   disabled: boolean;
   /** Start a run; `prompt` undefined = the action's default prompt. */
   onRun: (action: RunAction, prompt?: string) => void;
   /** File the candidate onto the board without starting a run. */
   onFile: () => void;
-  /** Run first-contact issue triage without leaving the board. */
-  onTriage?: () => void;
 }) {
+  const anchorRef = useRef<HTMLElement>(null);
+  const [promptOpen, setPromptOpen] = useState(false);
+  const [prompt, setPrompt] = useState('');
+
   const labels = metadataLabels(candidate.metadata);
-  const showTriage = candidate.source === 'github-issue' && !hasLabel(labels, AUTO_TRIAGED_LABEL) && onTriage;
-  const [defaultAction, ...otherActions] = candidate.runActions;
+  const [defaultAction] = candidate.runActions;
+  const runPending = pendingRunRoles.size > 0 || preparing !== undefined;
+  const status = boardCardStatus({
+    idle: { label: defaultAction.label, affordance: 'run' },
+    runs: candidate.runActions
+      .filter(action => pendingRunRoles.has(action.role))
+      .map(action => ({ label: action.label, phase: pendingRunRoles.get(action.role) })),
+    preparing,
+  });
+
+  const closePrompt = () => {
+    setPromptOpen(false);
+    setPrompt('');
+  };
+
+  const runPrompt = () => {
+    const trimmed = prompt.trim();
+    if (!trimmed || runPending) return;
+    closePrompt();
+    onRun(defaultAction, trimmed);
+  };
+
   return (
     <CardTitleTooltip title={candidate.title}>
       <article
+        ref={anchorRef}
         draggable
         aria-label={candidate.title}
+        aria-busy={runPending || undefined}
         data-testid="candidate-card"
         onDragStart={event =>
           setDragPayload(event, {
@@ -52,66 +84,114 @@ export function CandidateCard({
             },
           })
         }
-        className="group border-border1/50 bg-neutral6/5 hover:bg-surface3 flex cursor-grab flex-col gap-3 rounded-xl border p-3 transition-colors outline-none active:cursor-grabbing"
+        className="group border-border1/50 bg-neutral6/5 hover:bg-surface3 relative flex cursor-grab flex-col gap-3 rounded-xl border p-3 transition-colors outline-none active:cursor-grabbing"
       >
+        {/* Starting the default run is also what files the candidate. */}
+        <button
+          type="button"
+          draggable={false}
+          disabled={disabled || runPending}
+          aria-busy={runPending || undefined}
+          aria-label={`${defaultAction.label} ${candidate.title}`}
+          className="focus-visible:outline-accent1 absolute inset-0 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
+          onClick={() => onRun(defaultAction)}
+        />
+        <div className="absolute top-2 right-2">
+          <DropdownMenu>
+            <DropdownMenu.Trigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  disabled={disabled}
+                  aria-label={`Actions for ${candidate.title}`}
+                  className={REVEAL_ON_CARD_HOVER}
+                >
+                  <EllipsisVertical size={13} aria-hidden />
+                </Button>
+              }
+            />
+            <DropdownMenu.Content align="end" className="min-w-44">
+              {candidate.runActions.map(action => (
+                <DropdownMenu.Item key={action.label} disabled={runPending} onClick={() => onRun(action)}>
+                  {actionIcon(action.label)}
+                  <span>{pendingRunRoles.has(action.role) ? 'Starting…' : action.label}</span>
+                </DropdownMenu.Item>
+              ))}
+              <DropdownMenu.Item disabled={runPending} onClick={() => setPromptOpen(true)}>
+                <PencilLine aria-hidden />
+                <span>Custom prompt…</span>
+              </DropdownMenu.Item>
+              <DropdownMenu.Item render={<a href={candidate.url} target="_blank" rel="noreferrer" />}>
+                <ArrowUpRight aria-hidden />
+                <span>{externalLinkLabel(candidate.source)}</span>
+              </DropdownMenu.Item>
+              <DropdownMenu.Item onClick={onFile}>
+                <Plus aria-hidden />
+                <span>Add to board</span>
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu>
+        </div>
         <div className="flex min-w-0 flex-col gap-1.5">
-          <span className="text-ui-xs text-icon2 block truncate">{candidate.meta}</span>
+          <span className="text-ui-xs text-icon2 truncate pr-8">{candidate.meta}</span>
           <div className="flex min-w-0 items-center gap-1.5">
             <SourceIcon source={candidate.source} />
-            <button
-              type="button"
-              disabled={disabled}
-              aria-busy={pendingRunRoles.has(defaultAction.role) || undefined}
-              // Title click starts the default run — same as the primary action
-              // button — so clicking a candidate always kicks off its work.
-              onClick={() => onRun(defaultAction)}
-              className="text-ui-smd text-icon6 min-w-0 flex-1 truncate text-left font-semibold hover:underline disabled:opacity-60"
-            >
+            <span className="text-ui-smd text-icon6 min-w-0 flex-1 truncate font-semibold">
               <SourceTitle source={candidate.source} title={candidate.title} />
-            </button>
+            </span>
+            {/* Triage reads the source before deciding, so keep it one click away. */}
             <a
               href={candidate.url}
               target="_blank"
               rel="noreferrer"
+              draggable={false}
               aria-label={externalLinkLabel(candidate.source)}
-              className="text-icon3 hover:text-icon5 shrink-0 transition-[opacity,translate] focus-visible:translate-x-0 focus-visible:translate-y-0 focus-visible:opacity-100 motion-reduce:transition-none pointer-fine:-translate-x-1 pointer-fine:translate-y-1 pointer-fine:opacity-0 pointer-fine:group-hover:translate-x-0 pointer-fine:group-hover:translate-y-0 pointer-fine:group-hover:opacity-100"
+              className={cn('text-icon3 hover:text-icon5 relative shrink-0', REVEAL_ON_CARD_HOVER)}
             >
               <ArrowUpRight size={12} aria-hidden />
             </a>
           </div>
         </div>
         <CardLabels labels={labels} />
-        <FactoryItemActions
-          actionLabel={defaultAction.label}
-          itemLabel={candidate.title}
-          starting={pendingRunRoles.has(defaultAction.role)}
-          disabled={disabled}
-          onAction={() => onRun(defaultAction)}
-          extraActions={otherActions.map(action => ({
-            label: action.label,
-            starting: pendingRunRoles.has(action.role),
-            onAction: () => onRun(action),
-          }))}
-          onRunPrompt={prompt => onRun(defaultAction, prompt)}
-          menuExtras={
-            <>
-              <DropdownMenu.Item render={<a href={candidate.url} target="_blank" rel="noreferrer" />}>
-                <ArrowUpRight aria-hidden />
-                <span>{externalLinkLabel(candidate.source)}</span>
-              </DropdownMenu.Item>
-              {showTriage && (
-                <DropdownMenu.Item disabled={triageStarting} onClick={onTriage}>
-                  <Stethoscope aria-hidden />
-                  <span>{triageStarting ? 'Starting…' : 'Triage issue'}</span>
-                </DropdownMenu.Item>
-              )}
-              <DropdownMenu.Item onClick={onFile}>
-                <Plus aria-hidden />
-                <span>Add to board</span>
-              </DropdownMenu.Item>
-            </>
-          }
-        />
+        <CardStatus status={status} />
+        <Popover open={promptOpen} onOpenChange={open => (open ? setPromptOpen(true) : closePrompt())}>
+          <PopoverContent anchor={anchorRef} align="end" className="w-80 p-3">
+            <form
+              aria-label={`Custom prompt for ${candidate.title}`}
+              className="flex flex-col gap-2"
+              onSubmit={event => {
+                event.preventDefault();
+                runPrompt();
+              }}
+            >
+              <Textarea
+                autoFocus
+                rows={3}
+                size="sm"
+                value={prompt}
+                placeholder="What should the agent do with this?"
+                aria-label={`Prompt for ${candidate.title}`}
+                onChange={event => setPrompt(event.target.value)}
+                onKeyDown={event => {
+                  if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                    event.preventDefault();
+                    runPrompt();
+                  }
+                }}
+              />
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="ghost" size="xs" onClick={closePrompt}>
+                  Cancel
+                </Button>
+                <Button type="submit" size="xs" disabled={runPending || !prompt.trim()}>
+                  Run
+                </Button>
+              </div>
+            </form>
+          </PopoverContent>
+        </Popover>
       </article>
     </CardTitleTooltip>
   );

@@ -1,5 +1,5 @@
 ---
-title: "Deploy Mastra to Amazon EC2 | Deploy"
+title: "Amazon EC2 | Deploy"
 description: "Learn how to deploy a Mastra application to Amazon EC2"
 ---
 
@@ -8,19 +8,19 @@ import StepItem from "@site/src/components/StepItem";
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
-# Deploy Mastra to Amazon EC2
+# Amazon EC2
 
 Deploy your Mastra server to Amazon EC2. The server runs on infrastructure you manage and can support long-running agents and workflows.
 
 :::note
-This guide covers deploying the [Mastra server](/docs/server/mastra-server). If you're using a [server adapter](/docs/server/server-adapters) or [web framework](/docs/deployment/web-framework), deploy the way you normally would for that framework.
+This guide covers deploying the [Mastra server](/docs/server/overview). If you're using a [server adapter](/docs/server/server-adapters) or [web framework](/docs/deployment/web-framework), deploy the way you normally would for that framework.
 :::
 
 ## Before you begin
 
 You'll need:
 
-- A [Mastra application](/guides/getting-started/quickstart)
+- A [Mastra application](/docs)
 - An [EC2](https://aws.amazon.com/ec2/) instance (Ubuntu or Amazon Linux) with Git and Node.js 22.13.0+ installed
 
 For production, you'll also need:
@@ -97,7 +97,7 @@ For production, you'll also need:
     This is a basic example. In production, use a process manager like [PM2](https://pm2.keymetrics.io/) or [systemd](https://systemd.io/) to keep your application running and handle restarts.
 
     :::warning
-    Set up [authentication](/docs/server/auth) before exposing your endpoints publicly.
+    Set up [authentication](/docs/auth/overview) before exposing your endpoints publicly.
     :::
   </StepItem>
 

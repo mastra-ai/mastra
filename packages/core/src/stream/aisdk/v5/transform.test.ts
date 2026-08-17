@@ -683,6 +683,10 @@ describe('convertFullStreamChunkToMastra', () => {
         anthropic: {
           cacheReadInputTokens: 94,
           cacheCreationInputTokens: 6,
+          cacheCreation: {
+            ephemeral_5m_input_tokens: 4,
+            ephemeral_1h_input_tokens: 2,
+          },
         },
       };
       const chunk: StreamPart = {
@@ -707,6 +711,8 @@ describe('convertFullStreamChunkToMastra', () => {
         expect(result.payload.stepResult.reason).toBe('stop');
         expect(result.payload.output.usage.cachedInputTokens).toBe(94);
         expect(result.payload.output.usage.cacheCreationInputTokens).toBe(6);
+        expect(result.payload.output.usage.cacheCreationInputTokens5m).toBe(4);
+        expect(result.payload.output.usage.cacheCreationInputTokens1h).toBe(2);
         expect(result.payload.providerMetadata).toEqual(providerMetadata);
         expect(result.payload.metadata.providerMetadata).toEqual(providerMetadata);
       }

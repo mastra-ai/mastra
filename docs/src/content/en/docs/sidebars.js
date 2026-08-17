@@ -22,7 +22,7 @@ const sidebars = {
     },
     {
       type: 'doc',
-      id: 'getting-started/develop',
+      id: 'develop',
       label: 'Develop',
     },
     {
@@ -46,7 +46,7 @@ const sidebars = {
           items: [
             {
               type: 'doc',
-              id: 'agents/using-tools',
+              id: 'agents/tools',
               label: 'Tools',
             },
             {
@@ -56,7 +56,7 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'agents/agent-approval',
+              id: 'agents/human-in-the-loop',
               label: 'Human-in-the-Loop',
             },
             {
@@ -158,32 +158,32 @@ const sidebars = {
           items: [
             {
               type: 'doc',
-              id: 'long-running-agents/durable-agents',
+              id: 'harness/durable-agents',
               label: 'Durable Agents',
             },
             {
               type: 'doc',
-              id: 'long-running-agents/background-tasks',
+              id: 'harness/background-tasks',
               label: 'Background Tasks',
             },
             {
               type: 'doc',
-              id: 'long-running-agents/goals',
+              id: 'harness/goals',
               label: 'Goals',
             },
             {
               type: 'doc',
-              id: 'long-running-agents/schedules',
+              id: 'harness/schedules',
               label: 'Schedules',
             },
             {
               type: 'doc',
-              id: 'long-running-agents/signals',
+              id: 'harness/signals',
               label: 'Signals',
             },
             {
               type: 'doc',
-              id: 'long-running-agents/signal-providers',
+              id: 'harness/signal-providers',
               label: 'Signal Providers',
             },
             {
@@ -247,17 +247,17 @@ const sidebars = {
       items: [
         {
           type: 'doc',
-          id: 'capabilities/subagents',
+          id: 'subagents',
           label: 'Subagents',
         },
         {
           type: 'doc',
-          id: 'agents/skills',
+          id: 'skills',
           label: 'Skills',
         },
         {
           type: 'doc',
-          id: 'capabilities/channels',
+          id: 'channels',
           label: 'Channels',
         },
         {
@@ -265,7 +265,7 @@ const sidebars = {
           label: 'Sandbox',
           link: {
             type: 'doc',
-            id: 'workspace/overview',
+            id: 'sandbox/overview',
           },
           customProps: {
             contextualSidebar: true,
@@ -273,51 +273,30 @@ const sidebars = {
           items: [
             {
               type: 'doc',
-              id: 'workspace/filesystem',
+              id: 'sandbox/filesystem',
               label: 'Filesystem',
             },
             {
               type: 'doc',
-              id: 'workspace/sandbox',
-              label: 'Sandbox',
+              id: 'sandbox/search',
+              label: 'Search',
             },
             {
               type: 'doc',
-              id: 'workspace/lsp',
-              label: 'LSP Inspection',
-            },
-            {
-              type: 'doc',
-              id: 'workspace/skills',
+              id: 'sandbox/skills',
               label: 'Skills',
             },
             {
               type: 'doc',
-              id: 'workspace/search',
-              label: 'Search and Indexing',
+              id: 'sandbox/lsp',
+              label: 'LSP',
             },
           ],
         },
         {
-          type: 'category',
+          type: 'doc',
+          id: 'browser',
           label: 'Browser',
-          link: {
-            type: 'doc',
-            id: 'browser/overview',
-          },
-          customProps: {
-            contextualSidebar: true,
-          },
-          items: [
-            {
-              type: 'doc',
-              id: 'browser/recording',
-              label: 'Recording',
-              customProps: {
-                tags: ['new'],
-              },
-            },
-          ],
         },
         {
           type: 'category',
@@ -332,22 +311,22 @@ const sidebars = {
           items: [
             {
               type: 'doc',
-              id: 'agents/a2a',
+              id: 'connections/a2a',
               label: 'A2A',
             },
             {
               type: 'doc',
-              id: 'agents/acp',
+              id: 'connections/acp',
               label: 'ACP',
             },
             {
               type: 'doc',
-              id: 'agents/sdk-agents',
+              id: 'connections/sdk-agents',
               label: 'SDK Agents',
             },
             {
               type: 'doc',
-              id: 'mcp/overview',
+              id: 'connections/mcp',
               label: 'MCP',
             },
           ],
@@ -363,7 +342,7 @@ const sidebars = {
       items: [
         {
           type: 'doc',
-          id: 'storage/overview',
+          id: 'storage',
           label: 'Storage',
         },
         {
@@ -371,7 +350,7 @@ const sidebars = {
           label: 'Server',
           link: {
             type: 'doc',
-            id: 'server/mastra-server',
+            id: 'server/overview',
           },
           customProps: {
             contextualSidebar: true,
@@ -442,7 +421,7 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'editor/overview',
+              id: 'studio/editor',
               label: 'Editor',
             },
           ],
@@ -452,7 +431,7 @@ const sidebars = {
           label: 'Auth',
           link: {
             type: 'doc',
-            id: 'server/auth/index',
+            id: 'auth/overview',
           },
           customProps: {
             contextualSidebar: true,
@@ -460,32 +439,32 @@ const sidebars = {
           items: [
             {
               type: 'doc',
-              id: 'server/auth/composite-auth',
+              id: 'auth/composite-auth',
               label: 'Composite Auth',
             },
             {
               type: 'doc',
-              id: 'server/auth/custom-auth-provider',
+              id: 'auth/custom-auth-provider',
               label: 'Custom Auth Provider',
             },
             {
               type: 'doc',
-              id: 'server/auth/fga',
+              id: 'auth/fga',
               label: 'Fine-Grained Authorization',
             },
             {
               type: 'doc',
-              id: 'server/auth/jwt',
+              id: 'auth/jwt',
               label: 'JSON Web Token',
             },
             {
               type: 'doc',
-              id: 'server/auth/simple-auth',
+              id: 'auth/simple-auth',
               label: 'Simple Auth',
             },
             {
               type: 'doc',
-              id: 'server/auth/workers',
+              id: 'auth/workers',
               label: 'Workers',
               customProps: {
                 tags: ['new'],
@@ -580,42 +559,9 @@ const sidebars = {
               label: 'Feedback',
             },
             {
-              type: 'category',
-              label: 'Integrations',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/overview',
-                  label: 'Overview',
-                },
-                {
-                  type: 'category',
-                  label: 'Exporters',
-                  items: [
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/exporters/mastra-storage',
-                      label: 'Mastra Storage',
-                    },
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/exporters/mastra-platform',
-                      label: 'Mastra Platform',
-                    },
-                  ],
-                },
-                {
-                  type: 'category',
-                  label: 'Processors',
-                  items: [
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/processors/sensitive-data-filter',
-                      label: 'SensitiveDataFilter',
-                    },
-                  ],
-                },
-              ],
+              type: 'doc',
+              id: 'observability/integrations/exporters/mastra-storage',
+              label: 'Storage',
             },
           ],
         },
@@ -737,86 +683,75 @@ const sidebars = {
   ],
   platformSidebar: [
     {
-      type: 'category',
-      label: 'Mastra Platform',
-      items: [
-        {
-          type: 'doc',
-          id: 'mastra-platform/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/deploy',
-          label: 'Deploy',
-          customProps: {
-            tags: ['new'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/environments',
-          label: 'Environments',
-          customProps: {
-            tags: ['new'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/regions',
-          label: 'Regions',
-          customProps: {
-            tags: ['new'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/observability',
-          label: 'Observability',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/trace-intelligence',
-          label: 'Trace Intelligence',
-          customProps: {
-            tags: ['new'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/studio',
-          label: 'Studio',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/server',
-          label: 'Server',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/github',
-          label: 'GitHub integration',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/database',
-          label: 'Hosted databases',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/workspaces',
-          label: 'Workspaces',
-          customProps: {
-            tags: ['new'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/configuration',
-          label: 'Configuration',
-        },
-      ],
+      type: 'doc',
+      id: 'mastra-platform/overview',
+      label: 'Overview',
     },
+    {
+      type: 'doc',
+      id: 'mastra-platform/deploy',
+      label: 'Deploy',
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/environments',
+      label: 'Environments',
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/regions',
+      label: 'Regions',
+      customProps: {
+        tags: ['new'],
+      },
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/observability',
+      label: 'Observability',
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/trace-intelligence',
+      label: 'Trace Intelligence',
+      customProps: {
+        tags: ['new'],
+      },
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/studio',
+      label: 'Studio',
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/server',
+      label: 'Server',
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/github',
+      label: 'GitHub integration',
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/database',
+      label: 'Hosted databases',
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/workspaces',
+      label: 'Workspaces',
+      customProps: {
+        tags: ['new'],
+      },
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/configuration',
+      label: 'Configuration',
+    },
+    { type: 'doc', id: 'mastra-platform/api', label: 'API Reference' },
   ],
 }
 

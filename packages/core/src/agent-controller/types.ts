@@ -225,6 +225,18 @@ export type BuiltinToolId =
 /** Process-local listener notified after AgentController materializes a live session. */
 export type AgentControllerSessionCreatedListener<TState = {}> = (session: Session<TState>) => void | Promise<void>;
 
+/** Options for {@link AgentController.onSessionCreated}. */
+export interface AgentControllerSessionCreatedOptions {
+  /**
+   * Make `createSession()` await this listener before resolving a newly
+   * materialized session. Blocking listeners run sequentially in registration
+   * order, before fire-and-forget listeners are notified. Failures are
+   * isolated and logged, never thrown. Keep the work short — it holds up every
+   * caller awaiting that session's creation.
+   */
+  blocking?: boolean;
+}
+
 /** Process-local listener notified after AgentController tears down a live session. */
 export type AgentControllerSessionDeletedListener<TState = {}> = (session: Session<TState>) => void | Promise<void>;
 
@@ -506,6 +518,8 @@ export interface TokenUsage {
   reasoningTokens?: number;
   cachedInputTokens?: number;
   cacheCreationInputTokens?: number;
+  cacheCreationInputTokens5m?: number;
+  cacheCreationInputTokens1h?: number;
   raw?: unknown;
 }
 

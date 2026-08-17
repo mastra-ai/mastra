@@ -31,9 +31,12 @@ describe('requestContextSchema type inference', () => {
         const all = context.requestContext.all;
         expectTypeOf(all).toEqualTypeOf<{ userId: string; apiKey: string }>();
 
-        // Verify unknown keys are rejected
+        // Verify unknown keys are rejected on the strict API
         // @ts-expect-error - key does not exist in the request context schema
         context.requestContext.get('nonexistentKey');
+
+        // Runtime-only keys are available through the open-map escape hatch
+        expectTypeOf(context.requestContext.getRaw('nonexistentKey')).toEqualTypeOf<unknown>();
 
         return { success: true };
       },
@@ -131,6 +134,8 @@ describe('requestContextSchema type inference', () => {
 
         // @ts-expect-error - key does not exist in the request context schema
         context.requestContext.get('nonexistentKey');
+
+        expectTypeOf(context.requestContext.getRaw('nonexistentKey')).toEqualTypeOf<unknown>();
 
         return { success: true };
       },

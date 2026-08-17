@@ -307,7 +307,7 @@ export class CoreToolBuilder extends MastraBase {
                 .optional(),
             });
           }
-          this.originalTool.inputSchema = nextSchema;
+          this.originalTool.inputSchema = toStandardSchema(nextSchema);
         } else {
           // Normalize to Standard Schema, extract JSON Schema, splice overrides.
           const standardSchema = isStandardSchemaWithJSON(schema) ? schema : toStandardSchema(schema);
@@ -688,9 +688,12 @@ export class CoreToolBuilder extends MastraBase {
             // Nest agent-specific properties under 'agent' key
             // Do NOT include workflow context even if workflow properties exist
             // (agents use workflows internally but tools should see agent context)
+            // Preserve MCP context when the agent run originated from an MCP tools/call
+            // so nested tools can use elicitation/log/progress.
             const { suspend, resumeData, threadId, resourceId, ...restBaseContext } = baseContext;
             toolContext = {
               ...restBaseContext,
+              ...(execOptions.mcp ? { mcp: execOptions.mcp } : {}),
               agent: {
                 agentId: options.agentId || '',
                 toolCallId: execOptions.toolCallId || '',
@@ -708,6 +711,7 @@ export class CoreToolBuilder extends MastraBase {
             const { suspend, resumeData, ...restBaseContext } = baseContext;
             toolContext = {
               ...restBaseContext,
+              ...(execOptions.mcp ? { mcp: execOptions.mcp } : {}),
               workflow: options.workflow || {
                 runId: options.runId,
                 workflowId: options.workflowId,

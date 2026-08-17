@@ -14,6 +14,7 @@ import type { SaveQueueManager } from '../../save-queue';
 import { getModelOutputForTripwire } from '../../trip-wire';
 import type { AgentMethodType } from '../../types';
 import { isSupportedLanguageModel } from '../../utils';
+import { fireClientToolOutputHooks } from './client-tool-output-hooks';
 import type { PrepareStreamRunScope } from './run-scope';
 import {
   CONVERTED_TOOLS_KEY,
@@ -168,6 +169,18 @@ export function createMapResultsStep<OUTPUT = undefined>({
       }
     }
 
+    // Client-executed tool results arrive as trailing tool-role input messages on
+    // a follow-up request (the browser ran the tool and re-invoked the agent).
+    // The tool already resolved on the client, so fire `onOutput` for matching
+    // execute-less tools. This runs after the tripwire check on purpose: a
+    // request rejected by input processors must not trigger hook side effects.
+    await fireClientToolOutputHooks({
+      messages: options.messages,
+      tools: convertedTools,
+      abortSignal: options.abortSignal,
+      logger: capabilities.logger,
+    });
+
     // Resolve output processors - overrides replace user-configured but auto-derived (memory) are kept
     let effectiveOutputProcessors = capabilities.outputProcessors
       ? typeof capabilities.outputProcessors === 'function'
@@ -232,6 +245,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       agentId,
       requestContext: result.requestContext!,
       actor: options.actor,
+      mcp: options.mcp,
       ...createObservabilityContext({ currentSpan: agentSpan }),
       runId,
       toolChoice: result.toolChoice,

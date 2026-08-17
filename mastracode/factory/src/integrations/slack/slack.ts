@@ -10,6 +10,7 @@ import type {
 } from '@mastra/core/channels';
 import type { Mastra } from '@mastra/core/mastra';
 import { createSlackAdapter } from '@mastra/slack';
+import type { SlackAdapterChannelConfig } from '@mastra/slack';
 import { Card, CardText, Actions, LinkButton } from 'chat';
 
 import {
@@ -80,6 +81,8 @@ interface SlackChannelDeps {
    * session. Best-effort — a failure never blocks the run. Unset → no card.
    */
   workItems?: WorkItemsStorage;
+  /** Overrides applied to the Slack channel adapter entry. */
+  adapterOptions?: SlackAdapterChannelConfig;
 }
 
 /**
@@ -668,13 +671,14 @@ interface SlackCredentials {
 }
 
 export function createSlackChannelsConfig(deps: SlackChannelDeps & { slack: SlackCredentials }): FactoryChannelsConfig {
+  const adapter = createSlackAdapter(deps.slack);
+  const slack =
+    deps.adapterOptions?.streaming === false
+      ? { adapter, ...deps.adapterOptions }
+      : { adapter, ...deps.adapterOptions, streaming: deps.adapterOptions?.streaming ?? true };
+
   return {
-    adapters: {
-      slack: {
-        adapter: createSlackAdapter(deps.slack),
-        toolDisplay: 'hidden',
-      },
-    },
+    adapters: { slack },
     handlers: createHandlers(deps),
     // New linked+repo-backed threads own a Factory user-session id as their
     // resourceId, which is what makes the controller session repo-backed.

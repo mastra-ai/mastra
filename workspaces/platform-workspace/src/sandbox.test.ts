@@ -2109,6 +2109,7 @@ describe('PlatformSandbox', () => {
       const template = new PlatformSandbox({
         accessToken: 'sk_test',
         projectId: 'proj_123',
+        actingUserId: 'external-user-42',
         environmentId: 'env_123',
         idleTimeoutMinutes: 30,
         networkIsolation: 'PRIVATE',
@@ -2123,6 +2124,7 @@ describe('PlatformSandbox', () => {
       await child._start();
 
       expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox');
+      expect((fetchMock.mock.calls[0]![1].headers as Headers).get('x-acting-user-id')).toBe('external-user-42');
       const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
       expect(body).toMatchObject({
         environmentId: 'env_123',

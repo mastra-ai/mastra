@@ -7,6 +7,8 @@
 
 import type { FactoryMetrics } from '@mastra/factory/storage/domains/work-items/metrics';
 
+import { requestJson } from './request';
+
 export type { FactoryMetrics };
 
 /** Inclusive UTC calendar-date bounds (`yyyy-MM-dd`) for a metrics request. */
@@ -22,21 +24,8 @@ export async function fetchFactoryMetrics(
   range: FactoryMetricsRange,
 ): Promise<FactoryMetrics> {
   const query = new URLSearchParams({ from: range.from, to: range.to });
-  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/metrics?${query}`, {
-    headers: { Accept: 'application/json' },
-    credentials: 'include',
-  });
-  if (!res.ok) {
-    let message = `Request failed (${res.status})`;
-    try {
-      const body = (await res.json()) as { error?: string; message?: string };
-      if (body.message) message = body.message;
-      else if (body.error) message = body.error;
-    } catch {
-      /* ignore non-JSON */
-    }
-    throw new Error(message);
-  }
-  const data = (await res.json()) as { metrics: FactoryMetrics };
+  const data = await requestJson<{ metrics: FactoryMetrics }>(
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/metrics?${query}`,
+  );
   return data.metrics;
 }

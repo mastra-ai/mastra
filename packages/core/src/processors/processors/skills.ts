@@ -119,10 +119,10 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
    * Remapped locations are registered as aliases with the skills registry so
    * the `skill` and `skill_read` tools can resolve them back to the skill.
    */
-  private formatLocation(skill: Skill): string {
+  private formatLocation(skill: Skill, skills: WorkspaceSkills = this._skills!): string {
     if (!this._formatLocation) return `${skill.path}/SKILL.md`;
     const location = this._formatLocation(skill);
-    this._skills?.registerLocationAlias?.(location, skill.path);
+    skills.registerLocationAlias?.(location, skill.path);
     return location;
   }
 
@@ -137,15 +137,15 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
    * Format available skills metadata based on configured format.
    * Skills are sorted by name for deterministic output (prompt cache stability).
    */
-  private async formatAvailableSkills(): Promise<string> {
-    const skillsList = await this._skills?.list();
-    if (!skillsList || skillsList.length === 0) {
+  private async formatAvailableSkills(skills: WorkspaceSkills = this._skills!): Promise<string> {
+    const skillsList = await skills.list();
+    if (skillsList.length === 0) {
       return '';
     }
 
     // Get full skill objects to include source info (parallel fetch).
     // Use meta.path (not meta.name) so same-named skills each resolve to their specific entry.
-    const skillPromises = skillsList.map(meta => this._skills?.get(meta.path));
+    const skillPromises = skillsList.map(meta => skills.get(meta.path));
     const fullSkills = (await Promise.all(skillPromises)).filter((s): s is Skill => s !== undefined && s !== null);
     const dedupedSkills = Array.from(new Map(fullSkills.map(skill => [skill.path, skill])).values());
 
@@ -159,7 +159,7 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
             skill => `  <skill>
     <name>${this.escapeXml(skill.name)}</name>
     <description>${this.escapeXml(skill.description)}</description>
-    <location>${this.escapeXml(this.formatLocation(skill))}</location>
+    <location>${this.escapeXml(this.formatLocation(skill, skills))}</location>
     <source>${this.escapeXml(this.formatSourceType(skill))}</source>
   </skill>`,
           )
@@ -177,7 +177,7 @@ ${JSON.stringify(
   dedupedSkills.map(s => ({
     name: s.name,
     description: s.description,
-    location: this.formatLocation(s),
+    location: this.formatLocation(s, skills),
     source: this.formatSourceType(s),
   })),
   null,
@@ -189,7 +189,7 @@ ${JSON.stringify(
         const skillsMd = dedupedSkills
           .map(
             skill =>
-              `- **${skill.name}** [${this.formatSourceType(skill)}] (${this.formatLocation(skill)}): ${skill.description}`,
+              `- **${skill.name}** [${this.formatSourceType(skill)}] (${this.formatLocation(skill, skills)}): ${skill.description}`,
           )
           .join('\n');
         return `# Available Skills
@@ -225,16 +225,18 @@ ${skillsMd}`;
    * message.  Tools are provided by `Agent.listSkillTools()` instead.
    */
   async processInputStep({ messageList, stepNumber, requestContext }: ProcessInputStepArgs) {
+    const skills = this._skills?.getScoped ? await this._skills.getScoped({ requestContext }) : this._skills;
+
     // Refresh skills on first step only (not every step in the agentic loop)
     if (stepNumber === 0) {
-      await this._skills?.maybeRefresh({ requestContext });
+      await skills?.maybeRefresh({ requestContext });
     }
-    const skillsList = await this._skills?.list();
+    const skillsList = await skills?.list();
     const hasSkills = skillsList && skillsList.length > 0;
 
     // Inject available skills metadata (if any skills discovered)
     if (hasSkills) {
-      const availableSkillsMessage = await this.formatAvailableSkills();
+      const availableSkillsMessage = await this.formatAvailableSkills(skills);
       if (availableSkillsMessage) {
         messageList.addSystem({
           role: 'system',
@@ -246,7 +248,7 @@ ${skillsMd}`;
       // registered as aliases with the skills registry, so the location field
       // stays a valid tool identifier. Only when the skills implementation
       // cannot register aliases does the guidance fall back to by-name usage.
-      const locationResolvable = !this._formatLocation || typeof this._skills?.registerLocationAlias === 'function';
+      const locationResolvable = !this._formatLocation || typeof skills?.registerLocationAlias === 'function';
       const locationGuidance = locationResolvable
         ? 'If multiple skills share the same name, use the exact location (shown in the location field) instead of the name to disambiguate. ' +
           'The location field identifies a skill for the `skill` and `skill_read` tools; it is not guaranteed to exist on your workspace filesystem, so read skill files with `skill_read` rather than with filesystem tools. '

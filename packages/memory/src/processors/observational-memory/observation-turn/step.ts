@@ -83,11 +83,13 @@ export class ObservationStep {
         resourceId,
         checkThreshold: true,
         messages: step0Messages,
+        record: this.turn.record,
         currentModel: this.turn.actorModelContext,
         writer: this.turn.writer,
         messageList,
       });
 
+      this.turn.setRecord(activation.record);
       if (activation.activated) {
         activated = true;
         if (activation.activatedMessageIds?.length) {
@@ -146,6 +148,7 @@ export class ObservationStep {
     let statusSnapshot = await om.getStatus({
       threadId,
       resourceId,
+      record: this.turn.record,
       messages: getObservableMessages(messageList),
     });
 
@@ -314,6 +317,7 @@ export class ObservationStep {
       statusSnapshot = await om.getStatus({
         threadId,
         resourceId,
+        record: this.turn.record,
         messages: getObservableMessages(messageList),
       });
     }
@@ -372,7 +376,8 @@ export class ObservationStep {
 
   /**
    * Run the full threshold observation pipeline:
-   * waitForBuffering → re-check → activate → reflect → blockAfter gate → observe
+   * waitForBuffering → re-check → activate → reflect → observe (sync fallback when
+   * buffered activation did not happen)
    */
   private async runThresholdObservation(): Promise<{
     succeeded: boolean;
@@ -383,8 +388,9 @@ export class ObservationStep {
     const { threadId, resourceId, messageList } = this.turn;
     const om = this.turn.om;
 
-    // Wait for any in-flight buffering to settle
+    // Wait for any in-flight buffering to settle, then refresh the turn cache once.
     await om.waitForBuffering(threadId, resourceId);
+    await this.turn.refreshRecord();
 
     // A step-0 seeded response message exists ONLY as a marker anchor in the live list.
     // It must never be part of the observation input: the sync strategy records
@@ -399,6 +405,7 @@ export class ObservationStep {
     const freshStatus = await om.getStatus({
       threadId,
       resourceId,
+      record: this.turn.record,
       messages: observableMessages,
     });
 
@@ -411,11 +418,13 @@ export class ObservationStep {
       const activation = await om.activate({
         threadId,
         resourceId,
+        record: this.turn.record,
         messages: observableMessages,
         currentModel: this.turn.actorModelContext,
         writer: this.turn.writer,
         messageList,
       });
+      this.turn.setRecord(activation.record);
 
       if (activation.activated) {
         // Check reflection after activation — use maybeReflect so that a

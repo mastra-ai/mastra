@@ -203,6 +203,8 @@ export interface FactoryProjectPayload {
   defaultModelId?: string | null;
   /** Whether new Slack sessions create Work-board items for this Factory. */
   slackWorkItemsEnabled?: boolean;
+  /** Whether Factory rules may start agent runs without someone asking for them. */
+  autoRunEnabled?: boolean;
 }
 
 /** `{...projectRepository, repository}` payload from the Factory project routes. */
@@ -332,6 +334,22 @@ export async function updateFactoryDefaultModel(
     res,
     'Failed to update Factory default model',
   );
+  return project;
+}
+
+/** Enable or disable rule-started agent runs (review, triage, planning) for this Factory. */
+export async function updateFactoryAutoRun(
+  baseUrl: string,
+  factoryProjectId: string,
+  autoRunEnabled: boolean,
+): Promise<FactoryProjectPayload> {
+  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ autoRunEnabled }),
+  });
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to update automatic runs');
   return project;
 }
 
@@ -734,9 +752,11 @@ export interface RepositorySettings {
    * configured.
    */
   setupCommand: string | null;
+  /** Best-effort shell command run before a session workspace is retired. */
+  teardownCommand: string | null;
 }
 
-/** Read a repository's settings (currently just the worktree setup command). */
+/** Read a repository's worktree lifecycle settings. */
 export async function fetchRepositorySettings(
   baseUrl: string,
   projectRepositoryId: string,
@@ -749,7 +769,7 @@ export async function fetchRepositorySettings(
   return (await res.json()) as RepositorySettings;
 }
 
-/** Persist a repository's setup command. Pass `null` (or blank) to clear it. */
+/** Persist a repository's lifecycle commands. Pass `null` (or blank) to clear one. */
 export async function saveRepositorySettings(
   baseUrl: string,
   projectRepositoryId: string,

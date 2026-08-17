@@ -1,6 +1,6 @@
 ---
 title: "Reference: Agents API | Client SDK"
-description: Learn how to interact with Mastra AI agents, including generating responses, streaming interactions, and managing agent tools using the client-js SDK.
+description: Learn how to interact with Mastra AI agents, including response generation and streamed interactions, along with agent-tool management using the client-js SDK.
 packages:
   - "@mastra/ai-sdk"
   - "@mastra/client-js"
@@ -350,7 +350,7 @@ await subscription.processDataStream({
 
 ### `streamUntilIdle()`
 
-Stream a response and keep the stream open until every [background task](/docs/long-running-agents/background-tasks) dispatched during the run completes. The server re-enters the agentic loop on each task completion so the LLM can react to results in the same call. Requires background tasks to be [enabled on the Mastra instance](/reference/configuration#backgroundtasks) and a memory thread; otherwise the call uses a plain `stream()`.
+Stream a response and keep the stream open until every [background task](/docs/harness/background-tasks) dispatched during the run completes. The server re-enters the agentic loop on each task completion so the LLM can react to results in the same call. Requires background tasks to be [enabled on the Mastra instance](/reference/configuration#backgroundtasks) and a memory thread; otherwise the call uses a plain `stream()`.
 
 ```typescript
 const response = await agent.streamUntilIdle('Research solana for me', {
@@ -372,7 +372,7 @@ response.processDataStream({
 
 ### `resumeStreamUntilIdle()`
 
-Resume a suspended agent stream with custom data and keep the stream open until every [background task](/docs/long-running-agents/background-tasks) dispatched during the run completes. Use this to continue execution after a suspension point, such as a workflow suspend within an agent. Requires background tasks to be [enabled on the Mastra instance](/reference/configuration#backgroundtasks) and a memory thread; otherwise the call uses a plain `resumeStream()`:
+Resume a suspended agent stream with custom data and keep the stream open until every [background task](/docs/harness/background-tasks) dispatched during the run completes. Use this to continue execution after a suspension point, such as a workflow suspend within an agent. Requires background tasks to be [enabled on the Mastra instance](/reference/configuration#backgroundtasks) and a memory thread; otherwise the call uses a plain `resumeStream()`:
 
 ```typescript
 const response = await agent.resumeStreamUntilIdle(
@@ -562,7 +562,7 @@ if (output.finishReason === 'suspended') {
 
 ## Agent schedules
 
-Use the client SDK schedule methods to manage persisted agent schedules over the `/api/schedules` routes. For concepts and server-side examples, see [Schedules](/docs/long-running-agents/schedules) and the [`mastra.schedules` reference](/reference/schedules/overview).
+Use the client SDK schedule methods to manage persisted agent schedules over the `/api/schedules` routes. For concepts and server-side examples, see [Schedules](/docs/harness/schedules) and the [`mastra.schedules` reference](/reference/schedules/overview).
 
 ### `createSchedule()`
 
@@ -904,7 +904,7 @@ console.log(result.success) // true
 
 ## Version management
 
-Both `Agent` (code-defined) and `StoredAgent` instances have methods for managing configuration versions. See [Editor versioning](/docs/editor/overview#versioning) for lifecycle and selection behavior.
+Both `Agent` (code-defined) and `StoredAgent` instances have methods for managing configuration versions. See [Editor versioning](/docs/studio/editor#versioning) for lifecycle and selection behavior.
 
 ### Getting an agent with a specific version
 

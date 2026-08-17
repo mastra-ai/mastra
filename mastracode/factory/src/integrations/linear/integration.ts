@@ -39,6 +39,7 @@ import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '.
 import { IssueReconcileWorker } from '../issue-reconcile-worker.js';
 import { buildLinearAgentTools } from './agent-tools.js';
 import { attachLinearIssueReconciler } from './issue-reconciler.js';
+import { linearIssueReconciliationEnabled, linearIssueReconciliationInterval } from './reconciliation-config.js';
 import { buildLinearRoutes } from './routes.js';
 import { attachLinearRules } from './rules.js';
 import type { LinearConnectionRow, LinearStorageHandle, UpsertLinearConnectionInput } from './storage.js';
@@ -125,7 +126,8 @@ export interface LinearIssueComment {
 }
 
 /** Full issue payload for agent context: everything in {@link LinearIssue} plus description and discussion. */
-export interface LinearIssueDetail extends LinearIssue {
+export interface LinearIssueDetail extends Omit<LinearIssue, 'projectId'> {
+  projectId: string | null;
   /** Markdown body of the issue, or `null` when empty. */
   description: string | null;
   /** Discussion comments, oldest first. */
@@ -209,7 +211,7 @@ interface IssueDetailQueryData {
     createdAt: string;
     updatedAt: string;
     state: { name: string; type: string };
-    project: { id: string };
+    project: { id: string } | null;
     assignee: { name: string } | null;
     creator: { name: string } | null;
     team: { key: string } | null;
@@ -910,7 +912,7 @@ export class LinearIntegration implements FactoryIntegration {
     const comments = allComments.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     return {
       id: issue.id,
-      projectId: issue.project.id,
+      projectId: issue.project?.id ?? null,
       identifier: issue.identifier,
       title: issue.title,
       description: issue.description?.trim() ? issue.description : null,
@@ -972,15 +974,15 @@ export class LinearIntegration implements FactoryIntegration {
   // ── FactoryIntegration surface ───────────────────────────────────────────
 
   workers(ctx: IntegrationContext): MastraWorker[] {
-    if (process.env.MASTRACODE_LINEAR_RECONCILE_ENABLED?.trim().toLowerCase() === 'false') return [];
+    if (!linearIssueReconciliationEnabled()) return [];
     const reconcile = attachLinearIssueReconciler(this, ctx);
     if (!reconcile) return [];
-    const intervalMs = Number(process.env.MASTRACODE_LINEAR_RECONCILE_INTERVAL_MS);
+    const intervalMs = linearIssueReconciliationInterval();
     return [
       new IssueReconcileWorker({
         integrationId: this.id,
         reconcile,
-        ...(Number.isSafeInteger(intervalMs) && intervalMs > 0 ? { intervalMs } : {}),
+        ...(intervalMs ? { intervalMs } : {}),
       }),
     ];
   }
@@ -1024,7 +1026,7 @@ function getLinearAccessToken(connection: IntegrationConnection): string {
   return connection.accessToken;
 }
 
-function linearIssueToIntakeIssue(issue: LinearIssue): IntakeIssue {
+function linearIssueToIntakeIssue(issue: Omit<LinearIssue, 'projectId'>): IntakeIssue {
   return {
     id: issue.id,
     identifier: issue.identifier,

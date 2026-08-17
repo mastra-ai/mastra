@@ -17,8 +17,8 @@ export const pages: PageConfig[] = [
   { path: '/docs/agents/overview', name: 'Docs – Agents' },
   { path: '/docs/workflows/overview', name: 'Docs – Workflows' },
   { path: '/docs/memory/overview', name: 'Docs – Memory' },
-  { path: '/docs/mcp/overview', name: 'Docs – MCP' },
-  { path: '/docs/server/mastra-server', name: 'Docs – Server' },
+  { path: '/docs/connections/mcp', name: 'Docs – MCP' },
+  { path: '/docs/server/overview', name: 'Docs – Server' },
   { path: '/docs/observability/overview', name: 'Docs – Observability' },
   { path: '/docs/evals/running-in-ci', name: 'Docs – Evals CI' },
   { path: '/docs/deployment/overview', name: 'Docs – Deployment' },
@@ -31,12 +31,11 @@ export const pages: PageConfig[] = [
   { path: '/integrations', name: 'Integrations – Index' },
   { path: '/integrations/channels/slack', name: 'Integrations – Slack' },
 
-  // --- Guides ---
-  { path: '/guides/getting-started/quickstart', name: 'Guides – Quickstart' },
   { path: '/integrations/agentic-ui/ai-sdk-ui', name: 'Integrations – AI SDK UI' },
   { path: '/integrations/frameworks/next-js', name: 'Integrations – Next.js' },
 
   // --- Reference ---
+  { path: '/reference/voice/overview', name: 'Reference – Voice' },
   { path: '/reference/configuration', name: 'Reference – Configuration' },
   { path: '/reference/core/mastra-class', name: 'Reference – Mastra Class' },
   { path: '/reference/agents/agent', name: 'Reference – Agent' },

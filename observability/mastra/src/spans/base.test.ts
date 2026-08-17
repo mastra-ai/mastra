@@ -1,5 +1,5 @@
 import type { ObservabilityExporter, TracingEvent } from '@mastra/core/observability';
-import { SpanType, SamplingStrategyType, InternalSpans } from '@mastra/core/observability';
+import { SpanType, SamplingStrategyType, InternalSpans, TracingEventType } from '@mastra/core/observability';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { DefaultObservabilityInstance } from '../instances';
@@ -678,11 +678,21 @@ describe('Span', () => {
       expect(result.self).toBe('[Circular]');
     });
 
-    it('should strip specified keys', () => {
+    it('should preserve domain keys by default and strip runtime-shaped values', () => {
       const input = {
         name: 'test',
-        logger: { level: 'info' },
-        tracingContext: { traceId: '123' },
+        logger: { label: 'domain logger field' },
+        tracingContext: { traceId: 'domain-trace-context' },
+        steps: ['plan', 'book'],
+        providerMetadata: { source: 'user' },
+        execute: 'now',
+        validate: true,
+        runtimeLogger: { logger: { info() {} } },
+        runtimeTracing: { tracingContext: { currentSpan: undefined } },
+        runtimeFunctions: {
+          execute() {},
+          validate() {},
+        },
         data: 'keep this',
       };
 
@@ -690,8 +700,15 @@ describe('Span', () => {
 
       expect(result.name).toBe('test');
       expect(result.data).toBe('keep this');
-      expect(result.logger).toBeUndefined();
-      expect(result.tracingContext).toBeUndefined();
+      expect(result.logger).toEqual({ label: 'domain logger field' });
+      expect(result.tracingContext).toEqual({ traceId: 'domain-trace-context' });
+      expect(result.steps).toEqual(['plan', 'book']);
+      expect(result.providerMetadata).toEqual({ source: 'user' });
+      expect(result.execute).toBe('now');
+      expect(result.validate).toBe(true);
+      expect(result.runtimeLogger).toEqual({});
+      expect(result.runtimeTracing).toEqual({});
+      expect(result.runtimeFunctions).toEqual({});
     });
 
     it("should honor an object's serializeForSpan() method so private fields are not walked", () => {
@@ -898,6 +915,60 @@ describe('Span', () => {
       expect(result.$schema).toBe('[schema getter failed]');
     });
 
+    it('should return a serialization error when object key enumeration throws', () => {
+      const input = new Proxy(
+        {},
+        {
+          ownKeys() {
+            throw new Error('ownKeys failed');
+          },
+        },
+      );
+
+      const result = deepClean(input);
+
+      expect(result).toBe('[ownKeys failed]');
+    });
+
+    it('should respect maxObjectKeys when a property getter throws', () => {
+      const input: Record<string, unknown> = {
+        first: 1,
+        second: 2,
+      };
+
+      Object.defineProperty(input, 'third', {
+        enumerable: true,
+        get() {
+          throw new Error('third getter failed');
+        },
+      });
+
+      const result = deepClean(input, { ...DEFAULT_DEEP_CLEAN_OPTIONS, maxObjectKeys: 2 });
+
+      expect(result).toEqual({
+        first: 1,
+        second: 2,
+        __truncated: '1 more keys omitted',
+      });
+    });
+
+    it('should not read throwing getters for explicitly stripped keys', () => {
+      const input: Record<string, unknown> = {
+        visible: 'ok',
+      };
+
+      Object.defineProperty(input, 'secret', {
+        enumerable: true,
+        get() {
+          throw new Error('secret getter failed');
+        },
+      });
+
+      const result = deepClean(input, { ...DEFAULT_DEEP_CLEAN_OPTIONS, keysToStrip: ['secret'] });
+
+      expect(result).toEqual({ visible: 'ok' });
+    });
+
     it('should serialize Maps including nested and primitive/object values', () => {
       const inner = new Map<string, any>([['k', 'v']]);
       const map = new Map<any, any>([
@@ -963,19 +1034,58 @@ describe('Span', () => {
       expect(result.map.__truncated).toBe('3 more keys omitted');
     });
 
-    it('should strip matching string Map keys before truncation', () => {
+    it('should strip matching string Map keys before truncation when explicitly configured', () => {
       const map = new Map<any, any>([
         ['logger', 'omit'],
         ['visible', 1],
         [2, 'keep-number-key'],
       ]);
 
-      const result = deepClean({ map });
+      const result = deepClean({ map }, { ...DEFAULT_DEEP_CLEAN_OPTIONS, keysToStrip: ['logger'] });
 
       expect(result.map.__map_entries).toEqual([
         ['string', 'visible', 1],
         ['number', 2, 'keep-number-key'],
       ]);
+    });
+
+    it('should preserve matching string Map keys by default unless their values are runtime-shaped', () => {
+      const map = new Map<any, any>([
+        ['logger', 'domain logger'],
+        ['execute', 'domain execute'],
+        ['validate', false],
+        ['tracingContext', { traceId: 'domain-trace-context' }],
+        ['runtimeLogger', { logger: { warn() {} } }],
+        ['runtimeTracing', { tracingContext: { currentSpan: undefined } }],
+        ['runtimeFunction', { execute() {} }],
+      ]);
+
+      const result = deepClean({ map });
+
+      expect(result.map.__map_entries).toEqual([
+        ['string', 'logger', 'domain logger'],
+        ['string', 'execute', 'domain execute'],
+        ['string', 'validate', false],
+        ['string', 'tracingContext', { traceId: 'domain-trace-context' }],
+        ['string', 'runtimeLogger', {}],
+        ['string', 'runtimeTracing', {}],
+        ['string', 'runtimeFunction', {}],
+      ]);
+    });
+
+    it('should not strip Map entries when runtime-shape checks hit throwing getters', () => {
+      const logger = {};
+      Object.defineProperty(logger, 'info', {
+        enumerable: true,
+        get() {
+          throw new Error('logger getter failed');
+        },
+      });
+      const map = new Map<any, any>([['logger', logger]]);
+
+      const result = deepClean({ map });
+
+      expect(result.map.__map_entries).toEqual([['string', 'logger', { info: '[logger getter failed]' }]]);
     });
 
     it('should serialize Sets including nested and object items', () => {
@@ -1071,6 +1181,186 @@ describe('Span', () => {
       expect(result.err.stack).toBe('[stack getter failed]');
       expect(result.err.cause).toBe('[cause getter failed]');
       expect(() => JSON.stringify(result)).not.toThrow();
+    });
+  });
+
+  describe('span-aware serialization', () => {
+    it('strips model step and inference output steps without stripping nested domain steps', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const modelStep = tracing.startSpan({
+        type: SpanType.MODEL_STEP,
+        name: 'model-step',
+        attributes: { stepIndex: 0 },
+      });
+      modelStep.end({
+        output: {
+          text: 'ok',
+          steps: [{ request: { body: 'large' } }],
+          object: { steps: ['domain-step'] },
+        },
+      });
+
+      const modelInference = tracing.startSpan({
+        type: SpanType.MODEL_INFERENCE,
+        name: 'model-inference',
+        attributes: { stepIndex: 0 },
+      });
+      modelInference.end({
+        output: {
+          text: 'ok',
+          steps: [{ request: { body: 'large' } }],
+          object: { steps: ['domain-step'] },
+        },
+      });
+
+      const spans = testExporter.events
+        .filter(event => event.type === TracingEventType.SPAN_ENDED)
+        .map(event => event.exportedSpan);
+      const stepSpan = spans.find(span => span.type === SpanType.MODEL_STEP);
+      const inferenceSpan = spans.find(span => span.type === SpanType.MODEL_INFERENCE);
+
+      expect(stepSpan?.output).toEqual({ text: 'ok', object: { steps: ['domain-step'] } });
+      expect(inferenceSpan?.output).toEqual({ text: 'ok', object: { steps: ['domain-step'] } });
+    });
+
+    it('only prepares plain record model outputs before deepClean', () => {
+      class ModelOutput {
+        steps = ['class-owned'];
+        text = 'class output';
+      }
+
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const classOutputSpan = tracing.startSpan({
+        type: SpanType.MODEL_STEP,
+        name: 'model-step-class-output',
+        attributes: { stepIndex: 0 },
+      });
+      classOutputSpan.end({ output: new ModelOutput() });
+
+      const throwingOutput: Record<string, unknown> = {
+        text: 'throwing output',
+      };
+      Object.defineProperty(throwingOutput, 'steps', {
+        enumerable: true,
+        get() {
+          throw new Error('steps getter failed');
+        },
+      });
+
+      const throwingOutputSpan = tracing.startSpan({
+        type: SpanType.MODEL_STEP,
+        name: 'model-step-throwing-output',
+        attributes: { stepIndex: 1 },
+      });
+      throwingOutputSpan.end({ output: throwingOutput });
+
+      const spans = testExporter.events
+        .filter(event => event.type === TracingEventType.SPAN_ENDED)
+        .map(event => event.exportedSpan);
+      const classSpan = spans.find(span => span.name === 'model-step-class-output');
+      const throwingSpan = spans.find(span => span.name === 'model-step-throwing-output');
+
+      expect(classSpan?.output).toEqual({ steps: ['class-owned'], text: 'class output' });
+      expect(throwingSpan?.output).toEqual({ text: 'throwing output', steps: '[steps getter failed]' });
+    });
+
+    it('strips model step metadata provider metadata but preserves model chunk provider metadata', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const modelStep = tracing.startSpan({
+        type: SpanType.MODEL_STEP,
+        name: 'model-step',
+        attributes: { stepIndex: 0 },
+        metadata: {
+          providerMetadata: { provider: { noisy: true } },
+          experimental_providerMetadata: { provider: { legacy: true } },
+          keep: 'metadata',
+        },
+      });
+      modelStep.end({
+        metadata: {
+          providerMetadata: { provider: { noisy: true } },
+          experimental_providerMetadata: { provider: { legacy: true } },
+          endKeep: 'metadata',
+        },
+      });
+
+      const modelChunk = tracing.startSpan({
+        type: SpanType.MODEL_CHUNK,
+        name: 'model-chunk',
+        attributes: { chunkType: 'tool-result', sequenceNumber: 0 },
+        metadata: {
+          providerMetadata: { provider: { useful: true } },
+          keep: 'chunk',
+        },
+      });
+      modelChunk.end();
+
+      const spans = testExporter.events
+        .filter(event => event.type === TracingEventType.SPAN_ENDED)
+        .map(event => event.exportedSpan);
+      const stepSpan = spans.find(span => span.type === SpanType.MODEL_STEP);
+      const chunkSpan = spans.find(span => span.type === SpanType.MODEL_CHUNK);
+
+      expect(stepSpan?.metadata).toEqual({ keep: 'metadata', endKeep: 'metadata' });
+      expect(chunkSpan?.metadata).toEqual({
+        providerMetadata: { provider: { useful: true } },
+        keep: 'chunk',
+      });
+    });
+
+    it('does not throw when model step metadata has throwing getters during construction', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+      const metadata: Record<string, unknown> = {
+        keep: 'metadata',
+      };
+      Object.defineProperty(metadata, 'providerMetadata', {
+        enumerable: true,
+        get() {
+          throw new Error('provider metadata getter failed');
+        },
+      });
+
+      expect(() =>
+        tracing.startSpan({
+          type: SpanType.MODEL_STEP,
+          name: 'model-step-throwing-metadata',
+          attributes: { stepIndex: 0 },
+          metadata,
+        }),
+      ).not.toThrow();
+
+      const span = testExporter.events.find(
+        event =>
+          event.type === TracingEventType.SPAN_STARTED && event.exportedSpan.name === 'model-step-throwing-metadata',
+      )?.exportedSpan;
+
+      expect(span?.metadata).toEqual({
+        keep: 'metadata',
+        providerMetadata: '[provider metadata getter failed]',
+      });
     });
   });
 

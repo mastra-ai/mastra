@@ -86,7 +86,9 @@ export function SignalDeltaColumn({
                 <button
                   aria-label={`View theme details for ${delta.label}`}
                   className="hover:border-border2 block w-full cursor-pointer rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-white/[0.03]"
-                  onClick={() => onThemeSelect({ signalName, themeId, label: delta.label }, detailIndexFor(delta))}
+                  onClick={() =>
+                    onThemeSelect({ kind: 'theme', signalName, themeId, label: delta.label }, detailIndexFor(delta))
+                  }
                   type="button"
                 >
                   {card}

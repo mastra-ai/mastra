@@ -188,6 +188,7 @@ describe('Trace signals trace insight', () => {
       renderSignals();
 
       await openThemeDetails();
+      fireEvent.click(screen.getByRole('button', { name: 'Clear theme filter' }));
       fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
       fireEvent.click(
         await screen.findByRole('button', { name: 'View trace insight for Save the transcript with the project.' }),

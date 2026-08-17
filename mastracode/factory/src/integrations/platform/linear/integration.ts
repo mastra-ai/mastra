@@ -12,6 +12,7 @@ import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '.
 import { buildLinearAgentTools } from '../../linear/agent-tools.js';
 import type { LinearConnectionCheck, LinearIntegration } from '../../linear/integration.js';
 import { attachLinearIssueReconciler } from '../../linear/issue-reconciler.js';
+import { linearIssueReconciliationEnabled, linearIssueReconciliationInterval } from '../../linear/reconciliation-config.js';
 import { buildLinearRoutes } from '../../linear/routes.js';
 import { attachLinearRules } from '../../linear/rules.js';
 import type { LinearConnectionData, LinearConnectionRow, LinearStorageHandle } from '../../linear/storage.js';
@@ -362,7 +363,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
 
   workers(ctx: IntegrationContext): MastraWorker[] {
     const pollingEnabled = process.env.MASTRACODE_PLATFORM_LINEAR_POLLING_ENABLED?.trim().toLowerCase() !== 'false';
-    const reconcileEnabled = process.env.MASTRACODE_LINEAR_RECONCILE_ENABLED?.trim().toLowerCase() !== 'false';
+    const reconcileEnabled = linearIssueReconciliationEnabled();
     if (!pollingEnabled && !reconcileEnabled) return [];
 
     const ingest = attachLinearRules(ctx);
@@ -372,7 +373,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     if (!ingest && !reconcile) return [];
 
     const pollIntervalMs = optionalPositiveIntegerEnv('MASTRACODE_PLATFORM_LINEAR_POLLING_INTERVAL_MS');
-    const reconcileIntervalMs = optionalPositiveIntegerEnv('MASTRACODE_LINEAR_RECONCILE_INTERVAL_MS');
+    const reconcileIntervalMs = linearIssueReconciliationInterval();
 
     return [
       new PlatformLinearEventWorker({

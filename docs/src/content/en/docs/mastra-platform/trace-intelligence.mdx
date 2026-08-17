@@ -5,7 +5,7 @@ description: Find recurring goals, outcomes, behaviors, and sentiment across you
 
 # Trace Intelligence on Mastra platform
 
-Trace Intelligence finds recurring patterns across your agent's interactions. It analyzes traces captured by Mastra Observability, produces trace signals for four dimensions, and clusters similar trace signals into themes.
+Trace Intelligence finds recurring patterns across your agent's interactions. It analyzes traces captured by Mastra Observability and produces trace signals for four dimensions. It then clusters similar trace signals into themes.
 
 Use Trace Intelligence to investigate questions such as:
 
@@ -32,7 +32,7 @@ Once Mastra enrolls the project, you don't need to change your agent definition 
 
 Trace Intelligence needs enough processed traces from one agent to identify recurring patterns. Initial themes are usually available after at least **100 completed traces** from that agent have been processed.
 
-The trace count under **Traces** can reach 100 before Trace Intelligence is ready because the analysis pipeline runs asynchronously. Processing can take several minutes after the threshold is reached. Traces that can't be analyzed don't contribute, so 100 is a minimum, not an exact UI trigger.
+The trace count under **Traces** can reach 100 before Trace Intelligence is ready because the analysis pipeline runs asynchronously. Processing can take several minutes after the threshold is reached. Traces that can't be analyzed don't contribute. As a result, 100 is a minimum rather than an exact UI trigger.
 
 Trace Intelligence updates automatically as more traces arrive. Studio needs themes for at least two trace signal types before it can display the relationship flow.
 
@@ -95,7 +95,7 @@ Filtering the flow by a theme is unavailable for snapshots with more than 2,000 
 
 ### Intelligence isn't in the sidebar
 
-Confirm that Mastra enrolled the correct project, that you use the beta-compatible Mastra version, and that you redeployed Studio. The private beta doesn't support local Studio.
+Confirm that Mastra enrolled the correct project, that you use the beta-compatible Mastra version, and that you redeployed Studio because the private beta doesn't support local Studio.
 
 ### An agent is missing
 

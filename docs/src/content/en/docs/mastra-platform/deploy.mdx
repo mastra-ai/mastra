@@ -22,7 +22,7 @@ This page covers the unified deploy flow. The earlier split commands, [`mastra s
 
 ## Before you begin
 
-You'll need a [Mastra application](/guides/getting-started/quickstart) and a [Mastra platform](https://projects.mastra.ai) account. If you're not authenticated, the CLI prompts you to log in on first use.
+You'll need a [Mastra application](/docs) and a [Mastra platform](https://projects.mastra.ai) account. If you're not authenticated, the CLI prompts you to log in on first use.
 
 A local `.env` file is optional. Environment variables stored on the platform are used as-is at deploy time, and managed resources like [hosted databases](/docs/mastra-platform/database) inject their own variables. Pass `--env-file` only when you want to layer local values on top.
 
@@ -83,7 +83,7 @@ A local `.env` file is optional. Environment variables stored on the platform ar
     Verify your deployment at the URL printed by the CLI. Append `/api/agents` to confirm it returns a JSON list of your agents.
 
     :::warning
-    Set up [authentication](/docs/server/auth) before exposing your endpoints publicly.
+    Set up [authentication](/docs/auth/overview) before exposing your endpoints publicly.
     :::
   </StepItem>
 </Steps>
@@ -116,7 +116,7 @@ The region is fixed when the environment is created. Databases attached to an en
 
 Preflight validates the built output before anything includes, and only flags issues in your own code:
 
-- **Local storage paths**: A hard block. File-backed storage (for example `file:./mastra.db`) is lost on every deploy. Preflight passes when the path is guarded by an environment variable that's set locally, stored on the platform, or provided by a managed database:
+- **Local storage paths**: A hard block. File-backed storage (for example `file:./mastra.db`) is lost on every deploy. Preflight passes when the path is guarded by an environment variable that's set locally or stored on the platform, including values provided by a managed database:
 
   ```ts title="src/mastra/storage.ts"
   import { LibSQLStore } from '@mastra/libsql'

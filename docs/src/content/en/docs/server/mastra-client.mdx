@@ -1,5 +1,5 @@
 ---
-title: "Mastra client SDK | Server"
+title: "Mastra client | Server"
 description: "Learn how to set up and use the Mastra Client SDK"
 packages:
   - "@mastra/client-js"
@@ -7,9 +7,9 @@ packages:
   - "@mastra/react"
 ---
 
-# Mastra client SDK
+# Mastra client
 
-The Mastra Client SDK provides a concise and type-safe interface for interacting with your [Mastra Server](/docs/server/mastra-server) from your client environment.
+The Mastra Client SDK provides a concise and type-safe interface for interacting with your [Mastra Server](/docs/server/overview) from your client environment.
 
 ## Prerequisites
 
@@ -50,7 +50,7 @@ export const mastraClient = new MastraClient({
 The Mastra Client SDK exposes all resources served by the Mastra Server.
 
 - **[Agents](/reference/client-js/agents)**: Generate responses and stream conversations.
-- **[A2A](/docs/agents/a2a)**: Discover agents through agent cards and work with task-based A2A streams.
+- **[A2A](/docs/connections/a2a)**: Discover agents through agent cards and work with task-based A2A streams.
 - **[Memory](/reference/client-js/memory)**: Manage conversation threads and message history.
 - **[Tools](/reference/client-js/tools)**: Executed and managed tools.
 - **[Workflows](/reference/client-js/workflows)**: Trigger workflows and track their execution.
@@ -62,7 +62,7 @@ The Mastra Client SDK exposes all resources served by the Mastra Server.
 
 ## Create and run dynamic workflows
 
-Use `upsertDynamicWorkflow()` to create or replace a persisted workflow definition. A successful upsert validates the complete definition, registers it with the running Mastra instance, and makes it available through the standard workflow execution API.
+Use `upsertDynamicWorkflow()` to create or replace a persisted workflow definition. A successful upsert validates the complete definition and registers it with the running Mastra instance. The workflow then becomes available through the standard execution API.
 
 The following example shows the full lifecycle of a mapping workflow, from creation and inspection through execution and deletion:
 

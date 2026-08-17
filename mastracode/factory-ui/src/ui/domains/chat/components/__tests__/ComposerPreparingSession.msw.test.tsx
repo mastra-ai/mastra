@@ -7,6 +7,36 @@ import { waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { releaseSession, renderThread, stubPreparingSession } from './composer-session-test-fixture';
 
 describe('Composer while a session prepares its workspace', () => {
+  it('blocks sandbox actions while /ensure is pending but keeps the textarea typable', async () => {
+    const session = stubPreparingSession({ ensurePending: true });
+    const user = userEvent.setup();
+    const { container, client } = renderThread();
+
+    const message = () => screen.getByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(message()).toBeEnabled());
+    const sendButton = screen.getByRole('button', { name: 'Send message' });
+    expect(sendButton).toBeDisabled();
+
+    await user.type(message(), 'draft while initializing');
+    expect(message()).toHaveValue('draft while initializing');
+    await user.keyboard('{Enter}');
+    expect(session.posted).toEqual([]);
+
+    const image = new File(['png'], 'shot.png', { type: 'image/png' });
+    const form = container.querySelector('form');
+    assert(form);
+    fireEvent.drop(form, { dataTransfer: { files: [image] } });
+    fireEvent.paste(message(), { clipboardData: { files: [image] } });
+    expect(screen.queryByRole('button', { name: 'Remove image' })).not.toBeInTheDocument();
+
+    session.finishEnsure();
+    await waitFor(() => expect(sendButton).toBeEnabled());
+    expect(message()).toHaveValue('draft while initializing');
+
+    session.finishWorkspace();
+    await waitForMutationsIdle(client);
+  });
+
   it('sends the message straight away and shows it while the workspace comes up', async () => {
     const session = stubPreparingSession();
     const user = userEvent.setup();

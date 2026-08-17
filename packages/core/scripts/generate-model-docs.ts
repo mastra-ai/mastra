@@ -1155,7 +1155,7 @@ ${gatewaysList
       title="Mastra"
       description="Built-in Observational Memory"
       href="/models/gateways/${g}"
-      logo="https://mastra.ai/brand/logo.svg"
+      logo="/img/integrations/mastra.svg"
     />`;
       }
     }

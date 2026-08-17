@@ -1,22 +1,22 @@
 ---
-title: 'Deploy Mastra to Netlify | Deploy'
+title: 'Netlify | Deploy'
 description: 'Learn how to deploy a Mastra application to Netlify'
 ---
 
 import Steps from '@site/src/components/Steps';
 import StepItem from '@site/src/components/StepItem';
 
-# Deploy Mastra to Netlify
+# Netlify
 
 Use `@mastra/deployer-netlify` to deploy your Mastra server on Netlify. The deployer bundles your code and generates a `.netlify` directory conforming to Netlify's [Frameworks API](https://docs.netlify.com/build/frameworks/frameworks-api/), ready to deploy. You can deploy as serverless functions (default) or as [edge functions](https://docs.netlify.com/build/edge-functions/overview/) for lower latency and longer execution times.
 
 :::note
-This guide covers deploying the [Mastra server](/docs/server/mastra-server). If you're using a [server adapter](/docs/server/server-adapters) or [web framework](/docs/deployment/web-framework), deploy the way you normally would for that framework.
+This guide covers deploying the [Mastra server](/docs/server/overview). If you're using a [server adapter](/docs/server/server-adapters) or [web framework](/docs/deployment/web-framework), deploy the way you normally would for that framework.
 :::
 
 ## Before you begin
 
-You'll need a [Mastra application](/guides/getting-started/quickstart) and a [Netlify](https://www.netlify.com/) account.
+You'll need a [Mastra application](/docs) and a [Netlify](https://www.netlify.com/) account.
 
 :::warning
 Netlify Functions use an ephemeral filesystem, so any storage you configure (including observability storage) must be hosted externally. If you're using [LibSQLStore](/integrations/databases/libsql) with a file URL, switch to a remotely hosted database.
@@ -88,7 +88,7 @@ After setting up your project, push it to your remote Git provider of choice (e.
   <StepItem>
     Verify your deployment at `https://<random-slug>.netlify.app/api/agents`, which should return a JSON list of your agents.
 
-    Since the [Mastra server](/docs/server/mastra-server) prefixes every API endpoint with `/api`, you have to add it to your URLs when making requests.
+    Since the [Mastra server](/docs/server/overview) prefixes every API endpoint with `/api`, you have to add it to your URLs when making requests.
 
     :::note
 
@@ -101,7 +101,7 @@ After setting up your project, push it to your remote Git provider of choice (e.
     You can now call your Mastra endpoints over HTTP.
 
     :::warning
-    Set up [authentication](/docs/server/auth) before exposing your endpoints publicly.
+    Set up [authentication](/docs/auth/overview) before exposing your endpoints publicly.
     :::
   </StepItem>
 </Steps>
