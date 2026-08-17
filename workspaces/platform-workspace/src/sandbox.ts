@@ -711,9 +711,12 @@ export class PlatformSandbox extends MastraSandbox {
       await new Promise(r => setTimeout(r, SIDECAR_PROBE_INTERVAL_MS));
     }
     // Sidecar never came up. Leave registry entry unset — every exec goes lease.
-    if (generation === this._probeGeneration) {
-      this._probeState = 'timed-out';
-    }
+    // If a teardown or new start() bumped `_probeGeneration` while our final
+    // health request was in flight, this probe has been superseded — don't
+    // clobber the newer probe's state and don't emit a timeout log that
+    // describes an old attempt after a newer one already succeeded.
+    if (generation !== this._probeGeneration) return;
+    this._probeState = 'timed-out';
     this.logger.warn('platform-workspace probe timed out', {
       sandboxId,
       sessionId: this._client.sessionId,

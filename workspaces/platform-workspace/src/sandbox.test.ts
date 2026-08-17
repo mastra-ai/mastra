@@ -1796,6 +1796,48 @@ describe('PlatformSandbox', () => {
         vi.useRealTimers();
       });
 
+      it('does not log a timeout for a superseded probe', async () => {
+        // Regression: if teardown or a new start() bumps `_probeGeneration`
+        // while the final health request is pending, the loop exit path must
+        // return early — otherwise it clobbers the newer probe's state and
+        // emits a timeout log describing an old attempt.
+        vi.useFakeTimers();
+        vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+        const fetchMock = vi.fn().mockResolvedValueOnce(
+          json({
+            id: 'sbx_superseded',
+            createdAt: '2026-06-26T00:00:00.000Z',
+            instanceUrl: 'http://[fd12::1]:47000',
+          }),
+        );
+        const privateNetFetch = vi.fn().mockRejectedValue(new Error('ECONNREFUSED'));
+        const { registry } = fakeAddressRegistry();
+
+        const sandbox = new PlatformSandbox({
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          sessionId: 'sess_42',
+          fetch: fetchMock,
+          privateNetFetch,
+          addressRegistry: registry,
+        });
+        const loggerWarnSpy = vi.spyOn((sandbox as any).logger, 'warn');
+        await sandbox._start();
+
+        // Simulate teardown / new start() superseding the first probe by
+        // bumping the generation mid-flight (before the 30s deadline).
+        (sandbox as any)._probeGeneration += 1;
+
+        // Advance past the probe timeout so the first probe's loop exits.
+        await vi.advanceTimersByTimeAsync(35_000);
+
+        expect(loggerWarnSpy).not.toHaveBeenCalledWith('platform-workspace probe timed out', expect.anything());
+        // And the superseded probe didn't clobber the new generation's state.
+        expect((sandbox as any)._probeState).not.toBe('timed-out');
+        vi.useRealTimers();
+      });
+
       it('does not block start() while the probe is running', async () => {
         vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
         const fetchMock = vi.fn().mockResolvedValueOnce(
