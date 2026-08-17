@@ -7,8 +7,20 @@ import { useChat, useMastraClient } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
-import { ChatMessagesContext, ChatRunningContext, ChatSendContext, ChatTasksContext } from './chat-context';
-import type { MessagesContextValue, RunningContextValue, SendContextValue, TasksContextValue } from './chat-context';
+import {
+  ChatHistoryContext,
+  ChatMessagesContext,
+  ChatRunningContext,
+  ChatSendContext,
+  ChatTasksContext,
+} from './chat-context';
+import type {
+  HistoryContextValue,
+  MessagesContextValue,
+  RunningContextValue,
+  SendContextValue,
+  TasksContextValue,
+} from './chat-context';
 import { useChatSendHandler } from './use-chat-send-handler';
 import { useObservationalMemoryContext } from '@/domains/agents/context';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
@@ -48,7 +60,16 @@ export function ChatProvider({
   modelVersion,
   agentVersionId,
   supportsMemory,
-}: Readonly<{ children: ReactNode }> & ChatProps) {
+  history,
+}: Readonly<{
+  children: ReactNode;
+  history?: {
+    hasMore: boolean;
+    isLoading: boolean;
+    load: () => Promise<MastraDBMessage[]>;
+  };
+}> &
+  ChatProps) {
   const { settings: tracingSettings } = useTracingSettings();
   const modelOverride = usePlaygroundModelOptional()?.modelOverride;
 
@@ -324,8 +345,17 @@ export function ChatProvider({
   );
   const sendValue = useMemo<SendContextValue>(() => ({ send }), [send]);
   const tasksValue = useMemo<TasksContextValue>(() => ({ tasks }), [tasks]);
+  const loadHistory = async () => {
+    if (!history?.hasMore || history.isLoading) return;
 
-  return (
+    const persistedMessages = await history.load();
+    setMessages(currentMessages => {
+      const currentMessageIds = new Set(currentMessages.map(message => message.id));
+      const olderMessages = persistedMessages.filter(message => !currentMessageIds.has(message.id));
+      return olderMessages.length > 0 ? [...olderMessages, ...currentMessages] : currentMessages;
+    });
+  };
+  const chat = (
     <ChatRunningContext.Provider value={runningValue}>
       <ChatMessagesContext.Provider value={messagesValue}>
         <ChatTasksContext.Provider value={tasksValue}>
@@ -348,4 +378,13 @@ export function ChatProvider({
       </ChatMessagesContext.Provider>
     </ChatRunningContext.Provider>
   );
+
+  if (!history) return chat;
+
+  const historyValue: HistoryContextValue = {
+    hasMore: history.hasMore,
+    isLoading: history.isLoading,
+    load: loadHistory,
+  };
+  return <ChatHistoryContext.Provider value={historyValue}>{chat}</ChatHistoryContext.Provider>;
 }

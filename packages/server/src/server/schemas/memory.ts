@@ -513,7 +513,7 @@ export const getThreadByIdResponseSchema = threadSchema;
 /**
  * Response for GET /memory/threads/:threadId/messages
  */
-export const listMessagesResponseSchema = z.object({
+export const listMessagesResponseSchema = paginationInfoSchema.extend({
   messages: z.array(messageSchema),
   uiMessages: z.array(z.unknown()).nullable(), // Converted messages in UI format
 });

@@ -30,7 +30,7 @@ import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
 import { AttachFilePopover } from './attachments/attach-file-popover';
 import { ComposerAttachments as ChatComposerAttachments } from './attachments/attachment';
 import { ComposerAttachmentsProvider, useComposerAttachments } from './attachments/composer-attachments';
-import { useChatMessages, useChatRunning, useChatSend } from './chat/chat-context';
+import { useChatHistory, useChatMessages, useChatRunning, useChatSend } from './chat/chat-context';
 import { useReadAloud } from './chat/use-read-aloud';
 import { BracketOverlay } from './components/bracket-overlay';
 import './thread.css';
@@ -132,6 +132,7 @@ export const Thread = ({
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   const messages = useChatMessages();
+  const history = useChatHistory();
   const { isRunning } = useChatRunning();
   const { requestContext } = usePlaygroundStore();
   const { isSpeaking, readAloud, stop: stopSpeaking } = useReadAloud(agentId, requestContext);
@@ -162,7 +163,11 @@ export const Thread = ({
 
   return (
     <ComposerAttachmentsProvider>
-      <MessageScrollerProvider defaultScrollPosition="last-anchor">
+      <MessageScrollerProvider
+        defaultScrollPosition="last-anchor"
+        onReachStart={history.hasMore && !history.isLoading ? history.load : undefined}
+        preserveScrollOnPrepend={history.hasMore}
+      >
         <div className="group/thread grid h-full grid-rows-[1fr_auto] overflow-y-auto" data-testid="thread-wrapper">
           <MessageScroller>
             <MessageScrollerViewport className="h-full overflow-y-scroll" style={{ overflowAnchor: 'none' }}>

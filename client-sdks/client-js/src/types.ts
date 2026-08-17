@@ -791,7 +791,7 @@ export type ListMemoryThreadMessagesParams = Omit<StorageListMessagesInput, 'thr
   includeSystemReminders?: boolean;
 };
 
-export type ListMemoryThreadMessagesResponse = {
+export type ListMemoryThreadMessagesResponse = PaginationInfo & {
   messages: MastraDBMessage[];
 };
 
