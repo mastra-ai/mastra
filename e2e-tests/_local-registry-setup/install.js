@@ -27,18 +27,20 @@ function isTransient(output) {
  *
  * Transient registry errors are retried, since a flaky uplink should not fail a run.
  *
+ * The command is executed directly rather than through a shell, so arguments are
+ * passed as an argv array and are never re-parsed as shell syntax.
+ *
  * @param {string} command
  * @param {string[]} args
- * @param {{ cwd?: string, env?: NodeJS.ProcessEnv, shell?: boolean, retries?: number }} [options]
+ * @param {{ cwd?: string, env?: NodeJS.ProcessEnv, retries?: number }} [options]
  */
-export function installWithRetry(command, args, { cwd, env, shell = true, retries = 3 } = {}) {
+export function installWithRetry(command, args, { cwd, env, retries = 3 } = {}) {
   let lastOutput = '';
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     const result = spawnSync(command, args, {
       cwd,
       env,
-      shell,
       encoding: 'utf8',
       // Capture output so we can classify failures, while still surfacing it.
       stdio: ['inherit', 'pipe', 'pipe'],
@@ -75,9 +77,15 @@ export function installWithRetry(command, args, { cwd, env, shell = true, retrie
 
 /**
  * Run a command, failing loudly on a non-zero exit code.
+ *
+ * As above, the command is executed directly rather than through a shell.
+ *
+ * @param {string} command
+ * @param {string[]} args
+ * @param {{ cwd?: string, env?: NodeJS.ProcessEnv }} [options]
  */
-export function runOrThrow(command, args, { cwd, env, shell = true } = {}) {
-  const result = spawnSync(command, args, { cwd, env, shell, stdio: 'inherit' });
+export function runOrThrow(command, args, { cwd, env } = {}) {
+  const result = spawnSync(command, args, { cwd, env, stdio: 'inherit' });
 
   if (result.error) {
     throw new Error(`Failed to spawn "${command} ${args.join(' ')}": ${result.error.message}`);

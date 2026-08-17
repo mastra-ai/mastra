@@ -39,7 +39,6 @@ minimumReleaseAge: 0
   console.log('Installing dependencies...');
   installWithRetry(pkgManager, installArgs, {
     cwd: newPath,
-    shell: true,
     env,
   });
 }

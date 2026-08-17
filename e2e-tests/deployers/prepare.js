@@ -32,8 +32,8 @@ export async function setupDeployerProject(pathToStoreFiles, tag, pkgManager, de
 
   console.log('Directory:', newPath);
   console.log('Installing dependencies...');
-  installWithRetry(pkgManager, installArgs, { cwd: newPath, shell: true, env });
+  installWithRetry(pkgManager, installArgs, { cwd: newPath, env });
 
   console.log('building mastra...');
-  runOrThrow(pkgManager, ['build'], { cwd: newPath, shell: true, env });
+  runOrThrow(pkgManager, ['build'], { cwd: newPath, env });
 }

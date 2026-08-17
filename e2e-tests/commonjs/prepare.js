@@ -13,5 +13,5 @@ export async function setupTestProject(pathToStoreFiles) {
   await cp(projectPath, newPath, { recursive: true });
 
   console.log('Installing dependencies...');
-  installWithRetry('pnpm', ['install', '--config.minimum-release-age=0'], { cwd: newPath, shell: true });
+  installWithRetry('pnpm', ['install', '--config.minimum-release-age=0'], { cwd: newPath });
 }

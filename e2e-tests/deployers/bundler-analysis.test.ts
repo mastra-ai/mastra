@@ -112,7 +112,6 @@ export const mastra = new Mastra({
       console.log('Installing dependencies...');
       installWithRetry(pkgManager, installArgs, {
         cwd: fixturePath,
-        shell: true,
         env: process.env,
       });
     },
@@ -134,7 +133,6 @@ export const mastra = new Mastra({
       const result = spawnSync(pkgManager, ['build'], {
         cwd: fixturePath,
         stdio: 'inherit',
-        shell: true,
         env: process.env,
       });
 

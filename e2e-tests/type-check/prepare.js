@@ -26,7 +26,6 @@ export async function setupTemplate(pathToStoreFiles, pkgManager) {
   console.log('Installing dependencies...');
   installWithRetry(pkgManager, installArgs, {
     cwd: newPath,
-    shell: true,
     env: process.env,
   });
 }
