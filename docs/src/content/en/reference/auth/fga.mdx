@@ -9,7 +9,7 @@ packages:
 
 The `IFGAProvider` interface defines a fine-grained authorization (FGA) provider. Mastra calls it to decide whether a user or a system actor may perform a permission on a specific resource. Implement it to connect Mastra to an FGA backend, such as WorkOS Authorization.
 
-For concepts, configuration, and the lifecycle points where Mastra enforces FGA, see [Fine-grained authorization](/docs/server/auth/fga).
+For concepts, configuration, and the lifecycle points where Mastra enforces FGA, see [Fine-grained authorization](/docs/auth/fga).
 
 ## Usage example
 
@@ -52,7 +52,7 @@ Returns: `Promise<boolean>`
 
 ### `require(user, params)`
 
-Throws `FGADeniedError` when `user` lacks the permission. Mastra calls this at its [enforcement points](/docs/server/auth/fga#enforcement-points).
+Throws `FGADeniedError` when `user` lacks the permission. Mastra calls this at its [enforcement points](/docs/auth/fga#enforcement-points).
 
 Returns: `Promise<void>`
 
@@ -68,7 +68,7 @@ Authorizes a non-user system actor, such as an autonomous or scheduled agent. Op
 
 System actors skip the user-centric `require()` path, so implement `requireActor` to enforce per-agent least privilege for them. Throw `FGADeniedError` to deny. When a provider doesn't implement `requireActor`, Mastra preserves the trusted-actor bypass (allow after the tenant-scope check), so adding the method remains backward compatible.
 
-Treat `actor.permissions` as an untrusted claim. Resolve the agent's authoritative grants from a trusted source keyed by `actor.agentId`, rather than trusting the inline values. See [System actors](/docs/server/auth/fga#system-actors).
+Treat `actor.permissions` as an untrusted claim. Resolve the agent's authoritative grants from a trusted source keyed by `actor.agentId`, rather than trusting the inline values. See [System actors](/docs/auth/fga#system-actors).
 
 ```typescript
 import { FGADeniedError } from '@mastra/core/auth/ee'
@@ -210,6 +210,6 @@ throw new FGADeniedError(user, { type: 'agent', id: 'reporter' }, 'agents:execut
 
 ## Related
 
-- [Fine-grained authorization](/docs/server/auth/fga)
-- [System actors](/docs/server/auth/fga#system-actors)
+- [Fine-grained authorization](/docs/auth/fga)
+- [System actors](/docs/auth/fga#system-actors)
 - [WorkOS authentication](/reference/auth/workos)

@@ -312,8 +312,17 @@ export interface GlobalSettings {
   voice: VoiceSettings;
   // Signal routing configuration
   signals: SignalSettings;
+  // Read-only discovery of MCP servers configured by other coding agents
+  mcp: McpDiscoverySettings;
   // Cloud observability configuration (per-resource project IDs; tokens stored in auth.json)
   observability: ObservabilitySettings;
+}
+
+export interface McpDiscoverySettings {
+  /** Reuse top-level MCP servers from ~/.claude.json. */
+  claudeCodeGlobal: boolean;
+  /** Reuse MCP servers from $CODEX_HOME/config.toml or ~/.codex/config.toml. */
+  codexGlobal: boolean;
 }
 
 export interface SignalSettings {
@@ -400,6 +409,7 @@ const DEFAULTS: GlobalSettings = {
   shellPassthrough: { mode: 'default' },
   voice: { enabled: false, engine: defaultVoiceEngine(), provider: DEFAULT_STT_PROVIDER },
   signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
+  mcp: { claudeCodeGlobal: false, codexGlobal: false },
   observability: { resources: {}, localTracing: false },
 };
 
@@ -470,6 +480,14 @@ function parseSignalSettings(rawSignals: unknown): SignalSettings {
       typeof raw.experimentalGithubSignals === 'boolean'
         ? raw.experimentalGithubSignals
         : DEFAULTS.signals.experimentalGithubSignals,
+  };
+}
+
+function parseMcpDiscoverySettings(rawMcp: unknown): McpDiscoverySettings {
+  const raw = rawMcp && typeof rawMcp === 'object' ? (rawMcp as Record<string, unknown>) : {};
+  return {
+    claudeCodeGlobal: typeof raw.claudeCodeGlobal === 'boolean' ? raw.claudeCodeGlobal : DEFAULTS.mcp.claudeCodeGlobal,
+    codexGlobal: typeof raw.codexGlobal === 'boolean' ? raw.codexGlobal : DEFAULTS.mcp.codexGlobal,
   };
 }
 
@@ -774,6 +792,7 @@ function migrateFromAuth(settingsPath: string): boolean {
         shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
         voice: parseVoiceSettings(raw.voice),
         signals: parseSignalSettings(raw.signals),
+        mcp: parseMcpDiscoverySettings(raw.mcp),
         observability: parseObservabilitySettings(raw.observability),
       };
       applyQuietModePreferenceRollout(settings, raw.onboarding);
@@ -901,6 +920,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
       voice: parseVoiceSettings(raw.voice),
       signals: parseSignalSettings(raw.signals),
+      mcp: parseMcpDiscoverySettings(raw.mcp),
       observability: parseObservabilitySettings(raw.observability),
     };
 

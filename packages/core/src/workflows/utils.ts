@@ -226,6 +226,29 @@ export function getResumeLabelsByStepId(
     );
 }
 
+export function abortableSleep(duration: number, signal?: AbortSignal): Promise<void> {
+  return new Promise(resolve => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+
+    const onAbort = () => {
+      clearTimeout(timeout);
+      resolve();
+    };
+    const timeout = setTimeout(
+      () => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve();
+      },
+      Math.max(0, duration),
+    );
+
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
 export const runCountDeprecationMessage =
   "Warning: 'runCount' is deprecated and will be removed on November 4th, 2025. Please use 'retryCount' instead.";
 
@@ -720,6 +743,18 @@ export function cleanStepResult(stepResult: unknown): unknown {
  * (megabytes per event for durable agent runs). Result/suspended events get
  * their fresh completion fields from the current execution result instead.
  */
+export function omitPriorSuspensionFields<T extends Record<string, unknown>>(
+  stepInfo: T,
+): Omit<T, 'suspendedAt' | 'suspendPayload' | 'suspendOutput'> {
+  const {
+    suspendedAt: _suspendedAt,
+    suspendPayload: _suspendPayload,
+    suspendOutput: _suspendOutput,
+    ...rest
+  } = stepInfo;
+  return rest;
+}
+
 export function omitPriorCompletionFields<T extends Record<string, unknown>>(
   stepInfo: T,
 ): Omit<
