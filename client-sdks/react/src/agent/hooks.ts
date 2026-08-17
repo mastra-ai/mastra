@@ -974,18 +974,35 @@ export const useChat = ({
       return;
     }
 
-    const response = await agent.approveToolCall({
-      runId: currentRunId,
-      toolCallId,
-      ...continuation,
-    });
+    try {
+      const response =
+        resumeData !== undefined
+          ? await agent.resumeStream(resumeData as Parameters<typeof agent.resumeStream>[0], {
+              runId: currentRunId,
+              toolCallId,
+              ...continuation,
+            })
+          : await agent.approveToolCall({
+              runId: currentRunId,
+              toolCallId,
+              ...continuation,
+            });
 
-    await response.processDataStream({
-      onChunk: async (chunk: ChunkType) => {
-        await processStreamChunk(chunk, onChunk);
-      },
-    });
-    setIsRunning(false);
+      await response.processDataStream({
+        onChunk: async (chunk: ChunkType) => {
+          await processStreamChunk(chunk, onChunk);
+        },
+      });
+      setIsRunning(false);
+    } catch (error) {
+      setToolCallApprovals(prev => {
+        const next = { ...prev };
+        delete next[toolCallId];
+        return next;
+      });
+      setIsRunning(false);
+      throw error;
+    }
   };
 
   const declineToolCall = async (toolCallId: string) => {

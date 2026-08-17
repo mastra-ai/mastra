@@ -15,6 +15,7 @@ import type { SystemMessage } from '../../llm';
 import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { ToolCallConcurrency } from '../../loop/types';
+import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory/memory';
 import type { MemoryConfig } from '../../memory/types';
 import type { AIModelGenerationSpan, Span, SpanType, TracingContext, TracingOptions } from '../../observability';
@@ -24,6 +25,7 @@ import type { RequestContext } from '../../request-context';
 import type { ChunkType } from '../../stream/types';
 import type {
   CoreTool,
+  MCPToolExecutionContext,
   RequireToolApproval,
   ToolPayloadTransformPolicy,
   ToolPayloadTransformTarget,
@@ -568,6 +570,8 @@ export interface RunRegistryEntry {
   workspace?: Workspace;
   /** Request context for forwarding auth data, feature flags, etc. to tools */
   requestContext?: RequestContext;
+  /** MCP protocol context for in-process tool execution (non-serializable). */
+  mcp?: MCPToolExecutionContext;
   /** Cleanup function to call when run completes */
   cleanup?: () => void;
   /** MessageList for tracking conversation messages (non-serializable) */
@@ -742,6 +746,11 @@ export interface RunRegistryEntry {
    * surface — purely an internal coordination primitive.
    */
   workflowExecution?: Promise<unknown>;
+  /**
+   * Mastra instance that owns this in-process run. Used during shutdown to
+   * wait only for executions that may still need this instance's storage.
+   */
+  mastra?: Mastra;
   /**
    * Tripwire data from `processInput` (initial input processing). When an
    * input processor calls `abort()` during `runInputProcessors` in
