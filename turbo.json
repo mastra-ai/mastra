@@ -32,6 +32,12 @@
       "cache": false,
       "persistent": true
     },
+    // The watch layers JS over the declarations `build` leaves in dist, so it cannot race it.
+    "@mastra/playground-ui#dev": {
+      "dependsOn": ["^build", "@mastra/playground-ui#build"],
+      "cache": false,
+      "persistent": true
+    },
     "validate:package": {
       "dependsOn": []
     },
