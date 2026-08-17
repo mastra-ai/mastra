@@ -13,21 +13,21 @@ import {
   parseKnowledgeWikilinks,
 } from './base';
 import type {
-  AppendKnowledgeItemInput,
+  AppendKnowledgeInput,
   ClaimKnowledgeSemanticOutboxInput,
   CreateKnowledgeNodeInput,
   KnowledgeActivityAction,
   KnowledgeActivityEvent,
   KnowledgeCurationCursor,
   KnowledgeNode,
-  KnowledgeItem,
+  KnowledgeRecord,
   KnowledgeMention,
   KnowledgeScope,
   KnowledgeSemanticDocumentType,
   KnowledgeSemanticOperation,
   KnowledgeSemanticOutboxEntry,
-  ListKnowledgeItemsInput,
-  ListKnowledgeItemsOutput,
+  QueryKnowledgeInput,
+  QueryKnowledgeOutput,
   ListKnowledgeNodesInput,
   SearchKnowledgeInput,
   SearchKnowledgeResult,
@@ -43,13 +43,17 @@ function cloneNode(node: KnowledgeNode): KnowledgeNode {
   };
 }
 
-function cloneItem(item: KnowledgeItem): KnowledgeItem {
+function nodeReferenceId(node: KnowledgeNode | string): string {
+  return typeof node === 'string' ? node : node.id;
+}
+
+function cloneRecord(record: KnowledgeRecord): KnowledgeRecord {
   return {
-    ...item,
-    scope: [...item.scope],
-    capturedAt: new Date(item.capturedAt),
-    when: item.when ? new Date(item.when) : undefined,
-    deletedAt: item.deletedAt ? new Date(item.deletedAt) : undefined,
+    ...record,
+    scope: [...record.scope],
+    capturedAt: new Date(record.capturedAt),
+    when: record.when ? new Date(record.when) : undefined,
+    deletedAt: record.deletedAt ? new Date(record.deletedAt) : undefined,
   };
 }
 
@@ -68,7 +72,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   async dangerouslyClearAll(): Promise<void> {
     this.#db.knowledgeNodes.clear();
     this.#db.knowledgeNodeKeys.clear();
-    this.#db.knowledgeItems.clear();
+    this.#db.knowledgeRecords.clear();
     this.#db.knowledgeMentions.clear();
     this.#db.knowledgeCursors.clear();
     this.#db.knowledgeActivity.length = 0;
@@ -182,10 +186,10 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const scopeChanged = knowledgeScopeKey(existing.scope) !== knowledgeScopeKey(scope);
     if (scopeChanged) {
       this.#enqueue('node', input.id, 'delete', createKnowledgeUlid(), existing.scope);
-      for (const item of this.#db.knowledgeItems.values()) {
-        if (item.parentNodeId !== input.id) continue;
-        this.#enqueue('item', item.id, 'delete', createKnowledgeUlid(), item.scope);
-        if (!item.deletedAt) this.#enqueue('item', item.id, 'upsert', createKnowledgeUlid(), item.scope);
+      for (const record of this.#db.knowledgeRecords.values()) {
+        if (record.node !== input.id) continue;
+        this.#enqueue('record', record.id, 'delete', createKnowledgeUlid(), record.scope);
+        if (!record.deletedAt) this.#enqueue('record', record.id, 'upsert', createKnowledgeUlid(), record.scope);
       }
     }
     this.#enqueue('node', input.id, 'upsert', updated.version, scope);
@@ -203,10 +207,10 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       throw new Error('Cannot merge a knowledge node into a target that is narrower than its source scope');
     }
 
-    for (const [id, item] of this.#db.knowledgeItems) {
-      if (item.parentNodeId === source.id) {
-        this.#db.knowledgeItems.set(id, { ...item, parentNodeId: target.id });
-        this.#enqueue('item', id, item.deletedAt ? 'delete' : 'upsert', createKnowledgeUlid(), item.scope);
+    for (const [id, record] of this.#db.knowledgeRecords) {
+      if (record.node === source.id) {
+        this.#db.knowledgeRecords.set(id, { ...record, node: target.id });
+        this.#enqueue('record', id, record.deletedAt ? 'delete' : 'upsert', createKnowledgeUlid(), record.scope);
       }
     }
     for (const [key, mentions] of this.#db.knowledgeMentions) {
@@ -218,10 +222,16 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         const separator = key.indexOf(':');
         const sourceType = key.slice(0, separator);
         const sourceId = key.slice(separator + 1);
-        if (sourceType === 'item') {
-          const item = this.#db.knowledgeItems.get(sourceId);
-          if (item)
-            this.#enqueue('item', sourceId, item.deletedAt ? 'delete' : 'upsert', createKnowledgeUlid(), item.scope);
+        if (sourceType === 'record') {
+          const record = this.#db.knowledgeRecords.get(sourceId);
+          if (record)
+            this.#enqueue(
+              'record',
+              sourceId,
+              record.deletedAt ? 'delete' : 'upsert',
+              createKnowledgeUlid(),
+              record.scope,
+            );
         } else {
           const sourceNode = this.#db.knowledgeNodes.get(sourceId);
           if (sourceNode) this.#enqueue('node', sourceId, 'upsert', createKnowledgeUlid(), sourceNode.scope);
@@ -241,14 +251,15 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     return cloneNode(target);
   }
 
-  async appendItem(input: AppendKnowledgeItemInput): Promise<KnowledgeItem> {
-    const parent = this.#resolveTerminalNode(input.parentNodeId);
-    if (!parent) throw new KnowledgeNotFoundError('node', input.parentNodeId);
+  async appendKnowledge(input: AppendKnowledgeInput): Promise<KnowledgeRecord> {
+    const node = nodeReferenceId(input.node);
+    const parent = this.#resolveTerminalNode(node);
+    if (!parent) throw new KnowledgeNotFoundError('node', node);
     const scope = canonicalizeKnowledgeScope(input.scope);
     assertKnowledgeScopeWithinCeiling(scope, input.maxScope);
-    const item: KnowledgeItem = {
+    const record: KnowledgeRecord = {
       id: input.id ?? createKnowledgeUlid(),
-      parentNodeId: parent.id,
+      node: parent.id,
       text: input.text,
       scope,
       sourceThreadId: input.sourceThreadId,
@@ -256,95 +267,90 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       when: input.when ? new Date(input.when) : undefined,
       maxScope: input.maxScope,
     };
-    if (this.#db.knowledgeItems.has(item.id)) throw new Error(`Knowledge item already exists: ${item.id}`);
-    this.#db.knowledgeItems.set(item.id, item);
-    await this.#replaceMentions('item', item.id, item.text, input.resolutionScope, input.defaultScope);
+    if (this.#db.knowledgeRecords.has(record.id)) throw new Error(`Knowledge already exists: ${record.id}`);
+    this.#db.knowledgeRecords.set(record.id, record);
+    await this.#replaceMentions('record', record.id, record.text, input.resolutionScope, input.defaultScope);
     parent.updatedAt = new Date();
-    this.#recordActivity('item-created', 'item', item.id, scope, input.sourceThreadId);
-    this.#enqueue('item', item.id, 'upsert', item.id, scope);
-    return cloneItem(item);
+    this.#recordActivity('record-created', 'record', record.id, scope, input.sourceThreadId);
+    this.#enqueue('record', record.id, 'upsert', record.id, scope);
+    return cloneRecord(record);
   }
 
-  async getItem({
+  async getKnowledge({
     id,
     includeDeleted = false,
   }: {
     id: string;
     includeDeleted?: boolean;
-  }): Promise<KnowledgeItem | null> {
-    const item = this.#db.knowledgeItems.get(id);
-    if (!item || (item.deletedAt && !includeDeleted)) return null;
-    return cloneItem(item);
+  }): Promise<KnowledgeRecord | null> {
+    const record = this.#db.knowledgeRecords.get(id);
+    if (!record || (record.deletedAt && !includeDeleted)) return null;
+    return cloneRecord(record);
   }
 
-  async itemsAbout(input: ListKnowledgeItemsInput): Promise<ListKnowledgeItemsOutput> {
-    const queryScope = canonicalizeKnowledgeScope(input.scope);
-    const terminal = this.#resolveTerminalNode(input.nodeId);
-    if (!terminal) return { items: [] };
-    return this.#paginateItems(
-      [...this.#db.knowledgeItems.values()].filter(item => item.parentNodeId === terminal.id),
-      { ...input, scope: queryScope },
-    );
+  async knowledgeAbout(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput> {
+    return this.#queryKnowledge(input, 'about');
   }
 
-  async itemsTouching(input: ListKnowledgeItemsInput): Promise<ListKnowledgeItemsOutput> {
-    const queryScope = canonicalizeKnowledgeScope(input.scope);
-    const terminal = this.#resolveTerminalNode(input.nodeId);
-    if (!terminal) return { items: [] };
-    return this.#paginateItems(
-      [...this.#db.knowledgeItems.values()].filter(
-        item =>
-          item.parentNodeId === terminal.id || this.#db.knowledgeMentions.get(`item:${item.id}`)?.has(terminal.id),
-      ),
-      { ...input, scope: queryScope },
-    );
+  async knowledgeMentioning(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput> {
+    return this.#queryKnowledge(input, 'mentioning');
   }
 
-  async removeItem({ id, deletedBy }: { id: string; deletedBy: string }): Promise<KnowledgeItem> {
-    const item = this.#db.knowledgeItems.get(id);
-    if (!item) throw new KnowledgeNotFoundError('item', id);
-    if (item.deletedAt) return cloneItem(item);
-    const updated = { ...item, deletedAt: new Date(), deletedBy };
-    this.#db.knowledgeItems.set(id, updated);
-    this.#recordActivity('item-deleted', 'item', id, item.scope, item.sourceThreadId);
-    this.#enqueue('item', id, 'delete', updated.deletedAt.toISOString(), item.scope);
-    return cloneItem(updated);
+  async knowledgeRelatedTo(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput> {
+    return this.#queryKnowledge(input, 'related');
   }
 
-  async restoreItem({ id }: { id: string }): Promise<KnowledgeItem> {
-    const item = this.#db.knowledgeItems.get(id);
-    if (!item) throw new KnowledgeNotFoundError('item', id);
-    if (!item.deletedAt) return cloneItem(item);
-    const updated = { ...item, deletedAt: undefined, deletedBy: undefined };
-    this.#db.knowledgeItems.set(id, updated);
-    this.#recordActivity('item-restored', 'item', id, item.scope, item.sourceThreadId);
-    this.#enqueue('item', id, 'upsert', createKnowledgeUlid(), item.scope);
-    return cloneItem(updated);
+  async removeKnowledge({ id, deletedBy }: { id: string; deletedBy: string }): Promise<KnowledgeRecord> {
+    const record = this.#db.knowledgeRecords.get(id);
+    if (!record) throw new KnowledgeNotFoundError('record', id);
+    if (record.deletedAt) return cloneRecord(record);
+    const updated = { ...record, deletedAt: new Date(), deletedBy };
+    this.#db.knowledgeRecords.set(id, updated);
+    this.#recordActivity('record-deleted', 'record', id, record.scope, record.sourceThreadId);
+    this.#enqueue('record', id, 'delete', updated.deletedAt.toISOString(), record.scope);
+    return cloneRecord(updated);
   }
 
-  async rescopeItem({ id, scope }: { id: string; scope: KnowledgeScope }): Promise<KnowledgeItem> {
-    const item = this.#db.knowledgeItems.get(id);
-    if (!item) throw new KnowledgeNotFoundError('item', id);
+  async restoreKnowledge({ id }: { id: string }): Promise<KnowledgeRecord> {
+    const record = this.#db.knowledgeRecords.get(id);
+    if (!record) throw new KnowledgeNotFoundError('record', id);
+    if (!record.deletedAt) return cloneRecord(record);
+    const updated = { ...record, deletedAt: undefined, deletedBy: undefined };
+    this.#db.knowledgeRecords.set(id, updated);
+    this.#recordActivity('record-restored', 'record', id, record.scope, record.sourceThreadId);
+    this.#enqueue('record', id, 'upsert', createKnowledgeUlid(), record.scope);
+    return cloneRecord(updated);
+  }
+
+  async rescopeKnowledge({ id, scope }: { id: string; scope: KnowledgeScope }): Promise<KnowledgeRecord> {
+    const record = this.#db.knowledgeRecords.get(id);
+    if (!record) throw new KnowledgeNotFoundError('record', id);
     const canonical = canonicalizeKnowledgeScope(scope);
-    assertKnowledgeScopeWithinCeiling(canonical, item.maxScope);
-    const updated = { ...item, scope: canonical };
-    this.#db.knowledgeItems.set(id, updated);
-    this.#recordActivity('item-rescoped', 'item', id, canonical, item.sourceThreadId);
-    if (knowledgeScopeKey(item.scope) !== knowledgeScopeKey(canonical)) {
-      this.#enqueue('item', id, 'delete', createKnowledgeUlid(), item.scope);
+    assertKnowledgeScopeWithinCeiling(canonical, record.maxScope);
+    const updated = { ...record, scope: canonical };
+    this.#db.knowledgeRecords.set(id, updated);
+    this.#recordActivity('record-rescoped', 'record', id, canonical, record.sourceThreadId);
+    if (knowledgeScopeKey(record.scope) !== knowledgeScopeKey(canonical)) {
+      this.#enqueue('record', id, 'delete', createKnowledgeUlid(), record.scope);
     }
-    if (!item.deletedAt) {
-      this.#enqueue('item', id, 'upsert', createKnowledgeUlid(), canonical);
+    if (!record.deletedAt) {
+      this.#enqueue('record', id, 'upsert', createKnowledgeUlid(), canonical);
     }
-    return cloneItem(updated);
+    return cloneRecord(updated);
   }
 
-  async raiseCeiling({ id, maxScope }: { id: string; maxScope?: KnowledgeItem['maxScope'] }): Promise<KnowledgeItem> {
-    const item = this.#db.knowledgeItems.get(id);
-    if (!item) throw new KnowledgeNotFoundError('item', id);
-    const updated = { ...item, maxScope };
-    this.#db.knowledgeItems.set(id, updated);
-    return cloneItem(updated);
+  async raiseKnowledgeCeiling({
+    id,
+    maxScope,
+  }: {
+    id: string;
+    maxScope?: KnowledgeRecord['maxScope'];
+  }): Promise<KnowledgeRecord> {
+    const record = this.#db.knowledgeRecords.get(id);
+    if (!record) throw new KnowledgeNotFoundError('record', id);
+    const updated = { ...record, maxScope };
+    this.#db.knowledgeRecords.set(id, updated);
+    return cloneRecord(updated);
   }
 
   async search(input: SearchKnowledgeInput): Promise<SearchKnowledgeResult[]> {
@@ -368,23 +374,23 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         });
       }
     }
-    for (const item of this.#db.knowledgeItems.values()) {
+    for (const record of this.#db.knowledgeRecords.values()) {
       if (
-        item.deletedAt ||
-        !isKnowledgeScopeVisible(item.scope, queryScope) ||
-        !item.text.toLocaleLowerCase().includes(query)
+        record.deletedAt ||
+        !isKnowledgeScopeVisible(record.scope, queryScope) ||
+        !record.text.toLocaleLowerCase().includes(query)
       ) {
         continue;
       }
-      const parent = this.#resolveTerminalNode(item.parentNodeId);
+      const parent = this.#resolveTerminalNode(record.node);
       if (!parent) continue;
       results.push({
-        type: 'item',
-        id: item.id,
+        type: 'record',
+        id: record.id,
         recordId: parent.id,
         name: parent.name,
-        text: item.text,
-        scope: item.scope,
+        text: record.text,
+        scope: record.scope,
       });
     }
     return results.slice(0, input.limit ?? 20);
@@ -398,11 +404,11 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   async advanceCurationCursor(input: {
     sourceThreadId: string;
     agent: string;
-    lastItemId: string;
+    lastKnowledgeId: string;
   }): Promise<KnowledgeCurationCursor> {
     const key = `${input.sourceThreadId}\u0000${input.agent}`;
     const existing = this.#db.knowledgeCursors.get(key);
-    if (existing && input.lastItemId < existing.lastItemId)
+    if (existing && input.lastKnowledgeId < existing.lastKnowledgeId)
       throw new Error('Knowledge curation cursor cannot move backwards');
     const cursor = { ...input, updatedAt: new Date() };
     this.#db.knowledgeCursors.set(key, cursor);
@@ -530,16 +536,32 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     this.#db.knowledgeMentions.set(`${sourceType}:${sourceId}`, mentions);
   }
 
-  #paginateItems(items: KnowledgeItem[], input: ListKnowledgeItemsInput): ListKnowledgeItemsOutput {
-    const filtered = items
-      .filter(item => input.includeDeleted || !item.deletedAt)
-      .filter(item => isKnowledgeScopeVisible(item.scope, input.scope))
-      .filter(item => !input.after || item.id < input.after)
+  #queryKnowledge(input: QueryKnowledgeInput, relationship: 'about' | 'mentioning' | 'related'): QueryKnowledgeOutput {
+    const queryScope = canonicalizeKnowledgeScope(input.scope);
+    const terminal = this.#resolveTerminalNode(nodeReferenceId(input.node));
+    if (!terminal) return { records: [] };
+    return this.#paginateKnowledge(
+      [...this.#db.knowledgeRecords.values()].filter(record => {
+        const about = record.node === terminal.id;
+        const mentioning = this.#db.knowledgeMentions.get(`record:${record.id}`)?.has(terminal.id) ?? false;
+        if (relationship === 'about') return about;
+        if (relationship === 'mentioning') return mentioning;
+        return about || mentioning;
+      }),
+      { ...input, scope: queryScope },
+    );
+  }
+
+  #paginateKnowledge(records: KnowledgeRecord[], input: QueryKnowledgeInput): QueryKnowledgeOutput {
+    const filtered = records
+      .filter(record => input.includeDeleted || !record.deletedAt)
+      .filter(record => isKnowledgeScopeVisible(record.scope, input.scope))
+      .filter(record => !input.after || record.id < input.after)
       .sort((a, b) => b.id.localeCompare(a.id));
     const limit = input.limit ?? 100;
     const page = filtered.slice(0, limit);
     return {
-      items: page.map(cloneItem),
+      records: page.map(cloneRecord),
       nextCursor: filtered.length > limit ? page.at(-1)?.id : undefined,
     };
   }

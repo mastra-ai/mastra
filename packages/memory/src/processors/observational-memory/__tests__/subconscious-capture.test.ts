@@ -25,7 +25,7 @@ function createContext(memory: Memory, current: SubconsciousCaptureOutput) {
 }
 
 describe('Subconscious capture', () => {
-  it('deterministically writes scoped nodes, items, mentions, provenance, and ceilings', async () => {
+  it('deterministically writes scoped nodes, records, mentions, provenance, and ceilings', async () => {
     const memory = new Memory({ storage: new InMemoryStore() });
     const extractor = new SubconsciousCaptureExtractor({
       defaultScope: 'org',
@@ -37,7 +37,7 @@ describe('Subconscious capture', () => {
         {
           name: 'Project Atlas',
           kind: 'project',
-          items: [
+          records: [
             {
               text: '[[Maya Chen]] owns [[Project Atlas]].',
               scope: 'org',
@@ -59,18 +59,18 @@ describe('Subconscious capture', () => {
     expect(atlas).toMatchObject({ kind: 'project', scope: resourceScope });
     expect(maya).toMatchObject({ scope: resourceScope });
 
-    const items = await store.itemsAbout({ nodeId: atlas!.id, scope: threadScope });
-    expect(items.items).toHaveLength(2);
-    expect(items.items[0]).toMatchObject({
+    const records = await store.knowledgeAbout({ node: atlas!.id, scope: threadScope });
+    expect(records.records).toHaveLength(2);
+    expect(records.records[0]).toMatchObject({
       sourceThreadId: 'alpha',
       maxScope: 'resource',
     });
-    expect(items.items.map(item => item.scope)).toEqual(expect.arrayContaining([resourceScope, threadScope]));
-    expect(items.items.find(item => item.when)?.when?.toISOString()).toBe('2030-01-15T00:00:00.000Z');
-    expect(items.items.every(item => item.capturedAt instanceof Date)).toBe(true);
+    expect(records.records.map(record => record.scope)).toEqual(expect.arrayContaining([resourceScope, threadScope]));
+    expect(records.records.find(record => record.when)?.when?.toISOString()).toBe('2030-01-15T00:00:00.000Z');
+    expect(records.records.every(record => record.capturedAt instanceof Date)).toBe(true);
 
-    const touchingMaya = await store.itemsTouching({ nodeId: maya!.id, scope: threadScope });
-    expect(touchingMaya.items.map(item => item.text)).toContain('[[Maya Chen]] owns [[Project Atlas]].');
+    const touchingMaya = await store.knowledgeRelatedTo({ node: maya!.id, scope: threadScope });
+    expect(touchingMaya.records.map(record => record.text)).toContain('[[Maya Chen]] owns [[Project Atlas]].');
   });
 
   it('loads bounded learned guidance after user instructions', async () => {
@@ -109,7 +109,7 @@ describe('Subconscious capture', () => {
       learnedGuidance: false,
     });
     const context = createContext(memory, {
-      nodes: [{ name: 'Atlas', kind: 'project', items: [] }],
+      nodes: [{ name: 'Atlas', kind: 'project', records: [] }],
     });
 
     await extractor.onExtracted?.({ ...context, extractor });
@@ -127,7 +127,7 @@ describe('Subconscious capture', () => {
       learnedGuidance: false,
     });
     const context = createContext(memory, {
-      nodes: [{ name: 'Alpha Secret', kind: 'note', scope: 'thread', items: [] }],
+      nodes: [{ name: 'Alpha Secret', kind: 'note', scope: 'thread', records: [] }],
     });
 
     await extractor.onExtracted?.({ ...context, extractor });
@@ -150,7 +150,7 @@ describe('Subconscious capture', () => {
     });
     const sendStateSignal = vi.fn(async () => ({ skipped: true, reason: 'unchanged' }) as any);
     const context = createContext(memory, {
-      nodes: [{ name: 'Atlas', kind: 'project', items: [{ text: 'Atlas launches in January.' }] }],
+      nodes: [{ name: 'Atlas', kind: 'project', records: [{ text: 'Atlas launches in January.' }] }],
     });
 
     await extractor.onExtracted?.({ ...context, extractor, sendStateSignal });
@@ -228,8 +228,8 @@ describe('Knowledge semantic indexing', () => {
       content: 'Launch plan',
       scope: ['org:acme', 'resource:user-42'],
     });
-    const item = await knowledge.appendItem({
-      parentNodeId: node.id,
+    const record = await knowledge.appendKnowledge({
+      node: node.id,
       text: '[[Maya Chen]] owns Atlas.',
       scope: ['org:acme', 'resource:user-42'],
       sourceThreadId: 'alpha',
@@ -248,15 +248,15 @@ describe('Knowledge semantic indexing', () => {
     expect(await coordinator.drain(['org:acme', 'resource:user-42'])).toBeGreaterThanOrEqual(2);
     expect(await coordinator.drain(['org:acme', 'resource:user-42'])).toBe(0);
     expect(embedder.doEmbed).toHaveBeenCalledWith(expect.objectContaining({ values: ['Project Atlas\nLaunch plan'] }));
-    expect(vectors.get(`knowledge:item:${item.id}`)?.metadata).toMatchObject({
-      document_type: 'item',
+    expect(vectors.get(`knowledge:record:${record.id}`)?.metadata).toMatchObject({
+      document_type: 'record',
       scope_org: 'acme',
       scope_resource: 'user-42',
     });
 
-    await knowledge.removeItem({ id: item.id, deletedBy: 'curator' });
+    await knowledge.removeKnowledge({ id: record.id, deletedBy: 'curator' });
     await coordinator.drain(['org:acme', 'resource:user-42']);
-    expect(vectors.has(`knowledge:item:${item.id}`)).toBe(false);
+    expect(vectors.has(`knowledge:record:${record.id}`)).toBe(false);
     expect(deleteVectors).toHaveBeenCalled();
   });
 

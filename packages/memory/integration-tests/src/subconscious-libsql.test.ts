@@ -79,7 +79,7 @@ describe('Subconscious LibSQL integration', () => {
                       {
                         name: 'Project Atlas',
                         kind: 'project',
-                        items: [
+                        records: [
                           {
                             text: '[[Maya Chen]] owns [[Project Atlas]].',
                             reason: 'The ownership relationship determines who can answer project questions.',
@@ -94,7 +94,7 @@ describe('Subconscious LibSQL integration', () => {
                         name: 'Alpha Secret',
                         kind: 'note',
                         scope: 'thread',
-                        items: [
+                        records: [
                           {
                             text: 'Only the alpha thread may see this.',
                             scope: 'thread',
@@ -149,7 +149,7 @@ describe('Subconscious LibSQL integration', () => {
     const scope = ['org:acme', `resource:${resourceId}`, `thread:${threadId}`];
     const atlas = await knowledge.resolveNode({ name: 'Project Atlas', scope });
     expect(atlas).toMatchObject({ kind: 'project', scope: scope.slice(0, 2) });
-    expect((await knowledge.itemsAbout({ nodeId: atlas!.id, scope })).items).toHaveLength(2);
+    expect((await knowledge.knowledgeAbout({ node: atlas!.id, scope })).records).toHaveLength(2);
 
     const betaThreadId = randomUUID();
     await memory.createThread({ threadId: betaThreadId, resourceId, title: 'Sibling thread' });

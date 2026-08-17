@@ -54,7 +54,7 @@ describe('KnowledgeLibSQL initialization', () => {
 
       let cursorAdvanced = false;
       const advance = store
-        .advanceCurationCursor({ sourceThreadId: 'thread-1', agent: 'capture', lastItemId: 'item-1' })
+        .advanceCurationCursor({ sourceThreadId: 'thread-1', agent: 'capture', lastKnowledgeId: 'knowledge-1' })
         .then(() => {
           cursorAdvanced = true;
         });
@@ -64,7 +64,7 @@ describe('KnowledgeLibSQL initialization', () => {
       releaseLock();
       await Promise.all([lockedWrite, advance]);
       expect(await store.getCurationCursor({ sourceThreadId: 'thread-1', agent: 'capture' })).toEqual(
-        expect.objectContaining({ lastItemId: 'item-1' }),
+        expect.objectContaining({ lastKnowledgeId: 'knowledge-1' }),
       );
     } finally {
       client.close();
