@@ -121,6 +121,7 @@ describe('getDynamicMemory', () => {
     getOmScopeMock.mockReset();
     resolveModelMock.mockReset();
     resolveModelMock.mockImplementation((modelId: string) => ({ modelId }));
+    delete process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS;
   });
 
   it('wires Mastra Code observational memory activation defaults into core memory', async () => {
@@ -164,7 +165,14 @@ describe('getDynamicMemory', () => {
     });
   });
 
-  it('enables project-scoped Subconscious memory when vector storage is available', async () => {
+  it('keeps Subconscious memory disabled unless explicitly opted in', async () => {
+    const { config } = await createMemoryConfig({ projectPath: '/tmp/project' }, 'thread', { vector: true });
+
+    expect(config.options.observationalMemory.experimental_subconscious).toBeUndefined();
+  });
+
+  it('enables project-scoped Subconscious memory when explicitly opted in with vector storage', async () => {
+    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
     const vector = { vector: true };
     const { config, requestContext } = await createMemoryConfig({ projectPath: '/tmp/project' }, 'thread', vector);
 
