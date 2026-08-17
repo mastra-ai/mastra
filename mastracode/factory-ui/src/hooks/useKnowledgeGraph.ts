@@ -44,11 +44,7 @@ export function useKnowledgeGraph(
   });
 }
 
-export function useKnowledgeNode(
-  factoryProjectId: string | undefined,
-  nodeId: string | undefined,
-  threadId?: string,
-) {
+export function useKnowledgeNode(factoryProjectId: string | undefined, nodeId: string | undefined, threadId?: string) {
   const { baseUrl } = useApiConfig();
   return useQuery({
     queryKey: queryKeys.knowledgeNode(factoryProjectId, nodeId, threadId),

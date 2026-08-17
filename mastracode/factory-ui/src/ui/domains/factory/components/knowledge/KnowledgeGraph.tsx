@@ -57,12 +57,7 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
   return (
     // Outer wrapper is unclipped so the pin badge can straddle the rim;
     // only the inner circle clips (it must, to keep the label inside).
-    <div
-      data-testid="knowledge-node"
-      data-node-id={node.id}
-      className="relative"
-      style={{ width: size, height: size }}
-    >
+    <div data-testid="knowledge-node" data-node-id={node.id} className="relative" style={{ width: size, height: size }}>
       {/* A11: nodes never carry pin visuals — pins belong to their item
           markers (dot / line / junction). */}
       <div
@@ -666,7 +661,9 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
         style={style}
       >
         <div className="text-icon6">{source && target ? `${source} → ${target}` : 'Item'}</div>
-        <div className="text-icon4 mt-0.5 leading-relaxed">{hover.edge.data?.text ?? 'Mentioned in a knowledge item'}</div>
+        <div className="text-icon4 mt-0.5 leading-relaxed">
+          {hover.edge.data?.text ?? 'Mentioned in a knowledge item'}
+        </div>
       </div>
     );
   }

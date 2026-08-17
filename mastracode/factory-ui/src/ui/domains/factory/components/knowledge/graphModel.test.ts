@@ -82,11 +82,7 @@ describe('degreeMap', () => {
 });
 
 describe('filterGraph', () => {
-  const nodes = [
-    node('org-1', { rung: 'org', scope: ['org:o'] }),
-    node('res-1'),
-    node('res-pinned', { pinned: true }),
-  ];
+  const nodes = [node('org-1', { rung: 'org', scope: ['org:o'] }), node('res-1'), node('res-pinned', { pinned: true })];
   const edges = [edge('org-1', 'res-1'), edge('res-1', 'res-pinned')];
 
   it('shows everything with no filters', () => {
@@ -156,10 +152,7 @@ describe('deriveItemElements (Amendment A11)', () => {
   });
 
   it('renders a PINNED two-node item as a midpoint junction so the chip is collision-protected', () => {
-    const { itemNodes, itemEdges } = deriveItemElements(
-      [node('a'), node('b')],
-      [mem('m1', ['a', 'b'], true)],
-    );
+    const { itemNodes, itemEdges } = deriveItemElements([node('a'), node('b')], [mem('m1', ['a', 'b'], true)]);
     expect(itemNodes).toEqual([expect.objectContaining({ kind: 'junction', size: ITEM_PIN_SIZE })]);
     expect(itemEdges.map(edge => [edge.source, edge.target])).toEqual([
       ['a', 'item:m1'],
@@ -172,9 +165,7 @@ describe('deriveItemElements (Amendment A11)', () => {
       [node('a'), node('b'), node('c')],
       [mem('m1', ['a', 'b', 'c'])],
     );
-    expect(itemNodes).toEqual([
-      expect.objectContaining({ id: 'item:m1', kind: 'junction', size: ITEM_JUNCTION_SIZE }),
-    ]);
+    expect(itemNodes).toEqual([expect.objectContaining({ id: 'item:m1', kind: 'junction', size: ITEM_JUNCTION_SIZE })]);
     expect(itemEdges).toHaveLength(3);
   });
 

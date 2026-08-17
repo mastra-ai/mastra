@@ -133,7 +133,9 @@ function ItemCard({
       >
         <div className="text-icon5 text-xs leading-relaxed">
           <ItemText text={item.text} onNodeRef={onNodeRef} />
-          {item.pinned ? <Pin size={11} className="ml-1 inline text-amber-400" aria-label="Pinned knowledge item" /> : null}
+          {item.pinned ? (
+            <Pin size={11} className="ml-1 inline text-amber-400" aria-label="Pinned knowledge item" />
+          ) : null}
         </div>
         <div className="text-icon3 mt-1.5 flex items-center gap-2 text-[10px]">
           <RungBadge rung={item.rung} />
@@ -183,7 +185,9 @@ function ItemCard({
               <p className="text-icon5 text-[11px] leading-relaxed italic">{reason}</p>
             </div>
           ) : (
-            <p className="text-icon3 mt-2 text-[10px] italic">No capture reasoning was recorded for this knowledge item.</p>
+            <p className="text-icon3 mt-2 text-[10px] italic">
+              No capture reasoning was recorded for this knowledge item.
+            </p>
           )}
           {otherMetadata.length > 0 ? (
             <dl className="text-icon3 mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[10px]">
@@ -270,13 +274,9 @@ export function KnowledgeFlyout({
                   <dt>Scope</dt>
                   <dd className="text-icon5 text-right break-all">{nodeQuery.data.node.scope.join(' → ')}</dd>
                   <dt>Created</dt>
-                  <dd className="text-icon5 text-right">
-                    {new Date(nodeQuery.data.node.createdAt).toLocaleString()}
-                  </dd>
+                  <dd className="text-icon5 text-right">{new Date(nodeQuery.data.node.createdAt).toLocaleString()}</dd>
                   <dt>Updated</dt>
-                  <dd className="text-icon5 text-right">
-                    {new Date(nodeQuery.data.node.updatedAt).toLocaleString()}
-                  </dd>
+                  <dd className="text-icon5 text-right">{new Date(nodeQuery.data.node.updatedAt).toLocaleString()}</dd>
                   <dt>Knowledge items</dt>
                   <dd className="text-icon5 text-right">{nodeQuery.data.items.length}</dd>
                 </dl>
@@ -287,7 +287,7 @@ export function KnowledgeFlyout({
               <Collapsible defaultOpen>
                 <SectionHeader title="Content" />
                 <CollapsibleContent>
-                  <p className="text-icon5 whitespace-pre-wrap px-4 pb-3 text-xs leading-relaxed">
+                  <p className="text-icon5 px-4 pb-3 text-xs leading-relaxed whitespace-pre-wrap">
                     <ItemText text={nodeQuery.data.node.content} onNodeRef={onNodeRef} />
                   </p>
                 </CollapsibleContent>
