@@ -457,7 +457,7 @@
     },
     {
       "source": "/docs/server-db/mastra-server",
-      "destination": "/docs/server/mastra-server",
+      "destination": "/docs/server/overview",
       "permanent": true
     },
     {
@@ -2158,6 +2158,11 @@
     {
       "source": "/docs/workspace/lsp",
       "destination": "/docs/sandbox/lsp",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server/mastra-server",
+      "destination": "/docs/server/overview",
       "permanent": true
     }
   ]

@@ -350,7 +350,7 @@ const sidebars = {
           label: 'Server',
           link: {
             type: 'doc',
-            id: 'server/mastra-server',
+            id: 'server/overview',
           },
           customProps: {
             contextualSidebar: true,
