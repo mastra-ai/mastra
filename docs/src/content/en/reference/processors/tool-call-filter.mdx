@@ -9,7 +9,7 @@ packages:
 
 The `ToolCallFilter` is an **input processor** that filters out tool calls and their results from the prompt sent to the model. This is useful when you want to exclude specific tool interactions from context or remove all tool calls entirely.
 
-Filtering happens in the `processLLMRequest` hook, which runs after the message list is converted to a model prompt. Changes are transient: they affect only what is sent to the model on that call. Stored messages, memory, and UI history keep their original tool calls and results.
+Filtering happens in the `processLLMRequest` hook, which runs after the message list is converted to a model prompt. Changes are transient: they affect only what's sent to the model on that call. Stored messages, memory, and UI history keep their original tool calls and results.
 
 ## Usage example
 
