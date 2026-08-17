@@ -118,8 +118,8 @@ describe('KnowledgeInspector', () => {
     const hub = await harness.knowledge.createNode({ name: 'Hub', kind: 'project', scope: resourceScope });
     await harness.knowledge.createNode({ name: 'Leaf A', kind: 'service', scope: resourceScope });
     await harness.knowledge.createNode({ name: 'Leaf B', kind: 'service', scope: resourceScope });
-    await harness.knowledge.appendItem({
-      parentNodeId: hub.id,
+    await harness.knowledge.appendKnowledge({
+      node: hub.id,
       text: 'Hub links [[Leaf A]] and [[Leaf B]].',
       scope: resourceScope,
       sourceThreadId: 'thread-1',
@@ -173,8 +173,8 @@ describe('KnowledgeInspector', () => {
         kind: 'project',
         scope: resourceScope,
       });
-      await harness.knowledge.appendItem({
-        parentNodeId: parent.id,
+      await harness.knowledge.appendKnowledge({
+        node: parent.id,
         text: `Parent ${index} references [[Target]].`,
         scope: resourceScope,
         sourceThreadId: 'thread-1',
@@ -182,8 +182,8 @@ describe('KnowledgeInspector', () => {
         defaultScope: resourceScope,
       });
     }
-    await harness.knowledge.appendItem({
-      parentNodeId: source.id,
+    await harness.knowledge.appendKnowledge({
+      node: source.id,
       text: outgoingNames.map(name => `[[${name}]]`).join(' '),
       scope: resourceScope,
       sourceThreadId: 'thread-1',
@@ -215,16 +215,16 @@ describe('KnowledgeInspector', () => {
     const related = await harness.knowledge.createNode({ name: 'Related', kind: 'service', scope: resourceScope });
     const node = await harness.knowledge.createNode({ name: 'Atlas', kind: 'project', scope: resourceScope });
     const parent = await harness.knowledge.createNode({ name: 'Portfolio', kind: 'program', scope: resourceScope });
-    await harness.knowledge.appendItem({
-      parentNodeId: node.id,
+    await harness.knowledge.appendKnowledge({
+      node: node.id,
       text: 'Atlas deploys through [[Related]].',
       scope: resourceScope,
       sourceThreadId: 'thread-1',
       resolutionScope: resourceScope,
       defaultScope: resourceScope,
     });
-    await harness.knowledge.appendItem({
-      parentNodeId: parent.id,
+    await harness.knowledge.appendKnowledge({
+      node: parent.id,
       text: 'Portfolio includes [[Atlas]].',
       scope: resourceScope,
       sourceThreadId: 'thread-1',
@@ -326,8 +326,8 @@ describe('KnowledgeInspector', () => {
       kind: 'note',
       scope: threadScope,
     });
-    await harness.knowledge.appendItem({
-      parentNodeId: privateNode.id,
+    await harness.knowledge.appendKnowledge({
+      node: privateNode.id,
       text: 'Private item with a broader activity scope.',
       scope: resourceScope,
       sourceThreadId: 'private-source-thread',
