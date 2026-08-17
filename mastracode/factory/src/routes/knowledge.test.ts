@@ -1,5 +1,5 @@
 import { InMemoryDB, InMemoryKnowledgeStorage } from '@mastra/core/storage';
-import type { KnowledgeEntity, KnowledgeScope, KnowledgeStorage } from '@mastra/core/storage';
+import type { KnowledgeNode, KnowledgeScope, KnowledgeStorage } from '@mastra/core/storage';
 import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -61,13 +61,13 @@ async function entity(
   name: string,
   scope: KnowledgeScope,
   kind = 'concept',
-): Promise<KnowledgeEntity> {
-  return store.createEntity({ name, kind, scope });
+): Promise<KnowledgeNode> {
+  return store.createNode({ name, kind, scope });
 }
 
 async function fact(
   store: KnowledgeStorage,
-  parent: KnowledgeEntity,
+  parent: KnowledgeNode,
   text: string,
   scope: KnowledgeScope,
   sourceThreadId = 'thread-a',
@@ -82,8 +82,8 @@ async function fact(
     autoCreateScope?: KnowledgeScope;
   } = {},
 ) {
-  return store.appendFact({
-    parentEntityId: parent.id,
+  return store.appendItem({
+    parentNodeId: parent.id,
     text,
     scope,
     sourceThreadId,
@@ -330,7 +330,7 @@ describe('KnowledgeRoutes', () => {
     const source = await entity(h.knowledge, 'Source', h.projectScope);
     await entity(h.knowledge, 'Linked', h.projectScope);
     const created = await fact(h.knowledge, source, 'Links [[Linked]].', h.projectScope);
-    await h.knowledge.removeFact({ id: created.id, deletedBy: 'test' });
+    await h.knowledge.removeItem({ id: created.id, deletedBy: 'test' });
 
     const { body } = await graph(h);
     expect(body.edges).toHaveLength(0);
@@ -356,7 +356,7 @@ describe('KnowledgeRoutes', () => {
     await fact(h.knowledge, source, 'First [[Mystery]].', h.projectScope, 'thread-a', undefined, hidden);
     await fact(h.knowledge, source, 'Second [[Mystery]].', h.projectScope, 'thread-a', undefined, hidden);
     await fact(h.knowledge, source, 'Third [[Mystery]].', h.projectScope, 'thread-a', undefined, hidden);
-    const spy = vi.spyOn(h.knowledge, 'resolveEntity');
+    const spy = vi.spyOn(h.knowledge, 'resolveNode');
 
     await graph(h);
     const mysteryLookups = spy.mock.calls.filter(([input]) => input.name.toLocaleLowerCase() === 'mystery');

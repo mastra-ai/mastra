@@ -18,7 +18,7 @@
 
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
-import type { KnowledgeEntity, KnowledgeFact, KnowledgeScope, KnowledgeStorage } from '@mastra/core/storage';
+import type { KnowledgeNode, KnowledgeItem, KnowledgeScope, KnowledgeStorage } from '@mastra/core/storage';
 import {
   canonicalizeKnowledgeScope,
   isKnowledgeScopeVisible,
@@ -208,10 +208,10 @@ interface ResolvedView {
  */
 class WikilinkResolver {
   /** exact `${scopeKey}\u0000${lowerName}` → entity, from the fetched window. */
-  readonly #inWindow = new Map<string, KnowledgeEntity>();
+  readonly #inWindow = new Map<string, KnowledgeNode>();
   readonly #windowIds = new Set<string>();
   /** `${factScopeKey}\u0000${lowerName}` → fallback result (null = dangling). */
-  readonly #fallbackCache = new Map<string, KnowledgeEntity | null>();
+  readonly #fallbackCache = new Map<string, KnowledgeNode | null>();
   #fallbackLookups = 0;
   readonly #store: KnowledgeStorage;
   readonly #maxFallbackLookups: number;
@@ -219,7 +219,7 @@ class WikilinkResolver {
   readonly cappedNames: string[] = [];
   #cappedSeen = new Set<string>();
 
-  constructor(store: KnowledgeStorage, entities: KnowledgeEntity[], maxFallbackLookups: number) {
+  constructor(store: KnowledgeStorage, entities: KnowledgeNode[], maxFallbackLookups: number) {
     this.#store = store;
     this.#maxFallbackLookups = maxFallbackLookups;
     for (const entity of entities) {
@@ -233,7 +233,7 @@ class WikilinkResolver {
   }
 
   /** Resolve a wikilink name from a fact's scope. Returns the entity or null (dangling/capped). */
-  async resolve(name: string, factScope: KnowledgeScope): Promise<KnowledgeEntity | null> {
+  async resolve(name: string, factScope: KnowledgeScope): Promise<KnowledgeNode | null> {
     const canonical = canonicalizeKnowledgeScope(factScope);
     const lower = name.trim().toLocaleLowerCase();
     for (let length = canonical.length; length > 0; length--) {
@@ -254,9 +254,9 @@ class WikilinkResolver {
       return null;
     }
     this.#fallbackLookups += 1;
-    let resolved: KnowledgeEntity | null = null;
+    let resolved: KnowledgeNode | null = null;
     try {
-      resolved = await this.#store.resolveEntity({ name, scope: canonical });
+      resolved = await this.#store.resolveNode({ name, scope: canonical });
     } catch {
       resolved = null;
     }
@@ -264,7 +264,7 @@ class WikilinkResolver {
     return this.#trackOutOfWindow(resolved);
   }
 
-  #trackOutOfWindow(entity: KnowledgeEntity | null): KnowledgeEntity | null {
+  #trackOutOfWindow(entity: KnowledgeNode | null): KnowledgeNode | null {
     if (entity && !this.#windowIds.has(entity.id)) {
       this.outOfWindow.set(entity.id, { id: entity.id, name: entity.name });
     }
@@ -355,8 +355,8 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     }
 
     const candidateScope: KnowledgeScope = [...defaultScope, `thread:${threadId}`];
-    const probe = await store.listFactsBySource({ sourceThreadId: threadId, scope: candidateScope, limit: 1 });
-    if (probe.facts.length === 0) {
+    const probe = await store.listItemsBySource({ sourceThreadId: threadId, scope: candidateScope, limit: 1 });
+    if (probe.items.length === 0) {
       return { response: c.json({ error: 'thread_not_found' }, 404) };
     }
     return {
@@ -377,7 +377,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
   async #pinnedEntityIds(view: ResolvedView): Promise<Array<{ rung: 'resource' | 'thread'; id: string }>> {
     const out: Array<{ rung: 'resource' | 'thread'; id: string }> = [];
     for (const { rung, scope } of view.pinRungs) {
-      const entity = await view.store.getEntityByName({ name: PINNED_ENTITY_NAME, scope });
+      const entity = await view.store.getNodeByName({ name: PINNED_ENTITY_NAME, scope });
       if (entity && !entity.mergedInto) out.push({ rung, id: entity.id });
     }
     return out;
@@ -387,10 +387,10 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
   async #pinnedFacts(
     view: ResolvedView,
     pinnedIds: Array<{ rung: 'resource' | 'thread'; id: string }>,
-  ): Promise<Array<{ rung: 'resource' | 'thread'; fact: KnowledgeFact }>> {
-    const out: Array<{ rung: 'resource' | 'thread'; fact: KnowledgeFact }> = [];
+  ): Promise<Array<{ rung: 'resource' | 'thread'; fact: KnowledgeItem }>> {
+    const out: Array<{ rung: 'resource' | 'thread'; fact: KnowledgeItem }> = [];
     for (const { rung, id } of pinnedIds) {
-      const { facts } = await view.store.factsAbout({ entityId: id, scope: view.scope, limit: 200 });
+      const { items: facts } = await view.store.itemsAbout({ nodeId: id, scope: view.scope, limit: 200 });
       for (const fact of facts) out.push({ rung, fact });
     }
     return out;
@@ -409,18 +409,18 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const limits = this.#limits;
 
           // Entities, newest-first; +1 to detect truncation.
-          const fetched = await store.listEntities({ scope, limit: limits.maxEntities + 1 });
+          const fetched = await store.listNodes({ scope, limit: limits.maxEntities + 1 });
           let truncated = fetched.length > limits.maxEntities;
           const pinnedIds = await this.#pinnedEntityIds(view);
           const pinnedIdSet = new Set(pinnedIds.map(p => p.id));
           const entities = fetched.slice(0, limits.maxEntities).filter(entity => !pinnedIdSet.has(entity.id));
 
           // Facts window: per-entity owned facts, then newest-first overall.
-          const factWindow: KnowledgeFact[] = [];
+          const factWindow: KnowledgeItem[] = [];
           for (const entity of entities) {
             if (factWindow.length > limits.maxFacts) break;
-            const { facts } = await store.factsAbout({
-              entityId: entity.id,
+            const { items: facts } = await store.itemsAbout({
+              nodeId: entity.id,
               scope,
               limit: limits.maxFacts + 1 - factWindow.length,
             });
@@ -443,20 +443,20 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const edgeSeen = new Set<string>();
           const factCounts = new Map<string, number>();
           for (const fact of factWindow) {
-            factCounts.set(fact.parentEntityId, (factCounts.get(fact.parentEntityId) ?? 0) + 1);
-            const entityIds = [fact.parentEntityId];
+            factCounts.set(fact.parentNodeId, (factCounts.get(fact.parentNodeId) ?? 0) + 1);
+            const entityIds = [fact.parentNodeId];
             for (const name of parseKnowledgeWikilinks(fact.text)) {
               const target = await resolver.resolve(name, fact.scope);
               if (!target) continue; // dangling or capped
-              if (target.id === fact.parentEntityId) continue; // self-link
+              if (target.id === fact.parentNodeId) continue; // self-link
               if (!resolver.inWindowId(target.id)) continue; // reported via outOfWindow
               if (!entityIds.includes(target.id)) entityIds.push(target.id);
-              const key = `${fact.parentEntityId}\u0000${target.id}`;
+              const key = `${fact.parentNodeId}\u0000${target.id}`;
               if (edgeSeen.has(key)) continue;
               edgeSeen.add(key);
               edges.push({
-                id: `wikilink:${fact.parentEntityId}:${target.id}`,
-                source: fact.parentEntityId,
+                id: `wikilink:${fact.parentNodeId}:${target.id}`,
+                source: fact.parentNodeId,
                 target: target.id,
                 type: 'wikilink',
                 factId: fact.id,
@@ -546,7 +546,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const entityId = loose(c).req.param('entityId');
           if (!entityId || entityId.length > 512) return c.json({ error: 'entity_not_found' }, 404);
 
-          const entity = await store.getEntity(entityId);
+          const entity = await store.getNode(entityId);
           // getEntity is a bare id lookup with NO scope predicate — the
           // visibility check here is what keeps this from being an IDOR.
           if (!entity || !isKnowledgeScopeVisible(entity.scope, scope)) {
@@ -557,17 +557,17 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const pinnedIdSet = new Set(pinnedIds.map(p => p.id));
 
           const [owned, touching] = await Promise.all([
-            store.factsAbout({ entityId: entity.id, scope, limit: 200 }),
-            store.factsTouching({ entityId: entity.id, scope, limit: 200 }),
+            store.itemsAbout({ nodeId: entity.id, scope, limit: 200 }),
+            store.itemsTouching({ nodeId: entity.id, scope, limit: 200 }),
           ]);
           const seen = new Set<string>();
           const facts: KnowledgeEntityFactPayload[] = [];
-          const push = (fact: KnowledgeFact, relation: 'owned' | 'mentions') => {
+          const push = (fact: KnowledgeItem, relation: 'owned' | 'mentions') => {
             if (seen.has(fact.id)) return;
             seen.add(fact.id);
             facts.push({
               id: fact.id,
-              parentEntityId: fact.parentEntityId,
+              parentEntityId: fact.parentNodeId,
               relation,
               text: fact.text,
               scope: fact.scope,
@@ -575,14 +575,14 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               sourceThreadId: fact.sourceThreadId,
               capturedAt: fact.capturedAt.toISOString(),
               ...(fact.when ? { when: fact.when.toISOString() } : {}),
-              pinned: pinnedIdSet.has(fact.parentEntityId),
+              pinned: pinnedIdSet.has(fact.parentNodeId),
               ...(fact.metadata ? { metadata: fact.metadata } : {}),
             });
           };
           // Owned first (newest-first within each group — fact ids are ULIDs).
-          for (const fact of [...owned.facts].sort((a, b) => b.id.localeCompare(a.id))) push(fact, 'owned');
-          for (const fact of [...touching.facts].sort((a, b) => b.id.localeCompare(a.id))) {
-            if (fact.parentEntityId !== entity.id) push(fact, 'mentions');
+          for (const fact of [...owned.items].sort((a, b) => b.id.localeCompare(a.id))) push(fact, 'owned');
+          for (const fact of [...touching.items].sort((a, b) => b.id.localeCompare(a.id))) {
+            if (fact.parentNodeId !== entity.id) push(fact, 'mentions');
           }
 
           const payload: KnowledgeEntityPayload = {
