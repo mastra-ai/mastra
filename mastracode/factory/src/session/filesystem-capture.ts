@@ -96,7 +96,13 @@ export function observeSessionFilesystem(
 ): () => void {
   let capture = Promise.resolve();
   return session.onBeforeAgentEnd(() => {
+    // Chain so captures stay sequential (last write wins), but do NOT return
+    // the chain: finishAgentRun awaits every listener before emitting
+    // agent_end, and the capture's sandbox execs (git status + artifacts
+    // find, 30s timeouts each) must not gate turn completion - parity with
+    // the checkpoint listener in checkpoint-capture.ts. The un-returned
+    // chain cannot leak an unhandled rejection: captureSessionFilesystem's
+    // entire body runs inside its own try/catch.
     capture = capture.then(() => captureSessionFilesystem(session, dependencies));
-    return capture;
   });
 }
