@@ -24,6 +24,7 @@ import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { runPrune, resolveTargets } from '../../retention';
+import { buildWorkflowStatusFilter } from './status-filter';
 
 function getSchemaName(schema?: string) {
   return schema ? `"${schema}"` : '"public"';
@@ -558,15 +559,13 @@ export class WorkflowsPG extends WorkflowsStorage {
       }
 
       if (status) {
-        // Use regexp_replace to strip problematic Unicode escape sequences before casting to jsonb.
-        // PostgreSQL's jsonb cast fails on:
-        // - \u0000 (null character) with error 22P05 "unsupported Unicode escape sequence"
-        // - \uD800-\uDFFF (unpaired surrogates) with "Unicode low surrogate must follow a high surrogate"
-        // The regex pattern matches \u0000 and all surrogate code points (D800-DFFF).
-        // See: https://github.com/mastra-ai/mastra/issues/11563
-        conditions.push(
-          `regexp_replace(snapshot::text, '\\\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})', '', 'g')::jsonb ->> 'status' = $${paramIndex}`,
-        );
+        // When `snapshot` is `jsonb` (the store's default), read `status` directly so the
+        // predicate stays indexable. The regexp_replace sanitization is only needed on
+        // `json`/`text` columns, where a stored NUL or unpaired surrogate makes the
+        // `::jsonb` cast throw 22P05. See: https://github.com/mastra-ai/mastra/issues/11563
+        // Unknown/missing column type falls back to the safe sanitizing form.
+        const snapshotColumnType = await this.#db.getColumnType(TABLE_WORKFLOW_SNAPSHOT, 'snapshot');
+        conditions.push(buildWorkflowStatusFilter(snapshotColumnType === 'jsonb', paramIndex));
         values.push(status);
         paramIndex++;
       }

@@ -604,6 +604,23 @@ export class PgDB extends MastraBase {
   }
 
   /**
+   * Returns the live SQL type of a column (`data_type` from `information_schema`,
+   * e.g. `jsonb`, `json`, `text`), or `null` when the column does not exist.
+   * Always probes the catalog because the init-window schema snapshot only tracks
+   * column names, not their types.
+   */
+  async getColumnType(table: string, column: string): Promise<string | null> {
+    const schema = this.schemaName || 'public';
+
+    const result = await this.client.oneOrNone(
+      `SELECT data_type FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND (column_name = $3 OR column_name = $4)`,
+      [schema, table, column, column.toLowerCase()],
+    );
+
+    return result ? String(result.data_type) : null;
+  }
+
+  /**
    * Prepares values for insertion, handling JSONB columns by stringifying them
    */
   private prepareValuesForInsert(record: Record<string, any>, tableName: TABLE_NAMES): any[] {
