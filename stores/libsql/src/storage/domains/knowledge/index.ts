@@ -142,7 +142,6 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async init(): Promise<void> {
-    await this.#migrateLegacyKnowledgeSchema();
     await this.#db.createTable({ tableName: TABLE_KNOWLEDGE_RECORDS, schema: KNOWLEDGE_RECORDS_SCHEMA });
     await this.#db.createTable({ tableName: TABLE_KNOWLEDGE_ITEMS, schema: KNOWLEDGE_ITEMS_SCHEMA });
     await this.#db.createTable({
@@ -723,77 +722,6 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
           args: [(input.retryAt ?? new Date()).toISOString(), id, input.workerId],
         });
     });
-  }
-
-  async #migrateLegacyKnowledgeSchema(): Promise<void> {
-    const tables = await this.#client.execute({
-      sql: `SELECT name FROM sqlite_master WHERE type='table' AND name IN (?, ?)`,
-      args: ['mastra_knowledge_facts', TABLE_KNOWLEDGE_ITEMS],
-    });
-    const names = new Set(tables.rows.map(row => String(row.name)));
-    if (names.has('mastra_knowledge_facts') && !names.has(TABLE_KNOWLEDGE_ITEMS)) {
-      await this.#client.execute(`ALTER TABLE "mastra_knowledge_facts" RENAME TO "${TABLE_KNOWLEDGE_ITEMS}"`);
-    }
-
-    const itemColumns = await this.#client.execute(`PRAGMA table_info("${TABLE_KNOWLEDGE_ITEMS}")`);
-    const itemColumnNames = new Set(itemColumns.rows.map(row => String(row.name)));
-    if (itemColumnNames.has('parentEntityId') && !itemColumnNames.has('parentNodeId')) {
-      await this.#client.execute(
-        `ALTER TABLE "${TABLE_KNOWLEDGE_ITEMS}" RENAME COLUMN "parentEntityId" TO "parentNodeId"`,
-      );
-    }
-
-    const recordColumns = await this.#client.execute(`PRAGMA table_info("${TABLE_KNOWLEDGE_RECORDS}")`);
-    const recordColumnNames = new Set(recordColumns.rows.map(row => String(row.name)));
-    if (recordColumnNames.size > 0 && !recordColumnNames.has('content')) {
-      await this.#client.execute(`ALTER TABLE "${TABLE_KNOWLEDGE_RECORDS}" ADD COLUMN "content" TEXT`);
-    }
-    if (recordColumnNames.has('body')) {
-      await this.#client.execute(
-        `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" AS target SET content=COALESCE(target.content, (SELECT page.body FROM "${TABLE_KNOWLEDGE_RECORDS}" AS page WHERE page.type='page' AND page.scopeKey=target.scopeKey AND page.canonicalName=target.canonicalName LIMIT 1)) WHERE target.type='entity' AND EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORDS}" AS page WHERE page.type='page' AND page.scopeKey=target.scopeKey AND page.canonicalName=target.canonicalName)`,
-      );
-      await this.#client
-        .execute(
-          `INSERT OR IGNORE INTO "${TABLE_KNOWLEDGE_MENTIONS}" (sourceType,sourceId,recordId) SELECT 'node', target.id, mention.recordId FROM "${TABLE_KNOWLEDGE_RECORDS}" AS page JOIN "${TABLE_KNOWLEDGE_RECORDS}" AS target ON target.type='entity' AND target.scopeKey=page.scopeKey AND target.canonicalName=page.canonicalName JOIN "${TABLE_KNOWLEDGE_MENTIONS}" AS mention ON mention.sourceType='page' AND mention.sourceId=page.id WHERE page.type='page'`,
-        )
-        .catch(() => undefined);
-      await this.#client
-        .execute(
-          `DELETE FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE sourceType='page' AND sourceId IN (SELECT page.id FROM "${TABLE_KNOWLEDGE_RECORDS}" AS page JOIN "${TABLE_KNOWLEDGE_RECORDS}" AS target ON target.type='entity' AND target.scopeKey=page.scopeKey AND target.canonicalName=page.canonicalName WHERE page.type='page')`,
-        )
-        .catch(() => undefined);
-      await this.#client.execute(
-        `DELETE FROM "${TABLE_KNOWLEDGE_RECORDS}" AS page WHERE page.type='page' AND EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORDS}" AS target WHERE target.type='entity' AND target.scopeKey=page.scopeKey AND target.canonicalName=page.canonicalName)`,
-      );
-      await this.#client.execute(
-        `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET content=COALESCE(content, body), kind=COALESCE(kind, 'document'), type='node' WHERE type='page'`,
-      );
-    }
-    if (recordColumnNames.size > 0) {
-      await this.#client.execute(`UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET type='node' WHERE type='entity'`);
-    }
-
-    const cursorColumns = await this.#client.execute(`PRAGMA table_info("${TABLE_KNOWLEDGE_CURSORS}")`);
-    const cursorColumnNames = new Set(cursorColumns.rows.map(row => String(row.name)));
-    if (cursorColumnNames.has('lastFactId') && !cursorColumnNames.has('lastItemId')) {
-      await this.#client.execute(`ALTER TABLE "${TABLE_KNOWLEDGE_CURSORS}" RENAME COLUMN "lastFactId" TO "lastItemId"`);
-    }
-
-    await this.#client
-      .execute(
-        `UPDATE "${TABLE_KNOWLEDGE_MENTIONS}" SET sourceType=CASE sourceType WHEN 'fact' THEN 'item' WHEN 'page' THEN 'node' ELSE sourceType END`,
-      )
-      .catch(() => undefined);
-    await this.#client
-      .execute(
-        `UPDATE "${TABLE_KNOWLEDGE_ACTIVITY}" SET action=replace(replace(action, 'entity-', 'node-'), 'fact-', 'item-'), recordType=CASE recordType WHEN 'entity' THEN 'node' WHEN 'page' THEN 'node' WHEN 'fact' THEN 'item' ELSE recordType END`,
-      )
-      .catch(() => undefined);
-    await this.#client
-      .execute(
-        `UPDATE "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" SET documentType=CASE documentType WHEN 'entity' THEN 'node' WHEN 'page' THEN 'node' WHEN 'fact' THEN 'item' ELSE documentType END, documentId=replace(replace(replace(documentId, 'knowledge:entity:', 'knowledge:node:'), 'knowledge:page:', 'knowledge:node:'), 'knowledge:fact:', 'knowledge:item:'), idempotencyKey=replace(replace(replace(idempotencyKey, 'knowledge:entity:', 'knowledge:node:'), 'knowledge:page:', 'knowledge:node:'), 'knowledge:fact:', 'knowledge:item:')`,
-      )
-      .catch(() => undefined);
   }
 
   async #transaction<T>(operation: (tx: Transaction) => Promise<T>): Promise<T> {
