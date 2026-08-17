@@ -260,17 +260,13 @@ describe('addUserMessage', () => {
           value: {
             updates: [
               {
-                id: 'activity-1',
-                action: 'fact-created',
-                type: 'fact',
-                recordId: 'fact-1',
+                action: 'item-created',
+                type: 'item',
                 name: 'Atlas launch',
-                targetId: 'atlas',
-                targetType: 'entity',
                 createdAt: '2026-07-15T00:00:00.000Z',
               },
             ],
-            hot: [{ type: 'entity', id: 'atlas', name: 'Atlas launch', updates: 1 }],
+            hot: [{ type: 'node', name: 'Atlas launch', updates: 1 }],
           },
         },
         'subconscious-activity-1',

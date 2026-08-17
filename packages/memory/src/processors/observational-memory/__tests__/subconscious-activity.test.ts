@@ -52,12 +52,13 @@ describe('Subconscious activity', () => {
 
     expect(snapshot.updates.map(update => update.name)).toContain('Project Atlas');
     expect(snapshot.updates.map(update => update.name)).not.toContain('Alpha Secret');
-    expect(snapshot.updates.some(update => update.sourceThreadId === 'alpha')).toBe(true);
-    expect(snapshot.updates.some(update => update.recordId !== atlas.id && update.type === 'item')).toBe(true);
-    expect(snapshot.updates).toContainEqual(
-      expect.objectContaining({ recordId: sharedSecretItem.id, type: 'item', name: undefined }),
-    );
+    expect(snapshot.updates.some(update => update.type === 'item' && !('name' in update))).toBe(true);
     expect(snapshot.updates).toHaveLength(3);
+    expect(snapshot.updates.every(update => !('recordId' in update) && !('targetId' in update))).toBe(true);
+    expect(snapshot.updates.every(update => !('sourceThreadId' in update))).toBe(true);
+    expect(snapshot.hot.every(record => !('id' in record))).toBe(true);
+    expect(JSON.stringify(snapshot)).not.toContain(sharedSecretItem.id);
+    expect(JSON.stringify(snapshot)).not.toContain(secret.id);
   });
 
   it('does not expose names after an activity target moves outside the visible scope', async () => {
@@ -74,14 +75,12 @@ describe('Subconscious activity', () => {
 
     const snapshot = await buildSubconsciousActivitySnapshot({ store, scope: betaScope, recentUpdates: 10 });
 
-    expect(snapshot.updates).toContainEqual(
-      expect.objectContaining({ recordId: secret.id, type: 'node', name: undefined }),
-    );
-    expect(snapshot.updates).toContainEqual(
-      expect.objectContaining({ recordId: document.id, type: 'node', name: undefined }),
-    );
+    expect(snapshot.updates).toHaveLength(2);
+    expect(snapshot.updates.every(update => update.type === 'node' && !('name' in update))).toBe(true);
     expect(snapshot.hot.map(record => record.name)).not.toContain('Moved secret');
     expect(snapshot.hot.map(record => record.name)).not.toContain('Moved document');
+    expect(JSON.stringify(snapshot)).not.toContain(secret.id);
+    expect(JSON.stringify(snapshot)).not.toContain(document.id);
     expect(renderSubconsciousActivity(snapshot)).not.toContain(secret.id);
     expect(renderSubconsciousActivity(snapshot)).not.toContain(document.id);
   });
