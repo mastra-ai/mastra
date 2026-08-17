@@ -18,6 +18,7 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 
 import { getAgentFromSystem } from './agents';
 import { handleError } from './error';
+import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
 import { validateBody } from './utils';
 
 /**
@@ -41,10 +42,10 @@ function schemaToJsonSchema(schema: PublicSchema<unknown> | undefined) {
   return standardSchemaToJSONSchema(toStandardSchema(schema), { target: 'draft-2020-12' });
 }
 
-function serializeSchema(schema: unknown): string | undefined {
+function serializeSchema(schema: unknown, options?: { stripInjectedOverrides?: boolean }): string | undefined {
   const jsonSchema = schemaToJsonSchema(resolveLazySchema(schema) as PublicSchema<unknown> | undefined);
   if (jsonSchema === undefined) return undefined;
-  return stringify(jsonSchema);
+  return stringify(options?.stripInjectedOverrides ? stripInjectedToolOverrideFields(jsonSchema) : jsonSchema);
 }
 
 /**
@@ -100,7 +101,7 @@ function serializeTool(tool: any): any {
 
   return {
     ...tool,
-    inputSchema: serializeSchema(tool.inputSchema),
+    inputSchema: serializeSchema(tool.inputSchema, { stripInjectedOverrides: true }),
     outputSchema: serializeSchema(tool.outputSchema),
     requestContextSchema: serializeSchema(tool.requestContextSchema),
   };

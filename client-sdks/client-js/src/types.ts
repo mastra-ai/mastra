@@ -153,6 +153,8 @@ export type ListAgentSuspendedRunsParams = GeneratedRequest<QueryParams<'GET /ag
  */
 export type ListAgentSuspendedRunsResponse = GeneratedResponse<'GET /agents/:agentId/suspended-runs'>;
 
+export type GetAgentPlanResponse = GeneratedResponse<'GET /agents/:agentId/plans/file'>;
+
 export type AgentSuspendedRun = ListAgentSuspendedRunsResponse['runs'][number];
 
 export type AgentSuspendedRunToolCall = AgentSuspendedRun['toolCalls'][number];

@@ -93,10 +93,10 @@ export function CandidateCard({
           disabled={disabled || runPending}
           aria-busy={runPending || undefined}
           aria-label={`${defaultAction.label} ${candidate.title}`}
-          className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
+          className="focus-visible:outline-accent1 absolute inset-0 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
           onClick={() => onRun(defaultAction)}
         />
-        <div className="absolute top-2 right-2 z-20">
+        <div className="absolute top-2 right-2">
           <DropdownMenu>
             <DropdownMenu.Trigger
               render={
@@ -148,7 +148,7 @@ export function CandidateCard({
               rel="noreferrer"
               draggable={false}
               aria-label={externalLinkLabel(candidate.source)}
-              className={cn('text-icon3 hover:text-icon5 relative z-20 shrink-0', REVEAL_ON_CARD_HOVER)}
+              className={cn('text-icon3 hover:text-icon5 relative shrink-0', REVEAL_ON_CARD_HOVER)}
             >
               <ArrowUpRight size={12} aria-hidden />
             </a>

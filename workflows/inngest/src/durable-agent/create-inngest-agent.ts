@@ -51,7 +51,7 @@ import type { MessageListInput } from '@mastra/core/agent/message-list';
 import { InMemoryServerCache } from '@mastra/core/cache';
 import type { MastraServerCache } from '@mastra/core/cache';
 import { CachingPubSub } from '@mastra/core/events';
-import type { PubSub } from '@mastra/core/events';
+import type { Event, PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import { SpanType, EntityType } from '@mastra/core/observability';
 import type { MastraModelOutput, ChunkType, FullOutput, MastraOnFinishCallback } from '@mastra/core/stream';
@@ -61,6 +61,20 @@ import type { Inngest } from 'inngest';
 import { InngestPubSub } from '../pubsub';
 import type { InngestWorkflow } from '../workflow';
 import { createInngestDurableAgenticWorkflow, InngestDurableStepIds } from './create-inngest-agentic-workflow';
+
+class InngestWorkflowCachingPubSub extends CachingPubSub {
+  override publish(
+    topic: string,
+    event: Omit<Event, 'id' | 'createdAt' | 'index'>,
+    options?: { localOnly?: boolean },
+  ): Promise<void> {
+    if (topic.startsWith('workflow.events.v2.')) {
+      return super.publish(topic, event, { ...options, localOnly: true });
+    }
+
+    return super.publish(topic, event, options);
+  }
+}
 
 /**
  * Internal sentinel used by {@link InngestAgent.generate} and
@@ -267,6 +281,7 @@ export interface InngestAgentStreamResult<OUTPUT = undefined> {
 export interface InngestAgentResumeOptions<OUTPUT = undefined> {
   threadId?: string;
   resourceId?: string;
+  requestContext?: AgentExecutionOptions<OUTPUT>['requestContext'];
   onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
   onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
   onFinish?: MastraOnFinishCallback<OUTPUT>;
@@ -576,7 +591,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     // Ensure the agent's CachingPubSub (and its cache) is resolved so workflow
     // events and agent.stream events share the same history backend.
     getPubsub();
-    return new CachingPubSub(defaultPubsub, resolveCache());
+    return new InngestWorkflowCachingPubSub(defaultPubsub, resolveCache());
   });
 
   // Lazily resolve cache
@@ -1014,19 +1029,27 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           // Find the suspended step from the snapshot
           const suspendedStepIds = snapshot?.suspendedPaths ? Object.keys(snapshot.suspendedPaths) : [];
           const steps = suspendedStepIds.length > 0 ? suspendedStepIds : [];
+          const requestContext = {
+            ...(snapshot?.requestContext ?? {}),
+            ...(resumeOptions?.requestContext?.toJSON() ?? {}),
+          };
+          const tracingOptions = snapshot?.tracingContext
+            ? {
+                traceId: snapshot.tracingContext.traceId,
+                parentSpanId: snapshot.tracingContext.spanId,
+              }
+            : undefined;
 
           await inngest.send({
             name: eventName,
             data: {
               inputData: resumeData,
-              initialState: snapshot?.value ?? {},
               runId,
               resourceId: resumeOptions?.resourceId,
-              requestContext: snapshot?.requestContext ?? {},
-              stepResults: snapshot?.context,
+              requestContext,
+              tracingOptions,
               resume: {
                 steps,
-                stepResults: snapshot?.context,
                 resumePayload: resumeData,
                 resumePath: steps[0] ? snapshot?.suspendedPaths?.[steps[0]] : undefined,
               },
