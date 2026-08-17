@@ -159,6 +159,7 @@ describe('AgentController.getObservationalMemoryRecord', () => {
             chunks: 1,
             messageTokens: 1_500,
             observationTokens: 500,
+            projectedMessageRemoval: 0,
           },
           reflection: {
             status: 'complete',
@@ -172,5 +173,45 @@ describe('AgentController.getObservationalMemoryRecord', () => {
     });
 
     await session.thread.switch({ threadId: threadB.id });
+  });
+
+  it('restores buffered observation counts when chunks are stored serialized', async () => {
+    const thread = await session.thread.create();
+    const resourceId = session.identity.getResourceId();
+    const memoryStorage = (await storage.getStore('memory'))!;
+    const record = await memoryStorage.initializeObservationalMemory({
+      threadId: thread.id,
+      resourceId,
+      scope: 'thread',
+      config: { observation: { messageTokens: 12_000 }, reflection: { observationTokens: 24_000 } },
+    });
+    Object.assign(record, {
+      pendingMessageTokens: 6_000,
+      bufferedObservationChunks: JSON.stringify([
+        {
+          id: 'chunk-1',
+          cycleId: 'cycle-1',
+          observations: 'Buffered observation',
+          tokenCount: 500,
+          messageIds: ['message-1'],
+          messageTokens: 1_500,
+          lastObservedAt: new Date(),
+          createdAt: new Date(),
+        },
+      ]),
+    });
+    const events: any[] = [];
+    session.subscribe(event => events.push(event));
+
+    await session.thread.switch({ threadId: thread.id });
+    await controller.loadOMProgress(session);
+
+    expect(events.find(event => event.type === 'om_status')).toMatchObject({
+      windows: {
+        buffered: {
+          observations: { status: 'complete', chunks: 1, messageTokens: 1_500, observationTokens: 500 },
+        },
+      },
+    });
   });
 });

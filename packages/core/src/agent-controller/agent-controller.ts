@@ -1705,7 +1705,20 @@ export class AgentController<TState = {}> {
       );
       const messageTokens = record.pendingMessageTokens ?? 0;
       const observationTokens = record.observationTokenCount ?? 0;
-      const bufferedChunks = Array.isArray(record.bufferedObservationChunks) ? record.bufferedObservationChunks : [];
+      // Some storage backends return the chunk list serialized, so parse defensively
+      // (mirrors the OM processor's own `getBufferedChunks` helper).
+      const rawChunks = record.bufferedObservationChunks;
+      let bufferedChunks: { messageTokens?: number; tokenCount?: number }[] = [];
+      if (Array.isArray(rawChunks)) {
+        bufferedChunks = rawChunks;
+      } else if (typeof rawChunks === 'string') {
+        try {
+          const parsed = JSON.parse(rawChunks);
+          if (Array.isArray(parsed)) bufferedChunks = parsed;
+        } catch {
+          bufferedChunks = [];
+        }
+      }
       const bufferedMessageTokens = Math.min(
         bufferedChunks.reduce((sum, chunk) => sum + (chunk.messageTokens ?? 0), 0),
         messageTokens,
@@ -1719,7 +1732,10 @@ export class AgentController<TState = {}> {
             : ('idle' as const),
         chunks: bufferedChunks.length,
         messageTokens: bufferedMessageTokens,
-        projectedMessageRemoval: bufferedMessageTokens,
+        // The real projection depends on the OM processor's activation boundary math,
+        // which isn't reproducible from the record alone. Report 0 until the first live
+        // status arrives rather than an authoritative-looking approximation.
+        projectedMessageRemoval: 0,
         observationTokens: bufferedObservationTokens,
       };
       const bufferedRef = {
@@ -1732,6 +1748,8 @@ export class AgentController<TState = {}> {
         observationTokens: record.bufferedReflectionTokens ?? 0,
       };
       const generationCount = record.generationCount ?? 0;
+      // Step index is per-run and intentionally not durable — a restored thread starts at 0
+      // and picks up the real step number from the next live status update.
       const stepNumber = 0;
 
       session.emit({
