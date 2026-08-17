@@ -41,13 +41,19 @@ export class CloudflareSandboxBridgeError extends Error {
   }
 }
 
+function stripTrailingSlashes(url: string): string {
+  let end = url.length;
+  while (end > 0 && url[end - 1] === '/') end--;
+  return url.slice(0, end);
+}
+
 export class CloudflareSandboxBridgeClient {
   readonly baseUrl: string;
   private readonly apiToken?: string;
   private readonly fetchImpl: typeof globalThis.fetch;
 
   constructor(options: CloudflareSandboxBridgeClientOptions) {
-    this.baseUrl = options.baseUrl.replace(/\/+$/, '');
+    this.baseUrl = stripTrailingSlashes(options.baseUrl);
     this.apiToken = options.apiToken;
     this.fetchImpl = options.fetch ?? globalThis.fetch;
   }
