@@ -8,18 +8,20 @@ import { ObservationMarkerBadge } from './badges/observation-marker-badge';
 import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
 import { ToolBadge } from './badges/tool-badge';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
+import { SubmitPlanTool } from './submit-plan-tool';
 import { useActivatedSkills } from '@/domains/agents/context/activated-skills-context';
 import {
   isBrowserTool,
   isBrowserToolError,
   useBrowserToolCallsSafe,
 } from '@/domains/agents/context/browser-tool-calls-context';
+import { SUBMIT_PLAN_TOOL_ID } from '@/domains/agents/hooks/use-agent-plan';
 import type { BrowserSessionProbe } from '@/domains/agents/hooks/use-browser-session-probe';
 import { McpAppToolResult } from '@/domains/mcps/components/mcp-app-tool-result';
 import { useMcpAppTools } from '@/domains/mcps/hooks';
 import { WorkflowRunProvider } from '@/domains/workflows';
 import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
-import { useChatSend } from '@/lib/ai-ui/chat/chat-context';
+import { useChatAgentSafe, useChatSend } from '@/lib/ai-ui/chat/chat-context';
 import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 
 /**
@@ -72,6 +74,7 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
   const { activateSkill } = useActivatedSkills();
   const { data: mcpAppToolsMap } = useMcpAppTools();
   const send = useChatSend();
+  const chatAgent = useChatAgentSafe();
   const queryClient = useQueryClient();
 
   const args = input;
@@ -181,6 +184,23 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
   // ask_user tool renders a dedicated interactive component for answering questions.
   if (toolName === 'ask_user') {
     return <AskUserTool toolName={toolName} toolCallId={toolCallId} output={output} metadata={metadata} />;
+  }
+
+  const isSubmitPlanTool =
+    toolName === SUBMIT_PLAN_TOOL_ID || chatAgent?.submitPlanToolNames?.includes(toolName) === true;
+
+  if (isSubmitPlanTool && chatAgent) {
+    return (
+      <SubmitPlanTool
+        agentId={chatAgent.agentId}
+        agentVersionId={chatAgent.agentVersionId}
+        requestContext={chatAgent.requestContext}
+        toolName={toolName}
+        toolCallId={toolCallId}
+        output={output}
+        metadata={metadata}
+      />
+    );
   }
 
   if (isBackgroundTaskResult) {

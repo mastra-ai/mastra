@@ -3,6 +3,7 @@
 node_modules
 .vercel
 .mastra.mastra
+.mastracode/
 database.sqlite
 hitl-approval-recall.db*
 .duckdb

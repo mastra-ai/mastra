@@ -26,6 +26,10 @@ const approveToolCallMock = vi.fn(async () => ({
   body: { cancel: vi.fn() },
   processDataStream: approveToolCallProcessDataStreamMock,
 }));
+const resumeStreamMock = vi.fn(async () => ({
+  body: { cancel: vi.fn() },
+  processDataStream: approveToolCallProcessDataStreamMock,
+}));
 const sendToolApprovalMock = vi.fn(async () => ({
   accepted: true,
   runId: 'run-approval',
@@ -104,6 +108,7 @@ vi.mock('@mastra/client-js', () => ({
         sendSignal: sendSignalMock,
         sendMessage: sendMessageMock,
         approveToolCall: approveToolCallMock,
+        resumeStream: resumeStreamMock,
         sendToolApproval: sendToolApprovalMock,
         declineToolCall: declineToolCallMock,
         stream: streamMock,
@@ -150,6 +155,7 @@ describe('useChat forwards clientTools', () => {
     sendSignalMock.mockClear();
     sendMessageMock.mockClear();
     approveToolCallMock.mockClear();
+    resumeStreamMock.mockClear();
     sendToolApprovalMock.mockClear();
     declineToolCallMock.mockClear();
     approveToolCallProcessDataStreamMock.mockClear();
@@ -216,6 +222,33 @@ describe('useChat forwards clientTools', () => {
       expect.objectContaining({ model: 'google/gemini-2.5-flash' }),
     );
     expect(approveToolCallMock).toHaveBeenCalledWith(expect.objectContaining({ model: 'google/gemini-2.5-flash' }));
+  });
+
+  it('uses resumeStream for custom resume data on the legacy stream transport', async () => {
+    const { result } = renderHook(
+      () => useChat({ agentId: 'test-agent', threadId: 'thread-1', enableThreadSignals: false }),
+      { wrapper },
+    );
+    const resumeData = {
+      action: 'approved',
+      path: '.mastracode/plans/ship.md',
+      title: 'Ship',
+      plan: '# Ship',
+    };
+
+    await act(async () => {
+      await result.current.sendMessage({
+        mode: 'stream',
+        message: 'hi',
+      });
+      await result.current.approveToolCall('submit-plan-call', resumeData);
+    });
+
+    expect(resumeStreamMock).toHaveBeenCalledWith(
+      resumeData,
+      expect.objectContaining({ toolCallId: 'submit-plan-call' }),
+    );
+    expect(approveToolCallMock).not.toHaveBeenCalled();
   });
 
   it('retains the model override for network approval', async () => {

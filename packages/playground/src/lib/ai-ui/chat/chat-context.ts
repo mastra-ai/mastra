@@ -40,6 +40,13 @@ export interface TasksContextValue {
   tasks: TaskItem[];
 }
 
+export interface AgentContextValue {
+  agentId: string;
+  agentVersionId?: string;
+  requestContext?: Record<string, unknown>;
+  submitPlanToolNames?: string[];
+}
+
 // NOTE: Tool/network approvals are NOT exposed here. The badge approval buttons
 // consume the existing `ToolCallProvider` (`@/services/tool-call-provider`),
 // which `ChatProvider` renders directly with `useChat`'s handlers — identical to
@@ -54,8 +61,10 @@ export const ChatRunningContext = createContext<RunningContextValue>({
 });
 export const ChatSendContext = createContext<SendContextValue>({ send: () => {} });
 export const ChatTasksContext = createContext<TasksContextValue>({ tasks: [] });
+export const ChatAgentContext = createContext<AgentContextValue | undefined>(undefined);
 
 export const useChatMessages = (): MastraDBMessage[] => useContext(ChatMessagesContext).messages;
 export const useChatRunning = (): RunningContextValue => useContext(ChatRunningContext);
 export const useChatSend = (): SendContextValue['send'] => useContext(ChatSendContext).send;
 export const useChatTasks = (): TaskItem[] => useContext(ChatTasksContext).tasks;
+export const useChatAgentSafe = (): AgentContextValue | undefined => useContext(ChatAgentContext);

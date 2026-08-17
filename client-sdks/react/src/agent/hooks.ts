@@ -974,11 +974,18 @@ export const useChat = ({
       return;
     }
 
-    const response = await agent.approveToolCall({
-      runId: currentRunId,
-      toolCallId,
-      ...continuation,
-    });
+    const response =
+      resumeData !== undefined
+        ? await agent.resumeStream(resumeData as Parameters<typeof agent.resumeStream>[0], {
+            runId: currentRunId,
+            toolCallId,
+            ...continuation,
+          })
+        : await agent.approveToolCall({
+            runId: currentRunId,
+            toolCallId,
+            ...continuation,
+          });
 
     await response.processDataStream({
       onChunk: async (chunk: ChunkType) => {
