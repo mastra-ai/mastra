@@ -532,6 +532,72 @@ describe('Subconscious remind', () => {
       expect(context.sendSignal).not.toHaveBeenCalled();
     });
 
+    it('persists the reminder exchange so a later run, even on a reconstructed Memory, sees it', async () => {
+      const { Memory } = await import('../../../index');
+      // One storage shared by both runs; each run gets its own Memory instance over it, the same
+      // way a process restart reconstructs Memory around surviving storage.
+      const sharedStorage = new InMemoryStore();
+      const prompts: unknown[] = [];
+      const recordingModel = (response: string) =>
+        new MockLanguageModelV2({
+          doGenerate: async options => {
+            prompts.push(options.prompt);
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop' as const,
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              warnings: [],
+              content: [{ type: 'text' as const, text: response }],
+            };
+          },
+          doStream: async options => {
+            prompts.push(options.prompt);
+            return {
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'remind-1', modelId: 'remind-model', timestamp: new Date() },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: response },
+                { type: 'text-end', id: 'text-1' },
+                { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+              ]),
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            };
+          },
+        });
+
+      const runOnce = async (response: string) => {
+        const extractor = new SubconsciousRemindExtractor({ name: 'remind', maxSteps: 3, builtIn: true }, undefined, {
+          createRemindMemory: () => new Memory({ storage: sharedStorage }),
+        });
+        const context = createContext('unused');
+        const item = await seedRelevantItem(context);
+        context.mainAgent.getModel = vi.fn(async () => recordingModel(response.replace('{itemId}', item.id))) as any;
+        const result = await applyExtractorHooks({
+          source: 'observer',
+          extractors: [extractor],
+          rawObservations: 'The user is scheduling Project Atlas.',
+          ...context,
+        });
+        return { result, context };
+      };
+
+      // First run: a grounded reminder fires once and is written to the remind conversation.
+      const first = await runOnce('marker-first-reminder Project Atlas launches January 15. Source: {itemId}');
+      expect(first.result.failures).toBeUndefined();
+      expect(first.context.sendSignal).toHaveBeenCalledOnce();
+
+      // Second run: fresh Memory over the same storage. The persisted first exchange must reach
+      // the model's prompt (that history is what lets it decline to repeat itself), and its
+      // no-reminder decision must stay silent.
+      prompts.length = 0;
+      const second = await runOnce('<no-reminder />');
+      expect(second.result.failures).toBeUndefined();
+      expect(second.context.sendSignal).not.toHaveBeenCalled();
+      expect(JSON.stringify(prompts)).toContain('marker-first-reminder');
+    });
+
     it('routes a remind memory construction failure into the extractor failure path', async () => {
       const extractor = new SubconsciousRemindExtractor({ name: 'remind', maxSteps: 3, builtIn: true }, undefined, {
         createRemindMemory: () => {
