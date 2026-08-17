@@ -64,11 +64,11 @@ describe('InMemoryKnowledgeStorage', () => {
     expect(record.capturedAt).toBeInstanceOf(Date);
     expect(record.when?.toISOString()).toBe('2026-07-01T00:00:00.000Z');
     expect(record.node).toBe(jane.id);
-    expect((await store.knowledgeAbout({ node: jane, scope: thread })).records).toHaveLength(1);
-    expect((await store.knowledgeAbout({ node: marco!, scope: thread })).records).toHaveLength(0);
-    expect((await store.knowledgeMentioning({ node: marco!, scope: thread })).records[0]?.id).toBe(record.id);
-    expect((await store.knowledgeRelatedTo({ node: marco!, scope: thread })).records[0]?.id).toBe(record.id);
-    expect((await store.knowledgeRelatedTo({ node: marco!, scope: sibling })).records).toHaveLength(0);
+    expect((await store.listKnowledgeAbout({ node: jane, scope: thread })).records).toHaveLength(1);
+    expect((await store.listKnowledgeAbout({ node: marco!, scope: thread })).records).toHaveLength(0);
+    expect((await store.listKnowledgeMentioning({ node: marco!, scope: thread })).records[0]?.id).toBe(record.id);
+    expect((await store.listKnowledgeRelatedTo({ node: marco!, scope: thread })).records[0]?.id).toBe(record.id);
+    expect((await store.listKnowledgeRelatedTo({ node: marco!, scope: sibling })).records).toHaveLength(0);
   });
 
   it('applies record visibility independently from node scope', async () => {
@@ -83,11 +83,11 @@ describe('InMemoryKnowledgeStorage', () => {
       defaultScope: resource,
     });
 
-    expect((await store.knowledgeAbout({ node, scope: org })).records).toHaveLength(1);
+    expect((await store.listKnowledgeAbout({ node, scope: org })).records).toHaveLength(1);
     expect(await store.search({ query: 'org-visible', scope: org })).toEqual([
       expect.objectContaining({ type: 'record', recordId: node.id, scope: org }),
     ]);
-    expect((await store.knowledgeAbout({ node, scope: thread })).records).toHaveLength(1);
+    expect((await store.listKnowledgeAbout({ node, scope: thread })).records).toHaveLength(1);
   });
 
   it('soft deletes and restores knowledge without losing mention relationships', async () => {
@@ -109,10 +109,10 @@ describe('InMemoryKnowledgeStorage', () => {
     expect(await store.getKnowledge({ id: record.id, includeDeleted: true })).toEqual(
       expect.objectContaining({ deletedBy: 'curator' }),
     );
-    expect((await store.knowledgeRelatedTo({ node: marco.id, scope: thread })).records).toHaveLength(0);
+    expect((await store.listKnowledgeRelatedTo({ node: marco.id, scope: thread })).records).toHaveLength(0);
 
     await store.restoreKnowledge({ id: record.id });
-    expect((await store.knowledgeRelatedTo({ node: marco.id, scope: thread })).records[0]?.id).toBe(record.id);
+    expect((await store.listKnowledgeRelatedTo({ node: marco.id, scope: thread })).records[0]?.id).toBe(record.id);
     expect((await store.listActivity({ scope: thread })).map(event => event.action)).toEqual(
       expect.arrayContaining(['record-deleted', 'record-restored']),
     );
@@ -229,11 +229,11 @@ describe('InMemoryKnowledgeStorage', () => {
       defaultScope: resource,
     });
 
-    const nodeOne = await store.knowledgeAbout({ node: node.id, scope: thread, limit: 1 });
+    const nodeOne = await store.listKnowledgeAbout({ node: node.id, scope: thread, limit: 1 });
     expect(nodeOne.records[0]?.id).toBe(second.id);
     expect(nodeOne.nextCursor).toBe(second.id);
     expect(
-      (await store.knowledgeAbout({ node: node.id, scope: thread, limit: 1, after: nodeOne.nextCursor })).records[0]
+      (await store.listKnowledgeAbout({ node: node.id, scope: thread, limit: 1, after: nodeOne.nextCursor })).records[0]
         ?.id,
     ).toBe(first.id);
 
