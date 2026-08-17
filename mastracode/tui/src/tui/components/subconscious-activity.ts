@@ -12,7 +12,7 @@ const DISPLAY_ERRORS = 3;
 
 interface SubconsciousActivityUpdate {
   action: string;
-  type: 'node' | 'item';
+  type: 'node' | 'record';
   name?: string;
   createdAt: string;
 }
@@ -44,7 +44,7 @@ function update(value: unknown): SubconsciousActivityUpdate | undefined {
   if (
     !item ||
     !string(item.action) ||
-    !['node', 'item'].includes(String(item.type)) ||
+    !['node', 'record'].includes(String(item.type)) ||
     !string(item.createdAt) ||
     (item.name !== undefined && typeof item.name !== 'string')
   ) {
