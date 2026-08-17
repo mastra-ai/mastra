@@ -78,72 +78,78 @@ describe('ToolCard dispatch', () => {
     expect(container.textContent).toBe('');
   });
 
-  it('routes submit_plan to the submitted plan card', () => {
-    renderToolCard(
-      baseProps({
-        toolName: 'submit_plan',
-        output: {
-          content: 'Plan approved.',
-          submittedPlan: {
-            title: 'Ship the feature',
-            path: '.mastracode/plans/ship-feature.md',
-            plan: '## Implementation\n\nBuild and verify the feature.',
+  describe('when the submit_plan tool has completed', () => {
+    it('routes the result to the submitted plan card', () => {
+      renderToolCard(
+        baseProps({
+          toolName: 'submit_plan',
+          output: {
+            content: 'Plan approved.',
+            submittedPlan: {
+              title: 'Ship the feature',
+              path: '.mastracode/plans/ship-feature.md',
+              plan: '## Implementation\n\nBuild and verify the feature.',
+            },
           },
-        },
-      }),
-    );
+        }),
+      );
 
-    expect(screen.getByRole('group', { name: 'Submitted plan' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Ship the feature' })).toBeTruthy();
+      expect(screen.getByRole('group', { name: 'Submitted plan' })).toBeTruthy();
+      expect(screen.getByRole('heading', { name: 'Ship the feature' })).toBeTruthy();
+    });
   });
 
-  it('routes an aliased submit_plan tool to the persisted plan card by intrinsic tool id', () => {
-    renderToolCard(
-      baseProps({
-        toolName: 'userDefinedAlias',
-        output: {
-          toolId: 'submit_plan',
-          content: 'Plan approved.',
-          submittedPlan: {
-            title: 'Aliased plan',
-            path: '.mastracode/plans/aliased.md',
-            plan: '## Implementation\n\nRender the aliased plan.',
+  describe('when an aliased submit_plan tool has completed', () => {
+    it('routes the intrinsic tool result to the submitted plan card', () => {
+      renderToolCard(
+        baseProps({
+          toolName: 'userDefinedAlias',
+          output: {
+            toolId: 'submit_plan',
+            content: 'Plan approved.',
+            submittedPlan: {
+              title: 'Aliased plan',
+              path: '.mastracode/plans/aliased.md',
+              plan: '## Implementation\n\nRender the aliased plan.',
+            },
           },
-        },
-      }),
-    );
+        }),
+      );
 
-    expect(screen.getByRole('group', { name: 'Submitted plan' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Aliased plan' })).toBeTruthy();
+      expect(screen.getByRole('group', { name: 'Submitted plan' })).toBeTruthy();
+      expect(screen.getByRole('heading', { name: 'Aliased plan' })).toBeTruthy();
+    });
   });
 
-  it('routes a suspended aliased submit_plan tool to the approval card', async () => {
-    const path = '.mastracode/plans/aliased.md';
-    server.use(
-      http.get(`${BASE_URL}/api/agents/:agentId/plans/file`, ({ request }) => {
-        if (new URL(request.url).searchParams.get('path') !== path) {
-          return HttpResponse.json({ message: 'Plan not found' }, { status: 404 });
-        }
-        return HttpResponse.json({ path, content: '# Aliased plan\n\nRender it.' });
-      }),
-    );
+  describe('when an aliased submit_plan tool is suspended', () => {
+    it('routes the intrinsic tool payload to the approval card', async () => {
+      const path = '.mastracode/plans/aliased.md';
+      server.use(
+        http.get(`${BASE_URL}/api/agents/:agentId/plans/file`, ({ request }) => {
+          if (new URL(request.url).searchParams.get('path') !== path) {
+            return HttpResponse.json({ message: 'Plan not found' }, { status: 404 });
+          }
+          return HttpResponse.json({ path, content: '# Aliased plan\n\nRender it.' });
+        }),
+      );
 
-    renderToolCard(
-      baseProps({
-        toolName: 'userDefinedAlias',
-        toolCallId: 'aliased-call',
-        output: undefined,
-        metadata: {
-          mode: 'stream',
-          suspendedTools: {
-            userDefinedAlias: { suspendPayload: { toolId: 'submit_plan', path } },
+      renderToolCard(
+        baseProps({
+          toolName: 'userDefinedAlias',
+          toolCallId: 'aliased-call',
+          output: undefined,
+          metadata: {
+            mode: 'stream',
+            suspendedTools: {
+              userDefinedAlias: { suspendPayload: { toolId: 'submit_plan', path } },
+            },
           },
-        },
-      }),
-    );
+        }),
+      );
 
-    expect(await screen.findByRole('group', { name: 'Plan approval' })).toBeTruthy();
-    expect(await screen.findByRole('heading', { name: 'Aliased plan' })).toBeTruthy();
+      expect(await screen.findByRole('group', { name: 'Plan approval' })).toBeTruthy();
+      expect(await screen.findByRole('heading', { name: 'Aliased plan' })).toBeTruthy();
+    });
   });
 
   it('renders an observation marker for OM observation tool', () => {
