@@ -2,6 +2,7 @@ import type { StandardSchemaV1 } from '@standard-schema/spec';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '../error';
 import type { IMastraLogger } from '../logger';
 import type { RequestContext } from '../request-context';
+import { getRequestContextInputValues } from '../request-context/input-source';
 import type { StandardSchemaWithJSON } from '../schema';
 import { removeUndefinedValues } from '../utils';
 import type { ExecutionGraph } from './execution-engine';
@@ -195,8 +196,8 @@ export async function validateStepRequestContext({
   const requestContextSchema = step.requestContextSchema;
 
   if (requestContextSchema && validateInputs) {
-    // Get all values from requestContext
-    const contextValues = requestContext?.all ?? {};
+    // Get input-form values so transformed contexts can be forwarded safely.
+    const contextValues = getRequestContextInputValues(requestContext);
     const validatedRequestContext = await validateWithStandardSchema(requestContextSchema, contextValues);
     if (!validatedRequestContext.success) {
       const errorMessages = validatedRequestContext.issues.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
