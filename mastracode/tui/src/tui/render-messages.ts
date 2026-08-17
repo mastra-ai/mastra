@@ -12,6 +12,7 @@ import type { TaskItemInput, TaskItemSnapshot } from '@mastra/core/signals';
 import { assignTaskIds } from '@mastra/core/signals';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { TASKS_STATE_ID } from '@mastra/core/tools';
+import { disposeAssistantRenderState, finalizeStreamingAssistant } from './assistant-render-registry.js';
 import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
@@ -298,8 +299,7 @@ export function confirmPendingUserMessage(
   if (!pending) return;
 
   if (state.streamingComponent && state.session.displayState.get().isRunning) {
-    state.streamingComponent = undefined;
-    state.streamingMessage = undefined;
+    finalizeStreamingAssistant(state);
   }
 
   replacePendingUserMessage(state, messageId, text, attachments);
@@ -844,6 +844,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
   const messages = await state.session.thread.listActiveMessages({ limit: STARTUP_MESSAGE_WINDOW_SIZE });
   state.lastRenderedMessageAt = getLatestMessageTimestamp(messages);
 
+  disposeAssistantRenderState(state);
   state.chatContainer.clear();
   state.pendingTools.clear();
   state.pendingTaskToolIds?.clear();

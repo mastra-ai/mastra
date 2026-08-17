@@ -3,6 +3,7 @@ import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { createSignal } from '@mastra/core/signals';
 import stripAnsi from 'strip-ansi';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { AssistantRenderRegistry } from '../../assistant-render-registry.js';
 import { AssistantMessageComponent } from '../../components/assistant-message.js';
 import { isChatBoundarySpacer } from '../../components/chat-boundary-spacer.js';
 import { JudgeDisplayComponent } from '../../components/judge-display.js';
@@ -125,6 +126,7 @@ describe('handleMessageStart signals', () => {
       allSlashCommandComponents: [],
       allSystemReminderComponents: [],
       messageComponentsById: new Map(),
+      assistantRenderRegistry: new AssistantRenderRegistry(),
       pendingSubagents: new Map(),
       hideThinkingBlock: false,
       toolOutputExpanded: false,
@@ -493,6 +495,7 @@ describe('goal evaluation live rendering ownership', () => {
       allSlashCommandComponents: [],
       allSystemReminderComponents: [],
       messageComponentsById: new Map(),
+      assistantRenderRegistry: new AssistantRenderRegistry(),
       pendingSubagents: new Map(),
       hideThinkingBlock: false,
       toolOutputExpanded: false,
@@ -563,6 +566,7 @@ describe('handleMessageUpdate assistant streaming', () => {
       allSlashCommandComponents: [],
       allSystemReminderComponents: [],
       messageComponentsById: new Map(),
+      assistantRenderRegistry: new AssistantRenderRegistry(),
       pendingSubagents: new Map(),
       hideThinkingBlock: false,
       toolOutputExpanded: false,
@@ -637,6 +641,50 @@ describe('handleMessageUpdate assistant streaming', () => {
     const toolLineIndex = rendered.findIndex(line => line.includes('write'));
     const textLineIndex = rendered.findIndex(line => line.includes('assistant text'));
     expect(rendered.slice(toolLineIndex + 1, textLineIndex)).toContain('');
+  });
+
+  it('preserves assistant and Markdown identity across message updates', () => {
+    handleMessageUpdate(ctx, assistantMessage([{ type: 'text', text: 'first' }]));
+    const assistant = state.streamingComponent!;
+    const markdown = (assistant.children[0] as unknown as { children: unknown[] }).children[0];
+
+    handleMessageUpdate(ctx, assistantMessage([{ type: 'text', text: 'second' }]));
+
+    expect(state.streamingComponent).toBe(assistant);
+    expect((assistant.children[0] as unknown as { children: unknown[] }).children[0]).toBe(markdown);
+  });
+
+  it('owns stable finalized and active segments across a tool boundary', () => {
+    handleMessageUpdate(
+      ctx,
+      assistantMessage([
+        { type: 'text', text: 'before' },
+        toolPart({ toolCallId: 'tool-1', toolName: 'read_file', args: { path: 'a.ts' } }),
+        { type: 'text', text: 'after' },
+      ]),
+    );
+
+    const record = state.assistantRenderRegistry.get('msg-1')!;
+    expect(record.segments.size).toBe(2);
+    expect([...record.segments.values()].map(segment => segment.finalized)).toEqual([true, false]);
+    expect(record.activeSegmentKey).toContain('tool-1');
+    expect(state.streamingComponent).toBe(record.segments.get(record.activeSegmentKey!)?.component);
+  });
+
+  it.each([
+    { stopReason: 'aborted', errorMessage: 'Interrupted' },
+    { stopReason: 'error', errorMessage: 'boom' },
+  ])('finalizes registry ownership on $stopReason message completion', terminal => {
+    handleMessageUpdate(ctx, assistantMessage([{ type: 'text', text: 'partial' }]));
+    const component = state.streamingComponent!;
+
+    handleMessageEnd(ctx, terminalMessage([{ type: 'text', text: 'partial' }], terminal));
+
+    const record = state.assistantRenderRegistry.get('msg-1')!;
+    expect([...record.segments.values()].every(segment => segment.finalized)).toBe(true);
+    expect(record.activeSegmentKey).toBeUndefined();
+    expect(state.streamingComponent).toBeUndefined();
+    expect(stripAnsi(component.render(80).join('\n'))).toContain(terminal.errorMessage);
   });
 
   it('surfaces failed pending tools in quiet mode when the assistant run errors', () => {

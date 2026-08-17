@@ -20,6 +20,7 @@ import type { StorageMaintenance } from '@mastra/code-sdk/utils/storage-maintena
 import type { AgentController, MastraDBMessage, Session } from '@mastra/core/agent-controller';
 import type { SkillMetadata, Workspace } from '@mastra/core/workspace';
 import type { GithubSignals } from '@mastra/github-signals';
+import { AssistantRenderRegistry } from './assistant-render-registry.js';
 import type { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import type { AssistantMessageComponent } from './components/assistant-message.js';
 import { CustomEditor } from './components/custom-editor.js';
@@ -186,6 +187,7 @@ export interface TUIState {
   // ── Agent / streaming ─────────────────────────────────────────────────
   isInitialized: boolean;
   gradientAnimator?: GradientAnimator;
+  assistantRenderRegistry: AssistantRenderRegistry;
   streamingComponent?: AssistantMessageComponent;
   streamingMessage?: MastraDBMessage;
   pendingTools: Map<string, IToolExecutionComponent>;
@@ -390,6 +392,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
 
     // Agent / streaming
     isInitialized: false,
+    assistantRenderRegistry: new AssistantRenderRegistry(),
     pendingTools: new Map(),
     pendingTaskToolIds: new Set(),
     taskToolInsertIndex: -1,
