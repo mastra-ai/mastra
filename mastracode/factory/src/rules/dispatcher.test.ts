@@ -35,6 +35,10 @@ function createSession(
     agentEndReason?: 'complete' | 'aborted' | 'error' | 'suspended';
     /** Models a signal queued onto an in-flight run that ends before draining it. */
     dropDeliveredSignal?: boolean;
+    /** The run that swallowed the dropped signal ends, freeing the session. */
+    endRunAfterDroppedSignal?: boolean;
+    /** Once the session is free, a redelivered signal wakes it and lands. */
+    acceptRedeliveredSignal?: boolean;
   },
 ) {
   let threadId = 'thread-1';
@@ -46,6 +50,7 @@ function createSession(
       listener({ type: 'agent_end', reason });
     }
   };
+  let signalSends = 0;
   const deliveredKeys = new Set<string>();
   const deliveredSignals = new Set<string>();
   const delivered: string[] = [];
@@ -81,10 +86,19 @@ function createSession(
     state: { set: vi.fn(async () => {}) },
     sendMessage: vi.fn(async () => {}),
     sendSignal: vi.fn((input: { id: string }, _options: { requestContext: { get(key: string): unknown } }) => {
-      if (!options?.dropDeliveredSignal) deliveredSignals.add(input.id);
-      if (options?.emitAgentEndDuringSignal) {
-        emitAgentEnd();
+      signalSends += 1;
+      // The first send is the one queued onto the busy run; anything after it is
+      // a redelivery into a session the dispatcher waited for.
+      const redelivered = signalSends > 1 && options?.acceptRedeliveredSignal === true;
+      if (!options?.dropDeliveredSignal || redelivered) deliveredSignals.add(input.id);
+      if (options?.emitAgentEndDuringSignal || redelivered) {
+        emitAgentEnd(redelivered ? 'complete' : undefined);
+      } else if (options?.endRunAfterDroppedSignal) {
+        // The busy run finishes without ever answering the queued prompt, which
+        // is the moment the session becomes free to take it again.
+        queueMicrotask(() => emitAgentEnd('complete'));
       }
+      if (redelivered) return { accepted: Promise.resolve({ accepted: true as const, action: 'wake' }) };
       return { accepted: options?.signalAccepted ?? Promise.resolve({ accepted: true, action: 'deliver' }) };
     }),
     subscribe: vi.fn((listener: (event: { type: string; reason?: string }) => void) => {
@@ -1203,10 +1217,13 @@ describe('FactoryDecisionDispatcher', () => {
       kickoffMessage: null,
     });
     // The session is mid-turn, so the signal is delivered onto the in-flight
-    // run; that run then ends without ever persisting or answering the prompt.
+    // run; that run then ends without ever persisting or answering the prompt,
+    // and the redelivery is swallowed the same way. Nothing here can be waited
+    // out, so the decision has to go back on the queue.
     const { controller, getAgentEndListenerCount } = createSession(undefined, {
       signalAccepted: Promise.resolve({ accepted: true, action: 'deliver' }),
       dropDeliveredSignal: true,
+      endRunAfterDroppedSignal: true,
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
@@ -1221,6 +1238,63 @@ describe('FactoryDecisionDispatcher', () => {
     const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
     expect(decision?.status).toBe('retry');
     expect(decision?.lastError).toContain('never reached the agent');
+    expect(getAgentEndListenerCount()).toBe(0);
+  });
+
+  it('redelivers a kickoff dropped onto an ending run once that run finishes', async () => {
+    // The condition that frees the session is the in-flight run ending, which
+    // takes as long as a turn takes. Retrying on the generic backoff spends all
+    // five attempts inside half a minute, so every one lands on the same busy
+    // run and the card dies of impatience rather than of anything being wrong.
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      arguments: 'Issue 42',
+      idempotencyKey: 'skill-redelivered-after-run-ends',
+    });
+    await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        id: item.id,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Fix issue',
+          stages: ['execute'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'work',
+      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: PROJECT_ID,
+      kickoffKey: 'kickoff-null',
+      kickoffMessage: null,
+    });
+    const { controller, session, getAgentEndListenerCount } = createSession(undefined, {
+      signalAccepted: Promise.resolve({ accepted: true, action: 'deliver' }),
+      dropDeliveredSignal: true,
+      endRunAfterDroppedSignal: true,
+      acceptRedeliveredSignal: true,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(decision?.status).toBe('succeeded');
+    // Settled inside the one lease, without spending the card's retry budget.
+    expect(decision?.attempts).toBe(1);
+    expect(session.sendSignal).toHaveBeenCalledTimes(2);
     expect(getAgentEndListenerCount()).toBe(0);
   });
 

@@ -490,14 +490,21 @@ export class FactoryDecisionDispatcher {
           );
         }
         let resolveAgentEnd!: () => void;
-        const agentEnd = new Promise<void>(resolve => {
-          resolveAgentEnd = resolve;
-        });
+        let agentEnd!: Promise<void>;
         // The run's own verdict, not the delivery's. A signal can reach the
         // agent perfectly and the run still die on a provider error or be
         // cancelled mid-flight; without this the decision reports success and
         // the break is invisible on the card.
         let endReason: 'complete' | 'aborted' | 'error' | 'suspended' | undefined;
+        // Re-armed before a redelivery so the second send waits on its own run's
+        // ending rather than seeing the one that already resolved.
+        const armAgentEnd = () => {
+          endReason = undefined;
+          agentEnd = new Promise<void>(resolve => {
+            resolveAgentEnd = resolve;
+          });
+        };
+        armAgentEnd();
         const unsubscribe = session.subscribe(event => {
           if (event.type === 'agent_end') {
             endReason = event.reason;
@@ -505,7 +512,7 @@ export class FactoryDecisionDispatcher {
           }
         });
 
-        try {
+        const sendKickoff = async () => {
           const result = session.sendSignal(
             {
               id: record.id,
@@ -526,6 +533,37 @@ export class FactoryDecisionDispatcher {
             // a success.
             throw new Error(`Factory skill invocation signal did not reach the agent (${String(settled.action)}).`);
           }
+          return settled;
+        };
+
+        try {
+          let settled = await sendKickoff();
+          if (settled.action === 'deliver') {
+            // `deliver` means the signal was queued onto a run that was already
+            // in flight. If that run ends before draining its queue the prompt
+            // is dropped silently: no turn starts, no error surfaces, and the
+            // decision reports success while the card sits in its new stage with
+            // nobody working. Signals persist under their own id (the same
+            // identity the replay guard above reads), so confirm the message
+            // actually landed in the thread rather than trusting the ack.
+            const landed = await session.thread.listActiveMessages();
+            if (!landed.some(message => message.id === record.id)) {
+              // The condition that resolves this is the in-flight run ending, so
+              // wait for exactly that and redeliver into the idle session. A
+              // backoff cannot work here: retries are sized in seconds and a turn
+              // takes minutes, so every attempt lands on the same busy run and
+              // the card burns its whole budget without the session ever having
+              // had a chance to be free.
+              if (!(await waitForAgentEndOrTimeout(agentEnd))) {
+                throw new Error('Factory skill invocation is waiting on a run that has not ended.');
+              }
+              armAgentEnd();
+              settled = await sendKickoff();
+              if (settled.action !== 'wake') {
+                throw new Error('Factory skill invocation was queued onto an ending run and never reached the agent.');
+              }
+            }
+          }
           if (settled.action === 'wake') {
             const observed = await waitForAgentEndOrTimeout(agentEnd);
             if (!observed) {
@@ -544,20 +582,6 @@ export class FactoryDecisionDispatcher {
               // the board to press. A spurious retry is bounded by MAX_ATTEMPTS;
               // a dead card costs a human a manual nudge.
               throw new Error('Factory skill run was aborted before it finished.');
-            }
-          } else {
-            // `deliver` means the signal was queued onto a run that was already
-            // in flight. If that run ends before draining its queue the prompt
-            // is dropped silently: no turn starts, no error surfaces, and the
-            // decision reports success while the card sits in its new stage with
-            // nobody working. Signals persist under their own id (the same
-            // identity the replay guard above reads), so confirm the message
-            // actually landed in the thread rather than trusting the ack.
-            const landed = await session.thread.listActiveMessages();
-            if (!landed.some(message => message.id === record.id)) {
-              // Retryable on purpose: the next attempt finds the session idle
-              // and takes the instrumented `wake` path instead.
-              throw new Error('Factory skill invocation was queued onto an ending run and never reached the agent.');
             }
           }
         } finally {
