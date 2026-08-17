@@ -27,6 +27,23 @@ import { validateToolInput, validateToolOutput, validateToolSuspendData, validat
 export const MASTRA_TOOL_MARKER = Symbol.for('mastra.core.tool.Tool');
 
 type RequestContextEncoder = (values: Record<string, unknown>) => Record<string, unknown> | undefined;
+type RequestContextInputValidator = (values: Record<string, unknown>) => boolean;
+
+function getRequestContextInputValidator(schema: PublicSchema): RequestContextInputValidator {
+  const standardSchema = toStandardSchema(schema);
+
+  return values => {
+    try {
+      const result = standardSchema['~standard'].validate(values);
+      if (result instanceof Promise) {
+        throw new Error('Your schema is async, which is not supported. Please use a sync schema.');
+      }
+      return !('issues' in result) || !result.issues?.length;
+    } catch {
+      return false;
+    }
+  };
+}
 
 function getRequestContextEncoder(schema: PublicSchema | undefined): RequestContextEncoder | undefined {
   if (!schema || (typeof schema !== 'object' && typeof schema !== 'function')) {
@@ -48,7 +65,7 @@ function getRequestContextEncoder(schema: PublicSchema | undefined): RequestCont
         return result.data as Record<string, unknown>;
       }
     } catch {
-      // Unidirectional transforms cannot encode; retain the existing write-through behavior.
+      // Unidirectional transforms cannot encode.
     }
 
     return undefined;
@@ -61,28 +78,48 @@ function getRequestContextEncoder(schema: PublicSchema | undefined): RequestCont
  */
 class TransformedRequestContext extends RequestContext<Record<string, any>> {
   readonly #source: RequestContext;
+  readonly #acceptsInput: RequestContextInputValidator;
   readonly #encode?: RequestContextEncoder;
 
-  constructor(source: RequestContext, transformedValues: Record<string, unknown>, encode?: RequestContextEncoder) {
+  constructor(
+    source: RequestContext,
+    transformedValues: Record<string, unknown>,
+    acceptsInput: RequestContextInputValidator,
+    encode?: RequestContextEncoder,
+  ) {
     super(Object.entries({ ...source.all, ...transformedValues }));
     this.#source = source;
+    this.#acceptsInput = acceptsInput;
     this.#encode = encode;
     Object.defineProperty(this, REQUEST_CONTEXT_INPUT_SOURCE, { value: source });
   }
 
   #getSourceValue(key: string, value: unknown): unknown {
-    const encodedValues = this.#encode?.(this.all);
-    return encodedValues && Object.prototype.hasOwnProperty.call(encodedValues, key) ? encodedValues[key] : value;
+    const nextSourceValues = { ...this.#source.all, [key]: value };
+    if (this.#acceptsInput(nextSourceValues)) {
+      return value;
+    }
+
+    const encodedValues = this.#encode?.({ ...this.all, [key]: value });
+    if (encodedValues && Object.prototype.hasOwnProperty.call(encodedValues, key)) {
+      return encodedValues[key];
+    }
+
+    throw new Error(
+      `Unable to persist request context key "${key}": the value is not valid schema input and cannot be encoded from the schema output.`,
+    );
   }
 
   public override set(key: string, value: any): void {
+    const sourceValue = this.#getSourceValue(key, value);
+    this.#source.setRaw(key, sourceValue);
     super.set(key, value);
-    this.#source.setRaw(key, this.#getSourceValue(key, value));
   }
 
   public override setRaw(key: string, value: unknown): void {
+    const sourceValue = this.#getSourceValue(key, value);
+    this.#source.setRaw(key, sourceValue);
     super.setRaw(key, value);
-    this.#source.setRaw(key, this.#getSourceValue(key, value));
   }
 
   public override delete(key: string): boolean {
@@ -422,6 +459,7 @@ export class Tool<
           ? new TransformedRequestContext(
               sourceRequestContext ?? new RequestContext(),
               validatedRequestContext as Record<string, unknown>,
+              getRequestContextInputValidator(this.requestContextSchema),
               getRequestContextEncoder(this.requestContextSchema),
             )
           : context?.requestContext;

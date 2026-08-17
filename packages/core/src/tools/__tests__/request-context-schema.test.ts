@@ -257,6 +257,62 @@ describe('Tool requestContextSchema', () => {
       },
     );
 
+    it.each(['set', 'setRaw'] as const)(
+      'should reject unencodable transformed values written with %s without corrupting the source',
+      async mutationMethod => {
+        let executions = 0;
+        const tool = createTool({
+          id: 'one-way-transform-mutation-tool',
+          description: 'A tool with a one-way transform',
+          requestContextSchema: z.object({ count: z.string().transform(Number) }),
+          execute: async (_, { requestContext }) => {
+            executions += 1;
+            const count = requestContext.get('count');
+            if (executions === 1) {
+              requestContext[mutationMethod]('count', count + 1);
+            }
+            return { count };
+          },
+        });
+        const requestContext = new RequestContext();
+        requestContext.set('count', '1');
+
+        await expect(tool.execute!({}, { requestContext })).rejects.toThrow(
+          'the value is not valid schema input and cannot be encoded',
+        );
+        const secondResult = await tool.execute!({}, { requestContext });
+
+        expect(secondResult).toEqual({ count: 1 });
+        expect(requestContext.getRaw('count')).toBe('1');
+      },
+    );
+
+    it('should not write decoded values when another required field prevents encoding', async () => {
+      const tool = createTool({
+        id: 'invalid-context-mutation-tool',
+        description: 'A tool that makes its context invalid before a codec mutation',
+        requestContextSchema: z.object({ date: dateCodec, mode: z.string() }),
+        execute: async (_, { requestContext }) => {
+          requestContext.delete('mode');
+          requestContext.set('date', new Date('2026-08-18T00:00:00.000Z'));
+          return { success: true };
+        },
+      });
+      const requestContext = new RequestContext();
+      requestContext.set('date', '2026-08-17T00:00:00.000Z');
+      requestContext.set('mode', 'fast');
+
+      await expect(tool.execute!({}, { requestContext })).rejects.toThrow(
+        'the value is not valid schema input and cannot be encoded',
+      );
+      expect(requestContext.all).toEqual({ date: '2026-08-17T00:00:00.000Z' });
+
+      const secondResult = await tool.execute!({}, { requestContext });
+      expect(secondResult).toHaveProperty('error', true);
+      expect(secondResult.message).toContain('mode');
+      expect(secondResult.message).not.toContain('expected string, received Date');
+    });
+
     it.each([undefined, {}])('should apply schema defaults when request context is missing', async context => {
       let capturedMode: string | undefined;
       const tool = createTool({
