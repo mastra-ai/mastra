@@ -1,8 +1,8 @@
 ---
-title: "Reference: SignalProvider | Signals"
-description: "API reference for SignalProvider, the abstract base class for building signal providers that monitor external sources and push events into agent threads."
+title: 'Reference: SignalProvider | Signals'
+description: 'API reference for SignalProvider, the abstract base class for building signal providers that monitor external sources and push events into agent threads.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # SignalProvider
@@ -109,10 +109,10 @@ Called by the Agent constructor. Establishes the bidirectional link so the provi
 
 ```typescript prettier:false
 class MySignals extends SignalProvider<'my-signals'> {
-  readonly id = 'my-signals'
+  readonly id = 'my-signals';
 
   override connect(agent) {
-    super.connect(agent)
+    super.connect(agent);
     // additional setup after agent link is established
   }
 }
@@ -177,14 +177,12 @@ Returns: `Record<string, unknown>`
 Subscribe a thread to an external resource. This is a protected method: call it from within your provider implementation.
 
 ```typescript prettier:false
-const sub = this.subscribe(
-  { threadId: 'thread-1', resourceId: 'user-1' },
-  'github:mastra-ai/mastra#123',
-  { pr: 123 },
-)
+const sub = await this.subscribe({ threadId: 'thread-1', resourceId: 'user-1' }, 'github:mastra-ai/mastra#123', {
+  pr: 123,
+});
 ```
 
-Returns: `SignalSubscription`: the created subscription, or the existing one with merged metadata.
+Returns: `Promise<SignalSubscription>`: the created subscription, or the existing one with merged metadata.
 
 <PropertiesTable
   content={[
@@ -213,84 +211,81 @@ Returns: `SignalSubscription`: the created subscription, or the existing one wit
 Remove a subscription.
 
 ```typescript prettier:false
-const removed = this.unsubscribe(
-  { threadId: 'thread-1', resourceId: 'user-1' },
-  'github:mastra-ai/mastra#123',
-)
+const removed = await this.unsubscribe({ threadId: 'thread-1', resourceId: 'user-1' }, 'github:mastra-ai/mastra#123');
 ```
 
-Returns: `boolean`: `true` if removed, `false` if no matching subscription existed.
+Returns: `Promise<boolean>`: `true` if removed, `false` if no matching subscription existed.
 
 #### `getSubscriptions()`
 
 Return all active subscriptions for this provider.
 
 ```typescript prettier:false
-const allSubs = this.getSubscriptions()
+const allSubs = await this.getSubscriptions();
 ```
 
-Returns: `SignalSubscription[]`
+Returns: `Promise<SignalSubscription[]>`
 
 #### `getSubscriptionsForResource(externalResourceId)`
 
 Return all subscriptions for a specific external resource.
 
 ```typescript prettier:false
-const subs = this.getSubscriptionsForResource('github:mastra-ai/mastra#123')
+const subs = await this.getSubscriptionsForResource('github:mastra-ai/mastra#123');
 for (const sub of subs) {
   await this.notify(
     { source: 'my-provider', kind: 'update', summary: 'Resource updated' },
     { threadId: sub.threadId, resourceId: sub.resourceId },
-  )
+  );
 }
 ```
 
-Returns: `SignalSubscription[]`
+Returns: `Promise<SignalSubscription[]>`
 
 #### `getSubscriptionsForThread(target)`
 
 Return all subscriptions for a specific thread.
 
 ```typescript prettier:false
-const subs = this.getSubscriptionsForThread({
+const subs = await this.getSubscriptionsForThread({
   threadId: 'thread-1',
   resourceId: 'user-1',
-})
+});
 ```
 
-Returns: `SignalSubscription[]`
+Returns: `Promise<SignalSubscription[]>`
 
 #### `hasSubscription(target, externalResourceId)`
 
 Check whether a subscription exists.
 
 ```typescript prettier:false
-if (this.hasSubscription(target, 'github:mastra-ai/mastra#123')) {
+if (await this.hasSubscription(target, 'github:mastra-ai/mastra#123')) {
   // already subscribed
 }
 ```
 
-Returns: `boolean`
+Returns: `Promise<boolean>`
 
 #### `unsubscribeAll(target)`
 
 Remove all subscriptions for a thread.
 
 ```typescript prettier:false
-const removed = this.unsubscribeAll({
+const removed = await this.unsubscribeAll({
   threadId: 'thread-1',
   resourceId: 'user-1',
-})
+});
 ```
 
-Returns: `number`: count of removed subscriptions.
+Returns: `Promise<number>`: count of removed subscriptions.
 
 #### `subscriptionCount`
 
 Total number of active subscriptions for this provider.
 
 ```typescript prettier:false
-if (this.subscriptionCount === 0) {
+if ((await this.subscriptionCount) === 0) {
   // nothing to poll
 }
 ```
@@ -322,7 +317,7 @@ async poll(subscriptions: SignalSubscription[]) {
 Start the polling timer. Called by the Agent after `connect()`. Idempotent: calling multiple times has no effect.
 
 ```typescript prettier:false
-provider.startPolling()
+provider.startPolling();
 ```
 
 #### `stopPolling()`
@@ -330,7 +325,7 @@ provider.startPolling()
 Stop the polling timer.
 
 ```typescript prettier:false
-provider.stopPolling()
+provider.stopPolling();
 ```
 
 ### Webhooks
@@ -376,7 +371,7 @@ async start() {
 Called on shutdown. The default implementation stops polling and clears all subscriptions.
 
 ```typescript prettier:false
-provider.stop()
+provider.stop();
 ```
 
 ### Notifications
@@ -395,7 +390,7 @@ await this.notify(
     payload: { prNumber: 123 },
   },
   { threadId: 'thread-1', resourceId: 'user-1' },
-)
+);
 ```
 
 <PropertiesTable
@@ -525,11 +520,11 @@ Identifies a specific agent thread.
 Runtime check for `SignalProvider` instances.
 
 ```typescript prettier:false
-import { isSignalProvider } from '@mastra/core/signals'
+import { isSignalProvider } from '@mastra/core/signals';
 
 if (isSignalProvider(obj)) {
-  obj.connect(agent)
+  obj.connect(agent);
 }
 ```
 
-Returns: `boolean`
+Returns: `Promise<boolean>`

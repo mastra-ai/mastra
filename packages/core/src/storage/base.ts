@@ -18,6 +18,7 @@ import type {
   ExperimentsStorage,
   BackgroundTasksStorage,
   SchedulesStorage,
+  SignalSubscriptionsStorage,
   ChannelsStorage,
   HarnessStorage,
   ToolProviderConnectionsStorage,
@@ -50,6 +51,7 @@ export type StorageDomains = {
   blobs?: BlobStore;
   backgroundTasks?: BackgroundTasksStorage;
   schedules?: SchedulesStorage;
+  signalSubscriptions?: SignalSubscriptionsStorage;
   harness?: HarnessStorage;
   toolProviderConnections?: ToolProviderConnectionsStorage;
   threadState?: ThreadStateStorage;
@@ -396,6 +398,7 @@ export class MastraCompositeStore extends MastraBase {
         blobs: resolve('blobs'),
         backgroundTasks: resolve('backgroundTasks'),
         schedules: resolve('schedules'),
+        signalSubscriptions: resolve('signalSubscriptions'),
         channels: resolve('channels'),
         harness: resolve('harness'),
         toolProviderConnections: resolve('toolProviderConnections'),

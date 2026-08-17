@@ -27,36 +27,36 @@ class TestSignalProvider extends SignalProvider<'test-signals'> {
     target: SignalProviderTarget,
     externalResourceId: string,
     metadata?: Record<string, unknown>,
-  ): SignalSubscription {
+  ): Promise<SignalSubscription> {
     return this.subscribe(target, externalResourceId, metadata);
   }
 
-  doUnsubscribe(target: SignalProviderTarget, externalResourceId: string): boolean {
+  doUnsubscribe(target: SignalProviderTarget, externalResourceId: string): Promise<boolean> {
     return this.unsubscribe(target, externalResourceId);
   }
 
-  doGetSubscriptions(): SignalSubscription[] {
+  doGetSubscriptions(): Promise<SignalSubscription[]> {
     return this.getSubscriptions();
   }
 
-  doGetSubscriptionsForResource(externalResourceId: string): SignalSubscription[] {
+  doGetSubscriptionsForResource(externalResourceId: string): Promise<SignalSubscription[]> {
     return this.getSubscriptionsForResource(externalResourceId);
   }
 
-  doGetSubscriptionsForThread(target: SignalProviderTarget): SignalSubscription[] {
+  doGetSubscriptionsForThread(target: SignalProviderTarget): Promise<SignalSubscription[]> {
     return this.getSubscriptionsForThread(target);
   }
 
-  doHasSubscription(target: SignalProviderTarget, externalResourceId: string): boolean {
+  doHasSubscription(target: SignalProviderTarget, externalResourceId: string): Promise<boolean> {
     return this.hasSubscription(target, externalResourceId);
   }
 
-  doUnsubscribeAll(target: SignalProviderTarget): number {
+  doUnsubscribeAll(target: SignalProviderTarget): Promise<number> {
     return this.unsubscribeAll(target);
   }
 
-  doGetSubscriptionCount(): number {
-    return this.subscriptionCount;
+  doGetSubscriptionCount(): Promise<number> {
+    return this.getSubscriptionCount();
   }
 
   doGetAgent() {
@@ -83,13 +83,13 @@ describe('SignalProvider', () => {
     provider = new TestSignalProvider();
   });
 
-  afterEach(() => {
-    provider.stop();
+  afterEach(async () => {
+    await provider.stop();
   });
 
   describe('subscription tracking', () => {
-    it('creates a subscription and returns it', () => {
-      const sub = provider.doSubscribe(target1, 'github:mastra-ai/mastra#123');
+    it('creates a subscription and returns it', async () => {
+      const sub = await provider.doSubscribe(target1, 'github:mastra-ai/mastra#123');
       expect(sub.providerId).toBe('test-signals');
       expect(sub.threadId).toBe('thread-1');
       expect(sub.resourceId).toBe('user-1');
@@ -99,108 +99,108 @@ describe('SignalProvider', () => {
       expect(sub.metadata).toEqual({});
     });
 
-    it('returns existing subscription on duplicate and merges metadata', () => {
-      const sub1 = provider.doSubscribe(target1, 'github:mastra-ai/mastra#123', { pr: 123 });
-      const sub2 = provider.doSubscribe(target1, 'github:mastra-ai/mastra#123', { status: 'open' });
+    it('returns existing subscription on duplicate and merges metadata', async () => {
+      const sub1 = await provider.doSubscribe(target1, 'github:mastra-ai/mastra#123', { pr: 123 });
+      const sub2 = await provider.doSubscribe(target1, 'github:mastra-ai/mastra#123', { status: 'open' });
       expect(sub2.id).toBe(sub1.id);
       expect(sub2.metadata).toEqual({ pr: 123, status: 'open' });
-      expect(provider.doGetSubscriptionCount()).toBe(1);
+      expect(await provider.doGetSubscriptionCount()).toBe(1);
     });
 
-    it('tracks multiple subscriptions for different targets', () => {
-      provider.doSubscribe(target1, 'github:mastra-ai/mastra#123');
-      provider.doSubscribe(target2, 'github:mastra-ai/mastra#123');
-      provider.doSubscribe(target1, 'github:mastra-ai/mastra#456');
-      expect(provider.doGetSubscriptionCount()).toBe(3);
+    it('tracks multiple subscriptions for different targets', async () => {
+      await provider.doSubscribe(target1, 'github:mastra-ai/mastra#123');
+      await provider.doSubscribe(target2, 'github:mastra-ai/mastra#123');
+      await provider.doSubscribe(target1, 'github:mastra-ai/mastra#456');
+      expect(await provider.doGetSubscriptionCount()).toBe(3);
     });
 
-    it('getSubscriptions returns all active subscriptions', () => {
-      provider.doSubscribe(target1, 'res-a');
-      provider.doSubscribe(target2, 'res-b');
-      const subs = provider.doGetSubscriptions();
+    it('getSubscriptions returns all active subscriptions', async () => {
+      await provider.doSubscribe(target1, 'res-a');
+      await provider.doSubscribe(target2, 'res-b');
+      const subs = await provider.doGetSubscriptions();
       expect(subs).toHaveLength(2);
       expect(subs.map(s => s.externalResourceId).sort()).toEqual(['res-a', 'res-b']);
     });
 
-    it('getSubscriptionsForResource returns subscriptions by external resource', () => {
-      provider.doSubscribe(target1, 'res-a');
-      provider.doSubscribe(target2, 'res-a');
-      provider.doSubscribe(target3, 'res-b');
+    it('getSubscriptionsForResource returns subscriptions by external resource', async () => {
+      await provider.doSubscribe(target1, 'res-a');
+      await provider.doSubscribe(target2, 'res-a');
+      await provider.doSubscribe(target3, 'res-b');
 
-      const resA = provider.doGetSubscriptionsForResource('res-a');
+      const resA = await provider.doGetSubscriptionsForResource('res-a');
       expect(resA).toHaveLength(2);
       expect(resA.every(s => s.externalResourceId === 'res-a')).toBe(true);
 
-      const resB = provider.doGetSubscriptionsForResource('res-b');
+      const resB = await provider.doGetSubscriptionsForResource('res-b');
       expect(resB).toHaveLength(1);
       expect(resB[0].threadId).toBe('thread-3');
 
-      expect(provider.doGetSubscriptionsForResource('nonexistent')).toEqual([]);
+      expect(await provider.doGetSubscriptionsForResource('nonexistent')).toEqual([]);
     });
 
-    it('getSubscriptionsForThread returns subscriptions by thread', () => {
-      provider.doSubscribe(target1, 'res-a');
-      provider.doSubscribe(target1, 'res-b');
-      provider.doSubscribe(target2, 'res-a');
+    it('getSubscriptionsForThread returns subscriptions by thread', async () => {
+      await provider.doSubscribe(target1, 'res-a');
+      await provider.doSubscribe(target1, 'res-b');
+      await provider.doSubscribe(target2, 'res-a');
 
-      const thread1Subs = provider.doGetSubscriptionsForThread(target1);
+      const thread1Subs = await provider.doGetSubscriptionsForThread(target1);
       expect(thread1Subs).toHaveLength(2);
       expect(thread1Subs.map(s => s.externalResourceId).sort()).toEqual(['res-a', 'res-b']);
 
-      const thread2Subs = provider.doGetSubscriptionsForThread(target2);
+      const thread2Subs = await provider.doGetSubscriptionsForThread(target2);
       expect(thread2Subs).toHaveLength(1);
     });
 
-    it('hasSubscription checks existence', () => {
-      provider.doSubscribe(target1, 'res-a');
-      expect(provider.doHasSubscription(target1, 'res-a')).toBe(true);
-      expect(provider.doHasSubscription(target1, 'res-b')).toBe(false);
-      expect(provider.doHasSubscription(target2, 'res-a')).toBe(false);
+    it('hasSubscription checks existence', async () => {
+      await provider.doSubscribe(target1, 'res-a');
+      expect(await provider.doHasSubscription(target1, 'res-a')).toBe(true);
+      expect(await provider.doHasSubscription(target1, 'res-b')).toBe(false);
+      expect(await provider.doHasSubscription(target2, 'res-a')).toBe(false);
     });
 
-    it('unsubscribe removes a subscription and cleans up indices', () => {
-      provider.doSubscribe(target1, 'res-a');
-      provider.doSubscribe(target1, 'res-b');
+    it('unsubscribe removes a subscription and cleans up indices', async () => {
+      await provider.doSubscribe(target1, 'res-a');
+      await provider.doSubscribe(target1, 'res-b');
 
-      expect(provider.doUnsubscribe(target1, 'res-a')).toBe(true);
-      expect(provider.doGetSubscriptionCount()).toBe(1);
-      expect(provider.doHasSubscription(target1, 'res-a')).toBe(false);
-      expect(provider.doGetSubscriptionsForResource('res-a')).toEqual([]);
-      expect(provider.doGetSubscriptionsForThread(target1)).toHaveLength(1);
+      expect(await provider.doUnsubscribe(target1, 'res-a')).toBe(true);
+      expect(await provider.doGetSubscriptionCount()).toBe(1);
+      expect(await provider.doHasSubscription(target1, 'res-a')).toBe(false);
+      expect(await provider.doGetSubscriptionsForResource('res-a')).toEqual([]);
+      expect(await provider.doGetSubscriptionsForThread(target1)).toHaveLength(1);
     });
 
-    it('unsubscribe returns false for non-existent subscription', () => {
-      expect(provider.doUnsubscribe(target1, 'nonexistent')).toBe(false);
+    it('unsubscribe returns false for non-existent subscription', async () => {
+      expect(await provider.doUnsubscribe(target1, 'nonexistent')).toBe(false);
     });
 
-    it('unsubscribeAll removes all subscriptions for a thread', () => {
-      provider.doSubscribe(target1, 'res-a');
-      provider.doSubscribe(target1, 'res-b');
-      provider.doSubscribe(target1, 'res-c');
-      provider.doSubscribe(target2, 'res-a');
+    it('unsubscribeAll removes all subscriptions for a thread', async () => {
+      await provider.doSubscribe(target1, 'res-a');
+      await provider.doSubscribe(target1, 'res-b');
+      await provider.doSubscribe(target1, 'res-c');
+      await provider.doSubscribe(target2, 'res-a');
 
-      const removed = provider.doUnsubscribeAll(target1);
+      const removed = await provider.doUnsubscribeAll(target1);
       expect(removed).toBe(3);
-      expect(provider.doGetSubscriptionCount()).toBe(1);
-      expect(provider.doGetSubscriptionsForThread(target1)).toEqual([]);
-      expect(provider.doGetSubscriptionsForThread(target2)).toHaveLength(1);
+      expect(await provider.doGetSubscriptionCount()).toBe(1);
+      expect(await provider.doGetSubscriptionsForThread(target1)).toEqual([]);
+      expect(await provider.doGetSubscriptionsForThread(target2)).toHaveLength(1);
     });
 
-    it('stop() clears all subscriptions', () => {
-      provider.doSubscribe(target1, 'res-a');
-      provider.doSubscribe(target2, 'res-b');
+    it('stop() clears all subscriptions', async () => {
+      await provider.doSubscribe(target1, 'res-a');
+      await provider.doSubscribe(target2, 'res-b');
       provider.stop();
-      expect(provider.doGetSubscriptionCount()).toBe(0);
-      expect(provider.doGetSubscriptions()).toEqual([]);
+      expect(await provider.doGetSubscriptionCount()).toBe(0);
+      expect(await provider.doGetSubscriptions()).toEqual([]);
     });
   });
 
   describe('connection', () => {
-    it('agent is undefined before connect', () => {
+    it('agent is undefined before connect', async () => {
       expect(provider.doGetAgent()).toBeUndefined();
     });
 
-    it('agent is set after connect', () => {
+    it('agent is set after connect', async () => {
       const mockAgent = { sendNotificationSignal: vi.fn() } as any;
       provider.connect(mockAgent);
       expect(provider.doGetAgent()).toBe(mockAgent);
@@ -245,7 +245,7 @@ describe('SignalProvider', () => {
       vi.useRealTimers();
     });
 
-    it('does not start polling when pollInterval is not set', () => {
+    it('does not start polling when pollInterval is not set', async () => {
       const p = new TestSignalProvider();
       p.startPolling();
       vi.advanceTimersByTime(10_000);
@@ -253,7 +253,7 @@ describe('SignalProvider', () => {
       p.stop();
     });
 
-    it('does not start polling when pollInterval is 0', () => {
+    it('does not start polling when pollInterval is 0', async () => {
       const p = new TestSignalProvider({ pollInterval: 0 });
       p.startPolling();
       vi.advanceTimersByTime(10_000);
@@ -273,7 +273,7 @@ describe('SignalProvider', () => {
       p.stop();
     });
 
-    it('skips poll when no subscriptions', () => {
+    it('skips poll when no subscriptions', async () => {
       const p = new TestSignalProvider({ pollInterval: 1000 });
       p.startPolling();
       vi.advanceTimersByTime(3500);
@@ -306,7 +306,7 @@ describe('SignalProvider', () => {
       p.stop();
     });
 
-    it('swallows poll errors without crashing', () => {
+    it('swallows poll errors without crashing', async () => {
       const errorProvider = new TestSignalProvider({ pollInterval: 1000 });
       errorProvider.poll = vi.fn().mockRejectedValue(new Error('poll failed'));
       errorProvider.doSubscribe(target1, 'res-a');
@@ -314,31 +314,31 @@ describe('SignalProvider', () => {
 
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      vi.advanceTimersByTime(1500);
+      await vi.advanceTimersByTimeAsync(1500);
       expect(errorProvider.poll).toHaveBeenCalled();
 
       warnSpy.mockRestore();
-      errorProvider.stop();
+      await errorProvider.stop();
     });
   });
 
   describe('isSignalProvider', () => {
-    it('returns true for SignalProvider instances', () => {
+    it('returns true for SignalProvider instances', async () => {
       expect(isSignalProvider(provider)).toBe(true);
     });
 
-    it('returns false for plain objects', () => {
+    it('returns false for plain objects', async () => {
       expect(isSignalProvider({ id: 'test' })).toBe(false);
     });
 
-    it('returns false for null/undefined', () => {
+    it('returns false for null/undefined', async () => {
       expect(isSignalProvider(null)).toBe(false);
       expect(isSignalProvider(undefined)).toBe(false);
     });
   });
 
   describe('Agent wiring', () => {
-    it('calls start() on providers during Agent construction', () => {
+    it('calls start() on providers during Agent construction', async () => {
       const startFn = vi.fn();
       const p = new TestSignalProvider();
       p.start = startFn;
@@ -376,7 +376,7 @@ describe('SignalProvider', () => {
       expect(tools).toHaveProperty('myTool');
     });
 
-    it('propagates __registerMastra to signal providers', () => {
+    it('propagates __registerMastra to signal providers', async () => {
       const registerSpy = vi.fn();
       const p = new TestSignalProvider();
       p.__registerMastra = registerSpy;
@@ -394,7 +394,7 @@ describe('SignalProvider', () => {
       expect(registerSpy).toHaveBeenCalledWith(fakeMastra);
     });
 
-    it('connects provider to agent via signals config', () => {
+    it('connects provider to agent via signals config', async () => {
       const p = new TestSignalProvider();
       expect(p.doGetAgent()).toBeUndefined();
 
@@ -409,7 +409,7 @@ describe('SignalProvider', () => {
       expect(p.isConnected).toBe(true);
     });
 
-    it('does not re-wire already-connected providers (fork safety)', () => {
+    it('does not re-wire already-connected providers (fork safety)', async () => {
       const p = new TestSignalProvider();
       const startFn = vi.fn();
       p.start = startFn;
@@ -437,7 +437,7 @@ describe('SignalProvider', () => {
       expect(p.doGetAgent()).toBe(firstAgent);
     });
 
-    it('registers input and output processors from providers', () => {
+    it('registers input and output processors from providers', async () => {
       const fakeInputProcessor = { id: 'fake-input', processInputStep: vi.fn() };
       const fakeOutputProcessor = { id: 'fake-output', processOutputStep: vi.fn() };
 

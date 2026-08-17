@@ -1,8 +1,8 @@
 ---
-title: "Signal providers | Long-running agents"
-description: "Learn what signal providers are and how to build one that monitors an external source and pushes notifications into agent threads."
+title: 'Signal providers | Long-running agents'
+description: 'Learn what signal providers are and how to build one that monitors an external source and pushes notifications into agent threads.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # Signal providers
@@ -128,7 +128,7 @@ export const supportAgent = new Agent({
   signals: [ciSignals],
 })
 
-ciSignals.watch({ resourceId: 'user_123', threadId: 'thread_456' }, 'acme-app-main')
+await ciSignals.watch({ resourceId: 'user_123', threadId: 'thread_456' }, 'acme-app-main')
 ```
 
 Mastra calls `poll()` on the `pollInterval` with all active subscriptions. It skips a cycle when there are no subscriptions and doesn't overlap cycles, so a slow `poll()` doesn't run concurrently with itself.
@@ -152,7 +152,7 @@ export class CiSignals extends SignalProvider<'ci-signals'> {
 
   async handleWebhook(request: SignalProviderWebhookRequest) {
     const payload = request.body as { pipeline: string; status: string }
-    const subscriptions = this.getSubscriptionsForResource(payload.pipeline)
+    const subscriptions = await this.getSubscriptionsForResource(payload.pipeline)
 
     for (const sub of subscriptions) {
       await this.notify(
@@ -176,7 +176,7 @@ export class CiSignals extends SignalProvider<'ci-signals'> {
 
 ## Built-in webhook provider
 
-For generic webhook sources, use [`WebhookSignalProvider`](/reference/signals/webhook-signal-provider) instead of writing a subclass. Configure it with a function that extracts a resource id from the payload, and an optional function that builds the notification.
+For generic webhook sources, use [`WebhookSignalProvider`](/reference/signals/webhook-signal-provider) instead of writing a subclass. Configure it with a function that extracts a resource ID from the payload. You can also extract a stable webhook delivery ID for cross-replica deduplication or provide a custom notification builder.
 
 ```typescript title="src/mastra/index.ts"
 import { Agent } from '@mastra/core/agent'
@@ -184,6 +184,7 @@ import { WebhookSignalProvider } from '@mastra/core/signals'
 
 const webhooks = new WebhookSignalProvider({
   extractResourceId: payload => (payload as { repository: string }).repository,
+  extractDeliveryId: request => request.headers['x-delivery-id'],
   buildNotification: (payload, sub) => ({
     source: 'ci',
     kind: 'build-status',
@@ -200,7 +201,7 @@ export const supportAgent = new Agent({
   signals: [webhooks],
 })
 
-webhooks.subscribeThread({ resourceId: 'user_123', threadId: 'thread_456' }, 'acme/app')
+await webhooks.subscribeThread({ resourceId: 'user_123', threadId: 'thread_456' }, 'acme/app')
 ```
 
 When a webhook arrives, call `webhooks.handleWebhook({ body, headers })` from your route. The provider matches the extracted resource id against its subscriptions and notifies each matching thread.

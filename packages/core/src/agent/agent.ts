@@ -886,8 +886,7 @@ export class Agent<
         // Skip re-wiring providers that are already connected (e.g. via __fork())
         if (!provider.isConnected) {
           provider.connect(this as Agent<any, any, any, any>);
-          provider.startPolling();
-          void provider.start?.();
+          void provider.__initialize();
         }
 
         if (provider.getInputProcessors) {
