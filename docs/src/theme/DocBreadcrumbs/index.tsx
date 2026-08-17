@@ -50,7 +50,7 @@ export default function DocBreadcrumbs(): ReactNode {
                       href={href}
                       isLast={isLast}
                       onClick={idx === 0 ? clearSidebar : undefined}
-                      className={idx === 0 && !href ? styles.contextualBack : undefined}
+                      className={idx === 0 && !href ? styles['contextual-back'] : undefined}
                     >
                       {item.label}
                     </BreadcrumbsItemLink>

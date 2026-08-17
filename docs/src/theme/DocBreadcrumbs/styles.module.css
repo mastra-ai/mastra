@@ -2,19 +2,19 @@
   --ifm-breadcrumb-size-multiplier: 0.8;
 }
 
-.contextualBack {
+.contextual-back {
   cursor: pointer;
   font-weight: 500;
 }
 
-.contextualBack:hover {
+.contextual-back:hover {
   background: var(--ifm-breadcrumb-item-background-active);
   color: var(--ifm-link-hover-color);
   text-decoration: none;
 }
 
-@media (min-width: 62.25rem) {
-  .contextualBack:hover {
+@media (width >= 62.25rem) {
+  .contextual-back:hover {
     color: var(--mastra-text-primary);
   }
 }
