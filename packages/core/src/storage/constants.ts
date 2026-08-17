@@ -61,8 +61,8 @@ export const TABLE_HARNESS_SESSIONS = 'mastra_harness_sessions';
 export const TABLE_THREAD_STATE = 'mastra_thread_state';
 
 // Knowledge store tables
+export const TABLE_KNOWLEDGE_NODES = 'mastra_knowledge_nodes';
 export const TABLE_KNOWLEDGE_RECORDS = 'mastra_knowledge_records';
-export const TABLE_KNOWLEDGE_ITEMS = 'mastra_knowledge_items';
 export const TABLE_KNOWLEDGE_MENTIONS = 'mastra_knowledge_mentions';
 export const TABLE_KNOWLEDGE_CURSORS = 'mastra_knowledge_cursors';
 export const TABLE_KNOWLEDGE_ACTIVITY = 'mastra_knowledge_activity';
@@ -108,8 +108,8 @@ export type TABLE_NAMES =
   | typeof TABLE_HARNESS_SESSIONS
   | typeof TABLE_THREAD_STATE
   | typeof TABLE_WORKFLOW_DEFINITIONS
+  | typeof TABLE_KNOWLEDGE_NODES
   | typeof TABLE_KNOWLEDGE_RECORDS
-  | typeof TABLE_KNOWLEDGE_ITEMS
   | typeof TABLE_KNOWLEDGE_MENTIONS
   | typeof TABLE_KNOWLEDGE_CURSORS
   | typeof TABLE_KNOWLEDGE_ACTIVITY
@@ -655,7 +655,7 @@ export const EXPERIMENT_RESULTS_SCHEMA: Record<string, StorageColumn> = {
   createdAt: { type: 'timestamp', nullable: false },
 };
 
-export const KNOWLEDGE_RECORDS_SCHEMA: Record<string, StorageColumn> = {
+export const KNOWLEDGE_NODES_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
   type: { type: 'text', nullable: false },
   name: { type: 'text', nullable: false },
@@ -670,9 +670,9 @@ export const KNOWLEDGE_RECORDS_SCHEMA: Record<string, StorageColumn> = {
   updatedAt: { type: 'timestamp', nullable: false },
 };
 
-export const KNOWLEDGE_ITEMS_SCHEMA: Record<string, StorageColumn> = {
+export const KNOWLEDGE_RECORDS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
-  parentNodeId: { type: 'text', nullable: false },
+  node: { type: 'text', nullable: false },
   text: { type: 'text', nullable: false },
   scope: { type: 'jsonb', nullable: false },
   scopeKey: { type: 'text', nullable: false },
@@ -693,7 +693,7 @@ export const KNOWLEDGE_MENTIONS_SCHEMA: Record<string, StorageColumn> = {
 export const KNOWLEDGE_CURSORS_SCHEMA: Record<string, StorageColumn> = {
   sourceThreadId: { type: 'text', nullable: false },
   agent: { type: 'text', nullable: false },
-  lastItemId: { type: 'text', nullable: false },
+  lastKnowledgeId: { type: 'text', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
 
@@ -880,8 +880,8 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_HARNESS_SESSIONS]: HARNESS_SESSIONS_SCHEMA,
   [TABLE_THREAD_STATE]: THREAD_STATE_SCHEMA,
   [TABLE_WORKFLOW_DEFINITIONS]: WORKFLOW_DEFINITIONS_SCHEMA,
+  [TABLE_KNOWLEDGE_NODES]: KNOWLEDGE_NODES_SCHEMA,
   [TABLE_KNOWLEDGE_RECORDS]: KNOWLEDGE_RECORDS_SCHEMA,
-  [TABLE_KNOWLEDGE_ITEMS]: KNOWLEDGE_ITEMS_SCHEMA,
   [TABLE_KNOWLEDGE_MENTIONS]: KNOWLEDGE_MENTIONS_SCHEMA,
   [TABLE_KNOWLEDGE_CURSORS]: KNOWLEDGE_CURSORS_SCHEMA,
   [TABLE_KNOWLEDGE_ACTIVITY]: KNOWLEDGE_ACTIVITY_SCHEMA,
