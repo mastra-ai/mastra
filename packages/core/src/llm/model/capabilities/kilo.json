@@ -515,6 +515,7 @@
     "z-ai/glm-5-turbo",
     "z-ai/glm-5.1",
     "z-ai/glm-5.2",
+    "z-ai/glm-5.2:free",
     "z-ai/glm-5v-turbo",
     "~anthropic/claude-haiku-latest",
     "~anthropic/claude-opus-latest",

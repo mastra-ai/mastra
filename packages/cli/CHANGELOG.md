@@ -1,5 +1,15 @@
 # mastra
 
+## 1.25.1-alpha.7
+
+### Patch Changes
+
+- Improved factory board cards with compact live-session indicators and related-item links that show pull request status for reviews, reveal live sessions, and open exact source records. ([#21575](https://github.com/mastra-ai/mastra/pull/21575))
+
+- Updated dependencies [[`940bf5c`](https://github.com/mastra-ai/mastra/commit/940bf5ccf04f2c9ebd8a1390431733222a03b1cd)]:
+  - @mastra/core@1.60.0-alpha.7
+  - @mastra/deployer@1.60.0-alpha.7
+
 ## 1.25.1-alpha.6
 
 ### Patch Changes
