@@ -2,4 +2,4 @@
 'create-mastra': patch
 ---
 
-Reduced the create-mastra package by removing unused CLI development assets.
+Removed unused starter files and templates from the `create-mastra` package. The command-line tool still clones the starter repository.
