@@ -3400,9 +3400,15 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
+      '@mastra/clickhouse':
+        specifier: workspace:*
+        version: link:../../stores/clickhouse
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mastra/observability':
+        specifier: workspace:*
+        version: link:../mastra
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15

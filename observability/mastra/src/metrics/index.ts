@@ -3,3 +3,4 @@
  */
 
 export { CardinalityFilter } from './cardinality';
+export { emitTokenMetrics } from './auto-extract';

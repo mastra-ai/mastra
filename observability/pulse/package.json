@@ -1,7 +1,7 @@
 {
   "name": "@mastra/pulse",
   "version": "0.0.1-alpha.0",
-  "description": "Experimental adapters for Mastra's event-first (Pulse) observability pipeline — standalone ClickHouse HTTP writer, table schema, and span backfill. The pipeline itself lives in @mastra/core (`new Mastra({ pulse })`)",
+  "description": "Experimental adapters for Mastra's event-first (Pulse) observability pipeline \u2014 standalone ClickHouse HTTP writer, table schema, and span backfill. The pipeline itself lives in @mastra/core (`new Mastra({ pulse })`)",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -34,12 +34,14 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@mastra/observability": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/node": "22.20.1",
     "eslint": "^10.7.0",
     "tsdown": "0.22.9",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "@mastra/clickhouse": "workspace:*"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.16.0-0 <2.0.0-0"

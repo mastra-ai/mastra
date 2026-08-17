@@ -82,3 +82,58 @@ describe('backfillFromObservability', () => {
     expect(result.traces).toBe(1);
   });
 });
+
+describe('backfill cost parity (the live fold, replayed)', () => {
+  /**
+   * Live capture folds token+cost into the model end pulse via metric events
+   * emitted before span_ended. Persisted spans carry usage+model but NO cost
+   * — backfill must RECOMPUTE it through the same estimator path, or every
+   * backfilled flow silently loses its bill (found by smoke S7).
+   */
+  it('folds tokens AND estimated cost into the backfilled model pulse', async () => {
+    const storage = new InMemoryPulseStorage();
+    const observability = fakeObservability([
+      {
+        traceId: 'trace-cost',
+        spans: [
+          {
+            id: 'root-c',
+            name: 'agent run',
+            type: 'agent_run',
+            startedAt: '2026-08-14T10:00:00.000Z',
+            endedAt: '2026-08-14T10:00:02.000Z',
+            isRootSpan: true,
+          },
+          {
+            id: 'model-c',
+            name: 'llm',
+            type: 'model_generation',
+            startedAt: '2026-08-14T10:00:00.100Z',
+            endedAt: '2026-08-14T10:00:01.900Z',
+            parentSpanId: 'root-c',
+            attributes: {
+              model: 'gpt-4o-mini',
+              provider: 'openai',
+              usage: {
+                inputTokens: 1000,
+                outputTokens: 500,
+                inputDetails: { text: 1000, cacheRead: 0, cacheWrite: 0 },
+                outputDetails: { text: 500, reasoning: 0 },
+              },
+            },
+          },
+        ],
+      },
+    ]);
+
+    await backfillFromObservability({ observability, storage });
+
+    const detail = await storage.getFlow('trace-cost');
+    expect(detail, 'flow must exist').toBeTruthy();
+    expect(detail!.costUsd, 'cost must be recomputed at backfill').toBeGreaterThan(0);
+
+    const timeline = await storage.getFlowTimeline('trace-cost');
+    // No metric-lane rows: the fold is the only cost carrier.
+    expect(timeline.filter(t => t.source === 'metric')).toHaveLength(0);
+  });
+});
