@@ -108,10 +108,11 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
 
     const observerPreviousObservationTokens = 1000;
     const observeAttachments = state?.observeAttachments;
+    const subconsciousEnabled = Boolean(vector) && process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
     // Factory sessions get a factory-only Subconscious config, so the cache key
     // carries a factory presence bit to keep the two configs from cross-serving.
     const isFactory = typeof factoryProjectId === 'string' && factoryProjectId.trim().length > 0;
-    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}`;
+    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}:${subconsciousEnabled ? 1 : 0}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;
     }
@@ -133,7 +134,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
           enabled: true,
           temporalMarkers: true,
           retrieval: vector ? { vector: true } : true,
-          experimental_subconscious: vector
+          experimental_subconscious: subconsciousEnabled
             ? new Subconscious({
                 defaultScope: 'resource',
                 maxScope: 'resource',
