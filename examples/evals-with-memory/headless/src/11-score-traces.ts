@@ -34,7 +34,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 async function main() {
-  const dir = mkdtempSync(join(tmpdir(), 'evals-workshop-'));
+  const dir = mkdtempSync(join(tmpdir(), 'evals-with-memory-'));
   const cleanup = () => rmSync(dir, { recursive: true, force: true });
 
   const libsql = new LibSQLStore({ id: 'score-traces', url: `file:${join(dir, 'eval.db')}` });
@@ -54,7 +54,7 @@ async function main() {
   });
 
   const observability = new Observability({
-    configs: { default: { serviceName: 'evals-workshop', exporters: [new MastraStorageExporter()] } },
+    configs: { default: { serviceName: 'evals-with-memory', exporters: [new MastraStorageExporter()] } },
   });
 
   // ---------------------------------------------------------------------

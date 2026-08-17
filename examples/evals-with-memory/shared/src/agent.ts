@@ -81,7 +81,7 @@ export function buildSupportAgent(opts: BuildOptions = {}): AgentBundle {
     url = dbPath;
     cleanup = () => {};
   } else {
-    const dir = mkdtempSync(join(tmpdir(), 'evals-workshop-'));
+    const dir = mkdtempSync(join(tmpdir(), 'evals-with-memory-'));
     url = `file:${join(dir, 'eval.db')}`;
     cleanup = () => {
       try {
@@ -160,7 +160,7 @@ export function buildBillingAgent(opts: BuildOptions = {}): AgentBundle {
     url = dbPath;
     cleanup = () => {};
   } else {
-    const dir = mkdtempSync(join(tmpdir(), 'evals-workshop-'));
+    const dir = mkdtempSync(join(tmpdir(), 'evals-with-memory-'));
     url = `file:${join(dir, 'eval.db')}`;
     cleanup = () => {
       try {

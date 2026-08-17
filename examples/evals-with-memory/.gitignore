@@ -1,3 +1,8 @@
-.env
 node_modules
+dist
 .mastra
+.env
+*.db
+*.db-journal
+*.db-wal
+*.db-shm

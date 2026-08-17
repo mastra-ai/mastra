@@ -159,7 +159,7 @@ ${Object.values(NIMBUS_KNOWLEDGE)
 export const observability = new Observability({
   configs: {
     default: {
-      serviceName: 'evals-workshop',
+      serviceName: 'evals-with-memory',
       exporters: [new MastraStorageExporter()],
       spanOutputProcessors: [new SensitiveDataFilter()],
     },

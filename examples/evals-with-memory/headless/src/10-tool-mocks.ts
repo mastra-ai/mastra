@@ -43,7 +43,7 @@ const SNAPSHOT = { plan: 'Free', storageUsedGb: 11.2, storageLimitGb: 15 };
 
 async function main() {
   resetAccounts();
-  const dir = mkdtempSync(join(tmpdir(), 'evals-workshop-'));
+  const dir = mkdtempSync(join(tmpdir(), 'evals-with-memory-'));
   const cleanup = () => rmSync(dir, { recursive: true, force: true });
 
   // Traces are needed for part (e). DuckDB takes the observability domain
@@ -66,7 +66,7 @@ async function main() {
   });
 
   const observability = new Observability({
-    configs: { default: { serviceName: 'evals-workshop', exporters: [new MastraStorageExporter()] } },
+    configs: { default: { serviceName: 'evals-with-memory', exporters: [new MastraStorageExporter()] } },
   });
 
   const mastra = new Mastra({

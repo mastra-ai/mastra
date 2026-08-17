@@ -1,38 +1,30 @@
 {
-  "name": "examples-evals-with-memory",
-  "type": "module",
+  "name": "evals-with-memory",
   "private": true,
-  "description": "Three ways to run Mastra evals against memory-enabled agents",
-  "version": "0.0.1",
+  "type": "module",
+  "description": "Mastra evals workshop \u2014 a headless CI-safe surface and a Studio demo surface over one shared core",
   "scripts": {
-    "ex:runeval-global": "npx tsx src/runeval-global.ts",
-    "ex:runeval-per-item": "npx tsx src/runeval-per-item.ts",
-    "ex:dataset": "npx tsx src/dataset.ts",
-    "ex:all": "pnpm ex:runeval-global && pnpm ex:runeval-per-item && pnpm ex:dataset",
-    "clean": "rm -rf .mastra"
-  },
-  "dependencies": {
-    "@mastra/core": "latest",
-    "@mastra/evals": "latest",
-    "@mastra/libsql": "latest",
-    "@mastra/memory": "latest",
-    "ai": "^4.3.19",
-    "typescript": "^5.9.3"
-  },
-  "pnpm": {
-    "overrides": {
-      "@mastra/core": "link:../../packages/core",
-      "@mastra/evals": "link:../../packages/evals",
-      "@mastra/libsql": "link:../../stores/libsql",
-      "@mastra/memory": "link:../../packages/memory"
-    }
+    "ex:1": "pnpm --filter @workshop/headless ex:1",
+    "ex:2": "pnpm --filter @workshop/headless ex:2",
+    "ex:3": "pnpm --filter @workshop/headless ex:3",
+    "ex:4": "pnpm --filter @workshop/headless ex:4",
+    "ex:5": "pnpm --filter @workshop/headless ex:5",
+    "ex:6": "pnpm --filter @workshop/headless ex:6",
+    "ex:7": "pnpm --filter @workshop/headless ex:7",
+    "ex:8": "pnpm --filter @workshop/headless ex:8",
+    "ex:9": "pnpm --filter @workshop/headless ex:9",
+    "ex:10": "pnpm --filter @workshop/headless ex:10",
+    "ex:11": "pnpm --filter @workshop/headless ex:11",
+    "ex:12": "pnpm --filter @workshop/headless ex:12",
+    "ex:all": "pnpm --filter @workshop/headless ex:all",
+    "ex:offline": "pnpm --filter @workshop/headless ex:offline",
+    "dev": "pnpm --filter @workshop/studio dev",
+    "seed": "pnpm --filter @workshop/studio seed",
+    "reset": "rm -f studio/eval.db* studio/observability.duckdb* && pnpm seed",
+    "clean": "pnpm -r clean"
   },
   "devDependencies": {
-    "@types/node": "^20.12.7",
-    "tsx": "catalog:"
+    "typescript": "catalog:"
   },
-  "keywords": [],
-  "author": "",
-  "license": "Apache-2.0",
-  "packageManager": "pnpm@10.29.3+sha512.498e1fb4cca5aa06c1dcf2611e6fafc50972ffe7189998c409e90de74566444298ffe43e6cd2acdc775ba1aa7cc5e092a8b7054c811ba8c5770f84693d33d2dc"
+  "packageManager": "pnpm@10.29.3"
 }
