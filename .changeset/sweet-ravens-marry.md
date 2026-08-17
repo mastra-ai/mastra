@@ -2,4 +2,4 @@
 'mastra': patch
 ---
 
-Improved template clone warnings to use the standard CLI output.
+Template cloning now reports package.json update failures as warnings and continues project creation.
