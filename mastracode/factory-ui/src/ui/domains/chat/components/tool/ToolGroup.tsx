@@ -1,6 +1,7 @@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { presentTool } from '@mastra/playground-ui/components/ai/tool-call';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { FoldVertical, X } from 'lucide-react';
 import { useState } from 'react';
@@ -8,7 +9,6 @@ import { useState } from 'react';
 import type { ToolCall } from '../../services/transcript';
 import { ROW_RAIL, ROW_TRIGGER, TranscriptRow } from '../TranscriptRow';
 import { ToolCard } from './ToolCard';
-import { presentTool } from './tool-presentation';
 
 /** Consecutive tool calls this long collapse into one group row. */
 export const TOOL_GROUP_MIN = 3;
