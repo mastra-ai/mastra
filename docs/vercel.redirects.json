@@ -1017,7 +1017,7 @@
     },
     {
       "source": "/docs/agents/file-based-agents",
-      "destination": "/docs/getting-started/develop",
+      "destination": "/docs/develop",
       "permanent": true
     },
     {
@@ -1107,7 +1107,7 @@
     },
     {
       "source": "/docs/getting-started/file-based-agents",
-      "destination": "/docs/getting-started/develop",
+      "destination": "/docs/develop",
       "permanent": true
     },
     {
@@ -2173,6 +2173,16 @@
     {
       "source": "/docs/auth/index",
       "destination": "/docs/auth/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/develop",
+      "destination": "/docs/develop",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents",
+      "destination": "/docs/agents/overview",
       "permanent": true
     }
   ]

@@ -22,7 +22,7 @@ const sidebars = {
     },
     {
       type: 'doc',
-      id: 'getting-started/develop',
+      id: 'develop',
       label: 'Develop',
     },
     {
