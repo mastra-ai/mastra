@@ -95,6 +95,7 @@ import { WorkspaceInstructionsProcessor } from '../processors/processors/workspa
 import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, MASTRA_VERSIONS_KEY } from '../request-context';
+import { getRequestContextInputValues } from '../request-context/input-source';
 import type { DeclaredAgentSchedule } from '../schedules/define';
 import type { InferStandardSchemaOutput } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
@@ -1463,7 +1464,7 @@ export class Agent<
    */
   async #validateRequestContext(requestContext?: RequestContext) {
     if (this.#requestContextSchema) {
-      const contextValues = requestContext?.all ?? {};
+      const contextValues = getRequestContextInputValues(requestContext);
       const validation = await this.#requestContextSchema['~standard'].validate(contextValues);
 
       if (validation.issues) {
