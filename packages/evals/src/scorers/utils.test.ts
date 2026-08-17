@@ -63,6 +63,15 @@ describe('Scorer Utils', () => {
       expect(result).toBe('Assistant response');
     });
 
+    it('should extract the final assistant response from multi-step output', () => {
+      const output: ScorerRunOutputForAgent = [
+        createTestMessage({ content: 'Intermediate assistant response', role: 'assistant' }),
+        createTestMessage({ content: 'Final assistant response', role: 'assistant' }),
+      ];
+
+      expect(getAssistantMessageFromRunOutput(output)).toBe('Final assistant response');
+    });
+
     it('should extract assistant text from workflow-style output', () => {
       expect(getAssistantMessageFromRunOutput({ text: 'Workflow response' })).toBe('Workflow response');
       expect(getAssistantMessageFromRunOutput({ content: 'Task response' })).toBe('Task response');

@@ -394,7 +394,12 @@ export const getCombinedSystemPrompt = (input?: unknown): string => {
  */
 export const getAssistantMessageFromRunOutput = (output?: unknown) => {
   if (typeof output === 'string') return output;
-  if (Array.isArray(output)) return getTextFromMessages(output, 'assistant');
+  if (Array.isArray(output)) {
+    const finalAssistantMessage = [...output]
+      .reverse()
+      .find(message => isRecord(message) && getEffectiveMessageRole(message) === 'assistant');
+    return finalAssistantMessage ? getTextFromValue(finalAssistantMessage) : undefined;
+  }
   if (!isRecord(output)) return undefined;
 
   const isAssistantOutput = output.role === undefined || output.role === 'assistant';
