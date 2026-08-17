@@ -40,6 +40,52 @@ describe('TraceDataPanelView — Add tool mocks to item', () => {
   });
 });
 
+describe('TraceDataPanelView — trace usage summary', () => {
+  it('renders token and cost rows when usage is provided', () => {
+    render(
+      <TraceDataPanelView
+        {...baseProps}
+        usage={{ inputTokens: 1200, outputTokens: 300, estimatedCost: 0.0042, costUnit: 'usd' }}
+      />,
+    );
+
+    expect(screen.getByText('Trace input tokens')).not.toBeNull();
+    expect(screen.getByText('1.2K')).not.toBeNull();
+    expect(screen.getByText('Trace output tokens')).not.toBeNull();
+    expect(screen.getByText('300')).not.toBeNull();
+    expect(screen.getByText('Trace est. cost')).not.toBeNull();
+    expect(screen.getByText('$0.0042')).not.toBeNull();
+  });
+
+  it('renders a placeholder when the store produced no cost for the trace', () => {
+    render(<TraceDataPanelView {...baseProps} usage={{ inputTokens: 1200, outputTokens: 300 }} />);
+
+    expect(screen.getByText('Trace est. cost')).not.toBeNull();
+    expect(screen.getByText('—')).not.toBeNull();
+  });
+
+  it('renders no usage rows when the prop is omitted', () => {
+    render(<TraceDataPanelView {...baseProps} />);
+
+    expect(screen.queryByText('Trace est. cost')).toBeNull();
+    expect(screen.queryByText('Trace input tokens')).toBeNull();
+  });
+
+  it('does not render full-trace usage for a subtrace anchor', () => {
+    render(
+      <TraceDataPanelView
+        {...baseProps}
+        spans={nestedSpanFixture}
+        anchorSpanId="child"
+        usage={{ inputTokens: 12_500, outputTokens: 405, estimatedCost: 0.01, costUnit: 'usd' }}
+      />,
+    );
+
+    expect(screen.queryByText('Trace est. cost')).toBeNull();
+    expect(screen.queryByText('12.5K')).toBeNull();
+  });
+});
+
 describe('TraceDataPanelView — span selected from the URL', () => {
   describe('when the trace is still loading', () => {
     it('keeps the requested span instead of clearing it', () => {

@@ -181,6 +181,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/amd',
+          label: 'AMD',
+        },
+        {
+          type: 'doc',
           id: 'providers/anyapi',
           label: 'AnyAPI',
         },
@@ -701,6 +706,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/qvac',
+          label: 'QVAC',
+        },
+        {
+          type: 'doc',
           id: 'providers/regolo-ai',
           label: 'Regolo AI',
         },
@@ -716,6 +726,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/runinfra',
+          label: 'RunInfra',
+        },
+        {
+          type: 'doc',
           id: 'providers/sakana',
           label: 'Sakana AI',
         },
@@ -728,6 +743,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/scaleway',
           label: 'Scaleway',
+        },
+        {
+          type: 'doc',
+          id: 'providers/scnet-token-plan',
+          label: 'SCNet Token Plan',
         },
         {
           type: 'doc',

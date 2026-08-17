@@ -558,6 +558,67 @@ describe('agent-controller routes', () => {
       } as any)) as { running?: boolean };
       expect(res.running).toBe(true);
     });
+
+    it('returns the durable task list for initial UI hydration', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-1', id: 'user-1', ownerId: controller.id });
+      const threadId = session.thread.requireId();
+      const tasks = [
+        { id: 'investigate', content: 'Investigate the bug', status: 'completed', activeForm: 'Investigating the bug' },
+        { id: 'fix', content: 'Fix the bug', status: 'in_progress', activeForm: 'Fixing the bug' },
+      ] as const;
+      const threadState = await mastra.getStorage()!.getStore('threadState');
+      await threadState!.setState({ threadId, type: 'task', value: tasks });
+
+      const res = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+        threadId,
+      } as any)) as { tasks?: unknown };
+
+      expect(res.tasks).toEqual(tasks);
+    });
+
+    it('returns tasks for the explicitly requested thread instead of the session current thread', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-1', id: 'user-1', ownerId: controller.id });
+      const currentThreadId = session.thread.requireId();
+      const requestedThread = await session.thread.create({ title: 'Requested thread' });
+      await session.thread.switch({ threadId: currentThreadId });
+      const tasks = [
+        { id: 'requested', content: 'Requested task', status: 'pending', activeForm: 'Working on requested task' },
+      ] as const;
+      const threadState = await mastra.getStorage()!.getStore('threadState');
+      await threadState!.setState({ threadId: requestedThread.id, type: 'task', value: tasks });
+
+      const res = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+        threadId: requestedThread.id,
+      } as any)) as { threadId?: string; tasks?: unknown };
+
+      expect(res).toMatchObject({ threadId: requestedThread.id, tasks });
+    });
+
+    it('returns an empty task list when the requested thread has no durable task state', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-1', id: 'user-1', ownerId: controller.id });
+      const requestedThread = await session.thread.create({ title: 'No tasks' });
+
+      const res = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+        threadId: requestedThread.id,
+      } as any)) as { tasks?: unknown };
+
+      expect(res.tasks).toEqual([]);
+    });
   });
 
   describe('LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE message shape', () => {
@@ -772,9 +833,14 @@ describe('agent-controller routes', () => {
       const session = await mastra.getAgentController('code')!.createSession({ resourceId: 'user-state' });
       const busy = await session.thread.create({ title: 'busy' });
 
+      // Handler reads active state from the controller-wide active-run
+      // registry (same source as the `active-runs` endpoint) instead of
+      // resolving a per-session agent, so mock that instead of the per-agent
+      // `getActiveThreadRunId`. Semantics are identical: a thread is active
+      // iff a run is registered for its resourceId + threadId.
       const spy = vi
-        .spyOn(Agent.prototype, 'getActiveThreadRunId')
-        .mockImplementation(({ threadId }) => (threadId === busy.id ? 'run-1' : undefined));
+        .spyOn(Agent.prototype, 'listActiveThreadRuns')
+        .mockReturnValue([{ runId: 'run-1', resourceId: 'user-state', threadId: busy.id }]);
       try {
         const res = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
           mastra,
@@ -786,6 +852,52 @@ describe('agent-controller routes', () => {
         expect(res.threads.filter(t => t.id !== busy.id).every(t => t.state === 'idle')).toBe(true);
       } finally {
         spy.mockRestore();
+      }
+    });
+
+    it('does not initialize the configured workspace on read-only GET endpoints', async () => {
+      // Regression: GET /threads and GET /threads/:id/messages used to route
+      // through createSession, which fires Workspace.init() -> sandbox.start()
+      // as a side effect. That stalled reads 5-17s and burned a sandbox slot
+      // per page visit. These routes now query storage directly and must not
+      // provision the configured workspace, even on the first request against
+      // a fresh controller.
+      const { mastra: fresh, controller } = makeMastra();
+      const workspaceInit = vi.spyOn(Workspace.prototype, 'init');
+      const createSession = vi.spyOn(controller, 'createSession');
+      try {
+        // Seed a thread through storage so the messages endpoint has a target,
+        // WITHOUT going through createSession (which would provision).
+        await controller.initStorage();
+        const memory = await (controller as any).getMemoryStorage();
+        const seeded = await memory.saveThread({
+          thread: {
+            id: 'seeded-thread',
+            resourceId: 'read-only',
+            title: 'seeded',
+            metadata: {},
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+
+        await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
+          mastra: fresh,
+          controllerId: 'code',
+          resourceId: 'read-only',
+        } as any);
+        await LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE.handler({
+          mastra: fresh,
+          controllerId: 'code',
+          resourceId: 'read-only',
+          threadId: seeded.id,
+        } as any);
+
+        expect(workspaceInit).not.toHaveBeenCalled();
+        expect(createSession).not.toHaveBeenCalled();
+      } finally {
+        workspaceInit.mockRestore();
+        createSession.mockRestore();
       }
     });
 
