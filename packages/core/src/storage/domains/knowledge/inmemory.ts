@@ -308,15 +308,15 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     return cloneRecord(record);
   }
 
-  async listKnowledgeAbout(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput> {
+  async knowledgeAbout(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput> {
     return this.#queryKnowledge(input, 'about');
   }
 
-  async listKnowledgeMentioning(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput> {
+  async knowledgeMentioning(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput> {
     return this.#queryKnowledge(input, 'mentioning');
   }
 
-  async listKnowledgeRelatedTo(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput> {
+  async knowledgeRelatedTo(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput> {
     return this.#queryKnowledge(input, 'related');
   }
 
@@ -462,7 +462,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const queryScope = canonicalizeKnowledgeScope(input.scope);
     return this.#db.knowledgeActivity
       .filter(event => isKnowledgeScopeVisible(event.scope, queryScope))
-      .filter(event => !input.after || event.id < input.after)
+      .filter(event => !input.after || event.id > input.after)
       .sort((a, b) => b.id.localeCompare(a.id))
       .slice(0, input.limit ?? 100)
       .map(event => ({ ...event, scope: [...event.scope], createdAt: new Date(event.createdAt) }));

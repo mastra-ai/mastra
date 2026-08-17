@@ -70,7 +70,6 @@ import { AuthStorage } from './auth/storage.js';
 import { DEFAULT_CONFIG_DIR, validateConfigDirName } from './constants.js';
 import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
 import { HookManager } from './hooks/index.js';
-import { createKnowledgeInspector as createScopedKnowledgeInspector } from './knowledge-inspector.js';
 import { createMcpManager } from './mcp/index.js';
 import type { McpServerConfig } from './mcp/index.js';
 import { hasExplicitOMConfiguration } from './onboarding/om-settings.js';
@@ -1182,8 +1181,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     controller: controller,
     storage,
     storageMaintenance,
-    createKnowledgeInspector: (session: Session<MastraCodeState>) =>
-      createScopedKnowledgeInspector({ storage, session }),
     observability,
     memory,
     mcpManager,
@@ -1359,16 +1356,8 @@ export async function bootLocalAgentController(config?: MastraCodeConfig) {
   base.startPluginSignalProviders();
   const session = await controller.createSession({ id: sessionId, ownerId });
   await wireSessionConcerns(base, session);
-  const knowledgeInspector = await base.createKnowledgeInspector(session);
 
-  return {
-    ...base,
-    session,
-    knowledgeInspector,
-    knowledgeInspectorUnavailableReason: knowledgeInspector
-      ? undefined
-      : 'Knowledge inspection requires a configured knowledge storage domain.',
-  };
+  return { ...base, session };
 }
 
 /** Result of {@link mountAgentControllerOnMastra}: shared handles plus the owning Mastra. */
@@ -1496,7 +1485,6 @@ export async function prepareAgentControllerMount(
  * case: `bootLocalAgentController` (local) or {@link mountAgentControllerOnMastra} (server).
  */
 export const createMastraCode = bootLocalAgentController;
-export * from './knowledge-inspector.js';
 
 /**
  * Programmatic headless API. `runMC` runs an already-built controller/session

@@ -5,7 +5,11 @@ import { z } from 'zod';
 import { Extractor } from '../extractor';
 import type { ExtractorOnExtractedContext, ExtractorRuntimeContext } from '../extractor';
 import { publishSubconsciousActivity } from './activity';
-import type { SubconsciousCaptureConfig, SubconsciousCaptureOutput, SubconsciousDefaultCapture } from './types';
+import type {
+  SubconsciousBuiltInObservationConfig,
+  SubconsciousCaptureOutput,
+  SubconsciousDefaultCapture,
+} from './types';
 
 const CAPTURE_GUIDANCE_PAGE = 'capture-guidance';
 const MAX_CAPTURE_GUIDANCE_LENGTH = 4_000;
@@ -77,7 +81,7 @@ function parseWhen(value: string | undefined): Date | undefined {
 }
 
 export interface CaptureExtractorOptions {
-  config?: SubconsciousCaptureConfig;
+  config?: SubconsciousBuiltInObservationConfig;
   defaultScope: KnowledgeScopeLevel;
   maxScope?: KnowledgeScopeLevel;
   learnedGuidance: boolean;

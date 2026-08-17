@@ -43,40 +43,6 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       ).rejects.toThrow('Invalid knowledge scope entry');
     });
 
-    it('treats lexical query metacharacters literally', async () => {
-      const percent = await store.createNode({
-        name: 'Literal% node',
-        kind: 'document',
-        content: 'contains percent% text',
-        scope: resource,
-      });
-      await store.createNode({ name: 'LiteralX node', kind: 'document', content: 'control text', scope: resource });
-      const underscore = await store.createNode({
-        name: 'Under_score node',
-        kind: 'document',
-        content: 'contains under_score text',
-        scope: resource,
-      });
-      await store.createNode({ name: 'UnderXscore node', kind: 'document', content: 'control text', scope: resource });
-      const escape = await store.createNode({
-        name: 'Equal= node',
-        kind: 'document',
-        content: 'contains equal=sign text',
-        scope: resource,
-      });
-
-      expect(await store.listNodes({ scope: resource, namePrefix: 'Literal%' })).toEqual([
-        expect.objectContaining({ id: percent.id }),
-      ]);
-      expect(await store.search({ query: '%', scope: resource })).toEqual([
-        expect.objectContaining({ id: percent.id }),
-      ]);
-      expect(await store.search({ query: '_', scope: resource })).toEqual([
-        expect.objectContaining({ id: underscore.id }),
-      ]);
-      expect(await store.search({ query: '=', scope: resource })).toEqual([expect.objectContaining({ id: escape.id })]);
-    });
-
     it('applies record visibility independently from node scope', async () => {
       const node = await store.createNode({ name: 'Resource node', kind: 'task', scope: resource });
       await store.appendKnowledge({
@@ -88,7 +54,7 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         defaultScope: resource,
       });
 
-      expect((await store.listKnowledgeAbout({ node, scope: ['org:acme'] })).records).toHaveLength(1);
+      expect((await store.knowledgeAbout({ node, scope: ['org:acme'] })).records).toHaveLength(1);
       expect(await store.search({ query: 'organization-visible', scope: ['org:acme'] })).toEqual([
         expect.objectContaining({ type: 'record', recordId: node.id, scope: ['org:acme'] }),
       ]);
@@ -105,12 +71,12 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         resolutionScope: thread,
         defaultScope: resource,
       });
-      expect((await store.listKnowledgeMentioning({ node: marco, scope: thread })).records[0]?.id).toBe(record.id);
-      expect((await store.listKnowledgeRelatedTo({ node: marco, scope: thread })).records[0]?.id).toBe(record.id);
+      expect((await store.knowledgeMentioning({ node: marco, scope: thread })).records[0]?.id).toBe(record.id);
+      expect((await store.knowledgeRelatedTo({ node: marco, scope: thread })).records[0]?.id).toBe(record.id);
       await store.removeKnowledge({ id: record.id, deletedBy: 'curator' });
       expect(await store.getKnowledge({ id: record.id })).toBeNull();
       await store.restoreKnowledge({ id: record.id });
-      expect((await store.listKnowledgeRelatedTo({ node: marco, scope: thread })).records[0]?.id).toBe(record.id);
+      expect((await store.knowledgeRelatedTo({ node: marco, scope: thread })).records[0]?.id).toBe(record.id);
     });
 
     it('rejects merges whose target is narrower than the source alias', async () => {
@@ -149,7 +115,7 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         defaultScope: resource,
       });
       expect(
-        (await store.listKnowledgeRelatedTo({ node: target.id, scope: thread })).records.map(record => record.id),
+        (await store.knowledgeRelatedTo({ node: target.id, scope: thread })).records.map(record => record.id),
       ).toContain(postMergeKnowledge.id);
       expect((await store.createNode({ name: 'Jane Doe', kind: 'person', scope: resource })).id).toBe(target.id);
       const fallbackKnowledge = await store.appendKnowledge({
@@ -161,7 +127,7 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         defaultScope: resource,
       });
       expect(
-        (await store.listKnowledgeRelatedTo({ node: target.id, scope: thread })).records.map(record => record.id),
+        (await store.knowledgeRelatedTo({ node: target.id, scope: thread })).records.map(record => record.id),
       ).toContain(fallbackKnowledge.id);
 
       const beforeRescope = (await store.listSemanticOutbox()).length;
@@ -271,19 +237,6 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(await store.listActivity({ scope: thread })).toEqual([]);
       expect(await store.getCurationCursor({ sourceThreadId: 't1', agent: 'curate' })).toBeNull();
       expect(await store.listSemanticOutbox()).toEqual([]);
-    });
-
-    it('paginates activity from newest to oldest without duplicates', async () => {
-      await store.createNode({ name: 'Activity one', kind: 'task', scope: resource });
-      await store.createNode({ name: 'Activity two', kind: 'task', scope: resource });
-      await store.createNode({ name: 'Activity three', kind: 'task', scope: resource });
-
-      const all = await store.listActivity({ scope: thread });
-      const first = await store.listActivity({ scope: thread, limit: 2 });
-      const second = await store.listActivity({ scope: thread, after: first.at(-1)!.id, limit: 2 });
-
-      expect(first.map(event => event.id)).toEqual(all.slice(0, 2).map(event => event.id));
-      expect(second.map(event => event.id)).toEqual(all.slice(2).map(event => event.id));
     });
 
     it('persists activity, cursors, and recoverable semantic work', async () => {

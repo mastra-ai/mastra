@@ -4,7 +4,7 @@ import { SubconsciousRemindExtractor } from './remind';
 import type {
   ResolvedSubconsciousAgent,
   ResolvedSubconsciousConfig,
-  SubconsciousCaptureConfig,
+  SubconsciousBuiltInObservationConfig,
   SubconsciousConfig,
   SubconsciousCustomObservationConfig,
   SubconsciousObservationEntry,
@@ -37,16 +37,6 @@ function boundedSteps(entry: { maxSteps?: number } | undefined, fallback: number
     throw new Error('Subconscious maxSteps must be an integer between 1 and 25.');
   }
   return steps;
-}
-
-function resolveExtractor(entry: SubconsciousObservationEntry): ResolvedSubconsciousAgent {
-  const config = typeof entry === 'string' ? undefined : entry;
-  const name = entryName(entry);
-  return {
-    name,
-    instructions: config?.instructions,
-    builtIn: name === 'capture',
-  };
 }
 
 function resolveAgent(
@@ -97,11 +87,7 @@ export class Subconscious {
 
     this.config = Object.freeze({ ...config, observation: [...observation], reflection: [...reflection] });
     this.resolved = Object.freeze({
-      observation: observation.map(entry =>
-        entryName(entry) === 'remind'
-          ? resolveAgent(entry, BUILT_IN_OBSERVATION, config.model, maxSteps)
-          : resolveExtractor(entry),
-      ),
+      observation: observation.map(entry => resolveAgent(entry, BUILT_IN_OBSERVATION, config.model, maxSteps)),
       reflection: reflection.map(entry => resolveAgent(entry, BUILT_IN_REFLECTION, config.model, maxSteps)),
       defaultScope: config.defaultScope ?? 'resource',
       maxScope: config.maxScope,
@@ -118,7 +104,7 @@ export class Subconscious {
       if (name === 'capture') {
         extractors.push(
           new SubconsciousCaptureExtractor({
-            config: typeof entry === 'string' ? undefined : (entry as SubconsciousCaptureConfig),
+            config: typeof entry === 'string' ? undefined : (entry as SubconsciousBuiltInObservationConfig),
             defaultScope: this.resolved.defaultScope,
             maxScope: this.resolved.maxScope,
             learnedGuidance: this.resolved.learnedGuidance,
@@ -152,26 +138,12 @@ export class Subconscious {
       return;
     }
     if (BUILT_IN_OBSERVATION.has(name)) {
-      if (name === 'capture') {
-        if ('model' in entry || 'maxSteps' in entry) {
-          throw new Error('Subconscious capture shares the Observer model and does not accept model or maxSteps.');
-        }
-        if (
-          'schema' in entry &&
-          entry.schema &&
-          (!('onExtracted' in entry) || typeof entry.onExtracted !== 'function')
-        ) {
-          throw new Error('A custom capture schema requires an onExtracted hook that handles its output.');
-        }
+      if (name === 'capture' && entry.schema && typeof entry.onExtracted !== 'function') {
+        throw new Error('A custom capture schema requires an onExtracted hook that handles its output.');
       }
       return;
     }
-    if ('model' in entry || 'maxSteps' in entry) {
-      throw new Error(
-        `Subconscious observation extractor "${name}" shares the Observer model and does not accept model or maxSteps.`,
-      );
-    }
-    if (!('schema' in entry) || !entry.schema || !('onExtracted' in entry) || typeof entry.onExtracted !== 'function') {
+    if (!entry.schema || typeof entry.onExtracted !== 'function') {
       throw new Error(`Custom Subconscious observation agent "${name}" requires schema and onExtracted.`);
     }
   }

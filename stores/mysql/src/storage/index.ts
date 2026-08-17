@@ -11,7 +11,6 @@ import { ChannelsMySQL } from './domains/channels';
 import { DatasetsMySQL } from './domains/datasets';
 import { ExperimentsMySQL } from './domains/experiments';
 import { FavoritesMySQL } from './domains/favorites';
-import { KnowledgeMySQL } from './domains/knowledge';
 import { MCPClientsMySQL } from './domains/mcp-clients';
 import { MCPServersMySQL } from './domains/mcp-servers';
 import { MemoryMySQL } from './domains/memory';
@@ -36,7 +35,6 @@ export {
   DatasetsMySQL,
   ExperimentsMySQL,
   FavoritesMySQL,
-  KnowledgeMySQL,
   MCPClientsMySQL,
   MCPServersMySQL,
   MemoryMySQL,
@@ -211,7 +209,6 @@ export class MySQLStore extends MastraCompositeStore {
       skipDefaultIndexes: config.skipDefaultIndexes,
       indexes: config.indexes,
     });
-    const knowledge = new KnowledgeMySQL({ pool: this.pool, operations });
     const workflows = new WorkflowsMySQL({
       operations,
       pool: this.pool,
@@ -322,7 +319,6 @@ export class MySQLStore extends MastraCompositeStore {
 
     this.stores = {
       memory,
-      knowledge,
       workflows,
       scores,
       observability,
@@ -372,7 +368,6 @@ export class MySQLStore extends MastraCompositeStore {
  */
 const ALL_DOMAINS = [
   MemoryMySQL,
-  KnowledgeMySQL,
   ObservabilityMySQL,
   ScoresMySQL,
   ScorerDefinitionsMySQL,

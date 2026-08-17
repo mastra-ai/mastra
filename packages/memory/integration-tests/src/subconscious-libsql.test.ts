@@ -555,8 +555,8 @@ describe('Subconscious LibSQL integration', () => {
     const scope = ['org:acme', `resource:${resourceId}`, `thread:${threadId}`];
     const project = await knowledge.createNode({ name: 'Project Atlas', kind: 'project', scope });
     const appendSource = (text: string) =>
-      knowledge.appendKnowledge({
-        node: project.id,
+      knowledge.appendItem({
+        parentNodeId: project.id,
         text,
         scope,
         sourceThreadId: threadId,
@@ -583,7 +583,7 @@ describe('Subconscious LibSQL integration', () => {
               input: JSON.stringify({
                 name: 'deploy-atlas-safely',
                 procedure: 'Validate, publish, then verify the health check.',
-                sourceRecordIds: pendingIds,
+                sourceItemIds: pendingIds,
               }),
             },
           ],
@@ -630,11 +630,11 @@ describe('Subconscious LibSQL integration', () => {
 
     const skills = await knowledge.listNodes({ scope, kind: 'skill' });
     expect(skills).toHaveLength(1);
-    const evidence = await knowledge.knowledgeAbout({ node: skills[0]!.id, scope });
-    expect(evidence.records).toHaveLength(4);
-    expect(new Set(evidence.records.map(item => item.id)).size).toBe(4);
+    const evidence = await knowledge.itemsAbout({ nodeId: skills[0]!.id, scope });
+    expect(evidence.items).toHaveLength(4);
+    expect(new Set(evidence.items.map(item => item.id)).size).toBe(4);
     expect(await knowledge.getCurationCursor({ sourceThreadId: threadId, agent: 'learn' })).toMatchObject({
-      lastKnowledgeId: fourth.id,
+      lastItemId: fourth.id,
     });
   });
 });

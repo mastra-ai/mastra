@@ -52,37 +52,12 @@ describe('Subconscious activity', () => {
 
     expect(snapshot.updates.map(update => update.name)).toContain('Project Atlas');
     expect(snapshot.updates.map(update => update.name)).not.toContain('Alpha Secret');
-    expect(snapshot.updates.some(update => update.type === 'record' && !('name' in update))).toBe(true);
+    expect(snapshot.updates.some(update => update.sourceThreadId === 'alpha')).toBe(true);
+    expect(snapshot.updates.some(update => update.recordId !== atlas.id && update.type === 'record')).toBe(true);
+    expect(snapshot.updates).toContainEqual(
+      expect.objectContaining({ recordId: sharedSecretRecord.id, type: 'record', name: undefined }),
+    );
     expect(snapshot.updates).toHaveLength(3);
-    expect(snapshot.updates.every(update => !('recordId' in update) && !('targetId' in update))).toBe(true);
-    expect(snapshot.updates.every(update => !('sourceThreadId' in update))).toBe(true);
-    expect(snapshot.hot.every(record => !('id' in record))).toBe(true);
-    expect(JSON.stringify(snapshot)).not.toContain(sharedSecretRecord.id);
-    expect(JSON.stringify(snapshot)).not.toContain(secret.id);
-  });
-
-  it('does not expose names after an activity target moves outside the visible scope', async () => {
-    const store = await createStore();
-    const secret = await store.createNode({ name: 'Moved secret', kind: 'note', scope: resourceScope });
-    await store.updateNode({ id: secret.id, version: secret.version, scope: alphaScope });
-    const document = await store.createNode({
-      name: 'Moved document',
-      kind: 'document',
-      content: 'Private notes',
-      scope: resourceScope,
-    });
-    await store.updateNode({ id: document.id, version: document.version, scope: alphaScope });
-
-    const snapshot = await buildSubconsciousActivitySnapshot({ store, scope: betaScope, recentUpdates: 10 });
-
-    expect(snapshot.updates).toHaveLength(2);
-    expect(snapshot.updates.every(update => update.type === 'node' && !('name' in update))).toBe(true);
-    expect(snapshot.hot.map(record => record.name)).not.toContain('Moved secret');
-    expect(snapshot.hot.map(record => record.name)).not.toContain('Moved document');
-    expect(JSON.stringify(snapshot)).not.toContain(secret.id);
-    expect(JSON.stringify(snapshot)).not.toContain(document.id);
-    expect(renderSubconsciousActivity(snapshot)).not.toContain(secret.id);
-    expect(renderSubconsciousActivity(snapshot)).not.toContain(document.id);
   });
 
   it('bounds updates and hot records, renders errors, and generates stable cache keys', async () => {

@@ -31,27 +31,22 @@ export type SubconsciousCaptureHook = (
   },
 ) => Promise<SubconsciousCaptureOutput | void | undefined> | SubconsciousCaptureOutput | void | undefined;
 
-export interface SubconsciousCaptureConfig {
-  name: 'capture';
-  instructions?: string;
-  schema?: z.ZodTypeAny;
-  onExtracted?: SubconsciousCaptureHook;
-}
-
-export interface SubconsciousRemindConfig {
-  name: 'remind';
+export interface SubconsciousBuiltInObservationConfig {
+  name: SubconsciousBuiltInObservationAgent;
   instructions?: string;
   model?: SubconsciousModel;
+  schema?: z.ZodTypeAny;
+  onExtracted?: SubconsciousCaptureHook;
   maxSteps?: number;
 }
-
-export type SubconsciousBuiltInObservationConfig = SubconsciousCaptureConfig | SubconsciousRemindConfig;
 
 export interface SubconsciousCustomObservationConfig<T = unknown> {
   name: string;
   instructions?: string;
+  model?: SubconsciousModel;
   schema: z.ZodType<T>;
   onExtracted: (context: ExtractorOnExtractedContext<T>) => Promise<T | void | undefined> | T | void | undefined;
+  maxSteps?: number;
 }
 
 export interface SubconsciousBuiltInReflectionConfig {
@@ -97,7 +92,7 @@ export interface ResolvedSubconsciousAgent {
   instructions?: string;
   model?: SubconsciousModel;
   agent?: Agent;
-  maxSteps?: number;
+  maxSteps: number;
   builtIn: boolean;
 }
 
