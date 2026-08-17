@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { defaultFactoryRules } from './defaults.js';
+import { builtInFactoryRules, defaultFactoryRules } from './defaults.js';
 import { FACTORY_DISPATCH_CONSTANTS, FactoryDecisionDispatcher } from './dispatcher.js';
 import { FactoryStartCoordinator } from './start-coordinator.js';
 import { FactoryTransitionService } from './transition-service.js';
@@ -425,6 +425,51 @@ describe('FactoryDecisionDispatcher', () => {
       status: 'succeeded',
       attempts: 1,
     });
+  });
+
+  it('delivers the built-in build prompt into the work session when a card enters Building', async () => {
+    // Building is the one leg of the loop that has never run for real, and it
+    // carries a prompt rather than a skill. Drive the shipped rules through the
+    // dispatcher so the prompt an agent would actually receive is asserted.
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    await bindWorkRun(storage, item.id);
+    const bound = await storage.get({ orgId: 'org-1', id: item.id });
+    const transitionService = new FactoryTransitionService({ storage, rules: builtInFactoryRules() });
+    const transitioned = await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      board: 'work',
+      stage: 'execute',
+      expectedRevision: bound!.revision,
+      actor: { type: 'human', id: 'user-1' },
+      ingress: { type: 'human', identity: 'move-build-1' },
+      cause: 'board_drag',
+    });
+    expect(transitioned.status).toBe('accepted');
+    const { controller, session } = createSession(undefined, {
+      emitAgentEndDuringSignal: true,
+      agentEndReason: 'complete',
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(session.sendSignal).toHaveBeenCalledTimes(1);
+    expect(session.sendSignal.mock.calls[0]?.[0]).toMatchObject({
+      contents: expect.stringContaining('Open a pull request when the work is ready for review.'),
+    });
+    const buildDecisions = (await storage.listDeferredDecisions('org-1', PROJECT_ID)).filter(
+      decision => decision.decision.type === 'invokeSkill',
+    );
+    expect(buildDecisions.map(decision => decision.status)).toEqual(['succeeded']);
   });
 
   it('prepares a binding, delivers to active sessions, and consumes idle wake streams for an urgent stage transition', async () => {
