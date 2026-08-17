@@ -11,7 +11,7 @@ packages:
 
 Editor versions stored agents and prompt blocks. Database-backed resources use draft and publish operations. Code-backed agent overrides use deterministic files and Git history.
 
-See [Editor versioning](/docs/editor/overview#versioning) for release and experimentation patterns.
+See [Editor versioning](/docs/studio/editor#versioning) for release and experimentation patterns.
 
 ## Database lifecycle
 
@@ -42,7 +42,7 @@ See [`MastraEditor`](/reference/editor/mastra-editor#source) for source options.
 
 ## Select an agent version
 
-Calling [`mastra.getAgentById()`](/reference/core/getAgentById) without a selector returns the registered code-defined agent. Pass `status` or `versionId` to apply a stored override. See [Select a version](/docs/editor/overview#select-a-version) for a TypeScript example.
+Calling [`mastra.getAgentById()`](/reference/core/getAgentById) without a selector returns the registered code-defined agent. Pass `status` or `versionId` to apply a stored override. See [Select a version](/docs/studio/editor#select-a-version) for a TypeScript example.
 
 With the default server prefix, pass selectors as query parameters under `/api`:
 

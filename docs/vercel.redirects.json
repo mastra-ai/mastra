@@ -7,12 +7,12 @@
     },
     {
       "source": "/docs/editor/prompts",
-      "destination": "/docs/editor/overview",
+      "destination": "/docs/studio/editor",
       "permanent": true
     },
     {
       "source": "/docs/editor/tools",
-      "destination": "/docs/editor/overview",
+      "destination": "/docs/studio/editor",
       "permanent": true
     },
     {
@@ -2163,6 +2163,11 @@
     {
       "source": "/docs/server/mastra-server",
       "destination": "/docs/server/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/editor/overview",
+      "destination": "/docs/studio/editor",
       "permanent": true
     }
   ]

@@ -421,7 +421,7 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'editor/overview',
+              id: 'studio/editor',
               label: 'Editor',
             },
           ],
