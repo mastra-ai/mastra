@@ -1238,6 +1238,53 @@ describe('MessageHistory', () => {
       saveSpy.mockRestore();
     });
 
+    it('should preserve a deliberately emptied stored content string against an echo', async () => {
+      // The server emptied the content string (e.g. a redaction pass); an empty
+      // string is a stored value, not an absent one. The part list keeps the
+      // stored shape so the record itself still exists.
+      const stored = assistantMessage({
+        content: { format: 2, content: '', parts: [{ type: 'text', text: '' }] },
+      });
+      mockStorage.setMessages([stored]);
+
+      processor = new MessageHistory({ storage: mockStorage });
+      const saveSpy = vi.spyOn(mockStorage, 'saveMessages');
+
+      // The client echoes an older copy that still carries the pre-redaction text.
+      const staleEcho = assistantMessage({
+        content: { format: 2, content: 'Transformed answer', parts: [{ type: 'text', text: 'Transformed answer' }] },
+      });
+      const newUserMessage = assistantMessage({
+        id: 'msg-2',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Next turn' }] },
+        createdAt: new Date(baseTime),
+      });
+
+      const messageList = new MessageList().add([staleEcho, newUserMessage], 'input');
+
+      await processor.processOutputResult({
+        messageList,
+        messages: [],
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      // The emptied stored string survives: a falsy-but-present stored value must
+      // not be refilled from the client echo.
+      expect(saveSpy).toHaveBeenCalledWith({
+        messages: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'msg-1',
+            content: expect.objectContaining({ content: '', parts: [{ type: 'text', text: '' }] }),
+          }),
+          expect.objectContaining({ id: 'msg-2' }),
+        ]),
+      });
+
+      saveSpy.mockRestore();
+    });
+
     it('should merge a client-side tool result into the stored call message', async () => {
       const stored = assistantMessage({
         content: {
