@@ -564,6 +564,8 @@ function createStepHarness(options: { activated: boolean }) {
     actorModelContext: undefined,
     observabilityContext: undefined,
     responseMessageId: undefined,
+    refreshRecord: vi.fn(async () => {}),
+    setRecord: vi.fn(() => {}),
   } as any;
   const step = new ObservationStep(turn, 1);
   return { step, om, turn, turnRequestContext, maybeTriggerCuration, observe };
