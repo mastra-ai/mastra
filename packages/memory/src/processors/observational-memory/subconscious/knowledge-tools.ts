@@ -1,5 +1,5 @@
 import type {
-  KnowledgeItem,
+  KnowledgeRecord,
   KnowledgeNode,
   KnowledgeScope,
   KnowledgeStorage,
@@ -49,14 +49,14 @@ function normalizeLimit(limit: number | undefined): number {
   return Math.min(Math.max(limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
 }
 
-function serializeItem(item: KnowledgeItem) {
+function serializeRecord(record: KnowledgeRecord) {
   return {
-    id: item.id,
-    text: item.text,
-    scope: item.scope,
-    sourceThreadId: item.sourceThreadId,
-    capturedAt: item.capturedAt.toISOString(),
-    when: item.when?.toISOString(),
+    id: record.id,
+    text: record.text,
+    scope: record.scope,
+    sourceThreadId: record.sourceThreadId,
+    capturedAt: record.capturedAt.toISOString(),
+    when: record.when?.toISOString(),
   };
 }
 
@@ -92,18 +92,18 @@ async function loadSemanticResult(
       semanticScore: candidate.score,
     };
   }
-  if (type === 'item') {
-    const item = await store.getItem({ id: candidate.id.slice('knowledge:item:'.length) });
-    if (!item || !isKnowledgeScopeVisible(item.scope, scope)) return null;
-    const node = await store.getNode(item.parentNodeId);
+  if (type === 'record') {
+    const record = await store.getKnowledge({ id: candidate.id.slice('knowledge:record:'.length) });
+    if (!record || !isKnowledgeScopeVisible(record.scope, scope)) return null;
+    const node = await store.getNode(record.node);
     const parentVisible = Boolean(node && !node.mergedInto && isKnowledgeScopeVisible(node.scope, scope));
     return {
-      type: 'item',
-      id: item.id,
-      recordId: parentVisible ? node!.id : item.id,
+      type: 'record',
+      id: record.id,
+      recordId: parentVisible ? node!.id : record.id,
       name: parentVisible ? node!.name : '(private node)',
-      text: item.text,
-      scope: item.scope,
+      text: record.text,
+      scope: record.scope,
       semanticScore: candidate.score,
     };
   }
@@ -149,7 +149,7 @@ export function createKnowledgeTools(
   const knowledgeSearch = createTool({
     id: 'knowledge_search',
     description:
-      'Search durable scoped knowledge across nodes and knowledge items using lexical and semantic retrieval.',
+      'Search durable scoped knowledge across nodes and knowledge records using lexical and semantic retrieval.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -177,14 +177,18 @@ export function createKnowledgeTools(
 
   const knowledgeRead = createTool({
     id: 'knowledge_read',
-    description: 'Read a knowledge node, its content, and knowledge items about or linked to it by name or ID.',
+    description: 'Read a knowledge node, its content, and knowledge records about or linked to it by name or ID.',
     inputSchema: {
       type: 'object',
       properties: {
         id: { type: 'string', minLength: 1 },
         name: { type: 'string', minLength: 1 },
-        items: { type: 'string', enum: ['about', 'touching'], description: 'Knowledge item view. Defaults to about.' },
-        cursor: { type: 'string', minLength: 1, description: 'Return knowledge items after this item ULID.' },
+        relationship: {
+          type: 'string',
+          enum: ['about', 'mentioning', 'related'],
+          description: 'Knowledge relationship to query. Defaults to about.',
+        },
+        cursor: { type: 'string', minLength: 1, description: 'Return knowledge records after this record ULID.' },
         limit: { type: 'integer', minimum: 1, maximum: MAX_LIMIT },
       },
       additionalProperties: false,
@@ -193,13 +197,13 @@ export function createKnowledgeTools(
       const {
         id,
         name,
-        items = 'about',
+        relationship = 'about',
         cursor,
         limit: requestedLimit,
       } = input as {
         id?: string;
         name?: string;
-        items?: 'about' | 'touching';
+        relationship?: 'about' | 'mentioning' | 'related';
         cursor?: string;
         limit?: number;
       };
@@ -208,8 +212,14 @@ export function createKnowledgeTools(
       const store = await getKnowledgeStore(memory);
       const node = id ? await store.getNode(id) : await store.resolveNode({ name: name!, scope });
       if (!node || node.mergedInto || !isKnowledgeScopeVisible(node.scope, scope)) return { found: false };
-      const result = await (items === 'touching' ? store.itemsTouching : store.itemsAbout).call(store, {
-        nodeId: node.id,
+      const query =
+        relationship === 'related'
+          ? store.knowledgeRelatedTo
+          : relationship === 'mentioning'
+            ? store.knowledgeMentioning
+            : store.knowledgeAbout;
+      const result = await query.call(store, {
+        node,
         scope,
         after: cursor,
         limit: normalizeLimit(requestedLimit),
@@ -217,7 +227,7 @@ export function createKnowledgeTools(
       return {
         found: true,
         node: serializeNode(node),
-        items: result.items.map(serializeItem),
+        records: result.records.map(serializeRecord),
         nextCursor: result.nextCursor,
       };
     },
@@ -232,7 +242,7 @@ export function createKnowledgeTools(
         namePrefix: { type: 'string' },
         kind: { type: 'string', description: 'Optional node kind filter.' },
         hasContent: { type: 'boolean', description: 'Filter nodes by whether they have long-form content.' },
-        nodeId: { type: 'string', minLength: 1, description: 'When set, follow knowledge items touching this node.' },
+        node: { type: 'string', minLength: 1, description: 'When set, return knowledge related to this node.' },
         cursor: { type: 'string', minLength: 1 },
         limit: { type: 'integer', minimum: 1, maximum: MAX_LIMIT },
       },
@@ -243,37 +253,39 @@ export function createKnowledgeTools(
         namePrefix,
         kind,
         hasContent,
-        nodeId,
+        node: nodeReference,
         cursor,
         limit: requestedLimit,
       } = input as {
         namePrefix?: string;
         kind?: string;
         hasContent?: boolean;
-        nodeId?: string;
+        node?: string;
         cursor?: string;
         limit?: number;
       };
       const scope = fixedScope ?? resolveScope(context as KnowledgeToolContext);
       const limit = normalizeLimit(requestedLimit);
       const store = await getKnowledgeStore(memory);
-      if (nodeId) {
-        const node = await store.getNode(nodeId);
+      if (nodeReference) {
+        const node = await store.getNode(nodeReference);
         if (!node || node.mergedInto || !isKnowledgeScopeVisible(node.scope, scope)) return { found: false };
-        const result = await store.itemsTouching({ nodeId, scope, after: cursor, limit });
+        const result = await store.knowledgeRelatedTo({ node, scope, after: cursor, limit });
         return {
           found: true,
           node: serializeNode(node),
-          items: result.items.map(serializeItem),
+          records: result.records.map(serializeRecord),
           nextCursor: result.nextCursor,
         };
       }
       const nodes = await store.listNodes({ scope, namePrefix, kind, hasContent, cursor, limit: limit + 1 });
       const hasMore = nodes.length > limit;
-      const records = nodes.slice(0, limit);
+      const visibleNodes = nodes.slice(0, limit);
       return {
-        records: records.map(serializeNode),
-        nextCursor: hasMore ? createKnowledgeNodeCursor(records.at(-1)!, { namePrefix, kind, hasContent }) : undefined,
+        nodes: visibleNodes.map(serializeNode),
+        nextCursor: hasMore
+          ? createKnowledgeNodeCursor(visibleNodes.at(-1)!, { namePrefix, kind, hasContent })
+          : undefined,
       };
     },
   });
