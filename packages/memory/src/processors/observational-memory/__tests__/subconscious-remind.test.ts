@@ -310,6 +310,7 @@ describe('Subconscious remind', () => {
         resolutionScope: ['org:acme', 'resource:user-42', 'thread:alpha'],
         defaultScope: ['org:acme', 'resource:user-42'],
       });
+      context.mainAgent.getModel = vi.fn(async () => createModel(`The launch happens January 15. Source: ${item.id}`));
 
       vi.advanceTimersByTime(31 * 60 * 1000);
 
