@@ -165,6 +165,40 @@ describe('FactoryTransitionService', () => {
     expect(onTerminalStage).toHaveBeenCalledOnce();
   });
 
+  it('arms autonomy when a person moves a card, so its follow-up runs instead of parking', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['intake'] });
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+    });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeNull();
+
+    const result = await service.transition({ ...request(item, { stage: 'triage' }), cause: 'board_drag' });
+
+    expect(result.status).toBe('accepted');
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeInstanceOf(Date);
+  });
+
+  it('leaves autonomy unarmed when the mover is not a person', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['intake'] });
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+    });
+
+    const result = await service.transition({
+      ...request(item, { stage: 'triage' }),
+      actor: { type: 'system', id: 'reconciler' },
+      ingress: { type: 'rule', identity: 'rule-1' },
+      cause: 'board_drag',
+    });
+
+    expect(result.status).toBe('accepted');
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeNull();
+  });
+
   it('queues an urgent wake-up when a board drag has no skill follow-up', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['triage'] });

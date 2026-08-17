@@ -131,6 +131,14 @@ function deferredActor(record: FactoryDeferredDecisionRecord): FactoryRuleActor 
   return { type: 'system', id: 'factory-rule-dispatcher' };
 }
 
+/**
+ * A run that ended badly is not worth re-delivering: an aborted run was
+ * cancelled on purpose, usually by the very next decision for this item.
+ * Recording it as failed keeps the card honest without restarting work someone
+ * already superseded.
+ */
+class TerminalDispatchError extends Error {}
+
 function leaseIdentity(
   record: Pick<FactoryDeferredDecisionRecord | FactoryPendingStartRecord, 'id' | 'orgId' | 'factoryProjectId'>,
   ownerId: string,
@@ -337,7 +345,7 @@ export class FactoryDecisionDispatcher {
       const completed = await this.#storage.completeDeferredDecision(leaseIdentity(record, this.#ownerId), new Date());
       if (!completed) throw new Error('Factory decision lease was lost before completion.');
     } catch (error) {
-      const terminal = record.attempts >= MAX_ATTEMPTS;
+      const terminal = error instanceof TerminalDispatchError || record.attempts >= MAX_ATTEMPTS;
       await this.#storage.failDeferredDecision({
         ...leaseIdentity(record, this.#ownerId),
         now: new Date(),
@@ -469,8 +477,14 @@ export class FactoryDecisionDispatcher {
         const agentEnd = new Promise<void>(resolve => {
           resolveAgentEnd = resolve;
         });
+        // The run's own verdict, not the delivery's. A signal can reach the
+        // agent perfectly and the run still die on a provider error or be
+        // cancelled mid-flight; without this the decision reports success and
+        // the break is invisible on the card.
+        let endReason: 'complete' | 'aborted' | 'error' | 'suspended' | undefined;
         const unsubscribe = session.subscribe(event => {
           if (event.type === 'agent_end') {
+            endReason = event.reason;
             resolveAgentEnd();
           }
         });
@@ -503,6 +517,10 @@ export class FactoryDecisionDispatcher {
                 decisionId: record.id,
                 runId: settled.runId,
               });
+            } else if (endReason === 'error') {
+              throw new Error('Factory skill run ended in error.');
+            } else if (endReason === 'aborted') {
+              throw new TerminalDispatchError('Factory skill run was aborted before it finished.');
             }
           }
         } finally {

@@ -304,8 +304,11 @@ export const factory = new MastraFactory({
   vector,
   pubsub,
   platform: {
-    // Platform's GitHub App identity is not included in the Platform credentials.
-    // Reuse the deployment's configured App slug to ignore Factory's own handoff writes.
+    // The deployment's own self-hosted App slug, when one is configured. It is
+    // NOT Platform's identity: Platform posts as its own App, which names
+    // itself. Reusing this value for that purpose left self-recognition
+    // comparing against `undefined[bot]` on every Platform deployment, where
+    // this is legitimately unset.
     githubAppSlug,
   },
   // Browser-facing origin. On the platform the SPA is hosted separately, so

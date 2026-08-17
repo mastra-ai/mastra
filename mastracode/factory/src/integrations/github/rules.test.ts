@@ -4,6 +4,7 @@ import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
+import { GithubAppIdentity } from './app-identity.js';
 import type { GithubIntegration } from './integration.js';
 import { createGithubPullRequestReconciler, GithubRules } from './rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from './rules.js';
@@ -372,6 +373,68 @@ describe('GithubRules', () => {
     ).resolves.toEqual({ status: 'ignored' });
 
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+  });
+
+  it('ignores its own handoff comment when only the resolved identity names the App', async () => {
+    // Regression: a Platform deployment has no configured slug, because that
+    // slug names a *different*, self-hosted App. Recognition therefore has to
+    // come from the resolved identity. Without it Factory's own handoff woke
+    // triage and cancelled the run that had just written it.
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    await createLinkedIssue(workItems, project.id);
+    const service = new GithubRules({
+      github: {
+        ...github,
+        slug: undefined,
+        identity: new GithubAppIdentity('mastra-platform'),
+      } as unknown as GithubIntegration,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await expect(
+      service.ingest(
+        issueComment('created', 'delivery-platform-handoff', {
+          sender: 'mastra-platform[bot]',
+          author: 'mastra-platform[bot]',
+          body: '<!-- mastra-factory-triage -->\nRoute: Pending',
+        }),
+      ),
+    ).resolves.toEqual({ status: 'ignored' });
+
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+  });
+
+  it('still retriages a human handoff comment when the identity is resolved', async () => {
+    // The guard must key on authorship, not on the marker: a human quoting the
+    // marker to add a lead has to keep retriggering triage.
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    await createLinkedIssue(workItems, project.id);
+    const service = new GithubRules({
+      github: {
+        ...github,
+        slug: undefined,
+        identity: new GithubAppIdentity('mastra-platform'),
+      } as unknown as GithubIntegration,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await expect(
+      service.ingest(
+        issueComment('created', 'delivery-human-lead', {
+          body: '<!-- mastra-factory-triage -->\nNew investigation lead',
+        }),
+      ),
+    ).resolves.toEqual({ status: 'committed' });
+
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toHaveLength(1);
   });
 
   it('keeps trusted issues created before the Factory in Intake', async () => {

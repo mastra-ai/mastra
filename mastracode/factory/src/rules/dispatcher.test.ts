@@ -32,15 +32,16 @@ function createSession(
   options?: {
     signalAccepted?: Promise<{ accepted: true; action?: string }>;
     emitAgentEndDuringSignal?: boolean;
+    agentEndReason?: 'complete' | 'aborted' | 'error' | 'suspended';
   },
 ) {
   let threadId = 'thread-1';
   const consumeStream = vi.fn(async () => {});
   const notificationAccepted = accepted ?? Promise.resolve({ action: 'wake', output: { consumeStream } });
-  const agentEndListeners = new Set<(event: { type: string }) => void>();
-  const emitAgentEnd = () => {
+  const agentEndListeners = new Set<(event: { type: string; reason?: string }) => void>();
+  const emitAgentEnd = (reason = options?.agentEndReason) => {
     for (const listener of agentEndListeners) {
-      listener({ type: 'agent_end' });
+      listener({ type: 'agent_end', reason });
     }
   };
   const deliveredKeys = new Set<string>();
@@ -84,7 +85,7 @@ function createSession(
       }
       return { accepted: options?.signalAccepted ?? Promise.resolve({ accepted: true, action: 'deliver' }) };
     }),
-    subscribe: vi.fn((listener: (event: { type: string }) => void) => {
+    subscribe: vi.fn((listener: (event: { type: string; reason?: string }) => void) => {
       agentEndListeners.add(listener);
       return () => agentEndListeners.delete(listener);
     }),
@@ -1064,6 +1065,59 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+    expect(getAgentEndListenerCount()).toBe(0);
+  });
+
+  it.each([
+    { reason: 'error' as const, key: 'skill-run-error', expected: 'retry', message: 'ended in error' },
+    { reason: 'aborted' as const, key: 'skill-run-aborted', expected: 'failed', message: 'was aborted' },
+  ])('records a run that ended $reason instead of reporting success', async ({ reason, key, expected, message }) => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      arguments: 'Issue 42',
+      idempotencyKey: key,
+    });
+    await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        id: item.id,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Fix issue',
+          stages: ['execute'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'work',
+      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: PROJECT_ID,
+      kickoffKey: 'kickoff-null',
+      kickoffMessage: null,
+    });
+    const { controller, getAgentEndListenerCount } = createSession(undefined, {
+      signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+      emitAgentEndDuringSignal: true,
+      agentEndReason: reason,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(decision?.status).toBe(expected);
+    expect(decision?.lastError).toContain(message);
     expect(getAgentEndListenerCount()).toBe(0);
   });
 

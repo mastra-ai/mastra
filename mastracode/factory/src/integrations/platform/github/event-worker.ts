@@ -479,6 +479,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
     const sender = notification.metadata.sender;
     const repository = notification.metadata.repository;
     if (!sender || !repository) return false;
+    if (this.#github.identity?.matches(sender)) return true;
     if (isFactoryAppSender(sender, this.#github.slug)) return true;
     if (AUTHORIZED_BOTS.has(sender)) return true;
 

@@ -15,6 +15,7 @@ import type {
 } from '../../storage/domains/source-control/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
+import type { GithubAppIdentity } from './app-identity.js';
 import type { GithubRepositoryPermission } from './integration.js';
 import { changeRequestTargetKey } from './subscriptions.js';
 import type { ParsedGithubWebhook } from './webhook.js';
@@ -171,6 +172,13 @@ function pullRequestProvenance(data: Record<string, unknown> | undefined): Facto
 
 export interface GithubRulesIntegration {
   readonly slug?: string;
+  /**
+   * Factory's own GitHub login, used to ignore its own writes. Optional because
+   * not every integration can name itself; when absent, self-recognition falls
+   * back to the configured slug and, failing that, to content Factory stamps
+   * itself (see `FACTORY_TRIAGE_COMMENT_MARKER`).
+   */
+  readonly identity?: GithubAppIdentity;
   getRepositoryCollaboratorPermission(
     installationId: number,
     repoFullName: string,
@@ -190,6 +198,21 @@ export interface GithubRulesOptions {
 
 export class GithubRules {
   constructor(private readonly options: GithubRulesOptions) {}
+
+  /**
+   * Whether a login is Factory itself. Prefers the resolved identity, which is
+   * observed from Factory's own writes, and falls back to the configured slug.
+   * An unset slug must not silently answer "not Factory" — that is what
+   * disabled every self-loop guard.
+   */
+  #isFactoryLogin(login: string | undefined): boolean {
+    const identity = this.options.github.identity;
+    if (identity?.known) return identity.matches(login);
+    const slug = this.options.github.slug?.trim();
+    if (!slug || !login) return false;
+    return login.toLowerCase() === `${slug.toLowerCase()}[bot]`;
+  }
+
 
   async ingest(parsed: ParsedGithubWebhook): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
     const event = eventName(parsed);
@@ -279,8 +302,13 @@ export class GithubRules {
       installationId,
       repository: repositoryName,
       login,
-      factoryAuthored: (!senderIsResponder && provenance !== null) || login === `${this.options.github.slug}[bot]`,
+      factoryAuthored: (!senderIsResponder && provenance !== null) || this.#isFactoryLogin(login),
     });
+    // A marked handoff comment is ignored only when Factory authored it: a
+    // human may quote the marker to add an investigation lead, and that must
+    // still retrigger triage. Recognising the author is therefore the whole
+    // guard — when identity cannot be resolved this fails open and Factory's
+    // own handoff cancels the run that wrote it.
     if (
       actor.type === 'github' &&
       actor.factoryAuthored &&
@@ -370,7 +398,7 @@ export class GithubRules {
         ? {
             reviewRequest: {
               reviewer: requestedReviewer,
-              factoryReviewer: requestedReviewer === `${this.options.github.slug}[bot]`,
+              factoryReviewer: this.#isFactoryLogin(requestedReviewer),
             },
           }
         : {}),

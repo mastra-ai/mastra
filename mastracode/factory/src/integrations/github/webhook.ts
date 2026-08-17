@@ -3,6 +3,7 @@ import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { NotificationPriority } from '@mastra/core/notifications';
 import { RequestContext } from '@mastra/core/request-context';
 import type { Context } from 'hono';
+import { GithubAppIdentity } from './app-identity.js';
 import type { GithubIntegration, GithubRepositoryPermission } from './integration.js';
 import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from './subscriptions.js';
 import type {
@@ -73,6 +74,12 @@ export type FactorySessionOwner = { userId: string; orgId: string };
 export interface GithubWebhookDispatchIntegration {
   /** App slug, used to recognize Factory's own bot identity. */
   readonly slug?: string;
+  /**
+   * Resolved identity of the App this integration posts as. Preferred over
+   * {@link slug}, which names the deployment's own self-hosted App and is unset
+   * on deployments that run against Platform's App.
+   */
+  readonly identity?: GithubAppIdentity;
   readonly integrationStorage: GithubSubscriptionStorage;
   readonly sourceControlStorage: {
     sessions: { getBySessionId(sessionId: string): Promise<FactorySessionOwner | null> };
@@ -399,12 +406,15 @@ export function isFactoryAppSender(sender: string | undefined, slug: string | un
 
 async function isAuthorizedGithubSender(
   notification: GithubWebhookNotification,
-  github: Pick<GithubWebhookDispatchIntegration, 'getRepositoryCollaboratorPermission' | 'slug'> | undefined,
+  github:
+    | Pick<GithubWebhookDispatchIntegration, 'getRepositoryCollaboratorPermission' | 'slug' | 'identity'>
+    | undefined,
 ): Promise<boolean> {
   if (!AUTHOR_GATED_KINDS.has(notification.kind)) return true;
   const sender = notification.metadata.sender;
   const repository = notification.metadata.repository;
   if (!sender || !repository) return false;
+  if (github?.identity?.matches(sender)) return true;
   if (isFactoryAppSender(sender, github?.slug)) return true;
   const normalizedSender = sender.toLowerCase();
   if (notification.metadata.senderType?.toLowerCase() === 'bot' || normalizedSender.endsWith('[bot]')) {
