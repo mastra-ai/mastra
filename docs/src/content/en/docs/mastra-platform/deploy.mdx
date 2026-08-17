@@ -206,7 +206,7 @@ mastra deploy --env production --yes
 
 ## Migrating from server and studio deploys
 
-`mastra server deploy` and `mastra studio deploy` are the earlier split deploy paths. They're being **removed on October 30, 2026**. After that date both commands will fail and legacy-pipeline projects can't deploy a new build until they migrate.
+`mastra server deploy` and `mastra studio deploy` are the earlier split deploy paths. They'll be **removed in the Mastra 2.0 major release**. Once removed, both commands will fail and legacy-pipeline projects can't deploy a new build until they migrate.
 
 Existing deployed services keep running. This only affects your ability to publish new deploys.
 
@@ -289,7 +289,7 @@ The deploy log is the source of truth: the legacy pipeline prints a deprecation 
 
 **My deploy fails with `MASTRA_CORE_TOO_OLD`.** The environment pipeline requires `@mastra/core` `>= 1.44`. Upgrade `@mastra/core` and redeploy.
 
-**My organization isn't opted in yet.** Contact support. Opt-in will be automatic before the October 30, 2026 cutoff.
+**My organization isn't opted in yet.** Contact support. Opt-in will be automatic before Mastra 2.0 is released.
 
 **Can I roll back?** Yes. Environments retain deploy history and you can redeploy any prior successful artifact from the dashboard.
 
