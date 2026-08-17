@@ -88,7 +88,7 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         defaultScope: resource,
       });
 
-      expect((await store.knowledgeAbout({ node, scope: ['org:acme'] })).records).toHaveLength(1);
+      expect((await store.listKnowledgeAbout({ node, scope: ['org:acme'] })).records).toHaveLength(1);
       expect(await store.search({ query: 'organization-visible', scope: ['org:acme'] })).toEqual([
         expect.objectContaining({ type: 'record', recordId: node.id, scope: ['org:acme'] }),
       ]);
@@ -105,12 +105,12 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         resolutionScope: thread,
         defaultScope: resource,
       });
-      expect((await store.knowledgeMentioning({ node: marco, scope: thread })).records[0]?.id).toBe(record.id);
-      expect((await store.knowledgeRelatedTo({ node: marco, scope: thread })).records[0]?.id).toBe(record.id);
+      expect((await store.listKnowledgeMentioning({ node: marco, scope: thread })).records[0]?.id).toBe(record.id);
+      expect((await store.listKnowledgeRelatedTo({ node: marco, scope: thread })).records[0]?.id).toBe(record.id);
       await store.removeKnowledge({ id: record.id, deletedBy: 'curator' });
       expect(await store.getKnowledge({ id: record.id })).toBeNull();
       await store.restoreKnowledge({ id: record.id });
-      expect((await store.knowledgeRelatedTo({ node: marco, scope: thread })).records[0]?.id).toBe(record.id);
+      expect((await store.listKnowledgeRelatedTo({ node: marco, scope: thread })).records[0]?.id).toBe(record.id);
     });
 
     it('rejects merges whose target is narrower than the source alias', async () => {
@@ -149,7 +149,7 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         defaultScope: resource,
       });
       expect(
-        (await store.knowledgeRelatedTo({ node: target.id, scope: thread })).records.map(record => record.id),
+        (await store.listKnowledgeRelatedTo({ node: target.id, scope: thread })).records.map(record => record.id),
       ).toContain(postMergeKnowledge.id);
       expect((await store.createNode({ name: 'Jane Doe', kind: 'person', scope: resource })).id).toBe(target.id);
       const fallbackKnowledge = await store.appendKnowledge({
@@ -161,7 +161,7 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         defaultScope: resource,
       });
       expect(
-        (await store.knowledgeRelatedTo({ node: target.id, scope: thread })).records.map(record => record.id),
+        (await store.listKnowledgeRelatedTo({ node: target.id, scope: thread })).records.map(record => record.id),
       ).toContain(fallbackKnowledge.id);
 
       const beforeRescope = (await store.listSemanticOutbox()).length;
