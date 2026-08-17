@@ -1,19 +1,23 @@
 ---
 title: "Reference: createCodingAgent() | Coding Agent"
-description: "API reference for createCodingAgent(), a factory that builds a coding agent with portable defaults for workspace, task signal, error retries, and goal judge."
+description: "API reference for createCodingAgent(), which builds a coding agent with portable defaults for workspace, task signal, error retries, and goal judge."
 packages:
   - "@mastra/core"
 ---
 
 # createCodingAgent()
 
-`createCodingAgent()` builds a coding [`Agent`](/reference/agents/agent) with portable defaults for the pieces a coding agent always needs: a local workspace, the task-list signal provider, network-retry error processors, and the goal judge prompt. Supply only `model`, `instructions`, and `tools` to get a working agent, or override any default.
+**Added in:** `@mastra/core@1.48.0`
+
+`createCodingAgent()` builds a coding [`Agent`](/reference/agents/agent) with portable defaults for the pieces a coding agent always needs: a local workspace, the task-list signal provider, network-retry error processors, and the goal judge prompt. Supply only `model` and `instructions` to get a working agent, or override any default.
 
 The returned value is a standard `Agent`, so it works anywhere an `Agent` does: including as the agent passed to an [`AgentController`](/reference/agent-controller/agent-controller-class).
 
+For an introduction to coding agents and each default in context, see [Coding agents](/docs/agents/coding-agent).
+
 ## Usage example
 
-Pass a model, instructions, and tools. The factory fills in the workspace, task signal, error processors, and goal prompt:
+Pass a model and instructions. `createCodingAgent()` fills in the workspace, task signal, error processors, and goal prompt:
 
 ```typescript title="src/mastra/coding-agent.ts"
 import { createCodingAgent } from '@mastra/core/coding-agent'
@@ -23,13 +27,14 @@ const agent = createCodingAgent({
   name: 'My Coding Agent',
   model: '__GATEWAY_OPENAI_MODEL_BASE__',
   instructions: 'You are a helpful coding assistant.',
-  tools: {},
 })
 ```
 
+The agent receives the [workspace tools](/reference/workspace/workspace-class#filesystem-tools) for its resolved workspace, so `tools` is only needed for capabilities beyond the workspace.
+
 ## Parameters
 
-`createCodingAgent()` accepts every field of [`AgentConfig`](/reference/agents/agent#constructor-parameters) plus the fields below. Fields you provide always take precedence over the factory defaults.
+`createCodingAgent()` accepts every field of [`AgentConfig`](/reference/agents/agent#constructor-parameters) plus the fields below. Fields you provide always take precedence over the defaults.
 
 <PropertiesTable
   content={[
@@ -53,7 +58,7 @@ const agent = createCodingAgent({
     name: 'workspace',
     type: 'AnyWorkspace | undefined',
     description:
-      'The workspace backing the agent. When the key is omitted, a default local workspace is built. When set explicitly to undefined, the factory builds no default — opt out when the workspace is wired elsewhere (for example at the AgentController level).',
+      'The workspace backing the agent. When the key is omitted, a default local workspace is built. When set explicitly to undefined, no default is built. Opt out this way when the workspace is wired elsewhere, for example at the AgentController level.',
     isOptional: true,
   },
   {
@@ -66,7 +71,8 @@ const agent = createCodingAgent({
   {
     name: 'signals',
     type: 'SignalProvider[]',
-    description: 'Signal providers for the agent. When omitted, defaults to a single TaskSignalProvider.',
+    description:
+      'Signal providers for the agent. A TaskSignalProvider is added only when memory is configured, and it is merged into the providers you pass rather than replacing them. Without memory, the agent gets exactly the providers you pass, or none.',
     isOptional: true,
   },
   {
@@ -100,18 +106,18 @@ const agent = createCodingAgent({
 
 ## Defaults
 
-The factory only fills a default when you don't provide the corresponding field. Caller-provided values always win.
+A default is only filled in when you don't provide the corresponding field. Caller-provided values always win.
 
 | Field | Default when omitted |
 | - | - |
 | `workspace` | A [`Workspace`](/reference/workspace/workspace-class) backed by `LocalFilesystem` and `LocalSandbox` rooted at the base path. |
-| `signals` | A single [`TaskSignalProvider`](/reference/signals/task-signal-provider). |
+| `signals` | A [`TaskSignalProvider`](/reference/signals/task-signal-provider), added only when `memory` is configured. |
 | `errorProcessors` | Unknown stream-error retries with specialized ECONNRESET and bad-request policies, plus `PrefillErrorHandler` and `ProviderHistoryCompat`. |
 | `goal.prompt` | `DEFAULT_GOAL_JUDGE_PROMPT` (only when a `goal` is configured). |
 
 ### Workspace
 
-When the `workspace` key is omitted, the factory builds a local workspace rooted at `basePath` (default `process.cwd()`):
+When the `workspace` key is omitted, a local workspace rooted at `basePath` (default `process.cwd()`) is built:
 
 ```typescript
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'
@@ -130,10 +136,13 @@ const agent = createCodingAgent({
   name: 'My Coding Agent',
   model: '__GATEWAY_OPENAI_MODEL_BASE__',
   instructions: 'You are a helpful coding assistant.',
-  tools: {},
   workspace: undefined, // opt out of the default workspace
 })
 ```
+
+### Signals
+
+`TaskSignalProvider` needs a memory-backed thread, so it's only added when `memory` is configured. With memory configured, the provider is merged into any `signals` you pass, which keeps task tracking from being dropped by custom providers. Passing `signals: []` alongside `memory` still yields the task provider. To run a memory-backed agent with no task tracking, configure the agent with [`new Agent()`](/reference/agents/agent) instead. Before `@mastra/core@1.49.0`, the provider was always added, which failed in memoryless contexts.
 
 ### Error processors
 
@@ -147,6 +156,7 @@ Specific network-reset and bad-request policies take precedence over the unknown
 
 ## Related
 
+- [Coding agents](/docs/agents/coding-agent)
 - [`buildBasePrompt()`](/reference/coding-agent/build-base-prompt)
 - [`Agent`](/reference/agents/agent)
 - [`AgentController`](/reference/agent-controller/agent-controller-class)

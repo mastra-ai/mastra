@@ -1,0 +1,181 @@
+---
+title: "Coding agents | Agents"
+description: "Create an agent that works in a codebase, with workspace, task tracking, and retry defaults already wired."
+packages:
+  - "@mastra/core"
+---
+
+# Coding agents
+
+**Added in:** `@mastra/core@1.48.0`
+
+A coding agent works inside a project. It needs files it can edit and a shell it can run commands in, plus a way to survive the long runs that real code changes take. [`createCodingAgent()`](/reference/coding-agent/create-coding-agent) returns a standard [`Agent`](/reference/agents/agent) with those pieces already wired.
+
+It's a construction function that lives in `@mastra/core`, with no hosted service behind it. Everything it sets up is a Mastra primitive you can also configure by hand on `new Agent()`. The value it returns is an ordinary `Agent`, so it works anywhere an agent works, including inside an [`AgentController`](/docs/harness/agent-controller).
+
+## When to use a coding agent
+
+Use `createCodingAgent()` when the agent's job involves a codebase, so it needs a filesystem and a shell rather than only HTTP tools. Reach for `new Agent()` instead when you want none of the defaults below, or when you already assemble a workspace, signals, and processors yourself.
+
+The defaults match the ones [Mastra Code](https://code.mastra.ai) runs on, so you start from a configuration that's already been used against real repositories. The prompt, modes, and tools that make up the Mastra Code product aren't included. `createCodingAgent()` only sets up the runtime pieces described here.
+
+## Quickstart
+
+Pass a model and instructions. Nothing else is required:
+
+```typescript title="src/mastra/agents/coding-agent.ts"
+import { createCodingAgent } from '@mastra/core/coding-agent'
+
+export const codingAgent = createCodingAgent({
+  id: 'coding-agent',
+  name: 'Coding agent',
+  instructions: 'You are a helpful coding assistant. Work in the current project.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+
+const result = await codingAgent.generate('Which test files mention the /health endpoint?')
+```
+
+The agent can answer that question without any `tools` of your own. Because it has a workspace, Mastra gives it the [workspace tools](/docs/sandbox/overview#using-the-sandbox) for reading, writing, editing, listing, and grepping files, plus running commands, and it adds a description of the workspace to the system prompt. Add your own `tools` when the agent also needs to reach outside the project, for example to open a pull request.
+
+:::warning
+
+The default workspace runs commands on the host machine with the permissions of your application process. See [Workspace](#workspace) for how to swap in an isolated sandbox.
+
+:::
+
+## Defaults
+
+`createCodingAgent()` accepts every [`Agent`](/reference/agents/agent#constructor-parameters) option and fills in four of them when you leave them out. Your value always wins:
+
+| Field | Default when omitted | How to opt out |
+| - | - | - |
+| `workspace` | Local filesystem and sandbox rooted at `basePath` (`process.cwd()`) | `workspace: undefined` |
+| `signals` | Task tracking through [`TaskSignalProvider`](/reference/signals/task-signal-provider), only when `memory` is set | Omit `memory`, or don't configure memory on this agent |
+| `errorProcessors` | Retries for dropped connections and other transient model errors | `errorProcessors: []` |
+| `goal.prompt` | The built-in goal judge prompt, only when you configure a `goal` | Pass your own `goal.prompt` |
+
+Nothing else is added. There's no default model, instructions, tools, memory, storage, or processors.
+
+### Workspace
+
+A [`Workspace`](/reference/workspace/workspace-class) is what gives an agent files and a shell. When you don't pass one, `createCodingAgent()` builds this:
+
+```typescript
+import { LocalFilesystem, LocalSandbox, Workspace } from '@mastra/core/workspace'
+
+new Workspace({
+  filesystem: new LocalFilesystem({ basePath }),
+  sandbox: new LocalSandbox({ workingDirectory: basePath }),
+})
+```
+
+Point it somewhere else with `basePath`, or pass a `workspace` of your own to run in a remote sandbox. A custom workspace can also mount cloud storage or resolve a separate environment per user or thread:
+
+```typescript title="src/mastra/agents/coding-agent.ts" {10-12}
+import { createCodingAgent } from '@mastra/core/coding-agent'
+import { Workspace } from '@mastra/core/workspace'
+import { DaytonaSandbox } from '@mastra/daytona'
+
+export const codingAgent = createCodingAgent({
+  id: 'coding-agent',
+  name: 'Coding agent',
+  instructions: 'You are a helpful coding assistant.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  workspace: new Workspace({
+    sandbox: new DaytonaSandbox(),
+  }),
+})
+```
+
+Set `workspace: undefined` explicitly when the workspace is wired elsewhere, such as on the Mastra instance or on an [`AgentController`](/docs/harness/agent-controller). An omitted key builds the default. An explicit `undefined` builds nothing.
+
+:::note
+
+Visit [Sandbox](/docs/sandbox/overview) for the available backends, isolation options, and tool configuration, including how to require approval before a command runs.
+
+:::
+
+### Task tracking
+
+Long coding requests turn into several steps, and a task list keeps the agent honest about which ones are done. When the agent has `memory`, `createCodingAgent()` registers [`TaskSignalProvider`](/reference/signals/task-signal-provider), which adds the `task_write`, `task_update`, `task_complete`, and `task_check` [task tools](/reference/tools/task-tools) and persists the list in thread state:
+
+```typescript title="src/mastra/agents/coding-agent.ts" {9}
+import { createCodingAgent } from '@mastra/core/coding-agent'
+import { Memory } from '@mastra/memory'
+
+export const codingAgent = createCodingAgent({
+  id: 'coding-agent',
+  name: 'Coding agent',
+  instructions: 'Plan multi-step work with the task tools, then carry it out.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory(),
+})
+```
+
+Task state lives in a memory-backed thread, so a memoryless agent gets no task tools. Your own `signals` are kept and the task provider is added alongside them. To run a memory-backed agent without task tracking, configure the signals on `new Agent()` directly.
+
+### Error retries
+
+Model calls fail mid-stream, and a coding run that dies after ten minutes of work is expensive. The default [`StreamErrorRetryProcessor`](/reference/processors/stream-error-retry-processor) retries transient failures and leaves permanent ones alone:
+
+- Network resets (`ECONNRESET` and `socket hang up`) retry twice with exponential backoff, starting at `1000ms` and capped at `30000ms`.
+- Bad-request errors retry once after `2000ms`.
+- Other unrecognized stream errors retry twice after `3000ms`. Authorization failures surface immediately.
+
+[`PrefillErrorHandler`](/reference/processors/prefill-error-handler) and [`ProviderHistoryCompat`](/reference/processors/provider-history-compat) are included as well. Both recover from errors caused by the shape of the message history, such as a provider rejecting a conversation that ends with an assistant message, by repairing the history and retrying.
+
+Passing `errorProcessors` replaces this stack instead of adding to it. Pass `[]` for no error processors at all.
+
+### Goals
+
+A [goal](/docs/harness/goals) keeps the agent working toward an objective across many loop iterations, which suits tasks like "get the test suite passing". `createCodingAgent()` doesn't set a goal. When you configure one and leave out the prompt, it fills in the built-in goal judge prompt:
+
+```typescript title="src/mastra/agents/coding-agent.ts" {10-13}
+import { createCodingAgent } from '@mastra/core/coding-agent'
+import { Memory } from '@mastra/memory'
+
+export const codingAgent = createCodingAgent({
+  id: 'coding-agent',
+  name: 'Coding agent',
+  instructions: 'You are a helpful coding assistant.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory(),
+  goal: {
+    judge: '__GATEWAY_OPENAI_MODEL_MINI__',
+    maxRuns: 50,
+  },
+})
+```
+
+## Instructions for coding work
+
+`instructions` stay yours. When you'd rather start from the behavioral prompt Mastra Code uses, covering how to explore a repository, edit files, run commands, and write commits, build it with [`buildBasePrompt()`](/reference/coding-agent/build-base-prompt) and pass the result:
+
+```typescript title="src/mastra/agents/coding-agent.ts" {6-13}
+import { buildBasePrompt, createCodingAgent } from '@mastra/core/coding-agent'
+
+export const codingAgent = createCodingAgent({
+  id: 'coding-agent',
+  name: 'Coding agent',
+  instructions: buildBasePrompt({
+    projectPath: process.cwd(),
+    projectName: 'my-app',
+    platform: process.platform,
+    date: new Date().toDateString(),
+    mode: 'build',
+    toolGuidance: '',
+  }),
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+```
+
+`productName`, `coAuthorName`, and `coAuthorEmail` rebrand the prompt header and the commit trailer, so you can reuse the prompt in your own product without forking it.
+
+## Related
+
+- [`createCodingAgent()` reference](/reference/coding-agent/create-coding-agent)
+- [`buildBasePrompt()` reference](/reference/coding-agent/build-base-prompt)
+- [AgentController](/docs/harness/agent-controller)
+- [Goals](/docs/harness/goals)
+- [Sandbox](/docs/sandbox/overview)

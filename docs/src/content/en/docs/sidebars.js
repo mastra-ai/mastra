@@ -77,6 +77,14 @@ const sidebars = {
                 tags: ['new'],
               },
             },
+            {
+              type: 'doc',
+              id: 'agents/coding-agent',
+              label: 'Coding Agents',
+              customProps: {
+                tags: ['new'],
+              },
+            },
           ],
         },
         {
