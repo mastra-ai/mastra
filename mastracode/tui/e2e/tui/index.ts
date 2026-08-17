@@ -109,6 +109,7 @@ import {
   pluginsStreamingToolOutputScenario,
 } from './plugins.js';
 import { processShortcutsScenario } from './process-shortcuts.js';
+import { profileCommandScenario } from './profile-command.js';
 import { promptContextInstructionsScenario } from './prompt-context-instructions.js';
 import { promptQueueInterleaveScenario } from './prompt-queue-interleave.js';
 import { providerHistoryCompatScenario } from './provider-history-compat.js';
@@ -289,6 +290,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'provider-history-rejection-retry': providerHistoryRejectionRetryScenario,
   'prompt-context-instructions': promptContextInstructionsScenario,
   'prompt-queue-interleave': promptQueueInterleaveScenario,
+  'profile-command': profileCommandScenario,
   'prune-command': pruneCommandScenario,
   'quiet-settings': quietSettingsScenario,
   'quiet-streaming-preview-height': quietStreamingPreviewHeightScenario,

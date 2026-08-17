@@ -41,3 +41,4 @@ export { handleGithubCommand } from './github.js';
 export { handleGoalCommand, handleJudgeCommand } from './goal.js';
 export { handleWorkflowsCommand } from './workflows.js';
 export { handlePruneCommand } from './prune.js';
+export { handleProfileCommand } from './profile.js';

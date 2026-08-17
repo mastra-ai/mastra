@@ -12,6 +12,7 @@ import type { HookManager } from '@mastra/code-sdk/hooks/index';
 import type { McpManager } from '@mastra/code-sdk/mcp/manager';
 import { loadSettings } from '@mastra/code-sdk/onboarding/settings';
 import type { PluginManager } from '@mastra/code-sdk/plugins/manager';
+import type { ProcessMemoryDiagnostics } from '@mastra/code-sdk/process-memory-diagnostics';
 import { detectProject } from '@mastra/code-sdk/utils/project';
 import type { ProjectInfo } from '@mastra/code-sdk/utils/project';
 import type { SlashCommandMetadata } from '@mastra/code-sdk/utils/slash-command-loader';
@@ -143,6 +144,9 @@ export interface MastraTUIOptions {
 
   /** Storage maintenance handle for /prune (retention pruning + disk reclamation). */
   storageMaintenance?: StorageMaintenance;
+
+  /** Process-wide memory diagnostics handle for /profile. */
+  processMemoryDiagnostics?: ProcessMemoryDiagnostics;
 
   /** Optional terminal injection for in-process tests. Defaults to ProcessTerminal. */
   terminal?: Terminal;

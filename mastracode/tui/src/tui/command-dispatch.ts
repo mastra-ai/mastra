@@ -47,6 +47,7 @@ import {
   handleGoalCommand,
   handleWorkflowsCommand,
   handlePruneCommand,
+  handleProfileCommand,
 } from './commands/index.js';
 import { isCurrentThreadActive, sendSlashCommandMessage } from './commands/send-slash-command-message.js';
 import type { SlashCommandContext } from './commands/types.js';
@@ -218,6 +219,9 @@ export async function dispatchSlashCommand(
       return true;
     case 'prune':
       await handlePruneCommand(ctx, args);
+      return true;
+    case 'profile':
+      await handleProfileCommand(ctx, args);
       return true;
     case 'diff':
       await handleDiffCommand(ctx, args[0]);

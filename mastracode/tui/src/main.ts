@@ -139,6 +139,7 @@ async function tuiMain(pipedInput?: string | null) {
     mcpManager,
     pluginManager: result.pluginManager,
     storageMaintenance: result.storageMaintenance,
+    processMemoryDiagnostics,
     appName: 'Mastra Code',
     version: getCurrentVersion(),
     inlineQuestions: true,

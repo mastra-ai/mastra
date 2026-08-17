@@ -238,6 +238,16 @@ describe('setupKeyboardShortcuts', () => {
       'debug',
     ]);
     expect(githubCommand?.getArgumentCompletions?.('un').map(command => command.value)).toEqual(['unsubscribe']);
+    const profileCommand = autocompleteProviders[0]?.commands.find(command => command.name === 'profile') as
+      | { getArgumentCompletions?: (prefix: string) => Array<{ value: string }> }
+      | undefined;
+    expect(profileCommand?.getArgumentCompletions?.('').map(command => command.value)).toEqual([
+      'status',
+      'start',
+      'capture',
+      'stop',
+    ]);
+    expect(profileCommand?.getArgumentCompletions?.('ca').map(command => command.value)).toEqual(['capture']);
     expect(commandNames.indexOf('thread')).toBeLessThan(commandNames.indexOf('threads'));
     expect(commandNames).toContain('skill/');
     expect(commandNames).toContain('memory');

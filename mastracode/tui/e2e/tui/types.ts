@@ -83,6 +83,7 @@ export type ScenarioName =
   | 'provider-history-rejection-retry'
   | 'prompt-context-instructions'
   | 'prompt-queue-interleave'
+  | 'profile-command'
   | 'prune-command'
   | 'visible-commands'
   | 'integration-commands'
@@ -218,7 +219,9 @@ export type McE2eStartMastraCodeAppOptions = {
   onTuiCreated?: (tui: unknown) => Promise<void> | void;
   setupDebugLogging?: boolean;
   startupWarnings?: string[];
-  tui?: Partial<Pick<MastraTUIOptions, 'appName' | 'initialMessage' | 'inlineQuestions' | 'verbose'>>;
+  tui?: Partial<
+    Pick<MastraTUIOptions, 'appName' | 'initialMessage' | 'inlineQuestions' | 'processMemoryDiagnostics' | 'verbose'>
+  >;
 };
 
 export type McE2eInProcessAppContext = McE2ePrepareContext & {

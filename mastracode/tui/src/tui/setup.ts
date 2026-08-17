@@ -460,6 +460,17 @@ export function setupAutocomplete(state: TUIState): void {
         ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
     },
     {
+      name: 'profile',
+      description: 'Control process memory diagnostics',
+      getArgumentCompletions: (argumentPrefix: string) =>
+        [
+          { value: 'status', label: 'status', description: 'Show diagnostics status and latest process sample' },
+          { value: 'start', label: 'start', description: 'Start process memory diagnostics' },
+          { value: 'capture', label: 'capture', description: 'Persist an allocation profile without forcing GC' },
+          { value: 'stop', label: 'stop', description: 'Write final artifacts and stop diagnostics' },
+        ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
+    },
+    {
       name: 'prune',
       description: 'Prune old storage data (closes the TUI, shows progress)',
       getArgumentCompletions: (argumentPrefix: string) =>

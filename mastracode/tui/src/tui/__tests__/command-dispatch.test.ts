@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   handleOMCommand: vi.fn().mockResolvedValue(undefined),
   handleMastraGatewayCommand: vi.fn().mockResolvedValue(undefined),
   handlePluginsCommand: vi.fn().mockResolvedValue(undefined),
+  handleProfileCommand: vi.fn().mockResolvedValue(undefined),
   processSlashCommand: vi.fn().mockResolvedValue('custom output'),
   startGoalWithDefaults: vi.fn().mockResolvedValue(undefined),
   showError: vi.fn(),
@@ -63,6 +64,7 @@ vi.mock('../commands/index.js', () => ({
   handleGoalCommand: mocks.handleGoalCommand,
   handleWorkflowsCommand: mocks.handleWorkflowsCommand,
   handleJudgeCommand: mocks.handleJudgeCommand,
+  handleProfileCommand: mocks.handleProfileCommand,
 }));
 
 vi.mock('../display.js', () => ({
@@ -98,6 +100,7 @@ describe('dispatchSlashCommand models routing', () => {
     mocks.handleOMCommand.mockClear();
     mocks.handleMastraGatewayCommand.mockClear();
     mocks.handlePluginsCommand.mockClear();
+    mocks.handleProfileCommand.mockClear();
     mocks.processSlashCommand.mockClear();
     mocks.startGoalWithDefaults.mockClear();
     mocks.showError.mockClear();
@@ -127,6 +130,23 @@ describe('dispatchSlashCommand models routing', () => {
       resourceId: 'resource-1',
       mode: 'build',
     });
+  });
+
+  it('routes /profile subcommands to handleProfileCommand', async () => {
+    const state = {
+      customSlashCommands: [],
+      session: {
+        identity: { getResourceId: vi.fn(() => 'resource-1') },
+        thread: { getId: vi.fn(() => 'thread-1') },
+        mode: { get: vi.fn(() => 'build') },
+      },
+    } as any;
+    const ctx = {} as any;
+
+    const handled = await dispatchSlashCommand('/profile capture', state, () => ctx);
+
+    expect(handled).toBe(true);
+    expect(mocks.handleProfileCommand).toHaveBeenCalledWith(ctx, ['capture']);
   });
 
   it('routes /custom-providers to handleCustomProvidersCommand', async () => {
