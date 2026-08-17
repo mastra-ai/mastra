@@ -117,7 +117,46 @@ function RouteHeaderOverrideProbe() {
   return <RouteHeaderCrumbs crumbs={[{ id: 'override', label: 'Override crumb' }]} />;
 }
 
+function renderRouteHeader() {
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/',
+        element: <RouteHeader />,
+        handle: {
+          crumbs: [
+            { id: 'agents', label: 'Agents', to: '/agents' },
+            { id: 'agent', label: 'Research assistant' },
+          ],
+        },
+      },
+    ],
+    { initialEntries: ['/'] },
+  );
+
+  render(<RouterProvider router={router} />);
+}
+
 describe('route header handles', () => {
+  describe('when a route provides breadcrumb data', () => {
+    it('renders the route heading for assistive technologies only', () => {
+      renderRouteHeader();
+
+      const heading = screen.getByRole('heading', { level: 1, name: 'Research assistant' });
+
+      expect(heading.classList.contains('sr-only')).toBe(true);
+    });
+
+    it('places the breadcrumb before the route heading', () => {
+      renderRouteHeader();
+
+      const breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' });
+      const heading = screen.getByRole('heading', { level: 1, name: 'Research assistant' });
+
+      expect(breadcrumb.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+  });
+
   it('every page under RootLayout inherits or declares breadcrumb data', () => {
     // Scope: only routes nested in the main RootLayout subtree are covered.
     // MinimalRootLayout pages (e.g. /agents/:agentId/session) and unauthenticated
@@ -234,7 +273,7 @@ describe('route header handles', () => {
 
     render(<RouterProvider router={router} />);
 
-    await waitFor(() => expect(screen.getByText('Override crumb')).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Override crumb' })).toBeTruthy());
     expect(screen.queryByText('Handle crumb')).toBeNull();
   });
 });

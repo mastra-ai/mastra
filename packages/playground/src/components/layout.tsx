@@ -76,21 +76,19 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
         {shouldShowSidebar && <AppSidebar />}
         <div className="flex h-full min-h-0 flex-col">
           {shouldShowSidebar && <MobileNavbar />}
-          {shouldShowSidebar && (
-            <div className="mx-1.5 mt-1 shrink-0 lg:mx-2 lg:mt-1.5">
-              <RouteHeader />
-            </div>
-          )}
-          <PageHeadingContext.Provider value={pageHeading}>
+          <PageHeadingContext.Provider value={shouldShowSidebar ? undefined : pageHeading}>
             <div
               className={cn(
-                'ml-0 mx-1.5 mb-1.5 flex-1 min-h-0 overflow-y-auto [--studio-frame-radius:1.5rem] [--studio-frame-inset:0.5rem] rounded-studio-frame border border-border1 bg-surface2 shadow-main-frame lg:mx-2 lg:mb-2 lg:ml-0',
-                shouldShowSidebar ? 'mt-0' : 'mt-1.5 lg:mt-2 h-[calc(100%-1.5rem)]',
+                'bg-surface2 flex min-h-0 flex-1 flex-col overflow-hidden',
+                shouldShowSidebar && 'border-border1 lg:border-l',
               )}
             >
-              <AuthRequired>
-                <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
-              </AuthRequired>
+              {shouldShowSidebar && <RouteHeader />}
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <AuthRequired>
+                  <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
+                </AuthRequired>
+              </div>
             </div>
           </PageHeadingContext.Provider>
         </div>
