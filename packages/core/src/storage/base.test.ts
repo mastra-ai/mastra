@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { MastraCompositeStore } from './base';
 import type { StorageMastraRef } from './base';
+import { InMemoryDB } from './domains/inmemory-db';
+import { InMemoryKnowledgeStorage } from './domains/knowledge';
 import { InMemoryStore } from './mock';
 
 /**
@@ -103,6 +105,16 @@ describe('MastraCompositeStore — default delegation (issue #16782)', () => {
     });
 
     await expect(composite.init()).rejects.toThrow('inner init failed');
+  });
+
+  it('initializes a knowledge domain override', async () => {
+    const knowledge = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
+    const knowledgeInitSpy = vi.spyOn(knowledge, 'init');
+    const composite = new MastraCompositeStore({ id: 'outer-knowledge', domains: { knowledge } });
+
+    await composite.init();
+
+    expect(knowledgeInitSpy).toHaveBeenCalledOnce();
   });
 });
 
