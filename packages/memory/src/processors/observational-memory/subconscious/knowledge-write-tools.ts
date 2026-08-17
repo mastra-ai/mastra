@@ -49,31 +49,31 @@ export function createKnowledgeWriteTools(
   options: KnowledgeWriteToolsOptions,
 ): Record<string, ToolAction<any, any, any>> {
   return {
-    knowledge_add_item: createTool({
-      id: 'knowledge_add_item',
-      description: 'Append a scoped item to an existing node. Provenance and capture time are stamped by code.',
+    knowledge_append: createTool({
+      id: 'knowledge_append',
+      description: 'Append a scoped record to an existing node. Provenance and capture time are stamped by code.',
       inputSchema: {
         type: 'object',
         properties: {
-          parentNodeId: { type: 'string', minLength: 1 },
+          node: { type: 'string', minLength: 1 },
           text: { type: 'string', minLength: 1 },
           scope: scopeLevelSchema,
           when: { type: 'string' },
         },
-        required: ['parentNodeId', 'text'],
+        required: ['node', 'text'],
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
-        const value = input as { parentNodeId: string; text: string; scope?: KnowledgeScopeLevel; when?: string };
+        const value = input as { node: string; text: string; scope?: KnowledgeScopeLevel; when?: string };
         const store = await getStore(memory);
-        const parent = await store.getNode(value.parentNodeId);
-        if (!parent || parent.mergedInto) throw new Error(`Knowledge node not found: ${value.parentNodeId}`);
+        const parent = await store.getNode(value.node);
+        if (!parent || parent.mergedInto) throw new Error(`Knowledge node not found: ${value.node}`);
         requireVisible(parent.scope, options, 'Knowledge node');
         const scope = resolveWriteScope(options, value.scope);
         const when = value.when ? new Date(value.when) : undefined;
-        if (when && Number.isNaN(when.getTime())) throw new Error('KnowledgeItem when must be a valid date.');
-        return store.appendItem({
-          parentNodeId: parent.id,
+        if (when && Number.isNaN(when.getTime())) throw new Error('KnowledgeRecord when must be a valid date.');
+        return store.appendKnowledge({
+          node: parent.id,
           text: value.text,
           scope,
           sourceThreadId: options.sourceThreadId,
@@ -84,21 +84,21 @@ export function createKnowledgeWriteTools(
         });
       },
     }),
-    knowledge_remove_item: createTool({
-      id: 'knowledge_remove_item',
-      description: 'Soft-delete a visible item. Curators cannot restore or physically erase KnowledgeItems.',
+    knowledge_remove: createTool({
+      id: 'knowledge_remove',
+      description: 'Soft-delete a visible record. Curators cannot restore or physically erase knowledge records.',
       inputSchema: {
         type: 'object',
-        properties: { itemId: { type: 'string', minLength: 1 } },
-        required: ['itemId'],
+        properties: { recordId: { type: 'string', minLength: 1 } },
+        required: ['recordId'],
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
         const store = await getStore(memory);
-        const item = await store.getItem({ id: (input as { itemId: string }).itemId, includeDeleted: true });
-        if (!item) throw new Error(`KnowledgeItem not found: ${(input as { itemId: string }).itemId}`);
-        requireVisible(item.scope, options, 'KnowledgeItem');
-        return store.removeItem({ id: item.id, deletedBy: CURATOR_IDENTITY });
+        const record = await store.getKnowledge({ id: (input as { recordId: string }).recordId, includeDeleted: true });
+        if (!record) throw new Error(`KnowledgeRecord not found: ${(input as { recordId: string }).recordId}`);
+        requireVisible(record.scope, options, 'KnowledgeRecord');
+        return store.removeKnowledge({ id: record.id, deletedBy: CURATOR_IDENTITY });
       },
     }),
     knowledge_update_node: createTool({
@@ -107,20 +107,20 @@ export function createKnowledgeWriteTools(
       inputSchema: {
         type: 'object',
         properties: {
-          nodeId: { type: 'string', minLength: 1 },
+          node: { type: 'string', minLength: 1 },
           expectedVersion: { type: 'integer', minimum: 1 },
           name: { type: 'string', minLength: 1 },
           kind: { type: 'string', minLength: 1 },
         },
-        required: ['nodeId', 'expectedVersion'],
+        required: ['node', 'expectedVersion'],
         anyOf: [{ required: ['name'] }, { required: ['kind'] }],
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
-        const value = input as { nodeId: string; expectedVersion: number; name?: string; kind?: string };
+        const value = input as { node: string; expectedVersion: number; name?: string; kind?: string };
         const store = await getStore(memory);
-        const node = await store.getNode(value.nodeId);
-        if (!node || node.mergedInto) throw new Error(`Knowledge node not found: ${value.nodeId}`);
+        const node = await store.getNode(value.node);
+        if (!node || node.mergedInto) throw new Error(`Knowledge node not found: ${value.node}`);
         requireVisible(node.scope, options, 'Knowledge node');
         return store.updateNode({
           id: node.id,
@@ -153,24 +153,24 @@ export function createKnowledgeWriteTools(
         return store.mergeNodes(value);
       },
     }),
-    knowledge_rescope_item: createTool({
-      id: 'knowledge_rescope_item',
-      description: 'Change a item visibility scope without exceeding its stamped ceiling.',
+    knowledge_rescope: createTool({
+      id: 'knowledge_rescope',
+      description: 'Change a record visibility scope without exceeding its stamped ceiling.',
       inputSchema: {
         type: 'object',
-        properties: { itemId: { type: 'string', minLength: 1 }, scope: scopeLevelSchema },
-        required: ['itemId', 'scope'],
+        properties: { recordId: { type: 'string', minLength: 1 }, scope: scopeLevelSchema },
+        required: ['recordId', 'scope'],
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
-        const value = input as { itemId: string; scope: KnowledgeScopeLevel };
+        const value = input as { recordId: string; scope: KnowledgeScopeLevel };
         const store = await getStore(memory);
-        const item = await store.getItem({ id: value.itemId });
-        if (!item) throw new Error(`KnowledgeItem not found: ${value.itemId}`);
-        requireVisible(item.scope, options, 'KnowledgeItem');
+        const record = await store.getKnowledge({ id: value.recordId });
+        if (!record) throw new Error(`KnowledgeRecord not found: ${value.recordId}`);
+        requireVisible(record.scope, options, 'KnowledgeRecord');
         const scope = resolveWriteScope(options, value.scope);
-        assertKnowledgeScopeWithinCeiling(scope, item.maxScope);
-        return store.rescopeItem({ id: item.id, scope });
+        assertKnowledgeScopeWithinCeiling(scope, record.maxScope);
+        return store.rescopeKnowledge({ id: record.id, scope });
       },
     }),
     knowledge_write_node_content: createTool({

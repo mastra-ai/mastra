@@ -85,16 +85,16 @@ describe('Subconscious knowledge read tools', () => {
       kind: 'secret',
       scope: ['org:acme', 'resource:user-42', 'thread:beta'],
     });
-    await store.appendItem({
-      parentNodeId: shared.id,
+    await store.appendKnowledge({
+      node: shared.id,
       text: '[[Maya Chen]] owns Atlas.',
       scope: ['org:acme', 'resource:user-42'],
       sourceThreadId: 'alpha',
       resolutionScope: ['org:acme', 'resource:user-42', 'thread:alpha'],
       defaultScope: ['org:acme', 'resource:user-42'],
     });
-    await store.appendItem({
-      parentNodeId: secret.id,
+    await store.appendKnowledge({
+      node: secret.id,
       text: 'Sibling-only information.',
       scope: ['org:acme', 'resource:user-42', 'thread:beta'],
       sourceThreadId: 'beta',
@@ -105,27 +105,27 @@ describe('Subconscious knowledge read tools', () => {
     const tools = memory.listTools();
     const read = await tools.knowledge_read!.execute?.({ name: 'Project Atlas' }, toolContext());
     expect(read).toMatchObject({ found: true, node: { name: 'Project Atlas' } });
-    expect((read as any).items[0].text).toContain('Maya Chen');
+    expect((read as any).records[0].text).toContain('Maya Chen');
     const hidden = await tools.knowledge_read!.execute?.({ name: 'Beta Secret' }, toolContext());
     expect(hidden).toEqual({ found: false });
     const firstPage = await tools.knowledge_browse!.execute?.({ limit: 1 }, toolContext());
-    expect((firstPage as any).records).toHaveLength(1);
+    expect((firstPage as any).nodes).toHaveLength(1);
     expect((firstPage as any).nextCursor).toBeTruthy();
-    const cursorRecord = await store.getNode((firstPage as any).records[0].id);
+    const cursorNode = await store.getNode((firstPage as any).nodes[0].id);
     await store.updateNode({
-      id: cursorRecord!.id,
-      version: cursorRecord!.version,
-      name: `${cursorRecord!.name} renamed`,
+      id: cursorNode!.id,
+      version: cursorNode!.version,
+      name: `${cursorNode!.name} renamed`,
     });
     const secondPage = await tools.knowledge_browse!.execute?.(
       { limit: 1, cursor: (firstPage as any).nextCursor },
       toolContext(),
     );
-    expect((secondPage as any).records).toHaveLength(1);
-    expect((secondPage as any).records[0].id).not.toBe((firstPage as any).records[0].id);
-    expect(
-      [...(firstPage as any).records, ...(secondPage as any).records].map((record: any) => record.name),
-    ).not.toContain('Beta Secret');
+    expect((secondPage as any).nodes).toHaveLength(1);
+    expect((secondPage as any).nodes[0].id).not.toBe((firstPage as any).nodes[0].id);
+    expect([...(firstPage as any).nodes, ...(secondPage as any).nodes].map((node: any) => node.name)).not.toContain(
+      'Beta Secret',
+    );
   });
 
   it('combines lexical and semantic results while filtering sibling-private vectors even when the adapter ignores filters', async () => {
@@ -143,8 +143,8 @@ describe('Subconscious knowledge read tools', () => {
       kind: 'secret',
       scope: ['org:acme', 'resource:user-42', 'thread:beta'],
     });
-    await store.appendItem({
-      parentNodeId: privateParent.id,
+    await store.appendKnowledge({
+      node: privateParent.id,
       text: 'The cobalt procedure is shared.',
       scope: ['org:acme', 'resource:user-42'],
       sourceThreadId: 'beta',
@@ -158,11 +158,11 @@ describe('Subconscious knowledge read tools', () => {
     expect((result as any).results).toEqual(
       expect.arrayContaining([expect.objectContaining({ type: 'node', name: 'Deployment runbook' })]),
     );
-    expect((result as any).results.map((item: any) => item.name)).not.toContain('Beta Secret');
+    expect((result as any).results.map((result: any) => result.name)).not.toContain('Beta Secret');
     expect((result as any).results).toEqual(
-      expect.arrayContaining([expect.objectContaining({ type: 'item', name: '(private node)' })]),
+      expect.arrayContaining([expect.objectContaining({ type: 'record', name: '(private node)' })]),
     );
-    expect((result as any).results.some((item: any) => item.sources.includes('semantic'))).toBe(true);
+    expect((result as any).results.some((result: any) => result.sources.includes('semantic'))).toBe(true);
   });
 
   it('fails explicitly when the semantic index is unavailable', async () => {
