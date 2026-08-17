@@ -152,6 +152,8 @@ new Workspace({
 To keep that shape but work in a different directory, pass `basePath`:
 
 ```typescript
+import { createCodingAgent } from '@mastra/core/coding-agent'
+
 const agent = createCodingAgent({
   id: 'my-coding-agent',
   name: 'My Coding Agent',
@@ -164,6 +166,7 @@ const agent = createCodingAgent({
 Pass a `workspace` to build the backends yourself. Here the agent reads the whole repository while commands run inside one package. A remote sandbox takes the place of `LocalSandbox` in the same slot, see [Sandbox](/docs/sandbox/overview) for the available backends and isolation options:
 
 ```typescript
+import { createCodingAgent } from '@mastra/core/coding-agent'
 import { LocalFilesystem, LocalSandbox, Workspace } from '@mastra/core/workspace'
 
 const agent = createCodingAgent({
@@ -181,6 +184,8 @@ const agent = createCodingAgent({
 To opt out (for example, when the workspace is injected at the [`AgentController`](/reference/agent-controller/agent-controller-class) level), pass `workspace: undefined` explicitly. An omitted key builds the default, an explicit `undefined` builds nothing:
 
 ```typescript
+import { createCodingAgent } from '@mastra/core/coding-agent'
+
 const agent = createCodingAgent({
   id: 'my-coding-agent',
   name: 'My Coding Agent',
@@ -212,7 +217,9 @@ The provider needs a memory-backed thread, so it's only added when `memory` is c
 `TaskSignalProvider` takes no constructor arguments, so customizing this default means choosing which other providers the agent gets:
 
 ```typescript
+import { createCodingAgent } from '@mastra/core/coding-agent'
 import { WebhookSignalProvider } from '@mastra/core/signals'
+import { Memory } from '@mastra/memory'
 
 const agent = createCodingAgent({
   id: 'my-coding-agent',
@@ -247,6 +254,9 @@ Retries happen inside the `generate()` or `stream()` call that hit the error, so
 No goal is configured by default. When you pass a `goal` without a `prompt`, `DEFAULT_GOAL_JUDGE_PROMPT` is used. The `goal` config carries the judge and the run budget, while the objective itself is per thread and set with [`setObjective()`](/docs/harness/goals#managing-the-objective):
 
 ```typescript
+import { createCodingAgent } from '@mastra/core/coding-agent'
+import { Memory } from '@mastra/memory'
+
 const agent = createCodingAgent({
   id: 'my-coding-agent',
   name: 'My Coding Agent',
@@ -258,6 +268,9 @@ const agent = createCodingAgent({
     maxRuns: 50,
   },
 })
+
+const threadId = 'thread-1'
+const resourceId = 'user-1'
 
 await agent.setObjective('Get the test suite passing', { threadId, resourceId })
 ```
