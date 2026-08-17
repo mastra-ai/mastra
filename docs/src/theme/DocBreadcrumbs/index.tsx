@@ -17,42 +17,50 @@ export default function DocBreadcrumbs(): ReactNode {
   const homePageRoute = useHomePageRoute()
   const { clearSidebar } = useContextualSidebar()
   const { metadata } = useDoc()
+  const hideBreadcrumbs = metadata.id === 'index' || metadata.id === 'develop'
 
-  if (!breadcrumbs || metadata.id === 'index' || metadata.id === 'develop') {
+  if (!breadcrumbs) {
     return null
   }
 
   return (
-    <div data-name="doc-breadcrumbs-copy" className="mb-8 flex flex-wrap items-center justify-between gap-2">
-      <DocBreadcrumbsStructuredData breadcrumbs={breadcrumbs} />
-      <nav
-        className={clsx(ThemeClassNames.docs.docBreadcrumbs, styles.breadcrumbsContainer)}
-        aria-label={translate({
-          id: 'theme.docs.breadcrumbs.navAriaLabel',
-          message: 'Breadcrumbs',
-          description: 'The ARIA label for the breadcrumbs',
-        })}
-      >
-        <ul className="breadcrumbs">
-          {homePageRoute && <HomeBreadcrumbItem />}
-          {breadcrumbs.map((item, idx) => {
-            const isLast = idx === breadcrumbs.length - 1
-            const href = item.type === 'category' && item.linkUnlisted ? undefined : item.href
-            return (
-              <BreadcrumbsItem key={idx} active={isLast}>
-                <BreadcrumbsItemLink
-                  href={href}
-                  isLast={isLast}
-                  onClick={idx === 0 ? clearSidebar : undefined}
-                  className={idx === 0 && !href ? styles.contextualBack : undefined}
-                >
-                  {item.label}
-                </BreadcrumbsItemLink>
-              </BreadcrumbsItem>
-            )
-          })}
-        </ul>
-      </nav>
+    <div
+      data-name="doc-breadcrumbs-copy"
+      className={clsx('mb-8 flex flex-wrap items-center gap-2', hideBreadcrumbs ? 'justify-end' : 'justify-between')}
+    >
+      {!hideBreadcrumbs && (
+        <>
+          <DocBreadcrumbsStructuredData breadcrumbs={breadcrumbs} />
+          <nav
+            className={clsx(ThemeClassNames.docs.docBreadcrumbs, styles.breadcrumbsContainer)}
+            aria-label={translate({
+              id: 'theme.docs.breadcrumbs.navAriaLabel',
+              message: 'Breadcrumbs',
+              description: 'The ARIA label for the breadcrumbs',
+            })}
+          >
+            <ul className="breadcrumbs">
+              {homePageRoute && <HomeBreadcrumbItem />}
+              {breadcrumbs.map((item, idx) => {
+                const isLast = idx === breadcrumbs.length - 1
+                const href = item.type === 'category' && item.linkUnlisted ? undefined : item.href
+                return (
+                  <BreadcrumbsItem key={idx} active={isLast}>
+                    <BreadcrumbsItemLink
+                      href={href}
+                      isLast={isLast}
+                      onClick={idx === 0 ? clearSidebar : undefined}
+                      className={idx === 0 && !href ? styles.contextualBack : undefined}
+                    >
+                      {item.label}
+                    </BreadcrumbsItemLink>
+                  </BreadcrumbsItem>
+                )
+              })}
+            </ul>
+          </nav>
+        </>
+      )}
       <BrowserOnly fallback={<div />}>{() => <CopyOpenInButton />}</BrowserOnly>
     </div>
   )

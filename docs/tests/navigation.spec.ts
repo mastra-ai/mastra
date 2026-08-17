@@ -92,9 +92,13 @@ test.describe('Breadcrumb navigation', () => {
   test('hides breadcrumbs on Get Started and Develop', async ({ page }) => {
     await page.goto('/docs', { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('navigation', { name: 'Breadcrumbs' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Copy page' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Show more options' })).toBeVisible()
 
     await page.goto('/docs/develop', { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('navigation', { name: 'Breadcrumbs' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Copy page' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Show more options' })).toBeVisible()
   })
 
   test('root groups restore the global sidebar while categories link to their overviews', async ({
