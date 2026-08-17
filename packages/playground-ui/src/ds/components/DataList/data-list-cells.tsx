@@ -263,15 +263,16 @@ export interface DataListTimeCellProps {
   timestamp: Date | string;
 }
 
-/** Compact monospace time cell — `HH:mm:ss.SSS` with the millisecond portion tinted. */
 export function DataListTimeCell({ timestamp }: DataListTimeCellProps) {
   const date = toDate(timestamp);
   return (
-    <DataListCell height="compact" className="text-ui-smd text-neutral3 flex font-mono">
+    <DataListCell height="compact" className="flex font-mono text-ui-smd text-neutral3">
       {date ? (
         <>
-          {format(date, 'HH:mm:ss')}
-          <span className="text-neutral2">.{String(date.getMilliseconds()).padStart(3, '0')}</span>
+          {format(date, 'h:mm:ss')}
+          <span className="text-neutral2">
+            .{String(date.getMilliseconds()).padStart(3, '0')} {format(date, 'aaa')}
+          </span>
         </>
       ) : null}
     </DataListCell>

@@ -47,13 +47,13 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
             {span.startedAt && (
               <>
                 <KV.Key>Started</KV.Key>
-                <KV.Value>{format(new Date(span.startedAt), 'MMM dd, HH:mm:ss.SSS')}</KV.Value>
+                <KV.Value>{format(new Date(span.startedAt), 'MMM dd, h:mm:ss.SSS aaa')}</KV.Value>
               </>
             )}
             {span.endedAt && (
               <>
                 <KV.Key>Ended</KV.Key>
-                <KV.Value>{format(new Date(span.endedAt), 'MMM dd, HH:mm:ss.SSS')}</KV.Value>
+                <KV.Value>{format(new Date(span.endedAt), 'MMM dd, h:mm:ss.SSS aaa')}</KV.Value>
               </>
             )}
             {duration && (

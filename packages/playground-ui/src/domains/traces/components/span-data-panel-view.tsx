@@ -270,14 +270,16 @@ function SpanDataPanelContent({
           <>
             <DataKeysAndValues.Key>Started</DataKeysAndValues.Key>
             <DataKeysAndValues.Value>
-              {format(new Date(span.startedAt), 'MMM dd, HH:mm:ss.SSS')}
+              {format(new Date(span.startedAt), 'MMM dd, h:mm:ss.SSS aaa')}
             </DataKeysAndValues.Value>
           </>
         )}
         {span.endedAt && (
           <>
             <DataKeysAndValues.Key>Ended</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{format(new Date(span.endedAt), 'MMM dd, HH:mm:ss.SSS')}</DataKeysAndValues.Value>
+            <DataKeysAndValues.Value>
+              {format(new Date(span.endedAt), 'MMM dd, h:mm:ss.SSS aaa')}
+            </DataKeysAndValues.Value>
           </>
         )}
         {duration && (
