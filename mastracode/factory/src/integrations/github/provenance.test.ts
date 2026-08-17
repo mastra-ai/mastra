@@ -127,13 +127,17 @@ describe('recordFactoryPullRequestProvenance', () => {
     expect(await integrationStorage.subscriptions.listByTarget('factory-pr-provenance:10:17')).toEqual([]);
   });
 
-  it('fails closed when pull request verification is unavailable', async () => {
+  it('records unverified provenance when the verification fetch is unavailable', async () => {
     const { sourceControl, integrationStorage, github, input, pullsGet } = await setup();
     pullsGet.mockRejectedValueOnce(new Error('GitHub unavailable'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     await expect(
       recordFactoryPullRequestProvenance(github, sourceControl, integrationStorage, input),
     ).resolves.toBeUndefined();
-    expect(await integrationStorage.subscriptions.listByTarget('factory-pr-provenance:10:17')).toEqual([]);
+    warn.mockRestore();
+    expect((await integrationStorage.subscriptions.listByTarget('factory-pr-provenance:10:17'))[0]).toMatchObject({
+      data: { workItemId: 'item-1', pullRequestNumber: 17, verified: false },
+    });
   });
 });
