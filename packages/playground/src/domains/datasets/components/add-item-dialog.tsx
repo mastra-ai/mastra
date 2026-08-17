@@ -4,9 +4,11 @@ import type { DatasetItemToolMock } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useState } from 'react';
+import { MAX_EXPERIMENT_ITEM_TIMEOUT_MS } from '../constants';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 import { DatasetItemScorerSelector } from './dataset-detail/dataset-item-scorer-selector';
 
@@ -68,6 +70,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
   const [toolMocks, setToolMocks] = useState('');
   const [scorerOverrideEnabled, setScorerOverrideEnabled] = useState(false);
   const [selectedScorerIds, setSelectedScorerIds] = useState<string[]>([]);
+  const [timeoutValue, setTimeoutValue] = useState('');
   const [requestContext, setRequestContext] = useState('');
   const [validationErrors, setValidationErrors] = useState<SchemaValidationError | null>(null);
   const { addItem } = useDatasetMutations();
@@ -77,6 +80,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
     setGroundTruth('');
     setExpectedTrajectory('');
     setToolMocks('');
+    setTimeoutValue('');
     setScorerOverrideEnabled(false);
     setSelectedScorerIds([]);
     setRequestContext('');
@@ -132,11 +136,26 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
           toast.error('Tool Mocks must be a JSON array');
           return;
         }
-        parsedToolMocks = parsed as DatasetItemToolMock[];
+        parsedToolMocks = parsed;
       } catch {
         toast.error('Tool Mocks must be valid JSON');
         return;
       }
+    }
+
+    let parsedTimeout: number | undefined;
+    if (timeoutValue.trim()) {
+      const timeout = Number(timeoutValue);
+      if (
+        !Number.isFinite(timeout) ||
+        !Number.isInteger(timeout) ||
+        timeout <= 0 ||
+        timeout > MAX_EXPERIMENT_ITEM_TIMEOUT_MS
+      ) {
+        toast.error('Item timeout must be a positive integer no greater than 1,800,000 milliseconds (30 minutes)');
+        return;
+      }
+      parsedTimeout = timeout;
     }
 
     // Parse requestContext if provided
@@ -158,6 +177,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
         expectedTrajectory: parsedTrajectory,
         toolMocks: parsedToolMocks,
         scorerIds: scorerOverrideEnabled ? selectedScorerIds : undefined,
+        timeout: parsedTimeout,
         requestContext: parsedRequestContext,
       });
 
@@ -262,6 +282,23 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
               onSelectedScorerIdsChange={setSelectedScorerIds}
               disabled={addItem.isPending}
             />
+
+            <div className="space-y-2">
+              <Label htmlFor="item-timeout">Item timeout (ms, optional)</Label>
+              <p className="text-muted-foreground text-xs">
+                Overrides the experiment-level item timeout. Enter a positive integer from 1 to 1,800,000 milliseconds
+                (30 minutes).
+              </p>
+              <Input
+                id="item-timeout"
+                type="number"
+                min={1}
+                max={MAX_EXPERIMENT_ITEM_TIMEOUT_MS}
+                step={1}
+                value={timeoutValue}
+                onChange={event => setTimeoutValue(event.target.value)}
+              />
+            </div>
 
             <div className="space-y-2">
               <Label htmlFor="item-request-context">Request Context (JSON, optional)</Label>

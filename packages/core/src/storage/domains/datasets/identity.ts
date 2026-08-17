@@ -15,6 +15,7 @@ const payloadFields = [
   'toolMocks',
   'unmockedToolPolicy',
   'scorerIds',
+  'timeout',
   'requestContext',
   'metadata',
   'source',

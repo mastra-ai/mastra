@@ -3,7 +3,13 @@ import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
-import { listExperimentsQuerySchema, triggerExperimentBodySchema } from '../schemas/datasets';
+import {
+  addItemBodySchema,
+  batchInsertItemsBodySchema,
+  listExperimentsQuerySchema,
+  triggerExperimentBodySchema,
+  updateItemBodySchema,
+} from '../schemas/datasets';
 import {
   ADD_ITEM_ROUTE,
   BATCH_INSERT_ITEMS_ROUTE,
@@ -21,6 +27,8 @@ import {
   UPDATE_ITEM_ROUTE,
 } from './datasets';
 import { createTestServerContext } from './test-utils';
+
+const MAX_EXPERIMENT_ITEM_TIMEOUT_MS = 30 * 60 * 1000;
 
 describe('Datasets Handlers', () => {
   let mockStorage: InMemoryStore;
@@ -853,6 +861,102 @@ describe('Datasets Handlers', () => {
       expect(byInput.get('selected')?.scorerIds).toEqual(['quality']);
       expect(byInput.get('disabled')?.scorerIds).toEqual([]);
       expect(byInput.get('inherited')?.scorerIds).toBeUndefined();
+    });
+  });
+  describe('item timeouts', () => {
+    it('round-trips timeout through add, get, update, and batch insert', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Timeouts DS' });
+
+      const added = (await ADD_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        input: { q: 'slow' },
+        timeout: 1_000,
+      } as any)) as any;
+
+      expect(added.timeout).toBe(1_000);
+
+      const fetched = (await GET_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        itemId: added.id,
+      } as any)) as any;
+
+      expect(fetched.timeout).toBe(1_000);
+
+      const updated = (await UPDATE_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        itemId: added.id,
+        timeout: 2_000,
+      } as any)) as any;
+
+      expect(updated.timeout).toBe(2_000);
+
+      const batch = (await BATCH_INSERT_ITEMS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        items: [{ input: { q: 'batch' }, timeout: 3_000 }],
+      } as any)) as any;
+
+      expect(batch.items[0].timeout).toBe(3_000);
+    });
+
+    it('forwards itemTimeout when triggering an experiment', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Experiment Timeout DS' });
+      const startExperimentAsync = vi
+        .spyOn(dataset, 'startExperimentAsync')
+        .mockResolvedValue({ experimentId: 'exp-1', status: 'pending', totalItems: 1 } as any);
+      vi.spyOn(mastra.datasets, 'get').mockResolvedValue(dataset);
+
+      await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        targetType: 'agent',
+        targetId: 'agent-1',
+        itemTimeout: 5_000,
+      } as any);
+
+      expect(startExperimentAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          targetType: 'agent',
+          targetId: 'agent-1',
+          itemTimeout: 5_000,
+        }),
+      );
+    });
+
+    it('validates timeout values as positive integers up to 30 minutes', () => {
+      expect(addItemBodySchema.safeParse({ input: {}, timeout: MAX_EXPERIMENT_ITEM_TIMEOUT_MS }).success).toBe(true);
+      expect(addItemBodySchema.safeParse({ input: {}, timeout: 0 }).success).toBe(false);
+      expect(addItemBodySchema.safeParse({ input: {}, timeout: MAX_EXPERIMENT_ITEM_TIMEOUT_MS + 1 }).success).toBe(
+        false,
+      );
+      expect(updateItemBodySchema.safeParse({ timeout: 1.5 }).success).toBe(false);
+      expect(updateItemBodySchema.safeParse({ timeout: MAX_EXPERIMENT_ITEM_TIMEOUT_MS + 1 }).success).toBe(false);
+      expect(batchInsertItemsBodySchema.safeParse({ items: [{ input: {}, timeout: -1 }] }).success).toBe(false);
+      expect(
+        batchInsertItemsBodySchema.safeParse({
+          items: [{ input: {}, timeout: MAX_EXPERIMENT_ITEM_TIMEOUT_MS + 1 }],
+        }).success,
+      ).toBe(false);
+      expect(
+        triggerExperimentBodySchema.safeParse({
+          targetType: 'agent',
+          targetId: 'agent-1',
+          itemTimeout: MAX_EXPERIMENT_ITEM_TIMEOUT_MS,
+        }).success,
+      ).toBe(true);
+      expect(
+        triggerExperimentBodySchema.safeParse({ targetType: 'agent', targetId: 'agent-1', itemTimeout: 0 }).success,
+      ).toBe(false);
+      expect(
+        triggerExperimentBodySchema.safeParse({
+          targetType: 'agent',
+          targetId: 'agent-1',
+          itemTimeout: MAX_EXPERIMENT_ITEM_TIMEOUT_MS + 1,
+        }).success,
+      ).toBe(false);
     });
   });
 });

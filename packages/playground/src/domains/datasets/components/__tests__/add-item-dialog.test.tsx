@@ -13,12 +13,17 @@ import {
   createdDatasetItem,
   createdDatasetItemWithEmptyScorers,
   createdDatasetItemWithScorers,
+  createdDatasetItemWithTimeout,
   createdDatasetItemWithoutMocks,
 } from './fixtures/add-item';
 import { itemScorers } from './fixtures/item-scorers';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
+
+vi.mock('@mastra/playground-ui/utils/toast', () => ({
+  toast: { error: vi.fn(), success: vi.fn() },
+}));
 
 // Thin stub for the heavy Dialog atom so this test focuses on the real client + mutation behavior.
 vi.mock('@mastra/playground-ui/components/Dialog', () => {
@@ -107,6 +112,12 @@ function renderReopenableDialog() {
 /** The form has a known order of CodeEditors: input, groundTruth, expectedTrajectory, toolMocks, requestContext. */
 function getEditors() {
   return screen.getAllByRole<HTMLTextAreaElement>('textbox');
+}
+
+function submitDialog() {
+  const form = screen.getByRole('button', { name: /add item/i }).closest('form');
+  if (!form) throw new Error('Add item form not found');
+  fireEvent.submit(form);
 }
 
 const useScorerHandler = () => {
@@ -321,6 +332,72 @@ describe('AddItemDialog', () => {
         'false',
       );
       expect(screen.queryByRole('combobox')).toBeNull();
+    });
+  });
+
+  describe('when a valid item timeout is provided', () => {
+    it('posts the timeout in milliseconds', async () => {
+      const capture = vi.fn();
+      server.use(
+        http.post(`${BASE_URL}/api/datasets/dataset-1/items`, async ({ request }) => {
+          capture(await request.json());
+          return HttpResponse.json(createdDatasetItemWithTimeout);
+        }),
+      );
+
+      renderDialog();
+
+      fireEvent.change(screen.getByRole<HTMLInputElement>('spinbutton', { name: /item timeout/i }), {
+        target: { value: '1800000' },
+      });
+      submitDialog();
+
+      await waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
+      expect(capture).toHaveBeenCalledWith(expect.objectContaining({ timeout: 1_800_000 }));
+    });
+  });
+
+  describe('when the item timeout is left empty', () => {
+    it('omits timeout from the request', async () => {
+      const capture = vi.fn();
+      server.use(
+        http.post(`${BASE_URL}/api/datasets/dataset-1/items`, async ({ request }) => {
+          capture(await request.json());
+          return HttpResponse.json(createdDatasetItemWithoutMocks);
+        }),
+      );
+
+      renderDialog();
+      submitDialog();
+
+      await waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
+      expect(capture).toHaveBeenCalledWith(expect.not.objectContaining({ timeout: expect.anything() }));
+    });
+  });
+
+  describe('when the item timeout is outside the supported range', () => {
+    it.each(['0', '-1', '1.5', '1800001'])('rejects %s before making a request', async timeout => {
+      const capture = vi.fn();
+      server.use(
+        http.post(`${BASE_URL}/api/datasets/dataset-1/items`, async ({ request }) => {
+          capture(await request.json());
+          return HttpResponse.json(createdDatasetItem);
+        }),
+      );
+
+      renderDialog();
+
+      fireEvent.change(screen.getByRole<HTMLInputElement>('spinbutton', { name: /item timeout/i }), {
+        target: { value: timeout },
+      });
+      submitDialog();
+
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(
+          'Item timeout must be a positive integer no greater than 1,800,000 milliseconds (30 minutes)',
+        ),
+      );
+      expect(capture).not.toHaveBeenCalled();
     });
   });
 });

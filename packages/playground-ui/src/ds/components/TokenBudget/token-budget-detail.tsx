@@ -55,7 +55,7 @@ export function TokenBudgetDetail({
         <div className="bg-current" style={{ width: `${used - freed}%` }} />
         <div className="token-budget-hatch" style={{ width: `${freed}%` }} />
       </div>
-      {description && <p className="text-ui-xs text-icon2">{description}</p>}
+      {description && <p className="text-icon2 text-ui-xs">{description}</p>}
     </div>
   );
 }

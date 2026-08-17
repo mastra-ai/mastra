@@ -231,6 +231,7 @@ export function DatasetItems({
 
   const detailPanelSlot = featuredItem ? (
     <DatasetItemPanel
+      key={featuredItem.id}
       datasetId={datasetId}
       item={featuredItem}
       items={items}

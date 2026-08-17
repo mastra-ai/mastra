@@ -1,4 +1,4 @@
-import type { DatasetItemToolMock } from '@mastra/client-js';
+import type { DatasetItem } from '@mastra/client-js';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
@@ -22,14 +22,32 @@ import {
   HistoryIcon,
   Trash2Icon,
 } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { DatasetItemContent, DatasetItemVersionsPanel, EditModeContent } from '@/domains/datasets';
+import { DatasetItemContent, DatasetItemEditForm, DatasetItemVersionsPanel } from '@/domains/datasets';
 import { useDatasetItemVersions } from '@/domains/datasets/hooks/use-dataset-item-versions';
 import type { DatasetItemVersion } from '@/domains/datasets/hooks/use-dataset-item-versions';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
 import { useLinkComponent } from '@/lib/framework';
+
+function toDatasetItem(version: DatasetItemVersion, datasetId: string, itemId: string): DatasetItem {
+  return {
+    id: itemId,
+    datasetId,
+    datasetVersion: version.datasetVersion,
+    input: version.input,
+    groundTruth: version.groundTruth,
+    expectedTrajectory: version.expectedTrajectory,
+    toolMocks: version.toolMocks,
+    scorerIds: version.scorerIds,
+    timeout: version.timeout,
+    requestContext: version.requestContext,
+    metadata: version.metadata,
+    createdAt: version.createdAt,
+    updatedAt: version.updatedAt,
+  };
+}
 
 function DatasetItemPage() {
   const { datasetId, itemId } = useParams<{ datasetId: string; itemId: string }>();
@@ -38,7 +56,7 @@ function DatasetItemPage() {
 
   // Use versions as single source of truth - works for both active and deleted items
   const { data: versions, isLoading: isVersionsLoading, error } = useDatasetItemVersions(datasetId ?? '', itemId ?? '');
-  const { updateItem, deleteItem } = useDatasetMutations();
+  const { deleteItem } = useDatasetMutations();
   const { data: dataset } = useDataset(datasetId ?? '');
 
   // Derive item state from versions
@@ -48,59 +66,7 @@ function DatasetItemPage() {
   // Version viewing state
   const [selectedVersion, setSelectedVersion] = useState<DatasetItemVersion | null>(null);
 
-  // Derive form defaults from latest version (recomputes when version changes)
-  const formDefaults = useMemo(() => {
-    if (!latestVersion || isDeleted)
-      return {
-        input: '',
-        groundTruth: '',
-        metadata: '',
-        trajectory: '',
-        toolMocks: '',
-        scorerOverrideEnabled: false,
-        scorerIds: [],
-        requestContext: '',
-      };
-    return {
-      input: JSON.stringify(latestVersion.input, null, 2),
-      groundTruth: latestVersion.groundTruth ? JSON.stringify(latestVersion.groundTruth, null, 2) : '',
-      metadata: latestVersion.metadata ? JSON.stringify(latestVersion.metadata, null, 2) : '',
-      trajectory:
-        latestVersion.expectedTrajectory != null ? JSON.stringify(latestVersion.expectedTrajectory, null, 2) : '',
-      toolMocks: latestVersion.toolMocks?.length ? JSON.stringify(latestVersion.toolMocks, null, 2) : '',
-      scorerOverrideEnabled: latestVersion.scorerIds !== undefined,
-      scorerIds: latestVersion.scorerIds ?? [],
-      requestContext: latestVersion.requestContext ? JSON.stringify(latestVersion.requestContext, null, 2) : '',
-    };
-  }, [latestVersion, isDeleted]);
-
-  // Use datasetVersion as key to reset form state when version changes
-  const versionKey = latestVersion?.datasetVersion ?? 0;
-
-  // Edit mode state
   const [isEditing, setIsEditing] = useState(false);
-  const [inputValue, setInputValue] = useState(formDefaults.input);
-  const [groundTruthValue, setGroundTruthValue] = useState(formDefaults.groundTruth);
-  const [metadataValue, setMetadataValue] = useState(formDefaults.metadata);
-  const [trajectoryValue, setTrajectoryValue] = useState(formDefaults.trajectory);
-  const [toolMocksValue, setToolMocksValue] = useState(formDefaults.toolMocks);
-  const [scorerOverrideEnabled, setScorerOverrideEnabled] = useState(formDefaults.scorerOverrideEnabled);
-  const [selectedScorerIds, setSelectedScorerIds] = useState(formDefaults.scorerIds);
-  const [requestContextValue, setRequestContextValue] = useState(formDefaults.requestContext);
-
-  // Reset form values when version changes (key-based reset pattern)
-  const [prevVersionKey, setPrevVersionKey] = useState(versionKey);
-  if (versionKey !== prevVersionKey) {
-    setPrevVersionKey(versionKey);
-    setInputValue(formDefaults.input);
-    setGroundTruthValue(formDefaults.groundTruth);
-    setMetadataValue(formDefaults.metadata);
-    setTrajectoryValue(formDefaults.trajectory);
-    setToolMocksValue(formDefaults.toolMocks);
-    setScorerOverrideEnabled(formDefaults.scorerOverrideEnabled);
-    setSelectedScorerIds(formDefaults.scorerIds);
-    setRequestContextValue(formDefaults.requestContext);
-  }
 
   // Delete dialog state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -134,121 +100,6 @@ function DatasetItemPage() {
     }
   };
 
-  const handleSave = async () => {
-    if (!datasetId || !itemId) return;
-
-    // Parse and validate input JSON
-    let parsedInput: unknown;
-    try {
-      parsedInput = JSON.parse(inputValue);
-    } catch {
-      toast.error('Input must be valid JSON');
-      return;
-    }
-
-    // Parse groundTruth if provided
-    let parsedGroundTruth: unknown | undefined;
-    if (groundTruthValue.trim()) {
-      try {
-        parsedGroundTruth = JSON.parse(groundTruthValue);
-      } catch {
-        toast.error('Ground Truth must be valid JSON');
-        return;
-      }
-    }
-
-    // Parse metadata if provided
-    let parsedMetadata: Record<string, unknown> | undefined;
-    if (metadataValue.trim()) {
-      try {
-        parsedMetadata = JSON.parse(metadataValue);
-      } catch {
-        toast.error('Metadata must be valid JSON');
-        return;
-      }
-    }
-
-    let parsedTrajectory: unknown | undefined;
-    const trajectoryChanged = trajectoryValue !== formDefaults.trajectory;
-    if (trajectoryChanged && trajectoryValue.trim()) {
-      try {
-        parsedTrajectory = JSON.parse(trajectoryValue);
-      } catch {
-        toast.error('Expected Trajectory must be valid JSON');
-        return;
-      }
-    }
-
-    let parsedToolMocks: DatasetItemToolMock[] | undefined;
-    const toolMocksChanged = toolMocksValue !== formDefaults.toolMocks;
-    if (toolMocksChanged && toolMocksValue.trim()) {
-      try {
-        const parsed = JSON.parse(toolMocksValue);
-        if (!Array.isArray(parsed)) {
-          toast.error('Tool Mocks must be a JSON array');
-          return;
-        }
-        parsedToolMocks = parsed as DatasetItemToolMock[];
-      } catch {
-        toast.error('Tool Mocks must be valid JSON');
-        return;
-      }
-    }
-
-    let parsedRequestContext: Record<string, unknown> | undefined;
-    const requestContextChanged = requestContextValue !== formDefaults.requestContext;
-    if (requestContextChanged && requestContextValue.trim()) {
-      try {
-        parsedRequestContext = JSON.parse(requestContextValue);
-      } catch {
-        toast.error('Request Context must be valid JSON');
-        return;
-      }
-    }
-
-    const scorerIdsChanged =
-      scorerOverrideEnabled !== formDefaults.scorerOverrideEnabled ||
-      (scorerOverrideEnabled &&
-        (selectedScorerIds.length !== formDefaults.scorerIds.length ||
-          selectedScorerIds.some((id, index) => id !== formDefaults.scorerIds[index])));
-    const scorerIds = scorerOverrideEnabled ? selectedScorerIds : null;
-
-    try {
-      await updateItem.mutateAsync({
-        datasetId,
-        itemId,
-        input: parsedInput,
-        groundTruth: parsedGroundTruth,
-        metadata: parsedMetadata,
-        ...(trajectoryChanged ? { expectedTrajectory: parsedTrajectory ?? null } : {}),
-        ...(toolMocksChanged ? { toolMocks: parsedToolMocks ?? [] } : {}),
-        ...(scorerIdsChanged ? { scorerIds } : {}),
-        ...(requestContextChanged ? { requestContext: parsedRequestContext } : {}),
-      });
-      toast.success('Item updated successfully');
-      setIsEditing(false);
-    } catch (error) {
-      toast.error(`Failed to update item: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  };
-
-  const handleCancel = () => {
-    // Reset form values to latest version
-    if (latestVersion) {
-      setInputValue(JSON.stringify(latestVersion.input, null, 2));
-      setGroundTruthValue(latestVersion.groundTruth ? JSON.stringify(latestVersion.groundTruth, null, 2) : '');
-      setMetadataValue(latestVersion.metadata ? JSON.stringify(latestVersion.metadata, null, 2) : '');
-      setTrajectoryValue(
-        latestVersion.expectedTrajectory != null ? JSON.stringify(latestVersion.expectedTrajectory, null, 2) : '',
-      );
-      setToolMocksValue(latestVersion.toolMocks?.length ? JSON.stringify(latestVersion.toolMocks, null, 2) : '');
-      setScorerOverrideEnabled(latestVersion.scorerIds !== undefined);
-      setSelectedScorerIds(latestVersion.scorerIds ?? []);
-      setRequestContextValue(latestVersion.requestContext ? JSON.stringify(latestVersion.requestContext, null, 2) : '');
-    }
-    setIsEditing(false);
-  };
-
   const handleDeleteConfirm = async () => {
     if (!datasetId || !itemId) return;
     try {
@@ -264,21 +115,9 @@ function DatasetItemPage() {
   // Determine which version to display
   const versionToDisplay = selectedVersion ?? latestVersion;
 
-  // Build display item from flat version data
-  const displayItem = versionToDisplay
-    ? {
-        id: itemId ?? '',
-        datasetId: datasetId ?? '',
-        datasetVersion: versionToDisplay.datasetVersion,
-        input: versionToDisplay.input,
-        groundTruth: versionToDisplay.groundTruth,
-        expectedTrajectory: versionToDisplay.expectedTrajectory,
-        scorerIds: versionToDisplay.scorerIds,
-        metadata: versionToDisplay.metadata,
-        createdAt: versionToDisplay.createdAt,
-        updatedAt: versionToDisplay.updatedAt,
-      }
-    : null;
+  const displayItem =
+    versionToDisplay && datasetId && itemId ? toDatasetItem(versionToDisplay, datasetId, itemId) : null;
+  const editableItem = latestVersion && datasetId && itemId ? toDatasetItem(latestVersion, datasetId, itemId) : null;
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -386,28 +225,12 @@ function DatasetItemPage() {
                   </Notice>
                 )}
 
-                {isEditing ? (
-                  <EditModeContent
-                    inputValue={inputValue}
-                    setInputValue={setInputValue}
-                    groundTruthValue={groundTruthValue}
-                    setGroundTruthValue={setGroundTruthValue}
-                    metadataValue={metadataValue}
-                    setMetadataValue={setMetadataValue}
-                    trajectoryValue={trajectoryValue}
-                    setTrajectoryValue={setTrajectoryValue}
-                    toolMocksValue={toolMocksValue}
-                    setToolMocksValue={setToolMocksValue}
-                    scorerOverrideEnabled={scorerOverrideEnabled}
-                    setScorerOverrideEnabled={setScorerOverrideEnabled}
-                    selectedScorerIds={selectedScorerIds}
-                    setSelectedScorerIds={setSelectedScorerIds}
-                    requestContextValue={requestContextValue}
-                    setRequestContextValue={setRequestContextValue}
-                    validationErrors={null}
-                    onSave={handleSave}
-                    onCancel={handleCancel}
-                    isSaving={updateItem.isPending}
+                {isEditing && editableItem ? (
+                  <DatasetItemEditForm
+                    key={editableItem.id}
+                    item={editableItem}
+                    onSuccess={() => setIsEditing(false)}
+                    onCancel={() => setIsEditing(false)}
                   />
                 ) : displayItem ? (
                   <DatasetItemContent item={displayItem} Link={FrameworkLink} />

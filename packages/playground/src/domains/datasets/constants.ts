@@ -1,0 +1,1 @@
+export const MAX_EXPERIMENT_ITEM_TIMEOUT_MS = 30 * 60 * 1000;

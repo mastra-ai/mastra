@@ -200,6 +200,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       toolMocks: (typeof row.toolMocks === 'string' ? safelyParseJSON(row.toolMocks) : row.toolMocks) ?? undefined,
       unmockedToolPolicy: row.unmockedToolPolicy ?? undefined,
       scorerIds: (typeof row.scorerIds === 'string' ? safelyParseJSON(row.scorerIds) : row.scorerIds) ?? undefined,
+      timeout: row.timeout == null ? undefined : Number(row.timeout),
       requestContext: typeof row.requestContext === 'string' ? safelyParseJSON(row.requestContext) : row.requestContext,
       metadata: typeof row.metadata === 'string' ? safelyParseJSON(row.metadata) : row.metadata,
       source: typeof row.source === 'string' ? safelyParseJSON(row.source) : row.source,
@@ -517,6 +518,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
             toolMocks: args.toolMocks ?? null,
             unmockedToolPolicy: args.unmockedToolPolicy ?? null,
             scorerIds: args.scorerIds ?? null,
+            timeout: args.timeout ?? null,
             requestContext: args.requestContext ?? null,
             metadata: args.metadata ?? null,
             source: args.source ?? null,
@@ -549,6 +551,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         toolMocks: args.toolMocks,
         unmockedToolPolicy: args.unmockedToolPolicy,
         scorerIds: args.scorerIds,
+        timeout: args.timeout,
         requestContext: args.requestContext,
         metadata: args.metadata,
         source: args.source,
@@ -596,6 +599,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         args.toolMocks !== undefined ||
         args.unmockedToolPolicy !== undefined ||
         args.scorerIds !== undefined ||
+        args.timeout !== undefined ||
         args.requestContext !== undefined ||
         args.metadata !== undefined ||
         args.source !== undefined;
@@ -615,6 +619,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const mergedUnmockedToolPolicy =
         args.unmockedToolPolicy !== undefined ? args.unmockedToolPolicy : existing.unmockedToolPolicy;
       const mergedScorerIds = args.scorerIds !== undefined ? (args.scorerIds ?? undefined) : existing.scorerIds;
+      const mergedTimeout = args.timeout !== undefined ? args.timeout : existing.timeout;
       const mergedRequestContext = args.requestContext !== undefined ? args.requestContext : existing.requestContext;
       const mergedMetadata = args.metadata !== undefined ? args.metadata : existing.metadata;
       const mergedSource = args.source !== undefined ? args.source : existing.source;
@@ -669,6 +674,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
             toolMocks: mergedToolMocks ?? null,
             unmockedToolPolicy: mergedUnmockedToolPolicy ?? null,
             scorerIds: mergedScorerIds ?? null,
+            timeout: mergedTimeout ?? null,
             requestContext: mergedRequestContext,
             metadata: mergedMetadata,
             source: mergedSource,
@@ -700,6 +706,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         toolMocks: mergedToolMocks,
         unmockedToolPolicy: mergedUnmockedToolPolicy,
         scorerIds: mergedScorerIds,
+        timeout: mergedTimeout,
         requestContext: mergedRequestContext,
         metadata: mergedMetadata,
         source: mergedSource,
@@ -782,6 +789,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
             toolMocks: existing.toolMocks ?? null,
             unmockedToolPolicy: existing.unmockedToolPolicy ?? null,
             scorerIds: existing.scorerIds ?? null,
+            timeout: existing.timeout ?? null,
             requestContext: existing.requestContext,
             metadata: existing.metadata,
             source: existing.source,
@@ -889,6 +897,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
               toolMocks: insert.item.toolMocks,
               unmockedToolPolicy: insert.item.unmockedToolPolicy,
               scorerIds: insert.item.scorerIds,
+              timeout: insert.item.timeout,
               requestContext: insert.item.requestContext,
               metadata: insert.item.metadata,
               source: insert.item.source,
@@ -989,6 +998,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
           toolMocks: item.toolMocks ?? null,
           unmockedToolPolicy: item.unmockedToolPolicy ?? null,
           scorerIds: item.scorerIds ?? null,
+          timeout: item.timeout ?? null,
           requestContext: item.requestContext,
           metadata: item.metadata,
           source: item.source,

@@ -23,6 +23,8 @@ export interface DataItem<I = unknown, E = unknown> {
   input: I;
   /** Ground truth for scoring */
   groundTruth?: E;
+  /** Execution timeout override in milliseconds. Must be a positive integer no greater than 30 minutes. */
+  timeout?: number;
   /** Additional metadata */
   metadata?: Record<string, unknown>;
   /** Per-item request context merged over the global request context (item takes precedence) */
@@ -229,7 +231,7 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
    * consumers must not treat it as a read-after-write signal for storage.
    */
   onEvent?: ExperimentEventObserver;
-  /** Per-item execution timeout in milliseconds */
+  /** Per-item execution timeout fallback in milliseconds. Must be a positive integer no greater than 30 minutes. */
   itemTimeout?: number;
   /** Maximum retries per item on failure (default: 0 = no retries). Abort errors are never retried. */
   maxRetries?: number;

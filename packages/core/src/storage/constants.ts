@@ -578,6 +578,7 @@ export const DATASET_ITEMS_SCHEMA: Record<string, StorageColumn> = {
   toolMocks: { type: 'jsonb', nullable: true },
   unmockedToolPolicy: { type: 'text', nullable: true },
   scorerIds: { type: 'jsonb', nullable: true },
+  timeout: { type: 'integer', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };

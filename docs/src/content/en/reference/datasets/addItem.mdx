@@ -24,6 +24,7 @@ const item = await dataset.addItem({
   input: { question: 'What is TypeScript?' },
   groundTruth: { answer: 'A typed superset of JavaScript' },
   scorerIds: ['accuracy', 'relevancy'],
+  timeout: 15_000,
   metadata: { source: 'manual' },
 })
 
@@ -51,6 +52,13 @@ console.log(item.id)
     isOptional: true,
     description:
       'Scorer IDs that override dataset-attached scorers for this item. An empty array runs no scorers for the item. Omit this field to inherit the dataset scorer IDs.',
+  },
+  {
+    name: 'timeout',
+    type: 'number',
+    isOptional: true,
+    description:
+      "Execution timeout override in milliseconds. Use a positive integer from 1 to 1,800,000 (30 minutes). This value takes precedence over the experiment's `itemTimeout` fallback.",
   },
   {
     name: 'metadata',
@@ -105,6 +113,12 @@ console.log(item.id)
             isOptional: true,
             description:
               'Scorer IDs selected for this item. An empty array is an explicit override that runs no scorers.',
+          },
+          {
+            name: 'timeout',
+            type: 'number',
+            isOptional: true,
+            description: 'Execution timeout override in milliseconds, from 1 to 1,800,000 (30 minutes).',
           },
           {
             name: 'metadata',

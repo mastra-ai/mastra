@@ -25,6 +25,7 @@ const updated = await dataset.updateItem({
   input: { question: 'What is TypeScript?' },
   groundTruth: { answer: 'A typed superset of JavaScript' },
   scorerIds: null,
+  timeout: 20_000,
   metadata: { reviewed: true },
 })
 ```
@@ -56,6 +57,13 @@ const updated = await dataset.updateItem({
     isOptional: true,
     description:
       'Scorer IDs that override dataset-attached scorers for this item. Use `[]` to run no scorers, `null` to remove the override and restore dataset inheritance, or omit the field to preserve the current value.',
+  },
+  {
+    name: 'timeout',
+    type: 'number',
+    isOptional: true,
+    description:
+      "Updated execution timeout override in milliseconds. Use a positive integer from 1 to 1,800,000 (30 minutes). This value takes precedence over the experiment's `itemTimeout` fallback.",
   },
   {
     name: 'metadata',

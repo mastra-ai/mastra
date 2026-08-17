@@ -46,6 +46,8 @@ export interface ExecutionResult {
   output: unknown;
   /** Structured error if execution failed */
   error: { message: string; stack?: string; code?: string } | null;
+  /** Whether execution failed with an explicit AbortError */
+  aborted?: boolean;
   /** Trace ID from agent/workflow execution (null for scorers or errors) */
   traceId: string | null;
   /** Root span ID from agent/workflow execution (null when not traced) */
@@ -98,6 +100,7 @@ async function executeScorer(
         message: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
       },
+      ...(error instanceof Error && error.name === 'AbortError' ? { aborted: true } : {}),
       traceId: null,
     };
   }
@@ -180,6 +183,7 @@ export async function executeTarget(
         message: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
       },
+      ...(error instanceof Error && error.name === 'AbortError' ? { aborted: true } : {}),
       traceId: null,
     };
   }
@@ -188,7 +192,7 @@ export async function executeTarget(
 /**
  * Race a promise against an AbortSignal. Rejects with the signal's reason when aborted.
  */
-function raceWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+export function raceWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   if (signal.aborted) {
     return Promise.reject(signal.reason ?? new DOMException('The operation was aborted.', 'AbortError'));
   }
