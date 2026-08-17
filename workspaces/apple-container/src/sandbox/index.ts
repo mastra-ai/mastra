@@ -23,7 +23,12 @@ import type {
   SandboxCloneOptions,
   SandboxInfo,
 } from '@mastra/core/workspace';
-import { MastraSandbox, ProcessHandle, SandboxExecutionError } from '@mastra/core/workspace';
+import {
+  MastraSandbox,
+  ProcessHandle,
+  UnsupportedStdinCloseError,
+  SandboxExecutionError,
+} from '@mastra/core/workspace';
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 300_000;
 const DEFAULT_IMAGE = 'node:22-slim';
@@ -843,7 +848,7 @@ class AppleContainerCliProcess extends ProcessHandle {
   }
 
   async closeStdin(): Promise<void> {
-    throw new Error('Apple container CLI runner does not support closing stdin');
+    throw new UnsupportedStdinCloseError('Apple container CLI runner does not support closing stdin');
   }
 }
 

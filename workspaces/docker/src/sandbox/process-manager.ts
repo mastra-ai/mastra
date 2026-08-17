@@ -7,6 +7,8 @@
  * stdout/stderr streams.
  */
 
+import type { Duplex } from 'node:stream';
+
 import { ProcessHandle, SandboxProcessManager } from '@mastra/core/workspace';
 import type { CommandResult, ProcessInfo, SpawnProcessOptions } from '@mastra/core/workspace';
 import type { Container, Exec, ExecInspectInfo } from 'dockerode';
@@ -34,14 +36,14 @@ class DockerProcessHandle extends ProcessHandle {
   /** @internal Set by the timeout path to distinguish timeout kills from explicit kills */
   _timedOut = false;
   private _waitPromise: Promise<CommandResult> | null = null;
-  private _stdinStream: NodeJS.WritableStream | null = null;
+  private _stdinStream: Duplex | null = null;
   private _execStream: NodeJS.ReadWriteStream | null = null;
 
   constructor(
     exec: Exec,
     container: Container,
     startTime: number,
-    stdinStream: NodeJS.WritableStream | null,
+    stdinStream: Duplex | null,
     options?: SpawnProcessOptions,
   ) {
     super(options);
@@ -159,7 +161,7 @@ class DockerProcessHandle extends ProcessHandle {
     if (!this._stdinStream) {
       throw new Error(`Process ${this.pid} was not started with stdin support`);
     }
-    const stream = this._stdinStream as NodeJS.WritableStream & { writableEnded?: boolean };
+    const stream = this._stdinStream;
     if (stream.writableEnded) return;
     await new Promise<void>(resolve => stream.end(resolve));
   }

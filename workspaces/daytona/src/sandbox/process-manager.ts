@@ -13,7 +13,7 @@
  */
 
 import type { Sandbox } from '@daytonaio/sdk';
-import { ProcessHandle, SandboxProcessManager } from '@mastra/core/workspace';
+import { ProcessHandle, UnsupportedStdinCloseError, SandboxProcessManager } from '@mastra/core/workspace';
 import type { CommandResult, ProcessInfo, SpawnProcessOptions } from '@mastra/core/workspace';
 import { shellQuote } from '../utils/shell-quote';
 import type { DaytonaSandbox } from './index';
@@ -162,7 +162,7 @@ class DaytonaProcessHandle extends ProcessHandle {
   }
 
   async closeStdin(): Promise<void> {
-    throw new Error('Daytona SDK does not expose a way to close stdin for a running process');
+    throw new UnsupportedStdinCloseError('Daytona SDK does not expose a way to close stdin for a running process');
   }
 }
 

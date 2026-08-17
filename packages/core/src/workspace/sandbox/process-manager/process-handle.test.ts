@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { MastraSandbox } from '../mastra-sandbox';
 import type { CommandResult } from '../types';
-import { ProcessHandle } from './process-handle';
+import { ProcessHandle, UnsupportedStdinCloseError } from './process-handle';
 import { SandboxProcessManager } from './process-manager';
 import type { SpawnProcessOptions } from './types';
 
@@ -52,6 +52,22 @@ class TestProcessHandle extends ProcessHandle {
       executionTimeMs: 0,
     });
   }
+}
+
+/** Mirrors providers that never override `closeStdin()`. */
+class NoStdinCloseProcessHandle extends ProcessHandle {
+  readonly pid = 'no-close-pid';
+  exitCode: number | undefined;
+
+  async wait(): Promise<CommandResult> {
+    throw new Error('not used');
+  }
+
+  async kill(): Promise<boolean> {
+    return true;
+  }
+
+  async sendStdin(): Promise<void> {}
 }
 
 class TestProcessManager extends SandboxProcessManager {
@@ -295,6 +311,35 @@ describe('ProcessHandle output retention', () => {
 
     expect(sendStdin).toHaveBeenCalledWith('final input');
     expect(closeStdin).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects closeStdin by default so providers opt in to stdin closure', async () => {
+    const handle = new NoStdinCloseProcessHandle();
+
+    await expect(handle.closeStdin()).rejects.toBeInstanceOf(UnsupportedStdinCloseError);
+  });
+
+  it('finishes the writer stream when the provider cannot close stdin', async () => {
+    const handle = new TestProcessHandle();
+    vi.spyOn(handle, 'closeStdin').mockRejectedValue(
+      new UnsupportedStdinCloseError('provider does not support closing stdin'),
+    );
+
+    await new Promise<void>((resolve, reject) => {
+      handle.writer.end('final input', err => (err ? reject(err) : resolve()));
+    });
+  });
+
+  it('surfaces non-unsupported closeStdin failures through the writer stream', async () => {
+    const handle = new TestProcessHandle();
+    vi.spyOn(handle, 'closeStdin').mockRejectedValue(new Error('stream already destroyed'));
+
+    const writer = handle.writer;
+    const errored = once(writer, 'error');
+    writer.end('final input');
+
+    const [error] = (await errored) as [Error];
+    expect(error.message).toBe('stream already destroyed');
   });
 });
 

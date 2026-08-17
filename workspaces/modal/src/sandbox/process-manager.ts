@@ -4,7 +4,7 @@
  * process runs until the sandbox timeout.
  */
 
-import { ProcessHandle, SandboxProcessManager } from '@mastra/core/workspace';
+import { ProcessHandle, UnsupportedStdinCloseError, SandboxProcessManager } from '@mastra/core/workspace';
 import type { CommandResult, ProcessInfo, SpawnProcessOptions } from '@mastra/core/workspace';
 import type { ContainerProcess } from 'modal';
 import type { ModalSandbox } from './index';
@@ -157,7 +157,9 @@ class ModalProcessHandle extends ProcessHandle {
   }
 
   async closeStdin(): Promise<void> {
-    throw new Error('Modal JS SDK does not expose stdin on exec() — closeStdin() is not supported');
+    throw new UnsupportedStdinCloseError(
+      'Modal JS SDK does not expose stdin on exec() — closeStdin() is not supported',
+    );
   }
 }
 

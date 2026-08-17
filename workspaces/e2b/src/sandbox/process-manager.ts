@@ -5,7 +5,7 @@
  * Wraps the E2B SDK's commands API (background mode, sendStdin, kill, list).
  */
 
-import { ProcessHandle, SandboxProcessManager } from '@mastra/core/workspace';
+import { ProcessHandle, UnsupportedStdinCloseError, SandboxProcessManager } from '@mastra/core/workspace';
 import type { CommandResult, ProcessInfo, SpawnProcessOptions } from '@mastra/core/workspace';
 import type { CommandHandle as E2BCommandHandle, Sandbox } from 'e2b';
 import type { E2BSandbox } from './index';
@@ -99,7 +99,7 @@ class E2BProcessHandle extends ProcessHandle {
   }
 
   async closeStdin(): Promise<void> {
-    throw new Error('E2B SDK does not expose a way to close stdin for a running command');
+    throw new UnsupportedStdinCloseError('E2B SDK does not expose a way to close stdin for a running command');
   }
 }
 

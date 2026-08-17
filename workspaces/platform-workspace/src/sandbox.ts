@@ -10,7 +10,13 @@ import type {
   SandboxInfo,
   SpawnProcessOptions,
 } from '@mastra/core/workspace';
-import { MastraSandbox, ProcessHandle, SandboxNotReadyError, SandboxProcessManager } from '@mastra/core/workspace';
+import {
+  MastraSandbox,
+  ProcessHandle,
+  UnsupportedStdinCloseError,
+  SandboxNotReadyError,
+  SandboxProcessManager,
+} from '@mastra/core/workspace';
 import type { PlatformClientOptions } from './client.js';
 import { PlatformApiError, PlatformClient } from './client.js';
 import type { DirectExecWebSocketFactory, ExecLease } from './direct-exec.js';
@@ -294,7 +300,7 @@ class PlatformProcessHandle extends ProcessHandle {
   }
 
   async closeStdin(): Promise<void> {
-    throw new Error('Platform sandbox command execution does not support closing stdin');
+    throw new UnsupportedStdinCloseError('Platform sandbox command execution does not support closing stdin');
   }
 }
 

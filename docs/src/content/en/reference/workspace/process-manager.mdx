@@ -377,7 +377,7 @@ await handle.sendStdin('console.log("hello")\n')
 
 #### `closeStdin()`
 
-Close the process's stdin to signal end-of-file (EOF). Use this after sending all input to commands that read until stdin closes. Throws if the process has already exited, stdin isn't available, or the sandbox provider doesn't support closing stdin.
+Close the process's stdin to signal end-of-file (EOF). Use this after sending all input to commands that read until stdin closes. An exited process or an unavailable stdin causes a throw. Providers without a stdin close primitive throw `UnsupportedStdinCloseError`.
 
 ```typescript
 const handle = await sandbox.processes.spawn('cat')
@@ -386,7 +386,7 @@ await handle.closeStdin()
 const result = await handle.wait()
 ```
 
-Calling `handle.writer.end()` also closes stdin.
+Calling `handle.writer.end()` also closes stdin. On providers without stdin close support, `writer.end()` finishes the stream without an error.
 
 **Returns:** `Promise<void>`
 

@@ -9,7 +9,7 @@
  * so `sendStdin()` throws a clear "not supported" error.
  */
 
-import { ProcessHandle, SandboxProcessManager } from '@mastra/core/workspace';
+import { ProcessHandle, UnsupportedStdinCloseError, SandboxProcessManager } from '@mastra/core/workspace';
 import type { CommandResult, ProcessInfo, SpawnProcessOptions } from '@mastra/core/workspace';
 import type { Command } from '@vercel/sandbox';
 import type { VercelSandbox } from './index';
@@ -136,7 +136,7 @@ class VercelSandboxProcessHandle extends ProcessHandle {
   }
 
   async closeStdin(): Promise<void> {
-    throw new Error('VercelSandbox does not support closing stdin for running processes.');
+    throw new UnsupportedStdinCloseError('VercelSandbox does not support closing stdin for running processes.');
   }
 }
 
