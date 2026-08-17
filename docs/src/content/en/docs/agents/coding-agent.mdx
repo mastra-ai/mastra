@@ -9,9 +9,11 @@ packages:
 
 **Added in:** `@mastra/core@1.48.0`
 
-A coding agent works inside a project. It needs files it can edit and a shell it can run commands in, plus a way to survive the long runs that real code changes take. [`createCodingAgent()`](/reference/coding-agent/create-coding-agent) returns a standard [`Agent`](/reference/agents/agent) with those pieces already wired.
+A coding agent works inside a project, so it needs files it can edit and a shell it can run commands in.
 
-It's a construction function that lives in `@mastra/core`, with no hosted service behind it. Everything it sets up is a Mastra primitive you can also configure by hand on `new Agent()`. The value it returns is an ordinary `Agent`, so it works anywhere an agent works, including inside an [`AgentController`](/docs/harness/agent-controller).
+[`createCodingAgent()`](/reference/coding-agent/create-coding-agent) is the shorthand for that setup. It returns a standard [`Agent`](/reference/agents/agent) with default capabilities already configured for coding work, so you don't have to wire up the workspace and the surrounding machinery yourself. You can change or switch off every default, and each one is a Mastra primitive you can also set on `new Agent()` by hand.
+
+The function lives in `@mastra/core`, with no hosted service behind it. The value it returns is an ordinary `Agent`, so it works anywhere an agent works, including inside an [`AgentController`](/docs/harness/agent-controller).
 
 ## When to use a coding agent
 
