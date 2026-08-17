@@ -1,8 +1,12 @@
 import type { SpanRecord } from '@mastra/core/storage';
-import { format } from 'date-fns';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { formatSpanDuration, getTokenLimitMessage, isTokenLimitExceeded } from '../utils/span-utils';
+import {
+  formatSpanDuration,
+  formatSpanPanelTimestamp,
+  getTokenLimitMessage,
+  isTokenLimitExceeded,
+} from '../utils/span-utils';
 import { SpanTokenUsage } from './span-token-usage';
 import type { TokenUsage } from './span-token-usage';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
@@ -140,6 +144,8 @@ function SpanDataPanelContent({
   isAnchor?: boolean;
 }) {
   const duration = formatSpanDuration(span.startedAt, span.endedAt);
+  const startedAt = formatSpanPanelTimestamp(span.startedAt);
+  const endedAt = formatSpanPanelTimestamp(span.endedAt);
   const usage = span.attributes?.usage as TokenUsage | undefined;
 
   const detailsBody = (
@@ -266,20 +272,16 @@ function SpanDataPanelContent({
             <DataKeysAndValues.Value>{span.spanType}</DataKeysAndValues.Value>
           </>
         )}
-        {span.startedAt && (
+        {startedAt && (
           <>
             <DataKeysAndValues.Key>Started</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>
-              {format(new Date(span.startedAt), 'MMM dd, h:mm:ss.SSS aaa')}
-            </DataKeysAndValues.Value>
+            <DataKeysAndValues.Value>{startedAt}</DataKeysAndValues.Value>
           </>
         )}
-        {span.endedAt && (
+        {endedAt && (
           <>
             <DataKeysAndValues.Key>Ended</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>
-              {format(new Date(span.endedAt), 'MMM dd, h:mm:ss.SSS aaa')}
-            </DataKeysAndValues.Value>
+            <DataKeysAndValues.Value>{endedAt}</DataKeysAndValues.Value>
           </>
         )}
         {duration && (

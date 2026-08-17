@@ -1,7 +1,6 @@
 import type { SpanRecord } from '@mastra/core/storage';
-import { format } from 'date-fns';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
-import { formatSpanDuration } from '../utils/span-utils';
+import { formatSpanDuration, formatSpanPanelTimestamp } from '../utils/span-utils';
 import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
 
 const KV = DataDetailsPanel.KeyValueList;
@@ -21,6 +20,8 @@ export interface SpanDetailsViewProps {
  */
 export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetailsViewProps) {
   const duration = formatSpanDuration(span?.startedAt, span?.endedAt);
+  const startedAt = formatSpanPanelTimestamp(span?.startedAt);
+  const endedAt = formatSpanPanelTimestamp(span?.endedAt);
 
   return (
     <DataDetailsPanel>
@@ -44,16 +45,16 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
                 <KV.Value>{span.spanType}</KV.Value>
               </>
             )}
-            {span.startedAt && (
+            {startedAt && (
               <>
                 <KV.Key>Started</KV.Key>
-                <KV.Value>{format(new Date(span.startedAt), 'MMM dd, h:mm:ss.SSS aaa')}</KV.Value>
+                <KV.Value>{startedAt}</KV.Value>
               </>
             )}
-            {span.endedAt && (
+            {endedAt && (
               <>
                 <KV.Key>Ended</KV.Key>
-                <KV.Value>{format(new Date(span.endedAt), 'MMM dd, h:mm:ss.SSS aaa')}</KV.Value>
+                <KV.Value>{endedAt}</KV.Value>
               </>
             )}
             {duration && (
