@@ -12,8 +12,10 @@ Server on Mastra platform is a production deployment target that runs your Mastr
 
 You get a stable API endpoint with environment variable management and custom domain support, plus deploy history out of the box.
 
-:::note
-`mastra server deploy` is the earlier split deploy path. New projects should use the unified [`mastra deploy`](/docs/mastra-platform/deploy) command, which adds preflight validation, environments, and CLI-managed databases.
+:::warning[Deprecated — removed October 30, 2026]
+`mastra server deploy` is the earlier split deploy path and is being **removed on October 30, 2026**. After that date the command will fail, and projects still on the legacy pipeline cannot ship a new deploy until they migrate. Existing deployed services keep running.
+
+Migrate to the unified [`mastra deploy`](/docs/mastra-platform/deploy) command. See [Migrating from server and studio deploys](/docs/mastra-platform/deploy#migrating-from-server-and-studio-deploys).
 :::
 
 :::note

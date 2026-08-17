@@ -204,6 +204,62 @@ In CI, set `MASTRA_PROJECT_ID` and `MASTRA_API_TOKEN` and pass `--yes`:
 mastra deploy --env production --yes
 ```
 
+## Migrating from server and studio deploys
+
+`mastra server deploy` and `mastra studio deploy` are the earlier split deploy paths. They are being **removed on October 30, 2026**. After that date both commands will fail and legacy-pipeline projects cannot ship a new deploy until they migrate.
+
+Existing deployed services keep running — this only affects your ability to ship new deploys.
+
+### Who this affects
+
+You are on the legacy pipeline if any of these are true:
+
+- Your last deploy went out with `mastra server deploy` or `mastra studio deploy` and the deploy log printed a **Deprecated** banner.
+- Your project's most recent successful deploy shipped `@mastra/core` older than `1.44`.
+- Your organization has not been opted in to environment deploys.
+
+The deploy log is the source of truth: the legacy pipeline prints a deprecation banner on every deploy.
+
+### Migrate
+
+<Steps>
+  <StepItem>
+    Upgrade `@mastra/core` in your project. The environment pipeline calls `setStudio` on the built artifact, which requires `@mastra/core` `>= 1.44`.
+
+    ```bash npm2yarn
+    npm install @mastra/core@latest
+    ```
+  </StepItem>
+
+  <StepItem>
+    Replace the split command in your scripts and CI with the unified command:
+
+    ```diff
+    - mastra server deploy
+    - mastra studio deploy
+    + mastra deploy
+    ```
+
+    `mastra deploy` builds once and deploys both the server and the Studio UI shell for the target environment. Any recent `mastra` CLI supports it — if yours does not, upgrade with `npm install -g mastra@latest`.
+  </StepItem>
+
+  <StepItem>
+    Deploy once. Your project is auto-adopted onto the environment pipeline and the `production` environment is created on first deploy. See [Environments](/docs/mastra-platform/environments) for the full model.
+  </StepItem>
+
+  <StepItem>
+    Move any project-level environment variables to the environment that needs them, in the dashboard under **Environments → \<env> → Variables**. See [Environment variables](/docs/mastra-platform/environments#environment-variables).
+  </StepItem>
+</Steps>
+
+### FAQ
+
+**My deploy fails with `MASTRA_CORE_TOO_OLD`.** The environment pipeline requires `@mastra/core` `>= 1.44`. Upgrade `@mastra/core` and redeploy.
+
+**My organization is not opted in yet.** Contact support. Opt-in will be automatic before the October 30, 2026 cutoff.
+
+**Can I roll back?** Yes. Environments retain deploy history and you can redeploy any prior successful artifact from the dashboard.
+
 ## Related
 
 - [Environments](/docs/mastra-platform/environments)
