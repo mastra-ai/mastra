@@ -432,7 +432,7 @@ See the [`ToolSearchProcessor` reference](/reference/processors/tool-search-proc
 
 Handles provider-specific history incompatibilities when agents reuse messages across model providers. It can rewrite the outbound LLM request before the provider call, or recover from known provider API errors and retry.
 
-Add `ProviderHistoryCompat` explicitly when you need provider history compatibility rules, reactive API error recovery, custom compatibility rules, or predictable processor ordering.
+Add `ProviderHistoryCompat` explicitly when you need provider history compatibility rules, reactive API error recovery, custom compatibility rules, or predictable processor ordering. For Azure OpenAI agents that use observational memory, the processor rewrites `<system-reminder>` wrappers in outbound prompts to avoid content moderation refusals. Stored history remains unchanged.
 
 See the [`ProviderHistoryCompat` reference](/reference/processors/provider-history-compat) for setup, built-in rules, and custom rule options.
 
@@ -651,7 +651,7 @@ await agent.generate('Your prompt', { maxSteps: MAX_STEPS })
 ```
 
 :::note
-Reactive signals default to `tagName: 'system-reminder'`. Visit [Signals](/docs/long-running-agents/signals#send-processor-context) for more on processor-emitted signals.
+Reactive signals default to `tagName: 'system-reminder'`. Visit [Signals](/docs/harness/signals#send-processor-context) for more on processor-emitted signals.
 :::
 
 ### Deliver a reminder without retaining it

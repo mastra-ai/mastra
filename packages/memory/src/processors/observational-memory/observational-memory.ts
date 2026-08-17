@@ -2783,7 +2783,13 @@ ${formattedMessages}
    * }
    * ```
    */
-  async getStatus(opts: { threadId: string; resourceId?: string; messages?: MastraDBMessage[] }): Promise<{
+  async getStatus(opts: {
+    threadId: string;
+    resourceId?: string;
+    messages?: MastraDBMessage[];
+    /** Pre-loaded record to skip the initial storage read. */
+    record?: ObservationalMemoryRecord;
+  }): Promise<{
     record: ObservationalMemoryRecord;
     pendingTokens: number;
     threshold: number;
@@ -2799,14 +2805,14 @@ ${formattedMessages}
     asyncReflectionEnabled: boolean;
     scope: 'resource' | 'thread';
   }> {
-    const { threadId, resourceId } = opts;
-    const record = await this.getOrCreateRecord(threadId, resourceId);
+    const { threadId, resourceId, record: providedRecord, messages } = opts;
+    const record = providedRecord ?? (await this.getOrCreateRecord(threadId, resourceId));
     const currentObservationTokens = record.observationTokenCount ?? 0;
 
     // Use provided messages or load from storage
     let unobservedMessages: MastraDBMessage[];
-    if (opts.messages) {
-      unobservedMessages = this.getUnobservedMessages(opts.messages, record);
+    if (messages) {
+      unobservedMessages = this.getUnobservedMessages(messages, record);
     } else {
       const rawMessages = await this.loadMessagesFromStorage(
         threadId,
@@ -3015,7 +3021,7 @@ ${formattedMessages}
     pendingTokens?: number;
     /** Pre-loaded record to skip the initial getOrCreateRecord() fetch.
      *  When called fire-and-forget, passing the record avoids an async gap
-     *  before lastBufferedBoundary is set. */
+     *  before lastBufferedBoundary is set and exposes buffering state to same-step callers. */
     record?: ObservationalMemoryRecord;
     writer?: ProcessorStreamWriter;
     agent?: ProcessorContext['agent'];
@@ -3035,6 +3041,7 @@ ${formattedMessages}
     const { threadId, resourceId, requestContext, observabilityContext } = opts;
 
     let record = opts.record ?? (await this.getOrCreateRecord(threadId, resourceId));
+    const inMemoryRecord = record;
 
     // Check if buffering is enabled
     if (!this.buffering.isAsyncObservationEnabled()) {
@@ -3075,6 +3082,8 @@ ${formattedMessages}
 
     // Set persistent flag and register op
     registerOp(record.id, 'bufferingObservation');
+    inMemoryRecord.isBufferingObservation = true;
+    inMemoryRecord.lastBufferedAtTokens = currentTokens;
     this.storage.setBufferingObservationFlag(record.id, true, currentTokens).catch(err => {
       omError('[OM] Failed to set buffering observation flag', err);
     });
@@ -3086,8 +3095,17 @@ ${formattedMessages}
     });
     BufferingCoordinator.asyncBufferingOps.set(bufferKey, opPromise);
 
-    // Re-fetch record after mutex wait to get the latest state
+    // Keep the caller's turn-scoped record current while using a fresh storage snapshot
+    // for the asynchronous write path.
     record = (await this.storage.getObservationalMemory(record.threadId, record.resourceId)) ?? record;
+    const setBufferingState = (isBufferingObservation: boolean, lastBufferedAtTokens?: number) => {
+      inMemoryRecord.isBufferingObservation = isBufferingObservation;
+      record.isBufferingObservation = isBufferingObservation;
+      if (lastBufferedAtTokens !== undefined) {
+        inMemoryRecord.lastBufferedAtTokens = lastBufferedAtTokens;
+        record.lastBufferedAtTokens = lastBufferedAtTokens;
+      }
+    };
 
     let flagCleared = false;
 
@@ -3130,6 +3148,7 @@ ${formattedMessages}
       const newTokens = await this.tokenCounter.countMessagesAsync(candidateMessages);
 
       if (candidateMessages.length === 0 || (!opts.skipMinimumTokenCheck && newTokens < minNewTokens)) {
+        setBufferingState(false);
         return { buffered: false, record };
       }
 
@@ -3206,6 +3225,7 @@ ${formattedMessages}
       // Update the boundary tokens in storage + in-memory cache for interval tracking
       await this.storage.setBufferingObservationFlag(record.id, false, newTokens).catch(() => {});
       flagCleared = true;
+      setBufferingState(false, newTokens);
       BufferingCoordinator.lastBufferedBoundary.set(bufferKey, newTokens);
 
       // Update lastBufferedAtTime in-memory cache so subsequent buffer() calls filter correctly
@@ -3213,7 +3233,7 @@ ${formattedMessages}
       const cursor = new Date(maxTimestamp.getTime() + 1);
       BufferingCoordinator.lastBufferedAtTime.set(bufferKey, cursor);
 
-      const updatedRecord = await this.getOrCreateRecord(threadId, resourceId);
+      const updatedRecord = (await this.storage.getObservationalMemory(record.threadId, record.resourceId)) ?? record;
       return { buffered: true, record: updatedRecord };
     } catch (error) {
       omError('[OM] buffer() failed', error);
@@ -3224,6 +3244,7 @@ ${formattedMessages}
       resolveOp!();
       // Only clear the flag if the success path didn't already clear it (with token count)
       if (!flagCleared) {
+        setBufferingState(false);
         await this.storage.setBufferingObservationFlag(record.id, false).catch(() => {});
       }
     }
@@ -3257,6 +3278,8 @@ ${formattedMessages}
     checkThreshold?: boolean;
     /** Messages to use for threshold check (in-memory). If omitted, loads from storage. */
     messages?: MastraDBMessage[];
+    /** Pre-loaded record to skip the initial storage read. */
+    record?: ObservationalMemoryRecord;
     /** Current actor model for provider-change activation checks. */
     currentModel?: ObservationModelContext;
     /** Stream writer for emitting activation markers to the UI. */
@@ -3270,7 +3293,7 @@ ${formattedMessages}
   }> {
     const { threadId, resourceId } = opts;
 
-    const record = await this.getOrCreateRecord(threadId, resourceId);
+    const record = opts.record ?? (await this.getOrCreateRecord(threadId, resourceId));
 
     // Reset stale lastBufferedBoundary at the start of a new turn.
     // If the stored boundary is far above the current context size, it's
@@ -3336,7 +3359,7 @@ ${formattedMessages}
         activationActivateAfterIdle = activateAfterIdle;
         activateAfterIdleExpiredMs = ttlExpiredMs;
       } else {
-        const status = await this.getStatus({ threadId, resourceId, messages: thresholdMessages });
+        const status = await this.getStatus({ threadId, resourceId, record, messages: thresholdMessages });
         if (status.pendingTokens < status.threshold) {
           return { activated: false, record };
         }

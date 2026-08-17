@@ -16075,10 +16075,14 @@ describe('Processor stream events: buffering status and activation markers', () 
     // record (e.g. setBufferingObservationFlag) are visible everywhere. Real DBs
     // return fresh rows on each query, so the cached record remains stale.
     const originalGetOrCreate = om.getOrCreateRecord.bind(om);
-    om.getOrCreateRecord = async (...args: Parameters<typeof om.getOrCreateRecord>) => {
-      const record = await originalGetOrCreate(...args);
-      return JSON.parse(JSON.stringify(record));
-    };
+    const getOrCreateSpy = vi
+      .spyOn(om, 'getOrCreateRecord')
+      .mockImplementation(async (...args: Parameters<typeof om.getOrCreateRecord>) => {
+        const record = await originalGetOrCreate(...args);
+        return JSON.parse(JSON.stringify(record));
+      });
+    const setPendingSpy = vi.spyOn(storage, 'setPendingMessageTokens');
+    const emitProgressSpy = vi.spyOn(om, 'emitProgress');
 
     await storage.saveThread({
       thread: {
@@ -16173,12 +16177,14 @@ describe('Processor stream events: buffering status and activation markers', () 
       await new Promise(r => setTimeout(r, 50));
     }
 
+    expect(emitProgressSpy).toHaveBeenCalledTimes(1);
+    expect(setPendingSpy).toHaveBeenCalledTimes(1);
+    expect(getOrCreateSpy.mock.calls.length).toBeLessThan(3);
     expect(capturedStatusParts.length).toBeGreaterThanOrEqual(1);
 
     const lastStatus = capturedStatusParts[capturedStatusParts.length - 1];
-    // emitProgress should use a fresh record from storage (not the stale cached
-    // one from turn.start()). The fresh record reflects the isBufferingObservation
-    // flag set by buffer(), so the status should NOT be 'idle'.
+    // The turn-scoped record is updated before the asynchronous buffer work yields,
+    // so progress remains current without another storage fetch.
     expect(lastStatus.data.windows.buffered.observations.status).not.toBe('idle');
   });
 

@@ -100,7 +100,7 @@ export function WorkItemActivity({
           <button
             type="button"
             draggable={false}
-            className="text-ui-xs text-icon4 hover:text-icon6 focus-visible:outline-accent1 relative z-20 flex min-w-0 items-center gap-1.5 rounded-full outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="text-ui-xs text-icon4 hover:text-icon6 focus-visible:outline-accent1 relative flex min-w-0 items-center gap-1.5 rounded-full outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
             aria-label={`View activity by ${worker.name}`}
             onPointerDown={event => event.stopPropagation()}
           >
