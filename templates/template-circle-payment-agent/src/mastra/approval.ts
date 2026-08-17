@@ -1,13 +1,19 @@
-// Which shell commands stop for the user first.
+// Which shell commands stop for the user first, and which the agent may not run at all.
 //
 // Most of what the agent does is recoverable, so the default is to run. What stops is what cannot
 // be taken back: a stablecoin transfer has no chargeback, and x402 settles before the seller
 // answers. This is not a sandbox — it does not stop the agent deleting files or installing
 // packages. For a ceiling no instruction can argue past, cap spending with `circle wallet limit
 // set`.
+//
+// Two lists, because "stop and ask" and "not yours to run" are different answers. Approval is for
+// a spend the user can weigh and allow. The second list is for commands that belong in the user's
+// own terminal — accepting Terms of Use, and anything Circle confirms with a one-time code — which
+// no approval can make safe or even workable here: the sandbox has no terminal to type a code
+// into, so an approved login would sit at a prompt until it timed out.
 
 /** Matched anywhere in a segment, so a pipe or a `$(…)` cannot slip one through. */
-const NEEDS_APPROVAL: readonly RegExp[] = [
+const SPENDS: readonly RegExp[] = [
   // Buying from a seller. x402 charges before the request resolves, so this is spent on send.
   /\bcircle services pay\b/,
   // Sending USDC to an address, with no seller to check the destination against.
@@ -17,12 +23,15 @@ const NEEDS_APPROVAL: readonly RegExp[] = [
   /\bcircle gateway (deposit|withdraw)\b/,
   // A signature can authorise a later transfer, so it spends just as surely, only afterwards.
   /\bcircle wallet (swap|execute|sign)\b/,
-  // The ceiling every other entry here relies on.
-  /\bcircle wallet limit (set|reset)\b/,
-  // Circle's own rules: the agent must never accept the Terms of Use for the user, and login waits
-  // on a one-time code this sandbox has no way to answer.
+];
+
+/** Commands only the user can complete, in a terminal the agent does not have. */
+const USER_ONLY: readonly RegExp[] = [
+  // Circle's own rule: an agent must never accept the Terms of Use on a user's behalf.
   /\bcircle terms (accept|reset)\b/,
+  // Both wait on a one-time code, which must never pass through the agent.
   /\bcircle wallet login\b/,
+  /\bcircle wallet limit (set|reset)\b/,
 ];
 
 // `circle services pay --estimate` returns a price without signing, and `--help` prints text.
@@ -47,18 +56,34 @@ function isReadOnlyInvocation(segment: string): boolean {
 }
 
 /**
- * Whether `command` needs the user to approve it before it runs.
- *
- * A shell line is not one command, so it is split first and each piece judged on its own: any one
- * of them is enough to stop the whole line. Everything not listed above runs immediately.
+ * A shell line is not one command, so it is split and each piece judged on its own: any one of
+ * them is enough to stop the whole line.
  */
-export function requiresApproval(command: string): boolean {
-  const segments = command
+function segmentsOf(command: string): string[] {
+  return command
     .split(/\|\||&&|[;|\n]/)
     .map(segment => segment.trim().replace(/\s+/g, ' '))
     .filter(Boolean);
+}
 
-  return segments.some(
-    segment => NEEDS_APPROVAL.some(pattern => pattern.test(segment)) && !isReadOnlyInvocation(segment),
+function matches(command: string, patterns: readonly RegExp[]): boolean {
+  return segmentsOf(command).some(
+    segment => patterns.some(pattern => pattern.test(segment)) && !isReadOnlyInvocation(segment),
   );
+}
+
+/**
+ * Whether `command` spends money, and so needs the user to approve it before it runs.
+ *
+ * Deliberately narrow. Everything else — searching the marketplace, reading balances, installing
+ * skills — runs immediately, because an approval prompt the user answers by reflex protects
+ * nothing when the one that matters arrives.
+ */
+export function requiresApproval(command: string): boolean {
+  return matches(command, SPENDS);
+}
+
+/** Whether `command` is one the user has to run themselves. */
+export function requiresUserTerminal(command: string): boolean {
+  return matches(command, USER_ONLY);
 }

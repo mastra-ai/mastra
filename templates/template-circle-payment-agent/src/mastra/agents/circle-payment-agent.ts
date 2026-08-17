@@ -6,7 +6,7 @@ import { Agent } from '@mastra/core/agent';
 import { LocalFilesystem, LocalSandbox, WORKSPACE_TOOLS, Workspace } from '@mastra/core/workspace';
 import { Memory } from '@mastra/memory';
 
-import { requiresApproval } from '../approval';
+import { requiresApproval, requiresUserTerminal } from '../approval';
 
 // The skills registry's global install directory, which `~/.claude/skills` and its equivalents
 // symlink into. Mastra reads the same files Claude Code and Codex do, so a skill is installed once
@@ -83,6 +83,24 @@ const workspace = new Workspace({
   // because the sandbox already reaches the whole filesystem, so this grants nothing new.
   filesystem: new LocalFilesystem({ basePath: homedir(), contained: false }),
   tools: {
+    // Commands the user has to run themselves never reach the shell. Returning the refusal as the
+    // tool's own result — rather than suspending for an approval the user cannot usefully grant —
+    // tells the model what to do next in the place it is already reading.
+    hooks: {
+      beforeToolCall: ({ workspaceToolName, input }) => {
+        if (workspaceToolName !== WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND) return;
+        const command = String((input as { command?: unknown })?.command ?? '');
+        if (!requiresUserTerminal(command)) return;
+        return {
+          proceed: false,
+          output:
+            `Blocked: \`${command}\` is the user's to run, not yours. It either accepts Circle's ` +
+            'Terms of Use or waits on a one-time code, and this shell has no terminal to type one ' +
+            'into. Give the user the exact command to paste into their own terminal, say what it ' +
+            'does, and continue once they confirm. Do not retry it here or work around it.',
+        };
+      },
+    },
     // The shell, plus reading. Writing, editing and deleting stay off — the shell does those, under
     // the gate below.
     enabled: false,
