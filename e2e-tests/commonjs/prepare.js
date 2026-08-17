@@ -1,7 +1,7 @@
-import { spawnSync } from 'node:child_process';
 import { cp, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { installWithRetry } from '../_local-registry-setup/install.js';
 
 export async function setupTestProject(pathToStoreFiles) {
   const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -13,9 +13,5 @@ export async function setupTestProject(pathToStoreFiles) {
   await cp(projectPath, newPath, { recursive: true });
 
   console.log('Installing dependencies...');
-  spawnSync('pnpm', ['install', '--config.minimum-release-age=0'], {
-    cwd: newPath,
-    stdio: 'inherit',
-    shell: true,
-  });
+  installWithRetry('pnpm', ['install', '--config.minimum-release-age=0'], { cwd: newPath, shell: true });
 }

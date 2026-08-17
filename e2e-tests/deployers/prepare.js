@@ -1,7 +1,7 @@
-import { spawnSync } from 'node:child_process';
 import { cp, mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { installWithRetry, runOrThrow } from '../_local-registry-setup/install.js';
 
 /**
  *
@@ -32,18 +32,8 @@ export async function setupDeployerProject(pathToStoreFiles, tag, pkgManager, de
 
   console.log('Directory:', newPath);
   console.log('Installing dependencies...');
-  spawnSync(pkgManager, installArgs, {
-    cwd: newPath,
-    stdio: 'inherit',
-    shell: true,
-    env,
-  });
+  installWithRetry(pkgManager, installArgs, { cwd: newPath, shell: true, env });
 
   console.log('building mastra...');
-  spawnSync(pkgManager, ['build'], {
-    cwd: newPath,
-    stdio: 'inherit',
-    shell: true,
-    env,
-  });
+  runOrThrow(pkgManager, ['build'], { cwd: newPath, shell: true, env });
 }
