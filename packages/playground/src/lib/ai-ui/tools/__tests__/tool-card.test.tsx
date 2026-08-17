@@ -248,18 +248,20 @@ describe('ToolCard dispatch', () => {
   });
 
   it('renders a generic tool badge as a fallback', () => {
-    renderToolCard(baseProps({ toolName: 'searchDocs' }));
-    expect(screen.getByText('searchDocs')).toBeTruthy();
+    renderToolCard(baseProps({ toolName: 'search_docs' }));
+    expect(screen.getByRole('group', { name: 'Tool: search_docs' })).toBeTruthy();
+    expect(screen.getByText('Search docs')).toBeTruthy();
   });
 
   it('treats background-task string results as a generic tool badge', () => {
     renderToolCard(
       baseProps({
-        toolName: 'startJob',
+        toolName: 'start_job',
         output: 'Background task started with id abc',
       }),
     );
-    expect(screen.getByText('startJob')).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Tool: start_job' })).toBeTruthy();
+    expect(screen.getByText('Start job')).toBeTruthy();
   });
 
   it('surfaces the agent suspend payload when suspendedTools is keyed by toolCallId', () => {

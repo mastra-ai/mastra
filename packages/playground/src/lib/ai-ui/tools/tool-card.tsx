@@ -222,6 +222,7 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
         isNetwork={isNetwork}
         toolCalled={toolCalled}
         withoutArgs={isAgent || isWorkflow}
+        state={state}
       />
     );
   }
@@ -335,6 +336,7 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
         suspendPayload={suspendedToolMetadata?.suspendPayload}
         isNetwork={isNetwork}
         toolCalled={toolCalled}
+        state={state}
       />
       {mcpAppInfo && result !== undefined && (
         <McpAppToolResult

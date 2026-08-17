@@ -27,10 +27,10 @@ const renderWithProviders = (node: ReactNode) =>
 afterEach(() => cleanup());
 
 describe('ToolBadge', () => {
-  it('renders tool arguments as a static code block', () => {
+  it('uses the Factory tool row and filters internal arguments', () => {
     renderWithProviders(
       <ToolBadge
-        toolName="searchDocs"
+        toolName="search_docs"
         args={{
           query: 'CodeBlock',
           __mastraMetadata: { source: 'internal' },
@@ -41,23 +41,25 @@ describe('ToolBadge', () => {
         toolCallId="call-1"
         toolApprovalMetadata={undefined}
         isNetwork={false}
+        state="input-available"
       />,
     );
 
-    fireEvent.click(screen.getByText('searchDocs'));
+    const tool = screen.getByRole('group', { name: 'Tool: search_docs' });
+    expect(tool.getAttribute('aria-busy')).toBe('true');
+    expect(screen.getByText('Search docs')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Search docs/ }));
 
-    const toolArgs = screen.getByTestId('tool-args');
-
-    expect(toolArgs.textContent).toContain('"query": "CodeBlock"');
-    expect(toolArgs.textContent).not.toContain('__mastraMetadata');
-    expect(toolArgs.textContent).not.toContain('_background');
+    expect(tool.textContent).toContain('"query": "CodeBlock"');
+    expect(tool.textContent).not.toContain('__mastraMetadata');
+    expect(tool.textContent).not.toContain('_background');
     expect(screen.queryByLabelText('Code editor')).toBeNull();
   });
 
-  it('renders tool results as a static code block', () => {
+  it('renders successful results inside the shared disclosure', () => {
     renderWithProviders(
       <ToolBadge
-        toolName="getWeather"
+        toolName="get_weather"
         args={{ location: 'Paris' }}
         result={{
           temperature: 20,
@@ -67,15 +69,52 @@ describe('ToolBadge', () => {
         toolCallId="call-1"
         toolApprovalMetadata={undefined}
         isNetwork={false}
+        state="output-available"
       />,
     );
 
-    fireEvent.click(screen.getByText('getWeather'));
+    const tool = screen.getByRole('group', { name: 'Tool: get_weather' });
+    expect(tool.getAttribute('aria-busy')).toBe('false');
+    fireEvent.click(screen.getByRole('button', { name: /Get weather/ }));
 
-    const toolResult = screen.getByTestId('tool-result');
-
-    expect(toolResult.textContent).toContain('"temperature": 20');
-    expect(toolResult.textContent).toContain('"conditions": "cloudy"');
+    expect(tool.textContent).toContain('"temperature": 20');
+    expect(tool.textContent).toContain('"conditions": "cloudy"');
     expect(screen.queryByLabelText('Code editor')).toBeNull();
+  });
+
+  it('maps failed calls to the Factory failure state', () => {
+    renderWithProviders(
+      <ToolBadge
+        toolName="fetch_weather"
+        args={{ location: 'Paris' }}
+        result="Request failed"
+        toolOutput={[]}
+        toolCallId="call-1"
+        toolApprovalMetadata={undefined}
+        isNetwork={false}
+        state="output-error"
+      />,
+    );
+
+    expect(screen.getByRole('img', { name: 'Failed' })).toBeTruthy();
+  });
+
+  it('opens pending approvals inside the shared tool rail', () => {
+    renderWithProviders(
+      <ToolBadge
+        toolName="charge_card"
+        args={{ amount: 42 }}
+        result={undefined}
+        toolOutput={[]}
+        toolCallId="call-1"
+        toolApprovalMetadata={{ toolCallId: 'call-1', toolName: 'charge_card', args: { amount: 42 } }}
+        isNetwork={false}
+        state="input-available"
+      />,
+    );
+
+    const tool = screen.getByRole('group', { name: 'Tool: charge_card' });
+    expect(tool.textContent).toContain('Approval required');
+    expect(screen.getByRole('button', { name: /Approve/ })).toBeTruthy();
   });
 });
