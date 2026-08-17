@@ -73,6 +73,10 @@ export class CachingPubSub extends PubSub {
     return this.inner.supportsNativeBatching;
   }
 
+  get supportsOffsets(): boolean {
+    return true;
+  }
+
   /**
    * Log an error message using the configured logger or console.error.
    */

@@ -1,8 +1,8 @@
 ---
-title: "Reference: EventEmitterPubSub | PubSub"
+title: 'Reference: EventEmitterPubSub | PubSub'
 description: API reference for EventEmitterPubSub, the default in-process pub/sub implementation in Mastra.
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # EventEmitterPubSub
@@ -86,6 +86,11 @@ const pubsub = new EventEmitterPubSub(undefined, { logger })
     name: 'supportsNativeBatching',
     type: 'boolean',
     description: 'Returns `true`. Subscribers can opt in to batched delivery with `options.batch`.',
+  },
+  {
+    name: 'supportsOffsets',
+    type: 'boolean',
+    description: 'Returns `false`. The in-memory emitter does not retain indexed event history.',
   },
 ]}
 />
