@@ -64,6 +64,24 @@ export type ResolvedActivationTTL = number | 'auto';
  */
 export type ObservationalMemoryModel = Exclude<AgentConfig['model'], undefined> | ModelByInputTokens;
 
+/**
+ * Controls which continuation-hint sections OM asks the Observer and Reflector to emit.
+ *
+ * Pass `false` to disable both, or an object to disable them individually. Agents that
+ * drive their own control flow generally want `suggestedResponse: false` so memory does
+ * not compete with the agent for what to say next.
+ *
+ * @default true
+ */
+export type ContinuationHintsConfig =
+  | boolean
+  | {
+      /** Emit the `<current-task>` section. @default true */
+      currentTask?: boolean;
+      /** Emit the `<suggested-response>` section. @default true */
+      suggestedResponse?: boolean;
+    };
+
 export interface ObservationConfig {
   /**
    * Model for the Observer agent.
@@ -202,6 +220,14 @@ export interface ObservationConfig {
   instruction?: string;
 
   /**
+   * Which continuation-hint sections the Observer should emit.
+   * Set `{ suggestedResponse: false }` when the agent owns its own control flow.
+   *
+   * @default true
+   */
+  continuationHints?: ContinuationHintsConfig;
+
+  /**
    * Manage working memory through Observational Memory extraction.
    * When enabled alongside `workingMemory.enabled`, Memory supplies defaults that
    * disable main-agent working memory management and add the WorkingMemoryExtractor.
@@ -338,6 +364,14 @@ export interface ReflectionConfig {
    * Use this to customize reflection behavior for specific use cases.
    */
   instruction?: string;
+
+  /**
+   * Which continuation-hint sections the Reflector should emit.
+   * Set `{ suggestedResponse: false }` when the agent owns its own control flow.
+   *
+   * @default true
+   */
+  continuationHints?: ContinuationHintsConfig;
 
   /**
    * Additional values to extract from reflector output. Built-in OM fields are registered automatically.
@@ -539,6 +573,8 @@ export interface DataOmObservationFailedPart {
  */
 export interface DataOmStatusPart {
   type: 'data-om-status';
+  /** Stream to clients without persisting as a standalone data-only message. */
+  transient?: boolean;
   data: {
     windows: {
       /** Active context windows — current token usage and thresholds */

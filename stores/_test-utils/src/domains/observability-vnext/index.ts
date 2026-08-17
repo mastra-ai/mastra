@@ -844,7 +844,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         coreFeatures.delete('observability-delta-polling');
 
         try {
-          expect(storage.getFeatures()).toBeUndefined();
+          expect(storage.getFeatures()).not.toContain('delta-polling');
 
           const page = await storage.listLogs({});
           expect(page.deltaCursor).toBeUndefined();

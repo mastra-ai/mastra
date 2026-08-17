@@ -760,7 +760,9 @@ describe('TaskPanel', () => {
     await pushTasks([taskPlanMenu, taskShop, taskCook]);
 
     expect(await screen.findByTestId('task-panel')).toBeTruthy();
-    expect(screen.getByText('0/3 completed')).toBeTruthy();
+    const progress = screen.getByRole('progressbar', { name: 'Task completion' });
+    expect(progress.getAttribute('aria-valuenow')).toBe('0');
+    expect(progress.getAttribute('aria-valuemax')).toBe('3');
     expect(screen.getByText('Planning menu')).toBeTruthy();
     expect(screen.getByText('Create shopping list')).toBeTruthy();
     expect(screen.getByText('Cook meal')).toBeTruthy();
@@ -776,7 +778,11 @@ describe('TaskPanel', () => {
     await pushTasks([taskPlanMenu, taskShop]);
     await pushTasks([completedPlan, activeShop], 'task-list-update');
 
-    expect(await screen.findByText('1/2 completed')).toBeTruthy();
+    await waitFor(() => {
+      const progress = screen.getByRole('progressbar', { name: 'Task completion' });
+      expect(progress.getAttribute('aria-valuenow')).toBe('1');
+      expect(progress.getAttribute('aria-valuemax')).toBe('2');
+    });
     expect(screen.getByText('Plan menu')).toBeTruthy();
     expect(screen.getByText('Shopping for ingredients')).toBeTruthy();
     expect(screen.queryByText('Planning menu')).toBeFalsy();
