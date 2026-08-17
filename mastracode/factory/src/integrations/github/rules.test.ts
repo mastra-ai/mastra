@@ -1161,6 +1161,149 @@ describe('GithubRules', () => {
     );
   });
 
+  it('delivers a changes-requested review into the authoring agent session', async () => {
+    // The rule test above only proves a decision row of the right shape exists.
+    // This one runs the dispatcher over that row so the leg is exercised all the
+    // way to the message the authoring agent actually receives.
+    const { github, sourceControl, integrationStorage, workItems, projects, project, projectRepository } =
+      await setup('read');
+    const rules = builtInFactoryRules();
+    const transitionService = new FactoryTransitionService({ storage: workItems, rules });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules,
+    });
+
+    const notifications: Array<{ threadId: string; summary: string; priority: string }> = [];
+    let threadId: string | undefined = 'thread-work';
+    const session = {
+      thread: {
+        list: vi.fn(async () => []),
+        create: vi.fn(async () => {
+          threadId = 'thread-work';
+          return { id: threadId };
+        }),
+        switch: vi.fn(async ({ threadId: next }: { threadId: string }) => {
+          threadId = next;
+        }),
+        setSetting: vi.fn(async () => {}),
+        rename: vi.fn(async () => {}),
+        requireId: vi.fn(() => {
+          if (!threadId) throw new Error('Thread was not persisted before binding creation.');
+          return threadId;
+        }),
+        listActiveMessages: vi.fn(async () => []),
+      },
+      getWorkspace: () => ({ skills: { maybeRefresh: vi.fn(async () => {}), get: vi.fn(async () => undefined) } }),
+      subscribe: vi.fn(() => () => {}),
+      state: { set: vi.fn(async () => {}) },
+      sendMessage: vi.fn(async () => {}),
+      sendSignal: vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, action: 'wake' }) })),
+      sendNotificationSignal: vi.fn(
+        async (input: { summary: string; priority: string }) => (
+          notifications.push({ threadId: threadId!, summary: input.summary, priority: input.priority }),
+          {
+            persisted: Promise.resolve(),
+            accepted: Promise.resolve({ action: 'wake', output: { consumeStream: async () => {} } }),
+          }
+        ),
+      ),
+    };
+    const controller = {
+      createSession: vi.fn(async () => session),
+      getSessionByResource: vi.fn(async () => session),
+    };
+    await sourceControl.sessions.create({
+      sessionId: 'session-work-42',
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'factory/issue-42',
+      baseBranch: 'main',
+    });
+    const coordinator = new FactoryStartCoordinator(controller as never, workItems, transitionService, sourceControl);
+    const prepared = await coordinator.prepare({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      sessionId: 'session-work-42',
+      threadTitle: 'Issue 42',
+      kickoffKey: 'kickoff-work-42',
+      destinationStage: 'execute',
+      workItem: {
+        role: 'work',
+        input: {
+          externalSource: {
+            integrationId: 'github',
+            type: 'issue',
+            externalId: 'github:10:issue:42',
+            url: 'https://github.com/acme/repo/issues/42',
+          },
+          title: 'Issue 42',
+          stages: ['execute'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+    });
+    await integrationStorage.subscriptions.create({
+      orgId: 'org-1',
+      targetKey: 'factory-pr-provenance:10:17',
+      threadId: 'thread-work',
+      status: 'active',
+      data: { kind: 'factory-pr-provenance', workItemId: prepared.workItemId },
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage: workItems,
+      isAutoRunEnabled: async () => true,
+      ownerId: 'worker-1',
+    });
+
+    await service.ingest({
+      event: 'pull_request_review',
+      deliveryId: 'delivery-review-dispatched',
+      payload: {
+        action: 'submitted',
+        installation: { id: 7 },
+        repository: { id: 10, full_name: 'acme/repo' },
+        sender: { login: 'reviewer' },
+        review: {
+          id: 99,
+          state: 'changes_requested',
+          body: 'This needs a null check.',
+          html_url: 'https://github.com/acme/repo/pull/17#pullrequestreview-99',
+        },
+        pull_request: {
+          number: 17,
+          title: 'PR 17',
+          html_url: 'https://github.com/acme/repo/pull/17',
+          state: 'open',
+          merged: false,
+          head: { ref: 'feature' },
+          base: { ref: 'main' },
+        },
+      },
+    });
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(notifications).toEqual([
+      expect.objectContaining({
+        threadId: 'thread-work',
+        priority: 'high',
+        summary: expect.stringContaining('https://github.com/acme/repo/pull/17'),
+      }),
+    ]);
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions.filter(decision => decision.decision.type === 'sendMessage').map(decision => decision.status)).
+      toEqual(['succeeded']);
+  });
+
   it('routes a comment on a pull request back to the Work item that authored it', async () => {
     // Comments on a PR arrive as `issue_comment` and used to be dropped at the
     // ingress, so review feedback left as a plain comment — the fallback the
