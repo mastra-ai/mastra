@@ -108,7 +108,7 @@ export function createPromptAlignmentScorerLLM({
   const scale = options?.scale || 1;
   const evaluationMode = options?.evaluationMode || 'both';
   const contextMode = options?.contextMode || 'current';
-  const maxRememberedMessages = Math.max(1, options?.maxRememberedMessages || 10);
+  const maxRememberedMessages = Math.max(1, options?.maxRememberedMessages ?? 10);
 
   return createScorer<ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge>({
     id: 'prompt-alignment-scorer',
