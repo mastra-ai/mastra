@@ -1,5 +1,37 @@
 # @mastra/factory
 
+## 0.8.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`940bf5c`](https://github.com/mastra-ai/mastra/commit/940bf5ccf04f2c9ebd8a1390431733222a03b1cd)]:
+  - @mastra/core@1.60.0-alpha.7
+  - @mastra/code-sdk@1.2.2-alpha.7
+
+## 0.8.0-alpha.7
+
+### Patch Changes
+
+- Fixed Linear issue reconciliation for issues that are not assigned to a project. ([#21601](https://github.com/mastra-ai/mastra/pull/21601))
+
+- Updated dependencies [[`0b4f108`](https://github.com/mastra-ai/mastra/commit/0b4f1089aa8d92e67c2a8e99726822c5ee410784), [`88ddc7c`](https://github.com/mastra-ai/mastra/commit/88ddc7ce01d40175f13a3228b789a906779680bd), [`a7dd322`](https://github.com/mastra-ai/mastra/commit/a7dd32247d95afc539f483ca37f4594af0387f59)]:
+  - @mastra/core@1.60.0-alpha.6
+  - @mastra/code-sdk@1.2.2-alpha.6
+
+## 0.8.0-alpha.6
+
+### Minor Changes
+
+- Add per-repository worktree teardown commands and run them during terminal, explicit, and destructive Factory session cleanup. ([#21564](https://github.com/mastra-ai/mastra/pull/21564))
+
+## 0.7.1-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`74e5bd3`](https://github.com/mastra-ai/mastra/commit/74e5bd315b8b3a1e04cb6cf480bb0f5fc4951dc8)]:
+  - @mastra/core@1.60.0-alpha.5
+  - @mastra/code-sdk@1.2.2-alpha.5
+
 ## 0.7.1-alpha.4
 
 ### Patch Changes
