@@ -58,9 +58,12 @@ export interface ToolCallProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 export function ToolCall(props: ToolCallProps): React.ReactElement;
+export function presentTool(toolName: string, input: unknown): ToolPresentation;
 ```
 
 `headerActions` carries application-specific metadata affordances in the row. `children` appends application-specific controls or sections to the expanded body. `defaultOpen` lets a pending approval remain visible and actionable on first render.
+
+`presentTool` exposes the same presentation result used by `ToolCall`. Factory's local `ToolGroup` uses it to build the group summary without copying the shared name and icon mapping.
 
 The component stays provider-independent. It must not read Playground or Factory contexts, query clients, message metadata, or transport state.
 
