@@ -7,18 +7,13 @@ function activitySnapshot(name: string) {
   return {
     updates: [
       {
-        id: `activity-${name.toLowerCase().replaceAll(' ', '-')}`,
-        action: 'fact-created',
-        type: 'fact',
-        recordId: `fact-${name.toLowerCase().replaceAll(' ', '-')}`,
+        action: 'item-created',
+        type: 'item',
         name,
-        targetId: `entity-${name.toLowerCase().replaceAll(' ', '-')}`,
-        targetType: 'entity',
-        sourceThreadId: 'source-thread',
         createdAt: '2026-07-15T20:00:00.000Z',
       },
     ],
-    hot: [{ type: 'entity', id: `entity-${name.toLowerCase().replaceAll(' ', '-')}`, name, updates: 1 }],
+    hot: [{ type: 'node', name, updates: 1 }],
   };
 }
 
@@ -90,7 +85,7 @@ export const subconsciousActivityRenderingScenario: McE2eScenario = {
     terminal.write('Start state signal host run.');
     terminal.write('\r');
     await runtime.waitForScreenText(/Subconscious knowledge/i, terminal, 10_000);
-    await runtime.waitForScreenText(/fact-created: Atlas launch/i, terminal, 10_000);
+    await runtime.waitForScreenText(/item-created: Atlas launch/i, terminal, 10_000);
     await runtime.waitForScreenText(/Hot: Atlas launch \(1\)/i, terminal, 10_000);
     runtime.printScreen('live Subconscious activity', terminal);
 
@@ -101,7 +96,7 @@ export const subconsciousActivityRenderingScenario: McE2eScenario = {
     terminal.write('\r');
     await runtime.waitForScreenText(new RegExp(`Switched to: ${REPLAY_TITLE}`, 'i'), terminal);
     await runtime.waitForScreenText(/Subconscious knowledge/i, terminal, 8_000);
-    await runtime.waitForScreenText(/fact-created: Beta service/i, terminal, 8_000);
+    await runtime.waitForScreenText(/item-created: Beta service/i, terminal, 8_000);
     await runtime.waitForScreenText(/Hot: Beta service \(1\)/i, terminal, 8_000);
     runtime.printScreen('replayed Subconscious activity', terminal);
     terminal.keyCtrlC();

@@ -17,10 +17,10 @@ export interface KnowledgeGraphNode {
   kind: string;
   scope: string[];
   rung: KnowledgeRung;
-  /** A pinned fact's wikilinks reference this entity (the pin accent). */
+  /** A pinned item's wikilinks reference this node (the pin accent). */
   pinned: boolean;
-  /** Facts owned by this entity inside the snapshot window (not a total). */
-  factCount: number;
+  /** Knowledge items owned by this node inside the snapshot window (not a total). */
+  itemCount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -29,23 +29,23 @@ export interface KnowledgeGraphEdge {
   id: string;
   source: string;
   target: string;
-  /** Always 'wikilink' — the fact's owner entity is the edge source. */
+  /** Always 'wikilink' — the item's owner node is the edge source. */
   type: 'wikilink';
-  factId: string;
-  /** Derived from a PINNED fact — the pin marks the relationship (A9). */
+  itemId: string;
+  /** Derived from a PINNED item — the pin marks the relationship (A9). */
   pinned?: boolean;
 }
 
 /**
- * A memory as a first-class graph element (A11): a windowed fact with the
- * in-window entities it touches, owner first (pins omit the hidden reserved
+ * A knowledge item as a first-class graph element (A11): a windowed item with the
+ * in-window nodes it touches, owner first (pins omit the hidden reserved
  * owner). Rendered by arity — 1: dot, 2: line, 3+: junction.
  */
-export interface KnowledgeGraphMemory {
+export interface KnowledgeGraphItem {
   id: string;
-  entityIds: string[];
+  nodeIds: string[];
   pinned: boolean;
-  /** Fact text, truncated server-side for hover cards. */
+  /** Knowledge item text, truncated server-side for hover cards. */
   text: string;
 }
 
@@ -54,8 +54,7 @@ export interface KnowledgeGraphPayload {
   threadId?: string;
   nodes: KnowledgeGraphNode[];
   edges: KnowledgeGraphEdge[];
-  /** Absent from pre-A11 server payloads — treat as empty. */
-  memories?: KnowledgeGraphMemory[];
+  items: KnowledgeGraphItem[];
   truncated: boolean;
   outOfWindow: Array<{ id: string; name: string }>;
   unresolvedCapped: { count: number; names: string[] };
@@ -63,9 +62,9 @@ export interface KnowledgeGraphPayload {
   version: string | null;
 }
 
-export interface KnowledgeEntityFact {
+export interface KnowledgeNodeItem {
   id: string;
-  parentEntityId: string;
+  parentNodeId: string;
   relation: 'owned' | 'mentions';
   text: string;
   scope: string[];
@@ -73,22 +72,23 @@ export interface KnowledgeEntityFact {
   sourceThreadId: string;
   capturedAt: string;
   when?: string;
-  /** This fact IS a pin (authored under the reserved pinned entity). */
+  /** This item IS a pin (authored under the reserved pinned node). */
   pinned: boolean;
   metadata?: Record<string, unknown>;
 }
 
-export interface KnowledgeEntityPayload {
-  entity: {
+export interface KnowledgeNodePayload {
+  node: {
     id: string;
     name: string;
     kind: string;
+    content: string;
     scope: string[];
     rung: KnowledgeRung;
     createdAt: string;
     updatedAt: string;
   };
-  facts: KnowledgeEntityFact[];
+  items: KnowledgeNodeItem[];
 }
 
 function knowledgeBase(baseUrl: string, factoryProjectId: string): string {
@@ -111,15 +111,15 @@ export async function fetchKnowledgeGraph(
   );
 }
 
-export async function fetchKnowledgeEntity(
+export async function fetchKnowledgeNode(
   baseUrl: string,
   factoryProjectId: string,
-  entityId: string,
+  nodeId: string,
   threadId?: string,
   signal?: AbortSignal,
-): Promise<KnowledgeEntityPayload> {
-  return requestJson<KnowledgeEntityPayload>(
-    `${knowledgeBase(baseUrl, factoryProjectId)}/entities/${encodeURIComponent(entityId)}${threadQuery(threadId)}`,
+): Promise<KnowledgeNodePayload> {
+  return requestJson<KnowledgeNodePayload>(
+    `${knowledgeBase(baseUrl, factoryProjectId)}/nodes/${encodeURIComponent(nodeId)}${threadQuery(threadId)}`,
     { signal },
   );
 }

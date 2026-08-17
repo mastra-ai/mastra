@@ -8,14 +8,14 @@ import type { Edge, Node } from '@xyflow/react';
 
 import type {
   KnowledgeGraphEdge,
-  KnowledgeGraphMemory,
+  KnowledgeGraphItem,
   KnowledgeGraphNode,
   KnowledgeRung,
 } from '../../services/knowledge';
 
 export const NODE_SIZE_MIN = 52;
 export const NODE_SIZE_MAX = 176;
-/** Unlabeled leaf nodes (no incoming memories) render as small dots. */
+/** Unlabeled leaf nodes (no incoming items) render as small dots. */
 export const NODE_SIZE_DOT = 26;
 /** Being pointed AT is what importance means — incoming counts double. */
 const INCOMING_WEIGHT = 2;
@@ -42,7 +42,7 @@ export function nodeSize(degree: NodeDegree, maxWeighted: number): number {
 }
 
 /**
- * A node earns its label by being referenced: no incoming memories means the
+ * A node earns its label by being referenced: no incoming items means the
  * label stays hidden (hover/click still surface the details).
  */
 export function shouldShowLabel(degree: NodeDegree): boolean {
@@ -69,7 +69,7 @@ export function degreeMap(edges: KnowledgeGraphEdge[]): Map<string, NodeDegree> 
 export interface KnowledgeGraphFilters {
   /** Scope rungs to show; empty set = show all. */
   rungs: ReadonlySet<KnowledgeRung>;
-  /** Show only pin-accented entities (and edges between them). */
+  /** Show only pin-accented nodes (and edges between them). */
   pinnedOnly: boolean;
 }
 
@@ -81,7 +81,7 @@ export function filterGraph(
   filters: KnowledgeGraphFilters,
 ): { nodes: KnowledgeGraphNode[]; edges: KnowledgeGraphEdge[] } {
   // A9: pins live on nodes (single-target pins) AND edges (relationship
-  // pins) — the pin filter keeps both kinds' entities.
+  // pins) — the pin filter keeps both kinds' nodes.
   const pinnedEdgeIds = new Set<string>();
   for (const edge of edges) {
     if (edge.pinned) {
@@ -110,7 +110,7 @@ export function egoGraph(
   nodes: KnowledgeGraphNode[],
   edges: KnowledgeGraphEdge[],
   focusId: string,
-  memories?: KnowledgeGraphMemory[],
+  items?: KnowledgeGraphItem[],
 ): { nodes: KnowledgeGraphNode[]; edges: KnowledgeGraphEdge[] } {
   const keep = new Set([focusId]);
   const keptEdges = edges.filter(edge => edge.source === focusId || edge.target === focusId);
@@ -118,12 +118,12 @@ export function egoGraph(
     keep.add(edge.source);
     keep.add(edge.target);
   }
-  // A memory's whole entity set is one neighborhood: a junction memory that
-  // touches the focus must keep ALL its entities, or the memory element gets
-  // dropped downstream (its entities no longer all survive) and a neighbor
+  // A knowledge item's whole node set is one neighborhood: a junction item that
+  // touches the focus must keep ALL its nodes, or the item element gets
+  // dropped downstream (its nodes no longer all survive) and a neighbor
   // strands with no visible connection.
-  for (const memory of memories ?? []) {
-    if (memory.entityIds.includes(focusId)) for (const id of memory.entityIds) keep.add(id);
+  for (const item of items ?? []) {
+    if (item.nodeIds.includes(focusId)) for (const id of item.nodeIds) keep.add(id);
   }
   return {
     nodes: nodes.filter(node => keep.has(node.id)),
@@ -131,158 +131,158 @@ export function egoGraph(
   };
 }
 
-/** A11: memories render by arity — tiny dots, connecting lines, junctions. */
-export const MEMORY_DOT_SIZE = 14;
-export const MEMORY_JUNCTION_SIZE = 12;
-/** Pinned memory markers are the pin chip itself — sized so it fits. */
-export const MEMORY_PIN_SIZE = 22;
+/** A11: items render by arity — tiny dots, connecting lines, junctions. */
+export const ITEM_DOT_SIZE = 14;
+export const ITEM_JUNCTION_SIZE = 12;
+/** Pinned item markers are the pin chip itself — sized so it fits. */
+export const ITEM_PIN_SIZE = 22;
 
-export interface MemoryNodeElement {
+export interface ItemNodeElement {
   id: string;
-  memory: KnowledgeGraphMemory;
-  /** 'dot' anchors a single-entity memory; 'junction' splits a 2+-entity one. */
+  item: KnowledgeGraphItem;
+  /** 'dot' anchors a single-node item; 'junction' splits a 2+-node one. */
   kind: 'dot' | 'junction';
   size: number;
 }
 
-export interface MemoryEdgeElement {
+export interface ItemEdgeElement {
   id: string;
-  /** Always an entity id, so page click handlers can treat it as the owner. */
+  /** Always a node id, so page click handlers can treat it as the owner. */
   source: string;
-  /** An entity id (plain line) or a memory node id (stub/spoke). */
+  /** An node id (plain line) or a knowledge item node id (stub/spoke). */
   target: string;
-  memory: KnowledgeGraphMemory;
+  item: KnowledgeGraphItem;
 }
 
 /**
- * A11 derivation: memories (already filtered to visible entities) become
+ * A11 derivation: items (already filtered to visible nodes) become
  * graph elements by arity:
- * - 1 entity  → a tiny dot + stub edge hugging its entity. Suppressed when
- *   the unpinned memory is its entity's only windowed fact — the entity
+ * - 1 node  → a tiny dot + stub edge hugging its node. Suppressed when
+ *   the unpinned item is its node's only windowed item — the node
  *   circle already represents it (the flyout shows it on click).
- * - 2 entities, unpinned → the connecting line (the memory IS the edge).
- * - 2 entities, pinned → a midpoint junction (the pin chip) + two spokes, so
+ * - 2 nodes, unpinned → the connecting line (the item IS the edge).
+ * - 2 nodes, pinned → a midpoint junction (the pin chip) + two spokes, so
  *   the collision forces keep the chip clear of other nodes.
- * - 3+ entities → a junction node splitting to each entity.
- * Dot/stub/line/junction all carry the memory — clicking any of them is
- * clicking the memory.
+ * - 3+ nodes → a junction node splitting to each node.
+ * Dot/stub/line/junction all carry the item — clicking any of them is
+ * clicking the item.
  */
-export function deriveMemoryElements(
-  entities: KnowledgeGraphNode[],
-  memories: KnowledgeGraphMemory[],
-): { memoryNodes: MemoryNodeElement[]; memoryEdges: MemoryEdgeElement[] } {
-  const byId = new Map(entities.map(entity => [entity.id, entity]));
-  const memoryNodes: MemoryNodeElement[] = [];
-  const memoryEdges: MemoryEdgeElement[] = [];
-  for (const memory of memories) {
-    if (memory.entityIds.length === 0) continue;
-    if (!memory.entityIds.every(id => byId.has(id))) continue;
-    const nodeId = `mem:${memory.id}`;
-    if (memory.entityIds.length === 1) {
-      const owner = byId.get(memory.entityIds[0]!)!;
-      if (!memory.pinned && owner.factCount === 1) continue; // the circle IS the memory
-      memoryNodes.push({
+export function deriveItemElements(
+  nodes: KnowledgeGraphNode[],
+  items: KnowledgeGraphItem[],
+): { itemNodes: ItemNodeElement[]; itemEdges: ItemEdgeElement[] } {
+  const byId = new Map(nodes.map(node => [node.id, node]));
+  const itemNodes: ItemNodeElement[] = [];
+  const itemEdges: ItemEdgeElement[] = [];
+  for (const item of items) {
+    if (item.nodeIds.length === 0) continue;
+    if (!item.nodeIds.every(id => byId.has(id))) continue;
+    const nodeId = `item:${item.id}`;
+    if (item.nodeIds.length === 1) {
+      const owner = byId.get(item.nodeIds[0]!)!;
+      if (!item.pinned && owner.itemCount === 1) continue; // the circle IS the item
+      itemNodes.push({
         id: nodeId,
-        memory,
+        item,
         kind: 'dot',
-        size: memory.pinned ? MEMORY_PIN_SIZE : MEMORY_DOT_SIZE,
+        size: item.pinned ? ITEM_PIN_SIZE : ITEM_DOT_SIZE,
       });
-      memoryEdges.push({ id: `${nodeId}:stub`, source: owner.id, target: nodeId, memory });
+      itemEdges.push({ id: `${nodeId}:stub`, source: owner.id, target: nodeId, item });
       continue;
     }
-    if (memory.entityIds.length === 2 && !memory.pinned) {
-      memoryEdges.push({ id: nodeId, source: memory.entityIds[0]!, target: memory.entityIds[1]!, memory });
+    if (item.nodeIds.length === 2 && !item.pinned) {
+      itemEdges.push({ id: nodeId, source: item.nodeIds[0]!, target: item.nodeIds[1]!, item });
       continue;
     }
-    memoryNodes.push({
+    itemNodes.push({
       id: nodeId,
-      memory,
+      item,
       kind: 'junction',
-      size: memory.pinned ? MEMORY_PIN_SIZE : MEMORY_JUNCTION_SIZE,
+      size: item.pinned ? ITEM_PIN_SIZE : ITEM_JUNCTION_SIZE,
     });
-    for (const [index, entityId] of memory.entityIds.entries()) {
-      memoryEdges.push({ id: `${nodeId}:${index}`, source: entityId, target: nodeId, memory });
+    for (const [index, relatedNodeId] of item.nodeIds.entries()) {
+      itemEdges.push({ id: `${nodeId}:${index}`, source: relatedNodeId, target: nodeId, item });
     }
   }
-  return { memoryNodes, memoryEdges };
+  return { itemNodes, itemEdges };
 }
 
 /**
  * Logical owner→target pairs for degree sizing and filter/ego traversal —
- * one pseudo-edge per memory connection (per-fact, so repeated links between
- * the same entities count toward importance).
+ * one pseudo-edge per item connection (per-item, so repeated links between
+ * the same nodes count toward importance).
  */
-export function memoryPairEdges(memories: KnowledgeGraphMemory[]): KnowledgeGraphEdge[] {
+export function itemPairEdges(items: KnowledgeGraphItem[]): KnowledgeGraphEdge[] {
   const edges: KnowledgeGraphEdge[] = [];
-  for (const memory of memories) {
-    for (let i = 1; i < memory.entityIds.length; i += 1) {
+  for (const item of items) {
+    for (let i = 1; i < item.nodeIds.length; i += 1) {
       edges.push({
-        id: `pair:${memory.id}:${i}`,
-        source: memory.entityIds[0]!,
-        target: memory.entityIds[i]!,
+        id: `pair:${item.id}:${i}`,
+        source: item.nodeIds[0]!,
+        target: item.nodeIds[i]!,
         type: 'wikilink',
-        factId: memory.id,
-        pinned: memory.pinned || undefined,
+        itemId: item.id,
+        pinned: item.pinned || undefined,
       });
     }
   }
   return edges;
 }
 
-export type EntityFlowNode = Node<{
-  entity: KnowledgeGraphNode;
+export type NodeFlowNode = Node<{
+  node: KnowledgeGraphNode;
   size: number;
   degree: NodeDegree;
   /** Ego focus: the focused node always renders at max size WITH its label. */
   focused: boolean;
 }>;
 
-export type MemoryFlowNode = Node<{
-  memory: KnowledgeGraphMemory;
+export type ItemFlowNode = Node<{
+  item: KnowledgeGraphItem;
   kind: 'dot' | 'junction';
   size: number;
-  /** The memory currently selected (its fact is open in the flyout). */
+  /** The item currently selected (its item is open in the flyout). */
   focused?: boolean;
 }>;
 
 export type KnowledgeFlowEdge = Edge<{
-  factId: string;
+  itemId: string;
   linkType: 'wikilink';
   pinned: boolean;
   text?: string;
-  /** The edge belongs to the memory currently selected in the flyout. */
+  /** The edge belongs to the item currently selected in the flyout. */
   focused?: boolean;
 }>;
 
-/** Map A11 memory elements into React Flow nodes/edges (positions from the layout). */
-export function toMemoryFlow(
-  memoryNodes: MemoryNodeElement[],
-  memoryEdges: MemoryEdgeElement[],
+/** Map A11 item elements into React Flow nodes/edges (positions from the layout). */
+export function toItemFlow(
+  itemNodes: ItemNodeElement[],
+  itemEdges: ItemEdgeElement[],
   positions?: ReadonlyMap<string, { x: number; y: number }>,
-): { nodes: MemoryFlowNode[]; edges: KnowledgeFlowEdge[] } {
+): { nodes: ItemFlowNode[]; edges: KnowledgeFlowEdge[] } {
   return {
-    nodes: memoryNodes.map(element => {
+    nodes: itemNodes.map(element => {
       const center = positions?.get(element.id);
       const position = center ? { x: center.x - element.size / 2, y: center.y - element.size / 2 } : { x: 0, y: 0 };
       return {
         id: element.id,
-        type: 'knowledgeMemory',
+        type: 'knowledgeItem',
         position,
         width: element.size,
         height: element.size,
-        data: { memory: element.memory, kind: element.kind, size: element.size },
-      } satisfies MemoryFlowNode;
+        data: { item: element.item, kind: element.kind, size: element.size },
+      } satisfies ItemFlowNode;
     }),
-    edges: memoryEdges.map(element => ({
+    edges: itemEdges.map(element => ({
       id: element.id,
       source: element.source,
       target: element.target,
       type: 'knowledgeLink',
       data: {
-        factId: element.memory.id,
+        itemId: element.item.id,
         linkType: 'wikilink' as const,
-        pinned: element.memory.pinned,
-        text: element.memory.text,
+        pinned: element.item.pinned,
+        text: element.item.text,
       },
     })),
   };
@@ -298,7 +298,7 @@ export function toFlowGraph(
   edges: KnowledgeGraphEdge[],
   positions?: ReadonlyMap<string, { x: number; y: number }>,
   focusId?: string | null,
-): { nodes: EntityFlowNode[]; edges: KnowledgeFlowEdge[] } {
+): { nodes: NodeFlowNode[]; edges: KnowledgeFlowEdge[] } {
   const degrees = degreeMap(edges);
   let maxWeighted = 0;
   for (const node of nodes) {
@@ -306,32 +306,32 @@ export function toFlowGraph(
     if (degree && degree.incoming >= 1) maxWeighted = Math.max(maxWeighted, weightedDegree(degree));
   }
   return {
-    nodes: nodes.map(entity => {
-      const degree = degrees.get(entity.id) ?? { incoming: 0, outgoing: 0 };
-      const focused = entity.id === focusId;
+    nodes: nodes.map(node => {
+      const degree = degrees.get(node.id) ?? { incoming: 0, outgoing: 0 };
+      const focused = node.id === focusId;
       const size = focused ? NODE_SIZE_MAX : nodeSize(degree, maxWeighted);
       // The force layout positions circle CENTERS; React Flow positions the
       // node's TOP-LEFT corner — convert here or differently-sized nodes skew
       // into each other (the sim thinks they're apart, the render stacks them).
-      const center = positions?.get(entity.id);
+      const center = positions?.get(node.id);
       const position = center ? { x: center.x - size / 2, y: center.y - size / 2 } : { x: 0, y: 0 };
       return {
-        id: entity.id,
-        type: 'knowledgeEntity',
+        id: node.id,
+        type: 'knowledgeNode',
         position,
         // Explicit dims so fitView and the minimap know the node size before
         // the DOM measures it.
         width: size,
         height: size,
-        data: { entity, size, degree, focused },
-      } satisfies EntityFlowNode;
+        data: { node, size, degree, focused },
+      } satisfies NodeFlowNode;
     }),
     edges: edges.map(edge => ({
       id: edge.id,
       source: edge.source,
       target: edge.target,
       type: 'knowledgeLink',
-      data: { factId: edge.factId, linkType: edge.type, pinned: edge.pinned ?? false },
+      data: { itemId: edge.itemId, linkType: edge.type, pinned: edge.pinned ?? false },
     })),
   };
 }

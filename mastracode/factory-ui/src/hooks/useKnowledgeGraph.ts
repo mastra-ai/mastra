@@ -10,7 +10,7 @@ import { skipToken, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { fetchKnowledgeEntity, fetchKnowledgeGraph } from '../ui/domains/factory/services/knowledge';
+import { fetchKnowledgeNode, fetchKnowledgeGraph } from '../ui/domains/factory/services/knowledge';
 import { RequestError } from '../ui/domains/factory/services/request';
 
 /**
@@ -44,17 +44,17 @@ export function useKnowledgeGraph(
   });
 }
 
-export function useKnowledgeEntity(
+export function useKnowledgeNode(
   factoryProjectId: string | undefined,
-  entityId: string | undefined,
+  nodeId: string | undefined,
   threadId?: string,
 ) {
   const { baseUrl } = useApiConfig();
   return useQuery({
-    queryKey: queryKeys.knowledgeEntity(factoryProjectId, entityId, threadId),
+    queryKey: queryKeys.knowledgeNode(factoryProjectId, nodeId, threadId),
     queryFn:
-      factoryProjectId && entityId
-        ? ({ signal }) => fetchKnowledgeEntity(baseUrl, factoryProjectId, entityId, threadId, signal)
+      factoryProjectId && nodeId
+        ? ({ signal }) => fetchKnowledgeNode(baseUrl, factoryProjectId, nodeId, threadId, signal)
         : skipToken,
   });
 }

@@ -16,10 +16,10 @@ import { useInteractionIdle } from '../domains/factory/components/knowledge/useI
 
 /**
  * The Knowledge page: a live force-directed graph of the project's knowledge —
- * entities as nodes, wikilink relationships as edges. The default view is
- * project scope (org + project records, the memories that carry across
+ * nodes as nodes, wikilink relationships as edges. The default view is
+ * project scope (org + project records, the knowledge items that carry across
  * sessions); thread-scoped knowledge is reached only by drilling into a
- * memory's "captured in session" link, which switches to the thread view with
+ * knowledge item's "captured in session" link, which switches to the thread view with
  * an org → project → thread breadcrumb (Amendment A2). Thread state lives in
  * the `?thread=` search param so the view is linkable and back-button safe.
  */
@@ -27,11 +27,11 @@ export function KnowledgePage() {
   return <FactoryPageShell>{project => <KnowledgeContent factoryProjectId={project.id} />}</FactoryPageShell>;
 }
 
-/** One hop in the entity trail (A7): the nodes visited via clicks/wikilinks. */
+/** One hop in the node trail (A7): the nodes visited via clicks/wikilinks. */
 export interface TrailEntry {
-  entityId: string;
+  nodeId: string;
   name: string;
-  factId?: string;
+  itemId?: string;
 }
 
 function Breadcrumb({
@@ -63,7 +63,7 @@ function Breadcrumb({
         </>
       ) : null}
       {trail.map((entry, index) => (
-        <span key={`${entry.entityId}-${index}`} className="flex items-center gap-1">
+        <span key={`${entry.nodeId}-${index}`} className="flex items-center gap-1">
           <ChevronRight size={11} />
           {index === trail.length - 1 ? (
             <span className="text-icon5 max-w-44 truncate" title={entry.name}>
@@ -88,7 +88,7 @@ function Breadcrumb({
 function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const threadId = searchParams.get('thread') ?? undefined;
-  // The entity trail (A7): the flyout shows the LAST entry; earlier entries
+  // The node trail (A7): the flyout shows the LAST entry; earlier entries
   // are clickable breadcrumbs back through the hops.
   const [trail, setTrail] = useState<TrailEntry[]>([]);
   const selected = trail.at(-1) ?? null;
@@ -179,44 +179,44 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
         <KnowledgeGraph
           payload={graphQuery.data}
           arrivals={arrivals}
-          focusedId={selected?.entityId ?? null}
-          focusedFactId={selected?.factId ?? null}
+          focusedId={selected?.nodeId ?? null}
+          focusedItemId={selected?.itemId ?? null}
           onFocusChange={id => {
             // A graph click starts a fresh trail; a pane click clears it.
             if (!id) return setTrail([]);
             const node = graphQuery.data?.nodes.find(entry => entry.id === id);
-            setTrail([{ entityId: id, name: node?.name ?? id }]);
+            setTrail([{ nodeId: id, name: node?.name ?? id }]);
           }}
-          onNodeClick={entity => setSelected({ entityId: entity.id, name: entity.name })}
+          onNodeClick={node => setSelected({ nodeId: node.id, name: node.name })}
           onEdgeClick={edge => {
-            // Selecting an edge selects AND expands the supporting memory (A7).
+            // Selecting an edge selects AND expands the supporting knowledge item (A7).
             const node = graphQuery.data?.nodes.find(entry => entry.id === edge.source);
-            setSelected({ entityId: edge.source, name: node?.name ?? edge.source, factId: edge.factId });
+            setSelected({ nodeId: edge.source, name: node?.name ?? edge.source, itemId: edge.itemId });
           }}
         />
         {selected && factoryProjectId ? (
           <KnowledgeFlyout
             factoryProjectId={factoryProjectId}
-            entityId={selected.entityId}
+            nodeId={selected.nodeId}
             threadId={threadId}
-            focusFactId={selected.factId}
-            onSelectMemory={factId =>
-              // Bidirectional selection: expanding a card selects the memory
+            focusItemId={selected.itemId}
+            onSelectItem={itemId =>
+              // Bidirectional selection: expanding a card selects the knowledge item
               // page-wide, so the graph lights its marker/edge up too.
               setTrail(current =>
                 current.length === 0
                   ? current
-                  : [...current.slice(0, -1), { ...current[current.length - 1]!, factId: factId ?? undefined }],
+                  : [...current.slice(0, -1), { ...current[current.length - 1]!, itemId: itemId ?? undefined }],
               )
             }
             onClose={() => setTrail([])}
             onOpenThread={openThread}
-            onEntityRef={name => {
+            onNodeRef={name => {
               // A clicked [[wikilink]] gets the full node-click treatment (A7):
               // ego focus + cluster zoom + flyout swap, PUSHED onto the trail.
               const target = graphQuery.data?.nodes.find(node => node.name.toLowerCase() === name.toLowerCase());
-              if (target && target.id !== selected.entityId)
-                setTrail(current => [...current, { entityId: target.id, name: target.name }]);
+              if (target && target.id !== selected.nodeId)
+                setTrail(current => [...current, { nodeId: target.id, name: target.name }]);
             }}
           />
         ) : null}
@@ -231,7 +231,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
           Knowledge Graph
         </Txt>
         <Txt as="p" variant="ui-md" className="text-icon3 mt-1">
-          Explore entities and the relationships captured by the agent over time.
+          Explore nodes and the relationships captured by the agent over time.
         </Txt>
         <Breadcrumb
           threadId={threadId}

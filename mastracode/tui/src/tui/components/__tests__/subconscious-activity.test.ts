@@ -1,4 +1,6 @@
 import { visibleWidth } from '@earendil-works/pi-tui';
+import { InMemoryStore } from '@mastra/core/storage';
+import { buildSubconsciousActivitySnapshot } from '@mastra/memory/processors';
 import stripAnsi from 'strip-ansi';
 import { describe, expect, it } from 'vitest';
 
@@ -8,18 +10,13 @@ function snapshot(overrides: Record<string, unknown> = {}): any {
   return {
     updates: [
       {
-        id: 'activity-1',
-        action: 'fact-created',
-        type: 'fact',
-        recordId: 'fact-1',
+        action: 'item-created',
+        type: 'item',
         name: 'Atlas launch',
-        targetId: 'atlas',
-        targetType: 'entity',
-        sourceThreadId: 'thread-1',
         createdAt: '2026-07-15T00:00:00.000Z',
       },
     ],
-    hot: [{ type: 'entity', id: 'atlas', name: 'Atlas launch', updates: 3 }],
+    hot: [{ type: 'node', name: 'Atlas launch', updates: 3 }],
     ...overrides,
   };
 }
@@ -35,39 +32,61 @@ describe('SubconsciousActivityComponent', () => {
     const rendered = text(new SubconsciousActivityComponent(parsed!));
     expect(rendered).toContain('Subconscious knowledge');
     expect(rendered).toContain('1 update · 1 hot');
-    expect(rendered).toContain('fact-created: Atlas launch');
+    expect(rendered).toContain('item-created: Atlas launch');
     expect(rendered).toContain('Hot: Atlas launch (3)');
   });
 
-  it('does not render or retain raw record ids when activity details are unavailable', () => {
+  it('renders redacted activity details without requiring storage identifiers', () => {
     const parsed = parseSubconsciousActivitySnapshot(
-      snapshot({ updates: [{ ...snapshot().updates[0], name: undefined, recordId: 'private-record-id' }], hot: [] }),
+      snapshot({ updates: [{ ...snapshot().updates[0], name: undefined }], hot: [] }),
     );
     const rendered = text(new SubconsciousActivityComponent(parsed!));
 
-    expect(rendered).toContain('fact (details unavailable)');
-    expect(rendered).not.toContain('private-record-id');
-    expect(JSON.stringify(parsed)).not.toContain('private-record-id');
+    expect(rendered).toContain('item (details unavailable)');
+  });
+
+  it('accepts snapshots produced by observational memory without exposing provenance', async () => {
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('knowledge'))!;
+    const scope = ['org:acme', 'resource:user-42', 'thread:alpha'];
+    const node = await store.createNode({ name: 'Atlas launch', kind: 'project', scope });
+    const item = await store.appendItem({
+      parentNodeId: node.id,
+      text: 'Launches in January.',
+      scope,
+      sourceThreadId: 'private-thread',
+      resolutionScope: scope,
+      defaultScope: scope,
+    });
+
+    const produced = await buildSubconsciousActivitySnapshot({ store, scope, recentUpdates: 10 });
+    const parsed = parseSubconsciousActivitySnapshot(produced);
+
+    expect(parsed).toBeDefined();
+    expect(text(new SubconsciousActivityComponent(parsed!))).toContain('item-created: Atlas launch');
+    expect(JSON.stringify(produced)).not.toContain(node.id);
+    expect(JSON.stringify(produced)).not.toContain(item.id);
+    expect(JSON.stringify(produced)).not.toContain('private-thread');
+    expect(produced.updates.every(update => !('recordId' in update) && !('targetId' in update))).toBe(true);
+    expect(produced.updates.every(update => !('sourceThreadId' in update))).toBe(true);
   });
 
   it('renders errors without losing activity', () => {
     const rendered = text(new SubconsciousActivityComponent(snapshot({ errors: ['remind model failed'] })));
     expect(rendered).toContain('1 error');
     expect(rendered).toContain('Error: remind model failed');
-    expect(rendered).toContain('fact-created: Atlas launch');
+    expect(rendered).toContain('item-created: Atlas launch');
   });
 
   it('bounds dense activity output', () => {
     const dense = snapshot({
       updates: Array.from({ length: 10 }, (_, index) => ({
         ...snapshot().updates[0]!,
-        id: `activity-${index}`,
         name: `Record ${index}`,
       })),
       hot: Array.from({ length: 10 }, (_, index) => ({
-        type: 'entity' as const,
-        id: `entity-${index}`,
-        name: `Entity ${index}`,
+        type: 'node' as const,
+        name: `Node ${index}`,
         updates: 10 - index,
       })),
       errors: Array.from({ length: 10 }, (_, index) => `error ${index}`),
@@ -84,7 +103,7 @@ describe('SubconsciousActivityComponent', () => {
     expect(parseSubconsciousActivitySnapshot({ updates: [], hot: [], errors: [1] })).toBeUndefined();
     expect(
       parseSubconsciousActivitySnapshot({
-        updates: Array.from({ length: 100 }, (_, index) => ({ ...snapshot().updates[0], id: `activity-${index}` })),
+        updates: Array.from({ length: 100 }, () => snapshot().updates[0]),
         hot: [],
       }),
     ).toBeDefined();

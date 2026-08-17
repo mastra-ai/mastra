@@ -3,13 +3,13 @@ import { describe, expect, it } from 'vitest';
 import type { KnowledgeGraphEdge, KnowledgeGraphNode } from '../../services/knowledge';
 import {
   degreeMap,
-  deriveMemoryElements,
+  deriveItemElements,
   egoGraph,
   filterGraph,
-  MEMORY_DOT_SIZE,
-  MEMORY_JUNCTION_SIZE,
-  MEMORY_PIN_SIZE,
-  memoryPairEdges,
+  ITEM_DOT_SIZE,
+  ITEM_JUNCTION_SIZE,
+  ITEM_PIN_SIZE,
+  itemPairEdges,
   NODE_SIZE_DOT,
   NODE_SIZE_MAX,
   NODE_SIZE_MIN,
@@ -20,15 +20,15 @@ import {
 } from './graphModel';
 import { runLayout } from './layout';
 
-function entity(id: string, overrides: Partial<KnowledgeGraphNode> = {}): KnowledgeGraphNode {
+function node(id: string, overrides: Partial<KnowledgeGraphNode> = {}): KnowledgeGraphNode {
   return {
     id,
-    name: `Entity ${id}`,
+    name: `Knowledge node ${id}`,
     kind: 'concept',
     scope: ['org:o', 'resource:r'],
     rung: 'resource',
     pinned: false,
-    factCount: 1,
+    itemCount: 1,
     createdAt: '2026-08-13T00:00:00.000Z',
     updatedAt: '2026-08-13T00:00:00.000Z',
     ...overrides,
@@ -36,7 +36,7 @@ function entity(id: string, overrides: Partial<KnowledgeGraphNode> = {}): Knowle
 }
 
 function edge(source: string, target: string, type: 'wikilink' = 'wikilink'): KnowledgeGraphEdge {
-  return { id: `${type}:${source}:${target}`, source, target, type, factId: 'f-1' };
+  return { id: `${type}:${source}:${target}`, source, target, type, itemId: 'f-1' };
 }
 
 describe('nodeSize (Amendments A3 + A5)', () => {
@@ -65,7 +65,7 @@ describe('nodeSize (Amendments A3 + A5)', () => {
     expect(nodeSize({ incoming: 10_000, outgoing: 10_000 }, 10)).toBe(NODE_SIZE_MAX);
   });
 
-  it('renders unreferenced entities as small dots without labels', () => {
+  it('renders unreferenced nodes as small dots without labels', () => {
     expect(shouldShowLabel({ incoming: 0, outgoing: 5 })).toBe(false);
     expect(shouldShowLabel({ incoming: 1, outgoing: 0 })).toBe(true);
     expect(nodeSize({ incoming: 0, outgoing: 5 }, 10)).toBe(NODE_SIZE_DOT);
@@ -83,9 +83,9 @@ describe('degreeMap', () => {
 
 describe('filterGraph', () => {
   const nodes = [
-    entity('org-1', { rung: 'org', scope: ['org:o'] }),
-    entity('res-1'),
-    entity('res-pinned', { pinned: true }),
+    node('org-1', { rung: 'org', scope: ['org:o'] }),
+    node('res-1'),
+    node('res-pinned', { pinned: true }),
   ];
   const edges = [edge('org-1', 'res-1'), edge('res-1', 'res-pinned')];
 
@@ -101,7 +101,7 @@ describe('filterGraph', () => {
     expect(result.edges.map(e => e.id)).toEqual(['wikilink:res-1:res-pinned']);
   });
 
-  it('pin filter keeps only accented entities', () => {
+  it('pin filter keeps only accented nodes', () => {
     const result = filterGraph(nodes, edges, { rungs: new Set(), pinnedOnly: true });
     expect(result.nodes.map(node => node.id)).toEqual(['res-pinned']);
     expect(result.edges).toHaveLength(0);
@@ -114,8 +114,8 @@ describe('filterGraph', () => {
     expect(result.edges).toEqual([pinnedEdge]);
   });
 
-  it('pin filter keeps entities touched by pinned memories via pair edges (A11)', () => {
-    const pairs = memoryPairEdges([{ id: 'm1', entityIds: ['org-1', 'res-1'], pinned: true, text: 'pinned link' }]);
+  it('pin filter keeps nodes touched by pinned items via pair edges (A11)', () => {
+    const pairs = itemPairEdges([{ id: 'm1', nodeIds: ['org-1', 'res-1'], pinned: true, text: 'pinned link' }]);
     const result = filterGraph(nodes, pairs, { rungs: new Set(), pinnedOnly: true });
     expect(result.nodes.map(node => node.id).sort()).toEqual(['org-1', 'res-1', 'res-pinned']);
   });
@@ -126,66 +126,66 @@ describe('filterGraph', () => {
   });
 });
 
-describe('deriveMemoryElements (Amendment A11)', () => {
-  const mem = (id: string, entityIds: string[], pinned = false) => ({ id, entityIds, pinned, text: `memory ${id}` });
+describe('deriveItemElements (Amendment A11)', () => {
+  const mem = (id: string, nodeIds: string[], pinned = false) => ({ id, nodeIds, pinned, text: `item ${id}` });
 
-  it('renders a single-entity memory as a dot with a hugging stub edge, entity as the edge source', () => {
-    const owner = entity('a', { factCount: 3 });
-    const { memoryNodes, memoryEdges } = deriveMemoryElements([owner], [mem('m1', ['a'])]);
-    expect(memoryNodes).toEqual([expect.objectContaining({ id: 'mem:m1', kind: 'dot', size: MEMORY_DOT_SIZE })]);
-    expect(memoryEdges).toEqual([expect.objectContaining({ id: 'mem:m1:stub', source: 'a', target: 'mem:m1' })]);
+  it('renders a single-node item as a dot with a hugging stub edge, node as the edge source', () => {
+    const owner = node('a', { itemCount: 3 });
+    const { itemNodes, itemEdges } = deriveItemElements([owner], [mem('m1', ['a'])]);
+    expect(itemNodes).toEqual([expect.objectContaining({ id: 'item:m1', kind: 'dot', size: ITEM_DOT_SIZE })]);
+    expect(itemEdges).toEqual([expect.objectContaining({ id: 'item:m1:stub', source: 'a', target: 'item:m1' })]);
   });
 
-  it("suppresses the dot when an unpinned memory is its entity's only fact — the circle IS the memory", () => {
-    const owner = entity('a', { factCount: 1 });
-    const { memoryNodes, memoryEdges } = deriveMemoryElements([owner], [mem('m1', ['a'])]);
-    expect(memoryNodes).toHaveLength(0);
-    expect(memoryEdges).toHaveLength(0);
+  it("suppresses the dot when an unpinned item is its node's only item — the circle IS the item", () => {
+    const owner = node('a', { itemCount: 1 });
+    const { itemNodes, itemEdges } = deriveItemElements([owner], [mem('m1', ['a'])]);
+    expect(itemNodes).toHaveLength(0);
+    expect(itemEdges).toHaveLength(0);
   });
 
-  it('renders a pinned single-entity memory as the pin chip even on a one-fact entity', () => {
-    const owner = entity('a', { factCount: 1 });
-    const { memoryNodes } = deriveMemoryElements([owner], [mem('m1', ['a'], true)]);
-    expect(memoryNodes).toEqual([expect.objectContaining({ kind: 'dot', size: MEMORY_PIN_SIZE })]);
+  it('renders a pinned single-node item as the pin chip even on a one-item node', () => {
+    const owner = node('a', { itemCount: 1 });
+    const { itemNodes } = deriveItemElements([owner], [mem('m1', ['a'], true)]);
+    expect(itemNodes).toEqual([expect.objectContaining({ kind: 'dot', size: ITEM_PIN_SIZE })]);
   });
 
-  it('renders a two-entity memory as the connecting line — the memory IS the edge', () => {
-    const { memoryNodes, memoryEdges } = deriveMemoryElements([entity('a'), entity('b')], [mem('m1', ['a', 'b'])]);
-    expect(memoryNodes).toHaveLength(0);
-    expect(memoryEdges).toEqual([expect.objectContaining({ id: 'mem:m1', source: 'a', target: 'b' })]);
+  it('renders a two-node item as the connecting line — the item IS the edge', () => {
+    const { itemNodes, itemEdges } = deriveItemElements([node('a'), node('b')], [mem('m1', ['a', 'b'])]);
+    expect(itemNodes).toHaveLength(0);
+    expect(itemEdges).toEqual([expect.objectContaining({ id: 'item:m1', source: 'a', target: 'b' })]);
   });
 
-  it('renders a PINNED two-entity memory as a midpoint junction so the chip is collision-protected', () => {
-    const { memoryNodes, memoryEdges } = deriveMemoryElements(
-      [entity('a'), entity('b')],
+  it('renders a PINNED two-node item as a midpoint junction so the chip is collision-protected', () => {
+    const { itemNodes, itemEdges } = deriveItemElements(
+      [node('a'), node('b')],
       [mem('m1', ['a', 'b'], true)],
     );
-    expect(memoryNodes).toEqual([expect.objectContaining({ kind: 'junction', size: MEMORY_PIN_SIZE })]);
-    expect(memoryEdges.map(edge => [edge.source, edge.target])).toEqual([
-      ['a', 'mem:m1'],
-      ['b', 'mem:m1'],
+    expect(itemNodes).toEqual([expect.objectContaining({ kind: 'junction', size: ITEM_PIN_SIZE })]);
+    expect(itemEdges.map(edge => [edge.source, edge.target])).toEqual([
+      ['a', 'item:m1'],
+      ['b', 'item:m1'],
     ]);
   });
 
-  it('renders a 3+-entity memory as a junction splitting to each entity', () => {
-    const { memoryNodes, memoryEdges } = deriveMemoryElements(
-      [entity('a'), entity('b'), entity('c')],
+  it('renders a 3+-node item as a junction splitting to each node', () => {
+    const { itemNodes, itemEdges } = deriveItemElements(
+      [node('a'), node('b'), node('c')],
       [mem('m1', ['a', 'b', 'c'])],
     );
-    expect(memoryNodes).toEqual([
-      expect.objectContaining({ id: 'mem:m1', kind: 'junction', size: MEMORY_JUNCTION_SIZE }),
+    expect(itemNodes).toEqual([
+      expect.objectContaining({ id: 'item:m1', kind: 'junction', size: ITEM_JUNCTION_SIZE }),
     ]);
-    expect(memoryEdges).toHaveLength(3);
+    expect(itemEdges).toHaveLength(3);
   });
 
-  it('drops memories touching entities outside the visible set (filter/ego safety)', () => {
-    const { memoryNodes, memoryEdges } = deriveMemoryElements([entity('a')], [mem('m1', ['a', 'ghost'])]);
-    expect(memoryNodes).toHaveLength(0);
-    expect(memoryEdges).toHaveLength(0);
+  it('drops items touching nodes outside the visible set (filter/ego safety)', () => {
+    const { itemNodes, itemEdges } = deriveItemElements([node('a')], [mem('m1', ['a', 'ghost'])]);
+    expect(itemNodes).toHaveLength(0);
+    expect(itemEdges).toHaveLength(0);
   });
 
-  it('memoryPairEdges emits per-fact owner→target pairs carrying the pin flag', () => {
-    const pairs = memoryPairEdges([mem('m1', ['a', 'b', 'c'], true), mem('m2', ['a'])]);
+  it('itemPairEdges emits per-item owner→target pairs carrying the pin flag', () => {
+    const pairs = itemPairEdges([mem('m1', ['a', 'b', 'c'], true), mem('m2', ['a'])]);
     expect(pairs.map(pair => [pair.source, pair.target, pair.pinned])).toEqual([
       ['a', 'b', true],
       ['a', 'c', true],
@@ -195,29 +195,29 @@ describe('deriveMemoryElements (Amendment A11)', () => {
 
 describe('egoGraph (Amendment A5)', () => {
   it('keeps only the focused node and its direct neighbors', () => {
-    const nodes = [entity('a'), entity('b'), entity('c'), entity('d')];
+    const nodes = [node('a'), node('b'), node('c'), node('d')];
     const edges = [edge('a', 'b'), edge('c', 'b'), edge('c', 'd')];
     const result = egoGraph(nodes, edges, 'b');
     expect(result.nodes.map(node => node.id).sort()).toEqual(['a', 'b', 'c']);
     expect(result.edges.map(e => e.id).sort()).toEqual(['wikilink:a:b', 'wikilink:c:b']);
   });
 
-  it('keeps the full entity set of a junction memory touching the focus', () => {
-    // A 3+-entity memory is one neighborhood: dropping any of its entities
-    // makes deriveMemoryElements discard the memory, stranding a neighbor
+  it('keeps the full node set of a junction item touching the focus', () => {
+    // A 3+-node item is one neighborhood: dropping any of its nodes
+    // makes deriveItemElements discard the item, stranding a neighbor
     // with no visible connection (the far-left orphan bug).
-    const nodes = [entity('a'), entity('b'), entity('c'), entity('d'), entity('e')];
-    const memories = [{ id: 'm1', entityIds: ['b', 'a', 'c', 'd'], pinned: false, text: 'memory m1' }];
-    const edges = memoryPairEdges(memories);
-    const result = egoGraph(nodes, edges, 'a', memories);
+    const nodes = [node('a'), node('b'), node('c'), node('d'), node('e')];
+    const items = [{ id: 'm1', nodeIds: ['b', 'a', 'c', 'd'], pinned: false, text: 'item m1' }];
+    const edges = itemPairEdges(items);
+    const result = egoGraph(nodes, edges, 'a', items);
     expect(result.nodes.map(node => node.id).sort()).toEqual(['a', 'b', 'c', 'd']);
   });
 });
 
 describe('toFlowGraph', () => {
-  it('maps entities to sized flow nodes and typed edges', () => {
-    const { nodes, edges } = toFlowGraph([entity('a'), entity('b')], [edge('a', 'b'), edge('b', 'a')]);
-    expect(nodes[0]).toMatchObject({ id: 'a', type: 'knowledgeEntity' });
+  it('maps nodes to sized flow nodes and typed edges', () => {
+    const { nodes, edges } = toFlowGraph([node('a'), node('b')], [edge('a', 'b'), edge('b', 'a')]);
+    expect(nodes[0]).toMatchObject({ id: 'a', type: 'knowledgeNode' });
     expect(nodes[0]!.data.size).toBeGreaterThanOrEqual(NODE_SIZE_MIN);
     expect(edges.map(e => e.data?.linkType)).toEqual(['wikilink', 'wikilink']);
     expect(edges.every(e => e.type === 'knowledgeLink')).toBe(true);
@@ -225,14 +225,14 @@ describe('toFlowGraph', () => {
 
   it('converts layout centers to top-left React Flow positions', () => {
     const positions = new Map([['a', { x: 10, y: 20 }]]);
-    const { nodes } = toFlowGraph([entity('a')], [], positions);
+    const { nodes } = toFlowGraph([node('a')], [], positions);
     // 'a' is an unreferenced dot (size 26): top-left = center - 13.
     expect(nodes[0]!.data.size).toBe(NODE_SIZE_DOT);
     expect(nodes[0]!.position).toEqual({ x: 10 - 13, y: 20 - 13 });
   });
 
   it('forces the focused node to max size and labels it even with zero incoming', () => {
-    const { nodes } = toFlowGraph([entity('a'), entity('b')], [edge('a', 'b')], undefined, 'a');
+    const { nodes } = toFlowGraph([node('a'), node('b')], [edge('a', 'b')], undefined, 'a');
     const focused = nodes.find(node => node.id === 'a')!;
     expect(focused.data.size).toBe(NODE_SIZE_MAX);
     expect(focused.data.focused).toBe(true); // 'a' has 0 incoming — focus labels it anyway
