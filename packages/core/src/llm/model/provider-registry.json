@@ -637,6 +637,7 @@
         "qwen3.6-27b",
         "qwen3.6-35b-a3b",
         "qwen3.8-2.4t-a95b",
+        "qwen3.8-27b",
         "qwen3guard-gen-0.6b",
         "qwen3guard-gen-8b",
         "voxtral-small-2507"
@@ -1282,6 +1283,33 @@
         "hf:zai-org/GLM-5.2"
       ],
       "docUrl": "https://synthetic.new/pricing",
+      "gateway": "models.dev"
+    },
+    "jalapeno": {
+      "url": "https://api.jalapeno-cloud.ai/v1",
+      "apiKeyEnvVar": "JALAPENO_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Jalapeno Cloud",
+      "models": [
+        "DeepSeek-V4-Flash",
+        "DeepSeek-V4-Pro",
+        "GLM-5.1",
+        "GLM-5.2",
+        "Hy3",
+        "Kimi-K2.5",
+        "Kimi-K2.7-Code",
+        "Kimi-K3",
+        "MiniMax-M3",
+        "Qwen3-Next-80B-A3B-Instruct",
+        "Qwen3-Next-80B-A3B-Thinking",
+        "Qwen3-VL-235B-A22B-Instruct",
+        "Qwen3-VL-235B-A22B-Thinking",
+        "Qwen3.5-122B-A10B",
+        "Qwen3.5-27B",
+        "Qwen3.5-35B-A3B",
+        "Qwen3.5-397B-A17B"
+      ],
+      "docUrl": "https://www.jalapeno-cloud.ai/docs/",
       "gateway": "models.dev"
     },
     "abliteration-ai": {
@@ -3062,6 +3090,7 @@
         "gemini-3.1-flash-lite-preview",
         "gemini-3.1-pro-preview",
         "glm-5.2",
+        "glm-5.3",
         "gpt-5-mini",
         "gpt-5.1-codex",
         "gpt-5.1-codex-max",
@@ -3463,6 +3492,8 @@
         "qwen/qwen3-max",
         "qwen/qwen3-next-80b-a3b-instruct",
         "qwen/qwen3-next-80b-a3b-thinking",
+        "qwen/qwen3-vl-235b-a22b-instruct",
+        "qwen/qwen3-vl-235b-a22b-thinking",
         "qwen/qwen3-vl-plus",
         "qwen/qwen3.5-122b-a10b",
         "qwen/qwen3.5-27b",
@@ -6365,7 +6396,7 @@
     "cerebras": {
       "apiKeyEnvVar": "CEREBRAS_API_KEY",
       "name": "Cerebras",
-      "models": ["gemma-4-31b", "gpt-oss-120b", "zai-glm-4.7"],
+      "models": ["gemma-4-31b", "gpt-oss-120b"],
       "docUrl": "https://inference-docs.cerebras.ai/models/overview",
       "gateway": "models.dev",
       "npm": "@ai-sdk/cerebras"
@@ -8922,6 +8953,7 @@
       "qwen3.6-27b",
       "qwen3.6-35b-a3b",
       "qwen3.8-2.4t-a95b",
+      "qwen3.8-27b",
       "qwen3guard-gen-0.6b",
       "qwen3guard-gen-8b",
       "voxtral-small-2507"
@@ -9541,6 +9573,25 @@
       "hf:openai/gpt-oss-120b",
       "hf:zai-org/GLM-4.7-Flash",
       "hf:zai-org/GLM-5.2"
+    ],
+    "jalapeno": [
+      "DeepSeek-V4-Flash",
+      "DeepSeek-V4-Pro",
+      "GLM-5.1",
+      "GLM-5.2",
+      "Hy3",
+      "Kimi-K2.5",
+      "Kimi-K2.7-Code",
+      "Kimi-K3",
+      "MiniMax-M3",
+      "Qwen3-Next-80B-A3B-Instruct",
+      "Qwen3-Next-80B-A3B-Thinking",
+      "Qwen3-VL-235B-A22B-Instruct",
+      "Qwen3-VL-235B-A22B-Thinking",
+      "Qwen3.5-122B-A10B",
+      "Qwen3.5-27B",
+      "Qwen3.5-35B-A3B",
+      "Qwen3.5-397B-A17B"
     ],
     "abliteration-ai": ["abliterated-model", "abliterated-model-large"],
     "deepseek": ["deepseek-chat", "deepseek-reasoner", "deepseek-v4-flash", "deepseek-v4-pro"],
@@ -10880,6 +10931,7 @@
       "gemini-3.1-flash-lite-preview",
       "gemini-3.1-pro-preview",
       "glm-5.2",
+      "glm-5.3",
       "gpt-5-mini",
       "gpt-5.1-codex",
       "gpt-5.1-codex-max",
@@ -11172,6 +11224,8 @@
       "qwen/qwen3-max",
       "qwen/qwen3-next-80b-a3b-instruct",
       "qwen/qwen3-next-80b-a3b-thinking",
+      "qwen/qwen3-vl-235b-a22b-instruct",
+      "qwen/qwen3-vl-235b-a22b-thinking",
       "qwen/qwen3-vl-plus",
       "qwen/qwen3.5-122b-a10b",
       "qwen/qwen3.5-27b",
@@ -12888,7 +12942,7 @@
       "perplexity/sonar-reasoning-pro",
       "xai/grok-4.3"
     ],
-    "cerebras": ["gemma-4-31b", "gpt-oss-120b", "zai-glm-4.7"],
+    "cerebras": ["gemma-4-31b", "gpt-oss-120b"],
     "amd": ["DeepSeek-V4-Flash"],
     "bailing": ["Ling-1T", "Ring-1T"],
     "vercel": [

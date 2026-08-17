@@ -49,7 +49,8 @@ import type { StorageListWorkflowRunsInput } from '../storage';
 import { WorkflowRunOutput } from '../stream/RunOutput';
 import type { ChunkType, LanguageModelUsage, ProviderMetadata } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
-import { Tool } from '../tools/tool';
+import type { Tool } from '../tools/tool';
+import { isMastraTool } from '../tools/toolchecks';
 import type { ToolExecutionContext } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { PUBSUB_SYMBOL } from './constants';
@@ -211,7 +212,10 @@ export function mapVariable(config: any): any {
 // ============================================
 
 function isToolStep(input: unknown): input is ToolStep<any, any, any, any, any> {
-  return input instanceof Tool;
+  // `isMastraTool` also recognizes tools by their shared marker symbol, which
+  // survives module duplication (Vite SSR) and spread copies — e.g. tools
+  // renamed by `resolveStoredToolProviders` — where `instanceof` fails.
+  return isMastraTool(input);
 }
 
 /**
@@ -220,7 +224,7 @@ function isToolStep(input: unknown): input is ToolStep<any, any, any, any, any> 
  * Uses the `component` discriminator from MastraBase instead of instanceof.
  */
 function isAgentOrTool(input: unknown): boolean {
-  if (input instanceof Tool) return true;
+  if (isMastraTool(input)) return true;
   const base = input as MastraBase;
   if (base && base.component === RegisteredLogger.AGENT) return true;
   return false;
