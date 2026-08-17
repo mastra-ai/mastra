@@ -658,6 +658,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // 14. Create registry entry for non-serializable state
   const registryEntry: RunRegistryEntry = {
+    mastra,
     tools,
     saveQueueManager,
     memory,
@@ -673,6 +674,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       : undefined,
     workspace,
     requestContext,
+    mcp: execOptions?.mcp,
     inputProcessors,
     llmRequestInputProcessors,
     outputProcessors,

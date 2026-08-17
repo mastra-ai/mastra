@@ -91,6 +91,7 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       sandbox_provider: { type: 'text' },
       sandbox_workdir: { type: 'text' },
       setup_command: { type: 'text', nullable: true },
+      teardown_command: { type: 'text', nullable: true },
       created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
     },
@@ -263,6 +264,7 @@ export interface ProjectRepository {
   sandboxProvider: string;
   sandboxWorkdir: string;
   setupCommand: string | null;
+  teardownCommand: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -288,6 +290,7 @@ export interface LinkProjectRepositoryInput {
   sandboxProvider: string;
   sandboxWorkdir: string;
   setupCommand?: string | null;
+  teardownCommand?: string | null;
 }
 
 export interface UpdateProjectRepositoryInput {
@@ -295,6 +298,7 @@ export interface UpdateProjectRepositoryInput {
   sandboxProvider?: string;
   sandboxWorkdir?: string;
   setupCommand?: string | null;
+  teardownCommand?: string | null;
 }
 
 export interface ProjectRepositorySandbox {
@@ -471,6 +475,7 @@ export interface SourceControlStorageHandle {
   };
   readonly sessions: {
     list(args: { projectRepositoryId: string; userId: string }): Promise<SourceControlSession[]>;
+    listByProjectRepository(args: { projectRepositoryId: string }): Promise<SourceControlSession[]>;
     getBySessionId(sessionId: string): Promise<SourceControlSession | null>;
     getForBranch(args: {
       projectRepositoryId: string;
@@ -547,6 +552,7 @@ interface ProjectRepositoryDbRow extends Record<string, unknown> {
   sandbox_provider: string;
   sandbox_workdir: string;
   setup_command: string | null;
+  teardown_command: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -647,6 +653,7 @@ function toProjectRepository(row: ProjectRepositoryDbRow): ProjectRepository {
     sandboxProvider: row.sandbox_provider,
     sandboxWorkdir: row.sandbox_workdir,
     setupCommand: row.setup_command,
+    teardownCommand: row.teardown_command,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -1067,6 +1074,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
               sandbox_provider: input.sandboxProvider,
               sandbox_workdir: input.sandboxWorkdir,
               setup_command: input.setupCommand ?? null,
+              teardown_command: input.teardownCommand ?? null,
               created_at: now,
               updated_at: now,
             },
@@ -1081,6 +1089,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
           if (input.sandboxProvider !== undefined) patch.sandbox_provider = input.sandboxProvider;
           if (input.sandboxWorkdir !== undefined) patch.sandbox_workdir = input.sandboxWorkdir;
           if (input.setupCommand !== undefined) patch.setup_command = input.setupCommand;
+          if (input.teardownCommand !== undefined) patch.teardown_command = input.teardownCommand;
           await db().updateMany(PROJECT_REPOSITORIES, { id }, patch);
           return getProjectRepository({ orgId, id });
         },
@@ -1222,6 +1231,14 @@ export class SourceControlStorage extends FactoryStorageDomain {
             await db().findMany<SessionDbRow>(SESSIONS, {
               project_repository_id: projectRepositoryId,
               user_id: userId,
+            })
+          ).map(toSession);
+        },
+        listByProjectRepository: async ({ projectRepositoryId }) => {
+          if (!(await getProjectRepositoryById(projectRepositoryId))) return [];
+          return (
+            await db().findMany<SessionDbRow>(SESSIONS, {
+              project_repository_id: projectRepositoryId,
             })
           ).map(toSession);
         },

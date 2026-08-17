@@ -273,7 +273,7 @@ describe('CachingPubSub', () => {
       );
     });
 
-    it('forwards options (including batch) verbatim to the inner PubSub', async () => {
+    it('forwards options (including startFrom and batch) verbatim to the inner PubSub', async () => {
       const subscribeSpy = vi.fn(async () => {});
       class StubInner extends PubSub {
         get supportsNativeBatching() {
@@ -286,7 +286,7 @@ describe('CachingPubSub', () => {
       }
       const wrapped = new CachingPubSub(new StubInner(), cache);
       const cb = () => {};
-      const options = { batch: { maxSize: 2, maxWaitMs: 50 } };
+      const options = { startFrom: 'latest' as const, batch: { maxSize: 2, maxWaitMs: 50 } };
       await wrapped.subscribe('t', cb, options);
       expect(subscribeSpy).toHaveBeenCalledWith('t', cb, options);
     });
@@ -309,6 +309,10 @@ describe('CachingPubSub', () => {
       }
       expect(new CachingPubSub(new NativeInner(), cache).supportsNativeBatching).toBe(true);
       expect(new CachingPubSub(new NonNativeInner(), cache).supportsNativeBatching).toBe(false);
+    });
+
+    it('reports support for numeric offsets', () => {
+      expect(cachingPubsub.supportsOffsets).toBe(true);
     });
   });
 
