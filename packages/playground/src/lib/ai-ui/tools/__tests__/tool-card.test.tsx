@@ -32,9 +32,7 @@ const Providers = ({ children }: { children: ReactNode }) => {
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
-          <ChatAgentContext.Provider
-            value={{ agentId: 'test-agent', submitPlanToolNames: ['submit_plan', 'userDefinedAlias'] }}
-          >
+          <ChatAgentContext.Provider value={{ agentId: 'test-agent' }}>
             <ToolCallProvider
               approveToolcall={() => {}}
               declineToolcall={() => {}}
@@ -104,6 +102,7 @@ describe('ToolCard dispatch', () => {
       baseProps({
         toolName: 'userDefinedAlias',
         output: {
+          toolId: 'submit_plan',
           content: 'Plan approved.',
           submittedPlan: {
             title: 'Aliased plan',
@@ -137,7 +136,7 @@ describe('ToolCard dispatch', () => {
         metadata: {
           mode: 'stream',
           suspendedTools: {
-            userDefinedAlias: { suspendPayload: { path } },
+            userDefinedAlias: { suspendPayload: { toolId: 'submit_plan', path } },
           },
         },
       }),

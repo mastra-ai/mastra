@@ -44,7 +44,6 @@ export interface AgentContextValue {
   agentId: string;
   agentVersionId?: string;
   requestContext?: Record<string, unknown>;
-  submitPlanToolNames?: string[];
 }
 
 // NOTE: Tool/network approvals are NOT exposed here. The badge approval buttons
@@ -67,4 +66,3 @@ export const useChatMessages = (): MastraDBMessage[] => useContext(ChatMessagesC
 export const useChatRunning = (): RunningContextValue => useContext(ChatRunningContext);
 export const useChatSend = (): SendContextValue['send'] => useContext(ChatSendContext).send;
 export const useChatTasks = (): TaskItem[] => useContext(ChatTasksContext).tasks;
-export const useChatAgentSafe = (): AgentContextValue | undefined => useContext(ChatAgentContext);

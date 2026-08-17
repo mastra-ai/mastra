@@ -14,29 +14,6 @@ type SubmitPlanToolId = (typeof import('@mastra/core/tools'))['submitPlanTool'][
 // retaining a compile-time link to the literal ID exported by @mastra/core.
 export const SUBMIT_PLAN_TOOL_ID: SubmitPlanToolId = 'submit_plan';
 
-export function useAgentPlanToolNames({
-  agentId,
-  agentVersionId,
-  requestContext,
-}: Omit<UseAgentPlanOptions, 'path'>) {
-  const client = useMastraClient();
-
-  return useQuery({
-    queryKey: agentVersionId
-      ? ['agent', agentId, requestContext, { versionId: agentVersionId }]
-      : ['agent', agentId, requestContext],
-    queryFn: () => {
-      const agent = agentVersionId ? client.getAgent(agentId, { versionId: agentVersionId }) : client.getAgent(agentId);
-      return agent.details(requestContext);
-    },
-    select: agent =>
-      Object.entries(agent.tools ?? {})
-        .filter(([, tool]) => tool.id === SUBMIT_PLAN_TOOL_ID)
-        .map(([toolName]) => toolName),
-    retry: false,
-  });
-}
-
 export function useAgentPlan({ agentId, path, agentVersionId, requestContext }: UseAgentPlanOptions) {
   const client = useMastraClient();
 

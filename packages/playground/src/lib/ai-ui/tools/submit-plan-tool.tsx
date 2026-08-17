@@ -21,6 +21,8 @@ import { useAgentPlan } from '@/domains/agents/hooks/use-agent-plan';
 import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 import { useToolCall } from '@/services/tool-call-provider';
 
+const PLAN_EXPAND_CHARACTER_THRESHOLD = 500;
+
 export interface SubmitPlanToolProps {
   agentId: string;
   agentVersionId?: string;
@@ -92,6 +94,7 @@ function getSuspendedPlanPath(
 
 function SubmittedPlanCard({ plan }: { plan: SubmittedPlan }) {
   const document = getPlanDocument(plan.content);
+  const canExpand = document.body.length > PLAN_EXPAND_CHARACTER_THRESHOLD;
 
   return (
     <Plan role="group" aria-label="Submitted plan">
@@ -108,7 +111,7 @@ function SubmittedPlanCard({ plan }: { plan: SubmittedPlan }) {
         </PlanIntro>
         <PlanMain>
           <PlanContent>{document.body}</PlanContent>
-          <PlanControls />
+          {canExpand ? <PlanControls /> : null}
         </PlanMain>
       </PlanBody>
     </Plan>
@@ -128,6 +131,7 @@ function PendingPlanCard({ agentId, agentVersionId, requestContext, toolCallId, 
   const { approveToolcall, isRunning, toolCallApprovals } = useToolCall();
   const content = data?.content;
   const document = content ? getPlanDocument(content) : undefined;
+  const canExpand = Boolean(document && document.body.length > PLAN_EXPAND_CHARACTER_THRESHOLD);
   const isAnswered = toolCallApprovals[toolCallId] !== undefined;
   const controlsDisabled = isLoading || isRunning || isAnswered;
 
@@ -178,7 +182,7 @@ function PendingPlanCard({ agentId, agentVersionId, requestContext, toolCallId, 
                 Approve &amp; build
               </Button>
             </PlanActionGroup>
-            <PlanExpandButton />
+            {canExpand ? <PlanExpandButton /> : <span aria-hidden="true" />}
             <PlanActionGroup>
               <Button
                 type="button"

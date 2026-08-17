@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useContext, useEffect } from 'react';
 import { AskUserTool } from './ask-user-tool';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
 import { CodeModeBadge, getCodeModeCall } from './badges/code-mode-badge';
@@ -21,7 +21,7 @@ import { McpAppToolResult } from '@/domains/mcps/components/mcp-app-tool-result'
 import { useMcpAppTools } from '@/domains/mcps/hooks';
 import { WorkflowRunProvider } from '@/domains/workflows';
 import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
-import { useChatAgentSafe, useChatSend } from '@/lib/ai-ui/chat/chat-context';
+import { ChatAgentContext, useChatSend } from '@/lib/ai-ui/chat/chat-context';
 import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 
 /**
@@ -59,6 +59,9 @@ export interface ToolCardProps {
 
 const TASK_TOOL_NAMES = new Set(['task_write', 'task_update', 'task_complete', 'task_check']);
 
+const hasSubmitPlanToolId = (value: unknown): boolean =>
+  typeof value === 'object' && value !== null && 'toolId' in value && value.toolId === SUBMIT_PLAN_TOOL_ID;
+
 export const ToolCard = (props: ToolCardProps) => {
   return (
     <WorkflowRunProvider workflowId={''} withoutTimeTravel>
@@ -74,7 +77,7 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
   const { activateSkill } = useActivatedSkills();
   const { data: mcpAppToolsMap } = useMcpAppTools();
   const send = useChatSend();
-  const chatAgent = useChatAgentSafe();
+  const chatAgent = useContext(ChatAgentContext);
   const queryClient = useQueryClient();
 
   const args = input;
@@ -187,7 +190,9 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
   }
 
   const isSubmitPlanTool =
-    toolName === SUBMIT_PLAN_TOOL_ID || chatAgent?.submitPlanToolNames?.includes(toolName) === true;
+    toolName === SUBMIT_PLAN_TOOL_ID ||
+    hasSubmitPlanToolId(suspendedToolMetadata?.suspendPayload) ||
+    hasSubmitPlanToolId(output);
 
   if (isSubmitPlanTool && chatAgent) {
     return (

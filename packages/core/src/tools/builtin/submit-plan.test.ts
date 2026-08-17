@@ -21,7 +21,10 @@ describe('submitPlanTool (native suspend)', () => {
     const result = await (submitPlanTool as any).execute({ path: '.mastracode/plans/ship-it.md' }, ctx);
 
     expect(ctx.agent.suspend).toHaveBeenCalledTimes(1);
-    expect((ctx.agent.suspend as any).mock.calls[0][0]).toEqual({ path: '.mastracode/plans/ship-it.md' });
+    expect((ctx.agent.suspend as any).mock.calls[0][0]).toEqual({
+      toolId: 'submit_plan',
+      path: '.mastracode/plans/ship-it.md',
+    });
     // suspend short-circuits the step; the tool returns no output.
     expect(result).toBeUndefined();
   });
@@ -35,6 +38,7 @@ describe('submitPlanTool (native suspend)', () => {
 
     expect(ctx.agent.suspend).not.toHaveBeenCalled();
     expect(result).toEqual({
+      toolId: 'submit_plan',
       content: 'Plan approved. Proceed with implementation following the approved plan.',
       isError: false,
       submittedPlan: { title: 'Ship it', path: '.mastracode/plans/ship-it.md', plan: 'Do it' },

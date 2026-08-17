@@ -42,8 +42,23 @@ import { myMcpServer, myMcpServerTwo, mcpAppsServer } from './mcp/server';
 // Non-Mastra MCP server — uses @modelcontextprotocol/sdk directly via stdio.
 // toMCPServerProxies() wraps each MCPClient connection as an MCPServerBase so
 // it appears in Studio alongside native MCPServer instances.
-import { resolve } from 'node:path';
-import { projectRoot } from './project-root';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
+
+// Resolve the project root reliably even when running from the bundled output.
+// Walk up from the bundled file's directory, skipping the .mastra output tree.
+function findProjectRoot(startDir: string): string {
+  let dir = startDir;
+  while (dir !== dirname(dir)) {
+    const hasPackageJson = existsSync(resolve(dir, 'package.json'));
+    const isInsideMastraOutput = dir.includes('.mastra');
+    if (hasPackageJson && !isInsideMastraOutput) return dir;
+    dir = dirname(dir);
+  }
+  return startDir;
+}
+const projectRoot = findProjectRoot(dirname(fileURLToPath(import.meta.url)));
 
 const externalMcpClient = new MCPClient({
   servers: {
@@ -92,7 +107,6 @@ import { askUserAgent } from './agents/ask-user-agent';
 import { codeModeAgent } from './agents/code-mode-agent';
 import { clinicDirectAgent, clinicSpecialistAgent, clinicSupervisorAgent } from './agents/clinic-context-agents';
 import { approvalDemoAgent } from './agents/approval-demo-agent';
-import { planDemoAgent } from './agents/plan-demo-agent';
 import {
   standupNoteNormalizerAgent,
   standupDigestAgent,
@@ -127,7 +141,6 @@ export const mastra = new Mastra({
     gatewayAgent,
     askUserAgent,
     approvalDemoAgent,
-    planDemoAgent,
     chefAgent,
     chefAgentResponses,
     codeOverrideEditableAgent,

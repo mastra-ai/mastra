@@ -195,6 +195,7 @@ describe('Plan', () => {
     if (!content) throw new Error('Expected plan content to render.');
 
     const expandButton = screen.getByRole('button', { name: /expand plan/i });
+    expect(expandButton.getAttribute('data-variant')).toBe('default');
     expect(expandButton.getAttribute('type')).toBe('button');
 
     fireEvent.click(expandButton);

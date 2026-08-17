@@ -25,7 +25,6 @@ import { useChatSendHandler } from './use-chat-send-handler';
 import { useObservationalMemoryContext } from '@/domains/agents/context';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { usePlaygroundModelOptional } from '@/domains/agents/context/playground-model-context';
-import { useAgentPlanToolNames } from '@/domains/agents/hooks/use-agent-plan';
 import { useMemoryConfig } from '@/domains/memory/hooks';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 import { getCanSendWhileStreaming } from '@/services/mastra-runtime-state';
@@ -64,11 +63,6 @@ export function ChatProvider({
 }: Readonly<{ children: ReactNode }> & ChatProps) {
   const { settings: tracingSettings } = useTracingSettings();
   const modelOverride = usePlaygroundModelOptional()?.modelOverride;
-  const { data: submitPlanToolNames = [] } = useAgentPlanToolNames({
-    agentId,
-    agentVersionId,
-    requestContext,
-  });
 
   // Errors emitted as `error` chunks (or thrown by sendMessage) are not persisted
   // to server memory, so they get wiped from useChat's `messages` state when
@@ -343,8 +337,8 @@ export function ChatProvider({
   const sendValue = useMemo<SendContextValue>(() => ({ send }), [send]);
   const tasksValue = useMemo<TasksContextValue>(() => ({ tasks }), [tasks]);
   const agentValue = useMemo<AgentContextValue>(
-    () => ({ agentId, agentVersionId, requestContext, submitPlanToolNames }),
-    [agentId, agentVersionId, requestContext, submitPlanToolNames],
+    () => ({ agentId, agentVersionId, requestContext }),
+    [agentId, agentVersionId, requestContext],
   );
 
   return (

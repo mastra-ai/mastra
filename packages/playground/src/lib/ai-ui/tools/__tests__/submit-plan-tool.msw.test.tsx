@@ -106,13 +106,13 @@ describe('SubmitPlanTool', () => {
 
       renderSubmitPlan(pendingProps);
 
-      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Approve the plan and switch to build' }).disabled).toBe(
-        true,
-      );
+      expect(
+        screen.getByRole<HTMLButtonElement>('button', { name: 'Approve the plan and switch to build' }).disabled,
+      ).toBe(true);
       await screen.findByRole('heading', { name: 'Add dark mode' });
-      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Approve the plan and switch to build' }).disabled).toBe(
-        false,
-      );
+      expect(
+        screen.getByRole<HTMLButtonElement>('button', { name: 'Approve the plan and switch to build' }).disabled,
+      ).toBe(false);
     });
 
     it('keeps the approval action on one line without shrinking', async () => {
@@ -125,6 +125,42 @@ describe('SubmitPlanTool', () => {
 
       expect(approveButton.classList.contains('shrink-0')).toBe(true);
       expect(approveButton.classList.contains('whitespace-nowrap')).toBe(true);
+    });
+
+    it('hides the expand action when the plan body is 500 characters or shorter', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/agents/:agentId/plans/file`, () =>
+          HttpResponse.json({
+            path: submittedPlanPath,
+            content: `# Short plan\n\n${'x'.repeat(500)}`,
+          }),
+        ),
+      );
+
+      renderSubmitPlan(pendingProps);
+
+      expect(await screen.findByRole('heading', { name: 'Short plan' })).not.toBeNull();
+      expect(screen.queryByRole('button', { name: 'Expand plan' })).toBeNull();
+    });
+
+    it('shows a secondary expand action when the plan body exceeds 500 characters', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/agents/:agentId/plans/file`, () =>
+          HttpResponse.json({
+            path: submittedPlanPath,
+            content: `# Long plan\n\n${'x'.repeat(501)}`,
+          }),
+        ),
+      );
+
+      renderSubmitPlan(pendingProps);
+
+      const expandButton = await screen.findByRole('button', { name: 'Expand plan' });
+      expect(expandButton.getAttribute('data-variant')).toBe('default');
+
+      const primaryButtons = document.querySelectorAll('button[data-variant="primary"]');
+      expect(primaryButtons).toHaveLength(1);
+      expect(primaryButtons[0]?.getAttribute('aria-label')).toBe('Approve the plan and switch to build');
     });
 
     it('resumes the tool with the displayed plan when approved', async () => {
@@ -200,9 +236,9 @@ describe('SubmitPlanTool', () => {
       renderSubmitPlan(pendingProps);
 
       expect(await screen.findByText('Unable to load the submitted plan.')).not.toBeNull();
-      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Approve the plan and switch to build' }).disabled).toBe(
-        false,
-      );
+      expect(
+        screen.getByRole<HTMLButtonElement>('button', { name: 'Approve the plan and switch to build' }).disabled,
+      ).toBe(false);
     });
   });
 });
