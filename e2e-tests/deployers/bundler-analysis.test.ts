@@ -3,6 +3,7 @@ import { join } from 'path';
 import { mkdtemp, rm, writeFile, mkdir, readFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { spawnSync } from 'node:child_process';
+import { installWithRetry } from '../_local-registry-setup/install.js';
 
 const timeout = 5 * 60 * 1000;
 
@@ -109,9 +110,8 @@ export const mastra = new Mastra({
       const installArgs = pkgManager === 'pnpm' ? ['install', '--config.minimum-release-age=0'] : ['install'];
 
       console.log('Installing dependencies...');
-      spawnSync(pkgManager, installArgs, {
+      installWithRetry(pkgManager, installArgs, {
         cwd: fixturePath,
-        stdio: 'inherit',
         shell: true,
         env: process.env,
       });

@@ -26,6 +26,10 @@ function isTransient(output) {
  * failure (`Cannot find type definition file for 'node'`, `mastra: not found`).
  *
  * Transient registry errors are retried, since a flaky uplink should not fail a run.
+ *
+ * @param {string} command
+ * @param {string[]} args
+ * @param {{ cwd?: string, env?: NodeJS.ProcessEnv, shell?: boolean, retries?: number }} [options]
  */
 export function installWithRetry(command, args, { cwd, env, shell = true, retries = 3 } = {}) {
   let lastOutput = '';
