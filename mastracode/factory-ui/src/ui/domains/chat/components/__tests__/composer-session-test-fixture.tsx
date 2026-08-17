@@ -1,3 +1,4 @@
+import type { AgentControllerEvent } from '@mastra/client-js';
 import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import type { QueryClient } from '@tanstack/react-query';
 import { screen, waitFor } from '@testing-library/react';
@@ -12,6 +13,7 @@ import Chat from '../../Chat';
 import { ChatSessionBoundary } from '../../context/ChatSessionProvider';
 import { ChatSessionTestProvider } from '../../context/ChatSessionTestProvider';
 import { useHandoffPrompt } from '../../hooks/useHandoffPrompt';
+import { ActivityLine } from '../ActivityLine';
 import { Composer } from '../Composer';
 import { Transcript } from '../Transcript';
 
@@ -26,6 +28,8 @@ export const SESSION_ID = '20000000-0000-4000-8000-000000000003';
 
 interface PreparingSession {
   finishWorkspace: () => void;
+  /** Push an event down the session stream; resolves once the stream is open. */
+  emit: (event: AgentControllerEvent) => Promise<void>;
   posted: string[];
   postedFiles: unknown[];
   delivered: string[];
@@ -40,6 +44,8 @@ interface StubPreparingSessionOptions {
   failDispatch?: boolean;
   failWorkspace?: boolean;
   materialized?: boolean;
+  /** Close the turn as soon as a message is delivered. Off when a test drives the turn itself. */
+  autoAgentEnd?: boolean;
 }
 
 function readSentMessage(body: unknown): string {
@@ -58,6 +64,7 @@ export function stubPreparingSession({
   failDispatch = false,
   failWorkspace = false,
   materialized = false,
+  autoAgentEnd = true,
 }: StubPreparingSessionOptions = {}): PreparingSession {
   let releaseWorkspace = () => {};
   const workspaceReady = new Promise<void>(resolve => {
@@ -67,8 +74,13 @@ export function stubPreparingSession({
   const sseOpen = new Promise<ReadableStreamDefaultController<Uint8Array>>(resolve => {
     attachSse = resolve;
   });
+  const encoder = new TextEncoder();
   const result: PreparingSession = {
     finishWorkspace: releaseWorkspace,
+    emit: async event => {
+      const controller = await sseOpen;
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+    },
     posted: [],
     postedFiles: [],
     delivered: [],
@@ -195,7 +207,7 @@ export function stubPreparingSession({
       if (failWorkspace) return HttpResponse.json({ message: 'Clone failed' }, { status: 500 });
       if (failDispatch) return HttpResponse.json({ message: 'Sandbox is gone' }, { status: 500 });
       result.delivered.push(readSentMessage(body));
-      void sseOpen.then(controller => controller.enqueue(new TextEncoder().encode('data: {"type":"agent_end"}\n\n')));
+      if (autoAgentEnd) void result.emit({ type: 'agent_end' });
       return HttpResponse.json({ ok: true });
     }),
     http.post(`${API}/sessions/:resourceId/steer`, () => {
@@ -219,6 +231,7 @@ function ThreadSurface() {
     <>
       <Link to="/away">go-away</Link>
       <Transcript />
+      <ActivityLine />
       <Composer />
     </>
   );

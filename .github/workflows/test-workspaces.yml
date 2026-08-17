@@ -23,7 +23,7 @@ jobs:
       packages: ${{ steps.set-packages.outputs.packages }}
     steps:
       - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-        timeout-minutes: 5
+        timeout-minutes: 20
         with:
           ref: ${{ inputs.head_sha }}
           persist-credentials: false
@@ -50,7 +50,7 @@ jobs:
         package: ${{ fromJson(needs.setup.outputs.packages) }}
     steps:
       - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-        timeout-minutes: 5
+        timeout-minutes: 20
         with:
           ref: ${{ inputs.head_sha }}
           persist-credentials: false
@@ -80,7 +80,7 @@ jobs:
         package: [s3, gcs, azure]
     steps:
       - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-        timeout-minutes: 5
+        timeout-minutes: 20
         with:
           ref: ${{ inputs.head_sha }}
           persist-credentials: false

@@ -205,6 +205,16 @@ export function MessageScrollerProvider({
   const [viewportElement, setViewportElement] = React.useState<HTMLDivElement | null>(null);
   const [contentElement, setContentElement] = React.useState<HTMLDivElement | null>(null);
   const defaultScrollAppliedRef = React.useRef(false);
+  const deferDefaultScrollRef = React.useRef(false);
+  const defaultScrollScheduledRef = React.useRef(false);
+  const seenAnchorIdsRef = React.useRef<Set<string> | null>(null);
+  seenAnchorIdsRef.current ??= new Set<string>();
+  const seenAnchorIds = seenAnchorIdsRef.current;
+  // Message ID reconciliation keeps the row element while replacing its ID.
+  const seenAnchorElementsRef = React.useRef<WeakSet<HTMLElement> | null>(null);
+  seenAnchorElementsRef.current ??= new WeakSet<HTMLElement>();
+  const seenAnchorElements = seenAnchorElementsRef.current;
+  const turnAnchoringArmedRef = React.useRef(false);
   const [scrollable, setScrollable] = React.useState<MessageScrollerScrollable>(DEFAULT_SCROLLABLE);
   const [visibility, setVisibility] = React.useState<MessageScrollerVisibility>(DEFAULT_VISIBILITY);
   const atEndRef = React.useRef(true);
@@ -258,11 +268,23 @@ export function MessageScrollerProvider({
     });
   }, [publishScrollable, scrollEdgeThreshold, viewportElement]);
 
-  const updateVisibility = React.useCallback(() => {
-    // Registration is mount order, not document order, once history is prepended.
+  // Registration is mount order, not document order, once history is prepended.
+  const getOrderedItems = React.useCallback(() => {
     orderedItemsRef.current ??= orderItemsByDocumentPosition(Array.from(itemsRegistry.entries()));
-    const items = orderedItemsRef.current;
-    const fallbackAnchorId = items.filter(([, item]) => item.scrollAnchor).at(-1)?.[0] ?? items.at(-1)?.[0];
+    return orderedItemsRef.current;
+  }, [itemsRegistry]);
+
+  const getLastAnchorId = React.useCallback(
+    () =>
+      getOrderedItems()
+        .filter(([, item]) => item.scrollAnchor)
+        .at(-1)?.[0],
+    [getOrderedItems],
+  );
+
+  const updateVisibility = React.useCallback(() => {
+    const items = getOrderedItems();
+    const fallbackAnchorId = getLastAnchorId() ?? items.at(-1)?.[0];
 
     if (items.length === 0) {
       publishVisibility(DEFAULT_VISIBILITY);
@@ -306,7 +328,15 @@ export function MessageScrollerProvider({
       visibleMessageIds:
         orderedVisibleMessageIds.length > 0 ? orderedVisibleMessageIds : fallbackAnchorId ? [fallbackAnchorId] : [],
     });
-  }, [intersectingMessageIds, itemsRegistry, publishVisibility, scrollMargin, scrollPreviousItemPeek, viewportElement]);
+  }, [
+    getLastAnchorId,
+    getOrderedItems,
+    intersectingMessageIds,
+    publishVisibility,
+    scrollMargin,
+    scrollPreviousItemPeek,
+    viewportElement,
+  ]);
 
   const syncAfterScroll = React.useCallback(() => {
     updateScrollable();
@@ -491,31 +521,86 @@ export function MessageScrollerProvider({
   }, [itemsVersion, updateScrollable, updateVisibility]);
 
   React.useLayoutEffect(() => {
-    if (defaultScrollAppliedRef.current || !viewportElement || itemsRegistry.size === 0) return;
-
-    let didScroll = false;
-    if (defaultScrollPosition === 'start') {
-      didScroll = scrollToStart({ behavior: 'auto' });
-    } else if (defaultScrollPosition === 'last-anchor') {
-      const lastAnchorId = Array.from(itemsRegistry.entries())
-        .filter(([, item]) => item.scrollAnchor)
-        .at(-1)?.[0];
-      didScroll = lastAnchorId
-        ? scrollToMessage(lastAnchorId, { align: 'start', behavior: 'auto' })
-        : scrollToEnd({ behavior: 'auto' });
-    } else {
-      didScroll = scrollToEnd({ behavior: 'auto' });
+    if (defaultScrollAppliedRef.current || !viewportElement) return undefined;
+    if (itemsRegistry.size === 0) {
+      deferDefaultScrollRef.current = true;
+      return undefined;
     }
 
-    if (didScroll) defaultScrollAppliedRef.current = true;
+    const applyDefaultScroll = () => {
+      const lastAnchorId = getLastAnchorId();
+      let didScroll = false;
+      if (defaultScrollPosition === 'start') {
+        didScroll = scrollToStart({ behavior: 'auto' });
+      } else if (defaultScrollPosition === 'last-anchor') {
+        didScroll = lastAnchorId
+          ? scrollToMessage(lastAnchorId, { align: 'start', behavior: 'auto' })
+          : scrollToEnd({ behavior: 'auto' });
+      } else {
+        didScroll = scrollToEnd({ behavior: 'auto' });
+      }
+
+      if (!didScroll) return;
+      defaultScrollAppliedRef.current = true;
+      turnAnchoringArmedRef.current = true;
+    };
+
+    if (!deferDefaultScrollRef.current) {
+      applyDefaultScroll();
+      return undefined;
+    }
+    if (defaultScrollScheduledRef.current) return undefined;
+
+    defaultScrollScheduledRef.current = true;
+    let cancelled = false;
+    scheduleScrollSync(() => {
+      scheduleScrollSync(() => {
+        defaultScrollScheduledRef.current = false;
+        if (!cancelled && !defaultScrollAppliedRef.current) applyDefaultScroll();
+      });
+    });
+    return () => {
+      cancelled = true;
+      defaultScrollScheduledRef.current = false;
+    };
   }, [
     defaultScrollPosition,
+    getLastAnchorId,
     itemsRegistry,
     itemsVersion,
     scrollToEnd,
     scrollToMessage,
     scrollToStart,
     viewportElement,
+  ]);
+
+  React.useLayoutEffect(() => {
+    const lastAnchorId = getLastAnchorId();
+    const lastAnchor = lastAnchorId ? itemsRegistry.get(lastAnchorId) : undefined;
+    const shouldAnchorNewTurn =
+      turnAnchoringArmedRef.current &&
+      lastAnchorId !== undefined &&
+      lastAnchor !== undefined &&
+      !seenAnchorIds.has(lastAnchorId) &&
+      !seenAnchorElements.has(lastAnchor.element);
+
+    for (const [messageId, item] of getOrderedItems()) {
+      if (!item.scrollAnchor) continue;
+      seenAnchorIds.add(messageId);
+      seenAnchorElements.add(item.element);
+    }
+    turnAnchoringArmedRef.current = defaultScrollAppliedRef.current;
+
+    if (!shouldAnchorNewTurn || !lastAnchorId) return;
+    scrollToMessage(lastAnchorId, { align: 'start', behavior: 'smooth' });
+  }, [
+    getLastAnchorId,
+    getOrderedItems,
+    itemsRegistry,
+    itemsVersion,
+    scrollToMessage,
+    seenAnchorElements,
+    seenAnchorIds,
   ]);
 
   // Older items land above the reader and shove their position down. A prepend is
@@ -617,7 +702,9 @@ export const MessageScrollerViewport = React.forwardRef<HTMLDivElement, MessageS
         tabIndex={tabIndex ?? 0}
         data-slot="message-scroller-viewport"
         className={cn(
-          'size-full min-h-0 min-w-0 overflow-y-auto overscroll-contain data-autoscrolling:scrollbar-thumb-transparent data-autoscrolling:scrollbar-track-transparent',
+          // Size container so consumers can size the room under a live turn in cqh.
+          '[container-type:size] size-full min-h-0 min-w-0 overflow-y-auto overscroll-contain',
+          'data-autoscrolling:scrollbar-thumb-transparent data-autoscrolling:scrollbar-track-transparent',
           className,
         )}
         onScroll={event => {

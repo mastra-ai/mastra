@@ -1,5 +1,5 @@
 /**
- * Client-side aggregation for the Metrics page's queue-health chart.
+ * Client-side aggregation for the Overview page's queue-health chart.
  *
  * Pure, DB-free functions over `work_items` rows — mirrors the discipline of
  * the server-side `computeFactoryMetrics`, but lives in the UI layer because
