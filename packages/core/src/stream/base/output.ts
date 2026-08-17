@@ -205,6 +205,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #emitter = new EventEmitter();
   #bufferedSteps: LLMStepResult<OUTPUT>[] = [];
   #bufferedReasoningDetails: Record<string, LLMStepResult<OUTPUT>['reasoning'][number]> = {};
+  // Per-step mirror of `#bufferedReasoningDetails`. Populated across
+  // reasoning-start/delta/end so a step reports its own reasoning (including
+  // start/end-only metadata and blocks with no text delta), and reset each step.
+  // Unlike the run-lifetime map it is not cleared by `#truncateRunBuffers`, so a
+  // goal continuation that truncates before a step-finish cannot drop it.
+  #bufferedByStepReasoningDetails: Record<string, LLMStepResult<OUTPUT>['reasoning'][number]> = {};
   #bufferedByStep: LLMStepResult<OUTPUT> = {
     text: '',
     reasoning: [],
@@ -648,6 +654,16 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   text: '',
                 },
               };
+              self.#bufferedByStepReasoningDetails[chunk.payload.id] = {
+                type: 'reasoning',
+                runId: chunk.runId,
+                from: chunk.from,
+                payload: {
+                  id: chunk.payload.id,
+                  providerMetadata: chunk.payload.providerMetadata,
+                  text: '',
+                },
+              };
               break;
             case 'reasoning-delta': {
               self.#bufferedReasoning.push({
@@ -663,20 +679,24 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 payload: chunk.payload,
               });
 
-              const bufferedReasoning = self.#bufferedReasoningDetails[chunk.payload.id];
-              if (bufferedReasoning) {
-                bufferedReasoning.payload.text += chunk.payload.text;
-                if (chunk.payload.providerMetadata) {
-                  bufferedReasoning.payload.providerMetadata = chunk.payload.providerMetadata;
+              for (const details of [self.#bufferedReasoningDetails, self.#bufferedByStepReasoningDetails]) {
+                const bufferedReasoning = details[chunk.payload.id];
+                if (bufferedReasoning) {
+                  bufferedReasoning.payload.text += chunk.payload.text;
+                  if (chunk.payload.providerMetadata) {
+                    bufferedReasoning.payload.providerMetadata = chunk.payload.providerMetadata;
+                  }
                 }
               }
               break;
             }
 
             case 'reasoning-end': {
-              const bufferedReasoning = self.#bufferedReasoningDetails[chunk.payload.id];
-              if (chunk.payload.providerMetadata && bufferedReasoning) {
-                bufferedReasoning.payload.providerMetadata = chunk.payload.providerMetadata;
+              for (const details of [self.#bufferedReasoningDetails, self.#bufferedByStepReasoningDetails]) {
+                const bufferedReasoning = details[chunk.payload.id];
+                if (chunk.payload.providerMetadata && bufferedReasoning) {
+                  bufferedReasoning.payload.providerMetadata = chunk.payload.providerMetadata;
+                }
               }
               break;
             }
@@ -744,40 +764,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               // Per-step reasoning must not leak earlier steps. `#bufferedReasoning`
               // and `#bufferedReasoningDetails` are run-lifetime buffers, so reading
               // them here made every step report the cumulative reasoning of all
-              // prior steps. Rebuild this step's reasoning from the per-step
-              // `#bufferedByStep.reasoning` buffer instead, mirroring how `stepText`
-              // uses `#bufferedByStep.text`. Aggregating the details from the per-step
-              // deltas (rather than filtering the run-lifetime details map) also keeps
-              // this correct when a goal continuation clears the run-lifetime buffers
-              // via `#truncateRunBuffers` before this step-finish lands, since the
-              // per-step buffer is untouched by that boundary. Text is joined from the
-              // deltas and details are aggregated per reasoning id, matching the
-              // run-level reasoning fields.
-              const stepReasoningText = self.#bufferedByStep.reasoning
-                .map(reasoningPart => reasoningPart.payload.text)
-                .join('');
-              const stepReasoningDetailsById = new Map<string, LLMStepResult<OUTPUT>['reasoning'][number]>();
-              for (const reasoningPart of self.#bufferedByStep.reasoning) {
-                let detail = stepReasoningDetailsById.get(reasoningPart.payload.id);
-                if (!detail) {
-                  detail = {
-                    type: 'reasoning',
-                    runId: reasoningPart.runId,
-                    from: reasoningPart.from,
-                    payload: {
-                      id: reasoningPart.payload.id,
-                      text: '',
-                      providerMetadata: reasoningPart.payload.providerMetadata,
-                    },
-                  };
-                  stepReasoningDetailsById.set(reasoningPart.payload.id, detail);
-                }
-                detail.payload.text += reasoningPart.payload.text;
-                if (reasoningPart.payload.providerMetadata) {
-                  detail.payload.providerMetadata = reasoningPart.payload.providerMetadata;
-                }
-              }
-              const stepReasoning = Array.from(stepReasoningDetailsById.values());
+              // prior steps. Read this step's reasoning from the per-step details map
+              // instead, mirroring how `stepText` uses `#bufferedByStep.text`. That
+              // map is built across reasoning-start/delta/end (so start/end-only
+              // metadata and blocks with no text delta are preserved) and, unlike the
+              // run-lifetime map, is untouched by `#truncateRunBuffers`, so a goal
+              // continuation that truncates before this step-finish cannot drop it.
+              const stepReasoning = Object.values(self.#bufferedByStepReasoningDetails);
+              const stepReasoningText = stepReasoning.map(detail => detail.payload.text).join('');
 
               const stepResult: LLMStepResult<OUTPUT> = {
                 stepType: self.#bufferedSteps.length === 0 ? 'initial' : 'tool-result',
@@ -879,6 +873,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 providerMetadata: undefined,
                 finishReason: undefined,
               };
+              self.#bufferedByStepReasoningDetails = {};
 
               // A continuing goal evaluation arrived while this step was still
               // in flight (in-process chunk ordering): this step-finish belongs
@@ -2068,6 +2063,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       bufferedSteps: steps,
       bufferedStepRequests: requests,
       bufferedReasoningDetails: this.#bufferedReasoningDetails,
+      bufferedByStepReasoningDetails: this.#bufferedByStepReasoningDetails,
       bufferedByStep: this.#bufferedByStep,
       bufferedText: this.#bufferedText,
       bufferedTextChunks: this.#bufferedTextChunks,
@@ -2093,6 +2089,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#status = state.status;
     this.#bufferedSteps = rehydrateStepRequests(state.bufferedSteps, state.bufferedStepRequests);
     this.#bufferedReasoningDetails = state.bufferedReasoningDetails;
+    this.#bufferedByStepReasoningDetails = state.bufferedByStepReasoningDetails ?? {};
     this.#bufferedByStep = state.bufferedByStep;
     this.#bufferedText = state.bufferedText;
     this.#bufferedTextChunks = state.bufferedTextChunks;

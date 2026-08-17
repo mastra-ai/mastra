@@ -1407,12 +1407,12 @@ describe('MastraModelOutput', () => {
   });
 
   describe('per-step reasoning', () => {
-    const reasoningStart = (runId: string, id: string): ChunkType =>
-      ({ type: 'reasoning-start', runId, from: ChunkFrom.AGENT, payload: { id } }) as ChunkType;
+    const reasoningStart = (runId: string, id: string, providerMetadata?: Record<string, unknown>): ChunkType =>
+      ({ type: 'reasoning-start', runId, from: ChunkFrom.AGENT, payload: { id, providerMetadata } }) as ChunkType;
     const reasoningDelta = (runId: string, id: string, text: string): ChunkType =>
       ({ type: 'reasoning-delta', runId, from: ChunkFrom.AGENT, payload: { id, text } }) as ChunkType;
-    const reasoningEnd = (runId: string, id: string): ChunkType =>
-      ({ type: 'reasoning-end', runId, from: ChunkFrom.AGENT, payload: { id } }) as ChunkType;
+    const reasoningEnd = (runId: string, id: string, providerMetadata?: Record<string, unknown>): ChunkType =>
+      ({ type: 'reasoning-end', runId, from: ChunkFrom.AGENT, payload: { id, providerMetadata } }) as ChunkType;
 
     it('reports only the current step reasoning to steps and onStepFinish, and keeps run-level reasoning cumulative', async () => {
       const runId = 'test-run';
@@ -1513,6 +1513,46 @@ describe('MastraModelOutput', () => {
       await output.consumeStream();
 
       expect(stepFinishReasoning).toEqual([{ text: 'JUDGED-TURN-THINKING', ids: ['rs1'] }]);
+    });
+
+    it('preserves per-step reasoning-start/end metadata and blocks with no text delta', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+
+      const startMeta = { openai: { itemId: 'block-1' } };
+      const endMeta = { openai: { signature: 'sig-1' } };
+
+      // rsA carries providerMetadata only on start/end (never on a delta); rsB is a
+      // reasoning block with no text delta at all. Both must survive per step.
+      const stream = createChunkStream([
+        reasoningStart(runId, 'rsA', startMeta),
+        reasoningDelta(runId, 'rsA', 'THINKING'),
+        reasoningEnd(runId, 'rsA', endMeta),
+        reasoningStart(runId, 'rsB'),
+        reasoningEnd(runId, 'rsB'),
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+      const steps = await output.steps;
+
+      expect(steps).toHaveLength(1);
+      expect(steps[0]!.reasoning.map(r => r.payload.id)).toEqual(['rsA', 'rsB']);
+      // reasoning-end metadata wins over the start metadata for the same block.
+      expect(steps[0]!.reasoning[0]!.payload.providerMetadata).toEqual(endMeta);
+      expect(steps[0]!.reasoning[0]!.payload.text).toBe('THINKING');
+      // The delta-less block is still reported with empty text.
+      expect(steps[0]!.reasoning[1]!.payload.text).toBe('');
+      expect(steps[0]!.reasoningText).toBe('THINKING');
     });
 
     it('reports empty reasoning for a step that produced none', async () => {
