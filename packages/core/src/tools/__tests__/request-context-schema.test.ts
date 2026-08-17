@@ -197,6 +197,32 @@ describe('Tool requestContextSchema', () => {
 
       expect(capturedDate).toBeInstanceOf(Date);
       expect((capturedDate as Date).toISOString()).toBe('2026-08-17T00:00:00.000Z');
+      expect(capturedDate).toEqual(new Date('2026-08-17T00:00:00.000Z'));
+    });
+
+    it('should validate input-form values when forwarding transformed context to a nested tool', async () => {
+      const innerTool = createTool({
+        id: 'inner-transform-tool',
+        description: 'A nested tool',
+        requestContextSchema: z.object({ date: dateCodec }),
+        execute: async (_, { requestContext }) => ({
+          dateIsDate: requestContext.get('date') instanceof Date,
+          allDateIsDate: requestContext.all.date instanceof Date,
+        }),
+      });
+      const outerTool = createTool({
+        id: 'outer-transform-tool',
+        description: 'A forwarding tool',
+        requestContextSchema: z.object({ date: dateCodec }),
+        execute: async (_, { requestContext }) => innerTool.execute!({}, { requestContext }),
+      });
+      const requestContext = new RequestContext();
+      requestContext.set('date', '2026-08-17T00:00:00.000Z');
+
+      const result = await outerTool.execute!({}, { requestContext });
+
+      expect(result).toEqual({ dateIsDate: true, allDateIsDate: true });
+      expect(requestContext.getRaw('date')).toBe('2026-08-17T00:00:00.000Z');
     });
 
     it.each(['set', 'setRaw'] as const)(

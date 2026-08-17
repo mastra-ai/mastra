@@ -1,6 +1,7 @@
 import type { ToolBackgroundConfig } from '../background-tasks';
 import type { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
+import { getRequestContextInputSource, REQUEST_CONTEXT_INPUT_SOURCE } from '../request-context/input-source';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON, InferPublicSchema } from '../schema';
 import type { SuspendOptions } from '../workflows';
@@ -66,6 +67,7 @@ class TransformedRequestContext extends RequestContext<Record<string, any>> {
     super(Object.entries({ ...source.all, ...transformedValues }));
     this.#source = source;
     this.#encode = encode;
+    Object.defineProperty(this, REQUEST_CONTEXT_INPUT_SOURCE, { value: source });
   }
 
   #getSourceValue(key: string, value: unknown): unknown {
@@ -404,10 +406,12 @@ export class Tool<
           data = validationResult.data;
         }
 
+        const sourceRequestContext = getRequestContextInputSource(context?.requestContext);
+
         // Validate request context if schema exists
         const { data: validatedRequestContext, error: requestContextError } = validateRequestContext(
           this.requestContextSchema,
-          context?.requestContext,
+          sourceRequestContext,
           this.id,
         );
         if (requestContextError) {
@@ -416,7 +420,7 @@ export class Tool<
 
         const executionRequestContext = this.requestContextSchema
           ? new TransformedRequestContext(
-              context?.requestContext ?? new RequestContext(),
+              sourceRequestContext ?? new RequestContext(),
               validatedRequestContext as Record<string, unknown>,
               getRequestContextEncoder(this.requestContextSchema),
             )
