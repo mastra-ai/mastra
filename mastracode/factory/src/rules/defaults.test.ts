@@ -816,12 +816,29 @@ describe('defaultFactoryRules', () => {
         type: 'upsertLinkedWorkItem',
         stage: 'intake',
       });
+      // A pull request Factory opened is the Work leg's own output: its
+      // provenance is known, so it advances to Review even though an App bot can
+      // never hold collaborator permission. An issue Factory opened gets no such
+      // pass — auto-triaging our own issue is a self-loop with no upside.
       expect(await rules.github[event]?.onEvent?.(factoryAuthored)).toMatchObject({
         type: 'upsertLinkedWorkItem',
-        stage: 'intake',
+        stage: event === 'pullRequestOpened' ? 'review' : 'intake',
       });
     },
   );
+
+  it('keeps a factory-authored pull request opened before the Factory in Intake', async () => {
+    const rules = defaultFactoryRules({ version: 'deployment-7' });
+    const older = {
+      ...githubContext('pullRequestOpened', '2026-05-01T00:00:00Z'),
+      actor: { type: 'github', login: 'factory-bot', trusted: false, factoryAuthored: true } as const,
+    };
+
+    expect(await rules.github.pullRequestOpened?.onEvent?.(older)).toMatchObject({
+      type: 'upsertLinkedWorkItem',
+      stage: 'intake',
+    });
+  });
 
   it.each(['issueOpened', 'pullRequestOpened'] as const)(
     'keeps trusted %s items created before the Factory in Intake',

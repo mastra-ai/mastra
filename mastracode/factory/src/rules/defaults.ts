@@ -228,6 +228,12 @@ function issueClosed(context: FactoryGithubRuleContext) {
 
 function pullRequestOpened(context: FactoryGithubRuleContext) {
   if (!context.pullRequest) return;
+  // Trust is a repository-collaborator permission lookup, and a GitHub App bot
+  // is never a collaborator — so a PR Factory opened itself scores as untrusted
+  // and parks in Intake, the one class of PR whose provenance we know best.
+  // Factory authorship is its own trust signal: the branch came from a Work run
+  // this Factory dispatched.
+  const factoryAuthored = context.actor.type === 'github' && context.actor.factoryAuthored;
   return {
     type: 'upsertLinkedWorkItem',
     idempotencyKey: `${context.ingress.id}:pull-request-intake`,
@@ -237,13 +243,14 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
     title: context.pullRequest.title,
     url: context.pullRequest.url,
     stage:
-      trustedGithubActor(context) && createdAfterFactory(context.pullRequest.createdAt, context.factory.createdAt)
+      (trustedGithubActor(context) || factoryAuthored) &&
+      createdAfterFactory(context.pullRequest.createdAt, context.factory.createdAt)
         ? 'review'
         : 'intake',
     metadata: {
       githubRepositoryId: context.repository.id,
       githubPullRequestNumber: context.pullRequest.number,
-      factoryAuthored: context.actor.type === 'github' && context.actor.factoryAuthored,
+      factoryAuthored,
       state: context.pullRequest.state,
       draft: context.pullRequest.draft,
       merged: context.pullRequest.merged,
