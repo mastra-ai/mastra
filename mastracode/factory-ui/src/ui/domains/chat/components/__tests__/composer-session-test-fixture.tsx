@@ -1,4 +1,4 @@
-import type { AgentControllerEvent } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/client-js';
 import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import type { QueryClient } from '@tanstack/react-query';
 import { screen, waitFor } from '@testing-library/react';
@@ -15,6 +15,7 @@ import { ChatSessionTestProvider } from '../../context/ChatSessionTestProvider';
 import { useHandoffPrompt } from '../../hooks/useHandoffPrompt';
 import { ActivityLine } from '../ActivityLine';
 import { Composer } from '../Composer';
+import { TaskPanel } from '../TaskPanel';
 import { Transcript } from '../Transcript';
 
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
@@ -42,6 +43,7 @@ interface PreparingSession {
 
 interface StubPreparingSessionOptions {
   createdSessionTitle?: string;
+  tasks?: AgentControllerTaskSnapshot[];
   failDispatch?: boolean;
   failWorkspace?: boolean;
   materialized?: boolean;
@@ -63,6 +65,7 @@ function readSentFiles(body: unknown): unknown[] {
 
 export function stubPreparingSession({
   createdSessionTitle,
+  tasks,
   failDispatch = false,
   failWorkspace = false,
   materialized = false,
@@ -186,6 +189,7 @@ export function stubPreparingSession({
         modeId: 'build',
         modelId: 'openai/gpt-4o-mini',
         threadId: SESSION_ID,
+        tasks,
         settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
       }),
     ),
@@ -242,6 +246,7 @@ function ThreadSurface() {
     <>
       <Link to="/away">go-away</Link>
       <Transcript />
+      <TaskPanel />
       <ActivityLine />
       <Composer />
     </>

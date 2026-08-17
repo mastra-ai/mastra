@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowUpRight, CircleSlash, EllipsisVertical, Link2, MessagesSquare, Trash2 } from 'lucide-react';
+import { ArrowUpRight, CircleSlash, EllipsisVertical, Trash2 } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
 import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
@@ -20,13 +20,21 @@ import type { ItemRunSpec, RunAction } from '../boardRunSpecs';
 import { itemStageLabel, itemStageOptions } from '../boardStages';
 import type { AuditEventPage } from '../services/audit';
 import type { FactoryDecisionSummary } from '../services/decisions';
-import { relatedWorkItems, relationshipLabel, relationshipPath } from '../services/relationships';
+import { relatedWorkItems, relationshipPath } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { workItemActivity } from '../workItemActivity';
-import { CardLabels, CardStatus, CardTitleTooltip, REVEAL_ON_CARD_HOVER, SourceTitle } from './BoardCardParts';
+import {
+  CardIdleOverlay,
+  CardLabels,
+  CardStatus,
+  CardTitleTooltip,
+  REVEAL_ON_CARD_HOVER,
+  SourceTitle,
+} from './BoardCardParts';
 import { BoardStageIcon, SourceIcon, actionIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
+import { RelatedWorkItemLink } from './RelatedWorkItemLink';
 import { WorkItemActivity } from './WorkItemActivity';
 
 interface CardPrimaryAction {
@@ -78,6 +86,7 @@ export function WorkItemCard({
   allItems,
   activityPage,
   liveWorktreePaths,
+  sessionLivenessResolved,
   runDisabled,
   preparing,
   evaluatingStage,
@@ -102,6 +111,7 @@ export function WorkItemCard({
   activityPage?: AuditEventPage;
   /** Worktrees that still exist; session refs outside this set are stale. */
   liveWorktreePaths: ReadonlySet<string>;
+  sessionLivenessResolved: boolean;
   runDisabled: boolean;
   /** Status text while the click is resolving, before the run mutation starts. */
   preparing?: string;
@@ -176,6 +186,8 @@ export function WorkItemCard({
     transitionReason,
   });
   const retryDecisionId = status.kind === 'error' ? status.retryDecisionId : undefined;
+  const showIdleAction = status.kind === 'idle';
+  const showStatusRow = activity.lastWorker !== undefined || status.kind !== 'idle';
 
   return (
     <CardTitleTooltip title={item.title}>
@@ -199,7 +211,7 @@ export function WorkItemCard({
             to={`/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`}
             draggable={false}
             aria-label={`Open session for ${item.title}`}
-            className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="focus-visible:outline-accent1 absolute inset-0 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
           />
         ) : (
           <button
@@ -208,7 +220,7 @@ export function WorkItemCard({
             disabled={runDisabled || runPending}
             aria-busy={runPending || undefined}
             aria-label={primaryAction.ariaLabel}
-            className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
+            className="focus-visible:outline-accent1 absolute inset-0 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
             onClick={primaryAction.start}
           />
         )}
@@ -280,7 +292,41 @@ export function WorkItemCard({
           </DropdownMenu>
         </div>
         <div className="flex min-w-0 flex-col gap-1.5">
-          <span className="text-ui-xs text-icon2 truncate pr-8">{workItemMeta(item)}</span>
+          <div className="flex min-w-0 items-center gap-1.5 pr-8">
+            <span className="text-ui-xs text-icon2 min-w-0 truncate">{workItemMeta(item)}</span>
+            {threadSession !== undefined && (
+              <span data-live-session-indicator aria-hidden className="bg-accent1 size-2 shrink-0 rounded-full" />
+            )}
+            {relatedItems.map(related => {
+              const relatedSession = sessionLivenessResolved
+                ? itemThreadSession(liveSessions(related.sessions, liveWorktreePaths))
+                : undefined;
+
+              if (relatedSession !== undefined) {
+                return (
+                  <RelatedWorkItemLink
+                    key={related.id}
+                    item={related}
+                    href={`/factories/${factoryId}/workspaces/${relatedSession.sessionId}/threads/${relatedSession.threadId}`}
+                    kind="session"
+                  />
+                );
+              }
+
+              if (sessionLivenessResolved && related.url !== null) {
+                return <RelatedWorkItemLink key={related.id} item={related} href={related.url} kind="external" />;
+              }
+
+              return (
+                <RelatedWorkItemLink
+                  key={related.id}
+                  item={related}
+                  href={relationshipPath(related, factoryId)}
+                  kind="board"
+                />
+              );
+            })}
+          </div>
           <div className="flex min-w-0 items-center gap-1.5">
             {item.source === 'github-pr' ? (
               <PullRequestStatusIcon status={pullRequestStatusForItem(item)} />
@@ -293,31 +339,6 @@ export function WorkItemCard({
           </div>
         </div>
         <CardLabels labels={labels} />
-        {threadSession !== undefined && (
-          <span className="text-ui-xs text-accent1 flex items-center gap-1">
-            <MessagesSquare size={11} aria-hidden />
-            <span className="truncate">Session · {threadSession.branch}</span>
-          </span>
-        )}
-        {relatedItems.map(related => {
-          const relationText = relationshipLabel(related);
-          const relatedSession = itemThreadSession(liveSessions(related.sessions, liveWorktreePaths));
-          return (
-            <Link
-              key={related.id}
-              to={
-                relatedSession
-                  ? `/factories/${factoryId}/workspaces/${relatedSession.sessionId}/threads/${relatedSession.threadId}`
-                  : relationshipPath(related, factoryId)
-              }
-              className="text-ui-xs text-icon4 hover:text-icon6 relative z-20 flex items-center gap-1 hover:underline"
-              aria-label={`Open ${relationText}`}
-            >
-              <Link2 size={11} aria-hidden />
-              <span className="truncate">{relationText}</span>
-            </Link>
-          );
-        })}
         {otherStages.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5">
             {otherStages.map(stage => (
@@ -327,14 +348,19 @@ export function WorkItemCard({
             ))}
           </div>
         )}
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-          <WorkItemActivity activity={activity} actors={activityPage?.actors ?? {}} />
-          <CardStatus
-            status={status}
-            onRetry={retryDecisionId === undefined ? undefined : () => onRetryDecision(retryDecisionId)}
-            retrying={retryDecisionId !== undefined && retryDecisionId === retryingDecisionId}
-          />
-        </div>
+        {showIdleAction && <CardIdleOverlay status={status} />}
+        {showStatusRow && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+            <WorkItemActivity activity={activity} actors={activityPage?.actors ?? {}} />
+            {status.kind !== 'idle' && (
+              <CardStatus
+                status={status}
+                onRetry={retryDecisionId === undefined ? undefined : () => onRetryDecision(retryDecisionId)}
+                retrying={retryDecisionId !== undefined && retryDecisionId === retryingDecisionId}
+              />
+            )}
+          </div>
+        )}
       </article>
     </CardTitleTooltip>
   );

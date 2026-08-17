@@ -1,5 +1,48 @@
 # @mastra/editor
 
+## 0.13.14-alpha.2
+
+### Patch Changes
+
+- Fixed editor-owned agent instructions failing silently. Agents configured with `editor: { instructions: true }` now throw a clear error instead of running with empty instructions when no published version is available in Studio. This affected agents that were never provisioned, only had a draft version, were deleted, had a published version with no instructions, or hit a storage error while loading. Fixes https://github.com/mastra-ai/mastra/issues/21373 ([#21395](https://github.com/mastra-ai/mastra/pull/21395))
+
+  **Before:** the agent ran normally with an empty system prompt.
+
+  **After:** resolving or generating with the agent throws until a published version with instructions exists.
+
+  ```ts
+  // Agent definition — Studio owns the instructions:
+  export const agent = new Agent({
+    id: 'support-agent',
+    editor: { instructions: true },
+    model: 'openai/gpt-4o',
+  });
+  ```
+
+  ```ts
+  // Throws until a version is published in Studio:
+  const agent = client.getAgent('support-agent', { status: 'published' });
+  await agent.generate('hi');
+
+  // Use status: 'draft' to run against the latest draft instead, without publishing:
+  const draftAgent = client.getAgent('support-agent', { status: 'draft' });
+  await draftAgent.generate('hi');
+  ```
+
+- Updated dependencies [[`d7e6745`](https://github.com/mastra-ai/mastra/commit/d7e67456954863c55440ea9c49bc6ceb9949972d), [`9acb50f`](https://github.com/mastra-ai/mastra/commit/9acb50f71cec9c362f06820033f90ae6b1f8282f), [`46e9e3f`](https://github.com/mastra-ai/mastra/commit/46e9e3f73babe1bc70080a596cf2ac0b9da48519), [`3f9a190`](https://github.com/mastra-ai/mastra/commit/3f9a19057c027155867b9317294ee4ca7bd0581a), [`e8808e3`](https://github.com/mastra-ai/mastra/commit/e8808e3d8eb585a2565be53e56a7e0e1477352a4), [`eede4de`](https://github.com/mastra-ai/mastra/commit/eede4de104f59b391d28aa249659388e9a1cf558), [`eede4de`](https://github.com/mastra-ai/mastra/commit/eede4de104f59b391d28aa249659388e9a1cf558), [`d4be8c1`](https://github.com/mastra-ai/mastra/commit/d4be8c1739d22d621e3f78790e1dd5eb5ecc3589), [`a5d2eb1`](https://github.com/mastra-ai/mastra/commit/a5d2eb10347eade1ae2816d88f466c25186c54a5), [`13d49d8`](https://github.com/mastra-ai/mastra/commit/13d49d82f434f319d4bd9a4234369d8186f8e102), [`a97044b`](https://github.com/mastra-ai/mastra/commit/a97044b00cc79e189b07509701b2694c728dfeac), [`e81744c`](https://github.com/mastra-ai/mastra/commit/e81744cd13c46619c142dc521dc0baac47607a84)]:
+  - @mastra/core@1.60.0-alpha.4
+  - @mastra/memory@1.27.0-alpha.0
+  - @mastra/mcp@1.17.0-alpha.0
+
+## 0.13.14-alpha.1
+
+### Patch Changes
+
+- Keep agent snapshot updates as drafts until explicitly published. ([#21528](https://github.com/mastra-ai/mastra/pull/21528))
+
+- Updated dependencies [[`7e096f0`](https://github.com/mastra-ai/mastra/commit/7e096f02f0dddbf09b85d306458351245ed2f886), [`8f0a332`](https://github.com/mastra-ai/mastra/commit/8f0a3321bf180368d76fe7b36aa1a8f60f00b6de), [`b098de9`](https://github.com/mastra-ai/mastra/commit/b098de9d7cb9f672e0883a5c716465a3a689693d), [`ef6e295`](https://github.com/mastra-ai/mastra/commit/ef6e295b59bc25a5b61b633a89c97bcfce9fb465), [`208e1b3`](https://github.com/mastra-ai/mastra/commit/208e1b39f30f4b386e494394e9d71d96f0f90241), [`c938d34`](https://github.com/mastra-ai/mastra/commit/c938d34739936c8ecbabd67ad6a4a4396f41c4c6), [`1d9a0ea`](https://github.com/mastra-ai/mastra/commit/1d9a0ea4a9901baee6cd56737243bd6d1f631ac0), [`3667679`](https://github.com/mastra-ai/mastra/commit/3667679db057edfb086846d13369fdda4902ad65), [`49696e8`](https://github.com/mastra-ai/mastra/commit/49696e8e42f870674a0a58f5abcd22cc54dd2864), [`512100a`](https://github.com/mastra-ai/mastra/commit/512100a7d8b7e9c920f2590c6b3612f5de0d3cff), [`9ef432b`](https://github.com/mastra-ai/mastra/commit/9ef432b6faa534b57b0d182a610e13dd9a7123ff), [`b9cf308`](https://github.com/mastra-ai/mastra/commit/b9cf30846f97f99ac1906ee8a68f4f2d117b0378)]:
+  - @mastra/core@1.60.0-alpha.2
+
 ## 0.13.14-alpha.0
 
 ### Patch Changes
