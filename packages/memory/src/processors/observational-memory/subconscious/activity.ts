@@ -39,8 +39,8 @@ async function getActivityTarget(
     if (!node || !isKnowledgeScopeVisible(node.scope, scope)) return { id: event.recordId, type: 'node' };
     return { id: node.id, name: node.name, type: 'node' };
   }
-  const item = await store.getItem({ id: event.recordId, includeDeleted: true });
-  const node = item ? await store.getNode(item.parentNodeId) : undefined;
+  const record = await store.getKnowledge({ id: event.recordId, includeDeleted: true });
+  const node = record ? await store.getNode(record.node) : undefined;
   if (!node || !isKnowledgeScopeVisible(node.scope, scope)) return { id: event.recordId, type: 'node' };
   return { id: node.id, name: node.name, type: 'node' };
 }
