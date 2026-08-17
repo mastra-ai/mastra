@@ -1,6 +1,6 @@
 ---
 title: "Reference: createCodingAgent() | Coding Agent"
-description: "API reference for createCodingAgent(), which builds a coding agent with portable defaults for workspace, task signal, error retries, and goal judge."
+description: "API reference for createCodingAgent(), which builds a coding agent with portable defaults for workspace, task signals with memory, error retries, and goal judge."
 packages:
   - "@mastra/core"
 ---
@@ -9,7 +9,7 @@ packages:
 
 **Added in:** `@mastra/core@1.48.0`
 
-`createCodingAgent()` builds a coding [`Agent`](/reference/agents/agent) with portable defaults for the pieces a coding agent always needs: a local workspace, the task-list signal provider, network-retry error processors, and the goal judge prompt. Supply only `model` and `instructions` to get a working agent, or override any default.
+`createCodingAgent()` builds a coding [`Agent`](/reference/agents/agent) with portable defaults for the pieces a coding agent always needs: a local workspace, the task-list signal provider when `memory` is configured, network-retry error processors, and the goal judge prompt. Supply only `model` and `instructions` to get a working agent, or override any default.
 
 The returned value is a standard `Agent`, so it works anywhere an `Agent` does: including as the agent passed to an [`AgentController`](/reference/agent-controller/agent-controller-class).
 
@@ -17,7 +17,7 @@ For an introduction to coding agents and each default in context, see [Coding ag
 
 ## Usage example
 
-Pass a model and instructions. `createCodingAgent()` fills in the workspace, task signal, error processors, and goal prompt:
+Pass a model and instructions. `createCodingAgent()` fills in the workspace and error processors, adds the task signal provider when `memory` is configured, and supplies the goal prompt when a `goal` is configured:
 
 ```typescript title="src/mastra/coding-agent.ts"
 import { createCodingAgent } from '@mastra/core/coding-agent'
@@ -34,7 +34,7 @@ The agent receives the [workspace tools](/reference/workspace/workspace-class#fi
 
 ## Parameters
 
-`createCodingAgent()` accepts every field of [`AgentConfig`](/reference/agents/agent#constructor-parameters) plus the fields below. Fields you provide always take precedence over the defaults.
+`createCodingAgent()` accepts every field of [`AgentConfig`](/reference/agents/agent#constructor-parameters) plus the fields below. Fields you provide replace the corresponding default, except for `signals`: the default task signal provider is merged into the providers you pass. See [Signals](#signals).
 
 <PropertiesTable
   content={[
@@ -106,7 +106,7 @@ The agent receives the [workspace tools](/reference/workspace/workspace-class#fi
 
 ## Defaults
 
-A default is only filled in when you don't provide the corresponding field. Caller-provided values always win.
+A default is only filled in when you don't provide the corresponding field. `signals` is the exception: the task signal provider is appended to the providers you pass.
 
 | Field | Default when omitted |
 | - | - |

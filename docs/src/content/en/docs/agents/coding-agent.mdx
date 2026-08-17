@@ -46,7 +46,7 @@ The default workspace runs commands on the host machine with the permissions of 
 
 ## Defaults
 
-`createCodingAgent()` accepts every [`Agent`](/reference/agents/agent#constructor-parameters) option and fills in four of them when you leave them out. Your value always wins:
+`createCodingAgent()` accepts every [`Agent`](/reference/agents/agent#constructor-parameters) option and fills in four of them when you leave them out. Your value replaces the default, except for `signals`, where the task provider is appended to yours:
 
 | Field | Default when omitted | How to opt out |
 | - | - | - |
