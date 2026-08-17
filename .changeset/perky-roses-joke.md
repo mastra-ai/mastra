@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed createStep() and workflow step detection not recognizing tool copies. Tools that lose their class prototype — for example provider tools renamed by tool-provider resolution, or tools loaded twice in Vite SSR — are now detected via the shared tool marker, so createStep(tool) builds a proper tool step instead of misinterpreting the tool as a custom step and passing the wrong arguments to it. This applies to both the default createStep and the one exported from @mastra/core/workflows/evented.
+Fixed `createStep(tool)` sometimes misinterpreting a tool as a custom step. Copied or renamed tools — such as tools resolved through a tool provider — are now correctly detected and build a proper tool step. This applies to both the default `createStep` and the one exported from `@mastra/core/workflows/evented`.
