@@ -278,6 +278,53 @@ export const getUserMessageFromRunInput = (input?: unknown): string | undefined 
   );
 };
 
+const DEFAULT_CONVERSATION_HISTORY_MESSAGES = 10;
+
+/**
+ * Renders the remembered conversation history from an agent scorer run input as a transcript.
+ *
+ * Only agent run inputs carry `rememberedMessages`; any other input shape (a bare string,
+ * a plain `{ prompt }` object, `ModelMessage[]`) returns `undefined` so callers can safely
+ * fall back to single-turn behaviour.
+ *
+ * @param input - The scorer run input
+ * @param options.maxMessages - How many of the most recent remembered messages to keep (default 10)
+ * @returns A newline separated `role: text` transcript, or `undefined` if there is no history
+ *
+ * @example
+ * ```ts
+ * const scorer = createScorer({ ... })
+ *   .preprocess(({ run }) => {
+ *     const history = getConversationHistoryFromRunInput(run.input, { maxMessages: 4 });
+ *     return { history };
+ *   });
+ * ```
+ */
+export const getConversationHistoryFromRunInput = (
+  input?: unknown,
+  options?: { maxMessages?: number },
+): string | undefined => {
+  if (!isScorerRunInputForAgent(input)) return undefined;
+
+  const maxMessages = options?.maxMessages ?? DEFAULT_CONVERSATION_HISTORY_MESSAGES;
+  if (maxMessages <= 0) return undefined;
+
+  const lines = input.rememberedMessages
+    .slice(-maxMessages)
+    .map(message => {
+      if (!isRecord(message)) return undefined;
+
+      const role = getEffectiveMessageRole(message);
+      const text = getTextContentFromMastraDBMessage(message as MastraDBMessage).trim();
+      if (!role || !text) return undefined;
+
+      return `${role}: ${text}`;
+    })
+    .filter((line): line is string => Boolean(line));
+
+  return lines.length > 0 ? lines.join('\n') : undefined;
+};
+
 /**
  * Extracts all system messages from a scorer run input.
  *

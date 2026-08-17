@@ -40,6 +40,13 @@ The `createPromptAlignmentScorerLLM()` function creates a scorer that evaluates 
           "Evaluation mode - 'user' evaluates user prompt alignment only, 'system' evaluates system compliance only, 'both' evaluates both with weighted scoring (default: 'both')",
         required: false,
       },
+      {
+        name: 'includeConversationHistory',
+        type: 'boolean | { maxMessages?: number }',
+        description:
+          'Include prior conversation turns from the agent memory in the judge prompt so short replies are scored in context (default: false). Pass an object to cap how many recent messages are included (default: 10). Only applies to agent runs that carry remembered messages.',
+        required: false,
+      },
     ],
   },
 ]}
@@ -115,6 +122,24 @@ const scorer = createPromptAlignmentScorerLLM({
   },
 })
 ```
+
+### Multi-turn conversations
+
+By default the scorer only sees the current turn. In a conversation, a reply like `"A"` is meaningless on its own, so the judge cannot tell what the user asked for and scores the response as misaligned.
+
+Set `includeConversationHistory` to give the judge the prior turns from the agent's memory. The judge uses them to interpret the current prompt, but still scores only the current response.
+
+```typescript
+const scorer = createPromptAlignmentScorerLLM({
+  model: '__GATEWAY_OPENAI_MODEL__',
+  options: {
+    evaluationMode: 'user',
+    includeConversationHistory: { maxMessages: 6 }, // or `true` for the last 10 messages
+  },
+})
+```
+
+This only affects agent runs, where the scorer receives the remembered messages. Runs scored from a plain prompt string are unchanged.
 
 ### Multi-Dimensional Analysis
 

@@ -12,6 +12,7 @@ import { describe, it, expect } from 'vitest';
 import {
   getTextContentFromMastraDBMessage,
   getUserMessageFromRunInput,
+  getConversationHistoryFromRunInput,
   getCombinedSystemPrompt,
   getAssistantMessageFromRunOutput,
   getReasoningFromRunOutput,
@@ -261,6 +262,58 @@ describe('Scorer Utils', () => {
       expect(getUserMessageFromRunInput({ inputMessages: [{ role: 'user', body: 'Body message question' }] })).toBe(
         'Body message question',
       );
+    });
+  });
+
+  describe('getConversationHistoryFromRunInput', () => {
+    const agentInput = (rememberedMessages: MastraDBMessage[]) => ({
+      inputMessages: [createTestMessage({ content: 'A', role: 'user', id: 'current' })],
+      rememberedMessages,
+      systemMessages: [],
+      taggedSystemMessages: {},
+    });
+
+    it('should render remembered messages as a role prefixed transcript in order', () => {
+      const history = getConversationHistoryFromRunInput(
+        agentInput([
+          createTestMessage({ content: 'Which option should I pick?', role: 'user', id: 'r1' }),
+          createTestMessage({ content: 'Option A or Option B?', role: 'assistant', id: 'r2' }),
+        ]),
+      );
+
+      expect(history).toBe('user: Which option should I pick?\nassistant: Option A or Option B?');
+    });
+
+    it('should keep only the most recent messages when maxMessages is set', () => {
+      const history = getConversationHistoryFromRunInput(
+        agentInput([
+          createTestMessage({ content: 'oldest', role: 'user', id: 'r1' }),
+          createTestMessage({ content: 'middle', role: 'assistant', id: 'r2' }),
+          createTestMessage({ content: 'newest', role: 'user', id: 'r3' }),
+        ]),
+        { maxMessages: 2 },
+      );
+
+      expect(history).toBe('assistant: middle\nuser: newest');
+    });
+
+    it('should return undefined when there is no usable history', () => {
+      expect(getConversationHistoryFromRunInput(agentInput([]))).toBeUndefined();
+      expect(
+        getConversationHistoryFromRunInput(agentInput([createTestMessage({ content: '', role: 'user', id: 'r1' })])),
+      ).toBeUndefined();
+      expect(
+        getConversationHistoryFromRunInput(agentInput([createTestMessage({ content: 'hi', role: 'user', id: 'r1' })]), {
+          maxMessages: 0,
+        }),
+      ).toBeUndefined();
+    });
+
+    it('should return undefined for non-agent run input shapes', () => {
+      expect(getConversationHistoryFromRunInput('just a string')).toBeUndefined();
+      expect(getConversationHistoryFromRunInput({ prompt: 'no history here' })).toBeUndefined();
+      expect(getConversationHistoryFromRunInput({ inputMessages: [{ role: 'user', content: 'hi' }] })).toBeUndefined();
+      expect(getConversationHistoryFromRunInput(undefined)).toBeUndefined();
     });
   });
 
