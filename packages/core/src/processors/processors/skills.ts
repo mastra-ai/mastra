@@ -21,6 +21,8 @@
  * });
  * ```
  */
+import type { IMastraLogger } from '../../logger';
+import type { Mastra } from '../../mastra';
 import type { Skill, SkillFormat, WorkspaceSkills } from '../../workspace/skills';
 import type { Workspace } from '../../workspace/workspace';
 import type { ProcessInputStepArgs, Processor } from '../index';
@@ -51,6 +53,15 @@ interface SkillsProcessorBaseOptions {
    * by name.
    */
   formatLocation?: (skill: Skill) => string;
+  /**
+   * When true, the processor awaits the skills staleness check and refresh
+   * before the first step, so the injected catalog reflects disk (subject to
+   * the staleness cooldown). Defaults to false: the turn serves the cached
+   * catalog and revalidates in the background, so mid-session skill changes
+   * appear one turn later. Enable this only when same-turn freshness matters
+   * more than turn latency (e.g. local filesystems where the walk is cheap).
+   */
+  blockingRefresh?: boolean;
 }
 
 /**
@@ -83,11 +94,27 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
   /** Optional override for rendering the location field */
   private readonly _formatLocation: ((skill: Skill) => string) | undefined;
 
+  /** When true, await the staleness check before step 0 (same-turn freshness) */
+  private readonly _blockingRefresh: boolean;
+
+  /** Mastra logger, attached via __registerMastra; console.warn fallback until then */
+  private _logger?: IMastraLogger;
+
   constructor(opts: SkillsProcessorOptions) {
     this._skills = 'skills' in opts && opts.skills ? opts.skills : opts.workspace?.skills;
     this._format = opts.format ?? 'xml';
     this._formatLocation = opts.formatLocation;
+    this._blockingRefresh = opts.blockingRefresh ?? false;
   }
+
+  __registerMastra(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void {
+    this._logger = mastra.getLogger();
+  }
+
+  /** Log a background refresh failure without ever throwing or blocking the step. */
+  private _warnRefreshFailed = (error: unknown): void => {
+    (this._logger ?? console).warn('SkillsProcessor: background skills refresh failed', { error });
+  };
 
   /**
    * List all skills available to this processor.
@@ -227,9 +254,19 @@ ${skillsMd}`;
   async processInputStep({ messageList, stepNumber, requestContext }: ProcessInputStepArgs) {
     const skills = this._skills?.getScoped ? await this._skills.getScoped({ requestContext }) : this._skills;
 
-    // Refresh skills on first step only (not every step in the agentic loop)
+    // Revalidate skills on first step only (not every step in the agentic loop).
+    // Fire-and-forget by default: the staleness walk can cost seconds of
+    // filesystem I/O over remote sandboxes, so the turn serves the cached
+    // catalog below while the walk runs in the background. Rejections are
+    // contained (an unhandled rejection in a processor can kill the process)
+    // but logged so sandbox outages stay visible. With blockingRefresh the
+    // walk is awaited so the catalog reflects disk.
     if (stepNumber === 0) {
-      await skills?.maybeRefresh({ requestContext });
+      if (this._blockingRefresh) {
+        await skills?.maybeRefresh({ requestContext })?.catch(this._warnRefreshFailed);
+      } else {
+        void skills?.maybeRefresh({ requestContext })?.catch(this._warnRefreshFailed);
+      }
     }
     const skillsList = await skills?.list();
     const hasSkills = skillsList && skillsList.length > 0;

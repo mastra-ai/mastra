@@ -146,6 +146,101 @@ describe('SkillSearchProcessor', () => {
       expect(result.tools?.search_skills).toBeUndefined();
       expect(result.tools?.load_skill).toBeUndefined();
     });
+
+    it('resolves without awaiting a slow maybeRefresh (fire-and-forget revalidation)', async () => {
+      const workspace = createMockWorkspace(testSkills);
+      // maybeRefresh never resolves - the step must still complete and inject tools
+      workspace.skills.maybeRefresh = vi.fn().mockReturnValue(new Promise<void>(() => {}));
+
+      const processor = new SkillSearchProcessor({ workspace });
+      const result = await processor.processInputStep(createMockArgs('thread-1'));
+
+      // Revalidation was fired...
+      expect(workspace.skills.maybeRefresh).toHaveBeenCalledTimes(1);
+      // ...and the step still produced the meta-tools from the cached catalog
+      expect(result.tools).toHaveProperty('search_skills');
+      expect(result.tools).toHaveProperty('load_skill');
+    });
+
+    it('does not fail the step when maybeRefresh rejects, and warns via console fallback', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const workspace = createMockWorkspace(testSkills);
+        workspace.skills.maybeRefresh = vi.fn().mockRejectedValue(new Error('sandbox unreachable'));
+
+        const processor = new SkillSearchProcessor({ workspace });
+
+        await expect(processor.processInputStep(createMockArgs('thread-1'))).resolves.toHaveProperty(
+          'tools.search_skills',
+        );
+
+        // Fire-and-forget: the catch handler runs after the step resolves
+        await vi.waitFor(() => {
+          expect(warnSpy).toHaveBeenCalledWith(
+            'SkillSearchProcessor: background skills refresh failed',
+            expect.objectContaining({ error: expect.any(Error) }),
+          );
+        });
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it('warns through the Mastra logger when registered and maybeRefresh rejects', async () => {
+      const workspace = createMockWorkspace(testSkills);
+      workspace.skills.maybeRefresh = vi.fn().mockRejectedValue(new Error('sandbox unreachable'));
+
+      const processor = new SkillSearchProcessor({ workspace });
+      const loggerWarn = vi.fn();
+      processor.__registerMastra({ getLogger: () => ({ warn: loggerWarn }) } as any);
+
+      await processor.processInputStep(createMockArgs('thread-1'));
+
+      await vi.waitFor(() => {
+        expect(loggerWarn).toHaveBeenCalledWith(
+          'SkillSearchProcessor: background skills refresh failed',
+          expect.objectContaining({ error: expect.any(Error) }),
+        );
+      });
+    });
+
+    it('awaits maybeRefresh before step 0 when blockingRefresh is enabled', async () => {
+      const workspace = createMockWorkspace(testSkills);
+      // Gated maybeRefresh: the step must not complete until it resolves
+      let releaseRefresh!: () => void;
+      workspace.skills.maybeRefresh = vi.fn().mockReturnValue(
+        new Promise<void>(resolve => {
+          releaseRefresh = resolve;
+        }),
+      );
+
+      const processor = new SkillSearchProcessor({ workspace, blockingRefresh: true });
+
+      let stepDone = false;
+      const stepP = processor.processInputStep(createMockArgs('thread-1')).then(result => {
+        stepDone = true;
+        return result;
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(stepDone).toBe(false);
+
+      releaseRefresh();
+      const result = await stepP;
+      expect(stepDone).toBe(true);
+      expect(result.tools).toHaveProperty('search_skills');
+    });
+
+    it('does not fail the step when maybeRefresh rejects under blockingRefresh', async () => {
+      const workspace = createMockWorkspace(testSkills);
+      workspace.skills.maybeRefresh = vi.fn().mockRejectedValue(new Error('sandbox unreachable'));
+
+      const processor = new SkillSearchProcessor({ workspace, blockingRefresh: true });
+
+      await expect(processor.processInputStep(createMockArgs('thread-1'))).resolves.toHaveProperty(
+        'tools.search_skills',
+      );
+    });
   });
 
   describe('search_skills', () => {
