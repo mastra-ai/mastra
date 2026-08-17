@@ -9,7 +9,7 @@ import type { MastraDBMessage, MessageInput } from '../agent/message-list';
 import { isAgentCompatible } from '../agent/subagent';
 import type { SubAgent } from '../agent/subagent';
 import { TripWire } from '../agent/trip-wire';
-import { MastraFGAPermissions } from '../auth/ee';
+import { MastraFGAPermissions, getWorkflowFGAResourceId, requireFGA } from '../auth/ee';
 import type { ActorSignal } from '../auth/ee';
 import { MastraBase } from '../base';
 import { RequestContext } from '../di';
@@ -1639,6 +1639,7 @@ export class Workflow<
   public type: WorkflowType = 'default';
   /** Where this workflow came from: 'code' for statically registered workflows, 'dynamic' for workflows rehydrated from storage. Set by rehydrateWorkflow; defaults to 'code'. */
   public origin: 'code' | 'dynamic' = 'code';
+  public isInternal = false;
   #nestedWorkflowInput?: TInput;
   public committed: boolean = false;
   protected stepFlow: StepFlowEntry<TEngineType>[];
@@ -1729,6 +1730,10 @@ export class Workflow<
   __registerMastra(mastra: Mastra) {
     this.#mastra = mastra;
     this.executionEngine.__registerMastra(mastra);
+  }
+
+  __markInternal() {
+    this.isInternal = true;
   }
 
   __registerPrimitives(p: MastraPrimitives) {
@@ -2553,6 +2558,7 @@ export class Workflow<
         requestContextSchema: this.requestContextSchema,
         runId: runIdToUse,
         resourceId: options?.resourceId,
+        isInternalWorkflow: this.isInternal,
         executionEngine: this.executionEngine,
         executionGraph: this.executionGraph,
         mastra: this.#mastra,
@@ -2719,7 +2725,6 @@ export class Workflow<
     const fgaProvider = mastra?.getServer()?.fga;
     if (fgaProvider) {
       const user = requestContext?.get('user' as any);
-      const { getWorkflowFGAResourceId, requireFGA } = await import('../auth/ee/fga-check');
       await requireFGA({
         fgaProvider,
         user,
@@ -3038,6 +3043,18 @@ export class Workflow<
             {} as Record<string, StepResult<any, any, any, any>>,
           );
           finalSteps = { ...finalSteps, ...updatedNestedSteps };
+
+          // Nested suspend is recorded on both the container and the flattened leaf.
+          // Demote the container in the public steps map so clients (e.g. Studio)
+          // that treat every status==='suspended' entry as a resume target only
+          // see the leaf. Keep the container entry for hierarchy; leave suspendedPaths alone.
+          const parentStep = finalSteps[step];
+          if (parentStep?.status === 'suspended') {
+            const hasSuspendedChild = Object.values(updatedNestedSteps).some(child => child?.status === 'suspended');
+            if (hasSuspendedChild) {
+              finalSteps[step] = { ...parentStep, status: 'running' };
+            }
+          }
         }
       }
     }
@@ -3232,6 +3249,8 @@ export class Run<
    */
   readonly resourceId?: string;
 
+  readonly isInternalWorkflow: boolean;
+
   /**
    * Whether to disable scorers for this run
    */
@@ -3306,6 +3325,7 @@ export class Run<
     workflowId: string;
     runId: string;
     resourceId?: string;
+    isInternalWorkflow?: boolean;
     stateSchema?: StandardSchemaWithJSON<TState>;
     inputSchema?: StandardSchemaWithJSON<TInput>;
     requestContextSchema?: StandardSchemaWithJSON<any>;
@@ -3329,6 +3349,7 @@ export class Run<
     this.workflowId = params.workflowId;
     this.runId = params.runId;
     this.resourceId = params.resourceId;
+    this.isInternalWorkflow = params.isInternalWorkflow ?? false;
     this.serializedStepGraph = params.serializedStepGraph;
     this.executionEngine = params.executionEngine;
     this.executionGraph = params.executionGraph;
@@ -4247,6 +4268,26 @@ export class Run<
     } & Partial<ObservabilityContext>,
   ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const observabilityContext = resolveObservabilityContext(params);
+    const fgaProvider = this.#mastra?.getServer()?.fga;
+    if (fgaProvider && !this.isInternalWorkflow) {
+      await requireFGA({
+        fgaProvider,
+        user: params.requestContext?.get('user' as any),
+        resource: { type: 'workflow', id: getWorkflowFGAResourceId(this.workflowId) },
+        permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
+        requestContext: params.requestContext,
+        actor: params.actor,
+        context: {
+          resourceId: this.resourceId,
+        },
+        metadata: {
+          workflowId: this.workflowId,
+          runId: this.runId,
+          resourceId: this.resourceId,
+        },
+      });
+    }
+
     const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
     const snapshot = await workflowsStore?.loadWorkflowSnapshot({
       workflowName: this.workflowId,

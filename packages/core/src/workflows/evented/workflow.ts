@@ -9,6 +9,8 @@ import { isAgentCompatible } from '../../agent/subagent';
 import type { SubAgent } from '../../agent/subagent';
 import { TripWire } from '../../agent/trip-wire';
 import { isSupportedLanguageModel } from '../../agent/utils';
+import { MastraFGAPermissions, getWorkflowFGAResourceId, requireFGA } from '../../auth/ee';
+import type { ActorSignal } from '../../auth/ee';
 import type { MastraBase } from '../../base';
 import { RequestContext } from '../../di';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
@@ -1746,6 +1748,7 @@ export class EventedWorkflow<
         workflowId: this.id,
         runId: runIdToUse,
         resourceId: options?.resourceId,
+        isInternalWorkflow: this.isInternal,
         executionEngine: this.executionEngine,
         executionGraph: this.executionGraph,
         serializedStepGraph: this.serializedStepGraph,
@@ -1824,6 +1827,7 @@ export class EventedRun<
     workflowId: string;
     runId: string;
     resourceId?: string;
+    isInternalWorkflow?: boolean;
     executionEngine: ExecutionEngine;
     executionGraph: ExecutionGraph;
     serializedStepGraph: SerializedStepFlowEntry[];
@@ -2190,6 +2194,7 @@ export class EventedRun<
     requestContext,
     perStep,
     outputOptions,
+    actor,
   }: {
     resumeData?: TResume;
     step?:
@@ -2201,6 +2206,7 @@ export class EventedRun<
       | string
       | string[];
     requestContext?: RequestContext;
+    actor?: ActorSignal;
     perStep?: boolean;
     outputOptions?: {
       includeState?: boolean;
@@ -2243,6 +2249,7 @@ export class EventedRun<
             requestContext,
             perStep,
             outputOptions,
+            actor,
           });
 
           if (self.streamOutput) {
@@ -2282,12 +2289,33 @@ export class EventedRun<
     label?: string;
     forEachIndex?: number;
     requestContext?: RequestContext;
+    actor?: ActorSignal;
     perStep?: boolean;
     outputOptions?: {
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    const fgaProvider = this.mastra?.getServer()?.fga;
+    if (fgaProvider && !this.isInternalWorkflow) {
+      await requireFGA({
+        fgaProvider,
+        user: params.requestContext?.get('user' as any),
+        resource: { type: 'workflow', id: getWorkflowFGAResourceId(this.workflowId) },
+        permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
+        requestContext: params.requestContext,
+        actor: params.actor,
+        context: {
+          resourceId: this.resourceId,
+        },
+        metadata: {
+          workflowId: this.workflowId,
+          runId: this.runId,
+          resourceId: this.resourceId,
+        },
+      });
+    }
+
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
     if (!workflowsStore) {
       throw new Error('Cannot resume workflow: workflows store is required');
