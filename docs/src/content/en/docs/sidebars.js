@@ -311,6 +311,11 @@ const sidebars = {
           items: [
             {
               type: 'doc',
+              id: 'connections/mcp',
+              label: 'MCP',
+            },
+            {
+              type: 'doc',
               id: 'connections/a2a',
               label: 'A2A',
             },
@@ -323,11 +328,6 @@ const sidebars = {
               type: 'doc',
               id: 'connections/sdk-agents',
               label: 'SDK Agents',
-            },
-            {
-              type: 'doc',
-              id: 'connections/mcp',
-              label: 'MCP',
             },
           ],
         },
