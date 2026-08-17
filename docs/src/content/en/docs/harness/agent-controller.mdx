@@ -35,12 +35,6 @@ You could assemble all of this yourself on top of the [Agent class](/docs/agents
 
 Create the backing [`Agent`](/reference/agents/agent), storage, and [`Workspace`](/reference/workspace/workspace-class). Call [`controller.init()`](/reference/agent-controller/agent-controller-class#init) once, then use [`controller.createSession()`](/reference/agent-controller/agent-controller-class#createsessionoptions) to create a Session. Subscribe with [`session.subscribe()`](/reference/agent-controller/session#subscribelistener) and send work with [`session.sendMessage()`](/reference/agent-controller/session#sendmessage-content-files-requestcontext-):
 
-:::tip
-
-For a coding agent, swap `new Agent()` below for [`createCodingAgent()`](/reference/coding-agent/create-coding-agent) and pass `workspace: undefined` so the controller's workspace is the only one in play.
-
-:::
-
 ```typescript title="src/mastra/agent-controller.ts"
 import { Agent } from '@mastra/core/agent'
 import { AgentController } from '@mastra/core/agent-controller'
