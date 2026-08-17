@@ -134,6 +134,17 @@ class RetainedOutputBuffer {
 }
 
 /**
+ * Thrown by {@link ProcessHandle.closeStdin} when the sandbox provider has no
+ * way to close a running process's stdin.
+ *
+ * `handle.writer.end()` treats this error as a successful finish, so piping to
+ * a process stays safe on providers without stdin close support.
+ */
+export class UnsupportedStdinCloseError extends Error {
+  readonly name = 'UnsupportedStdinCloseError';
+}
+
+/**
  * Handle to a spawned process.
  *
  * Subclasses implement the platform-specific primitives (kill, sendStdin,
@@ -177,17 +188,6 @@ class RetainedOutputBuffer {
  * );
  * ```
  */
-/**
- * Thrown by {@link ProcessHandle.closeStdin} when the sandbox provider has no
- * way to close a running process's stdin.
- *
- * `handle.writer.end()` treats this error as a successful finish, so piping to
- * a process stays safe on providers without stdin close support.
- */
-export class UnsupportedStdinCloseError extends Error {
-  readonly name = 'UnsupportedStdinCloseError';
-}
-
 export abstract class ProcessHandle {
   /** Process ID */
   abstract readonly pid: string;
