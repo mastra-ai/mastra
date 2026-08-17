@@ -277,6 +277,44 @@ describe('SessionRunEngine — abort deadline', () => {
     expect(session.stream.isOpen()).toBe(false);
   });
 
+  it('Given a subscribed run whose producer loses liveness, Then it finalizes as an error and the subscription can process a follow-up run', async () => {
+    const { engine, events, session } = createHarness();
+
+    const subscription = {
+      stream: (async function* () {
+        yield chunk({ type: 'text-start', payload: { id: 't1' }, runId: 'run-1' });
+        yield chunk({ type: 'text-delta', payload: { id: 't1', text: 'partial' }, runId: 'run-1' });
+        yield chunk({
+          type: 'error',
+          payload: { error: new Error('Thread run run-1 lost its lease before publishing a terminal event') },
+          runId: 'run-1',
+        });
+        yield chunk({ type: 'text-start', payload: { id: 't2' }, runId: 'run-2' });
+        yield chunk({ type: 'text-delta', payload: { id: 't2', text: 'recovered' }, runId: 'run-2' });
+        yield chunk({ type: 'finish', payload: { stepResult: { reason: 'stop' } }, runId: 'run-2' });
+      })(),
+      activeRunId: () => null,
+      abort: () => true,
+      unsubscribe: vi.fn(),
+    };
+    session.stream.attach({ subscription, key: 'thread-1' });
+
+    await engine.processSubscribedThreadStream(subscription);
+
+    expect(events.filter(event => event.type === 'error')).toEqual([
+      {
+        type: 'error',
+        error: new Error('Thread run run-1 lost its lease before publishing a terminal event'),
+      },
+    ]);
+    expect(events.filter(event => event.type === 'agent_end')).toEqual([
+      { type: 'agent_end', reason: 'error' },
+      { type: 'agent_end', reason: 'complete' },
+    ]);
+    expect(events.filter(event => event.type === 'agent_start')).toHaveLength(2);
+    expect(session.run.isRunning()).toBe(false);
+  });
+
   it('Given a stream that reacts to the abort signal in time, Then the deadline never fires', async () => {
     const { engine, events, session } = createHarness();
     const abortController = session.run.ensureAbortController();
