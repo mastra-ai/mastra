@@ -37,29 +37,36 @@ describe('MySQL knowledge concurrency and indexes', () => {
     expect(ddl.join('\n')).toContain('idx_knowledge_outbox_idempotency');
     expect(ddl.join('\n')).toMatch(/PRIMARY KEY \(`sourceThreadId`, `agent`\)/);
 
+    const suffix = `export_${process.pid}_${Date.now().toString(36)}`;
+    const tables = [
+      'mastra_knowledge_mentions',
+      'mastra_knowledge_items',
+      'mastra_knowledge_records',
+      'mastra_knowledge_cursors',
+      'mastra_knowledge_activity',
+      'mastra_knowledge_semantic_outbox',
+    ];
+    const exportedTable = (table: string) => `${table}_${suffix}`;
+    const exportDdl = ddl.map(statement =>
+      tables.reduce((sql, table) => sql.replaceAll(`\`${table}\``, `\`${exportedTable(table)}\``), statement),
+    );
+
     const connection = await pool.getConnection();
     try {
-      await connection.query('SET FOREIGN_KEY_CHECKS=0');
-      for (const table of [
-        'mastra_knowledge_mentions',
-        'mastra_knowledge_items',
-        'mastra_knowledge_records',
-        'mastra_knowledge_cursors',
-        'mastra_knowledge_activity',
-        'mastra_knowledge_semantic_outbox',
-      ]) {
-        await connection.query(`DROP TABLE IF EXISTS \`${table}\``);
-      }
-      await connection.query('SET FOREIGN_KEY_CHECKS=1');
-      for (const statement of ddl) await connection.query(statement);
+      for (const statement of exportDdl) await connection.query(statement);
       const [exportedIndexes] = await connection.query(
-        "SELECT INDEX_NAME AS indexName FROM information_schema.statistics WHERE table_schema=? AND table_name='mastra_knowledge_semantic_outbox'",
-        [database],
+        'SELECT INDEX_NAME AS indexName FROM information_schema.statistics WHERE table_schema=? AND table_name=?',
+        [database, exportedTable('mastra_knowledge_semantic_outbox')],
       );
       expect((exportedIndexes as Array<{ indexName: string }>).map(row => row.indexName)).toContain(
         'idx_knowledge_outbox_idempotency',
       );
     } finally {
+      await connection.query('SET FOREIGN_KEY_CHECKS=0');
+      for (const table of tables) {
+        await connection.query(`DROP TABLE IF EXISTS \`${exportedTable(table)}\``);
+      }
+      await connection.query('SET FOREIGN_KEY_CHECKS=1');
       connection.release();
     }
   });
