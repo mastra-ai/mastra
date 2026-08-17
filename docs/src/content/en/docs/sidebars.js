@@ -431,7 +431,7 @@ const sidebars = {
           label: 'Auth',
           link: {
             type: 'doc',
-            id: 'server/auth/index',
+            id: 'auth/overview',
           },
           customProps: {
             contextualSidebar: true,
@@ -439,32 +439,32 @@ const sidebars = {
           items: [
             {
               type: 'doc',
-              id: 'server/auth/composite-auth',
+              id: 'auth/composite-auth',
               label: 'Composite Auth',
             },
             {
               type: 'doc',
-              id: 'server/auth/custom-auth-provider',
+              id: 'auth/custom-auth-provider',
               label: 'Custom Auth Provider',
             },
             {
               type: 'doc',
-              id: 'server/auth/fga',
+              id: 'auth/fga',
               label: 'Fine-Grained Authorization',
             },
             {
               type: 'doc',
-              id: 'server/auth/jwt',
+              id: 'auth/jwt',
               label: 'JSON Web Token',
             },
             {
               type: 'doc',
-              id: 'server/auth/simple-auth',
+              id: 'auth/simple-auth',
               label: 'Simple Auth',
             },
             {
               type: 'doc',
-              id: 'server/auth/workers',
+              id: 'auth/workers',
               label: 'Workers',
               customProps: {
                 tags: ['new'],

@@ -357,7 +357,7 @@ MASTRA_STEP_EXECUTION_URL=http://api:4111/api
 
 Without this variable, the orchestration worker attempts to execute steps in its own process, which doesn't have access to the full Mastra runtime in a split deployment.
 
-The endpoint uses the server's normal auth pipeline. If the API has an auth provider, set `MASTRA_WORKER_AUTH_TOKEN` to a bearer token that provider accepts. Mastra forwards the value as an `Authorization: Bearer` credential. The configured auth provider validates the token. See [Worker authentication](/docs/server/auth/workers) for server configuration and other credential formats.
+The endpoint uses the server's normal auth pipeline. If the API has an auth provider, set `MASTRA_WORKER_AUTH_TOKEN` to a bearer token that provider accepts. Mastra forwards the value as an `Authorization: Bearer` credential. The configured auth provider validates the token. See [Worker authentication](/docs/auth/workers) for server configuration and other credential formats.
 
 ### Scale workers
 
@@ -394,7 +394,7 @@ If the API crashes while a step is executing, that work can be lost and the work
 
 ## Related
 
-- [Worker authentication](/docs/server/auth/workers): Secure worker-to-API communication
+- [Worker authentication](/docs/auth/workers): Secure worker-to-API communication
 - [Workers reference](/reference/workers/overview): Details about worker environment variables and types, with a list of supported storage backends
 - [CLI reference](/reference/cli/mastra#mastra-worker-build): `mastra worker build` and `mastra worker start`
 - [PubSub](/docs/server/pubsub): Event delivery backends

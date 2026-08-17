@@ -491,43 +491,38 @@
       "permanent": true
     },
     {
-      "source": "/docs/auth",
-      "destination": "/docs/server/auth",
+      "source": "/docs/server/auth",
+      "destination": "/docs/auth/overview",
       "permanent": true
     },
     {
-      "source": "/docs/auth/index",
-      "destination": "/docs/server/auth/index",
+      "source": "/docs/server/auth/composite-auth",
+      "destination": "/docs/auth/composite-auth",
       "permanent": true
     },
     {
-      "source": "/docs/auth/jwt",
-      "destination": "/docs/server/auth/jwt",
+      "source": "/docs/server/auth/custom-auth-provider",
+      "destination": "/docs/auth/custom-auth-provider",
       "permanent": true
     },
     {
-      "source": "/docs/auth/clerk",
-      "destination": "/integrations/auth/clerk",
+      "source": "/docs/server/auth/fga",
+      "destination": "/docs/auth/fga",
       "permanent": true
     },
     {
-      "source": "/docs/auth/supabase",
-      "destination": "/integrations/auth/supabase",
+      "source": "/docs/server/auth/jwt",
+      "destination": "/docs/auth/jwt",
       "permanent": true
     },
     {
-      "source": "/docs/auth/firebase",
-      "destination": "/integrations/auth/firebase",
+      "source": "/docs/server/auth/simple-auth",
+      "destination": "/docs/auth/simple-auth",
       "permanent": true
     },
     {
-      "source": "/docs/auth/workos",
-      "destination": "/integrations/auth/workos",
-      "permanent": true
-    },
-    {
-      "source": "/docs/auth/auth0",
-      "destination": "/integrations/auth/auth0",
+      "source": "/docs/server/auth/workers",
+      "destination": "/docs/auth/workers",
       "permanent": true
     },
     {
@@ -2168,6 +2163,16 @@
     {
       "source": "/docs/editor/overview",
       "destination": "/docs/studio/editor",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server/auth/:path*",
+      "destination": "/docs/auth/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/auth/index",
+      "destination": "/docs/auth/overview",
       "permanent": true
     }
   ]
