@@ -83,6 +83,7 @@ export type {
   ObserveTrigger,
   ObservationConfig,
   ReflectionConfig,
+  ContinuationHintsConfig,
   ObserverResult,
   ReflectorResult,
   // Observation marker config

@@ -46,6 +46,7 @@ import type {
   SubscribeAgentThreadParams,
   ListAgentSuspendedRunsParams,
   ListAgentSuspendedRunsResponse,
+  GetAgentPlanResponse,
   ProcessAgentThreadStreamOptions,
   CreateCodeAgentVersionParams,
   ActivateAgentVersionResponse,
@@ -541,6 +542,16 @@ export class Agent extends BaseResource {
    */
   details(requestContext?: RequestContext | Record<string, any>): Promise<GetAgentResponse> {
     return this.request(`/agents/${this.agentId}${this.getQueryString(requestContext)}`);
+  }
+
+  /**
+   * Reads a markdown plan submitted by this agent through the core submit_plan tool.
+   * The server only serves paths under `.mastracode/plans/` and only when the
+   * agent exposes that capability.
+   */
+  readPlan(path: string, requestContext?: RequestContext | Record<string, any>): Promise<GetAgentPlanResponse> {
+    const contextQuery = this.getQueryString(requestContext, '&');
+    return this.request(`/agents/${this.agentId}/plans/file?path=${encodeURIComponent(path)}${contextQuery}`);
   }
 
   /**

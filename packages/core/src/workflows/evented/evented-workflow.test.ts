@@ -24,6 +24,7 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import type { Processor } from '../../processors';
 import { ProcessorStepSchema } from '../../processors/step-schema';
+import { RequestContext } from '../../request-context';
 import { MockStore } from '../../storage/mock';
 import { createTool } from '../../tools/tool';
 import { createStep, createWorkflow } from '.';
@@ -1028,6 +1029,127 @@ describe('Workflow (Evented Engine Specific)', () => {
         const stepResult = result.steps['evented-transient-step'];
         expect(stepResult?.status).toBe('failed');
         expect(stepResult?.nonRetryable).toBeUndefined();
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+  });
+
+  describe('resume FGA checks', () => {
+    async function createSuspendedRun({
+      fgaProvider,
+      internal = false,
+    }: {
+      fgaProvider?: {
+        require: ReturnType<typeof vi.fn>;
+        check: ReturnType<typeof vi.fn>;
+        filterAccessible: ReturnType<typeof vi.fn>;
+      };
+      internal?: boolean;
+    } = {}) {
+      const storage = new MockStore();
+      const step = createStep({
+        id: 'evented-resume-fga-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
+        suspendSchema: z.object({ waiting: z.boolean() }),
+        resumeSchema: z.object({ approved: z.boolean() }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          if (!resumeData?.approved) await suspend({ waiting: true });
+          return inputData;
+        },
+      });
+      const workflow = createWorkflow({
+        id: `evented-resume-fga-workflow-${crypto.randomUUID()}`,
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
+        steps: [step],
+      });
+      workflow.then(step).commit();
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { [workflow.id]: workflow },
+        server: fgaProvider ? { fga: fgaProvider } : undefined,
+      });
+      if (internal) mastra.__registerInternalWorkflow(workflow);
+      await mastra.startWorkers();
+      const run = await workflow.createRun({ resourceId: 'tenant-1' });
+      const startResult = await run.start({
+        inputData: { value: 'ok' },
+        actor: { actorKind: 'system', sourceWorkflow: 'test-setup' },
+      });
+      if (startResult.status === 'failed') throw startResult.error;
+      expect(startResult).toMatchObject({ status: 'suspended' });
+      return { mastra, run, workflow };
+    }
+
+    it('checks workflows:execute when resuming a run', async () => {
+      const fgaProvider = { require: vi.fn(), check: vi.fn(), filterAccessible: vi.fn() };
+      const { mastra, run, workflow } = await createSuspendedRun({ fgaProvider });
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+      try {
+        await run.resume({ resumeData: { approved: true }, requestContext });
+        expect(fgaProvider.require).toHaveBeenCalledWith(
+          { id: 'user-1' },
+          expect.objectContaining({
+            resource: { type: 'workflow', id: workflow.id },
+            permission: 'workflows:execute',
+            context: expect.objectContaining({ resourceId: 'tenant-1', requestContext }),
+          }),
+        );
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+
+    it('fails closed on resume when no user or trusted actor is available', async () => {
+      const fgaProvider = { require: vi.fn(), check: vi.fn(), filterAccessible: vi.fn() };
+      const { mastra, run } = await createSuspendedRun({ fgaProvider });
+      try {
+        await expect(run.resume({ resumeData: { approved: true } })).rejects.toThrow('authenticated user is required');
+        expect(fgaProvider.require).not.toHaveBeenCalled();
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+
+    it('supports trusted actors on resume', async () => {
+      const fgaProvider = { require: vi.fn(), check: vi.fn(), filterAccessible: vi.fn() };
+      const { mastra, run } = await createSuspendedRun({ fgaProvider });
+      try {
+        const requestContext = new RequestContext();
+        requestContext.set('organizationId', 'org-1');
+        await expect(
+          run.resume({
+            resumeData: { approved: true },
+            requestContext,
+            actor: { actorKind: 'system', sourceWorkflow: 'agentic-loop' },
+          }),
+        ).resolves.toMatchObject({ status: 'success' });
+        expect(fgaProvider.require).not.toHaveBeenCalled();
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+
+    it('allows resume without an FGA provider', async () => {
+      const { mastra, run } = await createSuspendedRun();
+      try {
+        await expect(run.resume({ resumeData: { approved: true } })).resolves.toMatchObject({ status: 'success' });
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+
+    it('allows internal workflow resumes without an end-user identity', async () => {
+      const fgaProvider = { require: vi.fn(), check: vi.fn(), filterAccessible: vi.fn() };
+      const { mastra, run } = await createSuspendedRun({ fgaProvider, internal: true });
+      try {
+        await expect(run.resume({ resumeData: { approved: true } })).resolves.toMatchObject({ status: 'success' });
+        expect(fgaProvider.require).not.toHaveBeenCalled();
       } finally {
         await mastra.stopWorkers();
       }

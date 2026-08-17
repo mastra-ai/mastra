@@ -10,7 +10,7 @@ packages:
 
 The `MastraEditor` class sets up the editor system. Pass it to the `Mastra` constructor to turn on editor features like prompt blocks, agent code override, versioning, and tool providers.
 
-See [Editor](/docs/editor/overview) for an introduction to what the editor does.
+See [Editor](/docs/studio/editor) for an introduction to what the editor does.
 
 ## Usage example
 
@@ -93,7 +93,7 @@ export const mastra = new Mastra({
     name: 'source',
     type: "'code' | 'db'",
     description:
-      "Where agent overrides are stored. With 'db', overrides live in the configured storage backend and Studio shows the save and publish flow. With 'code', overrides live as per-agent JSON files on disk (routed through a local FilesystemStore) and Studio shows filesystem actions. See [Editor storage options](/docs/editor/overview#choose-where-changes-are-stored) for the difference.",
+      "Where agent overrides are stored. With 'db', overrides live in the configured storage backend and Studio shows the save and publish flow. With 'code', overrides live as per-agent JSON files on disk (routed through a local FilesystemStore) and Studio shows filesystem actions. See [Editor storage options](/docs/studio/editor#choose-where-changes-are-stored) for the difference.",
     isOptional: true,
     defaultValue: "'db'",
   },
@@ -486,4 +486,4 @@ const source = mastra.getEditor()?.getSource()
 
 Returns: `'code' | 'db' | undefined`
 
-When `source` is omitted, Editor uses the configured database storage even though `getSource()` returns `undefined`. See [Editor storage options](/docs/editor/overview#choose-where-changes-are-stored) for the storage workflows and [code-source versioning](/reference/editor/versioning#code-source) for activation and Git history behavior.
+When `source` is omitted, Editor uses the configured database storage even though `getSource()` returns `undefined`. See [Editor storage options](/docs/studio/editor#choose-where-changes-are-stored) for the storage workflows and [code-source versioning](/reference/editor/versioning#code-source) for activation and Git history behavior.
