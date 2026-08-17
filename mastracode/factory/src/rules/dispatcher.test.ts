@@ -1339,6 +1339,76 @@ describe('FactoryDecisionDispatcher', () => {
     ).toBeNull();
   });
 
+  it('retires a parked proposal once the run it asked for is starting anyway', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    // First drag, before the item is armed: the run parks as a question.
+    const { item } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: 'skill-parked',
+    });
+    const { controller, session, emitAgentEnd } = createSession();
+    const transitionService = new FactoryTransitionService({
+      storage,
+      rules: defaultFactoryRules({
+        version: 'rules-v1',
+        overrides: {
+          work: {
+            execute: {
+              issue: {
+                onEnter: () => ({
+                  type: 'invokeSkill',
+                  role: 'work',
+                  skillName: 'understand-issue',
+                  idempotencyKey: 'skill-approved',
+                }),
+              },
+            },
+          },
+        },
+      }),
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => false,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+    const [parked] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(parked).toMatchObject({ status: 'proposed' });
+
+    // The person answers by taking the item on, which arms it and emits a
+    // second copy of the same run. The parked question is now moot.
+    await storage.armAutonomy({ orgId: 'org-1', id: item.id, now: new Date('2030-01-01T00:01:00Z') });
+    await bindWorkRun(storage, item.id);
+    const current = await storage.get({ orgId: 'org-1', id: item.id });
+    await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      board: 'work',
+      stage: 'execute',
+      expectedRevision: current!.revision,
+      actor: { type: 'human', id: 'user-1' },
+      ingress: { type: 'human', identity: 'move-2' },
+      cause: 'test',
+      reenter: true,
+    });
+
+    const dispatched = dispatcher.runOnce(new Date('2030-01-01T00:02:00Z'));
+    await vi.waitFor(() => expect(session.sendSignal).toHaveBeenCalled());
+    emitAgentEnd();
+    await dispatched;
+
+    const decisions = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(decisions.find(entry => entry.id === parked!.id)?.status).toBe('dismissed');
+    expect(decisions.find(entry => entry.id !== parked!.id)?.status).toBe('succeeded');
+  });
+
   it('still moves cards for external facts while automatic runs are off', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {

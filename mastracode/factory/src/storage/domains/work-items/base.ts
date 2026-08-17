@@ -1356,14 +1356,18 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   /**
-   * Retire every proposal parked on a work item. A merged pull request (or an
-   * item closed out any other way) leaves its queued runs with nothing left to
-   * do, and they would otherwise sit on the card forever asking to be answered.
+   * Retire proposals parked on a work item. A merged pull request (or an item
+   * closed out any other way) leaves its queued runs with nothing left to do,
+   * and they would otherwise sit on the card forever asking to be answered.
+   *
+   * Pass `role` to retire only the proposals a run now starting has overtaken:
+   * a parked "start triage" is moot the moment triage is actually running.
    */
   async dismissProposalsForWorkItem(input: {
     orgId: string;
     factoryProjectId: string;
     workItemId: string;
+    role?: string;
     dismissedAt: Date;
   }): Promise<FactoryDeferredDecisionRecord[]> {
     const rows = await this.#db.findMany<GovernanceDbRow>('factory_deferred_decisions', {
@@ -1374,6 +1378,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     });
     const dismissed: FactoryDeferredDecisionRecord[] = [];
     for (const row of rows) {
+      if (input.role !== undefined && toDeferredDecision(row).decision.role !== input.role) continue;
       // Re-settled atomically: an approval racing this sweep keeps the run.
       const record = await this.dismissDeferredDecision(input.orgId, input.factoryProjectId, row.id, input.dismissedAt);
       if (record) dismissed.push(record);

@@ -337,6 +337,7 @@ export class FactoryDecisionDispatcher {
         if (!proposed) throw new Error('Factory decision lease was lost before approval could be requested.');
         return;
       }
+      await this.#supersedeProposals(record, decision);
       await this.#withLease(
         async leaseExpiresAt =>
           this.#storage.renewDeferredDecisionLease(leaseIdentity(record, this.#ownerId), leaseExpiresAt),
@@ -353,6 +354,29 @@ export class FactoryDecisionDispatcher {
         lastError: sanitizeDispatchError(error),
         terminal,
       });
+    }
+  }
+
+  /**
+   * A proposal is a question: "should this run start?" Once that run is
+   * starting anyway — because a person approved a later copy, or armed the item
+   * — the question has been answered and the card must stop asking it. Left
+   * alone the badge outlives the work it describes, and the one affordance that
+   * means "the loop is stopped, answer this" cries wolf.
+   */
+  async #supersedeProposals(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<void> {
+    if (decision.type !== 'invokeSkill' || !record.workItemId) return;
+    try {
+      await this.#storage.dismissProposalsForWorkItem({
+        orgId: record.orgId,
+        factoryProjectId: record.factoryProjectId,
+        workItemId: record.workItemId,
+        role: decision.role,
+        dismissedAt: new Date(),
+      });
+    } catch (error) {
+      // Best-effort: a stale badge is not worth failing the run it describes.
+      console.error('Factory proposal supersede failed', sanitizeDispatchError(error));
     }
   }
 
