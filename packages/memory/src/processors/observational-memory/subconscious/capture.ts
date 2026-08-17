@@ -21,7 +21,7 @@ export const subconsciousCaptureSchema = z.object({
       name: z.string().trim().min(1),
       kind: z.string().trim().min(1),
       scope: z.enum(['org', 'resource', 'thread']).optional(),
-      items: z.array(
+      records: z.array(
         z.object({
           text: z.string().trim().min(1),
           scope: z.enum(['org', 'resource', 'thread']).optional(),
@@ -33,13 +33,13 @@ export const subconsciousCaptureSchema = z.object({
 });
 
 const CAPTURE_INSTRUCTIONS = `Extract durable, explicitly stated knowledge from the observations.
-Return nodes with short stable names, a freeform kind, and knowledge items nested under the node each item is about.
+Return nodes with short stable names, a freeform kind, and knowledge records nested under the node each record is about.
 Use common kinds such as person, task, event, project, organization, or document when they fit.
 Set node scope to the narrowest level where that identity and content should be shared. Omit it to use the configured default scope.
-Knowledge items must be grounded in the conversation, concise, and written as prose. Do not infer unstated information.
-Wrap every named node mentioned in item text in [[wikilinks]].
-Set an item scope only when the conversation establishes where it applies. Use org for organization-wide items, resource for items shared across this resource's conversations, and thread for conversation-private items.
-Omit scope when uncertain; omitted item scopes stay private to the current thread.
+Knowledge records must be grounded in the conversation, concise, and written as prose. Do not infer unstated information.
+Wrap every named node mentioned in record text in [[wikilinks]].
+Set a record scope only when the conversation establishes where it applies. Use org for organization-wide records, resource for records shared across this resource's conversations, and thread for conversation-private records.
+Omit scope when uncertain; omitted record scopes stay private to the current thread.
 Emit when only when the conversation anchors the referred time. Resolve relative dates against the current date and use ISO 8601.`;
 
 function clampScope(level: KnowledgeScopeLevel, ceiling?: KnowledgeScopeLevel): KnowledgeScopeLevel {
@@ -103,14 +103,14 @@ export class SubconsciousCaptureExtractor extends Extractor<SubconsciousCaptureO
           kind: extractedNode.kind,
           scope: nodeScope,
         });
-        for (const extractedItem of extractedNode.items) {
-          const itemLevel = clampScope(extractedItem.scope ?? 'thread', options.maxScope);
-          await store.appendItem({
-            parentNodeId: node.id,
-            text: extractedItem.text,
-            scope: expandKnowledgeScope(scopeContext, itemLevel),
+        for (const extractedKnowledge of extractedNode.records) {
+          const knowledgeLevel = clampScope(extractedKnowledge.scope ?? 'thread', options.maxScope);
+          await store.appendKnowledge({
+            node,
+            text: extractedKnowledge.text,
+            scope: expandKnowledgeScope(scopeContext, knowledgeLevel),
             sourceThreadId: context.threadId,
-            when: parseWhen(extractedItem.when),
+            when: parseWhen(extractedKnowledge.when),
             maxScope: options.maxScope,
             resolutionScope: scopeContext,
             defaultScope: nodeScope,
