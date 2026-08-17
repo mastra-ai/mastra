@@ -23,6 +23,7 @@ import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { buildConstraintName } from '../../db/constraint-utils';
 import { runPrune, resolveTargets } from '../../retention';
 
 function getSchemaName(schema?: string) {
@@ -36,6 +37,18 @@ function getTableName({ indexName, schemaName }: { indexName: string; schemaName
 
 /** Base name (before any schema prefix) of the expression index backing the status filter. */
 const WORKFLOW_SNAPSHOT_STATUS_INDEX = 'mastra_workflow_snapshot_name_status_createdat_idx';
+
+/**
+ * Schema-prefixed name of the status index, lowercased and truncated the same way Postgres
+ * stores it, so the init snapshot's index set answers "does it exist?" without a probe or a
+ * no-op `CREATE INDEX` (schema-prefixed names routinely exceed the 63-byte limit).
+ */
+function workflowSnapshotStatusIndexName(schemaName?: string): string {
+  return buildConstraintName({
+    baseName: WORKFLOW_SNAPSHOT_STATUS_INDEX,
+    schemaName: schemaName && schemaName !== 'public' ? schemaName : undefined,
+  });
+}
 
 /**
  * Expression index on `(workflow_name, snapshot->>'status', "createdAt" DESC)` so
@@ -154,9 +167,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       statements.push(generateIndexSQL(idx, schemaName));
     }
 
-    statements.push(
-      `${workflowSnapshotStatusIndexSQL(`${schemaPrefix}${WORKFLOW_SNAPSHOT_STATUS_INDEX}`, schemaName)};`,
-    );
+    statements.push(`${workflowSnapshotStatusIndexSQL(workflowSnapshotStatusIndexName(parsedSchema), schemaName)};`);
 
     return statements;
   }
@@ -188,8 +199,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     const snapshotType = await this.#db.getColumnType(TABLE_WORKFLOW_SNAPSHOT, 'snapshot');
     if (snapshotType !== 'jsonb') return;
 
-    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
-    const indexName = `${schemaPrefix}${WORKFLOW_SNAPSHOT_STATUS_INDEX}`;
+    const indexName = workflowSnapshotStatusIndexName(this.#schema);
     try {
       await this.#db.createIndexFromStatement(indexName, workflowSnapshotStatusIndexSQL(indexName, this.#schema));
     } catch (error) {

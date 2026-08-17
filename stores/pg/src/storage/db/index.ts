@@ -534,6 +534,7 @@ export class PgDB extends MastraBase {
     if (snapshot) {
       snapshot.tables.delete(tableName);
       snapshot.columns.delete(tableName);
+      snapshot.columnTypes.delete(tableName);
     }
     this.tableColumnsCache.delete(tableName);
     this.columnTypeCache.delete(tableName);
@@ -614,10 +615,22 @@ export class PgDB extends MastraBase {
    * Returns the Postgres data type of a column (e.g. `jsonb`, `json`, `text`),
    * or null when the table or column does not exist.
    *
-   * Results are cached per instance; the cache is invalidated alongside
-   * {@link tableColumnsCache} whenever DDL changes a table.
+   * Answered from the init snapshot when one is installed, so a warm `init()`
+   * issues no catalog probe. Outside init, results are cached per instance and
+   * the cache is invalidated alongside {@link tableColumnsCache} whenever DDL
+   * changes a table.
    */
   async getColumnType(table: string, column: string): Promise<string | null> {
+    const snapshot = this.schemaSnapshot;
+    if (snapshot) {
+      const types = snapshot.columnTypes.get(table);
+      const known = types?.get(column) ?? types?.get(column.toLowerCase());
+      if (known) return known;
+      // The table exists in the snapshot but the column does not: nothing to probe for.
+      // A table created during this init has no snapshot types yet, so fall through.
+      if (types) return null;
+    }
+
     const cached = this.columnTypeCache.get(table)?.get(column);
     if (cached !== undefined) return cached;
 
@@ -629,6 +642,14 @@ export class PgDB extends MastraBase {
 
     const dataType = result?.data_type ?? null;
     if (dataType) {
+      if (snapshot) {
+        let snapshotTypes = snapshot.columnTypes.get(table);
+        if (!snapshotTypes) {
+          snapshotTypes = new Map<string, string>();
+          snapshot.columnTypes.set(table, snapshotTypes);
+        }
+        snapshotTypes.set(column, dataType);
+      }
       let types = this.columnTypeCache.get(table);
       if (!types) {
         types = new Map();

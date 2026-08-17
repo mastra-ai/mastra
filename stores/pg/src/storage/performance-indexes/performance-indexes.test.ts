@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { buildConstraintName } from '../db/constraint-utils';
 import { MemoryPG } from '../domains/memory';
 import { ObservabilityPG } from '../domains/observability';
 import { ScoresPG } from '../domains/scores';
@@ -154,6 +155,22 @@ describe('PostgresStore Domain Performance Indexes', () => {
       const ddl = WorkflowsPG.getExportDDL('test_schema').join('\n');
 
       expect(ddl).toContain('test_schema_mastra_workflow_snapshot_name_status_createdat_idx');
+    });
+
+    // Postgres stores identifiers truncated to 63 bytes. Emitting the untruncated name would
+    // make init's snapshot lookup miss and re-issue CREATE INDEX on every warm init.
+    it('should truncate the status expression index name to the Postgres identifier limit', () => {
+      const longSchema = 'deployment_schema';
+      const ddl = WorkflowsPG.getExportDDL(longSchema).join('\n');
+
+      const indexName = ddl.match(/CREATE INDEX IF NOT EXISTS "([^"]+)" ON [^\n]*snapshot ->> 'status'/)?.[1];
+      expect(indexName).toBe(
+        buildConstraintName({
+          baseName: 'mastra_workflow_snapshot_name_status_createdat_idx',
+          schemaName: longSchema,
+        }),
+      );
+      expect(Buffer.byteLength(indexName!, 'utf-8')).toBeLessThanOrEqual(63);
     });
   });
 
