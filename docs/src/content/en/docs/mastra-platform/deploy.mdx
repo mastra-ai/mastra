@@ -253,9 +253,14 @@ The deploy log is the source of truth: the legacy pipeline prints a deprecation 
           explaining what changed so I can decide.
        e. Bump `@mastra/core` (and any `@mastra/*` peers) to the latest matching
           versions, then run typecheck and tests. Report anything still failing.
+    4. Search my scripts, package.json, Dockerfiles, and CI config for
+       `mastra server deploy` and `mastra studio deploy`. Replace each
+       occurrence with `mastra deploy` — this is the unified command required
+       by the environment pipeline.
 
-    Do not change my deploy scripts, my infra, or my environment variables —
-    only the Mastra usage inside my code.
+    Do not restructure my CI, provision new infra, or change my environment
+    variable values — only the Mastra usage in my code and the deploy command
+    itself.
     ```
   </StepItem>
 
