@@ -22,6 +22,9 @@ src/content/en/guides/ - choose the matching guide styleguide:
 @docs/styleguides/GUIDE_DEPLOYMENT.md - deployment guides for specific platform
 src/content/en/reference/ - @styleguides/REFERENCE.md
 
+Diagrams in any doc - @styleguides/DIAGRAM.md
+Converting an existing diagram image to Mermaid - .claude/skills/docs-diagrams
+
 E2E testing
 pnpm build # Build site
 pnpm test:e2e # Playwright tests desktop + tablet + mobile

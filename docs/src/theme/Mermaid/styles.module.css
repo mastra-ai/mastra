@@ -1,0 +1,15 @@
+.container {
+  display: flex;
+  justify-content: center;
+  margin: 1.5rem 0;
+  padding: 1.25rem;
+  border: var(--border-sm) solid var(--border-subtle);
+  border-radius: var(--ifm-global-radius);
+  background-color: var(--mastra-surface-3);
+  overflow-x: auto;
+}
+
+.container :global(svg) {
+  max-width: 100%;
+  height: auto;
+}

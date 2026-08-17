@@ -18,6 +18,9 @@ Start with references/STYLEGUIDE.md for all docs. Then use the guide that matche
   - references/GUIDE_INTEGRATION.md: Integration guides for using Mastra with an external library or ecosystem
   - references/GUIDE_DEPLOYMENT.md: Deployment guides for shipping a Mastra app to a platform
 - references/REFERENCE.md: Reference and API docs
+- references/DIAGRAM.md: Any doc containing a Mermaid diagram
+
+To replace an existing diagram image with Mermaid, use the docs-diagrams skill.
 
 ## Linting
 
