@@ -786,7 +786,14 @@ export class MessageList {
     },
   };
   private rememberedPersisted = {
-    db: () => this.all.db().filter(m => this.memoryMessagesPersisted.has(m)),
+    // Report remembered messages as they were loaded from storage. Input processors rewrite the
+    // live objects (e.g. ToolCallFilter strips tool-invocation parts for the LLM prompt); the
+    // persisted view must ignore those transient edits so memory/storage is never corrupted.
+    db: () =>
+      this.all
+        .db()
+        .filter(m => this.memoryMessagesPersisted.has(m))
+        .map(m => this.stateManager.getPersistedRemembered(m.id) ?? m),
     v1: () => convertToV1Messages(this.rememberedPersisted.db()),
 
     aiV5: {

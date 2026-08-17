@@ -30,6 +30,12 @@ export class MessageStateManager {
   private newResponseMessagesPersisted = new Set<MastraDBMessage>();
   private userContextMessagesPersisted = new Set<MastraDBMessage>();
 
+  // Snapshot of remembered (memory-sourced) messages as they were loaded from storage,
+  // keyed by id. Input processors (e.g. ToolCallFilter) rewrite the live message objects
+  // to shape the LLM prompt; the persisted views must keep reporting the original stored
+  // message so those transforms never leak back into memory/storage.
+  private persistedRememberedById = new Map<string, MastraDBMessage>();
+
   /**
    * Add a message to the appropriate source set and persisted set
    */
@@ -38,6 +44,12 @@ export class MessageStateManager {
       case 'memory':
         this.memoryMessages.add(message);
         this.memoryMessagesPersisted.add(message);
+        // Capture the message as it was first loaded from storage. A later input processor
+        // may replace this object with a rewritten copy (same id) for the LLM prompt; the
+        // persisted views must still surface this original, so never overwrite an existing entry.
+        if (!this.persistedRememberedById.has(message.id)) {
+          this.persistedRememberedById.set(message.id, message);
+        }
         break;
       case 'response':
         // Promoting from memory (e.g. OM step prepare → merge step-2 text): keep a single
@@ -152,7 +164,18 @@ export class MessageStateManager {
   }
 
   /**
-   * Remove a message from all source sets
+   * Get the remembered (memory-sourced) message as it was originally loaded from storage.
+   * Returns undefined for messages that were never loaded from memory. Used by the persisted
+   * views so an input processor rewriting the live object cannot corrupt the stored record.
+   */
+  getPersistedRemembered(id: string): MastraDBMessage | undefined {
+    return this.persistedRememberedById.get(id);
+  }
+
+  /**
+   * Remove a message from all source sets. The persisted-remembered snapshot is intentionally
+   * left intact: an input processor removing/replacing a remembered message must not erase the
+   * record of what was actually stored.
    */
   removeMessage(message: MastraDBMessage): void {
     this.memoryMessages.delete(message);

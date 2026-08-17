@@ -1,17 +1,19 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, mockValues, mockId } from '@internal/ai-sdk-v5/test';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod/v4';
 
 import { Mastra } from '../..';
 import { MessageList } from '../../agent/message-list';
 import { EventEmitterPubSub } from '../../events';
+import type { IMastraLogger } from '../../logger';
 import { loop } from '../../loop/loop';
 import { MastraLanguageModelV2Mock } from '../../loop/test-utils/MastraLanguageModelV2Mock';
 import type { MastraDBMessage } from '../../memory/types';
 import { toolCallFilterProvider } from '../../processor-provider/providers';
 import { InMemoryStore } from '../../storage';
 import type { ProcessInputStepArgs } from '../index';
+import { ProcessorRunner } from '../runner';
 
 import { ToolCallFilter } from './tool-call-filter';
 
@@ -2003,6 +2005,110 @@ describe('ToolCallFilter', () => {
       expect(step4Prompt.some((msg: any) => msg.content?.some((p: any) => p.toolCallId === 'call-weather-3'))).toBe(
         true,
       );
+    });
+  });
+
+  // Regression: https://github.com/mastra-ai/mastra/issues/21631
+  // ToolCallFilter is an input-only processor: it strips tool calls from the LLM prompt but the
+  // filtered messages must "remain saved in memory". Running it through the shared ProcessorRunner
+  // used to rewrite the remembered (memory-sourced) messages in the persisted MessageList, so the
+  // stored tool-invocation parts were destroyed. The prompt view must be filtered while the
+  // persisted view keeps the original stored message intact.
+  describe('Issue #21631: input filtering must not mutate the persisted MessageList', () => {
+    const mockLogger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      trackException: vi.fn(),
+      getTransports: vi.fn(() => new Map()),
+    } as unknown as IMastraLogger;
+
+    const hasToolInvocation = (message: MastraDBMessage | undefined): boolean => {
+      if (!message || typeof message.content === 'string' || !message.content?.parts) return false;
+      return message.content.parts.some((p: any) => p.type === 'tool-invocation');
+    };
+
+    // An assistant tool call made on a previous turn, loaded back from memory this turn.
+    const rememberedAssistantWithToolCall = (): MastraDBMessage => ({
+      id: 'remembered-assistant',
+      role: 'assistant',
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text' as const, text: 'Let me look that up.' },
+          {
+            type: 'tool-invocation' as const,
+            toolInvocation: {
+              state: 'result' as const,
+              toolCallId: 'call-1',
+              toolName: 'search_documents',
+              args: { query: 'pricing' },
+              result: { documents: [{ title: 'Pricing', content: '$99' }] },
+            },
+          },
+        ],
+      },
+      createdAt: new Date(1000),
+      threadId: 'thread-21631',
+    });
+
+    const currentUserInput = (id: string, text: string): MastraDBMessage => ({
+      id,
+      role: 'user',
+      content: { format: 2, parts: [{ type: 'text' as const, text }] },
+      createdAt: new Date(2000),
+      threadId: 'thread-21631',
+    });
+
+    it('filters tool calls from the LLM prompt but keeps them in the persisted remembered messages', async () => {
+      const messageList = new MessageList({ threadId: 'thread-21631' });
+      messageList.add([rememberedAssistantWithToolCall()], 'memory');
+      messageList.add([currentUserInput('current-user', 'What is the price?')], 'input');
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [new ToolCallFilter()],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      await runner.runInputProcessors(messageList);
+
+      // LLM-input view is filtered (ToolCallFilter's documented behavior).
+      const promptRemembered = messageList.get.remembered.db();
+      expect(promptRemembered).toHaveLength(1);
+      expect(hasToolInvocation(promptRemembered[0])).toBe(false);
+
+      // Persisted/stored view still carries the original tool-invocation part.
+      const persistedRemembered = messageList.getPersisted.remembered.db();
+      expect(persistedRemembered).toHaveLength(1);
+      expect(hasToolInvocation(persistedRemembered[0])).toBe(true);
+
+      // The remembered message is not re-queued as an unsaved (new) message to be written back.
+      expect(messageList.drainUnsavedMessages().some(m => m.id === 'remembered-assistant')).toBe(false);
+    });
+
+    it('preserves the original stored tool result even with preserveModelOutput enabled', async () => {
+      const messageList = new MessageList({ threadId: 'thread-21631' });
+      messageList.add([rememberedAssistantWithToolCall()], 'memory');
+      messageList.add([currentUserInput('current-user-2', 'And in AUD?')], 'input');
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [new ToolCallFilter({ preserveModelOutput: true })],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      await runner.runInputProcessors(messageList);
+
+      const persisted = messageList.getPersisted.remembered.db()[0];
+      expect(hasToolInvocation(persisted)).toBe(true);
+      const invocation = (persisted.content as { parts: any[] }).parts.find(
+        (p: any) => p.type === 'tool-invocation',
+      );
+      expect(invocation.toolInvocation.result).toEqual({ documents: [{ title: 'Pricing', content: '$99' }] });
     });
   });
 });
