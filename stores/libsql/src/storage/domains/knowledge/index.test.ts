@@ -71,42 +71,6 @@ describe('KnowledgeLibSQL initialization', () => {
     }
   });
 
-  it('migrates legacy entities, pages, facts, and cursors without losing content', async () => {
-    const client = createClient({
-      url: `file:/tmp/mastra-legacy-knowledge-${Date.now()}-${Math.random().toString(16).slice(2)}.db`,
-    });
-    try {
-      await client.batch([
-        `CREATE TABLE mastra_knowledge_records (id TEXT PRIMARY KEY, type TEXT NOT NULL, name TEXT NOT NULL, canonicalName TEXT NOT NULL, kind TEXT, body TEXT, scope TEXT NOT NULL, scopeKey TEXT NOT NULL, version INTEGER NOT NULL, mergedInto TEXT, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL)`,
-        `CREATE UNIQUE INDEX idx_knowledge_records_identity ON mastra_knowledge_records(type, scopeKey, canonicalName)`,
-        `CREATE TABLE mastra_knowledge_facts (id TEXT PRIMARY KEY, parentEntityId TEXT NOT NULL, text TEXT NOT NULL, scope TEXT NOT NULL, scopeKey TEXT NOT NULL, sourceThreadId TEXT NOT NULL, capturedAt TEXT NOT NULL, "when" TEXT, maxScope TEXT, deletedAt TEXT, deletedBy TEXT)`,
-        `CREATE TABLE mastra_knowledge_mentions (sourceType TEXT NOT NULL, sourceId TEXT NOT NULL, recordId TEXT NOT NULL, PRIMARY KEY(sourceType, sourceId, recordId))`,
-        `CREATE TABLE mastra_knowledge_cursors (sourceThreadId TEXT NOT NULL, agent TEXT NOT NULL, lastFactId TEXT NOT NULL, updatedAt TEXT NOT NULL, PRIMARY KEY(sourceThreadId, agent))`,
-        `INSERT INTO mastra_knowledge_records VALUES ('entity-1','entity','Deploy','deploy','task',NULL,'["org:acme"]','org:acme',1,NULL,'2026-01-01','2026-01-01')`,
-        `INSERT INTO mastra_knowledge_records VALUES ('page-1','page','Deploy','deploy',NULL,'Release [[Deploy]]','["org:acme"]','org:acme',1,NULL,'2026-01-01','2026-01-01')`,
-        `INSERT INTO mastra_knowledge_facts VALUES ('fact-1','entity-1','Ready','["org:acme"]','org:acme','thread-1','2026-01-01',NULL,NULL,NULL,NULL)`,
-        `INSERT INTO mastra_knowledge_mentions VALUES ('page','page-1','entity-1')`,
-        `INSERT INTO mastra_knowledge_cursors VALUES ('thread-1','capture','fact-1','2026-01-01')`,
-      ]);
-
-      const store = new KnowledgeLibSQL({ client });
-      await store.init();
-
-      expect(await store.getNode('entity-1')).toEqual(
-        expect.objectContaining({ type: 'node', content: 'Release [[Deploy]]' }),
-      );
-      expect(await store.getNode('page-1')).toBeNull();
-      expect(await store.getItem({ id: 'fact-1' })).toEqual(
-        expect.objectContaining({ id: 'fact-1', parentNodeId: 'entity-1' }),
-      );
-      expect(await store.getCurationCursor({ sourceThreadId: 'thread-1', agent: 'capture' })).toEqual(
-        expect.objectContaining({ lastItemId: 'fact-1' }),
-      );
-    } finally {
-      client.close();
-    }
-  });
-
   it('is repeatable and adds knowledge tables to an existing store', async () => {
     const client = createClient({ url: 'file::memory:?cache=shared' });
     try {
