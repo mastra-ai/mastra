@@ -243,7 +243,7 @@ For finer control, gate on the sender's identity. Every request carries the send
 
 ### Server authentication
 
-The Slack webhook route is exempt from Mastra's [server authentication](/docs/server/auth). Slack can't send a bearer token, so Mastra registers the channel webhook as a public route and verifies each request with the Slack signing secret instead. This holds even when you enable a provider like [`MastraAuthSimple`](/docs/auth/simple-auth): the rest of your API stays protected, but the webhook route relies on the signing secret rather than your server auth. Keep `SLACK_SIGNING_SECRET` set so the adapter can reject requests that Slack didn't sign.
+The Slack webhook route is exempt from Mastra's [server authentication](/docs/auth/overview). Slack can't send a bearer token, so Mastra registers the channel webhook as a public route and verifies each request with the Slack signing secret instead. This holds even when you enable a provider like [`MastraAuthSimple`](/docs/auth/simple-auth): the rest of your API stays protected, but the webhook route relies on the signing secret rather than your server auth. Keep `SLACK_SIGNING_SECRET` set so the adapter can reject requests that Slack didn't sign.
 
 ### External channels
 
