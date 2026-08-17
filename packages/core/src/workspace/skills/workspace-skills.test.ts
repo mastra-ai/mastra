@@ -656,6 +656,13 @@ user-invocable: false
       try {
         (WorkspaceSkillsImpl as any).STALENESS_CHECK_COOLDOWN = 0;
 
+        // Settle any mtime/discovery-time tie left over from initial discovery:
+        // mock entries and #lastDiscoveryTime can land in the same millisecond,
+        // making the first walk short-circuit as stale (1 stat) while the next
+        // walk runs in full (3 stats). One refresh here guarantees both
+        // measurements below observe identical non-stale walks.
+        await skills.maybeRefresh();
+
         const before = statMock.mock.calls.length;
         await Promise.all([skills.maybeRefresh(), skills.maybeRefresh()]);
         const concurrentDelta = statMock.mock.calls.length - before;
