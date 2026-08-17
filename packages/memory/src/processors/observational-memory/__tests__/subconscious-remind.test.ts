@@ -91,8 +91,8 @@ describe('Subconscious remind', () => {
       kind: 'project',
       scope: ['org:acme', 'resource:user-42'],
     });
-    const item = await store.appendItem({
-      parentNodeId: node.id,
+    const record = await store.appendKnowledge({
+      node: node.id,
       text: 'Project Atlas launches January 15.',
       scope: ['org:acme', 'resource:user-42'],
       sourceThreadId: 'alpha',
@@ -100,7 +100,7 @@ describe('Subconscious remind', () => {
       defaultScope: ['org:acme', 'resource:user-42'],
     });
     context.mainAgent.getModel = vi.fn(async () =>
-      createModel(`Project Atlas launches January 15. Source: ${item.id}`),
+      createModel(`Project Atlas launches January 15. Source: ${record.id}`),
     );
 
     const result = await applyExtractorHooks({
@@ -116,10 +116,10 @@ describe('Subconscious remind', () => {
       expect.objectContaining({
         type: 'reactive',
         tagName: 'remembered',
-        contents: expect.stringContaining(item.id),
+        contents: expect.stringContaining(record.id),
         attributes: expect.objectContaining({
           source: 'subconscious',
-          sourceIds: expect.stringContaining(item.id),
+          sourceIds: expect.stringContaining(record.id),
           agent: 'remind',
           threadId: 'alpha',
         }),
@@ -127,7 +127,7 @@ describe('Subconscious remind', () => {
     );
   });
 
-  it.each(['Project Atlas launches January 15.', 'Project Atlas launches January 15. Source: invented-item-id'])(
+  it.each(['Project Atlas launches January 15.', 'Project Atlas launches January 15. Source: invented-record-id'])(
     'suppresses an ungrounded reminder: %s',
     async response => {
       const extractor = new SubconsciousRemindExtractor({
@@ -142,8 +142,8 @@ describe('Subconscious remind', () => {
         kind: 'project',
         scope: ['org:acme', 'resource:user-42'],
       });
-      await store.appendItem({
-        parentNodeId: node.id,
+      await store.appendKnowledge({
+        node: node.id,
         text: 'Project Atlas launches January 15.',
         scope: ['org:acme', 'resource:user-42'],
         sourceThreadId: 'alpha',
