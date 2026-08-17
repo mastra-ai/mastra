@@ -604,6 +604,7 @@ export class MastraCompositeStore extends MastraBase {
       maybeInit(this.stores.harness);
       maybeInit(this.stores.toolProviderConnections);
       maybeInit(this.stores.notifications);
+      maybeInit(this.stores.knowledge);
       maybeInit(this.stores.threadState);
     }
 
