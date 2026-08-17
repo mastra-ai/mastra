@@ -57,7 +57,7 @@ beforeEach(() => {
 });
 
 // Mock fs after importing vol
-vi.mock('fs/promises', async () => {
+vi.mock('node:fs/promises', async () => {
   const memfs = await vi.importActual<typeof MemfsModule>('memfs');
   return {
     default: memfs.fs.promises,
