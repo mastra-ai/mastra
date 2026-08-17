@@ -962,6 +962,82 @@ This skill helps with endpoint design and API patterns.`;
     });
   });
 
+  describe('request-scoped dynamic resolvers', () => {
+    it('keeps concurrent requests pinned to their own skill paths', async () => {
+      const filesystem = createMockFilesystem({
+        'tenant-a/alpha/SKILL.md': `---\nname: alpha\ndescription: Alpha skill\n---\n\nAlpha-only instructions`,
+        'tenant-b/beta/SKILL.md': `---\nname: beta\ndescription: Beta skill\n---\n\nBeta-only instructions`,
+      });
+      const searchEngine = createMockSearchEngine();
+      const requestA = {};
+      const requestB = {};
+      const resolver = vi.fn(async ({ requestContext }) => (requestContext === requestA ? ['tenant-a'] : ['tenant-b']));
+      const skills = new WorkspaceSkillsImpl({ source: filesystem, skills: resolver, searchEngine });
+
+      const [scopedA, scopedB] = await Promise.all([
+        skills.getScoped({ requestContext: requestA }),
+        skills.getScoped({ requestContext: requestB }),
+      ]);
+      const [listA, listB] = await Promise.all([scopedA.list(), scopedB.list()]);
+
+      expect(listA.map(skill => skill.name)).toEqual(['alpha']);
+      expect(listB.map(skill => skill.name)).toEqual(['beta']);
+      expect(await scopedA.get('beta')).toBeNull();
+      expect(await scopedB.get('alpha')).toBeNull();
+      expect((await scopedA.search('Beta-only')).map(result => result.skill.name)).toEqual([]);
+      expect((await scopedB.search('Alpha-only')).map(result => result.skill.name)).toEqual([]);
+
+      expect(await skills.getScoped({ requestContext: requestA })).toBe(scopedA);
+      expect(await skills.getScoped({ requestContext: requestB })).toBe(scopedB);
+      expect(resolver).toHaveBeenCalledTimes(2);
+    });
+
+    it('prevents foreign search documents from crowding out scoped results', async () => {
+      const filesystem = createMockFilesystem({
+        'tenant-a/alpha/SKILL.md': `---\nname: alpha\ndescription: Alpha skill\n---\n\nShared search term`,
+        'tenant-b/beta/SKILL.md': `---\nname: beta\ndescription: Beta skill\n---\n\nShared search term`,
+      });
+      const indexedDocs: IndexDocument[] = [];
+      const searchEngine: MockSearchEngine = {
+        index: vi.fn(async doc => {
+          indexedDocs.push(doc);
+        }),
+        search: vi.fn(async (_query, options) =>
+          indexedDocs
+            .map(doc => ({
+              id: doc.id,
+              content: doc.content,
+              score: doc.metadata?.skillPath === 'tenant-b/beta' ? 2 : 1,
+              metadata: doc.metadata,
+            }))
+            .sort((a, b) => b.score - a.score)
+            .slice(0, options?.topK ?? 10),
+        ),
+        clear: vi.fn(),
+        canBM25: true,
+        canVector: false,
+        canHybrid: false,
+      };
+      const requestA = {};
+      const requestB = {};
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: async ({ requestContext }) => (requestContext === requestA ? ['tenant-a'] : ['tenant-b']),
+        searchEngine,
+      });
+
+      const [scopedA, scopedB] = await Promise.all([
+        skills.getScoped({ requestContext: requestA }),
+        skills.getScoped({ requestContext: requestB }),
+      ]);
+      await Promise.all([scopedA.list(), scopedB.list()]);
+
+      expect((await scopedA.search('Shared', { topK: 1 })).map(result => result.skillName)).toEqual(['alpha']);
+      expect((await scopedB.search('Shared', { topK: 1 })).map(result => result.skillName)).toEqual(['beta']);
+      expect(new Set(indexedDocs.map(doc => doc.id)).size).toBe(2);
+    });
+  });
+
   describe('maybeRefresh', () => {
     it('should not refresh when no changes have occurred', async () => {
       const pastTime = new Date(Date.now() - 10000); // 10 seconds ago

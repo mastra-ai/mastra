@@ -1,0 +1,14 @@
+{
+  "temperature": [
+    "Inferact/Qwen3.8-2.4T-A95B-NVFP4",
+    "Qwen/Qwen3.8-27B",
+    "deepseek-ai/DeepSeek-V4-Flash-0731",
+    "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16"
+  ],
+  "structuredOutput": [
+    "Inferact/Qwen3.8-2.4T-A95B-NVFP4",
+    "Qwen/Qwen3.8-27B",
+    "deepseek-ai/DeepSeek-V4-Flash-0731",
+    "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16"
+  ]
+}

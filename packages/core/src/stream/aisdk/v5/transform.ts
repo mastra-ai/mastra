@@ -336,7 +336,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           },
           output: {
             // Normalize usage to handle both V2 (flat) and V3 (nested) formats
-            usage: normalizeUsage(value.usage),
+            usage: normalizeUsage(value.usage, value.providerMetadata),
           },
           metadata: {
             providerMetadata: value.providerMetadata,
@@ -619,7 +619,27 @@ function isV3Usage(usage: unknown): usage is LanguageModelV3Usage {
  *
  * The original usage data is preserved in the `raw` field for advanced use cases.
  */
-function normalizeUsage(usage: LanguageModelV2Usage | LanguageModelV3Usage | undefined): LanguageModelUsage {
+function getAnthropicCacheCreationUsage(providerMetadata?: SharedV2ProviderMetadata): {
+  cacheCreationInputTokens5m?: number;
+  cacheCreationInputTokens1h?: number;
+} {
+  const cacheCreation = providerMetadata?.anthropic?.cacheCreation;
+  if (typeof cacheCreation !== 'object' || cacheCreation === null) return {};
+
+  const details = cacheCreation as Record<string, unknown>;
+  const cacheCreationInputTokens5m = details.ephemeral_5m_input_tokens ?? details.ephemeral5mInputTokens;
+  const cacheCreationInputTokens1h = details.ephemeral_1h_input_tokens ?? details.ephemeral1hInputTokens;
+  return {
+    ...(typeof cacheCreationInputTokens5m === 'number' && { cacheCreationInputTokens5m }),
+    ...(typeof cacheCreationInputTokens1h === 'number' && { cacheCreationInputTokens1h }),
+  };
+}
+
+function normalizeUsage(
+  usage: LanguageModelV2Usage | LanguageModelV3Usage | undefined,
+  providerMetadata?: SharedV2ProviderMetadata,
+): LanguageModelUsage {
+  const cacheCreationUsage = getAnthropicCacheCreationUsage(providerMetadata);
   if (!usage) {
     return {
       inputTokens: undefined,
@@ -628,6 +648,7 @@ function normalizeUsage(usage: LanguageModelV2Usage | LanguageModelV3Usage | und
       reasoningTokens: undefined,
       cachedInputTokens: undefined,
       cacheCreationInputTokens: undefined,
+      ...cacheCreationUsage,
       raw: undefined,
     };
   }
@@ -643,6 +664,7 @@ function normalizeUsage(usage: LanguageModelV2Usage | LanguageModelV3Usage | und
       reasoningTokens: usage.outputTokens.reasoning,
       cachedInputTokens: usage.inputTokens.cacheRead,
       cacheCreationInputTokens: usage.inputTokens.cacheWrite,
+      ...cacheCreationUsage,
       raw: usage,
     };
   }
@@ -656,6 +678,7 @@ function normalizeUsage(usage: LanguageModelV2Usage | LanguageModelV3Usage | und
     reasoningTokens: (v2Usage as { reasoningTokens?: number }).reasoningTokens,
     cachedInputTokens: (v2Usage as { cachedInputTokens?: number }).cachedInputTokens,
     cacheCreationInputTokens: (v2Usage as { cacheCreationInputTokens?: number }).cacheCreationInputTokens,
+    ...cacheCreationUsage,
     raw: usage,
   };
 }

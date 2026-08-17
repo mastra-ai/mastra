@@ -74,6 +74,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
     shellPassthrough: { mode: 'default' },
     voice: { enabled: false, engine: 'cloud', provider: 'openai', model: 'whisper-1' },
     signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
+    mcp: { claudeCodeGlobal: false, codexGlobal: false },
     observability: { resources: {}, localTracing: false },
     ...overrides,
   };
@@ -199,6 +200,24 @@ function withTempSettingsFile(run: (filePath: string) => void): void {
     rmSync(dir, { recursive: true, force: true });
   }
 }
+
+describe('MCP discovery settings parsing', () => {
+  it('defaults external MCP discovery to disabled', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, '{}', 'utf-8');
+
+      expect(loadSettings(filePath).mcp).toEqual({ claudeCodeGlobal: false, codexGlobal: false });
+    });
+  });
+
+  it('loads valid opt-ins and defaults malformed values', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ mcp: { claudeCodeGlobal: true, codexGlobal: 'yes' } }), 'utf-8');
+
+      expect(loadSettings(filePath).mcp).toEqual({ claudeCodeGlobal: true, codexGlobal: false });
+    });
+  });
+});
 
 describe('voice settings parsing', () => {
   it('back-compat: old { enabled }-only file gets engine + provider defaults', () => {

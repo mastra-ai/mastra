@@ -29,4 +29,7 @@ types (no inline types, no `as any`). MSW is wired in `vitest.setup.ts`.
 Use Playwright E2E (`e2e-tests-studio`) only when MSW can't model the journey
 (multi-page, real server, streaming, real browser concerns).
 
+Always include mobile, tablet, and desktop screenshots when handing off any UI
+modification.
+
 Coordinate with packages/playground-ui for cross-boundary changes.

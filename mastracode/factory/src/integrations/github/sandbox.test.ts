@@ -23,6 +23,7 @@ import {
   recycleClaimedWorkdir,
   resolveGitIdentity,
   runWorktreeSetup,
+  runWorktreeTeardown,
   safeBranchDir,
   shellQuote,
   withInstallToken,
@@ -1229,6 +1230,42 @@ describe('runWorktreeSetup', () => {
     await runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i');
 
     expect(spy).toHaveBeenCalledWith('sh', ['-c', expect.any(String)], { timeout: 15 * 60_000 });
+  });
+});
+
+describe('runWorktreeTeardown', () => {
+  it('uses the same quoted workdir shell and reports bounded command output', async () => {
+    const sandbox = new FakeSandbox(() => ({ exitCode: 9, stdout: '', stderr: `prefix-${'x'.repeat(3000)}` }));
+    const err = await runWorktreeTeardown(
+      sandbox,
+      "/workspace/worktrees/feature's-branch",
+      'pnpm local worktree teardown',
+    ).catch(e => e);
+
+    expect(sandbox.calls[0]).toContain("cd '/workspace/worktrees/feature'\\''s-branch'");
+    expect(err).toBeInstanceOf(WorktreeError);
+    expect(err.code).toBe('teardown-failed');
+    expect(err.message).toContain('exit 9');
+    expect(err.message.length).toBeLessThan(2100);
+  });
+
+  it('times out with the teardown phase while forwarding the same provider budget', async () => {
+    vi.useFakeTimers();
+    try {
+      const sandbox = new FakeSandbox();
+      const execute = vi.fn(() => new Promise<never>(() => {}));
+      sandbox.executeCommand = execute;
+      const outcome = runWorktreeTeardown(sandbox, '/workspace/worktrees/feat-x', 'pnpm local teardown', {
+        timeoutMs: 20,
+      }).catch(e => e);
+      await vi.advanceTimersByTimeAsync(21);
+
+      const err = await outcome;
+      expect(err.message).toContain('worktree teardown');
+      expect(execute).toHaveBeenCalledWith('sh', ['-c', expect.any(String)], { timeout: 20 });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
