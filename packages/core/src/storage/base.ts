@@ -579,29 +579,13 @@ export class MastraCompositeStore extends MastraBase {
     };
 
     if (this.stores) {
-      maybeInit(this.stores.memory);
-      maybeInit(this.stores.workflows);
-      maybeInit(this.stores.workflowDefinitions);
-      maybeInit(this.stores.scores);
-      maybeInit(this.stores.observability);
-      maybeInit(this.stores.agents);
-      maybeInit(this.stores.datasets);
-      maybeInit(this.stores.experiments);
-      maybeInit(this.stores.promptBlocks);
-      maybeInit(this.stores.scorerDefinitions);
-      maybeInit(this.stores.mcpClients);
-      maybeInit(this.stores.mcpServers);
-      maybeInit(this.stores.workspaces);
-      maybeInit(this.stores.skills);
-      maybeInit(this.stores.favorites);
-      maybeInit(this.stores.blobs);
-      maybeInit(this.stores.backgroundTasks);
-      maybeInit(this.stores.schedules);
-      maybeInit(this.stores.channels);
-      maybeInit(this.stores.harness);
-      maybeInit(this.stores.toolProviderConnections);
-      maybeInit(this.stores.notifications);
-      maybeInit(this.stores.threadState);
+      // Iterate every registered domain instead of naming them one by one, so
+      // a domain added to the stores map can never silently dodge init. The
+      // typeof guard skips subclass-set entries that don't expose an init
+      // method.
+      for (const domain of Object.values(this.stores)) {
+        if (typeof domain?.init === 'function') maybeInit(domain);
+      }
     }
 
     await Promise.all(initTasks);
