@@ -107,8 +107,9 @@ function mergeEchoContent(stored: MastraMessageContentV2, incoming: MastraMessag
   };
 
   // Content string: the stored (server-authored) version is canonical; only adopt
-  // the incoming string when the stored message never had one.
-  if (!merged.content && incoming.content) {
+  // the incoming string when the stored message never had one. An empty stored
+  // string is a stored value (e.g. a redaction pass), not an absent one.
+  if (merged.content === undefined && incoming.content !== undefined) {
     merged.content = incoming.content;
   }
 
