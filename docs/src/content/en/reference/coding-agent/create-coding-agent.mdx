@@ -17,7 +17,7 @@ For an introduction to coding agents and each default in context, see [Coding ag
 
 ## Usage example
 
-Pass a model and instructions. `createCodingAgent()` fills in the workspace and error processors, adds the task signal provider when `memory` is configured, and supplies the goal prompt when a `goal` is configured:
+Pass a model and instructions. `createCodingAgent()` fills in the workspace and the error processors. The task signal provider is added when `memory` is configured, and the goal prompt when a `goal` is configured:
 
 ```typescript title="src/mastra/coding-agent.ts"
 import { createCodingAgent } from '@mastra/core/coding-agent'
