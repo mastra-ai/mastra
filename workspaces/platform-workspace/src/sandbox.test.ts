@@ -1020,7 +1020,7 @@ describe('PlatformSandbox', () => {
           },
           delete: (id: string) => {
             deletes.push(id);
-            entries.delete(id);
+            return entries.delete(id);
           },
         } as SandboxAddressRegistry,
         entries,

@@ -46,8 +46,8 @@ export class InProcessSandboxAddressRegistry implements SandboxAddressRegistry {
     this.#map.set(sandboxId, instanceUrl);
   }
 
-  delete(sandboxId: string): void {
-    this.#map.delete(sandboxId);
+  delete(sandboxId: string): boolean {
+    return this.#map.delete(sandboxId);
   }
 
   /**

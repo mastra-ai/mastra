@@ -41,7 +41,12 @@ export type PlatformSandboxNetworkIsolation = 'ISOLATED' | 'PRIVATE';
 export interface SandboxAddressRegistry {
   set(sandboxId: string, instanceUrl: string): void;
   get(sandboxId: string): string | undefined;
-  delete(sandboxId: string): void;
+  /**
+   * Remove the entry for a sandbox. Returns `true` if an entry was actually
+   * removed, `false` if there was nothing to delete — callers use the return
+   * value to skip logging no-op evictions.
+   */
+  delete(sandboxId: string): boolean;
 }
 
 export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'processes'>, PlatformClientOptions {
