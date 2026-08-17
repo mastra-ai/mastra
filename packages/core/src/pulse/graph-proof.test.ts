@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TracingEventType } from '../observability';
 import type { PulseRecord, PulseRelationshipRecord } from '../storage/domains/pulse';
-import { PulseBridge } from './bridge';
+import { PulseBridge, spanPulseId } from './bridge';
 import { PulseBus } from './bus';
 import type { PulseBusEvent } from './types';
 
@@ -174,5 +174,66 @@ describe('deterministic pulse ids (cross-process identity)', () => {
     // by its real record id — computed, not remembered.
     expect(resume!.to.id).toBe(suspendedStartPulse.id);
     expect(resume!.to.id.startsWith('span:')).toBe(false);
+  });
+});
+
+describe('reference-edge semantics (ghost spans)', () => {
+  /**
+   * The engine can name spans that were never exported (a suspended span's
+   * persisted tracing context — smoke S4 finding). Reference endpoints
+   * (parent_of `from`, resume_of `to`) stay COMPUTABLE for such ghosts but
+   * cannot resolve to a row. Self-anchored endpoints (the emitting pulse's
+   * own side, flow_contains, origin_of) must ALWAYS resolve. This test pins
+   * that split so the graph's integrity promise is stated exactly.
+   */
+  it('edges to never-exported spans are computable; self-anchored sides always resolve', async () => {
+    const bus = new PulseBus();
+    const pulses: PulseRecord[] = [];
+    const relationships: PulseRelationshipRecord[] = [];
+    bus.subscribe((e: PulseBusEvent) => {
+      if (e.type === 'pulse') pulses.push(e.record);
+      else relationships.push(e.record);
+    });
+    const bridge = new PulseBridge({ bus });
+    // A root whose parent AND resume target were never exported (ghost).
+    await bridge.exportTracingEvent({
+      type: TracingEventType.SPAN_STARTED,
+      exportedSpan: span({
+        id: 'resumed',
+        isRootSpan: true,
+        traceId: 'flow-g',
+        parentSpanId: 'ghost-span',
+        metadata: { resumed: true, resumedFromSpanId: 'ghost-span' },
+      }) as any,
+    } as any);
+    await bridge.exportTracingEvent({
+      type: TracingEventType.SPAN_ENDED,
+      exportedSpan: span({
+        id: 'resumed',
+        isRootSpan: true,
+        traceId: 'flow-g',
+        parentSpanId: 'ghost-span',
+        metadata: { resumed: true, resumedFromSpanId: 'ghost-span' },
+      }) as any,
+    } as any);
+
+    const ids = new Set(pulses.map(p => p.id));
+    const ghostRef = spanPulseId('flow-g', 'ghost-span', 'started');
+
+    const parent = relationships.find(r => r.type === 'parent_of')!;
+    expect(parent.from.id).toBe(ghostRef); // computable, deterministic
+    expect(ids.has(parent.from.id)).toBe(false); // ghost: legitimately unresolved
+    expect(ids.has(parent.to.id)).toBe(true); // self-anchored side ALWAYS resolves
+
+    const resume = relationships.find(r => r.type === 'resume_of')!;
+    expect(resume.to.id).toBe(ghostRef);
+    expect(ids.has(resume.from.id)).toBe(true);
+
+    // Strict edges: every endpoint self-anchored → always resolve.
+    for (const r of relationships.filter(x => x.type === 'flow_contains')) {
+      expect(ids.has(r.to.id)).toBe(true);
+    }
+    const origin = relationships.find(r => r.type === 'origin_of')!;
+    expect(ids.has(origin.from.id)).toBe(true);
   });
 });
