@@ -11,9 +11,9 @@ packages:
 
 `createCodingAgent()` builds a coding [`Agent`](/reference/agents/agent) with portable defaults for the pieces a coding agent always needs: a local workspace, the task-list signal provider when `memory` is configured, network-retry error processors, and the goal judge prompt. Supply only `model` and `instructions` to get a working agent, or override any default.
 
-The returned value is a standard `Agent`, so it works anywhere an `Agent` does: including as the agent passed to an [`AgentController`](/reference/agent-controller/agent-controller-class).
+The returned value is a standard `Agent`, so it works anywhere an `Agent` does: including as the agent passed to an [`AgentController`](/reference/agent-controller/agent-controller-class). The function lives in `@mastra/core` with no hosted service behind it, and every default it fills in is a primitive you can also configure on [`new Agent()`](/reference/agents/agent) yourself.
 
-For an introduction to coding agents and each default in context, see [Coding agents](/docs/agents/coding-agent).
+The defaults match the ones [Mastra Code](https://code.mastra.ai) runs on. The prompt, modes, and tools that make up that product aren't included: `createCodingAgent()` sets up only the runtime pieces listed under [Defaults](#defaults).
 
 ## Usage example
 
@@ -28,9 +28,19 @@ const agent = createCodingAgent({
   model: '__GATEWAY_OPENAI_MODEL_BASE__',
   instructions: 'You are a helpful coding assistant.',
 })
+
+const result = await agent.generate('Which test files mention the /health endpoint?')
 ```
 
-The agent receives the [workspace tools](/reference/workspace/workspace-class#filesystem-tools) for its resolved workspace, so `tools` is only needed for capabilities beyond the workspace.
+The agent receives the [workspace tools](/reference/workspace/workspace-class#filesystem-tools) for its resolved workspace, so `tools` is only needed for capabilities beyond the workspace, such as opening a pull request. Mastra also adds a description of the workspace to the system prompt.
+
+:::warning
+
+The default workspace runs commands on the host machine with the permissions of your application process. See [Workspace](#workspace) for how to swap in an isolated sandbox.
+
+:::
+
+For the behavioral prompt Mastra Code uses, covering repository exploration, edits, commands, and commits, build `instructions` with [`buildBasePrompt()`](/reference/coding-agent/build-base-prompt).
 
 ## Parameters
 
@@ -115,6 +125,17 @@ A default is only filled in when you don't provide the corresponding field. `sig
 | `errorProcessors` | Unknown stream-error retries with specialized ECONNRESET and bad-request policies, plus `PrefillErrorHandler` and `ProviderHistoryCompat`. |
 | `goal.prompt` | `DEFAULT_GOAL_JUDGE_PROMPT` (only when a `goal` is configured). |
 
+Nothing else is filled in. There's no default `model`, `instructions`, `tools`, `memory`, storage, or input and output processors.
+
+Each default has an explicit opt-out:
+
+| Default | How to opt out |
+| - | - |
+| Workspace | `workspace: undefined` |
+| Task tracking | Don't configure `memory` on the agent |
+| Error processors | `errorProcessors: []` |
+| Goal judge prompt | Omit `goal`, or pass your own `goal.prompt` |
+
 ### Workspace
 
 When the `workspace` key is omitted, a local workspace rooted at `basePath` (default `process.cwd()`) is built:
@@ -128,7 +149,36 @@ new Workspace({
 })
 ```
 
-To opt out (for example, when the workspace is injected at the [`AgentController`](/reference/agent-controller/agent-controller-class) level), pass `workspace: undefined` explicitly:
+To keep that shape but work in a different directory, pass `basePath`:
+
+```typescript
+const agent = createCodingAgent({
+  id: 'my-coding-agent',
+  name: 'My Coding Agent',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
+  instructions: 'You are a helpful coding assistant.',
+  basePath: '/srv/checkouts/my-app',
+})
+```
+
+Pass a `workspace` to build the backends yourself. Here the agent reads the whole repository while commands run inside one package. A remote sandbox takes the place of `LocalSandbox` in the same slot, see [Sandbox](/docs/sandbox/overview) for the available backends and isolation options:
+
+```typescript
+import { LocalFilesystem, LocalSandbox, Workspace } from '@mastra/core/workspace'
+
+const agent = createCodingAgent({
+  id: 'my-coding-agent',
+  name: 'My Coding Agent',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
+  instructions: 'You are a helpful coding assistant.',
+  workspace: new Workspace({
+    filesystem: new LocalFilesystem({ basePath: '/srv/checkouts/my-app' }),
+    sandbox: new LocalSandbox({ workingDirectory: '/srv/checkouts/my-app/packages/api' }),
+  }),
+})
+```
+
+To opt out (for example, when the workspace is injected at the [`AgentController`](/reference/agent-controller/agent-controller-class) level), pass `workspace: undefined` explicitly. An omitted key builds the default, an explicit `undefined` builds nothing:
 
 ```typescript
 const agent = createCodingAgent({
@@ -142,7 +192,43 @@ const agent = createCodingAgent({
 
 ### Signals
 
-`TaskSignalProvider` needs a memory-backed thread, so it's only added when `memory` is configured. With memory configured, the provider is merged into any `signals` you pass, which keeps task tracking from being dropped by custom providers. Passing `signals: []` alongside `memory` still yields the task provider. To run a memory-backed agent with no task tracking, configure the agent with [`new Agent()`](/reference/agents/agent) instead. Before `@mastra/core@1.49.0`, the provider was always added, which failed in memoryless contexts.
+[`TaskSignalProvider`](/reference/signals/task-signal-provider) adds the `task_write`, `task_update`, `task_complete`, and `task_check` [task tools](/reference/tools/task-tools) and persists the list in thread state, which gives the agent a durable plan across a multi-step request:
+
+```typescript
+import { createCodingAgent } from '@mastra/core/coding-agent'
+import { Memory } from '@mastra/memory'
+
+const agent = createCodingAgent({
+  id: 'my-coding-agent',
+  name: 'My Coding Agent',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
+  instructions: 'Plan multi-step work with the task tools, then carry it out.',
+  memory: new Memory(),
+})
+```
+
+The provider needs a memory-backed thread, so it's only added when `memory` is configured. With memory configured, the provider is merged into any `signals` you pass, which keeps task tracking from being dropped by custom providers. Passing `signals: []` alongside `memory` still yields the task provider. To run a memory-backed agent with no task tracking, configure the agent with [`new Agent()`](/reference/agents/agent) instead. Before `@mastra/core@1.49.0`, the provider was always added, which failed in memoryless contexts.
+
+`TaskSignalProvider` takes no constructor arguments, so customizing this default means choosing which other providers the agent gets:
+
+```typescript
+import { WebhookSignalProvider } from '@mastra/core/signals'
+
+const agent = createCodingAgent({
+  id: 'my-coding-agent',
+  name: 'My Coding Agent',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
+  instructions: 'You are a helpful coding assistant.',
+  memory: new Memory(),
+  signals: [
+    new WebhookSignalProvider({
+      extractResourceId: payload => (payload as { repository: string }).repository,
+    }),
+  ],
+})
+```
+
+That agent gets the webhook provider and the task provider.
 
 ### Error processors
 
@@ -152,11 +238,36 @@ The default [`StreamErrorRetryProcessor`](/reference/processors/stream-error-ret
 - Network resets (`ECONNRESET` / `socket hang up`) retry up to twice with exponential backoff (`1000ms * 2^retryCount`, capped at `30000ms`).
 - Bad-request errors retry once after `2000ms`.
 
-Specific network-reset and bad-request policies take precedence over the unknown-error policy. Passing `errorProcessors` replaces the default processor stack. `PrefillErrorHandler` and `ProviderHistoryCompat` are also included for provider compatibility.
+Specific network-reset and bad-request policies take precedence over the unknown-error policy. Passing `errorProcessors` replaces the default processor stack. `PrefillErrorHandler` and `ProviderHistoryCompat` are also included for provider compatibility: both repair errors caused by the shape of the message history, such as a provider rejecting a conversation that ends with an assistant message.
+
+Retries happen inside the `generate()` or `stream()` call that hit the error, so a recovered failure is invisible to your code. When the retries run out, the error surfaces the way any model error does: `generate()` rejects and `stream()` emits an `error` chunk. `generate()` and `stream()` also accept `errorProcessors` per call, which replaces the agent's stack for that request. See [Processors](/docs/agents/processors#error-processor-retry-limits) for `maxProcessorRetries`, the retry budget these processors share.
+
+### Goal
+
+No goal is configured by default. When you pass a `goal` without a `prompt`, `DEFAULT_GOAL_JUDGE_PROMPT` is used. The `goal` config carries the judge and the run budget, while the objective itself is per thread and set with [`setObjective()`](/docs/harness/goals#managing-the-objective):
+
+```typescript
+const agent = createCodingAgent({
+  id: 'my-coding-agent',
+  name: 'My Coding Agent',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
+  instructions: 'You are a helpful coding assistant.',
+  memory: new Memory(),
+  goal: {
+    judge: '__GATEWAY_OPENAI_MODEL_MINI__',
+    maxRuns: 50,
+  },
+})
+
+await agent.setObjective('Get the test suite passing', { threadId, resourceId })
+```
+
+[Goals](/docs/harness/goals) require a [storage](/docs/storage) backend and a memory-backed thread. Without a resolved `judge`, the goal step is a no-op.
 
 ## Related
 
-- [Coding agents](/docs/agents/coding-agent)
 - [`buildBasePrompt()`](/reference/coding-agent/build-base-prompt)
+- [Goals](/docs/harness/goals)
+- [Sandbox](/docs/sandbox/overview)
 - [`Agent`](/reference/agents/agent)
 - [`AgentController`](/reference/agent-controller/agent-controller-class)
