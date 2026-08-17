@@ -25,26 +25,62 @@ import { validateToolInput, validateToolOutput, validateToolSuspendData, validat
  */
 export const MASTRA_TOOL_MARKER = Symbol.for('mastra.core.tool.Tool');
 
+type RequestContextEncoder = (values: Record<string, unknown>) => Record<string, unknown> | undefined;
+
+function getRequestContextEncoder(schema: PublicSchema | undefined): RequestContextEncoder | undefined {
+  if (!schema || (typeof schema !== 'object' && typeof schema !== 'function')) {
+    return undefined;
+  }
+
+  const encodableSchema = schema as {
+    safeEncode?: (value: unknown) => { success: boolean; data?: unknown };
+    '~standard'?: { vendor?: string };
+  };
+  if (encodableSchema['~standard']?.vendor !== 'zod' || typeof encodableSchema.safeEncode !== 'function') {
+    return undefined;
+  }
+
+  return values => {
+    try {
+      const result = encodableSchema.safeEncode!(values);
+      if (result.success && result.data && typeof result.data === 'object' && !Array.isArray(result.data)) {
+        return result.data as Record<string, unknown>;
+      }
+    } catch {
+      // Unidirectional transforms cannot encode; retain the existing write-through behavior.
+    }
+
+    return undefined;
+  };
+}
+
 /**
  * Exposes schema-transformed values for one tool execution while keeping
  * explicit mutations connected to the shared request context.
  */
 class TransformedRequestContext extends RequestContext<Record<string, any>> {
   readonly #source: RequestContext;
+  readonly #encode?: RequestContextEncoder;
 
-  constructor(source: RequestContext, transformedValues: Record<string, unknown>) {
+  constructor(source: RequestContext, transformedValues: Record<string, unknown>, encode?: RequestContextEncoder) {
     super(Object.entries({ ...source.all, ...transformedValues }));
     this.#source = source;
+    this.#encode = encode;
+  }
+
+  #getSourceValue(key: string, value: unknown): unknown {
+    const encodedValues = this.#encode?.(this.all);
+    return encodedValues && Object.prototype.hasOwnProperty.call(encodedValues, key) ? encodedValues[key] : value;
   }
 
   public override set(key: string, value: any): void {
     super.set(key, value);
-    this.#source.setRaw(key, value);
+    this.#source.setRaw(key, this.#getSourceValue(key, value));
   }
 
   public override setRaw(key: string, value: unknown): void {
     super.setRaw(key, value);
-    this.#source.setRaw(key, value);
+    this.#source.setRaw(key, this.#getSourceValue(key, value));
   }
 
   public override delete(key: string): boolean {
@@ -382,6 +418,7 @@ export class Tool<
           ? new TransformedRequestContext(
               context?.requestContext ?? new RequestContext(),
               validatedRequestContext as Record<string, unknown>,
+              getRequestContextEncoder(this.requestContextSchema),
             )
           : context?.requestContext;
 

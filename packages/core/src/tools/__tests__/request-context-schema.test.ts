@@ -199,6 +199,38 @@ describe('Tool requestContextSchema', () => {
       expect((capturedDate as Date).toISOString()).toBe('2026-08-17T00:00:00.000Z');
     });
 
+    it.each(['set', 'setRaw'] as const)(
+      'should encode transformed values written with %s before the next execution',
+      async mutationMethod => {
+        const capturedDates: string[] = [];
+        const tool = createTool({
+          id: 'transform-mutation-tool',
+          description: 'A test tool',
+          requestContextSchema: z.object({ date: dateCodec }),
+          execute: async (_, { requestContext }) => {
+            const date = requestContext.get('date');
+            capturedDates.push(date.toISOString());
+
+            if (capturedDates.length === 1) {
+              requestContext[mutationMethod]('date', new Date('2026-08-18T00:00:00.000Z'));
+            }
+
+            return { success: true };
+          },
+        });
+        const requestContext = new RequestContext();
+        requestContext.set('date', '2026-08-17T00:00:00.000Z');
+
+        const firstResult = await tool.execute!({}, { requestContext });
+        const secondResult = await tool.execute!({}, { requestContext });
+
+        expect(firstResult).toEqual({ success: true });
+        expect(secondResult).toEqual({ success: true });
+        expect(capturedDates).toEqual(['2026-08-17T00:00:00.000Z', '2026-08-18T00:00:00.000Z']);
+        expect(requestContext.getRaw('date')).toBe('2026-08-18T00:00:00.000Z');
+      },
+    );
+
     it.each([undefined, {}])('should apply schema defaults when request context is missing', async context => {
       let capturedMode: string | undefined;
       const tool = createTool({
