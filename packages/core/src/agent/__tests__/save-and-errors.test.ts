@@ -1533,6 +1533,129 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
           expect(allPersistedText).not.toContain(`chunk-${i} `);
         }
       });
+
+      it('should not persist any assistant text on abort by default', async () => {
+        if (version === 'v1') return; // Only test for v2 (VNext) path
+
+        const abortController = new AbortController();
+        const totalChunks = 20;
+        const abortAfterChunks = 5;
+
+        // Same provider behavior as the opted-in test: it ignores cancellation and
+        // keeps streaming after the abort signal fires.
+        const slowStreamModel = new MockLanguageModelV2({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 200, totalTokens: 210 },
+            content: [{ type: 'text', text: 'Full long response' }],
+            warnings: [],
+          }),
+          doStream: async () => {
+            const allChunks = [
+              { type: 'stream-start' as const, warnings: [] },
+              {
+                type: 'response-metadata' as const,
+                id: 'id-0',
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              },
+              { type: 'text-start' as const, id: 'text-1' },
+              ...Array.from({ length: totalChunks }, (_, i) => ({
+                type: 'text-delta' as const,
+                id: 'text-1',
+                delta: `chunk-${i + 1} `,
+              })),
+              { type: 'text-end' as const, id: 'text-1' },
+              {
+                type: 'finish' as const,
+                finishReason: 'stop' as const,
+                usage: { inputTokens: 10, outputTokens: 200, totalTokens: 210 },
+              },
+            ];
+
+            let index = 0;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: new ReadableStream({
+                async pull(controller) {
+                  if (index < allChunks.length) {
+                    await new Promise(resolve => setTimeout(resolve, 5));
+                    const chunk = allChunks[index++]!;
+
+                    const textDeltaCount = index - 3;
+                    if (chunk.type === 'text-delta' && textDeltaCount === abortAfterChunks) {
+                      abortController.abort();
+                    }
+
+                    controller.enqueue(chunk);
+                  } else {
+                    controller.close();
+                  }
+                },
+              }),
+            };
+          },
+        });
+
+        const mockMemory = new MockMemory();
+        const savedMessages: MastraDBMessage[] = [];
+        const origSaveMessages = mockMemory.saveMessages.bind(mockMemory);
+        mockMemory.saveMessages = async function (args) {
+          savedMessages.push(...args.messages);
+          return origSaveMessages(args);
+        };
+
+        const agent = new Agent({
+          id: 'test-abort-default-off',
+          name: 'Test Abort Default Off',
+          model: slowStreamModel,
+          instructions: 'You are a helpful assistant.',
+          memory: mockMemory,
+        });
+
+        const stream = await agent.stream('Write a very long essay', {
+          abortSignal: abortController.signal,
+          memory: {
+            thread: 'abort-default-thread',
+            resource: 'abort-test-resource',
+          },
+        });
+
+        try {
+          await stream.consumeStream();
+        } catch {
+          // Expected - abort error
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        const recalled = await mockMemory.recall({
+          threadId: 'abort-default-thread',
+          count: 100,
+        });
+
+        const collectText = (messages: MastraDBMessage[]) =>
+          messages
+            .filter(m => m.role === 'assistant')
+            .map(m => {
+              if (typeof m.content === 'string') return m.content;
+              if (m.content.parts) {
+                return m.content.parts
+                  .filter((p: any) => p.type === 'text')
+                  .map((p: any) => p.text)
+                  .join('');
+              }
+              return '';
+            })
+            .join('');
+
+        const allPersistedText = collectText(savedMessages) + collectText(recalled.messages);
+
+        // Default behavior is unchanged: an aborted stream persists no assistant output.
+        expect(allPersistedText).toBe('');
+      });
     });
   }
 }

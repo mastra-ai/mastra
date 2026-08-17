@@ -674,6 +674,13 @@ const stream = await agent.stream('message for agent')
             description: 'Save messages incrementally after each stream step completes (default: false).',
           },
           {
+            name: 'persistPartialOnAbort',
+            type: 'boolean',
+            isOptional: true,
+            description:
+              'Save the assistant text that was streamed before an abort to memory (default: false). Only text emitted before the abort is persisted; output a provider keeps producing after cancellation is discarded, and nothing is saved when no text was streamed.',
+          },
+          {
             name: 'requireToolApproval',
             type: 'boolean',
             isOptional: true,

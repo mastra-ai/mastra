@@ -26,34 +26,26 @@ import {
 } from './run-scope-keys';
 import type { AgentCapabilities, PrepareMemoryStepOutput, PrepareToolsStepOutput } from './schema';
 
-function getPartialAssistantText(payload: { text?: string }, messageList: MessageList, streamedText: string): string {
-  if (typeof payload.text === 'string' && payload.text.trim().length > 0) {
+/**
+ * Assistant text that was already streamed to the caller when the abort happened.
+ *
+ * Prefers the snapshot taken when the abort signal fired. Falls back to the aborted finish
+ * payload, which the stream builds from its own buffer at the abort event. Text a provider
+ * emitted after cancellation is never included.
+ */
+function getPartialAbortedText(
+  payload: { text?: string; finishReason?: string },
+  streamedTextAtAbort?: string,
+): string {
+  if (typeof streamedTextAtAbort === 'string' && streamedTextAtAbort.length > 0) {
+    return streamedTextAtAbort;
+  }
+
+  if (payload.finishReason === 'aborted' && typeof payload.text === 'string') {
     return payload.text;
   }
 
-  if (streamedText.trim().length > 0) {
-    return streamedText;
-  }
-
-  return messageList.get.response
-    .db()
-    .filter(message => message.role === 'assistant')
-    .map(message => {
-      if (typeof message.content?.content === 'string') {
-        return message.content.content;
-      }
-      if (Array.isArray(message.content?.parts)) {
-        return message.content.parts
-          .filter(
-            (part): part is { type: 'text'; text: string } => part.type === 'text' && typeof part.text === 'string',
-          )
-          .map(part => part.text)
-          .join('');
-      }
-      return '';
-    })
-    .join('')
-    .trim();
+  return '';
 }
 
 interface MapResultsStepOptions<OUTPUT = undefined> {
@@ -104,7 +96,25 @@ export function createMapResultsStep<OUTPUT = undefined>({
     const convertedTools = runScope.get(CONVERTED_TOOLS_KEY);
 
     let threadCreatedByStep = false;
+    const persistPartialOnAbort = options.persistPartialOnAbort === true;
+    // Text already handed to the caller. Snapshotted the moment the abort signal fires so
+    // chunks a provider keeps producing after cancellation can never widen the snapshot.
     let streamedText = '';
+    let streamedTextAtAbort: string | undefined;
+
+    if (persistPartialOnAbort && options.abortSignal) {
+      if (options.abortSignal.aborted) {
+        streamedTextAtAbort = streamedText;
+      } else {
+        options.abortSignal.addEventListener(
+          'abort',
+          () => {
+            streamedTextAtAbort = streamedText;
+          },
+          { once: true },
+        );
+      }
+    }
 
     const result = {
       ...options,
@@ -352,12 +362,37 @@ export function createMapResultsStep<OUTPUT = undefined>({
             return;
           }
 
-          if (payload.finishReason === 'aborted') {
-            const partialText = getPartialAssistantText(payload, messageList, streamedText);
-            if (options.persistPartialOnAbort && partialText) {
+          // Both abort exits share one policy: persist nothing by default, and when the caller
+          // opts in persist only the assistant text that was streamed before the abort.
+          const aborted = payload.finishReason === 'aborted' || options.abortSignal?.aborted === true;
+
+          if (aborted) {
+            const endAbortedSpan = () => {
+              if (payload.finishReason === 'aborted') {
+                agentSpan?.end({ output: { status: 'aborted', reason: 'abort' } });
+              } else {
+                agentSpan?.end();
+              }
+            };
+
+            const partialText = getPartialAbortedText(payload, streamedTextAtAbort);
+
+            if (!persistPartialOnAbort || partialText.trim().length === 0) {
+              endAbortedSpan();
+            } else {
               try {
                 await capabilities.executeOnFinish({
-                  result: { ...payload, text: partialText },
+                  // Bound the persisted response to the pre-abort snapshot. The raw payload may carry
+                  // a complete post-abort response (providers can ignore cancellation).
+                  result: {
+                    ...payload,
+                    text: partialText,
+                    response: {
+                      ...(payload.response ?? {}),
+                      dbMessages: undefined,
+                      messages: [{ role: 'assistant', content: [{ type: 'text', text: partialText }] }],
+                    },
+                  },
                   outputText: partialText,
                   thread: result.thread,
                   threadId: result.threadId,
@@ -369,7 +404,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
                   runId,
                   messageList,
                   threadExists: memoryData.threadExists || threadCreatedByStep,
-                  structuredOutput: !!options.structuredOutput?.schema,
+                  structuredOutput: false,
                   overrideScorers: options.scorers,
                   onTitleGenerated: options.memory?.onTitleGenerated,
                   waitUntil: options.serverless?.waitUntil,
@@ -383,36 +418,20 @@ export function createMapResultsStep<OUTPUT = undefined>({
                   error: e,
                   runId,
                 });
-                agentSpan?.end({
-                  output: {
-                    status: 'aborted',
-                    reason: 'abort',
-                  },
-                });
+                endAbortedSpan();
               }
-            } else {
-              agentSpan?.end({
-                output: {
-                  status: 'aborted',
-                  reason: 'abort',
-                },
-              });
             }
-            return;
-          }
 
-          // Skip memory persistence when the abort signal has fired unless the caller opted in.
-          // Providers may continue after cancellation, so only the captured partial text is eligible.
-          const aborted = options.abortSignal?.aborted;
-          const partialText = getPartialAssistantText(payload, messageList, streamedText);
-          const shouldPersist = !aborted || (options.persistPartialOnAbort === true && partialText.length > 0);
-
-          if (shouldPersist) {
+            // The aborted finish payload is synthetic; the caller already received onAbort.
+            if (payload.finishReason === 'aborted') {
+              return;
+            }
+          } else {
             try {
               const outputText =
                 options.structuredOutput?.schema && payload.object != null
                   ? JSON.stringify(payload.object)
-                  : partialText || payload.text || '';
+                  : payload.text || '';
 
               await capabilities.executeOnFinish({
                 result: payload,
@@ -432,10 +451,6 @@ export function createMapResultsStep<OUTPUT = undefined>({
                 onTitleGenerated: options.memory?.onTitleGenerated,
                 waitUntil: options.serverless?.waitUntil,
               });
-
-              if (aborted && saveQueueManager && result.threadId && !memoryConfig?.readOnly) {
-                await saveQueueManager.flushMessages(messageList, result.threadId, memoryConfig);
-              }
             } catch (e) {
               capabilities.logger.error('Error saving memory on finish', {
                 error: e,
@@ -457,8 +472,6 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
               agentSpan?.error({ error: spanError, endSpan: true });
             }
-          } else {
-            agentSpan?.end();
           }
 
           await options?.onFinish?.({
@@ -470,12 +483,14 @@ export function createMapResultsStep<OUTPUT = undefined>({
           });
         },
         onStepFinish: result.onStepFinish,
-        onChunk: async (chunk: any) => {
-          if (chunk.type === 'text-delta') {
-            streamedText += chunk.payload.text;
-          }
-          await options.onChunk?.(chunk);
-        },
+        onChunk: persistPartialOnAbort
+          ? async (chunk: any) => {
+              if (chunk.type === 'text-delta') {
+                streamedText += chunk.payload.text;
+              }
+              await options.onChunk?.(chunk);
+            }
+          : options.onChunk,
         onError: options.onError,
         onAbort: options.onAbort,
         abortSignal: options.abortSignal,
