@@ -20045,9 +20045,13 @@ export type GetAgentControllerControllerIdSessionsResourceId_Response = {
   modelId: string;
   running?: boolean | undefined;
   tasks: {
+    /** Stable task identifier (for example, 'task_investigate_tests'). Keep this unchanged across updates. */
     id: string;
+    /** Task description in imperative form (e.g., 'Fix authentication bug') */
     content: string;
+    /** Current task status */
     status: 'pending' | 'in_progress' | 'completed';
+    /** Present continuous form shown during execution (e.g., 'Fixing authentication bug') */
     activeForm: string;
   }[];
   omProgress?:

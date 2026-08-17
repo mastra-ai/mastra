@@ -57,7 +57,7 @@ const taskItemInputSchema = z.object({
     .describe("Present continuous form shown during execution (e.g., 'Fixing authentication bug')"),
 });
 
-const taskItemSchema = taskItemInputSchema.extend({
+export const taskItemSchema = taskItemInputSchema.extend({
   id: taskIdSchema,
 });
 

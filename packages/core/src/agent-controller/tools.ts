@@ -53,6 +53,7 @@ export {
   taskCheckTool,
   assignTaskIds,
   summarizeTaskCheck,
+  taskItemSchema,
 } from '../tools/builtin/task-tools';
 export type {
   TaskItem,

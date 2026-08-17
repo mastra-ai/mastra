@@ -15,6 +15,7 @@ export {
   submitPlanTool,
   taskCheckTool,
   taskCompleteTool,
+  taskItemSchema,
   taskUpdateTool,
   taskWriteTool,
 } from './tools';

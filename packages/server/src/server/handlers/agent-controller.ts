@@ -1,10 +1,7 @@
 import type { Agent } from '@mastra/core/agent';
+import { taskItemSchema } from '@mastra/core/agent-controller';
 import type { AgentController, Session } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
-// Type-only import: erased at runtime, so this cannot crash against an older
-// @mastra/core that lacks the `./agent-controller` subpath export. Controller
-// resolution at runtime goes through mastra.getAgentController?.(), never a
-// value import.
 import { z } from 'zod/v4';
 
 import { HTTPException } from '../http-exception';
@@ -278,14 +275,7 @@ const sessionStateResponseSchema = z.object({
   modelId: z.string(),
   /** Whether the agent is currently executing a run (for initial UI hydration). */
   running: z.boolean().optional(),
-  tasks: z.array(
-    z.object({
-      id: z.string(),
-      content: z.string(),
-      status: z.enum(['pending', 'in_progress', 'completed']),
-      activeForm: z.string(),
-    }),
-  ),
+  tasks: z.array(taskItemSchema),
   omProgress: omProgressSummarySchema.optional(),
   tokenUsage: z.record(z.string(), z.unknown()).optional(),
   settings: sessionSettingsSchema.optional(),
