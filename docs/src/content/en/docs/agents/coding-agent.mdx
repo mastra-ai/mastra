@@ -9,15 +9,15 @@ packages:
 
 **Added in:** `@mastra/core@1.48.0`
 
-A coding agent works inside a project, so it needs files it can edit and a shell it can run commands in.
+A coding agent works inside a project. It reads and changes files and runs commands in a shell, rather than only calling HTTP tools.
 
-[`createCodingAgent()`](/reference/coding-agent/create-coding-agent) is the shorthand for that setup. It returns a standard [`Agent`](/reference/agents/agent) with default capabilities already configured for coding work, so you don't have to wire up the workspace and the surrounding machinery yourself. You can change or switch off every default, and each one is a Mastra primitive you can also set on `new Agent()` by hand.
+[`createCodingAgent()`](/reference/coding-agent/create-coding-agent) returns an [`Agent`](/reference/agents/agent) that already has what that work needs: a workspace for reading files and running commands, plus retries for the errors that interrupt long runs. Give it memory and it also keeps a task list across multi-step requests. Each of those is a Mastra primitive you could configure on `new Agent()` yourself, and each one can be replaced or switched off here.
 
-The function lives in `@mastra/core`, with no hosted service behind it. The value it returns is an ordinary `Agent`, so it works anywhere an agent works, including inside an [`AgentController`](/docs/harness/agent-controller).
+The agent it returns is an ordinary `Agent`, so it works anywhere an agent does, including inside an [`AgentController`](/docs/harness/agent-controller).
 
 ## When to use a coding agent
 
-Use `createCodingAgent()` when the agent's job involves a codebase, so it needs a filesystem and a shell rather than only HTTP tools. Reach for `new Agent()` instead when you want none of the defaults below, or when you already assemble a workspace, signals, and processors yourself.
+Use `createCodingAgent()` when the agent's job involves a codebase, such as fixing a failing test or applying a refactor across several files. Reach for `new Agent()` instead when you want none of the defaults below, or when you already assemble them yourself.
 
 The defaults match the ones [Mastra Code](https://code.mastra.ai) runs on, so you start from a configuration that's already been used against real repositories. The prompt, modes, and tools that make up the Mastra Code product aren't included. `createCodingAgent()` only sets up the runtime pieces described here.
 
