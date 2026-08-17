@@ -78,9 +78,10 @@ export function createFakeBridge(options: { apiToken?: string; baseUrl?: string 
       if (options.apiToken && authorization !== `Bearer ${options.apiToken}`) {
         return new Response('unauthorized', { status: 401 });
       }
-      if (!url.startsWith(baseUrl)) return new Response('not found', { status: 404 });
+      const requested = new URL(url);
+      if (requested.origin !== new URL(baseUrl).origin) return new Response('not found', { status: 404 });
 
-      const path = url.slice(baseUrl.length);
+      const path = requested.pathname;
 
       if (method === 'POST' && path === '/v1/sandbox') {
         const id = `sbx-${nextId++}`;

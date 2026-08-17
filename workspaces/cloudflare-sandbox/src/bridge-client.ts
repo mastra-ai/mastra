@@ -38,8 +38,10 @@ function stripTrailingSlashes(url: string): string {
 
 /** Encodes an absolute sandbox path for the `/file/*` route, which omits the leading slash. */
 function encodeFilePath(absolutePath: string): string {
+  let start = 0;
+  while (start < absolutePath.length && absolutePath[start] === '/') start++;
   return absolutePath
-    .replace(/^\/+/, '')
+    .slice(start)
     .split('/')
     .map(segment => encodeURIComponent(segment))
     .join('/');

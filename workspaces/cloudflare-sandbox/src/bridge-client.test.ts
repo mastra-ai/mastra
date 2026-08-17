@@ -71,6 +71,15 @@ describe('CloudflareSandboxBridgeClient', () => {
     expect(bridge.files.get('/workspace/bin/data')).toBe('hi');
   });
 
+  it('encodes file paths without leading slashes or a backtracking regex', async () => {
+    const { bridge, client } = createClient();
+    const id = await client.createSandbox();
+
+    await client.writeFile(id, '///workspace/a b.txt', 'x');
+
+    expect(bridge.requests.at(-1)?.url).toBe(`${BASE_URL}/v1/sandbox/${id}/file/workspace/a%20b.txt`);
+  });
+
   it('sends argv, timeout_ms and cwd to /exec', async () => {
     const { bridge, client } = createClient();
     const id = await client.createSandbox();
