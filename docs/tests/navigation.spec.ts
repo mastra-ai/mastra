@@ -88,6 +88,59 @@ test.describe('Tab switcher navigation', () => {
   })
 })
 
+test.describe('Breadcrumb navigation', () => {
+  test('root groups restore the global sidebar while categories link to their overviews', async ({
+    page,
+    isMobile,
+  }) => {
+    await page.goto('/docs/connections/acp', { waitUntil: 'domcontentloaded' })
+
+    let breadcrumbs = page.getByRole('navigation', { name: 'Breadcrumbs' })
+    const extendButton = breadcrumbs.getByRole('button', { name: 'Extend', exact: true })
+    await expect(breadcrumbs.getByRole('link', { name: 'Connections', exact: true })).toHaveAttribute(
+      'href',
+      '/docs/connections/overview',
+    )
+
+    const connectionLink = breadcrumbs.getByRole('link', { name: 'Connections', exact: true })
+    await connectionLink.hover()
+    await page.waitForTimeout(250)
+    const linkHover = await connectionLink.evaluate(element => {
+      const style = getComputedStyle(element)
+      return { backgroundColor: style.backgroundColor, color: style.color, fontWeight: style.fontWeight }
+    })
+    await extendButton.hover()
+    await page.waitForTimeout(250)
+    const buttonHover = await extendButton.evaluate(element => {
+      const style = getComputedStyle(element)
+      return {
+        backgroundColor: style.backgroundColor,
+        color: style.color,
+        cursor: style.cursor,
+        fontWeight: style.fontWeight,
+      }
+    })
+    expect(buttonHover).toEqual({ ...linkHover, cursor: 'pointer' })
+
+    await extendButton.click()
+    await expect(page).toHaveURL('/docs/connections/acp')
+    if (!isMobile) await expect(visibleSidebarPane(page, 'root')).toBeVisible()
+
+    await page.goto('/docs/studio/observability', { waitUntil: 'domcontentloaded' })
+
+    breadcrumbs = page.getByRole('navigation', { name: 'Breadcrumbs' })
+    const rootGroup = breadcrumbs.getByRole('button', { name: 'Develop / Deploy', exact: true })
+    await expect(breadcrumbs.getByRole('link', { name: 'Studio', exact: true })).toHaveAttribute(
+      'href',
+      '/docs/studio/overview',
+    )
+
+    await rootGroup.click()
+    await expect(page).toHaveURL('/docs/studio/observability')
+    if (!isMobile) await expect(visibleSidebarPane(page, 'root')).toBeVisible()
+  })
+})
+
 // ─── Mobile docs dropdown tests (mobile only — dropdown is in hamburger menu) ──
 
 test.describe('Mobile docs dropdown', () => {

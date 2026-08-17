@@ -9,11 +9,13 @@ import DocBreadcrumbsStructuredData from '@theme/DocBreadcrumbs/StructuredData'
 import { BreadcrumbsItemLink, BreadcrumbsItem } from '@site/src/components/ui/breadcrumbs'
 import BrowserOnly from '@docusaurus/BrowserOnly'
 import { CopyOpenInButton } from '@site/src/components/copy-page-button'
+import { useContextualSidebar } from '../contextual-sidebar-context'
 import styles from './styles.module.css'
 
 export default function DocBreadcrumbs(): ReactNode {
   const breadcrumbs = useSidebarBreadcrumbs()
   const homePageRoute = useHomePageRoute()
+  const { clearSidebar } = useContextualSidebar()
 
   if (!breadcrumbs) {
     return null
@@ -37,7 +39,12 @@ export default function DocBreadcrumbs(): ReactNode {
             const href = item.type === 'category' && item.linkUnlisted ? undefined : item.href
             return (
               <BreadcrumbsItem key={idx} active={isLast}>
-                <BreadcrumbsItemLink href={href} isLast={isLast}>
+                <BreadcrumbsItemLink
+                  href={href}
+                  isLast={isLast}
+                  onClick={idx === 0 ? clearSidebar : undefined}
+                  className={idx === 0 && !href ? styles.contextualBack : undefined}
+                >
                   {item.label}
                 </BreadcrumbsItemLink>
               </BreadcrumbsItem>
