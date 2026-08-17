@@ -131,14 +131,6 @@ function deferredActor(record: FactoryDeferredDecisionRecord): FactoryRuleActor 
   return { type: 'system', id: 'factory-rule-dispatcher' };
 }
 
-/**
- * A run that ended badly is not worth re-delivering: an aborted run was
- * cancelled on purpose, usually by the very next decision for this item.
- * Recording it as failed keeps the card honest without restarting work someone
- * already superseded.
- */
-class TerminalDispatchError extends Error {}
-
 function leaseIdentity(
   record: Pick<FactoryDeferredDecisionRecord | FactoryPendingStartRecord, 'id' | 'orgId' | 'factoryProjectId'>,
   ownerId: string,
@@ -346,7 +338,7 @@ export class FactoryDecisionDispatcher {
       const completed = await this.#storage.completeDeferredDecision(leaseIdentity(record, this.#ownerId), new Date());
       if (!completed) throw new Error('Factory decision lease was lost before completion.');
     } catch (error) {
-      const terminal = error instanceof TerminalDispatchError || record.attempts >= MAX_ATTEMPTS;
+      const terminal = record.attempts >= MAX_ATTEMPTS;
       await this.#storage.failDeferredDecision({
         ...leaseIdentity(record, this.#ownerId),
         now: new Date(),
@@ -544,7 +536,14 @@ export class FactoryDecisionDispatcher {
             } else if (endReason === 'error') {
               throw new Error('Factory skill run ended in error.');
             } else if (endReason === 'aborted') {
-              throw new TerminalDispatchError('Factory skill run was aborted before it finished.');
+              // Retryable, though an abort reads as deliberate. The stream does
+              // not say who aborted, and in practice the dominant cause is the
+              // process going away underneath the run — an operator restarting
+              // the server — not anyone deciding this work should stop. Treating
+              // that as terminal dead-ends the card at attempt 1 with nothing on
+              // the board to press. A spurious retry is bounded by MAX_ATTEMPTS;
+              // a dead card costs a human a manual nudge.
+              throw new Error('Factory skill run was aborted before it finished.');
             }
           } else {
             // `deliver` means the signal was queued onto a run that was already

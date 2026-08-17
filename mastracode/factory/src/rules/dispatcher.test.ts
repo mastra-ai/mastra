@@ -1116,9 +1116,12 @@ describe('FactoryDecisionDispatcher', () => {
   });
 
   it.each([
-    { reason: 'error' as const, key: 'skill-run-error', expected: 'retry', message: 'ended in error' },
-    { reason: 'aborted' as const, key: 'skill-run-aborted', expected: 'failed', message: 'was aborted' },
-  ])('records a run that ended $reason instead of reporting success', async ({ reason, key, expected, message }) => {
+    { reason: 'error' as const, key: 'skill-run-error', message: 'ended in error' },
+    // An abort reads as deliberate, but the stream never says who aborted, and
+    // the usual cause is the process going away underneath the run. Ending the
+    // card at attempt 1 with no button leaves a human to nudge it by hand.
+    { reason: 'aborted' as const, key: 'skill-run-aborted', message: 'was aborted' },
+  ])('retries a run that ended $reason instead of reporting success', async ({ reason, key, message }) => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {
       type: 'invokeSkill',
@@ -1163,8 +1166,10 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(decision?.status).toBe(expected);
+    expect(decision?.status).toBe('retry');
     expect(decision?.lastError).toContain(message);
+    // `retry` only helps if the row can actually be picked up again.
+    expect(decision?.availableAt).toBeTruthy();
     expect(getAgentEndListenerCount()).toBe(0);
   });
 
