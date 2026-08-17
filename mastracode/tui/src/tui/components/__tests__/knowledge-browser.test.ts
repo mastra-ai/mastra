@@ -89,7 +89,7 @@ function createInspector(overrides: Partial<KnowledgeInspector> = {}): Knowledge
       scopeLevel: 'resource' as const,
       items: [
         {
-          action: 'item-created' as const,
+          action: 'record-created' as const,
           recordType: 'node' as const,
           scope: atlas.scope,
           createdAt: '2026-07-15T00:00:00.000Z',
@@ -445,7 +445,7 @@ describe('KnowledgeBrowserComponent', () => {
 
     browser.handleInput('\t');
     await settle();
-    expect(text(browser)).toContain('item-created: Atlas');
+    expect(text(browser)).toContain('record-created: Atlas');
   });
 
   it('closes on escape and returns from detail with backspace', async () => {

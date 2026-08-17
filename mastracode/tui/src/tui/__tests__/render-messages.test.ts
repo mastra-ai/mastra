@@ -260,8 +260,8 @@ describe('addUserMessage', () => {
           value: {
             updates: [
               {
-                action: 'item-created',
-                type: 'item',
+                action: 'record-created',
+                type: 'record',
                 name: 'Atlas launch',
                 createdAt: '2026-07-15T00:00:00.000Z',
               },

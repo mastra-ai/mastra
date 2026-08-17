@@ -27,7 +27,7 @@ function captureContext(memory: Memory, requestContext: RequestContext, resource
     memory,
     requestContext,
     current: {
-      nodes: [{ name: 'Shared Node', kind: 'note', items: [{ text: 'The rollout region is cobalt.' }] }],
+      nodes: [{ name: 'Shared Node', kind: 'note', records: [{ text: 'The rollout region is cobalt.' }] }],
     },
   };
 }
@@ -66,7 +66,7 @@ function makeSignalArgs(
 }
 
 describe('Subconscious project scope override', () => {
-  it('capture writes nodes and items under knowledgeResourceId instead of the run resourceId', async () => {
+  it('capture writes nodes and records under knowledgeResourceId instead of the run resourceId', async () => {
     const memory = new Memory({ storage: new InMemoryStore() });
     const extractor = new SubconsciousCaptureExtractor({
       defaultScope: 'resource',
@@ -82,10 +82,10 @@ describe('Subconscious project scope override', () => {
     expect(shared).toMatchObject({ scope: PROJECT_SCOPE });
     expect(await store.getNodeByName({ name: 'Shared Node', scope: ['org:acme', 'resource:session-a'] })).toBeNull();
 
-    const items = await store.itemsAbout({ nodeId: shared!.id, scope: [...PROJECT_SCOPE, 'thread:thread-a'] });
-    expect(items.items).toHaveLength(1);
-    // Unscoped captured items land at thread level; the resource rung is the project.
-    expect(items.items[0]!.scope).toEqual([...PROJECT_SCOPE, 'thread:thread-a']);
+    const records = await store.knowledgeAbout({ node: shared!, scope: [...PROJECT_SCOPE, 'thread:thread-a'] });
+    expect(records.records).toHaveLength(1);
+    // Unscoped captured records land at thread level; the resource rung is the project.
+    expect(records.records[0]!.scope).toEqual([...PROJECT_SCOPE, 'thread:thread-a']);
   });
 
   it('capture falls back to the run resourceId when no override is present', async () => {
@@ -203,7 +203,7 @@ describe('Subconscious project scope override', () => {
   it('curate, learn, and remind resolve the worklist and search scope from the override', async () => {
     const memory = new Memory({ storage: new InMemoryStore() });
     const store = (await memory.storage.getStore('knowledge'))!;
-    const listItemsBySource = vi.spyOn(store, 'listItemsBySource');
+    const knowledgeBySource = vi.spyOn(store, 'knowledgeBySource');
     const search = vi.spyOn(store, 'search');
 
     const resolved = {
@@ -230,11 +230,11 @@ describe('Subconscious project scope override', () => {
 
     await createCuratorHandler(memory, resolved)(reflectionContext());
     await createLearnerHandler(memory, resolved)(reflectionContext());
-    for (const call of listItemsBySource.mock.calls) {
+    for (const call of knowledgeBySource.mock.calls) {
       expect(call[0]!.scope).toContain('resource:project-1');
       expect(call[0]!.scope).not.toContain('resource:session-a');
     }
-    expect(listItemsBySource).toHaveBeenCalled();
+    expect(knowledgeBySource).toHaveBeenCalled();
 
     const remind = new SubconsciousRemindExtractor({ name: 'remind', maxSteps: 3, builtIn: true } as any);
     await Promise.resolve(

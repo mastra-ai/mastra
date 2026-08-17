@@ -13,11 +13,11 @@ export interface SubconsciousCaptureOutput {
     name: string;
     kind: string;
     scope?: KnowledgeScopeLevel;
-    items: Array<{
+    records: Array<{
       text: string;
       scope?: KnowledgeScopeLevel;
       when?: string;
-      /** One short sentence: why the KnowledgeItem is worth keeping (or must stay pinned). Stored as item metadata. */
+      /** One short sentence: why the KnowledgeRecord is worth keeping (or must stay pinned). Stored as record metadata. */
       reason?: string;
       /** Present only when capture-time pinning is enabled; routes the item to the pin set. */
       pin?: boolean;

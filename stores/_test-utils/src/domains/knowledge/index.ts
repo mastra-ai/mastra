@@ -77,27 +77,27 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(await store.search({ query: '=', scope: resource })).toEqual([expect.objectContaining({ id: escape.id })]);
     });
 
-    it('applies item visibility independently from parent node identity scope', async () => {
+    it('applies record visibility independently from node scope', async () => {
       const node = await store.createNode({ name: 'Resource node', kind: 'task', scope: resource });
-      await store.appendItem({
-        parentNodeId: node.id,
-        text: 'organization-visible item',
+      await store.appendKnowledge({
+        node,
+        text: 'organization-visible knowledge',
         scope: ['org:acme'],
         sourceThreadId: 't1',
         resolutionScope: thread,
         defaultScope: resource,
       });
 
-      expect((await store.itemsAbout({ nodeId: node.id, scope: ['org:acme'] })).items).toHaveLength(1);
+      expect((await store.knowledgeAbout({ node, scope: ['org:acme'] })).records).toHaveLength(1);
       expect(await store.search({ query: 'organization-visible', scope: ['org:acme'] })).toEqual([
-        expect.objectContaining({ type: 'item', recordId: node.id, scope: ['org:acme'] }),
+        expect.objectContaining({ type: 'record', recordId: node.id, scope: ['org:acme'] }),
       ]);
     });
 
-    it('persists optional KnowledgeItem metadata and returns it on reads', async () => {
+    it('persists optional KnowledgeRecord metadata and returns it on reads', async () => {
       const node = await store.createNode({ name: 'Jane meta', kind: 'person', scope: resource });
-      const withMetadata = await store.appendItem({
-        parentNodeId: node.id,
+      const withMetadata = await store.appendKnowledge({
+        node: node.id,
         text: 'Prefers tabs.',
         scope: resource,
         sourceThreadId: 't1',
@@ -105,8 +105,8 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         resolutionScope: thread,
         defaultScope: resource,
       });
-      const withoutMetadata = await store.appendItem({
-        parentNodeId: node.id,
+      const withoutMetadata = await store.appendKnowledge({
+        node: node.id,
         text: 'Likes coffee.',
         scope: resource,
         sourceThreadId: 't1',
@@ -114,28 +114,29 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         defaultScope: resource,
       });
       expect(withMetadata.metadata).toEqual({ reason: 'Durable style preference stated explicitly.' });
-      expect((await store.getItem({ id: withMetadata.id }))?.metadata).toEqual({
+      expect((await store.getKnowledge({ id: withMetadata.id }))?.metadata).toEqual({
         reason: 'Durable style preference stated explicitly.',
       });
-      expect((await store.getItem({ id: withoutMetadata.id }))?.metadata).toBeUndefined();
+      expect((await store.getKnowledge({ id: withoutMetadata.id }))?.metadata).toBeUndefined();
     });
 
     it('maintains mentions and soft deletes without losing them', async () => {
       const jane = await store.createNode({ name: 'Jane', kind: 'person', scope: resource });
       const marco = await store.createNode({ name: 'Marco', kind: 'person', scope: resource });
-      const item = await store.appendItem({
-        parentNodeId: jane.id,
+      const record = await store.appendKnowledge({
+        node: jane,
         text: 'Works with [[Marco]].',
         scope: resource,
         sourceThreadId: 't1',
         resolutionScope: thread,
         defaultScope: resource,
       });
-      expect((await store.itemsTouching({ nodeId: marco.id, scope: thread })).items[0]?.id).toBe(item.id);
-      await store.removeItem({ id: item.id, deletedBy: 'curator' });
-      expect(await store.getItem({ id: item.id })).toBeNull();
-      await store.restoreItem({ id: item.id });
-      expect((await store.itemsTouching({ nodeId: marco.id, scope: thread })).items[0]?.id).toBe(item.id);
+      expect((await store.knowledgeMentioning({ node: marco, scope: thread })).records[0]?.id).toBe(record.id);
+      expect((await store.knowledgeRelatedTo({ node: marco, scope: thread })).records[0]?.id).toBe(record.id);
+      await store.removeKnowledge({ id: record.id, deletedBy: 'curator' });
+      expect(await store.getKnowledge({ id: record.id })).toBeNull();
+      await store.restoreKnowledge({ id: record.id });
+      expect((await store.knowledgeRelatedTo({ node: marco, scope: thread })).records[0]?.id).toBe(record.id);
     });
 
     it('rejects merges whose target is narrower than the source alias', async () => {
@@ -151,8 +152,8 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       const duplicate = await store.createNode({ name: 'Jane Doe', kind: 'person', scope: resource });
       await store.createNode({ kind: 'document', name: 'People', content: 'Contact [[Jane Doe]]', scope: resource });
       const project = await store.createNode({ name: 'Project', kind: 'task', scope: resource });
-      const item = await store.appendItem({
-        parentNodeId: project.id,
+      const record = await store.appendKnowledge({
+        node: project.id,
         text: 'Owned by [[Jane Doe]]',
         scope: resource,
         sourceThreadId: 't1',
@@ -163,34 +164,34 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       const beforeMerge = (await store.listSemanticOutbox()).length;
       await store.mergeNodes({ sourceId: duplicate.id, targetId: target.id, sourceVersion: duplicate.version });
       expect((await store.listSemanticOutbox()).slice(beforeMerge).map(entry => entry.documentType)).toEqual(
-        expect.arrayContaining(['node', 'item', 'node']),
+        expect.arrayContaining(['node', 'record', 'node']),
       );
-      const postMergeItem = await store.appendItem({
-        parentNodeId: project.id,
+      const postMergeKnowledge = await store.appendKnowledge({
+        node: project.id,
         text: 'Still references [[Jane Doe]]',
         scope: resource,
         sourceThreadId: 't1',
         resolutionScope: thread,
         defaultScope: resource,
       });
-      expect((await store.itemsTouching({ nodeId: target.id, scope: thread })).items.map(item => item.id)).toContain(
-        postMergeItem.id,
-      );
+      expect(
+        (await store.knowledgeRelatedTo({ node: target.id, scope: thread })).records.map(record => record.id),
+      ).toContain(postMergeKnowledge.id);
       expect((await store.createNode({ name: 'Jane Doe', kind: 'person', scope: resource })).id).toBe(target.id);
-      const fallbackItem = await store.appendItem({
-        parentNodeId: project.id,
+      const fallbackKnowledge = await store.appendKnowledge({
+        node: project.id,
         text: 'Fallback references [[Jane Doe]]',
         scope: resource,
         sourceThreadId: 't1',
         resolutionScope: ['org:acme'],
         defaultScope: resource,
       });
-      expect((await store.itemsTouching({ nodeId: target.id, scope: thread })).items.map(item => item.id)).toContain(
-        fallbackItem.id,
-      );
+      expect(
+        (await store.knowledgeRelatedTo({ node: target.id, scope: thread })).records.map(record => record.id),
+      ).toContain(fallbackKnowledge.id);
 
       const beforeRescope = (await store.listSemanticOutbox()).length;
-      await store.rescopeItem({ id: item.id, scope: ['org:acme'] });
+      await store.rescopeKnowledge({ id: record.id, scope: ['org:acme'] });
       expect((await store.listSemanticOutbox()).slice(beforeRescope)).toEqual([
         expect.objectContaining({ operation: 'delete', scope: resource }),
         expect.objectContaining({ operation: 'upsert', scope: ['org:acme'] }),
@@ -199,9 +200,9 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
 
     it('deletes stale semantic scopes when records move', async () => {
       const node = await store.createNode({ name: 'Movable', kind: 'task', content: 'body', scope: resource });
-      const item = await store.appendItem({
-        parentNodeId: node.id,
-        text: 'dependent item',
+      const record = await store.appendKnowledge({
+        node: node.id,
+        text: 'dependent record',
         scope: resource,
         sourceThreadId: 't1',
         resolutionScope: thread,
@@ -224,8 +225,8 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
             operation: 'upsert',
             scope: ['org:acme'],
           }),
-          expect.objectContaining({ documentId: `knowledge:item:${item.id}`, operation: 'delete' }),
-          expect.objectContaining({ documentId: `knowledge:item:${item.id}`, operation: 'upsert' }),
+          expect.objectContaining({ documentId: `knowledge:record:${record.id}`, operation: 'delete' }),
+          expect.objectContaining({ documentId: `knowledge:record:${record.id}`, operation: 'upsert' }),
         ]),
       );
     });
@@ -247,8 +248,8 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       await expect(store.updateNode({ id: node.id, version: node.version, kind: 'stale' })).rejects.toThrow(
         'version conflict',
       );
-      const item = await store.appendItem({
-        parentNodeId: node.id,
+      const record = await store.appendKnowledge({
+        node: node.id,
         text: 'private',
         scope: resource,
         sourceThreadId: 't1',
@@ -256,7 +257,7 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         resolutionScope: thread,
         defaultScope: resource,
       });
-      await expect(store.rescopeItem({ id: item.id, scope: ['org:acme'] })).rejects.toThrow('ceiling');
+      await expect(store.rescopeKnowledge({ id: record.id, scope: ['org:acme'] })).rejects.toThrow('ceiling');
     });
 
     it('serializes semantic work for successive versions of the same document', async () => {
@@ -276,9 +277,9 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
 
     it('dangerously clears every knowledge table', async () => {
       const node = await store.createNode({ name: 'Temporary', kind: 'task', scope: resource });
-      await store.appendItem({
-        parentNodeId: node.id,
-        text: 'temporary item',
+      await store.appendKnowledge({
+        node: node.id,
+        text: 'temporary record',
         scope: resource,
         sourceThreadId: 't1',
         resolutionScope: thread,
@@ -287,7 +288,7 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       await store.advanceCurationCursor({
         sourceThreadId: 't1',
         agent: 'curate',
-        lastItemId: '01J00000000000000000000000',
+        lastKnowledgeId: '01J00000000000000000000000',
       });
 
       await store.dangerouslyClearAll();
@@ -316,10 +317,10 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       await store.advanceCurationCursor({
         sourceThreadId: 't1',
         agent: 'curate',
-        lastItemId: '01J00000000000000000000000',
+        lastKnowledgeId: '01J00000000000000000000000',
       });
       expect(await store.getCurationCursor({ sourceThreadId: 't1', agent: 'curate' })).toEqual(
-        expect.objectContaining({ lastItemId: '01J00000000000000000000000' }),
+        expect.objectContaining({ lastKnowledgeId: '01J00000000000000000000000' }),
       );
       expect((await store.listActivity({ scope: thread }))[0]).toEqual(expect.objectContaining({ recordId: node.id }));
       const pending = await store.listSemanticOutbox({ status: 'pending' });

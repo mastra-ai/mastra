@@ -78,13 +78,13 @@ describe('Subconscious pinned knowledge', () => {
     const tools = createTools(memory, { maxScope: 'thread' });
     const pinned = await tools.knowledge_pin!.execute!({ text: 'thread ceiling pin' } as any, {} as any);
     const store = await getStore(memory);
-    const entity = await store.getNode(pinned.parentNodeId);
+    const entity = await store.getNode(pinned.node);
     expect(entity!.scope).toEqual(threadScope);
     const { pins } = await listPinnedKnowledge({ store, scope: threadScope });
     expect(pins.map(pin => pin.id)).toEqual([pinned.id]);
   });
 
-  it('pins a KnowledgeItem and assembles it into the pin set', async () => {
+  it('pins a KnowledgeRecord and assembles it into the pin set', async () => {
     const memory = createMemory();
     const tools = createTools(memory);
     const pinned = await tools.knowledge_pin!.execute!({ text: 'Always answer in French.' } as any, {} as any);
@@ -94,34 +94,34 @@ describe('Subconscious pinned knowledge', () => {
     expect(pins[0]!.text).toBe('Always answer in French.');
   });
 
-  it('unpin soft-deletes the KnowledgeItem and it leaves the assembled set', async () => {
+  it('unpin soft-deletes the KnowledgeRecord and it leaves the assembled set', async () => {
     const memory = createMemory();
     const tools = createTools(memory);
     const pinned = await tools.knowledge_pin!.execute!({ text: 'Never force push.' } as any, {} as any);
-    await tools.knowledge_unpin!.execute!({ itemId: pinned.id } as any, {} as any);
+    await tools.knowledge_unpin!.execute!({ recordId: pinned.id } as any, {} as any);
     const store = await getStore(memory);
     const { pins } = await listPinnedKnowledge({ store, scope: threadScope });
     expect(pins).toHaveLength(0);
-    const raw = await store.getItem({ id: pinned.id, includeDeleted: true });
+    const raw = await store.getKnowledge({ id: pinned.id, includeDeleted: true });
     expect(raw?.deletedAt).toBeTruthy();
   });
 
-  it('never returns a deleted KnowledgeItem even when later reads overlap it', async () => {
+  it('never returns a deleted KnowledgeRecord even when later reads overlap it', async () => {
     const memory = createMemory();
     const tools = createTools(memory);
     const a = await tools.knowledge_pin!.execute!({ text: 'keep me' } as any, {} as any);
     const b = await tools.knowledge_pin!.execute!({ text: 'drop me' } as any, {} as any);
-    await tools.knowledge_unpin!.execute!({ itemId: b.id } as any, {} as any);
+    await tools.knowledge_unpin!.execute!({ recordId: b.id } as any, {} as any);
     const { pins } = await listPinnedKnowledge({ store: await getStore(memory), scope: threadScope });
     expect(pins.map(pin => pin.id)).toEqual([a.id]);
   });
 
-  it('edit replaces the pin under a new KnowledgeItem id and removes the old one', async () => {
+  it('edit replaces the pin under a new KnowledgeRecord id and removes the old one', async () => {
     const memory = createMemory();
     const tools = createTools(memory);
     const pinned = await tools.knowledge_pin!.execute!({ text: 'Speak French.' } as any, {} as any);
     const edited = await tools.knowledge_edit_pin!.execute!(
-      { itemId: pinned.id, text: 'Speak French. Loudly.' } as any,
+      { recordId: pinned.id, text: 'Speak French. Loudly.' } as any,
       {} as any,
     );
     expect(edited.id).not.toBe(pinned.id);
@@ -130,7 +130,7 @@ describe('Subconscious pinned knowledge', () => {
     expect(pins[0]!.text).toBe('Speak French. Loudly.');
   });
 
-  it('stores a pin reason as KnowledgeItem metadata and carries it forward through edits', async () => {
+  it('stores a pin reason as KnowledgeRecord metadata and carries it forward through edits', async () => {
     const memory = createMemory();
     const tools = createTools(memory);
     const pinned = await tools.knowledge_pin!.execute!(
@@ -141,14 +141,14 @@ describe('Subconscious pinned knowledge', () => {
 
     // Edit without a new reason carries the old metadata forward.
     const edited = await tools.knowledge_edit_pin!.execute!(
-      { itemId: pinned.id, text: 'Never force push to shared branches.' } as any,
+      { recordId: pinned.id, text: 'Never force push to shared branches.' } as any,
       {} as any,
     );
     expect(edited.metadata).toEqual({ reason: 'Standing safety rule; violating it destroys history.' });
 
     // Edit with a new reason replaces the old one.
     const reReasoned = await tools.knowledge_edit_pin!.execute!(
-      { itemId: edited.id, text: 'Never force push, ever.', reason: 'Updated after the incident.' } as any,
+      { recordId: edited.id, text: 'Never force push, ever.', reason: 'Updated after the incident.' } as any,
       {} as any,
     );
     expect(reReasoned.metadata).toEqual({ reason: 'Updated after the incident.' });
@@ -189,12 +189,12 @@ describe('Subconscious pinned knowledge', () => {
     const tools = createTools(memory);
     const a = await tools.knowledge_pin!.execute!({ text: 'wide pin', scope: 'resource' } as any, {} as any);
     const b = await tools.knowledge_pin!.execute!({ text: 'narrow pin', scope: 'thread' } as any, {} as any);
-    expect(a.parentNodeId).toBe(b.parentNodeId);
+    expect(a.node).toBe(b.node);
     const store = await getStore(memory);
-    const entity = await store.getNode(a.parentNodeId);
+    const entity = await store.getNode(a.node);
     expect(entity?.name).toBe(PINNED_NODE_NAME);
     const { pins, nodeId } = await listPinnedKnowledge({ store, scope: threadScope });
-    expect(nodeId).toBe(a.parentNodeId);
+    expect(nodeId).toBe(a.node);
     expect(pins).toHaveLength(2);
   });
 

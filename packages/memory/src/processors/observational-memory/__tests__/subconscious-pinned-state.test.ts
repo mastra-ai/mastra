@@ -152,7 +152,7 @@ describe('PinnedStateProcessor', () => {
   it('clears the lane with an empty snapshot when the last pin is unpinned and a base is present', async () => {
     const { tools, processor } = createHarness();
     const pinned = await tools.knowledge_pin!.execute!({ text: 'doomed pin' } as any, {} as any);
-    await tools.knowledge_unpin!.execute!({ itemId: pinned.id } as any, {} as any);
+    await tools.knowledge_unpin!.execute!({ recordId: pinned.id } as any, {} as any);
     const result = await processor.computeStateSignal(
       makeArgs({
         contextWindow: { hasSnapshot: true } as any,
@@ -165,7 +165,7 @@ describe('PinnedStateProcessor', () => {
   it('emits nothing for an empty set when there is no base in the window', async () => {
     const { tools, processor } = createHarness();
     const pinned = await tools.knowledge_pin!.execute!({ text: 'gone pin' } as any, {} as any);
-    await tools.knowledge_unpin!.execute!({ itemId: pinned.id } as any, {} as any);
+    await tools.knowledge_unpin!.execute!({ recordId: pinned.id } as any, {} as any);
     const result = await processor.computeStateSignal(
       makeArgs({
         contextWindow: { hasSnapshot: false } as any,
@@ -175,7 +175,7 @@ describe('PinnedStateProcessor', () => {
     expect(result).toBeUndefined();
   });
 
-  it('folds the same KnowledgeItem id added in one delta and removed in a later one order-stably', () => {
+  it('folds the same KnowledgeRecord id added in one delta and removed in a later one order-stably', () => {
     const base: PinEntry[] = [];
     const afterAdd = applyPinOps(base, [{ op: 'add', pin: { id: 'f1', text: 'ephemeral' } }]);
     const afterRemove = applyPinOps(afterAdd, [{ op: 'remove', id: 'f1' }]);
