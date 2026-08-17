@@ -12,13 +12,13 @@ const DISPLAY_ERRORS = 3;
 
 interface SubconsciousActivityUpdate {
   action: string;
-  type: 'entity' | 'fact' | 'page';
+  type: 'node' | 'item';
   name?: string;
   createdAt: string;
 }
 
 interface SubconsciousHotRecord {
-  type: 'entity' | 'page';
+  type: 'node';
   name: string;
   updates: number;
 }
@@ -43,15 +43,10 @@ function update(value: unknown): SubconsciousActivityUpdate | undefined {
   const item = object(value);
   if (
     !item ||
-    !string(item.id) ||
     !string(item.action) ||
-    !['entity', 'fact', 'page'].includes(String(item.type)) ||
-    !string(item.recordId) ||
-    !string(item.targetId) ||
-    !['entity', 'page'].includes(String(item.targetType)) ||
+    !['node', 'item'].includes(String(item.type)) ||
     !string(item.createdAt) ||
-    (item.name !== undefined && typeof item.name !== 'string') ||
-    (item.sourceThreadId !== undefined && typeof item.sourceThreadId !== 'string')
+    (item.name !== undefined && typeof item.name !== 'string')
   ) {
     return undefined;
   }
@@ -67,8 +62,7 @@ function hotRecord(value: unknown): SubconsciousHotRecord | undefined {
   const item = object(value);
   if (
     !item ||
-    !['entity', 'page'].includes(String(item.type)) ||
-    !string(item.id) ||
+    item.type !== 'node' ||
     !string(item.name) ||
     typeof item.updates !== 'number' ||
     !Number.isFinite(item.updates) ||
