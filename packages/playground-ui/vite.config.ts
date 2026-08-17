@@ -43,8 +43,9 @@ const fileEntries = (directory: string, prefix: string) => {
 };
 
 // One entry per design-system component folder holding an index.ts, published as
-// `components/<Name>` or a nested `components/ai/plan`. Folders without an index.ts
-// only group files and are not published as broad barrels.
+// `components/<Name>` or a nested `components/ai/plan`. The walk stops at that
+// index.ts — deeper folders are the component's internals, already re-exported by
+// its barrel — and folders without one only group files.
 const componentEntries = (directory: string, prefix: string) => {
   const sourceDir = resolve(__dirname, directory);
   const entries: Array<[string, string]> = [];
