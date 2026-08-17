@@ -996,5 +996,29 @@ describe('agent-controller routes', () => {
         } as any),
       ).rejects.toThrow('Thread not found');
     });
+
+    it('SESSION STATE rejects a requested thread owned by another resource', async () => {
+      const { victimThreadId } = await setupTwoSessions();
+      await expect(
+        GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'attacker',
+          threadId: victimThreadId,
+        } as any),
+      ).rejects.toThrow(`thread "${victimThreadId}" not found`);
+    });
+
+    it('SESSION STATE rejects a requested thread that does not exist', async () => {
+      await setupTwoSessions();
+      await expect(
+        GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'attacker',
+          threadId: 'missing-thread',
+        } as any),
+      ).rejects.toThrow('thread "missing-thread" not found');
+    });
   });
 });
