@@ -501,14 +501,14 @@ export class KnowledgeMySQL extends KnowledgeStorage {
     return result.rows[0] ? parseKnowledge(result.rows[0]) : null;
   }
 
-  async knowledgeAbout(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput> {
+  async listKnowledgeAbout(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput> {
     return this.#queryKnowledge(input, 'about');
   }
-  async knowledgeMentioning(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput> {
+  async listKnowledgeMentioning(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput> {
     return this.#queryKnowledge(input, 'mentioning');
   }
 
-  async knowledgeRelatedTo(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput> {
+  async listKnowledgeRelatedTo(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput> {
     return this.#queryKnowledge(input, 'related');
   }
 
