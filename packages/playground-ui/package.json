@@ -106,7 +106,7 @@
   },
   "scripts": {
     "build": "vite build",
-    "dev": "vite build --watch",
+    "dev": "vite build --watch --mode development",
     "test": "vitest",
     "typecheck": "tsc",
     "lint": "oxlint . && eslint .",

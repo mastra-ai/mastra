@@ -151,23 +151,29 @@ const baseConfig: UserConfig = {
   },
 };
 
-const libConfig: UserConfig = {
+// Declarations cost ~7s of every rebuild, which the `dev` watch pays on each
+// keystroke for types no consumer reads before the next real build.
+const createLibConfig = (emitTypes: boolean): UserConfig => ({
   ...baseConfig,
   plugins: [
     ...(baseConfig.plugins ?? []),
-    dts({
-      insertTypesEntry: true,
-      exclude: ['vite.config.ts', 'src/**/*.test.ts', 'src/**/*.test.tsx', 'src/**/__tests__/**'],
-      // vite-plugin-dts logs type errors but does not fail the build on its own.
-      // Since this is now the single TypeScript pass (the standalone `tsc` step
-      // was removed from `build`), fail the build when diagnostics are emitted so
-      // type errors still gate the bundle.
-      afterDiagnostic: diagnostics => {
-        if (diagnostics.length > 0) {
-          throw new Error(`vite-plugin-dts found ${diagnostics.length} type error(s); see log above.`);
-        }
-      },
-    }),
+    ...(emitTypes
+      ? [
+          dts({
+            insertTypesEntry: true,
+            exclude: ['vite.config.ts', 'src/**/*.test.ts', 'src/**/*.test.tsx', 'src/**/__tests__/**'],
+            // vite-plugin-dts logs type errors but does not fail the build on its own.
+            // Since this is now the single TypeScript pass (the standalone `tsc` step
+            // was removed from `build`), fail the build when diagnostics are emitted so
+            // type errors still gate the bundle.
+            afterDiagnostic: diagnostics => {
+              if (diagnostics.length > 0) {
+                throw new Error(`vite-plugin-dts found ${diagnostics.length} type error(s); see log above.`);
+              }
+            },
+          }),
+        ]
+      : []),
     libInjectCss(),
     nodeExternals() as PluginOption,
   ],
@@ -206,11 +212,11 @@ const libConfig: UserConfig = {
       },
     },
   },
-};
+});
 
 // Storybook sets STORYBOOK=true and bundles this package as an app.
 // Library-mode plugins (dts, libInjectCss, nodeExternals) would externalize
 // deps and break the static build, so we skip them when Storybook is running.
 const isStorybook = process.env.STORYBOOK === 'true';
 
-export default defineConfig(isStorybook ? baseConfig : libConfig);
+export default defineConfig(({ mode }) => (isStorybook ? baseConfig : createLibConfig(mode === 'production')));
