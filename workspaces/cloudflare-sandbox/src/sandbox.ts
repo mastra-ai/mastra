@@ -9,10 +9,7 @@ import type {
   SandboxInfo,
 } from '@mastra/core/workspace';
 import { MastraSandbox } from '@mastra/core/workspace';
-import {
-  CloudflareSandboxBridgeClient,
-  type CloudflareSandboxBridgeClientOptions,
-} from './bridge-client';
+import { CloudflareSandboxBridgeClient, type CloudflareSandboxBridgeClientOptions } from './bridge-client';
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 300_000;
 const WORKSPACE_ROOT = '/workspace';
@@ -194,6 +191,18 @@ export class CloudflareSandbox extends MastraSandbox {
       if (!signal.aborted) throw error;
     } finally {
       clearTimeout(timer);
+    }
+
+    // Flush each decoder so a trailing truncated multi-byte sequence isn't dropped.
+    const stdoutTail = stdoutDecoder.decode();
+    if (stdoutTail) {
+      stdout += stdoutTail;
+      options?.onStdout?.(stdoutTail);
+    }
+    const stderrTail = stderrDecoder.decode();
+    if (stderrTail) {
+      stderr += stderrTail;
+      options?.onStderr?.(stderrTail);
     }
 
     this.lastUsedAt = new Date();

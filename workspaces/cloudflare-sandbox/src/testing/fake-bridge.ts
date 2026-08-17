@@ -103,8 +103,7 @@ export function createFakeBridge(options: { apiToken?: string; baseUrl?: string 
       if (method === 'PUT' && file) {
         const filePath = `/${decodeURIComponent(file[2]!)}`;
         const body = init.body;
-        const content =
-          typeof body === 'string' ? body : Buffer.from(body as unknown as Uint8Array).toString('utf8');
+        const content = typeof body === 'string' ? body : Buffer.from(body as unknown as Uint8Array).toString('utf8');
         bridge.files.set(filePath, content);
         return Response.json({ ok: true });
       }

@@ -131,7 +131,7 @@ describe('CloudflareSandbox conformance', () => {
   });
 
   createSandboxLifecycleTests(() => ({
-    sandbox: sandbox as any,
+    sandbox,
     capabilities: {
       supportsMounting: false,
       supportsReconnection: true,

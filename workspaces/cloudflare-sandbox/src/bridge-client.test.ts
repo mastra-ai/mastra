@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { CloudflareSandboxBridgeClient, CloudflareSandboxBridgeError, type CloudflareCommandEvent } from './bridge-client';
+import {
+  CloudflareSandboxBridgeClient,
+  CloudflareSandboxBridgeError,
+  type CloudflareCommandEvent,
+} from './bridge-client';
 import { createFakeBridge } from './testing/fake-bridge';
 
 const BASE_URL = 'https://bridge.example.com';
@@ -71,7 +75,11 @@ describe('CloudflareSandboxBridgeClient', () => {
     const { bridge, client } = createClient();
     const id = await client.createSandbox();
 
-    await client.exec(id, { argv: ['echo', 'hello world'], timeoutMs: 10_000, cwd: '/workspace' }, { onEvent: () => {} });
+    await client.exec(
+      id,
+      { argv: ['echo', 'hello world'], timeoutMs: 10_000, cwd: '/workspace' },
+      { onEvent: () => {} },
+    );
 
     expect(bridge.execs[0]).toEqual({ argv: ['echo', 'hello world'], timeout_ms: 10_000, cwd: '/workspace' });
     expect(bridge.requests.at(-1)?.url).toBe(`${BASE_URL}/v1/sandbox/${id}/exec`);
