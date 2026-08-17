@@ -66,7 +66,13 @@ export async function createFactoryTransitionTools(options: {
           throw new Error('Factory transitions require an authenticated bound agent tool call.');
         }
         const binding = await options.storage.findActiveRunBinding(currentAddress);
-        if (!binding || binding.id !== availableBinding.id) {
+        // Authority is the work item this session is bound to, not the individual
+        // binding row. Handing the next role its turn in an existing session
+        // rotates the binding, and tools built for the previous role stay live
+        // across that rotation; keying on row identity would strand the run that
+        // the rotation exists to start. Re-pointing a session at a different item
+        // is the hijack this guards against.
+        if (!binding || binding.workItemId !== availableBinding.workItemId) {
           throw new Error('Factory agent binding is unavailable, revoked, or no longer matches this session.');
         }
         const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
