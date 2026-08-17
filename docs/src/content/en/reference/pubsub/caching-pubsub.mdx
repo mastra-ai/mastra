@@ -1,8 +1,8 @@
 ---
-title: "Reference: CachingPubSub | PubSub"
+title: 'Reference: CachingPubSub | PubSub'
 description: API reference for CachingPubSub, a pub/sub wrapper that adds event caching and replay for resumable streams.
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # CachingPubSub
@@ -88,6 +88,11 @@ const pubsub = withCaching(new EventEmitterPubSub(), new InMemoryServerCache())
     name: 'supportsNativeBatching',
     type: 'boolean',
     description: 'Mirrors the inner pub/sub. Returns `true` only when the wrapped implementation supports batching.',
+  },
+  {
+    name: 'supportsOffsets',
+    type: 'boolean',
+    description: 'Returns `true`. Cached events have sequential indexes that support numeric offset replay.',
   },
 ]}
 />

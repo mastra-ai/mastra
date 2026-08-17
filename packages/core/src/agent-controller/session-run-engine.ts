@@ -807,6 +807,16 @@ export class SessionRunEngine {
             'cacheCreationInputTokens',
             getUsageNumber(usageRecord, 'cacheCreationInputTokens'),
           );
+          addOptionalUsageField(
+            stepUsage,
+            'cacheCreationInputTokens5m',
+            getUsageNumber(usageRecord, 'cacheCreationInputTokens5m'),
+          );
+          addOptionalUsageField(
+            stepUsage,
+            'cacheCreationInputTokens1h',
+            getUsageNumber(usageRecord, 'cacheCreationInputTokens1h'),
+          );
           if (usageRecord.raw !== undefined) {
             stepUsage.raw = usageRecord.raw;
           }

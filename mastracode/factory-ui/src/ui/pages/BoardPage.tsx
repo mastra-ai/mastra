@@ -320,6 +320,7 @@ function BoardContent({
                     allItems={items.all}
                     activityPage={activityPage}
                     liveWorktreePaths={runs.liveWorktreePaths}
+                    sessionLivenessResolved={runs.sessionLivenessResolved}
                     runDisabled={runs.disabled}
                     preparing={runs.preparingFor(item.id)}
                     evaluatingStage={items.evaluatingStages.get(item.id)}

@@ -1053,14 +1053,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
                 // Emit step-start before the first stream chunk so the
                 // ordering matches the regular agent: start → step-start → response-metadata → …
-                // onResult has already fired by the time the first chunk arrives,
-                // so `request` and `warnings` are populated.
+                // Keep the full model request out of the durable event stream; the helper
+                // preserves the canonical payload shape with an empty `request` object.
                 if (!stepStartEmitted && pubsub) {
                   stepStartEmitted = true;
                   await emitStepStartEvent(pubsub, runId, {
                     stepId: DurableStepIds.LLM_EXECUTION,
                     messageId: currentMessageId,
-                    request,
                     warnings,
                   });
                 }
