@@ -51,15 +51,18 @@ jobs:
           # not restored from FETCH_HEAD. The package instructions and the
           # generated changelog are exempt, and the automated Changesets release
           # PR is skipped entirely: it only bumps versions and changelogs, so it
-          # can never add the E2E coverage this rule asks for.
-          if [ "${HEAD_REF#changeset-release/}" != "$HEAD_REF" ]; then
+          # can never add the E2E coverage this rule asks for. The branch name
+          # alone is not a trusted signal, since a fork can pick any name, so the
+          # skip also requires the head to live in this repository.
+          if [ "$HEAD_REPO_FULL_NAME" = "$BASE_REPOSITORY" ] \
+            && [ "${HEAD_REF#changeset-release/}" != "$HEAD_REF" ]; then
             echo "Skipping deployer E2E coverage rule for the Changesets release PR."
           elif grep -q '^packages/deployer/' /tmp/changed-coverage-files \
             && ! grep -q '^e2e-tests/monorepo/' /tmp/changed-coverage-files \
             && awk '$0 ~ /^packages\/deployer\// && $0 != "packages/deployer/AGENTS.md" && $0 != "packages/deployer/CHANGELOG.md" { found=1; exit } END { exit(found ? 0 : 1) }' \
               /tmp/changed-coverage-files; then
             first_deployer_file="$(
-              awk '$0 ~ /^packages\/deployer\// && $0 != "packages/deployer/AGENTS.md" { print; exit }' \
+              awk '$0 ~ /^packages\/deployer\// && $0 != "packages/deployer/AGENTS.md" && $0 != "packages/deployer/CHANGELOG.md" { print; exit }' \
                 /tmp/changed-coverage-files
             )"
             escaped_deployer_file="${first_deployer_file//%/%25}"
