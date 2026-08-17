@@ -2,10 +2,12 @@ import type {
   ISSOProvider,
   ISessionProvider,
   IUserProvider,
+  MastraAuthRequest,
   Session,
   SSOCallbackResult,
   SSOLoginConfig,
 } from '@internal/auth';
+import { getRequestHeader } from '@internal/auth';
 import type { EEUser } from '@internal/auth/ee';
 import type { MastraAuthProviderOptions } from '@internal/auth/provider';
 import { MastraAuthProvider } from '@internal/auth/provider';
@@ -349,13 +351,10 @@ export class MastraAuthAuth0 extends MastraAuthProvider<Auth0User> implements IU
   // MastraAuthProvider Implementation
   // ============================================================================
 
-  async authenticateToken(
-    token: string,
-    request?: Request | { header(name: string): string | undefined },
-  ): Promise<Auth0User | null> {
+  async authenticateToken(token: string, request?: MastraAuthRequest): Promise<Auth0User | null> {
     // When SSO is enabled, try the encrypted session cookie first (like Okta pattern).
     if (this.ssoEnabled && request) {
-      const sessionUser = await this.getUserFromSessionCookie(request as Request);
+      const sessionUser = await this.getUserFromSessionCookie(request);
       if (sessionUser) return sessionUser as unknown as Auth0User;
     }
 
@@ -467,13 +466,8 @@ export class MastraAuthAuth0 extends MastraAuthProvider<Auth0User> implements IU
   /**
    * Extract user from the encrypted SSO session cookie.
    */
-  private async getUserFromSessionCookie(
-    request: Request | { header(name: string): string | undefined },
-  ): Promise<EEUser | null> {
-    const cookie =
-      'header' in request && typeof (request as any).header === 'function'
-        ? (request as any).header('cookie')
-        : (request as Request).headers?.get('cookie');
+  private async getUserFromSessionCookie(request: MastraAuthRequest): Promise<EEUser | null> {
+    const cookie = getRequestHeader(request, 'cookie');
     if (!cookie) return null;
 
     const match = cookie.match(new RegExp(`(?:^|;\\s*)${escapeRegex(this.cookieName)}=([^;]+)`));

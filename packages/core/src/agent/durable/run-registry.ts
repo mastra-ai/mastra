@@ -1,5 +1,6 @@
 import { TTLCache } from '@isaacs/ttlcache';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
+import type { Mastra } from '../../mastra';
 import type { CoreTool } from '../../tools/types';
 import type { MessageList } from '../message-list';
 import type { SaveQueueManager } from '../save-queue';
@@ -25,6 +26,12 @@ export const globalRunRegistry = new TTLCache<string, RunRegistryEntry>({
   },
   noDisposeOnSet: true,
 });
+
+export function getActiveDurableAgentWorkflowExecutions(mastra: Mastra): Promise<unknown>[] {
+  return Array.from(globalRunRegistry.values()).flatMap(entry =>
+    entry.mastra === mastra && entry.workflowExecution ? [entry.workflowExecution] : [],
+  );
+}
 
 /**
  * End a run's root spans (MODEL_GENERATION then AGENT_RUN) with an error so the trace

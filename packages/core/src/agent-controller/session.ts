@@ -69,7 +69,12 @@ export type SessionSendNotificationSignalOptions = {
 };
 
 /** Usage fields that are summed across steps when present on a step's usage. */
-type OptionalUsageField = 'reasoningTokens' | 'cachedInputTokens' | 'cacheCreationInputTokens';
+type OptionalUsageField =
+  | 'reasoningTokens'
+  | 'cachedInputTokens'
+  | 'cacheCreationInputTokens'
+  | 'cacheCreationInputTokens5m'
+  | 'cacheCreationInputTokens1h';
 
 function addOptionalUsageField(usage: TokenUsage, key: OptionalUsageField, value: number | undefined): void {
   if (value !== undefined) {
@@ -3916,6 +3921,8 @@ export class Session<TState = unknown> {
     addOptionalUsageField(this.#tokenUsage, 'reasoningTokens', stepUsage.reasoningTokens);
     addOptionalUsageField(this.#tokenUsage, 'cachedInputTokens', stepUsage.cachedInputTokens);
     addOptionalUsageField(this.#tokenUsage, 'cacheCreationInputTokens', stepUsage.cacheCreationInputTokens);
+    addOptionalUsageField(this.#tokenUsage, 'cacheCreationInputTokens5m', stepUsage.cacheCreationInputTokens5m);
+    addOptionalUsageField(this.#tokenUsage, 'cacheCreationInputTokens1h', stepUsage.cacheCreationInputTokens1h);
     if (stepUsage.raw !== undefined) {
       this.#tokenUsage.raw = stepUsage.raw;
     }

@@ -1,5 +1,14 @@
 # @mastra/mysql
 
+## 0.7.1-alpha.0
+
+### Patch Changes
+
+- Fix the alterTable existing-column probe reading the wrong information_schema field casing. MySQL returns result fields with uppercase keys through mysql2, so the probe's existing-column set was always empty and every warm boot re-ran 107 ALTER TABLE ADD COLUMN statements that failed with ER_DUP_FIELDNAME and were silently swallowed, taking metadata locks on production tables for nothing. The probe now reads whichever key casing is present. Measured on docker mysql:9.7: warm init drops from 326 to 109 client-server round trips and issues zero ALTER statements. ([#21633](https://github.com/mastra-ai/mastra/pull/21633))
+
+- Updated dependencies [[`940bf5c`](https://github.com/mastra-ai/mastra/commit/940bf5ccf04f2c9ebd8a1390431733222a03b1cd)]:
+  - @mastra/core@1.60.0-alpha.7
+
 ## 0.7.0
 
 ### Minor Changes

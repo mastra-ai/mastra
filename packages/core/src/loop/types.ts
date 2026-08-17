@@ -41,7 +41,7 @@ import type {
   StreamChunkType,
   StreamTransportRef,
 } from '../stream/types';
-import type { RequireToolApproval, ToolPayloadTransformPolicy } from '../tools';
+import type { MCPToolExecutionContext, RequireToolApproval, ToolPayloadTransformPolicy } from '../tools';
 import type { MastraIdGenerator } from '../types';
 import type { OutputWriter } from '../workflows/types';
 import type { Workspace } from '../workspace/workspace';
@@ -244,6 +244,8 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   requestContext?: RequestContext;
   /** Trusted server-side signal for this loop's FGA checks. */
   actor?: ActorSignal;
+  /** MCP protocol context forwarded to tools executed by this loop. */
+  mcp?: MCPToolExecutionContext;
   methodType: ModelMethodType;
   /**
    * Maximum number of processor-triggered retries allowed for this generation.

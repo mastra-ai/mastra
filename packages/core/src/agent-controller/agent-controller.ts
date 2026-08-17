@@ -40,6 +40,7 @@ import type {
   AgentControllerRequestContext,
   AgentControllerRequestStateUpdater,
   AgentControllerSessionCreatedListener,
+  AgentControllerSessionCreatedOptions,
   AgentControllerSessionDeletedListener,
   AgentControllerThread,
   ModelAuthStatus,
@@ -198,7 +199,10 @@ export class AgentController<TState = {}> {
    * that session's model/mode/state instead of an arbitrary one.
    */
   readonly #sessionsByResource = new Map<string, Promise<Session<TState>>>();
-  readonly #sessionCreatedListeners: AgentControllerSessionCreatedListener<TState>[] = [];
+  readonly #sessionCreatedListeners: Array<{
+    listener: AgentControllerSessionCreatedListener<TState>;
+    blocking: boolean;
+  }> = [];
   readonly #sessionDeletedListeners: AgentControllerSessionDeletedListener<TState>[] = [];
   /**
    * In-progress deletions keyed by registry key, so {@link createSession} can
@@ -277,19 +281,45 @@ export class AgentController<TState = {}> {
   /**
    * Subscribe to process-local notifications for newly materialized sessions.
    * Cached `createSession()` calls do not notify listeners again.
+   *
+   * Async listeners are fire-and-forget by default. Pass `blocking: true` to
+   * make `createSession()` await the listener before resolving — for setup that
+   * must land before the caller can start a run (e.g. seeding session state
+   * from storage). Blocking listeners run sequentially in registration order,
+   * before fire-and-forget listeners are notified. Failures are isolated and
+   * logged, never thrown — session creation stays best-effort with respect to
+   * listener setup. A blocking listener must not call `createSession()` for
+   * the same `(resourceId, scope)` it is initializing: that lookup awaits the
+   * in-flight creation that is awaiting the listener, which deadlocks.
    */
-  onSessionCreated(listener: AgentControllerSessionCreatedListener<TState>): () => void {
-    this.#sessionCreatedListeners.push(listener);
+  onSessionCreated(
+    listener: AgentControllerSessionCreatedListener<TState>,
+    options?: AgentControllerSessionCreatedOptions,
+  ): () => void {
+    const entry = { listener, blocking: options?.blocking === true };
+    this.#sessionCreatedListeners.push(entry);
     return () => {
-      const index = this.#sessionCreatedListeners.indexOf(listener);
+      const index = this.#sessionCreatedListeners.indexOf(entry);
       if (index !== -1) {
         this.#sessionCreatedListeners.splice(index, 1);
       }
     };
   }
 
-  #notifySessionCreated(session: Session<TState>): void {
-    for (const listener of [...this.#sessionCreatedListeners]) {
+  async #notifySessionCreated(session: Session<TState>): Promise<void> {
+    const entries = [...this.#sessionCreatedListeners];
+    // Blocking listeners complete sequentially, in registration order, before
+    // fire-and-forget listeners can observe the session.
+    for (const { listener, blocking } of entries) {
+      if (!blocking) continue;
+      try {
+        await listener(session);
+      } catch (error) {
+        console.error('Error in session-created listener:', error);
+      }
+    }
+    for (const { listener, blocking } of entries) {
+      if (blocking) continue;
       try {
         const result = listener(session);
         if (result && typeof result === 'object' && 'catch' in result) {
@@ -707,7 +737,7 @@ export class AgentController<TState = {}> {
       }
     }
 
-    this.#notifySessionCreated(session);
+    await this.#notifySessionCreated(session);
     return session;
   }
 
@@ -898,7 +928,22 @@ export class AgentController<TState = {}> {
     return this.initPromise;
   }
 
-  private async runInit(): Promise<void> {
+  /**
+   * Initialize only what read-only queries need: the storage layer (either a
+   * fresh internal Mastra wrapping the configured storage, or the inherited
+   * parent Mastra's storage). Skips workspace/sandbox provisioning entirely.
+   *
+   * Idempotent and safe to call from every read query; the underlying
+   * MastraCompositeStore init dedupes.
+   */
+  async initStorage(): Promise<void> {
+    this.#storageInitPromise ??= this.runStorageInit();
+    return this.#storageInitPromise;
+  }
+
+  #storageInitPromise?: Promise<void>;
+
+  private async runStorageInit(): Promise<void> {
     // Create an internal Mastra instance so agents have access to storage
     // (required for tool approval snapshot persistence/resume).
     // We init storage through Mastra's proxied storage so augmentWithInit
@@ -927,6 +972,13 @@ export class AgentController<TState = {}> {
       // is safe even when the parent already initialized it.
       await this.#externalMastra.getStorage()?.init();
     }
+  }
+
+  private async runInit(): Promise<void> {
+    // Storage init is a prerequisite for both reads and writes; share the same
+    // promise so a concurrent read that already triggered storage init doesn't
+    // race with the workspace init we're about to do.
+    await this.initStorage();
 
     // Initialize workspace if configured (skip for dynamic factory — resolved per-request)
     if (this.config.workspace && !this.workspaceInitialized && typeof this.workspace !== 'function') {
@@ -1110,7 +1162,15 @@ export class AgentController<TState = {}> {
     }
   }
 
-  private async queryThreadById({ threadId }: { threadId: string }): Promise<AgentControllerThread | null> {
+  /**
+   * Read a single thread by id directly from storage, without constructing a
+   * {@link Session}. Read-only server endpoints use this so a GET request for a
+   * thread doesn't spin up a workspace/sandbox as a side effect of session
+   * creation. Returns `null` when the thread doesn't exist or no storage is
+   * configured.
+   */
+  async queryThreadById({ threadId }: { threadId: string }): Promise<AgentControllerThread | null> {
+    await this.initStorage();
     if (!this.#resolveStorage()) return null;
     const memoryStorage = await this.getMemoryStorage();
     const thread = await memoryStorage.getThreadById({ threadId });
@@ -1125,7 +1185,12 @@ export class AgentController<TState = {}> {
     };
   }
 
-  private async queryThreads({
+  /**
+   * List threads directly from storage, without constructing a {@link Session}.
+   * Read-only server endpoints use this so a GET on `/threads` doesn't spin up
+   * a workspace/sandbox as a side effect of session creation.
+   */
+  async queryThreads({
     resourceId,
     includeForkedSubagents,
     metadata,
@@ -1134,6 +1199,7 @@ export class AgentController<TState = {}> {
     includeForkedSubagents?: boolean;
     metadata?: Record<string, unknown>;
   }): Promise<AgentControllerThread[]> {
+    await this.initStorage();
     if (!this.#resolveStorage()) {
       return [];
     }
@@ -1166,13 +1232,14 @@ export class AgentController<TState = {}> {
     }));
   }
 
-  private async queryThreadMessages({
-    threadId,
-    limit,
-  }: {
-    threadId: string;
-    limit?: number;
-  }): Promise<MastraDBMessage[]> {
+  /**
+   * List messages for a thread directly from storage, without constructing a
+   * {@link Session}. Read-only server endpoints use this so a GET on a thread's
+   * messages doesn't spin up a workspace/sandbox as a side effect of session
+   * creation.
+   */
+  async queryThreadMessages({ threadId, limit }: { threadId: string; limit?: number }): Promise<MastraDBMessage[]> {
+    await this.initStorage();
     if (!this.#resolveStorage()) return [];
 
     const memoryStorage = await this.getMemoryStorage();

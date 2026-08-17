@@ -299,10 +299,20 @@ Prefer concrete resolved outcomes over abstract workflow status so the assistant
  */
 export const OBSERVER_OUTPUT_FORMAT_BASE = buildObserverOutputFormat();
 
-export function buildObserverOutputFormat(extractors: readonly Extractor<any>[] = []): string {
-  const extractorSections = buildExtractorOutputSections(extractors);
+/**
+ * Build the Observer's output format.
+ *
+ * `extractors` distinguishes two cases that both look empty:
+ * - `undefined` — the no-arg call behind the exported defaults (OBSERVER_OUTPUT_FORMAT_BASE,
+ *   OBSERVER_SYSTEM_PROMPT, REFLECTOR_SYSTEM_PROMPT), which keep describing both built-in
+ *   sections with their historical text. Runtime callers always pass the composed list.
+ * - `[]` — the caller composed extractors and every section was disabled, so no continuation
+ *   sections are described at all.
+ */
+export function buildObserverOutputFormat(extractors?: readonly Extractor<any>[]): string {
+  const extractorSections = buildExtractorOutputSections(extractors ?? []);
   const legacyContinuationSections =
-    extractors.length === 0
+    extractors === undefined
       ? `
 <current-task>
 State the current task(s) explicitly:
@@ -371,17 +381,36 @@ export const OBSERVER_GUIDELINES = `- Be specific enough for the assistant to ac
  * Build the complete observer system prompt.
  * @param multiThread - Whether this is for multi-thread batched observation (default: false)
  * @param instruction - Optional custom instructions to append to the prompt
+ * @param includeThreadTitle - Whether the Observer should also produce a thread title
+ * @param extractors - Active extractors, used to decide which sections the prompt describes.
+ *   Omitted only by the exported no-arg defaults; pass `[]` to describe no continuation sections at all.
  */
 export function buildObserverSystemPrompt(
   multiThread: boolean = false,
   instruction?: string,
   includeThreadTitle: boolean = false,
-  extractors: readonly Extractor<any>[] = [],
+  extractors?: readonly Extractor<any>[],
 ): string {
   const outputFormat = buildObserverOutputFormat(extractors);
-  const multiThreadTitleInstruction = includeThreadTitle
-    ? ` Each thread's observations, current-task, suggested-response, and thread-title should be nested inside a <thread id="..."> block within <observations>.`
-    : ` Each thread's observations, current-task, and suggested-response should be nested inside a <thread id="..."> block within <observations>.`;
+  const customInstructions = instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : '';
+  // Runtime callers always pass the composed extractor list; `undefined` only occurs through
+  // the exported no-arg defaults (e.g. OBSERVER_SYSTEM_PROMPT), which keep both built-in sections.
+  const currentTaskEnabled =
+    extractors === undefined || extractors.some(extractor => extractor.slug === 'current-task');
+  const suggestedResponseEnabled =
+    extractors === undefined || extractors.some(extractor => extractor.slug === 'suggested-response');
+  const multiThreadSections = [
+    'observations',
+    ...(currentTaskEnabled ? ['current-task'] : []),
+    ...(suggestedResponseEnabled ? ['suggested-response'] : []),
+    ...(includeThreadTitle ? ['thread-title'] : []),
+  ];
+  // Grammatical list for any combination: "a", "a and b", "a, b, and c".
+  const multiThreadSectionList =
+    multiThreadSections.length <= 2
+      ? multiThreadSections.join(' and ')
+      : `${multiThreadSections.slice(0, -1).join(', ')}, and ${multiThreadSections[multiThreadSections.length - 1]}`;
+  const multiThreadTitleInstruction = ` Each thread's ${multiThreadSectionList} should be nested inside a <thread id="..."> block within <observations>.`;
   const multiThreadTitleExample = includeThreadTitle
     ? `
 <thread-title>Feature X implementation</thread-title>`
@@ -390,7 +419,6 @@ export function buildObserverSystemPrompt(
     ? `
 <thread-title>Deployment setup</thread-title>`
     : '';
-
   if (multiThread) {
     return `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
 
@@ -417,28 +445,44 @@ For multi-thread output, wrap each thread's observations like this:
 <thread id="thread_id_1">
 Date: Dec 4, 2025
 * 🔴 (14:30) User prefers direct answers
-* 🔴 (14:31) Working on feature X
+* 🔴 (14:31) Working on feature X${
+      currentTaskEnabled
+        ? `
 
 <current-task>
 What the agent is currently working on in this thread
-</current-task>
+</current-task>`
+        : ''
+    }${
+      suggestedResponseEnabled
+        ? `
 
 <suggested-response>
 Hint for the agent's next message in this thread
-</suggested-response>${multiThreadTitleExample}
+</suggested-response>`
+        : ''
+    }${multiThreadTitleExample}
 </thread>
 
 <thread id="thread_id_2">
 Date: Dec 5, 2025
-* 🔴 (09:15) User asked about deployment
+* 🔴 (09:15) User asked about deployment${
+      currentTaskEnabled
+        ? `
 
 <current-task>
 Current task for this thread
-</current-task>
+</current-task>`
+        : ''
+    }${
+      suggestedResponseEnabled
+        ? `
 
 <suggested-response>
 Suggested response for this thread
-</suggested-response>${multiThreadSecondTitleExample}
+</suggested-response>`
+        : ''
+    }${multiThreadSecondTitleExample}
 </thread>
 </observations>
 
@@ -448,7 +492,11 @@ ${OBSERVER_GUIDELINES}
 
 Remember: These observations are the assistant's ONLY memory. Make them count.
 
-User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority.${instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : ''}`;
+User messages are extremely important.${
+      currentTaskEnabled
+        ? ' If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority.'
+        : ''
+    }${customInstructions}`;
   }
 
   return `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
@@ -475,7 +523,15 @@ Simply output your observations without any thread-related markup.
 
 Remember: These observations are the assistant's ONLY memory. Make them count.
 
-User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority. If the assistant needs to respond to the user, indicate in <suggested-response> that it should pause for user reply before continuing other tasks.${instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : ''}`;
+User messages are extremely important.${
+    currentTaskEnabled
+      ? ' If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority.'
+      : ''
+  }${
+    suggestedResponseEnabled
+      ? ' If the assistant needs to respond to the user, indicate in <suggested-response> that it should pause for user reply before continuing other tasks.'
+      : ''
+  }${customInstructions}`;
 }
 
 /**
@@ -1676,7 +1732,9 @@ export function optimizeObservationsForContext(observations: string): string {
   optimized = optimized.replace(/🟢\s*/g, '');
 
   // Remove semantic tags like [label, label] but keep collapsed markers like [72 items collapsed - ID: b1fa]
-  optimized = optimized.replace(/\[(?![\d\s]*items collapsed)[^\]]+\]/g, '');
+  // and markdown link text like [label](url) — the trailing `(?!\()` lookahead keeps the label so the
+  // link survives intact instead of collapsing to a bare, unlabelled URL.
+  optimized = optimized.replace(/\[(?![\d\s]*items collapsed)[^\]]+\](?!\()/g, '');
 
   // Remove arrow indicators
   optimized = optimized.replace(/\s*->\s*/g, ' ');

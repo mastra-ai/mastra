@@ -34,6 +34,55 @@ describe('watch events: no prior-result amplification', () => {
   const resultEventsFor = (events: any[], id: string) =>
     events.filter(e => e.type === 'workflow-step-result' && e.payload?.id === id);
 
+  it('emits step lifecycle events by default', async () => {
+    const echo = createStep({
+      id: 'default-events-step',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      execute: async ({ inputData }) => inputData,
+    });
+
+    const workflow = createWorkflow({
+      id: 'default-events-workflow',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+    })
+      .then(echo)
+      .commit();
+
+    const run = await workflow.createRun();
+    const { events, result } = await collect(run.stream({ inputData: { value: 'hello' } }));
+
+    expect(result.status).toBe('success');
+    expect(events.map(event => event.type)).toEqual(
+      expect.arrayContaining(['workflow-start', 'workflow-step-start', 'workflow-step-result', 'workflow-finish']),
+    );
+  });
+
+  it('suppresses step lifecycle events when emitStepEvents is false', async () => {
+    const echo = createStep({
+      id: 'suppressed-events-step',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      execute: async ({ inputData }) => inputData,
+    });
+
+    const workflow = createWorkflow({
+      id: 'suppressed-events-workflow',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      options: { emitStepEvents: false },
+    })
+      .then(echo)
+      .commit();
+
+    const run = await workflow.createRun();
+    const { events, result } = await collect(run.stream({ inputData: { value: 'hello' } }));
+
+    expect(result.status).toBe('success');
+    expect(events.map(event => event.type)).toEqual(['workflow-start', 'workflow-finish']);
+  });
+
   it('emits a start event with input but no completion fields for a normal step', async () => {
     const echo = createStep({
       id: 'echo',

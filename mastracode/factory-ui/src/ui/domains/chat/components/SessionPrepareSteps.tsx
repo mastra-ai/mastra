@@ -2,7 +2,7 @@ import { ProcessStepListItem } from '@mastra/playground-ui/components/Steps';
 import type { ProcessStep } from '@mastra/playground-ui/components/Steps';
 
 import type { PrepareProgress } from '../../workspaces/services/github';
-import { useChatMessagesInitializing } from '../context/ChatSessionProvider';
+import { useChatMessagesInitializing } from '../context/useChatMessagesInitializing';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 
 const GROUPS = [

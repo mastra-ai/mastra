@@ -6,6 +6,8 @@
  * org-wide, so every member of the org reads and moves the same cards.
  */
 
+import type { FactoryRuleStage } from '@mastra/factory/rules/types';
+
 import { requestJson } from './request';
 
 export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'slack-thread' | 'manual';
@@ -133,7 +135,6 @@ function fromWireWorkItem(item: WireWorkItem): WorkItem {
 }
 
 export type FactoryBoard = 'work' | 'review';
-export type FactoryStage = 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done' | 'canceled';
 
 export type FactoryTransitionResult =
   | {
@@ -141,7 +142,7 @@ export type FactoryTransitionResult =
       transitionId: string;
       itemId: string;
       revision: number;
-      stage: FactoryStage;
+      stage: FactoryRuleStage;
       decisions: unknown[];
     }
   | { status: 'rejected'; transitionId: string; itemId: string; code: string; reason: string };
@@ -193,7 +194,7 @@ export async function transitionWorkItem(
   baseUrl: string,
   githubProjectId: string,
   id: string,
-  input: { board: FactoryBoard; stage: FactoryStage; expectedRevision: number; requestId: string; cause: string },
+  input: { board: FactoryBoard; stage: FactoryRuleStage; expectedRevision: number; requestId: string; cause: string },
 ): Promise<FactoryTransitionResult> {
   const res = await fetch(
     `${baseUrl}/web/factory/projects/${encodeURIComponent(githubProjectId)}/work-items/${encodeURIComponent(id)}/transition`,
@@ -224,7 +225,7 @@ export interface StartFactoryRunRequest {
   threadTags?: Record<string, string>;
   kickoffKey: string;
   invocation?: { type: 'prompt'; prompt: string } | { type: 'skill'; skillName: string; arguments: string };
-  destinationStage: FactoryStage;
+  destinationStage: FactoryRuleStage;
   workItem: {
     id?: string;
     role: string;

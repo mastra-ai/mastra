@@ -11,7 +11,7 @@ packages:
 
 :::warning[Deprecated]
 
-Agent networks are deprecated and will be removed in a future major release. [Supervisor agents](../capabilities/subagents) using `agent.stream()` or `agent.generate()` are now the recommended approach. It provides the same multi-agent coordination with better control, a simpler API, and easier debugging.
+Agent networks are deprecated and will be removed in a future major release. [Supervisor agents](../subagents) using `agent.stream()` or `agent.generate()` are now the recommended approach. It provides the same multi-agent coordination with better control, a simpler API, and easier debugging.
 
 See the [migration guide](/reference/migrations/network-to-supervisor) to upgrade.
 
@@ -114,7 +114,7 @@ console.log(final?.summary)
 
 When a primitive requires approval, the stream emits an `agent-execution-approval` or `tool-execution-approval` chunk. Use `approveNetworkToolCall()` or `declineNetworkToolCall()` to respond.
 
-Network approval uses snapshots to capture execution state. Ensure a [storage provider](/docs/storage/overview) is enabled in your Mastra instance.
+Network approval uses snapshots to capture execution state. Ensure a [storage provider](/docs/storage) is enabled in your Mastra instance.
 
 ```typescript title="src/approve-network.ts"
 const stream = await routingAgent.network('Perform some sensitive action', {
@@ -199,5 +199,5 @@ Requirements for automatic resumption:
 
 ## Related
 
-- [Supervisor agents](../capabilities/subagents)
+- [Supervisor agents](../subagents)
 - [Migration: `.network()` to supervisor agents](/reference/migrations/network-to-supervisor)

@@ -1,5 +1,25 @@
 # @mastra/inngest
 
+## 1.8.7-alpha.1
+
+### Patch Changes
+
+- Fixed durable Inngest streams retaining events after consumers unsubscribe and prevented internal workflow watch events from filling replay caches. ([#21572](https://github.com/mastra-ai/mastra/pull/21572))
+
+- Updated dependencies [[`0b4f108`](https://github.com/mastra-ai/mastra/commit/0b4f1089aa8d92e67c2a8e99726822c5ee410784), [`88ddc7c`](https://github.com/mastra-ai/mastra/commit/88ddc7ce01d40175f13a3228b789a906779680bd), [`a7dd322`](https://github.com/mastra-ai/mastra/commit/a7dd32247d95afc539f483ca37f4594af0387f59)]:
+  - @mastra/core@1.60.0-alpha.6
+
+## 1.8.7-alpha.0
+
+### Patch Changes
+
+- Fixed Inngest workflow resumes failing when persisted state grows too large by restoring resume state from storage instead of copying it into events. ([#21549](https://github.com/mastra-ai/mastra/pull/21549))
+
+- Fixed durable agent resumes to restore request context and continue the original trace after suspension. ([#21566](https://github.com/mastra-ai/mastra/pull/21566))
+
+- Updated dependencies [[`d7e6745`](https://github.com/mastra-ai/mastra/commit/d7e67456954863c55440ea9c49bc6ceb9949972d), [`9acb50f`](https://github.com/mastra-ai/mastra/commit/9acb50f71cec9c362f06820033f90ae6b1f8282f), [`46e9e3f`](https://github.com/mastra-ai/mastra/commit/46e9e3f73babe1bc70080a596cf2ac0b9da48519), [`3f9a190`](https://github.com/mastra-ai/mastra/commit/3f9a19057c027155867b9317294ee4ca7bd0581a), [`e8808e3`](https://github.com/mastra-ai/mastra/commit/e8808e3d8eb585a2565be53e56a7e0e1477352a4), [`d4be8c1`](https://github.com/mastra-ai/mastra/commit/d4be8c1739d22d621e3f78790e1dd5eb5ecc3589), [`a5d2eb1`](https://github.com/mastra-ai/mastra/commit/a5d2eb10347eade1ae2816d88f466c25186c54a5), [`e81744c`](https://github.com/mastra-ai/mastra/commit/e81744cd13c46619c142dc521dc0baac47607a84)]:
+  - @mastra/core@1.60.0-alpha.4
+
 ## 1.8.6
 
 ### Patch Changes

@@ -170,7 +170,6 @@ function createNestedResumeFixture(suspendedPaths: Record<string, number[]>) {
     invoke,
     loadWorkflowSnapshot,
     nestedRunId,
-    nestedStepResults,
     nestedWorkflow,
     resumePayload,
     suspendedStep,
@@ -180,16 +179,8 @@ function createNestedResumeFixture(suspendedPaths: Record<string, number[]>) {
 describe('InngestExecutionEngine.executeWorkflowStep', () => {
   it('restores the suspended child path when resuming with only the nested workflow id', async () => {
     const fixture = createNestedResumeFixture({ 'suspended-child-step': [1, 0] });
-    const {
-      execute,
-      invoke,
-      loadWorkflowSnapshot,
-      nestedRunId,
-      nestedStepResults,
-      nestedWorkflow,
-      resumePayload,
-      suspendedStep,
-    } = fixture;
+    const { execute, invoke, loadWorkflowSnapshot, nestedRunId, nestedWorkflow, resumePayload, suspendedStep } =
+      fixture;
 
     await execute();
 
@@ -198,10 +189,10 @@ describe('InngestExecutionEngine.executeWorkflowStep', () => {
       runId: nestedRunId,
     });
     expect(invoke).toHaveBeenCalledTimes(1);
+    expect(invoke.mock.calls[0]?.[1].data).not.toHaveProperty('initialState');
     expect(invoke.mock.calls[0]?.[1].data.resume).toEqual({
       runId: nestedRunId,
       steps: [suspendedStep.id],
-      stepResults: nestedStepResults,
       resumePayload,
       resumePath: [1, 0],
     });
