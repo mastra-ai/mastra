@@ -20,7 +20,7 @@ import { PulseStorage } from './base';
  * - status = aborted (session-layer override) > failed > completed >
  *   stale (quiet past threshold) > running
  * - tree = parentSpanId chain with per-node derived durations
- * - cost = SUM of metric-lane estimated_cost_usd
+ * - cost = SUM of bridge-folded cost_usd on span pulses
  */
 export class InMemoryPulseStorage extends PulseStorage {
   #pulses: PulseRecord[] = [];
@@ -116,21 +116,18 @@ export class InMemoryPulseStorage extends PulseStorage {
       .find(p => !p.parentSpanId && (p.action.endsWith('_completed') || p.action.endsWith('_failed')));
 
     // Session-layer abort override: the span layer records aborted runs as
-    // completed; the session's run_control.abort_completed fact wins. Aborts
-    // that carry a runId join EXACTLY (the abort belongs to this flow iff the
-    // flow contains that run); legacy rows without one fall back to the
-    // thread + 2s-window heuristic.
+    // completed; the session's run_control.abort_completed fact wins. The
+    // join is EXACT — the abort names its run, and the flow is aborted iff
+    // it contains that run. Every real abort path stamps the runId.
     const flowRunIds = new Set(sorted.map(p => p.runId).filter(Boolean));
-    const aborted = this.#pulses.some(p => {
-      if (p.source !== 'session' || p.surface !== 'run_control' || p.action !== 'abort_completed') return false;
-      if (p.runId) return flowRunIds.has(p.runId);
-      return Boolean(
-        p.threadId &&
-        p.threadId === threadId &&
-        p.timestamp.getTime() >= first.timestamp.getTime() &&
-        p.timestamp.getTime() <= last.timestamp.getTime() + 2_000,
-      );
-    });
+    const aborted = this.#pulses.some(
+      p =>
+        p.source === 'session' &&
+        p.surface === 'run_control' &&
+        p.action === 'abort_completed' &&
+        p.runId != null &&
+        flowRunIds.has(p.runId),
+    );
 
     let status: FlowStatus;
     if (aborted) status = 'aborted';
@@ -144,13 +141,12 @@ export class InMemoryPulseStorage extends PulseStorage {
         ? rootEnd.timestamp.getTime() - rootStart.timestamp.getTime()
         : null;
 
-    // Cost dual-read: the core bridge folds cost into semantic model pulses
-    // (data.cost_usd); legacy captures carried it on metric-lane rows
-    // (data.estimated_cost_usd). Sum both so old databases keep reading.
+    // Cost single-source: the bridge folds token cost into the semantic
+    // model pulse's data (cost_usd) — live capture and backfill both.
     let costUsd: number | undefined;
     for (const p of this.#pulses) {
-      if (p.traceId !== flowId) continue;
-      const c = p.source === 'span' ? p.data?.cost_usd : p.source === 'metric' ? p.data?.estimated_cost_usd : undefined;
+      if (p.traceId !== flowId || p.source !== 'span') continue;
+      const c = p.data?.cost_usd;
       if (typeof c === 'number') costUsd = (costUsd ?? 0) + c;
     }
 

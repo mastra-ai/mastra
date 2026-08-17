@@ -41,11 +41,6 @@ const RETRY_DELAY_MS = 250;
 const MAX_TRACKED_FLOWS = 10_000;
 /** Buffered-record ceiling (pulses + relationships) — o11y uses the same 10k. */
 const MAX_BUFFERED_RECORDS = 10_000;
-/**
- * Session-abort attribution window past the last span pulse — mirrors the
- * derived rule (abort_completed within [first, last + 2s] of a flow's window).
- */
-const ABORT_WINDOW_MS = 2_000;
 
 /**
  * Per-flow writer-side accumulator for the flow index. APPROXIMATIONS
@@ -53,13 +48,12 @@ const ABORT_WINDOW_MS = 2_000;
  * - `pulseCount`/`costUsd` only see records that pass through THIS exporter
  *   while the flow is tracked; late pulses arriving after the accumulator was
  *   evicted (one flush after the terminal upsert) bump nothing.
- * - a session abort more than one flush cycle after the terminal upsert is
- *   missed by the index (the derived rule's 2s window usually falls inside
- *   one flush interval, so in practice both agree).
+ * - a session abort arriving after the flow's accumulator was evicted is
+ *   missed by the index (the derived read still sees it — runId join).
  */
 interface FlowAccumulator {
   startedAt: Date;
-  /** Max span-pulse timestamp — closes the abort-attribution window. */
+  /** Max span-pulse timestamp seen for this flow. */
   lastTs: Date;
   rootStartAt?: Date;
   rootEndAt?: Date;
@@ -131,28 +125,13 @@ export class PulseStorageExporter extends MastraBase implements PulseBusExporter
 
   /** Fold one pulse into the per-flow accumulators (writer-side derivation). */
   #accumulate(record: PulseRecord): void {
-    // Session-layer abort override. An abort carrying a runId joins EXACTLY:
-    // only the flow that contains that run is marked. Legacy rows without a
-    // runId fall back to the thread + window heuristic the derived read uses.
+    // Session-layer abort override: an exact join — the abort names its run,
+    // and only the flow containing that run is marked. Every real abort path
+    // stamps the runId (engine + deleteSession; smoke-verified).
     if (record.source === 'session' && record.surface === 'run_control' && record.action === 'abort_completed') {
-      if (record.runId) {
-        for (const acc of this.#flows.values()) {
-          if (!acc.aborted && acc.runIds.has(record.runId)) {
-            acc.aborted = true;
-            acc.dirty = true;
-          }
-        }
-        return;
-      }
-      if (!record.threadId) return;
-      const ts = record.timestamp.getTime();
+      if (!record.runId) return;
       for (const acc of this.#flows.values()) {
-        if (
-          acc.threadId === record.threadId &&
-          !acc.aborted &&
-          ts >= acc.startedAt.getTime() &&
-          ts <= acc.lastTs.getTime() + ABORT_WINDOW_MS
-        ) {
+        if (!acc.aborted && acc.runIds.has(record.runId)) {
           acc.aborted = true;
           acc.dirty = true;
         }
@@ -161,19 +140,11 @@ export class PulseStorageExporter extends MastraBase implements PulseBusExporter
     }
 
     if (!record.traceId) return;
-    const existing = this.#flows.get(record.traceId);
+    // Non-span lanes never open nor enrich a flow — cost lives only on the
+    // bridge-folded span pulse.
+    if (record.source !== 'span') return;
 
-    // Non-span lanes never open a flow; they may only enrich a tracked one
-    // (bridge-folded cost lives on span pulses, so this is a safety net).
-    if (record.source !== 'span') {
-      if (existing && typeof record.data?.cost_usd === 'number') {
-        existing.costUsd = (existing.costUsd ?? 0) + record.data.cost_usd;
-        existing.dirty = true;
-      }
-      return;
-    }
-
-    let acc = existing;
+    let acc = this.#flows.get(record.traceId);
     if (!acc) {
       // A pulse arriving after the flow's terminal row was evicted must not
       // re-open it as `running` — it bumps nothing (documented approximation).

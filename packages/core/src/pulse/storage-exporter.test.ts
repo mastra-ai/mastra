@@ -217,8 +217,10 @@ describe('PulseStorageExporter flow index', () => {
   it('lets a session abort in the next batch override a completed flow', async () => {
     const { storage, upserts } = fakeStorage();
     const exporter = new PulseStorageExporter({ storage, flowIndex: true });
-    exporter.onPulseEvent(span('flow-1', { timestamp: at(0) }));
-    exporter.onPulseEvent(span('flow-1', { action: 'run_completed', type: 'output', timestamp: at(1000) }));
+    exporter.onPulseEvent(span('flow-1', { runId: 'run-1', timestamp: at(0) }));
+    exporter.onPulseEvent(
+      span('flow-1', { runId: 'run-1', action: 'run_completed', type: 'output', timestamp: at(1000) }),
+    );
     await exporter.flush();
     expect(upserts[0]![0]!.status).toBe('completed');
 
@@ -226,11 +228,12 @@ describe('PulseStorageExporter flow index', () => {
       span('', {
         traceId: '',
         threadId: 't-1',
+        runId: 'run-1',
         spanId: undefined,
         source: 'session',
         surface: 'run_control',
         action: 'abort_completed',
-        timestamp: at(1500), // inside the [start, last + 2s] window
+        timestamp: at(1500),
       }),
     );
     await exporter.flush();
@@ -238,7 +241,7 @@ describe('PulseStorageExporter flow index', () => {
     await exporter.shutdown();
   });
 
-  it('ignores aborts outside the flow window or for other threads', async () => {
+  it('ignores aborts naming an unknown run or carrying no runId', async () => {
     const { storage, upserts } = fakeStorage();
     const exporter = new PulseStorageExporter({ storage, flowIndex: true });
     exporter.onPulseEvent(span('flow-1', { timestamp: at(0) }));
@@ -251,18 +254,19 @@ describe('PulseStorageExporter flow index', () => {
         source: 'session',
         surface: 'run_control',
         action: 'abort_completed',
-        timestamp: at(1500),
+        timestamp: at(1500), // no runId → never attributed
       }),
     );
     exporter.onPulseEvent(
       span('', {
         traceId: '',
         threadId: 't-1',
+        runId: 'run-elsewhere',
         spanId: undefined,
         source: 'session',
         surface: 'run_control',
         action: 'abort_completed',
-        timestamp: at(5000), // past the +2s window
+        timestamp: at(1600), // names a run this flow never contained
       }),
     );
     await exporter.shutdown();

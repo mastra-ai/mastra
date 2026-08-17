@@ -33,7 +33,7 @@ export interface PulseRecord {
   runId?: string;
   threadId?: string;
   resourceId?: string;
-  /** Capture lane: span | session | runtime | log | metric | score | feedback | drop. */
+  /** Capture lane: span | session | log | metric | score | feedback | drop. */
   source: string;
 }
 
@@ -73,7 +73,7 @@ export interface FlowSummary {
   durationMs: number | null;
   status: FlowStatus;
   pulseCount: number;
-  /** SUM of metric pulses' estimated_cost_usd, when present. */
+  /** SUM of bridge-folded cost_usd on span pulses, when present. */
   costUsd?: number;
   entityName?: string;
 }
@@ -196,7 +196,7 @@ export abstract class PulseStorage extends StorageDomain {
   /** One derived flow with its tree and referenced definitions. */
   abstract getFlow(flowId: string): Promise<FlowDetail | null>;
 
-  /** All pulses of a flow (plus session/runtime lanes joined by thread) in order. */
+  /** All pulses of a flow (plus session-lane rows joined by thread) in order. */
   abstract getFlowTimeline(flowId: string): Promise<FlowTimelineEntry[]>;
 
   /** Remove everything (test/dev helper). */

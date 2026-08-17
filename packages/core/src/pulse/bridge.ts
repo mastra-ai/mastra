@@ -66,7 +66,7 @@ const SURFACES = new Set([
   'workflow',
 ]);
 
-const CORE_REL_TYPES = new Set([
+const CORE_REL_TYPES = [
   'origin_of',
   'flow_contains',
   'thread_contains_flow',
@@ -91,7 +91,10 @@ const CORE_REL_TYPES = new Set([
   'queued_follow_up',
   'schedule_triggered',
   'scored_target',
-]);
+] as const;
+
+/** Eric's 24-type core vocabulary — a typo here fails at compile time. */
+type CoreRelationshipType = (typeof CORE_REL_TYPES)[number];
 
 /** Span types whose semantic end pulse receives the folded token/cost data. */
 const MODEL_SPAN_TYPES = new Set(['model_generation', 'model_step', 'model_inference']);
@@ -267,7 +270,7 @@ export class PulseBridge extends MastraBase implements ObservabilityExporter {
   }
 
   #emitRelationship(
-    type: string,
+    type: CoreRelationshipType,
     fromKind: PulseEndpointKind,
     fromId: string,
     toKind: PulseEndpointKind,
@@ -282,7 +285,7 @@ export class PulseBridge extends MastraBase implements ObservabilityExporter {
         id: randomUUID(),
         timestamp,
         seq: nextPulseSeq(),
-        type: CORE_REL_TYPES.has(type) ? type : `candidate:${type}`,
+        type,
         from: { kind: fromKind, id: fromId },
         to: { kind: toKind, id: toId },
         ...(attributes ? { attributes } : {}),

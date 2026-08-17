@@ -23,11 +23,13 @@ function pulse(overrides: Partial<PulseRecord>): PulseRecord {
 
 /** A minimal completed agent flow: root start/end + one child model span. */
 function completedFlow(traceId: string, threadId?: string): PulseRecord[] {
+  const runId = `run-${traceId}`;
   return [
-    pulse({ traceId, threadId, spanId: 'root', action: 'run_started', timestamp: at(0) }),
+    pulse({ traceId, threadId, runId, spanId: 'root', action: 'run_started', timestamp: at(0) }),
     pulse({
       traceId,
       threadId,
+      runId,
       spanId: 'gen',
       parentSpanId: 'root',
       surface: 'model',
@@ -37,6 +39,7 @@ function completedFlow(traceId: string, threadId?: string): PulseRecord[] {
     pulse({
       traceId,
       threadId,
+      runId,
       spanId: 'gen',
       parentSpanId: 'root',
       surface: 'model',
@@ -77,6 +80,7 @@ describe('InMemoryPulseStorage (derivation rules)', () => {
       pulse({
         traceId: '',
         threadId: 't-1',
+        runId: 'run-flow-1',
         source: 'session',
         surface: 'run_control',
         action: 'abort_completed',
@@ -127,17 +131,17 @@ describe('InMemoryPulseStorage (derivation rules)', () => {
     // New shape: the bridge folds cost onto the semantic model pulse.
     rows[2] = { ...rows[2]!, data: { total_output_tokens: 42, cost_usd: 0.0002 } };
     await s.batchCreatePulses(rows);
-    // Legacy shape: metric-lane row (old databases).
+    // Non-span lanes never carry flow cost — only the folded span data does.
     await s.batchCreatePulses([
       pulse({
         source: 'metric',
         surface: 'model',
-        action: 'mastra_output_tokens',
-        data: { estimated_cost_usd: 0.0001 },
+        action: 'metric_recorded',
+        data: { value: 42 },
       }),
     ]);
     const { flows } = await s.listFlows();
-    expect(flows[0]!.costUsd).toBeCloseTo(0.0003);
+    expect(flows[0]!.costUsd).toBeCloseTo(0.0002);
   });
 
   it('interleaves session-lane facts into the timeline by thread', async () => {
@@ -266,9 +270,6 @@ describe('InMemoryPulseStorage flow index', () => {
    * PulseStorageExporter (flowIndex on) land in BOTH the raw tables (derived
    * path) and the index. The two reads must agree. Legitimate differences,
    * excluded by construction here and documented in the experiment verdict:
-   * - legacy metric-lane cost (data.estimated_cost_usd) is summed by the
-   *   derived read but not indexed (the index is for the new pipeline where
-   *   cost is folded onto span pulses as data.cost_usd);
    * - index staleness keys off the last UPSERT time, derived staleness off
    *   the last pulse timestamp — equal whenever upserts follow pulses
    *   promptly, as they do in the real writer;
@@ -305,6 +306,7 @@ describe('InMemoryPulseStorage flow index', () => {
       pulse({
         traceId: '',
         threadId: 't-3',
+        runId: 'run-flow-aborted',
         source: 'session',
         surface: 'run_control',
         action: 'abort_completed',
@@ -387,7 +389,7 @@ describe('exact abort attribution (runId join)', () => {
     expect(status['flow-b']).toBe('completed');
   });
 
-  it('falls back to the thread window for legacy abort rows without runId', async () => {
+  it('ignores abort facts without a runId — attribution is never guessed', async () => {
     const s = new InMemoryPulseStorage();
     await s.batchCreatePulses([
       pulse({ traceId: 'flow-l', threadId: 't-9', spanId: 'root', action: 'run_started', timestamp: at(0) }),
@@ -410,6 +412,6 @@ describe('exact abort attribution (runId join)', () => {
       }),
     ]);
     const { flows } = await s.listFlows();
-    expect(flows[0]!.status).toBe('aborted');
+    expect(flows[0]!.status).toBe('completed');
   });
 });
