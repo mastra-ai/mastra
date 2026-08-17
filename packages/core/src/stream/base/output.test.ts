@@ -1515,6 +1515,35 @@ describe('MastraModelOutput', () => {
       expect(stepFinishReasoning).toEqual([{ text: 'JUDGED-TURN-THINKING', ids: ['rs1'] }]);
     });
 
+    it('drops a judged step whose only reasoning is a delta-less block on goal continuation', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+
+      // The judged turn's only in-flight content is a reasoning block with no text
+      // delta. That still marks the step as in flight, so the goal boundary must
+      // drop it from the run-end steps rather than leaking the judged turn.
+      const stream = createChunkStream([
+        reasoningStart(runId, 'rs1'),
+        reasoningEnd(runId, 'rs1'),
+        createGoalChunk(runId, { shouldContinue: true }),
+        createStepFinishChunk(runId),
+        createGoalChunk(runId, { shouldContinue: false }),
+        createFinishChunk(runId),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+
+      expect(await output.steps).toHaveLength(0);
+    });
+
     it('preserves per-step reasoning-start/end metadata and blocks with no text delta', async () => {
       const runId = 'test-run';
       const messageList = new MessageList({ threadId: 'test-thread' });

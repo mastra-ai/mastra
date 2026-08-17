@@ -1254,6 +1254,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   byStep.text.length > 0 ||
                   byStep.toolCalls.length > 0 ||
                   byStep.reasoning.length > 0 ||
+                  // A reasoning block with only start/end (no text delta) lives in
+                  // the per-step details map but not in `byStep.reasoning`, so check
+                  // it too, otherwise such a judged step would leak into run-end steps.
+                  Object.keys(self.#bufferedByStepReasoningDetails).length > 0 ||
                   byStep.sources.length > 0 ||
                   byStep.files.length > 0
                 ) {
