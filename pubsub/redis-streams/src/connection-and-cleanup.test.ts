@@ -168,6 +168,28 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
       await ps.publish(topic, makeEvent({ data: { n: 2 } }));
       await expect.poll(() => received, { timeout: 5000 }).toContain('2');
     }, 20_000);
+
+    it('preserves a latest subscriber position when recovering after deletion', async () => {
+      const ps = createPubSub();
+      const topic = `clear-latest-${randomUUID()}`;
+      const received: number[] = [];
+      await ps.publish(topic, makeEvent({ data: { n: 0 } }));
+      await ps.subscribe(
+        topic,
+        (event, ack) => {
+          received.push((event.data as { n: number }).n);
+          void ack?.();
+        },
+        { startFrom: 'latest' },
+      );
+
+      await ps.publish(topic, makeEvent({ data: { n: 1 } }));
+      await expect.poll(() => received, { timeout: 5000 }).toEqual([1]);
+
+      await ps.clearTopic(topic);
+      await ps.publish(topic, makeEvent({ data: { n: 2 } }));
+      await expect.poll(() => received, { timeout: 5000 }).toEqual([1, 2]);
+    }, 20_000);
   });
 
   describe('streamIdleTtlMs', () => {

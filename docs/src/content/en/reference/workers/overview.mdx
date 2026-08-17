@@ -42,7 +42,7 @@ The base URL of the API server, used by the orchestration worker to execute work
 MASTRA_STEP_EXECUTION_URL=http://api:4111/api
 ```
 
-Use HTTPS URLs in production. See [Security recommendations](/docs/server/auth/workers#security-recommendations).
+Use HTTPS URLs in production. See [Security recommendations](/docs/auth/workers#security-recommendations).
 
 The orchestration worker sends step execution requests to:
 
@@ -52,7 +52,7 @@ ${MASTRA_STEP_EXECUTION_URL}/workflows/:workflowId/runs/:runId/steps/execute
 
 ### `MASTRA_WORKER_AUTH_TOKEN`
 
-A bearer token sent by the orchestration worker when calling the API's step execution endpoint. The API's configured auth provider must recognize this token. See [Worker authentication](/docs/server/auth/workers).
+A bearer token sent by the orchestration worker when calling the API's step execution endpoint. The API's configured auth provider must recognize this token. See [Worker authentication](/docs/auth/workers).
 
 ```
 MASTRA_WORKER_AUTH_TOKEN=sk-worker-secret-token

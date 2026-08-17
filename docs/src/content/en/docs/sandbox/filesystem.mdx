@@ -1,0 +1,280 @@
+---
+title: "Filesystem | Workspace"
+description: Give agents persistent files through sandbox mounts or workspace file tools.
+packages:
+  - "@mastra/core"
+---
+
+import { IntegrationGrid } from '@site/src/components/integrations/grid';
+
+# Filesystem
+
+Filesystems give agents persistent storage for source code, documents, datasets, and generated artifacts.
+
+Mastra supports two mutually exclusive ways to add a filesystem to a workspace:
+
+| Configuration | Agent access | Sandbox access |
+| - | - | - |
+| `mounts` | File tools | Files appear as local directories through FUSE |
+| `filesystem` | File tools | No access |
+
+Use `mounts` when a sandbox needs to run commands against the files. The agent can use file tools, while code inside the sandbox can use shell commands and libraries against the same storage.
+
+Use `filesystem` when the agent only needs direct file tools or the sandbox backend doesn't support mounts. The agent acts as the driver: it can read a file and pass its contents to another tool, but the file doesn't exist inside the sandbox. A command such as `cat`, `grep`, or `python script.py` can't access it unless your application passes the content as input.
+
+You can't configure both `filesystem` and `mounts` on the same workspace.
+
+## When to use filesystems
+
+Mount a filesystem when you want to:
+
+- Seed an ephemeral sandbox with source code, datasets, or project files.
+- Persist files after the sandbox stops or is deleted.
+- Let commands and agent file tools work against the same storage.
+- Share a storage location across multiple sandbox runs.
+
+Use a workspace-only filesystem when you want to:
+
+- Give an agent access to a managed knowledge base without command execution.
+- Read documents uploaded by non-technical teammates to services such as S3 or Google Drive.
+- Use persistent storage with a sandbox backend that doesn't support mounts.
+- Keep the storage provider separate from the sandbox execution environment.
+
+For example, a real-estate agent could read travel-policy documents from an S3 bucket or Google Drive folder and use them while answering questions. The agent can search and read those files without needing a sandbox to execute commands against them.
+
+A data agent could also download reports from Google Drive with file tools. It can pass their contents to a sandbox for analysis and presentation generation, then upload the finished presentation for the team. This works even when the sandbox backend can't mount Google Drive because the agent transfers the input and output between the filesystem and sandbox.
+
+## Supported filesystems
+
+### `LocalFilesystem`
+
+[`LocalFilesystem`](/reference/workspace/local-filesystem) stores files in a directory on the same machine as your Mastra application. Use it for local development or when the application already has access to the files on disk.
+
+`LocalFilesystem` contains file-tool access within its configured `basePath` by default. You can allow specific paths outside that directory or disable containment when the application requires broader host access.
+
+### Other filesystems
+
+Use another filesystem when files need to persist outside the application host or already live in an external service:
+
+<IntegrationGrid
+  section="File storage"
+  additionalItems={[
+  {
+    type: 'link',
+    href: '/reference/workspace/platform-filesystem',
+    label: 'Mastra Platform',
+    customProps: { icon: '/img/integrations/mastra.svg', customCSS: 'dark:invert' },
+  },
+]}
+/>
+
+Workspace-only file tools work with the full provider list. FUSE mount support depends on both the filesystem and sandbox backend, so check both references before choosing a combination.
+
+## Mounts
+
+Use mounts when both the agent and sandbox commands need access to the same files.
+
+### Quickstart
+
+Mount an S3 filesystem into a sandbox:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Workspace } from '@mastra/core/workspace'
+import { DaytonaSandbox } from '@mastra/daytona'
+import { S3Filesystem } from '@mastra/s3'
+
+const workspace = new Workspace({
+  mounts: {
+    '/workspace': new S3Filesystem({
+      bucket: process.env.S3_BUCKET!,
+      region: process.env.S3_REGION!,
+    }),
+  },
+  sandbox: new DaytonaSandbox(),
+})
+
+export const mastra = new Mastra({ workspace })
+```
+
+Existing objects in the bucket seed the sandbox at `/workspace`. Files created there persist in S3 after the sandbox stops. All agents registered with this `Mastra` instance inherit the workspace.
+
+### Using mounts
+
+The agent receives file tools for mounted storage:
+
+| Tool | Does |
+| - | - |
+| `read_file` | Reads text or binary file contents. |
+| `write_file` | Creates or replaces a file. |
+| `edit_file` | Applies targeted edits to a text file. |
+| `list_files` | Lists files and directories, with optional glob filtering. |
+| `file_stat` | Returns file metadata. |
+| `mkdir` | Creates a directory. |
+| `delete` | Deletes files or directories. |
+| `grep` | Searches file contents with a regular expression. |
+
+Mounted files are also available to commands inside the sandbox. In the Quickstart, `read_file('/workspace/report.md')` and `cat /workspace/report.md` read the same S3 object.
+
+Use `WORKSPACE_TOOLS.FILESYSTEM` to require approval, disable tools, enforce read-before-write, or change output limits. See the [Workspace filesystem tools reference](/reference/workspace/workspace-class#filesystem-tools) for configuration details.
+
+:::warning
+
+File-tool policies only apply to file-tool calls. Restrictions such as `allowedPaths`, approval rules, or read-before-write don't constrain shell commands running inside the sandbox. A command can access any mounted path allowed by the sandbox backend and mount configuration. If the agent must not bypass file-tool policies through the shell, disable its sandbox command tools.
+
+:::
+
+### Multiple mounts
+
+The `mounts` option creates a `CompositeFilesystem` that routes paths to storage providers by mount prefix. Supported sandbox backends expose those providers as local directories through FUSE.
+
+```typescript
+import { Workspace } from '@mastra/core/workspace'
+import { E2BSandbox } from '@mastra/e2b'
+import { GCSFilesystem } from '@mastra/gcs'
+import { S3Filesystem } from '@mastra/s3'
+
+const workspace = new Workspace({
+  mounts: {
+    '/data': new S3Filesystem({
+      bucket: 'agent-data',
+      region: 'us-east-1',
+    }),
+    '/reports': new GCSFilesystem({
+      bucket: 'agent-reports',
+    }),
+  },
+  sandbox: new E2BSandbox({ id: 'analysis-sandbox' }),
+})
+```
+
+With this configuration:
+
+- Existing objects under `/data` and `/reports` seed the sandbox when the mounts become available.
+- Agent file tools route each path to its corresponding storage provider.
+- Commands inside the sandbox access the same paths.
+- New and updated files persist in the underlying buckets.
+
+All file paths must start with a mount prefix. Listing `/` returns a virtual directory for each mount. Mount paths can't be nested, so a workspace can't mount both `/data` and `/data/archive`.
+
+Mount support varies by sandbox backend and filesystem provider. Check both references before choosing a combination.
+
+### Read-only mounts
+
+Set `readOnly: true` on a filesystem provider when the sandbox and agent should only read seeded files. Mastra excludes write tools for provider objects known to be read-only, and the mount backend enforces its own write restrictions.
+
+```typescript
+const workspace = new Workspace({
+  mounts: {
+    '/policies': new S3Filesystem({
+      bucket: 'company-policies',
+      region: 'us-east-1',
+      readOnly: true,
+    }),
+  },
+  sandbox: new DaytonaSandbox(),
+})
+```
+
+### Per-user or per-thread mounts
+
+Workspace-level `mounts` require a sandbox provider object and can't be combined with a sandbox resolver. For one sandbox and storage prefix per user or thread, create and mount the filesystem inside the sandbox resolver. See [Multi-tenant sandboxes](/docs/sandbox/overview#multi-tenant-sandboxes) for a complete example.
+
+## Workspace-only filesystem
+
+Pass a provider to `filesystem` when only the agent needs file access. The agent receives file tools, but a sandbox configured on the same workspace can't see those files.
+
+### Quickstart
+
+```typescript title="src/mastra/workspaces.ts"
+import { LocalSandbox, Workspace } from '@mastra/core/workspace'
+import { GoogleDriveFilesystem } from '@mastra/google-drive'
+
+const workspace = new Workspace({
+  filesystem: new GoogleDriveFilesystem({
+    folderId: process.env.GOOGLE_DRIVE_FOLDER_ID!,
+    accessToken: process.env.GOOGLE_DRIVE_ACCESS_TOKEN!,
+  }),
+  sandbox: new LocalSandbox({
+    workingDirectory: './workspace',
+  }),
+})
+```
+
+The agent receives the same file tools listed under [Using mounts](#using-mounts), plus sandbox command tools. It can use both in one task. For the prompt "Format `draft.md` with Prettier and save it as `formatted.md`", the agent can:
+
+1. Read `draft.md` from Google Drive with `read_file`.
+1. Pass the returned content to `execute_command`, for example by piping it into Prettier.
+1. Write the command output to `formatted.md` with `write_file`.
+
+The Google Drive files never appear inside the sandbox. Only the content passed to `execute_command` crosses into the execution environment, and only the returned output is written back.
+
+### Seed a filesystem
+
+Files already in the folder seed the workspace. You can also seed any writable provider through its API before the agent uses it:
+
+```typescript
+await workspace.filesystem?.writeFile(
+  'travel-policy.md',
+  '# Travel policy\n\nEmployees may book economy flights.',
+)
+```
+
+Filesystem operations initialize the provider on first use. Writes replace existing files by default. Pass `{ overwrite: false }` when existing content must be preserved.
+
+### Containment
+
+`LocalFilesystem` uses contained mode by default. File tools can access `basePath` but can't traverse into unrelated host paths through absolute paths, `..`, or symlinks.
+
+```typescript
+import { LocalFilesystem, Workspace } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: './knowledge-base',
+    allowedPaths: ['../shared-policies'],
+  }),
+})
+```
+
+Containment still matters even though the agent accesses files through tools. It limits what those tools can expose. Prefer `allowedPaths` for specific external directories instead of setting `contained: false`.
+
+### Read-only mode
+
+Set `readOnly: true` when the agent should use seeded content without changing it:
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: './knowledge-base',
+    readOnly: true,
+  }),
+})
+```
+
+For a provider object, Mastra removes write, edit, delete, and directory-creation tools. For a resolver-backed filesystem, the tools remain registered because the provider isn't known until execution. Write attempts are rejected at runtime.
+
+### Multi-tenant filesystems
+
+Use a resolver when each request, user, role, or tenant needs different storage:
+
+```typescript
+const workspace = new Workspace({
+  filesystem: ({ requestContext }) => {
+    const tenantId = requestContext.get('tenant-id') as string
+    return new S3Filesystem({
+      bucket: process.env.S3_BUCKET!,
+      region: process.env.S3_REGION!,
+      prefix: `tenants/${tenantId}`,
+    })
+  },
+})
+```
+
+Each tenant's prefix seeds its own workspace view. Workspace tools resolve the filesystem from the request context automatically.
+
+## Related
+
+- [Sandbox](/docs/sandbox/overview)
+- [`WorkspaceFilesystem` reference](/reference/workspace/filesystem)
+- [`Workspace` reference](/reference/workspace/workspace-class)
