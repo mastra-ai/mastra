@@ -445,6 +445,30 @@ describe('MastraCompositeStore — init coverage pinning', () => {
     expect(parentInitSpy).toHaveBeenCalledTimes(1);
     expect(memoryInitSpy).not.toHaveBeenCalled();
   });
+
+  it('initializes every registered domain, including ones added after this file was written', async () => {
+    // Conformance test: a synthetic 24th domain registered in the stores map
+    // under a key no hand-written roll call ever named must still be
+    // initialized by composite init(). This fails on roll-call code (the
+    // domain is silently skipped) and passes on the iteration-based init.
+    const memory = fakeDomain();
+    const synthetic = fakeDomain();
+
+    const composite = new MastraCompositeStore({
+      id: 'outer-init-conformance',
+      domains: {
+        memory: memory as unknown as NonNullable<InMemoryStore['stores']>['memory'],
+      },
+    });
+    // Register the synthetic domain the way a future StorageDomains member
+    // would appear in the stores map, without changing any public API.
+    (composite.stores as unknown as Record<string, unknown>).syntheticFutureDomain = synthetic;
+
+    await composite.init();
+
+    expect(memory.init).toHaveBeenCalledTimes(1);
+    expect(synthetic.init).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('MastraCompositeStore.__registerMastra', () => {
