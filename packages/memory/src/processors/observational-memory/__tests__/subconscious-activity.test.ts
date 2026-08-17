@@ -22,16 +22,16 @@ describe('Subconscious activity', () => {
   it('returns bounded ancestor-visible activity without sibling thread-private updates', async () => {
     const store = await createStore();
     const atlas = await store.createNode({ name: 'Project Atlas', kind: 'project', scope: resourceScope });
-    await store.appendItem({
-      parentNodeId: atlas.id,
+    await store.appendKnowledge({
+      node: atlas.id,
       text: '[[Project Atlas]] launches in January.',
       scope: resourceScope,
       sourceThreadId: 'alpha',
       resolutionScope: alphaScope,
       defaultScope: resourceScope,
     });
-    await store.appendItem({
-      parentNodeId: atlas.id,
+    await store.appendKnowledge({
+      node: atlas.id,
       text: 'The private alpha code is cobalt.',
       scope: alphaScope,
       sourceThreadId: 'alpha',
@@ -39,8 +39,8 @@ describe('Subconscious activity', () => {
       defaultScope: resourceScope,
     });
     const secret = await store.createNode({ name: 'Alpha Secret', kind: 'note', scope: alphaScope });
-    const sharedSecretItem = await store.appendItem({
-      parentNodeId: secret.id,
+    const sharedSecretRecord = await store.appendKnowledge({
+      node: secret.id,
       text: 'A shared policy exists.',
       scope: resourceScope,
       sourceThreadId: 'alpha',
@@ -52,12 +52,12 @@ describe('Subconscious activity', () => {
 
     expect(snapshot.updates.map(update => update.name)).toContain('Project Atlas');
     expect(snapshot.updates.map(update => update.name)).not.toContain('Alpha Secret');
-    expect(snapshot.updates.some(update => update.type === 'item' && !('name' in update))).toBe(true);
+    expect(snapshot.updates.some(update => update.type === 'record' && !('name' in update))).toBe(true);
     expect(snapshot.updates).toHaveLength(3);
     expect(snapshot.updates.every(update => !('recordId' in update) && !('targetId' in update))).toBe(true);
     expect(snapshot.updates.every(update => !('sourceThreadId' in update))).toBe(true);
     expect(snapshot.hot.every(record => !('id' in record))).toBe(true);
-    expect(JSON.stringify(snapshot)).not.toContain(sharedSecretItem.id);
+    expect(JSON.stringify(snapshot)).not.toContain(sharedSecretRecord.id);
     expect(JSON.stringify(snapshot)).not.toContain(secret.id);
   });
 

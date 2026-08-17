@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { Extractor } from '../extractor';
 import type { ExtractorOnExtractedContext, ExtractorRuntimeContext } from '../extractor';
 import { publishSubconsciousActivity } from './activity';
-import { writePinnedItem } from './pinned';
+import { writePinnedKnowledge } from './pinned';
 import { resolveKnowledgeResourceId } from './scope';
 import type { SubconsciousCaptureConfig, SubconsciousCaptureOutput, SubconsciousDefaultCapture } from './types';
 
@@ -19,7 +19,7 @@ export const subconsciousCaptureSchema = z.object({
       name: z.string().trim().min(1),
       kind: z.string().trim().min(1),
       scope: z.enum(['org', 'resource', 'thread']).optional(),
-      items: z.array(
+      records: z.array(
         z.object({
           text: z.string().trim().min(1),
           scope: z.enum(['org', 'resource', 'thread']).optional(),
@@ -39,7 +39,7 @@ const subconsciousCapturePinningSchema = z.object({
       name: z.string().trim().min(1),
       kind: z.string().trim().min(1),
       scope: z.enum(['org', 'resource', 'thread']).optional(),
-      items: z.array(
+      records: z.array(
         z.object({
           text: z.string().trim().min(1),
           scope: z.enum(['org', 'resource', 'thread']).optional(),
@@ -55,17 +55,17 @@ const subconsciousCapturePinningSchema = z.object({
 const CAPTURE_PINNING_INSTRUCTIONS = `Mark pin: true only for durable user preferences or hard constraints that should apply in every future session without being asked for.`;
 
 const CAPTURE_INSTRUCTIONS = `Extract durable, explicitly stated knowledge from the observations.
-Return nodes with short stable names, a freeform kind, and knowledge items nested under the node each item is about.
+Return nodes with short stable names, a freeform kind, and knowledge records nested under the node each record is about.
 Use common kinds such as person, task, event, project, organization, or document when they fit.
 Set node scope to the narrowest level where that identity and content should be shared. Omit it to use the configured default scope.
-Knowledge items must be grounded in the conversation, concise, and written as prose. Do not infer unstated information.
-Wrap every named node mentioned in item text in [[wikilinks]].
-Set an item scope only when the conversation establishes where it applies. Use org for organization-wide items, resource for items shared across this resource's conversations, and thread for conversation-private items.
-Omit scope when uncertain; omitted item scopes stay private to the current thread.
+Knowledge records must be grounded in the conversation, concise, and written as prose. Do not infer unstated information.
+Wrap every named node mentioned in record text in [[wikilinks]].
+Set a record scope only when the conversation establishes where it applies. Use org for organization-wide records, resource for records shared across this resource's conversations, and thread for conversation-private records.
+Omit scope when uncertain; omitted record scopes stay private to the current thread.
 Emit when only when the conversation anchors the referred time. Resolve relative dates against the current date and use ISO 8601.
-Capture what was learned through the work, not what the session was told: skip items that merely restate standing instructions, configured rules, or the text of the task or issue the session was handed. The exception is an explicit request from the user to remember something, which is always captured even when it duplicates an existing instruction.`;
+Capture what was learned through the work, not what the session was told: skip records that merely restate standing instructions, configured rules, or the text of the task or issue the session was handed. The exception is an explicit request from the user to remember something, which is always captured even when it duplicates an existing instruction.`;
 
-const CAPTURE_REASON_INSTRUCTIONS = `Every item requires a reason: the concrete why behind capturing it, in one short sentence - what it cost to learn or when it will matter again (and for pinned items, why it must stay in context). Never write generic filler such as "seemed relevant" or "useful context".`;
+const CAPTURE_REASON_INSTRUCTIONS = `Every record requires a reason: the concrete why behind capturing it, in one short sentence - what it cost to learn or when it will matter again (and for pinned records, why it must stay in context). Never write generic filler such as "seemed relevant" or "useful context".`;
 
 function clampScope(level: KnowledgeScopeLevel, ceiling?: KnowledgeScopeLevel): KnowledgeScopeLevel {
   return ceiling && SCOPE_ORDER[level] < SCOPE_ORDER[ceiling] ? ceiling : level;
@@ -102,7 +102,7 @@ async function getKnowledgeStore(context: ExtractorRuntimeContext): Promise<Know
 function parseWhen(value: string | undefined): Date | undefined {
   if (!value) return undefined;
   const when = new Date(value);
-  if (Number.isNaN(when.getTime())) throw new Error(`Invalid Subconscious item time: ${value}`);
+  if (Number.isNaN(when.getTime())) throw new Error(`Invalid Subconscious record time: ${value}`);
   return when;
 }
 
@@ -139,10 +139,10 @@ export class SubconsciousCaptureExtractor extends Extractor<SubconsciousCaptureO
           kind: extractedNode.kind,
           scope: nodeScope,
         });
-        for (const extractedItem of extractedNode.items) {
-          if (capturePinning && extractedItem.pin === true && options.pins) {
+        for (const extractedKnowledge of extractedNode.records) {
+          if (capturePinning && extractedKnowledge.pin === true && options.pins) {
             try {
-              await writePinnedItem(
+              await writePinnedKnowledge(
                 store,
                 {
                   scope: scopeContext,
@@ -152,24 +152,24 @@ export class SubconsciousCaptureExtractor extends Extractor<SubconsciousCaptureO
                   maxPins: options.pins.maxPins,
                   maxCharacters: options.pins.maxCharacters,
                 },
-                extractedItem.text,
-                extractedItem.scope,
-                extractedItem.reason ? { reason: extractedItem.reason } : undefined,
+                extractedKnowledge.text,
+                extractedKnowledge.scope,
+                extractedKnowledge.reason ? { reason: extractedKnowledge.reason } : undefined,
               );
             } catch (error) {
               droppedPins.push(`Capture-time pin dropped: ${error instanceof Error ? error.message : String(error)}`);
             }
             continue;
           }
-          const itemLevel = clampScope(extractedItem.scope ?? 'thread', options.maxScope);
-          await store.appendItem({
-            parentNodeId: node.id,
-            text: extractedItem.text,
-            scope: expandKnowledgeScope(scopeContext, itemLevel),
+          const knowledgeLevel = clampScope(extractedKnowledge.scope ?? 'thread', options.maxScope);
+          await store.appendKnowledge({
+            node,
+            text: extractedKnowledge.text,
+            scope: expandKnowledgeScope(scopeContext, knowledgeLevel),
             sourceThreadId: context.threadId,
-            when: parseWhen(extractedItem.when),
+            when: parseWhen(extractedKnowledge.when),
             maxScope: options.maxScope,
-            metadata: extractedItem.reason ? { reason: extractedItem.reason } : undefined,
+            metadata: extractedKnowledge.reason ? { reason: extractedKnowledge.reason } : undefined,
             resolutionScope: scopeContext,
             defaultScope: nodeScope,
           });
