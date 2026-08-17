@@ -151,13 +151,14 @@ const baseConfig: UserConfig = {
   },
 };
 
-// Declarations cost ~7s of every rebuild, which the `dev` watch pays on each
-// keystroke for types no consumer reads before the next real build.
-const createLibConfig = (emitTypes: boolean): UserConfig => ({
+// The `dev` watch layers fresh JS over a previous full build: declarations cost
+// ~7s per rebuild, so it skips them and must leave the ones on disk alone —
+// consumers resolve their types from there.
+const createLibConfig = (isProduction: boolean): UserConfig => ({
   ...baseConfig,
   plugins: [
     ...(baseConfig.plugins ?? []),
-    ...(emitTypes
+    ...(isProduction
       ? [
           dts({
             insertTypesEntry: true,
@@ -178,6 +179,7 @@ const createLibConfig = (emitTypes: boolean): UserConfig => ({
     nodeExternals() as PluginOption,
   ],
   build: {
+    emptyOutDir: isProduction,
     lib: {
       entry: {
         style: resolve(__dirname, 'src/style.ts'),
