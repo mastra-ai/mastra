@@ -133,6 +133,15 @@ export const githubSignalsCommandScenario = {
     await runtime.waitForScreenText(/1 subscription/i, terminal);
     await runtime.waitForScreenText(/mastra-ai\/mastra#17637 mode=working sync=success/i, terminal);
     await runtime.waitForScreenText(/ci=failure/i, terminal);
-    runtime.printScreen('github subscription debug status', terminal);
+
+    terminal.submit(`/github unsubscribe ${prFixture.owner}/${prFixture.repo}#${prFixture.number}`);
+    await runtime.waitForScreenText(/Unsubscribed from mastra-ai\/mastra#17637/i, terminal);
+
+    terminal.submit(`/github subscribe ${prFixture.owner}/${prFixture.repo}#${prFixture.number} --mode review`);
+    await runtime.waitForScreenText(/Subscribed to mastra-ai\/mastra#17637 in review mode/i, terminal, 30_000);
+
+    terminal.submit('/github debug');
+    await runtime.waitForScreenText(/mastra-ai\/mastra#17637 mode=review sync=success/i, terminal);
+    runtime.printScreen('review subscription debug status', terminal);
   },
 } satisfies McE2eScenario;

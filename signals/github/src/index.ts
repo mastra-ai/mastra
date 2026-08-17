@@ -45,8 +45,8 @@ const DEFAULT_AUTHORIZED_PERMISSIONS: GithubPermission[] = ['admin', 'maintain',
 const DEFAULT_AUTHORIZED_BOTS = ['coderabbitai[bot]', 'devin-ai-integration[bot]'];
 const PERMISSION_CACHE_TTL_MS = 5 * 60 * 1000;
 
-/** Notification kinds driven by comment/review activity that should be gated by author permission. */
-const AUTHOR_GATED_NOTIFICATION_KINDS = new Set(['pull-request-activity', 'pull-request-review-activity']);
+/** Notification kinds that include comment content and should be gated by author permission. */
+const AUTHOR_GATED_NOTIFICATION_KINDS = new Set(['pull-request-activity']);
 
 export type GithubPRSubscription = {
   owner: string;
@@ -496,8 +496,12 @@ function getPrLabel(subscription: GithubPRSubscription, snapshot?: GithubPullReq
   return snapshot?.title ? `${pr}: ${snapshot.title}` : pr;
 }
 
+function getTerminalNotificationSummary(label: string, terminalState: 'closed' | 'merged'): string {
+  return `${label} was ${terminalState}. This thread has been automatically unsubscribed from this PR. Resubscribe if you still need updates.`;
+}
+
 function getMergedNotificationSummary(label: string): string {
-  return `${label} was merged. This thread has been automatically unsubscribed from this PR. Resubscribe if you still need updates.`;
+  return getTerminalNotificationSummary(label, 'merged');
 }
 
 /**
@@ -659,6 +663,18 @@ function classifyGithubCommentActivityNotification(input: {
   return { kind: 'pull-request-activity', priority: 'high', summary };
 }
 
+function classifyGithubTerminalActivityNotification(input: {
+  subscription: GithubPRSubscription;
+  snapshot: GithubPullRequestSnapshot;
+  terminalState: 'closed' | 'merged';
+}): GithubActivityNotificationPlan {
+  return {
+    kind: input.terminalState === 'merged' ? 'pull-request-merged' : 'pull-request-closed',
+    priority: 'high',
+    summary: getTerminalNotificationSummary(getPrLabel(input.subscription, input.snapshot), input.terminalState),
+  };
+}
+
 function classifyGithubHeadActivityNotification(input: {
   subscription: GithubPRSubscription;
   snapshot: GithubPullRequestSnapshot;
@@ -678,7 +694,10 @@ function classifyGithubReviewStateActivityNotification(input: {
   return {
     kind: 'pull-request-review-activity',
     priority: 'medium',
-    summary: `${getPrLabel(input.subscription, input.snapshot)} has ${count} unresolved review ${count === 1 ? 'thread' : 'threads'}.`,
+    summary:
+      count === 0
+        ? `All review threads are resolved for ${getPrLabel(input.subscription, input.snapshot)}.`
+        : `${getPrLabel(input.subscription, input.snapshot)} has ${count} unresolved review ${count === 1 ? 'thread' : 'threads'}.`,
   };
 }
 
@@ -1496,7 +1515,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     await args.sendSignal?.({
       type: 'reactive',
       tagName: 'system-reminder',
-      contents: `Choose whether to follow ${repository.owner}/${repository.repo}#${evidence.number}: use /github subscribe ${evidence.number} --mode review for new commits, authorized latest PR comments, and observable unresolved-review-state changes; use --mode working for all actionable PR activity. Do not subscribe for a one-off inspection.`,
+      contents: `Choose whether to follow ${repository.owner}/${repository.repo}#${evidence.number}: use /github subscribe ${evidence.number} --mode review for new commits, authorized latest PR comments, review-thread-state changes including all threads resolved, and PR close or merge updates; use --mode working for all actionable PR activity. Do not subscribe for a one-off inspection.`,
       attributes: {
         type: 'github-subscription-hint',
         availableModes: 'review,working',
@@ -1541,7 +1560,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       github_subscribe_pr: createGithubTool({
         id: 'github_subscribe_pr',
         description:
-          'Subscribe this thread to a GitHub pull request. Use review mode for new commits, authorized latest PR comments, and observable unresolved-review-state changes. Use working mode for all actionable PR activity. Omitted mode defaults to working. Do not subscribe for a one-off inspection.',
+          'Subscribe this thread to a GitHub pull request. Use review mode for new commits, authorized latest PR comments, review-thread-state changes including all threads resolved, and PR close or merge updates. Use working mode for all actionable PR activity. Omitted mode defaults to working. Do not subscribe for a one-off inspection.',
         inputSchema: z.object({
           number: z.number().int().positive(),
           owner: z.string().optional(),
@@ -1758,8 +1777,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         const reviewStateChanged =
           !!previousReviewStateHash &&
           !!snapshot?.reviewStateHash &&
-          previousReviewStateHash !== snapshot.reviewStateHash &&
-          (snapshot.unresolvedReviewThreads ?? 0) > 0;
+          previousReviewStateHash !== snapshot.reviewStateHash;
         if (snapshot) applySnapshotCursor(nextSubscription, snapshot);
 
         // Working subscriptions preserve the existing baseline notification. Review subscriptions
@@ -1792,10 +1810,9 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         const terminalState = subscription.mode === 'review' ? getGithubTerminalState(snapshot) : undefined;
         let shouldKeepSubscription = !terminalState;
         if (
-          shouldKeepSubscription &&
-          changed &&
+          (changed || terminalState) &&
           snapshot &&
-          !(subscription.mode === 'review' && isFirstObservation) &&
+          !(subscription.mode === 'review' && isFirstObservation && !terminalState) &&
           isCurrentGeneration()
         ) {
           const notifications = await this.#sendActivityNotifications({
@@ -1807,6 +1824,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
             latestCommentChanged,
             headChanged,
             reviewStateChanged,
+            terminalState,
             isCurrentGeneration,
           });
           if (!isCurrentGeneration()) return 0;
@@ -1816,7 +1834,9 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
             nextSubscription.lastNotificationKind = primaryNotification.kind;
             nextSubscription.lastNotificationPriority = primaryNotification.priority;
             nextSubscription.lastNotificationSummary = primaryNotification.summary;
-            shouldKeepSubscription = notifications.every(notification => notification.kind !== 'pull-request-merged');
+            if (!terminalState) {
+              shouldKeepSubscription = notifications.every(notification => notification.kind !== 'pull-request-merged');
+            }
           }
         }
 
@@ -2102,32 +2122,43 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     latestCommentChanged?: boolean;
     headChanged?: boolean;
     reviewStateChanged?: boolean;
+    terminalState?: 'closed' | 'merged';
     isCurrentGeneration: () => boolean;
   }): Promise<Array<{ kind: string; priority: 'medium' | 'high'; summary: string }>> {
     const agent = this.#getNotificationAgent(input.polling);
     if (!agent?.sendNotificationSignal) return [];
     const notifications: Array<GithubActivityNotificationPlan | undefined> = [];
     if (input.subscription.mode === 'review') {
-      if (input.latestCommentChanged) {
+      if (input.terminalState) {
         notifications.push(
-          classifyGithubCommentActivityNotification({
+          classifyGithubTerminalActivityNotification({
             subscription: input.subscription,
             snapshot: input.snapshot,
+            terminalState: input.terminalState,
           }),
         );
-      }
-      if (input.headChanged) {
-        notifications.push(
-          classifyGithubHeadActivityNotification({ subscription: input.subscription, snapshot: input.snapshot }),
-        );
-      }
-      if (input.reviewStateChanged) {
-        notifications.push(
-          classifyGithubReviewStateActivityNotification({
-            subscription: input.subscription,
-            snapshot: input.snapshot,
-          }),
-        );
+      } else {
+        if (input.latestCommentChanged) {
+          notifications.push(
+            classifyGithubCommentActivityNotification({
+              subscription: input.subscription,
+              snapshot: input.snapshot,
+            }),
+          );
+        }
+        if (input.headChanged) {
+          notifications.push(
+            classifyGithubHeadActivityNotification({ subscription: input.subscription, snapshot: input.snapshot }),
+          );
+        }
+        if (input.reviewStateChanged) {
+          notifications.push(
+            classifyGithubReviewStateActivityNotification({
+              subscription: input.subscription,
+              snapshot: input.snapshot,
+            }),
+          );
+        }
       }
     } else {
       notifications.push(
@@ -2381,13 +2412,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     args: ProcessInputStepArgs,
     signal: GithubOperationResult,
     status: {
-      status:
-        | 'subscribed'
-        | 'sync_error'
-        | 'error'
-        | 'unsubscribed'
-        | 'not_subscribed'
-        | 'not_subscribed_terminal';
+      status: 'subscribed' | 'sync_error' | 'error' | 'unsubscribed' | 'not_subscribed' | 'not_subscribed_terminal';
       action: 'subscribeToPR' | 'unsubscribeFromPR';
       message: string;
     },

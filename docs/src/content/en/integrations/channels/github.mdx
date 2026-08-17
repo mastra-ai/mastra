@@ -62,7 +62,7 @@ export const mastra = new Mastra({
 })
 ```
 
-After the agent has created a memory thread, subscribe that thread to a PR. Choose `review` mode when the thread only needs code revisions, authorized latest PR comments, and observable unresolved-review-state updates:
+After the agent has created a memory thread, subscribe that thread to a PR. Choose `review` mode when the thread only needs code revisions, authorized latest PR comments, and observable review-thread-state updates:
 
 ```typescript
 await githubSignals.subscribeThreadToPR({
@@ -85,29 +85,29 @@ A thread has one current GitHub Signals subscription. Subscribing it to another 
 
 GitHub Signals supports two subscription modes:
 
-- `review`: Follows new head revisions, authorized latest PR comments, and observable changes to unresolved review threads.
-- `working`: Follows all actionable PR activity detected by the provider, subject to existing authorization gates. This is the default when `mode` is omitted and for stored subscriptions without a valid mode.
+- `review`: Follows new head revisions, authorized latest PR comments, and observable review-thread-state changes, including when all review threads become resolved.
+- `working`: Follows all actionable PR activity detected by the provider. Comment-bearing notifications remain subject to existing authorization gates. This is the default when `mode` is omitted and for stored subscriptions without a valid mode.
 
 The following table shows the observable behavior of each mode:
 
 | Pull request activity | `working` | `review` |
 | - | - | - |
-| First observation | Sends a baseline notification | Saves all cursors without notifying |
+| First observation | Sends a baseline notification | Saves all cursors without notifying unless the PR is closed or merged; then notifies and removes the subscription |
 | New commit or force-push | Notifies when the latest comment author is authorized | Notifies without requiring a comment author |
 | New authorized latest PR comment | Notifies | Notifies |
-| Observable unresolved-review-state change while unresolved threads remain | Notifies when the latest comment author is authorized | Notifies when the latest comment author is authorized |
+| Observable review-thread-state change | Notifies while unresolved threads remain | Notifies, including when all review threads become resolved |
 | Continuous integration checks start, fail, or recover | Notifies | Saves the new state without notifying |
 | Merge conflicts appear or resolve | Notifies | Saves the new state without notifying |
 | Other actionable aggregate PR activity | Notifies when applicable authorization checks pass | Saves the new state without notifying |
-| PR closes without merging | Notifies and keeps the subscription | Silently removes the subscription |
+| PR closes without merging | Notifies and keeps the subscription | Notifies and removes the subscription |
 | PR reopens | Notifies | Doesn't notify because the earlier close removed the subscription |
-| PR merges | Notifies and removes the subscription | Silently removes the subscription |
+| PR merges | Notifies and removes the subscription | Notifies and removes the subscription |
 
-Review mode uses the latest generic PR comment exposed by `gitcrawl`. The snapshot doesn't distinguish general PR conversation from inline review comments. Review-state changes also don't identify an actor, so the provider requires an authorized latest comment author before it sends that notification.
+Review mode uses the latest generic PR comment exposed by `gitcrawl`. The snapshot doesn't distinguish general PR conversation from inline review comments. Comment notifications require an authorized author because they include comment content. Review-state notifications contain only provider-generated state summaries and aren't author-gated.
 
-The unresolved-review-state cursor includes the unresolved thread count and the latest unresolved thread timestamp. It can't report the resolution of the final thread or replies on threads that are already resolved.
+The review-state cursor includes the unresolved thread count and the latest unresolved thread timestamp. It reports when the count reaches zero, but it can't report replies on threads that are already resolved.
 
-Review mode silently saves its first available snapshot, including when the subscribe-time snapshot fails and a later poll supplies the first observation. A review subscription to an already closed or merged PR isn't stored. If the PR closes or merges later, the provider removes the subscription without a notification. It doesn't follow a later reopen unless you subscribe again.
+During subscription, a PR already known to be closed or merged isn't stored and doesn't send an activity notification. Otherwise, review mode silently saves its first available non-terminal snapshot, including when the subscribe-time snapshot fails and a later poll supplies the first observation. If the first available poll snapshot or a later snapshot is closed or merged, the provider sends a terminal notification and removes the subscription. It doesn't follow a later reopen unless you subscribe again.
 
 ## Subscription tools
 
