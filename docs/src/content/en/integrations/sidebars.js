@@ -504,6 +504,15 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'deploy/render',
+          label: 'Render',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/render/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/render/white?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
           id: 'deploy/temporal',
           label: 'Temporal',
           customProps: {
