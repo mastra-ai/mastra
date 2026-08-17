@@ -272,12 +272,13 @@ export type PlanExpandButtonProps = Omit<
   'aria-label' | 'children' | 'onClick' | 'size' | 'type' | 'variant'
 >;
 
-export function PlanExpandButton(props: PlanExpandButtonProps) {
+export function PlanExpandButton({ className, ...props }: PlanExpandButtonProps) {
   const { isExpanded, toggleExpanded } = usePlanContext();
 
   return (
     <Button
       {...props}
+      className={cn('shrink-0 whitespace-nowrap', className)}
       type="button"
       variant="default"
       size="sm"

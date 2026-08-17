@@ -181,6 +181,25 @@ describe('Plan', () => {
     expect(content.style.maxHeight).toBe('');
   });
 
+  it('keeps the expand and collapse action on one line without shrinking', () => {
+    renderPlan(
+      <Plan>
+        <PlanContent>{'## Steps\n\n- Move data'}</PlanContent>
+        <PlanExpandButton />
+      </Plan>,
+    );
+
+    const expandButton = screen.getByRole('button', { name: /expand plan/i });
+    expect(expandButton.classList.contains('shrink-0')).toBe(true);
+    expect(expandButton.classList.contains('whitespace-nowrap')).toBe(true);
+
+    fireEvent.click(expandButton);
+
+    const collapseButton = screen.getByRole('button', { name: /collapse plan/i });
+    expect(collapseButton.classList.contains('shrink-0')).toBe(true);
+    expect(collapseButton.classList.contains('whitespace-nowrap')).toBe(true);
+  });
+
   it('preserves fixed expand behavior when unsupported button props are provided at runtime', () => {
     const overrideClick = vi.fn();
 
