@@ -58,25 +58,6 @@ const signalsNavItem: NavItem = {
   hidden: !isSignalsEnabled,
 };
 
-// The experimental Pulse page (event-first observability read model) mirrors the
-// Intelligence gating above: the /pulse route always resolves, but the sidebar
-// entry only appears when the dedicated MASTRA_PULSE_UI flag is set. The server
-// answers 501 on /api/pulse/flows unless a pulse store is configured, so the
-// page degrades gracefully even when reached directly.
-const isPulseEnabled =
-  typeof window !== 'undefined' && (window as unknown as Record<string, unknown>).MASTRA_PULSE_UI === 'true';
-
-const pulseNavItem: NavItem = {
-  name: 'Pulse',
-  url: '/pulse',
-  activePaths: ['/pulse'],
-  Icon: Radio,
-  isOnMastraPlatform: false,
-  // Kept in the registry so the /pulse route and breadcrumbs always resolve, but
-  // only surfaced in the sidebar/command palette when the flag is enabled.
-  hidden: !isPulseEnabled,
-};
-
 export const mainNav: NavSection[] = [
   {
     key: 'primitives',
@@ -197,7 +178,6 @@ export const mainNav: NavSection[] = [
         isOnMastraPlatform: true,
       },
       signalsNavItem,
-      pulseNavItem,
       {
         name: 'Logs',
         url: '/logs',
