@@ -6,20 +6,15 @@ vi.mock('../commands/utils', () => ({
   getPackageManager: vi.fn(() => 'npm'),
 }));
 
+import * as p from '@clack/prompts';
 import { execa } from 'execa';
 import { vol } from 'memfs';
 import type * as MemfsModule from 'memfs';
 import yoctoSpinner from 'yocto-spinner';
 
-// Mock the logger
-vi.mock('./logger', () => ({
-  logger: {
-    log: vi.fn(),
-    error: vi.fn(),
+vi.mock('@clack/prompts', () => ({
+  log: {
     warn: vi.fn(),
-    info: vi.fn(),
-    success: vi.fn(),
-    break: vi.fn(),
   },
 }));
 
@@ -239,23 +234,62 @@ describe('clone-template', () => {
       expect(packageJson.version).toBe('1.0.0'); // Should preserve other fields
     });
 
-    it('should handle missing package.json gracefully', async () => {
+    it('warns and succeeds when package.json is missing', async () => {
       const mockExec = vi.fn().mockImplementation(async () => {
         vol.fromJSON({ '/test-project/README.md': 'template' });
         return { stdout: '', stderr: '' };
       });
       vi.mocked(execa).mockImplementation(mockExec as never);
 
-      const { logger } = await import('./logger');
       const { cloneTemplate } = await import('./clone-template');
 
-      const result = await cloneTemplate({
-        template: mockTemplate,
-        projectName: 'test-project',
-      });
+      await expect(
+        cloneTemplate({
+          template: mockTemplate,
+          projectName: 'test-project',
+        }),
+      ).resolves.toBe('/test-project');
+      expect(p.log.warn).toHaveBeenCalledWith(expect.stringContaining('Could not update package.json:'));
+      expect(p.log.warn).toHaveBeenCalledWith(expect.stringContaining('ENOENT'));
+    });
 
-      expect(result).toBe('/test-project');
-      expect(logger.warn).toHaveBeenCalledWith('Could not update package.json', expect.any(Object));
+    it('warns and succeeds when package.json contains invalid JSON', async () => {
+      const mockExec = vi.fn().mockImplementation(async () => {
+        vol.fromJSON({ '/test-project/package.json': '{invalid json' });
+        return { stdout: '', stderr: '' };
+      });
+      vi.mocked(execa).mockImplementation(mockExec as never);
+
+      const { cloneTemplate } = await import('./clone-template');
+
+      await expect(
+        cloneTemplate({
+          template: mockTemplate,
+          projectName: 'test-project',
+        }),
+      ).resolves.toBe('/test-project');
+      expect(p.log.warn).toHaveBeenCalledWith(expect.stringContaining('Could not update package.json:'));
+      expect(p.log.warn).toHaveBeenCalledWith(expect.stringMatching(/JSON|Unexpected/));
+    });
+
+    it('warns and succeeds when package.json cannot be written', async () => {
+      const mockExec = vi.fn().mockImplementation(async () => {
+        vol.fromJSON({ '/test-project/package.json': JSON.stringify({ name: 'template' }) });
+        return { stdout: '', stderr: '' };
+      });
+      vi.mocked(execa).mockImplementation(mockExec as never);
+      const fs = await import('node:fs/promises');
+      vi.spyOn(fs.default, 'writeFile').mockRejectedValueOnce(new Error('disk full'));
+
+      const { cloneTemplate } = await import('./clone-template');
+
+      await expect(
+        cloneTemplate({
+          template: mockTemplate,
+          projectName: 'test-project',
+        }),
+      ).resolves.toBe('/test-project');
+      expect(p.log.warn).toHaveBeenCalledWith('Could not update package.json: disk full');
     });
 
     it('should throw error if directory already exists', async () => {

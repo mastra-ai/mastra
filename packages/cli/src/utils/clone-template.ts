@@ -1,11 +1,10 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import * as p from '@clack/prompts';
 import { execa } from 'execa';
 import yoctoSpinner from 'yocto-spinner';
 
 import { getPackageManager } from '../commands/utils';
-
-import { logger } from './logger';
 import type { PackageManager } from './package-manager';
 import type { Template } from './template-utils';
 
@@ -152,7 +151,7 @@ async function updatePackageJson(projectPath: string, projectName: string): Prom
     await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2), 'utf-8');
   } catch (error) {
     // It's okay if package.json doesn't exist or can't be updated
-    logger.warn('Could not update package.json', { error: error instanceof Error ? error.message : 'Unknown error' });
+    p.log.warn(`Could not update package.json: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
