@@ -1032,7 +1032,7 @@
     },
     {
       "source": "/docs/agents/file-based-agents",
-      "destination": "/docs/getting-started/develop",
+      "destination": "/docs/develop",
       "permanent": true
     },
     {
@@ -1122,7 +1122,7 @@
     },
     {
       "source": "/docs/getting-started/file-based-agents",
-      "destination": "/docs/getting-started/develop",
+      "destination": "/docs/develop",
       "permanent": true
     },
     {
@@ -2191,6 +2191,16 @@
       "permanent": true
     },
     {
+      "source": "/docs/getting-started/develop",
+      "destination": "/docs/develop",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents",
+      "destination": "/docs/agents/overview",
+      "permanent": true
+    },
+    {
       "source": "/docs/workspace/overview/llms.txt",
       "destination": "/docs/sandbox/overview/llms.txt",
       "permanent": true
@@ -2942,7 +2952,7 @@
     },
     {
       "source": "/docs/agents/file-based-agents/llms.txt",
-      "destination": "/docs/getting-started/develop/llms.txt",
+      "destination": "/docs/develop/llms.txt",
       "permanent": true
     },
     {
@@ -3032,7 +3042,7 @@
     },
     {
       "source": "/docs/getting-started/file-based-agents/llms.txt",
-      "destination": "/docs/getting-started/develop/llms.txt",
+      "destination": "/docs/develop/llms.txt",
       "permanent": true
     },
     {
@@ -3973,6 +3983,16 @@
     {
       "source": "/docs/auth/index/llms.txt",
       "destination": "/docs/auth/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/develop/llms.txt",
+      "destination": "/docs/develop/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/llms.txt",
+      "destination": "/docs/agents/overview/llms.txt",
       "permanent": true
     }
   ]
