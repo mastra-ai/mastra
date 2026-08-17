@@ -536,7 +536,10 @@ function isFactoryIngestedEvent(event: ParsedGithubWebhook): boolean {
   }
   if (event.event === 'pull_request') {
     const action = event.payload.action;
-    if (action === 'synchronize' || action === 'review_requested') return true;
+    // `opened` is what mints the Review card for a pull request. Without it a
+    // factory-authored PR never gets reviewed on the polling path, which is the
+    // only path a local deployment has.
+    if (action === 'opened' || action === 'synchronize' || action === 'review_requested') return true;
   }
   if (event.event === 'pull_request_review' && event.payload.action === 'submitted') return true;
   if (event.event === 'issue_comment' && event.payload.action === 'created') return true;

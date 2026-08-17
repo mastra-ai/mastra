@@ -135,6 +135,12 @@ describe('PlatformGithubEventWorker', () => {
                 payload: { action: 'opened' },
               },
               {
+                id: '1000-1',
+                deliveryId: 'delivery-pr-opened',
+                event: 'pull_request',
+                payload: { action: 'opened' },
+              },
+              {
                 id: '1001-0',
                 deliveryId: 'delivery-sync',
                 event: 'pull_request',
@@ -172,6 +178,11 @@ describe('PlatformGithubEventWorker', () => {
     await worker.start();
     await vi.advanceTimersByTimeAsync(0);
 
+    const parsedPullRequestOpened = {
+      event: 'pull_request',
+      deliveryId: 'delivery-pr-opened',
+      payload: { action: 'opened' },
+    };
     const parsedSynchronize = {
       event: 'pull_request',
       deliveryId: 'delivery-sync',
@@ -193,14 +204,16 @@ describe('PlatformGithubEventWorker', () => {
       retireSubscription: expect.any(Function),
       isAuthorizedSender: expect.any(Function),
     });
-    // Synchronize and review_requested feed the re-review path; closed feeds
-    // the reconciler. opened is dispatched to subscribers but not ingested by
-    // the factory rules — the factory picks up new work through the reconciler.
-    expect(ingestFactoryEvent).toHaveBeenCalledTimes(3);
-    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(1, parsedSynchronize);
-    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(2, parsedReviewRequested);
-    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(3, parsedClosed);
-    expect(dispatch).toHaveBeenCalledTimes(4);
+    // A pull request being opened is what mints its Review card, so it has to
+    // reach the rules engine; synchronize and review_requested feed the
+    // re-review path, and closed feeds the reconciler. An opened *issue* is
+    // deliberately absent — the factory picks new issues up via the reconciler.
+    expect(ingestFactoryEvent).toHaveBeenCalledTimes(4);
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(1, parsedPullRequestOpened);
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(2, parsedSynchronize);
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(3, parsedReviewRequested);
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(4, parsedClosed);
+    expect(dispatch).toHaveBeenCalledTimes(5);
     expect(dispatch).toHaveBeenNthCalledWith(
       1,
       {
@@ -210,9 +223,10 @@ describe('PlatformGithubEventWorker', () => {
       },
       dispatchDependencies,
     );
-    expect(dispatch).toHaveBeenNthCalledWith(2, parsedSynchronize, dispatchDependencies);
-    expect(dispatch).toHaveBeenNthCalledWith(3, parsedReviewRequested, dispatchDependencies);
-    expect(dispatch).toHaveBeenNthCalledWith(4, parsedClosed, dispatchDependencies);
+    expect(dispatch).toHaveBeenNthCalledWith(2, parsedPullRequestOpened, dispatchDependencies);
+    expect(dispatch).toHaveBeenNthCalledWith(3, parsedSynchronize, dispatchDependencies);
+    expect(dispatch).toHaveBeenNthCalledWith(4, parsedReviewRequested, dispatchDependencies);
+    expect(dispatch).toHaveBeenNthCalledWith(5, parsedClosed, dispatchDependencies);
     expect(eventRequests[0]?.searchParams.get('afterTimestamp')).toBe('999');
     expect(eventRequests[1]?.searchParams.get('afterEventId')).toBe('1003-0');
     expect(settings.read()).toEqual({
