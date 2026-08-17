@@ -584,6 +584,13 @@ export class InngestWorkflow<
                     resumeLabels: existingSnapshot?.resumeLabels ?? result.resumeLabels ?? {},
                     result: result.status === 'success' ? toSnapshotResult(result.result) : undefined,
                     error: result.status === 'failed' ? result.error : undefined,
+                    requestContext: requestContext.toJSON(),
+                    tracingContext: workflowSpanData
+                      ? {
+                          traceId: workflowSpanData.traceId,
+                          spanId: workflowSpanData.id,
+                        }
+                      : undefined,
                     timestamp: Date.now(),
                   },
                 });

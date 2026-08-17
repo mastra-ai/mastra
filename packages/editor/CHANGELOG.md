@@ -1,5 +1,39 @@
 # @mastra/editor
 
+## 0.13.14-alpha.2
+
+### Patch Changes
+
+- Fixed editor-owned agent instructions failing silently. Agents configured with `editor: { instructions: true }` now throw a clear error instead of running with empty instructions when no published version is available in Studio. This affected agents that were never provisioned, only had a draft version, were deleted, had a published version with no instructions, or hit a storage error while loading. Fixes https://github.com/mastra-ai/mastra/issues/21373 ([#21395](https://github.com/mastra-ai/mastra/pull/21395))
+
+  **Before:** the agent ran normally with an empty system prompt.
+
+  **After:** resolving or generating with the agent throws until a published version with instructions exists.
+
+  ```ts
+  // Agent definition — Studio owns the instructions:
+  export const agent = new Agent({
+    id: 'support-agent',
+    editor: { instructions: true },
+    model: 'openai/gpt-4o',
+  });
+  ```
+
+  ```ts
+  // Throws until a version is published in Studio:
+  const agent = client.getAgent('support-agent', { status: 'published' });
+  await agent.generate('hi');
+
+  // Use status: 'draft' to run against the latest draft instead, without publishing:
+  const draftAgent = client.getAgent('support-agent', { status: 'draft' });
+  await draftAgent.generate('hi');
+  ```
+
+- Updated dependencies [[`d7e6745`](https://github.com/mastra-ai/mastra/commit/d7e67456954863c55440ea9c49bc6ceb9949972d), [`9acb50f`](https://github.com/mastra-ai/mastra/commit/9acb50f71cec9c362f06820033f90ae6b1f8282f), [`46e9e3f`](https://github.com/mastra-ai/mastra/commit/46e9e3f73babe1bc70080a596cf2ac0b9da48519), [`3f9a190`](https://github.com/mastra-ai/mastra/commit/3f9a19057c027155867b9317294ee4ca7bd0581a), [`e8808e3`](https://github.com/mastra-ai/mastra/commit/e8808e3d8eb585a2565be53e56a7e0e1477352a4), [`eede4de`](https://github.com/mastra-ai/mastra/commit/eede4de104f59b391d28aa249659388e9a1cf558), [`eede4de`](https://github.com/mastra-ai/mastra/commit/eede4de104f59b391d28aa249659388e9a1cf558), [`d4be8c1`](https://github.com/mastra-ai/mastra/commit/d4be8c1739d22d621e3f78790e1dd5eb5ecc3589), [`a5d2eb1`](https://github.com/mastra-ai/mastra/commit/a5d2eb10347eade1ae2816d88f466c25186c54a5), [`13d49d8`](https://github.com/mastra-ai/mastra/commit/13d49d82f434f319d4bd9a4234369d8186f8e102), [`a97044b`](https://github.com/mastra-ai/mastra/commit/a97044b00cc79e189b07509701b2694c728dfeac), [`e81744c`](https://github.com/mastra-ai/mastra/commit/e81744cd13c46619c142dc521dc0baac47607a84)]:
+  - @mastra/core@1.60.0-alpha.4
+  - @mastra/memory@1.27.0-alpha.0
+  - @mastra/mcp@1.17.0-alpha.0
+
 ## 0.13.14-alpha.1
 
 ### Patch Changes

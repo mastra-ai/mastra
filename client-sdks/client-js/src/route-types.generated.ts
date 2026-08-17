@@ -20035,6 +20035,7 @@ export type GetAgentControllerControllerIdSessionsResourceId_PathParams = {
 
 export type GetAgentControllerControllerIdSessionsResourceId_QueryParams = {
   sessionScope?: string | undefined;
+  threadId?: string | undefined;
 };
 
 export type GetAgentControllerControllerIdSessionsResourceId_Response = {
@@ -20044,6 +20045,14 @@ export type GetAgentControllerControllerIdSessionsResourceId_Response = {
   modeId: string;
   modelId: string;
   running?: boolean | undefined;
+  tasks?:
+    | {
+        id: string;
+        content: string;
+        status: 'pending' | 'in_progress' | 'completed';
+        activeForm: string;
+      }[]
+    | undefined;
   omProgress?:
     | {
         status: string;
@@ -20153,8 +20162,9 @@ export interface GetAgentControllerControllerIdSessionsResourceIdThreads_RouteCo
 export type PostAgentControllerControllerIdSessionsResourceIdThreads_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
-export type PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+export type PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams = {
+  sessionScope?: string | undefined;
+};
 
 export type PostAgentControllerControllerIdSessionsResourceIdThreads_Body = {
   title?: string | undefined;
@@ -20203,7 +20213,7 @@ export type DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_P
 };
 
 export type DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response = {
   ok: boolean;
@@ -20237,7 +20247,7 @@ export type PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Path
   DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_PathParams;
 
 export type PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Body = {
   title: string;
@@ -20278,7 +20288,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdThreadsClone_PathPa
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdThreadsClone_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdThreadsClone_Body = {
   sourceThreadId?: string | undefined;
@@ -20371,7 +20381,7 @@ export type GetAgentControllerControllerIdSessionsResourceIdStream_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdStream_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdStream_Request = Simplify<
   (GetAgentControllerControllerIdSessionsResourceIdStream_PathParams extends never
@@ -20401,7 +20411,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdMessages_PathParams
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdMessages_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdMessages_Body = {
   message: string;
@@ -20454,7 +20464,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdSteer_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdSteer_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdSteer_Body = {
   message: string;
@@ -20500,7 +20510,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_PathParams
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_Body =
   PostAgentControllerControllerIdSessionsResourceIdSteer_Body;
@@ -20540,7 +20550,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdAbort_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdAbort_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdAbort_Response =
   DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response;
@@ -20573,7 +20583,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_PathPa
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_Body = {
   toolCallId: string;
@@ -20620,7 +20630,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Path
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdToolSuspension_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Body = {
   toolCallId: string;
@@ -20667,7 +20677,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdMode_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdMode_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdMode_Body = {
   modeId: string;
@@ -20708,7 +20718,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdModel_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdModel_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdModel_Body = {
   modelId: string;
@@ -20751,7 +20761,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdThread_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdThread_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdThread_Body = {
   threadId: string;
@@ -20792,7 +20802,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdNotifications_PathP
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdNotifications_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdNotifications_Body = {
   source: string;
@@ -20881,7 +20891,7 @@ export type GetAgentControllerControllerIdSessionsResourceIdOm_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdOm_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdOm_Response = {
   record?: unknown | undefined;
@@ -20915,7 +20925,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdResource_PathParams
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdResource_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdResource_Body = {
   newResourceId: string;
@@ -20956,7 +20966,7 @@ export type GetAgentControllerControllerIdSessionsResourceIdResources_PathParams
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdResources_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdResources_Response = {
   resourceIds: string[];
@@ -20990,7 +21000,7 @@ export type GetAgentControllerControllerIdSessionsResourceIdGoal_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdGoal_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdGoal_Response = {
   goal?:
@@ -21036,7 +21046,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdGoal_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdGoal_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdGoal_Body = {
   objective: string;
@@ -21079,7 +21089,7 @@ export type PutAgentControllerControllerIdSessionsResourceIdGoal_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PutAgentControllerControllerIdSessionsResourceIdGoal_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PutAgentControllerControllerIdSessionsResourceIdGoal_Body = {
   judgeModelId?: string | undefined;
@@ -21122,7 +21132,7 @@ export type DeleteAgentControllerControllerIdSessionsResourceIdGoal_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type DeleteAgentControllerControllerIdSessionsResourceIdGoal_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type DeleteAgentControllerControllerIdSessionsResourceIdGoal_Response =
   DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response;
@@ -21155,7 +21165,7 @@ export type GetAgentControllerControllerIdSessionsResourceIdPermissions_PathPara
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdPermissions_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdPermissions_Response = {
   categories?:
@@ -21198,7 +21208,7 @@ export type PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_Body = {
   category: 'read' | 'edit' | 'execute' | 'mcp' | 'other';
@@ -21240,7 +21250,7 @@ export type PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_Path
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_Body = {
   toolName: string;
@@ -21282,7 +21292,7 @@ export type PutAgentControllerControllerIdSessionsResourceIdState_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PutAgentControllerControllerIdSessionsResourceIdState_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PutAgentControllerControllerIdSessionsResourceIdState_Body = {
   state: {

@@ -298,8 +298,22 @@ describe('createInngestAgent observe-replay wiring', () => {
       expect((nestedWrapped as any).cache).toBe(durableAgent.cache);
     }
 
-    // Behavioural check: a publish from any of these factory-produced pubsubs
-    // becomes replayable via the agent's pubsub because they share a cache.
+    // Internal workflow watch events must remain live but stay out of replay history.
+    const watchTopic = 'workflow.events.v2.inngest-observe-factory-run';
+    const watchEvents: any[] = [];
+    await wrapped.subscribe(watchTopic, event => {
+      watchEvents.push(event);
+    });
+    await wrapped.publish(watchTopic, {
+      type: 'watch',
+      runId: 'inngest-observe-factory-run',
+      data: { type: 'workflow-step-result', payload: { large: 'payload' } },
+    } as any);
+    expect(watchEvents).toHaveLength(1);
+    expect(await wrapped.getHistory(watchTopic)).toEqual([]);
+
+    // Agent stream publishes from factory-produced pubsubs still become replayable
+    // via the agent's pubsub because they share a cache.
     const runId = 'inngest-observe-factory-run';
     const topic = AGENT_STREAM_TOPIC(runId);
     await wrapped.publish(topic, {
@@ -656,6 +670,10 @@ describe('InngestAgent parity surface', () => {
         userId: 'user-1',
         organizationId: 'org-1',
       },
+      tracingContext: {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+      },
     });
     const mastra = {
       getStorage: () => ({
@@ -664,7 +682,11 @@ describe('InngestAgent parity surface', () => {
     };
     (durableAgent as any).__setMastra(mastra);
 
-    const result = await durableAgent.resume(runId, { answer: 'approved' });
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'org-2');
+    requestContext.set('requestId', 'request-1');
+
+    const result = await durableAgent.resume(runId, { answer: 'approved' }, { requestContext });
     try {
       const deadline = Date.now() + 1_000;
       let entry = globalRunRegistry.get(runId);
@@ -683,7 +705,12 @@ describe('InngestAgent parity surface', () => {
           data: expect.objectContaining({
             requestContext: {
               userId: 'user-1',
-              organizationId: 'org-1',
+              organizationId: 'org-2',
+              requestId: 'request-1',
+            },
+            tracingOptions: {
+              traceId: 'trace-1',
+              parentSpanId: 'span-1',
             },
           }),
         }),
