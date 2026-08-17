@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { TooltipProvider } from '../Tooltip';
@@ -26,7 +26,18 @@ vi.mock('@/ds/components/CodeEditor/highlight', () => ({
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
+
+/** All three need fake timers, which stand in for the frame clock. */
+const frames = (until: () => boolean) => {
+  for (let frame = 0; frame < 400 && !until(); frame++) {
+    act(() => void vi.advanceTimersByTime(16));
+  }
+};
+
+const settle = () => frames(() => false);
+const arrive = (container: HTMLElement, text: string) => frames(() => !!container.textContent?.endsWith(text));
 
 describe('MarkdownRenderer', () => {
   it('renders fenced code blocks through the shared Code renderer', async () => {
@@ -141,95 +152,105 @@ describe('MarkdownRenderer', () => {
     expect(link.rel).toBe('');
   });
 
-  it('leaves settled text as plain prose', () => {
+  it('renders a reply that is not streaming whole, with nothing left to animate', () => {
     const { container } = render(<MarkdownRenderer>{'Two words'}</MarkdownRenderer>);
 
-    expect(container.querySelectorAll('.mastra-markdown-word')).toHaveLength(0);
+    expect(container.textContent).toBe('Two words');
+    expect(container.querySelectorAll('.mastra-markdown-arriving')).toHaveLength(0);
   });
 
-  it('splits streamed text into one span per word', () => {
-    const { container } = render(<MarkdownRenderer streaming>{'Two **bold** words'}</MarkdownRenderer>);
+  it('reveals a streamed reply a word at a time', () => {
+    vi.useFakeTimers();
+    const { container } = render(<MarkdownRenderer streaming>{'Two **bold** words here'}</MarkdownRenderer>);
 
-    const words = [...container.querySelectorAll('.mastra-markdown-word')].map(node => node.textContent);
+    expect(container.textContent).toBe('');
 
-    expect(words).toEqual(['Two', 'bold']);
-    expect(container.querySelector('.mastra-markdown-word-pending')?.textContent).toBe('words');
+    arrive(container, 'Two');
+    expect(container.textContent).toBe('Two');
+
+    arrive(container, 'bold');
+    expect(container.textContent).toBe('Two bold');
   });
 
-  it('fades a word once it is whole rather than as its characters land', () => {
-    const { container, rerender } = render(<MarkdownRenderer streaming>{'Hello wor'}</MarkdownRenderer>);
-
-    const growing = container.querySelector('.mastra-markdown-word-pending');
-
-    expect(growing?.textContent).toBe('wor');
-
-    rerender(<MarkdownRenderer streaming>{'Hello world a'}</MarkdownRenderer>);
-
-    expect(growing?.textContent).toBe('world');
-    expect(growing?.className).toBe('mastra-markdown-word');
-    expect(container.querySelector('.mastra-markdown-word-pending')?.textContent).toBe('a');
-  });
-
-  it('holds back a trailing word that markup splits in two', () => {
-    const { container } = render(<MarkdownRenderer streaming>{'Say Hel**lo**'}</MarkdownRenderer>);
-
-    const held = [...container.querySelectorAll('.mastra-markdown-word-pending')].map(node => node.textContent);
-    const landed = [...container.querySelectorAll('.mastra-markdown-word')].map(node => node.textContent);
-
-    expect(held).toEqual(['Hel', 'lo']);
-    expect(landed).toEqual(['Say']);
-  });
-
-  it('marks only the freshly landed tail of a long reply', () => {
+  it('never remounts a word that has landed, however far the reply runs past it', () => {
+    vi.useFakeTimers();
     const reply = Array.from({ length: 60 }, (_, index) => `word${index}`).join(' ');
+    const { container, rerender } = render(<MarkdownRenderer streaming>{'word0'}</MarkdownRenderer>);
+    const held = (text: string) => [...container.querySelectorAll('span')].find(node => node.textContent === text);
 
-    const { container } = render(<MarkdownRenderer streaming>{reply}</MarkdownRenderer>);
+    rerender(<MarkdownRenderer streaming>{reply}</MarkdownRenderer>);
+    arrive(container, 'word2');
+    const early = held('word1');
 
-    const marked = [...container.querySelectorAll('.mastra-markdown-word')].map(node => node.textContent);
-    const landed = reply.split(' ').slice(0, -1);
+    arrive(container, 'word45');
 
-    expect(marked.length).toBeGreaterThan(0);
-    expect(marked.length).toBeLessThan(landed.length);
-    expect(marked).toEqual(landed.slice(-marked.length));
+    expect(early?.textContent).toBe('word1');
+    expect(held('word1')).toBe(early);
   });
 
-  it('leaves a streamed code fence whole', () => {
+  it('animates only what lands after it joined a reply already under way', () => {
+    vi.useFakeTimers();
+    const word = (index: number) => `word${index}`;
+    const { container } = render(
+      <MarkdownRenderer streaming>{Array.from({ length: 40 }, (_, index) => word(index)).join(' ')}</MarkdownRenderer>,
+    );
+
+    const joined = container.textContent ?? '';
+
+    expect(joined).toBe(Array.from({ length: 28 }, (_, index) => word(index)).join(' '));
+    expect(container.querySelectorAll('.mastra-markdown-arriving')).toHaveLength(0);
+
+    arrive(container, word(39));
+
+    const animated = [...container.querySelectorAll('.mastra-markdown-arriving')].map(node => node.textContent);
+
+    expect(animated).toEqual(Array.from({ length: 12 }, (_, index) => word(index + 28)));
+  });
+
+  it('fades inline code in whole rather than a letter at a time', () => {
+    vi.useFakeTimers();
+    const { container } = render(<MarkdownRenderer streaming>{'Run `npm i` now'}</MarkdownRenderer>);
+
+    arrive(container, 'now');
+
+    const code = container.querySelector('code');
+
+    expect(code?.textContent).toBe('npm i');
+    expect(code?.classList.contains('mastra-markdown-arriving')).toBe(true);
+    expect(code?.querySelector('span')).toBeNull();
+  });
+
+  it('fades a code block in whole, background and all', () => {
+    vi.useFakeTimers();
     const { container } = render(
       <TooltipProvider>
         <MarkdownRenderer streaming>{'```ts\nconst ok = true;\n```'}</MarkdownRenderer>
       </TooltipProvider>,
     );
 
-    expect(screen.getByText('const ok = true;')).toBeDefined();
-    expect(container.querySelectorAll('.mastra-markdown-word, .mastra-markdown-word-pending')).toHaveLength(0);
-  });
+    settle();
 
-  it('leaves the words already on screen in place when more text arrives', () => {
-    const { container, rerender } = render(<MarkdownRenderer streaming>{'Hello there'}</MarkdownRenderer>);
+    const block = container.querySelector('figure');
 
-    const [hello] = container.querySelectorAll('.mastra-markdown-word');
-    const there = container.querySelector('.mastra-markdown-word-pending');
-
-    rerender(<MarkdownRenderer streaming>{'Hello there, friend'}</MarkdownRenderer>);
-
-    const words = container.querySelectorAll('.mastra-markdown-word');
-
-    expect(words[0]).toBe(hello);
-    expect(words[1]).toBe(there);
-    expect([...words].map(node => node.textContent)).toEqual(['Hello', 'there,']);
+    expect(block?.classList.contains('mastra-markdown-arriving')).toBe(true);
+    expect(block?.querySelector('.mastra-markdown-arriving')).toBeNull();
   });
 
   it('remounts no block as the reply grows past it', () => {
+    vi.useFakeTimers();
     const { container, rerender } = render(<MarkdownRenderer streaming>{'First para.\n\nSecond'}</MarkdownRenderer>);
 
+    arrive(container, 'Second');
     const paragraphs = [...container.querySelectorAll('p')];
 
     rerender(<MarkdownRenderer streaming>{'First para.\n\nSecond para.'}</MarkdownRenderer>);
+    arrive(container, 'para.');
 
     expect([...container.querySelectorAll('p')]).toEqual(paragraphs);
   });
 
   it('keeps every element on screen when a reply stops streaming', () => {
+    vi.useFakeTimers();
     const reply = 'Intro para.\n\nSecond para.\n\n```ts\nconst ok = true;\n```\n';
     const { container, rerender } = render(
       <TooltipProvider>
@@ -237,6 +258,7 @@ describe('MarkdownRenderer', () => {
       </TooltipProvider>,
     );
 
+    settle();
     const before = [...container.querySelectorAll('p, figure')];
 
     rerender(
@@ -246,30 +268,22 @@ describe('MarkdownRenderer', () => {
     );
 
     expect([...container.querySelectorAll('p, figure')]).toEqual(before);
-    expect(container.querySelectorAll('.mastra-markdown-word')).toHaveLength(0);
-  });
-
-  it('fades the word a block was holding once the reply moves past it', () => {
-    const { container, rerender } = render(<MarkdownRenderer streaming>{'First'}</MarkdownRenderer>);
-
-    const first = container.querySelector('.mastra-markdown-word-pending');
-
-    rerender(<MarkdownRenderer streaming>{'First\n\nSecond'}</MarkdownRenderer>);
-
-    const held = [...container.querySelectorAll('.mastra-markdown-word-pending')].map(node => node.textContent);
-
-    expect(first?.className).toBe('mastra-markdown-word');
-    expect(held).toEqual(['Second']);
   });
 
   it('closes a marker the stream has not caught up with', () => {
+    vi.useFakeTimers();
     const { container } = render(<MarkdownRenderer streaming>{'A **bold wo'}</MarkdownRenderer>);
+
+    arrive(container, 'wo');
 
     expect(container.querySelector('strong')?.textContent).toBe('bold wo');
   });
 
   it('renders a half-written link as its text rather than a dead anchor', () => {
+    vi.useFakeTimers();
     const { container } = render(<MarkdownRenderer streaming>{'See [the docs](https://mastra'}</MarkdownRenderer>);
+
+    arrive(container, 'docs');
 
     expect(container.querySelector('a')).toBeNull();
     expect(container.textContent).toContain('the docs');

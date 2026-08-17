@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
 import { createDurableAgent } from '../agent/durable/create-durable-agent';
+import { getActiveDurableAgentWorkflowExecutions } from '../agent/durable/run-registry';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
 import { isDurableAgentLike } from '../agent/types';
@@ -2236,10 +2237,17 @@ export class Mastra<
       throw error;
     }
 
-    return editor.agent.applyStoredOverrides(
+    const resolved = (await editor.agent.applyStoredOverrides(
       agent,
       'versionId' in version ? version : { status: version.status ?? 'published' },
-    ) as Promise<TAgent>;
+    )) as TAgent;
+
+    // Mark forks so Agent#execute doesn't try to re-resolve the version and recurse
+    if (resolved !== agent) {
+      resolved.__markStoredVersionApplied();
+    }
+
+    return resolved;
   }
 
   /**
@@ -6498,6 +6506,17 @@ export class Mastra<
 
     // SchedulerWorker is stopped as part of stopWorkers().
     await this.stopWorkers();
+
+    // Durable workflows may still be persisting their next terminal or suspended
+    // snapshot. Keep storage and other shared resources alive until they settle.
+    const durableExecutionResults = await Promise.allSettled(getActiveDurableAgentWorkflowExecutions(this));
+    durableExecutionResults.forEach(result => {
+      if (result.status === 'rejected') {
+        this.#logger?.error('Durable agent execution failed during shutdown', {
+          error: result.reason,
+        });
+      }
+    });
 
     const workspaceIds = Object.keys(this.#workspaces);
     const teardownResults = await Promise.allSettled(

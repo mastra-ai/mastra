@@ -1,9 +1,9 @@
 ---
-title: "Reference: RedisStreamsPubSub | PubSub"
+title: 'Reference: RedisStreamsPubSub | PubSub'
 description: API reference for RedisStreamsPubSub, the Redis Streams pub/sub implementation for distributed event delivery.
 packages:
-  - "@mastra/core"
-  - "@mastra/redis-streams"
+  - '@mastra/core'
+  - '@mastra/redis-streams'
 ---
 
 # RedisStreamsPubSub
@@ -125,6 +125,12 @@ export const mastra = new Mastra({
     type: 'ReadonlyArray<"pull" | "push">',
     description: 'Returns `["pull"]`.',
   },
+  {
+    name: 'supportsOffsets',
+    type: 'boolean',
+    description:
+      'Returns `false`. Redis stream anchors support start positions, but not the numeric indexes used by `subscribeFromOffset()`.',
+  },
 ]}
 />
 
@@ -136,10 +142,16 @@ export const mastra = new Mastra({
 
 Subscribes to a topic. With `options.group`, members of the group share events through a Redis consumer group. Without a group, the subscriber receives every event through a private consumer group.
 
+Set `options.startFrom` to `"latest"` to skip retained entries when Redis creates the consumer group. The default, `"earliest"`, reads retained entries first. This option doesn't reset an existing group's checkpoint.
+
 ```typescript
-await pubsub.subscribe('workflow.events', (event, ack, nack) => {
-  console.log(event)
-})
+await pubsub.subscribe(
+  'workflow.events',
+  (event, ack, nack) => {
+    console.log(event)
+  },
+  { group: 'live-workers', startFrom: 'latest' },
+)
 ```
 
 ### `flush()`

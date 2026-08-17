@@ -412,6 +412,8 @@ const agent = new Agent({
 
 When enabled, the agent detects suspended tools from message history on the next user message. It extracts `resumeData` based on the tool's `resumeSchema`, then automatically resumes the tool.
 
+Automatic resumption applies to data-bearing `suspend()` flows. It doesn't approve tools that use `requireApproval`; those tools remain suspended until an explicit approval or decline is submitted through `approveToolCall()`, `declineToolCall()`, `resumeStream({ approved: boolean })`, or an equivalent UI or API action.
+
 The following example shows a complete conversational flow:
 
 ```typescript title="src/mastra/tools/weather-tool.ts"

@@ -46,10 +46,10 @@ function createSessionDouble() {
   const calls: string[] = [];
   const session = {
     om: {
-      observer: { switchModel: vi.fn(async () => void calls.push('observer')) },
-      reflector: { switchModel: vi.fn(async () => void calls.push('reflector')) },
+      observer: { modelId: () => undefined, switchModel: vi.fn(async () => void calls.push('observer')) },
+      reflector: { modelId: () => undefined, switchModel: vi.fn(async () => void calls.push('reflector')) },
     },
-    state: { set: vi.fn(async () => void calls.push('state')) },
+    state: { get: () => ({}), set: vi.fn(async () => void calls.push('state')) },
     model: { switch: vi.fn(async () => void calls.push('model')) },
   };
   return { session: session as unknown as FactorySessionHandle, double: session, calls };

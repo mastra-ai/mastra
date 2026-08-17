@@ -19,8 +19,9 @@ import type {
   RetentionTablesDescriptor,
   TableRetentionPolicy,
 } from '@mastra/core/storage';
+import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
+import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { runPrune, resolveTargets } from '../../retention';
 
@@ -108,12 +109,24 @@ export class WorkflowsPG extends WorkflowsStorage {
     };
   }
 
+  static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
+    return [
+      {
+        name: `${schemaPrefix}mastra_workflow_snapshot_name_createdat_idx`,
+        table: TABLE_WORKFLOW_SNAPSHOT,
+        columns: ['workflow_name', 'createdAt DESC'],
+      },
+    ];
+  }
+
   /**
    * Returns all DDL statements for this domain: table with unique constraint.
    * Used by exportSchemas to produce a complete, reproducible schema export.
    */
   static getExportDDL(schemaName?: string): string[] {
     const statements: string[] = [];
+    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
 
     // Table (includes the UNIQUE constraint on workflow_name, run_id via generateTableSQL)
     statements.push(
@@ -125,26 +138,33 @@ export class WorkflowsPG extends WorkflowsStorage {
       }),
     );
 
+    for (const idx of WorkflowsPG.getDefaultIndexDefs(schemaPrefix)) {
+      statements.push(generateIndexSQL(idx, schemaName));
+    }
+
     return statements;
   }
 
   /**
    * Returns default index definitions for the workflows domain tables.
-   * Currently no default indexes are defined for workflows.
    */
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    return [];
+    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    return WorkflowsPG.getDefaultIndexDefs(schemaPrefix);
   }
 
   /**
    * Creates default indexes for optimal query performance.
-   * Currently no default indexes are defined for workflows.
    */
   async createDefaultIndexes(): Promise<void> {
-    if (this.#skipDefaultIndexes) {
-      return;
+    if (this.#skipDefaultIndexes) return;
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      try {
+        await this.#db.createIndex(indexDef);
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
+      }
     }
-    // No default indexes for workflows domain
   }
 
   async init(): Promise<void> {

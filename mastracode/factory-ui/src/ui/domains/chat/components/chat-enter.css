@@ -46,9 +46,34 @@
   }
 }
 
+/* The scroller stays pinned to the end while this opens and closes, so these
+ * curves — not a scroll animation — are what carry the transcript. Opening
+ * answers a keypress; closing is the conversation settling, so it drifts. */
+.turn-room {
+  min-height: 0;
+  transition: min-height 1500ms cubic-bezier(0.3, 0, 0.2, 1);
+}
+
+.turn-room-open {
+  min-height: 70cqh;
+  transition: min-height 440ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+/* A turn mounts with its room already due, and a transition alone has nothing to move from. */
+@starting-style {
+  .turn-room-open {
+    min-height: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .chat-surface-enter,
   .composer-enter {
     animation: none;
+  }
+
+  .turn-room,
+  .turn-room-open {
+    transition: none;
   }
 }

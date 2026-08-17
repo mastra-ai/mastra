@@ -1,3 +1,4 @@
+import { isFactoryRuleStage } from '@mastra/factory/rules/types';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useMutation, useMutationState, useQueryClient } from '@tanstack/react-query';
 import { ExternalLink } from 'lucide-react';
@@ -99,7 +100,7 @@ export function useStartFactoryRun() {
       const userSession = await createUserSession(baseUrl, repository.projectRepositoryId, { branch });
       const sessionId = userSession.sessionId;
       const desiredStage = workItem.stages.length === 1 ? workItem.stages[0] : undefined;
-      if (!desiredStage) throw new Error('Factory runs require one exclusive destination stage');
+      if (!isFactoryRuleStage(desiredStage)) throw new Error('Factory runs require one exclusive destination stage');
 
       setPhase('kickoff');
       const prepared = await startFactoryRun(baseUrl, factoryId, {
@@ -114,7 +115,7 @@ export function useStartFactoryRun() {
                 arguments: `${invocation.arguments.trim()}\n\nPrepared workspace context:\n- Session: ${sessionId}\n- Branch: ${userSession.branch}`,
               }
             : invocation,
-        destinationStage: desiredStage as 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done',
+        destinationStage: desiredStage,
         workItem: {
           id: workItem.id,
           role: workItem.role,

@@ -46,6 +46,10 @@ interface InternalSkill extends Skill {
   indexableContent: string;
 }
 
+interface SharedSearchState {
+  documentIds: Set<string>;
+}
+
 // =============================================================================
 // WorkspaceSkillsImpl
 // =============================================================================
@@ -76,6 +80,10 @@ export interface WorkspaceSkillsImplConfig {
    * Default: false
    */
   checkSkillFileMtime?: boolean;
+  /** @internal Namespace used to isolate a dynamic resolver's search documents. */
+  searchNamespace?: string;
+  /** @internal Search document registry shared by request-scoped views. */
+  sharedSearchState?: SharedSearchState;
 }
 
 /**
@@ -88,6 +96,12 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   readonly #validateOnLoad: boolean;
   readonly #assertAvailable?: () => void;
   readonly #checkSkillFileMtime: boolean;
+  readonly #searchNamespace?: string;
+  readonly #sharedSearchState: SharedSearchState;
+
+  /** Request-scoped views for dynamic resolvers, cached by request and canonical path set. */
+  readonly #scopedByRequest = new WeakMap<object, Promise<WorkspaceSkills>>();
+  readonly #scopedByPaths = new Map<string, Promise<WorkspaceSkills>>();
 
   /** Map of skill name -> array of candidates (supports same-named skills from different sources) */
   #skills: Map<string, InternalSkill[]> = new Map();
@@ -120,6 +134,51 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     this.#validateOnLoad = config.validateOnLoad ?? true;
     this.#assertAvailable = config.assertAvailable;
     this.#checkSkillFileMtime = config.checkSkillFileMtime ?? false;
+    this.#searchNamespace = config.searchNamespace;
+    this.#sharedSearchState = config.sharedSearchState ?? { documentIds: new Set() };
+  }
+
+  async getScoped(context?: SkillsContext): Promise<WorkspaceSkills> {
+    if (Array.isArray(this.#skillsResolver)) {
+      return this;
+    }
+
+    const requestContext = context?.requestContext;
+    if (requestContext && typeof requestContext === 'object') {
+      const cached = this.#scopedByRequest.get(requestContext);
+      if (cached) return cached;
+
+      const scoped = this.#createScoped(context).catch(error => {
+        this.#scopedByRequest.delete(requestContext);
+        throw error;
+      });
+      this.#scopedByRequest.set(requestContext, scoped);
+      return scoped;
+    }
+
+    return this.#createScoped(context);
+  }
+
+  async #createScoped(context?: SkillsContext): Promise<WorkspaceSkills> {
+    const paths = await this.#resolvePaths(context);
+    const key = [...paths].sort().join('\n');
+    const cached = this.#scopedByPaths.get(key);
+    if (cached) return cached;
+
+    const scoped = Promise.resolve<WorkspaceSkills>(
+      new WorkspaceSkillsImpl({
+        source: this.#source,
+        skills: paths,
+        searchEngine: this.#searchEngine,
+        validateOnLoad: this.#validateOnLoad,
+        assertAvailable: this.#assertAvailable,
+        checkSkillFileMtime: this.#checkSkillFileMtime,
+        searchNamespace: encodeURIComponent(key),
+        sharedSearchState: this.#sharedSearchState,
+      }),
+    );
+    this.#scopedByPaths.set(key, scoped);
+    return scoped;
   }
 
   // ===========================================================================
@@ -439,11 +498,13 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
     // Ask the search engine for enough rows to survive post-search filtering and
     // canonical alias de-duplication before applying the final topK.
-    const totalIndexedDocuments = [...this.#skills.values()].reduce(
-      (count, candidates) =>
-        count + candidates.reduce((skillCount, skill) => skillCount + 1 + skill.references.length, 0),
-      0,
-    );
+    const totalIndexedDocuments = this.#searchNamespace
+      ? this.#sharedSearchState.documentIds.size
+      : [...this.#skills.values()].reduce(
+          (count, candidates) =>
+            count + candidates.reduce((skillCount, skill) => skillCount + 1 + skill.references.length, 0),
+          0,
+        );
     const expandedTopK = Math.max(skillNames ? topK * 3 : topK, totalIndexedDocuments);
 
     // Delegate to SearchEngine
@@ -461,6 +522,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       const source = result.metadata?.source as string;
 
       if (!skillPath || !source) continue;
+      if (this.#searchNamespace && result.metadata?.skillScope !== this.#searchNamespace) continue;
 
       // Map path back to the canonical skill winner for filtering and results.
       const matchedSkill = this.#resolveByPath(skillPath);
@@ -1131,16 +1193,25 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     return parts.join('\n\n');
   }
 
+  #searchDocumentId(skillPath: string, source: string): string {
+    const id = `skill:${skillPath}:${source}`;
+    return this.#searchNamespace ? `skill-scope:${this.#searchNamespace}:${id}` : id;
+  }
+
   /**
    * Remove a skill's entries from the search index.
    */
   async #removeSkillFromIndex(skill: InternalSkill): Promise<void> {
     if (!this.#searchEngine?.remove) return;
 
-    const ids = [`skill:${skill.path}:SKILL.md`, ...skill.references.map(r => `skill:${skill.path}:${r}`)];
+    const ids = [
+      this.#searchDocumentId(skill.path, 'SKILL.md'),
+      ...skill.references.map(r => this.#searchDocumentId(skill.path, r)),
+    ];
     for (const id of ids) {
       try {
         await this.#searchEngine.remove(id);
+        this.#sharedSearchState.documentIds.delete(id);
       } catch {
         // Best-effort removal; entry may already be gone
       }
@@ -1166,14 +1237,17 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     if (!this.#searchEngine) return;
 
     // Index the main skill instructions
+    const skillDocumentId = this.#searchDocumentId(skill.path, 'SKILL.md');
     await this.#searchEngine.index({
-      id: `skill:${skill.path}:SKILL.md`,
+      id: skillDocumentId,
       content: skill.instructions,
       metadata: {
         skillPath: skill.path,
         source: 'SKILL.md',
+        ...(this.#searchNamespace ? { skillScope: this.#searchNamespace } : {}),
       },
     });
+    this.#sharedSearchState.documentIds.add(skillDocumentId);
 
     // Index each reference file in parallel (independent reads + index calls)
     await Promise.all(
@@ -1182,14 +1256,17 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
         try {
           const rawContent = await this.#source.readFile(fullPath);
           const content = typeof rawContent === 'string' ? rawContent : rawContent.toString('utf-8');
+          const referenceDocumentId = this.#searchDocumentId(skill.path, refPath);
           await this.#searchEngine!.index({
-            id: `skill:${skill.path}:${refPath}`,
+            id: referenceDocumentId,
             content,
             metadata: {
               skillPath: skill.path,
               source: `references/${refPath}`,
+              ...(this.#searchNamespace ? { skillScope: this.#searchNamespace } : {}),
             },
           });
+          this.#sharedSearchState.documentIds.add(referenceDocumentId);
         } catch {
           // Skip files that can't be read
         }
