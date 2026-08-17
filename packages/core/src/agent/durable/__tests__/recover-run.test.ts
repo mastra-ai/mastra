@@ -717,12 +717,12 @@ describe('DurableAgent.recover(runId)', () => {
     const runId = 'run-ready-fail';
     const failingStore = new InMemoryStore();
     const failingPubsub = new EventEmitterPubSub();
-    const actualSubscribeFromOffset = failingPubsub.subscribeFromOffset.bind(failingPubsub);
-    vi.spyOn(failingPubsub, 'subscribeFromOffset').mockImplementation((topic, offset, callback) => {
+    const actualSubscribe = failingPubsub.subscribe.bind(failingPubsub);
+    vi.spyOn(failingPubsub, 'subscribe').mockImplementation((topic, callback, options) => {
       if (topic === AGENT_STREAM_TOPIC(runId)) {
         return Promise.reject(new Error('pubsub subscription failed'));
       }
-      return actualSubscribeFromOffset(topic, offset, callback);
+      return actualSubscribe(topic, callback, options);
     });
     const { agent: failingAgent } = createDurableWithStore('agent-ready-fail', failingStore, failingPubsub);
     await seed(failingStore, runId, 'running', 'agent-ready-fail');

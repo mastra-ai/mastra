@@ -28,6 +28,8 @@
 
 const FUNCTION_KEYS_TO_STRIP = new Set(['execute', 'validate']);
 const LOGGER_METHODS = ['debug', 'info', 'warn', 'error'];
+/** Keys whose value decides the outcome in `shouldStripEntry()`. */
+const VALUE_STRIP_KEYS = new Set(['logger', 'tracingContext', ...FUNCTION_KEYS_TO_STRIP]);
 
 export interface DeepCleanOptions {
   keysToStrip: Set<string> | string[] | Record<string, unknown>;
@@ -183,6 +185,33 @@ function shouldStripEntry(key: string, value: unknown, stripSet: Set<string>): b
   }
 
   return FUNCTION_KEYS_TO_STRIP.has(key) && typeof value === 'function';
+}
+
+/**
+ * Whether an entry past the object-key limit would have been stripped anyway.
+ *
+ * The entry is dropped either way, so the value is taken from its property descriptor
+ * rather than read: a getter must not run for data that is being discarded. That keeps
+ * the truncation count the same wherever a runtime-shaped key sits. An accessor cannot
+ * be classified without invoking it, so it is left to the limit and counted.
+ */
+function wouldBeStripped(key: string, val: object, stripSet: Set<string>): boolean {
+  if (!VALUE_STRIP_KEYS.has(key)) {
+    return false;
+  }
+
+  let descriptor: PropertyDescriptor | undefined;
+  try {
+    descriptor = Object.getOwnPropertyDescriptor(val, key);
+  } catch {
+    return false;
+  }
+
+  if (!descriptor || !('value' in descriptor)) {
+    return false;
+  }
+
+  return shouldStripEntry(key, descriptor.value, stripSet);
 }
 
 function restoreSerializedMapKey(keyType: string, key: any): unknown {
@@ -494,9 +523,19 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
         return formatSerializationError(error);
       }
       let keyCount = 0;
+      let omittedByLimit = 0;
 
       for (const key of keys) {
         if (stripSet.has(key)) {
+          continue;
+        }
+
+        // Count what the limit actually drops; deriving it from `keys.length` would
+        // report stripped keys as truncated.
+        if (keyCount >= maxObjectKeys) {
+          if (!wouldBeStripped(key, val, stripSet)) {
+            omittedByLimit++;
+          }
           continue;
         }
 
@@ -504,11 +543,6 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
         try {
           rawValue = (val as Record<string, unknown>)[key];
         } catch (error) {
-          if (keyCount >= maxObjectKeys) {
-            cleaned['__truncated'] = `${keys.length - keyCount} more keys omitted`;
-            break;
-          }
-
           cleaned[key] = formatSerializationError(error);
           keyCount++;
           continue;
@@ -518,11 +552,6 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
           continue;
         }
 
-        if (keyCount >= maxObjectKeys) {
-          cleaned['__truncated'] = `${keys.length - keyCount} more keys omitted`;
-          break;
-        }
-
         try {
           cleaned[key] = helper(rawValue, depth + 1);
           keyCount++;
@@ -530,6 +559,10 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
           cleaned[key] = formatSerializationError(error);
           keyCount++;
         }
+      }
+
+      if (omittedByLimit > 0) {
+        cleaned['__truncated'] = `${omittedByLimit} more keys omitted`;
       }
 
       return cleaned;

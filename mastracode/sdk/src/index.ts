@@ -634,7 +634,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const memory = config?.memory === false ? undefined : (config?.memory ?? getDynamicMemory(storage, vector));
 
   // MCP
-  const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath, configDir, config?.mcpServers);
+  const mcpManager = config?.disableMcp
+    ? undefined
+    : createMcpManager(project.rootPath, configDir, config?.mcpServers, globalSettings.mcp);
 
   // Hooks
   const hookManager = config?.disableHooks

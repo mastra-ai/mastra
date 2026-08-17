@@ -550,13 +550,11 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           function: step.getFunction(),
           data: {
             inputData,
-            initialState: executionContext.state ?? snapshot?.value ?? {},
             requestContext: forwardedRequestContext,
             runId: runId,
             resume: {
               runId: runId,
               steps: nestedResumeSteps,
-              stepResults: snapshot?.context as any,
               resumePayload: resume.resumePayload,
               resumePath: nestedResumeStepId ? (snapshot?.suspendedPaths?.[nestedResumeStepId] as any) : undefined,
             },

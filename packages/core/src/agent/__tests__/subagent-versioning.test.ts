@@ -524,3 +524,139 @@ describe('Sub-agent version resolution', () => {
     expect(resolveSpy).toHaveBeenCalledWith(sub, { versionId: 'preset-ctx' });
   });
 });
+
+describe('direct agent call version resolution', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('resolves versioned self when requestContext versions select the agent', async () => {
+    const agent = new Agent({
+      id: 'my-agent',
+      name: 'my-agent',
+      instructions: 'code instructions',
+      model: makeMockModel('code response'),
+    });
+    const versionedAgent = new Agent({
+      id: 'my-agent',
+      name: 'my-agent',
+      instructions: 'versioned instructions',
+      model: makeMockModel('versioned response'),
+    });
+
+    const mastra = new Mastra({ agents: { agent } });
+    const resolveSpy = vi.spyOn(mastra, 'resolveVersionedAgent').mockResolvedValue(versionedAgent);
+
+    const ctx = new RequestContext();
+    ctx.set(MASTRA_VERSIONS_KEY, { agents: { 'my-agent': { versionId: 'v1' } } } as VersionOverrides);
+
+    const result = await agent.generate('hello', { requestContext: ctx });
+
+    expect(resolveSpy).toHaveBeenCalledWith(agent, { versionId: 'v1' });
+    expect(result.text).toBe('versioned response');
+  });
+
+  it('resolves versioned self when call-site versions select the agent', async () => {
+    const agent = new Agent({
+      id: 'my-agent',
+      name: 'my-agent',
+      instructions: 'code instructions',
+      model: makeMockModel('code response'),
+    });
+    const versionedAgent = new Agent({
+      id: 'my-agent',
+      name: 'my-agent',
+      instructions: 'versioned instructions',
+      model: makeMockModel('versioned response'),
+    });
+
+    const mastra = new Mastra({ agents: { agent } });
+    const resolveSpy = vi.spyOn(mastra, 'resolveVersionedAgent').mockResolvedValue(versionedAgent);
+
+    const result = await agent.generate('hello', {
+      versions: { agents: { 'my-agent': { status: 'published' } } },
+    });
+
+    expect(resolveSpy).toHaveBeenCalledWith(agent, { status: 'published' });
+    expect(result.text).toBe('versioned response');
+  });
+
+  it('defaultStatus applies to the called agent itself', async () => {
+    const agent = new Agent({
+      id: 'my-agent',
+      name: 'my-agent',
+      instructions: 'code instructions',
+      model: makeMockModel('code response'),
+    });
+    const versionedAgent = new Agent({
+      id: 'my-agent',
+      name: 'my-agent',
+      instructions: 'versioned instructions',
+      model: makeMockModel('versioned response'),
+    });
+
+    const mastra = new Mastra({ agents: { agent }, versions: { defaultStatus: 'published' } });
+    const resolveSpy = vi.spyOn(mastra, 'resolveVersionedAgent').mockResolvedValue(versionedAgent);
+
+    const result = await agent.generate('hello');
+
+    expect(resolveSpy).toHaveBeenCalledWith(agent, { status: 'published' });
+    expect(result.text).toBe('versioned response');
+  });
+
+  it('does not resolve self when overrides target another agent', async () => {
+    const agent = new Agent({
+      id: 'my-agent',
+      name: 'my-agent',
+      instructions: 'code instructions',
+      model: makeMockModel('code response'),
+    });
+
+    const mastra = new Mastra({ agents: { agent }, versions: { agents: { 'other-agent': { versionId: 'v1' } } } });
+    const resolveSpy = vi.spyOn(mastra, 'resolveVersionedAgent');
+
+    const result = await agent.generate('hello');
+
+    expect(resolveSpy).not.toHaveBeenCalled();
+    expect(result.text).toBe('code response');
+  });
+
+  it('falls back to the code-defined agent when self resolution fails', async () => {
+    const agent = new Agent({
+      id: 'my-agent',
+      name: 'my-agent',
+      instructions: 'code instructions',
+      model: makeMockModel('code response'),
+    });
+
+    const mastra = new Mastra({ agents: { agent }, versions: { agents: { 'my-agent': { versionId: 'v1' } } } });
+    vi.spyOn(mastra, 'resolveVersionedAgent').mockRejectedValue(new Error('Editor not configured'));
+
+    const result = await agent.generate('hello');
+
+    expect(result.text).toBe('code response');
+  });
+
+  it('resolves stored overrides exactly once (fork is marked, no recursion)', async () => {
+    const agent = new Agent({
+      id: 'my-agent',
+      name: 'my-agent',
+      instructions: 'code instructions',
+      model: makeMockModel('code response'),
+    });
+
+    const applyStoredOverrides = vi.fn(async (a: Agent) => a.__fork());
+    const stubEditor = { agent: { applyStoredOverrides } } as any;
+
+    new Mastra({
+      agents: { agent },
+      versions: { defaultStatus: 'published' },
+      editor: stubEditor,
+    });
+
+    const result = await agent.generate('hello');
+
+    expect(applyStoredOverrides).toHaveBeenCalledTimes(1);
+    expect(result.text).toBe('code response');
+  });
+});

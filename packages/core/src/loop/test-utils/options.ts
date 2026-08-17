@@ -2108,6 +2108,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           expect(await result.totalUsage).toMatchInlineSnapshot(`
             {
               "cacheCreationInputTokens": undefined,
+              "cacheCreationInputTokens1h": undefined,
+              "cacheCreationInputTokens5m": undefined,
               "cachedInputTokens": 3,
               "inputTokens": 6,
               "outputTokens": 20,
@@ -2128,6 +2130,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           expect(await result.totalUsage).toMatchInlineSnapshot(`
             {
               "cacheCreationInputTokens": undefined,
+              "cacheCreationInputTokens1h": undefined,
+              "cacheCreationInputTokens5m": undefined,
               "cachedInputTokens": 3,
               "inputTokens": 6,
               "outputTokens": 20,
