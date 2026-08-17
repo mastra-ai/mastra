@@ -82,7 +82,7 @@ describe('Subconscious project scope override', () => {
     expect(shared).toMatchObject({ scope: PROJECT_SCOPE });
     expect(await store.getNodeByName({ name: 'Shared Node', scope: ['org:acme', 'resource:session-a'] })).toBeNull();
 
-    const records = await store.knowledgeAbout({ node: shared!, scope: [...PROJECT_SCOPE, 'thread:thread-a'] });
+    const records = await store.listKnowledgeAbout({ node: shared!, scope: [...PROJECT_SCOPE, 'thread:thread-a'] });
     expect(records.records).toHaveLength(1);
     // Unscoped captured records land at thread level; the resource rung is the project.
     expect(records.records[0]!.scope).toEqual([...PROJECT_SCOPE, 'thread:thread-a']);

@@ -88,7 +88,7 @@ export async function listPinnedKnowledge(input: {
   const pins: KnowledgeRecord[] = [];
   let after: string | undefined;
   do {
-    const page = await input.store.knowledgeAbout({
+    const page = await input.store.listKnowledgeAbout({
       node: nodeId,
       scope: input.scope,
       after,

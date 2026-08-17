@@ -215,10 +215,10 @@ export function createKnowledgeTools(
       if (!node || node.mergedInto || !isKnowledgeScopeVisible(node.scope, scope)) return { found: false };
       const query =
         relationship === 'related'
-          ? store.knowledgeRelatedTo
+          ? store.listKnowledgeRelatedTo
           : relationship === 'mentioning'
-            ? store.knowledgeMentioning
-            : store.knowledgeAbout;
+            ? store.listKnowledgeMentioning
+            : store.listKnowledgeAbout;
       const result = await query.call(store, {
         node,
         scope,
@@ -271,7 +271,7 @@ export function createKnowledgeTools(
       if (nodeReference) {
         const node = await store.getNode(nodeReference);
         if (!node || node.mergedInto || !isKnowledgeScopeVisible(node.scope, scope)) return { found: false };
-        const result = await store.knowledgeRelatedTo({ node, scope, after: cursor, limit });
+        const result = await store.listKnowledgeRelatedTo({ node, scope, after: cursor, limit });
         return {
           found: true,
           node: serializeNode(node),

@@ -156,7 +156,7 @@ describe('Subconscious learner', () => {
 
     const skills = await store.listNodes({ scope, kind: 'skill' });
     expect(skills).toHaveLength(1);
-    const evidence = await store.knowledgeAbout({ node: skills[0]!.id, scope });
+    const evidence = await store.listKnowledgeAbout({ node: skills[0]!.id, scope });
     expect(evidence.records).toHaveLength(2);
     expect(evidence.records.every(record => record.sourceThreadId === 'subconscious:alpha:learn')).toBe(true);
   });
@@ -185,7 +185,7 @@ describe('Subconscious learner', () => {
     );
 
     expect(await store.listNodes({ scope, kind: 'skill' })).toEqual([expect.objectContaining({ id: existing.id })]);
-    expect((await store.knowledgeAbout({ node: existing.id, scope })).records).toHaveLength(2);
+    expect((await store.listKnowledgeAbout({ node: existing.id, scope })).records).toHaveLength(2);
   });
 
   it('rejects one-off evidence before creating a skill', async () => {
