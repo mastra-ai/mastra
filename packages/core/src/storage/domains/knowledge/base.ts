@@ -7,7 +7,7 @@ export type KnowledgeScope = string[];
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export type KnowledgeScopeLevel = 'org' | 'resource' | 'thread';
 /** @experimental Knowledge APIs are experimental and may change without notice. */
-export type KnowledgeSemanticDocumentType = 'node' | 'item';
+export type KnowledgeSemanticDocumentType = 'node' | 'record';
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export type KnowledgeSemanticOperation = 'upsert' | 'delete';
 /** @experimental Knowledge APIs are experimental and may change without notice. */
@@ -15,10 +15,10 @@ export type KnowledgeActivityAction =
   | 'node-created'
   | 'node-updated'
   | 'node-merged'
-  | 'item-created'
-  | 'item-deleted'
-  | 'item-restored'
-  | 'item-rescoped';
+  | 'record-created'
+  | 'record-deleted'
+  | 'record-restored'
+  | 'record-rescoped';
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export interface KnowledgeNode {
@@ -35,9 +35,12 @@ export interface KnowledgeNode {
 }
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
-export interface KnowledgeItem {
+export type KnowledgeNodeReference = KnowledgeNode | string;
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeRecord {
   id: string;
-  parentNodeId: string;
+  node: string;
   text: string;
   scope: KnowledgeScope;
   sourceThreadId: string;
@@ -50,16 +53,16 @@ export interface KnowledgeItem {
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export interface KnowledgeMention {
-  sourceType: 'item' | 'node';
-  sourceId: string;
-  recordId: string;
+  sourceType: 'record' | 'node';
+  source: string;
+  node: string;
 }
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export interface KnowledgeCurationCursor {
   sourceThreadId: string;
   agent: string;
-  lastItemId: string;
+  lastKnowledgeId: string;
   updatedAt: Date;
 }
 
@@ -113,9 +116,9 @@ export interface UpdateKnowledgeNodeInput {
 }
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
-export interface AppendKnowledgeItemInput {
+export interface AppendKnowledgeInput {
   id?: string;
-  parentNodeId: string;
+  node: KnowledgeNodeReference;
   text: string;
   scope: KnowledgeScope;
   sourceThreadId: string;
@@ -135,8 +138,8 @@ export interface ListKnowledgeNodesInput {
 }
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
-export interface ListKnowledgeItemsInput {
-  nodeId: string;
+export interface QueryKnowledgeInput {
+  node: KnowledgeNodeReference;
   scope: KnowledgeScope;
   after?: string;
   limit?: number;
@@ -144,8 +147,8 @@ export interface ListKnowledgeItemsInput {
 }
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
-export interface ListKnowledgeItemsOutput {
-  items: KnowledgeItem[];
+export interface QueryKnowledgeOutput {
+  records: KnowledgeRecord[];
   nextCursor?: string;
 }
 
@@ -331,21 +334,22 @@ export abstract class KnowledgeStorage extends StorageDomain {
   abstract updateNode(input: UpdateKnowledgeNodeInput): Promise<KnowledgeNode>;
   abstract mergeNodes(input: { sourceId: string; targetId: string; sourceVersion: number }): Promise<KnowledgeNode>;
 
-  abstract appendItem(input: AppendKnowledgeItemInput): Promise<KnowledgeItem>;
-  abstract getItem(input: { id: string; includeDeleted?: boolean }): Promise<KnowledgeItem | null>;
-  abstract itemsAbout(input: ListKnowledgeItemsInput): Promise<ListKnowledgeItemsOutput>;
-  abstract itemsTouching(input: ListKnowledgeItemsInput): Promise<ListKnowledgeItemsOutput>;
-  abstract removeItem(input: { id: string; deletedBy: string }): Promise<KnowledgeItem>;
-  abstract restoreItem(input: { id: string }): Promise<KnowledgeItem>;
-  abstract rescopeItem(input: { id: string; scope: KnowledgeScope }): Promise<KnowledgeItem>;
-  abstract raiseCeiling(input: { id: string; maxScope?: KnowledgeScopeLevel }): Promise<KnowledgeItem>;
+  abstract appendKnowledge(input: AppendKnowledgeInput): Promise<KnowledgeRecord>;
+  abstract getKnowledge(input: { id: string; includeDeleted?: boolean }): Promise<KnowledgeRecord | null>;
+  abstract knowledgeAbout(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput>;
+  abstract knowledgeMentioning(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput>;
+  abstract knowledgeRelatedTo(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput>;
+  abstract removeKnowledge(input: { id: string; deletedBy: string }): Promise<KnowledgeRecord>;
+  abstract restoreKnowledge(input: { id: string }): Promise<KnowledgeRecord>;
+  abstract rescopeKnowledge(input: { id: string; scope: KnowledgeScope }): Promise<KnowledgeRecord>;
+  abstract raiseKnowledgeCeiling(input: { id: string; maxScope?: KnowledgeScopeLevel }): Promise<KnowledgeRecord>;
 
   abstract search(input: SearchKnowledgeInput): Promise<SearchKnowledgeResult[]>;
   abstract getCurationCursor(input: { sourceThreadId: string; agent: string }): Promise<KnowledgeCurationCursor | null>;
   abstract advanceCurationCursor(input: {
     sourceThreadId: string;
     agent: string;
-    lastItemId: string;
+    lastKnowledgeId: string;
   }): Promise<KnowledgeCurationCursor>;
   abstract listActivity(input: {
     scope: KnowledgeScope;
