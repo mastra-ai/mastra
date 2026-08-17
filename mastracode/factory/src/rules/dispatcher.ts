@@ -546,6 +546,20 @@ export class FactoryDecisionDispatcher {
             } else if (endReason === 'aborted') {
               throw new TerminalDispatchError('Factory skill run was aborted before it finished.');
             }
+          } else {
+            // `deliver` means the signal was queued onto a run that was already
+            // in flight. If that run ends before draining its queue the prompt
+            // is dropped silently: no turn starts, no error surfaces, and the
+            // decision reports success while the card sits in its new stage with
+            // nobody working. Signals persist under their own id (the same
+            // identity the replay guard above reads), so confirm the message
+            // actually landed in the thread rather than trusting the ack.
+            const landed = await session.thread.listActiveMessages();
+            if (!landed.some(message => message.id === record.id)) {
+              // Retryable on purpose: the next attempt finds the session idle
+              // and takes the instrumented `wake` path instead.
+              throw new Error('Factory skill invocation was queued onto an ending run and never reached the agent.');
+            }
           }
         } finally {
           unsubscribe();

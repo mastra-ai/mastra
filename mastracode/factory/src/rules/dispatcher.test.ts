@@ -33,6 +33,8 @@ function createSession(
     signalAccepted?: Promise<{ accepted: true; action?: string }>;
     emitAgentEndDuringSignal?: boolean;
     agentEndReason?: 'complete' | 'aborted' | 'error' | 'suspended';
+    /** Models a signal queued onto an in-flight run that ends before draining it. */
+    dropDeliveredSignal?: boolean;
   },
 ) {
   let threadId = 'thread-1';
@@ -79,7 +81,7 @@ function createSession(
     state: { set: vi.fn(async () => {}) },
     sendMessage: vi.fn(async () => {}),
     sendSignal: vi.fn((input: { id: string }, _options: { requestContext: { get(key: string): unknown } }) => {
-      deliveredSignals.add(input.id);
+      if (!options?.dropDeliveredSignal) deliveredSignals.add(input.id);
       if (options?.emitAgentEndDuringSignal) {
         emitAgentEnd();
       }
@@ -1163,6 +1165,57 @@ describe('FactoryDecisionDispatcher', () => {
     const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
     expect(decision?.status).toBe(expected);
     expect(decision?.lastError).toContain(message);
+    expect(getAgentEndListenerCount()).toBe(0);
+  });
+
+  it('retries a kickoff that was queued onto an ending run instead of reporting success', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      arguments: 'Issue 42',
+      idempotencyKey: 'skill-delivered-onto-dying-run',
+    });
+    await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        id: item.id,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Fix issue',
+          stages: ['execute'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'work',
+      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: PROJECT_ID,
+      kickoffKey: 'kickoff-null',
+      kickoffMessage: null,
+    });
+    // The session is mid-turn, so the signal is delivered onto the in-flight
+    // run; that run then ends without ever persisting or answering the prompt.
+    const { controller, getAgentEndListenerCount } = createSession(undefined, {
+      signalAccepted: Promise.resolve({ accepted: true, action: 'deliver' }),
+      dropDeliveredSignal: true,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(decision?.status).toBe('retry');
+    expect(decision?.lastError).toContain('never reached the agent');
     expect(getAgentEndListenerCount()).toBe(0);
   });
 
