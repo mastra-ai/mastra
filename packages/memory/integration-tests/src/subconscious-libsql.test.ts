@@ -153,7 +153,7 @@ describe('Subconscious LibSQL integration', () => {
     const scope = ['org:acme', `resource:${resourceId}`, `thread:${threadId}`];
     const atlas = await knowledge.resolveNode({ name: 'Project Atlas', scope });
     expect(atlas).toMatchObject({ kind: 'project', scope: scope.slice(0, 2) });
-    expect((await knowledge.knowledgeAbout({ node: atlas!.id, scope })).records).toHaveLength(2);
+    expect((await knowledge.listKnowledgeAbout({ node: atlas!.id, scope })).records).toHaveLength(2);
 
     const betaThreadId = randomUUID();
     await memory.createThread({ threadId: betaThreadId, resourceId, title: 'Sibling thread' });
@@ -219,7 +219,7 @@ describe('Subconscious LibSQL integration', () => {
     const hidden = await tools.knowledge_read!.execute?.({ name: 'Alpha Secret' }, toolContext);
     expect(hidden).toEqual({ found: false });
     const browse = await tools.knowledge_browse!.execute?.({}, toolContext);
-    expect((browse as any).records.map((record: any) => record.name)).not.toContain('Alpha Secret');
+    expect((browse as any).nodes.map((node: any) => node.name)).not.toContain('Alpha Secret');
   });
 
   it('runs remind after observation and emits one scoped remembered signal', async () => {
@@ -630,7 +630,7 @@ describe('Subconscious LibSQL integration', () => {
 
     const skills = await knowledge.listNodes({ scope, kind: 'skill' });
     expect(skills).toHaveLength(1);
-    const evidence = await knowledge.knowledgeAbout({ node: skills[0]!.id, scope });
+    const evidence = await knowledge.listKnowledgeAbout({ node: skills[0]!.id, scope });
     expect(evidence.records).toHaveLength(4);
     expect(new Set(evidence.records.map(item => item.id)).size).toBe(4);
     expect(await knowledge.getCurationCursor({ sourceThreadId: threadId, agent: 'learn' })).toMatchObject({
