@@ -7,6 +7,25 @@ import { waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { releaseSession, renderThread, stubPreparingSession } from './composer-session-test-fixture';
 
 describe('Composer while a session prepares its workspace', () => {
+  it('hydrates the current task list from session state before another task event arrives', async () => {
+    const session = stubPreparingSession({
+      tasks: [
+        {
+          id: 'fix-task-sync',
+          content: 'Fix task-list synchronization',
+          status: 'in_progress',
+          activeForm: 'Fixing task-list synchronization',
+        },
+      ],
+    });
+    const { client } = renderThread();
+
+    session.finishWorkspace();
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Current tasks' })).toBeInTheDocument());
+    expect(screen.getByText('Fixing task-list synchronization')).toBeInTheDocument();
+    await waitForMutationsIdle(client);
+  });
+
   it('blocks sandbox actions while /ensure is pending but keeps the textarea typable', async () => {
     const session = stubPreparingSession({ ensurePending: true });
     const user = userEvent.setup();

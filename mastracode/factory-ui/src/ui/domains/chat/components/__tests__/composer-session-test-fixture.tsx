@@ -1,4 +1,4 @@
-import type { AgentControllerEvent } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/client-js';
 import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import type { QueryClient } from '@tanstack/react-query';
 import { screen, waitFor } from '@testing-library/react';
@@ -15,6 +15,7 @@ import { ChatSessionTestProvider } from '../../context/ChatSessionTestProvider';
 import { useHandoffPrompt } from '../../hooks/useHandoffPrompt';
 import { ActivityLine } from '../ActivityLine';
 import { Composer } from '../Composer';
+import { TaskPanel } from '../TaskPanel';
 import { Transcript } from '../Transcript';
 
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
@@ -46,6 +47,7 @@ interface StubPreparingSessionOptions {
   failWorkspace?: boolean;
   materialized?: boolean;
   ensurePending?: boolean;
+  tasks?: AgentControllerTaskSnapshot[];
   /** Close the turn as soon as a message is delivered. Off when a test drives the turn itself. */
   autoAgentEnd?: boolean;
 }
@@ -67,6 +69,7 @@ export function stubPreparingSession({
   failWorkspace = false,
   materialized = false,
   ensurePending = false,
+  tasks = [],
   autoAgentEnd = true,
 }: StubPreparingSessionOptions = {}): PreparingSession {
   let releaseEnsure = () => {};
@@ -186,6 +189,7 @@ export function stubPreparingSession({
         modeId: 'build',
         modelId: 'openai/gpt-4o-mini',
         threadId: SESSION_ID,
+        tasks,
         settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
       }),
     ),
@@ -243,6 +247,7 @@ function ThreadSurface() {
       <Link to="/away">go-away</Link>
       <Transcript />
       <ActivityLine />
+      <TaskPanel />
       <Composer />
     </>
   );
