@@ -13,6 +13,7 @@ Evaluation Guidelines:
 - Assess whether the response fully addresses the prompt or leaves gaps
 - Evaluate if the response format and tone are appropriate for the request
 - Be objective and focus on alignment rather than response quality
+- When conversation context is provided, use it to resolve short replies such as A, B, yes, and confirm against the preceding conversation.
 
 Score each dimension from 0.0 (completely misaligned) to 1.0 (perfectly aligned).`;
 
@@ -26,21 +27,29 @@ export function createAnalyzePrompt({
   systemPrompt?: string;
   agentResponse: string;
   evaluationMode: 'user' | 'system' | 'both';
+  conversationContext?: string;
 }) {
   // Build the prompt based on evaluation mode
+  const conversationSection =
+    conversationContext
+      ? `Conversation Context:
+${conversationContext}
+
+`
+      : '';
   let promptContext = '';
   let evaluationTarget = '';
 
   if (evaluationMode === 'user') {
-    promptContext = `User Prompt:
+    promptContext = `${conversationSection}User Prompt:
 ${userPrompt}`;
     evaluationTarget = "the user's prompt";
   } else if (evaluationMode === 'system') {
-    promptContext = `System Prompt:
+    promptContext = `${conversationSection}System Prompt:
 ${systemPrompt}`;
     evaluationTarget = "the system's behavioral guidelines and constraints";
   } else {
-    promptContext = `User Prompt:
+    promptContext = `${conversationSection}User Prompt:
 ${userPrompt}
 
 System Prompt:
