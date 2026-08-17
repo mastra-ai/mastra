@@ -72,12 +72,25 @@ new Workspace({
 })
 ```
 
-Point it somewhere else with `basePath`, or pass a `workspace` of your own to run in a remote sandbox. A custom workspace can also mount cloud storage or resolve a separate environment per user or thread:
+To work in a different directory, pass `basePath` and keep the default local workspace:
 
-```typescript title="src/mastra/agents/coding-agent.ts" {10-12}
+```typescript title="src/mastra/agents/coding-agent.ts" {8}
 import { createCodingAgent } from '@mastra/core/coding-agent'
-import { Workspace } from '@mastra/core/workspace'
-import { DaytonaSandbox } from '@mastra/daytona'
+
+export const codingAgent = createCodingAgent({
+  id: 'coding-agent',
+  name: 'Coding agent',
+  instructions: 'You are a helpful coding assistant.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  basePath: '/srv/checkouts/my-app',
+})
+```
+
+Pass a `workspace` to build the pieces yourself. This example lets the agent read the whole repository while commands run inside one package. The same hook takes a remote sandbox in place of `LocalSandbox`:
+
+```typescript title="src/mastra/agents/coding-agent.ts" {10-13}
+import { createCodingAgent } from '@mastra/core/coding-agent'
+import { LocalFilesystem, LocalSandbox, Workspace } from '@mastra/core/workspace'
 
 export const codingAgent = createCodingAgent({
   id: 'coding-agent',
@@ -85,7 +98,8 @@ export const codingAgent = createCodingAgent({
   instructions: 'You are a helpful coding assistant.',
   model: '__GATEWAY_OPENAI_MODEL__',
   workspace: new Workspace({
-    sandbox: new DaytonaSandbox(),
+    filesystem: new LocalFilesystem({ basePath: '/srv/checkouts/my-app' }),
+    sandbox: new LocalSandbox({ workingDirectory: '/srv/checkouts/my-app/packages/api' }),
   }),
 })
 ```
@@ -115,7 +129,30 @@ export const codingAgent = createCodingAgent({
 })
 ```
 
-Task state lives in a memory-backed thread, so a memoryless agent gets no task tools. Your own `signals` are kept and the task provider is added alongside them. To run a memory-backed agent without task tracking, configure the signals on `new Agent()` directly.
+Task state lives in a memory-backed thread, so a memoryless agent gets no task tools.
+
+[`TaskSignalProvider`](/reference/signals/task-signal-provider) takes no options, so customizing this default means choosing which providers the agent gets. Your own `signals` are kept and the task provider is added alongside them:
+
+```typescript title="src/mastra/agents/coding-agent.ts" {11-15}
+import { createCodingAgent } from '@mastra/core/coding-agent'
+import { WebhookSignalProvider } from '@mastra/core/signals'
+import { Memory } from '@mastra/memory'
+
+export const codingAgent = createCodingAgent({
+  id: 'coding-agent',
+  name: 'Coding agent',
+  instructions: 'Plan multi-step work with the task tools, then carry it out.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory(),
+  signals: [
+    new WebhookSignalProvider({
+      extractResourceId: payload => (payload as { repository: string }).repository,
+    }),
+  ],
+})
+```
+
+That agent gets the webhook provider and the task provider. Passing `signals: []` alongside `memory` still yields task tracking. To run a memory-backed agent without task tracking, configure the signals on [`new Agent()`](/reference/agents/agent) directly.
 
 ### Error retries
 
@@ -127,7 +164,9 @@ Model calls fail mid-stream, and a coding run that dies after ten minutes of wor
 
 [`PrefillErrorHandler`](/reference/processors/prefill-error-handler) and [`ProviderHistoryCompat`](/reference/processors/provider-history-compat) are included as well. Both recover from errors caused by the shape of the message history, such as a provider rejecting a conversation that ends with an assistant message, by repairing the history and retrying.
 
-Passing `errorProcessors` replaces this stack instead of adding to it. Pass `[]` for no error processors at all.
+The retries happen inside the `generate()` or `stream()` call that hit the error, so a recovered failure is invisible to your code. When the retries run out, the error surfaces the way any model error does: `generate()` rejects and `stream()` emits an `error` chunk.
+
+Passing `errorProcessors` replaces this stack instead of adding to it. Pass `[]` for no error processors at all. `generate()` and `stream()` also accept `errorProcessors` per call, which replaces the agent's stack for that request. See [Processors](/docs/agents/processors#error-processor-retry-limits) for `maxProcessorRetries`, the budget these processors share.
 
 ### Goals
 
@@ -149,6 +188,18 @@ export const codingAgent = createCodingAgent({
   },
 })
 ```
+
+The `goal` config is the judge and the budget. The objective itself is per thread, set with [`setObjective()`](/docs/harness/goals#managing-the-objective):
+
+```typescript title="src/mastra/run.ts"
+await codingAgent.setObjective('Get the test suite passing', { threadId, resourceId })
+
+const stream = await codingAgent.stream('Start working on the goal', {
+  memory: { thread: threadId, resource: resourceId },
+})
+```
+
+Goals need a [storage](/docs/storage) backend and a memory-backed thread. Without a `judge`, the goal step is a no-op.
 
 ## Instructions for coding work
 
