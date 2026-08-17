@@ -300,19 +300,6 @@ await ensurePulseTables({
 ]}
 />
 
-#### `attachPulseSession(session, exporter, ids?)`
-
-Subscribes to an Agent Controller session bus and records session-layer facts (tool approvals, the true abort outcome, follow-up queueing, mode and model switches) as pulse rows through the exporter's writer. Returns an unsubscribe function.
-
-```typescript
-import { attachPulseSession } from '@mastra/pulse'
-
-const detach = attachPulseSession(session, exporter, {
-  threadId: 'thread-1',
-  resourceId: 'user-1',
-})
-```
-
 #### `backfillFromObservability(options)`
 
 Replays spans already persisted by the observability storage domain through a `PulseExporter`, so historical traces gain a pulse read model.

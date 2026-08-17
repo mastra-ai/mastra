@@ -109,7 +109,7 @@ A flow is everything grouped under one trace. Its status is derived from the raw
 
 Two rules matter here:
 
-- Session abort overrides the span outcome. The span layer records aborted runs as completed; the session-layer abort fact is authoritative, so the derived status is `aborted`. Abort facts carry the aborted run's id, so attribution is an exact join — the abort flips only the flow that contains that run (a thread-plus-time-window fallback covers rows captured before run ids existed).
+- Session abort overrides the span outcome. The span layer records aborted runs as completed; the session-layer abort fact is authoritative, so the derived status is `aborted`. Abort facts carry the aborted run's id, so attribution is an exact join — the abort flips only the flow that contains that run. An abort without a run id attributes to nothing; attribution is never guessed.
 - Staleness is time-based. A flow with no terminal pulse goes `stale` after 30 seconds of silence. This is how crashed processes surface, since their unflushed tail is lost by design.
 
 ## What gets captured
@@ -120,7 +120,7 @@ The exporter consumes every observability event family and turns each into pulse
 | - | - |
 | Spans | Start, end, and error facts for all span types, with capped input/output payloads. Structure edges (`origin_of`, `parent_of`) are emitted at span start so running flows have a tree; `resume_of` and `uses_*` land on span end. Every trace-bearing pulse also gets a `flow_contains` membership edge, and all `pulse` endpoints reference pulse record ids. |
 | Logs | Log messages as pulse rows. Only levels at or above the observability logger's `minLevel` reach the bus; the default is `warn`. |
-| Metrics | Metric values, including cost. Cost only exists on metric events (`estimated_cost_usd`), never on span attributes. |
+| Metrics | Auto-extracted token metrics fold into the model pulse's `data` (with `cost_usd`); duration metrics are dropped; other metrics become `metric_recorded` pulses. Cost lives only on the folded span pulse — live capture and backfill both. |
 | Scores | Score results with a `scored_target` relationship to the scored span or flow |
 | Feedback | Feedback entries with a `scored_target` relationship to the target |
 | Drops | Meta-events counting observability events dropped upstream |
