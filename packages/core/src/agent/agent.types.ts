@@ -12,7 +12,7 @@ import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { MastraStreamTransformOptions } from '../stream/types';
-import type { RequireToolApproval, ToolHooks, ToolPayloadTransformPolicy } from '../tools';
+import type { MCPToolExecutionContext, RequireToolApproval, ToolHooks, ToolPayloadTransformPolicy } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { OutputWriter, WorkflowRunState } from '../workflows/types';
 import type { MessageListInput } from './message-list';
@@ -515,6 +515,9 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
 
   /** Trusted server-side signal for this agent FGA check. */
   actor?: ActorSignal;
+
+  /** MCP protocol context forwarded to tools executed by this agent. */
+  mcp?: MCPToolExecutionContext;
 
   /**
    * Per-invocation version overrides for sub-agents (and future primitives).

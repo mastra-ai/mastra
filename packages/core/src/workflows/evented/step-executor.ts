@@ -19,6 +19,7 @@ import type { SingleStepEntry, StepFlowEntry, StepResult } from '../types';
 import {
   validateStepInput,
   createDeprecationProxy,
+  omitPriorSuspensionFields,
   runCountDeprecationMessage,
   validateStepSuspendData,
 } from '../utils';
@@ -275,10 +276,11 @@ export class StepExecutor extends MastraBase {
       // Use stateUpdate if setState was called, otherwise use original state
       const finalState = stateUpdate ?? params.state;
 
+      const baseStepInfo = omitPriorSuspensionFields(stepInfo) as typeof stepInfo;
       let finalResult: StepResult<any, any, any, any> & { __state?: Record<string, any> };
       if (suspended) {
         finalResult = {
-          ...stepInfo,
+          ...baseStepInfo,
           status: 'suspended',
           suspendedAt: endedAt,
           ...(stepOutput ? { suspendOutput: stepOutput } : {}),
@@ -290,7 +292,7 @@ export class StepExecutor extends MastraBase {
         }
       } else if (bailed) {
         finalResult = {
-          ...stepInfo,
+          ...baseStepInfo,
           // @ts-expect-error - bailed status not in type
           status: 'bailed',
           endedAt,
@@ -299,13 +301,13 @@ export class StepExecutor extends MastraBase {
         };
       } else if (nestedWflowStepPaused) {
         finalResult = {
-          ...stepInfo,
+          ...baseStepInfo,
           status: 'paused',
           __state: finalState,
         };
       } else {
         finalResult = {
-          ...stepInfo,
+          ...baseStepInfo,
           status: 'success',
           endedAt,
           output: stepOutput,
@@ -344,7 +346,7 @@ export class StepExecutor extends MastraBase {
       this.logger?.error(`Error executing step ${stepId}: ` + errorInstance?.stack);
 
       return {
-        ...stepInfo,
+        ...(omitPriorSuspensionFields(stepInfo) as typeof stepInfo),
         status: 'failed',
         endedAt,
         error: errorInstance,
