@@ -2,4 +2,4 @@
 '@mastra/server': minor
 ---
 
-Added a guarded endpoint for reading submitted agent plan Markdown from the agent workspace.
+Added support for loading submitted agent plan Markdown from an agent workspace.
