@@ -3,4 +3,4 @@
 '@mastra/core': patch
 ---
 
-Added LibSQL persistence and legacy-schema migration for scoped knowledge nodes and items.
+Added LibSQL persistence for scoped knowledge nodes and items.
