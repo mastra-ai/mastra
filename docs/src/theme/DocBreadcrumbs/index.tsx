@@ -1,7 +1,7 @@
 import React, { type ReactNode } from 'react'
 import clsx from 'clsx'
 import { ThemeClassNames } from '@docusaurus/theme-common'
-import { useSidebarBreadcrumbs } from '@docusaurus/plugin-content-docs/client'
+import { useDoc, useSidebarBreadcrumbs } from '@docusaurus/plugin-content-docs/client'
 import { useHomePageRoute } from '@docusaurus/theme-common/internal'
 import { translate } from '@docusaurus/Translate'
 import HomeBreadcrumbItem from '@theme/DocBreadcrumbs/Items/Home'
@@ -16,8 +16,9 @@ export default function DocBreadcrumbs(): ReactNode {
   const breadcrumbs = useSidebarBreadcrumbs()
   const homePageRoute = useHomePageRoute()
   const { clearSidebar } = useContextualSidebar()
+  const { metadata } = useDoc()
 
-  if (!breadcrumbs) {
+  if (!breadcrumbs || metadata.id === 'index' || metadata.id === 'develop') {
     return null
   }
 

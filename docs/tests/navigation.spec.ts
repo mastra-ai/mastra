@@ -89,6 +89,14 @@ test.describe('Tab switcher navigation', () => {
 })
 
 test.describe('Breadcrumb navigation', () => {
+  test('hides breadcrumbs on Get Started and Develop', async ({ page }) => {
+    await page.goto('/docs', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('navigation', { name: 'Breadcrumbs' })).toHaveCount(0)
+
+    await page.goto('/docs/develop', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('navigation', { name: 'Breadcrumbs' })).toHaveCount(0)
+  })
+
   test('root groups restore the global sidebar while categories link to their overviews', async ({
     page,
     isMobile,
