@@ -17,10 +17,10 @@ export interface KnowledgeGraphNode {
   kind: string;
   scope: string[];
   rung: KnowledgeRung;
-  /** A pinned item's wikilinks reference this node (the pin accent). */
+  /** A pinned record's wikilinks reference this node (the pin accent). */
   pinned: boolean;
-  /** Knowledge items owned by this node inside the snapshot window (not a total). */
-  itemCount: number;
+  /** Knowledge records owned by this node inside the snapshot window (not a total). */
+  recordCount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -29,23 +29,23 @@ export interface KnowledgeGraphEdge {
   id: string;
   source: string;
   target: string;
-  /** Always 'wikilink' — the item's owner node is the edge source. */
+  /** Always 'wikilink' — the record's owner node is the edge source. */
   type: 'wikilink';
-  itemId: string;
-  /** Derived from a PINNED item — the pin marks the relationship (A9). */
+  recordId: string;
+  /** Derived from a PINNED record — the pin marks the relationship (A9). */
   pinned?: boolean;
 }
 
 /**
- * A knowledge item as a first-class graph element (A11): a windowed item with the
+ * A knowledge record as a first-class graph element (A11): a windowed record with the
  * in-window nodes it touches, owner first (pins omit the hidden reserved
  * owner). Rendered by arity — 1: dot, 2: line, 3+: junction.
  */
-export interface KnowledgeGraphItem {
+export interface KnowledgeGraphRecord {
   id: string;
   nodeIds: string[];
   pinned: boolean;
-  /** Knowledge item text, truncated server-side for hover cards. */
+  /** Knowledge record text, truncated server-side for hover cards. */
   text: string;
 }
 
@@ -54,7 +54,7 @@ export interface KnowledgeGraphPayload {
   threadId?: string;
   nodes: KnowledgeGraphNode[];
   edges: KnowledgeGraphEdge[];
-  items: KnowledgeGraphItem[];
+  records: KnowledgeGraphRecord[];
   truncated: boolean;
   outOfWindow: Array<{ id: string; name: string }>;
   unresolvedCapped: { count: number; names: string[] };
@@ -62,9 +62,9 @@ export interface KnowledgeGraphPayload {
   version: string | null;
 }
 
-export interface KnowledgeNodeItem {
+export interface KnowledgeNodeRecord {
   id: string;
-  parentNodeId: string;
+  node: string;
   relation: 'owned' | 'mentions';
   text: string;
   scope: string[];
@@ -72,7 +72,7 @@ export interface KnowledgeNodeItem {
   sourceThreadId: string;
   capturedAt: string;
   when?: string;
-  /** This item IS a pin (authored under the reserved pinned node). */
+  /** This record IS a pin (authored under the reserved pinned node). */
   pinned: boolean;
   metadata?: Record<string, unknown>;
 }
@@ -88,7 +88,7 @@ export interface KnowledgeNodePayload {
     createdAt: string;
     updatedAt: string;
   };
-  items: KnowledgeNodeItem[];
+  records: KnowledgeNodeRecord[];
 }
 
 function knowledgeBase(baseUrl: string, factoryProjectId: string): string {

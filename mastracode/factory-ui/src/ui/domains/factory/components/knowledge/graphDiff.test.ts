@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { computeArrivals } from './graphDiff';
-import { parseItemSegments } from './itemText';
+import { parseRecordSegments } from './recordText';
 
 function input(viewKey: string, version: string | null, nodeIds: string[], edgeIds: string[] = []) {
   return { viewKey, version, nodeIds: new Set(nodeIds), edgeIds: new Set(edgeIds) };
@@ -46,9 +46,9 @@ describe('computeArrivals', () => {
   });
 });
 
-describe('parseItemSegments', () => {
+describe('parseRecordSegments', () => {
   it('splits text and wikilinks', () => {
-    expect(parseItemSegments('Uses [[Billing API]] for charging and [[auth middleware]].')).toEqual([
+    expect(parseRecordSegments('Uses [[Billing API]] for charging and [[auth middleware]].')).toEqual([
       { type: 'text', value: 'Uses ' },
       { type: 'wikilink', value: 'Billing API' },
       { type: 'text', value: ' for charging and ' },
@@ -58,6 +58,6 @@ describe('parseItemSegments', () => {
   });
 
   it('returns plain text untouched', () => {
-    expect(parseItemSegments('no links here')).toEqual([{ type: 'text', value: 'no links here' }]);
+    expect(parseRecordSegments('no links here')).toEqual([{ type: 'text', value: 'no links here' }]);
   });
 });

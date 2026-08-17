@@ -22,10 +22,10 @@ const nodeFixture: KnowledgeNodePayload = {
     createdAt: '2026-08-13T00:00:00.000Z',
     updatedAt: '2026-08-13T01:00:00.000Z',
   },
-  items: [
+  records: [
     {
-      id: 'item-1',
-      parentNodeId: 'ent-1',
+      id: 'record-1',
+      node: 'ent-1',
       relation: 'owned',
       text: 'Payments Service uses [[Deploy Runbook]] for charging flows.',
       scope: ['org:org-1', `resource:${FACTORY_ID}`],
@@ -36,8 +36,8 @@ const nodeFixture: KnowledgeNodePayload = {
       metadata: { reason: 'Learned from a burned API call — costly to rediscover.' },
     },
     {
-      id: 'item-2',
-      parentNodeId: 'ent-1',
+      id: 'record-2',
+      node: 'ent-1',
       relation: 'owned',
       text: 'Deploys run nightly.',
       scope: ['org:org-1', `resource:${FACTORY_ID}`],
@@ -59,7 +59,7 @@ const graphFixture: KnowledgeGraphPayload = {
       scope: ['org:org-1', `resource:${FACTORY_ID}`],
       rung: 'resource',
       pinned: true,
-      itemCount: 3,
+      recordCount: 3,
       createdAt: '2026-08-13T00:00:00.000Z',
       updatedAt: '2026-08-13T01:00:00.000Z',
     },
@@ -70,23 +70,23 @@ const graphFixture: KnowledgeGraphPayload = {
       scope: ['org:org-1', `resource:${FACTORY_ID}`],
       rung: 'resource',
       pinned: false,
-      itemCount: 1,
+      recordCount: 1,
       createdAt: '2026-08-13T00:00:00.000Z',
       updatedAt: '2026-08-13T01:00:00.000Z',
     },
   ],
   edges: [
-    { id: 'wikilink:ent-1:ent-2', source: 'ent-1', target: 'ent-2', type: 'wikilink', itemId: 'item-1' },
+    { id: 'wikilink:ent-1:ent-2', source: 'ent-1', target: 'ent-2', type: 'wikilink', recordId: 'record-1' },
     // Both nodes carry an incoming edge so both render labels (the label
-    // rule hides names on nodes with zero incoming knowledge items).
-    { id: 'wikilink:ent-2:ent-1', source: 'ent-2', target: 'ent-1', type: 'wikilink', itemId: 'item-2' },
+    // rule hides names on nodes with zero incoming knowledge records).
+    { id: 'wikilink:ent-2:ent-1', source: 'ent-2', target: 'ent-1', type: 'wikilink', recordId: 'record-2' },
   ],
-  // A11: knowledge items drive rendering when present — a pinned line (junction
-  // marker), a reverse line, and a dot on ent-1 (itemCount 3 > 1 keeps it).
-  items: [
-    { id: 'item-1', nodeIds: ['ent-1', 'ent-2'], pinned: true, text: 'Payments Service uses Deploy Runbook.' },
-    { id: 'item-2', nodeIds: ['ent-2', 'ent-1'], pinned: false, text: 'Runbook references the service.' },
-    { id: 'item-3', nodeIds: ['ent-1'], pinned: false, text: 'Deploys run nightly.' },
+  // A11: knowledge records drive rendering when present — a pinned line (junction
+  // marker), a reverse line, and a dot on ent-1 (recordCount 3 > 1 keeps it).
+  records: [
+    { id: 'record-1', nodeIds: ['ent-1', 'ent-2'], pinned: true, text: 'Payments Service uses Deploy Runbook.' },
+    { id: 'record-2', nodeIds: ['ent-2', 'ent-1'], pinned: false, text: 'Runbook references the service.' },
+    { id: 'record-3', nodeIds: ['ent-1'], pinned: false, text: 'Deploys run nightly.' },
   ],
   truncated: false,
   outOfWindow: [],
@@ -103,8 +103,8 @@ function stubKnowledgeRoute(graph: KnowledgeGraphPayload | { status: number; mes
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
-      HttpResponse.json({ workItems: [] }),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-records`, () =>
+      HttpResponse.json({ workRecords: [] }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
@@ -130,7 +130,7 @@ function stubKnowledgeRoute(graph: KnowledgeGraphPayload | { status: number; mes
               scope: ['org:org-1', `resource:${FACTORY_ID}`, `thread:${threadId}`],
               rung: 'thread' as const,
               pinned: false,
-              itemCount: 1,
+              recordCount: 1,
               createdAt: '2026-08-13T04:00:00.000Z',
               updatedAt: '2026-08-13T04:00:00.000Z',
             },
@@ -140,11 +140,11 @@ function stubKnowledgeRoute(graph: KnowledgeGraphPayload | { status: number; mes
             ...graph.edges,
             { id: 'edge-thread', source: 'ent-1', target: 'ent-thread', type: 'wikilink' as const },
           ],
-          // A11: when knowledge items drive rendering, the same incoming connection
-          // must exist as a knowledge item so the label rule still passes.
-          items: [
-            ...(graph.items ?? []),
-            { id: 'item-thread', nodeIds: ['ent-1', 'ent-thread'], pinned: false, text: 'Session note.' },
+          // A11: when knowledge records drive rendering, the same incoming connection
+          // must exist as a knowledge record so the label rule still passes.
+          records: [
+            ...(graph.records ?? []),
+            { id: 'record-thread', nodeIds: ['ent-1', 'ent-thread'], pinned: false, text: 'Session note.' },
           ],
         });
       return HttpResponse.json(graph);
@@ -224,7 +224,7 @@ describe('KnowledgePage', () => {
     ).toBeInTheDocument();
   }, 15000);
 
-  it('opens the flyout on node click with knowledge items and reasoning drill-in', async () => {
+  it('opens the flyout on node click with knowledge records and reasoning drill-in', async () => {
     stubKnowledgeRoute();
     renderRoute();
     const user = userEvent.setup();
@@ -235,20 +235,20 @@ describe('KnowledgePage', () => {
     fireEvent.click(nodes[0]);
 
     const flyout = await screen.findByTestId('knowledge-flyout');
-    // Knowledge items section resolves from the node endpoint: item rows with the
+    // Knowledge records section resolves from the node endpoint: record rows with the
     // pin badge + wikilinks rendered as references.
     expect(await screen.findByText(/for charging flows/)).toBeInTheDocument();
     expect(flyout).toHaveTextContent('Payments Service');
     expect(flyout).toHaveTextContent('Handles charging flows through');
-    // A10: the pinned knowledge item card carries the amber standout marker.
-    const knowledgeItems = screen.getAllByTestId('knowledge-item');
-    expect(within(knowledgeItems[0]!).getByRole('button', { name: 'Deploy Runbook' })).toBeInTheDocument();
-    expect(knowledgeItems.some(card => card.getAttribute('data-pinned') === 'true')).toBe(true);
-    // Drill into the pinned knowledge item → provenance + reasoning.
+    // A10: the pinned knowledge record card carries the amber standout marker.
+    const knowledgeRecords = screen.getAllByTestId('knowledge-record');
+    expect(within(knowledgeRecords[0]!).getByRole('button', { name: 'Deploy Runbook' })).toBeInTheDocument();
+    expect(knowledgeRecords.some(card => card.getAttribute('data-pinned') === 'true')).toBe(true);
+    // Drill into the pinned knowledge record → provenance + reasoning.
     await user.click(screen.getByText(/for charging flows/));
-    const detail = await screen.findByTestId('knowledge-item-detail');
+    const detail = await screen.findByTestId('knowledge-record-detail');
     expect(detail).toHaveTextContent('Captured in session');
-    expect(screen.getByTestId('knowledge-item-reason')).toHaveTextContent(
+    expect(screen.getByTestId('knowledge-record-reason')).toHaveTextContent(
       'Learned from a burned API call — costly to rediscover.',
     );
     // The session link carries the source thread id.
@@ -285,9 +285,9 @@ describe('KnowledgePage', () => {
 
     const nodes = await screen.findAllByTestId('knowledge-node');
     fireEvent.click(nodes[0]);
-    // Hop to the referenced node via the knowledge item's wikilink.
-    const itemCard = (await screen.findAllByTestId('knowledge-item'))[0]!;
-    await user.click(within(itemCard).getByRole('button', { name: 'Deploy Runbook' }));
+    // Hop to the referenced node via the knowledge record's wikilink.
+    const recordCard = (await screen.findAllByTestId('knowledge-record'))[0]!;
+    await user.click(within(recordCard).getByRole('button', { name: 'Deploy Runbook' }));
 
     // Trail: ... project › Payments Service › Deploy Runbook (last crumb inert).
     const breadcrumb = screen.getByRole('navigation', { name: 'Knowledge scope' });

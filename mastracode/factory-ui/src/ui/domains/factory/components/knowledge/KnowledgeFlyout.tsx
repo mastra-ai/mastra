@@ -1,7 +1,7 @@
 /**
  * The right-side flyout: all the juicy details for a clicked node, organized
- * as collapsible sections — Knowledge node (identity + counts), Knowledge items (the node's
- * items with clickable [[wikilinks]]), and a per-knowledge item drill-in with full
+ * as collapsible sections — Knowledge node (identity + counts), Knowledge records (the node's
+ * records with clickable [[wikilinks]]), and a per-knowledge record drill-in with full
  * provenance including the capture agent's reasoning (`metadata.reason`) and
  * the "captured in session" link that opens the thread view (Amendment A2).
  */
@@ -12,8 +12,8 @@ import { ChevronDown, ExternalLink, Pin, Sparkles, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 
 import { useKnowledgeNode } from '../../../../../hooks/useKnowledgeGraph';
-import type { KnowledgeNodeItem, KnowledgeRung } from '../../services/knowledge';
-import { parseItemSegments } from './itemText';
+import type { KnowledgeNodeRecord, KnowledgeRung } from '../../services/knowledge';
+import { parseRecordSegments } from './recordText';
 
 const RUNG_LABELS: Record<KnowledgeRung, string> = { org: 'Org', resource: 'Project', thread: 'Session' };
 
@@ -37,10 +37,10 @@ function RungBadge({ rung }: { rung: KnowledgeRung }) {
   );
 }
 
-function ItemText({ text, onNodeRef }: { text: string; onNodeRef?: (name: string) => void }) {
+function RecordText({ text, onNodeRef }: { text: string; onNodeRef?: (name: string) => void }) {
   return (
     <span>
-      {parseItemSegments(text).map((segment, index) =>
+      {parseRecordSegments(text).map((segment, index) =>
         segment.type === 'wikilink' ? (
           <button
             key={index}
@@ -71,18 +71,18 @@ function relativeTime(iso: string): string {
   return `${Math.round(hours / 24)}d ago`;
 }
 
-function ItemCard({
-  item,
+function RecordCard({
+  record,
   expanded,
   onToggle,
   onNodeRef,
   onOpenThread,
 }: {
-  item: KnowledgeNodeItem;
+  record: KnowledgeNodeRecord;
   /**
-   * Selection is bidirectional and single: the page owns the selected item,
+   * Selection is bidirectional and single: the page owns the selected record,
    * so a graph edge/marker click expands exactly this card, and expanding a
-   * card selects (lights up) its knowledge item in the graph while collapsing the
+   * card selects (lights up) its knowledge record in the graph while collapsing the
    * others.
    */
   expanded: boolean;
@@ -93,28 +93,28 @@ function ItemCard({
   const cardRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (expanded) {
-      // Bring the selected knowledge item into view — a clicked edge or marker may
-      // back a knowledge item deep down the list.
+      // Bring the selected knowledge record into view — a clicked edge or marker may
+      // back a knowledge record deep down the list.
       cardRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
     }
   }, [expanded]);
-  const reason = typeof item.metadata?.reason === 'string' ? item.metadata.reason : undefined;
-  const otherMetadata = Object.entries(item.metadata ?? {}).filter(([key]) => key !== 'reason');
+  const reason = typeof record.metadata?.reason === 'string' ? record.metadata.reason : undefined;
+  const otherMetadata = Object.entries(record.metadata ?? {}).filter(([key]) => key !== 'reason');
   return (
     <div
       ref={cardRef}
-      data-testid="knowledge-item"
-      data-pinned={item.pinned || undefined}
+      data-testid="knowledge-record"
+      data-pinned={record.pinned || undefined}
       className={[
         'rounded-lg border transition-colors',
-        // A10: pinned knowledge items stand out — the same amber accent the graph
+        // A10: pinned knowledge records stand out — the same amber accent the graph
         // uses, with a faint amber wash behind the card.
-        item.pinned ? 'bg-amber-400/10' : 'bg-surface3/60',
+        record.pinned ? 'bg-amber-400/10' : 'bg-surface3/60',
         expanded
-          ? item.pinned
+          ? record.pinned
             ? 'border-amber-400/70'
             : 'border-purple-400/50'
-          : item.pinned
+          : record.pinned
             ? 'border-amber-400/40'
             : 'border-surface5',
       ].join(' ')}
@@ -132,29 +132,29 @@ function ItemCard({
         }}
       >
         <div className="text-icon5 text-xs leading-relaxed">
-          <ItemText text={item.text} onNodeRef={onNodeRef} />
-          {item.pinned ? (
-            <Pin size={11} className="ml-1 inline text-amber-400" aria-label="Pinned knowledge item" />
+          <RecordText text={record.text} onNodeRef={onNodeRef} />
+          {record.pinned ? (
+            <Pin size={11} className="ml-1 inline text-amber-400" aria-label="Pinned knowledge record" />
           ) : null}
         </div>
         <div className="text-icon3 mt-1.5 flex items-center gap-2 text-[10px]">
-          <RungBadge rung={item.rung} />
-          {item.relation === 'mentions' ? <span className="text-icon3">mentions</span> : null}
-          <span>captured {relativeTime(item.capturedAt)}</span>
+          <RungBadge rung={record.rung} />
+          {record.relation === 'mentions' ? <span className="text-icon3">mentions</span> : null}
+          <span>captured {relativeTime(record.capturedAt)}</span>
         </div>
       </div>
       {expanded ? (
-        <div data-testid="knowledge-item-detail" className="border-surface5 border-t px-3 py-2.5 text-[11px]">
+        <div data-testid="knowledge-record-detail" className="border-surface5 border-t px-3 py-2.5 text-[11px]">
           <dl className="text-icon4 grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1">
             <dt>Captured in session</dt>
             <dd>
-              {item.sourceThreadId ? (
+              {record.sourceThreadId ? (
                 <button
                   type="button"
                   className="flex items-center gap-1 text-purple-300 hover:underline"
-                  onClick={() => onOpenThread?.(item.sourceThreadId)}
+                  onClick={() => onOpenThread?.(record.sourceThreadId)}
                 >
-                  <span className="max-w-40 truncate">{item.sourceThreadId}</span>
+                  <span className="max-w-40 truncate">{record.sourceThreadId}</span>
                   <ExternalLink size={10} />
                 </button>
               ) : (
@@ -162,21 +162,21 @@ function ItemCard({
               )}
             </dd>
             <dt>Captured at</dt>
-            <dd>{new Date(item.capturedAt).toLocaleString()}</dd>
-            {item.when ? (
+            <dd>{new Date(record.capturedAt).toLocaleString()}</dd>
+            {record.when ? (
               <>
                 <dt>When</dt>
-                <dd>{item.when}</dd>
+                <dd>{record.when}</dd>
               </>
             ) : null}
             <dt>Scope chain</dt>
-            <dd className="break-all">{item.scope.join(' → ')}</dd>
+            <dd className="break-all">{record.scope.join(' → ')}</dd>
             <dt>Pinned</dt>
-            <dd>{item.pinned ? 'yes' : 'no'}</dd>
+            <dd>{record.pinned ? 'yes' : 'no'}</dd>
           </dl>
           {reason ? (
             <div
-              data-testid="knowledge-item-reason"
+              data-testid="knowledge-record-reason"
               className="mt-2 rounded-md border border-amber-400/30 bg-amber-400/10 p-2"
             >
               <div className="mb-1 flex items-center gap-1 text-[10px] font-semibold tracking-wide text-amber-300 uppercase">
@@ -186,7 +186,7 @@ function ItemCard({
             </div>
           ) : (
             <p className="text-icon3 mt-2 text-[10px] italic">
-              No capture reasoning was recorded for this knowledge item.
+              No capture reasoning was recorded for this knowledge record.
             </p>
           )}
           {otherMetadata.length > 0 ? (
@@ -209,10 +209,10 @@ export interface KnowledgeFlyoutProps {
   factoryProjectId: string;
   nodeId: string;
   threadId?: string;
-  /** Highlight the knowledge item backing a clicked edge. */
-  focusItemId?: string;
-  /** Card expand/collapse selects (or clears) the knowledge item page-wide — the graph lights it up too. */
-  onSelectItem?: (itemId: string | null) => void;
+  /** Highlight the knowledge record backing a clicked edge. */
+  focusRecordId?: string;
+  /** Card expand/collapse selects (or clears) the knowledge record page-wide — the graph lights it up too. */
+  onSelectRecord?: (recordId: string | null) => void;
   onClose: () => void;
   onNodeRef?: (name: string) => void;
   onOpenThread?: (threadId: string) => void;
@@ -222,8 +222,8 @@ export function KnowledgeFlyout({
   factoryProjectId,
   nodeId,
   threadId,
-  focusItemId,
-  onSelectItem,
+  focusRecordId,
+  onSelectRecord,
   onClose,
   onNodeRef,
   onOpenThread,
@@ -277,8 +277,8 @@ export function KnowledgeFlyout({
                   <dd className="text-icon5 text-right">{new Date(nodeQuery.data.node.createdAt).toLocaleString()}</dd>
                   <dt>Updated</dt>
                   <dd className="text-icon5 text-right">{new Date(nodeQuery.data.node.updatedAt).toLocaleString()}</dd>
-                  <dt>Knowledge items</dt>
-                  <dd className="text-icon5 text-right">{nodeQuery.data.items.length}</dd>
+                  <dt>Knowledge records</dt>
+                  <dd className="text-icon5 text-right">{nodeQuery.data.records.length}</dd>
                 </dl>
               </CollapsibleContent>
             </Collapsible>
@@ -288,28 +288,28 @@ export function KnowledgeFlyout({
                 <SectionHeader title="Content" />
                 <CollapsibleContent>
                   <p className="text-icon5 px-4 pb-3 text-xs leading-relaxed whitespace-pre-wrap">
-                    <ItemText text={nodeQuery.data.node.content} onNodeRef={onNodeRef} />
+                    <RecordText text={nodeQuery.data.node.content} onNodeRef={onNodeRef} />
                   </p>
                 </CollapsibleContent>
               </Collapsible>
             ) : null}
 
             <Collapsible defaultOpen>
-              <SectionHeader title="Knowledge items" count={nodeQuery.data.items.length} />
+              <SectionHeader title="Knowledge records" count={nodeQuery.data.records.length} />
               <CollapsibleContent>
                 <div className="flex flex-col gap-2 px-4 pb-3">
-                  {nodeQuery.data.items.length === 0 ? (
-                    <p className="text-icon3 text-xs">No knowledge items about this node yet.</p>
+                  {nodeQuery.data.records.length === 0 ? (
+                    <p className="text-icon3 text-xs">No knowledge records about this node yet.</p>
                   ) : (
-                    nodeQuery.data.items.map(item => (
+                    nodeQuery.data.records.map(record => (
                       <div
-                        key={item.id}
-                        className={item.id === focusItemId ? 'rounded-lg ring-2 ring-purple-400/60' : undefined}
+                        key={record.id}
+                        className={record.id === focusRecordId ? 'rounded-lg ring-2 ring-purple-400/60' : undefined}
                       >
-                        <ItemCard
-                          item={item}
-                          expanded={item.id === focusItemId}
-                          onToggle={() => onSelectItem?.(item.id === focusItemId ? null : item.id)}
+                        <RecordCard
+                          record={record}
+                          expanded={record.id === focusRecordId}
+                          onToggle={() => onSelectRecord?.(record.id === focusRecordId ? null : record.id)}
                           onNodeRef={onNodeRef}
                           onOpenThread={onOpenThread}
                         />

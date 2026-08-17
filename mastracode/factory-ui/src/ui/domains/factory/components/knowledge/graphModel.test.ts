@@ -3,13 +3,13 @@ import { describe, expect, it } from 'vitest';
 import type { KnowledgeGraphEdge, KnowledgeGraphNode } from '../../services/knowledge';
 import {
   degreeMap,
-  deriveItemElements,
+  deriveRecordElements,
   egoGraph,
   filterGraph,
-  ITEM_DOT_SIZE,
-  ITEM_JUNCTION_SIZE,
-  ITEM_PIN_SIZE,
-  itemPairEdges,
+  RECORD_DOT_SIZE,
+  RECORD_JUNCTION_SIZE,
+  RECORD_PIN_SIZE,
+  recordPairEdges,
   NODE_SIZE_DOT,
   NODE_SIZE_MAX,
   NODE_SIZE_MIN,
@@ -28,7 +28,7 @@ function node(id: string, overrides: Partial<KnowledgeGraphNode> = {}): Knowledg
     scope: ['org:o', 'resource:r'],
     rung: 'resource',
     pinned: false,
-    itemCount: 1,
+    recordCount: 1,
     createdAt: '2026-08-13T00:00:00.000Z',
     updatedAt: '2026-08-13T00:00:00.000Z',
     ...overrides,
@@ -36,7 +36,7 @@ function node(id: string, overrides: Partial<KnowledgeGraphNode> = {}): Knowledg
 }
 
 function edge(source: string, target: string, type: 'wikilink' = 'wikilink'): KnowledgeGraphEdge {
-  return { id: `${type}:${source}:${target}`, source, target, type, itemId: 'f-1' };
+  return { id: `${type}:${source}:${target}`, source, target, type, recordId: 'f-1' };
 }
 
 describe('nodeSize (Amendments A3 + A5)', () => {
@@ -110,8 +110,8 @@ describe('filterGraph', () => {
     expect(result.edges).toEqual([pinnedEdge]);
   });
 
-  it('pin filter keeps nodes touched by pinned items via pair edges (A11)', () => {
-    const pairs = itemPairEdges([{ id: 'm1', nodeIds: ['org-1', 'res-1'], pinned: true, text: 'pinned link' }]);
+  it('pin filter keeps nodes touched by pinned records via pair edges (A11)', () => {
+    const pairs = recordPairEdges([{ id: 'm1', nodeIds: ['org-1', 'res-1'], pinned: true, text: 'pinned link' }]);
     const result = filterGraph(nodes, pairs, { rungs: new Set(), pinnedOnly: true });
     expect(result.nodes.map(node => node.id).sort()).toEqual(['org-1', 'res-1', 'res-pinned']);
   });
@@ -122,61 +122,74 @@ describe('filterGraph', () => {
   });
 });
 
-describe('deriveItemElements (Amendment A11)', () => {
-  const mem = (id: string, nodeIds: string[], pinned = false) => ({ id, nodeIds, pinned, text: `item ${id}` });
-
-  it('renders a single-node item as a dot with a hugging stub edge, node as the edge source', () => {
-    const owner = node('a', { itemCount: 3 });
-    const { itemNodes, itemEdges } = deriveItemElements([owner], [mem('m1', ['a'])]);
-    expect(itemNodes).toEqual([expect.objectContaining({ id: 'item:m1', kind: 'dot', size: ITEM_DOT_SIZE })]);
-    expect(itemEdges).toEqual([expect.objectContaining({ id: 'item:m1:stub', source: 'a', target: 'item:m1' })]);
+describe('deriveRecordElements (Amendment A11)', () => {
+  const knowledgeRecord = (id: string, nodeIds: string[], pinned = false) => ({
+    id,
+    nodeIds,
+    pinned,
+    text: `record ${id}`,
   });
 
-  it("suppresses the dot when an unpinned item is its node's only item — the circle IS the item", () => {
-    const owner = node('a', { itemCount: 1 });
-    const { itemNodes, itemEdges } = deriveItemElements([owner], [mem('m1', ['a'])]);
-    expect(itemNodes).toHaveLength(0);
-    expect(itemEdges).toHaveLength(0);
+  it('renders a single-node record as a dot with a hugging stub edge, node as the edge source', () => {
+    const owner = node('a', { recordCount: 3 });
+    const { recordNodes, recordEdges } = deriveRecordElements([owner], [knowledgeRecord('m1', ['a'])]);
+    expect(recordNodes).toEqual([expect.objectContaining({ id: 'record:m1', kind: 'dot', size: RECORD_DOT_SIZE })]);
+    expect(recordEdges).toEqual([expect.objectContaining({ id: 'record:m1:stub', source: 'a', target: 'record:m1' })]);
   });
 
-  it('renders a pinned single-node item as the pin chip even on a one-item node', () => {
-    const owner = node('a', { itemCount: 1 });
-    const { itemNodes } = deriveItemElements([owner], [mem('m1', ['a'], true)]);
-    expect(itemNodes).toEqual([expect.objectContaining({ kind: 'dot', size: ITEM_PIN_SIZE })]);
+  it("suppresses the dot when an unpinned record is its node's only record — the circle IS the record", () => {
+    const owner = node('a', { recordCount: 1 });
+    const { recordNodes, recordEdges } = deriveRecordElements([owner], [knowledgeRecord('m1', ['a'])]);
+    expect(recordNodes).toHaveLength(0);
+    expect(recordEdges).toHaveLength(0);
   });
 
-  it('renders a two-node item as the connecting line — the item IS the edge', () => {
-    const { itemNodes, itemEdges } = deriveItemElements([node('a'), node('b')], [mem('m1', ['a', 'b'])]);
-    expect(itemNodes).toHaveLength(0);
-    expect(itemEdges).toEqual([expect.objectContaining({ id: 'item:m1', source: 'a', target: 'b' })]);
+  it('renders a pinned single-node record as the pin chip even on a one-record node', () => {
+    const owner = node('a', { recordCount: 1 });
+    const { recordNodes } = deriveRecordElements([owner], [knowledgeRecord('m1', ['a'], true)]);
+    expect(recordNodes).toEqual([expect.objectContaining({ kind: 'dot', size: RECORD_PIN_SIZE })]);
   });
 
-  it('renders a PINNED two-node item as a midpoint junction so the chip is collision-protected', () => {
-    const { itemNodes, itemEdges } = deriveItemElements([node('a'), node('b')], [mem('m1', ['a', 'b'], true)]);
-    expect(itemNodes).toEqual([expect.objectContaining({ kind: 'junction', size: ITEM_PIN_SIZE })]);
-    expect(itemEdges.map(edge => [edge.source, edge.target])).toEqual([
-      ['a', 'item:m1'],
-      ['b', 'item:m1'],
+  it('renders a two-node record as the connecting line — the record IS the edge', () => {
+    const { recordNodes, recordEdges } = deriveRecordElements(
+      [node('a'), node('b')],
+      [knowledgeRecord('m1', ['a', 'b'])],
+    );
+    expect(recordNodes).toHaveLength(0);
+    expect(recordEdges).toEqual([expect.objectContaining({ id: 'record:m1', source: 'a', target: 'b' })]);
+  });
+
+  it('renders a PINNED two-node record as a midpoint junction so the chip is collision-protected', () => {
+    const { recordNodes, recordEdges } = deriveRecordElements(
+      [node('a'), node('b')],
+      [knowledgeRecord('m1', ['a', 'b'], true)],
+    );
+    expect(recordNodes).toEqual([expect.objectContaining({ kind: 'junction', size: RECORD_PIN_SIZE })]);
+    expect(recordEdges.map(edge => [edge.source, edge.target])).toEqual([
+      ['a', 'record:m1'],
+      ['b', 'record:m1'],
     ]);
   });
 
-  it('renders a 3+-node item as a junction splitting to each node', () => {
-    const { itemNodes, itemEdges } = deriveItemElements(
+  it('renders a 3+-node record as a junction splitting to each node', () => {
+    const { recordNodes, recordEdges } = deriveRecordElements(
       [node('a'), node('b'), node('c')],
-      [mem('m1', ['a', 'b', 'c'])],
+      [knowledgeRecord('m1', ['a', 'b', 'c'])],
     );
-    expect(itemNodes).toEqual([expect.objectContaining({ id: 'item:m1', kind: 'junction', size: ITEM_JUNCTION_SIZE })]);
-    expect(itemEdges).toHaveLength(3);
+    expect(recordNodes).toEqual([
+      expect.objectContaining({ id: 'record:m1', kind: 'junction', size: RECORD_JUNCTION_SIZE }),
+    ]);
+    expect(recordEdges).toHaveLength(3);
   });
 
-  it('drops items touching nodes outside the visible set (filter/ego safety)', () => {
-    const { itemNodes, itemEdges } = deriveItemElements([node('a')], [mem('m1', ['a', 'ghost'])]);
-    expect(itemNodes).toHaveLength(0);
-    expect(itemEdges).toHaveLength(0);
+  it('drops records touching nodes outside the visible set (filter/ego safety)', () => {
+    const { recordNodes, recordEdges } = deriveRecordElements([node('a')], [knowledgeRecord('m1', ['a', 'ghost'])]);
+    expect(recordNodes).toHaveLength(0);
+    expect(recordEdges).toHaveLength(0);
   });
 
-  it('itemPairEdges emits per-item owner→target pairs carrying the pin flag', () => {
-    const pairs = itemPairEdges([mem('m1', ['a', 'b', 'c'], true), mem('m2', ['a'])]);
+  it('recordPairEdges emits per-record owner→target pairs carrying the pin flag', () => {
+    const pairs = recordPairEdges([knowledgeRecord('m1', ['a', 'b', 'c'], true), knowledgeRecord('m2', ['a'])]);
     expect(pairs.map(pair => [pair.source, pair.target, pair.pinned])).toEqual([
       ['a', 'b', true],
       ['a', 'c', true],
@@ -193,14 +206,14 @@ describe('egoGraph (Amendment A5)', () => {
     expect(result.edges.map(e => e.id).sort()).toEqual(['wikilink:a:b', 'wikilink:c:b']);
   });
 
-  it('keeps the full node set of a junction item touching the focus', () => {
-    // A 3+-node item is one neighborhood: dropping any of its nodes
-    // makes deriveItemElements discard the item, stranding a neighbor
+  it('keeps the full node set of a junction record touching the focus', () => {
+    // A 3+-node record is one neighborhood: dropping any of its nodes
+    // makes deriveRecordElements discard the record, stranding a neighbor
     // with no visible connection (the far-left orphan bug).
     const nodes = [node('a'), node('b'), node('c'), node('d'), node('e')];
-    const items = [{ id: 'm1', nodeIds: ['b', 'a', 'c', 'd'], pinned: false, text: 'item m1' }];
-    const edges = itemPairEdges(items);
-    const result = egoGraph(nodes, edges, 'a', items);
+    const records = [{ id: 'm1', nodeIds: ['b', 'a', 'c', 'd'], pinned: false, text: 'record m1' }];
+    const edges = recordPairEdges(records);
+    const result = egoGraph(nodes, edges, 'a', records);
     expect(result.nodes.map(node => node.id).sort()).toEqual(['a', 'b', 'c', 'd']);
   });
 });

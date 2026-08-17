@@ -17,9 +17,9 @@ import { useInteractionIdle } from '../domains/factory/components/knowledge/useI
 /**
  * The Knowledge page: a live force-directed graph of the project's knowledge —
  * nodes as nodes, wikilink relationships as edges. The default view is
- * project scope (org + project records, the knowledge items that carry across
+ * project scope (org + project records, the knowledge records that carry across
  * sessions); thread-scoped knowledge is reached only by drilling into a
- * knowledge item's "captured in session" link, which switches to the thread view with
+ * knowledge record's "captured in session" link, which switches to the thread view with
  * an org → project → thread breadcrumb (Amendment A2). Thread state lives in
  * the `?thread=` search param so the view is linkable and back-button safe.
  */
@@ -31,7 +31,7 @@ export function KnowledgePage() {
 export interface TrailEntry {
   nodeId: string;
   name: string;
-  itemId?: string;
+  recordId?: string;
 }
 
 function Breadcrumb({
@@ -180,7 +180,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
           payload={graphQuery.data}
           arrivals={arrivals}
           focusedId={selected?.nodeId ?? null}
-          focusedItemId={selected?.itemId ?? null}
+          focusedRecordId={selected?.recordId ?? null}
           onFocusChange={id => {
             // A graph click starts a fresh trail; a pane click clears it.
             if (!id) return setTrail([]);
@@ -189,9 +189,9 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
           }}
           onNodeClick={node => setSelected({ nodeId: node.id, name: node.name })}
           onEdgeClick={edge => {
-            // Selecting an edge selects AND expands the supporting knowledge item (A7).
+            // Selecting an edge selects AND expands the supporting knowledge record (A7).
             const node = graphQuery.data?.nodes.find(entry => entry.id === edge.source);
-            setSelected({ nodeId: edge.source, name: node?.name ?? edge.source, itemId: edge.itemId });
+            setSelected({ nodeId: edge.source, name: node?.name ?? edge.source, recordId: edge.recordId });
           }}
         />
         {selected && factoryProjectId ? (
@@ -199,14 +199,14 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
             factoryProjectId={factoryProjectId}
             nodeId={selected.nodeId}
             threadId={threadId}
-            focusItemId={selected.itemId}
-            onSelectItem={itemId =>
-              // Bidirectional selection: expanding a card selects the knowledge item
+            focusRecordId={selected.recordId}
+            onSelectRecord={recordId =>
+              // Bidirectional selection: expanding a card selects the knowledge record
               // page-wide, so the graph lights its marker/edge up too.
               setTrail(current =>
                 current.length === 0
                   ? current
-                  : [...current.slice(0, -1), { ...current[current.length - 1]!, itemId: itemId ?? undefined }],
+                  : [...current.slice(0, -1), { ...current[current.length - 1]!, recordId: recordId ?? undefined }],
               )
             }
             onClose={() => setTrail([])}

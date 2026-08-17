@@ -2,8 +2,8 @@
  * Read-only Mastra `apiRoutes` exposing the factory project's knowledge graph.
  *
  * Serves the Knowledge page in factory-ui: a polling graph snapshot (nodes
- * as nodes, wikilink edges derived from item text), a node flyout payload
- * with per-item provenance, and the recent activity feed. Every endpoint is a
+ * as nodes, wikilink edges derived from record text), a node flyout payload
+ * with per-record provenance, and the recent activity feed. Every endpoint is a
  * GET — this module never writes knowledge.
  *
  * Scoping is fail-closed: the org and resource rungs are derived server-side
@@ -18,7 +18,7 @@
 
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
-import type { KnowledgeNode, KnowledgeItem, KnowledgeScope, KnowledgeStorage } from '@mastra/core/storage';
+import type { KnowledgeNode, KnowledgeRecord, KnowledgeScope, KnowledgeStorage } from '@mastra/core/storage';
 import {
   canonicalizeKnowledgeScope,
   isKnowledgeScopeVisible,
@@ -31,14 +31,14 @@ import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
 
-/** Reserved node that anchors pinned items (see subconscious/pinned.ts). */
+/** Reserved node that anchors pinned records (see subconscious/pinned.ts). */
 const PINNED_NODE_NAME = 'pinned';
 
-/** Hover-card budget for item text shipped in the graph payload. */
-const ITEM_TEXT_LIMIT = 240;
+/** Hover-card budget for record text shipped in the graph payload. */
+const RECORD_TEXT_LIMIT = 240;
 
-function truncateItemText(text: string): string {
-  return text.length > ITEM_TEXT_LIMIT ? `${text.slice(0, ITEM_TEXT_LIMIT - 1)}…` : text;
+function truncateRecordText(text: string): string {
+  return text.length > RECORD_TEXT_LIMIT ? `${text.slice(0, RECORD_TEXT_LIMIT - 1)}…` : text;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -47,13 +47,13 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export interface KnowledgeRouteLimits {
   /** Max nodes in a graph snapshot (newest-first). */
   maxNodes: number;
-  /** Max items parsed for edges per snapshot (newest-first). */
-  maxItems: number;
+  /** Max records parsed for edges per snapshot (newest-first). */
+  maxRecords: number;
   /** Max fallback `resolveNode` store lookups per request (deduped per unique name+scope). */
   maxFallbackLookups: number;
 }
 
-const DEFAULT_LIMITS: KnowledgeRouteLimits = { maxNodes: 500, maxItems: 2000, maxFallbackLookups: 100 };
+const DEFAULT_LIMITS: KnowledgeRouteLimits = { maxNodes: 500, maxRecords: 2000, maxFallbackLookups: 100 };
 
 export interface KnowledgeRoutesDeps extends RouteDependencies {
   /** Factory projects domain — validates the `:id` project belongs to the caller's org. */
@@ -63,7 +63,7 @@ export interface KnowledgeRoutesDeps extends RouteDependencies {
   limits?: Partial<KnowledgeRouteLimits>;
 }
 
-/** A graph node. `itemCount` is window-derived (items inside the snapshot window only). */
+/** A graph node. `recordCount` is window-derived (records inside the snapshot window only). */
 export interface KnowledgeGraphNode {
   id: string;
   name: string;
@@ -72,52 +72,52 @@ export interface KnowledgeGraphNode {
   /** Deepest rung of the record's scope: org | resource | thread. */
   rung: 'org' | 'resource' | 'thread';
   /**
-   * True when a non-deleted pinned item's wikilinks reference ONLY this
+   * True when a non-deleted pinned record's wikilinks reference ONLY this
    * node (A9: multi-target pins mark their edges instead — the pin is
    * about the relationship; a single-target pin has no edge to carry it).
    */
   pinned: boolean;
-  /** Items owned by this node INSIDE the snapshot window (not a total). */
-  itemCount: number;
+  /** Records owned by this node INSIDE the snapshot window (not a total). */
+  recordCount: number;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface KnowledgeGraphEdge {
   id: string;
-  /** The owning node of the item (its `parentNodeId`). */
+  /** The owning node of the record (its `node`). */
   source: string;
   /** The wikilink-resolved node. */
   target: string;
   /**
-   * Always 'wikilink': the item's `parentNodeId` is the edge SOURCE, so the
+   * Always 'wikilink': the record's `node` is the edge SOURCE, so the
    * plan's "parent link" collapses into the wikilink edge — nodes carry no
    * separate parent field to derive a second edge type from.
    */
   type: 'wikilink';
-  /** The item whose text produced the edge. */
-  itemId: string;
+  /** The record whose text produced the edge. */
+  recordId: string;
   /**
-   * True when the edge is derived from a PINNED item linking two nodes —
+   * True when the edge is derived from a PINNED record linking two nodes —
    * the pin marks the relationship, so the accent lives on the edge (A9).
    */
   pinned?: boolean;
 }
 
 /**
- * A knowledge item as a first-class graph element (A11): every item in the window,
+ * A knowledge record as a first-class graph element (A11): every record in the window,
  * with the in-window nodes it touches. The client renders by arity —
  * 1 node: a small dot linked to it; 2: the connecting line; 3+: a midpoint
- * junction splitting to each node. Pin items have their hidden reserved
+ * junction splitting to each node. Pin records have their hidden reserved
  * owner omitted, so their arity comes purely from wikilink targets.
  */
-export interface KnowledgeGraphItem {
-  /** The item id. */
+export interface KnowledgeGraphRecord {
+  /** The record id. */
   id: string;
   /** Owner node first (omitted for pins), then resolved wikilink targets. */
   nodeIds: string[];
   pinned: boolean;
-  /** Item text, truncated for hover cards. */
+  /** Record text, truncated for hover cards. */
   text: string;
 }
 
@@ -126,8 +126,8 @@ export interface KnowledgeGraphPayload {
   threadId?: string;
   nodes: KnowledgeGraphNode[];
   edges: KnowledgeGraphEdge[];
-  items: KnowledgeGraphItem[];
-  /** True when the node or item window cap was hit (newest-first window). */
+  records: KnowledgeGraphRecord[];
+  /** True when the node or record window cap was hit (newest-first window). */
   truncated: boolean;
   /** Wikilink targets that resolved in the store but fell outside the node window. */
   outOfWindow: Array<{ id: string; name: string }>;
@@ -139,10 +139,10 @@ export interface KnowledgeGraphPayload {
   version: string | null;
 }
 
-export interface KnowledgeNodeItemPayload {
+export interface KnowledgeNodeRecordPayload {
   id: string;
-  parentNodeId: string;
-  /** 'owned' when the node is the item's parent, 'mentions' when it only wikilinks it. */
+  node: string;
+  /** 'owned' when the node is the record's parent, 'mentions' when it only wikilinks it. */
   relation: 'owned' | 'mentions';
   text: string;
   scope: KnowledgeScope;
@@ -165,7 +165,7 @@ export interface KnowledgeNodePayload {
     createdAt: string;
     updatedAt: string;
   };
-  items: KnowledgeNodeItemPayload[];
+  records: KnowledgeNodeRecordPayload[];
 }
 
 function loose(c: unknown): Context {
@@ -202,16 +202,16 @@ interface ResolvedView {
 }
 
 /**
- * In-item + capped-fallback wikilink resolver, shared by both endpoints.
+ * In-record + capped-fallback wikilink resolver, shared by both endpoints.
  * Resolution uses the store's own algorithm: a descending-prefix walk over the
- * item's canonical scope matching canonical name + exact scope key at each
+ * record's canonical scope matching canonical name + exact scope key at each
  * prefix, so an edge never depends on whether the target landed in the window.
  */
 class WikilinkResolver {
   /** exact `${scopeKey}\u0000${lowerName}` → node, from the fetched window. */
   readonly #inWindow = new Map<string, KnowledgeNode>();
   readonly #windowIds = new Set<string>();
-  /** `${itemScopeKey}\u0000${lowerName}` → fallback result (null = dangling). */
+  /** `${recordScopeKey}\u0000${lowerName}` → fallback result (null = dangling). */
   readonly #fallbackCache = new Map<string, KnowledgeNode | null>();
   #fallbackLookups = 0;
   readonly #store: KnowledgeStorage;
@@ -233,9 +233,9 @@ class WikilinkResolver {
     return this.#windowIds.has(id);
   }
 
-  /** Resolve a wikilink name from a knowledge item's scope. Returns the node or null (dangling/capped). */
-  async resolve(name: string, itemScope: KnowledgeScope): Promise<KnowledgeNode | null> {
-    const canonical = canonicalizeKnowledgeScope(itemScope);
+  /** Resolve a wikilink name from a knowledge record's scope. Returns the node or null (dangling/capped). */
+  async resolve(name: string, recordScope: KnowledgeScope): Promise<KnowledgeNode | null> {
+    const canonical = canonicalizeKnowledgeScope(recordScope);
     const lower = name.trim().toLocaleLowerCase();
     for (let length = canonical.length; length > 0; length--) {
       const hit = this.#inWindow.get(`${knowledgeScopeKey(canonical.slice(0, length))}\u0000${lower}`);
@@ -306,11 +306,11 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
    * query scope. The ONE seam both endpoints share, so the default/thread view
    * scope and the pin rungs cannot drift between them.
    *
-   * threadId validation runs a single `listItemsBySource` lookup with
+   * threadId validation runs a single `listRecordsBySource` lookup with
    * `limit: 1` AT THE CANDIDATE SCOPE `[org, resource, thread:<id>]` — the
    * store's own visibility predicate is the authorization: the thread's own
-   * items (equal scope key) and its project/org captures (prefix) match, while
-   * a cross-org thread's items match nothing → zero rows → 404.
+   * records (equal scope key) and its project/org captures (prefix) match, while
+   * a cross-org thread's records match nothing → zero rows → 404.
    */
   async #resolveView(c: Context): Promise<ResolvedView | { response: Response }> {
     const tenant = await this.#resolveTenant(c);
@@ -356,8 +356,8 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     }
 
     const candidateScope: KnowledgeScope = [...defaultScope, `thread:${threadId}`];
-    const probe = await store.listItemsBySource({ sourceThreadId: threadId, scope: candidateScope, limit: 1 });
-    if (probe.items.length === 0) {
+    const probe = await store.knowledgeBySource({ sourceThreadId: threadId, scope: candidateScope, limit: 1 });
+    if (probe.records.length === 0) {
       return { response: c.json({ error: 'thread_not_found' }, 404) };
     }
     return {
@@ -384,15 +384,15 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     return out;
   }
 
-  /** Non-deleted pinned items for the given pinned-node ids, visible in the view. */
-  async #pinnedItems(
+  /** Non-deleted pinned records for the given pinned-node ids, visible in the view. */
+  async #pinnedRecords(
     view: ResolvedView,
     pinnedNodeIds: Array<{ rung: 'resource' | 'thread'; id: string }>,
-  ): Promise<Array<{ rung: 'resource' | 'thread'; item: KnowledgeItem }>> {
-    const out: Array<{ rung: 'resource' | 'thread'; item: KnowledgeItem }> = [];
+  ): Promise<Array<{ rung: 'resource' | 'thread'; record: KnowledgeRecord }>> {
+    const out: Array<{ rung: 'resource' | 'thread'; record: KnowledgeRecord }> = [];
     for (const { rung, id } of pinnedNodeIds) {
-      const { items } = await view.store.itemsAbout({ nodeId: id, scope: view.scope, limit: 200 });
-      for (const item of items) out.push({ rung, item });
+      const { records } = await view.store.listKnowledgeAbout({ node: id, scope: view.scope, limit: 200 });
+      for (const record of records) out.push({ rung, record });
     }
     return out;
   }
@@ -416,69 +416,69 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const pinnedNodeIdSet = new Set(pinnedNodeIds.map(p => p.id));
           const nodes = fetched.slice(0, limits.maxNodes).filter(node => !pinnedNodeIdSet.has(node.id));
 
-          // Item window: per-node owned items, then newest-first overall.
-          const itemWindow: KnowledgeItem[] = [];
+          // Record window: per-node owned records, then newest-first overall.
+          const recordWindow: KnowledgeRecord[] = [];
           for (const node of nodes) {
-            if (itemWindow.length > limits.maxItems) break;
-            const { items } = await store.itemsAbout({
-              nodeId: node.id,
+            if (recordWindow.length > limits.maxRecords) break;
+            const { records } = await store.listKnowledgeAbout({
+              node: node.id,
               scope,
-              limit: limits.maxItems + 1 - itemWindow.length,
+              limit: limits.maxRecords + 1 - recordWindow.length,
             });
-            itemWindow.push(...items);
+            recordWindow.push(...records);
           }
-          // Item ids are ULIDs — descending id = newest-first.
-          itemWindow.sort((a, b) => b.id.localeCompare(a.id));
-          if (itemWindow.length > limits.maxItems) {
+          // Record ids are ULIDs — descending id = newest-first.
+          recordWindow.sort((a, b) => b.id.localeCompare(a.id));
+          if (recordWindow.length > limits.maxRecords) {
             truncated = true;
-            itemWindow.length = limits.maxItems;
+            recordWindow.length = limits.maxRecords;
           }
 
           const resolver = new WikilinkResolver(store, nodes, limits.maxFallbackLookups);
 
-          // Edges: owner node (the item's parent link) → wikilinked node.
-          // Graph items: every windowed item with its in-window node set,
+          // Edges: owner node (the record's parent link) → wikilinked node.
+          // Graph records: every windowed record with its in-window node set,
           // owner first. The client renders dots, lines, or junctions by arity.
           const edges: KnowledgeGraphEdge[] = [];
-          const graphItems: KnowledgeGraphItem[] = [];
+          const graphRecords: KnowledgeGraphRecord[] = [];
           const edgeSeen = new Set<string>();
-          const itemCounts = new Map<string, number>();
-          for (const item of itemWindow) {
-            itemCounts.set(item.parentNodeId, (itemCounts.get(item.parentNodeId) ?? 0) + 1);
-            const nodeIds = [item.parentNodeId];
-            for (const name of parseKnowledgeWikilinks(item.text)) {
-              const target = await resolver.resolve(name, item.scope);
+          const recordCounts = new Map<string, number>();
+          for (const record of recordWindow) {
+            recordCounts.set(record.node, (recordCounts.get(record.node) ?? 0) + 1);
+            const nodeIds = [record.node];
+            for (const name of parseKnowledgeWikilinks(record.text)) {
+              const target = await resolver.resolve(name, record.scope);
               if (!target) continue;
-              if (target.id === item.parentNodeId) continue;
+              if (target.id === record.node) continue;
               if (!resolver.inWindowId(target.id)) continue;
               if (!nodeIds.includes(target.id)) nodeIds.push(target.id);
-              const key = `${item.parentNodeId}\u0000${target.id}`;
+              const key = `${record.node}\u0000${target.id}`;
               if (edgeSeen.has(key)) continue;
               edgeSeen.add(key);
               edges.push({
-                id: `wikilink:${item.parentNodeId}:${target.id}`,
-                source: item.parentNodeId,
+                id: `wikilink:${record.node}:${target.id}`,
+                source: record.node,
                 target: target.id,
                 type: 'wikilink',
-                itemId: item.id,
+                recordId: record.id,
               });
             }
-            graphItems.push({ id: item.id, nodeIds, pinned: false, text: truncateItemText(item.text) });
+            graphRecords.push({ id: record.id, nodeIds, pinned: false, text: truncateRecordText(record.text) });
           }
 
           // Pins mark relationships. The reserved owner node is omitted, so
           // arity comes purely from wikilink targets.
-          const pinnedItems = await this.#pinnedItems(view, pinnedNodeIds);
+          const pinnedRecords = await this.#pinnedRecords(view, pinnedNodeIds);
           const accented = new Set<string>();
-          for (const { item } of pinnedItems) {
+          for (const { record } of pinnedRecords) {
             const targets: string[] = [];
-            for (const name of parseKnowledgeWikilinks(item.text)) {
-              const target = await resolver.resolve(name, item.scope);
+            for (const name of parseKnowledgeWikilinks(record.text)) {
+              const target = await resolver.resolve(name, record.scope);
               if (target && resolver.inWindowId(target.id) && !targets.includes(target.id)) {
                 targets.push(target.id);
               }
             }
-            graphItems.push({ id: item.id, nodeIds: targets, pinned: true, text: truncateItemText(item.text) });
+            graphRecords.push({ id: record.id, nodeIds: targets, pinned: true, text: truncateRecordText(record.text) });
             if (targets.length === 1) {
               accented.add(targets[0]!);
               continue;
@@ -489,19 +489,19 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                 if (edgeSeen.has(key)) continue;
                 edgeSeen.add(key);
                 edges.push({
-                  id: `pin:${item.id}:${targets[a]}:${targets[b]}`,
+                  id: `pin:${record.id}:${targets[a]}:${targets[b]}`,
                   source: targets[a]!,
                   target: targets[b]!,
                   type: 'wikilink',
-                  itemId: item.id,
+                  recordId: record.id,
                   pinned: true,
                 });
               }
             }
           }
           const pinCensus = {
-            resource: pinnedItems.filter(p => p.rung === 'resource').length,
-            thread: view.view === 'thread' ? pinnedItems.filter(p => p.rung === 'thread').length : null,
+            resource: pinnedRecords.filter(p => p.rung === 'resource').length,
+            thread: view.view === 'thread' ? pinnedRecords.filter(p => p.rung === 'thread').length : null,
           };
 
           const activity = await store.listActivity({ scope, limit: 1 });
@@ -516,12 +516,12 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               scope: node.scope,
               rung: deepestRung(node.scope),
               pinned: accented.has(node.id),
-              itemCount: itemCounts.get(node.id) ?? 0,
+              recordCount: recordCounts.get(node.id) ?? 0,
               createdAt: node.createdAt.toISOString(),
               updatedAt: node.updatedAt.toISOString(),
             })),
             edges,
-            items: graphItems,
+            records: graphRecords,
             truncated,
             outOfWindow: [...resolver.outOfWindow.values()],
             unresolvedCapped: { count: resolver.cappedCount, names: resolver.cappedNames },
@@ -532,7 +532,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         },
       }),
 
-      // ── Node flyout payload: details + provenance-rich items ───────────────
+      // ── Node flyout payload: details + provenance-rich records ───────────────
       registerApiRoute('/web/factory/projects/:id/knowledge/nodes/:nodeId', {
         method: 'GET',
         requiresAuth: false,
@@ -553,33 +553,33 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const pinnedNodeIds = await this.#pinnedNodeIds(view);
           const pinnedNodeIdSet = new Set(pinnedNodeIds.map(p => p.id));
 
-          const [owned, touching] = await Promise.all([
-            store.itemsAbout({ nodeId: node.id, scope, limit: 200 }),
-            store.itemsTouching({ nodeId: node.id, scope, limit: 200 }),
+          const [owned, mentioning] = await Promise.all([
+            store.listKnowledgeAbout({ node: node.id, scope, limit: 200 }),
+            store.listKnowledgeMentioning({ node: node.id, scope, limit: 200 }),
           ]);
           const seen = new Set<string>();
-          const items: KnowledgeNodeItemPayload[] = [];
-          const push = (item: KnowledgeItem, relation: 'owned' | 'mentions') => {
-            if (seen.has(item.id)) return;
-            seen.add(item.id);
-            items.push({
-              id: item.id,
-              parentNodeId: item.parentNodeId,
+          const records: KnowledgeNodeRecordPayload[] = [];
+          const push = (record: KnowledgeRecord, relation: 'owned' | 'mentions') => {
+            if (seen.has(record.id)) return;
+            seen.add(record.id);
+            records.push({
+              id: record.id,
+              node: record.node,
               relation,
-              text: item.text,
-              scope: item.scope,
-              rung: deepestRung(item.scope),
-              sourceThreadId: item.sourceThreadId,
-              capturedAt: item.capturedAt.toISOString(),
-              ...(item.when ? { when: item.when.toISOString() } : {}),
-              pinned: pinnedNodeIdSet.has(item.parentNodeId),
-              ...(item.metadata ? { metadata: item.metadata } : {}),
+              text: record.text,
+              scope: record.scope,
+              rung: deepestRung(record.scope),
+              sourceThreadId: record.sourceThreadId,
+              capturedAt: record.capturedAt.toISOString(),
+              ...(record.when ? { when: record.when.toISOString() } : {}),
+              pinned: pinnedNodeIdSet.has(record.node),
+              ...(record.metadata ? { metadata: record.metadata } : {}),
             });
           };
-          // Owned first, newest-first within each group. Item ids are ULIDs.
-          for (const item of [...owned.items].sort((a, b) => b.id.localeCompare(a.id))) push(item, 'owned');
-          for (const item of [...touching.items].sort((a, b) => b.id.localeCompare(a.id))) {
-            if (item.parentNodeId !== node.id) push(item, 'mentions');
+          // Owned first, newest-first within each group. Record ids are ULIDs.
+          for (const record of [...owned.records].sort((a, b) => b.id.localeCompare(a.id))) push(record, 'owned');
+          for (const record of [...mentioning.records].sort((a, b) => b.id.localeCompare(a.id))) {
+            push(record, 'mentions');
           }
 
           const payload: KnowledgeNodePayload = {
@@ -593,7 +593,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               createdAt: node.createdAt.toISOString(),
               updatedAt: node.updatedAt.toISOString(),
             },
-            items,
+            records,
           };
           return c.json(payload);
         },

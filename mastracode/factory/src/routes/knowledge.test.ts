@@ -65,7 +65,7 @@ async function node(
   return store.createNode({ name, kind, scope });
 }
 
-async function item(
+async function record(
   store: KnowledgeStorage,
   parent: KnowledgeNode,
   text: string,
@@ -74,16 +74,16 @@ async function item(
   metadata?: Record<string, unknown>,
   options: {
     /**
-     * Where `appendItem`'s mention pass auto-creates entities for unresolved
-     * wikilinks. Tests that need a GENUINELY dangling name point this at a
+     * Where `appendKnowledge`'s mention pass auto-creates nodes for unresolved
+     * wikilinks. Tests that need a genuinely dangling name point this at a
      * thread scope invisible from the view under test (downward invisibility —
      * the only way a wikilink stays unresolved, since capture auto-creates).
      */
     autoCreateScope?: KnowledgeScope;
   } = {},
 ) {
-  return store.appendItem({
-    parentNodeId: parent.id,
+  return store.appendKnowledge({
+    node: parent,
     text,
     scope,
     sourceThreadId,
@@ -113,7 +113,7 @@ describe('KnowledgeRoutes', () => {
     const h = await createHarness();
     const service = await node(h.knowledge, 'Payments Service', h.projectScope, 'service');
     const runbook = await node(h.knowledge, 'Deploy Runbook', h.projectScope, 'doc');
-    await item(h.knowledge, service, 'Deploys follow the [[Deploy Runbook]] steps.', h.projectScope);
+    await record(h.knowledge, service, 'Deploys follow the [[Deploy Runbook]] steps.', h.projectScope);
 
     const { status, body } = await graph(h);
     expect(status).toBe(200);
@@ -121,7 +121,7 @@ describe('KnowledgeRoutes', () => {
     expect(body.nodes.map(node => node.id).sort()).toEqual([service.id, runbook.id].sort());
     expect(body.edges).toHaveLength(1);
     expect(body.edges[0]).toMatchObject({ source: service.id, target: runbook.id, type: 'wikilink' });
-    expect(body.nodes.find(node => node.id === service.id)?.itemCount).toBe(1);
+    expect(body.nodes.find(node => node.id === service.id)?.recordCount).toBe(1);
     expect(body.truncated).toBe(false);
   });
 
@@ -130,7 +130,7 @@ describe('KnowledgeRoutes', () => {
     const h = await createHarness();
     const orgEntity = await node(h.knowledge, 'Org Concept', h.orgScope);
     const threadEntity = await node(h.knowledge, 'Session Note', h.threadScope('t-1'));
-    await item(h.knowledge, threadEntity, 'Relates to [[Org Concept]].', h.threadScope('t-1'), 't-1');
+    await record(h.knowledge, threadEntity, 'Relates to [[Org Concept]].', h.threadScope('t-1'), 't-1');
 
     const { status, body } = await graph(h, '?threadId=t-1');
     expect(status).toBe(200);
@@ -144,7 +144,7 @@ describe('KnowledgeRoutes', () => {
     const h = await createHarness();
     const source = await node(h.knowledge, 'Source Entity', h.projectScope);
     const target = await node(h.knowledge, 'CamelCase Name', h.projectScope);
-    await item(h.knowledge, source, 'See [[camelcase name]].', h.projectScope);
+    await record(h.knowledge, source, 'See [[camelcase name]].', h.projectScope);
 
     const { body } = await graph(h);
     expect(body.edges).toHaveLength(1);
@@ -155,7 +155,7 @@ describe('KnowledgeRoutes', () => {
   it('drops unresolvable and self links', async () => {
     const h = await createHarness();
     const solo = await node(h.knowledge, 'Solo Entity', h.projectScope);
-    await item(
+    await record(
       h.knowledge,
       solo,
       'Mentions [[No Such Thing]] and itself [[Solo Entity]].',
@@ -179,7 +179,7 @@ describe('KnowledgeRoutes', () => {
     // Equal updatedAt → name-asc tiebreak keeps 'A window entity' in the window.
     const inWindow = await node(h.knowledge, 'A window entity', h.projectScope);
     const outside = await node(h.knowledge, 'Z outside entity', h.projectScope);
-    await item(h.knowledge, inWindow, 'Links [[Z outside entity]].', h.projectScope);
+    await record(h.knowledge, inWindow, 'Links [[Z outside entity]].', h.projectScope);
 
     const { body } = await graph(h);
     expect(body.nodes.map(node => node.id)).toEqual([inWindow.id]);
@@ -210,22 +210,22 @@ describe('KnowledgeRoutes', () => {
     const pinnedResource = await node(h.knowledge, 'pinned', h.projectScope, 'system');
     const pinnedThread = await node(h.knowledge, 'pinned', h.threadScope('t-pin'), 'system');
     // Single-target pin → node accent stays.
-    await item(h.knowledge, pinnedResource, 'Always check [[Critical Service]] health.', h.projectScope, 't-any');
+    await record(h.knowledge, pinnedResource, 'Always check [[Critical Service]] health.', h.projectScope, 't-any');
     // Multi-target pin → a pinned edge between the two mentioned entities, NO node accent.
-    const relPin = await item(
+    const relPin = await record(
       h.knowledge,
       pinnedResource,
       'Ship via [[Deploy Runbook]] on the [[Release Train]].',
       h.projectScope,
       't-any',
     );
-    await item(h.knowledge, pinnedThread, 'This session tracks [[Session Focus]].', h.threadScope('t-pin'), 't-pin');
+    await record(h.knowledge, pinnedThread, 'This session tracks [[Session Focus]].', h.threadScope('t-pin'), 't-pin');
 
     const defaultView = (await graph(h)).body;
     expect(defaultView.nodes.some(node => node.name === 'pinned')).toBe(false);
     expect(defaultView.nodes.find(node => node.id === accented.id)?.pinned).toBe(true);
     const pinnedEdge = defaultView.edges.find(edge => edge.pinned);
-    expect(pinnedEdge).toMatchObject({ source: relA.id, target: relB.id, itemId: relPin.id, pinned: true });
+    expect(pinnedEdge).toMatchObject({ source: relA.id, target: relB.id, recordId: relPin.id, pinned: true });
     expect(defaultView.nodes.find(node => node.id === relA.id)?.pinned).toBe(false);
     expect(defaultView.nodes.find(node => node.id === relB.id)?.pinned).toBe(false);
     expect(defaultView.pinCensus).toEqual({ resource: 2, thread: null });
@@ -239,26 +239,26 @@ describe('KnowledgeRoutes', () => {
     expect(threadView.pinCensus).toEqual({ resource: 2, thread: 1 });
   });
 
-  // 7b (A11): knowledge items are first-class payload elements with per-item node sets
-  it('emits every windowed item with its in-window nodes, owner first; pins omit the reserved owner', async () => {
+  // 7b (A11): knowledge records are first-class payload elements with per-record node sets
+  it('emits every windowed record with its in-window nodes, owner first; pins omit the reserved owner', async () => {
     const h = await createHarness();
     const owner = await node(h.knowledge, 'Deploy Runbook', h.projectScope, 'doc');
     const other = await node(h.knowledge, 'Release Train', h.projectScope, 'process');
     const third = await node(h.knowledge, 'Rollback Plan', h.projectScope, 'doc');
     const pinnedResource = await node(h.knowledge, 'pinned', h.projectScope, 'system');
-    const solo = await item(h.knowledge, owner, 'Runbook owner is the release captain.', h.projectScope, 't-1');
-    const pair = await item(h.knowledge, owner, 'Ships on the [[Release Train]].', h.projectScope, 't-1');
-    const trio = await item(
+    const solo = await record(h.knowledge, owner, 'Runbook owner is the release captain.', h.projectScope, 't-1');
+    const pair = await record(h.knowledge, owner, 'Ships on the [[Release Train]].', h.projectScope, 't-1');
+    const trio = await record(
       h.knowledge,
       owner,
       'Coordinates [[Release Train]] with [[Rollback Plan]].',
       h.projectScope,
       't-1',
     );
-    const pin = await item(h.knowledge, pinnedResource, 'Always run [[Rollback Plan]] first.', h.projectScope, 't-1');
+    const pin = await record(h.knowledge, pinnedResource, 'Always run [[Rollback Plan]] first.', h.projectScope, 't-1');
 
     const { body } = await graph(h);
-    const byId = new Map(body.items.map(memory => [memory.id, memory]));
+    const byId = new Map(body.records.map(memory => [memory.id, memory]));
     // Arity 1: dot material — just the owner.
     expect(byId.get(solo.id)).toMatchObject({ nodeIds: [owner.id], pinned: false });
     // Arity 2: line material — owner first, then the wikilink target.
@@ -308,20 +308,20 @@ describe('KnowledgeRoutes', () => {
   });
 
   // 10
-  it('merges itemsAbout/itemsTouching deduped and returns metadata.reason', async () => {
+  it('merges listKnowledgeAbout/listKnowledgeMentioning deduped and returns metadata.reason', async () => {
     const h = await createHarness();
     const target = await node(h.knowledge, 'Target Entity', h.projectScope);
     const other = await node(h.knowledge, 'Other Entity', h.projectScope);
-    const owned = await item(h.knowledge, target, 'Owned fact.', h.projectScope, 'thread-a', {
+    const owned = await record(h.knowledge, target, 'Owned fact.', h.projectScope, 'thread-a', {
       reason: 'costly to rediscover',
     });
-    const mention = await item(h.knowledge, other, 'Mentions [[Target Entity]].', h.projectScope);
+    const mention = await record(h.knowledge, other, 'Mentions [[Target Entity]].', h.projectScope);
 
     const { status, body } = await nodeDetail(h, target.id);
     expect(status).toBe(200);
-    expect(body.items.map(f => f.id)).toEqual([owned.id, mention.id]);
-    expect(body.items[0]).toMatchObject({ relation: 'owned', metadata: { reason: 'costly to rediscover' } });
-    expect(body.items[1]).toMatchObject({ relation: 'mentions' });
+    expect(body.records.map(f => f.id)).toEqual([owned.id, mention.id]);
+    expect(body.records[0]).toMatchObject({ relation: 'owned', metadata: { reason: 'costly to rediscover' } });
+    expect(body.records[1]).toMatchObject({ relation: 'mentions' });
   });
 
   // 11
@@ -329,12 +329,12 @@ describe('KnowledgeRoutes', () => {
     const h = await createHarness();
     const source = await node(h.knowledge, 'Source', h.projectScope);
     await node(h.knowledge, 'Linked', h.projectScope);
-    const created = await item(h.knowledge, source, 'Links [[Linked]].', h.projectScope);
-    await h.knowledge.removeItem({ id: created.id, deletedBy: 'test' });
+    const created = await record(h.knowledge, source, 'Links [[Linked]].', h.projectScope);
+    await h.knowledge.removeKnowledge({ id: created.id, deletedBy: 'test' });
 
     const { body } = await graph(h);
     expect(body.edges).toHaveLength(0);
-    expect(body.nodes.find(node => node.id === source.id)?.itemCount).toBe(0);
+    expect(body.nodes.find(node => node.id === source.id)?.recordCount).toBe(0);
   });
 
   // 12
@@ -342,7 +342,7 @@ describe('KnowledgeRoutes', () => {
     const h = await createHarness();
     const source = await node(h.knowledge, 'Cursor Entity', h.projectScope);
     const before = (await graph(h)).body.version;
-    await item(h.knowledge, source, 'New fact.', h.projectScope);
+    await record(h.knowledge, source, 'New fact.', h.projectScope);
     const after = (await graph(h)).body.version;
     expect(after).not.toBeNull();
     expect(after).not.toBe(before);
@@ -353,9 +353,9 @@ describe('KnowledgeRoutes', () => {
     const h = await createHarness();
     const source = await node(h.knowledge, 'Fallback Source', h.projectScope);
     const hidden = { autoCreateScope: h.threadScope('t-hidden') };
-    await item(h.knowledge, source, 'First [[Mystery]].', h.projectScope, 'thread-a', undefined, hidden);
-    await item(h.knowledge, source, 'Second [[Mystery]].', h.projectScope, 'thread-a', undefined, hidden);
-    await item(h.knowledge, source, 'Third [[Mystery]].', h.projectScope, 'thread-a', undefined, hidden);
+    await record(h.knowledge, source, 'First [[Mystery]].', h.projectScope, 'thread-a', undefined, hidden);
+    await record(h.knowledge, source, 'Second [[Mystery]].', h.projectScope, 'thread-a', undefined, hidden);
+    await record(h.knowledge, source, 'Third [[Mystery]].', h.projectScope, 'thread-a', undefined, hidden);
     const spy = vi.spyOn(h.knowledge, 'resolveNode');
 
     await graph(h);
@@ -370,7 +370,7 @@ describe('KnowledgeRoutes', () => {
     const wide = await createHarness({ knowledge: store, limits: { maxNodes: 10 } });
     const source = await node(store, 'A source entity', wide.projectScope);
     const target = await node(store, 'Z target entity', wide.projectScope);
-    await item(store, source, 'Links [[Z target entity]].', wide.projectScope);
+    await record(store, source, 'Links [[Z target entity]].', wide.projectScope);
 
     const wideBody = (await graph(wide)).body;
     expect(wideBody.edges).toEqual([
@@ -384,7 +384,7 @@ describe('KnowledgeRoutes', () => {
     // narrow harness has its own project — reseed under its scope.
     const narrowSource = await node(store, 'A source entity', narrow.projectScope);
     const narrowTarget = await node(store, 'Z target entity', narrow.projectScope);
-    await item(store, narrowSource, 'Links [[Z target entity]].', narrow.projectScope);
+    await record(store, narrowSource, 'Links [[Z target entity]].', narrow.projectScope);
     const narrowBody = (await graph(narrow)).body;
     expect(narrowBody.nodes.map(node => node.id)).toEqual([narrowSource.id]);
     expect(narrowBody.edges).toHaveLength(0);
@@ -396,7 +396,7 @@ describe('KnowledgeRoutes', () => {
   it('reports unique unknown names beyond the fallback cap as unresolvedCapped, not dangling', async () => {
     const h = await createHarness({ limits: { maxFallbackLookups: 1 } });
     const source = await node(h.knowledge, 'Capped Source', h.projectScope);
-    await item(h.knowledge, source, 'Sees [[Ghost One]] then [[Ghost Two]].', h.projectScope, 'thread-a', undefined, {
+    await record(h.knowledge, source, 'Sees [[Ghost One]] then [[Ghost Two]].', h.projectScope, 'thread-a', undefined, {
       autoCreateScope: h.threadScope('t-hidden'),
     });
 
@@ -411,7 +411,7 @@ describe('KnowledgeRoutes', () => {
     const h = await createHarness();
     const baseline = await node(h.knowledge, 'Baseline Entity', h.projectScope);
     const threadEntity = await node(h.knowledge, 'Thread Entity', h.threadScope('t-16'));
-    await item(h.knowledge, threadEntity, 'Thread-scoped capture.', h.threadScope('t-16'), 't-16');
+    await record(h.knowledge, threadEntity, 'Thread-scoped capture.', h.threadScope('t-16'), 't-16');
 
     const defaultView = (await graph(h)).body;
     expect(defaultView.nodes.map(node => node.id)).toEqual([baseline.id]);
@@ -436,7 +436,7 @@ describe('KnowledgeRoutes', () => {
       knowledge: h.knowledge,
     });
     const foreignEntity = await node(h.knowledge, 'Foreign Entity', foreign.projectScope);
-    await item(h.knowledge, foreignEntity, 'Foreign capture.', foreign.threadScope('t-foreign'), 't-foreign');
+    await record(h.knowledge, foreignEntity, 'Foreign capture.', foreign.threadScope('t-foreign'), 't-foreign');
     // Sanity: the fixture is non-empty in its own org.
     expect((await graph(foreign, '?threadId=t-foreign')).status).toBe(200);
 
@@ -449,13 +449,13 @@ describe('KnowledgeRoutes', () => {
   it('validates a thread whose ONLY facts are thread-scoped (pins the candidate-scope lookup)', async () => {
     const h = await createHarness();
     const threadEntity = await node(h.knowledge, 'Solo Thread Entity', h.threadScope('t-solo'));
-    const created = await item(h.knowledge, threadEntity, 'Thread-only capture.', h.threadScope('t-solo'), 't-solo');
+    const created = await record(h.knowledge, threadEntity, 'Thread-only capture.', h.threadScope('t-solo'), 't-solo');
 
     const { status, body } = await graph(h, '?threadId=t-solo');
     expect(status).toBe(200);
     expect(body.view).toBe('thread');
     expect(body.nodes.map(node => node.id)).toContain(threadEntity.id);
-    expect(body.nodes.find(node => node.id === threadEntity.id)?.itemCount).toBe(1);
+    expect(body.nodes.find(node => node.id === threadEntity.id)?.recordCount).toBe(1);
     expect(created.scope).toEqual(h.threadScope('t-solo'));
   });
 
@@ -463,14 +463,14 @@ describe('KnowledgeRoutes', () => {
   it('entity endpoint: thread-scoped entity 404s without threadId, 200 with it, 404 with a cross-org threadId', async () => {
     const h = await createHarness();
     const threadEntity = await node(h.knowledge, 'Drilled Entity', h.threadScope('t-19'));
-    await item(h.knowledge, threadEntity, 'Thread-scoped fact.', h.threadScope('t-19'), 't-19');
+    await record(h.knowledge, threadEntity, 'Thread-scoped fact.', h.threadScope('t-19'), 't-19');
 
     expect((await nodeDetail(h, threadEntity.id)).status).toBe(404);
 
     const withThread = await nodeDetail(h, threadEntity.id, '?threadId=t-19');
     expect(withThread.status).toBe(200);
-    expect(withThread.body.items).toHaveLength(1);
-    expect(withThread.body.items[0]).toMatchObject({ rung: 'thread', sourceThreadId: 't-19' });
+    expect(withThread.body.records).toHaveLength(1);
+    expect(withThread.body.records[0]).toMatchObject({ rung: 'thread', sourceThreadId: 't-19' });
 
     // Cross-org thread: seeded under the other org, requested from ours.
     const foreign = await createHarness({
@@ -479,7 +479,7 @@ describe('KnowledgeRoutes', () => {
       knowledge: h.knowledge,
     });
     const foreignEntity = await node(h.knowledge, 'Foreign Holder', foreign.projectScope);
-    await item(h.knowledge, foreignEntity, 'Foreign fact.', foreign.threadScope('t-x19'), 't-x19');
+    await record(h.knowledge, foreignEntity, 'Foreign fact.', foreign.threadScope('t-x19'), 't-x19');
     expect((await nodeDetail(h, threadEntity.id, '?threadId=t-x19')).status).toBe(404);
   });
 });

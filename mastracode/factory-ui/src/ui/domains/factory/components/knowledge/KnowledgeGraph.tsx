@@ -26,16 +26,16 @@ import { Boxes, Globe, Pin } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { KnowledgeGraphNode, KnowledgeGraphPayload, KnowledgeRung } from '../../services/knowledge';
-import type { NodeFlowNode, KnowledgeFlowEdge, KnowledgeGraphFilters, ItemFlowNode } from './graphModel';
+import type { NodeFlowNode, KnowledgeFlowEdge, KnowledgeGraphFilters, RecordFlowNode } from './graphModel';
 import {
-  deriveItemElements,
+  deriveRecordElements,
   egoGraph,
   filterGraph,
-  itemPairEdges,
+  recordPairEdges,
   NO_FILTERS,
   shouldShowLabel,
   toFlowGraph,
-  toItemFlow,
+  toRecordFlow,
 } from './graphModel';
 import type { Arrivals } from './graphDiff';
 import { runLayout } from './layout';
@@ -58,7 +58,7 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
     // Outer wrapper is unclipped so the pin badge can straddle the rim;
     // only the inner circle clips (it must, to keep the label inside).
     <div data-testid="knowledge-node" data-node-id={node.id} className="relative" style={{ width: size, height: size }}>
-      {/* A11: nodes never carry pin visuals — pins belong to their item
+      {/* A11: nodes never carry pin visuals — pins belong to their record
           markers (dot / line / junction). */}
       <div
         className={[
@@ -128,10 +128,10 @@ function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<Knowledg
         id={id}
         path={path}
         style={
-          // A9: a pinned item marks the RELATIONSHIP — the amber accent
+          // A9: a pinned record marks the RELATIONSHIP — the amber accent
           // rides the edge, with a pin chip at the arc's midpoint. Edges
-          // touching a knowledge item marker are white, echoing the Mastra logo.
-          // A selected item (open in the flyout) lights its edge up.
+          // touching a knowledge record marker are white, echoing the Mastra logo.
+          // A selected record (open in the flyout) lights its edge up.
           data?.focused
             ? {
                 stroke: pinned ? 'rgba(251,191,36,1)' : 'rgba(255,255,255,0.95)',
@@ -140,12 +140,12 @@ function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<Knowledg
               }
             : pinned
               ? { stroke: 'rgba(251,191,36,0.75)', strokeWidth: 2 }
-              : source.startsWith('item:') || target.startsWith('item:')
+              : source.startsWith('record:') || target.startsWith('record:')
                 ? { stroke: 'rgba(255,255,255,0.45)', strokeWidth: 1.2 }
                 : { stroke: 'rgba(139,92,246,0.4)', strokeWidth: 1.4 }
         }
       />
-      {pinned && !source.startsWith('item:') && !target.startsWith('item:') ? (
+      {pinned && !source.startsWith('record:') && !target.startsWith('record:') ? (
         <EdgeLabelRenderer>
           <span
             // Nodes always render above lines and their badges — no z lift.
@@ -166,29 +166,29 @@ function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<Knowledg
 const KnowledgeLink = memo(KnowledgeLinkComponent);
 
 /**
- * A11: a knowledge item rendered as its own tiny marker — a dot beside its node or
- * a junction where a multi-node item splits. Pinned items render as
+ * A11: a knowledge record rendered as its own tiny marker — a dot beside its node or
+ * a junction where a multi-node record splits. Pinned records render as
  * the amber pin chip itself (the marker being a layout node is what keeps
  * the chip collision-clear of nodes).
  */
-function ItemNodeComponent({ data }: NodeProps<ItemFlowNode>) {
-  const { item, size, focused } = data;
+function RecordNodeComponent({ data }: NodeProps<RecordFlowNode>) {
+  const { record, size, focused } = data;
   return (
     <div
-      data-testid="knowledge-item-node"
-      data-item-id={item.id}
+      data-testid="knowledge-record-node"
+      data-record-id={record.id}
       data-focused={focused || undefined}
       className={[
         'flex items-center justify-center rounded-full border transition-shadow',
-        // White markers mimic the Mastra logo's nodes-and-edges M — items
+        // White markers mimic the Mastra logo's nodes-and-edges M — records
         // read as knowledge points, distinct from nodes (purple) and pins
         // (amber).
-        item.pinned
+        record.pinned
           ? 'border-amber-300/80 bg-amber-400 text-[#1a1305] shadow-md shadow-amber-500/40'
           : 'border-white/70 bg-white/90 shadow-[0_0_6px_rgba(255,255,255,0.45)]',
-        // The selected item (open in the flyout) glows hard.
+        // The selected record (open in the flyout) glows hard.
         focused
-          ? item.pinned
+          ? record.pinned
             ? 'ring-2 ring-amber-300 shadow-[0_0_14px_rgba(251,191,36,0.9)]'
             : 'ring-2 ring-white shadow-[0_0_14px_rgba(255,255,255,0.9)]'
           : '',
@@ -197,22 +197,22 @@ function ItemNodeComponent({ data }: NodeProps<ItemFlowNode>) {
     >
       <Handle type="target" position={Position.Top} className="!invisible" />
       <Handle type="source" position={Position.Bottom} className="!invisible" />
-      {item.pinned ? <Pin size={11} aria-label="Pinned item" /> : null}
+      {record.pinned ? <Pin size={11} aria-label="Pinned record" /> : null}
     </div>
   );
 }
-const ItemNode = memo(ItemNodeComponent);
+const RecordNode = memo(RecordNodeComponent);
 
-const nodeTypes = { knowledgeNode: NodeNode, knowledgeItem: ItemNode };
+const nodeTypes = { knowledgeNode: NodeNode, knowledgeRecord: RecordNode };
 const edgeTypes = { knowledgeLink: KnowledgeLink };
 
 interface HoverCard {
-  kind: 'node' | 'edge' | 'item';
+  kind: 'node' | 'edge' | 'record';
   x: number;
   y: number;
   node?: NodeFlowNode;
   edge?: KnowledgeFlowEdge;
-  item?: ItemFlowNode;
+  record?: RecordFlowNode;
 }
 
 export interface KnowledgeGraphProps {
@@ -225,10 +225,10 @@ export interface KnowledgeGraphProps {
    */
   focusedId?: string | null;
   onFocusChange?: (id: string | null) => void;
-  /** The item selected in the flyout — its edge and marker light up. */
-  focusedItemId?: string | null;
+  /** The record selected in the flyout — its edge and marker light up. */
+  focusedRecordId?: string | null;
   onNodeClick?: (node: KnowledgeGraphNode) => void;
-  onEdgeClick?: (edge: { source: string; target: string; itemId: string }) => void;
+  onEdgeClick?: (edge: { source: string; target: string; recordId: string }) => void;
 }
 
 function TruncationBanner({ payload }: { payload: KnowledgeGraphPayload }) {
@@ -293,7 +293,7 @@ function KnowledgeGraphInner({
   arrivals,
   focusedId: controlledFocusId,
   onFocusChange,
-  focusedItemId,
+  focusedRecordId,
   onNodeClick,
   onEdgeClick,
 }: KnowledgeGraphProps) {
@@ -326,7 +326,7 @@ function KnowledgeGraphInner({
   // are thrown away whenever focus changes.
   const focusCenters = useRef(new Map<string, { x: number; y: number }>());
   const lastFocusId = useRef<string | null>(null);
-  /** Signature of the payload's node + item/edge id sets — detects real data changes. */
+  /** Signature of the payload's node + record/edge id sets — detects real data changes. */
   const lastSignature = useRef('');
   const [dragVersion, setDragVersion] = useState(0);
   const reactFlow = useReactFlow();
@@ -342,9 +342,9 @@ function KnowledgeGraphInner({
   }, [focusedId, reactFlow]);
 
   const { nodes, edges } = useMemo(() => {
-    // A11: items are the connection source of truth when the payload
+    // A11: records are the connection source of truth when the payload
     // carries them; logical owner→target pairs drive filters/ego/sizing.
-    const items = payload.items ?? [];
+    const records = payload.records ?? [];
     // Position capture policy: new data re-simulates WARM (nodes start
     // from their settled spots — new inbound edges change node sizes, so the
     // layout must re-settle); unchanged data freezes positions hard so
@@ -354,9 +354,9 @@ function KnowledgeGraphInner({
         .map(node => node.id)
         .sort()
         .join(','),
-      items.length > 0
-        ? items
-            .map(item => item.id)
+      records.length > 0
+        ? records
+            .map(record => record.id)
             .sort()
             .join(',')
         : payload.edges
@@ -377,15 +377,15 @@ function KnowledgeGraphInner({
     // Warm start: an ego run begins from wherever the nodes already sit in the
     // project view, so the cluster expands out of its current shape.
     const warmStart = (id: string) => centers.get(id) ?? lastCenters.current.get(id);
-    const pairEdges = items.length > 0 ? itemPairEdges(items) : payload.edges;
+    const pairEdges = records.length > 0 ? recordPairEdges(records) : payload.edges;
     let filtered = filterGraph(payload.nodes, pairEdges, filters);
     if (focusedId) {
-      const focused = egoGraph(filtered.nodes, filtered.edges, focusedId, items);
+      const focused = egoGraph(filtered.nodes, filtered.edges, focusedId, records);
       // A stale focus id (filtered away or gone from the payload) falls back
       // to the full view rather than an empty canvas.
       if (focused.nodes.some(node => node.id === focusedId)) filtered = focused;
     }
-    const { itemNodes, itemEdges } = deriveItemElements(filtered.nodes, items);
+    const { recordNodes, recordEdges } = deriveRecordElements(filtered.nodes, records);
     const mapped = toFlowGraph(filtered.nodes, filtered.edges, undefined, focusedId);
     const neighborOf = (id: string): { x: number; y: number } | undefined => {
       for (const edge of filtered.edges) {
@@ -409,10 +409,10 @@ function KnowledgeGraphInner({
           fixed: pinnedPositions.current.get(node.id) ?? (resimulate ? undefined : centers.get(node.id)),
           initial: warmStart(node.id) ?? (arrivals?.nodes.has(node.id) ? neighborOf(node.id) : undefined),
         })),
-        // Item markers: tiny padding so they nestle into their cluster,
+        // Record markers: tiny padding so they nestle into their cluster,
         // spawned beside their first node so they never fly in from origin.
-        ...itemNodes.map(marker => {
-          const anchor = warmStart(marker.item.nodeIds[0] ?? '');
+        ...recordNodes.map(marker => {
+          const anchor = warmStart(marker.record.nodeIds[0] ?? '');
           return {
             id: marker.id,
             size: marker.size,
@@ -424,12 +424,12 @@ function KnowledgeGraphInner({
           };
         }),
       ],
-      items.length > 0
-        ? itemEdges.map(edge => ({
+      records.length > 0
+        ? recordEdges.map(edge => ({
             source: edge.source,
             target: edge.target,
-            // Stubs/spokes hug; node↔node item lines keep normal length.
-            hug: edge.source.startsWith('item:') || edge.target.startsWith('item:'),
+            // Stubs/spokes hug; node↔node record lines keep normal length.
+            hug: edge.source.startsWith('record:') || edge.target.startsWith('record:'),
           }))
         : filtered.edges,
     );
@@ -439,36 +439,36 @@ function KnowledgeGraphInner({
     // scratch cache, so the project layout survives the visit untouched.
     for (const [id, center] of positions) centers.set(id, center);
     const nodeFlow = toFlowGraph(filtered.nodes, filtered.edges, positions, focusedId);
-    if (items.length === 0) return nodeFlow; // pre-A11 payload fallback
-    const itemFlow = toItemFlow(itemNodes, itemEdges, positions);
-    return { nodes: [...nodeFlow.nodes, ...itemFlow.nodes], edges: itemFlow.edges };
+    if (records.length === 0) return nodeFlow; // pre-A11 payload fallback
+    const recordFlow = toRecordFlow(recordNodes, recordEdges, positions);
+    return { nodes: [...nodeFlow.nodes, ...recordFlow.nodes], edges: recordFlow.edges };
     // dragVersion re-runs the layout after a drag pin.
   }, [payload, filters, focusedId, dragVersion, arrivals]);
 
   // Arrival animation: newly-polled nodes/edges fade-scale in with a pulse.
-  // Selection: the flyout's open item lights its marker and edge(s) up.
+  // Selection: the flyout's open record lights its marker and edge(s) up.
   const displayNodes = useMemo(() => {
     let mapped = nodes;
     if (arrivals && arrivals.nodes.size > 0)
       mapped = mapped.map(node => (arrivals.nodes.has(node.id) ? { ...node, className: 'knowledge-arrive' } : node));
-    if (focusedItemId)
+    if (focusedRecordId)
       mapped = mapped.map(node =>
-        node.type === 'knowledgeItem' && (node as ItemFlowNode).data.item.id === focusedItemId
-          ? ({ ...node, data: { ...node.data, focused: true } } as ItemFlowNode)
+        node.type === 'knowledgeRecord' && (node as RecordFlowNode).data.record.id === focusedRecordId
+          ? ({ ...node, data: { ...node.data, focused: true } } as RecordFlowNode)
           : node,
       );
     return mapped;
-  }, [nodes, arrivals, focusedItemId]);
+  }, [nodes, arrivals, focusedRecordId]);
   const displayEdges = useMemo(() => {
     let mapped = edges;
     if (arrivals && arrivals.edges.size > 0)
       mapped = mapped.map(edge => (arrivals.edges.has(edge.id) ? { ...edge, className: 'knowledge-arrive' } : edge));
-    if (focusedItemId)
+    if (focusedRecordId)
       mapped = mapped.map(edge =>
-        edge.data?.itemId === focusedItemId ? { ...edge, data: { ...edge.data, focused: true } } : edge,
+        edge.data?.recordId === focusedRecordId ? { ...edge, data: { ...edge.data, focused: true } } : edge,
       );
     return mapped;
-  }, [edges, arrivals, focusedItemId]);
+  }, [edges, arrivals, focusedRecordId]);
 
   const toggleRung = useCallback((rung: KnowledgeRung) => {
     setFilters(current => {
@@ -536,12 +536,12 @@ function KnowledgeGraphInner({
         proOptions={{ hideAttribution: true }}
         nodesConnectable={false}
         onNodeClick={(_, node) => {
-          // A11: a knowledge item marker click IS a knowledge item click — same behavior as
+          // A11: a knowledge record marker click IS a knowledge record click — same behavior as
           // clicking its edge (dot and stub are one unit).
-          if (node.type === 'knowledgeItem') {
-            const item = (node as ItemFlowNode).data.item;
-            const [first = '', second] = item.nodeIds;
-            onEdgeClick?.({ source: first, target: second ?? first, itemId: item.id });
+          if (node.type === 'knowledgeRecord') {
+            const record = (node as RecordFlowNode).data.record;
+            const [first = '', second] = record.nodeIds;
+            onEdgeClick?.({ source: first, target: second ?? first, recordId: record.id });
             return;
           }
           setFocusedId(node.id);
@@ -550,19 +550,19 @@ function KnowledgeGraphInner({
         onPaneClick={() => setFocusedId(null)}
         onEdgeClick={(_, edge) => {
           const flowEdge = edge as KnowledgeFlowEdge;
-          // Stub/spoke edges have a `item:` marker on one end — the flyout
-          // needs the knowledge-node end, never the synthetic item node id.
-          const nodeEnd = !flowEdge.source.startsWith('item:')
+          // Stub/spoke edges have a `record:` marker on one end — the flyout
+          // needs the knowledge-node end, never the synthetic record node id.
+          const nodeEnd = !flowEdge.source.startsWith('record:')
             ? flowEdge.source
-            : !flowEdge.target.startsWith('item:')
+            : !flowEdge.target.startsWith('record:')
               ? flowEdge.target
               : null;
           if (!nodeEnd) return;
-          onEdgeClick?.({ source: nodeEnd, target: flowEdge.target, itemId: flowEdge.data?.itemId ?? '' });
+          onEdgeClick?.({ source: nodeEnd, target: flowEdge.target, recordId: flowEdge.data?.recordId ?? '' });
         }}
         onNodeMouseEnter={(event, node) =>
-          node.type === 'knowledgeItem'
-            ? setHover({ kind: 'item', x: event.clientX, y: event.clientY, item: node as ItemFlowNode })
+          node.type === 'knowledgeRecord'
+            ? setHover({ kind: 'record', x: event.clientX, y: event.clientY, record: node as RecordFlowNode })
             : setHover({ kind: 'node', x: event.clientX, y: event.clientY, node: node as NodeFlowNode })
         }
         onNodeMouseLeave={() => setHover(null)}
@@ -622,8 +622,8 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
           <dd>{node.kind}</dd>
           <dt>Scope</dt>
           <dd>{RUNG_LABELS[node.rung]}</dd>
-          <dt>Knowledge items</dt>
-          <dd>{node.itemCount}</dd>
+          <dt>Knowledge records</dt>
+          <dd>{node.recordCount}</dd>
           <dt>Links</dt>
           <dd>
             {degree.incoming} in · {degree.outgoing} out
@@ -634,8 +634,8 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
       </div>
     );
   }
-  if (hover.kind === 'item' && hover.item) {
-    const { item } = hover.item.data;
+  if (hover.kind === 'record' && hover.record) {
+    const { record } = hover.record.data;
     return (
       <div
         data-testid="knowledge-hover-card"
@@ -643,10 +643,10 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
         style={style}
       >
         <div className="text-icon6 mb-1 flex items-center gap-1.5">
-          Item
-          {item.pinned ? <Pin size={11} className="text-amber-400" aria-label="Pinned" /> : null}
+          Record
+          {record.pinned ? <Pin size={11} className="text-amber-400" aria-label="Pinned" /> : null}
         </div>
-        <div className="text-icon4 leading-relaxed">{item.text}</div>
+        <div className="text-icon4 leading-relaxed">{record.text}</div>
       </div>
     );
   }
@@ -660,9 +660,9 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
         className="border-surface5 bg-surface3 pointer-events-none fixed z-50 max-w-72 rounded-lg border p-3 text-xs shadow-xl"
         style={style}
       >
-        <div className="text-icon6">{source && target ? `${source} → ${target}` : 'Item'}</div>
+        <div className="text-icon6">{source && target ? `${source} → ${target}` : 'Record'}</div>
         <div className="text-icon4 mt-0.5 leading-relaxed">
-          {hover.edge.data?.text ?? 'Mentioned in a knowledge item'}
+          {hover.edge.data?.text ?? 'Mentioned in a knowledge record'}
         </div>
       </div>
     );

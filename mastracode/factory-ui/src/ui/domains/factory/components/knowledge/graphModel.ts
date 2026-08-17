@@ -8,14 +8,14 @@ import type { Edge, Node } from '@xyflow/react';
 
 import type {
   KnowledgeGraphEdge,
-  KnowledgeGraphItem,
+  KnowledgeGraphRecord,
   KnowledgeGraphNode,
   KnowledgeRung,
 } from '../../services/knowledge';
 
 export const NODE_SIZE_MIN = 52;
 export const NODE_SIZE_MAX = 176;
-/** Unlabeled leaf nodes (no incoming items) render as small dots. */
+/** Unlabeled leaf nodes (no incoming records) render as small dots. */
 export const NODE_SIZE_DOT = 26;
 /** Being pointed AT is what importance means — incoming counts double. */
 const INCOMING_WEIGHT = 2;
@@ -42,7 +42,7 @@ export function nodeSize(degree: NodeDegree, maxWeighted: number): number {
 }
 
 /**
- * A node earns its label by being referenced: no incoming items means the
+ * A node earns its label by being referenced: no incoming records means the
  * label stays hidden (hover/click still surface the details).
  */
 export function shouldShowLabel(degree: NodeDegree): boolean {
@@ -110,7 +110,7 @@ export function egoGraph(
   nodes: KnowledgeGraphNode[],
   edges: KnowledgeGraphEdge[],
   focusId: string,
-  items?: KnowledgeGraphItem[],
+  records?: KnowledgeGraphRecord[],
 ): { nodes: KnowledgeGraphNode[]; edges: KnowledgeGraphEdge[] } {
   const keep = new Set([focusId]);
   const keptEdges = edges.filter(edge => edge.source === focusId || edge.target === focusId);
@@ -118,12 +118,12 @@ export function egoGraph(
     keep.add(edge.source);
     keep.add(edge.target);
   }
-  // A knowledge item's whole node set is one neighborhood: a junction item that
-  // touches the focus must keep ALL its nodes, or the item element gets
+  // A knowledge record's whole node set is one neighborhood: a junction record that
+  // touches the focus must keep ALL its nodes, or the record element gets
   // dropped downstream (its nodes no longer all survive) and a neighbor
   // strands with no visible connection.
-  for (const item of items ?? []) {
-    if (item.nodeIds.includes(focusId)) for (const id of item.nodeIds) keep.add(id);
+  for (const record of records ?? []) {
+    if (record.nodeIds.includes(focusId)) for (const id of record.nodeIds) keep.add(id);
   }
   return {
     nodes: nodes.filter(node => keep.has(node.id)),
@@ -131,98 +131,98 @@ export function egoGraph(
   };
 }
 
-/** A11: items render by arity — tiny dots, connecting lines, junctions. */
-export const ITEM_DOT_SIZE = 14;
-export const ITEM_JUNCTION_SIZE = 12;
-/** Pinned item markers are the pin chip itself — sized so it fits. */
-export const ITEM_PIN_SIZE = 22;
+/** A11: records render by arity — tiny dots, connecting lines, junctions. */
+export const RECORD_DOT_SIZE = 14;
+export const RECORD_JUNCTION_SIZE = 12;
+/** Pinned record markers are the pin chip itself — sized so it fits. */
+export const RECORD_PIN_SIZE = 22;
 
-export interface ItemNodeElement {
+export interface RecordNodeElement {
   id: string;
-  item: KnowledgeGraphItem;
-  /** 'dot' anchors a single-node item; 'junction' splits a 2+-node one. */
+  record: KnowledgeGraphRecord;
+  /** 'dot' anchors a single-node record; 'junction' splits a 2+-node one. */
   kind: 'dot' | 'junction';
   size: number;
 }
 
-export interface ItemEdgeElement {
+export interface RecordEdgeElement {
   id: string;
   /** Always a node id, so page click handlers can treat it as the owner. */
   source: string;
-  /** An node id (plain line) or a knowledge item node id (stub/spoke). */
+  /** An node id (plain line) or a knowledge record node id (stub/spoke). */
   target: string;
-  item: KnowledgeGraphItem;
+  record: KnowledgeGraphRecord;
 }
 
 /**
- * A11 derivation: items (already filtered to visible nodes) become
+ * A11 derivation: records (already filtered to visible nodes) become
  * graph elements by arity:
  * - 1 node  → a tiny dot + stub edge hugging its node. Suppressed when
- *   the unpinned item is its node's only windowed item — the node
+ *   the unpinned record is its node's only windowed record — the node
  *   circle already represents it (the flyout shows it on click).
- * - 2 nodes, unpinned → the connecting line (the item IS the edge).
+ * - 2 nodes, unpinned → the connecting line (the record IS the edge).
  * - 2 nodes, pinned → a midpoint junction (the pin chip) + two spokes, so
  *   the collision forces keep the chip clear of other nodes.
  * - 3+ nodes → a junction node splitting to each node.
- * Dot/stub/line/junction all carry the item — clicking any of them is
- * clicking the item.
+ * Dot/stub/line/junction all carry the record — clicking any of them is
+ * clicking the record.
  */
-export function deriveItemElements(
+export function deriveRecordElements(
   nodes: KnowledgeGraphNode[],
-  items: KnowledgeGraphItem[],
-): { itemNodes: ItemNodeElement[]; itemEdges: ItemEdgeElement[] } {
+  records: KnowledgeGraphRecord[],
+): { recordNodes: RecordNodeElement[]; recordEdges: RecordEdgeElement[] } {
   const byId = new Map(nodes.map(node => [node.id, node]));
-  const itemNodes: ItemNodeElement[] = [];
-  const itemEdges: ItemEdgeElement[] = [];
-  for (const item of items) {
-    if (item.nodeIds.length === 0) continue;
-    if (!item.nodeIds.every(id => byId.has(id))) continue;
-    const nodeId = `item:${item.id}`;
-    if (item.nodeIds.length === 1) {
-      const owner = byId.get(item.nodeIds[0]!)!;
-      if (!item.pinned && owner.itemCount === 1) continue; // the circle IS the item
-      itemNodes.push({
+  const recordNodes: RecordNodeElement[] = [];
+  const recordEdges: RecordEdgeElement[] = [];
+  for (const record of records) {
+    if (record.nodeIds.length === 0) continue;
+    if (!record.nodeIds.every(id => byId.has(id))) continue;
+    const nodeId = `record:${record.id}`;
+    if (record.nodeIds.length === 1) {
+      const owner = byId.get(record.nodeIds[0]!)!;
+      if (!record.pinned && owner.recordCount === 1) continue; // the circle represents the record
+      recordNodes.push({
         id: nodeId,
-        item,
+        record,
         kind: 'dot',
-        size: item.pinned ? ITEM_PIN_SIZE : ITEM_DOT_SIZE,
+        size: record.pinned ? RECORD_PIN_SIZE : RECORD_DOT_SIZE,
       });
-      itemEdges.push({ id: `${nodeId}:stub`, source: owner.id, target: nodeId, item });
+      recordEdges.push({ id: `${nodeId}:stub`, source: owner.id, target: nodeId, record });
       continue;
     }
-    if (item.nodeIds.length === 2 && !item.pinned) {
-      itemEdges.push({ id: nodeId, source: item.nodeIds[0]!, target: item.nodeIds[1]!, item });
+    if (record.nodeIds.length === 2 && !record.pinned) {
+      recordEdges.push({ id: nodeId, source: record.nodeIds[0]!, target: record.nodeIds[1]!, record });
       continue;
     }
-    itemNodes.push({
+    recordNodes.push({
       id: nodeId,
-      item,
+      record,
       kind: 'junction',
-      size: item.pinned ? ITEM_PIN_SIZE : ITEM_JUNCTION_SIZE,
+      size: record.pinned ? RECORD_PIN_SIZE : RECORD_JUNCTION_SIZE,
     });
-    for (const [index, relatedNodeId] of item.nodeIds.entries()) {
-      itemEdges.push({ id: `${nodeId}:${index}`, source: relatedNodeId, target: nodeId, item });
+    for (const [index, relatedNodeId] of record.nodeIds.entries()) {
+      recordEdges.push({ id: `${nodeId}:${index}`, source: relatedNodeId, target: nodeId, record });
     }
   }
-  return { itemNodes, itemEdges };
+  return { recordNodes, recordEdges };
 }
 
 /**
  * Logical owner→target pairs for degree sizing and filter/ego traversal —
- * one pseudo-edge per item connection (per-item, so repeated links between
+ * one pseudo-edge per record connection (per-record, so repeated links between
  * the same nodes count toward importance).
  */
-export function itemPairEdges(items: KnowledgeGraphItem[]): KnowledgeGraphEdge[] {
+export function recordPairEdges(records: KnowledgeGraphRecord[]): KnowledgeGraphEdge[] {
   const edges: KnowledgeGraphEdge[] = [];
-  for (const item of items) {
-    for (let i = 1; i < item.nodeIds.length; i += 1) {
+  for (const record of records) {
+    for (let i = 1; i < record.nodeIds.length; i += 1) {
       edges.push({
-        id: `pair:${item.id}:${i}`,
-        source: item.nodeIds[0]!,
-        target: item.nodeIds[i]!,
+        id: `pair:${record.id}:${i}`,
+        source: record.nodeIds[0]!,
+        target: record.nodeIds[i]!,
         type: 'wikilink',
-        itemId: item.id,
-        pinned: item.pinned || undefined,
+        recordId: record.id,
+        pinned: record.pinned || undefined,
       });
     }
   }
@@ -237,52 +237,52 @@ export type NodeFlowNode = Node<{
   focused: boolean;
 }>;
 
-export type ItemFlowNode = Node<{
-  item: KnowledgeGraphItem;
+export type RecordFlowNode = Node<{
+  record: KnowledgeGraphRecord;
   kind: 'dot' | 'junction';
   size: number;
-  /** The item currently selected (its item is open in the flyout). */
+  /** The record currently selected (its record is open in the flyout). */
   focused?: boolean;
 }>;
 
 export type KnowledgeFlowEdge = Edge<{
-  itemId: string;
+  recordId: string;
   linkType: 'wikilink';
   pinned: boolean;
   text?: string;
-  /** The edge belongs to the item currently selected in the flyout. */
+  /** The edge belongs to the record currently selected in the flyout. */
   focused?: boolean;
 }>;
 
-/** Map A11 item elements into React Flow nodes/edges (positions from the layout). */
-export function toItemFlow(
-  itemNodes: ItemNodeElement[],
-  itemEdges: ItemEdgeElement[],
+/** Map A11 record elements into React Flow nodes/edges (positions from the layout). */
+export function toRecordFlow(
+  recordNodes: RecordNodeElement[],
+  recordEdges: RecordEdgeElement[],
   positions?: ReadonlyMap<string, { x: number; y: number }>,
-): { nodes: ItemFlowNode[]; edges: KnowledgeFlowEdge[] } {
+): { nodes: RecordFlowNode[]; edges: KnowledgeFlowEdge[] } {
   return {
-    nodes: itemNodes.map(element => {
+    nodes: recordNodes.map(element => {
       const center = positions?.get(element.id);
       const position = center ? { x: center.x - element.size / 2, y: center.y - element.size / 2 } : { x: 0, y: 0 };
       return {
         id: element.id,
-        type: 'knowledgeItem',
+        type: 'knowledgeRecord',
         position,
         width: element.size,
         height: element.size,
-        data: { item: element.item, kind: element.kind, size: element.size },
-      } satisfies ItemFlowNode;
+        data: { record: element.record, kind: element.kind, size: element.size },
+      } satisfies RecordFlowNode;
     }),
-    edges: itemEdges.map(element => ({
+    edges: recordEdges.map(element => ({
       id: element.id,
       source: element.source,
       target: element.target,
       type: 'knowledgeLink',
       data: {
-        itemId: element.item.id,
+        recordId: element.record.id,
         linkType: 'wikilink' as const,
-        pinned: element.item.pinned,
-        text: element.item.text,
+        pinned: element.record.pinned,
+        text: element.record.text,
       },
     })),
   };
@@ -331,7 +331,7 @@ export function toFlowGraph(
       source: edge.source,
       target: edge.target,
       type: 'knowledgeLink',
-      data: { itemId: edge.itemId, linkType: edge.type, pinned: edge.pinned ?? false },
+      data: { recordId: edge.recordId, linkType: edge.type, pinned: edge.pinned ?? false },
     })),
   };
 }
