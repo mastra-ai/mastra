@@ -36,7 +36,10 @@ export const PULSE_TABLES_DDL: readonly string[] = [
   from_id    String,
   to_kind    Enum8('pulse' = 1, 'flow' = 2, 'thread' = 3, 'model_input' = 4, 'content' = 5, 'definition' = 6, 'external' = 7),
   to_id      String,
+  from_system String DEFAULT '',
+  to_system   String DEFAULT '',
   attributes String,
+  metadata   String DEFAULT '{}',
   trace_id   String
 ) ENGINE = MergeTree ORDER BY (trace_id, timestamp, seq)`,
 ];

@@ -101,9 +101,9 @@ await backfillFromObservability({ observability: observabilityStore, bus: mastra
 
 ## Session facts
 
-`attachPulseSession` is **deprecated and a no-op**: session facts are
-forwarded natively by the AgentController whenever `pulse` is configured on
-Mastra — no per-session wiring.
+Session facts (approvals, the true abort with its run id, follow-ups,
+mode/model switches) are forwarded natively by the AgentController whenever
+`pulse` is configured on Mastra — no per-session wiring.
 
 ## Limitations (research preview)
 
