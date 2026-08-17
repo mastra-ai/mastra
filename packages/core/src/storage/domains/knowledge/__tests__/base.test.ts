@@ -45,11 +45,11 @@ describe('InMemoryKnowledgeStorage', () => {
     expect(siblingOnly.scope).toEqual(sibling);
   });
 
-  it('stamps provenance, derives mentions, and separates items about from touching', async () => {
+  it('stamps provenance, derives mentions, and separates knowledge about from touching', async () => {
     const store = createStore();
     const jane = await store.createNode({ name: 'Jane', kind: 'person', scope: resource });
-    const item = await store.appendItem({
-      parentNodeId: jane.id,
+    const record = await store.appendKnowledge({
+      node: { ...jane, scope: sibling },
       text: 'Paired with [[Marco]] on [[deploy fix]].',
       scope: thread,
       sourceThreadId: 't1',
@@ -60,20 +60,22 @@ describe('InMemoryKnowledgeStorage', () => {
     });
     const marco = await store.resolveNode({ name: 'Marco', scope: thread });
 
-    expect(item.id).toHaveLength(26);
-    expect(item.capturedAt).toBeInstanceOf(Date);
-    expect(item.when?.toISOString()).toBe('2026-07-01T00:00:00.000Z');
-    expect((await store.itemsAbout({ nodeId: jane.id, scope: thread })).items).toHaveLength(1);
-    expect((await store.itemsAbout({ nodeId: marco!.id, scope: thread })).items).toHaveLength(0);
-    expect((await store.itemsTouching({ nodeId: marco!.id, scope: thread })).items[0]?.id).toBe(item.id);
-    expect((await store.itemsTouching({ nodeId: marco!.id, scope: sibling })).items).toHaveLength(0);
+    expect(record.id).toHaveLength(26);
+    expect(record.capturedAt).toBeInstanceOf(Date);
+    expect(record.when?.toISOString()).toBe('2026-07-01T00:00:00.000Z');
+    expect(record.node).toBe(jane.id);
+    expect((await store.knowledgeAbout({ node: jane, scope: thread })).records).toHaveLength(1);
+    expect((await store.knowledgeAbout({ node: marco!, scope: thread })).records).toHaveLength(0);
+    expect((await store.knowledgeMentioning({ node: marco!, scope: thread })).records[0]?.id).toBe(record.id);
+    expect((await store.knowledgeRelatedTo({ node: marco!, scope: thread })).records[0]?.id).toBe(record.id);
+    expect((await store.knowledgeRelatedTo({ node: marco!, scope: sibling })).records).toHaveLength(0);
   });
 
-  it('does not expose items through a scope that cannot see their parent node', async () => {
+  it('does not expose knowledge through a scope that cannot see their parent node', async () => {
     const store = createStore();
     const node = await store.createNode({ name: 'Resource Secret', kind: 'task', scope: resource });
-    await store.appendItem({
-      parentNodeId: node.id,
+    await store.appendKnowledge({
+      node: node.id,
       text: 'org-visible wording',
       scope: org,
       sourceThreadId: 't1',
@@ -81,17 +83,17 @@ describe('InMemoryKnowledgeStorage', () => {
       defaultScope: resource,
     });
 
-    expect((await store.itemsAbout({ nodeId: node.id, scope: org })).items).toEqual([]);
+    expect((await store.knowledgeAbout({ node: node.id, scope: org })).records).toEqual([]);
     expect(await store.search({ query: 'org-visible', scope: org })).toEqual([]);
-    expect((await store.itemsAbout({ nodeId: node.id, scope: thread })).items).toHaveLength(1);
+    expect((await store.knowledgeAbout({ node: node.id, scope: thread })).records).toHaveLength(1);
   });
 
-  it('soft deletes and restores items without losing mention relationships', async () => {
+  it('soft deletes and restores knowledge without losing mention relationships', async () => {
     const store = createStore();
     const jane = await store.createNode({ name: 'Jane', kind: 'person', scope: resource });
     const marco = await store.createNode({ name: 'Marco', kind: 'person', scope: resource });
-    const item = await store.appendItem({
-      parentNodeId: jane.id,
+    const record = await store.appendKnowledge({
+      node: jane.id,
       text: 'Works with [[Marco]].',
       scope: resource,
       sourceThreadId: 't1',
@@ -99,18 +101,18 @@ describe('InMemoryKnowledgeStorage', () => {
       defaultScope: resource,
     });
 
-    const removed = await store.removeItem({ id: item.id, deletedBy: 'curator' });
+    const removed = await store.removeKnowledge({ id: record.id, deletedBy: 'curator' });
     expect(removed.deletedAt).toBeInstanceOf(Date);
-    expect(await store.getItem({ id: item.id })).toBeNull();
-    expect(await store.getItem({ id: item.id, includeDeleted: true })).toEqual(
+    expect(await store.getKnowledge({ id: record.id })).toBeNull();
+    expect(await store.getKnowledge({ id: record.id, includeDeleted: true })).toEqual(
       expect.objectContaining({ deletedBy: 'curator' }),
     );
-    expect((await store.itemsTouching({ nodeId: marco.id, scope: thread })).items).toHaveLength(0);
+    expect((await store.knowledgeRelatedTo({ node: marco.id, scope: thread })).records).toHaveLength(0);
 
-    await store.restoreItem({ id: item.id });
-    expect((await store.itemsTouching({ nodeId: marco.id, scope: thread })).items[0]?.id).toBe(item.id);
+    await store.restoreKnowledge({ id: record.id });
+    expect((await store.knowledgeRelatedTo({ node: marco.id, scope: thread })).records[0]?.id).toBe(record.id);
     expect((await store.listActivity({ scope: thread })).map(event => event.action)).toEqual(
-      expect.arrayContaining(['item-deleted', 'item-restored']),
+      expect.arrayContaining(['record-deleted', 'record-restored']),
     );
   });
 
@@ -137,8 +139,8 @@ describe('InMemoryKnowledgeStorage', () => {
     const duplicate = await store.createNode({ name: 'Jane Doe', kind: 'person', scope: resource });
     await store.createNode({ kind: 'document', name: 'People', content: 'Contact [[Jane Doe]]', scope: resource });
     const parent = await store.createNode({ name: 'Project', kind: 'task', scope: resource });
-    const item = await store.appendItem({
-      parentNodeId: parent.id,
+    const record = await store.appendKnowledge({
+      node: parent.id,
       text: 'Owned by [[Jane Doe]]',
       scope: resource,
       sourceThreadId: 't1',
@@ -151,10 +153,10 @@ describe('InMemoryKnowledgeStorage', () => {
     await store.mergeNodes({ sourceId: duplicate.id, targetId: target.id, sourceVersion: duplicate.version });
 
     const mergeEntries = (await store.listSemanticOutbox()).slice(beforeMerge);
-    expect(mergeEntries.map(entry => entry.documentType)).toEqual(expect.arrayContaining(['node', 'item', 'node']));
+    expect(mergeEntries.map(entry => entry.documentType)).toEqual(expect.arrayContaining(['node', 'record', 'node']));
 
     const beforeRescope = (await store.listSemanticOutbox()).length;
-    await store.rescopeItem({ id: item.id, scope: org });
+    await store.rescopeKnowledge({ id: record.id, scope: org });
     const rescopeEntries = (await store.listSemanticOutbox()).slice(beforeRescope);
     expect(rescopeEntries).toEqual([
       expect.objectContaining({ operation: 'delete', scope: resource }),
@@ -165,8 +167,8 @@ describe('InMemoryKnowledgeStorage', () => {
   it('enforces ceilings and monotonic curation cursors', async () => {
     const store = createStore();
     const node = await store.createNode({ name: 'Secret', kind: 'task', scope: resource });
-    const item = await store.appendItem({
-      parentNodeId: node.id,
+    const record = await store.appendKnowledge({
+      node: node.id,
       text: 'Private detail',
       scope: resource,
       sourceThreadId: 't1',
@@ -175,33 +177,37 @@ describe('InMemoryKnowledgeStorage', () => {
       defaultScope: resource,
     });
 
-    await expect(store.rescopeItem({ id: item.id, scope: org })).rejects.toThrow('ceiling');
-    await store.raiseCeiling({ id: item.id, maxScope: 'org' });
-    await expect(store.rescopeItem({ id: item.id, scope: org })).resolves.toEqual(
+    await expect(store.rescopeKnowledge({ id: record.id, scope: org })).rejects.toThrow('ceiling');
+    await store.raiseKnowledgeCeiling({ id: record.id, maxScope: 'org' });
+    await expect(store.rescopeKnowledge({ id: record.id, scope: org })).resolves.toEqual(
       expect.objectContaining({ scope: org }),
     );
 
-    await store.advanceCurationCursor({ sourceThreadId: 't1', agent: 'curate', lastItemId: item.id });
+    await store.advanceCurationCursor({ sourceThreadId: 't1', agent: 'curate', lastKnowledgeId: record.id });
     await expect(
-      store.advanceCurationCursor({ sourceThreadId: 't1', agent: 'curate', lastItemId: '00000000000000000000000000' }),
+      store.advanceCurationCursor({
+        sourceThreadId: 't1',
+        agent: 'curate',
+        lastKnowledgeId: '00000000000000000000000000',
+      }),
     ).rejects.toThrow('cannot move backwards');
   });
 
-  it('paginates items newest-first and supports semantic outbox recovery', async () => {
+  it('paginates knowledge newest-first and supports semantic outbox recovery', async () => {
     const store = createStore();
     const node = await store.createNode({ name: 'Deploy', kind: 'task', scope: resource });
-    const first = await store.appendItem({
+    const first = await store.appendKnowledge({
       id: '01J00000000000000000000000',
-      parentNodeId: node.id,
+      node: node.id,
       text: 'first',
       scope: resource,
       sourceThreadId: 't1',
       resolutionScope: thread,
       defaultScope: resource,
     });
-    const second = await store.appendItem({
+    const second = await store.appendKnowledge({
       id: '01J00000000000000000000001',
-      parentNodeId: node.id,
+      node: node.id,
       text: 'second',
       scope: resource,
       sourceThreadId: 't1',
@@ -209,11 +215,12 @@ describe('InMemoryKnowledgeStorage', () => {
       defaultScope: resource,
     });
 
-    const nodeOne = await store.itemsAbout({ nodeId: node.id, scope: thread, limit: 1 });
-    expect(nodeOne.items[0]?.id).toBe(second.id);
+    const nodeOne = await store.knowledgeAbout({ node: node.id, scope: thread, limit: 1 });
+    expect(nodeOne.records[0]?.id).toBe(second.id);
     expect(nodeOne.nextCursor).toBe(second.id);
     expect(
-      (await store.itemsAbout({ nodeId: node.id, scope: thread, limit: 1, after: nodeOne.nextCursor })).items[0]?.id,
+      (await store.knowledgeAbout({ node: node.id, scope: thread, limit: 1, after: nodeOne.nextCursor })).records[0]
+        ?.id,
     ).toBe(first.id);
 
     const claimed = await store.claimSemanticOutbox({ workerId: 'one', limit: 1, now: new Date('2026-07-01') });
@@ -234,25 +241,25 @@ describe('InMemoryKnowledgeStorage', () => {
   it('keeps semantic outbox operations idempotent', async () => {
     const store = createStore();
     const node = await store.createNode({ name: 'Deploy', kind: 'task', scope: resource });
-    const item = await store.appendItem({
-      parentNodeId: node.id,
+    const record = await store.appendKnowledge({
+      node: node.id,
       text: 'detail',
       scope: resource,
       sourceThreadId: 't1',
       resolutionScope: thread,
       defaultScope: resource,
     });
-    await store.removeItem({ id: item.id, deletedBy: 'curator' });
+    await store.removeKnowledge({ id: record.id, deletedBy: 'curator' });
     const count = (await store.listSemanticOutbox()).length;
-    await store.removeItem({ id: item.id, deletedBy: 'curator' });
+    await store.removeKnowledge({ id: record.id, deletedBy: 'curator' });
     expect(await store.listSemanticOutbox()).toHaveLength(count);
   });
 
-  it('searches visible graph and node content while excluding deleted items', async () => {
+  it('searches visible graph and node content while excluding deleted knowledge', async () => {
     const store = createStore();
     const node = await store.createNode({ name: 'Deploy', kind: 'task', scope: resource });
-    const item = await store.appendItem({
-      parentNodeId: node.id,
+    const record = await store.appendKnowledge({
+      node: node.id,
       text: 'Use the release checklist',
       scope: thread,
       sourceThreadId: 't1',
@@ -268,9 +275,9 @@ describe('InMemoryKnowledgeStorage', () => {
 
     expect((await store.search({ query: 'release', scope: thread })).map(result => result.type)).toEqual([
       'node',
-      'item',
+      'record',
     ]);
-    await store.removeItem({ id: item.id, deletedBy: 'curator' });
+    await store.removeKnowledge({ id: record.id, deletedBy: 'curator' });
     expect((await store.search({ query: 'release', scope: thread })).map(result => result.type)).toEqual(['node']);
   });
 });

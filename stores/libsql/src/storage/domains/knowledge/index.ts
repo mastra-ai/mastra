@@ -6,9 +6,9 @@ import {
   isKnowledgeScopeVisible,
   KNOWLEDGE_ACTIVITY_SCHEMA,
   KNOWLEDGE_CURSORS_SCHEMA,
-  KNOWLEDGE_ITEMS_SCHEMA,
-  KNOWLEDGE_MENTIONS_SCHEMA,
   KNOWLEDGE_RECORDS_SCHEMA,
+  KNOWLEDGE_MENTIONS_SCHEMA,
+  KNOWLEDGE_NODES_SCHEMA,
   KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
   knowledgeScopeKey,
   knowledgeSemanticDocumentId,
@@ -19,26 +19,26 @@ import {
   parseKnowledgeWikilinks,
   TABLE_KNOWLEDGE_ACTIVITY,
   TABLE_KNOWLEDGE_CURSORS,
-  TABLE_KNOWLEDGE_ITEMS,
-  TABLE_KNOWLEDGE_MENTIONS,
   TABLE_KNOWLEDGE_RECORDS,
+  TABLE_KNOWLEDGE_MENTIONS,
+  TABLE_KNOWLEDGE_NODES,
   TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
 } from '@mastra/core/storage';
 import type {
-  AppendKnowledgeItemInput,
+  AppendKnowledgeInput,
   ClaimKnowledgeSemanticOutboxInput,
   CreateKnowledgeNodeInput,
   KnowledgeActivityAction,
   KnowledgeActivityEvent,
   KnowledgeCurationCursor,
   KnowledgeNode,
-  KnowledgeItem,
+  KnowledgeRecord,
   KnowledgeScope,
   KnowledgeSemanticDocumentType,
   KnowledgeSemanticOperation,
   KnowledgeSemanticOutboxEntry,
-  ListKnowledgeItemsInput,
-  ListKnowledgeItemsOutput,
+  QueryKnowledgeInput,
+  QueryKnowledgeOutput,
   ListKnowledgeNodesInput,
   SearchKnowledgeInput,
   SearchKnowledgeResult,
@@ -73,6 +73,10 @@ function canonicalName(name: string): string {
   return name.trim().toLocaleLowerCase();
 }
 
+function nodeReferenceId(node: KnowledgeNode | string): string {
+  return typeof node === 'string' ? node : node.id;
+}
+
 function parseNode(row: Record<string, unknown>): KnowledgeNode {
   return {
     id: String(row.id),
@@ -88,16 +92,16 @@ function parseNode(row: Record<string, unknown>): KnowledgeNode {
   };
 }
 
-function parseItem(row: Record<string, unknown>): KnowledgeItem {
+function parseKnowledge(row: Record<string, unknown>): KnowledgeRecord {
   return {
     id: String(row.id),
-    parentNodeId: String(row.parentNodeId),
+    node: String(row.node),
     text: String(row.text),
     scope: parseJson(row.scopeJson ?? row.scope),
     sourceThreadId: String(row.sourceThreadId),
     capturedAt: toDate(row.capturedAt),
     when: optionalDate(row.when),
-    maxScope: row.maxScope == null ? undefined : (String(row.maxScope) as KnowledgeItem['maxScope']),
+    maxScope: row.maxScope == null ? undefined : (String(row.maxScope) as KnowledgeRecord['maxScope']),
     deletedAt: optionalDate(row.deletedAt),
     deletedBy: row.deletedBy == null ? undefined : String(row.deletedBy),
   };
@@ -136,8 +140,8 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async init(): Promise<void> {
+    await this.#db.createTable({ tableName: TABLE_KNOWLEDGE_NODES, schema: KNOWLEDGE_NODES_SCHEMA });
     await this.#db.createTable({ tableName: TABLE_KNOWLEDGE_RECORDS, schema: KNOWLEDGE_RECORDS_SCHEMA });
-    await this.#db.createTable({ tableName: TABLE_KNOWLEDGE_ITEMS, schema: KNOWLEDGE_ITEMS_SCHEMA });
     await this.#db.createTable({
       tableName: TABLE_KNOWLEDGE_MENTIONS,
       schema: KNOWLEDGE_MENTIONS_SCHEMA,
@@ -156,19 +160,19 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     await this.#client.batch(
       [
         {
-          sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_records_idnode ON "${TABLE_KNOWLEDGE_RECORDS}" (type, scopeKey, canonicalName)`,
+          sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_nodes_identity ON "${TABLE_KNOWLEDGE_NODES}" (type, scopeKey, canonicalName)`,
           args: [],
         },
         {
-          sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_records_scope ON "${TABLE_KNOWLEDGE_RECORDS}" (scopeKey, type)`,
+          sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_nodes_scope ON "${TABLE_KNOWLEDGE_NODES}" (scopeKey, type)`,
           args: [],
         },
         {
-          sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_items_parent_latest ON "${TABLE_KNOWLEDGE_ITEMS}" (parentNodeId, id DESC)`,
+          sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_records_node_latest ON "${TABLE_KNOWLEDGE_RECORDS}" (node, id DESC)`,
           args: [],
         },
         {
-          sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_items_thread_latest ON "${TABLE_KNOWLEDGE_ITEMS}" (sourceThreadId, id DESC)`,
+          sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_records_thread_latest ON "${TABLE_KNOWLEDGE_RECORDS}" (sourceThreadId, id DESC)`,
           args: [],
         },
         {
@@ -196,8 +200,8 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     await this.#transaction(async tx => {
       for (const table of [
         TABLE_KNOWLEDGE_MENTIONS,
-        TABLE_KNOWLEDGE_ITEMS,
         TABLE_KNOWLEDGE_RECORDS,
+        TABLE_KNOWLEDGE_NODES,
         TABLE_KNOWLEDGE_CURSORS,
         TABLE_KNOWLEDGE_ACTIVITY,
         TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
@@ -231,7 +235,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         updatedAt: now,
       };
       await tx.execute({
-        sql: `INSERT INTO "${TABLE_KNOWLEDGE_RECORDS}" (id,type,name,canonicalName,kind,content,scope,scopeKey,version,mergedInto,createdAt,updatedAt) VALUES (?,?,?,?,?,?,jsonb(?),?,?,NULL,?,?)`,
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_NODES}" (id,type,name,canonicalName,kind,content,scope,scopeKey,version,mergedInto,createdAt,updatedAt) VALUES (?,?,?,?,?,?,jsonb(?),?,?,NULL,?,?)`,
         args: [
           node.id,
           'node',
@@ -282,7 +286,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       clauses.push(input.hasContent ? "content IS NOT NULL AND content <> ''" : "(content IS NULL OR content = '')");
     args.push(input.limit ?? 100);
     const result = await this.#client.execute({
-      sql: `SELECT *, json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE ${clauses.join(' AND ')} ORDER BY updatedAt DESC, name ASC LIMIT ?`,
+      sql: `SELECT *, json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_NODES}" WHERE ${clauses.join(' AND ')} ORDER BY updatedAt DESC, name ASC LIMIT ?`,
       args,
     });
     return result.rows.map(parseNode);
@@ -298,7 +302,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       const content = input.content ?? existing.content;
       const now = new Date();
       const result = await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET name=?,canonicalName=?,kind=?,content=?,scope=jsonb(?),scopeKey=?,version=version+1,updatedAt=? WHERE id=? AND type='node' AND version=?`,
+        sql: `UPDATE "${TABLE_KNOWLEDGE_NODES}" SET name=?,canonicalName=?,kind=?,content=?,scope=jsonb(?),scopeKey=?,version=version+1,updatedAt=? WHERE id=? AND type='node' AND version=?`,
         args: [
           name,
           canonicalName(name),
@@ -318,15 +322,15 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       await this.#activity(tx, 'node-updated', 'node', input.id, scope);
       if (knowledgeScopeKey(existing.scope) !== knowledgeScopeKey(scope)) {
         await this.#outbox(tx, 'node', input.id, 'delete', createKnowledgeUlid(), existing.scope);
-        const items = await tx.execute({
-          sql: `SELECT id,json(scope) AS scopeJson,deletedAt FROM "${TABLE_KNOWLEDGE_ITEMS}" WHERE parentNodeId=?`,
+        const knowledge = await tx.execute({
+          sql: `SELECT id,json(scope) AS scopeJson,deletedAt FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE node=?`,
           args: [input.id],
         });
-        for (const row of items.rows) {
-          const itemScope = parseJson<KnowledgeScope>(row.scopeJson);
-          await this.#outbox(tx, 'item', String(row.id), 'delete', createKnowledgeUlid(), itemScope);
+        for (const row of knowledge.rows) {
+          const recordScope = parseJson<KnowledgeScope>(row.scopeJson);
+          await this.#outbox(tx, 'record', String(row.id), 'delete', createKnowledgeUlid(), recordScope);
           if (row.deletedAt == null) {
-            await this.#outbox(tx, 'item', String(row.id), 'upsert', createKnowledgeUlid(), itemScope);
+            await this.#outbox(tx, 'record', String(row.id), 'upsert', createKnowledgeUlid(), recordScope);
           }
         }
       }
@@ -355,20 +359,20 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         throw new Error('Cannot merge a knowledge node into a target that is narrower than its source scope');
       }
       const affected = await tx.execute({
-        sql: `SELECT DISTINCT m.sourceType,m.sourceId,json(COALESCE(f.scope,r.scope)) AS scopeJson,CASE WHEN f.deletedAt IS NULL THEN 0 ELSE 1 END AS deleted FROM "${TABLE_KNOWLEDGE_MENTIONS}" m LEFT JOIN "${TABLE_KNOWLEDGE_ITEMS}" f ON m.sourceType='item' AND f.id=m.sourceId LEFT JOIN "${TABLE_KNOWLEDGE_RECORDS}" r ON m.sourceType='node' AND r.id=m.sourceId WHERE m.recordId=?`,
+        sql: `SELECT DISTINCT m.sourceType,m.sourceId,json(COALESCE(f.scope,r.scope)) AS scopeJson,CASE WHEN f.deletedAt IS NULL THEN 0 ELSE 1 END AS deleted FROM "${TABLE_KNOWLEDGE_MENTIONS}" m LEFT JOIN "${TABLE_KNOWLEDGE_RECORDS}" f ON m.sourceType='record' AND f.id=m.sourceId LEFT JOIN "${TABLE_KNOWLEDGE_NODES}" r ON m.sourceType='node' AND r.id=m.sourceId WHERE m.recordId=?`,
         args: [source.id],
       });
-      const movedItems = await tx.execute({
-        sql: `SELECT id,json(scope) AS scopeJson,deletedAt FROM "${TABLE_KNOWLEDGE_ITEMS}" WHERE parentNodeId=?`,
+      const movedKnowledge = await tx.execute({
+        sql: `SELECT id,json(scope) AS scopeJson,deletedAt FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE node=?`,
         args: [source.id],
       });
       const updated = await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET mergedInto=?,version=version+1,updatedAt=? WHERE id=? AND type='node' AND version=? AND mergedInto IS NULL`,
+        sql: `UPDATE "${TABLE_KNOWLEDGE_NODES}" SET mergedInto=?,version=version+1,updatedAt=? WHERE id=? AND type='node' AND version=? AND mergedInto IS NULL`,
         args: [target.id, new Date().toISOString(), source.id, input.sourceVersion],
       });
       if (updated.rowsAffected === 0) throw new KnowledgeConflictError(source.id);
       await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_ITEMS}" SET parentNodeId=? WHERE parentNodeId=?`,
+        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET node=? WHERE node=?`,
         args: [target.id, source.id],
       });
       await tx.execute({
@@ -379,10 +383,10 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         sql: `UPDATE "${TABLE_KNOWLEDGE_MENTIONS}" SET recordId=? WHERE recordId=?`,
         args: [target.id, source.id],
       });
-      for (const row of movedItems.rows)
+      for (const row of movedKnowledge.rows)
         await this.#outbox(
           tx,
-          'item',
+          'record',
           String(row.id),
           row.deletedAt == null ? 'upsert' : 'delete',
           createKnowledgeUlid(),
@@ -391,7 +395,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       for (const row of affected.rows)
         await this.#outbox(
           tx,
-          String(row.sourceType) as 'item' | 'node',
+          String(row.sourceType) as 'record' | 'node',
           String(row.sourceId),
           Number(row.deleted) ? 'delete' : 'upsert',
           createKnowledgeUlid(),
@@ -404,17 +408,18 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     });
   }
 
-  async appendItem(input: AppendKnowledgeItemInput): Promise<KnowledgeItem> {
+  async appendKnowledge(input: AppendKnowledgeInput): Promise<KnowledgeRecord> {
     const scope = canonicalizeKnowledgeScope(input.scope);
     const resolutionScope = canonicalizeKnowledgeScope(input.resolutionScope);
     const defaultScope = canonicalizeKnowledgeScope(input.defaultScope);
     assertKnowledgeScopeWithinCeiling(scope, input.maxScope);
     return this.#transaction(async tx => {
-      const parent = await this.#resolveTerminalNode(tx, input.parentNodeId);
-      if (!parent) throw new KnowledgeNotFoundError('node', input.parentNodeId);
-      const item: KnowledgeItem = {
+      const node = nodeReferenceId(input.node);
+      const parent = await this.#resolveTerminalNode(tx, node);
+      if (!parent) throw new KnowledgeNotFoundError('node', node);
+      const record: KnowledgeRecord = {
         id: input.id ?? createKnowledgeUlid(),
-        parentNodeId: parent.id,
+        node: parent.id,
         text: input.text,
         scope,
         sourceThreadId: input.sourceThreadId,
@@ -423,99 +428,104 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         maxScope: input.maxScope,
       };
       await tx.execute({
-        sql: `INSERT INTO "${TABLE_KNOWLEDGE_ITEMS}" (id,parentNodeId,text,scope,scopeKey,sourceThreadId,capturedAt,"when",maxScope,deletedAt,deletedBy) VALUES (?,?,?,jsonb(?),?,?,?,?,?,NULL,NULL)`,
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_RECORDS}" (id,node,text,scope,scopeKey,sourceThreadId,capturedAt,"when",maxScope,deletedAt,deletedBy) VALUES (?,?,?,jsonb(?),?,?,?,?,?,NULL,NULL)`,
         args: [
-          item.id,
-          item.parentNodeId,
-          item.text,
+          record.id,
+          record.node,
+          record.text,
           JSON.stringify(scope),
           knowledgeScopeKey(scope),
-          item.sourceThreadId,
-          item.capturedAt.toISOString(),
-          item.when?.toISOString() ?? null,
-          item.maxScope ?? null,
+          record.sourceThreadId,
+          record.capturedAt.toISOString(),
+          record.when?.toISOString() ?? null,
+          record.maxScope ?? null,
         ],
       });
-      await this.#replaceMentions(tx, 'item', item.id, item.text, resolutionScope, defaultScope);
-      await this.#activity(tx, 'item-created', 'item', item.id, scope, item.sourceThreadId);
-      await this.#outbox(tx, 'item', item.id, 'upsert', item.id, scope);
-      return item;
+      await this.#replaceMentions(tx, 'record', record.id, record.text, resolutionScope, defaultScope);
+      await this.#activity(tx, 'record-created', 'record', record.id, scope, record.sourceThreadId);
+      await this.#outbox(tx, 'record', record.id, 'upsert', record.id, scope);
+      return record;
     });
   }
 
-  async getItem(input: { id: string; includeDeleted?: boolean }): Promise<KnowledgeItem | null> {
+  async getKnowledge(input: { id: string; includeDeleted?: boolean }): Promise<KnowledgeRecord | null> {
     const result = await this.#client.execute({
-      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_ITEMS}" WHERE id=?${input.includeDeleted ? '' : ' AND deletedAt IS NULL'}`,
+      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE id=?${input.includeDeleted ? '' : ' AND deletedAt IS NULL'}`,
       args: [input.id],
     });
-    return result.rows[0] ? parseItem(result.rows[0]) : null;
+    return result.rows[0] ? parseKnowledge(result.rows[0]) : null;
   }
 
-  async itemsAbout(input: ListKnowledgeItemsInput): Promise<ListKnowledgeItemsOutput> {
-    return this.#listItems(input, false);
-  }
-  async itemsTouching(input: ListKnowledgeItemsInput): Promise<ListKnowledgeItemsOutput> {
-    return this.#listItems(input, true);
+  async knowledgeAbout(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput> {
+    return this.#queryKnowledge(input, 'about');
   }
 
-  async removeItem(input: { id: string; deletedBy: string }): Promise<KnowledgeItem> {
+  async knowledgeMentioning(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput> {
+    return this.#queryKnowledge(input, 'mentioning');
+  }
+
+  async knowledgeRelatedTo(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput> {
+    return this.#queryKnowledge(input, 'related');
+  }
+
+  async removeKnowledge(input: { id: string; deletedBy: string }): Promise<KnowledgeRecord> {
     return this.#transaction(async tx => {
-      const item = await this.#getItem(tx, input.id, true);
-      if (!item) throw new KnowledgeNotFoundError('item', input.id);
-      if (item.deletedAt) return item;
+      const record = await this.#getKnowledge(tx, input.id, true);
+      if (!record) throw new KnowledgeNotFoundError('record', input.id);
+      if (record.deletedAt) return record;
       const deletedAt = new Date();
       await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_ITEMS}" SET deletedAt=?,deletedBy=? WHERE id=? AND deletedAt IS NULL`,
+        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET deletedAt=?,deletedBy=? WHERE id=? AND deletedAt IS NULL`,
         args: [deletedAt.toISOString(), input.deletedBy, input.id],
       });
-      await this.#activity(tx, 'item-deleted', 'item', input.id, item.scope, item.sourceThreadId);
-      await this.#outbox(tx, 'item', input.id, 'delete', deletedAt.toISOString(), item.scope);
-      return { ...item, deletedAt, deletedBy: input.deletedBy };
+      await this.#activity(tx, 'record-deleted', 'record', input.id, record.scope, record.sourceThreadId);
+      await this.#outbox(tx, 'record', input.id, 'delete', deletedAt.toISOString(), record.scope);
+      return { ...record, deletedAt, deletedBy: input.deletedBy };
     });
   }
 
-  async restoreItem(input: { id: string }): Promise<KnowledgeItem> {
+  async restoreKnowledge(input: { id: string }): Promise<KnowledgeRecord> {
     return this.#transaction(async tx => {
-      const item = await this.#getItem(tx, input.id, true);
-      if (!item) throw new KnowledgeNotFoundError('item', input.id);
-      if (!item.deletedAt) return item;
+      const record = await this.#getKnowledge(tx, input.id, true);
+      if (!record) throw new KnowledgeNotFoundError('record', input.id);
+      if (!record.deletedAt) return record;
       await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_ITEMS}" SET deletedAt=NULL,deletedBy=NULL WHERE id=?`,
+        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET deletedAt=NULL,deletedBy=NULL WHERE id=?`,
         args: [input.id],
       });
-      await this.#activity(tx, 'item-restored', 'item', input.id, item.scope, item.sourceThreadId);
-      await this.#outbox(tx, 'item', input.id, 'upsert', createKnowledgeUlid(), item.scope);
-      return { ...item, deletedAt: undefined, deletedBy: undefined };
+      await this.#activity(tx, 'record-restored', 'record', input.id, record.scope, record.sourceThreadId);
+      await this.#outbox(tx, 'record', input.id, 'upsert', createKnowledgeUlid(), record.scope);
+      return { ...record, deletedAt: undefined, deletedBy: undefined };
     });
   }
 
-  async rescopeItem(input: { id: string; scope: KnowledgeScope }): Promise<KnowledgeItem> {
+  async rescopeKnowledge(input: { id: string; scope: KnowledgeScope }): Promise<KnowledgeRecord> {
     const scope = canonicalizeKnowledgeScope(input.scope);
     return this.#transaction(async tx => {
-      const item = await this.#getItem(tx, input.id, true);
-      if (!item) throw new KnowledgeNotFoundError('item', input.id);
-      assertKnowledgeScopeWithinCeiling(scope, item.maxScope);
+      const record = await this.#getKnowledge(tx, input.id, true);
+      if (!record) throw new KnowledgeNotFoundError('record', input.id);
+      assertKnowledgeScopeWithinCeiling(scope, record.maxScope);
       await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_ITEMS}" SET scope=jsonb(?),scopeKey=? WHERE id=?`,
+        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET scope=jsonb(?),scopeKey=? WHERE id=?`,
         args: [JSON.stringify(scope), knowledgeScopeKey(scope), input.id],
       });
-      await this.#activity(tx, 'item-rescoped', 'item', input.id, scope, item.sourceThreadId);
-      if (knowledgeScopeKey(item.scope) !== knowledgeScopeKey(scope))
-        await this.#outbox(tx, 'item', input.id, 'delete', createKnowledgeUlid(), item.scope);
-      if (!item.deletedAt) await this.#outbox(tx, 'item', input.id, 'upsert', createKnowledgeUlid(), scope);
-      return { ...item, scope };
+      await this.#activity(tx, 'record-rescoped', 'record', input.id, scope, record.sourceThreadId);
+      if (knowledgeScopeKey(record.scope) !== knowledgeScopeKey(scope))
+        await this.#outbox(tx, 'record', input.id, 'delete', createKnowledgeUlid(), record.scope);
+      if (!record.deletedAt) await this.#outbox(tx, 'record', input.id, 'upsert', createKnowledgeUlid(), scope);
+      return { ...record, scope };
     });
   }
 
-  async raiseCeiling(input: { id: string; maxScope?: KnowledgeItem['maxScope'] }): Promise<KnowledgeItem> {
+  async raiseKnowledgeCeiling(input: { id: string; maxScope?: KnowledgeRecord['maxScope'] }): Promise<KnowledgeRecord> {
     return this.#transaction(async tx => {
-      const item = await this.#getItem(tx, input.id, true);
-      if (!item) throw new KnowledgeNotFoundError('item', input.id);
+      const record = await this.#getKnowledge(tx, input.id, true);
+      if (!record) throw new KnowledgeNotFoundError('record', input.id);
       await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_ITEMS}" SET maxScope=? WHERE id=?`,
+        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET maxScope=? WHERE id=?`,
         args: [input.maxScope ?? null, input.id],
       });
-      return { ...item, maxScope: input.maxScope };
+      return { ...record, maxScope: input.maxScope };
     });
   }
 
@@ -525,7 +535,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     const query = `%${input.query.trim().toLocaleLowerCase()}%`;
     if (query === '%%') return [];
     const records = await this.#client.execute({
-      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE mergedInto IS NULL AND ${visibleSql} AND (canonicalName LIKE ? OR lower(COALESCE(kind,'')) LIKE ? OR lower(COALESCE(content,'')) LIKE ?) ORDER BY updatedAt DESC LIMIT ?`,
+      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_NODES}" WHERE mergedInto IS NULL AND ${visibleSql} AND (canonicalName LIKE ? OR lower(COALESCE(kind,'')) LIKE ? OR lower(COALESCE(content,'')) LIKE ?) ORDER BY updatedAt DESC LIMIT ?`,
       args: [key, key, query, query, query, input.limit ?? 20],
     });
     const results: SearchKnowledgeResult[] = records.rows.map(row => ({
@@ -537,15 +547,15 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       scope: parseJson<KnowledgeScope>(row.scopeJson),
     }));
     if (results.length < (input.limit ?? 20)) {
-      const items = await this.#client.execute({
-        sql: `SELECT f.*,json(f.scope) AS scopeJson,r.name FROM "${TABLE_KNOWLEDGE_ITEMS}" f JOIN "${TABLE_KNOWLEDGE_RECORDS}" r ON r.id=f.parentNodeId AND r.type='node' AND r.mergedInto IS NULL WHERE f.deletedAt IS NULL AND ${visibleSql.replaceAll('scopeKey', 'f.scopeKey')} AND ${visibleSql.replaceAll('scopeKey', 'r.scopeKey')} AND lower(f.text) LIKE ? ORDER BY f.id DESC LIMIT ?`,
+      const knowledge = await this.#client.execute({
+        sql: `SELECT f.*,json(f.scope) AS scopeJson,r.name FROM "${TABLE_KNOWLEDGE_RECORDS}" f JOIN "${TABLE_KNOWLEDGE_NODES}" r ON r.id=f.node AND r.type='node' AND r.mergedInto IS NULL WHERE f.deletedAt IS NULL AND ${visibleSql.replaceAll('scopeKey', 'f.scopeKey')} AND ${visibleSql.replaceAll('scopeKey', 'r.scopeKey')} AND lower(f.text) LIKE ? ORDER BY f.id DESC LIMIT ?`,
         args: [key, key, key, key, query, (input.limit ?? 20) - results.length],
       });
       results.push(
-        ...items.rows.map(row => ({
-          type: 'item' as const,
+        ...knowledge.rows.map(row => ({
+          type: 'record' as const,
           id: String(row.id),
-          recordId: String(row.parentNodeId),
+          recordId: String(row.node),
           name: String(row.name),
           text: String(row.text),
           scope: parseJson<KnowledgeScope>(row.scopeJson),
@@ -565,7 +575,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       ? {
           sourceThreadId: String(row.sourceThreadId),
           agent: String(row.agent),
-          lastItemId: String(row.lastItemId),
+          lastKnowledgeId: String(row.lastKnowledgeId),
           updatedAt: toDate(row.updatedAt),
         }
       : null;
@@ -574,15 +584,15 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   async advanceCurationCursor(input: {
     sourceThreadId: string;
     agent: string;
-    lastItemId: string;
+    lastKnowledgeId: string;
   }): Promise<KnowledgeCurationCursor> {
     const updatedAt = new Date();
     const result = await this.#db.executeWriteOperationWithRetry(
       () =>
         withClientWriteLock(this.#client, () =>
           this.#client.execute({
-            sql: `INSERT INTO "${TABLE_KNOWLEDGE_CURSORS}" (sourceThreadId,agent,lastItemId,updatedAt) VALUES (?,?,?,?) ON CONFLICT(sourceThreadId,agent) DO UPDATE SET lastItemId=excluded.lastItemId,updatedAt=excluded.updatedAt WHERE excluded.lastItemId >= "${TABLE_KNOWLEDGE_CURSORS}".lastItemId`,
-            args: [input.sourceThreadId, input.agent, input.lastItemId, updatedAt.toISOString()],
+            sql: `INSERT INTO "${TABLE_KNOWLEDGE_CURSORS}" (sourceThreadId,agent,lastKnowledgeId,updatedAt) VALUES (?,?,?,?) ON CONFLICT(sourceThreadId,agent) DO UPDATE SET lastKnowledgeId=excluded.lastKnowledgeId,updatedAt=excluded.updatedAt WHERE excluded.lastKnowledgeId >= "${TABLE_KNOWLEDGE_CURSORS}".lastKnowledgeId`,
+            args: [input.sourceThreadId, input.agent, input.lastKnowledgeId, updatedAt.toISOString()],
           }),
         ),
       'advance knowledge curation cursor',
@@ -707,14 +717,14 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
   async #getNode(executor: Executor, id: string): Promise<KnowledgeNode | null> {
     const result = await executor.execute({
-      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE id=? AND type='node'`,
+      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_NODES}" WHERE id=? AND type='node'`,
       args: [id],
     });
     return result.rows[0] ? parseNode(result.rows[0]) : null;
   }
   async #getNodeByName(executor: Executor, name: string, scope: KnowledgeScope): Promise<KnowledgeNode | null> {
     const result = await executor.execute({
-      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE type='node' AND scopeKey=? AND canonicalName=?`,
+      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_NODES}" WHERE type='node' AND scopeKey=? AND canonicalName=?`,
       args: [knowledgeScopeKey(scope), canonicalName(name)],
     });
     return result.rows[0] ? parseNode(result.rows[0]) : null;
@@ -739,37 +749,47 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     }
     return node;
   }
-  async #getItem(executor: Executor, id: string, includeDeleted: boolean): Promise<KnowledgeItem | null> {
+  async #getKnowledge(executor: Executor, id: string, includeDeleted: boolean): Promise<KnowledgeRecord | null> {
     const result = await executor.execute({
-      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_ITEMS}" WHERE id=?${includeDeleted ? '' : ' AND deletedAt IS NULL'}`,
+      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE id=?${includeDeleted ? '' : ' AND deletedAt IS NULL'}`,
       args: [id],
     });
-    return result.rows[0] ? parseItem(result.rows[0]) : null;
+    return result.rows[0] ? parseKnowledge(result.rows[0]) : null;
   }
 
-  async #listItems(input: ListKnowledgeItemsInput, touching: boolean): Promise<ListKnowledgeItemsOutput> {
+  async #queryKnowledge(
+    input: QueryKnowledgeInput,
+    relationship: 'about' | 'mentioning' | 'related',
+  ): Promise<QueryKnowledgeOutput> {
     const scope = canonicalizeKnowledgeScope(input.scope);
-    const node = await this.#resolveTerminalNode(this.#client, input.nodeId);
-    if (!node || !isKnowledgeScopeVisible(node.scope, scope)) return { items: [] };
+    const node = await this.#resolveTerminalNode(this.#client, nodeReferenceId(input.node));
+    if (!node || !isKnowledgeScopeVisible(node.scope, scope)) return { records: [] };
     const key = knowledgeScopeKey(scope);
-    const args: InValue[] = [node.id, ...(touching ? [node.id] : []), key, key];
+    const includesMentions = relationship !== 'about';
+    const relationSql =
+      relationship === 'about'
+        ? 'k.node=?'
+        : relationship === 'mentioning'
+          ? 'm.recordId=?'
+          : '(k.node=? OR m.recordId=?)';
+    const args: InValue[] = [node.id, ...(relationship === 'related' ? [node.id] : []), key, key];
     if (input.after) args.push(input.after);
     args.push((input.limit ?? 100) + 1);
     const result = await this.#client.execute({
-      sql: `SELECT DISTINCT i.*,json(i.scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_ITEMS}" i${touching ? ` LEFT JOIN "${TABLE_KNOWLEDGE_MENTIONS}" m ON m.sourceType='item' AND m.sourceId=i.id` : ''} WHERE ${touching ? '(i.parentNodeId=? OR m.recordId=?)' : 'i.parentNodeId=?'} AND ${visibleSql.replaceAll('scopeKey', 'i.scopeKey')}${input.includeDeleted ? '' : ' AND i.deletedAt IS NULL'}${input.after ? ' AND i.id < ?' : ''} ORDER BY i.id DESC LIMIT ?`,
+      sql: `SELECT DISTINCT k.*,json(k.scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" k${includesMentions ? ` LEFT JOIN "${TABLE_KNOWLEDGE_MENTIONS}" m ON m.sourceType='record' AND m.sourceId=k.id` : ''} WHERE ${relationSql} AND ${visibleSql.replaceAll('scopeKey', 'k.scopeKey')}${input.includeDeleted ? '' : ' AND k.deletedAt IS NULL'}${input.after ? ' AND k.id < ?' : ''} ORDER BY k.id DESC LIMIT ?`,
       args,
     });
     const limit = input.limit ?? 100;
     const rows = result.rows.slice(0, limit);
     return {
-      items: rows.map(parseItem),
+      records: rows.map(parseKnowledge),
       nextCursor: result.rows.length > limit ? String(rows.at(-1)?.id) : undefined,
     };
   }
 
   async #replaceMentions(
     tx: Transaction,
-    sourceType: 'item' | 'node',
+    sourceType: 'record' | 'node',
     sourceId: string,
     text: string,
     resolutionScope: KnowledgeScope,
@@ -797,7 +817,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
             updatedAt: now,
           };
           await tx.execute({
-            sql: `INSERT INTO "${TABLE_KNOWLEDGE_RECORDS}" (id,type,name,canonicalName,kind,content,scope,scopeKey,version,mergedInto,createdAt,updatedAt) VALUES (?,?,?,?,?,NULL,jsonb(?),?,?,NULL,?,?)`,
+            sql: `INSERT INTO "${TABLE_KNOWLEDGE_NODES}" (id,type,name,canonicalName,kind,content,scope,scopeKey,version,mergedInto,createdAt,updatedAt) VALUES (?,?,?,?,?,NULL,jsonb(?),?,?,NULL,?,?)`,
             args: [
               node.id,
               'node',
