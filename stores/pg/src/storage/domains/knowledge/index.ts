@@ -197,21 +197,49 @@ function parseOutbox(row: Record<string, unknown>): KnowledgeSemanticOutboxEntry
   };
 }
 
-function knowledgeIndexDDL(schemaName?: string): string[] {
+function knowledgeIndexes(schemaName?: string): Array<{ name: string; sql: string }> {
   const table = (name: string) => {
     const quotedName = `"${parseSqlIdentifier(name, 'table name')}"`;
     return schemaName ? `"${parseSqlIdentifier(schemaName, 'schema name')}".${quotedName}` : quotedName;
   };
   return [
-    `CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_records_identity ON ${table(TABLE_KNOWLEDGE_RECORDS)} ("type", "scopeKey", "canonicalName")`,
-    `CREATE INDEX IF NOT EXISTS idx_knowledge_records_scope ON ${table(TABLE_KNOWLEDGE_RECORDS)} ("scopeKey", "type")`,
-    `CREATE INDEX IF NOT EXISTS idx_knowledge_facts_parent_latest ON ${table(TABLE_KNOWLEDGE_ITEMS)} ("parentNodeId", "id" DESC)`,
-    `CREATE INDEX IF NOT EXISTS idx_knowledge_facts_thread_latest ON ${table(TABLE_KNOWLEDGE_ITEMS)} ("sourceThreadId", "id" DESC)`,
-    `CREATE INDEX IF NOT EXISTS idx_knowledge_mentions_record ON ${table(TABLE_KNOWLEDGE_MENTIONS)} ("recordId", "sourceType", "sourceId")`,
-    `CREATE INDEX IF NOT EXISTS idx_knowledge_activity_latest ON ${table(TABLE_KNOWLEDGE_ACTIVITY)} ("id" DESC)`,
-    `CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_outbox_idempotency ON ${table(TABLE_KNOWLEDGE_SEMANTIC_OUTBOX)} ("idempotencyKey")`,
-    `CREATE INDEX IF NOT EXISTS idx_knowledge_outbox_claim ON ${table(TABLE_KNOWLEDGE_SEMANTIC_OUTBOX)} ("status", "availableAt", "createdAt")`,
-  ].map(statement => `${statement};`);
+    {
+      name: 'idx_knowledge_records_identity',
+      sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_records_identity ON ${table(TABLE_KNOWLEDGE_RECORDS)} ("type", "scopeKey", "canonicalName");`,
+    },
+    {
+      name: 'idx_knowledge_records_scope',
+      sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_records_scope ON ${table(TABLE_KNOWLEDGE_RECORDS)} ("scopeKey", "type");`,
+    },
+    {
+      name: 'idx_knowledge_facts_parent_latest',
+      sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_facts_parent_latest ON ${table(TABLE_KNOWLEDGE_ITEMS)} ("parentNodeId", "id" DESC);`,
+    },
+    {
+      name: 'idx_knowledge_facts_thread_latest',
+      sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_facts_thread_latest ON ${table(TABLE_KNOWLEDGE_ITEMS)} ("sourceThreadId", "id" DESC);`,
+    },
+    {
+      name: 'idx_knowledge_mentions_record',
+      sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_mentions_record ON ${table(TABLE_KNOWLEDGE_MENTIONS)} ("recordId", "sourceType", "sourceId");`,
+    },
+    {
+      name: 'idx_knowledge_activity_latest',
+      sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_activity_latest ON ${table(TABLE_KNOWLEDGE_ACTIVITY)} ("id" DESC);`,
+    },
+    {
+      name: 'idx_knowledge_outbox_idempotency',
+      sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_outbox_idempotency ON ${table(TABLE_KNOWLEDGE_SEMANTIC_OUTBOX)} ("idempotencyKey");`,
+    },
+    {
+      name: 'idx_knowledge_outbox_claim',
+      sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_outbox_claim ON ${table(TABLE_KNOWLEDGE_SEMANTIC_OUTBOX)} ("status", "availableAt", "createdAt");`,
+    },
+  ];
+}
+
+function knowledgeIndexDDL(schemaName?: string): string[] {
+  return knowledgeIndexes(schemaName).map(index => index.sql);
 }
 
 export class KnowledgePG extends KnowledgeStorage {
@@ -300,7 +328,9 @@ export class KnowledgePG extends KnowledgeStorage {
       tableName: TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
       schema: KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
     });
-    await Promise.all(knowledgeIndexDDL().map(sql => this.#executor.execute({ sql, args: [] })));
+    await Promise.all(
+      knowledgeIndexes(this.#schemaName).map(index => this.#db.createIndexFromStatement(index.name, index.sql)),
+    );
   }
 
   async dangerouslyClearAll(): Promise<void> {
