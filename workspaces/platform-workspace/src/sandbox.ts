@@ -608,7 +608,19 @@ export class PlatformSandbox extends MastraSandbox {
    */
   private _populateAddressFromResponse(json: CreateSandboxResponse): void {
     if (!this._addressRegistry) return;
-    if (!json.instanceUrl) return;
+    if (!json.instanceUrl) {
+      // Proxy returned no instanceUrl (discovery failed, or an older proxy
+      // that predates the field). The registry stays empty, so every exec
+      // for this sandbox's lifetime goes via the lease/proxy path. This is
+      // the single most important cold-start degradation signal: one line
+      // here explains any subsequent lease-path behaviour for this sandbox
+      // without needing per-exec instrumentation.
+      this.logger.warn('platform-workspace instance url missing', {
+        sandboxId: json.id,
+        sessionId: this._client.sessionId,
+      });
+      return;
+    }
     // Clear any stale entry before probing. On reattach, the registry may have
     // the old sandbox's address; execs should fall back to lease until the new
     // probe succeeds rather than dialing the stale address.
@@ -1204,7 +1216,7 @@ export class PlatformSandbox extends MastraSandbox {
       }
       // Anything else escaping is unexpected (e.g. options validation). Treat
       // it like a transport failure so we don't wedge the caller.
-      this._invalidateAddress();
+      this._invalidateAddress('unexpected-error');
       return undefined;
     }
 
@@ -1216,7 +1228,7 @@ export class PlatformSandbox extends MastraSandbox {
     // still evicted so subsequent execs skip a dial we already know is slow —
     // but the timed-out result itself flows back to the caller unchanged.
     if (result.timedOut) {
-      if (!result.opened) this._invalidateAddress();
+      if (!result.opened) this._invalidateAddress('timeout-before-headers');
       return result;
     }
 
@@ -1226,7 +1238,7 @@ export class PlatformSandbox extends MastraSandbox {
     // means connection refused (no timeout to disambiguate).
     const transportFailed = !result.opened || result.exitCode === null;
     if (transportFailed) {
-      this._invalidateAddress();
+      this._invalidateAddress(result.opened ? 'no-exit-frame' : 'connection-refused');
       return undefined;
     }
 
@@ -1239,8 +1251,20 @@ export class PlatformSandbox extends MastraSandbox {
    * `instanceUrl` from a workspace-proxy response — until then, execs skip
    * the private-net dial and go straight to the lease path.
    */
-  private _invalidateAddress(): void {
-    if (this._sandboxId) this._addressRegistry?.delete(this._sandboxId);
+  private _invalidateAddress(reason: 'connection-refused' | 'no-exit-frame' | 'timeout-before-headers' | 'unexpected-error'): void {
+    if (!this._sandboxId) return;
+    const existed = this._addressRegistry?.delete(this._sandboxId) ?? false;
+    // Only warn on real eviction — no-op deletes are uninteresting noise.
+    // This is the "we just downgraded this sandbox to the slow lease path"
+    // signal that used to be silent. Joined with `probe ok` at start time,
+    // the pair fully describes any sandbox's transport state at time T.
+    if (existed) {
+      this.logger.warn('platform-workspace address registry evicted', {
+        sandboxId: this._sandboxId,
+        sessionId: this._client.sessionId,
+        reason,
+      });
+    }
   }
 
   /**
