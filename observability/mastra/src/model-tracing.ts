@@ -105,7 +105,7 @@ function getOpenRouterCostContext({ providerMetadata, stepProviderMetadata }: En
     costMetadata: {
       source: 'provider_reported',
       sdkProvider: 'openrouter',
-      sdkCostField: 'openrouter.usage.cost + openrouter.usage.costDetails.upstreamInferenceCost',
+      sdkCostField: 'openrouter.usage',
       scope: 'query_total',
       reportedStepCount: costs.length,
     },

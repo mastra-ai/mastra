@@ -102,7 +102,7 @@ describe('ModelSpanTracker', () => {
       tracker.endGeneration({
         attributes: {},
         stepProviderMetadata: [
-          { openrouter: { usage: { cost: 0, costDetails: { upstreamInferenceCost: 0.00002615 } } } },
+          { openrouter: { usage: { cost: 0, isByok: true, costDetails: { upstreamInferenceCost: 0.00002615 } } } },
           { openrouter: { usage: { cost: 0.000001 } } },
         ],
       });
@@ -116,11 +116,36 @@ describe('ModelSpanTracker', () => {
         costMetadata: {
           source: 'provider_reported',
           sdkProvider: 'openrouter',
-          sdkCostField: 'openrouter.usage.cost + openrouter.usage.costDetails.upstreamInferenceCost',
+          sdkCostField: 'openrouter.usage',
           scope: 'query_total',
           reportedStepCount: 2,
         },
       });
+    });
+
+    it('does not double-count a non-BYOK upstream cost', () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'openai/gpt-4o-mini', provider: 'openrouter' },
+      });
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      tracker.endGeneration({
+        attributes: {},
+        providerMetadata: {
+          openrouter: {
+            usage: {
+              cost: 0.000003,
+              isByok: false,
+              costDetails: { upstreamInferenceCost: 0.000003 },
+            },
+          },
+        },
+      });
+
+      const [span] = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
+      expect(span?.attributes?.costContext?.estimatedCost).toBe(0.000003);
     });
   });
 

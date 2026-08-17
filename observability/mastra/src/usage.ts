@@ -28,6 +28,7 @@ export function extractOpenRouterCost(providerMetadata?: ProviderMetadata): numb
   if (!usage || typeof usage !== 'object' || Array.isArray(usage)) return undefined;
 
   const cost = usage.cost;
+  const isByok = usage.isByok;
   const costDetails = usage.costDetails;
   const upstreamCost =
     costDetails && typeof costDetails === 'object' && !Array.isArray(costDetails)
@@ -40,7 +41,7 @@ export function extractOpenRouterCost(providerMetadata?: ProviderMetadata): numb
   if (cost == null && upstreamCost == null) return undefined;
   if ((cost != null && !isValid(cost)) || (upstreamCost != null && !isValid(upstreamCost))) return undefined;
 
-  return (cost ?? 0) + (upstreamCost ?? 0);
+  return isByok === true ? (cost ?? 0) + (upstreamCost ?? 0) : (cost ?? upstreamCost ?? undefined);
 }
 
 interface V3InputUsage {
