@@ -41,7 +41,7 @@
     "dotenv": "^17.4.2",
     "eslint": "^10.7.0",
     "tsdown": "0.22.9",
-    "typescript": "^6.0.3",
+    "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {

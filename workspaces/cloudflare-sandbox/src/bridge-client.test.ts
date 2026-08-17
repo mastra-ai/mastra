@@ -1,76 +1,123 @@
-import { describe, expect, it, vi } from 'vitest';
-import { CloudflareSandboxBridgeClient, CloudflareSandboxBridgeError } from './bridge-client';
+import { describe, expect, it } from 'vitest';
 
-function streamResponse(chunks: string[]): Response {
-  const encoder = new TextEncoder();
-  return new Response(
-    new ReadableStream({
-      start(controller) {
-        for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
-        controller.close();
-      },
-    }),
-    { status: 200, headers: { 'content-type': 'text/event-stream' } },
-  );
+import { CloudflareSandboxBridgeClient, CloudflareSandboxBridgeError, type CloudflareCommandEvent } from './bridge-client';
+import { createFakeBridge } from './testing/fake-bridge';
+
+const BASE_URL = 'https://bridge.example.com';
+
+function createClient(bridge = createFakeBridge({ apiToken: 'secret' })) {
+  return {
+    bridge,
+    client: new CloudflareSandboxBridgeClient({ baseUrl: `${BASE_URL}/`, apiToken: 'secret', fetch: bridge.fetch }),
+  };
+}
+
+function decode(events: CloudflareCommandEvent[], type: 'stdout' | 'stderr'): string {
+  return events
+    .filter(event => event.type === type)
+    .map(event => Buffer.from((event as { data: Uint8Array }).data).toString('utf8'))
+    .join('');
 }
 
 describe('CloudflareSandboxBridgeClient', () => {
-  it('creates a sandbox with bearer authentication', async () => {
-    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
-      new Response(JSON.stringify({ id: 'sandbox-1', status: 'running' }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
-    );
-    const client = new CloudflareSandboxBridgeClient({ baseUrl: 'https://bridge.example/', apiToken: 'token', fetch });
+  it('creates a sandbox with POST /v1/sandbox and a bearer token', async () => {
+    const { bridge, client } = createClient();
 
-    await expect(client.createSandbox()).resolves.toMatchObject({ id: 'sandbox-1' });
-    expect(fetch).toHaveBeenCalledWith('https://bridge.example/sandboxes', {
+    const id = await client.createSandbox();
+
+    expect(id).toBe('sbx-1');
+    expect(bridge.requests[0]).toMatchObject({
       method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: 'Bearer token' },
+      url: `${BASE_URL}/v1/sandbox`,
+      authorization: 'Bearer secret',
     });
   });
 
-  it('writes files in one request', async () => {
-    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response(null, { status: 204 }));
-    const client = new CloudflareSandboxBridgeClient({ baseUrl: 'https://bridge.example', fetch });
+  it('checks liveness with GET /v1/sandbox/:id/running', async () => {
+    const { bridge, client } = createClient();
+    const id = await client.createSandbox();
 
-    await client.writeFiles('sandbox/1', [{ path: 'workspace/file.txt', content: 'hello' }]);
-
-    expect(fetch).toHaveBeenCalledWith('https://bridge.example/sandboxes/sandbox%2F1/files', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ files: [{ path: 'workspace/file.txt', content: 'hello' }] }),
-    });
+    await expect(client.isRunning(id)).resolves.toBe(true);
+    await expect(client.isRunning('missing')).resolves.toBe(false);
+    expect(bridge.requests.at(-1)).toMatchObject({ method: 'GET', url: `${BASE_URL}/v1/sandbox/missing/running` });
   });
 
-  it('parses command events split across stream chunks', async () => {
-    const fetch = vi
-      .fn<typeof globalThis.fetch>()
-      .mockResolvedValue(
-        streamResponse(['data: {"type":"std', 'out","data":"hello"}\n\ndata: {"type":"complete","exitCode":0}\n\n']),
-      );
-    const client = new CloudflareSandboxBridgeClient({ baseUrl: 'https://bridge.example', fetch });
-    const events: unknown[] = [];
+  it('destroys a sandbox with DELETE /v1/sandbox/:id', async () => {
+    const { bridge, client } = createClient();
+    const id = await client.createSandbox();
 
-    await client.executeCommand(
-      'sandbox-1',
-      { command: 'echo hello', timeout: 30 },
-      { onEvent: event => events.push(event) },
-    );
+    await client.deleteSandbox(id);
 
-    expect(events).toEqual([
-      { type: 'stdout', data: 'hello' },
-      { type: 'complete', exitCode: 0 },
-    ]);
+    expect(bridge.sandboxes.has(id)).toBe(false);
+    expect(bridge.requests.at(-1)).toMatchObject({ method: 'DELETE', url: `${BASE_URL}/v1/sandbox/${id}` });
+  });
+
+  it('writes one file per PUT /v1/sandbox/:id/file/* request with raw bytes', async () => {
+    const { bridge, client } = createClient();
+    const id = await client.createSandbox();
+
+    await client.writeFile(id, '/workspace/src/index.ts', 'export const a = 1;');
+    await client.writeFile(id, '/workspace/bin/data', new Uint8Array([104, 105]));
+
+    expect(bridge.requests.at(-2)).toMatchObject({
+      method: 'PUT',
+      url: `${BASE_URL}/v1/sandbox/${id}/file/workspace/src/index.ts`,
+    });
+    expect(bridge.files.get('/workspace/src/index.ts')).toBe('export const a = 1;');
+    expect(bridge.files.get('/workspace/bin/data')).toBe('hi');
+  });
+
+  it('sends argv, timeout_ms and cwd to /exec', async () => {
+    const { bridge, client } = createClient();
+    const id = await client.createSandbox();
+
+    await client.exec(id, { argv: ['echo', 'hello world'], timeoutMs: 10_000, cwd: '/workspace' }, { onEvent: () => {} });
+
+    expect(bridge.execs[0]).toEqual({ argv: ['echo', 'hello world'], timeout_ms: 10_000, cwd: '/workspace' });
+    expect(bridge.requests.at(-1)?.url).toBe(`${BASE_URL}/v1/sandbox/${id}/exec`);
+  });
+
+  it('base64-decodes stdout chunks and reports exit_code', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    bridge.onExec = () => ({ stdout: 'hello world\n', stderr: 'warn\n', exitCode: 3, stdoutChunks: 4 });
+    const { client } = createClient(bridge);
+    const id = await client.createSandbox();
+
+    const events: CloudflareCommandEvent[] = [];
+    await client.exec(id, { argv: ['echo', 'hello'] }, { onEvent: event => events.push(event) });
+
+    expect(decode(events, 'stdout')).toBe('hello world\n');
+    expect(decode(events, 'stderr')).toBe('warn\n');
+    expect(events.at(-1)).toEqual({ type: 'exit', exitCode: 3 });
+  });
+
+  it('surfaces terminal error events', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    bridge.onExec = () => ({ error: { error: 'command timed out', code: 'TIMEOUT' } });
+    const { client } = createClient(bridge);
+    const id = await client.createSandbox();
+
+    const events: CloudflareCommandEvent[] = [];
+    await client.exec(id, { argv: ['sleep', '60'] }, { onEvent: event => events.push(event) });
+
+    expect(events).toEqual([{ type: 'error', message: 'command timed out', code: 'TIMEOUT' }]);
   });
 
   it('throws a descriptive error for unsuccessful responses', async () => {
-    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response('missing', { status: 404 }));
-    const client = new CloudflareSandboxBridgeClient({ baseUrl: 'https://bridge.example', fetch });
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const { client } = createClient(bridge);
 
-    await expect(client.getSandbox('missing')).rejects.toEqual(
-      expect.objectContaining<Partial<CloudflareSandboxBridgeError>>({ status: 404, body: 'missing' }),
-    );
+    await expect(client.isRunning('missing-route-check')).resolves.toBe(false);
+    await expect(
+      new CloudflareSandboxBridgeClient({ baseUrl: BASE_URL, apiToken: 'wrong', fetch: bridge.fetch }).createSandbox(),
+    ).rejects.toMatchObject({ name: 'CloudflareSandboxBridgeError', status: 401, body: 'unauthorized' });
+  });
+
+  it('exposes status and body on bridge errors', () => {
+    const error = new CloudflareSandboxBridgeError(404, 'missing');
+
+    expect(error.status).toBe(404);
+    expect(error.body).toBe('missing');
+    expect(error.message).toContain('404');
   });
 });

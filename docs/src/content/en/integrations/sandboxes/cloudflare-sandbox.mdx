@@ -7,7 +7,7 @@ packages:
 
 # Cloudflare Sandbox
 
-`CloudflareSandbox` executes commands and manages files in a remote [Cloudflare Sandbox](https://developers.cloudflare.com/sandbox/) through the Sandbox Bridge HTTP API.
+`CloudflareSandbox` executes commands and manages files in a remote [Cloudflare Sandbox](https://developers.cloudflare.com/sandbox/) through the [Sandbox Bridge HTTP API](https://developers.cloudflare.com/sandbox/bridge/http-api/).
 
 :::warning
 
@@ -33,7 +33,7 @@ import { CloudflareSandbox } from '@mastra/cloudflare-sandbox'
 const workspace = new Workspace({
   sandbox: new CloudflareSandbox({
     baseUrl: process.env.CLOUDFLARE_SANDBOX_BRIDGE_URL!,
-    apiToken: process.env.CLOUDFLARE_SANDBOX_API_TOKEN,
+    apiToken: process.env.CLOUDFLARE_SANDBOX_API_KEY,
     workingDirectory: '/workspace',
     commandTimeout: 300_000,
   }),
@@ -52,7 +52,7 @@ The provider creates a remote sandbox when the workspace starts. Pass `sandboxId
 
 ## Execute commands
 
-Pass command arguments, environment variables, a working directory, and streaming callbacks through `executeCommand()`:
+Pass command arguments, environment variables, a working directory, and streaming callbacks through `executeCommand()`. The provider sends the command as an `argv` array, so the bridge handles shell escaping:
 
 ```typescript
 const result = await workspace.sandbox?.executeCommand?.('npm', ['test'], {
@@ -67,7 +67,7 @@ const result = await workspace.sandbox?.executeCommand?.('npm', ['test'], {
 
 ## Write files
 
-Relative paths are resolved under `/workspace`. Absolute paths must also be within `/workspace`.
+Relative paths are resolved under `/workspace`. Absolute paths must also resolve within `/workspace`. Each file is sent as its own bridge request, and the bridge caps a single file at 32 MiB.
 
 ```typescript
 await workspace.sandbox?.writeFiles?.([
@@ -88,7 +88,7 @@ await workspace.sandbox?.writeFiles?.([
   {
     name: 'apiToken',
     type: 'string',
-    description: 'Bearer token accepted by the Bridge Worker.',
+    description: "Bearer token matching the Worker's SANDBOX_API_KEY secret.",
     isOptional: true,
   },
   {
@@ -141,9 +141,9 @@ await workspace.sandbox?.writeFiles?.([
 ## Lifecycle behavior
 
 - `start()`: Reconnects to `sandboxId` or creates a remote sandbox.
-- `stop()`: Detaches the Mastra lifecycle without deleting the remote sandbox because the Bridge API doesn't expose a suspend operation.
+- `stop()`: Detaches the Mastra lifecycle without deleting the remote sandbox because the bridge doesn't expose a suspend operation.
 - `destroy()`: Deletes the remote sandbox.
 
 ## Limitations
 
-The provider supports command execution, streamed output, and file writes. It doesn't currently expose mounts, background process management, stdin, snapshots, or port URLs.
+The provider supports command execution, streamed output, and file writes. It doesn't currently expose the bridge's bucket mounts, sessions, PTY terminals, or workspace persistence routes, and it doesn't support background process management, stdin, snapshots, or port URLs.

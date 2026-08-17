@@ -4,29 +4,18 @@ export interface CloudflareSandboxBridgeClientOptions {
   fetch?: typeof globalThis.fetch;
 }
 
-export interface CloudflareSandboxRecord {
-  id: string;
-  status?: string;
-  createdAt?: string;
-  [key: string]: unknown;
-}
+/** Terminal and streaming events emitted by `POST /v1/sandbox/:id/exec`. */
+export type CloudflareCommandEvent =
+  | { type: 'stdout'; data: Uint8Array }
+  | { type: 'stderr'; data: Uint8Array }
+  | { type: 'exit'; exitCode: number }
+  | { type: 'error'; message: string; code?: string };
 
-export interface CloudflareCommandEvent {
-  type: 'stdout' | 'stderr' | 'complete' | 'error';
-  data?: string;
-  exitCode?: number;
-  message?: string;
-}
-
-export interface CloudflareCommandRequest {
-  command: string;
-  timeout?: number;
-}
-
-export interface CloudflareFileWrite {
-  path: string;
-  content: string;
-  encoding?: 'base64';
+export interface CloudflareExecRequest {
+  /** Command and arguments. The bridge applies ANSI-C quoting to each element. */
+  argv: string[];
+  timeoutMs?: number;
+  cwd?: string;
 }
 
 export class CloudflareSandboxBridgeError extends Error {
@@ -47,6 +36,20 @@ function stripTrailingSlashes(url: string): string {
   return url.slice(0, end);
 }
 
+/** Encodes an absolute sandbox path for the `/file/*` route, which omits the leading slash. */
+function encodeFilePath(absolutePath: string): string {
+  return absolutePath
+    .replace(/^\/+/, '')
+    .split('/')
+    .map(segment => encodeURIComponent(segment))
+    .join('/');
+}
+
+/**
+ * Client for the Cloudflare Sandbox Bridge Worker.
+ *
+ * @see https://developers.cloudflare.com/sandbox/bridge/http-api/
+ */
 export class CloudflareSandboxBridgeClient {
   readonly baseUrl: string;
   private readonly apiToken?: string;
@@ -58,38 +61,53 @@ export class CloudflareSandboxBridgeClient {
     this.fetchImpl = options.fetch ?? globalThis.fetch;
   }
 
-  async createSandbox(): Promise<CloudflareSandboxRecord> {
-    return this.request<CloudflareSandboxRecord>('/sandboxes', { method: 'POST' });
+  /** `POST /v1/sandbox` */
+  async createSandbox(): Promise<string> {
+    const created = await this.request<{ id: string }>('/v1/sandbox', { method: 'POST' });
+    return created.id;
   }
 
-  async getSandbox(id: string): Promise<CloudflareSandboxRecord> {
-    return this.request<CloudflareSandboxRecord>(`/sandboxes/${encodeURIComponent(id)}`, {});
+  /** `GET /v1/sandbox/:id/running` */
+  async isRunning(id: string): Promise<boolean> {
+    const status = await this.request<{ running: boolean }>(`/v1/sandbox/${encodeURIComponent(id)}/running`, {});
+    return status.running === true;
   }
 
+  /** `DELETE /v1/sandbox/:id` */
   async deleteSandbox(id: string): Promise<void> {
-    await this.request(`/sandboxes/${encodeURIComponent(id)}`, { method: 'DELETE' }, true);
+    await this.request(`/v1/sandbox/${encodeURIComponent(id)}`, { method: 'DELETE' }, true);
   }
 
-  async writeFiles(id: string, files: CloudflareFileWrite[]): Promise<void> {
+  /** `PUT /v1/sandbox/:id/file/*` — one file per request, raw bytes as the body. */
+  async writeFile(id: string, absolutePath: string, content: Uint8Array | string): Promise<void> {
     await this.request(
-      `/sandboxes/${encodeURIComponent(id)}/files`,
-      { method: 'POST', body: JSON.stringify({ files }) },
+      `/v1/sandbox/${encodeURIComponent(id)}/file/${encodeFilePath(absolutePath)}`,
+      {
+        method: 'PUT',
+        body: content as RequestInit['body'],
+        headers: { 'content-type': 'application/octet-stream' },
+      },
       true,
     );
   }
 
-  async executeCommand(
+  /** `POST /v1/sandbox/:id/exec` — streams SSE events until `exit` or `error`. */
+  async exec(
     id: string,
-    request: CloudflareCommandRequest,
+    request: CloudflareExecRequest,
     options: {
       signal?: AbortSignal;
       onEvent: (event: CloudflareCommandEvent) => void;
     },
   ): Promise<void> {
-    const response = await this.fetchImpl(`${this.baseUrl}/sandboxes/${encodeURIComponent(id)}/commands`, {
+    const response = await this.fetchImpl(`${this.baseUrl}/v1/sandbox/${encodeURIComponent(id)}/exec`, {
       method: 'POST',
-      headers: this.headers(),
-      body: JSON.stringify(request),
+      headers: { ...this.headers(), 'content-type': 'application/json', accept: 'text/event-stream' },
+      body: JSON.stringify({
+        argv: request.argv,
+        ...(request.timeoutMs === undefined ? {} : { timeout_ms: request.timeoutMs }),
+        ...(request.cwd === undefined ? {} : { cwd: request.cwd }),
+      }),
       signal: options.signal,
     });
 
@@ -104,50 +122,56 @@ export class CloudflareSandboxBridgeClient {
     const decoder = new TextDecoder();
     let buffer = '';
 
-    const emit = (block: string) => {
-      const lines = block.split('\n');
-      const eventName = lines
-        .find(line => line.startsWith('event:'))
-        ?.slice(6)
-        .trim();
-      const data = lines
-        .filter(line => line.startsWith('data:'))
-        .map(line => line.slice(5).trimStart())
-        .join('\n');
-      if (!data && !eventName) return;
-
-      try {
-        const parsed = JSON.parse(data) as Record<string, unknown>;
-        options.onEvent({
-          ...parsed,
-          type:
-            (parsed.type as CloudflareCommandEvent['type'] | undefined) ??
-            (eventName as CloudflareCommandEvent['type']),
-        } as CloudflareCommandEvent);
-      } catch {
-        options.onEvent({ type: eventName as CloudflareCommandEvent['type'], data });
-      }
-    };
-
     while (true) {
       const { done, value } = await reader.read();
       buffer += decoder.decode(value, { stream: !done }).replace(/\r\n/g, '\n');
       let boundary = buffer.indexOf('\n\n');
       while (boundary !== -1) {
-        emit(buffer.slice(0, boundary));
+        this.emitBlock(buffer.slice(0, boundary), options.onEvent);
         buffer = buffer.slice(boundary + 2);
         boundary = buffer.indexOf('\n\n');
       }
       if (done) break;
     }
-    if (buffer.trim()) emit(buffer);
+    if (buffer.trim()) this.emitBlock(buffer, options.onEvent);
+  }
+
+  private emitBlock(block: string, onEvent: (event: CloudflareCommandEvent) => void): void {
+    let eventName: string | undefined;
+    const dataLines: string[] = [];
+    for (const line of block.split('\n')) {
+      if (line.startsWith('event:')) eventName = line.slice(6).trim();
+      else if (line.startsWith('data:')) dataLines.push(line.slice(5).replace(/^ /, ''));
+    }
+    const data = dataLines.join('\n');
+    if (!eventName || !data) return;
+
+    switch (eventName) {
+      case 'stdout':
+      case 'stderr':
+        onEvent({ type: eventName, data: base64ToBytes(data) });
+        return;
+      case 'exit': {
+        const parsed = safeJsonParse(data);
+        onEvent({ type: 'exit', exitCode: typeof parsed?.exit_code === 'number' ? parsed.exit_code : 0 });
+        return;
+      }
+      case 'error': {
+        const parsed = safeJsonParse(data);
+        onEvent({
+          type: 'error',
+          message: typeof parsed?.error === 'string' ? parsed.error : data,
+          code: typeof parsed?.code === 'string' ? parsed.code : undefined,
+        });
+        return;
+      }
+      default:
+        return;
+    }
   }
 
   private headers(): Record<string, string> {
-    return {
-      'content-type': 'application/json',
-      ...(this.apiToken ? { authorization: `Bearer ${this.apiToken}` } : {}),
-    };
+    return this.apiToken ? { authorization: `Bearer ${this.apiToken}` } : {};
   }
 
   private async request<T>(path: string, init: RequestInit, allowEmpty = false): Promise<T> {
@@ -160,5 +184,17 @@ export class CloudflareSandboxBridgeClient {
     }
     if (allowEmpty || response.status === 204) return undefined as T;
     return response.json() as Promise<T>;
+  }
+}
+
+function base64ToBytes(value: string): Uint8Array {
+  return new Uint8Array(Buffer.from(value, 'base64'));
+}
+
+function safeJsonParse(value: string): Record<string, unknown> | undefined {
+  try {
+    return JSON.parse(value) as Record<string, unknown>;
+  } catch {
+    return undefined;
   }
 }

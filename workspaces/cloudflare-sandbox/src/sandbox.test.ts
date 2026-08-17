@@ -1,114 +1,150 @@
-import type { CommandResult } from '@mastra/core/workspace';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CloudflareCommandEvent } from './bridge-client';
+import { createSandboxLifecycleTests } from '@internal/workspace-test-utils';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
 import { CloudflareSandbox } from './sandbox';
+import { createFakeBridge, type FakeBridge } from './testing/fake-bridge';
 
-const client = {
-  createSandbox: vi.fn(),
-  getSandbox: vi.fn(),
-  deleteSandbox: vi.fn(),
-  writeFiles: vi.fn(),
-  executeCommand: vi.fn(),
-};
+const BASE_URL = 'https://bridge.example.com';
 
-beforeEach(() => {
-  vi.clearAllMocks();
-  client.createSandbox.mockResolvedValue({ id: 'remote-1', status: 'running', createdAt: '2026-08-01T00:00:00Z' });
-  client.getSandbox.mockResolvedValue({ id: 'existing-1', status: 'running' });
-  client.deleteSandbox.mockResolvedValue(undefined);
-  client.writeFiles.mockResolvedValue(undefined);
-  client.executeCommand.mockResolvedValue(undefined);
-});
-
-function createSandbox(options: Record<string, unknown> = {}) {
-  return new CloudflareSandbox({ baseUrl: 'https://bridge.example', client, ...options });
+function createSandbox(bridge: FakeBridge, options: Partial<ConstructorParameters<typeof CloudflareSandbox>[0]> = {}) {
+  return new CloudflareSandbox({ baseUrl: BASE_URL, apiToken: 'secret', fetch: bridge.fetch, ...options });
 }
 
 describe('CloudflareSandbox', () => {
-  it('creates and destroys a remote sandbox', async () => {
-    const sandbox = createSandbox({ id: 'logical-1' });
+  it('creates a remote sandbox on start and deletes it on destroy', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge, { id: 'logical-1' });
 
-    await sandbox.start();
-    expect(client.createSandbox).toHaveBeenCalledOnce();
-    expect(sandbox.getInfo()).toMatchObject({
-      id: 'logical-1',
-      provider: 'cloudflare-sandbox',
-      metadata: { sandboxId: 'remote-1' },
-    });
+    await sandbox._start();
 
-    await sandbox.destroy();
-    expect(client.deleteSandbox).toHaveBeenCalledWith('remote-1');
+    expect(bridge.sandboxes.has('sbx-1')).toBe(true);
+    expect(sandbox.getInfo().id).toBe('logical-1');
+    expect(sandbox.getInfo().metadata?.sandboxId).toBe('sbx-1');
+
+    await sandbox._destroy();
+
+    expect(bridge.sandboxes.size).toBe(0);
   });
 
-  it('reconnects when a sandbox ID is provided', async () => {
-    const sandbox = createSandbox({ sandboxId: 'existing-1' });
+  it('reconnects to an existing sandbox instead of creating one', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    bridge.sandboxes.add('existing-1');
+    const sandbox = createSandbox(bridge, { sandboxId: 'existing-1' });
 
-    await sandbox.start();
+    await sandbox._start();
 
-    expect(client.getSandbox).toHaveBeenCalledWith('existing-1');
-    expect(client.createSandbox).not.toHaveBeenCalled();
+    expect(bridge.requests.map(request => request.url)).toEqual([`${BASE_URL}/v1/sandbox/existing-1/running`]);
+    expect(sandbox.getInfo().metadata?.sandboxId).toBe('existing-1');
   });
 
-  it('merges command settings and streams output', async () => {
-    client.executeCommand.mockImplementation(
-      async (_id: string, request: unknown, options: { onEvent: (event: CloudflareCommandEvent) => void }) => {
-        expect(request).toEqual({
-          command: "cd /workspace/app && BASE=one LOCAL='two words' printf '%s' hello",
-          timeout: 2,
-        });
-        options.onEvent({ type: 'stdout', data: 'hello' });
-        options.onEvent({ type: 'stderr', data: 'warning' });
-        options.onEvent({ type: 'complete', exitCode: 0 });
-      },
-    );
-    const onStdout = vi.fn();
-    const onStderr = vi.fn();
-    const sandbox = createSandbox({ env: { BASE: 'one' }, workingDirectory: '/workspace/app' });
-    await sandbox.start();
+  it('passes command, args, env and cwd through as argv', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge, { env: { BASE: '1' }, workingDirectory: '/workspace/app' });
+    await sandbox._start();
 
-    const result = await sandbox.executeCommand('printf', ['%s', 'hello'], {
-      env: { LOCAL: 'two words' },
-      timeout: 1500,
-      onStdout,
-      onStderr,
-    });
+    await sandbox.executeCommand('echo', ["it's fine"], { env: { EXTRA: 'a b' } });
 
-    expect(result).toMatchObject<Partial<CommandResult>>({
-      success: true,
-      exitCode: 0,
-      stdout: 'hello',
-      stderr: 'warning',
+    expect(bridge.execs[0]).toEqual({
+      argv: ['env', 'BASE=1', 'EXTRA=a b', 'echo', "it's fine"],
+      timeout_ms: 300_000,
+      cwd: '/workspace/app',
     });
-    expect(onStdout).toHaveBeenCalledWith('hello');
-    expect(onStderr).toHaveBeenCalledWith('warning');
   });
 
-  it('uploads text and binary files under /workspace', async () => {
-    const sandbox = createSandbox();
-    await sandbox.start();
+  it('decodes streamed output and reports the exit code', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    bridge.onExec = () => ({ stdout: 'hello wörld\n', stderr: 'oops\n', exitCode: 2, stdoutChunks: 5 });
+    const sandbox = createSandbox(bridge);
+    await sandbox._start();
+
+    const stdoutChunks: string[] = [];
+    const stderrChunks: string[] = [];
+    const result = await sandbox.executeCommand('echo', ['hello'], {
+      onStdout: chunk => stdoutChunks.push(chunk),
+      onStderr: chunk => stderrChunks.push(chunk),
+    });
+
+    expect(result.stdout).toBe('hello wörld\n');
+    expect(result.stderr).toBe('oops\n');
+    expect(result.exitCode).toBe(2);
+    expect(result.success).toBe(false);
+    expect(stdoutChunks.join('')).toBe('hello wörld\n');
+    expect(stderrChunks.join('')).toBe('oops\n');
+  });
+
+  it('records bridge error events as stderr', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    bridge.onExec = () => ({ error: { error: 'container is gone', code: 'NOT_RUNNING' } });
+    const sandbox = createSandbox(bridge);
+    await sandbox._start();
+
+    const result = await sandbox.executeCommand('echo', ['hi']);
+
+    expect(result.stderr).toContain('container is gone');
+    expect(result.success).toBe(false);
+  });
+
+  it('writes each file with its own request under /workspace', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge);
+    await sandbox._start();
 
     await sandbox.writeFiles([
-      { path: 'src/index.ts', content: 'export {}' },
-      { path: '/workspace/data.bin', content: Buffer.from([1, 2, 3]) },
+      { path: 'src/index.ts', content: 'export const a = 1;' },
+      { path: '/workspace/bin/data', content: Buffer.from('hi') },
     ]);
 
-    expect(client.writeFiles).toHaveBeenCalledWith('remote-1', [
-      { path: 'workspace/src/index.ts', content: 'export {}' },
-      { path: 'workspace/data.bin', content: 'AQID', encoding: 'base64' },
-    ]);
+    expect(bridge.files.get('/workspace/src/index.ts')).toBe('export const a = 1;');
+    expect(bridge.files.get('/workspace/bin/data')).toBe('hi');
   });
 
-  it('rejects writes outside /workspace', async () => {
-    const sandbox = createSandbox();
-    await sandbox.start();
+  it('rejects writes that escape /workspace', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge);
+    await sandbox._start();
 
-    await expect(sandbox.writeFiles([{ path: '/tmp/file', content: 'no' }])).rejects.toThrow('under /workspace');
+    await expect(sandbox.writeFiles([{ path: '/etc/passwd', content: 'x' }])).rejects.toThrow(/under \/workspace/);
+    await expect(sandbox.writeFiles([{ path: '../../etc/passwd', content: 'x' }])).rejects.toThrow(/under \/workspace/);
+    expect(bridge.files.size).toBe(0);
   });
 
   it('requires start before remote operations', async () => {
-    const sandbox = createSandbox();
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge, { id: 'not-started' });
 
-    await expect(sandbox.executeCommand('true')).rejects.toThrow('has not been started');
-    await expect(sandbox.writeFiles([])).rejects.toThrow('has not been started');
+    await expect(sandbox.executeCommand('echo', ['hi'])).rejects.toThrow(/has not been started/);
+    await expect(sandbox.writeFiles([{ path: 'a.txt', content: 'x' }])).rejects.toThrow(/has not been started/);
   });
+});
+
+describe('CloudflareSandbox conformance', () => {
+  const bridge = createFakeBridge({ apiToken: 'secret' });
+  let sandbox: CloudflareSandbox;
+
+  beforeAll(async () => {
+    sandbox = createSandbox(bridge, { id: `conformance-${Date.now()}` });
+    await sandbox._start();
+  });
+
+  afterAll(async () => {
+    await sandbox._destroy();
+  });
+
+  createSandboxLifecycleTests(() => ({
+    sandbox: sandbox as any,
+    capabilities: {
+      supportsMounting: false,
+      supportsReconnection: true,
+      supportsConcurrency: true,
+      supportsEnvVars: true,
+      supportsWorkingDirectory: true,
+      supportsTimeout: true,
+      defaultCommandTimeout: 5000,
+      supportsStreaming: true,
+      supportsStdin: false,
+    },
+    testTimeout: 5000,
+    fastOnly: false,
+    createSandbox: () => createSandbox(bridge),
+  }));
 });
