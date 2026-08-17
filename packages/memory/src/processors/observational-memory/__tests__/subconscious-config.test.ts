@@ -172,7 +172,7 @@ describe('Subconscious configuration', () => {
     expect(getExtractors(remindMemory)).toEqual([]);
   });
 
-  it('reuses one reminder memory instance, since sessions are separated by thread key', () => {
+  it('resolves the reminder memory model per invocation instead of freezing the first session model', () => {
     const memory = new Memory({
       storage: new InMemoryStore(),
       ...semanticInfrastructure,
@@ -181,7 +181,15 @@ describe('Subconscious configuration', () => {
       },
     });
 
-    expect((memory as any).getSubconsciousRemindMemory(model)).toBe((memory as any).getSubconsciousRemindMemory(model));
+    // Two sessions with different effective models: the second must not inherit the first.
+    const firstOm = ((memory as any).getSubconsciousRemindMemory('openai/gpt-5') as Memory).getMergedThreadConfig()
+      .observationalMemory as Record<string, unknown>;
+    const secondOm = (
+      (memory as any).getSubconsciousRemindMemory('anthropic/claude-sonnet-4-5') as Memory
+    ).getMergedThreadConfig().observationalMemory as Record<string, unknown>;
+
+    expect(firstOm.model).toBe('openai/gpt-5');
+    expect(secondOm.model).toBe('anthropic/claude-sonnet-4-5');
 
     // The child engine resolves its model through the app instance, so the parent has to hand it
     // over — otherwise a model that only exists in the app registry never resolves on this thread.

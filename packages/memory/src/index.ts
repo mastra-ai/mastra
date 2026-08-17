@@ -383,12 +383,11 @@ export class Memory extends MastraMemory {
   /** Threads with a curation currently in flight in this process; guards same-process double-fire only. */
   private _curationsInFlight = new Set<string>();
 
-  private _remindMemory?: Memory;
-
   /**
    * The Memory backing the reminder agent's own conversation, one thread per main-agent session
-   * (`subconscious:<threadId>:remind`), built lazily and shared across sessions — observational
-   * memory keys its record and its locks by thread, never by instance.
+   * (`subconscious:<threadId>:remind`). Built fresh per call so each session's effective model
+   * applies — a cached instance froze the first session's model forever. Continuity is unaffected:
+   * observational memory keys its record and its locks by thread, never by instance.
    *
    * Deliberately unlike the curate and learn memories, which pass `observationalMemory: false`:
    * that kills compression and reflection to stop a regress only Subconscious could cause. Omitting
@@ -397,16 +396,15 @@ export class Memory extends MastraMemory {
    * observational memory and spawns no nested subconscious agents.
    */
   private getSubconsciousRemindMemory(omModel?: ObservationalMemoryConfig['model']): Memory {
-    this._remindMemory ??= new Memory({
+    const remindMemory = new Memory({
       storage: this.storage,
       options: { observationalMemory: { model: omModel } },
     });
     // Without the app instance the child engine cannot resolve a model that only exists in the
     // app's registry, which would leave the remind thread with observational memory configured and
-    // unable to run. Registered on every access so a Mastra instance that arrives after the first
-    // reminder still reaches it. Curate and learn never hit this: their engine is off.
-    if (this._mastraInstance) this._remindMemory.__registerMastra(this._mastraInstance);
-    return this._remindMemory;
+    // unable to run. Curate and learn never hit this: their engine is off.
+    if (this._mastraInstance) remindMemory.__registerMastra(this._mastraInstance);
+    return remindMemory;
   }
 
   /**
