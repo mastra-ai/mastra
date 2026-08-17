@@ -90,4 +90,10 @@ describe('components/* subpath exports', () => {
     const mod = await import('./ds/components/ai/task-list');
     expect(mod.TaskList).toBeDefined();
   });
+
+  it('AI tool-call entry exports ToolCall and its presentation helper', async () => {
+    const mod = await import('./ds/components/ai/tool-call');
+    expect(mod.ToolCall).toBeDefined();
+    expect(mod.presentTool).toBeDefined();
+  });
 });
