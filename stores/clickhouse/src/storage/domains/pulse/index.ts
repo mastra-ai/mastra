@@ -28,7 +28,9 @@ const STALE_THRESHOLD_S = 30;
  * materialized read model instead (see scale notes). */
 const FLOW_SCAN_CAP = 1000;
 
-const PULSES_DDL = `CREATE TABLE IF NOT EXISTS pulses (
+/** Canonical Pulse DDL — the single source; @mastra/pulse's standalone
+ * schema pins itself to these via a sync test. */
+export const PULSES_DDL = `CREATE TABLE IF NOT EXISTS pulses (
   id             String,
   timestamp      DateTime64(3),
   seq            UInt64,
@@ -49,7 +51,7 @@ const PULSES_DDL = `CREATE TABLE IF NOT EXISTS pulses (
   source         LowCardinality(String)
 ) ENGINE = MergeTree ORDER BY (trace_id, timestamp, seq)`;
 
-const RELATIONSHIPS_DDL = `CREATE TABLE IF NOT EXISTS relationships (
+export const RELATIONSHIPS_DDL = `CREATE TABLE IF NOT EXISTS relationships (
   id         String,
   timestamp  DateTime64(3),
   seq        UInt64,
@@ -64,13 +66,6 @@ const RELATIONSHIPS_DDL = `CREATE TABLE IF NOT EXISTS relationships (
   metadata   String DEFAULT '{}',
   trace_id   String
 ) ENGINE = MergeTree ORDER BY (trace_id, timestamp, seq)`;
-
-/** Columns added after the first release — applied to pre-existing tables. */
-const RELATIONSHIPS_MIGRATIONS = [
-  `ALTER TABLE relationships ADD COLUMN IF NOT EXISTS from_system String DEFAULT ''`,
-  `ALTER TABLE relationships ADD COLUMN IF NOT EXISTS to_system String DEFAULT ''`,
-  `ALTER TABLE relationships ADD COLUMN IF NOT EXISTS metadata String DEFAULT '{}'`,
-];
 
 /**
  * Materialized flow-summary index (experimental, behind `pulse.flowIndex`).
@@ -195,9 +190,6 @@ export class PulseStorageClickhouse extends PulseStorage {
   async init(): Promise<void> {
     await this.client.command({ query: PULSES_DDL });
     await this.client.command({ query: RELATIONSHIPS_DDL });
-    for (const migration of RELATIONSHIPS_MIGRATIONS) {
-      await this.client.command({ query: migration });
-    }
     await this.client.command({ query: FLOWS_DDL });
   }
 
@@ -307,35 +299,18 @@ export class PulseStorageClickhouse extends PulseStorage {
     const result = await this.client.query({
       query: `
         WITH exact_aborts AS (
-          /* Aborts carrying a run id join EXACTLY: the flow that contains the
-             run is the flow that was aborted — no window guessing. */
+          /* The abort names its run; the flow is aborted iff it contains
+             that run. Exact join — no window guessing. */
           SELECT DISTINCT run_id
           FROM pulses
           WHERE source = 'session' AND surface = 'run_control'
             AND action = 'abort_completed' AND run_id != ''
         ),
-        window_aborts AS (
-          /* Legacy fallback for abort rows without a run id: match by thread
-             within the flow window. All abort times kept — a second abort in
-             the same thread must still be able to match a later flow. */
-          SELECT thread_id, groupArray(timestamp) AS abort_times
-          FROM pulses
-          WHERE source = 'session' AND surface = 'run_control'
-            AND action = 'abort_completed' AND run_id = '' AND thread_id != ''
-          GROUP BY thread_id
-        ),
         costs AS (
-          /* Dual-read: bridge-folded cost on semantic model pulses (cost_usd)
-             plus legacy metric-lane rows (estimated_cost_usd). */
+          /* Single source: bridge-folded cost on the semantic model pulse. */
           SELECT trace_id,
-                 sum(
-                   multiIf(
-                     source = 'span', toFloat64OrZero(JSONExtractRaw(data, 'cost_usd')),
-                     source = 'metric', toFloat64OrZero(JSONExtractRaw(data, 'estimated_cost_usd')),
-                     0
-                   )
-                 ) AS cost_usd
-          FROM pulses WHERE trace_id != '' AND source IN ('span', 'metric')
+                 sum(toFloat64OrZero(JSONExtractRaw(data, 'cost_usd'))) AS cost_usd
+          FROM pulses WHERE trace_id != '' AND source = 'span'
           GROUP BY trace_id
         )
         SELECT p.trace_id AS flow_id,
@@ -353,17 +328,12 @@ export class PulseStorageClickhouse extends PulseStorage {
                  hasAny(
                    groupUniqArrayIf(p.run_id, p.run_id != ''),
                    (SELECT groupUniqArray(run_id) FROM exact_aborts)
-                 )
-                   OR arrayExists(
-                     t -> t >= started_at AND t <= ended_at + INTERVAL 2 SECOND,
-                     any(a.abort_times)
-                   ), 'aborted',
+                 ), 'aborted',
                  countIf(p.type = 'error') > 0, 'failed',
                  endsWith(argMaxIf(p.action, (p.timestamp, p.seq), p.parent_span_id = '' AND (endsWith(p.action, '_completed') OR endsWith(p.action, '_failed'))), '_completed'), 'completed',
                  dateDiff('second', max(p.timestamp), now64(3)) > ${STALE_THRESHOLD_S}, 'stale',
                  'running') AS status
         FROM pulses p
-        LEFT JOIN window_aborts a ON a.thread_id = p.thread_id AND p.thread_id != ''
         LEFT JOIN costs c ON c.trace_id = p.trace_id
         WHERE p.source = 'span' AND p.trace_id != '' ${where}
         GROUP BY p.trace_id

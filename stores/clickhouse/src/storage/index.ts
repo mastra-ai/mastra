@@ -11,6 +11,7 @@ import { ObservabilityStorageClickhouse } from './domains/observability';
 import { ObservabilityStorageClickhouseVNext } from './domains/observability/v-next';
 export type { VNextObservabilityConfig, RetentionConfig } from './domains/observability/v-next';
 import { PulseStorageClickhouse } from './domains/pulse';
+export { PULSES_DDL, RELATIONSHIPS_DDL } from './domains/pulse';
 import { ScoresStorageClickhouse } from './domains/scores';
 import { WorkflowsStorageClickhouse } from './domains/workflows';
 

@@ -76,15 +76,16 @@ describe('PulseStorageClickhouse (live)', () => {
         surface: 'model',
         action: 'generate_completed',
         type: 'output',
+        data: { total_output_tokens: 9, cost_usd: 0.0003 },
         timestamp: at(900),
       }),
       p({ spanId: 'root', threadId: 't-1', action: 'run_completed', type: 'output', timestamp: at(1000) }),
-      // metric lane carries cost; session lane carries an approval fact
+      // non-span lanes carry no flow cost; session lane carries an approval fact
       p({
         source: 'metric',
         surface: 'model',
-        action: 'mastra_output_tokens',
-        data: { estimated_cost_usd: 0.0003 },
+        action: 'metric_recorded',
+        data: { value: 9 },
         timestamp: at(1100),
       }),
       p({
@@ -96,12 +97,13 @@ describe('PulseStorageClickhouse (live)', () => {
         type: 'decision',
         timestamp: at(500),
       }),
-      // a second flow, aborted via the session-layer override
-      p({ traceId: 'flow-2', spanId: 'root2', threadId: 't-2', timestamp: at(0) }),
+      // a second flow, aborted via the session-layer override (exact runId join)
+      p({ traceId: 'flow-2', spanId: 'root2', threadId: 't-2', runId: 'run-2', timestamp: at(0) }),
       p({
         traceId: 'flow-2',
         spanId: 'root2',
         threadId: 't-2',
+        runId: 'run-2',
         action: 'run_completed',
         type: 'output',
         timestamp: at(800),
@@ -109,6 +111,7 @@ describe('PulseStorageClickhouse (live)', () => {
       p({
         traceId: '',
         threadId: 't-2',
+        runId: 'run-2',
         source: 'session',
         surface: 'run_control',
         action: 'abort_completed',
@@ -150,7 +153,7 @@ describe('PulseStorageClickhouse (live)', () => {
       'session:required',
       'span:generate_completed',
       'span:run_completed',
-      'metric:mastra_output_tokens',
+      'metric:metric_recorded',
     ]);
 
     const filtered = await store.listFlows({ filter: { status: 'aborted' } });
@@ -224,10 +227,11 @@ describe('PulseStorageClickhouse (live)', () => {
       level: 'error',
       timestamp: ts(2500),
     });
-    emit({ traceId: 'flow-c', threadId: 't-c', metadata: undefined, timestamp: ts(3000) });
+    emit({ traceId: 'flow-c', threadId: 't-c', runId: 'run-c', metadata: undefined, timestamp: ts(3000) });
     emit({
       traceId: 'flow-c',
       threadId: 't-c',
+      runId: 'run-c',
       metadata: undefined,
       action: 'run_completed',
       type: 'output',
@@ -236,6 +240,7 @@ describe('PulseStorageClickhouse (live)', () => {
     emit({
       traceId: '',
       threadId: 't-c',
+      runId: 'run-c',
       spanId: undefined,
       source: 'session',
       surface: 'run_control',
@@ -273,7 +278,7 @@ describe('PulseStorageClickhouse (live)', () => {
 });
 
 describe('exact abort attribution (runId join, live)', () => {
-  it('aborts only the flow containing the abort runId; window fallback for legacy rows', async ctx => {
+  it('aborts only the flow containing the abort runId; never guesses without one', async ctx => {
     if (!available) return ctx.skip();
     const store = makeStore();
     await store.init();
@@ -323,7 +328,7 @@ describe('exact abort attribution (runId join, live)', () => {
         action: 'abort_completed',
         timestamp: at(1400),
       }),
-      // Legacy shape on another thread: no runId → window fallback still works.
+      // No runId → no attribution, ever (the guess is gone).
       p({ traceId: 'flow-l', threadId: 't-9', spanId: 'rl', timestamp: at(0) }),
       p({
         traceId: 'flow-l',
@@ -348,7 +353,7 @@ describe('exact abort attribution (runId join, live)', () => {
     const status = Object.fromEntries(flows.map(f => [f.flowId, f.status]));
     expect(status['flow-a']).toBe('aborted');
     expect(status['flow-b']).toBe('completed');
-    expect(status['flow-l']).toBe('aborted');
+    expect(status['flow-l']).toBe('completed');
   });
 });
 
@@ -378,12 +383,13 @@ describe('status rule parity: ClickHouse must match the in-memory oracle', () =>
     });
 
     const fixture = [
-      // (1) Two flows, one thread, TWO legacy aborts (no runId) — each abort
-      // must be able to match its own flow (min-per-thread loses the 2nd).
-      p({ traceId: 'flow-w1', threadId: 't-w', spanId: 'w1', timestamp: bt(0) }),
+      // (1) Two flows, one thread, TWO aborts — each names its own run and
+      // must flip exactly its own flow (exact runId join, no windows).
+      p({ traceId: 'flow-w1', threadId: 't-w', runId: 'run-w1', spanId: 'w1', timestamp: bt(0) }),
       p({
         traceId: 'flow-w1',
         threadId: 't-w',
+        runId: 'run-w1',
         spanId: 'w1',
         action: 'run_completed',
         type: 'output',
@@ -392,16 +398,18 @@ describe('status rule parity: ClickHouse must match the in-memory oracle', () =>
       p({
         traceId: '',
         threadId: 't-w',
+        runId: 'run-w1',
         spanId: undefined,
         source: 'session',
         surface: 'run_control',
         action: 'abort_completed',
         timestamp: bt(600),
       }),
-      p({ traceId: 'flow-w2', threadId: 't-w', spanId: 'w2', timestamp: bt(5_000) }),
+      p({ traceId: 'flow-w2', threadId: 't-w', runId: 'run-w2', spanId: 'w2', timestamp: bt(5_000) }),
       p({
         traceId: 'flow-w2',
         threadId: 't-w',
+        runId: 'run-w2',
         spanId: 'w2',
         action: 'run_completed',
         type: 'output',
@@ -410,6 +418,7 @@ describe('status rule parity: ClickHouse must match the in-memory oracle', () =>
       p({
         traceId: '',
         threadId: 't-w',
+        runId: 'run-w2',
         spanId: undefined,
         source: 'session',
         surface: 'run_control',
