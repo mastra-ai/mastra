@@ -67,8 +67,13 @@ export function boardCardStatus(input: BoardCardStatusInput): BoardCardStatus {
       detail: decision.lastError ?? undefined,
     };
   }
-  // Already failed at least once; the server retries on its own, so no button.
-  if (decision?.status === 'retry') {
+  // `retry` alone does not mean anything went wrong: a linked-card decision that
+  // already succeeded is deliberately reset to `retry` when its card is
+  // rematerialized, so the card gets re-filed. That replay has no attempt behind
+  // it and no error, and calling it a failure makes the board cry wolf. A real
+  // failure has been tried at least once, or left an error to show. The server
+  // retries either on its own, so neither offers a button.
+  if (decision?.status === 'retry' && (decision.attempts > 0 || decision.lastError)) {
     return {
       kind: 'error',
       label: `${automationCopy(decision.type).failed} — retrying…`,
