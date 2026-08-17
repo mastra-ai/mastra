@@ -206,17 +206,17 @@ mastra deploy --env production --yes
 
 ## Migrating from server and studio deploys
 
-`mastra server deploy` and `mastra studio deploy` are the earlier split deploy paths. They are being **removed on October 30, 2026**. After that date both commands will fail and legacy-pipeline projects cannot ship a new deploy until they migrate.
+`mastra server deploy` and `mastra studio deploy` are the earlier split deploy paths. They're being **removed on October 30, 2026**. After that date both commands will fail and legacy-pipeline projects can't deploy a new build until they migrate.
 
-Existing deployed services keep running — this only affects your ability to ship new deploys.
+Existing deployed services keep running. This only affects your ability to publish new deploys.
 
 ### Who this affects
 
 You are on the legacy pipeline if any of these are true:
 
 - Your last deploy went out with `mastra server deploy` or `mastra studio deploy` and the deploy log printed a **Deprecated** banner.
-- Your project's most recent successful deploy shipped `@mastra/core` older than `1.44`.
-- Your organization has not been opted in to environment deploys.
+- Your project's most recent successful deploy used `@mastra/core` older than `1.44`.
+- Your organization hasn't been opted in to environment deploys.
 
 The deploy log is the source of truth: the legacy pipeline prints a deprecation banner on every deploy.
 
@@ -273,7 +273,7 @@ The deploy log is the source of truth: the legacy pipeline prints a deprecation 
     + mastra deploy
     ```
 
-    `mastra deploy` builds once and deploys both the server and the Studio UI shell for the target environment. Any recent `mastra` CLI supports it — if yours does not, upgrade with `npm install -g mastra@latest`.
+    `mastra deploy` builds once and deploys both the server and the Studio UI shell for the target environment. Any recent `mastra` CLI supports it. If yours doesn't, upgrade with `npm install -g mastra@latest`.
   </StepItem>
 
   <StepItem>
@@ -289,7 +289,7 @@ The deploy log is the source of truth: the legacy pipeline prints a deprecation 
 
 **My deploy fails with `MASTRA_CORE_TOO_OLD`.** The environment pipeline requires `@mastra/core` `>= 1.44`. Upgrade `@mastra/core` and redeploy.
 
-**My organization is not opted in yet.** Contact support. Opt-in will be automatic before the October 30, 2026 cutoff.
+**My organization isn't opted in yet.** Contact support. Opt-in will be automatic before the October 30, 2026 cutoff.
 
 **Can I roll back?** Yes. Environments retain deploy history and you can redeploy any prior successful artifact from the dashboard.
 
