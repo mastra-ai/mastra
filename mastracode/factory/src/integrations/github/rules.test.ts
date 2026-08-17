@@ -1161,6 +1161,156 @@ describe('GithubRules', () => {
     );
   });
 
+  it('routes a changes-requested review through the PR card to the work item that authored it', async () => {
+    // Provenance is the happy path, but it is not always there: a PR opened
+    // outside the tracked tool call records none, so the PR-number lookup wins
+    // and returns the PR's own Review card. `addressReviewFeedback` refuses to
+    // act on the review board, so the wake was dropped and the authoring agent
+    // never heard about the feedback. The linked card names its author, so the
+    // event has to be carried back across that link.
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+    const work = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github:10:issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['execute'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github:10:pull-request:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        parentWorkItemId: work.item.id,
+        title: 'PR 17',
+        stages: ['review'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await service.ingest({
+      event: 'pull_request_review',
+      deliveryId: 'delivery-review-through-pr-card',
+      payload: {
+        action: 'submitted',
+        installation: { id: 7 },
+        repository: { id: 10, full_name: 'acme/repo' },
+        sender: { login: 'reviewer' },
+        review: {
+          id: 99,
+          state: 'changes_requested',
+          html_url: 'https://github.com/acme/repo/pull/17#pullrequestreview-99',
+        },
+        pull_request: {
+          number: 17,
+          title: 'PR 17',
+          html_url: 'https://github.com/acme/repo/pull/17',
+          state: 'open',
+          merged: false,
+          head: { ref: 'feature' },
+          base: { ref: 'main' },
+        },
+      },
+    });
+
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workItemId: work.item.id,
+          decision: expect.objectContaining({ type: 'sendMessage', role: 'work', priority: 'high' }),
+        }),
+      ]),
+    );
+  });
+
+  it('ignores a changes-requested review on a pull request card with no authoring work item', async () => {
+    // The link is what makes the hop safe. Without one there is no agent that
+    // wrote this code, and waking the PR card's own review session would put
+    // the reviewer in a loop against itself.
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github:10:pull-request:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        title: 'PR 17',
+        stages: ['review'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await service.ingest({
+      event: 'pull_request_review',
+      deliveryId: 'delivery-review-orphan-pr-card',
+      payload: {
+        action: 'submitted',
+        installation: { id: 7 },
+        repository: { id: 10, full_name: 'acme/repo' },
+        sender: { login: 'reviewer' },
+        review: {
+          id: 99,
+          state: 'changes_requested',
+          html_url: 'https://github.com/acme/repo/pull/17#pullrequestreview-99',
+        },
+        pull_request: {
+          number: 17,
+          title: 'PR 17',
+          html_url: 'https://github.com/acme/repo/pull/17',
+          state: 'open',
+          merged: false,
+          head: { ref: 'feature' },
+          base: { ref: 'main' },
+        },
+      },
+    });
+
+    expect(
+      (await workItems.listDeferredDecisions('org-1', project.id)).filter(
+        record => record.decision.type === 'sendMessage',
+      ),
+    ).toEqual([]);
+  });
+
   it('delivers a changes-requested review into the authoring agent session', async () => {
     // The rule test above only proves a decision row of the right shape exists.
     // This one runs the dispatcher over that row so the leg is exercised all the

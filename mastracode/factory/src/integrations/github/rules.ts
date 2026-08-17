@@ -297,6 +297,7 @@ export class GithubRules {
       pullRequestNumber,
       string(object(pullRequest?.head)?.ref),
       reReviewEvent ? null : provenance,
+      senderIsResponder && !reviewRequested,
     );
     const actor = await githubActor(this.options.github, {
       installationId,
@@ -462,8 +463,40 @@ export class GithubRules {
     pullRequestNumber: number | undefined,
     pullRequestHeadBranch: string | undefined,
     provenance: FactoryPullRequestProvenanceData | null,
+    preferAuthoringItem = false,
   ): Promise<WorkItemRow | undefined> {
     const items = await this.options.storage.list({ orgId, factoryProjectId: projectId });
+    const resolved = this.#resolveItem(
+      items,
+      repositoryId,
+      repositoryFullName,
+      issueNumber,
+      pullRequestNumber,
+      pullRequestHeadBranch,
+      provenance,
+    );
+    // Feedback on a pull request has to reach the item that *wrote* the code.
+    // Provenance normally lands it there directly, but when provenance is
+    // missing the PR-number lookup wins and returns the PR's own Review card
+    // instead — a board the feedback rules deliberately refuse to act on, so
+    // the wake is silently dropped. The linked card records its author in
+    // `parentWorkItemId`, so follow that link back rather than relaxing the
+    // guard, which would let a Review card react to its own posted review.
+    if (preferAuthoringItem && resolved?.externalSource?.type === 'pull-request' && resolved.parentWorkItemId) {
+      return items.find(item => item.id === resolved.parentWorkItemId) ?? resolved;
+    }
+    return resolved;
+  }
+
+  #resolveItem(
+    items: WorkItemRow[],
+    repositoryId: number,
+    repositoryFullName: string,
+    issueNumber: number | undefined,
+    pullRequestNumber: number | undefined,
+    pullRequestHeadBranch: string | undefined,
+    provenance: FactoryPullRequestProvenanceData | null,
+  ): WorkItemRow | undefined {
     if (provenance) return items.find(item => item.id === provenance.workItemId);
     if (issueNumber) {
       return (
