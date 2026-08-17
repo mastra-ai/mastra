@@ -12,20 +12,15 @@ import { isKnowledgeScopeVisible } from '@mastra/core/storage';
 export const SUBCONSCIOUS_ACTIVITY_STATE_ID = 'subconscious-activity';
 
 export interface SubconsciousActivityUpdate {
-  id: string;
   action: KnowledgeActivityEvent['action'];
   type: KnowledgeSemanticDocumentType;
-  recordId: string;
   name?: string;
-  targetId: string;
-  targetType: 'node';
-  sourceThreadId?: string;
   createdAt: string;
 }
 
 export interface SubconsciousActivitySnapshot {
   updates: SubconsciousActivityUpdate[];
-  hot: Array<{ type: 'node'; id: string; name: string; updates: number }>;
+  hot: Array<{ type: 'node'; name: string; updates: number }>;
   errors?: string[];
 }
 
@@ -52,24 +47,21 @@ export async function buildSubconsciousActivitySnapshot(input: {
   errors?: string[];
 }): Promise<SubconsciousActivitySnapshot> {
   const events = await input.store.listActivity({ scope: input.scope, limit: input.recentUpdates });
-  const updates = await Promise.all(
+  const resolvedUpdates = await Promise.all(
     events.map(async event => {
       const target = await getActivityTarget(input.store, event, input.scope);
       return {
-        id: event.id,
         action: event.action,
         type: event.recordType,
-        recordId: event.recordId,
         name: target.name,
         targetId: target.id,
         targetType: target.type,
-        sourceThreadId: event.sourceThreadId,
         createdAt: event.createdAt.toISOString(),
       };
     }),
   );
-  const hotByRecord = new Map<string, { type: 'node'; id: string; name: string; updates: number }>();
-  for (const update of updates) {
+  const hotByRecord = new Map<string, { type: 'node'; name: string; updates: number }>();
+  for (const update of resolvedUpdates) {
     if (!update.name) continue;
     const key = `${update.targetType}:${update.targetId}`;
     const existing = hotByRecord.get(key);
@@ -77,7 +69,6 @@ export async function buildSubconsciousActivitySnapshot(input: {
     else {
       hotByRecord.set(key, {
         type: update.targetType,
-        id: update.targetId,
         name: update.name,
         updates: 1,
       });
@@ -86,6 +77,12 @@ export async function buildSubconsciousActivitySnapshot(input: {
   const hot = [...hotByRecord.values()]
     .sort((a, b) => b.updates - a.updates || a.name.localeCompare(b.name))
     .slice(0, input.recentUpdates);
+  const updates = resolvedUpdates.map(update => ({
+    action: update.action,
+    type: update.type,
+    ...(update.name ? { name: update.name } : {}),
+    createdAt: update.createdAt,
+  }));
   const errors = input.errors?.filter(Boolean).slice(0, input.recentUpdates);
   return { updates, hot, ...(errors?.length ? { errors } : {}) };
 }
