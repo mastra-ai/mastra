@@ -182,9 +182,10 @@ describe('Subconscious remind', () => {
   });
 
   it('runs on the observational memory model when no main agent is available', async () => {
+    const itemId = 'item-atlas-launch';
     const extractor = new SubconsciousRemindExtractor(
       { name: 'remind', maxSteps: 3, builtIn: true },
-      createModel('Project Atlas launches January 15.') as any,
+      createModel(`Project Atlas launches January 15. Source KnowledgeItem: ${itemId}.`) as any,
     );
     const context = createContext('unused');
     delete (context as any).mainAgent;
@@ -195,6 +196,7 @@ describe('Subconscious remind', () => {
       scope: ['org:acme', 'resource:user-42'],
     });
     const item = await store.appendItem({
+      id: itemId,
       parentNodeId: node.id,
       text: 'Project Atlas launches January 15.',
       scope: ['org:acme', 'resource:user-42'],
