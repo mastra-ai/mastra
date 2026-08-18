@@ -552,6 +552,8 @@ For semantic scoring to work properly during re-ranking, each result must includ
 You can also use other relevance score providers like Voyage AI, Cohere, or ZeroEntropy:
 
 ```ts
+import { VoyageRelevanceScorer } from '@mastra/voyageai'
+
 const relevanceProvider = new VoyageRelevanceScorer({ model: 'rerank-2.5' })
 ```
 
