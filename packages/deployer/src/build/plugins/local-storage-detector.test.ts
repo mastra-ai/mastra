@@ -64,6 +64,41 @@ describe('localStorageDetector', () => {
     expect(legacy).toHaveLength(1);
   });
 
+  it('detects statically enabled background tasks in rendered user modules', () => {
+    const { metadata } = runPlugin([
+      {
+        id: '/project/src/mastra/index.ts',
+        code: `export const mastra = new Mastra({ backgroundTasks: { enabled: true } });`,
+      },
+    ]);
+
+    expect(metadata.backgroundTasksEnabled).toBe(true);
+  });
+
+  it('does not report disabled, dynamic, or tree-shaken background task configs', () => {
+    const { metadata } = runPlugin([
+      {
+        id: '/project/src/mastra/index.ts',
+        code: `export const mastra = new Mastra({ backgroundTasks: { enabled: false } });`,
+      },
+      {
+        id: '/project/src/mastra/dynamic.ts',
+        code: `const enabled = process.env.WORKERS === 'true'; export const mastra = new Mastra({ backgroundTasks: { enabled } });`,
+      },
+      {
+        id: '/project/src/mastra/unrelated.ts',
+        code: `const config = { backgroundTasks: { enabled: true } };`,
+      },
+      {
+        id: '/project/src/mastra/unused.ts',
+        code: `export const mastra = new Mastra({ backgroundTasks: { enabled: true } });`,
+        renderedLength: 0,
+      },
+    ]);
+
+    expect(metadata.backgroundTasksEnabled).toBeUndefined();
+  });
+
   it('ignores modules from node_modules', () => {
     const { metadata, legacy } = runPlugin([
       {

@@ -256,6 +256,7 @@ describe('preflightBuildOutput', () => {
       version?: number;
       localPaths?: Array<{ value: string; hint: string; module: string; guardedBy?: string }>;
       userEnvRefs?: string[];
+      backgroundTasksEnabled?: boolean;
     }) {
       writeFileSync(
         join(tmpDir, '.mastra', 'output', 'preflight-metadata.json'),
@@ -549,6 +550,40 @@ describe('preflightBuildOutput', () => {
 
       const issues = await preflightBuildOutput(tmpDir, {});
       expect(issues.find(i => i.code === 'MISSING_ENV_VAR')).toBeUndefined();
+    });
+
+    it('blocks when background tasks are configured but dedicated workers are disabled', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ backgroundTasksEnabled: true });
+
+      const issues = await preflightBuildOutput(
+        tmpDir,
+        {},
+        {
+          environmentName: 'production',
+          backgroundWorkersEnabled: false,
+        },
+      );
+      const issue = issues.find(i => i.code === 'BACKGROUND_WORKERS_DISABLED');
+      expect(issue).toEqual(
+        expect.objectContaining({
+          severity: 'error',
+          autofix: { kind: 'enable-background-workers' },
+        }),
+      );
+      expect(issue?.message).toContain('production environment');
+      expect(fixText(issue?.fix)).toContain('Scalable Server add-on');
+    });
+
+    it('does not report a worker issue when workers are enabled or their platform state is unavailable', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ backgroundTasksEnabled: true });
+
+      const enabledIssues = await preflightBuildOutput(tmpDir, {}, { backgroundWorkersEnabled: true });
+      const unknownIssues = await preflightBuildOutput(tmpDir, {});
+
+      expect(enabledIssues.find(i => i.code === 'BACKGROUND_WORKERS_DISABLED')).toBeUndefined();
+      expect(unknownIssues.find(i => i.code === 'BACKGROUND_WORKERS_DISABLED')).toBeUndefined();
     });
 
     it('falls back to bundle-wide scan + legacy file when metadata is absent (regression guard)', async () => {

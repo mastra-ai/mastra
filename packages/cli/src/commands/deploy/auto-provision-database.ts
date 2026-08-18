@@ -1,19 +1,10 @@
 /**
- * Deploy-time auto-provision hook.
+ * Interactive deploy-time handlers for structured preflight autofixes.
  *
- * When preflight detects that a required database env var will be missing at
- * runtime (`TURSO_DATABASE_URL`, `DATABASE_URL`, …), deploy would normally
- * error out and tell the user to run `mastra env db create`. That's an extra
- * command, an extra CLI cycle, and a papercut on top of an otherwise happy
- * deploy.
- *
- * Instead, this module inspects preflight issues with a
- * `create-managed-database` autofix hint, asks the user once per provider
- * whether they want to attach a managed database now, and — if they say yes —
- * runs the attach + poll inline. Successfully-provisioned providers are
- * dropped from the issue list and their injected env var names are added to
- * `managedEnvVarNames`, so the caller can hand the survivors to
- * `printPreflightIssues` and let deploy continue.
+ * Infrastructure is never created for non-interactive or `--yes` deploys.
+ * Interactive deploys prompt once per managed database provider and once for
+ * background workers, apply confirmed fixes in dependency order (databases
+ * before workers), and remove only successfully-resolved issues.
  */
 
 import * as p from '@clack/prompts';
@@ -22,6 +13,15 @@ import type { DatabaseKind, ProjectDatabase } from '../db/platform-api.js';
 import { attachDatabase, DB_ENV_VAR_NAMES, fetchDatabaseCatalog, pollDatabaseUntilReady } from '../db/platform-api.js';
 import type { PreflightAutofix, PreflightIssue } from '../deploy-preflight.js';
 import type { Environment } from '../env/platform-api.js';
+import { enableBackgroundWorkers } from '../env/platform-api.js';
+
+type DatabaseAutofix = Extract<PreflightAutofix, { kind: 'create-managed-database' }>;
+type WorkerAutofix = Extract<PreflightAutofix, { kind: 'enable-background-workers' }>;
+
+interface AutofixGroup {
+  fix: PreflightAutofix;
+  members: PreflightAutofix[];
+}
 
 export interface AutoProvisionContext {
   token: string;
@@ -31,50 +31,70 @@ export interface AutoProvisionContext {
   projectName: string;
   /** Project slug, used to derive a default database name. */
   projectSlug: string | null;
-  environment: Pick<Environment, 'id' | 'slug' | 'name' | 'type'>;
+  environment: Pick<Environment, 'id' | 'slug' | 'name' | 'type' | 'managedEnvVarNames'>;
+  /** Merged local and platform-stored env vars used to identify BYO Redis. */
+  envVars: Record<string, string>;
   /**
-   * Skip the auto-provision flow entirely (`--yes` / `--auto-accept`). We
-   * treat "accept all defaults" as "don't prompt me for infrastructure
-   * creation" — auto-accept should never silently spin up managed
-   * resources. Users who want provisioning in CI should run
-   * `mastra env db create` in a separate step.
+   * Skip autofixes entirely (`--yes` / `--auto-accept`). Accepting command
+   * defaults must never silently create managed infrastructure.
    */
   autoAccept: boolean;
 }
 
 export interface AutoProvisionResult {
-  /** Issues left after successful provisioning (unfixed ones passed through). */
+  /** Issues left after successful autofixes (unfixed ones pass through). */
   issues: PreflightIssue[];
-  /** Env var names newly injected by databases we just attached. */
+  /** Env var names newly injected by databases attached in this run. */
   newlyManagedEnvVarNames: string[];
-  /** Databases we attached in this run (for later summaries). */
+  /** Databases attached in this run (for the deploy summary). */
   provisioned: ProjectDatabase[];
+  /** Whether this run successfully enabled dedicated background workers. */
+  backgroundWorkersEnabled: boolean;
+}
+
+interface AutofixState {
+  newlyManagedEnvVarNames: string[];
+  provisioned: ProjectDatabase[];
+  backgroundWorkersEnabled: boolean;
 }
 
 function isInteractive(): boolean {
   return Boolean(process.stdin.isTTY && process.stdout.isTTY) && !process.env.CI;
 }
 
-function collectAutofixes(issues: PreflightIssue[]): Map<DatabaseKind, PreflightAutofix[]> {
-  const byProvider = new Map<DatabaseKind, PreflightAutofix[]>();
+function collectAutofixes(issues: PreflightIssue[]): AutofixGroup[] {
+  const databases = new Map<DatabaseKind, DatabaseAutofix[]>();
+  const workers: WorkerAutofix[] = [];
+
   for (const issue of issues) {
     const fix = issue.autofix;
-    if (!fix || fix.kind !== 'create-managed-database') continue;
-    const bucket = byProvider.get(fix.provider) ?? [];
-    bucket.push(fix);
-    byProvider.set(fix.provider, bucket);
+    if (!fix) continue;
+
+    switch (fix.kind) {
+      case 'create-managed-database': {
+        const bucket = databases.get(fix.provider) ?? [];
+        bucket.push(fix);
+        databases.set(fix.provider, bucket);
+        break;
+      }
+      case 'enable-background-workers':
+        workers.push(fix);
+        break;
+    }
   }
-  return byProvider;
+
+  return [
+    ...[...databases.values()].map(members => ({ fix: members[0]!, members })),
+    ...(workers.length > 0 ? [{ fix: workers[0]!, members: workers }] : []),
+  ];
 }
 
 /**
- * If preflight surfaced blocking issues we know how to auto-fix (missing
- * managed database env vars), offer to fix them inline. Non-interactive
- * callers get the original issues back untouched — the caller is expected to
- * fall through to `printPreflightIssues`, which will still print the exact
- * `mastra env db create` command in the error text.
+ * Offer to apply supported preflight fixes inline. Non-interactive callers get
+ * the original issues back untouched so normal preflight output still shows
+ * deterministic remediation.
  */
-export async function maybeAutoProvisionDatabases(
+export async function maybeApplyPreflightAutofixes(
   issues: PreflightIssue[],
   ctx: AutoProvisionContext,
 ): Promise<AutoProvisionResult> {
@@ -82,14 +102,11 @@ export async function maybeAutoProvisionDatabases(
     issues,
     newlyManagedEnvVarNames: [],
     provisioned: [],
+    backgroundWorkersEnabled: false,
   };
 
-  const grouped = collectAutofixes(issues);
-  if (grouped.size === 0) return untouched;
-
-  // Prompting requires a TTY; --yes should not silently create infra without
-  // an explicit yes to a specific provider.
-  if (!isInteractive() || ctx.autoAccept) return untouched;
+  const groups = collectAutofixes(issues);
+  if (groups.length === 0 || !isInteractive() || ctx.autoAccept) return untouched;
 
   // The platform filters the provider catalog per-organization (feature
   // flags, e.g. `managed-redis`). Only offer kinds the platform would let
@@ -107,50 +124,113 @@ export async function maybeAutoProvisionDatabases(
   }
 
   const resolved = new Set<PreflightAutofix>();
-  const newlyManaged: string[] = [];
-  const provisioned: ProjectDatabase[] = [];
+  const state: AutofixState = {
+    newlyManagedEnvVarNames: [],
+    provisioned: [],
+    backgroundWorkersEnabled: false,
+  };
 
-  for (const [provider, fixes] of grouped) {
-    // Silently skip kinds the platform doesn't offer this org — mirrors the
-    // dashboard, where a gated provider simply doesn't appear.
-    if (!availableKinds.has(provider)) continue;
+  for (const group of groups) {
+    if (group.fix.kind === 'create-managed-database' && !availableKinds.has(group.fix.provider)) continue;
 
-    const uniqueVars = [...new Set(fixes.map(f => f.envVarName))].join(', ');
-    const confirm = await p.confirm({
-      message:
-        `Preflight needs ${uniqueVars} for the ${ctx.environment.name} environment. ` +
-        `Create a managed ${provider} database now and attach it?`,
-      initialValue: true,
-    });
-
-    if (p.isCancel(confirm)) {
-      p.cancel('Deploy cancelled.');
-      process.exit(0);
-    }
-    if (!confirm) continue;
-
-    try {
-      const created = await provisionOne(ctx, provider);
-      provisioned.push(created);
-      const injected = DB_ENV_VAR_NAMES[provider] ?? [];
-      newlyManaged.push(...injected);
-      for (const fix of fixes) resolved.add(fix);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      p.log.error(`Failed to attach a ${provider} database: ${message}`);
-      // Leave the fixes in the issue list — the normal error printer will
-      // show the exact `mastra env db create` command as remediation.
+    if (await handleAutofix(group.fix, ctx, state)) {
+      for (const fix of group.members) resolved.add(fix);
     }
   }
 
-  if (resolved.size === 0) return untouched;
+  if (resolved.size === 0 && state.provisioned.length === 0) return untouched;
 
-  const remaining = issues.filter(issue => !issue.autofix || !resolved.has(issue.autofix));
   return {
-    issues: remaining,
-    newlyManagedEnvVarNames: newlyManaged,
-    provisioned,
+    issues: issues.filter(issue => !issue.autofix || !resolved.has(issue.autofix)),
+    ...state,
   };
+}
+
+async function handleAutofix(fix: PreflightAutofix, ctx: AutoProvisionContext, state: AutofixState): Promise<boolean> {
+  switch (fix.kind) {
+    case 'create-managed-database':
+      return handleDatabaseAutofix(fix, ctx, state);
+    case 'enable-background-workers':
+      return handleWorkerAutofix(ctx, state);
+  }
+}
+
+async function handleDatabaseAutofix(
+  fix: DatabaseAutofix,
+  ctx: AutoProvisionContext,
+  state: AutofixState,
+): Promise<boolean> {
+  const providerEnvVars = DB_ENV_VAR_NAMES[fix.provider] ?? [];
+  const confirm = await p.confirm({
+    message:
+      `Preflight needs ${providerEnvVars.join(', ')} for the ${ctx.environment.slug} environment. ` +
+      `Create a managed ${fix.provider} database now and attach it?`,
+    initialValue: true,
+  });
+
+  if (p.isCancel(confirm)) cancelDeploy();
+  if (!confirm) return false;
+
+  try {
+    const created = await provisionOne(ctx, fix.provider);
+    state.provisioned.push(created);
+    state.newlyManagedEnvVarNames.push(...providerEnvVars);
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    p.log.error(`Failed to attach a ${fix.provider} database: ${message}`);
+    return false;
+  }
+}
+
+async function handleWorkerAutofix(ctx: AutoProvisionContext, state: AutofixState): Promise<boolean> {
+  const managedNames = [...(ctx.environment.managedEnvVarNames ?? []), ...state.newlyManagedEnvVarNames];
+  const hasManagedRedis = managedNames.includes('REDIS_URL');
+  const hasByoRedis = Boolean(ctx.envVars.REDIS_URL) && !hasManagedRedis;
+  const confirm = await p.confirm({
+    message:
+      `Background tasks are enabled in your Mastra config. ` +
+      `Enable dedicated background workers for the ${ctx.environment.slug} environment?` +
+      (!hasManagedRedis && !hasByoRedis ? ' A managed Redis database will also be created and attached.' : ''),
+    initialValue: true,
+  });
+
+  if (p.isCancel(confirm)) cancelDeploy();
+  if (!confirm) return false;
+
+  let redisSource: 'managed' | 'byo' = hasByoRedis ? 'byo' : 'managed';
+  if (!hasManagedRedis && !hasByoRedis) {
+    try {
+      const created = await provisionOne(ctx, 'redis');
+      state.provisioned.push(created);
+      state.newlyManagedEnvVarNames.push(...DB_ENV_VAR_NAMES.redis);
+      redisSource = 'managed';
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      p.log.error(`Failed to attach a redis database: ${message}`);
+      return false;
+    }
+  }
+
+  const spinner = p.spinner();
+  spinner.start(`Enabling background workers for ${ctx.environment.slug}...`);
+
+  try {
+    await enableBackgroundWorkers(ctx.token, ctx.orgId, ctx.projectId, ctx.environment.id, redisSource);
+    spinner.stop(`Background workers are enabled for ${ctx.environment.slug}.`);
+    state.backgroundWorkersEnabled = true;
+    return true;
+  } catch (error) {
+    spinner.stop('Could not enable background workers.');
+    const message = error instanceof Error ? error.message : String(error);
+    p.log.error(`Failed to enable background workers: ${message}`);
+    return false;
+  }
+}
+
+function cancelDeploy(): never {
+  p.cancel('Deploy cancelled.');
+  process.exit(0);
 }
 
 async function provisionOne(ctx: AutoProvisionContext, provider: DatabaseKind): Promise<ProjectDatabase> {
