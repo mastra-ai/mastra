@@ -215,7 +215,7 @@ Lists all metadata field indexes for an index.
 
 ### `updateVector()`
 
-Updates a vector or metadata for a specific ID within an index.
+Updates the vector and optionally the metadata for a specific ID within an index. Vectorize has no partial-update operation, so `update.vector` is required; metadata-only updates are not supported and throw an error.
 
 <PropertiesTable
   content={[
@@ -231,8 +231,9 @@ Updates a vector or metadata for a specific ID within an index.
   },
   {
     name: 'update',
-    type: '{ vector?: number[]; metadata?: Record<string, any>; }',
-    description: 'Object containing the vector and/or metadata to update',
+    type: '{ vector: number[]; metadata?: Record<string, any>; }',
+    description:
+      'Object containing the new vector values, and optionally the metadata to update. The vector values are required',
   },
 ]}
 />
@@ -252,6 +253,32 @@ Deletes a vector and its associated metadata for a specific ID within an index.
     name: 'id',
     type: 'string',
     description: 'Unique identifier of the vector and metadata to delete',
+  },
+]}
+/>
+
+### `deleteVectors()`
+
+Deletes multiple vectors and their associated metadata by ID. Vectorize has no filtered-delete operation, so deleting by metadata filter is not supported and throws an error.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index containing the vectors to delete',
+  },
+  {
+    name: 'ids',
+    type: 'string[]',
+    description:
+      'Unique identifiers of the vectors to delete. Must contain at least one ID, and cannot be combined with filter',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'Not supported by Vectorize. Passing a filter throws an error',
   },
 ]}
 />
