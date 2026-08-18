@@ -121,7 +121,7 @@ export const ComposerAttachments = () => {
 
   return (
     <div className="absolute inset-x-0 bottom-full px-2" data-attachments-row>
-      <div className="mx-auto w-full max-w-3xl overflow-x-auto">
+      <div className="mx-auto w-full max-w-[740px] overflow-x-auto">
         <div className="flex flex-row items-center gap-4 px-3 pt-3 pb-1">
           {attachments.map(att => (
             <AttachmentThumbnail key={att.id} attachment={att} />

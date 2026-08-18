@@ -125,6 +125,17 @@ describe('AgentChatShell', () => {
     expect(screen.queryByRole('button', { name: /memory/i })).toBeNull();
   });
 
+  it('uses the compact type scale and row height for the agent title', async () => {
+    renderShell();
+
+    const title = await screen.findByRole('heading', { name: 'Test Agent' });
+    const copyButton = screen.getByTestId('agent-entity-header-copy-id');
+
+    expect(title.classList.contains('text-ui-md')).toBe(true);
+    expect(title.classList.contains('leading-ui-md')).toBe(true);
+    expect(copyButton.parentElement?.classList.contains('py-2')).toBe(true);
+  });
+
   it('never owns or fetches the OM panel data from the shell', async () => {
     const { onOM, onMessages } = renderShell();
 

@@ -182,7 +182,7 @@ export const Thread = ({
                   <div
                     ref={messagesContainerRef}
                     data-testid="thread-message-column"
-                    className="relative mx-auto w-full max-w-3xl px-4 pb-7 group-has-[[data-attachments-row]]/thread:pb-24"
+                    className="relative mx-auto w-full max-w-[740px] px-4 pb-7 group-has-[[data-attachments-row]]/thread:pb-24"
                   >
                     <BracketOverlay containerRef={messagesContainerRef} />
                     <MessageScrollerContent className="flex flex-col gap-6 py-6">
@@ -224,13 +224,13 @@ export const Thread = ({
                 </div>
               )}
             </MessageScrollerViewport>
-            <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 mx-auto flex w-full max-w-3xl px-4">
+            <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 mx-auto flex w-full max-w-[740px] px-4">
               <MessageScrollerButton className="pointer-events-auto static ms-auto translate-x-0 rtl:translate-x-0" />
             </div>
           </MessageScroller>
 
           {showThumbnailInChat && agentId && threadId && (
-            <div className="mx-auto mb-2 w-full max-w-3xl px-4">
+            <div className="mx-auto mb-2 w-full max-w-[740px] px-4">
               <BrowserThumbnail agentName={agentName} />
             </div>
           )}
@@ -320,10 +320,10 @@ const AgentComposer = ({
           void submit();
         }}
       >
-        <ComposerAttachments>
+        <ComposerAttachments className="max-w-[740px]">
           <ChatComposerAttachments />
         </ComposerAttachments>
-        <ComposerRing busy={isRunning}>
+        <ComposerRing busy={isRunning} className="max-w-[740px]">
           <ComposerBox sendingPulseKey={sendPulseKey}>
             <ComposerInput
               ref={textareaRef}

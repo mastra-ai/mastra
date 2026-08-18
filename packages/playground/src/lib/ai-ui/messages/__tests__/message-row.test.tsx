@@ -123,7 +123,11 @@ describe('MessageRow', () => {
         content: { format: 2, parts: [{ type: 'text', text: 'a user line' }] },
       }),
     );
-    expect(screen.getByText('a user line')).toBeTruthy();
+    const bubble = screen.getByText('a user line').closest('.bg-surface3');
+
+    expect(bubble).toBeTruthy();
+    expect(bubble?.classList.contains('px-2')).toBe(true);
+    expect(bubble?.classList.contains('py-1')).toBe(true);
   });
 
   it('drops messages with no displayable role', () => {

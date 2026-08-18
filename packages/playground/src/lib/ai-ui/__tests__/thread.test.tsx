@@ -224,6 +224,17 @@ describe('Thread', () => {
     expect(screen.queryByText('How can I help you today?')).toBeFalsy();
   });
 
+  it('limits the aligned chat surfaces to 740px', async () => {
+    server.use(...baseHandlers());
+
+    await act(async () => {
+      renderThread([userMessage('previous question')]);
+    });
+
+    expect(screen.getByTestId('thread-message-column').className).toContain('max-w-[740px]');
+    expect(document.querySelector<HTMLElement>('.composer-ring')?.className).toContain('max-w-[740px]');
+  });
+
   describe('when a message contains a tool call', () => {
     it('allows the tool hover surface to paint outside the virtualized message item', async () => {
       server.use(...baseHandlers());

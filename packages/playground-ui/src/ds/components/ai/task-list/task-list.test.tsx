@@ -27,22 +27,17 @@ describe('TaskList', () => {
       expect(screen.getByRole('progressbar').getAttribute('aria-valuemax')).toBe('3');
     });
 
-    it('renders one progress bar per task, colored by status', () => {
+    it('shows the completed and total task counts', () => {
       render(<TaskList tasks={mixedTasks} />);
 
-      const bars = Array.from(screen.getByRole('progressbar').children).map(bar => bar.className);
-      expect(bars).toHaveLength(3);
-      expect(bars[0]).toContain('bg-positive1');
-      expect(bars[1]).toContain('bg-warning1');
-      expect(bars[2]).toContain('bg-surface6');
+      expect(screen.getByRole('progressbar').textContent).toBe('1/3');
     });
 
-    it('reveals the exact count on hover', async () => {
-      render(<TaskList tasks={mixedTasks} />);
+    it('allows more tasks to remain visible before scrolling', () => {
+      const { container } = render(<TaskList tasks={mixedTasks} />);
 
-      fireEvent.mouseEnter(screen.getByRole('progressbar'));
-
-      expect((await screen.findByRole('tooltip')).textContent).toBe('1/3 completed');
+      const viewport = container.querySelector<HTMLElement>('[style*="max-height"]');
+      expect(viewport?.style.maxHeight).toBe('16rem');
     });
 
     it('renders the active form instead of the task content', () => {
@@ -85,13 +80,13 @@ describe('TaskList', () => {
   describe('when the list is collapsed', () => {
     const collapse = () => fireEvent.click(screen.getByRole('button'));
 
-    it('hides the tasks while keeping the progress bars', () => {
+    it('hides the tasks while keeping the progress count', () => {
       render(<TaskList tasks={mixedTasks} />);
       collapse();
 
       expect(screen.queryByText('Inspect code')).toBeNull();
       expect(screen.queryByText('Build package')).toBeNull();
-      expect(screen.getByRole('progressbar').children).toHaveLength(3);
+      expect(screen.getByRole('progressbar').textContent).toBe('1/3');
       expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('1');
     });
 
@@ -147,17 +142,18 @@ describe('TaskList', () => {
   });
 
   describe('when empty lists are configured to remain visible', () => {
-    it('renders no progress bar', () => {
+    it('renders a zero task count', () => {
       render(<TaskList tasks={[]} hideWhenEmpty={false} />);
 
-      expect(screen.getByRole('progressbar').children).toHaveLength(0);
+      expect(screen.getByRole('progressbar').textContent).toBe('0/0');
     });
   });
 
   describe('when completed lists are configured to remain visible', () => {
-    it('renders every bar as completed', () => {
+    it('renders the fully completed count', () => {
       render(<TaskList tasks={completedTasks} hideWhenComplete={false} />);
 
+      expect(screen.getByRole('progressbar').textContent).toBe('3/3');
       expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('3');
     });
   });

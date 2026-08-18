@@ -314,7 +314,7 @@ export const MessageRow = forwardRef<HTMLDivElement, MessageRowProps>(
           <DatasetSaveAction messageText={getTextFromParts(message)} />
           <div
             className={cn(
-              'max-w-[max(366px,70%)] break-words px-4 py-2 text-neutral6 text-ui-lg leading-ui-lg rounded-xl bg-surface3',
+              'max-w-[max(366px,70%)] break-words px-2 py-1 text-neutral6 text-ui-lg leading-ui-lg rounded-xl bg-surface3',
               isPending && 'opacity-60 animate-pulse',
             )}
           >
@@ -332,7 +332,7 @@ export const MessageRow = forwardRef<HTMLDivElement, MessageRowProps>(
           <MessageFactory message={displayMessage} {...assistantRenderers} status={messageStatusRenderers} />
         </div>
         {showActionBar && (
-          <div className="flex h-6 items-center gap-2 pt-4">
+          <div className="mt-3 flex h-6 items-center gap-2">
             <AssistantActionBar
               text={getTextFromParts(displayMessage)}
               modelMetadata={modelMetadata}

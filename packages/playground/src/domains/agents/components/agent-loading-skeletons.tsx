@@ -20,7 +20,7 @@ function AgentViewHeaderLoadingSkeleton() {
   return (
     <div className="flex items-center justify-between gap-2 pr-3 max-lg:py-2">
       <div className="min-w-0 flex-1 max-lg:hidden">
-        <div className="flex min-w-0 items-center gap-2 p-3">
+        <div className="flex min-w-0 items-center gap-2 px-3 py-2">
           <Skeleton className="size-7 shrink-0 rounded-full" />
           <Skeleton className="h-4 w-36" />
         </div>

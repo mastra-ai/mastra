@@ -18,7 +18,7 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
 
   return (
     <TooltipProvider>
-      <div className="min-w-0 overflow-x-hidden p-3">
+      <div className="min-w-0 overflow-x-hidden px-3 py-2">
         <Tooltip>
           <TooltipTrigger asChild>
             <button
@@ -36,7 +36,7 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
               {isLoading ? (
                 <Skeleton className="h-3 w-32" />
               ) : (
-                <Txt variant="header-md" as="h2" className="truncate font-medium">
+                <Txt variant="ui-md" as="h2" className="truncate font-medium">
                   {agentName}
                 </Txt>
               )}
