@@ -22,6 +22,53 @@ export interface EntityLearningProgressResponse {
   signalCatalog?: SignalCatalogEntry[];
 }
 
+export type TraceSignalArtifact =
+  | 'latestUserInput'
+  | 'minifiedTrace'
+  | 'summary'
+  | 'tags'
+  | 'entityIntent'
+  | 'entityIntentSummary';
+
+export interface TraceSignalDefinition {
+  id: string;
+  name: string;
+  displayLabel: string;
+  description: string;
+  taskPrompt: string;
+  extraOutputRules: string[];
+  artifactAllowlist: TraceSignalArtifact[];
+  version: number;
+  status: 'active' | 'archived';
+  enabled: boolean | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TraceSignalManagementListResponse {
+  definitions: TraceSignalDefinition[];
+  limits: {
+    maxDefinitionsPerOrganization: number;
+  };
+}
+
+export interface CreateTraceSignalDefinitionInput {
+  name: string;
+  displayLabel: string;
+  description: string;
+  taskPrompt: string;
+  extraOutputRules: string[];
+  artifactAllowlist: TraceSignalArtifact[];
+}
+
+export type UpdateTraceSignalDefinitionInput = Omit<CreateTraceSignalDefinitionInput, 'name'>;
+
+export interface ProjectTraceSignalSetting {
+  projectId: string;
+  signalDefinitionId: string;
+  enabled: boolean;
+}
+
 export interface ThemeLearningEntity {
   entityId: string;
   entityType: string;

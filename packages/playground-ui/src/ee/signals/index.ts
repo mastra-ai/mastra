@@ -5,6 +5,7 @@ export * from './signal-colors';
 export * from './signal-formatting';
 export * from './signals-error-state';
 export * from './signals-loading-skeleton';
+export * from './settings';
 export * from './trace-intelligence-context';
 export * from './trace-intelligence-provider';
 export * from './use-trace-intelligence';
