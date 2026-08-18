@@ -266,7 +266,7 @@ export interface DataListTimeCellProps {
 export function DataListTimeCell({ timestamp }: DataListTimeCellProps) {
   const date = toDate(timestamp);
   return (
-    <DataListCell height="compact" className="flex font-mono text-ui-smd text-neutral3">
+    <DataListCell height="compact" className="text-ui-smd text-neutral3 flex font-mono">
       {date ? (
         <>
           {format(date, 'h:mm:ss')}
