@@ -20,17 +20,18 @@ export function getSignalHue(signalName: string) {
   }
 }
 
-const BUILT_IN_HUES = Object.values(SIGNAL_HUES);
 const MINIMUM_HUE_DISTANCE = 30;
+const RESERVED_HUES = [0, ...Object.values(SIGNAL_HUES)];
+const CUSTOM_SIGNAL_HUES = Array.from({ length: 360 }, (_, hue) => hue).filter(hue =>
+  RESERVED_HUES.every(reservedHue => circularHueDistance(hue, reservedHue) >= MINIMUM_HUE_DISTANCE),
+);
 
 function customSignalHue(signalName: string): number {
   let hash = 0;
-  for (const character of signalName) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  for (const character of signalName.toLowerCase()) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
 
-  let hue = hash % 360;
-  while (BUILT_IN_HUES.some(builtInHue => circularHueDistance(hue, builtInHue) < MINIMUM_HUE_DISTANCE)) {
-    hue = (hue + MINIMUM_HUE_DISTANCE) % 360;
-  }
+  const hue = CUSTOM_SIGNAL_HUES[hash % CUSTOM_SIGNAL_HUES.length];
+  if (hue === undefined) throw new Error('Custom signal hue palette is empty');
   return hue;
 }
 
