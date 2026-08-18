@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { basename, dirname, isAbsolute, join, normalize, resolve } from 'node:path';
+import { isAbsolute, normalize, posix, resolve, win32 } from 'node:path';
 import { estimateTokenCount } from 'tokenx';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import { signalToXmlMarkup } from '../agent/signals';
@@ -73,8 +73,43 @@ function isInstructionFileName(name: string): boolean {
   return INSTRUCTION_FILE_NAMES.some(instructionFileName => instructionFileName.toLowerCase() === name.toLowerCase());
 }
 
+/**
+ * Normalize path separators to forward slashes.
+ *
+ * Instruction paths are embedded in prompt reminders and used as the dedup
+ * identity in metadata, so they must be stable across platforms. `node:path`
+ * produces `\` separators on Windows; converting to `/` keeps the reminder
+ * path (and the metadata used to avoid re-injection) identical on every OS.
+ * Windows filesystem APIs accept forward slashes, so real reads still work.
+ */
+function toPosixPath(candidatePath: string): string {
+  return candidatePath.replaceAll('\\', '/');
+}
+
+function usesWindowsPathSemantics(candidatePath: string): boolean {
+  const normalizedPath = toPosixPath(candidatePath);
+  return normalizedPath.startsWith('//') || (/^[a-zA-Z]:\//.test(normalizedPath) && win32.isAbsolute(normalizedPath));
+}
+
 function toAbsolutePath(candidatePath: string): string {
-  return normalize(isAbsolute(candidatePath) ? candidatePath : resolve(process.cwd(), candidatePath));
+  if (usesWindowsPathSemantics(candidatePath)) {
+    return toPosixPath(win32.normalize(candidatePath));
+  }
+
+  const absolutePath = normalize(isAbsolute(candidatePath) ? candidatePath : resolve(process.cwd(), candidatePath));
+  return toPosixPath(absolutePath);
+}
+
+function dirnamePreservingWindowsRoot(candidatePath: string): string {
+  return usesWindowsPathSemantics(candidatePath)
+    ? toPosixPath(win32.dirname(candidatePath))
+    : posix.dirname(candidatePath);
+}
+
+function joinPreservingWindowsRoot(basePath: string, childPath: string): string {
+  return usesWindowsPathSemantics(basePath)
+    ? toPosixPath(win32.join(basePath, childPath))
+    : posix.join(basePath, childPath);
 }
 
 function findInstructionFileForPath(
@@ -83,28 +118,31 @@ function findInstructionFileForPath(
   isDirectory: (path: string) => boolean,
 ): string | undefined {
   const absoluteCandidatePath = toAbsolutePath(candidatePath);
-  const candidateName = basename(absoluteCandidatePath);
+  const candidateName = posix.basename(absoluteCandidatePath);
 
   if (isInstructionFileName(candidateName)) {
     return absoluteCandidatePath;
   }
 
+  // Ordinary paths use POSIX operations so the walk is deterministic on every
+  // platform. UNC and drive-rooted paths use win32 operations to preserve their
+  // roots, then convert the result back to forward slashes.
   let currentDir = absoluteCandidatePath;
   if (!pathExists(currentDir) || !isDirectory(currentDir)) {
-    currentDir = dirname(currentDir);
+    currentDir = dirnamePreservingWindowsRoot(currentDir);
   }
 
   let previousDir: string | undefined;
   while (currentDir && currentDir !== previousDir) {
     for (const instructionFileName of INSTRUCTION_FILE_NAMES) {
-      const instructionFilePath = join(currentDir, instructionFileName);
+      const instructionFilePath = joinPreservingWindowsRoot(currentDir, instructionFileName);
       if (pathExists(instructionFilePath)) {
         return instructionFilePath;
       }
     }
 
     previousDir = currentDir;
-    currentDir = dirname(currentDir);
+    currentDir = dirnamePreservingWindowsRoot(currentDir);
   }
 
   return undefined;
