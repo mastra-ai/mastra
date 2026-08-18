@@ -927,15 +927,38 @@ describe('GitHub session workspace preparation', () => {
     const { resolver } = await createLocalFactory();
     addProject();
     addSession({ id: 'session-a' });
+    // Keep background warm-up from settling until after start() is asserted.
+    // Without this gate the test only passes because materialization still
+    // needs several more microtask turns after one await.
+    let releaseToken: (() => void) | undefined;
+    const tokenGate = new Promise<void>(resolve => {
+      releaseToken = resolve;
+    });
+    mocks.getRepositoryAccess.mockImplementation(async ({ repositoryId }: { repositoryId: string }) => {
+      await tokenGate;
+      return {
+        cloneUrl: 'https://github.com/octocat/hello.git',
+        authorization: { scheme: 'bearer' as const, token: `repo-token-${repositoryId}` },
+      };
+    });
 
-    const resolved = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
-    await (resolved as any).sandbox.start();
+    try {
+      const resolved = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      await (resolved as any).sandbox.start();
 
-    expect(mocks.ensureSandbox).not.toHaveBeenCalled();
-    expect(mocks.materializeRepo).not.toHaveBeenCalled();
+      expect(mocks.ensureSandbox).not.toHaveBeenCalled();
+      expect(mocks.materializeRepo).not.toHaveBeenCalled();
 
-    await (resolved as any).sandbox.getInfo();
-    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
+      releaseToken?.();
+      await (resolved as any).sandbox.getInfo();
+      expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
+    } finally {
+      releaseToken?.();
+      mocks.getRepositoryAccess.mockImplementation(async ({ repositoryId }: { repositoryId: string }) => ({
+        cloneUrl: 'https://github.com/octocat/hello.git',
+        authorization: { scheme: 'bearer' as const, token: `repo-token-${repositoryId}` },
+      }));
+    }
   });
 
   it('surfaces ordinary command failures without reviving the sandbox', async () => {

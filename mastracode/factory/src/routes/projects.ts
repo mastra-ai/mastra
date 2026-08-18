@@ -468,7 +468,11 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             createdByUserId: tenant.userId,
             ...input,
           });
-          this.deps.onProjectRepositoryLinked?.({ orgId: tenant.orgId, projectRepository });
+          try {
+            this.deps.onProjectRepositoryLinked?.({ orgId: tenant.orgId, projectRepository });
+          } catch (error) {
+            console.warn('[factory] onProjectRepositoryLinked failed after a successful repository link:', error);
+          }
           return context.json(
             { projectRepository: await this.#repositoryPayload(found.handle, tenant.orgId, projectRepository) },
             201,

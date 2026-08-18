@@ -90,6 +90,10 @@ export interface FactoryDecisionDispatcherOptions {
   reconcileIntervalMs?: number;
 }
 
+function positiveMs(value: number | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+
 function sanitizeDispatchError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   return message
@@ -189,9 +193,12 @@ export class FactoryDecisionDispatcher {
     this.#primeCredentials = options.primeCredentials;
     const maxInFlight = options.maxInFlight ?? MAX_IN_FLIGHT;
     this.#maxInFlight = Number.isFinite(maxInFlight) && maxInFlight > 0 ? Math.floor(maxInFlight) : MAX_IN_FLIGHT;
-    this.#staleBindingSweepIntervalMs = options.staleBindingSweepIntervalMs ?? STALE_BINDING_SWEEP_INTERVAL_MS;
-    this.#staleBindingTtlMs = options.staleBindingTtlMs ?? STALE_BINDING_TTL_MS;
-    this.#reconcileIntervalMs = options.reconcileIntervalMs ?? RECONCILE_INTERVAL_MS;
+    this.#staleBindingSweepIntervalMs = positiveMs(
+      options.staleBindingSweepIntervalMs,
+      STALE_BINDING_SWEEP_INTERVAL_MS,
+    );
+    this.#staleBindingTtlMs = positiveMs(options.staleBindingTtlMs, STALE_BINDING_TTL_MS);
+    this.#reconcileIntervalMs = positiveMs(options.reconcileIntervalMs, RECONCILE_INTERVAL_MS);
   }
 
   start(): void {

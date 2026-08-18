@@ -698,8 +698,21 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       get id() {
         return materializedSandboxes.get(workspaceId)?.id ?? workspaceId;
       },
+      name: 'Factory Lazy Sandbox',
+      get provider() {
+        return fleet.provider;
+      },
+      get status() {
+        return materializedSandboxes.has(workspaceId) ? 'ready' : 'pending';
+      },
       get supportsCheckpoints() {
         return materializedSandboxes.get(workspaceId)?.supportsCheckpoints ?? false;
+      },
+      getInstructions() {
+        return '';
+      },
+      clone(): never {
+        throw new Error('The Factory session sandbox cannot be cloned from a lazy handle.');
       },
       async start() {
         // Intentionally a no-op. `Workspace.init()` calls `sandbox.start()`

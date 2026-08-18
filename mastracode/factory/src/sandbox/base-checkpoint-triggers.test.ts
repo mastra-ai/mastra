@@ -19,6 +19,7 @@ const projectRepository = (overrides: Partial<ProjectRepository> = {}): ProjectR
   sandboxProvider: 'platform',
   sandboxWorkdir: '/workspace/acme/app',
   setupCommand: 'pnpm install',
+  teardownCommand: null,
   baseCheckpoint: null,
   createdAt: new Date(),
   updatedAt: new Date(),

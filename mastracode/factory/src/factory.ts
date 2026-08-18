@@ -533,13 +533,17 @@ export class MastraFactory {
     // Constructed only when a sandbox fleet and GitHub source control exist;
     // otherwise sessions simply keep the cold clone+setup path.
     if (githubIntegration && fleet.enabled && storage.isDomainReady('source-control')) {
+      const checkpointLogger = {
+        warn: (message: string) => console.warn(`[factory] ${message}`),
+      } as ConstructorParameters<typeof BaseCheckpointBuilder>[0]['logger'];
       baseCheckpoints = createBaseCheckpointTriggers({
-        builder: new BaseCheckpointBuilder({ fleet }),
+        builder: new BaseCheckpointBuilder({ fleet, logger: checkpointLogger }),
         fleet,
         github: {
           sourceControlStorage: sourceControlStorage.forIntegration('github'),
           ...(githubIntegration.versionControl ? { versionControl: githubIntegration.versionControl } : {}),
         },
+        logger: checkpointLogger,
       });
     }
     const workItemsReady = storage.isDomainReady('work-items');

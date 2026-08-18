@@ -14,7 +14,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import { createAppRoutes } from '../../router';
 
 const FACTORY_ID = 'fp-1';
@@ -178,7 +178,7 @@ function renderThreadRoute() {
 describe('ThreadPage eager render during /ensure', () => {
   it('becomes fully interactive while /ensure is still pending', async () => {
     const ensure = stubThreadRoute();
-    renderThreadRoute();
+    const { client } = renderThreadRoute();
 
     // Header + composer + transcript region should render right away.
     expect(await screen.findByRole('region', { name: 'Thread composer' })).toBeInTheDocument();
@@ -207,11 +207,12 @@ describe('ThreadPage eager render during /ensure', () => {
     // The warm-up fired exactly once for this session entry.
     expect(ensure.ensureRequests()).toBe(1);
     await ensure.completeEnsure();
+    await waitForMutationsIdle(client);
   });
 
   it('keeps the textarea typable during message loading and preserves the draft', async () => {
     const ensure = stubThreadRoute();
-    renderThreadRoute();
+    const { client } = renderThreadRoute();
 
     // Composer mounts eagerly.
     const composerRegion = await screen.findByRole('region', { name: 'Thread composer' });
@@ -264,5 +265,6 @@ describe('ThreadPage eager render during /ensure', () => {
     expect(await screen.findByRole('button', { name: 'Remove image' })).toBeInTheDocument();
 
     await ensure.completeEnsure();
+    await waitForMutationsIdle(client);
   });
 });

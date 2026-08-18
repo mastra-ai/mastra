@@ -92,9 +92,9 @@ export function ChatSessionConfigProvider({
     : Boolean(resourceOverride) || (Boolean(storedSession) && !resolvingSession);
   // `sandboxPreparing` — true only while session metadata is still resolving
   // for an in-session mount. Distinct from `!sandboxReady`, which is also
-  // false outside any session. A denied/missing session must not keep the
-  // preparing loader up forever.
-  const sandboxPreparing = inSession && !sandboxReady && !sessionError;
+  // false outside any session. Track the pending query (not `!sandboxReady`)
+  // so a denied/missing session cannot keep the preparing loader up forever.
+  const sandboxPreparing = resolvingSession && !resourceOverride;
   const sandboxProgressQuery = useEnsureProgress(inSession ? repository?.projectRepositoryId : undefined);
   // Warm-up progress is informational only — it never blocks the chat UI.
   const sandboxWarming = inSession && !resourceOverride && ensureQuery.isPending;

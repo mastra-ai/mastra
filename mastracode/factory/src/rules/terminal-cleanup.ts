@@ -53,6 +53,10 @@ export function createTerminalStageCleanup(options: TerminalStageCleanupOptions)
     } catch {
       // Best-effort; a stranded proposal is still dismissible from the card.
     }
-    await options.releaseSandboxes?.(args);
+    try {
+      await options.releaseSandboxes?.(args);
+    } catch {
+      // Best-effort; a leaked sandbox is retired by the next reconcile walk.
+    }
   };
 }

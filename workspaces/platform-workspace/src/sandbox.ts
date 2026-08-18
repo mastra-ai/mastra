@@ -624,7 +624,14 @@ export class PlatformSandbox extends MastraSandbox {
    */
   private _populateAddressFromResponse(json: CreateSandboxResponse): void {
     if (!this._addressRegistry) return;
-    if (!json.instanceUrl) return;
+    if (!json.instanceUrl) {
+      // A later start() without an address must not keep probing the previous
+      // sidecar. Invalidate any in-flight probe and drop the remembered target.
+      this._probeGeneration++;
+      this._probeTarget = null;
+      this._transportReadyPromise = null;
+      return;
+    }
     // Clear any stale entry before probing. On reattach, the registry may have
     // the old sandbox's address; execs should fall back to lease until the new
     // probe succeeds rather than dialing the stale address.
@@ -978,6 +985,9 @@ export class PlatformSandbox extends MastraSandbox {
    * the cached `'running'` state (see `MastraSandbox._start`).
    */
   private _clearDestroyedState(destroyedSandboxId: string): void {
+    this._probeGeneration++;
+    this._probeTarget = null;
+    this._transportReadyPromise = null;
     this._sandboxId = undefined;
     this._createdAt = null;
     this._lease = null;

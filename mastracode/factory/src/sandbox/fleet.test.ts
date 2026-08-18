@@ -480,7 +480,7 @@ describe('LocalSandbox end-to-end through the fleet', () => {
       seedCheckpointName: 'repo-pr-1',
     });
     const sessionWorkdir = path.join(tempDir, 'session-work');
-    const session = await localFleet(machine).ensureSandbox(bindingStore(sessionStore), undefined, undefined, {
+    const session = await localFleet(machine).ensureSandbox(sessionStore, undefined, undefined, {
       workingDirectory: sessionWorkdir,
     });
     expect(await fs.readFile(path.join(sessionWorkdir, 'cloned.txt'), 'utf-8')).toBe('repo');

@@ -1914,9 +1914,9 @@ describe('LocalSandbox', () => {
 
       const entries = await fs.readdir(path.join(checkpointsDir, 'repo-abc'));
       expect(entries).toEqual(['v2.txt']);
-      // No leftover temp dirs
+      // No leftover temp or backup dirs
       const ckptEntries = await fs.readdir(checkpointsDir);
-      expect(ckptEntries.filter(e => e.startsWith('.tmp-'))).toEqual([]);
+      expect(ckptEntries.filter(e => e.startsWith('.tmp-') || e.startsWith('.bak-'))).toEqual([]);
     });
 
     it('rejects unsafe checkpoint names', async () => {

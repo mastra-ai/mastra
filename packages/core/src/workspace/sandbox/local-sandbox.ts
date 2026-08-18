@@ -414,8 +414,9 @@ export class LocalSandbox extends MastraSandbox {
 
   /**
    * Persist the working directory as the configured named checkpoint.
-   * Copies to a temp sibling then renames into place so a concurrent boot never
-   * observes a half-written checkpoint. No-op when no checkpoint name is set.
+   * Copies to a temp sibling, then swaps it into place with rename so a
+   * concurrent boot always observes a complete checkpoint. No-op when no
+   * checkpoint name is set.
    */
   async snapshot(): Promise<void> {
     if (!this._checkpointName) return;
@@ -429,13 +430,26 @@ export class LocalSandbox extends MastraSandbox {
     const target = this._checkpointPath(name);
     await fs.mkdir(this._checkpointsDirectory, { recursive: true });
     const tmp = path.join(this._checkpointsDirectory, `.tmp-${name}-${crypto.randomBytes(6).toString('hex')}`);
+    const backup = path.join(this._checkpointsDirectory, `.bak-${name}-${crypto.randomBytes(6).toString('hex')}`);
+    let targetMoved = false;
     try {
       await fs.cp(this.workingDirectory, tmp, { recursive: true });
-      await fs.rm(target, { recursive: true, force: true });
+      try {
+        await fs.rename(target, backup);
+        targetMoved = true;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
       await fs.rename(tmp, target);
     } catch (error) {
       await fs.rm(tmp, { recursive: true, force: true }).catch(() => {});
+      if (targetMoved) {
+        await fs.rename(backup, target).catch(() => {});
+      }
       throw error;
+    }
+    if (targetMoved) {
+      await fs.rm(backup, { recursive: true, force: true }).catch(() => {});
     }
     this.logger.debug('Captured checkpoint', { checkpointName: name, target });
   }
