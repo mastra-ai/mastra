@@ -28,11 +28,11 @@ function makeController(sendMessage = vi.fn(async () => {})) {
       }),
     },
     getWorkspace: vi.fn(() => ({ skills: undefined })),
-    state: { set: vi.fn(async () => {}) },
+    state: { get: vi.fn(() => ({})), set: vi.fn(async () => {}) },
     model: { switch: vi.fn(async () => {}) },
     om: {
-      observer: { switchModel: vi.fn(async () => {}) },
-      reflector: { switchModel: vi.fn(async () => {}) },
+      observer: { modelId: vi.fn(() => undefined), switchModel: vi.fn(async () => {}) },
+      reflector: { modelId: vi.fn(() => undefined), switchModel: vi.fn(async () => {}) },
     },
     sendMessage,
   };

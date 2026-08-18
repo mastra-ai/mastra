@@ -42,6 +42,8 @@ export interface FactoryTransitionRequest {
   causalChain?: readonly FactoryRuleCausalEntry[];
   /** Internal materialization path: evaluate only the destination onEnter leaf even when already at that stage. */
   initialEntry?: boolean;
+  /** Re-runs the stage's entry rules when the item already holds that stage, to restart work the entry invalidated. */
+  reenter?: boolean;
 }
 
 export interface FactoryTransitionServiceOptions {
@@ -195,6 +197,9 @@ export class FactoryTransitionService {
       );
     }
 
+    const humanBoardDrag =
+      request.actor.type === 'human' && request.cause === 'board_drag' && fromStage !== request.stage;
+
     const contextBase = {
       tenant: { orgId: request.orgId, projectId: request.factoryProjectId },
       actor: request.actor,
@@ -212,6 +217,7 @@ export class FactoryTransitionService {
         title: item.title,
         url: item.externalSource?.url ?? null,
         stages: [...item.stages],
+        metadata: item.metadata,
       },
       board: request.board,
       itemRevision: item.revision,
@@ -233,6 +239,7 @@ export class FactoryTransitionService {
             fromStage,
             toStage: request.stage,
             initialEntry: request.initialEntry,
+            reenter: request.reenter,
           })) {
             const context: FactoryStageRuleContext = Object.freeze({
               ...contextBase,
@@ -247,7 +254,7 @@ export class FactoryTransitionService {
             decisions.push(decision);
           }
           const validated = validateFactoryRuleDecisions(decisions);
-          if (request.actor.type === 'human' && request.cause === 'board_drag' && fromStage !== request.stage) {
+          if (humanBoardDrag) {
             const message = stageTransitionMessage(fromStage, request.stage);
             const skill = validated.find(decision => decision.type === 'invokeSkill');
             if (skill) {
@@ -278,7 +285,13 @@ export class FactoryTransitionService {
           : ruleFailure(error);
       evaluation = { outcome: 'rejected', ...failed };
     }
-    return this.#commit(request, transitionId, evaluation);
+    // Moving a card by hand is itself the request to do the work. Arm the item
+    // inside the same revision-checked update that commits the transition, so
+    // the decisions it emits run instead of parking as proposals — and so a
+    // stale or rejected commit does not leave the item spuriously armed.
+    return this.#commit(request, transitionId, evaluation, {
+      armAutonomy: evaluation.outcome === 'accepted' && humanBoardDrag,
+    });
   }
 
   async #commitRejection(
@@ -296,8 +309,10 @@ export class FactoryTransitionService {
     evaluation:
       | { outcome: 'accepted'; decisions: Record<string, unknown>[] }
       | { outcome: 'rejected'; code: string; reason: string },
+    options: { armAutonomy?: boolean } = {},
   ): Promise<FactoryTransitionResult> {
     const committed = await this.#storage.commitTransition({
+      armAutonomy: options.armAutonomy === true,
       orgId: request.orgId,
       factoryProjectId: request.factoryProjectId,
       workItemId: request.workItemId,

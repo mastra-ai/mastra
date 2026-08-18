@@ -4,7 +4,7 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController, AgentControllerEventListener } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 
-import { resolveSkillInvocation } from '../skills/service.js';
+import { resolvePromptInvocation, resolveSkillInvocation } from '../skills/service.js';
 import type { SkillSession } from '../skills/service.js';
 import type {
   FactoryDeferredDecisionRecord,
@@ -29,6 +29,15 @@ const SKILL_COMPLETION_OBSERVATION_TIMEOUT_MS = 10 * 60_000;
 // capacity until their agent run reaches a terminal state; binding preparation
 // also runs detached from the poll loop under this concurrency cap.
 const MAX_IN_FLIGHT = 25;
+// Staleness sweep: legacy/leaked active bindings (item deleted, transition
+// path bypassed, or pre-dating terminal-stage revocation) are revoked on a
+// slow cadence so the per-tick reconcile walk stays bounded.
+const STALE_BINDING_SWEEP_INTERVAL_MS = 10 * 60_000;
+const STALE_BINDING_TTL_MS = 24 * 60 * 60_000;
+// The bound-thread reconcile walk reads a cursor + messages per binding; it
+// exists to catch results missed at run end, so it runs on a slow cadence off
+// the claim path rather than on every 1s tick.
+const RECONCILE_INTERVAL_MS = 30_000;
 
 function waitForAgentEndOrTimeout(agentEnd: Promise<void>): Promise<boolean> {
   return new Promise(resolve => {
@@ -73,6 +82,16 @@ export interface FactoryDecisionDispatcherOptions {
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   maxInFlight?: number;
+  /** How often the stale-binding sweep runs. Defaults to 10 minutes. */
+  staleBindingSweepIntervalMs?: number;
+  /** Active bindings older than this are revoked by the sweep. Defaults to 24 hours. */
+  staleBindingTtlMs?: number;
+  /** How often the bound-thread reconcile walk runs. Defaults to 30 seconds. */
+  reconcileIntervalMs?: number;
+}
+
+function positiveMs(value: number | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
 }
 
 function sanitizeDispatchError(error: unknown): string {
@@ -153,6 +172,12 @@ export class FactoryDecisionDispatcher {
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   readonly #maxInFlight: number;
+  readonly #staleBindingSweepIntervalMs: number;
+  readonly #staleBindingTtlMs: number;
+  #lastStaleBindingSweepAt?: Date;
+  readonly #reconcileIntervalMs: number;
+  #lastReconcileAt?: Date;
+  #reconcileInFlight?: Promise<void>;
   #timer?: ReturnType<typeof setInterval>;
   #activeClaim?: Promise<void>;
   readonly #inFlight = new Set<Promise<void>>();
@@ -168,6 +193,12 @@ export class FactoryDecisionDispatcher {
     this.#primeCredentials = options.primeCredentials;
     const maxInFlight = options.maxInFlight ?? MAX_IN_FLIGHT;
     this.#maxInFlight = Number.isFinite(maxInFlight) && maxInFlight > 0 ? Math.floor(maxInFlight) : MAX_IN_FLIGHT;
+    this.#staleBindingSweepIntervalMs = positiveMs(
+      options.staleBindingSweepIntervalMs,
+      STALE_BINDING_SWEEP_INTERVAL_MS,
+    );
+    this.#staleBindingTtlMs = positiveMs(options.staleBindingTtlMs, STALE_BINDING_TTL_MS);
+    this.#reconcileIntervalMs = positiveMs(options.reconcileIntervalMs, RECONCILE_INTERVAL_MS);
   }
 
   start(): void {
@@ -196,7 +227,8 @@ export class FactoryDecisionDispatcher {
    * decision. In-flight records stay protected from re-claim by lease renewal.
    */
   async #claimAndStart(now: Date): Promise<Array<Promise<void>>> {
-    await this.#reconcileToolResults?.();
+    await this.#maybeSweepStaleBindings(now);
+    this.#maybeReconcileToolResults(now);
     const capacity = this.#maxInFlight - this.#inFlight.size;
     if (capacity <= 0) return [];
     const limit = Math.min(BATCH_SIZE, capacity);
@@ -225,6 +257,47 @@ export class FactoryDecisionDispatcher {
       ...starts.map(start => this.#track(this.#dispatchPendingStart(start, now))),
       ...decisions.map(decision => this.#track(this.#dispatchDecision(decision, now))),
     ];
+  }
+
+  /**
+   * Throttled, coalesced, non-blocking bound-thread reconcile: dispatch
+   * claiming never waits behind cursor + message reads, and overlapping runs
+   * are skipped while one is still in flight.
+   */
+  #maybeReconcileToolResults(now: Date): void {
+    if (!this.#reconcileToolResults || this.#reconcileInFlight) return;
+    if (this.#lastReconcileAt && now.getTime() - this.#lastReconcileAt.getTime() < this.#reconcileIntervalMs) return;
+    this.#lastReconcileAt = now;
+    const run = this.#reconcileToolResults()
+      .catch(error => {
+        console.error('Factory tool-result reconcile failed', sanitizeDispatchError(error));
+      })
+      .finally(() => {
+        this.#reconcileInFlight = undefined;
+      });
+    this.#reconcileInFlight = run;
+    this.#track(run);
+  }
+
+  /** Slow-cadence revocation of leaked/legacy bindings; failures never block the claim path. */
+  async #maybeSweepStaleBindings(now: Date): Promise<void> {
+    // The first tick only anchors the cadence: sweeping at boot would race the
+    // startup reconcile that is still draining trailing tool results.
+    if (!this.#lastStaleBindingSweepAt) {
+      this.#lastStaleBindingSweepAt = now;
+      return;
+    }
+    if (now.getTime() - this.#lastStaleBindingSweepAt.getTime() < this.#staleBindingSweepIntervalMs) return;
+    this.#lastStaleBindingSweepAt = now;
+    try {
+      const revoked = await this.#storage.revokeStaleRunBindings({
+        olderThan: new Date(now.getTime() - this.#staleBindingTtlMs),
+        now,
+      });
+      if (revoked > 0) console.info(`Factory stale-binding sweep revoked ${revoked} binding(s)`);
+    } catch (error) {
+      console.error('Factory stale-binding sweep failed', sanitizeDispatchError(error));
+    }
   }
 
   #track(dispatch: Promise<void>): Promise<void> {
@@ -263,6 +336,7 @@ export class FactoryDecisionDispatcher {
         if (!proposed) throw new Error('Factory decision lease was lost before approval could be requested.');
         return;
       }
+      await this.#supersedeProposals(record, decision);
       await this.#withLease(
         async leaseExpiresAt =>
           this.#storage.renewDeferredDecisionLease(leaseIdentity(record, this.#ownerId), leaseExpiresAt),
@@ -282,10 +356,38 @@ export class FactoryDecisionDispatcher {
     }
   }
 
+  /**
+   * A proposal is a question: "should this run start?" Once that run is
+   * starting anyway — because a person approved a later copy, or armed the item
+   * — the question has been answered and the card must stop asking it. Left
+   * alone the badge outlives the work it describes, and the one affordance that
+   * means "the loop is stopped, answer this" cries wolf.
+   */
+  async #supersedeProposals(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<void> {
+    if (decision.type !== 'invokeSkill' || !record.workItemId) return;
+    try {
+      await this.#storage.dismissProposalsForWorkItem({
+        orgId: record.orgId,
+        factoryProjectId: record.factoryProjectId,
+        workItemId: record.workItemId,
+        role: decision.role,
+        dismissedAt: new Date(),
+      });
+    } catch (error) {
+      // Best-effort: a stale badge is not worth failing the run it describes.
+      console.error('Factory proposal supersede failed', sanitizeDispatchError(error));
+    }
+  }
+
   /** Starting an agent run spends the project's compute and executes its code — the one effect a human owns. */
   async #needsApproval(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<boolean> {
     if (decision.type !== 'invokeSkill' || record.approvedAt !== null) return false;
-    return !(await this.#isAutoRunEnabled({ orgId: record.orgId, factoryProjectId: record.factoryProjectId }));
+    if (await this.#isAutoRunEnabled({ orgId: record.orgId, factoryProjectId: record.factoryProjectId })) return false;
+    // Withholding auto-run decides what the Factory may pick up on its own, not
+    // whether it may finish work a person already handed it. Once someone starts
+    // an item, the runs that carry it to review are that same request continuing.
+    const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
+    return item?.autonomyArmedAt == null;
   }
 
   async #executeDecision(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<void> {
@@ -309,6 +411,7 @@ export class FactoryDecisionDispatcher {
           ingress: { type: 'rule', identity: `decision:${record.idempotencyKey}` },
           cause: 'rule_decision',
           causalChain: nextChain,
+          ...(decision.reenter ? { reenter: true } : {}),
         });
         if (result.status === 'rejected') throw new Error(`${result.code}: ${result.reason}`);
         if (!decision.message) return;
@@ -357,11 +460,17 @@ export class FactoryDecisionDispatcher {
         await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
         const requestContext = new RequestContext();
         requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
-        const resolved = await resolveSkillInvocation(this.#controller, {
-          resourceId: binding.resourceId,
-          name: decision.skillName,
-          arguments: decision.arguments,
-        });
+        const resolved =
+          decision.skillName === undefined
+            ? await resolvePromptInvocation(this.#controller, {
+                resourceId: binding.resourceId,
+                prompt: decision.prompt,
+              })
+            : await resolveSkillInvocation(this.#controller, {
+                resourceId: binding.resourceId,
+                name: decision.skillName,
+                arguments: decision.arguments,
+              });
         const session = resolved.session as DispatcherSession;
         await this.#switchThread(session, binding);
         const delivered = await session.thread.listActiveMessages();
@@ -388,16 +497,29 @@ export class FactoryDecisionDispatcher {
           );
         }
         let resolveAgentEnd!: () => void;
-        const agentEnd = new Promise<void>(resolve => {
-          resolveAgentEnd = resolve;
-        });
+        let agentEnd!: Promise<void>;
+        // The run's own verdict, not the delivery's. A signal can reach the
+        // agent perfectly and the run still die on a provider error or be
+        // cancelled mid-flight; without this the decision reports success and
+        // the break is invisible on the card.
+        let endReason: 'complete' | 'aborted' | 'error' | 'suspended' | undefined;
+        // Re-armed before a redelivery so the second send waits on its own run's
+        // ending rather than seeing the one that already resolved.
+        const armAgentEnd = () => {
+          endReason = undefined;
+          agentEnd = new Promise<void>(resolve => {
+            resolveAgentEnd = resolve;
+          });
+        };
+        armAgentEnd();
         const unsubscribe = session.subscribe(event => {
           if (event.type === 'agent_end') {
+            endReason = event.reason;
             resolveAgentEnd();
           }
         });
 
-        try {
+        const sendKickoff = async () => {
           const result = session.sendSignal(
             {
               id: record.id,
@@ -418,13 +540,58 @@ export class FactoryDecisionDispatcher {
             // a success.
             throw new Error(`Factory skill invocation signal did not reach the agent (${String(settled.action)}).`);
           }
-          if (settled.action === 'wake') {
+          return settled;
+        };
+
+        try {
+          let settled = await sendKickoff();
+          if (settled.action === 'deliver') {
+            // `deliver` means the signal was queued onto a run that was already
+            // in flight. If that run ends before draining its queue the prompt
+            // is dropped silently: no turn starts, no error surfaces, and the
+            // decision reports success while the card sits in its new stage with
+            // nobody working. Signals persist under their own id (the same
+            // identity the replay guard above reads), so confirm the message
+            // actually landed in the thread rather than trusting the ack.
+            const landed = await session.thread.listActiveMessages();
+            if (!landed.some(message => message.id === record.id)) {
+              // The condition that resolves this is the in-flight run ending, so
+              // wait for exactly that and redeliver into the idle session. A
+              // backoff cannot work here: retries are sized in seconds and a turn
+              // takes minutes, so every attempt lands on the same busy run and
+              // the card burns its whole budget without the session ever having
+              // had a chance to be free.
+              if (!(await waitForAgentEndOrTimeout(agentEnd))) {
+                throw new Error('Factory skill invocation is waiting on a run that has not ended.');
+              }
+              armAgentEnd();
+              settled = await sendKickoff();
+              if (settled.action !== 'wake') {
+                throw new Error('Factory skill invocation was queued onto an ending run and never reached the agent.');
+              }
+            }
+          }
+          // A landed `deliver` still runs on the in-flight session, so the run's
+          // terminal outcome matters as much as a fresh wake's: a run that ends
+          // in error after accepting the prompt has still failed this decision.
+          {
             const observed = await waitForAgentEndOrTimeout(agentEnd);
             if (!observed) {
               console.warn('Factory skill run terminal event was not observed before timeout', {
                 decisionId: record.id,
-                runId: settled.runId,
+                runId: settled.action === 'wake' ? settled.runId : undefined,
               });
+            } else if (endReason === 'error') {
+              throw new Error('Factory skill run ended in error.');
+            } else if (endReason === 'aborted') {
+              // Retryable, though an abort reads as deliberate. The stream does
+              // not say who aborted, and in practice the dominant cause is the
+              // process going away underneath the run — an operator restarting
+              // the server — not anyone deciding this work should stop. Treating
+              // that as terminal dead-ends the card at attempt 1 with nothing on
+              // the board to press. A spurious retry is bounded by MAX_ATTEMPTS;
+              // a dead card costs a human a manual nudge.
+              throw new Error('Factory skill run was aborted before it finished.');
             }
           }
         } finally {

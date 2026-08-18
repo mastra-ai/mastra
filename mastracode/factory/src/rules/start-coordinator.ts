@@ -27,6 +27,8 @@ export interface FactoryStartRequest {
     input: CreateWorkItemInput;
   };
   requestContext?: RequestContext;
+  /** Arm the item's autonomy in the same transaction that prepares the run. */
+  armAutonomy?: boolean;
 }
 
 export class FactoryStartTransitionError extends Error {
@@ -189,6 +191,7 @@ export class FactoryStartCoordinator {
       resourceId: sourceSession.sessionId,
       kickoffKey: request.kickoffKey,
       kickoffMessage,
+      armAutonomy: request.armAutonomy === true,
     });
     await session.thread.setSetting({ key: 'factoryWorkItemId', value: prepared.item.id });
 

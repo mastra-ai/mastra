@@ -25,6 +25,7 @@ const item = {
   title: 'Issue 42',
   url: 'https://github.test/acme/repo/issues/42',
   stages: ['intake'],
+  metadata: null as Record<string, unknown> | null,
 };
 
 function reject() {
@@ -458,6 +459,94 @@ describe('defaultFactoryRules', () => {
     });
   });
 
+  it.each([
+    ['issue', 'github-issue'],
+    ['linearIssue', 'linear-issue'],
+    ['manual', 'manual'],
+  ] as const)('starts building a %s item from a prompt, with no skill to activate', async (source, itemSource) => {
+    // The approved plan is the specification, and opening the pull request is
+    // what signals the stage is done, so this run needs no skill contract.
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.execute?.[source]?.onEnter;
+    const context = {
+      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
+      item: { ...item, source: itemSource },
+      source,
+      stage: 'execute',
+      fromStage: 'planning',
+      toStage: 'execute',
+    } as FactoryStageRuleContext;
+
+    const decision = await rule?.(context);
+    expect(decision).toMatchObject({
+      type: 'invokeSkill',
+      idempotencyKey: 'delivery-1:build',
+      role: 'work',
+      prompt:
+        'Implement the approved plan for https://github.test/acme/repo/issues/42. Open a pull request when the work is ready for review.',
+    });
+    expect(decision).not.toHaveProperty('skillName');
+  });
+
+  function buildPrompt(source: 'issue' | 'linearIssue' | 'manual', metadata: Record<string, unknown> | null) {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.execute?.[source]?.onEnter;
+    const context = {
+      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
+      item: { ...item, metadata },
+      source,
+      stage: 'execute',
+      fromStage: 'planning',
+      toStage: 'execute',
+    } as FactoryStageRuleContext;
+    return Promise.resolve(rule?.(context)).then(decision => (decision as { prompt?: string } | undefined)?.prompt);
+  }
+
+  it('asks the builder to credit the reporter whose issue caused the work', async () => {
+    const prompt = await buildPrompt('issue', { author: 'octocat' });
+
+    expect(prompt).toContain('reported by @octocat');
+    expect(prompt).toContain('Co-Authored-By: octocat <ID+octocat@users.noreply.github.com>');
+    // Intake stamps a login but never the numeric id the trailer needs, so the
+    // builder is told where to get it rather than left to invent one.
+    expect(prompt).toContain('gh api users/octocat --jq .id');
+  });
+
+  it('credits the login that intake actually stamped when the issue was opened', async () => {
+    // The unit tests above hand `buildWorkItem` its metadata, so they pass even if
+    // intake writes the reporter under a different key than the builder reads.
+    // Join the two halves: take the metadata `issueOpened` really produces and
+    // feed that to the build rule, so a rename on either side fails here.
+    const opened = await defaultFactoryRules({ version: 'deployment-7' }).github.issueOpened?.onEvent?.({
+      ...githubContext('issueOpened'),
+      actor: { type: 'github', login: 'reporter-login', trusted: true, factoryAuthored: false },
+    });
+    const stamped = (opened as { metadata?: Record<string, unknown> } | undefined)?.metadata ?? null;
+
+    expect(stamped).toMatchObject({ author: 'reporter-login' });
+    expect(await buildPrompt('issue', stamped)).toContain(
+      'Co-Authored-By: reporter-login <ID+reporter-login@users.noreply.github.com>',
+    );
+  });
+
+  it('credits nobody when the reporter account is gone', async () => {
+    // The issue poller stamps `__unknown__` when GitHub returns no author, which
+    // is a string and not a bot, so only the login grammar stops it from becoming
+    // a trailer crediting an account nobody owns.
+    expect(await buildPrompt('issue', { author: '__unknown__' })).not.toContain('Co-Authored-By');
+  });
+
+  it('credits nobody when the reporter is the Factory itself', async () => {
+    expect(await buildPrompt('issue', { author: 'mastra-platform[bot]' })).not.toContain('Co-Authored-By');
+  });
+
+  it.each([
+    ['linearIssue', 'a Linear display name'],
+    ['manual', 'nothing at all'],
+  ] as const)('credits nobody on a %s card, whose reporter is %s', async (source, _reporterKind) => {
+    // Only a GitHub login resolves to the identity a trailer needs; anything
+    // else would produce a trailer that credits no real account.
+    expect(await buildPrompt(source, { author: 'Ada Lovelace' })).not.toContain('Co-Authored-By');
+  });
+
   it('keys the planning skill invocation once per ingress', async () => {
     const rule = defaultFactoryRules({ version: 'deployment-7' }).work.planning?.issue?.onEnter;
     const context = {
@@ -496,6 +585,157 @@ describe('defaultFactoryRules', () => {
     ]) {
       expect(await rule?.(context)).toBeUndefined();
     }
+  });
+
+  describe('pullRequestReviewSubmitted', () => {
+    function reviewContext(overrides: Partial<FactoryGithubRuleContext> = {}): FactoryGithubRuleContext {
+      return {
+        ...githubContext('pullRequestReviewSubmitted'),
+        item,
+        board: 'work',
+        itemRevision: 5,
+        review: {
+          id: 99,
+          state: 'changes_requested',
+          url: 'https://github.test/acme/repo/pull/17#pullrequestreview-99',
+        },
+        ...overrides,
+      };
+    }
+
+    it('wakes the authoring Work agent when changes are requested', async () => {
+      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestReviewSubmitted?.onEvent;
+      const decision = await rule?.(reviewContext());
+      expect(decision).toMatchObject({
+        type: 'sendMessage',
+        idempotencyKey: 'delivery-1:address-review-feedback',
+        role: 'work',
+        priority: 'high',
+      });
+      // The message has to carry the review URL: the agent reads the individual
+      // line comments from its own PR subscription, not from this message.
+      expect((decision as { message: string }).message).toContain('#pullrequestreview-99');
+    });
+
+    it('stays quiet for reviews that are not asking for changes', async () => {
+      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestReviewSubmitted?.onEvent;
+      for (const state of ['approved', 'commented', 'dismissed']) {
+        expect(
+          await rule?.(reviewContext({ review: { id: 99, state, url: 'https://github.test/r' } })),
+        ).toBeUndefined();
+      }
+    });
+
+    it('never fires on the Review card that posted the review', async () => {
+      // Only the PR's author can act on the feedback. Reacting on the Review
+      // card would loop the reviewer against its own output.
+      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestReviewSubmitted?.onEvent;
+      expect(await rule?.(reviewContext({ board: 'review' }))).toBeUndefined();
+      expect(await rule?.(reviewContext({ item: undefined, board: undefined }))).toBeUndefined();
+      expect(await rule?.(reviewContext({ review: undefined }))).toBeUndefined();
+    });
+  });
+
+  describe('pullRequestCommentCreated', () => {
+    function commentContext(overrides: Partial<FactoryGithubRuleContext> = {}): FactoryGithubRuleContext {
+      return {
+        ...githubContext('pullRequestCommentCreated'),
+        item,
+        board: 'work',
+        itemRevision: 5,
+        issueComment: {
+          id: 555,
+          body: 'This needs a null check.',
+          url: 'https://github.test/acme/repo/pull/17#issuecomment-555',
+          author: 'reviewer',
+        },
+        ...overrides,
+      };
+    }
+
+    it('wakes the authoring Work agent when someone comments on the pull request', async () => {
+      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestCommentCreated?.onEvent;
+      const decision = await rule?.(commentContext());
+      expect(decision).toMatchObject({
+        type: 'sendMessage',
+        idempotencyKey: 'delivery-1:address-pull-request-comment',
+        role: 'work',
+        priority: 'high',
+      });
+      expect((decision as { message: string }).message).toContain('#issuecomment-555');
+    });
+
+    it('ignores Factory-authored comments so the Work agent cannot wake itself', async () => {
+      // `factoryAuthored` cannot tell the Work role from the Review role, so
+      // reacting to Factory's own comments would let the Work agent's progress
+      // notes wake it in a loop.
+      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestCommentCreated?.onEvent;
+      expect(
+        await rule?.(
+          commentContext({
+            actor: { type: 'github', login: 'factory[bot]', trusted: true, factoryAuthored: true },
+          }),
+        ),
+      ).toBeUndefined();
+    });
+
+    it('stays quiet on the Review card and on pull requests that are no longer open', async () => {
+      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestCommentCreated?.onEvent;
+      expect(await rule?.(commentContext({ board: 'review' }))).toBeUndefined();
+      expect(await rule?.(commentContext({ issueComment: undefined }))).toBeUndefined();
+      const openPr = commentContext().pullRequest!;
+      expect(await rule?.(commentContext({ pullRequest: { ...openPr, state: 'closed' } }))).toBeUndefined();
+      expect(await rule?.(commentContext({ pullRequest: { ...openPr, merged: true } }))).toBeUndefined();
+    });
+
+    it('wakes on the review verdict Factory had to post as a comment on its own pull request', async () => {
+      // GitHub refuses a self-review, so on Factory-authored PRs the verdict
+      // arrives as a comment under Factory's own login. It is the handoff, so it
+      // has to survive the self-loop guard.
+      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestCommentCreated?.onEvent;
+      const decision = await rule?.(
+        commentContext({
+          actor: { type: 'github', login: 'factory[bot]', trusted: true, factoryAuthored: true },
+          issueComment: {
+            id: 556,
+            body: '**Verdict: Request changes**\n\n## Findings\n\nThe retry loop never terminates.',
+            url: 'https://github.test/acme/repo/pull/17#issuecomment-556',
+            author: 'factory[bot]',
+          },
+        }),
+      );
+      expect(decision).toMatchObject({ type: 'sendMessage', role: 'work', priority: 'high' });
+    });
+
+    it('ignores a Factory verdict that approves, and a verdict only quoted in the body', async () => {
+      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestCommentCreated?.onEvent;
+      const factoryActor = { type: 'github', login: 'factory[bot]', trusted: true, factoryAuthored: true } as const;
+      expect(
+        await rule?.(
+          commentContext({
+            actor: factoryActor,
+            issueComment: { id: 557, body: '**Verdict: Approve**\n\nLooks good.', author: 'factory[bot]' },
+          }),
+        ),
+      ).toBeUndefined();
+      expect(
+        await rule?.(
+          commentContext({
+            actor: factoryActor,
+            issueComment: { id: 558, body: 'Pushed the fixes.\n\n> Verdict: request changes', author: 'factory[bot]' },
+          }),
+        ),
+      ).toBeUndefined();
+      // A negated first line must not read as a request for changes.
+      expect(
+        await rule?.(
+          commentContext({
+            actor: factoryActor,
+            issueComment: { id: 559, body: '**Verdict: do not request changes**\n\nAll good.', author: 'factory[bot]' },
+          }),
+        ),
+      ).toBeUndefined();
+    });
   });
 
   describe('pullRequestReviewRequested', () => {
@@ -589,13 +829,23 @@ describe('defaultFactoryRules', () => {
       });
     });
 
-    it('does nothing when the PR is still in Intake or Reviewing, is unlinked, or is not on the Review board', async () => {
+    it('supersedes the pass in flight when a push lands on a card still in Reviewing', async () => {
+      // The push invalidates whatever the running pass is reading, so it has to
+      // start over on the new head. Re-entering the stage is how that pass gets
+      // cancelled; dropping the push would strand the review on stale code.
+      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestUpdated?.onEvent;
+      expect(await rule?.(pushContext({ item: { ...prItem, stages: ['review'] } }))).toMatchObject({
+        type: 'transition',
+        board: 'review',
+        stage: 'review',
+      });
+    });
+
+    it('does nothing when the PR is still in Intake, is unlinked, or is not on the Review board', async () => {
       const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestUpdated?.onEvent;
       for (const context of [
         // Card is still in intake — a review pass has not started yet.
         pushContext({ item: { ...prItem, stages: ['intake'] } }),
-        // Card is already back in review — waking the pending pass would double-fire.
-        pushContext({ item: { ...prItem, stages: ['review'] } }),
         // No linked Review card to move.
         pushContext({ item: undefined, board: undefined, itemRevision: undefined }),
         // Card exists but is bound to the Work board (not a PR review card).
@@ -639,12 +889,29 @@ describe('defaultFactoryRules', () => {
         type: 'upsertLinkedWorkItem',
         stage: 'intake',
       });
+      // A pull request Factory opened is the Work leg's own output: its
+      // provenance is known, so it advances to Review even though an App bot can
+      // never hold collaborator permission. An issue Factory opened gets no such
+      // pass — auto-triaging our own issue is a self-loop with no upside.
       expect(await rules.github[event]?.onEvent?.(factoryAuthored)).toMatchObject({
         type: 'upsertLinkedWorkItem',
-        stage: 'intake',
+        stage: event === 'pullRequestOpened' ? 'review' : 'intake',
       });
     },
   );
+
+  it('keeps a factory-authored pull request opened before the Factory in Intake', async () => {
+    const rules = defaultFactoryRules({ version: 'deployment-7' });
+    const older = {
+      ...githubContext('pullRequestOpened', '2026-05-01T00:00:00Z'),
+      actor: { type: 'github', login: 'factory-bot', trusted: false, factoryAuthored: true } as const,
+    };
+
+    expect(await rules.github.pullRequestOpened?.onEvent?.(older)).toMatchObject({
+      type: 'upsertLinkedWorkItem',
+      stage: 'intake',
+    });
+  });
 
   it.each(['issueOpened', 'pullRequestOpened'] as const)(
     'keeps trusted %s items created before the Factory in Intake',
