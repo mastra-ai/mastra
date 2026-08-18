@@ -329,7 +329,7 @@ describe('ToolCall', () => {
       expect(tool.textContent).not.toContain('\u001b');
     });
 
-    it('shows the current bounded edit diff', () => {
+    it('shows the bounded edit diff before loading syntax colors asynchronously', async () => {
       renderToolCall(
         <ToolCall
           toolName="string_replace"
@@ -343,6 +343,9 @@ describe('ToolCall', () => {
       const diff = screen.getByRole('group', { name: 'File change' });
       expect(diff.textContent).toContain('const a = 1;');
       expect(diff.textContent).toContain('const a = 2;');
+      expect(diff.querySelector('[style*="--shiki-dark"]')).toBeNull();
+
+      await waitFor(() => expect(diff.querySelector('.shiki-token')).not.toBeNull());
     });
 
     it('shows a write as a named source-code block', () => {

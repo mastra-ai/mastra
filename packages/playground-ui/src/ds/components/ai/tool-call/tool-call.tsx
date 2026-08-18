@@ -4,13 +4,15 @@ import { createContext, useContext, useEffect, useState } from 'react';
 
 import { Card } from '../../Card';
 import { Code } from '../../Code';
+import { HighlightedTokenLine } from '../../Code/highlighted-code';
+import { useHighlightedCode } from '../../Code/use-highlighted-code';
 import { CodeBlock } from '../../CodeBlock';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../Collapsible';
 import { CopyButton } from '../../CopyButton';
 import { Shimmer } from '../../Shimmer';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../Tooltip';
 import { Txt } from '../../Txt';
-import { highlightCode, languageForPath } from './tool-call-highlight';
+import { languageForPath } from './tool-call-language';
 import { presentTool } from './tool-presentation';
 import { cn } from '@/lib/utils';
 
@@ -340,15 +342,20 @@ function boundedLines(value: string): { lines: string[]; hidden: number } {
 
 function DiffSide({ lines, side, lang }: { lines: string[]; side: keyof typeof DIFF_SIDES; lang: string | undefined }) {
   const { sign, row, gutter } = DIFF_SIDES[side];
+  const highlighted = useHighlightedCode(lines.join('\n'), lang);
+
   return (
     <>
       {lines.map((line, index) => (
         <div key={index} className={cn('flex whitespace-pre', row)}>
           <span className={cn('w-5 shrink-0 text-center opacity-70 select-none', gutter)}>{sign}</span>
-          <span
-            className="text-icon6 [&_span]:font-inherit [&_span]:leading-inherit flex-1 pr-2.5 [&_span]:text-inherit dark:[&_span]:![background-color:var(--shiki-dark-bg)] dark:[&_span]:![color:var(--shiki-dark)]"
-            dangerouslySetInnerHTML={{ __html: highlightCode(line, lang) || '&nbsp;' }}
-          />
+          <span className="text-icon6 flex-1 pr-2.5">
+            {highlighted?.tokens[index] ? (
+              <HighlightedTokenLine tokens={highlighted.tokens[index]} />
+            ) : (
+              line || '\u00a0'
+            )}
+          </span>
         </div>
       ))}
     </>
