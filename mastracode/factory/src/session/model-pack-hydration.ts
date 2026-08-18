@@ -15,7 +15,10 @@ export interface ModelPackApplicableSession {
 export interface ModelPackHydrationSession extends ModelPackApplicableSession {
   readonly identity: { getResourceId(): string };
   state: { get(): Record<string, unknown> | undefined };
-  thread: ModelPackApplicableSession['thread'] & { getId(): string | null | undefined };
+  thread: ModelPackApplicableSession['thread'] & {
+    getId(): string | null | undefined;
+    getSetting(args: { key: string }): Promise<unknown>;
+  };
 }
 
 export async function applyActiveModelPack(
@@ -61,7 +64,7 @@ export async function hydrateSessionModelPack(
   { sourceControl, workItems, modelPacks }: ModelPackHydrationDependencies,
 ): Promise<void> {
   const resourceId = session.identity.getResourceId();
-  if (session.state.get()?.factoryProjectId) return;
+  if (session.state.get()?.factoryProjectId || typeof session.thread.getSetting !== 'function') return;
   try {
     const sourceSession = await sourceControl.sessions.getBySessionId(resourceId);
     if (!sourceSession) return;
@@ -78,10 +81,10 @@ export async function hydrateSessionModelPack(
       return;
     }
     const existingThreadSettings = await Promise.all([
-      session.thread.getSetting?.({ key: 'activeModelPackId' }),
-      session.thread.getSetting?.({ key: 'modeModelId_build' }),
-      session.thread.getSetting?.({ key: 'modeModelId_plan' }),
-      session.thread.getSetting?.({ key: 'modeModelId_fast' }),
+      session.thread.getSetting({ key: 'activeModelPackId' }),
+      session.thread.getSetting({ key: 'modeModelId_build' }),
+      session.thread.getSetting({ key: 'modeModelId_plan' }),
+      session.thread.getSetting({ key: 'modeModelId_fast' }),
     ]);
     if (existingThreadSettings.some(setting => typeof setting === 'string')) return;
 

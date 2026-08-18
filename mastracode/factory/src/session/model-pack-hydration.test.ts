@@ -125,6 +125,18 @@ describe('hydrateSessionModelPack', () => {
     expect(session.thread.setSetting).not.toHaveBeenCalled();
   });
 
+  it('does not apply a user pack when thread settings cannot be read', async () => {
+    const session = createSession();
+    delete (session.thread as { getSetting?: ModelPackHydrationSession['thread']['getSetting'] }).getSetting;
+    const dependencies = createDependencies();
+
+    await hydrateSessionModelPack(session, dependencies);
+
+    expect(dependencies.sourceControl.sessions.getBySessionId).not.toHaveBeenCalled();
+    expect(dependencies.modelPacks.getActive).not.toHaveBeenCalled();
+    expect(session.model.switch).not.toHaveBeenCalled();
+  });
+
   it('does not apply a user pack to Factory work sessions', async () => {
     const session = createSession({ factoryProjectId: 'factory-1' });
     const dependencies = createDependencies();
