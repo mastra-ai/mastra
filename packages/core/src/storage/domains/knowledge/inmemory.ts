@@ -222,6 +222,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     if (source.version !== input.sourceVersion) throw new KnowledgeConflictError(input.sourceId);
     const target = this.#resolveTerminalNode(input.targetId);
     if (!target) throw new KnowledgeNotFoundError('node', input.targetId);
+    if (target.id === source.id) throw new Error('Cannot create a knowledge merge cycle');
     if (!isKnowledgeScopeVisible(target.scope, source.scope)) {
       throw new Error('Cannot merge a knowledge node into a target that is narrower than its source scope');
     }
@@ -367,6 +368,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }): Promise<KnowledgeRecord> {
     const record = this.#db.knowledgeRecords.get(id);
     if (!record) throw new KnowledgeNotFoundError('record', id);
+    assertKnowledgeScopeWithinCeiling(record.scope, maxScope);
     const updated = { ...record, maxScope };
     this.#db.knowledgeRecords.set(id, updated);
     return cloneRecord(updated);
@@ -442,7 +444,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const queryScope = canonicalizeKnowledgeScope(input.scope);
     return this.#db.knowledgeActivity
       .filter(event => isKnowledgeScopeVisible(event.scope, queryScope))
-      .filter(event => !input.after || event.id > input.after)
+      .filter(event => !input.after || event.id < input.after)
       .sort((a, b) => b.id.localeCompare(a.id))
       .slice(0, input.limit ?? 100)
       .map(event => ({ ...event, scope: [...event.scope], createdAt: new Date(event.createdAt) }));
