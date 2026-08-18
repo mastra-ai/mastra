@@ -3,6 +3,7 @@ title: "Reference: Memory.settled() | Memory"
 description: "Documentation for the `Memory.settled()` method in Mastra, which waits for background memory work to finish before you close the storage connection."
 packages:
   - "@mastra/memory"
+  - "@mastra/core"
 ---
 
 # Memory.settled()
@@ -13,6 +14,8 @@ The `.settled()` method resolves once all background work the `Memory` instance 
 - Vector cleanup started by `deleteThread()` and `deleteMessages()`
 
 Await this method before closing a storage connection you own. Without it, background statements can run against a closed connection.
+
+The method is declared on the base memory class, so it's also available on the `MastraMemory` instance returned by `agent.getMemory()`.
 
 ## Usage example
 

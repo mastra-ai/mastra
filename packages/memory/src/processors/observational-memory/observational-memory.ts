@@ -392,6 +392,8 @@ export class ObservationalMemory {
       if (this.pendingBackgroundWork.size === 0) return;
       await Promise.allSettled([...this.pendingBackgroundWork]);
     }
+    // Work that finished on the final round has drained; only warn if any is genuinely left.
+    if (this.pendingBackgroundWork.size === 0) return;
     omError(`[OM:settled] background work still pending after ${maxDrainRounds} drain rounds; giving up waiting`);
   }
 
