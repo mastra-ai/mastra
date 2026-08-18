@@ -227,7 +227,9 @@ export class FactoryDecisionDispatcher {
    * decision. In-flight records stay protected from re-claim by lease renewal.
    */
   async #claimAndStart(now: Date): Promise<Array<Promise<void>>> {
-    await this.#maybeSweepStaleBindings(now);
+    // Fire-and-forget like the reconcile walk: the sweep reads every active
+    // binding, so awaiting it would stretch the tick as the active set grows.
+    void this.#maybeSweepStaleBindings(now);
     this.#maybeReconcileToolResults(now);
     const capacity = this.#maxInFlight - this.#inFlight.size;
     if (capacity <= 0) return [];

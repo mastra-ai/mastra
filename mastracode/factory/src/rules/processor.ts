@@ -28,8 +28,13 @@ const STATE_ID = 'factory-phase';
 const RULE_TIMEOUT_MS = 5_000;
 const TRANSCRIPT_PAGE_SIZE = 50;
 const MAX_LINKED_ITEMS = 5;
+function ruleStage(item: WorkItemRow | null | undefined): FactoryRuleStage | undefined {
+  const stage = item?.stages.length === 1 ? item.stages[0] : undefined;
+  return stage !== undefined && isFactoryRuleStage(stage) ? stage : undefined;
+}
+
 function itemInRuleStage(item: WorkItemRow | null | undefined): item is WorkItemRow {
-  return Boolean(item && item.stages.length === 1 && isFactoryRuleStage(item.stages[0]));
+  return ruleStage(item) !== undefined;
 }
 
 const PHASE_LABELS: Record<FactoryRuleStage, string> = {
@@ -266,8 +271,8 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     }
 
     const item = await this.options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
-    const stage = item?.stages.length === 1 ? item.stages[0] : undefined;
-    if (!item || !isFactoryRuleStage(stage)) return;
+    const stage = ruleStage(item);
+    if (!item || !stage) return;
     const allItems = await this.options.storage.list({
       orgId: binding.orgId,
       factoryProjectId: binding.factoryProjectId,

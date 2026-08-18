@@ -50,10 +50,18 @@ describe('createTerminalStageCleanup', () => {
     const reconcileBinding = vi.fn(async () => {
       order.push('reconcile');
     });
+    const revoke = storage.revokeRunBindingsForWorkItem.bind(storage);
+    vi.spyOn(storage, 'revokeRunBindingsForWorkItem').mockImplementation(async input => {
+      order.push('revoke');
+      return revoke(input);
+    });
     const cleanup = createTerminalStageCleanup({ workItems: storage, reconcileBinding });
 
     await cleanup({ orgId: 'org-1', factoryProjectId: PROJECT_ID, workItemId: work.item.id });
 
+    // Both bindings reconcile before the single revocation pass: revoking
+    // first would drop the trailing tool results this cleanup exists to ingest.
+    expect(order).toEqual(['reconcile', 'reconcile', 'revoke']);
     expect(reconcileBinding).toHaveBeenCalledTimes(2);
     expect(reconcileBinding.mock.calls.map(([b]: any[]) => b.id).sort()).toEqual(
       [work.binding.id, review.binding.id].sort(),

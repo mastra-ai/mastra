@@ -95,24 +95,18 @@ function planWorkItem(context: FactoryStageRuleContext) {
   } as const;
 }
 
-/**
- * Building carries a prompt rather than a skill. The approved plan is already
- * the specification, so there is nothing for a skill document to add, and the
- * handoff a skill would define is unnecessary here: Building ends by opening a
- * pull request, which arrives as its own event and raises the Review card.
- */
-/**
- * The reporter earns a `Co-Authored-By` trailer on the work their report caused.
- * Only a GitHub issue qualifies: Linear stamps a display name and a manual card
- * stamps nothing, and neither resolves to the GitHub identity a trailer needs.
- * Factory's own reports are skipped — crediting ourselves is noise.
- */
 // A GitHub login is alphanumeric with interior hyphens — no underscores, no
 // spaces. Checking the grammar rejects the placeholder the issue poller stamps
 // when the reporter's account is gone (`__unknown__`), which would otherwise
 // become a trailer crediting an account that does not exist.
 const GITHUB_LOGIN = /^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/;
 
+/**
+ * The reporter earns a `Co-Authored-By` trailer on the work their report caused.
+ * Only a GitHub issue qualifies: Linear stamps a display name and a manual card
+ * stamps nothing, and neither resolves to the GitHub identity a trailer needs.
+ * Factory's own reports are skipped — crediting ourselves is noise.
+ */
 function reporterCoAuthor(context: FactoryStageRuleContext) {
   if (context.source !== 'issue') return undefined;
   const author = context.item.metadata?.author;
@@ -121,6 +115,12 @@ function reporterCoAuthor(context: FactoryStageRuleContext) {
   return author;
 }
 
+/**
+ * Building carries a prompt rather than a skill. The approved plan is already
+ * the specification, so there is nothing for a skill document to add, and the
+ * handoff a skill would define is unnecessary here: Building ends by opening a
+ * pull request, which arrives as its own event and raises the Review card.
+ */
 function buildWorkItem(context: FactoryStageRuleContext) {
   const subject = context.item.url ? `the approved plan for ${context.item.url}` : 'the approved plan';
   const reporter = reporterCoAuthor(context);
@@ -329,6 +329,8 @@ function addressReviewFeedback(context: FactoryGithubRuleContext) {
   // binds the event there; a Review card seeing its own posted review must not
   // react to it (that would loop the reviewer against itself).
   if (context.board !== 'work') return;
+  // A closed or merged pull request has no branch left to push fixes to.
+  if (context.pullRequest.state !== 'open' || context.pullRequest.merged) return;
   // `approved` needs no work, and `commented` (a review body with no verdict)
   // is how a reviewer leaves notes without blocking — only a verdict that asks
   // for changes should pull the author back in.

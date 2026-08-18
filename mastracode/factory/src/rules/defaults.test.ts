@@ -626,6 +626,19 @@ describe('defaultFactoryRules', () => {
       }
     });
 
+    it('stays quiet when the pull request is closed or merged', async () => {
+      // A closed or merged PR has no branch left to push fixes to, so waking
+      // the author would only send them to a dead end.
+      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestReviewSubmitted?.onEvent;
+      const base = reviewContext();
+      for (const pullRequest of [
+        { ...base.pullRequest!, state: 'closed' },
+        { ...base.pullRequest!, merged: true },
+      ]) {
+        expect(await rule?.({ ...base, pullRequest })).toBeUndefined();
+      }
+    });
+
     it('never fires on the Review card that posted the review', async () => {
       // Only the PR's author can act on the feedback. Reacting on the Review
       // card would loop the reviewer against its own output.
@@ -838,6 +851,9 @@ describe('defaultFactoryRules', () => {
         type: 'transition',
         board: 'review',
         stage: 'review',
+        // Without the re-entry flag a same-stage transition is inert and the
+        // in-flight pass is never superseded.
+        reenter: true,
       });
     });
 

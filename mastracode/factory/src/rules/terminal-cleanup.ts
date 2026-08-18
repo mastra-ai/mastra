@@ -5,7 +5,7 @@ export interface TerminalStageCleanupOptions {
   /** Final ingest of trailing tool results before the binding is revoked. */
   reconcileBinding?: (binding: FactoryRunBindingRecord) => Promise<void>;
   /** Release the item's session sandboxes back to the reuse pool. */
-  releaseSandboxes?: (args: { orgId: string; workItemId: string }) => Promise<unknown>;
+  releaseSandboxes?: (args: TerminalStageCleanupArgs) => Promise<unknown>;
 }
 
 export interface TerminalStageCleanupArgs {
@@ -32,6 +32,10 @@ export function createTerminalStageCleanup(options: TerminalStageCleanupOptions)
         // creation) may not be ingested yet — reconcile before revoking.
         await options.reconcileBinding?.(binding).catch(() => {});
       }
+    } catch {
+      // Best-effort; revocation below does not depend on the listing.
+    }
+    try {
       await options.workItems.revokeRunBindingsForWorkItem({
         orgId: args.orgId,
         factoryProjectId: args.factoryProjectId,
