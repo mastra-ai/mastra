@@ -140,6 +140,12 @@ function extractModelTextFromToolContent(content: unknown): string | undefined {
  * `toModelOutput` can read MCP `content` without changing the execute return shape.
  */
 export const MCP_CALL_TOOL_CONTENT = Symbol.for('mastra.mcp.callToolContent');
+export const MCP_CALL_TOOL_RESULT = Symbol.for('mastra.mcp.callToolResult');
+
+export type MCPCallToolResult = {
+  content: unknown;
+  _meta?: Record<string, unknown>;
+};
 
 type ScalarMcpContentReservation = {
   output?: unknown;
@@ -164,19 +170,54 @@ function removeScalarMcpContentReservation(
   }
 }
 
-function attachMcpCallToolContent(
+/** Returns the MCP result envelope attached to a structured tool output. */
+export function getMcpCallToolResult(output: unknown): MCPCallToolResult | undefined {
+  if (output !== null && typeof output === 'object') {
+    const result = output as Record<PropertyKey, unknown>;
+    const attached = result[MCP_CALL_TOOL_RESULT] as MCPCallToolResult | undefined;
+    if (attached) return attached;
+  }
+
+  return undefined;
+}
+
+function attachMcpCallToolResult(
   structuredContent: unknown,
   content: unknown,
+  meta: Record<string, unknown> | undefined,
   scalarMcpContentQueue: ScalarMcpContentReservation[],
   reservation: ScalarMcpContentReservation | undefined,
 ): unknown {
   if (structuredContent !== null && typeof structuredContent === 'object') {
     removeScalarMcpContentReservation(scalarMcpContentQueue, reservation);
+    const result: MCPCallToolResult = {
+      content,
+      ...(meta !== undefined ? { _meta: meta } : {}),
+    };
+    Object.defineProperty(structuredContent, MCP_CALL_TOOL_RESULT, {
+      value: result,
+      enumerable: false,
+      configurable: true,
+    });
     Object.defineProperty(structuredContent, MCP_CALL_TOOL_CONTENT, {
       value: content,
       enumerable: false,
       configurable: true,
     });
+    if (!('content' in structuredContent)) {
+      Object.defineProperty(structuredContent, 'content', {
+        value: content,
+        enumerable: false,
+        configurable: true,
+      });
+    }
+    if (meta !== undefined && !('_meta' in structuredContent)) {
+      Object.defineProperty(structuredContent, '_meta', {
+        value: meta,
+        enumerable: false,
+        configurable: true,
+      });
+    }
     return structuredContent;
   }
 
@@ -188,7 +229,10 @@ function attachMcpCallToolContent(
   return structuredContent;
 }
 
-function getMcpCallToolContent(output: unknown, scalarMcpContentQueue: ScalarMcpContentReservation[]): unknown {
+function getMcpCallToolContent(
+  output: unknown,
+  scalarMcpContentQueue: ScalarMcpContentReservation[],
+): unknown {
   if (output !== null && typeof output === 'object') {
     const attached = (output as Record<PropertyKey, unknown>)[MCP_CALL_TOOL_CONTENT];
     if (attached !== undefined) {
@@ -196,9 +240,16 @@ function getMcpCallToolContent(output: unknown, scalarMcpContentQueue: ScalarMcp
     }
   }
 
-  const index = scalarMcpContentQueue.findIndex(entry => entry.ready && Object.is(entry.output, output));
+  const index = scalarMcpContentQueue.findIndex(
+    entry => entry.ready && Object.is(entry.output, output),
+  );
   if (index !== -1) {
-    return scalarMcpContentQueue.splice(index, 1)[0]?.content;
+    const reservation = scalarMcpContentQueue[index];
+    if (reservation) {
+      const content = reservation.content;
+      scalarMcpContentQueue.splice(index, 1);
+      return content;
+    }
   }
 
   return undefined;
@@ -1492,9 +1543,10 @@ export class InternalMastraMCPClient extends MastraBase {
                 this.log('debug', `Tool executed successfully: ${tool.name}`);
 
                 if (res.structuredContent !== undefined) {
-                  return attachMcpCallToolContent(
+                  return attachMcpCallToolResult(
                     res.structuredContent,
                     res.content,
+                    res._meta,
                     scalarMcpContentQueue,
                     scalarMcpContentReservation,
                   );
