@@ -2,15 +2,21 @@
 '@mastra/playground-ui': minor
 ---
 
-Added a reusable ToolCall component with the humanized labels, compact rows, command output, file writes, and diffs used by MastraCode Factory.
+Added reusable compound tool primitives with the humanized labels, compact rows, generic Tools icon, command output, file writes, and diffs used by MastraCode Factory. Applications can compose custom headers, entity-colored icons, actions, expandable content, and connected tool sequences without routing that content through the generic renderer.
 
 ```tsx
-import { ToolCall } from '@mastra/playground-ui/components/ai/tool-call';
+import { Tool, ToolCallListItem, ToolContent, ToolHeader, ToolIcon } from '@mastra/playground-ui/components/ai/tool-call';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 
-<ToolCall
-  toolName="execute_command"
-  input={{ command: 'pnpm test' }}
-  result="Tests passed"
-  status="success"
-/>;
+<ToolCallListItem continued>
+  <Tool status="success">
+    <ToolHeader>
+      <ToolIcon>
+        <WorkflowIcon className="text-accent3" />
+      </ToolIcon>
+      Order workflow
+    </ToolHeader>
+    <ToolContent>{workflowGraph}</ToolContent>
+  </Tool>
+</ToolCallListItem>;
 ```

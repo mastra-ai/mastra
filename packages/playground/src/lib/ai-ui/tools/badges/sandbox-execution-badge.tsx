@@ -1,9 +1,8 @@
-import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Tool, ToolContent, ToolHeader, ToolIcon } from '@mastra/playground-ui/components/ai/tool-call';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { CheckIcon, ChevronUpIcon, CopyIcon, TerminalSquare } from 'lucide-react';
+import { CheckIcon, CopyIcon, TerminalSquare } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DataMessagePart } from '../tool-card';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
@@ -158,7 +157,7 @@ export const SandboxExecutionBadge = ({
     return (dataPartsProp ?? []).filter(part => part.type === 'data');
   }, [dataPartsProp]);
 
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(true);
   const { isCopied, copyToClipboard } = useCopyToClipboard({ copiedDuration: 1500, showToast: false });
   const { Link } = useLinkComponent();
 
@@ -242,79 +241,81 @@ export const SandboxExecutionBadge = ({
     copyToClipboard(outputContent);
   };
 
+  const status = isRunning ? 'running' : exitSuccess === false ? 'error' : result === undefined ? 'running' : 'success';
+
   return (
-    <div className="mb-4" data-testid="sandbox-execution-badge">
-      {/* Header row */}
-      <div className="flex items-center justify-between gap-2">
-        <button onClick={() => setIsCollapsed(s => !s)} className="flex min-w-0 items-center gap-2" type="button">
-          <Icon>
-            <ChevronUpIcon className={cn('transition-all', isCollapsed ? 'rotate-90' : 'rotate-180')} />
-          </Icon>
-          <Badge icon={<TerminalSquare className="text-accent6" size={16} />}>{displayName}</Badge>
-          {execMeta?.sandbox && (
-            <Link
-              href={execMeta.id ? `/workspaces/${execMeta.id}` : '/workspaces'}
-              className="text-neutral6 bg-surface3 border-border1 hover:bg-surface4 hover:border-border2 flex items-center gap-1.5 rounded border px-1.5 py-0.5 text-xs transition-colors"
-              onClick={(e: React.MouseEvent) => e.stopPropagation()}
-            >
-              <span className={cn('w-1.5 h-1.5 rounded-full', getStatusColor(execMeta.sandbox.status))} />
-              <span>{execMeta.sandbox.name || execMeta.sandbox.provider}</span>
-            </Link>
-          )}
-        </button>
+    <Tool
+      data-testid="sandbox-execution-badge"
+      status={status}
+      open={!isCollapsed}
+      onOpenChange={open => setIsCollapsed(!open)}
+      aria-label={`Tool: ${toolName}`}
+    >
+      <ToolHeader
+        actions={
+          <div className="flex items-center gap-2">
+            {execMeta?.sandbox && (
+              <Link
+                href={execMeta.id ? `/workspaces/${execMeta.id}` : '/workspaces'}
+                className="text-neutral6 bg-surface3 border-border1 hover:bg-surface4 hover:border-border2 flex items-center gap-1.5 rounded border px-1.5 py-0.5 text-xs transition-colors"
+              >
+                <span className={cn('w-1.5 h-1.5 rounded-full', getStatusColor(execMeta.sandbox.status))} />
+                <span>{execMeta.sandbox.name || execMeta.sandbox.provider}</span>
+              </Link>
+            )}
+            {isRunning ? (
+              <>
+                <span className="text-accent6 flex items-center gap-1.5 text-xs">
+                  <span className="bg-accent6 h-1.5 w-1.5 animate-pulse rounded-full" />
+                  <span className="animate-pulse">running</span>
+                </span>
+                <span className="text-neutral6 text-xs tabular-nums">{elapsedTime}ms</span>
+              </>
+            ) : (
+              <>
+                {exitCode !== undefined &&
+                  (exitSuccess ? (
+                    <CheckIcon className="text-green-400" size={14} />
+                  ) : wasKilled ? (
+                    <span className="rounded bg-orange-500/20 px-1.5 py-0.5 text-[10px] font-medium text-orange-400">
+                      killed
+                    </span>
+                  ) : (
+                    <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-medium text-red-400">
+                      exit {exitCode}
+                    </span>
+                  ))}
+                {executionTime !== undefined && <span className="text-neutral6 text-xs">{executionTime}ms</span>}
+              </>
+            )}
+          </div>
+        }
+      >
+        <ToolIcon>
+          <TerminalSquare className="text-accent6" size={16} />
+        </ToolIcon>
+        {displayName}
+      </ToolHeader>
 
-        {/* Status area */}
-        <div className="flex items-center gap-2">
-          {isRunning ? (
-            <>
-              <span className="text-accent6 flex items-center gap-1.5 text-xs">
-                <span className="bg-accent6 h-1.5 w-1.5 animate-pulse rounded-full" />
-                <span className="animate-pulse">running</span>
-              </span>
-              <span className="text-neutral6 text-xs tabular-nums">{elapsedTime}ms</span>
-            </>
-          ) : (
-            <>
-              {exitCode !== undefined &&
-                (exitSuccess ? (
-                  <CheckIcon className="text-green-400" size={14} />
-                ) : wasKilled ? (
-                  <span className="rounded bg-orange-500/20 px-1.5 py-0.5 text-[10px] font-medium text-orange-400">
-                    killed
-                  </span>
-                ) : (
-                  <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-medium text-red-400">
-                    exit {exitCode}
-                  </span>
-                ))}
-              {executionTime !== undefined && <span className="text-neutral6 text-xs">{executionTime}ms</span>}
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Content area */}
-      {!isCollapsed && (
-        <div className="pt-2">
-          {(outputContent || commandDisplay) && (
-            <TerminalBlock
-              command={commandDisplay}
-              content={outputContent}
-              onCopy={outputContent ? onCopy : undefined}
-              isCopied={isCopied}
-            />
-          )}
-
-          <ToolApprovalButtons
-            toolCalled={toolCalled}
-            toolCallId={toolCallId}
-            toolApprovalMetadata={toolApprovalMetadata}
-            toolName={toolName}
-            isNetwork={isNetwork}
-            isGenerateMode={metadata?.mode === 'generate'}
+      <ToolContent>
+        {(outputContent || commandDisplay) && (
+          <TerminalBlock
+            command={commandDisplay}
+            content={outputContent}
+            onCopy={outputContent ? onCopy : undefined}
+            isCopied={isCopied}
           />
-        </div>
-      )}
-    </div>
+        )}
+
+        <ToolApprovalButtons
+          toolCalled={toolCalled}
+          toolCallId={toolCallId}
+          toolApprovalMetadata={toolApprovalMetadata}
+          toolName={toolName}
+          isNetwork={isNetwork}
+          isGenerateMode={metadata?.mode === 'generate'}
+        />
+      </ToolContent>
+    </Tool>
   );
 };

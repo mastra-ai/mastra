@@ -1,10 +1,17 @@
+import {
+  Tool,
+  ToolCallListItem,
+  ToolContent,
+  ToolHeader,
+  ToolIcon,
+} from '@mastra/playground-ui/components/ai/tool-call';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
-import React from 'react';
+import { Type } from 'lucide-react';
 import Markdown from 'react-markdown';
 import { ToolCard } from '../tool-card';
+import { isInlineToolCallHidden } from '../tool-card-visibility';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
-import { BadgeWrapper } from './badge-wrapper';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
@@ -33,7 +40,6 @@ export interface AgentBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCal
   suspendPayload?: any;
   toolCalled?: boolean;
   isComplete?: boolean;
-  keepOpenForStreamingChildMessages?: boolean;
 }
 
 export const AgentBadge = ({
@@ -47,7 +53,6 @@ export const AgentBadge = ({
   suspendPayload,
   toolCalled: toolCalledProp,
   isComplete = false,
-  keepOpenForStreamingChildMessages = false,
 }: AgentBadgeProps) => {
   const routingDecision = metadata?.mode === 'network' ? metadata.routingDecision : undefined;
   const selectionReason =
@@ -76,14 +81,15 @@ export const AgentBadge = ({
       }
       return message.toolOutput !== undefined;
     });
-
   let toolCalled = allChildToolsComplete;
 
   if (isNetwork) {
     toolCalled = toolCalledProp ?? allChildToolsComplete;
   }
 
-  const shouldCollapseContent = isComplete && !toolApprovalMetadata && !keepOpenForStreamingChildMessages;
+  const displayMessages = messages.filter(message =>
+    message.type === 'text' ? message.content.trim().length > 0 : !isInlineToolCallHidden(message.toolName),
+  );
 
   let suspendPayloadSlot =
     typeof suspendPayload === 'string' ? (
@@ -93,68 +99,89 @@ export const AgentBadge = ({
     );
 
   return (
-    <BadgeWrapper
-      data-testid="agent-badge"
-      icon={<AgentIcon className="text-accent1" />}
-      title={agentId}
-      initialCollapsed={shouldCollapseContent}
-      extraInfo={
-        metadata?.mode === 'network' ? (
-          <NetworkChoiceMetadataDialogTrigger
-            selectionReason={selectionReason ?? ''}
-            input={agentNetworkInput as string | Record<string, unknown> | undefined}
-          />
-        ) : bgEntry?.taskId && bgEntry?.startedAt ? (
-          <BackgroundTaskMetadataDialogTrigger backgroundTask={bgEntry} />
-        ) : null
-      }
-    >
-      {messages.map((message, index) => {
-        if (message.type === 'text') {
-          return <Markdown key={index}>{message.content}</Markdown>;
-        }
-
-        let result;
-
-        try {
-          result = typeof message.toolOutput === 'string' ? JSON.parse(message.toolOutput) : message.toolOutput;
-        } catch {
-          result = message.toolOutput;
-        }
-
-        return (
-          <React.Fragment key={index}>
-            <ToolCard
-              toolName={message.toolName}
-              input={message.args}
-              output={result}
-              state="output-available"
-              toolCallId={message.toolCallId}
-              metadata={{
-                mode: 'stream',
-                requireApprovalMetadata: parentRequireApprovalMetadata,
-                suspendedTools: parentSuspendedTools,
-              }}
+    <Tool data-testid="agent-badge" status={isComplete ? 'success' : 'running'} aria-label={`Tool: ${toolName}`}>
+      <ToolHeader
+        actions={
+          metadata?.mode === 'network' ? (
+            <NetworkChoiceMetadataDialogTrigger
+              selectionReason={selectionReason ?? ''}
+              input={agentNetworkInput as string | Record<string, unknown> | undefined}
             />
-          </React.Fragment>
-        );
-      })}
+          ) : bgEntry?.taskId && bgEntry?.startedAt ? (
+            <BackgroundTaskMetadataDialogTrigger backgroundTask={bgEntry} />
+          ) : null
+        }
+      >
+        <ToolIcon>
+          <AgentIcon className="text-accent1" />
+        </ToolIcon>
+        {agentId}
+      </ToolHeader>
 
-      {suspendPayloadSlot !== undefined && suspendPayload && (
-        <div>
-          <p className="pb-2 font-medium">Agent suspend payload</p>
-          {suspendPayloadSlot}
+      <ToolContent>
+        <div className="pl-6">
+          {displayMessages.map((message, index) => {
+            const continued = index < displayMessages.length - 1;
+
+            if (message.type === 'text') {
+              return (
+                <ToolCallListItem key={index} continued={continued}>
+                  <div
+                    data-testid="agent-text-message"
+                    className="text-neutral3 text-ui-sm leading-ui-md flex min-w-0 items-start gap-2 px-1.5 py-1"
+                  >
+                    <Type data-testid="agent-text-icon" aria-hidden className="text-icon3 mt-0.5 size-4 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <Markdown>{message.content}</Markdown>
+                    </div>
+                  </div>
+                </ToolCallListItem>
+              );
+            }
+
+            let result;
+
+            try {
+              result = typeof message.toolOutput === 'string' ? JSON.parse(message.toolOutput) : message.toolOutput;
+            } catch {
+              result = message.toolOutput;
+            }
+
+            return (
+              <ToolCallListItem key={index} continued={continued}>
+                <ToolCard
+                  toolName={message.toolName}
+                  input={message.args}
+                  output={result}
+                  state="output-available"
+                  toolCallId={message.toolCallId}
+                  metadata={{
+                    mode: 'stream',
+                    requireApprovalMetadata: parentRequireApprovalMetadata,
+                    suspendedTools: parentSuspendedTools,
+                  }}
+                />
+              </ToolCallListItem>
+            );
+          })}
         </div>
-      )}
 
-      <ToolApprovalButtons
-        toolCalled={toolCalled}
-        toolCallId={toolCallId}
-        toolApprovalMetadata={toolApprovalMetadata}
-        toolName={toolName}
-        isNetwork={isNetwork}
-        isGenerateMode={metadata?.mode === 'generate'}
-      />
-    </BadgeWrapper>
+        {suspendPayloadSlot !== undefined && suspendPayload && (
+          <div>
+            <p className="text-ui-xs text-neutral3 mb-1.5">Agent suspend payload</p>
+            {suspendPayloadSlot}
+          </div>
+        )}
+
+        <ToolApprovalButtons
+          toolCalled={toolCalled}
+          toolCallId={toolCallId}
+          toolApprovalMetadata={toolApprovalMetadata}
+          toolName={toolName}
+          isNetwork={isNetwork}
+          isGenerateMode={metadata?.mode === 'generate'}
+        />
+      </ToolContent>
+    </Tool>
   );
 };

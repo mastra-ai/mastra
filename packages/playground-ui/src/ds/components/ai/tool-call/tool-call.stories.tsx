@@ -1,8 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
+import { AgentIcon } from '../../../icons/AgentIcon';
+import { ToolCoinIcon } from '../../../icons/ToolCoinIcon';
+import { WorkflowIcon } from '../../../icons/WorkflowIcon';
 import { Button } from '../../Button';
 import { TooltipProvider } from '../../Tooltip';
-import { ToolCall } from './tool-call';
+import { Tool, ToolCall, ToolCallListItem, ToolContent, ToolHeader, ToolIcon } from './tool-call';
 
 const meta: Meta<typeof ToolCall> = {
   title: 'AI/Tool Call',
@@ -10,8 +13,10 @@ const meta: Meta<typeof ToolCall> = {
   decorators: [
     Story => (
       <TooltipProvider>
-        <div className="w-full max-w-2xl p-4">
-          <Story />
+        <div className="bg-surface1 min-h-screen w-full p-4">
+          <div className="max-w-2xl">
+            <Story />
+          </div>
         </div>
       </TooltipProvider>
     ),
@@ -69,7 +74,7 @@ export const FileWrite: Story = {
   },
 };
 
-export const UnknownTool: Story = {
+export const GenericTool: Story = {
   args: {
     toolName: 'fetch_pull_request',
     input: { owner: 'mastra-ai', repository: 'mastra', number: 42 },
@@ -95,4 +100,59 @@ export const PendingAction: Story = {
       </Button>
     ),
   },
+};
+
+export const CustomEntities: Story = {
+  render: () => (
+    <div className="flex flex-col gap-3">
+      <Tool status="success" defaultOpen aria-label="Order fulfillment workflow">
+        <ToolHeader>
+          <ToolIcon>
+            <WorkflowIcon className="text-accent3" />
+          </ToolIcon>
+          Order fulfillment
+        </ToolHeader>
+        <ToolContent>
+          <div className="text-icon3">Workflow graph and run controls</div>
+        </ToolContent>
+      </Tool>
+
+      <Tool status="success" defaultOpen aria-label="Research agent">
+        <ToolHeader>
+          <ToolIcon>
+            <AgentIcon className="text-accent1" />
+          </ToolIcon>
+          Research agent
+        </ToolHeader>
+        <ToolContent>
+          <div className="text-icon3">Sub-agent response and nested tool calls</div>
+        </ToolContent>
+      </Tool>
+
+      <Tool status="success" defaultOpen aria-label="Code mode">
+        <ToolHeader>
+          <ToolIcon>
+            <ToolCoinIcon className="text-accent6" />
+          </ToolIcon>
+          execute_typescript
+        </ToolHeader>
+        <ToolContent>
+          <div className="text-icon3 font-mono">return await getOrders();</div>
+        </ToolContent>
+      </Tool>
+    </div>
+  ),
+};
+
+export const ConnectedSequence: Story = {
+  render: () => (
+    <div className="flex flex-col">
+      <ToolCallListItem continued>
+        <ToolCall toolName="write_file" input={{ path: 'src/answer.ts' }} status="success" />
+      </ToolCallListItem>
+      <ToolCallListItem>
+        <ToolCall toolName="execute_command" input={{ command: 'pnpm test' }} status="success" />
+      </ToolCallListItem>
+    </div>
+  ),
 };

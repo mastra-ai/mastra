@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import type { TaskItem } from '@mastra/core/signals';
 
 export type SignalData = {
   id?: string;
@@ -44,6 +45,28 @@ export const isSignalData = (value: unknown): value is SignalData => {
   if (!isRecord(value)) return false;
   return value.type === 'notification' || value.type === 'state' || value.type === 'reactive';
 };
+
+const isTaskItemArray = (value: unknown): value is TaskItem[] =>
+  Array.isArray(value) &&
+  value.every(
+    item =>
+      isRecord(item) &&
+      typeof item.id === 'string' &&
+      typeof item.content === 'string' &&
+      (item.status === 'pending' || item.status === 'in_progress' || item.status === 'completed') &&
+      typeof item.activeForm === 'string',
+  );
+
+export const getTaskSignalData = (signal: SignalData): TaskItem[] | undefined => {
+  const isTaskSignal =
+    signal.id === 'tasks' || signal.tagName === 'current-task-list' || signal.tagName === 'task-list-update';
+  if (!isTaskSignal) return undefined;
+
+  const value = isRecord(signal.metadata?.value) ? signal.metadata.value : undefined;
+  return isTaskItemArray(value?.tasks) ? value.tasks : undefined;
+};
+
+export const isTaskSignalData = (signal: SignalData): boolean => getTaskSignalData(signal) !== undefined;
 
 const getSignalMetadata = (message: MastraDBMessage): Record<string, unknown> | undefined => {
   const signal = message.content.metadata?.signal;

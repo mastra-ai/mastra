@@ -75,11 +75,11 @@ describe('AgentBadgeWrapper', () => {
       expect(mockResolveToChildMessages).toHaveBeenCalledWith([]);
       expect(mockAgentBadge).toHaveBeenCalledWith(
         expect.objectContaining({
-          keepOpenForStreamingChildMessages: true,
           messages: fallbackMessages,
         }),
         undefined,
       );
+      expect(mockAgentBadge.mock.calls.at(-1)?.[0]).not.toHaveProperty('keepOpenForStreamingChildMessages');
     }, 15000);
   });
 
@@ -99,11 +99,11 @@ describe('AgentBadgeWrapper', () => {
       expect(mockResolveToChildMessages).toHaveBeenCalledWith([]);
       expect(mockAgentBadge).toHaveBeenCalledWith(
         expect.objectContaining({
-          keepOpenForStreamingChildMessages: false,
           messages: [],
         }),
         undefined,
       );
+      expect(mockAgentBadge.mock.calls.at(-1)?.[0]).not.toHaveProperty('keepOpenForStreamingChildMessages');
     });
   });
 
@@ -126,6 +126,46 @@ describe('AgentBadgeWrapper', () => {
       expect(mockAgentBadge).toHaveBeenCalledWith(
         expect.objectContaining({
           messages: [{ type: 'text', content: 'remote A2A response' }],
+        }),
+        undefined,
+      );
+    });
+  });
+
+  describe('when a persisted network result carries the sub-agent messages', () => {
+    it('rebuilds the nested transcript instead of reducing it to the final text', async () => {
+      const nestedMessages = [{ type: 'text', content: 'resolved nested transcript' }];
+      mockResolveToChildMessages.mockReturnValue(nestedMessages);
+
+      await renderWrapper({
+        agentId: 'agent-1',
+        result: {
+          text: 'final answer',
+          messages: [
+            {
+              id: 'child-message-1',
+              role: 'assistant',
+              createdAt: new Date(),
+              content: { format: 2, parts: [{ type: 'text', text: 'final answer' }] },
+            },
+          ],
+        },
+        toolCallId: 'tool-call-1',
+        toolName: 'subagent-tool',
+        toolApprovalMetadata: undefined,
+        isNetwork: true,
+      });
+
+      expect(mockResolveToChildMessages).toHaveBeenCalledWith([
+        expect.objectContaining({
+          id: 'child-message-1',
+          role: 'assistant',
+          parts: [expect.objectContaining({ type: 'text', text: 'final answer' })],
+        }),
+      ]);
+      expect(mockAgentBadge).toHaveBeenCalledWith(
+        expect.objectContaining({
+          messages: nestedMessages,
         }),
         undefined,
       );

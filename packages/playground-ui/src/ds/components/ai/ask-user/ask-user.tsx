@@ -2,7 +2,10 @@ import { useId, useState } from 'react';
 import type { ComponentProps, KeyboardEvent, ReactNode } from 'react';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
+import { Card } from '@/ds/components/Card';
+import { Checkbox } from '@/ds/components/Checkbox';
 import { Input } from '@/ds/components/Input';
+import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
 import { cn } from '@/lib/utils';
 
 export type AskUserSelectionMode = 'single_select' | 'multi_select';
@@ -36,25 +39,53 @@ export const AskUserOptionDescription = ({ className, ...props }: ComponentProps
   <span className={cn('block text-ui-xs font-normal text-neutral3', className)} {...props} />
 );
 
-interface AskUserOptionControlProps extends Omit<ComponentProps<'input'>, 'type'> {
+interface AskUserOptionControlProps extends Omit<ComponentProps<typeof Card>, 'children'> {
   type: 'radio' | 'checkbox';
   label: string;
   description?: string;
+  value: string;
+  checked?: boolean;
+  disabled?: boolean;
+  onCheckedChange?: (checked: boolean) => void;
 }
 
-export const AskUserOptionControl = ({ type, label, description, className, ...props }: AskUserOptionControlProps) => (
-  <label
+export const AskUserOptionControl = ({
+  type,
+  label,
+  description,
+  value,
+  checked,
+  disabled,
+  onCheckedChange,
+  className,
+  ...props
+}: AskUserOptionControlProps) => (
+  <Card
+    as="label"
+    appearance="surface"
+    interactive={!disabled}
     className={cn(
-      'flex cursor-pointer items-start gap-2 rounded-md border border-border1 bg-surface3 px-3 py-2 text-neutral5 transition-colors hover:bg-surface4 has-[:checked]:border-border2 has-[:checked]:bg-surface4 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50',
+      'flex items-start gap-2.5 p-2.5 text-left text-neutral5',
+      disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
       className,
     )}
+    {...props}
   >
-    <input type={type} className="mt-0.5 accent-current" {...props} />
-    <span>
-      <span className="block">{label}</span>
+    {type === 'radio' ? (
+      <RadioGroupItem value={value} disabled={disabled} className="mt-0.5" />
+    ) : (
+      <Checkbox
+        checked={checked}
+        disabled={disabled}
+        className="mt-0.5"
+        onCheckedChange={nextChecked => onCheckedChange?.(nextChecked)}
+      />
+    )}
+    <span className="min-w-0">
+      <span className="text-neutral6 block font-medium">{label}</span>
       {description ? <AskUserOptionDescription>{description}</AskUserOptionDescription> : null}
     </span>
-  </label>
+  </Card>
 );
 
 export const AskUserSubmit = ({ children = 'Submit answer', ...props }: ComponentProps<typeof Button>) => (
@@ -168,35 +199,52 @@ const AskUserInput = ({
   const isMulti = payload.selectionMode === 'multi_select';
   return (
     <AskUserContainer data-testid="ask-user" {...props}>
-      <fieldset disabled={isSubmitting} className="space-y-2">
+      <fieldset className="space-y-2">
         <AskUserQuestion>{payload.question}</AskUserQuestion>
-        {options.map(option => {
-          const checked = selected.includes(option.label);
-          return (
-            <AskUserOptionControl
-              key={option.label}
-              type={isMulti ? 'checkbox' : 'radio'}
-              name={inputId}
-              label={option.label}
-              description={option.description}
-              disabled={isSubmitting}
-              checked={checked}
-              onChange={() => {
-                if (isSubmitting) return;
-                if (!isMulti) {
-                  setSelected([option.label]);
-                  onSubmit(option.label);
-                  return;
-                }
-                setSelected(current =>
-                  current.includes(option.label)
-                    ? current.filter(selectedLabel => selectedLabel !== option.label)
-                    : [...current, option.label],
-                );
-              }}
-            />
-          );
-        })}
+        {isMulti ? (
+          <div className="grid gap-2">
+            {options.map(option => (
+              <AskUserOptionControl
+                key={option.label}
+                type="checkbox"
+                value={option.label}
+                label={option.label}
+                description={option.description}
+                disabled={isSubmitting}
+                checked={selected.includes(option.label)}
+                onCheckedChange={nextChecked => {
+                  if (isSubmitting) return;
+                  setSelected(current =>
+                    nextChecked
+                      ? [...current, option.label]
+                      : current.filter(selectedLabel => selectedLabel !== option.label),
+                  );
+                }}
+              />
+            ))}
+          </div>
+        ) : (
+          <RadioGroup
+            aria-label={payload.question}
+            disabled={isSubmitting}
+            value={selected[0] ?? ''}
+            onValueChange={value => {
+              setSelected([value]);
+              onSubmit(value);
+            }}
+          >
+            {options.map(option => (
+              <AskUserOptionControl
+                key={option.label}
+                type="radio"
+                value={option.label}
+                label={option.label}
+                description={option.description}
+                disabled={isSubmitting}
+              />
+            ))}
+          </RadioGroup>
+        )}
         {isMulti ? (
           <AskUserSubmit disabled={isSubmitting || selected.length === 0} onClick={() => onSubmit(selected)}>
             Submit answer

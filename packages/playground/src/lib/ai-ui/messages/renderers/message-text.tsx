@@ -1,9 +1,8 @@
-import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Tool, ToolContent, ToolHeader, ToolIcon } from '@mastra/playground-ui/components/ai/tool-call';
+import { Card } from '@mastra/playground-ui/components/Card';
 import { MarkdownRenderer, type MarkdownExternalLinkTarget } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { CheckCircleIcon, ChevronUpIcon } from 'lucide-react';
+import { CheckCircleIcon } from 'lucide-react';
 import { useState } from 'react';
 
 import type { MessageMetadata } from '../message-metadata';
@@ -22,7 +21,7 @@ export interface MessageTextProps {
  * metadata).
  */
 export const MessageText = ({ text, metadata, externalLinkTarget, streaming }: MessageTextProps) => {
-  const [collapsedCompletionCheck, setCollapsedCompletionCheck] = useState(false);
+  const [collapsedCompletionCheck, setCollapsedCompletionCheck] = useState(true);
 
   if (metadata?.status === 'tripwire') {
     return <TripwireNotice reason={text} tripwire={metadata.tripwire} />;
@@ -45,21 +44,28 @@ export const MessageText = ({ text, metadata, externalLinkTarget, streaming }: M
   const taskCompleteResult = metadata?.completionResult;
   if (taskCompleteResult) {
     return (
-      <div className="mb-2 space-y-2">
-        <button onClick={() => setCollapsedCompletionCheck(s => !s)} className="flex items-center gap-2">
-          <Icon>
-            <ChevronUpIcon className={cn('transition-all', collapsedCompletionCheck ? 'rotate-90' : 'rotate-180')} />
-          </Icon>
-          <Badge variant="info" icon={<CheckCircleIcon />}>
-            {collapsedCompletionCheck ? 'Show' : 'Hide'} completion check
-          </Badge>
-        </button>
-        {!collapsedCompletionCheck && (
-          <Notice variant="info" title={taskCompleteResult?.passed ? 'Complete' : 'Not Complete'}>
+      <Tool
+        className="mb-2"
+        status={taskCompleteResult.passed ? 'success' : 'error'}
+        open={!collapsedCompletionCheck}
+        onOpenChange={open => setCollapsedCompletionCheck(!open)}
+        aria-label="Completion check"
+      >
+        <ToolHeader>
+          <ToolIcon>
+            <CheckCircleIcon className="text-accent3" />
+          </ToolIcon>
+          {collapsedCompletionCheck ? 'Show' : 'Hide'} completion check
+        </ToolHeader>
+        <ToolContent>
+          <Card role="group" aria-label="Completion check result" className="text-neutral5 space-y-3 p-3">
+            <p className="text-ui-xs text-neutral4 font-medium">
+              {taskCompleteResult?.passed ? 'Complete' : 'Not Complete'}
+            </p>
             <MarkdownRenderer externalLinkTarget={externalLinkTarget}>{text}</MarkdownRenderer>
-          </Notice>
-        )}
-      </div>
+          </Card>
+        </ToolContent>
+      </Tool>
     );
   }
 
@@ -80,7 +86,7 @@ export const MessageText = ({ text, metadata, externalLinkTarget, streaming }: M
   }
 
   return (
-    <MarkdownRenderer externalLinkTarget={externalLinkTarget} streaming={streaming}>
+    <MarkdownRenderer className="my-3" externalLinkTarget={externalLinkTarget} streaming={streaming}>
       {text}
     </MarkdownRenderer>
   );

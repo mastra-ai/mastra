@@ -222,10 +222,39 @@ describe('ToolCard dispatch', () => {
         output: { tree: [] },
       }),
     );
-    expect(screen.getByTestId('file-tree-badge')).toBeTruthy();
+    const badge = screen.getByTestId('file-tree-badge');
+    expect(badge.getAttribute('role')).toBe('group');
+    expect(badge.getAttribute('aria-label')).toBe(`Tool: ${WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES}`);
+    expect(badge.querySelector('.text-accent6')).toBeTruthy();
   });
 
-  it('routes sandbox execute_command to the sandbox execution badge', () => {
+  it('keeps list_files approval UI collapsed until requested', () => {
+    const toolName = WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES;
+    renderToolCard(
+      baseProps({
+        toolName,
+        input: { path: '.' },
+        output: undefined,
+        state: 'input-available',
+        metadata: {
+          mode: 'stream',
+          requireApprovalMetadata: {
+            [toolName]: { toolCallId: 'call-1', toolName, args: { path: '.' } },
+          },
+        },
+      }),
+    );
+
+    const trigger = screen.getByRole('button', { name: /List Files/ });
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
+
+    fireEvent.click(trigger);
+
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
+  });
+
+  it('routes sandbox execute_command to a disclosure collapsed by default', () => {
     renderToolCard(
       baseProps({
         toolName: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
@@ -233,7 +262,33 @@ describe('ToolCard dispatch', () => {
         output: { stdout: 'a\nb' },
       }),
     );
-    expect(screen.getByTestId('sandbox-execution-badge')).toBeTruthy();
+    const badge = screen.getByTestId('sandbox-execution-badge');
+    expect(badge.getAttribute('role')).toBe('group');
+    expect(badge.getAttribute('aria-label')).toBe(`Tool: ${WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND}`);
+    expect(badge.querySelector('.text-accent6')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Execute Command' }).getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByText('$')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Execute Command' }));
+
+    expect(screen.getByText('$')).toBeTruthy();
+  });
+
+  it.each([
+    [WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT, 'Get Process Output'],
+    [WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS, 'Kill Process'],
+  ])('keeps %s collapsed by default', (toolName, label) => {
+    renderToolCard(
+      baseProps({
+        toolName,
+        input: { pid: 123 },
+        output: 'done',
+      }),
+    );
+
+    const trigger = screen.getByRole('button', { name: label });
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByText('$')).toBeNull();
   });
 
   it('routes code-mode calls to the code mode badge', () => {

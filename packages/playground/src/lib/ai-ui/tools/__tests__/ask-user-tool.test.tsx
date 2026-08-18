@@ -1,5 +1,5 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MessageMetadata } from '../../messages/message-metadata';
 import { AskUserTool } from '../ask-user-tool';
@@ -44,9 +44,13 @@ describe('AskUserTool', () => {
       },
     };
 
-    it('renders the ask-user badge with the question', () => {
+    it('renders the custom ask-user UI inside a tool that is open by default', () => {
       renderTool({ toolName: 'ask_user', toolCallId: 'call-1', output: undefined, metadata });
 
+      const tool = screen.getByRole('group', { name: 'Tool: ask_user' });
+      const trigger = screen.getByRole('button', { name: 'Ask user' });
+      expect(trigger.getAttribute('aria-expanded')).toBe('true');
+      expect(tool.querySelector('.text-accent6')).toBeTruthy();
       expect(screen.getByTestId('ask-user-badge')).toBeTruthy();
       expect(screen.getByText('What is your favorite color?')).toBeTruthy();
     });

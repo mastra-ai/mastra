@@ -24,7 +24,7 @@ export const AskUserBadge = ({ toolCallId, suspendPayload, result }: AskUserBadg
       isAnswered={isAnswered}
       isSubmitting={isRunning}
       onSubmit={submitAnswer}
-      className="mb-4 w-full max-w-full"
+      className="w-full max-w-full"
     />
   );
 };

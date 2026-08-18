@@ -106,7 +106,6 @@ export const ToolBadge = ({
       input={withoutArgs ? undefined : parseArgs(args)}
       result={result}
       status={toolStatus(state, result)}
-      defaultOpen={Boolean(toolApprovalMetadata ?? suspendPayload)}
       headerActions={headerActions}
     >
       {Boolean(suspendPayload) && (

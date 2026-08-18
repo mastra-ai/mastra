@@ -9,6 +9,7 @@ import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
 import { ToolBadge } from './badges/tool-badge';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
 import { SubmitPlanTool } from './submit-plan-tool';
+import { isInlineToolCallHidden } from './tool-card-visibility';
 import { useActivatedSkills } from '@/domains/agents/context/activated-skills-context';
 import {
   isBrowserTool,
@@ -56,8 +57,6 @@ export interface ToolCardProps {
   /** `data`-typed parts from the parent message, for badges that read live streaming metadata. */
   dataParts?: ReadonlyArray<DataMessagePart>;
 }
-
-const TASK_TOOL_NAMES = new Set(['task_write', 'task_update', 'task_complete', 'task_check']);
 
 const hasSubmitPlanToolId = (value: unknown): boolean =>
   typeof value === 'object' && value !== null && 'toolId' in value && value.toolId === SUBMIT_PLAN_TOOL_ID;
@@ -173,14 +172,9 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
   const isBackgroundTaskResult =
     result && typeof result === 'string' && result.toLowerCase().includes('background task');
 
-  if (toolName === 'updateWorkingMemory') {
-    // Hide the updateWorkingMemory tool call in the UI.
-    return null;
-  }
-
-  // Task tool calls are rendered in the docked TaskPanel (bottom of chat) instead
-  // of inline to avoid repetition. Hide them entirely here.
-  if (TASK_TOOL_NAMES.has(toolName)) {
+  if (isInlineToolCallHidden(toolName)) {
+    // Working-memory updates stay hidden. Task calls render in the docked
+    // TaskPanel instead of inline to avoid repetition.
     return null;
   }
 

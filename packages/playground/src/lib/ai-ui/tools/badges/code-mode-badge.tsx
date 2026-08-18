@@ -1,9 +1,10 @@
+import { Tool, ToolContent, ToolHeader, ToolIcon } from '@mastra/playground-ui/components/ai/tool-call';
+import { Card } from '@mastra/playground-ui/components/Card';
 import { CodeBlock } from '@mastra/playground-ui/components/CodeBlock';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { ToolCoinIcon } from '@mastra/playground-ui/icons/ToolCoinIcon';
 import { formatTypeScript } from '@mastra/playground-ui/utils/formatting';
 import { useEffect, useState } from 'react';
-import { BadgeWrapper } from './badge-wrapper';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
 import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
@@ -76,6 +77,7 @@ export const CodeModeBadge = ({
   const hasResultValue = result !== undefined && result.result !== undefined;
 
   const toolCalled = toolCalledProp ?? result !== undefined;
+  const status = result === undefined ? 'running' : result.success ? 'success' : 'error';
 
   // The model usually emits the program as a single line; pretty-print it so the
   // highlighted block is readable. Falls back to the raw code if formatting fails
@@ -96,68 +98,75 @@ export const CodeModeBadge = ({
   }, [code]);
 
   return (
-    <BadgeWrapper
-      data-testid="code-mode-badge"
-      icon={<ToolCoinIcon className="text-accent6" />}
-      title={toolName}
-      initialCollapsed={!toolApprovalMetadata}
-    >
-      <div className="space-y-4">
-        <div>
-          <p className="pb-2 font-medium">Program</p>
-          <div data-testid="code-mode-program">
-            <CodeBlock code={formattedCode} lang="typescript" />
-          </div>
-        </div>
+    <Tool data-testid="code-mode-badge" status={status} aria-label={`Tool: ${toolName}`}>
+      <ToolHeader>
+        <ToolIcon>
+          <ToolCoinIcon className="text-accent6" />
+        </ToolIcon>
+        {toolName}
+      </ToolHeader>
 
-        {error && (
+      <ToolContent>
+        <Card role="group" aria-label="Code mode details" className="flex min-w-0 flex-col gap-3 p-3">
           <div>
-            <p className="pb-2 font-medium">Error</p>
-            <pre
-              data-testid="code-mode-error"
-              className="bg-surface4 text-error rounded-md p-4 font-mono text-sm break-words whitespace-pre-wrap"
-            >
-              {error.name ? `${error.name}: ` : ''}
-              {error.message}
-              {typeof error.line === 'number' ? ` (line ${error.line})` : ''}
-            </pre>
+            <p className="text-ui-xs text-neutral3 mb-1.5">Program</p>
+            <div data-testid="code-mode-program">
+              <CodeBlock code={formattedCode} lang="typescript" />
+            </div>
           </div>
-        )}
 
-        {hasResultValue && (
-          <div>
-            <p className="pb-2 font-medium">Result</p>
-            {typeof result!.result === 'string' ? (
-              <pre className="bg-surface4 overflow-x-auto rounded-md p-4 whitespace-pre" data-testid="code-mode-result">
-                {result!.result as string}
+          {error && (
+            <div>
+              <p className="text-ui-xs text-neutral3 mb-1.5">Error</p>
+              <pre
+                data-testid="code-mode-error"
+                className="bg-surface4 text-error rounded-md p-4 font-mono text-sm break-words whitespace-pre-wrap"
+              >
+                {error.name ? `${error.name}: ` : ''}
+                {error.message}
+                {typeof error.line === 'number' ? ` (line ${error.line})` : ''}
               </pre>
-            ) : (
-              <CodeEditor data={result!.result as Record<string, unknown>} data-testid="code-mode-result" />
-            )}
-          </div>
-        )}
+            </div>
+          )}
 
-        {logs.length > 0 && (
-          <div>
-            <p className="pb-2 font-medium">Logs</p>
-            <pre
-              data-testid="code-mode-logs"
-              className="overflow-x-auto rounded-md bg-black p-3 font-mono text-sm break-words whitespace-pre-wrap text-neutral-300"
-            >
-              {logs.join('\n')}
-            </pre>
-          </div>
-        )}
+          {hasResultValue && (
+            <div>
+              <p className="text-ui-xs text-neutral3 mb-1.5">Result</p>
+              {typeof result!.result === 'string' ? (
+                <pre
+                  className="bg-surface4 overflow-x-auto rounded-md p-4 whitespace-pre"
+                  data-testid="code-mode-result"
+                >
+                  {result!.result as string}
+                </pre>
+              ) : (
+                <CodeEditor data={result!.result as Record<string, unknown>} data-testid="code-mode-result" />
+              )}
+            </div>
+          )}
 
-        <ToolApprovalButtons
-          toolCalled={toolCalled}
-          toolCallId={toolCallId}
-          toolApprovalMetadata={toolApprovalMetadata}
-          toolName={toolName}
-          isNetwork={isNetwork}
-          isGenerateMode={metadata?.mode === 'generate'}
-        />
-      </div>
-    </BadgeWrapper>
+          {logs.length > 0 && (
+            <div>
+              <p className="text-ui-xs text-neutral3 mb-1.5">Logs</p>
+              <pre
+                data-testid="code-mode-logs"
+                className="overflow-x-auto rounded-md bg-black p-3 font-mono text-sm break-words whitespace-pre-wrap text-neutral-300"
+              >
+                {logs.join('\n')}
+              </pre>
+            </div>
+          )}
+
+          <ToolApprovalButtons
+            toolCalled={toolCalled}
+            toolCallId={toolCallId}
+            toolApprovalMetadata={toolApprovalMetadata}
+            toolName={toolName}
+            isNetwork={isNetwork}
+            isGenerateMode={metadata?.mode === 'generate'}
+          />
+        </Card>
+      </ToolContent>
+    </Tool>
   );
 };

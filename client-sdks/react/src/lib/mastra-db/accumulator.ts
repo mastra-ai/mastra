@@ -10,6 +10,7 @@ import type { AgentChunkType, ChunkType, NetworkChunkType } from '@mastra/core/s
 import type { WorkflowStreamResult, StepResult } from '@mastra/core/workflows';
 import { uint8ArrayToBase64, encodeFilePartDataForStorage } from '../../agent/signal-data';
 import { formatCompletionFeedback, formatStreamCompletionFeedback } from './formatCompletionFeedback';
+import { applyNetworkPrimitiveResult, parseNetworkPrimitiveResult } from './network-result';
 import { CLIENT_MESSAGE_ID_KEY } from './types';
 import type {
   BackgroundTaskEntry,
@@ -1574,7 +1575,6 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
     case 'network-validation-end':
     case 'network-object':
     case 'network-object-result':
-    case 'tool-output-denied':
       return result;
 
     default:
@@ -1868,7 +1868,11 @@ const handleAgentNetworkChunk = (
         toolCallId: toolPart.toolCallId,
         state: 'output-available',
         input: toolPart.input,
-        output: { ...currentOutput, result: currentOutput?.result || (chunk.payload as any)?.result || '' },
+        output: {
+          ...currentOutput,
+          result: currentOutput?.result || (chunk.payload as any)?.result || '',
+          text: currentOutput?.text || (chunk.payload as any)?.result || '',
+        },
       } as unknown as MastraMessagePart;
     }
 
@@ -1992,6 +1996,33 @@ const handleWorkflowNetworkChunk = (
       from: 'WORKFLOW',
       agentInput,
     });
+  }
+
+  if (chunk.type === 'workflow-execution-end') {
+    const lastMessage = lastAssistant(conversation);
+    if (!lastMessage) return conversation;
+
+    const parts = [...lastMessage.content.parts];
+    const primitiveId = (chunk.payload as any)?.primitiveId;
+    const toolPartIndex = findPartIndex(
+      parts,
+      part => isDynamicToolPart(part) && (!primitiveId || (part as any).toolName === primitiveId),
+    );
+    if (toolPartIndex === -1) return conversation;
+
+    const toolPart = parts[toolPartIndex] as any;
+    const workflowResult = (chunk.payload as any)?.result;
+    parts[toolPartIndex] = {
+      ...toolPart,
+      state: 'output-available',
+      output: {
+        ...(typeof toolPart.output === 'object' && toolPart.output !== null ? toolPart.output : {}),
+        ...(typeof workflowResult === 'object' && workflowResult !== null ? workflowResult : {}),
+        runId: chunk.runId,
+      },
+    } as unknown as MastraMessagePart;
+
+    return replaceLast(conversation, withParts(lastMessage, parts));
   }
 
   if (chunk.type === 'workflow-execution-suspended') {
@@ -2204,6 +2235,11 @@ export const accumulateNetworkChunk = ({
     if (!lastMessage) return newConversation;
 
     const agentChunk = chunk.payload as any;
+    const networkPrimitiveResult = parseNetworkPrimitiveResult(agentChunk.result);
+    if (networkPrimitiveResult) {
+      return replaceLast(newConversation, applyNetworkPrimitiveResult(lastMessage, networkPrimitiveResult));
+    }
+
     const parts = [...lastMessage.content.parts];
     const textPartIndex = findPartIndex(parts, part => part.type === 'text');
 

@@ -1,13 +1,16 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { ToolCallListItem } from '@mastra/playground-ui/components/ai/tool-call';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageFactory } from '@mastra/react';
 import type { MessageRenderers } from '@mastra/react';
 import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-react';
-import { forwardRef, useMemo } from 'react';
+import type { ReactNode } from 'react';
+import { forwardRef, useCallback, useMemo } from 'react';
 
 import type { DataMessagePart } from '../tools/tool-card';
+import { isInlineToolCallHidden } from '../tools/tool-card-visibility';
 import { DatasetSaveAction } from './dataset-save-action';
 import { AssistantTextPartRenderer } from './renderers/assistant-text-part-renderer';
 import { DataPartRenderer } from './renderers/data-part-renderer';
@@ -17,7 +20,7 @@ import { messageStatusRenderers } from './renderers/status-renderers';
 import { ToolInvocationPartRenderer } from './renderers/tool-invocation-part-renderer';
 import { UserFilePartRenderer } from './renderers/user-file-part-renderer';
 import { UserTextPartRenderer } from './renderers/user-text-part-renderer';
-import { getSignalType, isSignalData, isUserSignalType, toReactiveSignalData } from './signal-data';
+import { getSignalType, isSignalData, isTaskSignalData, isUserSignalType, toReactiveSignalData } from './signal-data';
 import { ProviderLogo } from '@/domains/llm/components/provider-logo';
 
 export interface MessageRowProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> {
@@ -96,6 +99,56 @@ const getDataParts = (message: MastraDBMessage): DataMessagePart[] =>
       name: 'name' in part && typeof part.name === 'string' ? part.name : undefined,
       data: readField(part, 'data'),
     }));
+
+const getToolPartName = (part: { type: string }): string | undefined => {
+  if (part.type === 'tool-invocation') {
+    const toolName = readField(readField(part, 'toolInvocation'), 'toolName');
+    return typeof toolName === 'string' ? toolName : undefined;
+  }
+
+  if (part.type === 'dynamic-tool' || (part.type.startsWith('tool-') && part.type !== 'tool-invocation')) {
+    const toolName = readField(part, 'toolName');
+    return typeof toolName === 'string' ? toolName : part.type.replace(/^tool-/, '');
+  }
+
+  return undefined;
+};
+
+/** Keep only parts that produce visible UI. This prevents hidden task/state
+ * plumbing from leaving empty message rows and action bars behind. */
+const isRenderableMessagePart = (part: MessagePart): boolean => {
+  const toolName = getToolPartName(part);
+  if (toolName !== undefined) return !isInlineToolCallHidden(toolName);
+
+  if (part.type === 'text') {
+    const value = readField(part, 'text');
+    return typeof value === 'string' && value.trim().length > 0;
+  }
+
+  if (part.type === 'reasoning') {
+    const value = readField(part, 'text') ?? readField(part, 'reasoning');
+    return (
+      (typeof value === 'string' && value.trim().length > 0) ||
+      readField(part, 'redacted') === true ||
+      readField(part, 'state') === 'streaming'
+    );
+  }
+
+  if (part.type === 'file') return true;
+
+  if (part.type === 'data-signal') {
+    const data = readField(part, 'data');
+    return isSignalData(data) && !isTaskSignalData(data);
+  }
+
+  return false;
+};
+
+const withRenderableParts = (message: MastraDBMessage): MastraDBMessage => {
+  const parts = message.content.parts.filter(isRenderableMessagePart);
+  if (parts.length === message.content.parts.length) return message;
+  return { ...message, content: { ...message.content, parts } };
+};
 
 const getTextFromParts = (message: MastraDBMessage): string =>
   message.content.parts
@@ -190,19 +243,39 @@ const AssistantActionBar = ({
 
 export const MessageRow = forwardRef<HTMLDivElement, MessageRowProps>(
   ({ message, hasModelList, isSpeaking, onReadAloud, onStopSpeaking, className, ...rootProps }, ref) => {
-    const dbMessage = toDisplayMessage(message);
+    const dbMessage = useMemo(() => toDisplayMessage(message), [message]);
+    const displayMessage = useMemo(() => (dbMessage ? withRenderableParts(dbMessage) : null), [dbMessage]);
     const metadata = getMessageMetadata(message);
     const modelMetadata = hasModelList ? getModelMetadata(metadata) : undefined;
     const dataParts = useMemo(() => getDataParts(message), [message]);
+    const visibleToolParts = useMemo(
+      () =>
+        (displayMessage?.content.parts ?? []).filter(part => {
+          const toolName = getToolPartName(part);
+          return toolName !== undefined && !isInlineToolCallHidden(toolName);
+        }),
+      [displayMessage],
+    );
+    const renderToolPart = useCallback(
+      (part: object, children: ReactNode) => {
+        const visibleIndex = visibleToolParts.findIndex(candidate => candidate === part);
+        const hasFollowingVisibleTool = visibleIndex >= 0 && visibleIndex < visibleToolParts.length - 1;
+
+        return <ToolCallListItem continued={hasFollowingVisibleTool}>{children}</ToolCallListItem>;
+      },
+      [visibleToolParts],
+    );
 
     const sharedRenderers = useMemo<MessageRenderers>(
       () => ({
         Reasoning: part => <ReasoningPartRenderer part={part} />,
         Data: part => <DataPartRenderer part={part} />,
-        ToolInvocation: part => <ToolInvocationPartRenderer part={part} metadata={metadata} dataParts={dataParts} />,
-        DynamicTool: part => <DynamicToolPartRenderer part={part} metadata={metadata} dataParts={dataParts} />,
+        ToolInvocation: part =>
+          renderToolPart(part, <ToolInvocationPartRenderer part={part} metadata={metadata} dataParts={dataParts} />),
+        DynamicTool: part =>
+          renderToolPart(part, <DynamicToolPartRenderer part={part} metadata={metadata} dataParts={dataParts} />),
       }),
-      [metadata, dataParts],
+      [metadata, dataParts, renderToolPart],
     );
 
     const userRenderers = useMemo<MessageRenderers>(
@@ -222,9 +295,9 @@ export const MessageRow = forwardRef<HTMLDivElement, MessageRowProps>(
       [sharedRenderers, metadata],
     );
 
-    if (dbMessage === null) return null;
+    if (displayMessage === null || displayMessage.content.parts.length === 0) return null;
 
-    const displayRole = dbMessage.role;
+    const displayRole = displayMessage.role;
 
     if (displayRole === 'user') {
       const isPending = isPendingMessage(message);
@@ -244,23 +317,23 @@ export const MessageRow = forwardRef<HTMLDivElement, MessageRowProps>(
               isPending && 'opacity-60 animate-pulse',
             )}
           >
-            <MessageFactory message={dbMessage} {...userRenderers} status={messageStatusRenderers} />
+            <MessageFactory message={displayMessage} {...userRenderers} status={messageStatusRenderers} />
           </div>
         </div>
       );
     }
 
-    const showActionBar = hasVisibleAssistantText(message, metadata);
+    const showActionBar = hasVisibleAssistantText(displayMessage, metadata);
 
     return (
       <div ref={ref} className={cn('max-w-full', className)} {...rootProps} data-message-id={message.id}>
         <div className="text-neutral6 text-ui-lg leading-ui-lg pt-2">
-          <MessageFactory message={dbMessage} {...assistantRenderers} status={messageStatusRenderers} />
+          <MessageFactory message={displayMessage} {...assistantRenderers} status={messageStatusRenderers} />
         </div>
         {showActionBar && (
           <div className="flex h-6 items-center gap-2 pt-4">
             <AssistantActionBar
-              text={getTextFromParts(message)}
+              text={getTextFromParts(displayMessage)}
               modelMetadata={modelMetadata}
               isSpeaking={isSpeaking}
               onReadAloud={onReadAloud}

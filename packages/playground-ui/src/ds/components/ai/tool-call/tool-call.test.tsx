@@ -1,17 +1,214 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { useState } from 'react';
+import type { ReactNode, SVGProps } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { ToolCoinIcon } from '../../../icons/ToolCoinIcon';
 import { TooltipProvider } from '../../Tooltip';
-import { ToolCall } from './tool-call';
+import { Tool, ToolCall, ToolCallListItem, ToolContent, ToolHeader, ToolIcon } from './tool-call';
 
 const renderToolCall = (node: ReactNode) => render(<TooltipProvider>{node}</TooltipProvider>);
 
 afterEach(() => cleanup());
 
+describe('Tool', () => {
+  describe('when an application composes a custom tool', () => {
+    it('lets the header disclose arbitrary application content', () => {
+      const WorkflowIcon = (props: SVGProps<SVGSVGElement>) => <svg data-testid="workflow-icon" {...props} />;
+
+      renderToolCall(
+        <Tool status="success" aria-label="Order fulfillment workflow">
+          <ToolHeader>
+            <ToolIcon>
+              <WorkflowIcon className="text-accent3" />
+            </ToolIcon>
+            Order fulfillment
+          </ToolHeader>
+          <ToolContent>
+            <div>Workflow graph</div>
+          </ToolContent>
+        </Tool>,
+      );
+
+      const tool = screen.getByRole('group', { name: 'Order fulfillment workflow' });
+      expect(within(tool).getByText('Order fulfillment')).toBeTruthy();
+      expect(within(tool).getByTestId('workflow-icon').classList.contains('text-accent3')).toBe(true);
+      expect(within(tool).queryByText('Workflow graph')).toBeNull();
+
+      fireEvent.click(within(tool).getByRole('button', { name: /Order fulfillment/ }));
+
+      expect(within(tool).getByText('Workflow graph')).toBeTruthy();
+    });
+
+    it('keeps header actions outside the disclosure button', () => {
+      renderToolCall(
+        <Tool status="running" defaultOpen aria-label="Network workflow">
+          <ToolHeader actions={<button type="button">Routing details</button>}>
+            <ToolIcon>
+              <svg aria-hidden />
+            </ToolIcon>
+            Network workflow
+          </ToolHeader>
+          <ToolContent>
+            <button type="button">Approve</button>
+          </ToolContent>
+        </Tool>,
+      );
+
+      const tool = screen.getByRole('group', { name: 'Network workflow' });
+      const details = within(tool).getByRole('button', { name: 'Routing details' });
+      expect(details.parentElement?.closest('button')).toBeNull();
+      expect(within(tool).getByRole('button', { name: 'Approve' })).toBeTruthy();
+    });
+
+    it('keeps the entity icon color while showing a separate failure marker', () => {
+      const AgentIcon = (props: SVGProps<SVGSVGElement>) => <svg data-testid="agent-icon" {...props} />;
+
+      renderToolCall(
+        <Tool status="error" aria-label="Weather agent">
+          <ToolHeader>
+            <ToolIcon>
+              <AgentIcon className="text-accent1" />
+            </ToolIcon>
+            Weather agent
+          </ToolHeader>
+          <ToolContent>Agent output</ToolContent>
+        </Tool>,
+      );
+
+      expect(screen.getByTestId('agent-icon').classList.contains('text-accent1')).toBe(true);
+      expect(screen.getByRole('img', { name: 'Failed' })).toBeTruthy();
+    });
+
+    it('renders a non-collapsible header without a disclosure button', () => {
+      renderToolCall(
+        <Tool status="running" collapsible={false} aria-label="Loading agent">
+          <ToolHeader>
+            <ToolIcon>
+              <svg aria-hidden />
+            </ToolIcon>
+            Loading agent
+          </ToolHeader>
+        </Tool>,
+      );
+
+      const tool = screen.getByRole('group', { name: 'Loading agent' });
+      expect(within(tool).getByText('Loading agent')).toBeTruthy();
+      expect(within(tool).queryByRole('button')).toBeNull();
+    });
+
+    it('does not add a grouping rail to custom content', () => {
+      renderToolCall(
+        <Tool status="running" defaultOpen aria-label="Confirm order">
+          <ToolHeader>
+            <ToolIcon>
+              <svg aria-hidden />
+            </ToolIcon>
+            Confirm order
+          </ToolHeader>
+          <ToolContent>
+            <button type="button">Approve</button>
+          </ToolContent>
+        </Tool>,
+      );
+
+      const tool = screen.getByRole('group', { name: 'Confirm order' });
+      expect(within(tool).getByRole('button', { name: 'Approve' })).toBeTruthy();
+      expect(tool.querySelector('[data-tool-call-rail]')).toBeNull();
+    });
+
+    it('can preserve an existing custom tool disclosure state', () => {
+      const ExistingCustomTool = () => {
+        const [isCollapsed, setIsCollapsed] = useState(true);
+        return (
+          <Tool
+            status="success"
+            open={!isCollapsed}
+            onOpenChange={open => setIsCollapsed(!open)}
+            aria-label="Existing custom tool"
+          >
+            <ToolHeader>{isCollapsed ? 'Collapsed summary' : 'Expanded tool'}</ToolHeader>
+            <ToolContent>Original custom body</ToolContent>
+          </Tool>
+        );
+      };
+
+      renderToolCall(<ExistingCustomTool />);
+
+      expect(screen.getByText('Collapsed summary')).toBeTruthy();
+      expect(screen.queryByText('Original custom body')).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Collapsed summary' }));
+      expect(screen.getByText('Expanded tool')).toBeTruthy();
+      expect(screen.getByText('Original custom body')).toBeTruthy();
+    });
+
+    it('keeps multitone custom icons colorable through currentColor', () => {
+      const { container } = render(<ToolCoinIcon className="text-accent6" />);
+
+      const paintedPaths = Array.from(container.querySelectorAll('path')).filter(
+        path => path.hasAttribute('fill') || path.hasAttribute('stroke'),
+      );
+      expect(paintedPaths.length).toBeGreaterThan(0);
+      expect(
+        paintedPaths.every(
+          path =>
+            (!path.hasAttribute('fill') || path.getAttribute('fill') === 'currentColor') &&
+            (!path.hasAttribute('stroke') || path.getAttribute('stroke') === 'currentColor'),
+        ),
+      ).toBe(true);
+    });
+  });
+});
+
+describe('ToolCallListItem', () => {
+  describe('when another tool follows the current item', () => {
+    it('renders a visual rail behind the item content', () => {
+      renderToolCall(
+        <ToolCallListItem continued>
+          <Tool status="success" aria-label="First tool">
+            <ToolHeader>First tool</ToolHeader>
+            <ToolContent>First result</ToolContent>
+          </Tool>
+        </ToolCallListItem>,
+      );
+
+      const rail = document.querySelector('[data-tool-call-rail]');
+      const content = document.querySelector('[data-tool-call-list-item-content]');
+
+      expect(rail).not.toBeNull();
+      expect(content?.contains(screen.getByRole('group', { name: 'First tool' }))).toBe(true);
+    });
+  });
+
+  describe('when the item ends the sequence', () => {
+    it('does not render a trailing rail', () => {
+      renderToolCall(
+        <ToolCallListItem>
+          <Tool status="success" aria-label="Only tool">
+            <ToolHeader>Only tool</ToolHeader>
+            <ToolContent>Only result</ToolContent>
+          </Tool>
+        </ToolCallListItem>,
+      );
+
+      expect(document.querySelector('[data-tool-call-rail]')).toBeNull();
+    });
+  });
+});
+
 describe('ToolCall', () => {
+  describe('when a tool has a generic presentation', () => {
+    it('colors operation-specific tool icons yellow by default', () => {
+      renderToolCall(<ToolCall toolName="execute_command" input={{ command: 'pnpm test' }} status="success" />);
+
+      const tool = screen.getByRole('group', { name: 'Tool: execute_command' });
+      expect(within(tool).getByText('Run')).toBeTruthy();
+      expect(tool.querySelector('svg')?.classList.contains('text-accent6')).toBe(true);
+    });
+  });
+
   describe('when a tool is running', () => {
     it('renders the current Factory row semantics and humanized presentation', () => {
       renderToolCall(<ToolCall toolName="execute_command" input={{ command: 'pnpm test' }} status="running" />);
