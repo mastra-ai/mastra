@@ -179,34 +179,20 @@
     border-radius: 8px;
   }
 
-  /* Streamed words. The animation runs when a word lands, so re-parsing the
-   * growing text lights up only what is new. No transform: it is ignored on
-   * inline elements. `backwards` so no `blur(0)` survives — a word left on the
-   * filtered raster path antialiases unlike the settled text replacing it. */
-  .mastra-markdown-streaming .mastra-markdown-word {
-    animation: mastra-markdown-word-in 180ms cubic-bezier(0.2, 0, 0, 1) backwards;
-  }
-
-  /* The word still being typed. It holds its width so revealing it shifts
-   * nothing; gaining the class above is what starts its fade. */
-  .mastra-markdown-streaming .mastra-markdown-word-pending {
-    opacity: 0;
-  }
-
-  @keyframes mastra-markdown-word-in {
+  /* A word landing, or a code block appearing whole with its background. Nothing
+   * but opacity, so a word stays inline and lines never re-break behind it. */
+  @keyframes mastra-markdown-arriving {
     from {
       opacity: 0;
-      filter: blur(3px);
     }
+  }
 
-    to {
-      opacity: 1;
-      filter: blur(0);
-    }
+  .mastra-markdown-arriving {
+    animation: mastra-markdown-arriving 800ms cubic-bezier(0.33, 1, 0.68, 1) backwards;
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .mastra-markdown-streaming .mastra-markdown-word {
+    .mastra-markdown-arriving {
       animation: none;
     }
   }

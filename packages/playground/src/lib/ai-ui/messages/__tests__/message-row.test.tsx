@@ -1,11 +1,12 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import type { MastraTextPart } from '@mastra/react';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MessageRow } from '../message-row';
 import { buildGlobalOmPartsByCycleId, convertOmPartsInMastraMessage } from '@/services/om-parts-converter';
@@ -22,7 +23,10 @@ beforeEach(() => {
   server.use(...mcpEmptyHandlers);
 });
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 const Providers = ({ children }: { children: ReactNode }) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -51,6 +55,8 @@ const Providers = ({ children }: { children: ReactNode }) => {
 
 const renderRow = (message: MastraDBMessage) => render(<MessageRow message={message} />, { wrapper: Providers });
 
+const streamingText = (text: string): MastraTextPart => ({ type: 'text', text, state: 'streaming' });
+
 const omPart = (name: string, data: Record<string, unknown>) => ({
   type: `data-${name}`,
   data,
@@ -74,6 +80,27 @@ describe('MessageRow', () => {
       }),
     );
     expect(screen.getByText('world')).toBeTruthy();
+  });
+
+  // The reveal only paces if the factory keeps the text part mounted as the
+  // reply grows; a remount would show every chunk whole again.
+  describe('when a streaming reply grows', () => {
+    it('reveals it gradually', () => {
+      vi.useFakeTimers();
+      const reply = `Ready. ${Array.from({ length: 40 }, (_, index) => `word${index}`).join(' ')}`;
+      const growing = (text: string) => baseMessage({ content: { format: 2, parts: [streamingText(text)] } });
+
+      const { container, rerender } = render(<MessageRow message={growing('Ready.')} />, { wrapper: Providers });
+      rerender(<MessageRow message={growing(reply)} />);
+
+      expect(container.textContent).not.toContain('word39');
+
+      for (let frames = 0; frames < 300 && !container.textContent?.includes('word39'); frames++) {
+        act(() => void vi.advanceTimersByTime(16));
+      }
+
+      expect(container.textContent).toContain('word39');
+    });
   });
 
   it('renders user text', () => {

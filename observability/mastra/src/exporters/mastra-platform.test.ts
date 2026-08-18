@@ -12,7 +12,8 @@ import { EntityType, SpanType, TracingEventType } from '@mastra/core/observabili
 import { fetchWithRetry } from '@mastra/core/utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AuthFailureCooldown } from './auth-failure-cooldown';
-import { MastraPlatformExporter } from './mastra-platform';
+import { CloudExporter } from './cloud';
+import { MastraPlatformExporter, OBSERVABILITY_CAPABILITIES_HEADER, QUOTA_PAUSE_CAPABILITY } from './mastra-platform';
 
 // Mock fetchWithRetry
 vi.mock('@mastra/core/utils', () => ({
@@ -816,6 +817,7 @@ describe('MastraPlatformExporter', () => {
           headers: {
             Authorization: expect.stringMatching(/^Bearer .+/),
             'Content-Type': 'application/json',
+            'x-mastra-observability-capabilities': 'quota-pause-v1',
           },
           body: expect.any(String),
         },
@@ -2026,7 +2028,7 @@ describe('MastraPlatformExporter', () => {
         // Exactly one warn despite both signal responses being 402s
         expect(warnSpy).toHaveBeenCalledTimes(1);
         expect(warnSpy).toHaveBeenCalledWith(
-          'Mastra observability paused: quota exhausted, dropping telemetry and probing every 300s',
+          'Mastra observability export paused: platform quota exhausted (OBSERVABILITY_QUOTA_EXCEEDED). Dropping telemetry and retrying in 300 seconds. Check Platform billing/usage to restore telemetry.',
         );
 
         // All five signal types are dropped while paused, memory stays bounded
@@ -2320,6 +2322,124 @@ describe('MastraPlatformExporter', () => {
       expect((quotaExporter as any).quotaProbeTimer).toBeNull();
       await vi.advanceTimersByTimeAsync(600_000);
       expect(mockFetchWithRetry).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('Capability Header', () => {
+    const mockSpan = getMockSpan({
+      id: 'span-cap',
+      name: 'cap-span',
+      type: SpanType.MODEL_GENERATION,
+      isEvent: false,
+      traceId: 'trace-cap',
+      input: { prompt: 'test' },
+      output: { response: 'result' },
+    });
+
+    function headersOfCall(index: number): Record<string, string> {
+      const options = mockFetchWithRetry.mock.calls[index]![1] as RequestInit;
+      return options.headers as Record<string, string>;
+    }
+
+    it('exports the expected header name and capability value', () => {
+      expect(OBSERVABILITY_CAPABILITIES_HEADER).toBe('x-mastra-observability-capabilities');
+      expect(QUOTA_PAUSE_CAPABILITY).toBe('quota-pause-v1');
+    });
+
+    it('sends quota-pause-v1 on all five signal upload paths', async () => {
+      mockFetchWithRetry.mockResolvedValue(new Response('{}', { status: 200 }));
+      const capExporter = new MastraPlatformExporter({
+        accessToken: createTestJWT({ teamId: 'cap-team', projectId: 'cap-project' }),
+        endpoint: 'http://localhost:3000',
+      });
+
+      try {
+        await capExporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: mockSpan });
+        await capExporter.onLogEvent(getMockLogEvent());
+        await capExporter.onMetricEvent(getMockMetricEvent());
+        await capExporter.onScoreEvent(getMockScoreEvent());
+        await capExporter.onFeedbackEvent(getMockFeedbackEvent());
+        await capExporter.flush();
+
+        expect(mockFetchWithRetry).toHaveBeenCalledTimes(5);
+        for (let i = 0; i < 5; i++) {
+          expect(headersOfCall(i)[OBSERVABILITY_CAPABILITIES_HEADER]).toBe(QUOTA_PAUSE_CAPABILITY);
+        }
+      } finally {
+        await capExporter.shutdown();
+      }
+    });
+
+    it('retains the header when a custom endpoint is configured', async () => {
+      mockFetchWithRetry.mockResolvedValue(new Response('{}', { status: 200 }));
+      const capExporter = new MastraPlatformExporter({
+        accessToken: createTestJWT({ teamId: 'cap-team', projectId: 'cap-project' }),
+        endpoint: 'https://custom-collector.example.com',
+      });
+
+      try {
+        await capExporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: mockSpan });
+        await capExporter.flush();
+
+        const [url] = mockFetchWithRetry.mock.calls[0] as [string];
+        expect(url).toBe('https://custom-collector.example.com/ai/spans/publish');
+        expect(headersOfCall(0)[OBSERVABILITY_CAPABILITIES_HEADER]).toBe(QUOTA_PAUSE_CAPABILITY);
+      } finally {
+        await capExporter.shutdown();
+      }
+    });
+
+    it('sends the header on the quota recovery probe', async () => {
+      vi.useFakeTimers();
+      const capExporter = new MastraPlatformExporter({
+        accessToken: createTestJWT({ teamId: 'cap-team', projectId: 'cap-project' }),
+        endpoint: 'http://localhost:3000',
+      });
+
+      try {
+        // Trigger the quota pause with a 402
+        mockFetchWithRetry.mockImplementation(async (_url, _options, _maxRetries, retryOptions) => {
+          retryOptions?.shouldRetryResponse?.(
+            new Response('{}', {
+              status: 402,
+              headers: { 'x-mastra-observability': 'disabled', 'x-mastra-observability-retry-after': '60' },
+            }),
+          );
+          throw new Error('Request failed with status: 402 Payment Required');
+        });
+        await capExporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: mockSpan });
+        await capExporter.flush();
+        expect((capExporter as any).quotaPaused).toBe(true);
+
+        mockFetchWithRetry.mockResolvedValue(new Response('{}', { status: 200 }));
+        await vi.advanceTimersByTimeAsync(60_000);
+
+        expect(mockFetchWithRetry).toHaveBeenCalledTimes(2);
+        expect(headersOfCall(1)[OBSERVABILITY_CAPABILITIES_HEADER]).toBe(QUOTA_PAUSE_CAPABILITY);
+        // Probes never use generic retries
+        expect(mockFetchWithRetry.mock.calls[1]![2]).toBe(1);
+      } finally {
+        await capExporter.shutdown();
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not add the header to legacy CloudExporter requests', async () => {
+      mockFetchWithRetry.mockResolvedValue(new Response('{}', { status: 200 }));
+      const cloudExporter = new CloudExporter({
+        accessToken: createTestJWT({ teamId: 'cloud-team', projectId: 'cloud-project' }),
+        endpoint: 'http://localhost:3000',
+      });
+
+      try {
+        await cloudExporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: mockSpan });
+        await cloudExporter.flush();
+
+        expect(mockFetchWithRetry).toHaveBeenCalledTimes(1);
+        expect(headersOfCall(0)[OBSERVABILITY_CAPABILITIES_HEADER]).toBeUndefined();
+      } finally {
+        await cloudExporter.shutdown();
+      }
     });
   });
 

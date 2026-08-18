@@ -37,8 +37,10 @@ export function isOpenAICompatibleObjectConfig(
   // 1. 'id' field (but NOT 'model' - that's ModelWithRetries)
   // 2. Both 'providerId' and 'modelId' fields
   if (!('model' in modelConfig)) {
-    if ('id' in modelConfig) return true;
-    if ('providerId' in modelConfig && 'modelId' in modelConfig) return true;
+    if ('providerId' in modelConfig && 'modelId' in modelConfig) {
+      return typeof modelConfig.providerId === 'string' && typeof modelConfig.modelId === 'string';
+    }
+    if ('id' in modelConfig) return typeof modelConfig.id === 'string';
   }
   return false;
 }

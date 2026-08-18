@@ -79,6 +79,14 @@ const skillSearch = new SkillSearchProcessor({
             isOptional: true,
             default: '3600000',
           },
+          {
+            name: 'blockingRefresh',
+            type: 'boolean',
+            description:
+              'When true, awaits the skills staleness check before the first step of each request so skill changes appear in the same turn. When false, the cached catalog is served and revalidated in the background, so skill changes can lag by one turn plus the staleness cooldown (up to 30 seconds).',
+            isOptional: true,
+            default: 'false',
+          },
         ],
       },
     ],
@@ -179,4 +187,4 @@ Reserve workspace file tools such as `mastra_workspace_read_file` for explicit f
 
 - [ToolSearchProcessor](/reference/processors/tool-search-processor)
 - [Processors](/docs/agents/processors)
-- [Workspace Skills](/docs/workspace/overview)
+- [Workspace Skills](/docs/sandbox/skills)

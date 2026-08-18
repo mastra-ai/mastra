@@ -175,6 +175,13 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
     description:
       'Require human approval before executing tools from this server. When set to `true`, all tools require approval. When set to a function, the function is called with the tool name, arguments, request context, and any tool annotations advertised by the server to dynamically decide whether approval is needed.',
   },
+  {
+    name: 'protocolVersion',
+    type: "'auto' | '2026-07-28'",
+    isOptional: true,
+    description:
+      "Opt-in MCP protocol version negotiation. Omitted keeps the legacy (2025-era) connect sequence unchanged. 'auto' probes the server at connect time and uses the stateless '2026-07-28' revision when the server supports it, with a safe fallback to the legacy handshake. '2026-07-28' pins that revision exactly and fails with a typed error when the server does not offer it. Elicitation handlers work on both eras: on a '2026-07-28' connection, embedded elicitation requests from input_required results are dispatched through the same registered handler and the originating call retries automatically.",
+  },
 ]}
 />
 
@@ -337,16 +344,22 @@ Intended to be passed onto an Agent definition.
 new Agent({ id: 'agent', tools: await mcp.listTools() })
 ```
 
-### `listToolsWithErrors()`
+### `listToolsWithErrors(options?)`
 
 Retrieves all tools from all configured servers, with tool names namespaced by their server name. Also returns per-server errors for servers that failed to connect or list tools.
 
+Set `perServerTimeoutMs` to limit how long discovery waits for each server. Servers that finish within the limit remain in `tools`. Timed-out servers appear in `errors`, and `durations` reports each server's discovery time in milliseconds.
+
 ```typescript
-const { tools, errors } = await mcp.listToolsWithErrors()
+const { tools, errors, durations } = await mcp.listToolsWithErrors({
+  perServerTimeoutMs: 3_000,
+})
 
 new Agent({ id: 'agent', tools })
-console.log(errors)
+console.log(errors, durations)
 ```
+
+When called without options, the method returns only `tools` and `errors`.
 
 ### `listToolsets()`
 
@@ -358,6 +371,21 @@ const res = await agent.stream(prompt, {
   toolsets: await mcp.listToolsets(),
 })
 ```
+
+### `listToolsetsWithErrors(options?)`
+
+Returns toolsets grouped by server name, along with per-server discovery errors. Set `perServerTimeoutMs` to limit each server independently and include per-server `durations` in milliseconds.
+
+```typescript
+const { toolsets, errors, durations } = await mcp.listToolsetsWithErrors({
+  perServerTimeoutMs: 3_000,
+})
+
+const res = await agent.stream(prompt, { toolsets })
+console.log(errors, durations)
+```
+
+When called without options, the method returns only `toolsets` and `errors`.
 
 ### `listToolDefinitions()`
 
@@ -371,17 +399,25 @@ const definitions = await mcp.listToolDefinitions()
 await cache.set('mcp-tools', JSON.stringify(definitions))
 ```
 
-### `listToolDefinitionsWithErrors()`
+### `listToolDefinitionsWithErrors(options?)`
 
 Like `listToolDefinitions()`, but also returns per-server errors for servers that failed to connect. Use this when caching a catalog, so you don't persist a partial manifest that omits a server that was down at discovery time.
 
+Set `perServerTimeoutMs` to limit each server independently. When options are provided, `durations` reports each server's discovery time in milliseconds.
+
 ```typescript
-const { definitions, errors } = await mcp.listToolDefinitionsWithErrors()
+const { definitions, errors, durations } = await mcp.listToolDefinitionsWithErrors({
+  perServerTimeoutMs: 3_000,
+})
 
 if (Object.keys(errors).length === 0) {
   await cache.set('mcp-tools', JSON.stringify(definitions))
 }
+
+console.log(durations)
 ```
+
+When called without options, the method returns only `definitions` and `errors`.
 
 ### `toolFromDefinition()`
 

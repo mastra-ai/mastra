@@ -3,6 +3,10 @@ export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'ma
 export const FACTORY_RULE_STAGES = ['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled'] as const;
 export type FactoryRuleStage = (typeof FACTORY_RULE_STAGES)[number];
 
+export function isFactoryRuleStage(value: unknown): value is FactoryRuleStage {
+  return typeof value === 'string' && FACTORY_RULE_STAGES.some(stage => stage === value);
+}
+
 export const FACTORY_RULE_BOARDS = ['work', 'review'] as const;
 export type FactoryRuleBoard = (typeof FACTORY_RULE_BOARDS)[number];
 

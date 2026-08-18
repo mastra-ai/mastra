@@ -20,6 +20,8 @@ import { ConnectionNotice } from '../domains/chat/components/ConnectionNotice';
 import { EmptyThreadState } from '../domains/chat/components/EmptyThreadState';
 import { GoalPanel } from '../domains/chat/components/GoalPanel';
 import { TaskPanel } from '../domains/chat/components/TaskPanel';
+import { PageTitle } from '../domains/chat/components/PageTitle';
+import { SessionFavicon } from '../domains/chat/components/SessionFavicon';
 import { Transcript } from '../domains/chat/components/Transcript';
 import { TranscriptHistoryLoader } from '../domains/chat/components/TranscriptHistoryLoader';
 import { ThreadRailLayer } from '../domains/chat/components/ThreadRailLayer';
@@ -48,17 +50,10 @@ export function ThreadPage() {
       sidebar={<Sidebar />}
       main={
         resolvingSession ? (
-          // bare bar stands in — the session header needs WorkspaceFilesProvider
-          <ChatShell className="flex-1">
-            <ChatShell.Bar>
-              <ChatHeader />
-            </ChatShell.Bar>
-            <div className="grid min-h-0 flex-1 place-items-center">
-              <Spinner aria-label="Loading session" className="text-icon3" />
-            </div>
-          </ChatShell>
+          <ResolvingSessionMain />
         ) : (
           <ChatSessionBoundary threadId={threadId}>
+            <PageTitle />
             <WorkspaceFilesProvider>
               <ThreadPageMain workspacePath={workspace.workspacePath} threadId={workspace.threadId} />
             </WorkspaceFilesProvider>
@@ -66,6 +61,25 @@ export function ThreadPage() {
         )
       }
     />
+  );
+}
+
+// Owns the favicon for this branch: the session boundary is not mounted yet, so
+// nothing else can write it. A bare bar stands in — the session header needs
+// WorkspaceFilesProvider.
+function ResolvingSessionMain() {
+  return (
+    <>
+      <SessionFavicon state="initializing" />
+      <ChatShell className="flex-1">
+        <ChatShell.Bar>
+          <ChatHeader />
+        </ChatShell.Bar>
+        <div className="grid min-h-0 flex-1 place-items-center">
+          <Spinner aria-label="Loading session" className="text-icon3" />
+        </div>
+      </ChatShell>
+    </>
   );
 }
 
@@ -138,6 +152,7 @@ function ThreadShell({
     <ChatShell
       className={threadShellClass}
       scroller={{
+        autoScroll: true,
         defaultScrollPosition: 'last-anchor',
         preserveScrollOnPrepend: true,
         onReachStart: canLoadMore ? loadMore.load : undefined,

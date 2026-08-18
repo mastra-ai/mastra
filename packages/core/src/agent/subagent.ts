@@ -40,7 +40,7 @@ export type SubAgentStreamResult = {
   runId: string;
 };
 
-export interface SubAgent<TId = string, TRequestContext extends Record<string, any> | unknown = unknown> {
+export interface SubAgent<TId = string, TRequestContext extends Record<string, any> | unknown = any> {
   /** Unique identifier for this subagent */
   readonly id: TId;
 

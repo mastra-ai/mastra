@@ -6,6 +6,7 @@ import { allRoute } from '@/api/route/all';
 import { streamingRoute } from '@/api/route/streaming';
 import { transitiveWorkspaceRoute } from '@/api/route/transitive-workspace';
 import { myAgent } from '@inner/hello-world/agent';
+import 'nodemailer';
 
 export const mastra = new Mastra({
   agents: { innerAgent, myAgent },

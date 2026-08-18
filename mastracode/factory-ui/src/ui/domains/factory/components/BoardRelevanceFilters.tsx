@@ -121,33 +121,38 @@ export function BoardRelevanceFilters({
             <span className="max-w-48 truncate">{labelButtonText}</span>
           </Button>
         </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="start" className="max-h-80 min-w-56 overflow-y-auto">
-          <DropdownMenu.Label>Labels</DropdownMenu.Label>
-          <div className="px-2 pb-1">
-            <input
-              type="search"
-              value={labelSearch}
-              onChange={event => setLabelSearch(event.target.value)}
-              placeholder="Search labels..."
-              aria-label="Search labels"
-              className="border-border-1 bg-surface-3 focus:border-border-2 w-full rounded-md border px-2 py-1 text-xs outline-none"
-            />
-          </div>
-          {visibleLabels.length === 0 && (
-            <div className="text-icon3 px-3 py-1.5 text-xs">
-              {availableLabels.length === 0 ? 'No labels available.' : 'No labels match.'}
+        <DropdownMenu.Content align="start" className="flex max-h-80 min-w-56 flex-col overflow-hidden">
+          <div className="shrink-0">
+            <DropdownMenu.Label>Labels</DropdownMenu.Label>
+            <div className="px-2 pb-1">
+              <input
+                type="search"
+                value={labelSearch}
+                onChange={event => setLabelSearch(event.target.value)}
+                onKeyDown={event => event.stopPropagation()}
+                placeholder="Search labels..."
+                aria-label="Search labels"
+                className="border-border-1 bg-surface-3 focus:border-border-2 w-full rounded-md border px-2 py-1 text-xs outline-none"
+              />
             </div>
-          )}
-          {visibleLabels.map(label => (
-            <DropdownMenu.CheckboxItem
-              key={label}
-              checked={selectedLabels.has(label)}
-              onCheckedChange={checked => onLabelChange(label, checked === true)}
-              onSelect={event => event.preventDefault()}
-            >
-              {label}
-            </DropdownMenu.CheckboxItem>
-          ))}
+          </div>
+          <div className="min-h-0 overflow-y-auto">
+            {visibleLabels.length === 0 && (
+              <div className="text-icon3 px-3 py-1.5 text-xs">
+                {availableLabels.length === 0 ? 'No labels available.' : 'No labels match.'}
+              </div>
+            )}
+            {visibleLabels.map(label => (
+              <DropdownMenu.CheckboxItem
+                key={label}
+                checked={selectedLabels.has(label)}
+                onCheckedChange={checked => onLabelChange(label, checked === true)}
+                onSelect={event => event.preventDefault()}
+              >
+                {label}
+              </DropdownMenu.CheckboxItem>
+            ))}
+          </div>
         </DropdownMenu.Content>
       </DropdownMenu>
 

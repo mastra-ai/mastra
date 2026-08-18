@@ -538,6 +538,14 @@ function withInProcessProjectLock<T>(key: string, fn: () => Promise<T>): Promise
   return result;
 }
 
+/** Source key a decision materializes, used to purge governance rows when the item is deleted. */
+function decisionSourceKey(decision: unknown): string | null {
+  if (typeof decision !== 'object' || decision === null) return null;
+  const record = decision as Record<string, unknown>;
+  if (record.type !== 'upsertLinkedWorkItem' || typeof record.sourceKey !== 'string') return null;
+  return record.sourceKey;
+}
+
 const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
   {
     name: 'factory_rule_ingress',
@@ -578,6 +586,7 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       factory_project_id: { type: 'text' },
       evaluation_id: { type: 'text' },
       work_item_id: { type: 'text', nullable: true },
+      source_key: { type: 'text', nullable: true },
       idempotency_key: { type: 'text' },
       effect_ordinal: { type: 'integer' },
       effect_hash: { type: 'text' },
@@ -1026,6 +1035,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 factory_project_id: input.factoryProjectId,
                 evaluation_id: evaluation.id,
                 work_item_id: item.id,
+                source_key: decisionSourceKey(decision),
                 idempotency_key: String(decision.idempotencyKey),
                 effect_ordinal: index,
                 effect_hash: factoryDecisionHash(decision),
@@ -1160,6 +1170,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             factory_project_id: input.factoryProjectId,
             evaluation_id: evaluation.id,
             work_item_id: item?.id ?? null,
+            source_key: decisionSourceKey(decision),
             idempotency_key: String(decision.idempotencyKey),
             effect_ordinal: effectOrdinal,
             effect_hash: factoryDecisionHash(decision),
@@ -1807,6 +1818,42 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, run);
   }
 
+  /**
+   * Drop the governance rows that materialized a source key so a deleted work item
+   * is not resurrected by the prior-ingress replay path on the next intake poll.
+   */
+  async #purgeRuleState(
+    ops: FactoryStorageOps,
+    { orgId, factoryProjectId, sourceKey }: { orgId: string; factoryProjectId: string; sourceKey: string },
+  ): Promise<void> {
+    const decisions = await ops.findMany<GovernanceDbRow>('factory_deferred_decisions', {
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+      source_key: sourceKey,
+    });
+    if (decisions.length === 0) return;
+
+    const evaluationIds = [...new Set(decisions.map(decision => String(decision.evaluation_id)))];
+    const ingressIds = new Set<string>();
+    for (const evaluationId of evaluationIds) {
+      const evaluation = await ops.findOne<GovernanceDbRow>('factory_rule_evaluations', { id: evaluationId });
+      if (evaluation) ingressIds.add(String(evaluation.ingress_id));
+    }
+
+    await ops.deleteMany('factory_deferred_decisions', {
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+      source_key: sourceKey,
+    });
+    for (const evaluationId of evaluationIds) {
+      await ops.deleteMany('factory_rule_evaluations', { id: evaluationId });
+    }
+    for (const ingressId of ingressIds) {
+      const remaining = await ops.findMany<GovernanceDbRow>('factory_rule_evaluations', { ingress_id: ingressId });
+      if (remaining.length === 0) await ops.deleteMany('factory_rule_ingress', { id: ingressId });
+    }
+  }
+
   async delete({ orgId, id }: { orgId: string; id: string }): Promise<WorkItemRow | null> {
     const candidate = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
     if (!candidate) return null;
@@ -1816,6 +1863,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       if (!existing) return null;
       const deleted = await ops.deleteMany('work_items', { org_id: orgId, id });
       if (deleted === 0) return null;
+      if (existing.source_key) {
+        await this.#purgeRuleState(ops, {
+          orgId,
+          factoryProjectId: existing.factory_project_id,
+          sourceKey: existing.source_key,
+        });
+      }
       await ops.updateMany(
         'work_items',
         { org_id: orgId, parent_work_item_id: id },
