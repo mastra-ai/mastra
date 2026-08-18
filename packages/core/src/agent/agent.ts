@@ -148,6 +148,7 @@ import type {
   DelegationStartContext,
   DelegationStartResult,
   DelegationCompleteContext,
+  DelegationHookError,
 } from './agent.types';
 // Value import of durable constants is safe: constants.ts is a leaf module
 // with no imports, so it cannot create the runtime cycle `agent →
@@ -4878,6 +4879,32 @@ export class Agent<
                   entityId: agentName,
                 }) || `${slugify(this.id)}-${agentName}`;
 
+            // Record a throwing delegation hook on the run's request context so
+            // callers can detect "delegation ran but the hook failed" without
+            // scraping logs. Runs for every hookErrorStrategy.
+            const recordHookError = (hook: DelegationHookError['hook'], hookError: unknown, logMessage: string) => {
+              const error = hookError instanceof Error ? hookError : new Error(String(hookError));
+              this.logger.error(logMessage, { agent: this.name, error });
+              const existing =
+                (requestContext.get('__mastra_delegationHookErrors') as DelegationHookError[] | undefined) ?? [];
+              requestContext.set('__mastra_delegationHookErrors', [
+                ...existing,
+                {
+                  hook,
+                  primitiveId: agent.id,
+                  toolCallId,
+                  runId: runId || '',
+                  name: error.name,
+                  message: error.message,
+                },
+              ]);
+              return error;
+            };
+            const hookErrorStrategy = delegation?.hookErrorStrategy ?? 'warn';
+            // A hook that just threw is not in a state to handle its own
+            // failure, so the failure path never re-invokes it.
+            let completeHookInvoked = false;
+
             // Call onDelegationStart before resolving the sub-agent's runtime
             // config so mutations of the delegated run's context in the hook
             // are visible to version, model, and default-options resolution
@@ -4888,8 +4915,26 @@ export class Agent<
               try {
                 startResult = await delegation.onDelegationStart(delegationStartContext);
               } catch (hookError) {
-                this.logger.error('onDelegationStart hook error', { agent: this.name, error: hookError });
-                // Continue with original values on hook error
+                const error = recordHookError('onDelegationStart', hookError, 'onDelegationStart hook error');
+                // Fail closed when configured: the delegation never started, so
+                // this throws directly rather than routing through
+                // onDelegationComplete. Otherwise continue with original values.
+                if (hookErrorStrategy === 'throw') {
+                  throw new MastraError(
+                    {
+                      id: 'AGENT_DELEGATION_HOOK_FAILED',
+                      domain: ErrorDomain.AGENT,
+                      category: ErrorCategory.USER,
+                      details: {
+                        agentName: this.name,
+                        subAgentName: agent.name ?? agent.id,
+                        hook: 'onDelegationStart',
+                        runId: runId || '',
+                      },
+                    },
+                    error,
+                  );
+                }
               }
             }
 
@@ -5118,8 +5163,13 @@ export class Agent<
                     toolCallId,
                   });
                 } catch (filterError) {
-                  this.logger.error('messageFilter error', { agent: this.name, error: filterError });
-                  // Fall back to unfiltered context on error
+                  recordHookError('messageFilter', filterError, 'messageFilter error');
+                  // Fail closed when configured (handled by the surrounding
+                  // catch, which fails the delegation). Otherwise fall back to
+                  // the unfiltered context.
+                  if (hookErrorStrategy === 'throw') {
+                    throw filterError;
+                  }
                 }
               }
 
@@ -5445,6 +5495,7 @@ export class Agent<
                     },
                   };
 
+                  completeHookInvoked = true;
                   const completeResult = await delegation.onDelegationComplete(delegationCompleteContext);
 
                   // If bailed, add a marker to the result and signal via requestContext
@@ -5493,14 +5544,22 @@ export class Agent<
                     }
                   }
                 } catch (hookError) {
-                  this.logger.error('onDelegationComplete hook error', { agent: this.name, error: hookError });
+                  recordHookError('onDelegationComplete', hookError, 'onDelegationComplete hook error');
+                  // Fail closed when configured: the surrounding catch turns
+                  // this into a tool failure for the parent.
+                  if (hookErrorStrategy === 'throw') {
+                    throw hookError;
+                  }
                 }
               }
               return result;
             } catch (err) {
               let bailed = false;
-              // Call onDelegationComplete with error if hook is provided
-              if (delegation?.onDelegationComplete) {
+              let completeHookError: Error | undefined;
+              // Call onDelegationComplete with error if hook is provided.
+              // Skipped when the success path already invoked it — including
+              // when that invocation is what threw us into this catch.
+              if (delegation?.onDelegationComplete && !completeHookInvoked) {
                 try {
                   const delegationCompleteContext: DelegationCompleteContext = {
                     primitiveId: agent.id,
@@ -5561,10 +5620,14 @@ export class Agent<
                     }
                   }
                 } catch (hookError) {
-                  this.logger.error('onDelegationComplete hook error on failure', {
-                    agent: this.name,
-                    error: hookError,
-                  });
+                  // Never rethrown, even under `throw`: the original delegation
+                  // error is strictly more informative than the hook's, so it
+                  // is surfaced below with the hook error attached as detail.
+                  completeHookError = recordHookError(
+                    'onDelegationComplete',
+                    hookError,
+                    'onDelegationComplete hook error on failure',
+                  );
                 }
               }
 
@@ -5579,6 +5642,7 @@ export class Agent<
                     runId: runId || '',
                     threadId: threadId || '',
                     resourceId: resourceId || '',
+                    ...(completeHookError ? { hookError: completeHookError.message } : {}),
                   },
                   text: `[Agent:${this.name}] - Failed agent tool execution for ${agentName}`,
                 },
