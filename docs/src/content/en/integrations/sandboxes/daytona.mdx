@@ -272,6 +272,36 @@ await sandbox.instance.updateNetworkSettings({
 })
 ```
 
+### Computer use (desktop)
+
+`DaytonaSandbox` exposes the [computer capability](/docs/sandbox/overview#computer-use-tools): screenshot, mouse, and keyboard control of a desktop environment inside the sandbox. When the sandbox is used in a workspace, agents automatically get the `mastra_workspace_computer_*` tools.
+
+The desktop processes (Xvfb, xfce4, x11vnc, noVNC) are started lazily on the first computer operation:
+
+```typescript
+const sandbox = new DaytonaSandbox()
+await sandbox.start()
+
+await sandbox.computer.leftClick(100, 200)
+await sandbox.computer.type('hello')
+const { data } = await sandbox.computer.screenshot() // PNG bytes
+
+// Live desktop view via the noVNC preview link
+const url = await sandbox.computer.streamUrl()
+```
+
+Disable the capability, or manage the desktop processes yourself, with the `computerUse` option:
+
+```typescript
+// No computer capability, no computer tools
+new DaytonaSandbox({ computerUse: false })
+
+// Capability stays on, but you call sandbox.daytona.computerUse.start() yourself
+new DaytonaSandbox({ computerUse: { autoStart: false } })
+```
+
+For Daytona-specific desktop APIs (regions, compressed screenshots, screen recording, accessibility tree), use the [direct SDK access](#direct-sdk-access) escape hatch: `sandbox.daytona.computerUse`.
+
 ## Constructor parameters
 
 <PropertiesTable
@@ -424,6 +454,14 @@ await sandbox.instance.updateNetworkSettings({
       'Comma-separated list of allowed domains when network access is restricted. Supports wildcards, for example `*.githubusercontent.com`. Use this instead of `networkAllowList` for services whose IP addresses change.',
     isOptional: true,
   },
+  {
+    name: 'computerUse',
+    type: 'boolean | { autoStart?: boolean; noVncPort?: number }',
+    description:
+      'Computer-use (desktop) capability configuration. Set to false to disable the capability. Set autoStart to false to manage the desktop processes yourself. noVncPort sets the noVNC viewer port used by computer.streamUrl().',
+    isOptional: true,
+    defaultValue: 'true',
+  },
 ]}
 />
 
@@ -462,6 +500,12 @@ await sandbox.instance.updateNetworkSettings({
     type: 'DaytonaProcessManager',
     description:
       'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
+  },
+  {
+    name: 'computer',
+    type: 'SandboxComputer | undefined',
+    description:
+      'Computer-use capability: screenshot, mouse, keyboard, and stream URL. Undefined when constructed with computerUse: false. See [SandboxComputer reference](/reference/workspace/sandbox#computer-capability).',
   },
 ]}
 />
