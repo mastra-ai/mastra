@@ -490,6 +490,32 @@ describe('agent-controller routes', () => {
       expect(received.errorType).toBe('provider');
     });
 
+    it('flattens Error instances on workspace events, not just on `error`', async () => {
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-ws-err',
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<unknown>;
+
+      const reader = stream.getReader();
+
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-ws-err', id: 'user-ws-err', ownerId: 'code' });
+      session.emit({ type: 'workspace_error', error: new Error('clone failed: permission denied') });
+
+      let received: any;
+      for (let i = 0; i < 10 && received === undefined; i++) {
+        const { value } = await reader.read();
+        if (value && typeof value === 'object' && (value as any).type === 'workspace_error') received = value;
+      }
+      await reader.cancel();
+
+      expect(received).toBeDefined();
+      expect(JSON.parse(JSON.stringify(received)).error.message).toBe('clone failed: permission denied');
+    });
+
     it('converts display-state Maps to plain objects so tool state survives JSON serialization', async () => {
       const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
         mastra,
@@ -759,6 +785,32 @@ describe('agent-controller routes', () => {
         resourceId: 'user-wt',
       } as any)) as { threads: unknown[] };
       expect(all.threads.length).toBeGreaterThanOrEqual(3);
+    });
+
+    it('keeps persisted session preferences out of a thread\u2019s tags', async () => {
+      // Preferences that survive a restart (thinking level, notifications) share
+      // the flat thread `metadata` bag with the scoping tags. They are string
+      // valued, so nothing but the reserved-key filter keeps them from surfacing
+      // as tags \u2014 and from being matchable through the `tags` filter.
+      await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-prefs',
+      } as any);
+      const session = await mastra.getAgentController('code')!.createSession({ resourceId: 'user-prefs' });
+      await session.state.set({ projectPath: '/repo' } as any);
+      await session.thread.create({ title: 'p1' });
+      await session.state.set({ projectPath: '/repo', thinkingLevel: 'high', notifications: 'bell' } as any);
+
+      const res = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-prefs',
+        tags: { projectPath: '/repo' },
+      } as any)) as { threads: { title?: string; tags?: Record<string, string> }[] };
+
+      const thread = res.threads.find(t => t.title === 'p1');
+      expect(thread?.tags).toEqual({ projectPath: '/repo' });
     });
 
     it('annotates each thread with its run state (active while a run executes, idle otherwise)', async () => {
