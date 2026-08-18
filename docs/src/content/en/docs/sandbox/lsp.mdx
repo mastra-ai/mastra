@@ -92,9 +92,14 @@ See [`WorkspaceToolsConfig`](/reference/workspace/workspace-class#tool-configura
 Set `lsp` to `true` for default behavior, or provide an object to customize server startup and diagnostics:
 
 ```typescript title="src/mastra/workspaces.ts"
+import { isAbsolute } from 'node:path'
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'
 
-const projectPath = process.env.PROJECT_PATH!
+const projectPath = process.env.PROJECT_PATH
+
+if (!projectPath || !isAbsolute(projectPath)) {
+  throw new Error('PROJECT_PATH must be an absolute path')
+}
 
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: projectPath }),

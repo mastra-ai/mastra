@@ -219,8 +219,13 @@ Filesystem and index mutations are independent. Writing, editing, or deleting a 
 ```typescript
 const path = 'notes/launch.md'
 const content = '# Launch notes\n\nShip the new dashboard on Friday.'
+const filesystem = workspace.filesystem
 
-await workspace.filesystem?.writeFile(path, content)
+if (!filesystem) {
+  throw new Error('This operation requires a static filesystem')
+}
+
+await filesystem.writeFile(path, content)
 await workspace.index(path, content)
 ```
 
