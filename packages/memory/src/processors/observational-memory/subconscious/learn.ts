@@ -138,7 +138,8 @@ export function composeReflectionAgentHandlers(
     for (const handler of handlers) {
       try {
         await handler(context);
-      } catch {
+      } catch (error) {
+        if (context.abortSignal?.aborted) throw error;
         // Each handler reports its own failure; reflection agents must remain independent.
       }
     }
@@ -191,6 +192,7 @@ export function createLearnerHandler(
       });
     } catch (error) {
       const message = `learn: ${error instanceof Error ? error.message : String(error)}`;
+      await context.writer?.custom({ type: 'data-subconscious-error', data: { agent: 'learn', error: message } });
       if (store && scope) {
         await publishSubconsciousActivity({
           store,
