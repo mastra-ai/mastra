@@ -256,7 +256,7 @@ export function reconcileClientEchoes(
     if (messagesContentEqual(message, stored)) {
       continue; // stale echo — already persisted, nothing to write
     }
-    if (stored.role === 'user') {
+    if (stored.role === 'user' && message.role === 'user') {
       reconciled.push(message); // client-authored edit, last-write-wins
       continue;
     }
