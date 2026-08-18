@@ -33,14 +33,14 @@ Apply `.claude/skills/mastra-docs/references/STYLEGUIDE.md` and the matching pag
 
 Type: deterministic.
 
-Use `scripts/run-checks.sh`; it captures validation, remark, Vale, and file-scoped Prettier output in `$RUN_DIR/commands/`.
+Use `scripts/run-checks.sh`; it captures validation, Remark, Vale, and file-scoped oxfmt-mdx output in `$RUN_DIR/commands/`.
 
 Check relevant output for:
 
-- frontmatter/sidebar validation failures,
-- remark structure errors,
+- frontmatter or sidebar validation failures,
+- Remark structure errors,
 - Vale error-level prose issues,
-- Prettier formatting failures.
+- oxfmt-mdx formatting failures.
 
 - `pass`: Checks pass or produce no output relevant to audited files.
 - `warn`: A tool cannot run for environmental reasons, such as missing local Vale setup.
@@ -63,7 +63,7 @@ Use package source, TypeScript definitions, real exports, and `docs/src/plugins/
 
 - `pass`: Examples match source and are complete enough for the page type.
 - `warn`: Technically plausible but missing small context or explanation.
-- `fail`: Stale imports/APIs, wrong options/signatures, missing required fields, literal model IDs, or incomplete quickstart/tutorial code.
+- `fail`: Stale imports or APIs, wrong options or signatures, missing required fields, literal model IDs, or incomplete task-oriented code.
 
 ### 4. API/property completeness
 
