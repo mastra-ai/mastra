@@ -21,7 +21,11 @@ interface ArchitectureOptions {
 interface InstallOptions extends ArchitectureOptions {
   pnpmOverrides?: Record<string, string>;
   pnpmNodeLinker?: 'hoisted';
+  /** Patch key -> path relative to the output directory. */
+  patchedDependencies?: Record<string, string>;
 }
+
+const PNPM_PATCHES_DIR = 'pnpm-patches';
 
 const PNPM_CONFIG_KEYS_TO_COPY = new Set([
   'allowBuilds',
@@ -105,6 +109,33 @@ function validatePnpmBuildApprovals(key: string, block: string): void {
   });
 }
 
+/**
+ * Reads the `patchedDependencies` map from a pnpm workspace file. Paths are returned as declared,
+ * i.e. relative to the workspace root. Returns an empty map for absent or unusable declarations.
+ */
+export function parsePnpmPatchedDependencies(source: string): Record<string, string> {
+  let parsed: unknown;
+  try {
+    parsed = parse(source);
+  } catch {
+    return {};
+  }
+
+  const patched = (parsed as { patchedDependencies?: unknown } | null)?.patchedDependencies;
+  if (!patched || typeof patched !== 'object' || Array.isArray(patched)) {
+    return {};
+  }
+
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(patched as Record<string, unknown>)) {
+    if (typeof value === 'string' && value.trim() && key.trim()) {
+      result[key] = value.trim();
+    }
+  }
+
+  return result;
+}
+
 export function copyPnpmWorkspaceSettings(source: string, options: InstallOptions = {}) {
   const hasArchitecture = Boolean(options.os?.length || options.cpu?.length || options.libc?.length);
   const lines = source.split(/\r?\n/);
@@ -157,6 +188,20 @@ export function copyPnpmWorkspaceSettings(source: string, options: InstallOption
         ),
       ].join('\n'),
     );
+  }
+
+  if (options.patchedDependencies && Object.keys(options.patchedDependencies).length > 0) {
+    blocks.push(
+      [
+        'patchedDependencies:',
+        ...Object.entries(options.patchedDependencies).map(
+          ([key, value]) => `  ${JSON.stringify(key)}: ${JSON.stringify(value)}`,
+        ),
+      ].join('\n'),
+    );
+    // The bundled output only installs runtime dependencies, so patches declared for
+    // dev-only or bundled-away packages are legitimately unused here.
+    blocks.push('allowUnusedPatches: true');
   }
 
   if (options.pnpmNodeLinker) {
@@ -260,11 +305,49 @@ export class Deps extends MastraBase {
       ? await fsPromises.readFile(sourceWorkspaceYamlPath, 'utf-8')
       : '';
 
+    const patchedDependencies = sourceWorkspaceYamlPath
+      ? await this.copyPnpmPatches(sourceWorkspaceYaml, path.dirname(sourceWorkspaceYamlPath), dir)
+      : undefined;
+
     await fsPromises.writeFile(
       path.join(dir, 'pnpm-workspace.yaml'),
-      copyPnpmWorkspaceSettings(sourceWorkspaceYaml, options),
+      copyPnpmWorkspaceSettings(sourceWorkspaceYaml, { ...options, patchedDependencies }),
       'utf-8',
     );
+  }
+
+  /**
+   * Copies the patch files declared by the source workspace into the output directory and returns
+   * the patch map rewritten to output-relative paths, so the patches survive the output install.
+   */
+  private async copyPnpmPatches(
+    sourceWorkspaceYaml: string,
+    sourceWorkspaceRoot: string,
+    dir: string,
+  ): Promise<Record<string, string>> {
+    const declared = parsePnpmPatchedDependencies(sourceWorkspaceYaml);
+    const rewritten: Record<string, string> = {};
+    const usedFileNames = new Set<string>();
+
+    for (const [key, declaredPath] of Object.entries(declared)) {
+      const sourcePath = path.resolve(sourceWorkspaceRoot, declaredPath);
+      if (!fs.existsSync(sourcePath)) {
+        this.logger.warn(`Skipping pnpm patch for "${key}": patch file not found at ${sourcePath}`);
+        continue;
+      }
+
+      let fileName = path.basename(sourcePath);
+      if (usedFileNames.has(fileName)) {
+        fileName = `${key.replace(/[^a-zA-Z0-9._-]/g, '_')}-${fileName}`;
+      }
+      usedFileNames.add(fileName);
+
+      await fsPromises.mkdir(path.join(dir, PNPM_PATCHES_DIR), { recursive: true });
+      await fsPromises.copyFile(sourcePath, path.join(dir, PNPM_PATCHES_DIR, fileName));
+      rewritten[key] = `${PNPM_PATCHES_DIR}/${fileName}`;
+    }
+
+    return rewritten;
   }
 
   private async writeYarnConfig(dir: string, options: ArchitectureOptions) {
