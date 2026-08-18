@@ -5211,6 +5211,13 @@ export class Agent<
 
               const { resumeData, suspend } = context?.agent ?? {};
 
+              // A delegation only resumes when the suspended-tool lookup actually found a run to
+              // resume. `resumeData` alone is model-authored and is present whenever the model
+              // decides to fill the always-exposed schema field, so branching on it would send an
+              // undefined runId into resumeGenerate/resumeStream and throw
+              // AGENT_RESUME_NO_SNAPSHOT_FOUND before the sub-agent ever runs. See issue #21608.
+              const shouldResumeSubAgent = !!resumeData && !!suspendedToolRunId;
+
               // Apply messageFilter callback (runs after onDelegationStart so effectivePrompt
               // reflects any hook modifications). Falls back to full context on error.
               let filteredContextMessages = sanitizedMessages;
@@ -5305,7 +5312,7 @@ export class Agent<
                 (methodType === 'generate' || methodType === 'generateLegacy') &&
                 supportedLanguageModelSpecifications.includes(resolvedModelVersion)
               ) {
-                const generateResult = resumeData
+                const generateResult = shouldResumeSubAgent
                   ? await resolvedAgent.resumeGenerate(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext: subAgentRequestContext,
@@ -5397,7 +5404,7 @@ export class Agent<
                 (methodType === 'stream' || methodType === 'streamLegacy') &&
                 supportedLanguageModelSpecifications.includes(resolvedModelVersion)
               ) {
-                const streamResult = resumeData
+                const streamResult = shouldResumeSubAgent
                   ? await resolvedAgent.resumeStream(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext: subAgentRequestContext,
