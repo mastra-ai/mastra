@@ -191,20 +191,22 @@ export class ObservationStep {
         }
       }
 
-      void om
-        .buffer({
-          threadId,
-          resourceId,
-          messages: unobservedMessages,
-          pendingTokens: statusSnapshot.pendingTokens,
-          record: statusSnapshot.record,
-          writer: this.turn.writer,
-          requestContext: this.turn.requestContext,
-          observabilityContext: this.turn.observabilityContext,
-        })
-        .catch((err: Error) => {
-          omDebug(`[OM:buffer] fire-and-forget buffer failed: ${err?.message}`);
-        });
+      void om.trackBackgroundWork(
+        om
+          .buffer({
+            threadId,
+            resourceId,
+            messages: unobservedMessages,
+            pendingTokens: statusSnapshot.pendingTokens,
+            record: statusSnapshot.record,
+            writer: this.turn.writer,
+            requestContext: this.turn.requestContext,
+            observabilityContext: this.turn.observabilityContext,
+          })
+          .catch((err: Error) => {
+            omDebug(`[OM:buffer] fire-and-forget buffer failed: ${err?.message}`);
+          }),
+      );
       buffered = true;
     }
 

@@ -75,12 +75,42 @@ function createWorker(input: {
   issueReconcileIntervalMs?: number;
   pollEventsEnabled?: boolean;
   github?: PlatformGithubEventDispatchIntegration;
+  /**
+   * Repositories the worker should treat as linked to a factory project. Pass
+   * `[]` for a "nothing configured" scenario. Defaults to the installation/repo
+   * pairs the existing fetch mocks use (`installationId: 7`, `repositoryId: 101`).
+   */
+  configured?: Array<{ installationId: number; repositoryId: number; slug?: string; orgId?: string }>;
 }) {
+  const configured = input.configured ?? [{ installationId: 7, repositoryId: 101, slug: 'acme/repo', orgId: 'org-1' }];
+  const sourceControl = {
+    projectRepositories: {
+      listConfiguredExternalKeys: vi.fn(async () =>
+        configured.map(row => ({
+          installationExternalId: String(row.installationId),
+          repositoryExternalId: String(row.repositoryId),
+        })),
+      ),
+      listByExternalRepository: vi.fn(async (args: { installationExternalId: string; repositoryExternalId: string }) => {
+        const match = configured.find(
+          row => String(row.installationId) === args.installationExternalId && String(row.repositoryId) === args.repositoryExternalId,
+        );
+        return match ? [{ orgId: match.orgId ?? 'org-1', factoryProjectId: 'proj-1' }] : [];
+      }),
+    },
+    repositories: {
+      findByExternalId: vi.fn(async (args: { orgId: string; externalId: string }) => {
+        const match = configured.find(row => String(row.repositoryId) === args.externalId);
+        return match ? { orgId: args.orgId, slug: match.slug ?? '' } : null;
+      }),
+    },
+  };
   return new PlatformGithubEventWorker({
     client: new PlatformApiClient({ baseUrl, accessToken, fetchImpl: input.fetchImpl }),
     controller: {} as never,
     github: input.github ?? createGithub(),
     storage: input.storage,
+    sourceControl: sourceControl as never,
     ingestFactoryEvent: input.ingestFactoryEvent,
     reconcileFactoryState: input.reconcileFactoryState,
     reconcileIssuesFactoryState: input.reconcileIssuesFactoryState,
@@ -116,13 +146,9 @@ describe('PlatformGithubEventWorker', () => {
     const fetchImpl = vi.fn<typeof fetch>(async input => {
       const url = new URL(String(input));
       if (url.pathname.endsWith('/installations')) {
-        return json({
-          installations: [{ installationId: 7, usable: true, suspendedAt: null }],
-        });
+        return json({ installations: [{ installationId: 7, usable: true, suspendedAt: null }] });
       }
-      if (url.pathname.endsWith('/installations/7/repositories')) {
-        return json({ repositories: [{ id: 101 }] });
-      }
+      if (url.pathname.endsWith('/installations/7/repositories')) return json({ repositories: [{ id: 101 }] });
       if (url.pathname.endsWith('/repositories/101/events')) {
         eventRequests.push(url);
         if (url.searchParams.has('afterTimestamp')) {
@@ -448,6 +474,140 @@ describe('PlatformGithubEventWorker', () => {
     expect(eventCalls).toBe(3);
 
     await worker.stop();
+  });
+
+  describe('linked-project scoping', () => {
+    function pathsFrom(mock: ReturnType<typeof vi.fn<typeof fetch>>): string[] {
+      return mock.mock.calls.map(call => new URL(String(call[0])).pathname);
+    }
+
+    function eventsOnlyFetch() {
+      return vi.fn<typeof fetch>(async input => {
+        const url = new URL(String(input));
+        if (url.pathname.includes('/repositories/') && url.pathname.endsWith('/events')) {
+          return json({ events: [], nextCursor: null });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      });
+    }
+
+    it('polls nothing and makes no platform calls when no factory project is linked to a repository', async () => {
+      const settings = createSettingsStorage();
+      const fetchImpl = eventsOnlyFetch();
+      const worker = createWorker({ fetchImpl, storage: settings.storage, configured: [] });
+
+      await worker.init(createDeps());
+      await worker.start();
+      await vi.advanceTimersByTimeAsync(0);
+      await worker.stop();
+
+      expect(pathsFrom(fetchImpl)).toEqual([]);
+    });
+
+    it('polls only the repositories linked to a factory project', async () => {
+      const settings = createSettingsStorage();
+      const fetchImpl = eventsOnlyFetch();
+      const worker = createWorker({
+        fetchImpl,
+        storage: settings.storage,
+        configured: [
+          { installationId: 7, repositoryId: 101, slug: 'acme/linked' },
+          { installationId: 8, repositoryId: 201, slug: 'other/linked' },
+        ],
+      });
+
+      await worker.init(createDeps());
+      await worker.start();
+      await vi.advanceTimersByTimeAsync(0);
+      await worker.stop();
+
+      const eventPaths = pathsFrom(fetchImpl)
+        .filter(path => path.endsWith('/events'))
+        .sort();
+      expect(eventPaths).toEqual([
+        '/v1/server/github-app/repositories/101/events',
+        '/v1/server/github-app/repositories/201/events',
+      ]);
+    });
+
+    it('picks up newly linked repositories on the next tick without a restart', async () => {
+      const settings = createSettingsStorage();
+      const fetchImpl = eventsOnlyFetch();
+      const configured: Array<{ installationId: number; repositoryId: number; slug: string }> = [
+        { installationId: 7, repositoryId: 101, slug: 'acme/first' },
+      ];
+      const listConfiguredExternalKeys = vi.fn(async () =>
+        configured.map(row => ({
+          installationExternalId: String(row.installationId),
+          repositoryExternalId: String(row.repositoryId),
+        })),
+      );
+      const worker = new PlatformGithubEventWorker({
+        client: new PlatformApiClient({ baseUrl, accessToken, fetchImpl }),
+        controller: {} as never,
+        github: createGithub(),
+        storage: settings.storage,
+        intervalMs: 1_000,
+        sourceControl: {
+          projectRepositories: {
+            listConfiguredExternalKeys,
+            listByExternalRepository: async args => {
+              const match = configured.find(
+                row =>
+                  String(row.installationId) === args.installationExternalId &&
+                  String(row.repositoryId) === args.repositoryExternalId,
+              );
+              return match ? [{ orgId: 'org-1', factoryProjectId: 'proj-1' } as never] : [];
+            },
+          },
+          repositories: {
+            findByExternalId: async args => {
+              const match = configured.find(row => String(row.repositoryId) === args.externalId);
+              return match ? ({ orgId: args.orgId, slug: match.slug } as never) : null;
+            },
+          },
+        },
+      });
+
+      await worker.init(createDeps());
+      await worker.start();
+      await vi.advanceTimersByTimeAsync(0);
+
+      let eventPaths = pathsFrom(fetchImpl).filter(path => path.endsWith('/events'));
+      expect(eventPaths).toEqual(['/v1/server/github-app/repositories/101/events']);
+
+      // Link another repo mid-cycle; it should be picked up on the next tick.
+      configured.push({ installationId: 7, repositoryId: 102, slug: 'acme/second' });
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      eventPaths = pathsFrom(fetchImpl).filter(path => path.endsWith('/events'));
+      expect(eventPaths).toContain('/v1/server/github-app/repositories/102/events');
+
+      await worker.stop();
+    });
+
+    it('skips configured keys with non-positive or non-numeric external IDs', async () => {
+      const settings = createSettingsStorage();
+      const fetchImpl = eventsOnlyFetch();
+      const worker = createWorker({
+        fetchImpl,
+        storage: settings.storage,
+        configured: [
+          { installationId: 0, repositoryId: 101, slug: 'acme/zero-inst' },
+          { installationId: 7, repositoryId: -5, slug: 'acme/negative-repo' },
+          { installationId: Number.NaN, repositoryId: 102, slug: 'acme/nan-inst' },
+          { installationId: 7, repositoryId: 103, slug: 'acme/valid' },
+        ],
+      });
+
+      await worker.init(createDeps());
+      await worker.start();
+      await vi.advanceTimersByTimeAsync(0);
+      await worker.stop();
+
+      const eventPaths = pathsFrom(fetchImpl).filter(path => path.endsWith('/events'));
+      expect(eventPaths).toEqual(['/v1/server/github-app/repositories/103/events']);
+    });
   });
 
   it('stops polling after lease renewal reports ownership loss', async () => {

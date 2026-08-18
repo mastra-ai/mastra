@@ -238,7 +238,11 @@ export interface FactoryProjectSnapshot extends FactoryProjectPayload {
 export type FactoryProject = FactoryProjectSnapshot;
 
 async function readJsonOrThrow<T>(res: Response, failure: string): Promise<T> {
-  if (!res.ok) throw new Error(`${failure} (${res.status})`);
+  if (!res.ok) {
+    const error = new Error(`${failure} (${res.status})`) as Error & { status?: number };
+    error.status = res.status;
+    throw error;
+  }
   return (await res.json()) as T;
 }
 
@@ -631,6 +635,7 @@ export interface FactoryUserSession {
   projectRepositoryId: string;
   orgId: string;
   userId: string;
+  visibility: 'org' | 'private';
   title?: string;
   branch: string;
   baseBranch: string;

@@ -72,6 +72,7 @@ const AGENT_SNAPSHOT_CONFIG_FIELDS = [
   'skillsFormat',
   'workspace',
   'browser',
+  'durable',
 ] as const satisfies (keyof StorageAgentSnapshotType)[];
 
 // ============================================================================
@@ -1093,6 +1094,12 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
     const skillsFormat = storedAgent.skillsFormat;
 
+    // Durable opt-in is persisted as a serializable subset (boolean or
+    // { maxSteps, cleanupTimeoutMs }). `cache`/`pubsub` are inherited from the
+    // Mastra instance by `createDurableAgent`, which `addAgent` invokes below
+    // whenever `agent.durable` is truthy.
+    const durable = storedAgent.durable;
+
     // Cast to `any` to avoid TS2589 "excessively deep" errors caused by the
     // complex generic inference of Agent<TTools, TRequestContext, …>.  The
     // individual field values have already been validated above.
@@ -1117,6 +1124,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       workspace,
       browser,
       ...(skillsFormat && { skillsFormat }),
+      ...(durable !== undefined && { durable }),
     } as any);
 
     // Only register in Mastra if no code-defined agent with this ID already exists.

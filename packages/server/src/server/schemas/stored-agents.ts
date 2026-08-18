@@ -252,6 +252,20 @@ const storedProcessorGraphSchema = z.object({
  * Fields that support conditional variants (StorageConditionalField) can be either
  * a static value OR an array of { value, rules? } variants evaluated at request time.
  */
+/**
+ * Serializable durable-execution opt-in. Mirrors `StorageDurableConfig`:
+ * `cache`/`pubsub` are live runtime objects and cannot be persisted, so they are
+ * not accepted here. Intentionally not a conditional field — durability is
+ * decided when the agent is registered, not per request.
+ */
+const durableConfigSchema = z.union([
+  z.boolean(),
+  z.object({
+    maxSteps: z.number().int().positive().optional(),
+    cleanupTimeoutMs: z.number().int().nonnegative().optional(),
+  }),
+]);
+
 const snapshotConfigSchema = z.object({
   name: z.string().describe('Name of the agent'),
   description: z.string().optional().describe('Description of the agent'),
@@ -308,6 +322,11 @@ const snapshotConfigSchema = z.object({
     .record(z.string(), z.unknown())
     .optional()
     .describe('JSON Schema defining valid request context variables for conditional rule evaluation'),
+  durable: durableConfigSchema
+    .optional()
+    .describe(
+      'Opt this agent into durable execution when it is hydrated. Cache and pubsub are inherited from the Mastra instance; without distributed backends durability is process-local. Does not enable automatic recovery — that stays `recovery.durableAgents`.',
+    ),
 });
 
 /**
@@ -488,6 +507,7 @@ export const storedAgentSchema = z.object({
     .record(z.string(), z.unknown())
     .optional()
     .describe('JSON Schema defining valid request context variables'),
+  durable: durableConfigSchema.optional().describe('Whether this agent is hydrated with durable execution enabled'),
 });
 
 /**
