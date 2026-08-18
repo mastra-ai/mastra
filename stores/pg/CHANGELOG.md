@@ -1,5 +1,41 @@
 # @mastra/pg
 
+## 1.20.1-alpha.3
+
+### Patch Changes
+
+- Stop a dropped Postgres connection from killing the process while a client is checked out. ([#21765](https://github.com/mastra-ai/mastra/pull/21765))
+
+  `PgFactoryStorage` attached an `error` listener to the pool, but pg only routes pool-level errors for _idle_ clients — it hands ownership of a client to the borrower for the duration of a checkout. A backend restart or network blip that landed on a client mid-transaction therefore reached an emitter with nothing listening, and Node escalated it to an uncaughtException that took the whole server down (`Connection terminated unexpectedly` at `pg/lib/client.js`), even though the idle siblings were logged and discarded cleanly.
+
+  Pools created by `PgFactoryStorage` now attach a listener once per physical connection as it is established, so a client stays covered while borrowed. While the client is idle the pool's own listener already reports the failure, so the extra listener stays quiet and a dropped connection is announced once, as the right thing. The pool still discards the failed connection and reconnects on the next checkout; the failure is now logged instead of fatal. Caller-supplied pools are left untouched, as before.
+
+- Updated dependencies [[`6db7a5d`](https://github.com/mastra-ai/mastra/commit/6db7a5dd3dd2b6f7ef75dcd804fcffef5fa83963), [`0cdc5dc`](https://github.com/mastra-ai/mastra/commit/0cdc5dc69024957815da4f51acc4119eb4f447d7)]:
+  - @mastra/core@1.60.0-alpha.12
+
+## 1.20.1-alpha.2
+
+### Patch Changes
+
+- Added a `durable` option to stored agents so agents created through the Agents API can run with durable execution — no code deployment required. ([#21715](https://github.com/mastra-ai/mastra/pull/21715))
+
+  ```typescript
+  await mastraClient.createStoredAgent({
+    id: 'helper',
+    name: 'Helper',
+    instructions: 'You are a helpful assistant.',
+    model: { provider: 'openai', name: 'gpt-5' },
+    durable: true,
+  });
+  ```
+
+  Pass `true` for defaults, or `{ maxSteps, cleanupTimeoutMs }` to tune the durable loop. Cache and pubsub are inherited from the server's Mastra instance, so configure distributed backends there for durability across replicas. Automatic recovery is still configured in code via `recovery.durableAgents`.
+
+- Improved PgVector upsert performance when writing many vectors at once. Batches are now written with a small number of multi-row inserts instead of one insert per vector, which reduces database round trips and connection pool usage during RAG and memory ingestion. ([#21719](https://github.com/mastra-ai/mastra/pull/21719))
+
+- Updated dependencies [[`6223446`](https://github.com/mastra-ai/mastra/commit/6223446ddce6166e96e0ba5e00d628b615dee8ca), [`583e235`](https://github.com/mastra-ai/mastra/commit/583e23519c13af16c1746f9c49722d011216611b), [`a77f8d4`](https://github.com/mastra-ai/mastra/commit/a77f8d4740d2178a74c41e4bf678b4fcd8fa0bb2), [`40d358e`](https://github.com/mastra-ai/mastra/commit/40d358e29d55543803e64b49241122f598ffabc7), [`e80cd7e`](https://github.com/mastra-ai/mastra/commit/e80cd7e7683e7d732e1cc6784bcac1d2640d2ce3), [`20504b2`](https://github.com/mastra-ai/mastra/commit/20504b2ecebd0e077acda3d457ab57480a98ed3e)]:
+  - @mastra/core@1.60.0-alpha.11
+
 ## 1.20.1-alpha.1
 
 ### Patch Changes

@@ -9,6 +9,7 @@ import type { WorkerDeps } from '@mastra/core/worker';
 import type { IntegrationStorageHandle } from '../../../storage/domains/integrations/base.js';
 import type { GithubRepositoryPermission } from '../../github/integration.js';
 import type { GithubIssueReconciler } from '../../github/issue-reconciler.js';
+import type { GithubReconcileRepositorySource } from '../../github/reconcile-worker.js';
 import type { GithubPullRequestReconciler, ReconcileRepository } from '../../github/rules.js';
 import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from '../../github/subscriptions.js';
 import { dispatchGithubWebhook, resolveAuthorizedBots } from '../../github/webhook.js';
@@ -71,6 +72,14 @@ export interface PlatformGithubEventWorkerConfig {
   controller: MountedMastraCode['controller'];
   github: PlatformGithubEventDispatchIntegration;
   storage: PlatformGithubEventStorage;
+  /**
+   * Source-control storage used to resolve the set of repositories the worker
+   * should poll. The worker restricts itself to `(installation, repository)`
+   * pairs linked to a factory project — the same set the reconciler uses —
+   * so polling scales with Factory usage, not with the size of the underlying
+   * GitHub org.
+   */
+  sourceControl: GithubReconcileRepositorySource;
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
   reconcileFactoryState?: GithubPullRequestReconciler;
   reconcileIssuesFactoryState?: GithubIssueReconciler;
@@ -101,6 +110,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
   readonly #intervalMs: number;
   readonly #now: () => number;
   readonly #dispatch: typeof dispatchGithubWebhook;
+  readonly #sourceControl: GithubReconcileRepositorySource;
   readonly #leaseOwner = randomUUID();
 
   #running = false;
@@ -144,6 +154,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
     );
     this.#now = config.now ?? Date.now;
     this.#dispatch = config.dispatch ?? dispatchGithubWebhook;
+    this.#sourceControl = config.sourceControl;
   }
 
   async init(deps: WorkerDeps): Promise<void> {
@@ -354,27 +365,42 @@ export class PlatformGithubEventWorker extends MastraWorker {
     }
   }
 
+  /**
+   * Configured `(installation, repository)` pairs — the same set the
+   * reconciler sweeps — resolved to the numeric ids and slug the poll
+   * addresses GitHub with. Repositories not linked to any factory project
+   * cannot produce work for Factory, so polling and reconciling them is
+   * wasted `/events` bandwidth and platform load.
+   */
   async #discoverRepositories(): Promise<Repository[]> {
-    const result = await this.#client.request<{
-      installations: Array<{
-        installationId: number;
-        usable: boolean;
-        suspendedAt: string | null;
-      }>;
-    }>('GET', `${API_PREFIX}/installations`);
+    const keys = await this.#sourceControl.projectRepositories.listConfiguredExternalKeys();
     const repositories = new Map<number, Repository>();
-
-    for (const installation of result.installations) {
-      if (!installation.usable || installation.suspendedAt) continue;
-      const page = await this.#client.request<{ repositories: Array<{ id: number; fullName?: string }> }>(
-        'GET',
-        `${API_PREFIX}/installations/${installation.installationId}/repositories`,
-      );
-      for (const repository of page.repositories) {
-        repositories.set(repository.id, { ...repository, installationId: installation.installationId });
+    for (const key of keys) {
+      const installationId = Number(key.installationExternalId);
+      const repositoryId = Number(key.repositoryExternalId);
+      if (
+        !Number.isSafeInteger(installationId) ||
+        installationId <= 0 ||
+        !Number.isSafeInteger(repositoryId) ||
+        repositoryId <= 0
+      ) {
+        continue;
       }
+      if (repositories.has(repositoryId)) continue;
+      // A configured key exists per project link, so `listByExternalRepository`
+      // always yields at least one row; the first row's orgId is enough to
+      // look up the repository row for its slug.
+      const projects = await this.#sourceControl.projectRepositories.listByExternalRepository(key);
+      const orgId = projects[0]?.orgId;
+      const repository = orgId
+        ? await this.#sourceControl.repositories.findByExternalId({ orgId, externalId: key.repositoryExternalId })
+        : null;
+      repositories.set(repositoryId, {
+        id: repositoryId,
+        installationId,
+        fullName: repository?.slug,
+      });
     }
-
     return [...repositories.values()];
   }
 

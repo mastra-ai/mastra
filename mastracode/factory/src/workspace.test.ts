@@ -294,6 +294,22 @@ describe('getFactoryWorkspace', () => {
     );
   });
 
+  it('uses work-item-specific artifact paths for Factory handoffs', async () => {
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
+    const read = (name: string) => fs.readFile(path.join(assetRoot, name, 'SKILL.md'), 'utf8');
+    const [triage, plan, review, rereview] = await Promise.all(
+      ['factory-triage', 'factory-plan', 'factory-review', 'factory-rereview'].map(read),
+    );
+
+    expect(triage).toContain('.artifacts/factory-triage/issue-<number>.md');
+    expect(plan).toContain('Write it to `.artifacts/plans/issue-<number>.md`');
+    expect(plan).toContain('include the same plan in the conversation');
+    expect(review).toContain('.artifacts/factory-review/pr-<number>.md');
+    expect(review).toContain('.artifacts/factory-review/follow-up-pr-<number>.md');
+    expect(rereview).toContain('.artifacts/factory-rereview/pr-<number>.md');
+    expect(rereview).toContain('.artifacts/factory-rereview/follow-up-pr-<number>.md');
+  });
+
   it('keeps the autonomous Factory skills on the terminal-handoff contract', async () => {
     const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
     const read = (skillName: string) => fs.readFile(path.join(assetRoot, skillName, 'SKILL.md'), 'utf8');
@@ -1297,11 +1313,56 @@ describe('GitHub session workspace preparation', () => {
   it('enforces exact session scope ownership', async () => {
     const { workspace } = await createLocalFactory();
     addProject();
-    addSession({ id: 'session-a', userId: 'someone-else' });
+    addSession({ id: 'session-a', userId: 'someone-else', visibility: 'private' });
 
     await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toThrow(
       /Factory session session-a is not available/,
     );
+  });
+
+  it('opens org-visible sessions to same-org non-owners', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a', userId: 'someone-else', visibility: 'org' });
+
+    await expect(
+      workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') }),
+    ).resolves.toBeDefined();
+  });
+
+  it('refuses private sessions to same-org non-owners', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a', userId: 'someone-else', visibility: 'private' });
+
+    await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toThrow(
+      /Factory session session-a is not available/,
+    );
+  });
+
+  it('refuses cross-org callers regardless of visibility', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a', userId: 'someone-else', visibility: 'org' });
+
+    await expect(
+      workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a', {
+          organizationId: 'org-2',
+          workosId: 'user-2',
+        }),
+      }),
+    ).rejects.toThrow(/Factory session session-a is not available/);
+  });
+
+  it('opens legacy sessions without stored visibility to same-org non-owners', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a', userId: 'someone-else', visibility: null });
+
+    await expect(
+      workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') }),
+    ).resolves.toBeDefined();
   });
 
   it('accepts session owners identified by provider-neutral id instead of workosId', async () => {

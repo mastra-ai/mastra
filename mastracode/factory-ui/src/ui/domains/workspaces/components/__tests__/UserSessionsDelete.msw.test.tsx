@@ -18,6 +18,7 @@ const session: FactoryUserSession = {
   projectRepositoryId,
   orgId: 'org-1',
   userId: 'user-1',
+  visibility: 'org' as const,
   branch: 'user/my-feature',
   baseBranch: 'main',
   sandboxId: null,
