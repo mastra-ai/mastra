@@ -48,7 +48,7 @@ import type {
 import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../observability';
 import { initContextStorage } from '../observability/context-storage';
 import type { Processor } from '../processors';
-import { PulseBridge, PulseBus, PulseStorageExporter } from '../pulse';
+import { PulseBridge, PulseBus, PulseStorageExporter, registerPulseEmitter, unregisterPulseEmitter } from '../pulse';
 import type { PulseConfig } from '../pulse';
 import type { AgentScheduleHandler } from '../schedules/define';
 import { metadataEqual, targetsEqual } from '../schedules/row-diff';
@@ -1554,6 +1554,10 @@ export class Mastra<
       }
       this.#pulseBridge = new PulseBridge({ bus: this.#pulseBus });
       this.#registerPulseBridge();
+      // EXPERIMENT (Gate 1): native signal/content facts flow through a
+      // process-level sink so truth-boundary seams stay one-line no-ops
+      // when pulse is off.
+      registerPulseEmitter(this.#pulseBus);
       // Propagate the instance logger (mirrors observability's setLogger
       // fan-out) — otherwise drops/warnings land on a default ConsoleLogger.
       for (const component of [this.#pulseBus, this.#pulseBridge, ...this.#pulseBus.getExporters()]) {
@@ -6614,7 +6618,11 @@ export class Mastra<
     // remaining span/metric events through the bridge onto the pulse bus, and
     // only then can the pulse writers flush everything (R5 ordering).
     if (this.#pulseBus) {
+      // Shutdown first (awaits flush — pending microtask drains complete at
+      // the first await boundary), THEN unregister: a queued-but-undrained
+      // native fact must never be cleared before it reaches the bus.
       await this.#pulseBus.shutdown();
+      unregisterPulseEmitter(this.#pulseBus);
     }
 
     // Close storage LAST: both the observability storage exporter and the

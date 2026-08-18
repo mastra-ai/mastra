@@ -6037,3 +6037,297 @@ describe('Agent signals', () => {
     });
   });
 });
+
+describe('EXPERIMENT Gate 1: native signal facts (pending chain)', () => {
+  /**
+   * The foundation experiment's ARM B backbone: a signal accepted WHILE the
+   * model generates must produce the full native fact chain — decided:pending
+   * → queued edge → drained (+forced continuation) → introduced → included
+   * in the SECOND frozen request (and provably absent from the first) — all
+   * joined by signalId, with zero text matching. The frozen prompts captured
+   * by the mock are the ground truth the facts are scored against.
+   */
+  it('captures decided→queued→drained→introduced→included, absent from attempt 1', async () => {
+    const { PulseBus } = await import('../../pulse/bus');
+    const { registerPulseEmitter, unregisterPulseEmitter } = await import('../../pulse/emitter');
+    const bus = new PulseBus();
+    const facts: any[] = [];
+    const edges: any[] = [];
+    bus.subscribe((e: any) => {
+      if (e.type === 'pulse') facts.push(e.record);
+      else edges.push(e.record);
+    });
+    registerPulseEmitter(bus);
+
+    let releaseFirst!: () => void;
+    const firstFinished = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    let streamCount = 0;
+    const prompts: any[][] = [];
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        streamCount += 1;
+        const callIndex = streamCount;
+        prompts.push(prompt as any[]);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: new ReadableStream({
+            async start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({
+                type: 'response-metadata',
+                id: `xid-${callIndex}`,
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              });
+              controller.enqueue({ type: 'text-start', id: `xt-${callIndex}` });
+              controller.enqueue({ type: 'text-delta', id: `xt-${callIndex}`, delta: `resp ${callIndex}` });
+              controller.enqueue({ type: 'text-end', id: `xt-${callIndex}` });
+              if (callIndex === 1) await firstFinished;
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+        };
+      },
+    });
+
+    try {
+      const memory = new MockMemory();
+      const agent = new Agent({
+        id: 'gate1-agent',
+        name: 'Gate1 Agent',
+        instructions: 'Test',
+        model,
+        memory,
+      });
+      const subscription = await agent.subscribeToThread({ threadId: 'g1-thread', resourceId: 'g1-user' });
+      const iterator = subscription.stream[Symbol.asyncIterator]();
+      void readNextRun(iterator);
+
+      const stream = await agent.stream('Hello', { memory: { thread: 'g1-thread', resource: 'g1-user' } });
+      await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
+
+      const sent = await agent.sendSignal(
+        { type: 'user-message', contents: 'Mid-flight signal' },
+        { resourceId: 'g1-user', threadId: 'g1-thread' },
+      );
+      await expect(sent.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
+      const sid = sent.signal.id;
+
+      releaseFirst();
+      await waitForCondition(() => streamCount === 2);
+      await stream.consumeStream();
+      await new Promise(r => setTimeout(r, 20)); // let microtask drains settle
+
+      // ── THE CHAIN, joined by signalId only ──
+      const decided = facts.find(f => f.action === 'delivery_decided' && f.attributes?.signalId === sid);
+      expect(decided, 'decided fact').toBeDefined();
+      expect(decided.attributes.routing).toBe('pending');
+      expect(decided.runId).toBe(stream.runId);
+      expect(edges.some(e => e.type === 'queued_signal' && e.to.id === `signal:${sid}`)).toBe(true);
+
+      const drained = facts.find(f => f.action === 'drained' && f.attributes?.signalId === sid);
+      expect(drained, 'drained fact').toBeDefined();
+      expect(drained.attributes.forcedContinuation).toBe(true);
+      expect(edges.some(e => e.type === 'drained_signal' && e.to.id === `signal:${sid}`)).toBe(true);
+
+      const introduced = facts.find(f => f.action === 'introduced' && f.attributes?.signalId === sid);
+      expect(introduced, 'introduced fact').toBeDefined();
+      expect(introduced.threadId).toBe('g1-thread');
+
+      const finals = facts
+        .filter(f => f.action === 'finalized' && f.runId === stream.runId)
+        .sort((a, b) => a.seq - b.seq);
+      expect(finals.length).toBeGreaterThanOrEqual(2);
+      // Both frozen requests really reached the model: the `executed`
+      // discriminator (joined by freeze nonce) is present for each.
+      const executedFreezes = new Set(
+        facts.filter(f => f.action === 'executed' && f.runId === stream.runId).map(f => f.attributes?.freezeId),
+      );
+      for (const f of finals) {
+        expect(executedFreezes.has(f.attributes?.freezeId), `finalized step ${f.attributes?.step} executed`).toBe(true);
+      }
+      // Exactly one inclusion edge, anchored on attempt 2's finalized fact —
+      // provably ABSENT from attempt 1 (the S6 "wasn't in the request" claim).
+      const allIncl = edges.filter(e => e.type === 'included_in_model_input' && e.to.id === `signal:${sid}`);
+      expect(allIncl, 'exactly one inclusion across the run').toHaveLength(1);
+      expect(allIncl[0]!.from.id).toBe(finals[1]!.id);
+      expect(allIncl[0]!.from.id).not.toBe(finals[0]!.id);
+
+      // ── GROUND TRUTH: the mock-captured frozen prompts agree ──
+      const tokenIn = (p: any[]) => p.some(m => (m as any)?.providerOptions?.mastra?.pulseSignalId === sid);
+      expect(tokenIn(prompts[0]!), 'lineage token absent from attempt 1').toBe(false);
+      expect(tokenIn(prompts[1]!), 'lineage token present in attempt 2').toBe(true);
+      // And the recorded position matches reality.
+      const pos = allIncl[0]!.attributes?.position;
+      expect((prompts[1]![pos as number] as any)?.providerOptions?.mastra?.pulseSignalId).toBe(sid);
+    } finally {
+      unregisterPulseEmitter(bus);
+    }
+  });
+
+  /**
+   * Disabled parity: with no sink registered, the identical pending flow must
+   * behave the same at the model boundary — same routing, same execute count,
+   * same normalized frozen requests — and carry ZERO pulse bytes (no lineage
+   * stamp, no facts). The lineage stamp is gated on the sink for this reason.
+   */
+  it('pulse off: identical model behavior, no lineage stamp, no facts', async () => {
+    const { PulseBus } = await import('../../pulse/bus');
+    const { registerPulseEmitter, unregisterPulseEmitter } = await import('../../pulse/emitter');
+
+    const runPendingFlow = async (tag: string) => {
+      let release!: () => void;
+      const firstDone = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      let streamCount = 0;
+      const prompts: any[][] = [];
+      const model = new MockLanguageModelV2({
+        doStream: async ({ prompt }) => {
+          streamCount += 1;
+          const callIndex = streamCount;
+          prompts.push(prompt as any[]);
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: new ReadableStream({
+              async start(controller) {
+                controller.enqueue({ type: 'stream-start', warnings: [] });
+                controller.enqueue({
+                  type: 'response-metadata',
+                  id: `${tag}-${callIndex}`,
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                });
+                controller.enqueue({ type: 'text-start', id: `t-${callIndex}` });
+                controller.enqueue({ type: 'text-delta', id: `t-${callIndex}`, delta: `resp ${callIndex}` });
+                controller.enqueue({ type: 'text-end', id: `t-${callIndex}` });
+                if (callIndex === 1) await firstDone;
+                controller.enqueue({
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                });
+                controller.close();
+              },
+            }),
+          };
+        },
+      });
+      const agent = new Agent({
+        id: `parity-agent-${tag}`,
+        name: 'Parity Agent',
+        instructions: 'Test',
+        model,
+        memory: new MockMemory(),
+      });
+      const subscription = await agent.subscribeToThread({ threadId: `pt-${tag}`, resourceId: `pu-${tag}` });
+      void readNextRun(subscription.stream[Symbol.asyncIterator]());
+      const stream = await agent.stream('Hello', { memory: { thread: `pt-${tag}`, resource: `pu-${tag}` } });
+      await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
+      const sent = await agent.sendSignal(
+        { type: 'user-message', contents: 'Mid-flight signal' },
+        { resourceId: `pu-${tag}`, threadId: `pt-${tag}` },
+      );
+      const accepted = await sent.accepted;
+      release();
+      await waitForCondition(() => streamCount === 2);
+      await stream.consumeStream();
+      await new Promise(r => setTimeout(r, 20));
+      return { prompts, streamCount, action: (accepted as any).action, text: await stream.text };
+    };
+
+    const bus = new PulseBus();
+    const facts: any[] = [];
+    bus.subscribe((e: any) => facts.push(e.record));
+    registerPulseEmitter(bus);
+    let on;
+    try {
+      on = await runPendingFlow('on');
+    } finally {
+      unregisterPulseEmitter(bus);
+    }
+    const factsOffBaseline = facts.length;
+    const off = await runPendingFlow('off');
+    expect(facts.length, 'no facts emitted while pulse off').toBe(factsOffBaseline);
+    expect(factsOffBaseline).toBeGreaterThan(0);
+
+    // Identical model-visible behavior.
+    expect(off.action).toBe(on.action);
+    expect(off.streamCount).toBe(on.streamCount);
+    expect(off.text).toBe(on.text);
+
+    // Zero pulse bytes in the frozen requests when off.
+    const stamped = (p: any[]) => p.filter(m => (m as any)?.providerOptions?.mastra?.pulseSignalId != null);
+    expect(off.prompts.flatMap(stamped)).toHaveLength(0);
+    expect(on.prompts.flatMap(stamped).length).toBeGreaterThan(0);
+
+    // Normalized frozen requests match (roles + content; ids/timestamps and
+    // the gated stamp are the only allowed differences).
+    const normalize = (p: any[]) =>
+      p.map(m => ({
+        role: (m as any).role,
+        content: JSON.parse(JSON.stringify((m as any).content, (k, v) => (k === 'providerOptions' ? undefined : v))),
+      }));
+    expect(off.prompts.map(normalize)).toEqual(on.prompts.map(normalize));
+  });
+
+  /** The third routing outcome: a signal to an IDLE thread wakes a fresh
+   * run — its delivery decision is a fact like pending and pre-run. */
+  it('wake routing emits its delivery decision', async () => {
+    const { PulseBus } = await import('../../pulse/bus');
+    const { registerPulseEmitter, unregisterPulseEmitter } = await import('../../pulse/emitter');
+    const bus = new PulseBus();
+    const facts: any[] = [];
+    const edges: any[] = [];
+    bus.subscribe((e: any) => (e.type === 'pulse' ? facts.push(e.record) : edges.push(e.record)));
+    registerPulseEmitter(bus);
+    try {
+      const model = new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'wk-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'wt' },
+            { type: 'text-delta', id: 'wt', delta: 'awake' },
+            { type: 'text-end', id: 'wt' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+          ]),
+        }),
+      });
+      const agent = new Agent({
+        id: 'gate1-wake-agent',
+        name: 'Gate1 Wake',
+        instructions: 'Test',
+        model,
+        memory: new MockMemory(),
+      });
+      const sent = await agent.sendSignal(
+        { type: 'user-message', contents: 'Wake the thread' },
+        { resourceId: 'gw-user', threadId: 'gw-thread' },
+      );
+      const accepted: any = await sent.accepted;
+      expect(accepted.action).toBe('wake');
+      await accepted.output?.consumeStream?.();
+      await new Promise(r => setTimeout(r, 20));
+
+      const decided = facts.find(f => f.action === 'delivery_decided' && f.attributes?.signalId === sent.signal.id);
+      expect(decided, 'wake decision fact').toBeDefined();
+      expect(decided.attributes.routing).toBe('wake');
+      expect(decided.runId).toBe(accepted.runId);
+      expect(edges.some(e => e.type === 'queued_signal' && e.to.id === `signal:${sent.signal.id}`)).toBe(true);
+    } finally {
+      unregisterPulseEmitter(bus);
+    }
+  });
+});

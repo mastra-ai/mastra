@@ -6,6 +6,7 @@ import { isLeaseProvider, NoopLeaseProvider } from '../events/pubsub';
 import type { LeaseProvider, PubSub } from '../events/pubsub';
 import type { EventCallback } from '../events/types';
 import { parseMemoryRequestContext } from '../memory/types';
+import { emitPulseFact, hasPulseEmitter } from '../pulse/emitter';
 import type { RequestContext } from '../request-context';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { MastraModelOutput } from '../stream/base/output';
@@ -2400,6 +2401,18 @@ export class AgentThreadStreamRuntime {
       signal,
       isActiveTarget ? target.ifActive?.attributes : target.ifIdle?.attributes,
     );
+    // EXPERIMENT (Gate 1): text-free lineage token — rides message-level
+    // providerOptions through conversion into the frozen model request.
+    // Gated on the sink so pulse-off runs stay byte-identical.
+    if (hasPulseEmitter()) {
+      signal = {
+        ...signal,
+        providerOptions: {
+          ...signal.providerOptions,
+          mastra: { ...(signal.providerOptions as any)?.mastra, pulseSignalId: signal.id },
+        },
+      };
+    }
 
     if (isActiveTarget && activeBehavior !== 'deliver') {
       if (activeBehavior === 'persist') {
@@ -2447,6 +2460,16 @@ export class AgentThreadStreamRuntime {
           const queue = state.pendingSignalsByThread.get(key) ?? [];
           queue.push(signal);
           state.pendingSignalsByThread.set(key, queue);
+          emitPulseFact({
+            runId: runId ?? '',
+            surface: 'signal',
+            action: 'delivery_decided',
+            type: 'decision',
+            attributes: { signalId: signal.id, routing: 'pending' },
+            threadId: activeRecord.threadId,
+            resourceId: activeRecord.resourceId,
+            edges: [{ type: 'queued_signal', to: { kind: 'content', id: `signal:${signal.id}` } }],
+          });
           this.#publish(pubsub, key, {
             type: 'signal-enqueued',
             runId,
@@ -2481,6 +2504,16 @@ export class AgentThreadStreamRuntime {
           const queue = state.preRunSignalsByThread.get(key) ?? [];
           queue.push(signal);
           state.preRunSignalsByThread.set(key, queue);
+          emitPulseFact({
+            runId: runId ?? '',
+            surface: 'signal',
+            action: 'delivery_decided',
+            type: 'decision',
+            attributes: { signalId: signal.id, routing: 'pre-run' },
+            threadId,
+            resourceId,
+            edges: [{ type: 'queued_signal', to: { kind: 'content', id: `signal:${signal.id}` } }],
+          });
         }
         this.#publish(pubsub, key, {
           type: 'signal-enqueued',
@@ -2616,6 +2649,18 @@ export class AgentThreadStreamRuntime {
       // We own the lease. Start the renewal timer so it survives runs
       // that outlive the TTL, then kick off the stream.
       this.#startLeaseRenewal(resolvedPubSub, reservedKey, reservedRunId);
+      // The third routing outcome: this signal WAKES a fresh run and rides
+      // in as its input (pending and pre-run are hooked at their branches).
+      emitPulseFact({
+        runId: reservedRunId,
+        surface: 'signal',
+        action: 'delivery_decided',
+        type: 'decision',
+        attributes: { signalId: signal.id, routing: 'wake' },
+        threadId,
+        resourceId,
+        edges: [{ type: 'queued_signal', to: { kind: 'content', id: `signal:${signal.id}` } }],
+      });
       try {
         const output = await agent.stream(signal, {
           ...(target.ifIdle?.streamOptions as any),

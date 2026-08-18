@@ -5,6 +5,7 @@ import { v4 as randomUUID } from '@lukeed/uuid';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { IMastraLogger } from '../../logger';
+import { emitPulseFact } from '../../pulse/emitter';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../tools/payload-transform';
 import type { IdGeneratorContext } from '../../types';
 import { createSignal, isCreatedAgentSignal, mastraDBMessageToSignal } from '../signals';
@@ -260,6 +261,20 @@ export class MessageList {
         : createSignal({ ...signalInput, type: signal.type, transient: signal.transient });
 
     this.addOne(signalForTranscript.toDBMessage(this.memoryInfo ?? undefined), source);
+    // EXPERIMENT (Gate 1): the ONE convergence point where signal content
+    // enters the conversation context (all five producer paths pass here).
+    // runId is not in scope on MessageList — the drain/routing facts carry
+    // it; this fact joins by signalId + threadId.
+    emitPulseFact({
+      runId: '',
+      surface: 'content',
+      action: 'introduced',
+      type: 'state',
+      attributes: { signalId: signal.id, signalType: signal.type },
+      threadId: this.memoryInfo?.threadId,
+      resourceId: this.memoryInfo?.resourceId,
+      edges: [{ type: 'introduced_content', to: { kind: 'content', id: `signal:${signal.id}` } }],
+    });
     return signalForTranscript;
   }
 

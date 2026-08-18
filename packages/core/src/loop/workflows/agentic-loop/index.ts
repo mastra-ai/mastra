@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage } from '../../../memory';
 import { InternalSpans } from '../../../observability';
+import { emitPulseFact } from '../../../pulse/emitter';
 import { safeEnqueue } from '../../../stream/base';
 import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
@@ -128,6 +129,14 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
         for (const pendingSignal of pendingSignals) {
           const signalForTranscript = messageList.addSignal(pendingSignal);
           safeEnqueue(controller, signalForTranscript.toDataPart() as any);
+          emitPulseFact({
+            runId,
+            surface: 'signal_queue',
+            action: 'drained',
+            type: 'state',
+            attributes: { signalId: pendingSignal.id, nextMessageId, forcedContinuation: true, site: 'loop-predicate' },
+            edges: [{ type: 'drained_signal', to: { kind: 'content', id: `signal:${pendingSignal.id}` } }],
+          });
         }
         if (typedInputData.stepResult) {
           typedInputData.stepResult.messageId = nextMessageId;

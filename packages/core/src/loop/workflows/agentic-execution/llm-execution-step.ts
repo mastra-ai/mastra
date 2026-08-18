@@ -34,6 +34,7 @@ import { isProcessorWorkflow } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 import { ProcessorRunner } from '../../../processors/runner';
 import type { ProcessorState } from '../../../processors/runner';
+import { emitPulseFact } from '../../../pulse/emitter';
 import { RequestContext } from '../../../request-context';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
@@ -142,6 +143,10 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   tools?: ToolSet;
   runId: string;
   messageId: string;
+  /** EXPERIMENT (Gate 1): fired once when the provider's response actually
+   * begins (`response-metadata`). The abort/error fallback stream never
+   * produces it, so this is the execution discriminator for pulse facts. */
+  onModelResponseBegan?: () => void;
   includeRawChunks?: boolean;
   messageList: MessageList;
   outputStream: MastraModelOutput<OUTPUT>;
@@ -491,6 +496,7 @@ function buildTripWireBailResponse<OUTPUT = undefined, TOOLS extends ToolSet = T
 async function processOutputStream<OUTPUT = undefined>({
   tools,
   messageId,
+  onModelResponseBegan,
   messageList,
   outputStream,
   runState,
@@ -780,6 +786,7 @@ async function processOutputStream<OUTPUT = undefined>({
 
     switch (chunk.type) {
       case 'response-metadata':
+        onModelResponseBegan?.();
         runState.setState({
           responseMetadata: {
             id: chunk.payload.id,
@@ -1182,6 +1189,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       modelSpanTracker?.startStep();
 
       let modelResult: ReturnType<typeof execute> | undefined;
+      // EXPERIMENT (Gate 1): set only when a live request is frozen for a
+      // real model call; stays undefined on the cache-replay path, so a
+      // replayed response-metadata chunk emits no `executed` fact.
+      let pulseFreezeId: string | undefined;
       let warnings: any;
       let request: any;
       let rawResponse: any;
@@ -1608,6 +1619,46 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           });
           modelSpanTracker?.startInference?.();
 
+          // EXPERIMENT (Gate 1): the request is FROZEN here — nothing below
+          // mutates the prompt. Record the exact ordered membership of
+          // lineage-stamped content (text-free: the providerOptions token
+          // planted at signal acceptance, surviving conversion).
+          // The freeze/execute pair is joined by a nonce: requestId
+          // (messageId) and step both collide across attempts on the
+          // abort/drain path.
+          pulseFreezeId = globalThis.crypto.randomUUID();
+          {
+            const includedEdges: Array<{
+              type: 'included_in_model_input';
+              to: { kind: 'content'; id: string };
+              attributes: Record<string, string | number>;
+            }> = [];
+            for (let position = 0; position < inputMessages.length; position++) {
+              const sid = (inputMessages[position] as { providerOptions?: { mastra?: { pulseSignalId?: string } } })
+                ?.providerOptions?.mastra?.pulseSignalId;
+              if (sid) {
+                includedEdges.push({
+                  type: 'included_in_model_input',
+                  to: { kind: 'content', id: `signal:${sid}` },
+                  attributes: { position },
+                });
+              }
+            }
+            emitPulseFact({
+              runId,
+              surface: 'model_input',
+              action: 'finalized',
+              type: 'state',
+              attributes: {
+                requestId: String(currentStep.messageId ?? ''),
+                freezeId: pulseFreezeId,
+                messageCount: inputMessages.length,
+                step: inputData.output?.steps?.length ?? 0,
+              },
+              edges: includedEdges,
+            });
+          }
+
           modelResult = executeWithContextSync({
             span: modelSpanTracker?.getTracingContext()?.currentSpan,
             fn: () =>
@@ -1713,6 +1764,28 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             tools: currentStep.tools,
             runId,
             messageId: currentStep.messageId,
+            // EXPERIMENT (Gate 1): the provider's response actually began —
+            // the abort/error fallback stream never reaches this. Without it,
+            // a step aborted before the model call still looks "seen"
+            // (finalized+inclusion), which is phantom visibility.
+            onModelResponseBegan: (() => {
+              let emitted = false;
+              return () => {
+                if (emitted || !pulseFreezeId) return;
+                emitted = true;
+                emitPulseFact({
+                  runId,
+                  surface: 'model_input',
+                  action: 'executed',
+                  type: 'state',
+                  attributes: {
+                    requestId: String(currentStep.messageId ?? ''),
+                    freezeId: pulseFreezeId,
+                    step: inputData.output?.steps?.length ?? 0,
+                  },
+                });
+              };
+            })(),
             messageList,
             runState,
             options,
