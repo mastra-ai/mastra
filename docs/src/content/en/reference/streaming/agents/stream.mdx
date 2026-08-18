@@ -970,6 +970,26 @@ for await (const chunk of stream.fullStream) {
 const fullText = await stream.text
 ```
 
+### Limiting execution time
+
+Use `modelSettings.timeout` to bound how long a run may take. `totalMs` limits the entire run, including every loop iteration, tool call and retry. `stepMs` limits a single model call, covering both establishing the stream and consuming it.
+
+```ts title="index.ts"
+const stream = await agent.stream('Tell me a story', {
+  modelSettings: {
+    timeout: {
+      totalMs: 30000, // fail the run if it takes longer than 30s
+      stepMs: 10000, // fail an individual model call after 10s
+    },
+  },
+})
+```
+
+Exceeding either budget fails with a `MastraTimeoutError`, which carries a `timeoutType` of `'total'` or `'step'`. The two budgets behave differently when the agent is configured with fallback [`models`](/reference/agents/agent):
+
+- A `totalMs` timeout ends the run immediately and does not try the next model, because it is a hard deadline for the run as a whole.
+- A `stepMs` timeout is not retried against the same model, but does advance to the next model, which makes it a way to fail over from a slow provider.
+
 ### AI SDK v5+ Format
 
 To use the stream with AI SDK v5 (and later), you can convert it using our utility function `toAISdkStream`.
