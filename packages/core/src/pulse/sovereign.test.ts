@@ -125,6 +125,11 @@ describe('sovereignty: observability OFF, pulse alone', () => {
       expect(flows).toHaveLength(1);
       expect(flows[0]).toMatchObject({ flowId: runId, runId, status: 'completed', threadId: 'sov-t' });
       expect(flows[0]!.durationMs).not.toBeNull();
+      // Tree derives from the synthetic node keys — run → generation → step.
+      const detail = await store.getFlow(runId);
+      expect(detail!.tree.map(n => n.label)).toEqual(
+        expect.arrayContaining(['agent.run', 'model.generate', 'model.step']),
+      );
     } finally {
       c.done();
     }

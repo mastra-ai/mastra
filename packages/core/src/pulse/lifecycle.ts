@@ -220,6 +220,10 @@ function emitMintedFact(phase: 'started' | 'ended', ctx: LifecycleSiteContext & 
   const isEnd = phase === 'ended';
   const occ = ctx.occurrence ?? 0;
   const pulseId = mintFactId(ctx.runId, ctx.surface, ctx.base, phase, occ);
+  // Synthetic node key: lets the existing span-keyed tree readers pair
+  // started/ended minted facts and link parents with zero reader changes.
+  const nodeKey = `${ctx.surface}.${ctx.base}.${occ}`;
+  const parentKey = ctx.parent ? `${ctx.parent.surface}.${ctx.parent.base}.${ctx.parent.occurrence ?? 0}` : undefined;
 
   let type: PulseFactInput['type'];
   let action: string;
@@ -264,6 +268,8 @@ function emitMintedFact(phase: 'started' | 'ended', ctx: LifecycleSiteContext & 
     id: pulseId,
     runId: ctx.runId,
     traceId: ctx.runId, // the agent run IS the flow
+    spanId: nodeKey,
+    parentSpanId: parentKey,
     surface: ctx.surface,
     action,
     type,
