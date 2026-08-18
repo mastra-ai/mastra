@@ -22,7 +22,10 @@ export function useSignalManagementMutations() {
   const { cacheScope, signalManagement } = useTraceIntelligence();
   const queryClient = useQueryClient();
   const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ['trace-intelligence', cacheScope, 'signal-management'] });
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['trace-intelligence', cacheScope, 'signal-management'] }),
+      queryClient.invalidateQueries({ queryKey: ['entity-learning', cacheScope, 'entities'] }),
+    ]);
 
   return {
     create: useMutation({

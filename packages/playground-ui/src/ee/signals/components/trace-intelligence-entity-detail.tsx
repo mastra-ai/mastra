@@ -65,6 +65,7 @@ export function TraceIntelligenceEntityDetail({
       LinkComponent={context.LinkComponent}
       getTraceHref={context.getTraceHref}
       signalCatalog={signalCatalog}
+      signalManagement={context.signalManagement}
     >
       {signalNames.length < 2 ? (
         <SignalsEmptyState LinkComponent={context.LinkComponent} progress={progressQuery.data} />

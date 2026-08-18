@@ -3,6 +3,9 @@ import type { EntityLearningProgressStatus, ThemeLearningEntity } from '@mastra/
 export type TraceIntelligenceEntitySort = 'default' | 'entity-asc' | 'entity-desc';
 export type TraceIntelligenceEntityView = 'compact' | 'list';
 
+const numberFormatter = new Intl.NumberFormat('en-US');
+const dateFormatter = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+
 export type EntityIndexMetadata = {
   traceCount: string;
   signalsSet: string;
@@ -31,18 +34,13 @@ export function entityIndexMetadata(entity: ThemeLearningEntity): EntityIndexMet
   const readySignalCount =
     entity.readySignalCount ?? enabledCatalog?.filter(signal => signal.status === 'ready').length;
   return {
-    traceCount: entity.traceCount === undefined ? '—' : new Intl.NumberFormat('en-US').format(entity.traceCount),
+    traceCount: entity.traceCount === undefined ? '—' : numberFormatter.format(entity.traceCount),
     signalsSet:
       readySignalCount === undefined || enabledSignalCount === undefined
         ? '—'
         : `${readySignalCount} of ${enabledSignalCount}`,
     status: entity.status,
-    updatedAt:
-      entity.updatedAt === undefined
-        ? '—'
-        : new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(
-            new Date(entity.updatedAt),
-          ),
+    updatedAt: entity.updatedAt === undefined ? '—' : dateFormatter.format(new Date(entity.updatedAt)),
   };
 }
 

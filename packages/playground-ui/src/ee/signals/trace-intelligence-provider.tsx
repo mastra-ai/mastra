@@ -1,5 +1,5 @@
 import type { SignalCatalogEntry } from '@mastra/client-js';
-import type { ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 
 import {
   defaultTraceIntelligenceContextValue,
@@ -28,11 +28,10 @@ export function TraceIntelligenceProvider({
   signalCatalog = defaultTraceIntelligenceContextValue.signalCatalog,
   signalManagement,
 }: TraceIntelligenceProviderProps) {
-  return (
-    <TraceIntelligenceContext.Provider
-      value={{ cacheScope, request, LinkComponent, getTraceHref, signalCatalog, signalManagement }}
-    >
-      {children}
-    </TraceIntelligenceContext.Provider>
+  const value = useMemo(
+    () => ({ cacheScope, request, LinkComponent, getTraceHref, signalCatalog, signalManagement }),
+    [cacheScope, getTraceHref, LinkComponent, request, signalCatalog, signalManagement],
   );
+
+  return <TraceIntelligenceContext.Provider value={value}>{children}</TraceIntelligenceContext.Provider>;
 }
