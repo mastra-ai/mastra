@@ -43,6 +43,7 @@ import type {
   UpdateBufferedReflectionInput,
 } from '@mastra/core/storage';
 import type { Pool, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
+import { indexKey } from '../../db/schema-snapshot';
 import type { StoreOperationsMySQL } from '../operations';
 import { generateTableSQL, generateIndexSQL } from '../operations';
 import { formatTableName, parseDateTime, quoteIdentifier, transformToSqlValue } from '../utils';
@@ -170,6 +171,7 @@ function addMySQLMessageMetadataFilter(
 }
 
 export class MemoryMySQL extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate = true;
   readonly supportsObservationalMemory = true;
 
   private pool: Pool;
@@ -247,15 +249,22 @@ export class MemoryMySQL extends MemoryStorage {
     });
 
     if (omSchema) {
-      // Create index on lookupKey for efficient OM queries
-      // MySQL does not support CREATE INDEX IF NOT EXISTS, so catch ER_DUP_KEYNAME (errno 1061)
-      try {
-        await this.pool.execute(
-          `CREATE INDEX idx_om_lookup_key ON ${OM_TABLE_QUOTED} (${quoteIdentifier('lookupKey', 'column name')}(191))`,
-        );
-      } catch (err: any) {
-        if (err?.errno !== 1061) {
-          throw err;
+      // Create index on lookupKey for efficient OM queries. Consult the
+      // init-scoped snapshot (held by the operations domain) first so a warm
+      // boot does not re-issue DDL that is doomed to fail; the errno-1061
+      // swallow below stays as the concurrent-boot safety net.
+      const snapshot = this.operations.getInitSchemaSnapshot();
+      if (!snapshot?.indexes.has(indexKey(OM_TABLE, 'idx_om_lookup_key'))) {
+        // MySQL does not support CREATE INDEX IF NOT EXISTS, so catch ER_DUP_KEYNAME (errno 1061)
+        try {
+          await this.pool.execute(
+            `CREATE INDEX idx_om_lookup_key ON ${OM_TABLE_QUOTED} (${quoteIdentifier('lookupKey', 'column name')}(191))`,
+          );
+          snapshot?.indexes.add(indexKey(OM_TABLE, 'idx_om_lookup_key'));
+        } catch (err: any) {
+          if (err?.errno !== 1061) {
+            throw err;
+          }
         }
       }
     }

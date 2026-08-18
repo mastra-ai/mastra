@@ -38,7 +38,6 @@ import {
   buildObserverHistoryMessage,
   buildMultiThreadObserverHistoryMessage,
   parseObserverOutput,
-  optimizeObservationsForContext,
   formatMessagesForObserver,
   hasCurrentTaskSection,
   extractCurrentTask,
@@ -3293,53 +3292,6 @@ User asked about </current-task> parsing and how it works
       const result = parseObserverOutput(text);
       expect(result.degenerate).toBe(true);
       expect(result.observations).toBe('');
-    });
-  });
-
-  describe('optimizeObservationsForContext', () => {
-    it('should strip yellow and green emojis', () => {
-      const observations = `
-- 🔴 Critical info
-- 🟡 Medium info
-- 🟢 Low info
-      `;
-
-      const optimized = optimizeObservationsForContext(observations);
-      expect(optimized).toContain('🔴 Critical info');
-      expect(optimized).not.toContain('🟡');
-      expect(optimized).not.toContain('🟢');
-    });
-
-    it('should strip anchor IDs before injecting context', () => {
-      const observations = '[O1] - 🔴 Critical info\n[O2] - 🟡 Medium info';
-      const optimized = optimizeObservationsForContext(observations);
-
-      expect(optimized).toContain('🔴 Critical info');
-      expect(optimized).toContain('- Medium info');
-      expect(optimized).not.toContain('[O1]');
-      expect(optimized).not.toContain('[O2]');
-    });
-
-    it('should preserve red emojis', () => {
-      const observations = '- 🔴 Critical user preference';
-      const optimized = optimizeObservationsForContext(observations);
-      expect(optimized).toContain('🔴');
-    });
-
-    it('should simplify arrows', () => {
-      const observations = '- Task -> completed successfully';
-      const optimized = optimizeObservationsForContext(observations);
-      expect(optimized).not.toContain('->');
-    });
-
-    it('should collapse multiple newlines', () => {
-      const observations = `Line 1
-
-
-
-Line 2`;
-      const optimized = optimizeObservationsForContext(observations);
-      expect(optimized).not.toContain('\n\n\n');
     });
   });
 });
@@ -12351,6 +12303,90 @@ describe('Full Async Buffering Flow', () => {
       expect(remaining).toHaveLength(1);
     });
 
+    it('forceMaxActivation: no observable effect with the documented defaults', async () => {
+      // Documented defaults: messageTokens=30k, bufferActivation=0.8 → retentionFloor=6k,
+      // blockAfter=1.2 → 36k. currentPending=36000, target=30000.
+      // Six 6k chunks: boundary 5 is the lowest over boundary (30k, overshoot=0),
+      // so the forced branch and the normal branch pick the same boundary and one
+      // chunk stays buffered. The docs must not describe this as draining the buffer.
+      const chunks = Array.from({ length: 6 }, (_, i) => ({
+        cycleId: `c-${i}`,
+        messageTokens: 6000,
+        observationTokens: 100,
+        obs: `Chunk ${i}`,
+      }));
+
+      const forced = await setupAndActivate({
+        chunks,
+        activationRatio: 0.8,
+        messageTokensThreshold: 30000,
+        currentPendingTokens: 36000,
+        forceMaxActivation: true,
+      });
+      const normal = await setupAndActivate({
+        chunks,
+        activationRatio: 0.8,
+        messageTokensThreshold: 30000,
+        currentPendingTokens: 36000,
+      });
+
+      expect(forced.result.chunksActivated).toBe(5);
+      expect(forced.result.chunksActivated).toBe(normal.result.chunksActivated);
+      expect(forced.result.messageTokensActivated).toBe(normal.result.messageTokensActivated);
+      expect(forced.remaining).toHaveLength(1);
+    });
+
+    it('forceMaxActivation: activates one extra chunk only when the retention floor is large', async () => {
+      // threshold=100k, ratio=0.7 → retentionFloor=30000, maxOvershoot=28500, minRemaining=1000
+      // currentPending=100000, target=70000
+      // Chunk 0: 69k (under). Chunk 1: 30k → cumulative 99k (over, overshoot=29000).
+      // Normal: overshoot 29000 > 28500 → falls back to the under boundary (1 chunk).
+      // Forced: remainingAfterOver = 1000 >= minRemaining → takes the over boundary (2 chunks).
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 69000, observationTokens: 500, obs: 'Chunk 0' },
+        { cycleId: 'c-1', messageTokens: 30000, observationTokens: 300, obs: 'Chunk 1' },
+      ];
+
+      const forced = await setupAndActivate({
+        chunks,
+        activationRatio: 0.7,
+        messageTokensThreshold: 100000,
+        currentPendingTokens: 100000,
+        forceMaxActivation: true,
+      });
+      const normal = await setupAndActivate({
+        chunks,
+        activationRatio: 0.7,
+        messageTokensThreshold: 100000,
+        currentPendingTokens: 100000,
+      });
+
+      // Forced activation never goes past the lowest boundary that reaches the target.
+      expect(forced.result.chunksActivated).toBe(2);
+      expect(forced.result.messageTokensActivated).toBe(99000);
+      expect(normal.result.chunksActivated).toBe(1);
+      expect(normal.result.messageTokensActivated).toBe(69000);
+    });
+
+    it('single buffered chunk covering the whole window leaves less than the minimum remaining', async () => {
+      // threshold=30k, ratio=0.8 → retentionFloor=6000, minRemaining=1000
+      // currentPending=36000, target=30000. One 36k chunk is the only boundary:
+      // overshoot=6000 > maxOvershoot=5700 and remainingAfterOver=0 < 1000, and there is
+      // no under boundary, so the final fallback activates it anyway and leaves 0 tokens.
+      const chunks = [{ cycleId: 'c-0', messageTokens: 36000, observationTokens: 400, obs: 'Chunk 0' }];
+
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio: 0.8,
+        messageTokensThreshold: 30000,
+        currentPendingTokens: 36000,
+      });
+
+      expect(result.chunksActivated).toBe(1);
+      expect(result.messageTokensActivated).toBe(36000);
+      expect(remaining).toHaveLength(0);
+    });
+
     it('large message scenario: safeguard falls back to small chunk when oversized message dominates', async () => {
       // Real-world scenario: a small chunk (2k) followed by a huge web_search result (46k).
       // threshold=30k, absolute retention=1000 → ratio ≈ 0.967
@@ -16039,10 +16075,14 @@ describe('Processor stream events: buffering status and activation markers', () 
     // record (e.g. setBufferingObservationFlag) are visible everywhere. Real DBs
     // return fresh rows on each query, so the cached record remains stale.
     const originalGetOrCreate = om.getOrCreateRecord.bind(om);
-    om.getOrCreateRecord = async (...args: Parameters<typeof om.getOrCreateRecord>) => {
-      const record = await originalGetOrCreate(...args);
-      return JSON.parse(JSON.stringify(record));
-    };
+    const getOrCreateSpy = vi
+      .spyOn(om, 'getOrCreateRecord')
+      .mockImplementation(async (...args: Parameters<typeof om.getOrCreateRecord>) => {
+        const record = await originalGetOrCreate(...args);
+        return JSON.parse(JSON.stringify(record));
+      });
+    const setPendingSpy = vi.spyOn(storage, 'setPendingMessageTokens');
+    const emitProgressSpy = vi.spyOn(om, 'emitProgress');
 
     await storage.saveThread({
       thread: {
@@ -16137,12 +16177,14 @@ describe('Processor stream events: buffering status and activation markers', () 
       await new Promise(r => setTimeout(r, 50));
     }
 
+    expect(emitProgressSpy).toHaveBeenCalledTimes(1);
+    expect(setPendingSpy).toHaveBeenCalledTimes(1);
+    expect(getOrCreateSpy.mock.calls.length).toBeLessThan(3);
     expect(capturedStatusParts.length).toBeGreaterThanOrEqual(1);
 
     const lastStatus = capturedStatusParts[capturedStatusParts.length - 1];
-    // emitProgress should use a fresh record from storage (not the stale cached
-    // one from turn.start()). The fresh record reflects the isBufferingObservation
-    // flag set by buffer(), so the status should NOT be 'idle'.
+    // The turn-scoped record is updated before the asynchronous buffer work yields,
+    // so progress remains current without another storage fetch.
     expect(lastStatus.data.windows.buffered.observations.status).not.toBe('idle');
   });
 

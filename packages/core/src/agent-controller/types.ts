@@ -225,6 +225,21 @@ export type BuiltinToolId =
 /** Process-local listener notified after AgentController materializes a live session. */
 export type AgentControllerSessionCreatedListener<TState = {}> = (session: Session<TState>) => void | Promise<void>;
 
+/** Options for {@link AgentController.onSessionCreated}. */
+export interface AgentControllerSessionCreatedOptions {
+  /**
+   * Make `createSession()` await this listener before resolving a newly
+   * materialized session. Blocking listeners run sequentially in registration
+   * order, before fire-and-forget listeners are notified. Failures are
+   * isolated and logged, never thrown. Keep the work short — it holds up every
+   * caller awaiting that session's creation.
+   */
+  blocking?: boolean;
+}
+
+/** Process-local listener notified after AgentController tears down a live session. */
+export type AgentControllerSessionDeletedListener<TState = {}> = (session: Session<TState>) => void | Promise<void>;
+
 export interface AgentControllerConfig<TState = {}> {
   /** Unique identifier for this controller instance */
   id: string;
@@ -503,6 +518,8 @@ export interface TokenUsage {
   reasoningTokens?: number;
   cachedInputTokens?: number;
   cacheCreationInputTokens?: number;
+  cacheCreationInputTokens5m?: number;
+  cacheCreationInputTokens1h?: number;
   raw?: unknown;
 }
 
@@ -785,6 +802,7 @@ export type AgentControllerEvent =
   | { type: 'tool_input_delta'; toolCallId: string; argsTextDelta: unknown; toolName?: string }
   | { type: 'tool_input_end'; toolCallId: string }
   | { type: 'shell_output'; toolCallId: string; output: string; stream: 'stdout' | 'stderr' }
+  | { type: 'command_exit'; toolCallId: string; exitCode: number; success: boolean }
   | { type: 'usage_update'; usage: TokenUsage }
   | { type: 'info'; message: string }
   | {

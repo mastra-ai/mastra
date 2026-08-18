@@ -163,6 +163,10 @@ describe('MastraTUI queueing', () => {
     tui.queueFollowUpMessage = vi.fn();
     tui.signalMessage = vi.fn();
 
+    // Object.create bypasses field initializers; getUserInput reads the queue.
+
+    (tui as any).queuedUserInput = [];
+
     const pendingInput = tui.getUserInput();
     editor.onSubmit?.('queued follow-up');
 
@@ -208,6 +212,10 @@ describe('MastraTUI queueing', () => {
     tui.signalMessage = vi.fn();
     tui.handleSlashCommand = vi.fn().mockResolvedValue(true);
 
+    // Object.create bypasses field initializers; getUserInput reads the queue.
+
+    (tui as any).queuedUserInput = [];
+
     tui.getUserInput();
     editor.onSubmit?.('/help');
 
@@ -244,6 +252,10 @@ describe('MastraTUI queueing', () => {
     };
     tui.state = state;
     tui.queueFollowUpMessage = vi.fn();
+
+    // Object.create bypasses field initializers; getUserInput reads the queue.
+
+    (tui as any).queuedUserInput = [];
 
     const pendingInput = tui.getUserInput();
     editor.onSubmit?.('wait for judge');

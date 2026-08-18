@@ -17,6 +17,7 @@ import type { CallSettings, ModelMessage, StepResult, ToolSet, TypedToolCall, UI
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type, MastraDBMessage } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
+import type { ModelConfigModelSettings } from '../llm/model/model-settings';
 import type { MastraLanguageModel, SharedProviderOptions } from '../llm/model/shared.types';
 import type { ScorerResult } from '../loop';
 import type { ClientObservabilityCarrier, ObservabilityContext } from '../observability';
@@ -144,6 +145,7 @@ export interface FilePayload {
   data: string | Uint8Array;
   base64?: string;
   mimeType: string;
+  filename?: string;
   providerMetadata?: ProviderMetadata;
 }
 
@@ -237,6 +239,8 @@ interface FinishPayload<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   stepResult: {
     /** Includes 'tripwire' and 'retry' for processor scenarios */
     reason: LanguageModelV2FinishReason | 'tripwire' | 'retry';
+    /** Provider's own finish reason (e.g. 'MALFORMED_FUNCTION_CALL'), when the provider reports one */
+    rawReason?: string;
     warnings?: LanguageModelV2CallWarning[];
     isContinued?: boolean;
     logprobs?: LanguageModelV1LogProbs;
@@ -296,6 +300,8 @@ export interface StepFinishPayload<Tools extends ToolSet = ToolSet, OUTPUT = und
     isContinued?: boolean;
     warnings?: LanguageModelV2CallWarning[];
     reason: LanguageModelV2FinishReason;
+    /** Provider's own finish reason (e.g. 'MALFORMED_FUNCTION_CALL'), when the provider reports one */
+    rawReason?: string;
   };
   output: {
     text?: string;
@@ -1069,7 +1075,7 @@ export type ModelManagerModelConfig = {
   maxRetries: number;
   id: string;
   headers?: Record<string, string>;
-  modelSettings?: Omit<CallSettings, 'abortSignal' | 'maxRetries' | 'headers'>;
+  modelSettings?: ModelConfigModelSettings;
   providerOptions?: SharedProviderOptions;
 };
 
@@ -1081,6 +1087,8 @@ export type LanguageModelUsage = LanguageModelV2Usage & {
   reasoningTokens?: number;
   cachedInputTokens?: number;
   cacheCreationInputTokens?: number;
+  cacheCreationInputTokens5m?: number;
+  cacheCreationInputTokens1h?: number;
   /**
    * Raw usage data from the provider, preserved for advanced use cases.
    * For V3 models, contains the full nested structure:

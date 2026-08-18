@@ -1,3 +1,4 @@
+import type { IncomingMessage } from 'node:http';
 import type { MastraAuthConfig as InternalMastraAuthConfig } from '@internal/auth/types';
 import type { Handler, MiddlewareHandler, Context } from 'hono';
 import type { cors } from 'hono/cors';
@@ -16,33 +17,86 @@ export type Methods = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'ALL';
 
 export type ApiRouteHandler = (c: any) => Response | Promise<Response>;
 
-export type ApiRoute =
-  | {
-      path: string;
-      method: Methods;
-      handler: Handler;
-      middleware?: MiddlewareHandler | MiddlewareHandler[];
-      openapi?: DescribeRouteOptions;
-      cors?: CorsOptions;
-      requiresAuth?: boolean;
-      requiresPermission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
-      fga?: RouteFGAConfig;
-      /** Framework-generated route. Bypasses the apiPrefix collision check. Mastra-internal — do not use. */
-      _mastraInternal?: true;
-    }
-  | {
-      path: string;
-      method: Methods;
-      createHandler: ({ mastra }: { mastra: Mastra }) => Promise<ApiRouteHandler>;
-      middleware?: MiddlewareHandler | MiddlewareHandler[];
-      openapi?: DescribeRouteOptions;
-      cors?: CorsOptions;
-      requiresAuth?: boolean;
-      requiresPermission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
-      fga?: RouteFGAConfig;
-      /** Framework-generated route. Bypasses the apiPrefix collision check. Mastra-internal — do not use. */
-      _mastraInternal?: true;
+type ApiRouteBase = {
+  path: string;
+  method: Methods;
+  requiresAuth?: boolean;
+  requiresPermission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
+  fga?: RouteFGAConfig;
+  /** Framework-generated route. Bypasses the apiPrefix collision check. Mastra-internal — do not use. */
+  _mastraInternal?: true;
+};
+
+type HonoApiRoute = ApiRouteBase & {
+  middleware?: MiddlewareHandler | MiddlewareHandler[];
+  openapi?: DescribeRouteOptions;
+  cors?: CorsOptions;
+} & ({ handler: Handler } | { createHandler: ({ mastra }: { mastra: Mastra }) => Promise<ApiRouteHandler> });
+
+/**
+ * Structural mirror of the generated OpenAPI metadata attached to a
+ * `ServerRoute` by `createRoute()` in `@mastra/server/server-adapter`.
+ * Core cannot import from `@mastra/server`, so keep this in sync with
+ * `generateRouteOpenAPI()` in `packages/server/src/server/server-adapter/routes/route-builder.ts`.
+ */
+type SchemaApiRouteOpenAPI = {
+  hide?: boolean;
+  summary?: string;
+  description?: string;
+  tags?: string[];
+  deprecated?: boolean;
+  requestParams?: {
+    path?: unknown;
+    query?: unknown;
+  };
+  requestBody?: {
+    content: {
+      'application/json': {
+        schema: unknown;
+      };
     };
+  };
+  responses: Record<
+    string,
+    {
+      description: string;
+      content?: {
+        'application/json': {
+          schema: unknown;
+        };
+      };
+    }
+  >;
+};
+
+/**
+ * A schema-aware route created by `createRoute()` from a server adapter.
+ * The adapter registers these through its native route pipeline so parsing,
+ * validation, response handling, and generated OpenAPI metadata are preserved.
+ *
+ * Structural mirror of `ServerRoute` in
+ * `packages/server/src/server/server-adapter/routes/index.ts` (core cannot
+ * import from `@mastra/server`). Keep the two in sync. Unlike Hono-style
+ * routes, schema routes do not support `middleware` or `cors`.
+ */
+type SchemaApiRoute = ApiRouteBase & {
+  /** Runtime discriminator attached by `createRoute()`. */
+  readonly _mastraSchemaRoute: true;
+  responseType: 'stream' | 'json' | 'datastream-response' | 'mcp-http' | 'mcp-sse';
+  handler(params: any): Promise<unknown>;
+  streamFormat?: 'sse' | 'stream';
+  sseFlushOnConnect?: boolean;
+  pathParamSchema?: unknown;
+  queryParamSchema?: unknown;
+  bodySchema?: unknown;
+  responseSchema?: unknown;
+  openapi?: SchemaApiRouteOpenAPI;
+  maxBodySize?: number;
+  deprecated?: boolean;
+  onValidationError?: ValidationErrorHook;
+};
+
+export type ApiRoute = HonoApiRoute | SchemaApiRoute;
 
 export type Middleware = MiddlewareHandler | { path: string; handler: MiddlewareHandler };
 
@@ -276,6 +330,15 @@ export type ServerConfig = {
      * Custom session ID generator function
      */
     sessionIdGenerator?: () => string;
+    /**
+     * Sets `req.auth` on the request handed to the MCP transport, which is what
+     * surfaces as `extra.authInfo` inside tool and agent execution.
+     *
+     * When omitted, the principal resolved by `server.auth` is bridged
+     * automatically. Provide this hook when your own middleware performs the
+     * verification and you want full control over the resulting `AuthInfo`.
+     */
+    setRequestAuth?: (req: IncomingMessage, requestContext: RequestContext) => void | Promise<void>;
   };
 
   /**

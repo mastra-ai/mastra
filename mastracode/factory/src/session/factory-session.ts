@@ -3,9 +3,10 @@ import { randomUUID } from 'node:crypto';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 
-import type { MemorySettingsRecord, MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
+import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import { applyStoredMemorySettings } from './memory-settings-hydration.js';
 
 type FactorySession = Awaited<ReturnType<AgentController<MastraCodeState>['createSession']>>;
 
@@ -84,27 +85,41 @@ export async function resolveFactorySourceRepository(args: {
   const { sourceControl, orgId, factoryProjectId, repositorySlug } = args;
 
   const connections = await sourceControl.connections.list({ orgId, factoryProjectId });
-  const connection = connections.find(candidate => candidate.integrationId === sourceControl.integrationId);
-  if (!connection) return { found: false, reason: 'connection' };
+  const candidates = connections.filter(candidate => candidate.integrationId === sourceControl.integrationId);
+  if (candidates.length === 0) return { found: false, reason: 'connection' };
 
-  const projectRepositories = await sourceControl.projectRepositories.list({ orgId, connectionId: connection.id });
-  const resolvedRepositories = await Promise.all(
-    projectRepositories.map(async projectRepository => ({
-      projectRepository,
-      repository: await sourceControl.repositories.get({ orgId, id: projectRepository.repositoryId }),
-    })),
-  );
-  const resolved = resolvedRepositories.find(
-    candidate => candidate.repository && (!repositorySlug || candidate.repository.slug === repositorySlug),
-  );
-  if (!resolved?.repository) return { found: false, reason: 'repository' };
+  // A project can carry stale connections: a provider-app reinstall leaves the
+  // old connection pointing at an installation that no longer exists, and that
+  // row can sit ahead of the healthy one. Try every candidate and skip the ones
+  // that no longer resolve rather than failing on the first.
+  for (const connection of candidates) {
+    let resolved;
+    try {
+      const projectRepositories = await sourceControl.projectRepositories.list({ orgId, connectionId: connection.id });
+      const resolvedRepositories = await Promise.all(
+        projectRepositories.map(async projectRepository => ({
+          projectRepository,
+          repository: await sourceControl.repositories.get({ orgId, id: projectRepository.repositoryId }),
+        })),
+      );
+      resolved = resolvedRepositories.find(
+        candidate => candidate.repository && (!repositorySlug || candidate.repository.slug === repositorySlug),
+      );
+    } catch {
+      // The connection no longer resolves (e.g. its installation was deleted).
+      continue;
+    }
+    if (!resolved?.repository) continue;
 
-  return {
-    found: true,
-    projectRepositoryId: resolved.projectRepository.id,
-    baseBranch: resolved.projectRepository.branch ?? resolved.repository.defaultBranch,
-    connectedByUserId: connection.createdByUserId,
-  };
+    return {
+      found: true,
+      projectRepositoryId: resolved.projectRepository.id,
+      baseBranch: resolved.projectRepository.branch ?? resolved.repository.defaultBranch,
+      connectedByUserId: connection.createdByUserId,
+    };
+  }
+
+  return { found: false, reason: 'repository' };
 }
 
 /**
@@ -171,6 +186,7 @@ export async function ensureFactorySourceSession(
     userId,
     branch,
     baseBranch: resolved.baseBranch,
+    visibility: 'org',
   });
   return {
     sessionId: session.sessionId,
@@ -179,18 +195,6 @@ export async function ensureFactorySourceSession(
     branch: session.branch,
     baseBranch: resolved.baseBranch,
   };
-}
-
-async function applyMemorySettings(session: FactorySession, record: MemorySettingsRecord | null): Promise<void> {
-  if (record?.observerModelId) await session.om.observer.switchModel({ modelId: record.observerModelId });
-  if (record?.reflectorModelId) await session.om.reflector.switchModel({ modelId: record.reflectorModelId });
-
-  const state = {
-    ...(record?.observationThreshold != null ? { observationThreshold: record.observationThreshold } : {}),
-    ...(record?.reflectionThreshold != null ? { reflectionThreshold: record.reflectionThreshold } : {}),
-    ...(record?.observeAttachments != null ? { observeAttachments: record.observeAttachments } : {}),
-  };
-  if (Object.keys(state).length > 0) await session.state.set(state);
 }
 
 export interface HydrateFactorySessionArgs {
@@ -214,7 +218,7 @@ export async function hydrateFactorySession(session: FactorySession, args: Hydra
   if (args.memorySettings) {
     try {
       const record = await args.memorySettings.get({ orgId: args.orgId, userId: args.userId });
-      await applyMemorySettings(session, record);
+      await applyStoredMemorySettings(session, record);
     } catch (error) {
       console.warn('[Factory Start] Failed to apply observational-memory settings', {
         error: error instanceof Error ? error.message : String(error),

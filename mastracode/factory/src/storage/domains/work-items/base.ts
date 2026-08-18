@@ -50,29 +50,18 @@ export interface WorkItemStageEntry {
 }
 
 /**
- * Sentinel actor ids that mark a stage transition as automation-driven (vs a
- * human's WorkOS user id): generic sentinels plus the system ids the Factory
- * rules engine stamps (see `actorId` in factory/rules/transition-service.ts).
- * Metrics treat any other actor — including a missing `exitedBy` on
- * pre-existing entries — as human.
+ * Whether an actor id marks a move an agent run performed: the binding id the
+ * transition tool stamps (`agent:*`), or the rule that fires off a bound run's
+ * tool result (see `factory/rules/processor.ts`).
+ *
+ * Deliberately narrower than "not a human": the poller stamps
+ * `factory-rule-dispatcher` / `github:*` on every card it syncs from the
+ * upstream repo, so counting those as machine work reports the repo's activity
+ * as the Factory's and pins any such ratio near 100%.
  */
-export const AUTOMATION_ACTORS = new Set([
-  'factory',
-  'system',
-  'automation',
-  'factory-rule-dispatcher',
-  'factory-tool-result-rule',
-]);
-
-/**
- * Whether an actor id marks a transition no human performed on the Factory
- * board: a sentinel automation id, an agent binding (`agent:*`), or an
- * external-webhook actor (`github:*` — a human may have acted on GitHub, but
- * the board move itself was automated).
- */
-export function isAutomationActor(by: string | undefined): boolean {
+export function isAgentActor(by: string | undefined): boolean {
   if (by === undefined) return false;
-  return AUTOMATION_ACTORS.has(by) || by.startsWith('agent:') || by.startsWith('github:');
+  return by.startsWith('agent:') || by === 'factory-tool-result-rule';
 }
 
 export interface WorkItemSessionRef {
@@ -134,7 +123,8 @@ export interface FactoryRuleEvaluationRecord {
   createdAt: Date;
 }
 
-export type FactoryDispatchStatus = 'pending' | 'leased' | 'retry' | 'succeeded' | 'failed';
+/** `proposed` is parked awaiting approval and never claimed; `dismissed` is a proposal turned down. */
+export type FactoryDispatchStatus = 'pending' | 'proposed' | 'dismissed' | 'leased' | 'retry' | 'succeeded' | 'failed';
 
 export interface FactoryDeferredDecisionPageInput {
   orgId: string;
@@ -167,6 +157,8 @@ export interface FactoryDeferredDecisionRecord {
   leaseOwner: string | null;
   leaseExpiresAt: Date | null;
   lastError: string | null;
+  /** When a human released this run; set once, so the gate never parks it again. */
+  approvedAt: Date | null;
   completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -546,6 +538,14 @@ function withInProcessProjectLock<T>(key: string, fn: () => Promise<T>): Promise
   return result;
 }
 
+/** Source key a decision materializes, used to purge governance rows when the item is deleted. */
+function decisionSourceKey(decision: unknown): string | null {
+  if (typeof decision !== 'object' || decision === null) return null;
+  const record = decision as Record<string, unknown>;
+  if (record.type !== 'upsertLinkedWorkItem' || typeof record.sourceKey !== 'string') return null;
+  return record.sourceKey;
+}
+
 const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
   {
     name: 'factory_rule_ingress',
@@ -586,6 +586,7 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       factory_project_id: { type: 'text' },
       evaluation_id: { type: 'text' },
       work_item_id: { type: 'text', nullable: true },
+      source_key: { type: 'text', nullable: true },
       idempotency_key: { type: 'text' },
       effect_ordinal: { type: 'integer' },
       effect_hash: { type: 'text' },
@@ -598,6 +599,7 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       lease_owner: { type: 'text', nullable: true },
       lease_expires_at: { type: 'timestamp', nullable: true },
       last_error: { type: 'text', nullable: true },
+      approved_at: { type: 'timestamp', nullable: true },
       completed_at: { type: 'timestamp', nullable: true },
       created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
@@ -720,6 +722,7 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
     leaseOwner: (row.lease_owner as string | null) ?? null,
     leaseExpiresAt: (row.lease_expires_at as Date | null) ?? null,
     lastError: (row.last_error as string | null) ?? null,
+    approvedAt: (row.approved_at as Date | null) ?? null,
     completedAt: (row.completed_at as Date | null) ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at as Date,
@@ -1032,6 +1035,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 factory_project_id: input.factoryProjectId,
                 evaluation_id: evaluation.id,
                 work_item_id: item.id,
+                source_key: decisionSourceKey(decision),
                 idempotency_key: String(decision.idempotencyKey),
                 effect_ordinal: index,
                 effect_hash: factoryDecisionHash(decision),
@@ -1166,6 +1170,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             factory_project_id: input.factoryProjectId,
             evaluation_id: evaluation.id,
             work_item_id: item?.id ?? null,
+            source_key: decisionSourceKey(decision),
             idempotency_key: String(decision.idempotencyKey),
             effect_ordinal: effectOrdinal,
             effect_hash: factoryDecisionHash(decision),
@@ -1278,6 +1283,74 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   async failDeferredDecision(input: FactoryDispatchFailureInput): Promise<FactoryDeferredDecisionRecord | null> {
     const row = await this.#failLease('factory_deferred_decisions', input);
     return row ? toDeferredDecision(row) : null;
+  }
+
+  /** Park a claimed effect for human approval; the dispatcher never claims `proposed` rows. */
+  async proposeDeferredDecision(
+    identity: FactoryLeaseIdentity,
+    now: Date,
+  ): Promise<FactoryDeferredDecisionRecord | null> {
+    let proposed = false;
+    const row = await this.#db.updateAtomic<GovernanceDbRow>(
+      'factory_deferred_decisions',
+      { id: identity.id, org_id: identity.orgId, factory_project_id: identity.factoryProjectId },
+      current => {
+        if (current.status !== 'leased' || current.lease_owner !== identity.ownerId) return null;
+        proposed = true;
+        return {
+          status: 'proposed',
+          // The claim that parked it spent no effect, so it costs no attempt.
+          attempts: 0,
+          lease_owner: null,
+          lease_expires_at: null,
+          updated_at: now,
+        };
+      },
+    );
+    return proposed && row ? toDeferredDecision(row) : null;
+  }
+
+  /** Release an approved effect back to the dispatcher; only `proposed` rows are approvable. */
+  async approveDeferredDecision(
+    orgId: string,
+    factoryProjectId: string,
+    decisionId: string,
+    now: Date,
+  ): Promise<FactoryDeferredDecisionRecord | null> {
+    return this.#settleProposedDecision(
+      { orgId, factoryProjectId, decisionId },
+      { status: 'pending', attempts: 0, available_at: now, approved_at: now, updated_at: now },
+    );
+  }
+
+  /** Retire a proposal nobody wants: `dismissed` is terminal, so the run never happens. */
+  async dismissDeferredDecision(
+    orgId: string,
+    factoryProjectId: string,
+    decisionId: string,
+    now: Date,
+  ): Promise<FactoryDeferredDecisionRecord | null> {
+    return this.#settleProposedDecision(
+      { orgId, factoryProjectId, decisionId },
+      { status: 'dismissed', updated_at: now, completed_at: now },
+    );
+  }
+
+  async #settleProposedDecision(
+    { orgId, factoryProjectId, decisionId }: { orgId: string; factoryProjectId: string; decisionId: string },
+    patch: Partial<GovernanceDbRow>,
+  ): Promise<FactoryDeferredDecisionRecord | null> {
+    let settled = false;
+    const row = await this.#db.updateAtomic<GovernanceDbRow>(
+      'factory_deferred_decisions',
+      { id: decisionId, org_id: orgId, factory_project_id: factoryProjectId },
+      current => {
+        if (current.status !== 'proposed') return null;
+        settled = true;
+        return patch;
+      },
+    );
+    return settled && row ? toDeferredDecision(row) : null;
   }
 
   /** Requeue the same idempotent terminal effect; non-failed decisions are never rerun. */
@@ -1745,6 +1818,42 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, run);
   }
 
+  /**
+   * Drop the governance rows that materialized a source key so a deleted work item
+   * is not resurrected by the prior-ingress replay path on the next intake poll.
+   */
+  async #purgeRuleState(
+    ops: FactoryStorageOps,
+    { orgId, factoryProjectId, sourceKey }: { orgId: string; factoryProjectId: string; sourceKey: string },
+  ): Promise<void> {
+    const decisions = await ops.findMany<GovernanceDbRow>('factory_deferred_decisions', {
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+      source_key: sourceKey,
+    });
+    if (decisions.length === 0) return;
+
+    const evaluationIds = [...new Set(decisions.map(decision => String(decision.evaluation_id)))];
+    const ingressIds = new Set<string>();
+    for (const evaluationId of evaluationIds) {
+      const evaluation = await ops.findOne<GovernanceDbRow>('factory_rule_evaluations', { id: evaluationId });
+      if (evaluation) ingressIds.add(String(evaluation.ingress_id));
+    }
+
+    await ops.deleteMany('factory_deferred_decisions', {
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+      source_key: sourceKey,
+    });
+    for (const evaluationId of evaluationIds) {
+      await ops.deleteMany('factory_rule_evaluations', { id: evaluationId });
+    }
+    for (const ingressId of ingressIds) {
+      const remaining = await ops.findMany<GovernanceDbRow>('factory_rule_evaluations', { ingress_id: ingressId });
+      if (remaining.length === 0) await ops.deleteMany('factory_rule_ingress', { id: ingressId });
+    }
+  }
+
   async delete({ orgId, id }: { orgId: string; id: string }): Promise<WorkItemRow | null> {
     const candidate = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
     if (!candidate) return null;
@@ -1754,6 +1863,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       if (!existing) return null;
       const deleted = await ops.deleteMany('work_items', { org_id: orgId, id });
       if (deleted === 0) return null;
+      if (existing.source_key) {
+        await this.#purgeRuleState(ops, {
+          orgId,
+          factoryProjectId: existing.factory_project_id,
+          sourceKey: existing.source_key,
+        });
+      }
       await ops.updateMany(
         'work_items',
         { org_id: orgId, parent_work_item_id: id },

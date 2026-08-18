@@ -2,6 +2,8 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { StoreOperations, TABLE_CONFIGS, TABLE_SPANS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES, CreateIndexOptions } from '@mastra/core/storage';
 import type { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise';
+import { indexKey, loadSchemaSnapshot } from '../../db/schema-snapshot';
+import type { SchemaSnapshot } from '../../db/schema-snapshot';
 import {
   formatTableName,
   prepareDeleteStatement,
@@ -25,11 +27,41 @@ export class StoreOperationsMySQL extends StoreOperations {
   private database?: string;
   private resolvedDatabase?: string | null;
 
+  /**
+   * Init-scoped catalog snapshot (see db/schema-snapshot.ts). Installed by
+   * MySQLStore.init() for exactly the init window and cleared in its finally;
+   * null at runtime so non-init callers keep probing the live catalog.
+   */
+  private schemaSnapshot: SchemaSnapshot | null = null;
+
   constructor({ pool, database }: { pool: Pool; database?: string }) {
     super();
     this.pool = pool;
     this.database = database;
     this.resolvedDatabase = database ?? null;
+  }
+
+  /**
+   * Loads and installs the init-scoped snapshot. A null load (no default
+   * database) or a failed load leaves the snapshot uninstalled, so init
+   * proceeds with today's per-probe behavior: correctness over optimization.
+   */
+  async loadInitSchemaSnapshot(): Promise<void> {
+    try {
+      this.schemaSnapshot = await loadSchemaSnapshot(this.pool, await this.getDatabase());
+    } catch (error) {
+      console.warn('Failed to load init schema snapshot, falling back to per-object probing:', error);
+      this.schemaSnapshot = null;
+    }
+  }
+
+  clearInitSchemaSnapshot(): void {
+    this.schemaSnapshot = null;
+  }
+
+  /** Read by sibling domains (memory's raw index DDL) so snapshot state lives in exactly one place. */
+  getInitSchemaSnapshot(): SchemaSnapshot | null {
+    return this.schemaSnapshot;
   }
 
   getPool(): Pool {
@@ -53,6 +85,11 @@ export class StoreOperationsMySQL extends StoreOperations {
   }
 
   async hasColumn(table: string, column: string): Promise<boolean> {
+    // Consult the init-scoped snapshot instead of probing the server.
+    const snapshotColumns = this.schemaSnapshot?.columns.get(table.toLowerCase());
+    if (snapshotColumns) {
+      return snapshotColumns.has(column.toLowerCase());
+    }
     const db = await this.getDatabase();
     const params: SqlParam[] = [table, column];
     let sql =
@@ -199,19 +236,37 @@ export class StoreOperationsMySQL extends StoreOperations {
     tableName: TABLE_NAMES;
     schema: Record<string, StorageColumn>;
   }): Promise<void> {
+    // Consult the init-scoped snapshot instead of probing the server.
+    const snapshot = this.schemaSnapshot;
+    if (snapshot?.tables.has(tableName.toLowerCase())) {
+      return;
+    }
     const connection = await this.pool.getConnection();
     try {
-      const db = await this.getDatabase();
-      const [t_rows] = await connection.query(
-        'SELECT COUNT(*) AS count FROM information_schema.tables WHERE table_schema = ? AND table_name = ?',
-        [db ?? '', tableName],
-      );
-      const exists = Array.isArray(t_rows) && t_rows.length > 0 && (t_rows[0] as any).count > 0;
-      if (exists) {
-        return;
+      if (!snapshot) {
+        const db = await this.getDatabase();
+        const [t_rows] = await connection.query(
+          'SELECT COUNT(*) AS count FROM information_schema.tables WHERE table_schema = ? AND table_name = ?',
+          [db ?? '', tableName],
+        );
+        const exists = Array.isArray(t_rows) && t_rows.length > 0 && (t_rows[0] as any).count > 0;
+        if (exists) {
+          return;
+        }
       }
       const sql = this.getCreateTableSQL(tableName, schema);
-      await connection.execute(sql);
+      const [result] = await connection.execute(sql);
+      // Maintain the snapshot so later domains in the same init see this table,
+      // but only when the CREATE actually created it. warningStatus > 0 means
+      // IF NOT EXISTS no-opped against a table the snapshot did not see (created
+      // out of band after the catalog read); leaving it out of the snapshot
+      // makes later consults fall back to probing the live catalog for it.
+      const created = (result as { warningStatus?: number } | undefined)?.warningStatus === 0;
+      if (snapshot && created) {
+        const table = tableName.toLowerCase();
+        snapshot.tables.add(table);
+        snapshot.columns.set(table, new Set(Object.keys(schema).map(column => column.toLowerCase())));
+      }
     } catch (error) {
       throw new MastraError(
         {
@@ -284,25 +339,34 @@ export class StoreOperationsMySQL extends StoreOperations {
     const indexName = quoteIdentifier(name, 'index name');
 
     try {
-      // Check if index already exists
-      const db = (await this.getDatabase()) ?? '';
-      const [existing] = await this.pool.execute<RowDataPacket[]>(
-        `SELECT 1 FROM information_schema.STATISTICS 
+      // Consult the init-scoped snapshot instead of probing the server.
+      const snapshot = this.schemaSnapshot;
+      if (snapshot) {
+        if (snapshot.indexes.has(indexKey(table, name))) {
+          return; // Index already exists
+        }
+      } else {
+        // Check if index already exists
+        const db = (await this.getDatabase()) ?? '';
+        const [existing] = await this.pool.execute<RowDataPacket[]>(
+          `SELECT 1 FROM information_schema.STATISTICS 
          WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND INDEX_NAME = ?
          LIMIT 1`,
-        [db, table, name],
-      );
+          [db, table, name],
+        );
 
-      if (existing.length > 0) {
-        return; // Index already exists
+        if (existing.length > 0) {
+          return; // Index already exists
+        }
       }
 
       // Look up column data types so we can add prefix lengths for TEXT/BLOB
       // columns, which MySQL cannot index without an explicit key length.
+      // (Cold path only: this runs when an index is actually being created.)
       const [columnMeta] = await this.pool.execute<RowDataPacket[]>(
         `SELECT COLUMN_NAME, DATA_TYPE FROM information_schema.COLUMNS
          WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?`,
-        [db, table],
+        [(await this.getDatabase()) ?? '', table],
       );
       const dataTypeByColumn = new Map<string, string>(
         columnMeta.map(row => [String(row.COLUMN_NAME).toLowerCase(), String(row.DATA_TYPE).toLowerCase()]),
@@ -339,6 +403,8 @@ export class StoreOperationsMySQL extends StoreOperations {
       const sql = `CREATE ${uniqueStr}INDEX ${indexName} ON ${tableName} (${columnsStr})`;
 
       await this.pool.execute(sql);
+      // Maintain the snapshot so later domains in the same init see this index.
+      this.schemaSnapshot?.indexes.add(indexKey(table, name));
     } catch (error) {
       // Log but don't throw - indexes are performance optimizations
       console.warn(`Failed to create index ${name}:`, error);
@@ -623,25 +689,39 @@ export class StoreOperationsMySQL extends StoreOperations {
   }): Promise<void> {
     if (!ifNotExists.length) return;
 
-    // Check if table exists first
-    const db = await this.getDatabase();
-    const tableExistsSql =
-      'SELECT COUNT(*) AS count FROM information_schema.tables WHERE table_schema = ? AND table_name = ?';
-    const [tableRows] = await this.pool.execute<RowDataPacket[]>(tableExistsSql, [db ?? '', tableName]);
-    const tableExists = Array.isArray(tableRows) && tableRows.length > 0 && (tableRows[0] as any).count > 0;
+    // Consult the init-scoped snapshot instead of the two server probes. A
+    // table the snapshot has no columns for is treated as unknown, not absent:
+    // it may exist on the server without the snapshot having seen it (created
+    // out of band after the catalog read), so those fall through to probing.
+    const snapshotColumns = this.schemaSnapshot?.columns.get(tableName.toLowerCase());
+    let existing: Set<string>;
+    if (snapshotColumns) {
+      existing = snapshotColumns;
+    } else {
+      // Check if table exists first
+      const db = await this.getDatabase();
+      const tableExistsSql =
+        'SELECT COUNT(*) AS count FROM information_schema.tables WHERE table_schema = ? AND table_name = ?';
+      const [tableRows] = await this.pool.execute<RowDataPacket[]>(tableExistsSql, [db ?? '', tableName]);
+      const tableExists = Array.isArray(tableRows) && tableRows.length > 0 && (tableRows[0] as any).count > 0;
 
-    if (!tableExists) {
-      return; // Silently return if table doesn't exist
-    }
+      if (!tableExists) {
+        return; // Silently return if table doesn't exist
+      }
 
-    const params: SqlParam[] = [tableName];
-    let sql = 'SELECT column_name FROM information_schema.columns WHERE table_name = ?';
-    if (db) {
-      sql += ' AND table_schema = ?';
-      params.push(db);
+      const params: SqlParam[] = [tableName];
+      let sql = 'SELECT column_name FROM information_schema.columns WHERE table_name = ?';
+      if (db) {
+        sql += ' AND table_schema = ?';
+        params.push(db);
+      }
+      const [rows] = await this.pool.execute<RowDataPacket[]>(sql, params);
+      // MySQL returns information_schema fields with uppercase keys through mysql2, but the
+      // casing can vary with server settings, so read whichever key shape is present.
+      existing = new Set(
+        (rows || []).map((row: RowDataPacket) => String(row.column_name ?? row.COLUMN_NAME).toLowerCase()),
+      );
     }
-    const [rows] = await this.pool.execute<RowDataPacket[]>(sql, params);
-    const existing = new Set((rows || []).map((row: RowDataPacket) => String(row.column_name).toLowerCase()));
 
     for (const columnName of ifNotExists) {
       if (existing.has(columnName.toLowerCase())) {
@@ -667,6 +747,8 @@ export class StoreOperationsMySQL extends StoreOperations {
       const alterSql = `ALTER TABLE ${formatTableName(tableName, this.database)} ADD COLUMN ${parts.join(' ')}`;
       try {
         await this.pool.execute(alterSql);
+        // `existing` is the snapshot's own set when one is installed, so this maintains it.
+        existing.add(columnName.toLowerCase());
       } catch (error) {
         if ((error as any)?.code === 'ER_DUP_FIELDNAME') {
           continue;

@@ -25,6 +25,7 @@ function reviewSession(index: number): FactoryUserSession {
     projectRepositoryId,
     orgId: 'org-1',
     userId: 'user-1',
+    visibility: 'org' as const,
     branch: `factory/pr-${20000 + index}`,
     baseBranch: 'main',
     sandboxId: null,
@@ -51,6 +52,10 @@ function renderSection() {
         value={{
           resourceId: 'resource-1',
           sessionEnabled: false,
+          resourceReady: false,
+          sandboxReady: false,
+          sandboxPreparing: false,
+          sandboxProgress: undefined,
           resourceEnabled: false,
           factorySessionState: { factoryProjectId: 'fp-1', projectRepositoryId },
           baseUrl: TEST_BASE_URL,

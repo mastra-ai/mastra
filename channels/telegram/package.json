@@ -1,6 +1,6 @@
 {
   "name": "@mastra/telegram",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Telegram integration for Mastra agents — a ChannelProvider over @chat-adapter/telegram with webhooks, secret verification, commands, and streaming replies",
   "license": "Apache-2.0",
   "type": "module",

@@ -360,33 +360,36 @@ describe('FactoryStartCoordinator', () => {
     });
   });
 
-  it('tags factory-review skill kickoffs with untrustedCheckout', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const { controller, session } = makeController();
-    session.getWorkspace.mockReturnValue({
-      skills: {
-        maybeRefresh: vi.fn(async () => {}),
-        get: vi.fn(async () => ({ name: 'factory-review', description: 'Review a PR', instructions: 'Review.' })),
-      },
-    } as never);
-    const coordinator = new FactoryStartCoordinator(
-      controller as never,
-      storage,
-      undefined,
-      makeSourceControl() as never,
-    );
+  it.each(['factory-review', 'factory-rereview'] as const)(
+    'tags %s skill kickoffs with untrustedCheckout',
+    async skillName => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { controller, session } = makeController();
+      session.getWorkspace.mockReturnValue({
+        skills: {
+          maybeRefresh: vi.fn(async () => {}),
+          get: vi.fn(async () => ({ name: skillName, description: 'Review a PR', instructions: 'Review.' })),
+        },
+      } as never);
+      const coordinator = new FactoryStartCoordinator(
+        controller as never,
+        storage,
+        undefined,
+        makeSourceControl() as never,
+      );
 
-    const request = startRequest({ kickoffMessage: null });
-    request.invocation = { type: 'skill', skillName: 'factory-review', arguments: 'PR #1' } as never;
-    await coordinator.prepare(request);
+      const request = startRequest({ kickoffMessage: null });
+      request.invocation = { type: 'skill', skillName, arguments: 'PR #1' } as never;
+      await coordinator.prepare(request);
 
-    expect(session.state.set).toHaveBeenCalledWith({
-      factoryProjectId: PROJECT_ID,
-      projectRepositoryId: 'project-repository-1',
-      untrustedCheckout: true,
-      baseRef: 'main',
-    });
-  });
+      expect(session.state.set).toHaveBeenCalledWith({
+        factoryProjectId: PROJECT_ID,
+        projectRepositoryId: 'project-repository-1',
+        untrustedCheckout: true,
+        baseRef: 'main',
+      });
+    },
+  );
 
   it('falls back to intake metadata for baseRef when the session record has no base branch', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;

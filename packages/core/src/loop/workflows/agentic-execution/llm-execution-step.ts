@@ -7,6 +7,7 @@ import type { StructuredOutputOptions } from '../../../agent';
 import type { MessageList } from '../../../agent/message-list';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { getErrorFromUnknown } from '../../../error/utils.js';
 import { mergeProviderOptions } from '../../../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../../../llm/model/router';
@@ -80,6 +81,7 @@ import { buildLlmPromptArgs } from '../../shared/build-llm-prompt-args';
 import { composeStepInput } from '../../shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../shared/inject-background-task-prompt';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../shared/merge-llm-call-headers';
+import { isMastraTimeoutError } from '../../timeout';
 import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
@@ -777,6 +779,13 @@ async function processOutputStream<OUTPUT = undefined>({
       metadata: chunk.metadata,
     });
 
+    // Track the assistant text emitted so far so an abort can hand the caller
+    // the partial response. This sits after the `abortSignal.aborted` break
+    // above, so chunks a provider keeps sending post-abort are never included.
+    if (chunk.type === 'text-delta') {
+      runState.setState({ partialText: runState.state.partialText + chunk.payload.text });
+    }
+
     switch (chunk.type) {
       case 'response-metadata':
         runState.setState({
@@ -827,11 +836,12 @@ async function processOutputStream<OUTPUT = undefined>({
         break;
       }
 
-      case 'finish':
+      case 'finish': {
         runState.setState({
           providerOptions: chunk.payload.metadata?.providerMetadata ?? chunk.payload.providerMetadata,
           stepResult: {
             reason: chunk.payload.reason,
+            rawReason: chunk.payload.stepResult.rawReason,
             logprobs: chunk.payload.logprobs,
             warnings: responseFromModel.warnings,
             totalUsage: chunk.payload.totalUsage,
@@ -841,7 +851,41 @@ async function processOutputStream<OUTPUT = undefined>({
             request: responseFromModel.request,
           },
         });
+
+        // A provider can end the stream with finishReason 'error' without ever enqueueing
+        // an error part (e.g. Google reports MALFORMED_FUNCTION_CALL this way). Without a
+        // synthesized error the run would close silently: no error chunk, no onError, and
+        // callers could not tell this apart from a turn that simply produced no text.
+        // Route it through the same deferred-error path as a real error part so error
+        // processors still get a chance to intercept and retry.
+        if (chunk.payload.stepResult.reason === 'error' && !runState.state.hasErrored) {
+          const rawReason = chunk.payload.stepResult.rawReason;
+          const syntheticError = new MastraError({
+            id: 'AGENT_STREAM_ERROR',
+            text: rawReason
+              ? `Agent stream finished with finishReason "error" (provider reported "${rawReason}") but no error payload was provided`
+              : 'Agent stream finished with finishReason "error" but no error payload was provided',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.SYSTEM,
+            details: {
+              runId: chunk.runId,
+              ...(rawReason && { rawFinishReason: rawReason }),
+            },
+          });
+
+          runState.setState({
+            hasErrored: true,
+            apiError: syntheticError,
+            deferredErrorChunk: {
+              type: 'error',
+              runId: chunk.runId,
+              from: chunk.from,
+              payload: { error: syntheticError },
+            },
+          });
+        }
         break;
+      }
 
       case 'error':
         if (isAbortError(chunk.payload.error) && options?.abortSignal?.aborted) {
@@ -1052,16 +1096,22 @@ function executeStreamWithFallbackModels<T>(
           throw err;
         }
 
+        // A total-run timeout is a hard deadline for the whole run, so it must not be
+        // laundered into an attempt against the next fallback model. A step timeout is
+        // a per-model failure and does fall through to the next model.
+        if (isMastraTimeoutError(err) && err.timeoutType === 'total') {
+          throw err;
+        }
+
         lastError = err;
 
         logger?.error(`Error executing model ${modelConfig.model.modelId}`, err);
       }
     }
     if (typeof finalResult === 'undefined') {
-      const lastErrMsg = lastError instanceof Error ? lastError.message : String(lastError);
-      const errorMessage = `Exhausted all fallback models. Last error: ${lastErrMsg}`;
-      logger?.error(errorMessage);
-      throw new Error(errorMessage, { cause: lastError });
+      const fatalError = lastError ?? new Error('Exhausted all fallback models without receiving a result.');
+      logger?.error('Exhausted all fallback models.', fatalError);
+      throw fatalError;
     }
     return finalResult;
   };
@@ -1816,6 +1866,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             logger?.debug?.('LLM execution aborted', { runId });
             await options?.onAbort?.({
               steps: inputData?.output?.steps ?? [],
+              text: runState.state.partialText,
             });
 
             safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
@@ -1936,6 +1987,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           cleanupProviderToolSpans(true);
           await options?.onAbort?.({
             steps: inputData?.output?.steps ?? [],
+            text: runState.state.partialText,
           });
 
           safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
@@ -2063,6 +2115,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         cleanupProviderToolSpans(true);
         await options.onAbort?.({
           steps: inputData?.output?.steps ?? [],
+          text: runState.state.partialText,
         });
         safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
         return bailFromExecution();
@@ -2350,6 +2403,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         messageId: outputStream.messageId,
         stepResult: {
           reason: stepReason,
+          ...(runState.state.stepResult?.rawReason && { rawReason: runState.state.stepResult.rawReason }),
           warnings,
           isContinued: shouldContinue,
           // Pass retry metadata for tracking

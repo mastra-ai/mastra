@@ -8,7 +8,7 @@ packages:
 
 # MCPClient
 
-The `MCPClient` class provides a way to manage multiple MCP server connections and their tools in a Mastra application. It handles connection lifecycle, tool namespacing, and provides access to tools across all configured servers.
+The `MCPClient` class provides a way to manage multiple MCP server connections and their tools in a Mastra application. It handles connection lifecycle and tool namespacing while providing access to tools across all configured servers.
 
 ## Constructor
 
@@ -175,6 +175,13 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
     description:
       'Require human approval before executing tools from this server. When set to `true`, all tools require approval. When set to a function, the function is called with the tool name, arguments, request context, and any tool annotations advertised by the server to dynamically decide whether approval is needed.',
   },
+  {
+    name: 'protocolVersion',
+    type: "'auto' | '2026-07-28'",
+    isOptional: true,
+    description:
+      "Opt-in MCP protocol version negotiation. Omitted keeps the legacy (2025-era) connect sequence unchanged. 'auto' probes the server at connect time and uses the stateless '2026-07-28' revision when the server supports it, with a safe fallback to the legacy handshake. '2026-07-28' pins that revision exactly and fails with a typed error when the server does not offer it. Elicitation handlers work on both eras: on a '2026-07-28' connection, embedded elicitation requests from input_required results are dispatched through the same registered handler and the originating call retries automatically.",
+  },
 ]}
 />
 
@@ -337,16 +344,22 @@ Intended to be passed onto an Agent definition.
 new Agent({ id: 'agent', tools: await mcp.listTools() })
 ```
 
-### `listToolsWithErrors()`
+### `listToolsWithErrors(options?)`
 
 Retrieves all tools from all configured servers, with tool names namespaced by their server name. Also returns per-server errors for servers that failed to connect or list tools.
 
+Set `perServerTimeoutMs` to limit how long discovery waits for each server. Servers that finish within the limit remain in `tools`. Timed-out servers appear in `errors`, and `durations` reports each server's discovery time in milliseconds.
+
 ```typescript
-const { tools, errors } = await mcp.listToolsWithErrors()
+const { tools, errors, durations } = await mcp.listToolsWithErrors({
+  perServerTimeoutMs: 3_000,
+})
 
 new Agent({ id: 'agent', tools })
-console.log(errors)
+console.log(errors, durations)
 ```
+
+When called without options, the method returns only `tools` and `errors`.
 
 ### `listToolsets()`
 
@@ -357,6 +370,80 @@ Intended to be passed at runtime into the generate or stream method.
 const res = await agent.stream(prompt, {
   toolsets: await mcp.listToolsets(),
 })
+```
+
+### `listToolsetsWithErrors(options?)`
+
+Returns toolsets grouped by server name, along with per-server discovery errors. Set `perServerTimeoutMs` to limit each server independently and include per-server `durations` in milliseconds.
+
+```typescript
+const { toolsets, errors, durations } = await mcp.listToolsetsWithErrors({
+  perServerTimeoutMs: 3_000,
+})
+
+const res = await agent.stream(prompt, { toolsets })
+console.log(errors, durations)
+```
+
+When called without options, the method returns only `toolsets` and `errors`.
+
+### `listToolDefinitions()`
+
+Returns every server's tools as plain, serializable definitions, grouped by server name and keyed by the server's own tool name (without the `serverName_toolName` namespacing that `listTools()` applies).
+
+Unlike `listTools()`, the result contains no functions or references to a live client, so it can be passed through `JSON.stringify` and cached in Redis or a database, as well as a build artifact. Each definition holds the data from the MCP `tools/list` response (name, description, input schema, output schema, annotations, and `_meta`), plus the server name, version, and instructions captured at discovery time.
+
+```typescript
+const definitions = await mcp.listToolDefinitions()
+
+await cache.set('mcp-tools', JSON.stringify(definitions))
+```
+
+### `listToolDefinitionsWithErrors(options?)`
+
+Like `listToolDefinitions()`, but also returns per-server errors for servers that failed to connect. Use this when caching a catalog, so you don't persist a partial manifest that omits a server that was down at discovery time.
+
+Set `perServerTimeoutMs` to limit each server independently. When options are provided, `durations` reports each server's discovery time in milliseconds.
+
+```typescript
+const { definitions, errors, durations } = await mcp.listToolDefinitionsWithErrors({
+  perServerTimeoutMs: 3_000,
+})
+
+if (Object.keys(errors).length === 0) {
+  await cache.set('mcp-tools', JSON.stringify(definitions))
+}
+
+console.log(durations)
+```
+
+When called without options, the method returns only `definitions` and `errors`.
+
+### `toolFromDefinition()`
+
+Rebuilds a single executable tool from a cached definition. No connection is opened here. The client connects lazily, the first time the tool is executed.
+
+The returned tool behaves exactly like one from `listTools()`, with the same strict-mode metadata, approval policy, structured content handling, tool error handling, and reconnect behavior.
+
+```typescript
+const definitions = JSON.parse(await cache.get('mcp-tools'))
+
+const tool = await mcp.toolFromDefinition({
+  serverName: 'weather',
+  definition: definitions.weather.getForecast,
+})
+```
+
+### `toolsFromDefinitions()`
+
+Rebuilds an entire cached catalog into a namespaced tool map, without connecting. This is the cached counterpart to `listTools()`. It produces the same `serverName_toolName` keys, so you can reconstruct an agent's tool map on a cold start, and connections only open for the servers whose tools are actually called.
+
+Servers present in the catalog but no longer configured on the client are skipped, so a stale cached manifest degrades gracefully.
+
+```typescript
+const definitions = JSON.parse(await cache.get('mcp-tools'))
+
+new Agent({ id: 'agent', tools: await mcp.toolsFromDefinitions({ definitions }) })
 ```
 
 ### `getServerInstructions()`
@@ -1054,7 +1141,7 @@ try {
 
 Concurrent `authenticate()` calls for the same server join the pending flow. Different servers authenticate independently. With valid stored tokens the call reconnects without opening a browser.
 
-Hosts that drive the flow themselves can capture the authorization code with the exported `createOAuthCallbackServer` helper, which binds a one-shot loopback server, validates the OAuth `state` parameter, and resolves with the code. It creates a plain HTTP server, so it's only for local loopback redirects. Web applications that use an HTTPS redirect URL must host their own callback endpoint and drive the provider directly rather than using this helper:
+Hosts that drive the flow themselves can capture the authorization code with the exported `createOAuthCallbackServer` helper, which binds a one-shot loopback server and validates the OAuth `state` parameter before resolving with the code. It creates a plain HTTP server, so it's only for local loopback redirects. Web applications that use an HTTPS redirect URL must host their own callback endpoint and drive the provider directly rather than using this helper:
 
 ```typescript
 import { createOAuthCallbackServer, getCallbackUrlCandidates } from '@mastra/mcp'

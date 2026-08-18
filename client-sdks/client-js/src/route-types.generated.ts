@@ -7,17 +7,17 @@
 
 export type Simplify<T> = { [K in keyof T]: T[K] } & {};
 
-type Shared_Auxiliary_290 =
+type Shared_Auxiliary_298 =
   | string
   | number
   | boolean
   | null
-  | Shared_Auxiliary_290[]
+  | Shared_Auxiliary_298[]
   | {
-      [key: string]: Shared_Auxiliary_290;
+      [key: string]: Shared_Auxiliary_298;
     };
 
-type Shared_Auxiliary_1079 =
+type Shared_Auxiliary_1095 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -62,19 +62,19 @@ type Shared_Auxiliary_1079 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_1079[];
+      args: Shared_Auxiliary_1095[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_1079;
+      arg: Shared_Auxiliary_1095;
     };
 
-type Shared_Auxiliary_1220 = {
+type Shared_Auxiliary_1236 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_1220[] | undefined;
+  children?: Shared_Auxiliary_1236[] | undefined;
 };
 
 type Shared_Type_0 = {
@@ -142,7 +142,15 @@ type Shared_Type_4 = {
   tracingOptions?: Shared_Type_3 | undefined;
   requireToolApproval?: boolean | undefined;
   autoResumeSuspendedTools?: boolean | undefined;
-  toolCallConcurrency?: number | undefined;
+  toolCallConcurrency?:
+    | (
+        | number
+        | {
+            limit?: number | undefined;
+            strategy?: ('available' | 'called') | undefined;
+          }
+      )
+    | undefined;
   includeRawChunks?: boolean | undefined;
   [x: string]: unknown;
 };
@@ -937,6 +945,16 @@ type Shared_Type_42 = {
         [key: string]: unknown;
       }
     | undefined;
+  /** Whether this agent is hydrated with durable execution enabled */
+  durable?:
+    | (
+        | boolean
+        | {
+            maxSteps?: number | undefined;
+            cleanupTimeoutMs?: number | undefined;
+          }
+      )
+    | undefined;
 };
 
 type Shared_Type_43 = {
@@ -1033,7 +1051,7 @@ type Shared_Type_49 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_290;
+          [key: string]: Shared_Auxiliary_298;
         };
       }
     | undefined;
@@ -1047,7 +1065,7 @@ type Shared_Type_50 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_290;
+          [key: string]: Shared_Auxiliary_298;
         };
       }
     | undefined;
@@ -1062,13 +1080,13 @@ type Shared_Type_51 = {
     | undefined;
   metadata?:
     | {
-        [key: string]: Shared_Auxiliary_290;
+        [key: string]: Shared_Auxiliary_298;
       }
     | undefined;
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_290;
+          [key: string]: Shared_Auxiliary_298;
         };
       }
     | undefined;
@@ -1156,7 +1174,7 @@ type Shared_Type_54 = {
   createdAt?: (string | Date) | undefined;
   metadata?:
     | {
-        [key: string]: Shared_Auxiliary_290;
+        [key: string]: Shared_Auxiliary_298;
       }
     | undefined;
   attributes?:
@@ -1169,7 +1187,7 @@ type Shared_Type_54 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_290;
+          [key: string]: Shared_Auxiliary_298;
         };
       }
     | undefined;
@@ -1182,7 +1200,7 @@ type Shared_Type_55 = {
   createdAt?: (string | Date) | undefined;
   metadata?:
     | {
-        [key: string]: Shared_Auxiliary_290;
+        [key: string]: Shared_Auxiliary_298;
       }
     | undefined;
   attributes?:
@@ -1195,7 +1213,7 @@ type Shared_Type_55 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_290;
+          [key: string]: Shared_Auxiliary_298;
         };
       }
     | undefined;
@@ -1466,7 +1484,8 @@ type Shared_Type_70 =
   | 'rag_vector_operation'
   | 'rag_action'
   | 'graph_action'
-  | 'mapping';
+  | 'mapping'
+  | 'skill_resolution';
 
 type Shared_Type_71 =
   | 'agent'
@@ -2457,13 +2476,13 @@ type Shared_Type_107 =
   | {
       type: 'conditional';
       steps: Shared_Type_105[];
-      predicates: Shared_Auxiliary_1079[];
+      predicates: Shared_Auxiliary_1095[];
     }
   | {
       type: 'loop';
       step: Shared_Type_105;
       loopType: 'dowhile' | 'dountil';
-      predicate: Shared_Auxiliary_1079;
+      predicate: Shared_Auxiliary_1095;
     };
 
 type Shared_Type_108 = {
@@ -2800,7 +2819,7 @@ type Shared_Type_120 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1220[] | undefined;
+  files?: Shared_Auxiliary_1236[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -4924,6 +4943,44 @@ export interface GetAgentsAgentIdToolsToolId_RouteContract {
   body: never;
   request: GetAgentsAgentIdToolsToolId_Request;
   response: GetAgentsAgentIdToolsToolId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agents/:agentId/plans/file
+// ============================================================================
+export type GetAgentsAgentIdPlansFile_PathParams = GetAgentsAgentId_PathParams;
+
+export type GetAgentsAgentIdPlansFile_QueryParams = {
+  /** Which stored config version to resolve: draft (latest version) or published (active version, default). When both status and versionId are provided, versionId takes precedence. */
+  status?: ('draft' | 'published') | undefined;
+  /** Specific version ID to resolve. Takes precedence over status when both are provided. */
+  versionId?: string | undefined;
+  /** Relative path to a markdown plan under .mastracode/plans/ */
+  path: string;
+};
+
+export type GetAgentsAgentIdPlansFile_Response = {
+  path: string;
+  content: string;
+};
+
+export type GetAgentsAgentIdPlansFile_Request = Simplify<
+  (GetAgentsAgentIdPlansFile_PathParams extends never ? {} : { params: GetAgentsAgentIdPlansFile_PathParams }) &
+    (GetAgentsAgentIdPlansFile_QueryParams extends never
+      ? {}
+      : {} extends GetAgentsAgentIdPlansFile_QueryParams
+        ? { query?: GetAgentsAgentIdPlansFile_QueryParams }
+        : { query: GetAgentsAgentIdPlansFile_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentsAgentIdPlansFile_RouteContract {
+  pathParams: GetAgentsAgentIdPlansFile_PathParams;
+  queryParams: GetAgentsAgentIdPlansFile_QueryParams;
+  body: never;
+  request: GetAgentsAgentIdPlansFile_Request;
+  response: GetAgentsAgentIdPlansFile_Response;
   responseType: 'json';
 }
 
@@ -8810,6 +8867,7 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
           | 'rag_action'
           | 'graph_action'
           | 'mapping'
+          | 'skill_resolution'
         )
       | undefined;
     structuredOutput?: boolean | undefined;
@@ -12588,6 +12646,19 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** Opt this agent into durable execution when it is hydrated. Cache and pubsub are inherited from the Mastra instance; without distributed backends durability is process-local. Does not enable automatic recovery — that stays `recovery.durableAgents`. */
+  durable?:
+    | (
+        | (
+            | boolean
+            | {
+                maxSteps?: number | undefined;
+                cleanupTimeoutMs?: number | undefined;
+              }
+          )
+        | undefined
+      )
+    | undefined;
 };
 
 export type PostStoredAgentsStoredAgentIdExport_Response = {
@@ -12701,6 +12772,19 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
         | {
             [key: string]: unknown;
           }
+        | undefined
+      )
+    | undefined;
+  /** Opt this agent into durable execution when it is hydrated. Cache and pubsub are inherited from the Mastra instance; without distributed backends durability is process-local. Does not enable automatic recovery — that stays `recovery.durableAgents`. */
+  durable?:
+    | (
+        | (
+            | boolean
+            | {
+                maxSteps?: number | undefined;
+                cleanupTimeoutMs?: number | undefined;
+              }
+          )
         | undefined
       )
     | undefined;
@@ -12953,6 +13037,16 @@ export type PostStoredAgents_Body = {
         [key: string]: unknown;
       }
     | undefined;
+  /** Opt this agent into durable execution when it is hydrated. Cache and pubsub are inherited from the Mastra instance; without distributed backends durability is process-local. Does not enable automatic recovery — that stays `recovery.durableAgents`. */
+  durable?:
+    | (
+        | boolean
+        | {
+            maxSteps?: number | undefined;
+            cleanupTimeoutMs?: number | undefined;
+          }
+      )
+    | undefined;
 };
 
 export type PostStoredAgents_Response = PostAgentsAgentIdClone_Response;
@@ -13199,6 +13293,19 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | {
             [key: string]: unknown;
           }
+        | undefined
+      )
+    | undefined;
+  /** Opt this agent into durable execution when it is hydrated. Cache and pubsub are inherited from the Mastra instance; without distributed backends durability is process-local. Does not enable automatic recovery — that stays `recovery.durableAgents`. */
+  durable?:
+    | (
+        | (
+            | boolean
+            | {
+                maxSteps?: number | undefined;
+                cleanupTimeoutMs?: number | undefined;
+              }
+          )
         | undefined
       )
     | undefined;
@@ -16300,7 +16407,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1220[] | undefined;
+  files?: Shared_Auxiliary_1236[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -16358,7 +16465,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_1220[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_1236[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -19943,6 +20050,36 @@ export interface GetAgentControllerControllerIdModels_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /agent-controller/:controllerId/active-runs
+// ============================================================================
+export type GetAgentControllerControllerIdActiveRuns_PathParams = GetAgentControllerControllerIdModes_PathParams;
+
+export type GetAgentControllerControllerIdActiveRuns_Response = {
+  runs: {
+    runId: string;
+    resourceId?: string | undefined;
+    threadId: string;
+  }[];
+};
+
+export type GetAgentControllerControllerIdActiveRuns_Request = Simplify<
+  (GetAgentControllerControllerIdActiveRuns_PathParams extends never
+    ? {}
+    : { params: GetAgentControllerControllerIdActiveRuns_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentControllerControllerIdActiveRuns_RouteContract {
+  pathParams: GetAgentControllerControllerIdActiveRuns_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetAgentControllerControllerIdActiveRuns_Request;
+  response: GetAgentControllerControllerIdActiveRuns_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: POST /agent-controller/:controllerId/sessions
 // ============================================================================
 export type PostAgentControllerControllerIdSessions_PathParams = GetAgentControllerControllerIdModes_PathParams;
@@ -19995,6 +20132,7 @@ export type GetAgentControllerControllerIdSessionsResourceId_PathParams = {
 
 export type GetAgentControllerControllerIdSessionsResourceId_QueryParams = {
   sessionScope?: string | undefined;
+  threadId?: string | undefined;
 };
 
 export type GetAgentControllerControllerIdSessionsResourceId_Response = {
@@ -20004,6 +20142,14 @@ export type GetAgentControllerControllerIdSessionsResourceId_Response = {
   modeId: string;
   modelId: string;
   running?: boolean | undefined;
+  tasks?:
+    | {
+        id: string;
+        content: string;
+        status: 'pending' | 'in_progress' | 'completed';
+        activeForm: string;
+      }[]
+    | undefined;
   omProgress?:
     | {
         status: string;
@@ -20019,7 +20165,15 @@ export type GetAgentControllerControllerIdSessionsResourceId_Response = {
     | undefined;
   tokenUsage?:
     | {
-        [key: string]: unknown;
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+        reasoningTokens?: number | undefined;
+        cachedInputTokens?: number | undefined;
+        cacheCreationInputTokens?: number | undefined;
+        cacheCreationInputTokens5m?: number | undefined;
+        cacheCreationInputTokens1h?: number | undefined;
+        raw?: unknown | undefined;
       }
     | undefined;
   settings?:
@@ -20113,8 +20267,9 @@ export interface GetAgentControllerControllerIdSessionsResourceIdThreads_RouteCo
 export type PostAgentControllerControllerIdSessionsResourceIdThreads_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
-export type PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+export type PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams = {
+  sessionScope?: string | undefined;
+};
 
 export type PostAgentControllerControllerIdSessionsResourceIdThreads_Body = {
   title?: string | undefined;
@@ -20163,7 +20318,7 @@ export type DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_P
 };
 
 export type DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response = {
   ok: boolean;
@@ -20197,7 +20352,7 @@ export type PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Path
   DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_PathParams;
 
 export type PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Body = {
   title: string;
@@ -20238,7 +20393,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdThreadsClone_PathPa
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdThreadsClone_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdThreadsClone_Body = {
   sourceThreadId?: string | undefined;
@@ -20331,7 +20486,7 @@ export type GetAgentControllerControllerIdSessionsResourceIdStream_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdStream_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdStream_Request = Simplify<
   (GetAgentControllerControllerIdSessionsResourceIdStream_PathParams extends never
@@ -20361,7 +20516,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdMessages_PathParams
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdMessages_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdMessages_Body = {
   message: string;
@@ -20414,7 +20569,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdSteer_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdSteer_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdSteer_Body = {
   message: string;
@@ -20460,7 +20615,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_PathParams
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_Body =
   PostAgentControllerControllerIdSessionsResourceIdSteer_Body;
@@ -20500,7 +20655,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdAbort_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdAbort_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdAbort_Response =
   DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response;
@@ -20533,7 +20688,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_PathPa
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_Body = {
   toolCallId: string;
@@ -20580,7 +20735,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Path
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdToolSuspension_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Body = {
   toolCallId: string;
@@ -20627,7 +20782,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdMode_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdMode_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdMode_Body = {
   modeId: string;
@@ -20668,7 +20823,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdModel_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdModel_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdModel_Body = {
   modelId: string;
@@ -20711,7 +20866,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdThread_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdThread_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdThread_Body = {
   threadId: string;
@@ -20752,7 +20907,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdNotifications_PathP
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdNotifications_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdNotifications_Body = {
   source: string;
@@ -20841,7 +20996,7 @@ export type GetAgentControllerControllerIdSessionsResourceIdOm_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdOm_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdOm_Response = {
   record?: unknown | undefined;
@@ -20875,7 +21030,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdResource_PathParams
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdResource_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdResource_Body = {
   newResourceId: string;
@@ -20916,7 +21071,7 @@ export type GetAgentControllerControllerIdSessionsResourceIdResources_PathParams
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdResources_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdResources_Response = {
   resourceIds: string[];
@@ -20950,7 +21105,7 @@ export type GetAgentControllerControllerIdSessionsResourceIdGoal_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdGoal_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdGoal_Response = {
   goal?:
@@ -20996,7 +21151,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdGoal_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdGoal_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdGoal_Body = {
   objective: string;
@@ -21039,7 +21194,7 @@ export type PutAgentControllerControllerIdSessionsResourceIdGoal_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PutAgentControllerControllerIdSessionsResourceIdGoal_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PutAgentControllerControllerIdSessionsResourceIdGoal_Body = {
   judgeModelId?: string | undefined;
@@ -21082,7 +21237,7 @@ export type DeleteAgentControllerControllerIdSessionsResourceIdGoal_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type DeleteAgentControllerControllerIdSessionsResourceIdGoal_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type DeleteAgentControllerControllerIdSessionsResourceIdGoal_Response =
   DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response;
@@ -21115,7 +21270,7 @@ export type GetAgentControllerControllerIdSessionsResourceIdPermissions_PathPara
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdPermissions_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdPermissions_Response = {
   categories?:
@@ -21158,7 +21313,7 @@ export type PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_Body = {
   category: 'read' | 'edit' | 'execute' | 'mcp' | 'other';
@@ -21200,7 +21355,7 @@ export type PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_Path
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_Body = {
   toolName: string;
@@ -21242,7 +21397,7 @@ export type PutAgentControllerControllerIdSessionsResourceIdState_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PutAgentControllerControllerIdSessionsResourceIdState_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PutAgentControllerControllerIdSessionsResourceIdState_Body = {
   state: {
@@ -21318,6 +21473,7 @@ export interface RouteTypes {
   'POST /agents/:agentId/models/:modelConfigId': PostAgentsAgentIdModelsModelConfigId_RouteContract;
   'POST /agents/:agentId/instructions/enhance': PostAgentsAgentIdInstructionsEnhance_RouteContract;
   'GET /agents/:agentId/tools/:toolId': GetAgentsAgentIdToolsToolId_RouteContract;
+  'GET /agents/:agentId/plans/file': GetAgentsAgentIdPlansFile_RouteContract;
   'GET /agents/:agentId/skills/:skillName': GetAgentsAgentIdSkillsSkillName_RouteContract;
   'POST /agents/:agentId/voice/speak': PostAgentsAgentIdVoiceSpeak_RouteContract;
   'POST /agents/:agentId/speak': PostAgentsAgentIdSpeak_RouteContract;
@@ -21647,6 +21803,7 @@ export interface RouteTypes {
   'GET /agent-controller': GetAgentController_RouteContract;
   'GET /agent-controller/:controllerId/modes': GetAgentControllerControllerIdModes_RouteContract;
   'GET /agent-controller/:controllerId/models': GetAgentControllerControllerIdModels_RouteContract;
+  'GET /agent-controller/:controllerId/active-runs': GetAgentControllerControllerIdActiveRuns_RouteContract;
   'POST /agent-controller/:controllerId/sessions': PostAgentControllerControllerIdSessions_RouteContract;
   'GET /agent-controller/:controllerId/sessions/:resourceId': GetAgentControllerControllerIdSessionsResourceId_RouteContract;
   'GET /agent-controller/:controllerId/sessions/:resourceId/threads': GetAgentControllerControllerIdSessionsResourceIdThreads_RouteContract;
@@ -21748,6 +21905,9 @@ export interface Client {
   };
   '/agent-controller': {
     GET: GetAgentController_RouteContract;
+  };
+  '/agent-controller/:controllerId/active-runs': {
+    GET: GetAgentControllerControllerIdActiveRuns_RouteContract;
   };
   '/agent-controller/:controllerId/models': {
     GET: GetAgentControllerControllerIdModels_RouteContract;
@@ -21897,6 +22057,9 @@ export interface Client {
   };
   '/agents/:agentId/observe': {
     POST: PostAgentsAgentIdObserve_RouteContract;
+  };
+  '/agents/:agentId/plans/file': {
+    GET: GetAgentsAgentIdPlansFile_RouteContract;
   };
   '/agents/:agentId/queue-message': {
     POST: PostAgentsAgentIdQueueMessage_RouteContract;

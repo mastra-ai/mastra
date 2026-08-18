@@ -231,7 +231,7 @@ type GithubSignalAgentOptions = {
   getNotificationStreamOptions?: (target: {
     resourceId: string;
     threadId: string;
-  }) => GithubNotificationStreamOptions | Promise<GithubNotificationStreamOptions>;
+  }) => GithubNotificationStreamOptions | undefined | Promise<GithubNotificationStreamOptions | undefined>;
 };
 
 type GithubSignalsMastra = {
@@ -1352,6 +1352,17 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     this.#pollingThreadGenerations.clear();
     for (const state of this.#polling.values()) clearInterval(state.timer);
     this.#polling.clear();
+  }
+
+  /**
+   * Shutdown hook. Per-thread polling lives in this provider's own timer map, not in the base
+   * class's single timer, so the inherited `stop()` would leave those intervals running: a
+   * provider that has been shut down would keep polling GitHub and keep notifying through the
+   * agent it was still connected to.
+   */
+  override stop(): void {
+    super.stop();
+    this.stopAllPolling();
   }
 
   async pollThreadNow(input: GithubPollingThread): Promise<number> {

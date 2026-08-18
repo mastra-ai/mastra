@@ -117,13 +117,13 @@ First, compose the **review handoff** — don't send it to the conversation yet;
 
 - **Findings** — correctness assessment, test assessment, scope assessment, pattern-consistency notes, each grounded in the history you traced. Distill — this is a handoff, not a transcript.
 - **Verification** — every command you executed (tests, typecheck, repros) with its outcome, or an explicit statement that nothing was executed and why.
-- **Existing review disposition** — every substantive finding from prior reviewers (bots included) with its classification: confirmed, addressed, or refuted with evidence. A major bot comment must never be silently dropped.
+- **Existing review disposition** — every substantive finding from prior reviewers (bots included, your own earlier passes included) with its classification: confirmed, addressed, or refuted with evidence. A major bot comment must never be silently dropped. Name each by subject and `file:line`, and remember the body lands as GitHub markdown — `#1` publishes as a link to issue 1.
 - **Adversarial check** (approve only) — the one-line record of why the strongest request-changes case fails.
 - **Requested changes** — one entry per change, concrete enough to act on (for a request-changes verdict).
 - **Assumptions** — every recorded judgment call from the run.
 - **Open questions** — any decision that genuinely needs a human.
 
-Next, publish the review on the PR itself — this is part of every pass, not something to wait to be asked for. Write the handoff body to a temp file (avoids shell-quoting breakage) and submit a PR review matching the verdict:
+Next, publish the review on the PR itself — this is part of every pass, not something to wait to be asked for. Write the handoff body to `.artifacts/factory-review/pr-<number>.md` and submit a PR review matching the verdict:
 
 - approve → `gh pr review <number> --approve --body-file <file>`
 - request changes → `gh pr review <number> --request-changes --body-file <file>`
@@ -135,7 +135,7 @@ If GitHub rejects the review submission (e.g. the token authored the PR and cann
 1. Branch from the reviewed PR's head: `git fetch origin pull/<number>/head && git checkout -b factory/review-followups-pr-<number> FETCH_HEAD`.
 2. Apply the fixes, run the narrowest tests covering them, and commit.
 3. Push the branch and open a follow-up PR with `gh pr create`: target the reviewed PR's head branch when it lives in this repository, so the author can merge the follow-ups into their PR with one click; when the reviewed PR comes from a fork, target its base branch instead and state in the body that it lands after PR <number>.
-4. The follow-up PR body links the review and lists each finding it addresses; the handoff links the follow-up PR.
+4. Write the follow-up body to `.artifacts/factory-review/follow-up-pr-<number>.md`; it links the review and lists each finding it addresses, and the handoff links the follow-up PR.
 
 Keep it strictly non-blocking and low-risk. A fix that demands design judgment, changes behavior, or grows beyond the mechanical stays a recorded finding — don't ship your own guess. **Never mix blocking findings into a follow-up PR**: those are requested changes on the reviewed PR, and implementing them yourself would review your own code. If tests fail on a follow-up fix, drop that fix and keep it a finding. If there are no such findings, skip this step entirely.
 

@@ -9,7 +9,7 @@ import type { MastraDBMessage, MessageInput } from '../agent/message-list';
 import { isAgentCompatible } from '../agent/subagent';
 import type { SubAgent } from '../agent/subagent';
 import { TripWire } from '../agent/trip-wire';
-import { MastraFGAPermissions } from '../auth/ee';
+import { MastraFGAPermissions, getWorkflowFGAResourceId, requireFGA } from '../auth/ee';
 import type { ActorSignal } from '../auth/ee';
 import { MastraBase } from '../base';
 import { RequestContext } from '../di';
@@ -42,13 +42,15 @@ import {
 } from '../processors/span-payload';
 import { ProcessorStepOutputSchema, ProcessorStepInputSchema } from '../processors/step-schema';
 import type { ProcessorStepInput, ProcessorStepOutput } from '../processors/step-schema';
+import { getRequestContextInputValues } from '../request-context/input-source';
 import { standardSchemaToJSONSchema, toStandardSchema } from '../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { StorageListWorkflowRunsInput } from '../storage';
 import { WorkflowRunOutput } from '../stream/RunOutput';
 import type { ChunkType, LanguageModelUsage, ProviderMetadata } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
-import { Tool } from '../tools/tool';
+import type { Tool } from '../tools/tool';
+import { isMastraTool } from '../tools/toolchecks';
 import type { ToolExecutionContext } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { PUBSUB_SYMBOL } from './constants';
@@ -210,7 +212,10 @@ export function mapVariable(config: any): any {
 // ============================================
 
 function isToolStep(input: unknown): input is ToolStep<any, any, any, any, any> {
-  return input instanceof Tool;
+  // `isMastraTool` also recognizes tools by their shared marker symbol, which
+  // survives module duplication (Vite SSR) and spread copies — e.g. tools
+  // renamed by `resolveStoredToolProviders` — where `instanceof` fails.
+  return isMastraTool(input);
 }
 
 /**
@@ -219,7 +224,7 @@ function isToolStep(input: unknown): input is ToolStep<any, any, any, any, any> 
  * Uses the `component` discriminator from MastraBase instead of instanceof.
  */
 function isAgentOrTool(input: unknown): boolean {
-  if (input instanceof Tool) return true;
+  if (isMastraTool(input)) return true;
   const base = input as MastraBase;
   if (base && base.component === RegisteredLogger.AGENT) return true;
   return false;
@@ -348,7 +353,12 @@ export function createStep<
   TRequestContext extends Record<string, any> | unknown = unknown,
 >(
   tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext>,
-  toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata },
+  toolOptions?: {
+    retries?: number;
+    scorers?: DynamicArgument<MastraScorers>;
+    metadata?: StepMetadata;
+    actor?: ActorSignal;
+  },
 ): Step<TId, unknown, TSchemaIn, TSchemaOut, TSuspend, TResume, DefaultEngineType, TRequestContext>;
 
 /**
@@ -687,6 +697,7 @@ function createStepFromProcessor<TProcessorId extends string>(
       const input = inputData as ProcessorStepOutput & {
         processorStates?: Map<string, ProcessorState>;
         abortSignal?: AbortSignal;
+        agent?: Agent;
       };
       const {
         phase,
@@ -725,6 +736,8 @@ function createStepFromProcessor<TProcessorId extends string>(
         processorStates,
         // Abort signal for cancelling in-flight processor work (e.g. OM observations)
         abortSignal,
+        // Agent reference so processors can access the running agent (e.g. on signal/schedule wake)
+        agent,
       } = input;
 
       // Create a minimal abort function that throws TripWire
@@ -976,6 +989,7 @@ function createStepFromProcessor<TProcessorId extends string>(
 
       const baseContext = {
         abort,
+        agent,
         retryCount: retryCount ?? 0,
         requestContext,
         ...processorObservabilityContext,
@@ -1635,6 +1649,7 @@ export class Workflow<
   public type: WorkflowType = 'default';
   /** Where this workflow came from: 'code' for statically registered workflows, 'dynamic' for workflows rehydrated from storage. Set by rehydrateWorkflow; defaults to 'code'. */
   public origin: 'code' | 'dynamic' = 'code';
+  public isInternal = false;
   #nestedWorkflowInput?: TInput;
   public committed: boolean = false;
   protected stepFlow: StepFlowEntry<TEngineType>[];
@@ -1685,6 +1700,7 @@ export class Workflow<
     this.type = type ?? 'default';
     this.#options = {
       validateInputs: options.validateInputs ?? true,
+      emitStepEvents: options.emitStepEvents ?? true,
       shouldPersistSnapshot: options.shouldPersistSnapshot ?? (() => true),
       pruneSnapshot: options.pruneSnapshot,
       tracingPolicy: options.tracingPolicy,
@@ -1724,6 +1740,10 @@ export class Workflow<
   __registerMastra(mastra: Mastra) {
     this.#mastra = mastra;
     this.executionEngine.__registerMastra(mastra);
+  }
+
+  __markInternal() {
+    this.isInternal = true;
   }
 
   __registerPrimitives(p: MastraPrimitives) {
@@ -2079,9 +2099,25 @@ export class Workflow<
   ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any, TRequestContext> {
     // Build a declarative `{ type: 'mapping' }` graph entry; the mapping logic is
     // interpreted at execution time by `createMappingStep`, not baked in here.
+    // Mapping ids must be stable across process restarts: they are recorded in
+    // workflow snapshots, and `timeTravel()` matches the live graph against those
+    // recorded ids. Only defer to `generateId` when a CUSTOM id generator is
+    // configured (the built-in default is `randomUUID()`, which would mint a
+    // different id per build and break time travel across restarts). Otherwise
+    // mint a deterministic id from the workflow id plus the ordinal of this
+    // mapping entry within the step flow.
+    // Skip ordinals whose id is already taken (an explicit `stepOptions.id` may
+    // have claimed a `mapping_<workflowId>_<n>` name) so the fallback never
+    // collides with an existing step.
+    let mappingOrdinal = this.stepFlow.filter(entry => entry.type === 'mapping').length;
+    while (`mapping_${this.id}_${mappingOrdinal}` in this.steps) {
+      mappingOrdinal++;
+    }
     const mappingId =
       stepOptions?.id ||
-      `mapping_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'mapping' }) || randomUUID()}`;
+      (this.#mastra?.getIdGenerator()
+        ? `mapping_${this.#mastra.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'mapping' })}`
+        : `mapping_${this.id}_${mappingOrdinal}`);
 
     const truncate = (s: string) => (s.length > 1000 ? s.slice(0, 1000) + '...\n}' : s);
 
@@ -2532,6 +2568,7 @@ export class Workflow<
         requestContextSchema: this.requestContextSchema,
         runId: runIdToUse,
         resourceId: options?.resourceId,
+        isInternalWorkflow: this.isInternal,
         executionEngine: this.executionEngine,
         executionGraph: this.executionGraph,
         mastra: this.#mastra,
@@ -2698,7 +2735,6 @@ export class Workflow<
     const fgaProvider = mastra?.getServer()?.fga;
     if (fgaProvider) {
       const user = requestContext?.get('user' as any);
-      const { getWorkflowFGAResourceId, requireFGA } = await import('../auth/ee/fga-check');
       await requireFGA({
         fgaProvider,
         user,
@@ -3017,6 +3053,18 @@ export class Workflow<
             {} as Record<string, StepResult<any, any, any, any>>,
           );
           finalSteps = { ...finalSteps, ...updatedNestedSteps };
+
+          // Nested suspend is recorded on both the container and the flattened leaf.
+          // Demote the container in the public steps map so clients (e.g. Studio)
+          // that treat every status==='suspended' entry as a resume target only
+          // see the leaf. Keep the container entry for hierarchy; leave suspendedPaths alone.
+          const parentStep = finalSteps[step];
+          if (parentStep?.status === 'suspended') {
+            const hasSuspendedChild = Object.values(updatedNestedSteps).some(child => child?.status === 'suspended');
+            if (hasSuspendedChild) {
+              finalSteps[step] = { ...parentStep, status: 'running' };
+            }
+          }
         }
       }
     }
@@ -3211,6 +3259,8 @@ export class Run<
    */
   readonly resourceId?: string;
 
+  readonly isInternalWorkflow: boolean;
+
   /**
    * Whether to disable scorers for this run
    */
@@ -3285,6 +3335,7 @@ export class Run<
     workflowId: string;
     runId: string;
     resourceId?: string;
+    isInternalWorkflow?: boolean;
     stateSchema?: StandardSchemaWithJSON<TState>;
     inputSchema?: StandardSchemaWithJSON<TInput>;
     requestContextSchema?: StandardSchemaWithJSON<any>;
@@ -3308,6 +3359,7 @@ export class Run<
     this.workflowId = params.workflowId;
     this.runId = params.runId;
     this.resourceId = params.resourceId;
+    this.isInternalWorkflow = params.isInternalWorkflow ?? false;
     this.serializedStepGraph = params.serializedStepGraph;
     this.executionEngine = params.executionEngine;
     this.executionGraph = params.executionGraph;
@@ -3395,7 +3447,7 @@ export class Run<
 
   protected async _validateRequestContext(requestContext?: RequestContext) {
     if (this.validateInputs && this.requestContextSchema) {
-      const contextValues = requestContext?.all ?? {};
+      const contextValues = getRequestContextInputValues(requestContext);
       const validation = this.requestContextSchema['~standard'].validate(contextValues);
 
       if (validation instanceof Promise) {
@@ -3672,7 +3724,7 @@ export class Run<
       } catch {}
     });
 
-    this.closeStreamAction = async () => {
+    const closeStreamAction = async () => {
       await this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
         type: 'watch',
         runId: this.runId,
@@ -3690,6 +3742,7 @@ export class Run<
         writer.releaseLock();
       }
     };
+    this.closeStreamAction = closeStreamAction;
 
     void this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
       type: 'watch',
@@ -3706,7 +3759,7 @@ export class Run<
       tracingOptions,
     } as any).then(result => {
       if (result.status !== 'suspended') {
-        this.closeStreamAction?.().catch(() => {});
+        closeStreamAction().catch(() => {});
       }
 
       return result;
@@ -3846,7 +3899,11 @@ export class Run<
           }
         });
 
-        self.closeStreamAction = async () => {
+        // Captured per invocation: `closeStreamAction` is a field on the run, and
+        // `createRun({ runId })` returns the cached run, so concurrent calls would
+        // otherwise each close the most recently created stream and strand the rest.
+        // The field is still assigned for external consumers (observeStreamLegacy).
+        const closeStreamAction = async () => {
           unwatch();
 
           try {
@@ -3858,6 +3915,7 @@ export class Run<
             self.mastra?.getLogger()?.error('Error closing stream:', err);
           }
         };
+        self.closeStreamAction = closeStreamAction;
 
         const executionResultsPromise = self._start({
           inputData,
@@ -3889,13 +3947,13 @@ export class Run<
           if (closeOnSuspend) {
             // always close stream, even if the workflow is suspended
             // this will trigger a finish event with workflow status set to suspended
-            self.closeStreamAction?.().catch(() => {});
+            closeStreamAction().catch(() => {});
           } else if (executionResults.status !== 'suspended') {
-            self.closeStreamAction?.().catch(() => {});
+            closeStreamAction().catch(() => {});
           }
         } catch (err) {
           self.streamOutput?.rejectResults(err as unknown as Error);
-          self.closeStreamAction?.().catch(() => {});
+          closeStreamAction().catch(() => {});
         }
       },
     });
@@ -3976,7 +4034,10 @@ export class Run<
           }
         });
 
-        self.closeStreamAction = async () => {
+        // Captured per invocation — see the note in the stream() path. Two concurrent
+        // resumes of one suspended run are reachable in normal use (double-clicked
+        // approval, client retry, two tabs) and each returned stream must terminate.
+        const closeStreamAction = async () => {
           unwatch();
 
           try {
@@ -3988,6 +4049,8 @@ export class Run<
             self.mastra?.getLogger()?.error('Error closing stream:', err);
           }
         };
+        self.closeStreamAction = closeStreamAction;
+
         const executionResultsPromise = self._resume({
           resumeData,
           step,
@@ -4013,10 +4076,10 @@ export class Run<
             self.streamOutput.updateResults(executionResults);
           }
 
-          self.closeStreamAction?.().catch(() => {});
+          closeStreamAction().catch(() => {});
         } catch (err) {
           self.streamOutput?.rejectResults(err as unknown as Error);
-          self.closeStreamAction?.().catch(() => {});
+          closeStreamAction().catch(() => {});
         }
       },
     });
@@ -4215,6 +4278,26 @@ export class Run<
     } & Partial<ObservabilityContext>,
   ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const observabilityContext = resolveObservabilityContext(params);
+    const fgaProvider = this.#mastra?.getServer()?.fga;
+    if (fgaProvider && !this.isInternalWorkflow) {
+      await requireFGA({
+        fgaProvider,
+        user: params.requestContext?.get('user' as any),
+        resource: { type: 'workflow', id: getWorkflowFGAResourceId(this.workflowId) },
+        permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
+        requestContext: params.requestContext,
+        actor: params.actor,
+        context: {
+          resourceId: this.resourceId,
+        },
+        metadata: {
+          workflowId: this.workflowId,
+          runId: this.runId,
+          resourceId: this.resourceId,
+        },
+      });
+    }
+
     const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
     const snapshot = await workflowsStore?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
@@ -4334,10 +4417,12 @@ export class Run<
     const resumeTracingOptions = {
       ...params.tracingOptions,
       traceId: effectiveTraceId,
-      parentSpanId: shouldUsePersistedParentSpan
-        ? persistedTracingContext?.spanId
-        : params.tracingOptions?.parentSpanId,
     };
+
+    // The persisted resume link travels separately from tracingOptions:
+    // tracingOptions.parentSpanId is reserved for external correlation ids,
+    // while the suspended span's id is a Mastra span present in storage.
+    const resumedFromSpanId = shouldUsePersistedParentSpan ? persistedTracingContext?.spanId : undefined;
 
     // note: this span is ended inside this.executionEngine.execute()
     const workflowSpan = getOrCreateSpan({
@@ -4358,6 +4443,7 @@ export class Run<
       tracingContext: observabilityContext.tracingContext,
       requestContext: requestContextToUse as RequestContext,
       mastra: this.#mastra,
+      resumedFromSpanId,
     });
 
     const traceId = workflowSpan?.externalTraceId;
@@ -4767,7 +4853,8 @@ export class Run<
           } as WorkflowStreamEvent);
         });
 
-        self.closeStreamAction = async () => {
+        // Captured per invocation — see the note in the stream() path.
+        const closeStreamAction = async () => {
           unwatch();
 
           try {
@@ -4779,6 +4866,8 @@ export class Run<
             self.mastra?.getLogger()?.error('Error closing stream:', err);
           }
         };
+        self.closeStreamAction = closeStreamAction;
+
         const executionResultsPromise = self._timeTravel({
           inputData,
           step,
@@ -4806,10 +4895,10 @@ export class Run<
             self.streamOutput.updateResults(executionResults);
           }
 
-          self.closeStreamAction?.().catch(() => {});
+          closeStreamAction().catch(() => {});
         } catch (err) {
           self.streamOutput?.rejectResults(err as unknown as Error);
-          self.closeStreamAction?.().catch(() => {});
+          closeStreamAction().catch(() => {});
         }
       },
     });

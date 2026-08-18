@@ -72,7 +72,7 @@ test.describe('Tab switcher navigation', () => {
     // Click through remaining tabs
     const tabs = [
       { label: 'Models', expectedPath: '/models' },
-      { label: 'Guides', expectedPath: '/guides' },
+      { label: 'Integrations', expectedPath: '/integrations' },
       { label: 'Reference', expectedPath: '/reference' },
     ]
 
@@ -119,13 +119,13 @@ test.describe('Mobile docs dropdown', () => {
     const dropdownContent = page.locator('[data-slot="dropdown-menu-content"]')
     await expect(dropdownContent).toBeVisible({ timeout: 5000 })
 
-    // Click "Models" in the dropdown menu
-    const modelsItem = dropdownContent.locator('a', { hasText: 'Models' }).first()
-    await modelsItem.click()
+    // Click "Integrations" in the dropdown menu
+    const integrationsItem = dropdownContent.locator('a', { hasText: 'Integrations' }).first()
+    await integrationsItem.click()
     await page.waitForLoadState('networkidle')
 
-    // Should have navigated to /models
-    await expect(page).toHaveURL(/\/models/)
+    // Should have navigated to /integrations
+    await expect(page).toHaveURL(/\/integrations/)
 
     expect(getErrors(), 'JS errors during mobile docs dropdown navigation').toEqual([])
   })
@@ -395,36 +395,32 @@ test.describe('Contextual sidebar', () => {
     expect(getErrors(), 'JS errors during contextual sidebar navigation').toEqual([])
   })
 
-  test('desktop: resets sidebar scrolling when switching panes', async ({ page, isMobile }) => {
+  test('desktop: restores root sidebar scrolling when leaving a contextual pane', async ({ page, isMobile }) => {
     test.skip(isMobile, 'Desktop sidebar not rendered on mobile')
     await page.setViewportSize({ width: 1200, height: 360 })
 
     await page.goto('/docs', { waitUntil: 'domcontentloaded' })
     const rootPane = visibleSidebarPane(page, 'root')
-    const agentsLink = await expectContextualCategoryRootLink(rootPane)
-    const rootScrollTop = await rootPane.evaluate(element => {
-      element.scrollTop = element.scrollHeight
-      return element.scrollTop
+    const guidesLink = rootPane.getByRole('link', { name: 'Guides', exact: true })
+    await expect(guidesLink).toBeVisible()
+    const rootScrollTop = await guidesLink.evaluate(element => {
+      element.scrollIntoView({ block: 'center' })
+      return element.closest('nav')?.scrollTop ?? 0
     })
     expect(rootScrollTop).toBeGreaterThan(0)
 
-    await agentsLink.evaluate((element: HTMLAnchorElement) => element.click())
+    await guidesLink.evaluate((element: HTMLAnchorElement) => element.click())
     const contextualPane = visibleSidebarPane(page, 'contextual')
     await expect(contextualPane).toBeVisible()
     await expect.poll(() => contextualPane.evaluate(element => element.scrollTop)).toBe(0)
-
-    const contextualScrollTop = await contextualPane.evaluate(element => {
-      element.scrollTop = element.scrollHeight
-      return element.scrollTop
-    })
-    expect(contextualScrollTop).toBeGreaterThan(0)
 
     await contextualPane
       .getByRole('button', { name: 'Back to global sidebar' })
       .evaluate((element: HTMLButtonElement) => element.click())
     const restoredRootPane = visibleSidebarPane(page, 'root')
     await expect(restoredRootPane).toBeVisible()
-    await expect.poll(() => restoredRootPane.evaluate(element => element.scrollTop)).toBe(0)
+    await expect.poll(() => restoredRootPane.evaluate(element => element.scrollTop)).toBe(rootScrollTop)
+    await expect(restoredRootPane.getByRole('link', { name: 'Guides', exact: true })).toBeInViewport()
 
     await page.setViewportSize({ width: 1200, height: 480 })
     await page.goto('/docs/observability/overview', { waitUntil: 'domcontentloaded' })
@@ -496,7 +492,7 @@ test.describe('Contextual sidebar', () => {
 
     const deploymentPane = visibleSidebarPane(page, 'contextual')
     await expect(deploymentPane).toBeVisible()
-    await expect(deploymentPane.getByRole('button', { name: 'Back to global sidebar' })).toHaveText('Deployment')
+    await expect(deploymentPane.getByRole('button', { name: 'Back to global sidebar' })).toHaveText('Deploy')
     await expect(deploymentPane.locator('a.menu__link[href="/docs/deployment/workflow-runners"]')).toHaveAttribute(
       'aria-current',
       'page',
@@ -684,10 +680,10 @@ test.describe('Contextual sidebar', () => {
   })
 })
 
-// ─── Admonitions and tabs on /guides/build-your-ui/ai-sdk-ui ──────────
+// ─── Admonitions and tabs on /integrations/agentic-ui/ai-sdk-ui ───────
 
 test.describe('Admonitions and tabs on AI SDK UI guide', () => {
-  const PAGE = '/guides/build-your-ui/ai-sdk-ui'
+  const PAGE = '/integrations/agentic-ui/ai-sdk-ui'
 
   test('admonitions are rendered and visible', async ({ page }) => {
     const getErrors = trackJsErrors(page)
@@ -695,7 +691,7 @@ test.describe('Admonitions and tabs on AI SDK UI guide', () => {
     await page.goto(PAGE, { waitUntil: 'domcontentloaded' })
     await page.waitForLoadState('networkidle')
 
-    // The page has admonitions of types: note, tip, info, warning.
+    // The page has admonitions of types: note, tip, warning.
     // Some admonitions are inside inactive tab panels (hidden attribute),
     // so we check all titles in the DOM for type coverage, then verify
     // only the visible ones are properly rendered.
@@ -708,7 +704,7 @@ test.describe('Admonitions and tabs on AI SDK UI guide', () => {
       titles.push((await allAdmonitions.nth(i).textContent())?.toLowerCase() ?? '')
     }
 
-    for (const type of ['note', 'tip', 'info', 'warning']) {
+    for (const type of ['note', 'tip', 'warning']) {
       expect(
         titles.some(t => t.includes(type)),
         `Expected an admonition of type "${type}"`,

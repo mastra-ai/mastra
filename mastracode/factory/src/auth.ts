@@ -552,6 +552,16 @@ function providerAuthRoutes(provider: IMastraAuthProvider, publicUrl?: string): 
           const cookieReturnTo = sanitizeReturnTo(readReturnToCookie(c));
           const returnTo = cookieReturnTo !== '/' ? cookieReturnTo : stateReturnTo;
           c.header('Set-Cookie', clearReturnToCookieHeader(), { append: true });
+          const idpError = c.req.query('error');
+          if (idpError) {
+            // IdP denial (e.g. access_denied for a non-org-member): bouncing to
+            // /auth/login would re-enter the IdP in a redirect loop.
+            const query = new URLSearchParams({ error: idpError.slice(0, 64) });
+            const description = c.req.query('error_description');
+            if (description) query.set('error_description', description.slice(0, 256));
+            if (returnTo !== '/') query.set('returnTo', returnTo);
+            return c.redirect(`/signin?${query.toString()}`);
+          }
           if (!code) {
             return c.redirect('/auth/login');
           }
@@ -707,6 +717,15 @@ export function buildAuthRoutes(provider: IMastraAuthProvider, options: { public
  */
 const SIGNATURE_VERIFYING_CHANNEL_WEBHOOK = /^\/api\/agent-controllers\/[^/]+\/channels\/slack\/webhook$/;
 
+// Fetched by tabs that may already be signed out. Enumerated, not prefix-matched,
+// so a future route under the same prefix does not inherit the pass.
+const SESSION_FAVICON_PATHS = new Set([
+  '/favicon-session-initializing.svg',
+  '/favicon-session-working.svg',
+  '/favicon-session-awaiting.svg',
+  '/favicon-session-error.svg',
+]);
+
 /**
  * Build the auth gate as a plain Hono middleware handler `(c, next)`. Protects
  * everything that is not a public `/auth/*` route: authenticated requests stash
@@ -743,6 +762,12 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
     if (c.req.method === 'GET' && (path === '/connect/slack' || path.startsWith('/connect/slack/'))) {
       return next();
     }
+    // The platform's deploy-auth flow lands IdP denials on `/login`
+    // (`error=access_denied&error_description=...`); the SPA serves sign-in at
+    // `/signin`, so forward the query there instead of burying it in returnTo.
+    if (c.req.method === 'GET' && path === '/login') {
+      return c.redirect(`/signin${new URL(c.req.url).search}`);
+    }
     // The SPA sign-in page, its static bundle, and browser-fetched metadata
     // must be reachable while signed out; no user is stashed, so `/api/*`
     // stays protected.
@@ -750,7 +775,8 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
       path === '/signin' ||
       path.startsWith('/assets/') ||
       path === '/manifest.webmanifest' ||
-      path === '/mastra.svg'
+      path === '/mastra.svg' ||
+      (c.req.method === 'GET' && SESSION_FAVICON_PATHS.has(path))
     ) {
       return next();
     }

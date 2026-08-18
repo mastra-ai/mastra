@@ -2,9 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { IMastraLogger } from '../../logger';
 import { Mastra } from '../../mastra';
+import { RequestContext } from '../../request-context';
 import type { GoalObjectiveRecord, ThreadStateStorage } from '../../storage/domains/thread-state/base';
 import { InMemoryStore } from '../../storage/mock';
 import { beginGoalActivity, getGoalActivityDurationMs, stopGoalActivity } from './activity';
+import { takeCachedGoalObjective } from './activity-cache';
 import { GOAL_STATE_TYPE } from './objective';
 
 const agentId = 'activity-agent';
@@ -185,6 +187,22 @@ describe('goal activity tracking', () => {
     vi.spyOn(store, 'getState').mockRejectedValueOnce(new Error('objective read failed'));
 
     await expect(beginGoalActivity({ mastra, agentId, threadId, runId: 'failed-logger' })).resolves.toBeUndefined();
+  });
+
+  // Regression: a store read that misses (the objective write has not landed yet)
+  // must not be cached. A cached `null` is treated as authoritative by the goal
+  // state processor, which then projects `status: none` for an objective the
+  // store is about to report as active.
+  it('does not cache an objective store miss', async () => {
+    const storage = new InMemoryStore();
+    const mastra = new Mastra({ storage, logger: false });
+    const threadId = `thread-${crypto.randomUUID()}`;
+    const requestContext = new RequestContext();
+
+    await beginGoalActivity({ mastra, agentId, threadId, runId: 'miss-run', requestContext });
+
+    // takeCachedGoalObjective is clear-on-read: exactly one call, no peeking first.
+    expect(takeCachedGoalObjective(requestContext, threadId)).toBeUndefined();
   });
 
   it('does not start activity for a paused objective', async () => {

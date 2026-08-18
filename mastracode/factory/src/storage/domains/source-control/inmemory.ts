@@ -301,6 +301,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         sandboxProvider: input.sandboxProvider,
         sandboxWorkdir: input.sandboxWorkdir,
         setupCommand: input.setupCommand ?? null,
+        teardownCommand: input.teardownCommand ?? null,
         createdAt: now,
         updatedAt: now,
       };
@@ -463,8 +464,14 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
   };
 
   readonly sessions = {
-    list: async ({ projectRepositoryId, userId }: { projectRepositoryId: string; userId: string }) =>
-      this.sessionsRows.filter(row => row.projectRepositoryId === projectRepositoryId && row.userId === userId),
+    list: async ({ projectRepositoryId, viewerUserId }: { projectRepositoryId: string; viewerUserId: string }) =>
+      this.sessionsRows.filter(
+        row =>
+          row.projectRepositoryId === projectRepositoryId &&
+          (row.visibility !== 'private' || row.userId === viewerUserId),
+      ),
+    listByProjectRepository: async ({ projectRepositoryId }: { projectRepositoryId: string }) =>
+      this.sessionsRows.filter(row => row.projectRepositoryId === projectRepositoryId),
     getBySessionId: async (sessionId: string): Promise<SourceControlSession | null> =>
       this.sessionsRows.find(row => row.sessionId === sessionId) ?? null,
     getForBranch: async ({
@@ -490,9 +497,12 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         id: randomUUID(),
         ...input,
         title: input.title ?? null,
+        visibility: input.visibility ?? 'org',
         sandboxId: null,
         sandboxWorkdir: null,
         materializedAt: null,
+        firstMessageAt: null,
+        firstMeaningfulExecAt: null,
         createdAt: now,
         updatedAt: now,
       };
@@ -513,7 +523,17 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
     },
     markMaterialized: async ({ id }: { id: string }) => {
       const row = this.sessionsRows.find(candidate => candidate.id === id);
-      if (row) Object.assign(row, { materializedAt: new Date(), updatedAt: new Date() });
+      if (row && row.materializedAt === null) Object.assign(row, { materializedAt: new Date(), updatedAt: new Date() });
+    },
+    markFirstMessage: async ({ sessionId }: { sessionId: string }) => {
+      const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
+      if (row && row.firstMessageAt === null) Object.assign(row, { firstMessageAt: new Date(), updatedAt: new Date() });
+    },
+    markFirstMeaningfulExec: async ({ sessionId }: { sessionId: string }) => {
+      const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
+      if (row && row.firstMeaningfulExecAt === null) {
+        Object.assign(row, { firstMeaningfulExecAt: new Date(), updatedAt: new Date() });
+      }
     },
     delete: async (id: string) => {
       this.sessionsRows.splice(0, this.sessionsRows.length, ...this.sessionsRows.filter(row => row.id !== id));

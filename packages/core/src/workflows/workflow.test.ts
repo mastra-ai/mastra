@@ -962,6 +962,100 @@ describe('Workflow (Default Engine Specifics)', () => {
       expect(result).toEqual({ value: 'ok' });
       expect(fgaProvider.require).not.toHaveBeenCalled();
     });
+
+    async function createSuspendedRun({
+      fgaProvider,
+      internal = false,
+    }: {
+      fgaProvider?: {
+        require: ReturnType<typeof vi.fn>;
+        check: ReturnType<typeof vi.fn>;
+        filterAccessible: ReturnType<typeof vi.fn>;
+      };
+      internal?: boolean;
+    } = {}) {
+      const storage = new MockStore();
+      const step = createStep({
+        id: 'resume-fga-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
+        suspendSchema: z.object({ waiting: z.boolean() }),
+        resumeSchema: z.object({ approved: z.boolean() }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          if (!resumeData?.approved) await suspend({ waiting: true });
+          return inputData;
+        },
+      });
+      const workflow = createWorkflow({
+        id: `resume-fga-workflow-${crypto.randomUUID()}`,
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
+        steps: [step],
+      })
+        .then(step)
+        .commit();
+      const mastra = new Mastra({ logger: false, storage, server: fgaProvider ? { fga: fgaProvider } : undefined });
+      if (internal) mastra.__registerInternalWorkflow(workflow);
+      else workflow.__registerMastra(mastra);
+      const run = await workflow.createRun({ resourceId: 'tenant-1' });
+      expect(await run.start({ inputData: { value: 'ok' } })).toMatchObject({ status: 'suspended' });
+      return { run, workflow };
+    }
+
+    it('checks workflows:execute when resuming a run', async () => {
+      const fgaProvider = { require: vi.fn(), check: vi.fn(), filterAccessible: vi.fn() };
+      const { run, workflow } = await createSuspendedRun({ fgaProvider });
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+
+      await run.resume({ resumeData: { approved: true }, requestContext });
+
+      expect(fgaProvider.require).toHaveBeenCalledWith(
+        { id: 'user-1' },
+        expect.objectContaining({
+          resource: { type: 'workflow', id: workflow.id },
+          permission: 'workflows:execute',
+          context: expect.objectContaining({ resourceId: 'tenant-1', requestContext }),
+        }),
+      );
+    });
+
+    it('fails closed on resume when no user or trusted actor is available', async () => {
+      const fgaProvider = { require: vi.fn(), check: vi.fn(), filterAccessible: vi.fn() };
+      const { run } = await createSuspendedRun({ fgaProvider });
+
+      await expect(run.resume({ resumeData: { approved: true } })).rejects.toThrow('authenticated user is required');
+      expect(fgaProvider.require).not.toHaveBeenCalled();
+    });
+
+    it('allows resume with a trusted actor without membership resolution', async () => {
+      const fgaProvider = { require: vi.fn(), check: vi.fn(), filterAccessible: vi.fn() };
+      const { run } = await createSuspendedRun({ fgaProvider });
+
+      const requestContext = new RequestContext();
+      requestContext.set('organizationId', 'org-1');
+      await expect(
+        run.resume({
+          resumeData: { approved: true },
+          requestContext,
+          actor: { actorKind: 'system', sourceWorkflow: 'agentic-loop' },
+        }),
+      ).resolves.toMatchObject({ status: 'success' });
+      expect(fgaProvider.require).not.toHaveBeenCalled();
+    });
+
+    it('allows resume when no FGA provider is configured', async () => {
+      const { run } = await createSuspendedRun();
+      await expect(run.resume({ resumeData: { approved: true } })).resolves.toMatchObject({ status: 'success' });
+    });
+
+    it('does not require end-user authorization for internal workflow resumes', async () => {
+      const fgaProvider = { require: vi.fn(), check: vi.fn(), filterAccessible: vi.fn() };
+      const { run } = await createSuspendedRun({ fgaProvider, internal: true });
+
+      await expect(run.resume({ resumeData: { approved: true } })).resolves.toMatchObject({ status: 'success' });
+      expect(fgaProvider.require).not.toHaveBeenCalled();
+    });
   });
 
   describe('Nested workflow abort listener cleanup (issue #16125)', () => {
@@ -1328,5 +1422,126 @@ describe('createRun storage existence read (issue #19015)', () => {
     await workflow.createRun({ runId: 'explicit-run-id' });
 
     expect(readSpy).toHaveBeenCalled();
+  });
+});
+
+describe('concurrent stream close', () => {
+  // An abandoned stream can only be observed by bounding the read — a plain drain
+  // would hang the suite rather than fail it.
+  async function drainWithin(stream: ReadableStream<any>, boundMs = 2000) {
+    const reader = stream.getReader();
+    const types: string[] = [];
+    try {
+      for (;;) {
+        const res = await Promise.race([
+          reader.read(),
+          new Promise<'timed-out'>(resolve => setTimeout(() => resolve('timed-out'), boundMs)),
+        ]);
+        if (res === 'timed-out') return { closed: false, types };
+        if (res.done) return { closed: true, types };
+        if (res.value?.type) types.push(res.value.type);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
+  it('closes both outputs when two resumeStream calls race for the same run', async () => {
+    const suspending = createStep({
+      id: 'suspending-step',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ result: z.string() }),
+      execute: async ({ suspend }) => {
+        await suspend({ waiting: true });
+        return { result: 'resumed' };
+      },
+    });
+    const final = createStep({
+      id: 'final-step',
+      inputSchema: z.object({ result: z.string() }),
+      outputSchema: z.object({ result: z.string() }),
+      execute: async () => ({ result: 'done' }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'concurrent-resume-close-wf',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ result: z.string() }),
+      steps: [suspending, final],
+    })
+      .then(suspending)
+      .then(final)
+      .commit();
+
+    new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      workflows: { 'concurrent-resume-close-wf': workflow },
+    });
+
+    const run = await workflow.createRun({ runId: 'concurrent-resume-close-run' });
+    await run.start({ inputData: {} });
+
+    // Two concurrent resumes of the same cached run: each must close its own stream.
+    const first = run.resumeStream({ step: 'suspending-step', resumeData: {} });
+    const second = run.resumeStream({ step: 'suspending-step', resumeData: {} });
+
+    const [firstDrain, secondDrain] = await Promise.all([
+      drainWithin(first.fullStream),
+      drainWithin(second.fullStream),
+    ]);
+
+    expect(firstDrain.closed).toBe(true);
+    expect(secondDrain.closed).toBe(true);
+    expect(firstDrain.types).toContain('workflow-finish');
+    expect(secondDrain.types).toContain('workflow-finish');
+  });
+
+  it('closes both outputs when two timeTravelStream calls race for the same run', async () => {
+    const first = createStep({
+      id: 'first-step',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ result: z.string() }),
+      execute: async () => ({ result: 'first' }),
+    });
+    const second = createStep({
+      id: 'second-step',
+      inputSchema: z.object({ result: z.string() }),
+      outputSchema: z.object({ result: z.string() }),
+      execute: async () => ({ result: 'second' }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'concurrent-time-travel-close-wf',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ result: z.string() }),
+      steps: [first, second],
+    })
+      .then(first)
+      .then(second)
+      .commit();
+
+    new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      workflows: { 'concurrent-time-travel-close-wf': workflow },
+    });
+
+    const run = await workflow.createRun({ runId: 'concurrent-time-travel-close-run' });
+    await run.start({ inputData: {} });
+
+    // Two concurrent time travels of the same cached run: each must close its own stream.
+    const firstTravel = run.timeTravelStream({ step: 'second-step', inputData: { result: 'first' } });
+    const secondTravel = run.timeTravelStream({ step: 'second-step', inputData: { result: 'first' } });
+
+    const [firstDrain, secondDrain] = await Promise.all([
+      drainWithin(firstTravel.fullStream),
+      drainWithin(secondTravel.fullStream),
+    ]);
+
+    expect(firstDrain.closed).toBe(true);
+    expect(secondDrain.closed).toBe(true);
+    expect(firstDrain.types).toContain('workflow-finish');
+    expect(secondDrain.types).toContain('workflow-finish');
   });
 });

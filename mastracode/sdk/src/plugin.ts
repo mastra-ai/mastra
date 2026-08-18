@@ -1,6 +1,15 @@
+import type { AgentController, Session } from '@mastra/core/agent-controller';
+import type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
+import type { SignalProvider } from '@mastra/core/signals';
 import type { Tool, ToolAction, ToolExecutionContext } from '@mastra/core/tools';
 
+import type { MastraCodeState } from './schema.js';
+
 export { createTool } from '@mastra/core/tools';
+export { RequestContext } from '@mastra/core/di';
+export type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
+export { SignalProvider } from '@mastra/core/signals';
+export type { SignalProviderTarget, SignalSubscription } from '@mastra/core/signals';
 export type { Tool, ToolAction, ToolExecutionContext } from '@mastra/core/tools';
 export { z } from 'zod';
 
@@ -88,7 +97,39 @@ export type MastraCodePluginConfigOption = {
 export type MastraCodePluginConfigSchema = Record<string, MastraCodePluginConfigOption>;
 export type MastraCodePluginConfigValues = Record<string, MastraCodePluginConfigValue>;
 
-export type MastraCodePluginContext = {
+/** The running Mastra Code controller, as seen by a plugin. */
+export type MastraCodePluginController = AgentController<MastraCodeState>;
+
+/** The session a plugin's contributions are running alongside. */
+export type MastraCodePluginSession = Session<MastraCodeState>;
+
+/**
+ * Lazy accessors for Mastra Code's runtime, handed to every plugin field resolver.
+ *
+ * Plugins are loaded before the controller and the session exist, so these are
+ * accessors rather than instances: call them at the moment you need the value,
+ * never during plugin load. Both return `undefined` until Mastra Code has
+ * constructed the corresponding object.
+ *
+ * @experimental This is an evolving runtime API. It currently exposes the whole
+ * controller so real plugins can be built against it; once we know what plugin
+ * authors actually reach for, it may narrow to a smaller facade in a future
+ * release.
+ */
+export type MastraCodePluginRuntime = {
+  /**
+   * The running controller, or `undefined` when it does not exist yet.
+   * @experimental see {@link MastraCodePluginRuntime}
+   */
+  getController?: () => MastraCodePluginController | undefined;
+  /**
+   * The active session, or `undefined` before one has been created.
+   * @experimental see {@link MastraCodePluginRuntime}
+   */
+  getActiveSession?: () => MastraCodePluginSession | undefined;
+};
+
+export type MastraCodePluginContext = MastraCodePluginRuntime & {
   cwd: string;
   scope: 'global' | 'project';
   pluginDir: string;
@@ -106,6 +147,34 @@ export type MastraCodePluginTools = Record<string, MastraCodePluginTool>;
 export type MastraCodePluginToolEntries = Record<string, MastraCodePluginToolEntry>;
 export type MastraCodePluginInstructions = string | ((context: MastraCodePluginContext) => string | Promise<string>);
 
+/**
+ * Processors a plugin contributes, split by lane.
+ *
+ * A bare array is shorthand for `{ input: [...] }`, since input processors are
+ * the common case. Plugin processors run last in Mastra Code's own configured
+ * processors — after the layers they customize, before the channel and memory
+ * layers the agent appends. That slot is fixed and not configurable.
+ */
+export type MastraCodePluginProcessorEntries =
+  | InputProcessor[]
+  | {
+      input?: InputProcessor[];
+      output?: OutputProcessor[];
+    };
+
+/**
+ * Signal providers a plugin contributes.
+ *
+ * Mastra Code owns their lifecycle: it registers Mastra on them, connects them
+ * to the coding agent, starts them polling, and stops them when the plugin is
+ * updated, disabled or removed. Their `getInputProcessors()` /
+ * `getOutputProcessors()` feed the same lanes as {@link MastraCodePluginProcessorEntries}.
+ *
+ * Note that `getTools()` is **ignored** for plugin-provided providers — inject
+ * tools from inside a processor instead.
+ */
+export type MastraCodePluginSignalProviderEntries = SignalProvider<string>[];
+
 export type MastraCodePlugin = {
   id: string;
   name?: string;
@@ -116,6 +185,16 @@ export type MastraCodePlugin = {
   tools?:
     | MastraCodePluginToolEntries
     | ((context: MastraCodePluginContext) => MastraCodePluginToolEntries | Promise<MastraCodePluginToolEntries>);
+  processors?:
+    | MastraCodePluginProcessorEntries
+    | ((
+        context: MastraCodePluginContext,
+      ) => MastraCodePluginProcessorEntries | Promise<MastraCodePluginProcessorEntries>);
+  signalProviders?:
+    | MastraCodePluginSignalProviderEntries
+    | ((
+        context: MastraCodePluginContext,
+      ) => MastraCodePluginSignalProviderEntries | Promise<MastraCodePluginSignalProviderEntries>);
 };
 
 export function defineMastraCodePlugin<TPlugin extends MastraCodePlugin>(plugin: TPlugin): TPlugin {

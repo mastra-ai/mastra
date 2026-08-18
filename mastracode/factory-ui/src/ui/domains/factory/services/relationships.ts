@@ -50,14 +50,8 @@ export function relationshipPath(item: Pick<WorkItem, 'source'>, factoryId: stri
 }
 
 export function relationshipLabel(item: WorkItem): string {
-  const number = workItemNumber(item);
-  if (item.source === 'github-pr') return number ? `Review: PR #${number}` : `Review: ${item.title}`;
-  if (item.source === 'github-issue') return number ? `Work item: Issue #${number}` : `Work item: ${item.title}`;
-  if (item.source === 'linear-issue') {
-    const identifier = linearIdentifier(item) ?? number;
-    return identifier ? `Work item: ${identifier}` : `Work item: ${item.title}`;
-  }
-  return `Work item: ${item.title}`;
+  const reference = workItemReferenceLabel(item) ?? item.title;
+  return item.source === 'github-pr' ? `Review: ${reference}` : `Work item: ${reference}`;
 }
 
 function linearIdentifier(item: IdentifiableItem): string | undefined {
@@ -73,4 +67,12 @@ export function workItemIdentifier(item: IdentifiableItem): string | undefined {
     return number ? `#${number}` : undefined;
   }
   return undefined;
+}
+
+export function workItemReferenceLabel(item: IdentifiableItem): string | undefined {
+  const identifier = workItemIdentifier(item);
+  if (identifier === undefined) return;
+  if (item.source === 'github-pr') return `PR ${identifier}`;
+  if (item.source === 'github-issue') return `Issue ${identifier}`;
+  return identifier;
 }

@@ -91,6 +91,11 @@ export const baseIterationStateSchema = z.object({
   options: z.any(),
   state: z.any(),
   messageId: z.string(),
+  // JSON-safe snapshot of the caller's requestContext.entries(), carried
+  // across every iteration so steps that rebuild runtime state from the Mastra
+  // instance resolve with the same request context on iteration N as on
+  // iteration 1. Dropping it here silently falls back to an empty context.
+  requestContextEntries: z.record(z.string(), z.any()).optional(),
   // Iteration tracking
   iterationCount: z.number(),
   accumulatedSteps: z.array(z.any()),

@@ -109,6 +109,7 @@ function addSqliteMetadataValuePredicate(
 }
 
 export class MemoryLibSQL extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate = true;
   readonly supportsObservationalMemory = true;
 
   /**

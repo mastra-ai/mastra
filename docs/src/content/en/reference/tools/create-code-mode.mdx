@@ -9,6 +9,12 @@ packages:
 
 **Added in:** `@mastra/core@1.38.0`
 
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 The `createCodeMode()` function returns a tool and generated instructions that let an agent run multi-tool computations as one TypeScript function. The generated code runs in a workspace sandbox, and each `external_*` call runs the real tool on the host with validation, request context, and tracing.
 
 For a conceptual overview, see [Code mode](/docs/agents/code-mode).
@@ -218,4 +224,4 @@ export const codeModeTool = createCodeModeTool({
 
 - [Code mode](/docs/agents/code-mode)
 - [createTool()](/reference/tools/create-tool)
-- [Workspace overview](/docs/workspace/overview)
+- [Sandbox](/docs/sandbox/overview)

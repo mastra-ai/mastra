@@ -119,6 +119,8 @@ class ExecuteCommandProcessHandle extends ProcessHandle {
   }
 
   async sendStdin(): Promise<void> {}
+
+  async closeStdin(): Promise<void> {}
 }
 
 class ExecuteCommandProcessManager extends SandboxProcessManager {
@@ -229,6 +231,14 @@ describe('MastraSandbox Base Class', () => {
       // Access the logger via a method that uses it
       // The sandbox's internal logger should now be the mock
       expect(sandbox['logger']).toBeDefined();
+    });
+  });
+
+  describe('Snapshot', () => {
+    it('resolves as a no-op by default', async () => {
+      const sandbox = new MountableSandbox();
+
+      await expect(sandbox.snapshot()).resolves.toBeUndefined();
     });
   });
 

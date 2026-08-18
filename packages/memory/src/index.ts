@@ -289,6 +289,29 @@ export class Memory extends MastraMemory {
     this.pendingVectorCleanup = Promise.allSettled([this.pendingVectorCleanup, cleanup]).then(() => undefined);
   }
 
+  /**
+   * Resolve once all background work this Memory started has finished: observational-memory
+   * cycles (buffered observation and reflection, including the nested agent runs they spawn)
+   * and vector cleanup from `deleteThread` / `deleteMessages`.
+   *
+   * Callers that own the storage connection should await this before closing it, otherwise
+   * background statements can race the close.
+   *
+   * ```ts
+   * await agent.generate('hello', { memory: { thread, resource } });
+   * await memory.settled();
+   * await store.close();
+   * ```
+   */
+  override async settled(): Promise<void> {
+    await this.pendingVectorCleanup;
+    // Only join an engine that already exists — never instantiate one just to drain it.
+    const engine = this._omEngine ? await this._omEngine : this._omEngineInstance;
+    await engine?.settled();
+    // Observational-memory cycles can start further vector cleanup; drain once more.
+    await this.pendingVectorCleanup;
+  }
+
   /** The shared ObservationalMemory engine. Lazily created on first access. */
   get omEngine(): Promise<ObservationalMemory | null> {
     if (!this._omEngine) {
@@ -725,7 +748,7 @@ export class Memory extends MastraMemory {
     memoryConfig?: MemoryConfigInternal;
   }): Promise<StorageThreadType> {
     const memoryStore = await this.getMemoryStore();
-    const updatedThread = await memoryStore.updateThread({
+    const updatedThread = await memoryStore.patchThread({
       id,
       title,
       metadata,
@@ -871,7 +894,7 @@ export class Memory extends MastraMemory {
             throw new Error(`Thread ${threadId} not found`);
           }
 
-          await memoryStore.updateThread({
+          await memoryStore.patchThread({
             id: threadId,
             metadata: {
               ...thread.metadata,
@@ -1022,7 +1045,7 @@ ${workingMemory}`;
           throw new Error(`Thread ${threadId} not found`);
         }
 
-        await memoryStore.updateThread({
+        await memoryStore.patchThread({
           id: threadId,
           metadata: {
             ...thread.metadata,

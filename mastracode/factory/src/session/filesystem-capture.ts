@@ -10,7 +10,7 @@ const ARTIFACTS_LIST_COMMAND = 'cd "$1" && test -d .artifacts && find .artifacts
 export interface FilesystemCaptureSession {
   readonly identity: { getResourceId(): string };
   readonly thread: { requireId(): string };
-  getWorkspace(): { sandbox?: Pick<WorkspaceSandbox, 'executeCommand'> };
+  getWorkspace(): { sandbox?: Pick<WorkspaceSandbox, 'executeCommand'> } | undefined;
   onBeforeAgentEnd(listener: SessionBeforeAgentEndListener): () => void;
 }
 
@@ -50,7 +50,8 @@ export async function captureSessionFilesystem(
     const resourceId = session.identity.getResourceId();
     const threadId = session.thread.requireId();
     const sourceSession = await sourceControl.sessions.getBySessionId(resourceId);
-    const sandbox = session.getWorkspace().sandbox;
+    // Chat-only sessions run without a workspace; there is nothing to capture.
+    const sandbox = session.getWorkspace()?.sandbox;
     if (!sourceSession?.sandboxWorkdir || !sandbox?.executeCommand) return;
 
     const result = await sandbox.executeCommand('git', ['-C', sourceSession.sandboxWorkdir, ...GIT_STATUS_ARGS], {
@@ -89,13 +90,73 @@ export async function captureSessionFilesystem(
   }
 }
 
+/**
+ * In-flight capture chains keyed by session resource id. Serves two purposes:
+ * readers of the persisted file listing (the /web/workspace routes) await the
+ * capture for the turn that just ended instead of racing it, and captures for
+ * the same resource stay sequential (last write wins) even when multiple
+ * scoped sessions observe the same resource id. In-process only: the factory
+ * server that runs the session controller also serves those routes.
+ */
+const pendingCaptures = new Map<string, Promise<void>>();
+
+/**
+ * Resolve once the session's in-flight filesystem capture (if any) has
+ * persisted, or after `timeoutMs` so a reader that arrives mid-capture is
+ * never blocked by the execs' worst-case 30s timeouts. Never rejects: the
+ * capture body is fully try/catch contained.
+ */
+export async function waitForPendingFilesystemCapture(resourceId: string, timeoutMs = 10_000): Promise<void> {
+  const pending = pendingCaptures.get(resourceId);
+  if (!pending) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      pending,
+      new Promise<void>(resolve => {
+        timer = setTimeout(resolve, timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export function observeSessionFilesystem(
   session: FilesystemCaptureSession,
   dependencies: FilesystemCaptureDependencies,
 ): () => void {
-  let capture = Promise.resolve();
+  let fallbackChain = Promise.resolve();
   return session.onBeforeAgentEnd(() => {
-    capture = capture.then(() => captureSessionFilesystem(session, dependencies));
-    return capture;
+    // Chain so captures stay sequential (last write wins), but do NOT return
+    // the chain: finishAgentRun awaits every listener before emitting
+    // agent_end, and the capture's sandbox execs (git status + artifacts
+    // find, 30s timeouts each) must not gate turn completion. Readers that
+    // need the fresh listing await the pending capture through
+    // waitForPendingFilesystemCapture instead. The un-returned chain cannot
+    // leak an unhandled rejection: captureSessionFilesystem's entire body
+    // runs inside its own try/catch, and disposal of this listener does not
+    // cancel an in-flight chain, so a final turn's capture still persists.
+    let resourceId: string | undefined;
+    try {
+      resourceId = session.identity.getResourceId();
+    } catch {
+      // No resource id means no route can address this session's listing;
+      // keep a per-observer chain so captures still run sequentially.
+      fallbackChain = fallbackChain.then(() => captureSessionFilesystem(session, dependencies));
+      return;
+    }
+    // Extend the resource-level chain rather than a per-session one: sessions
+    // are deduplicated by (resourceId, scope), so multiple scoped sessions can
+    // observe the same resource, and their captures must not interleave.
+    const chain = (pendingCaptures.get(resourceId) ?? Promise.resolve()).then(() =>
+      captureSessionFilesystem(session, dependencies),
+    );
+    pendingCaptures.set(resourceId, chain);
+    void chain.finally(() => {
+      if (pendingCaptures.get(resourceId) === chain) {
+        pendingCaptures.delete(resourceId);
+      }
+    });
   });
 }

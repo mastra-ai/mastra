@@ -1,5 +1,11 @@
 # @mastra/voice-google
 
+## 0.14.1
+
+### Patch Changes
+
+- Fixed `GoogleVoice.listen()` failing with `ERR_STREAM_PREMATURE_CLOSE` on Node 22 and newer. Speech-to-text with Application Default Credentials now transcribes again. Fixes [#19206](https://github.com/mastra-ai/mastra/issues/19206). ([#20976](https://github.com/mastra-ai/mastra/pull/20976))
+
 ## 0.14.1-alpha.0
 
 ### Patch Changes

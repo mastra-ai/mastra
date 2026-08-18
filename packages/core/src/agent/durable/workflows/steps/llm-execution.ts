@@ -86,6 +86,10 @@ const durableLLMInputSchema = z.object({
   options: z.any(),
   state: z.any(),
   messageId: z.string(),
+  // JSON-safe request context snapshot, forwarded from iteration state so the
+  // rebuild-from-Mastra path resolves the model and tools with the caller's
+  // context rather than an empty one.
+  requestContextEntries: z.record(z.string(), z.any()).optional(),
   // Agent span data for model span parenting
   agentSpanData: z.any().optional(),
   // Model span data (ONE span for entire agent run, created before workflow)
@@ -1049,14 +1053,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
                 // Emit step-start before the first stream chunk so the
                 // ordering matches the regular agent: start → step-start → response-metadata → …
-                // onResult has already fired by the time the first chunk arrives,
-                // so `request` and `warnings` are populated.
+                // Keep the full model request out of the durable event stream; the helper
+                // preserves the canonical payload shape with an empty `request` object.
                 if (!stepStartEmitted && pubsub) {
                   stepStartEmitted = true;
                   await emitStepStartEvent(pubsub, runId, {
                     stepId: DurableStepIds.LLM_EXECUTION,
                     messageId: currentMessageId,
-                    request,
                     warnings,
                   });
                 }
@@ -1324,7 +1327,15 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   case 'error': {
                     const payload = rawChunk.payload as any;
                     const errorMessage = payload?.error?.message || payload?.message || 'LLM execution error';
-                    const errorObj = new Error(errorMessage);
+                    const errorObj = new Error(errorMessage, { cause: payload?.error ?? payload });
+                    // Keep the producer's stack so crashes stay attributable to their real throw site.
+                    if (typeof payload?.error?.stack === 'string') {
+                      errorObj.stack = payload.error.stack;
+                    }
+                    // Retain the producer's error name so classification (e.g. AbortError) survives transport.
+                    if (typeof payload?.error?.name === 'string' && payload.error.name) {
+                      errorObj.name = payload.error.name;
+                    }
                     // DON'T emit error event here - we might have fallback models to try
                     // Error event will be emitted after all models are exhausted
                     throw errorObj;
@@ -1849,7 +1860,16 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
           type: 'error',
           runId,
           from: ChunkFrom.AGENT,
-          payload: { error: fatalError },
+          // Serialize explicitly: a raw Error JSON-stringifies to `{}` on plain
+          // transports, which destroys the producer stack and makes crashes
+          // unattributable on the consumer side.
+          payload: {
+            error: {
+              message: fatalError.message,
+              stack: fatalError.stack,
+              name: fatalError.name,
+            },
+          },
         });
 
         // Emit step-finish so MastraModelOutput resolves finishReason to 'error'
