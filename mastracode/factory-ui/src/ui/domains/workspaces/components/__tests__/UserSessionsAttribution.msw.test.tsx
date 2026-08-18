@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { FactoryUserSession } from '../../services/github';
 import { UserSessionsSection } from '../UserSessionsSection';
 
@@ -84,19 +84,25 @@ describe('user session attribution', () => {
       'user-viewer-9',
     );
 
-    renderSection();
+    const { client } = renderSection();
+    await waitForMutationsIdle(client);
 
-    const rows = [await screen.findByRole('button', { name: 'mine' }), screen.getByRole('button', { name: 'alpha' })];
+    // The non-owned session carries its owner in the accessible name; the
+    // viewer's own does not.
+    const mine = await screen.findByRole('button', { name: 'mine' });
+    const other = screen.getByRole('button', { name: 'alpha, started by user-owner-1' });
+    expect(mine).toBeInTheDocument();
+    expect(other).toBeInTheDocument();
+
     const labels = screen
       .getAllByRole('button')
       .map(button => button.getAttribute('aria-label'))
-      .filter(label => label === 'mine' || label === 'alpha');
-    expect(labels).toEqual(['mine', 'alpha']);
+      .filter(label => label === 'mine' || label === 'alpha, started by user-owner-1');
+    expect(labels).toEqual(['mine', 'alpha, started by user-owner-1']);
 
-    // The non-owned session carries its owner marker; the viewer's own does not.
-    expect(rows[0]).toBeInTheDocument();
-    expect(screen.getByLabelText('Started by user-owner-1')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Started by user-viewer-9')).not.toBeInTheDocument();
+    // The owner is still shown as visible text on the non-owned row only.
+    expect(screen.getByText('user-owner-1')).toBeInTheDocument();
+    expect(screen.queryByText('user-viewer-9')).not.toBeInTheDocument();
   });
 
   it('offers delete only on the viewer-owned session', async () => {
@@ -111,7 +117,8 @@ describe('user session attribution', () => {
       'user-viewer-9',
     );
 
-    renderSection();
+    const { client } = renderSection();
+    await waitForMutationsIdle(client);
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole('button', { name: 'Session actions for alpha' }));

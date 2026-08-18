@@ -63,7 +63,7 @@ export function SessionNavRow({
     <button
       type="button"
       aria-current={active ? 'page' : undefined}
-      aria-label={name}
+      aria-label={owner ? `${name}, started by ${owner}` : name}
       disabled={disabled || loading}
       onClick={onSelect}
       title={preview ? undefined : title}
@@ -71,7 +71,7 @@ export function SessionNavRow({
       <GitBranch />
       <MainSidebar.NavLabel className="flex-initial">{name}</MainSidebar.NavLabel>
       {owner ? (
-        <Txt as="span" variant="ui-xs" className="text-icon3 shrink-0 truncate" aria-label={`Started by ${owner}`}>
+        <Txt as="span" variant="ui-xs" className="text-icon3 shrink-0 truncate">
           {owner}
         </Txt>
       ) : null}
