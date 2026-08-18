@@ -107,6 +107,7 @@ function projectRepositoryRow(row: Record<string, any>) {
     sandboxProvider: row.sandboxProvider ?? 'railway',
     sandboxWorkdir: row.sandboxWorkdir,
     setupCommand: row.setupCommand ?? null,
+    baseCheckpoint: row.baseCheckpoint ?? null,
     teardownCommand: row.teardownCommand ?? null,
     createdAt: now,
     updatedAt: now,
@@ -399,6 +400,7 @@ const ensureProjectSandbox = vi.fn(
     storage: SourceControlStorageInMemory['sandboxes'];
     token: string;
     onProgress?: (e: any) => void;
+    seedCheckpointName?: string;
   }) => {
     await opts.storage.setSandboxId({ id: opts.row.id, sandboxId: 'sb' });
     opts.onProgress?.({ phase: 'provisioning', message: 'Provisioning a new sandbox…' });
@@ -782,6 +784,9 @@ describe('webhook route', () => {
       sendNotificationSignal,
     };
     const controller = {
+      // Delivery confirms this deployment holds the subscribed thread and reads
+      // the resource that owns it; here that is the subscription's own resource.
+      queryThreadById: vi.fn(async ({ threadId }: { threadId: string }) => ({ id: threadId, resourceId: 'resource-1' })),
       getSessionByResource: vi.fn(async () => session),
       createSession: vi.fn(),
     } as unknown as NonNullable<Parameters<typeof buildGithubRoutes>[0]>['controller'];

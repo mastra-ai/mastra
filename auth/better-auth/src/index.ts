@@ -183,16 +183,19 @@ export class MastraAuthBetterAuth
   }
 
   /**
-   * Cache a resolved `userId → orgId` mapping. Sweeps expired entries first so
-   * users who never authenticate again do not accumulate in the map for the
-   * process lifetime: every write bounds the cache to entries touched within
-   * the last TTL window.
+   * Cache a resolved `userId → orgId` mapping. The map is kept in expiry
+   * order: writes delete-then-set so refreshed entries move to the back, and
+   * since every entry uses the same TTL, iteration order is ascending
+   * `expiresAt`. The sweep therefore stops at the first live entry, making
+   * each write amortized O(1) instead of a full scan.
    */
   #storeOrgId(userId: string, orgId: string): void {
     const now = Date.now();
     for (const [key, entry] of this.#orgCache) {
-      if (now >= entry.expiresAt) this.#orgCache.delete(key);
+      if (now < entry.expiresAt) break;
+      this.#orgCache.delete(key);
     }
+    this.#orgCache.delete(userId);
     this.#orgCache.set(userId, { orgId, expiresAt: now + ORG_CACHE_TTL_MS });
   }
 

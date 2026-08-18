@@ -12,7 +12,7 @@ import type { GithubIssueReconciler } from '../../github/issue-reconciler.js';
 import type { GithubReconcileRepositorySource } from '../../github/reconcile-worker.js';
 import type { GithubPullRequestReconciler, ReconcileRepository } from '../../github/rules.js';
 import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from '../../github/subscriptions.js';
-import { dispatchGithubWebhook, resolveAuthorizedBots } from '../../github/webhook.js';
+import { dispatchGithubWebhook, isFactoryAppSender, resolveAuthorizedBots } from '../../github/webhook.js';
 import type {
   GithubWebhookDispatchIntegration,
   GithubWebhookNotification,
@@ -34,12 +34,19 @@ const SUPPORTED_EVENTS = new Set([
   'pull_request',
   'pull_request_review',
   'pull_request_review_comment',
+  // Pushes never reach the subscription dispatcher; they feed the factory
+  // ingest path so base checkpoints rebuild on default-branch updates.
+  'push',
 ]);
+// Kinds emitted by `classifyGithubWebhook` that carry untrusted sender-authored
+// content and must pass the sender authorization gate below.
 const AUTHOR_GATED_KINDS = new Set([
-  'issue-comment',
-  'pull-request-comment',
-  'pull-request-review',
-  'pull-request-review-comment',
+  'issue-comment-created',
+  'review-comment-created',
+  'review-approved',
+  'review-changes-requested',
+  'review-submitted',
+  'review-dismissed',
 ]);
 const AUTHORIZED_PERMISSIONS = new Set<GithubRepositoryPermission>(['admin', 'maintain', 'write']);
 const PERMISSION_CHECK_TIMEOUT_MS = 5_000;
@@ -83,6 +90,8 @@ export interface PlatformGithubEventWorkerConfig {
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
   reconcileFactoryState?: GithubPullRequestReconciler;
   reconcileIssuesFactoryState?: GithubIssueReconciler;
+  /** Base-checkpoint freshness sweep, run after the reconcilers within the lease. */
+  sweepBaseCheckpoints?: () => Promise<void>;
   /** When false the worker skips event tailing and only runs enabled reconciliation sweeps. */
   pollEventsEnabled?: boolean;
   intervalMs?: number;
@@ -104,6 +113,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
   readonly #ingestFactoryEvent: ((event: ParsedGithubWebhook) => Promise<unknown>) | undefined;
   readonly #reconcileFactoryState: GithubPullRequestReconciler | undefined;
   readonly #reconcileIssuesFactoryState: GithubIssueReconciler | undefined;
+  readonly #sweepBaseCheckpoints: (() => Promise<void>) | undefined;
   readonly #pollEventsEnabled: boolean;
   readonly #pullRequestReconcileIntervalMs: number;
   readonly #issueReconcileIntervalMs: number;
@@ -134,6 +144,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
     this.#ingestFactoryEvent = config.ingestFactoryEvent;
     this.#reconcileFactoryState = config.reconcileFactoryState;
     this.#reconcileIssuesFactoryState = config.reconcileIssuesFactoryState;
+    this.#sweepBaseCheckpoints = config.sweepBaseCheckpoints;
     this.#pollEventsEnabled = config.pollEventsEnabled ?? true;
     const legacyReconcileIntervalMs = config.reconcileIntervalMs ?? DEFAULT_RECONCILE_INTERVAL_MS;
     this.#pullRequestReconcileIntervalMs = config.pullRequestReconcileIntervalMs ?? legacyReconcileIntervalMs;
@@ -363,6 +374,16 @@ export class PlatformGithubEventWorker extends MastraWorker {
         });
       }
     }
+
+    if (this.#sweepBaseCheckpoints && this.#hasLease) {
+      try {
+        await this.#sweepBaseCheckpoints();
+      } catch (error) {
+        this.deps?.logger.warn('Platform GitHub base-checkpoint freshness sweep failed', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
   }
 
   /**
@@ -450,6 +471,15 @@ export class PlatformGithubEventWorker extends MastraWorker {
             retirePullRequestSubscription(id, status, this.#github.integrationStorage),
           github: this.#github,
           isAuthorizedSender: notification => this.#isAuthorizedSender(notification),
+          onTargetSkipped: subscription => {
+            // Routine when a subscription's thread belongs to another
+            // deployment, so this stays at debug rather than warning on a loop.
+            this.deps?.logger.debug('Platform GitHub event skipped: thread is not held here', {
+              deliveryId: event.deliveryId,
+              subscriptionId: subscription.id,
+              threadId: subscription.threadId,
+            });
+          },
           onSenderRejected: notification => {
             this.deps?.logger.debug('Platform GitHub event dropped: sender not authorized', {
               deliveryId: event.deliveryId,
@@ -489,6 +519,13 @@ export class PlatformGithubEventWorker extends MastraWorker {
     const sender = notification.metadata.sender;
     const repository = notification.metadata.repository;
     if (!sender || !repository) return false;
+    // Factory's own app has to clear the gate before the bot rules below, which
+    // fail closed for every bot that is not explicitly allowlisted. GitHub
+    // forbids an app from reviewing its own pull request, so `factory-review`
+    // posts its verdict as a comment under this login and that comment is the
+    // handoff the authoring agent wakes on.
+    if (this.#github.identity?.matches(sender)) return true;
+    if (isFactoryAppSender(sender, this.#github.slug)) return true;
     const normalizedSender = sender.toLowerCase();
     const authorizedBots = resolveAuthorizedBots(this.#github.authorizedBots);
     if (authorizedBots.has(normalizedSender)) return true;
@@ -540,18 +577,28 @@ function normalizeSettings(value: PlatformGithubEventWorkerSettings | null): Pla
 
 // Events the polling worker forwards to the factory rules engine. Closures
 // let the reconciler finalize cards; `synchronize` and `review_requested` on a
-// pull request are the two triggers the review board's re-review path listens
-// for. Direct-webhook consumers ingest every parsed event; the platform path
-// gates because most other events (comments, reviews, edits) only interest the
-// subscription dispatcher, not the factory rules.
+// pull request are the triggers the review board's re-review path listens for;
+// submitted reviews and pull request comments are how review feedback reaches
+// the agent that authored the branch. Direct-webhook consumers ingest every
+// parsed event; the platform path gates because the remaining events (issue
+// edits, comment edits and deletions) only interest the subscription
+// dispatcher, not the factory rules.
 function isFactoryIngestedEvent(event: ParsedGithubWebhook): boolean {
   if ((event.event === 'issues' || event.event === 'pull_request') && event.payload.action === 'closed') {
     return true;
   }
   if (event.event === 'pull_request') {
     const action = event.payload.action;
-    if (action === 'synchronize' || action === 'review_requested') return true;
+    // `opened` is what mints the Review card for a pull request. Without it a
+    // factory-authored PR never gets reviewed on the polling path, which is the
+    // only path a local deployment has.
+    if (action === 'opened' || action === 'synchronize' || action === 'review_requested') return true;
   }
+  if (event.event === 'pull_request_review' && event.payload.action === 'submitted') return true;
+  if (event.event === 'issue_comment' && event.payload.action === 'created') return true;
+  // Default-branch pushes drive base-checkpoint rebuilds
+  // (`withBaseCheckpointWebhookTrigger` wraps the ingest callback).
+  if (event.event === 'push') return true;
   return false;
 }
 
