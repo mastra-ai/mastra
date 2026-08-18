@@ -1,3 +1,4 @@
+import { isToolUIPart } from '@internal/ai-v6';
 import { describe, expect, it } from 'vitest';
 
 import type { MastraDBMessage, MastraToolInvocationPart } from '../state/types';
@@ -78,6 +79,18 @@ describe('AIV6Adapter — tool_search call/result item id preservation', () => {
     };
 
     const uiMsg = AIV6Adapter.toUIMessage(dbMsg);
+
+    // The write side must emit BOTH ids in their dedicated slots on the UI part,
+    // otherwise fromUIMessage could reconstruct the result id purely from
+    // callProviderMetadata and the round trip would pass vacuously.
+    const uiToolPart = uiMsg.parts[0];
+    expect(isToolUIPart(uiToolPart)).toBe(true);
+    if (!isToolUIPart(uiToolPart) || uiToolPart.state !== 'output-available') {
+      throw new Error('expected a tool_search UI part in output-available state');
+    }
+    expect(uiToolPart.callProviderMetadata?.openai?.itemId).toBe(CALL_ITEM_ID);
+    expect(uiToolPart.resultProviderMetadata?.openai?.itemId).toBe(RESULT_ITEM_ID);
+
     const roundTripped = AIV6Adapter.fromUIMessage(uiMsg);
 
     const toolInvocationPart = findToolInvocationPart(roundTripped, CALL_ITEM_ID);
