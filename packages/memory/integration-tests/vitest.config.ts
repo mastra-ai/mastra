@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig } from '@internal/lint/vitest';
 
 export default defineConfig({
   // Cast to any to avoid vite version mismatch type errors between workspace packages

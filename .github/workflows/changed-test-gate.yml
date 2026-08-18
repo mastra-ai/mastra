@@ -99,6 +99,19 @@ jobs:
 
           while IFS= read -r file; do
             git checkout FETCH_HEAD -- "$file"
+
+            # The test's Vitest config may be newly added in the PR. Restore it
+            # so the test is discovered while the implementation remains on base.
+            config_dir="$(dirname "$file")"
+            while [ "$config_dir" != "." ] && [ "$config_dir" != "/" ]; do
+              for config in vitest.config.ts vitest.config.mts; do
+                if git cat-file -e "FETCH_HEAD:$config_dir/$config" 2>/dev/null; then
+                  git checkout FETCH_HEAD -- "$config_dir/$config"
+                  break 2
+                fi
+              done
+              config_dir="$(dirname "$config_dir")"
+            done
           done < /tmp/changed-test-files
 
           echo "has_tests=true" >> "$GITHUB_OUTPUT"

@@ -37,6 +37,8 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+let workerExecArgv: string[] = [];
+
 interface WorkerMessage {
   type: 'ready' | 'received' | 'error' | 'published';
   data?: any;
@@ -80,9 +82,36 @@ describe('cross-process codec round-trips through UnixSocketPubSub', () => {
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'mc-codec-'));
+    const sourceResolverScript = join(tempDir, 'workspace-source-resolver.mjs');
+    const workspaceRoot = join(__dirname, '../../../../..').replace(/\\/g, '/');
+    await writeFile(
+      sourceResolverScript,
+      `
+import { registerHooks } from 'node:module';
+import { pathToFileURL } from 'node:url';
+import { createWorkspacePackageIndex, resolveWorkspaceSource } from '${workspaceRoot}/packages/_config/src/vitest-source-resolver.js';
+
+const index = createWorkspacePackageIndex('${workspaceRoot}');
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    const resolved = resolveWorkspaceSource(specifier, index, context.parentURL ? new URL(context.parentURL).pathname : undefined);
+    if (resolved) return { url: pathToFileURL(resolved.path).href + resolved.query, shortCircuit: true };
+    return nextResolve(specifier, context);
+  },
+});
+`,
+    );
+    workerExecArgv = process.env.CI ? [] : ['--import', 'tsx', '--import', sourceResolverScript];
     brokerScript = join(tempDir, 'broker.mjs');
     clientScript = join(tempDir, 'client.mjs');
-    const coreDist = join(__dirname, '../../../dist').replace(/\\/g, '/');
+    const eventsPath = join(
+      __dirname,
+      process.env.CI ? '../../../dist/events/index.js' : '../unix-socket-pubsub.ts',
+    ).replace(/\\/g, '/');
+    const streamPath = join(
+      __dirname,
+      process.env.CI ? '../../../dist/stream/index.js' : '../../stream/aisdk/v5/file.ts',
+    ).replace(/\\/g, '/');
 
     // Broker: waits for a "publish" IPC message, encodes the payload according
     // to its `kind`, and publishes it on the shared topic. The payload kind
@@ -94,7 +123,7 @@ describe('cross-process codec round-trips through UnixSocketPubSub', () => {
       `
 import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { UnixSocketPubSub } from '${coreDist}/events/index.js';
+import { UnixSocketPubSub } from '${eventsPath}';
 
 const socketPath = process.argv[2];
 await mkdir(dirname(socketPath), { recursive: true });
@@ -137,7 +166,7 @@ process.on('message', async (msg) => {
         // The codec registry must already contain 'DefaultGeneratedFile'
         // because UnixSocketPubSub's import of codec.ts triggers the
         // registrations IIFE — pin this here, no inline registerClass.
-        const { DefaultGeneratedFile } = await import('${coreDist}/stream/index.js');
+        const { DefaultGeneratedFile } = await import('${streamPath}');
         value = new DefaultGeneratedFile({ data: 'aGVsbG8=', mediaType: 'text/plain' });
       } else {
         throw new Error('unknown kind: ' + kind);
@@ -161,14 +190,14 @@ process.on('message', async (msg) => {
     await writeFile(
       clientScript,
       `
-import { UnixSocketPubSub } from '${coreDist}/events/index.js';
+import { UnixSocketPubSub } from '${eventsPath}';
 
 const socketPath = process.argv[2];
 const expectedKind = process.argv[3];
 
 const pubsub = new UnixSocketPubSub(socketPath);
 
-const { DefaultGeneratedFile: ClientDefaultGeneratedFile } = await import('${coreDist}/stream/index.js');
+const { DefaultGeneratedFile: ClientDefaultGeneratedFile } = await import('${streamPath}');
 
 await pubsub.subscribe('codec-test', e => {
   const v = e.data.value;
@@ -251,6 +280,7 @@ process.on('message', async (msg) => {
 
   function spawnBroker(socketPath: string): ChildProcess {
     const child = fork(brokerScript, [socketPath], {
+      execArgv: workerExecArgv,
       stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
       env: { ...process.env },
     });
@@ -259,6 +289,7 @@ process.on('message', async (msg) => {
   }
   function spawnClient(socketPath: string, expectedKind: string): ChildProcess {
     const child = fork(clientScript, [socketPath, expectedKind], {
+      execArgv: workerExecArgv,
       stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
       env: { ...process.env },
     });
