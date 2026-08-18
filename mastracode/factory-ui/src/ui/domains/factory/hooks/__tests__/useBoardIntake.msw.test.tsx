@@ -13,8 +13,16 @@ import { useBoardIntake } from '../useBoardIntake';
 
 const repository = { projectRepositoryId: 'repo-1', slug: 'acme/app' } as LinkedRepositoryPayload;
 
-function stubIntake(bindings: Array<{ integrationId: string; sourceId: string; factoryProjectId: string }>) {
+function stubIntake(
+  bindings: Array<{ integrationId: string; sourceId: string; factoryProjectId: string }>,
+  factoryIds: string[] = ['factory-1', 'factory-2'],
+) {
   server.use(
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+      HttpResponse.json({
+        projects: factoryIds.map(id => ({ id, name: id, repositories: [] })),
+      }),
+    ),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
       HttpResponse.json({
         config: {
@@ -55,11 +63,19 @@ describe('useBoardIntake Linear gating', () => {
     expect(result.current.available).not.toContain('linear');
   });
 
-  it('given no routing exists yet, when the board loads, then the Linear feed stays available', async () => {
+  it('given no routing and a single Factory, when the board loads, then the Linear feed stays available', async () => {
+    stubIntake([], ['factory-1']);
+
+    const { result } = renderIntake('factory-1');
+
+    await waitFor(() => expect(result.current.available).toContain('linear'));
+  });
+
+  it('given no routing and several Factories, when the board loads, then the Linear feed is withheld', async () => {
     stubIntake([]);
 
     const { result } = renderIntake('factory-2');
 
-    await waitFor(() => expect(result.current.available).toContain('linear'));
+    await waitFor(() => expect(result.current.available).toEqual([]));
   });
 });
