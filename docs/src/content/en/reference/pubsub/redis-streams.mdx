@@ -191,3 +191,13 @@ When a subscriber calls `nack`, the event is republished with an incremented `de
 Lease keys are namespaced under the same `keyPrefix` as topics, as `<keyPrefix>:lease:<key>`. All operations are atomic: `acquireLease` uses `SET NX PX` and refreshes its own TTL idempotently, while `releaseLease`, `renewLease`, and `transferLease` use Lua scripts that check ownership before mutating, so a concurrent renewal from another owner is never clobbered.
 
 You don't call these methods directly. Configuring `RedisStreamsPubSub` as the `pubsub` backend is enough for the runtime to detect and use the capability. See [`LeaseProvider`](/reference/pubsub/lease-provider) for the full method contract.
+
+## Managed provisioning
+
+When you deploy a project that reads `REDIS_URL` from the environment, the Mastra CLI's `deploy` preflight offers to attach a managed Redis on the Mastra platform in one step.
+
+If you accept, `mastra deploy` calls the platform's project-databases API with `kind: 'redis'`. The CLI then waits for the Railway-backed service to reach the ready state before injecting `REDIS_URL` into the deploy so `new RedisStreamsPubSub({ url: process.env.REDIS_URL })` connects without extra setup.
+
+The prompt is shown only when four conditions hold: `REDIS_URL` is referenced by user code, the environment doesn't already have it set, the terminal is interactive, and the org is on a plan that includes managed Redis. Non-interactive runs (CI, `--yes`) fail preflight with a copy-pasteable `mastra env db create --kind redis` command instead of silently creating infrastructure.
+
+You can also provision a managed Redis up front with `mastra env db create --kind redis`. Once attached, the platform meters CPU seconds and memory GB-hours and shows them on the project's Database Usage page.

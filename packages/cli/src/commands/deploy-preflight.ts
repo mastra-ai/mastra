@@ -370,14 +370,38 @@ function checkEnvVarNames(
   if (missing.length === 0) return [];
 
   missing.sort();
-  return [
-    {
+
+  // Split provider-known env vars into their own MISSING_ENV_VAR issues so we
+  // can attach an autofix hint (`create-managed-database`) — the deploy command
+  // then offers inline provisioning. Everything else stays in the single
+  // aggregated text warning.
+  const issues: PreflightIssue[] = [];
+  const unprovisioned: string[] = [];
+  for (const name of missing) {
+    const autofix = dbAutofixFor(name);
+    if (autofix) {
+      issues.push({
+        code: 'MISSING_ENV_VAR',
+        severity: 'warning',
+        message: `Build references ${name} but the env file being deployed does not provide it.`,
+        fix: `Add ${name} to your env file, or let \`mastra deploy\` provision a managed ${autofix.provider} for this environment.`,
+        autofix,
+      });
+    } else {
+      unprovisioned.push(name);
+    }
+  }
+
+  if (unprovisioned.length > 0) {
+    issues.push({
       code: 'MISSING_ENV_VAR',
       severity: 'warning',
-      message: `Build references ${missing.length} env var(s) not in the env file being deployed: ${missing.join(', ')}`,
+      message: `Build references ${unprovisioned.length} env var(s) not in the env file being deployed: ${unprovisioned.join(', ')}`,
       fix: `Add them to your env file, or confirm your code provides a fallback (e.g. \`process.env.X ?? 'default'\`).`,
-    },
-  ];
+    });
+  }
+
+  return issues;
 }
 
 /* ------------------------------------------------------------------ */
