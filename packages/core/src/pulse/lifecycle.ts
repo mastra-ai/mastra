@@ -50,6 +50,8 @@ export interface LifecycleSiteContext {
   name?: string;
   /** First-hand token data (fold-key shape) — the read-time cost source. */
   usage?: Record<string, number | undefined>;
+  /** Small identity attributes (e.g. model/provider for price resolution). */
+  attributes?: Record<string, string | number | boolean | undefined>;
 }
 
 /** Map a raw usage object to the canonical fold-key token data. */
@@ -247,6 +249,9 @@ function emitMintedFact(phase: 'started' | 'ended', ctx: LifecycleSiteContext & 
   const data: Record<string, number> = {};
   if (ctx.usage) for (const [k, v] of Object.entries(ctx.usage)) if (typeof v === 'number') data[k] = v;
 
+  const attributes: Record<string, unknown> = {};
+  if (ctx.attributes) for (const [k, v] of Object.entries(ctx.attributes)) if (v !== undefined) attributes[k] = v;
+
   emitPulseFact({
     id: pulseId,
     runId: ctx.runId,
@@ -254,6 +259,7 @@ function emitMintedFact(phase: 'started' | 'ended', ctx: LifecycleSiteContext & 
     surface: ctx.surface,
     action,
     type,
+    attributes: Object.keys(attributes).length ? attributes : undefined,
     level: ctx.error && isEnd ? 'error' : undefined,
     text: ctx.name,
     data: Object.keys(data).length ? data : undefined,

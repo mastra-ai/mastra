@@ -202,6 +202,12 @@ export abstract class PulseStorage extends StorageDomain {
   /** All pulses of a flow (plus session-lane rows joined by thread) in order. */
   abstract getFlowTimeline(flowId: string): Promise<FlowTimelineEntry[]>;
 
+  /** Append versioned model price rows (read-time cost derivation). */
+  abstract upsertModelPrices(rows: import('../../../pulse/pricing').ModelPriceRow[]): Promise<void>;
+
+  /** All price rows (readers reduce to latest-version per model). */
+  abstract listModelPrices(): Promise<import('../../../pulse/pricing').ModelPriceRow[]>;
+
   /** Remove everything (test/dev helper). */
   abstract dangerouslyClearAll(): Promise<void>;
 

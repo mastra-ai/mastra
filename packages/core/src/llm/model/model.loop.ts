@@ -344,6 +344,7 @@ export class MastraLLMVNext extends MastraBase {
               base: 'generate',
               output: true,
               usage: usageTokenData(props?.totalUsage),
+              attributes: { model: firstModel.modelId, provider: firstModel.provider },
             });
 
             try {

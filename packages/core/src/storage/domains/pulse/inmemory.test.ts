@@ -223,6 +223,54 @@ describe('InMemoryPulseStorage (derivation rules)', () => {
     expect(filtered.flows).toHaveLength(1);
   });
 
+  it('derives cost at read time from usage × the latest price version', async () => {
+    const s = store();
+    const rows = completedFlow('flow-c1', 't-1');
+    // Model end fact carries first-hand usage + model identity — no stored cost.
+    rows[2] = {
+      ...rows[2]!,
+      data: { total_input_tokens: 1000, total_output_tokens: 500 },
+      attributes: { model: 'gpt-4o-mini', provider: 'openai' },
+    };
+    await s.batchCreatePulses(rows);
+    await s.upsertModelPrices([
+      {
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        currency: 'USD',
+        version: 1,
+        validFrom: T0,
+        tiers: [{ rates: { input_tokens: 0.00001, output_tokens: 0.00002 } }],
+      },
+    ]);
+    let { flows } = await s.listFlows();
+    expect(flows[0]!.costUsd).toBeCloseTo(1000 * 0.00001 + 500 * 0.00002, 10);
+
+    // Retroactive correction: append version 2 → the SAME historical flow's
+    // cost recomputes at read. Write-time folding could never do this.
+    await s.upsertModelPrices([
+      {
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        currency: 'USD',
+        version: 2,
+        validFrom: T0,
+        tiers: [{ rates: { input_tokens: 0.0001, output_tokens: 0.0002 } }],
+      },
+    ]);
+    ({ flows } = await s.listFlows());
+    expect(flows[0]!.costUsd).toBeCloseTo(1000 * 0.0001 + 500 * 0.0002, 10);
+  });
+
+  it('stored folded cost stays readable when no price row matches (older data)', async () => {
+    const s = store();
+    const rows = completedFlow('flow-c2', 't-2');
+    rows[2] = { ...rows[2]!, data: { total_output_tokens: 42, cost_usd: 0.0002 } };
+    await s.batchCreatePulses(rows);
+    const { flows } = await s.listFlows();
+    expect(flows[0]!.costUsd).toBeCloseTo(0.0002, 10);
+  });
+
   it('filters flows by resourceId', async () => {
     const s = store();
     await s.batchCreatePulses(completedFlow('flow-a', 't-1').map(p => ({ ...p, resourceId: 'user-a' })));
@@ -374,7 +422,10 @@ describe('InMemoryPulseStorage flow index', () => {
     const indexed = await s.listFlowsFromIndex();
 
     expect(indexed.total).toBe(derived.total);
-    expect(indexed.flows).toEqual(derived.flows);
+    // The quarantined index stores only summary columns — compare on the
+    // fields it can know (runId/resourceId exist only on derived rows).
+    const indexComparable = ({ runId: _r, resourceId: _u, ...rest }: any) => rest;
+    expect(indexed.flows).toEqual(derived.flows.map(indexComparable));
     expect(derived.flows.map(f => `${f.flowId}:${f.status}`)).toEqual([
       'flow-live:running',
       'flow-aborted:aborted',
@@ -383,9 +434,11 @@ describe('InMemoryPulseStorage flow index', () => {
       'flow-stale:stale',
     ]);
     // and the filters see the same world
-    expect(await s.listFlowsFromIndex({ filter: { status: 'aborted' } })).toEqual(
-      await s.listFlows({ filter: { status: 'aborted' } }),
-    );
+    const derivedAborted = await s.listFlows({ filter: { status: 'aborted' } });
+    expect(await s.listFlowsFromIndex({ filter: { status: 'aborted' } })).toEqual({
+      ...derivedAborted,
+      flows: derivedAborted.flows.map(indexComparable),
+    });
   });
 });
 

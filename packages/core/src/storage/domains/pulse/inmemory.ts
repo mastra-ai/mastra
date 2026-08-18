@@ -1,3 +1,5 @@
+import { deriveCostUsd, latestPrices, priceFor } from '../../../pulse/pricing';
+import type { ModelPriceRow } from '../../../pulse/pricing';
 import type {
   FlowDetail,
   FlowIndexRow,
@@ -36,6 +38,7 @@ export class InMemoryPulseStorage extends PulseStorage {
   #relationshipIds = new Set<string>();
   /** Materialized flow index (experimental) — highest version per flow wins. */
   #flowIndex = new Map<string, FlowIndexRow & { updatedAt: Date }>();
+  #modelPrices: ModelPriceRow[] = [];
   #staleThresholdMs: number;
   #now: () => number;
 
@@ -61,12 +64,21 @@ export class InMemoryPulseStorage extends PulseStorage {
     }
   }
 
+  async upsertModelPrices(rows: ModelPriceRow[]): Promise<void> {
+    this.#modelPrices.push(...rows);
+  }
+
+  async listModelPrices(): Promise<ModelPriceRow[]> {
+    return [...this.#modelPrices];
+  }
+
   async dangerouslyClearAll(): Promise<void> {
     this.#pulses = [];
     this.#relationships = [];
     this.#pulseIds.clear();
     this.#relationshipIds.clear();
     this.#flowIndex.clear();
+    this.#modelPrices = [];
   }
 
   supportsFlowIndex(): boolean {
@@ -165,12 +177,21 @@ export class InMemoryPulseStorage extends PulseStorage {
         ? rootEnd.timestamp.getTime() - rootStart.timestamp.getTime()
         : null;
 
-    // Cost single-source: the bridge folds token cost into the semantic
-    // model pulse's data (cost_usd) — live capture and backfill both.
+    // Cost is DERIVED at read time: usage on model end facts × the latest
+    // versioned price row (pulse/pricing.ts — one shared rule for every
+    // reader). A stored cost_usd from older rows remains readable as a
+    // recorded fact when no price row matches.
+    const prices = latestPrices(this.#modelPrices);
     let costUsd: number | undefined;
     for (const p of this.#pulses) {
       if (p.traceId !== flowId || !LIFECYCLE_LANES.has(p.source)) continue;
-      const c = p.data?.cost_usd;
+      const price = priceFor(
+        prices,
+        p.attributes?.provider as string | undefined,
+        p.attributes?.model as string | undefined,
+      );
+      const derived = price ? deriveCostUsd(p.data as Record<string, number> | undefined, price) : undefined;
+      const c = derived ?? (typeof p.data?.cost_usd === 'number' ? p.data.cost_usd : undefined);
       if (typeof c === 'number') costUsd = (costUsd ?? 0) + c;
     }
 

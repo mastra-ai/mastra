@@ -104,15 +104,6 @@ const MODEL_SPAN_TYPES = new Set(['model_generation', 'model_step', 'model_infer
  * Auto-extracted token metric name → data key on the semantic model pulse.
  * Source of truth: observability/mastra/src/metrics/types.ts (TokenMetrics).
  */
-/**
- * Cost rides ONLY the two carrier totals. The metrics layer attaches an
- * estimatedCost to every detail metric AND puts the SUM of those details on
- * the matching total (observability/mastra/src/metrics/estimator.ts), and a
- * provider-supplied costContext is attached to one total as `query_total`.
- * Folding detail costs as well would double the true cost.
- */
-const COST_CARRIER_METRICS = new Set(['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens']);
-
 const TOKEN_METRIC_FOLD: Record<string, string> = {
   mastra_model_total_input_tokens: 'total_input_tokens',
   mastra_model_total_output_tokens: 'total_output_tokens',
@@ -540,12 +531,13 @@ export class PulseBridge extends MastraBase implements ObservabilityExporter {
     if (foldKey && metric.spanId) {
       // Shared store: the native lifecycle emitter folds the SAME data onto
       // its model end fact, keeping the two lanes byte-identical.
+      // Tokens only: cost is DERIVED at read time from usage × the pulse
+      // price table (pulse/pricing.ts) — write-time cost folding is gone.
       recordTokenMetric({
         spanId: metric.spanId,
         traceId: metric.traceId ?? '',
         foldKey,
         value,
-        cost: hasCost && COST_CARRIER_METRICS.has(name) ? cost : undefined,
       });
       return;
     }

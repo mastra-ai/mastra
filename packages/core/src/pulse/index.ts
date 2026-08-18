@@ -7,3 +7,4 @@ export * from './seq';
 export * from './emitter';
 export * from './lifecycle';
 export * from './identity';
+export * from './pricing';

@@ -224,7 +224,7 @@ describe('PulseBridge nativeSurfaces switch', () => {
     );
     await bridge.flush();
     const leftover = pulses.find(p => p.action === 'metric_recorded');
-    expect(leftover?.data).toEqual({ total_output_tokens: 9, cost_usd: 0.002 });
+    expect(leftover?.data).toEqual({ total_output_tokens: 9 });
   });
 });
 
@@ -263,7 +263,6 @@ describe('PulseBridge enrichment switch (directive 3)', () => {
       total_input_tokens: 30,
       total_output_tokens: 35,
       output_reasoning_tokens: 5,
-      cost_usd: 0.01,
     });
 
     // Cache entry consumed: flush emits no leftover metric pulses.
@@ -377,8 +376,10 @@ describe('PulseBridge enrichment switch (directive 3)', () => {
     });
 
     expect(pulses).toHaveLength(1);
-    // True cost = 0.003 (input total) + 0.007 (output total) = 0.01 — NOT 0.02.
-    expect(pulses[0]!.data!.cost_usd).toBeCloseTo(0.01, 10);
+    // Cost never folds at write anymore — it is DERIVED at read time from
+    // usage × the pulse price table. The fold carries tokens only.
+    expect(pulses[0]!.data!.cost_usd).toBeUndefined();
+    expect(pulses[0]!.data).toMatchObject({ total_input_tokens: 30, total_output_tokens: 40 });
   });
 
   it('drains leftover cache entries as metric_recorded pulses on flush and shutdown', async () => {
@@ -401,7 +402,7 @@ describe('PulseBridge enrichment switch (directive 3)', () => {
       traceId: 'trace-1',
       source: 'metric',
     });
-    expect(pulses[0]!.data).toEqual({ total_input_tokens: 30, total_output_tokens: 40, cost_usd: 0.004 });
+    expect(pulses[0]!.data).toEqual({ total_input_tokens: 30, total_output_tokens: 40 });
 
     // Cache cleared: draining again emits nothing.
     await bridge.shutdown();

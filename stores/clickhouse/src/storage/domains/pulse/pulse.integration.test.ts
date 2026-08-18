@@ -517,6 +517,69 @@ describe('status rule parity: ClickHouse must match the in-memory oracle', () =>
   });
 });
 
+describe('read-time cost derivation (live)', () => {
+  it('derives from usage × latest price version; retroactive corrections recompute', async ctx => {
+    if (!available) return ctx.skip();
+    const store = makeStore();
+    await store.init();
+    await store.dangerouslyClearAll();
+
+    let seq = 0;
+    const p = (o: Record<string, any>) => ({
+      id: `pc${++seq}`,
+      timestamp: at(seq * 100),
+      seq,
+      type: 'state' as const,
+      surface: 'agent',
+      action: 'run_started',
+      traceId: 'flow-cost',
+      runId: 'run-cost',
+      spanId: `s${seq}`,
+      source: 'native',
+      ...o,
+    });
+    await store.batchCreatePulses([
+      p({ spanId: 'root' }),
+      p({
+        spanId: 'gen',
+        parentSpanId: 'root',
+        surface: 'model',
+        action: 'generate_completed',
+        type: 'output',
+        data: { total_input_tokens: 1000, total_output_tokens: 500 },
+        attributes: { model: 'gpt-4o-mini', provider: 'openai' },
+      }),
+      p({ spanId: 'root', action: 'run_completed', type: 'output' }),
+    ] as any);
+
+    await store.upsertModelPrices([
+      {
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        currency: 'USD',
+        version: 1,
+        validFrom: T0,
+        tiers: [{ rates: { input_tokens: 0.00001, output_tokens: 0.00002 } }],
+      },
+    ]);
+    let { flows } = await store.listFlows();
+    expect(flows[0]!.costUsd).toBeCloseTo(1000 * 0.00001 + 500 * 0.00002, 10);
+
+    await store.upsertModelPrices([
+      {
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        currency: 'USD',
+        version: 2,
+        validFrom: T0,
+        tiers: [{ rates: { input_tokens: 0.0001, output_tokens: 0.0002 } }],
+      },
+    ]);
+    ({ flows } = await store.listFlows());
+    expect(flows[0]!.costUsd).toBeCloseTo(1000 * 0.0001 + 500 * 0.0002, 10);
+  });
+});
+
 describe('flow list pushdown (live)', () => {
   it('filters by resourceId and reports true totals past 1000 flows', async ctx => {
     if (!available) return ctx.skip();

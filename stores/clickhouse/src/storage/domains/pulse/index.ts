@@ -1,4 +1,6 @@
 import type { ClickHouseClient } from '@clickhouse/client';
+import { deriveCostUsd, latestPrices, priceFor } from '@mastra/core/pulse';
+import type { ModelPriceRow } from '@mastra/core/pulse';
 import { PulseStorage } from '@mastra/core/storage';
 import type {
   FlowDetail,
@@ -49,6 +51,17 @@ export const PULSES_DDL = `CREATE TABLE IF NOT EXISTS pulses (
   resource_id    String,
   source         LowCardinality(String)
 ) ENGINE = MergeTree ORDER BY (trace_id, timestamp, seq)`;
+
+export const MODEL_PRICES_DDL = `CREATE TABLE IF NOT EXISTS model_prices (
+  provider    String,
+  model       String,
+  currency    String,
+  version     UInt32,
+  valid_from  DateTime64(3),
+  tiers       String,
+  PRIMARY KEY (provider, model, version)
+) ENGINE = ReplacingMergeTree
+ORDER BY (provider, model, version)`;
 
 export const RELATIONSHIPS_DDL = `CREATE TABLE IF NOT EXISTS relationships (
   id         String,
@@ -192,6 +205,87 @@ export class PulseStorageClickhouse extends PulseStorage {
     await this.client.command({ query: PULSES_DDL });
     await this.client.command({ query: RELATIONSHIPS_DDL });
     await this.client.command({ query: FLOWS_DDL });
+    await this.client.command({ query: MODEL_PRICES_DDL });
+  }
+
+  async upsertModelPrices(rows: ModelPriceRow[]): Promise<void> {
+    if (!rows.length) return;
+    await this.client.insert({
+      table: 'model_prices',
+      values: rows.map(r => ({
+        provider: r.provider,
+        model: r.model,
+        currency: r.currency,
+        version: r.version,
+        valid_from: chTime(r.validFrom),
+        tiers: JSON.stringify(r.tiers),
+      })),
+      format: 'JSONEachRow',
+    });
+  }
+
+  async listModelPrices(): Promise<ModelPriceRow[]> {
+    const rs = await this.client.query({
+      query: `SELECT provider, model, currency, version, valid_from, tiers FROM model_prices FINAL`,
+      format: 'JSONEachRow',
+    });
+    const rows = await rs.json<{
+      provider: string;
+      model: string;
+      currency: string;
+      version: string | number;
+      valid_from: string;
+      tiers: string;
+    }>();
+    return rows.map(r => ({
+      provider: r.provider,
+      model: r.model,
+      currency: r.currency,
+      version: Number(r.version),
+      validFrom: parseTs(r.valid_from),
+      tiers: JSON.parse(r.tiers),
+    }));
+  }
+
+  /**
+   * Derived read-time cost per flow: usage on model end facts × latest
+   * price rows, via the SAME shared rule as the in-memory reader. A
+   * stored cost_usd (older rows) stays readable when no price matches.
+   */
+  async #withDerivedCost(summary: FlowSummary): Promise<FlowSummary> {
+    const derived = await this.#derivedCosts([summary.flowId]);
+    if (derived.has(summary.flowId)) summary.costUsd = derived.get(summary.flowId);
+    return summary;
+  }
+
+  async #derivedCosts(flowIds: string[]): Promise<Map<string, number>> {
+    const out = new Map<string, number>();
+    if (!flowIds.length) return out;
+    const prices = latestPrices(await this.listModelPrices());
+    const rs = await this.client.query({
+      query: `SELECT trace_id, data, attributes FROM (SELECT * FROM pulses LIMIT 1 BY id)
+              WHERE trace_id IN {var_flows:Array(String)}
+                AND source IN ('span','native')
+                AND data != '{}' AND data != ''`,
+      query_params: { var_flows: flowIds },
+      format: 'JSONEachRow',
+    });
+    const rows = await rs.json<{ trace_id: string; data: string; attributes: string }>();
+    for (const r of rows) {
+      let data: Record<string, number>;
+      let attrs: Record<string, unknown>;
+      try {
+        data = JSON.parse(r.data || '{}');
+        attrs = JSON.parse(r.attributes || '{}');
+      } catch {
+        continue;
+      }
+      const price = priceFor(prices, attrs.provider as string | undefined, attrs.model as string | undefined);
+      const derived = price ? deriveCostUsd(data, price) : undefined;
+      const c = derived ?? (typeof data.cost_usd === 'number' ? data.cost_usd : undefined);
+      if (typeof c === 'number') out.set(r.trace_id, (out.get(r.trace_id) ?? 0) + c);
+    }
+    return out;
   }
 
   async batchCreatePulses(records: PulseRecord[]): Promise<void> {
@@ -421,7 +515,10 @@ export class PulseStorageClickhouse extends PulseStorage {
     ]);
     const rows = await pageResult.json<FlowAggRow>();
     const countRows = await countResult.json<{ total: string | number }>();
-    return { flows: rows.map(r => this.#toSummary(r)), total: Number(countRows[0]?.total ?? 0) };
+    const flows = rows.map(r => this.#toSummary(r));
+    const derived = await this.#derivedCosts(flows.map(f => f.flowId));
+    for (const f of flows) if (derived.has(f.flowId)) f.costUsd = derived.get(f.flowId);
+    return { flows, total: Number(countRows[0]?.total ?? 0) };
   }
 
   async getFlow(flowId: string): Promise<FlowDetail | null> {
@@ -480,7 +577,7 @@ export class PulseStorageClickhouse extends PulseStorage {
     });
     const definitions = (await defs.json<{ to_id: string }>()).map(d => d.to_id);
 
-    return { ...this.#toSummary(agg), tree, definitions };
+    return { ...(await this.#withDerivedCost(this.#toSummary(agg))), tree, definitions };
   }
 
   async getFlowTimeline(flowId: string): Promise<FlowTimelineEntry[]> {
