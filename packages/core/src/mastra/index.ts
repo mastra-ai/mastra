@@ -20,6 +20,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { MastraScorer } from '../evals';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
+import { isRunLocalTopic } from '../events/topics';
 import type { Event, EventCallback } from '../events/types';
 import type { Harness } from '../harness';
 import { AvailableHooks, deregisterHook, registerHook } from '../hooks';
@@ -896,7 +897,7 @@ export class Mastra<
                 if (isOwnedHere) {
                   return target.publish(topic, event, { localOnly: true });
                 }
-              } else if (topic.startsWith('workflow.events.v2.')) {
+              } else if (isRunLocalTopic(topic)) {
                 // Per-run watch stream events. Only the publishing process
                 // consumes these (execution-engine subscribes per-run). No
                 // cross-instance fan-out needed.
