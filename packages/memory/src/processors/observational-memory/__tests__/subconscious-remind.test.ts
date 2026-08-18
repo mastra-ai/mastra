@@ -1,6 +1,7 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
+import type { MemoryStorage } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import { applyExtractorHooks } from '../extracted-values';
@@ -613,12 +614,28 @@ describe('Subconscious remind', () => {
       });
       await memory.saveThread({ thread: thread('alpha') });
       await memory.saveThread({ thread: thread('subconscious:alpha:remind') });
+      const memoryStore = await (memory as unknown as { getMemoryStore(): Promise<MemoryStorage> }).getMemoryStore();
+      await memoryStore.saveMessages({
+        messages: [
+          {
+            id: 'remind-msg-1',
+            threadId: 'subconscious:alpha:remind',
+            resourceId: 'user-42',
+            role: 'assistant' as const,
+            content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'a persisted reminder' }] },
+            type: 'text',
+            createdAt: now,
+          },
+        ],
+      });
 
       await memory.deleteThread('alpha');
 
-      // The session owns its derived reminder conversation: both die together.
+      // The session owns its derived reminder conversation: both die together, messages included.
       expect(await memory.getThreadById({ threadId: 'alpha' })).toBeNull();
       expect(await memory.getThreadById({ threadId: 'subconscious:alpha:remind' })).toBeNull();
+      const remaining = await memoryStore.listMessages({ threadId: 'subconscious:alpha:remind' });
+      expect(remaining.messages).toHaveLength(0);
     });
 
     it('leaves other sessions reminder conversations alone when a thread is deleted', async () => {

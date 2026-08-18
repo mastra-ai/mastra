@@ -917,6 +917,15 @@ export class Memory extends MastraMemory {
 
   async deleteThread(threadId: string): Promise<void> {
     const memoryStore = await this.getMemoryStore();
+    // The session's derived reminder conversation lives and dies with the session. Delete it first,
+    // through this same path, so a failure leaves the parent thread intact and the whole deletion
+    // retryable instead of orphaning the derived thread. The recursion terminates because the
+    // derived key grows at every level, so it can only descend as deep as threads actually exist.
+    const derivedRemindThreadId = remindThreadKey(threadId);
+    const derivedRemindThread = await memoryStore.getThreadById({ threadId: derivedRemindThreadId });
+    if (derivedRemindThread) {
+      await this.deleteThread(derivedRemindThreadId);
+    }
     const thread = await memoryStore.getThreadById({ threadId });
     await memoryStore.deleteThread({ threadId });
     if (thread?.resourceId && memoryStore.supportsObservationalMemory) {
@@ -924,14 +933,6 @@ export class Memory extends MastraMemory {
     }
     if (this.vector) {
       this.trackVectorCleanup(this.deleteThreadVectors(threadId));
-    }
-    // The session's derived reminder conversation lives and dies with the session. Delete it
-    // through the same path so its observational memory and vectors are cleaned up too; the
-    // recursion terminates because a derived thread has no derived thread of its own.
-    const derivedRemindThreadId = remindThreadKey(threadId);
-    const derivedRemindThread = await memoryStore.getThreadById({ threadId: derivedRemindThreadId });
-    if (derivedRemindThread) {
-      await this.deleteThread(derivedRemindThreadId);
     }
   }
 
