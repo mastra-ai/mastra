@@ -97,21 +97,32 @@ if (redisUrl) {
 //      credential (sandboxes, GitHub/Linear slots), not an identity signal —
 //      platform compute plus self-managed sign-in is a supported combination.
 //   4. Nothing configured — leave undefined and MastraFactory installs its
-//      platform-backed default provider.
+//      platform-backed default provider, which names its target at boot.
 const authDisabled = process.env.MASTRACODE_AUTH_DISABLED === '1';
-const workosConfigured = Boolean(process.env.WORKOS_API_KEY?.trim() && process.env.WORKOS_CLIENT_ID?.trim());
+const workosApiKey = process.env.WORKOS_API_KEY?.trim();
+const workosClientId = process.env.WORKOS_CLIENT_ID?.trim();
+const workosConfigured = Boolean(workosApiKey && workosClientId);
+const sharedApiUrl = process.env.MASTRA_SHARED_API_URL?.trim();
 let auth: IMastraAuthProvider | null | undefined;
 
 if (authDisabled) {
   auth = null;
-} else if (process.env.MASTRA_SHARED_API_URL?.trim()) {
-  if (workosConfigured) {
+  console.warn('[Auth] MASTRACODE_AUTH_DISABLED=1 — auth is off and every route is open.');
+} else if (sharedApiUrl) {
+  if (workosApiKey || workosClientId) {
     console.warn(
       '[Auth] WORKOS_API_KEY/WORKOS_CLIENT_ID are set but ignored: MASTRA_SHARED_API_URL takes precedence, so sign-in defers to the platform. Unset MASTRA_SHARED_API_URL to use self-managed WorkOS auth.',
     );
   }
+  console.log(`[Auth] Identity defers to the Mastra platform at ${sharedApiUrl}.`);
 } else if (workosConfigured) {
   auth = new MastraAuthWorkos({ fetchMemberships: true });
+  console.log(`[Auth] Self-managed WorkOS sign-in (client ${workosClientId}).`);
+} else if (workosApiKey || workosClientId) {
+  console.warn(
+    `[Auth] ${workosApiKey ? 'WORKOS_CLIENT_ID' : 'WORKOS_API_KEY'} is missing, so self-managed WorkOS sign-in is off ` +
+      'and identity defers to the Mastra platform instead. Set both variables to use your own WorkOS.',
+  );
 }
 
 // Direct GitHub App fallback: when the platform-backed integration isn't in

@@ -251,9 +251,16 @@ function resolveSandboxWorkdirBase(machine: WorkspaceSandbox, configuredWorkdir?
  *   4. otherwise host-only (no `Domain=`), which is correct for `localhost`.
  */
 function buildDefaultStudioAuth(publicUrl: string): IMastraAuthProvider {
-  return new MastraAuthStudio({
+  const provider = new MastraAuthStudio({
     cookieDomain: parentDomainFromPublicUrl(publicUrl),
   });
+  // Nobody chose this identity target, so name it. Log, not warn: the default
+  // is supported — it just must not be invisible.
+  console.log(
+    `[factory] Identity defers to ${provider.sharedApiUrl} (default). ` +
+      'Pass `auth` for your own provider, `auth: null` to disable auth, or MASTRA_SHARED_API_URL to point elsewhere.',
+  );
+  return provider;
 }
 
 /**

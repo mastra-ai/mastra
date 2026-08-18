@@ -75,7 +75,8 @@ export class MastraAuthStudio
 {
   readonly isMastraCloudAuth = true;
 
-  private sharedApiUrl: string;
+  /** Public so callers can report which identity endpoint they resolved to. */
+  readonly sharedApiUrl: string;
   private organizationId: string | undefined;
   private useProductionCookies: boolean;
   private cookieDomain: string | undefined;
