@@ -352,6 +352,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
       }
       await this.#activity('node-merged', 'node', source.id, source.scope, undefined, session);
       await this.#outbox('node', source.id, 'delete', input.sourceVersion + 1, source.scope, session);
+      await this.#outbox('node', target.id, 'upsert', createKnowledgeUlid(), target.scope, session);
       return target;
     });
   }
