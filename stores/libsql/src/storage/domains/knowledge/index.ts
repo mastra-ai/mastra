@@ -17,6 +17,7 @@ import {
   KnowledgeConflictError,
   KnowledgeNotFoundError,
   KnowledgeStorage,
+  parseKnowledgeNodeCursor,
   parseKnowledgeWikilinks,
   TABLE_KNOWLEDGE_ACTIVITY,
   TABLE_KNOWLEDGE_CURSORS,
@@ -285,9 +286,20 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     }
     if (input.hasContent !== undefined)
       clauses.push(input.hasContent ? "content IS NOT NULL AND content <> ''" : "(content IS NULL OR content = '')");
+    if (input.cursor) {
+      const cursor = parseKnowledgeNodeCursor(input.cursor, {
+        namePrefix: input.namePrefix,
+        kind: input.kind,
+        hasContent: input.hasContent,
+      });
+      clauses.push('(updatedAt < ? OR (updatedAt = ? AND (name > ? OR (name = ? AND id > ?))))');
+      const updatedAt = cursor.updatedAt.toISOString();
+      args.push(updatedAt, updatedAt, cursor.name, cursor.name, cursor.id);
+    }
     args.push(input.limit ?? 100);
     const result = await this.#client.execute({
-      sql: `SELECT *, json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_NODES}" WHERE ${clauses.join(' AND ')} ORDER BY updatedAt DESC, name ASC LIMIT ?`,
+      sql: `SELECT *, json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_NODES}" WHERE ${clauses.join(' AND ')} ORDER BY updatedAt DESC, name ASC, id ASC LIMIT ?`,
+
       args,
     });
     return result.rows.map(parseNode);

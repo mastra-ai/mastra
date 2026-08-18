@@ -11,6 +11,7 @@ import {
   KnowledgeConflictError,
   KnowledgeNotFoundError,
   KnowledgeStorage,
+  parseKnowledgeNodeCursor,
   parseKnowledgeWikilinks,
 } from './base';
 import type {
@@ -160,6 +161,13 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
 
   async listNodes(input: ListKnowledgeNodesInput): Promise<KnowledgeNode[]> {
     const queryScope = canonicalizeKnowledgeScope(input.scope);
+    const cursor = input.cursor
+      ? parseKnowledgeNodeCursor(input.cursor, {
+          namePrefix: input.namePrefix,
+          kind: input.kind,
+          hasContent: input.hasContent,
+        })
+      : undefined;
     return [...this.#db.knowledgeNodes.values()]
       .filter(node => !node.mergedInto)
       .filter(node => isKnowledgeScopeVisible(node.scope, queryScope))
@@ -168,7 +176,18 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       )
       .filter(node => !input.kind || node.kind === input.kind)
       .filter(node => input.hasContent === undefined || Boolean(node.content) === input.hasContent)
-      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime() || a.name.localeCompare(b.name))
+      .sort(
+        (a, b) =>
+          b.updatedAt.getTime() - a.updatedAt.getTime() ||
+          (a.name === b.name ? a.id.localeCompare(b.id) : a.name.localeCompare(b.name)),
+      )
+      .filter(
+        node =>
+          !cursor ||
+          node.updatedAt < cursor.updatedAt ||
+          (node.updatedAt.getTime() === cursor.updatedAt.getTime() &&
+            (node.name > cursor.name || (node.name === cursor.name && node.id > cursor.id))),
+      )
       .slice(0, input.limit ?? 100)
       .map(cloneNode);
   }
