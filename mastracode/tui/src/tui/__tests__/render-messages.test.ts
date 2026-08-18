@@ -3,6 +3,7 @@ import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { createSignal } from '@mastra/core/signals';
 import { describe, expect, it, vi } from 'vitest';
 
+import { AssistantRenderRegistry } from '../assistant-render-registry.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
 import { JudgeDisplayComponent } from '../components/judge-display.js';
@@ -28,6 +29,7 @@ function createState(): TUIState {
     pendingTools: new Map(),
     pendingSubagents: new Map(),
     allShellComponents: [],
+    assistantRenderRegistry: new AssistantRenderRegistry(),
     messageComponentsById: new Map(),
     pendingSignalMessageComponentsById: new Map(),
     followUpComponents: [],

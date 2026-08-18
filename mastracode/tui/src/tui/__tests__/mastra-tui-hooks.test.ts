@@ -31,6 +31,7 @@ vi.mock('../status-line.js', () => ({
   updateStatusLine: mocks.updateStatusLine,
 }));
 
+import { AssistantRenderRegistry } from '../assistant-render-registry.js';
 import { MastraTUI } from '../mastra-tui.js';
 
 function createHookResult(overrides: Record<string, unknown> = {}) {
@@ -56,6 +57,7 @@ function createBareTui(hookManager?: Record<string, unknown>) {
 
   tui.state = {
     hookManager,
+    assistantRenderRegistry: new AssistantRenderRegistry(),
     ui: { stop: vi.fn(), requestRender: vi.fn() },
     idleCounter: { setTimingState: vi.fn(), update: vi.fn() },
   };
