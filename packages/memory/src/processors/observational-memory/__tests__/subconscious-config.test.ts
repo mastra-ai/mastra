@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { Memory, Subconscious } from '../../../index';
 import type { Extractor } from '../extractor';
+import { usableObservationalMemoryModel } from '../subconscious/model';
 import type { ObservationalMemoryConfig } from '../types';
 
 const model = 'openai/gpt-5';
@@ -109,6 +110,13 @@ describe('Subconscious configuration', () => {
       ['capture', 'structured'],
       ['ticket', 'structured'],
     ]);
+  });
+
+  it('preserves an empty dynamic model list for actionable Agent validation', async () => {
+    const dynamicModel = usableObservationalMemoryModel((async () => []) as any);
+
+    expect(typeof dynamicModel).toBe('function');
+    await expect((dynamicModel as (context: unknown) => Promise<unknown>)({})).resolves.toEqual([]);
   });
 
   it('fails initialization explicitly when semantic infrastructure is missing', () => {

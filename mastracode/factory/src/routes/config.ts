@@ -606,6 +606,7 @@ async function persistMemorySettings(
 /** Dependencies injected into {@link ConfigRoutes}. */
 export interface ConfigRoutesDeps extends RouteDependencies {
   controller: ModelCatalog;
+  features?: { knowledge: boolean };
   authStorage?: AuthStorage;
   /** Tenant credential domain handle; absent in local (no-DB) mode. */
   modelCredentials?: ModelCredentialsStorage;
@@ -628,6 +629,7 @@ export interface ConfigRoutesDeps extends RouteDependencies {
 
 /**
  * The web config routes as Mastra `apiRoutes`:
+ *   - `GET    /web/config/features`               — list server-enabled product features
  *   - `GET    /web/config/providers`              — list providers + key source
  *   - `PUT    /web/config/providers/:provider/key` — set/update a provider's API key
  *   - `DELETE /web/config/providers/:provider/key` — remove a stored API key
@@ -650,6 +652,12 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
     const onCustomProvidersChanged = options.onCustomProvidersChanged ?? (() => {});
 
     return [
+      registerApiRoute('/web/config/features', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => c.json({ knowledge: options.features?.knowledge ?? false }),
+      }),
+
       registerApiRoute('/web/config/providers', {
         method: 'GET',
         requiresAuth: false,

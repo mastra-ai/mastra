@@ -302,7 +302,7 @@ describe('Subconscious LibSQL integration', () => {
     });
 
     expect(result.observed).toBe(true);
-    expect(getModel).toHaveBeenCalled();
+    expect(getModel).not.toHaveBeenCalled();
     expect(streamCall).toBe(1);
     expect(sendSignal).toHaveBeenCalledOnce();
     expect(sendSignal).toHaveBeenCalledWith(
@@ -409,7 +409,7 @@ describe('Subconscious LibSQL integration', () => {
     });
 
     expect(result.observed).toBe(true);
-    expect(getModel).toHaveBeenCalled();
+    expect(getModel).not.toHaveBeenCalled();
     expect(targetedDeliveries).toEqual([
       expect.objectContaining({
         resourceId,
