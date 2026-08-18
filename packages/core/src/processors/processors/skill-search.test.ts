@@ -177,7 +177,7 @@ describe('SkillSearchProcessor', () => {
         // Fire-and-forget: the catch handler runs after the step resolves
         await vi.waitFor(() => {
           expect(warnSpy).toHaveBeenCalledWith(
-            'SkillSearchProcessor: background skills refresh failed',
+            'SkillSearchProcessor: skills refresh failed',
             expect.objectContaining({ error: expect.any(Error) }),
           );
         });
@@ -198,7 +198,7 @@ describe('SkillSearchProcessor', () => {
 
       await vi.waitFor(() => {
         expect(loggerWarn).toHaveBeenCalledWith(
-          'SkillSearchProcessor: background skills refresh failed',
+          'SkillSearchProcessor: skills refresh failed',
           expect.objectContaining({ error: expect.any(Error) }),
         );
       });

@@ -111,9 +111,9 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
     this._logger = mastra.getLogger();
   }
 
-  /** Log a background refresh failure without ever throwing or blocking the step. */
+  /** Log a refresh failure without ever throwing or blocking the step. */
   private _warnRefreshFailed = (error: unknown): void => {
-    (this._logger ?? console).warn('SkillsProcessor: background skills refresh failed', { error });
+    (this._logger ?? console).warn('SkillsProcessor: skills refresh failed', { error });
   };
 
   /**
