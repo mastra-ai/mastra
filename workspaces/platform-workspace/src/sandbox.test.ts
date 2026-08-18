@@ -1713,6 +1713,12 @@ describe('PlatformSandbox', () => {
     });
 
     describe('sidecar probe', () => {
+      // Fake-timer tests below must not leak fake timers into later tests
+      // when an assertion fails before their trailing vi.useRealTimers().
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
       it('retries the /health probe until it succeeds', async () => {
         vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
         const fetchMock = vi.fn().mockResolvedValueOnce(

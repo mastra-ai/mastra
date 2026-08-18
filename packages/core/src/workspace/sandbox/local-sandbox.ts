@@ -395,10 +395,7 @@ export class LocalSandbox extends MastraSandbox {
     );
     for (const name of candidates) {
       const checkpointDir = this._checkpointPath(name);
-      try {
-        const stat = await fs.stat(checkpointDir);
-        if (!stat.isDirectory()) continue;
-      } catch {
+      if (!(await this._checkpointReadable(checkpointDir))) {
         // Missing checkpoint → try the next candidate (same contract as provider 404).
         continue;
       }
@@ -407,9 +404,39 @@ export class LocalSandbox extends MastraSandbox {
         checkpointName: name,
         checkpointDir,
       });
-      await fs.cp(checkpointDir, this.workingDirectory, { recursive: true });
+      try {
+        await fs.cp(checkpointDir, this.workingDirectory, { recursive: true });
+      } catch (error) {
+        // The checkpoint was swapped away mid-copy by a concurrent
+        // `_captureCheckpoint`. Wait for the replacement and copy that instead.
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        await fs.rm(this.workingDirectory, { recursive: true, force: true }).catch(() => {});
+        await fs.mkdir(this.workingDirectory, { recursive: true });
+        if (!(await this._checkpointReadable(checkpointDir))) continue;
+        await fs.cp(checkpointDir, this.workingDirectory, { recursive: true });
+      }
       return;
     }
+  }
+
+  /**
+   * Check that a checkpoint directory exists, retrying briefly to cover the
+   * instant in `_captureCheckpoint` where the old checkpoint has been renamed
+   * away but the replacement has not yet been renamed into place. The window
+   * is two atomic renames, so a couple of short retries close it.
+   */
+  private async _checkpointReadable(checkpointDir: string): Promise<boolean> {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 25));
+      try {
+        const stat = await fs.stat(checkpointDir);
+        if (stat.isDirectory()) return true;
+        return false;
+      } catch {
+        // Missing right now — may be mid-swap; retry.
+      }
+    }
+    return false;
   }
 
   /**

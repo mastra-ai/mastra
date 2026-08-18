@@ -1903,6 +1903,35 @@ describe('LocalSandbox', () => {
       expect(await fs.readdir(otherDir)).toEqual(['existing.txt']);
     });
 
+    it('seeds a start that overlaps checkpoint replacement (mid-swap window)', async () => {
+      // Build the checkpoint, then simulate the instant inside
+      // _captureCheckpoint where the old checkpoint has been renamed away but
+      // the replacement has not yet been renamed into place.
+      const sb = makeSandbox({ checkpointName: 'repo-abc' });
+      await sb.start();
+      await fs.writeFile(path.join(workDir, 'data.txt'), 'v2');
+      await sb.snapshot();
+
+      const ckptDir = path.join(checkpointsDir, 'repo-abc');
+      const asideDir = path.join(checkpointsDir, '.bak-repo-abc-test');
+      await fs.rename(ckptDir, asideDir);
+      // Restore the checkpoint shortly after the reader first observes it
+      // missing — within the reader's bounded retry window.
+      const restore = new Promise<void>(resolve =>
+        setTimeout(() => {
+          void fs.rename(asideDir, ckptDir).then(resolve);
+        }, 30),
+      );
+
+      const otherDir = path.join(tempDir, 'work-swap');
+      await fs.mkdir(otherDir, { recursive: true });
+      const reader = makeSandbox({ checkpointName: 'repo-abc', workingDirectory: otherDir });
+      await reader.start();
+      await restore;
+
+      expect(await fs.readFile(path.join(otherDir, 'data.txt'), 'utf-8')).toBe('v2');
+    });
+
     it('re-snapshot atomically replaces the previous checkpoint', async () => {
       const sb = makeSandbox({ checkpointName: 'repo-abc' });
       await sb.start();
