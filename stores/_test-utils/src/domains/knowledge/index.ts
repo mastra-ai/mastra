@@ -43,6 +43,40 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       ).rejects.toThrow('Invalid knowledge scope entry');
     });
 
+    it('treats lexical query metacharacters literally', async () => {
+      const percent = await store.createNode({
+        name: 'Literal% node',
+        kind: 'document',
+        content: 'contains percent% text',
+        scope: resource,
+      });
+      await store.createNode({ name: 'LiteralX node', kind: 'document', content: 'control text', scope: resource });
+      const underscore = await store.createNode({
+        name: 'Under_score node',
+        kind: 'document',
+        content: 'contains under_score text',
+        scope: resource,
+      });
+      await store.createNode({ name: 'UnderXscore node', kind: 'document', content: 'control text', scope: resource });
+      const escape = await store.createNode({
+        name: 'Equal= node',
+        kind: 'document',
+        content: 'contains equal=sign text',
+        scope: resource,
+      });
+
+      expect(await store.listNodes({ scope: resource, namePrefix: 'Literal%' })).toEqual([
+        expect.objectContaining({ id: percent.id }),
+      ]);
+      expect(await store.search({ query: '%', scope: resource })).toEqual([
+        expect.objectContaining({ id: percent.id }),
+      ]);
+      expect(await store.search({ query: '_', scope: resource })).toEqual([
+        expect.objectContaining({ id: underscore.id }),
+      ]);
+      expect(await store.search({ query: '=', scope: resource })).toEqual([expect.objectContaining({ id: escape.id })]);
+    });
+
     it('applies record visibility independently from node scope', async () => {
       const node = await store.createNode({ name: 'Resource node', kind: 'task', scope: resource });
       await store.appendKnowledge({
@@ -58,6 +92,32 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(await store.search({ query: 'organization-visible', scope: ['org:acme'] })).toEqual([
         expect.objectContaining({ type: 'record', recordId: node.id, scope: ['org:acme'] }),
       ]);
+    });
+
+    it('persists optional KnowledgeRecord metadata and returns it on reads', async () => {
+      const node = await store.createNode({ name: 'Jane meta', kind: 'person', scope: resource });
+      const withMetadata = await store.appendKnowledge({
+        node: node.id,
+        text: 'Prefers tabs.',
+        scope: resource,
+        sourceThreadId: 't1',
+        metadata: { reason: 'Durable style preference stated explicitly.' },
+        resolutionScope: thread,
+        defaultScope: resource,
+      });
+      const withoutMetadata = await store.appendKnowledge({
+        node: node.id,
+        text: 'Likes coffee.',
+        scope: resource,
+        sourceThreadId: 't1',
+        resolutionScope: thread,
+        defaultScope: resource,
+      });
+      expect(withMetadata.metadata).toEqual({ reason: 'Durable style preference stated explicitly.' });
+      expect((await store.getKnowledge({ id: withMetadata.id }))?.metadata).toEqual({
+        reason: 'Durable style preference stated explicitly.',
+      });
+      expect((await store.getKnowledge({ id: withoutMetadata.id }))?.metadata).toBeUndefined();
     });
 
     it('maintains mentions and soft deletes without losing them', async () => {
