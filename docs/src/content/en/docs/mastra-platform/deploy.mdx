@@ -10,7 +10,7 @@ import StepItem from "@site/src/components/StepItem";
 
 [`mastra deploy`](/reference/cli/mastra#mastra-deploy) is the single command for releasing a Mastra application to the [Mastra platform](/docs/mastra-platform/overview).
 
-One command builds your project and validates it before anything includes, plus creates the platform project and environment on your first run, deploys, streams build logs, and prints your public URL once the deploy is serving traffic.
+One command builds your project and validates it before anything ships, plus creates the platform project and environment on your first run, deploys, streams build logs, and prints your public URL once the deploy is serving traffic.
 
 ```bash
 mastra deploy
@@ -63,7 +63,7 @@ A local `.env` file is optional. Environment variables stored on the platform ar
     Preflight also catches database URLs that point at your local machine. A `.env` file with `REDIS_URL=redis://localhost:6379` works during development, but the deployed server can't reach your laptop — so the CLI warns and offers the same managed provisioning. If you decline, the deploy continues with your value as-is; if you accept, the managed database's connection variables take precedence at deploy time while your local `.env` keeps working for development.
 
     :::note
-    If preflight reports a hard-coded local path instead (`Build contains a host-local storage URL`), it can't offer the inline fix — guard the path with an environment variable first so the file is only used during local development:
+    If preflight reports a hard-coded local path instead (`Build contains a host-local storage URL`), it can't offer the inline fix. Guard the path with an environment variable first so the file is only used during local development:
 
     ```ts title="src/mastra/index.ts"
     new LibSQLStore({
@@ -75,6 +75,16 @@ A local `.env` file is optional. Environment variables stored on the platform ar
     ```
 
     :::
+
+    If the build statically enables `backgroundTasks`, preflight also checks whether the target environment has dedicated background workers enabled. The CLI offers to enable them before deployment:
+
+    ```text
+    Background tasks are enabled in your Mastra config. Enable dedicated background workers for the production environment? (Y/n)
+    ```
+
+    Accept the prompt to enable **Background Workers**. If the environment doesn't have a managed or user-provided `REDIS_URL`, the CLI creates and attaches a managed Redis database first. Starter and Team projects require the **Scalable Server** add-on. Background workers are included with Enterprise projects.
+
+    Non-interactive deploys and deploys that use `--yes` don't create this infrastructure. Enable **Background Workers** in the environment settings before rerunning the deploy.
   </StepItem>
 
   <StepItem>
@@ -118,7 +128,9 @@ The region is fixed when the environment is created. Databases attached to an en
 
 ## Preflight checks
 
-Preflight validates the built output before anything includes, and only flags issues in your own code:
+Preflight validates the built output before anything ships and only flags issues in your own code:
+
+- **Background workers disabled**: A hard block when the build statically enables `backgroundTasks` but the target environment doesn't have dedicated workers enabled. Interactive deploys offer to enable workers and provision managed Redis when needed.
 
 - **Local storage paths**: A hard block. File-backed storage (for example `file:./mastra.db`) is lost on every deploy. Preflight passes when the path is guarded by an environment variable that's set locally or stored on the platform, including values provided by a managed database:
 
