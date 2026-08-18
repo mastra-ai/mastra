@@ -87,4 +87,22 @@ describe('assistant render ownership at agent terminal paths', () => {
     expect(state.streamingMessage).toBeUndefined();
     expect(record.segments.values().next().value?.component.render(80).join('\n')).toContain('visible output');
   });
+
+  it('preserves queued assistant output and the interrupted marker when aborting before the next render', () => {
+    const { ctx, state } = createContext();
+    const pendingMessage = assistantMessage();
+    pendingMessage.content = {
+      format: 2,
+      parts: [{ type: 'text', text: 'visible output plus pending suffix' }],
+    };
+    state.streamingMessage = pendingMessage;
+    state.assistantRenderRegistry.queueActive(pendingMessage.id, pendingMessage);
+
+    handleAgentAborted(ctx);
+
+    const component = state.assistantRenderRegistry.get('assistant-1')!.segments.values().next().value!.component;
+    const output = component.render(80).join('\n');
+    expect(output).toContain('visible output plus pending suffix');
+    expect(output).toContain('Interrupted');
+  });
 });

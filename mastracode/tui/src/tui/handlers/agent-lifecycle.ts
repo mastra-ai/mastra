@@ -146,14 +146,21 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
   if (state.planRejectionAbort || state.userInitiatedAbort) {
     finalizeStreamingAssistant(state);
   } else if (state.streamingComponent && state.streamingMessage) {
-    // Update streaming message to show it was interrupted. Terminal status
-    // lives in content.metadata under the DB-native contract.
+    const terminalStatus = { stopReason: 'aborted' as const, errorMessage: 'Interrupted' };
+    state.assistantRenderRegistry.queueActive(state.streamingMessage.id, state.streamingMessage);
+    const queuedTerminalStatus = state.assistantRenderRegistry.queueActiveTerminalStatus(
+      state.streamingMessage.id,
+      terminalStatus,
+    );
+
+    // Keep the canonical streaming message consistent with the rendered terminal status.
     state.streamingMessage.content.metadata = {
       ...state.streamingMessage.content.metadata,
-      stopReason: 'aborted',
-      errorMessage: 'Interrupted',
+      ...terminalStatus,
     };
-    state.streamingComponent.updateContent(state.streamingMessage);
+    if (!queuedTerminalStatus) {
+      state.streamingComponent.updateContent(state.streamingMessage);
+    }
     finalizeStreamingAssistant(state);
   }
   state.userInitiatedAbort = false;

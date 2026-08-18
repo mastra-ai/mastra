@@ -133,6 +133,20 @@ export class AssistantRenderRegistry {
     return segment ? this.queueSegment(segment, message, afterApply) : undefined;
   }
 
+  queueActiveTerminalStatus(messageId: string, terminalStatus: AssistantTerminalStatus): boolean {
+    const segment = this.getActive(messageId);
+    if (!segment?.source) return false;
+    if (
+      segment.source.terminalStatus.stopReason === terminalStatus.stopReason &&
+      segment.source.terminalStatus.errorMessage === terminalStatus.errorMessage
+    ) {
+      return false;
+    }
+    segment.source.terminalStatus = terminalStatus;
+    segment.pendingApply = true;
+    return true;
+  }
+
   applyPending(messageId?: string): AppliedAssistantState[] {
     const applied: AppliedAssistantState[] = [];
     const records = messageId
