@@ -29,7 +29,7 @@ function stripAnsi(text: string): string {
 
 function createToolHandlerContext(): EventHandlerContext {
   const chatContainer = new Container();
-  const session = { displayState: { get: vi.fn(() => ({ toolInputBuffers: new Map() })) } };
+  const session = { displayState: { get: vi.fn(() => ({ toolInputBuffers: {} })) } };
   const state = {
     chatContainer,
     ui: { requestRender: vi.fn() },
@@ -120,7 +120,7 @@ describe('task tool rendering', () => {
   it('marks quiet tool result objects with isError true as failed even when the event flag is false', async () => {
     const ctx = createToolHandlerContext();
     ctx.state.quietMode = true;
-    const buffers = new Map([['call-1', { toolName: 'string_replace_lsp', text: '' }]]);
+    const buffers = { 'call-1': { toolName: 'string_replace_lsp', text: '' } };
     vi.mocked(ctx.state.session.displayState.get).mockReturnValue({ toolInputBuffers: buffers } as any);
 
     handleToolInputStart(ctx, 'call-1', 'string_replace_lsp');
@@ -136,10 +136,7 @@ describe('task tool rendering', () => {
   it('regroups quiet tools as streamed args arrive', async () => {
     const ctx = createToolHandlerContext();
     ctx.state.quietMode = true;
-    const buffers = new Map([
-      ['call-1', { toolName: 'view', text: '' }],
-      ['call-2', { toolName: 'view', text: '' }],
-    ]);
+    const buffers = { 'call-1': { toolName: 'view', text: '' }, 'call-2': { toolName: 'view', text: '' } };
     vi.mocked(ctx.state.session.displayState.get).mockReturnValue({ toolInputBuffers: buffers } as any);
 
     handleToolInputStart(ctx, 'call-1', 'view');
@@ -157,7 +154,7 @@ describe('task tool rendering', () => {
 
   it('streams submit_plan args into a plan box instead of rendering a generic tool', async () => {
     const ctx = createToolHandlerContext();
-    const buffers = new Map([['call-1', { toolName: 'submit_plan', text: '' }]]);
+    const buffers = { 'call-1': { toolName: 'submit_plan', text: '' } };
     vi.mocked(ctx.state.session.displayState.get).mockReturnValue({ toolInputBuffers: buffers } as any);
 
     handleToolInputStart(ctx, 'call-1', 'submit_plan');

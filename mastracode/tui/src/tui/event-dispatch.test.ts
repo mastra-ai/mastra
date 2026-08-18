@@ -25,7 +25,7 @@ function createMockAgentController(initialState: Record<string, unknown> = {}, p
           tasks: [],
           previousTasks,
           omProgress: { status: 'idle', pendingTokens: 0 },
-          modifiedFiles: new Map(),
+          modifiedFiles: {},
         }),
       },
     },

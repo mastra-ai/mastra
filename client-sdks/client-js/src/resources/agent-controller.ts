@@ -45,7 +45,7 @@ import { BaseResource } from './base';
 /** One arm of the wire union, selected by its `type`. */
 type WireEventOf<T extends AgentControllerWireEvent['type']> = Extract<AgentControllerWireEvent, { type: T }>;
 
-/** An `Error` as the stream handler flattens it — JSON drops a real `Error` to `{}`. */
+/** An `Error` as it serializes — controller errors carry `toJSON`, so JSON keeps their message. */
 export type WireError = WireEventOf<'workspace_error'>['error'];
 
 /** A `MastraDBMessage` before {@link hydrateMessage} turns its `createdAt` back into a `Date`. */
@@ -53,9 +53,6 @@ type SerializedMastraDBMessage = WireEventOf<'message_start'>['message'];
 
 /** An `AgentControllerThread` before {@link hydrateThread} turns its timestamps back into `Date`s. */
 type SerializedThread = WireEventOf<'thread_created'>['thread'];
-
-/** Servers predating the Map conversion send `{}` for these fields, so none of them is guaranteed. */
-type WireDisplayState = Partial<WireEventOf<'display_state_changed'>['displayState']>;
 
 /**
  * Notifications reach a session as agent signals carried on messages, not as
@@ -89,18 +86,14 @@ type Hydrated<T> = T extends { type: 'thread_created' }
     ? Omit<T, 'message'> & { message: MastraDBMessage }
     : T;
 
-/** Events the SDK types more loosely than the wire, to stay readable against older servers. */
-type LenientEventType = 'error' | 'display_state_changed';
-
 /**
  * AgentController events the SDK types explicitly: the wire union `@mastra/core`
  * derives from the controller's own events, with timestamps hydrated. This is a
  * discriminated union, so narrowing on `event.type` gives the right payload.
  */
 export type KnownAgentControllerEvent =
-  | Hydrated<Exclude<AgentControllerWireEvent, { type: LenientEventType }>>
+  | Hydrated<Exclude<AgentControllerWireEvent, { type: 'error' }>>
   | (Omit<WireEventOf<'error'>, 'error'> & { error: WireError | string })
-  | (Omit<WireEventOf<'display_state_changed'>, 'displayState'> & { displayState: WireDisplayState })
   | NotificationEvent;
 
 /** Any other agent controller event the SDK doesn't model explicitly. */

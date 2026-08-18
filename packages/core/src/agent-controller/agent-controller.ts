@@ -695,7 +695,7 @@ export class AgentController<TState = {}> {
           workspaceName: workspaceToConnect.name,
         });
       } catch (error) {
-        const initError = getErrorFromUnknown(error);
+        const initError = getErrorFromUnknown(error, { serializeStack: false });
         session.emit({ type: 'workspace_status_changed', status: 'error', error: initError });
         session.emit({ type: 'workspace_error', error: initError });
       }

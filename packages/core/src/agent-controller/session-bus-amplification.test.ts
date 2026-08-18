@@ -99,6 +99,6 @@ describe('event stream amplification (#19201)', () => {
     const last = snapshots.at(-1)!;
     // Coalescing drops intermediate snapshots, never the settled state.
     expect(last.displayState.isRunning).toBe(false);
-    expect(last.displayState.toolInputBuffers.get('t1')?.text).toBe('012345678910111213141516171819');
+    expect(last.displayState.toolInputBuffers['t1']?.text).toBe('012345678910111213141516171819');
   });
 });

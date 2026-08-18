@@ -241,8 +241,8 @@ describe('AgentController: tool suspension and resumption', () => {
     await session.sendMessage({ content: 'Do it' });
 
     const ds = session.displayState.get();
-    expect(ds.pendingSuspensions.size).toBe(1);
-    const suspension = Array.from(ds.pendingSuspensions.values())[0];
+    expect(Object.keys(ds.pendingSuspensions).length).toBe(1);
+    const suspension = Object.values(ds.pendingSuspensions)[0];
     expect(suspension!.toolName).toBe('confirmAction');
     expect(suspension!.suspendPayload).toEqual({ action: 'deploy' });
   });
@@ -332,7 +332,7 @@ describe('AgentController: tool suspension and resumption', () => {
 
     // pending suspensions should be cleared after resume
     const ds = session.displayState.get();
-    expect(ds.pendingSuspensions.size).toBe(0);
+    expect(Object.keys(ds.pendingSuspensions).length).toBe(0);
   });
 
   it('should forward requireToolApproval=false to sendStreamResume when controller is in yolo mode', async () => {

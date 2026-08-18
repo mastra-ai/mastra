@@ -147,7 +147,7 @@ describe('session.abort() during approval / suspension (#20592)', () => {
     expect(ds.isRunning).toBe(false);
 
     // The gated call must be settled rather than left rendering as in-flight.
-    const tool = ds.activeTools.get('call-1');
+    const tool = ds.activeTools['call-1'];
     expect(tool?.status).not.toBe('running');
     expect(tool?.status).not.toBe('streaming_input');
 
@@ -189,7 +189,7 @@ describe('session.abort() during approval / suspension (#20592)', () => {
     await ended;
 
     const ds = session.displayState.get();
-    expect(ds.pendingSuspensions.size).toBe(0);
+    expect(Object.keys(ds.pendingSuspensions).length).toBe(0);
     expect(ds.isRunning).toBe(false);
     expect(events.some(e => e.type === 'tool_suspension_cancelled')).toBe(true);
   });
