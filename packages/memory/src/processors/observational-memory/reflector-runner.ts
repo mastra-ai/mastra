@@ -37,6 +37,7 @@ import {
 import { getObservableMessages } from './message-utils';
 import type { ModelByInputTokens } from './model-by-input-tokens';
 import { didProviderChange } from './model-context';
+import { describeDegenerateOutput } from './observer-agent';
 import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-registry';
 import {
   buildReflectorSystemPrompt,
@@ -471,7 +472,7 @@ export class ReflectorRunner {
 
       if (parsed.degenerate) {
         omDebug(
-          `[OM:callReflector] attempt #${attemptNumber}: degenerate repetition detected, treating as compression failure`,
+          `[OM:callReflector] attempt #${attemptNumber}: degenerate repetition detected, treating as compression failure. ${describeDegenerateOutput(result.text, 2000)}`,
         );
         reflectedTokens = originalTokens;
       } else {

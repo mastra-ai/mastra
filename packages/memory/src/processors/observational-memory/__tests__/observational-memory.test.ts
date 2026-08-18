@@ -43,6 +43,7 @@ import {
   extractCurrentTask,
   sanitizeObservationLines,
   detectDegenerateRepetition,
+  describeDegenerateOutput,
 } from '../observer-agent';
 import { ObserverRunner } from '../observer-runner';
 import { ObservationalMemoryProcessor } from '../processor';
@@ -3292,6 +3293,37 @@ User asked about </current-task> parsing and how it works
       const result = parseObserverOutput(text);
       expect(result.degenerate).toBe(true);
       expect(result.observations).toBe('');
+    });
+  });
+
+  describe('describeDegenerateOutput', () => {
+    it('reports length, duplicate stats, and the most-repeated window on one line', () => {
+      const block =
+        'getLanguageModel().doGenerate(options: LanguageModelV2CallOptions): PromiseLike<LanguageModelV2GenerateResult>, ';
+      const text = block.repeat(100);
+      const description = describeDegenerateOutput(text);
+      expect(description).toContain(`length=${text.length}`);
+      expect(description).toMatch(/duplicateRatio=0\.\d+/);
+      expect(description).toMatch(/topWindowCount=\d+/);
+      expect(description).toContain('topWindow="');
+      expect(description).toContain('head="');
+      expect(description).toContain('tail="');
+      expect(description).not.toContain('\n');
+    });
+
+    it('bounds snippets to the requested size', () => {
+      const text = 'x'.repeat(10_000);
+      const description = describeDegenerateOutput(text, 100);
+      const head = /head="(x+)"/.exec(description)?.[1];
+      const tail = /tail="(x+)"/.exec(description)?.[1];
+      expect(head?.length).toBe(100);
+      expect(tail?.length).toBe(100);
+    });
+
+    it('omits the tail when the text is short', () => {
+      const description = describeDegenerateOutput('short text', 400);
+      expect(description).toContain('head="short text"');
+      expect(description).not.toContain('tail=');
     });
   });
 });
