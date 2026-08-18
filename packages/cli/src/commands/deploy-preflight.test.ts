@@ -552,7 +552,7 @@ describe('preflightBuildOutput', () => {
       expect(issues.find(i => i.code === 'MISSING_ENV_VAR')).toBeUndefined();
     });
 
-    it('blocks when background tasks are configured but dedicated workers are disabled', async () => {
+    it('warns when background tasks are configured but dedicated workers are disabled', async () => {
       writeBundle(`export {};`);
       writeMetadata({ backgroundTasksEnabled: true });
 
@@ -565,9 +565,11 @@ describe('preflightBuildOutput', () => {
         },
       );
       const issue = issues.find(i => i.code === 'BACKGROUND_WORKERS_DISABLED');
+      // Warning, not error: tasks still run in-process without dedicated
+      // workers, so the deploy is functional and must not hard-fail CI.
       expect(issue).toEqual(
         expect.objectContaining({
-          severity: 'error',
+          severity: 'warning',
           autofix: { kind: 'enable-background-workers' },
         }),
       );

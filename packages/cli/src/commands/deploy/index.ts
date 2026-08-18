@@ -852,6 +852,7 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
         name: environment.name,
         type: environment.type,
         managedEnvVarNames: environment.managedEnvVarNames,
+        envVars: environment.envVars,
       },
       envVars: preflightEnv,
       autoAccept,
@@ -862,7 +863,7 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
 
       // Re-run preflight with newly-created resource state folded in. This
       // clears all issues resolved by database-provided env vars while keeping
-      // declined or failed worker setup as a blocker.
+      // declined or failed worker setup as a warning.
       const mergedManagedNames = [...(environment.managedEnvVarNames ?? []), ...autofixed.newlyManagedEnvVarNames];
       issues = await preflightBuildOutput(targetDir, preflightEnv, {
         hasEnvFile: hasAmbientEnvFile,

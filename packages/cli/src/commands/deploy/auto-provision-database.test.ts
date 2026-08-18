@@ -10,6 +10,7 @@ const {
   confirmMock,
   cancelMock,
   logErrorMock,
+  logInfoMock,
   logSuccessMock,
   logWarnMock,
   spinnerMock,
@@ -21,6 +22,7 @@ const {
   confirmMock: vi.fn(),
   cancelMock: vi.fn(),
   logErrorMock: vi.fn(),
+  logInfoMock: vi.fn(),
   logSuccessMock: vi.fn(),
   logWarnMock: vi.fn(),
   spinnerMock: { start: vi.fn(), stop: vi.fn(), message: vi.fn() },
@@ -35,7 +37,7 @@ vi.mock('@clack/prompts', () => ({
   cancel: (args: unknown) => cancelMock(args),
   isCancel: (v: unknown) => v === Symbol.for('clack.cancel'),
   spinner: () => spinnerMock,
-  log: { error: logErrorMock, success: logSuccessMock, warn: logWarnMock },
+  log: { error: logErrorMock, info: logInfoMock, success: logSuccessMock, warn: logWarnMock },
 }));
 
 vi.mock('../db/platform-api.js', async () => {
@@ -70,7 +72,7 @@ function makeCtx(overrides: Partial<AutoProvisionContext> = {}): AutoProvisionCo
     projectId: 'proj-1',
     projectName: 'My App',
     projectSlug: 'my-app',
-    environment: { id: 'env-prod', slug: 'my-app-production', name: 'production', type: 'production' },
+    environment: { id: 'env-prod', slug: 'my-app-production', name: 'production', type: 'production', envVars: null },
     envVars: {},
     autoAccept: false,
     ...overrides,
@@ -113,7 +115,7 @@ function redisIssue(overrides: Partial<PreflightIssue> = {}): PreflightIssue {
 function workerIssue(overrides: Partial<PreflightIssue> = {}): PreflightIssue {
   return {
     code: 'BACKGROUND_WORKERS_DISABLED',
-    severity: 'error',
+    severity: 'warning',
     message: 'Background tasks are enabled but dedicated workers are disabled',
     fix: 'Enable Background Workers',
     autofix: { kind: 'enable-background-workers' },
@@ -302,7 +304,7 @@ describe('maybeApplyPreflightAutofixes', () => {
 
     await maybeApplyPreflightAutofixes(
       [tursoIssue()],
-      makeCtx({ environment: { id: 'env-stg', slug: 'stg', name: 'staging', type: 'staging' } }),
+      makeCtx({ environment: { id: 'env-stg', slug: 'stg', name: 'staging', type: 'staging', envVars: null } }),
     );
 
     expect(attachDatabaseMock).toHaveBeenCalledWith(
@@ -354,7 +356,7 @@ describe('maybeApplyPreflightAutofixes', () => {
 
     await maybeApplyPreflightAutofixes(
       [tursoIssue()],
-      makeCtx({ environment: { id: 'env-eu', slug: 'my-app--eu', name: 'eu', type: 'preview' } }),
+      makeCtx({ environment: { id: 'env-eu', slug: 'my-app--eu', name: 'eu', type: 'preview', envVars: null } }),
     );
 
     expect(attachDatabaseMock).toHaveBeenCalledWith(
@@ -372,7 +374,9 @@ describe('maybeApplyPreflightAutofixes', () => {
 
     await maybeApplyPreflightAutofixes(
       [tursoIssue()],
-      makeCtx({ environment: { id: 'env-prod', slug: 'my-app', name: 'production', type: 'production' } }),
+      makeCtx({
+        environment: { id: 'env-prod', slug: 'my-app', name: 'production', type: 'production', envVars: null },
+      }),
     );
 
     expect(attachDatabaseMock).toHaveBeenCalledWith(
@@ -391,7 +395,7 @@ describe('maybeApplyPreflightAutofixes', () => {
 
     const result = await maybeApplyPreflightAutofixes(
       [workerIssue(), unrelatedIssue()],
-      makeCtx({ environment: { id: 'env-prod', slug: 'prod', name: 'production', type: 'production' } }),
+      makeCtx({ environment: { id: 'env-prod', slug: 'prod', name: 'production', type: 'production', envVars: null } }),
     );
 
     expect(attachDatabaseMock).toHaveBeenCalledWith('t', 'org-1', 'proj-1', {
@@ -409,13 +413,57 @@ describe('maybeApplyPreflightAutofixes', () => {
     expect(result.issues).toEqual([unrelatedIssue()]);
   });
 
-  it('uses BYO Redis when REDIS_URL is user-provided and not managed', async () => {
+  it('uses BYO Redis when REDIS_URL is stored on the environment and not managed', async () => {
     confirmMock.mockResolvedValue(true);
     enableBackgroundWorkersMock.mockResolvedValue({});
 
-    await maybeApplyPreflightAutofixes([workerIssue()], makeCtx({ envVars: { REDIS_URL: 'redis://example.test' } }));
+    await maybeApplyPreflightAutofixes(
+      [workerIssue()],
+      makeCtx({
+        environment: {
+          id: 'env-prod',
+          slug: 'prod',
+          name: 'production',
+          type: 'production',
+          envVars: { REDIS_URL: 'redis://example.test' },
+        },
+        envVars: { REDIS_URL: 'redis://example.test' },
+      }),
+    );
 
     expect(enableBackgroundWorkersMock).toHaveBeenCalledWith('t', 'org-1', 'proj-1', 'env-prod', 'byo');
+    expect(attachDatabaseMock).not.toHaveBeenCalled();
+  });
+
+  it('skips worker setup when REDIS_URL exists only locally (not stored on the platform yet)', async () => {
+    // The platform resolves BYO Redis from *stored* env vars; local .env vars
+    // are only uploaded with the deploy. Enabling now would 400, so the fix is
+    // skipped with guidance instead of prompting.
+    const issues = [workerIssue()];
+    const result = await maybeApplyPreflightAutofixes(
+      issues,
+      makeCtx({ envVars: { REDIS_URL: 'redis://local-only.test' } }),
+    );
+
+    expect(confirmMock).not.toHaveBeenCalled();
+    expect(enableBackgroundWorkersMock).not.toHaveBeenCalled();
+    expect(attachDatabaseMock).not.toHaveBeenCalled();
+    expect(result.issues).toBe(issues);
+    expect(result.backgroundWorkersEnabled).toBe(false);
+    expect(logInfoMock).toHaveBeenCalledWith(expect.stringContaining('re-run `mastra deploy`'));
+  });
+
+  it('cancels the deploy when the worker prompt is aborted', async () => {
+    confirmMock.mockResolvedValue(Symbol.for('clack.cancel'));
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('process.exit');
+    });
+
+    await expect(maybeApplyPreflightAutofixes([workerIssue()], makeCtx())).rejects.toThrow('process.exit');
+
+    expect(exitSpy).toHaveBeenCalledWith(0);
+    expect(enableBackgroundWorkersMock).not.toHaveBeenCalled();
+    exitSpy.mockRestore();
   });
 
   it('provisions managed Redis before enabling workers', async () => {
@@ -442,7 +490,16 @@ describe('maybeApplyPreflightAutofixes', () => {
     const issues = [workerIssue()];
     const result = await maybeApplyPreflightAutofixes(
       issues,
-      makeCtx({ envVars: { REDIS_URL: 'redis://example.test' } }),
+      makeCtx({
+        environment: {
+          id: 'env-prod',
+          slug: 'prod',
+          name: 'production',
+          type: 'production',
+          envVars: { REDIS_URL: 'redis://example.test' },
+        },
+        envVars: { REDIS_URL: 'redis://example.test' },
+      }),
     );
 
     expect(result.issues).toBe(issues);
