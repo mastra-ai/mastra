@@ -960,6 +960,34 @@ describe('transcript reducer error notices', () => {
   });
 });
 
+describe('transcript reducer workspace errors', () => {
+  function noticeTexts(event: Record<string, unknown> & { type: string }): string[] {
+    const state = transcriptReducer(initialTranscript, { type: 'event', event });
+    return state.entries.flatMap(entry => (entry.kind === 'notice' ? [entry.text] : []));
+  }
+
+  it('surfaces the message of a workspace_error', () => {
+    expect(noticeTexts({ type: 'workspace_error', error: { name: 'Error', message: 'clone failed' } })).toEqual([
+      'Workspace: clone failed',
+    ]);
+  });
+
+  it('surfaces the message of a failed workspace_status_changed', () => {
+    expect(
+      noticeTexts({
+        type: 'workspace_status_changed',
+        status: 'error',
+        error: { name: 'Error', message: 'no disk space left' },
+      }),
+    ).toEqual(['Workspace: no disk space left']);
+  });
+
+  it('stays quiet while the workspace is healthy', () => {
+    expect(noticeTexts({ type: 'workspace_status_changed', status: 'ready' })).toEqual([]);
+    expect(noticeTexts({ type: 'workspace_ready', workspaceId: 'w1', workspaceName: 'repo' })).toEqual([]);
+  });
+});
+
 describe('live user-signal events render the same as their persisted copy', () => {
   /**
    * `agent-channels` stamps this on every inbound channel message, and
