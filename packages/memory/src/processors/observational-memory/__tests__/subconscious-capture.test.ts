@@ -59,7 +59,7 @@ describe('Subconscious capture', () => {
     expect(atlas).toMatchObject({ kind: 'project', scope: resourceScope });
     expect(maya).toMatchObject({ scope: resourceScope });
 
-    const records = await store.knowledgeAbout({ node: atlas!.id, scope: threadScope });
+    const records = await store.listKnowledgeAbout({ node: atlas!.id, scope: threadScope });
     expect(records.records).toHaveLength(2);
     expect(records.records[0]).toMatchObject({
       sourceThreadId: 'alpha',
@@ -69,7 +69,7 @@ describe('Subconscious capture', () => {
     expect(records.records.find(record => record.when)?.when?.toISOString()).toBe('2030-01-15T00:00:00.000Z');
     expect(records.records.every(record => record.capturedAt instanceof Date)).toBe(true);
 
-    const touchingMaya = await store.knowledgeRelatedTo({ node: maya!.id, scope: threadScope });
+    const touchingMaya = await store.listKnowledgeRelatedTo({ node: maya!.id, scope: threadScope });
     expect(touchingMaya.records.map(record => record.text)).toContain('[[Maya Chen]] owns [[Project Atlas]].');
   });
 
