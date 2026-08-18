@@ -1,18 +1,32 @@
-export type TraceSignalName = 'goal' | 'sentiment' | 'behavior' | 'outcome';
+export type BuiltInTraceSignalName = 'goal' | 'sentiment' | 'behavior' | 'outcome';
+
+export type TraceSignalName = string;
 
 export type EntityLearningProgressStatus = 'collecting' | 'processing' | 'ready';
+
+export interface SignalCatalogEntry {
+  name: string;
+  label: string;
+  description: string;
+  order: number;
+  builtIn: boolean;
+  enabled: boolean;
+  status: EntityLearningProgressStatus;
+}
 
 export interface EntityLearningProgressResponse {
   status: EntityLearningProgressStatus;
   traceCount: number;
-  signals: Record<TraceSignalName, { generated: number; embedded: number }>;
+  signals: Record<string, { generated: number; embedded: number }>;
   availableSignals: TraceSignalName[];
+  signalCatalog?: SignalCatalogEntry[];
 }
 
 export interface ThemeLearningEntity {
   entityId: string;
   entityType: string;
   availableSignals: TraceSignalName[];
+  signalCatalog?: SignalCatalogEntry[];
   latestWindow?: {
     startedAt: string;
     endedAt: string;
@@ -69,6 +83,7 @@ export type ThemeSnapshotLandmarkReason = 'range_start' | 'range_end' | 'time_sa
 
 export interface ThemeSnapshotsResponse {
   snapshots: Array<ThemeSnapshot & { availableSignals: TraceSignalName[]; reason?: ThemeSnapshotLandmarkReason }>;
+  signalCatalog?: SignalCatalogEntry[];
   nextCursor?: string;
   totalSnapshots?: number;
 }
