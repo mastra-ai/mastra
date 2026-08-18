@@ -19,9 +19,9 @@ describe('MongoDB knowledge concurrency and indexes', () => {
     const store = createStore();
     await store.init();
     await store.init();
-    const records = await connector.getCollection('mastra_knowledge_records');
+    const nodes = await connector.getCollection('mastra_knowledge_nodes');
     const outbox = await connector.getCollection('mastra_knowledge_semantic_outbox');
-    expect(Object.keys(await records.indexInformation())).toContain('type_1_scopeKey_1_canonicalName_1');
+    expect(Object.keys(await nodes.indexInformation())).toContain('type_1_scopeKey_1_canonicalName_1');
     expect(Object.keys(await outbox.indexInformation())).toContain('idempotencyKey_1');
   });
 
