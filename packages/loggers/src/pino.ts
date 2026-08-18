@@ -1,5 +1,5 @@
-import type { LoggerTransport } from '@mastra/core/logger';
-import { LogLevel, MastraLogger } from '@mastra/core/logger';
+import type { LoggerTransport, LoggerAdapterContext } from '@mastra/core/logger';
+import { LogLevel, MastraLogger, buildLogRecordData } from '@mastra/core/logger';
 import pino from 'pino';
 import pretty from 'pino-pretty';
 
@@ -40,6 +40,7 @@ interface PinoLoggerInternalOptions<CustomLevels extends string = never> extends
 
 export class PinoLogger<CustomLevels extends string = never> extends MastraLogger {
   protected logger: pino.Logger<CustomLevels>;
+  #adapterContext?: LoggerAdapterContext;
 
   constructor(options: PinoLoggerOptions<CustomLevels> = {}) {
     super(options);
@@ -51,6 +52,22 @@ export class PinoLogger<CustomLevels extends string = never> extends MastraLogge
       this.logger = internalOptions._logger;
       return;
     }
+
+    // Compose the user mixin with trace correlation. Pino mixins run
+    // synchronously on every log call, so the trace fields land in the
+    // native record before serialization — for ALL destinations (stdout,
+    // transports, files). Trace fields win on key conflicts.
+    const userMixin = options.mixin;
+    const correlationMixin: pino.MixinFn<CustomLevels> = (mergeObject, level, logger) => {
+      const userFields = userMixin ? userMixin(mergeObject, level, logger) : {};
+      const ctx = this.#adapterContext;
+      if (!ctx?.options.correlation) return userFields;
+      try {
+        return { ...userFields, ...(ctx.resolveTraceFields() ?? {}) };
+      } catch {
+        return userFields;
+      }
+    };
 
     const shouldPrettyPrint = options.prettyPrint ?? true;
     let prettyStream: ReturnType<typeof pretty> | undefined = undefined;
@@ -72,7 +89,7 @@ export class PinoLogger<CustomLevels extends string = never> extends MastraLogge
         level: options.level || LogLevel.INFO,
         formatters: options.formatters,
         redact: options.redact,
-        mixin: options.mixin,
+        mixin: correlationMixin,
         customLevels: options.customLevels,
         messageKey: options.messageKey ?? 'msg',
       },
@@ -122,22 +139,52 @@ export class PinoLogger<CustomLevels extends string = never> extends MastraLogge
       transports: Object.fromEntries(this.transports),
       _logger: childPino,
     };
-    return new PinoLogger(childOptions);
+    const child = new PinoLogger(childOptions);
+    if (this.#adapterContext) child.__attachObservability(this.#adapterContext);
+    return child;
+  }
+
+  /**
+   * Adapter hook (see `AdaptableLogger` in `@mastra/core/logger`): enables
+   * native trace correlation (trace_id/span_id merged into the pino record
+   * via mixin, for every destination) and observability export derived from
+   * the same record. Called by Mastra during setup.
+   */
+  __attachObservability(ctx: LoggerAdapterContext): void {
+    this.#adapterContext = ctx;
+  }
+
+  /**
+   * Export the record derived from the same native call to observability.
+   * Runs regardless of pino's level filter and never throws into the caller.
+   */
+  #export(level: 'debug' | 'info' | 'warn' | 'error', message: string, args: Record<string, any>): void {
+    const ctx = this.#adapterContext;
+    if (!ctx?.options.export) return;
+    try {
+      ctx.getLogSink()?.[level](message, buildLogRecordData(Object.keys(args).length > 0 ? [args] : []));
+    } catch {
+      // Never let observability export break the primary logger
+    }
   }
 
   debug(message: string, args: Record<string, any> = {}): void {
     this.logger.debug(args, message);
+    this.#export('debug', message, args);
   }
 
   info(message: string, args: Record<string, any> = {}): void {
     this.logger.info(args, message);
+    this.#export('info', message, args);
   }
 
   warn(message: string, args: Record<string, any> = {}): void {
     this.logger.warn(args, message);
+    this.#export('warn', message, args);
   }
 
   error(message: string, args: Record<string, any> = {}): void {
     this.logger.error(args, message);
+    this.#export('error', message, args);
   }
 }

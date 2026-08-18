@@ -192,6 +192,155 @@ describe('PinoLogger mixin option', () => {
   });
 });
 
+describe('PinoLogger observability adapter (__attachObservability)', () => {
+  const TRACE_FIELDS = { trace_id: '0af7651916cd43dd8448eb211c80319c', span_id: 'b7ad6b7169203331' };
+  let memoryStream: MemoryStream;
+
+  beforeEach(() => {
+    memoryStream = new MemoryStream();
+  });
+
+  function makeSink() {
+    const calls: Array<{ level: string; message: string; data?: Record<string, unknown> }> = [];
+    const make = (level: string) => (message: string, data?: Record<string, unknown>) =>
+      calls.push({ level, message, data });
+    return { calls, debug: make('debug'), info: make('info'), warn: make('warn'), error: make('error') };
+  }
+
+  function makeCtx(overrides: Partial<Parameters<PinoLogger['__attachObservability']>[0]> = {}) {
+    const sink = makeSink();
+    return {
+      sink,
+      ctx: {
+        resolveTraceFields: () => TRACE_FIELDS,
+        getLogSink: () => sink,
+        options: { correlation: true, export: true },
+        ...overrides,
+      },
+    };
+  }
+
+  it('injects trace fields into the native record for all destinations', async () => {
+    const logger = new PinoLogger({ transports: { memory: memoryStream } });
+    const { ctx } = makeCtx();
+    logger.__attachObservability(ctx);
+
+    logger.info('traced', { userId: 'u1' });
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    expect((await memoryStream.listLogs())[0]).toMatchObject({
+      msg: 'traced',
+      userId: 'u1',
+      ...TRACE_FIELDS,
+    });
+  });
+
+  it('omits trace fields when no span is active', async () => {
+    const logger = new PinoLogger({ transports: { memory: memoryStream } });
+    const { ctx } = makeCtx({ resolveTraceFields: () => undefined });
+    logger.__attachObservability(ctx);
+
+    logger.info('untraced');
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    const record = (await memoryStream.listLogs())[0];
+    expect(record.msg).toBe('untraced');
+    expect(record.trace_id).toBeUndefined();
+    expect(record.span_id).toBeUndefined();
+  });
+
+  it('does not inject trace fields when correlation is disabled', async () => {
+    const logger = new PinoLogger({ transports: { memory: memoryStream } });
+    const { ctx } = makeCtx({ options: { correlation: false, export: true } });
+    logger.__attachObservability(ctx);
+
+    logger.info('uncorrelated');
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    expect((await memoryStream.listLogs())[0].trace_id).toBeUndefined();
+  });
+
+  it('preserves user mixin fields; trace fields win on conflict', async () => {
+    const logger = new PinoLogger({
+      transports: { memory: memoryStream },
+      mixin() {
+        return { service: 'api', trace_id: 'user-supplied' };
+      },
+    });
+    const { ctx } = makeCtx();
+    logger.__attachObservability(ctx);
+
+    logger.info('mixed');
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    expect((await memoryStream.listLogs())[0]).toMatchObject({
+      msg: 'mixed',
+      service: 'api',
+      ...TRACE_FIELDS,
+    });
+  });
+
+  it('exports a LogEvent derived from the same native call', async () => {
+    const logger = new PinoLogger({ transports: { memory: memoryStream } });
+    const { ctx, sink } = makeCtx();
+    logger.__attachObservability(ctx);
+
+    logger.warn('watch out', { code: 42 });
+
+    expect(sink.calls).toEqual([{ level: 'warn', message: 'watch out', data: { code: 42 } }]);
+  });
+
+  it('does not export when export is disabled but still correlates', async () => {
+    const logger = new PinoLogger({ transports: { memory: memoryStream } });
+    const { ctx, sink } = makeCtx({ options: { correlation: true, export: false } });
+    logger.__attachObservability(ctx);
+
+    logger.info('stdout only');
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    expect(sink.calls).toEqual([]);
+    expect((await memoryStream.listLogs())[0]).toMatchObject(TRACE_FIELDS);
+  });
+
+  it('never lets a throwing sink break the native log call', async () => {
+    const logger = new PinoLogger({ transports: { memory: memoryStream } });
+    const sink = {
+      debug: () => {},
+      info: () => {
+        throw new Error('sink boom');
+      },
+      warn: () => {},
+      error: () => {},
+    };
+    logger.__attachObservability({
+      resolveTraceFields: () => TRACE_FIELDS,
+      getLogSink: () => sink,
+      options: { correlation: true, export: true },
+    });
+
+    expect(() => logger.info('resilient')).not.toThrow();
+    await new Promise(resolve => setTimeout(resolve, 100));
+    expect((await memoryStream.listLogs())[0]).toMatchObject({ msg: 'resilient' });
+  });
+
+  it('propagates correlation and export to child loggers', async () => {
+    const logger = new PinoLogger({ transports: { memory: memoryStream } });
+    const { ctx, sink } = makeCtx();
+    logger.__attachObservability(ctx);
+
+    const child = logger.child({ requestId: 'req-1' });
+    child.info('from child');
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    expect((await memoryStream.listLogs())[0]).toMatchObject({
+      msg: 'from child',
+      requestId: 'req-1',
+      ...TRACE_FIELDS,
+    });
+    expect(sink.calls).toEqual([{ level: 'info', message: 'from child', data: undefined }]);
+  });
+});
+
 type AuditLevel = 'audit';
 
 class PinoLoggerWithAudit extends PinoLogger<AuditLevel> {

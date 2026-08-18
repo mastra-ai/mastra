@@ -6,6 +6,12 @@ import type { IMastraLogger } from './logger';
 import type { BaseLogMessage, LoggerTransport } from './transport';
 
 /**
+ * @deprecated Fallback for loggers that do not implement the observability
+ * adapter contract (`AdaptableLogger`). Loggers with adapter support
+ * (`ConsoleLogger`, `PinoLogger`) get trace correlation and export attached
+ * natively instead. Will be removed in the next major release — implement
+ * `__attachObservability()` on custom loggers.
+ *
  * A transparent wrapper around IMastraLogger that also forwards log calls
  * to a LoggerContext (loggerVNext) for observability dual-write.
  *
