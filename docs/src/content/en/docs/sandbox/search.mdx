@@ -287,7 +287,6 @@ You can customize the search behavior with options:
 const results = await workspace.search('authentication flow', {
   topK: 10,
   mode: 'hybrid',
-  minScore: 0.5,
   vectorWeight: 0.5,
 })
 ```
@@ -296,7 +295,7 @@ const results = await workspace.search('authentication flow', {
 | - | - |
 | `topK` | Maximum number of results to return. `workspace.search()` defaults to 10. The agent search tool defaults to 5. |
 | `mode` | Search mode: `'bm25'`, `'vector'`, or `'hybrid'`. Defaults to the best available mode based on configuration. |
-| `minScore` | Filter out results below this score threshold. Its scale depends on the search mode and vector provider. |
+| `minScore` | Filter out results below this score threshold. Its scale depends on the search mode, vector provider, and indexed corpus. Tune it for the active index. |
 | `vectorWeight` | In hybrid mode, how much to weight vector scores vs BM25. 0 = all BM25, 1 = all vector, 0.5 = equal. |
 
 ### Search results
@@ -328,7 +327,7 @@ interface SearchResult {
 - Vector score meaning depends on the configured vector store.
 - Hybrid search min-max normalizes BM25 for the weighted calculation but uses the vector provider's score unchanged. The combined score isn't clamped to 0 through 1.
 - `scoreDetails` retains the raw component scores, including the unnormalized BM25 score.
-- Choose `minScore` for the configured mode and provider instead of assuming one threshold works across modes.
+- Choose `minScore` for the configured mode, vector provider, and indexed corpus instead of assuming one threshold works across modes or indexes.
 
 ### When to use each mode
 
