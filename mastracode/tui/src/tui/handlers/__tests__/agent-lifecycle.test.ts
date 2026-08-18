@@ -119,7 +119,7 @@ describe('assistant render ownership at agent terminal paths', () => {
     } as MastraDBMessage;
     const { segment } = state.assistantRenderRegistry.reconcile(
       postToolMessage.id,
-      'assistant-1:after:tool-1',
+      getAssistantSegmentKey(postToolMessage.id, 'tool-1'),
       postToolMessage,
       () => new AssistantMessageComponent(),
     );
@@ -143,6 +143,37 @@ describe('assistant render ownership at agent terminal paths', () => {
 
     const output = segment.component.render(80).join('\n');
     expect(output).toContain('pending post-tool output');
+    expect(output).toContain('Interrupted');
+    expect(output).not.toContain('visible output');
+  });
+
+  it('renders only the interrupted marker when aborting an empty post-tool segment', () => {
+    const { ctx, state } = createContext();
+    state.assistantRenderRegistry.finalizeActive('assistant-1');
+
+    const { segment } = state.assistantRenderRegistry.start(
+      'assistant-1',
+      getAssistantSegmentKey('assistant-1', 'tool-1'),
+      () => new AssistantMessageComponent(),
+    );
+    state.streamingComponent = segment.component;
+    state.streamingMessage = {
+      ...assistantMessage(),
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'visible output' },
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'result', toolCallId: 'tool-1', toolName: 'view', args: {}, result: 'ok' },
+          },
+        ],
+      },
+    } as MastraDBMessage;
+
+    handleAgentAborted(ctx);
+
+    const output = segment.component.render(80).join('\n');
     expect(output).toContain('Interrupted');
     expect(output).not.toContain('visible output');
   });

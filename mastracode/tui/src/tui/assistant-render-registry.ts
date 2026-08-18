@@ -135,7 +135,12 @@ export class AssistantRenderRegistry {
 
   queueActiveTerminalStatus(messageId: string, terminalStatus: AssistantTerminalStatus): boolean {
     const segment = this.getActive(messageId);
-    if (!segment?.source) return false;
+    if (!segment) return false;
+    if (!segment.source) {
+      segment.source = { parts: [], terminalStatus };
+      segment.pendingApply = true;
+      return true;
+    }
     if (
       segment.source.terminalStatus.stopReason === terminalStatus.stopReason &&
       segment.source.terminalStatus.errorMessage === terminalStatus.errorMessage
