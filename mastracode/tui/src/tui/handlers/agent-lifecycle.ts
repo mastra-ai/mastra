@@ -147,7 +147,6 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
     finalizeStreamingAssistant(state);
   } else if (state.streamingComponent && state.streamingMessage) {
     const terminalStatus = { stopReason: 'aborted' as const, errorMessage: 'Interrupted' };
-    state.assistantRenderRegistry.queueActive(state.streamingMessage.id, state.streamingMessage);
     const queuedTerminalStatus = state.assistantRenderRegistry.queueActiveTerminalStatus(
       state.streamingMessage.id,
       terminalStatus,
