@@ -42,11 +42,13 @@ export interface SandboxAddressRegistry {
   set(sandboxId: string, instanceUrl: string): void;
   get(sandboxId: string): string | undefined;
   /**
-   * Remove the entry for a sandbox. Returns `true` if an entry was actually
-   * removed, `false` if there was nothing to delete — callers use the return
-   * value to skip logging no-op evictions.
+   * Remove the entry for a sandbox. Implementations may return `true` if an
+   * entry was actually removed and `false` if there was nothing to delete;
+   * returning `void` is also accepted so pre-existing external implementations
+   * remain compatible. Callers treat any truthy return as "an entry existed"
+   * to skip logging no-op evictions.
    */
-  delete(sandboxId: string): boolean;
+  delete(sandboxId: string): void | boolean;
 }
 
 export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'processes'>, PlatformClientOptions {
@@ -638,6 +640,19 @@ export class PlatformSandbox extends MastraSandbox {
         sandboxId: json.id,
         sessionId: this._client.sessionId,
       });
+      // Fresh start() opens a new degradation window even when no probe fires.
+      // Drop the previous probe's terminal state and re-arm the one-shot lease
+      // warn so the next lease-path exec reports `instance-url-missing` (the
+      // actual reason) rather than `registry-evicted` / `probe-timed-out`
+      // inferred from the prior window. We deliberately do NOT delete the
+      // registry entry here — an older proxy that predates the `instanceUrl`
+      // field may leave a caller-populated or previously-probed entry that is
+      // still valid; a real transport failure will evict via
+      // `_invalidateAddress`, which is the correct signal.
+      this._probeGeneration++;
+      this._probeState = 'never-started';
+      this._transportReadyPromise = null;
+      this._leaseFallbackLogged = false;
       return;
     }
     // Clear any stale entry before probing. On reattach, the registry may have
@@ -844,6 +859,13 @@ export class PlatformSandbox extends MastraSandbox {
     // after we've deleted the entry below. The probe checks this generation
     // before calling set().
     this._probeGeneration++;
+    // Reset probe state and re-arm the one-shot lease warn so the next
+    // start()'s degradation window is inferred from a clean slate — otherwise
+    // `_logLeaseFallbackOnce` would still see `succeeded`/`timed-out` from the
+    // previous run and mis-report the reason (or stay latched at `logged`).
+    this._probeState = 'never-started';
+    this._transportReadyPromise = null;
+    this._leaseFallbackLogged = false;
     await this._client.request(`/sandbox/${encodeURIComponent(destroyedSandboxId)}`, { method: 'DELETE' });
     // Clear local state so a subsequent start() creates a fresh remote sandbox
     // instead of taking the reattach branch and pointing exec at a deleted resource.
@@ -1288,7 +1310,9 @@ export class PlatformSandbox extends MastraSandbox {
    * `instanceUrl` from a workspace-proxy response — until then, execs skip
    * the private-net dial and go straight to the lease path.
    */
-  private _invalidateAddress(reason: 'connection-refused' | 'no-exit-frame' | 'timeout-before-headers' | 'unexpected-error'): void {
+  private _invalidateAddress(
+    reason: 'connection-refused' | 'no-exit-frame' | 'timeout-before-headers' | 'unexpected-error',
+  ): void {
     if (!this._sandboxId) return;
     const existed = this._addressRegistry?.delete(this._sandboxId) ?? false;
     // Only warn on real eviction — no-op deletes are uninteresting noise.
@@ -1327,12 +1351,17 @@ export class PlatformSandbox extends MastraSandbox {
     if (this._leaseFallbackLogged) return;
     this._leaseFallbackLogged = true;
     const hasRegistryEntry = !!(this._sandboxId && this._addressRegistry?.get(this._sandboxId));
-    const reason: string = explicitReason
-      ?? (!this._addressRegistry ? 'no-registry-configured'
-        : this._probeState === 'never-started' ? 'instance-url-missing'
-        : this._probeState === 'in-flight' ? 'probe-in-flight'
-        : this._probeState === 'timed-out' ? 'probe-timed-out'
-        : 'registry-evicted');
+    const reason: string =
+      explicitReason ??
+      (!this._addressRegistry
+        ? 'no-registry-configured'
+        : this._probeState === 'never-started'
+          ? 'instance-url-missing'
+          : this._probeState === 'in-flight'
+            ? 'probe-in-flight'
+            : this._probeState === 'timed-out'
+              ? 'probe-timed-out'
+              : 'registry-evicted');
     this.logger.warn('platform-workspace exec using lease path', {
       sandboxId: this._sandboxId,
       sessionId: this._client.sessionId,

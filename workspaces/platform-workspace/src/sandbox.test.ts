@@ -1825,9 +1825,15 @@ describe('PlatformSandbox', () => {
         const loggerWarnSpy = vi.spyOn((sandbox as any).logger, 'warn');
         await sandbox._start();
 
-        // Simulate teardown / new start() superseding the first probe by
-        // bumping the generation mid-flight (before the 30s deadline).
-        (sandbox as any)._probeGeneration += 1;
+        // Bump the generation *inside the final sleep before the deadline* —
+        // after the loop's per-iteration guard has already been checked, but
+        // while the loop's `Date.now() < deadline` check hasn't yet failed.
+        // This is the only window where the loop exits into the terminal
+        // warn without re-checking generation, which is exactly the code
+        // path the fix addresses.
+        setTimeout(() => {
+          (sandbox as any)._probeGeneration += 1;
+        }, 29_900);
 
         // Advance past the probe timeout so the first probe's loop exits.
         await vi.advanceTimersByTimeAsync(35_000);
