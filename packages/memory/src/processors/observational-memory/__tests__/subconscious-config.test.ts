@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { Memory, Subconscious } from '../../../index';
 import type { Extractor } from '../extractor';
+import { usableObservationalMemoryModel } from '../subconscious/model';
 import type { ObservationalMemoryConfig } from '../types';
 
 const model = 'openai/gpt-5';
@@ -26,7 +27,7 @@ describe('Subconscious configuration', () => {
 
     expect(subconscious.resolved).toMatchObject({
       observation: [
-        { name: 'capture', builtIn: true, maxSteps: 5 },
+        { name: 'capture', builtIn: true },
         { name: 'remind', builtIn: true, maxSteps: 5 },
       ],
       reflection: [
@@ -81,6 +82,15 @@ describe('Subconscious configuration', () => {
     expect(() => new Subconscious({ reflection: [{ name: 'audit' }] })).toThrow(/requires instructions or agent/);
     expect(() => new Subconscious({ activity: { recentUpdates: 101 } })).toThrow(/between 1 and 100/);
     expect(() => new Subconscious({ maxSteps: 0 })).toThrow(/between 1 and 25/);
+    expect(() => new Subconscious({ observation: [{ name: 'capture', model, maxSteps: 2 } as any] })).toThrow(
+      /shares the Observer model/,
+    );
+    expect(
+      () =>
+        new Subconscious({
+          observation: [{ name: 'ticket', model, schema: z.string(), onExtracted: vi.fn() } as any],
+        }),
+    ).toThrow(/shares the Observer model/);
   });
 
   it('compiles capture and custom observation hooks into the shared extractor list', () => {
@@ -100,6 +110,13 @@ describe('Subconscious configuration', () => {
       ['capture', 'structured'],
       ['ticket', 'structured'],
     ]);
+  });
+
+  it('preserves an empty dynamic model list for actionable Agent validation', async () => {
+    const dynamicModel = usableObservationalMemoryModel((async () => []) as any);
+
+    expect(typeof dynamicModel).toBe('function');
+    await expect((dynamicModel as (context: unknown) => Promise<unknown>)({})).resolves.toEqual([]);
   });
 
   it('fails initialization explicitly when semantic infrastructure is missing', () => {

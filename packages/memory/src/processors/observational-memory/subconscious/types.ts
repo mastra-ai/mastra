@@ -17,6 +17,10 @@ export interface SubconsciousCaptureOutput {
       text: string;
       scope?: KnowledgeScopeLevel;
       when?: string;
+      /** One short sentence: why the KnowledgeRecord is worth keeping (or must stay pinned). Stored as record metadata. */
+      reason?: string;
+      /** Present only when capture-time pinning is enabled; routes the item to the pin set. */
+      pin?: boolean;
     }>;
   }>;
 }
@@ -31,22 +35,27 @@ export type SubconsciousCaptureHook = (
   },
 ) => Promise<SubconsciousCaptureOutput | void | undefined> | SubconsciousCaptureOutput | void | undefined;
 
-export interface SubconsciousBuiltInObservationConfig {
-  name: SubconsciousBuiltInObservationAgent;
+export interface SubconsciousCaptureConfig {
+  name: 'capture';
   instructions?: string;
-  model?: SubconsciousModel;
   schema?: z.ZodTypeAny;
   onExtracted?: SubconsciousCaptureHook;
+}
+
+export interface SubconsciousRemindConfig {
+  name: 'remind';
+  instructions?: string;
+  model?: SubconsciousModel;
   maxSteps?: number;
 }
+
+export type SubconsciousBuiltInObservationConfig = SubconsciousCaptureConfig | SubconsciousRemindConfig;
 
 export interface SubconsciousCustomObservationConfig<T = unknown> {
   name: string;
   instructions?: string;
-  model?: SubconsciousModel;
   schema: z.ZodType<T>;
   onExtracted: (context: ExtractorOnExtractedContext<T>) => Promise<T | void | undefined> | T | void | undefined;
-  maxSteps?: number;
 }
 
 export interface SubconsciousBuiltInReflectionConfig {
@@ -84,6 +93,19 @@ export interface SubconsciousConfig {
   learnedGuidance?: boolean;
   tools?: boolean;
   activity?: false | { recentUpdates?: number };
+  /**
+   * Opt in to a curator-maintained pinned knowledge page that is delivered on every turn.
+   * Off by default: the cost of a pin is per turn and permanent.
+   * `capturePinning` (off by default, even with `pins: true`) additionally lets the capture
+   * agent pin at observation time; capture-time pins are for durable user preferences and
+   * hard constraints only and share the same budget.
+   */
+  pins?: boolean | { maxPins?: number; maxCharacters?: number; capturePinning?: boolean };
+  /**
+   * Run the curator after every N committed observation runs (in addition to any
+   * caller-driven `Memory.runCuration` triggers). Off by default.
+   */
+  curationCadence?: number;
   maxSteps?: number;
 }
 
@@ -92,7 +114,7 @@ export interface ResolvedSubconsciousAgent {
   instructions?: string;
   model?: SubconsciousModel;
   agent?: Agent;
-  maxSteps: number;
+  maxSteps?: number;
   builtIn: boolean;
 }
 
@@ -104,4 +126,6 @@ export interface ResolvedSubconsciousConfig {
   learnedGuidance: boolean;
   tools: boolean;
   activity: false | { recentUpdates: number };
+  pins: false | { maxPins: number; maxCharacters: number; capturePinning: boolean };
+  curationCadence?: number;
 }
