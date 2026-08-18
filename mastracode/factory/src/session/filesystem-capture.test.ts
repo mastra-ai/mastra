@@ -172,7 +172,9 @@ describe('observeSessionFilesystem', () => {
   it('does not gate the agent-end listener on slow capture execs', async () => {
     // The sandbox exec never resolves: the listener must still settle
     // immediately, because agent_end must not wait on the capture I/O.
-    const { session, listeners } = createSession();
+    // Unique resource id: this chain never settles and must not leak into
+    // other tests through the shared resource-level chain map.
+    const { session, listeners } = createSession(undefined, 'resource-never-settles');
     const gatedExec = new Promise<never>(() => {});
     session.getWorkspace = () => ({
       sandbox: { executeCommand: vi.fn(() => gatedExec) } as any,
@@ -190,7 +192,7 @@ describe('observeSessionFilesystem', () => {
   it('still persists the capture after the listener returns', async () => {
     // Gate the exec, release it after the listener has already settled, and
     // verify the capture completes in the background.
-    const { session, listeners } = createSession();
+    const { session, listeners } = createSession(undefined, 'resource-background-persist');
     let releaseExec: ((value: ReturnType<typeof commandResult>) => void) | undefined;
     const gate = new Promise<ReturnType<typeof commandResult>>(resolve => {
       releaseExec = resolve;
@@ -212,7 +214,10 @@ describe('observeSessionFilesystem', () => {
   });
 
   it('serializes captures when terminal events arrive before the prior capture finishes', async () => {
-    const { session, listeners } = createSession([commandResult(), commandResult(), commandResult(), commandResult()]);
+    const { session, listeners } = createSession(
+      [commandResult(), commandResult(), commandResult(), commandResult()],
+      'resource-serialize',
+    );
     let completeFirstCapture: (() => void) | undefined;
     const dependencies = createDependencies();
     dependencies.filesystem.replaceFiles = vi.fn(
@@ -235,10 +240,42 @@ describe('observeSessionFilesystem', () => {
     completeFirstCapture?.();
   });
 
+  it('serializes captures across sessions observing the same resource', async () => {
+    // Sessions are deduplicated by (resourceId, scope), so two scoped
+    // sessions can observe the same resource; their captures must extend one
+    // shared chain instead of interleaving through independent ones.
+    const first = createSession(undefined, 'resource-shared');
+    const second = createSession(undefined, 'resource-shared');
+    let releaseExec: ((value: ReturnType<typeof commandResult>) => void) | undefined;
+    const gate = new Promise<ReturnType<typeof commandResult>>(resolve => {
+      releaseExec = resolve;
+    });
+    const firstExec = vi
+      .fn()
+      .mockImplementationOnce(() => gate)
+      .mockImplementation(async () => commandResult());
+    first.session.getWorkspace = () => ({ sandbox: { executeCommand: firstExec } as any });
+    const dependencies = createDependencies();
+    observeSessionFilesystem(first.session, dependencies);
+    observeSessionFilesystem(second.session, dependencies);
+
+    first.listeners[0]!({ type: 'agent_end', reason: 'complete' });
+    second.listeners[0]!({ type: 'agent_end', reason: 'complete' });
+    await vi.waitFor(() => expect(firstExec).toHaveBeenCalledTimes(1));
+
+    // The second session's capture waits on the first session's gated exec.
+    expect(second.executeCommand).not.toHaveBeenCalled();
+    expect(dependencies.filesystem.replaceFiles).not.toHaveBeenCalled();
+
+    releaseExec?.(commandResult());
+    await vi.waitFor(() => expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(2));
+    expect(second.executeCommand).toHaveBeenCalled();
+  });
+
   it('disposing the listener does not cancel an in-flight capture', async () => {
     // A final-turn capture may still be running when the session tears the
     // listener down; the chain must run to completion and persist.
-    const { session, listeners } = createSession();
+    const { session, listeners } = createSession(undefined, 'resource-dispose');
     let releaseExec: ((value: ReturnType<typeof commandResult>) => void) | undefined;
     const gate = new Promise<ReturnType<typeof commandResult>>(resolve => {
       releaseExec = resolve;

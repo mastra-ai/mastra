@@ -91,10 +91,12 @@ export async function captureSessionFilesystem(
 }
 
 /**
- * In-flight capture chains keyed by session resource id, so readers of the
- * persisted file listing (the /web/workspace routes) can await the capture
- * for the turn that just ended instead of racing it. In-process only: the
- * factory server that runs the session controller also serves those routes.
+ * In-flight capture chains keyed by session resource id. Serves two purposes:
+ * readers of the persisted file listing (the /web/workspace routes) await the
+ * capture for the turn that just ended instead of racing it, and captures for
+ * the same resource stay sequential (last write wins) even when multiple
+ * scoped sessions observe the same resource id. In-process only: the factory
+ * server that runs the session controller also serves those routes.
  */
 const pendingCaptures = new Map<string, Promise<void>>();
 
@@ -124,7 +126,7 @@ export function observeSessionFilesystem(
   session: FilesystemCaptureSession,
   dependencies: FilesystemCaptureDependencies,
 ): () => void {
-  let capture = Promise.resolve();
+  let fallbackChain = Promise.resolve();
   return session.onBeforeAgentEnd(() => {
     // Chain so captures stay sequential (last write wins), but do NOT return
     // the chain: finishAgentRun awaits every listener before emitting
@@ -135,16 +137,21 @@ export function observeSessionFilesystem(
     // leak an unhandled rejection: captureSessionFilesystem's entire body
     // runs inside its own try/catch, and disposal of this listener does not
     // cancel an in-flight chain, so a final turn's capture still persists.
-    capture = capture.then(() => captureSessionFilesystem(session, dependencies));
-
     let resourceId: string | undefined;
     try {
       resourceId = session.identity.getResourceId();
     } catch {
-      // No resource id means no route can address this session's listing.
+      // No resource id means no route can address this session's listing;
+      // keep a per-observer chain so captures still run sequentially.
+      fallbackChain = fallbackChain.then(() => captureSessionFilesystem(session, dependencies));
       return;
     }
-    const chain = capture;
+    // Extend the resource-level chain rather than a per-session one: sessions
+    // are deduplicated by (resourceId, scope), so multiple scoped sessions can
+    // observe the same resource, and their captures must not interleave.
+    const chain = (pendingCaptures.get(resourceId) ?? Promise.resolve()).then(() =>
+      captureSessionFilesystem(session, dependencies),
+    );
     pendingCaptures.set(resourceId, chain);
     void chain.finally(() => {
       if (pendingCaptures.get(resourceId) === chain) {
