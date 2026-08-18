@@ -24,25 +24,28 @@ async function fillAndSend(page: Page, message: string) {
 
 async function assertToolStream(page: Page) {
   const expectedTextResult = `The weather in Paris is sunny, with a temperature of 19°C (66°F). The humidity is at 50%, and there's a light wind blowing at 10 mph. Perfect weather for a lovely day out or a cozy meal at home!`;
+  const thread = page.getByTestId('thread-wrapper');
+  const tool = thread.getByRole('group', { name: 'Tool: weatherInfo' });
+  const toolTrigger = tool.getByRole('button', { name: /weatherinfo/i });
 
   // Check tool badge
-  await expect(page.getByTestId('thread-wrapper').getByRole('button', { name: `weatherInfo` })).toBeVisible({
-    timeout: 20000,
-  });
+  await expect(toolTrigger).toBeVisible({ timeout: 20000 });
 
   // Asset streaming result
-  await expect(page.getByTestId('thread-wrapper').getByText(expectedTextResult)).toBeVisible({ timeout: 20000 });
+  await expect(thread.getByText(expectedTextResult)).toBeVisible({ timeout: 20000 });
 
-  await page.getByRole('button', { name: `weatherInfo` }).click();
-  await expect(page.getByTestId('tool-args')).toContainText('"location": "paris"');
+  await toolTrigger.click();
 
-  await expect(page.getByTestId('tool-result')).toContainText(`"temperature":`);
-  await expect(page.getByTestId('tool-result')).toContainText(`"feelsLike":`);
-  await expect(page.getByTestId('tool-result')).toContainText(`"humidity":`);
-  await expect(page.getByTestId('tool-result')).toContainText(`"windSpeed":`);
-  await expect(page.getByTestId('tool-result')).toContainText(`"windGust":`);
-  await expect(page.getByTestId('tool-result')).toContainText(`"conditions":`);
-  await expect(page.getByTestId('tool-result')).toContainText(`"location":`);
+  const input = tool.getByRole('group', { name: 'Input', exact: true });
+  const output = tool.getByRole('group', { name: 'Output', exact: true });
+  await expect(input).toContainText('"location": "paris"');
+  await expect(output).toContainText(`"temperature":`);
+  await expect(output).toContainText(`"feelsLike":`);
+  await expect(output).toContainText(`"humidity":`);
+  await expect(output).toContainText(`"windSpeed":`);
+  await expect(output).toContainText(`"windGust":`);
+  await expect(output).toContainText(`"conditions":`);
+  await expect(output).toContainText(`"location":`);
 }
 
 test.describe('Agent chat streaming', () => {
