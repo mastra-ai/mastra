@@ -249,13 +249,16 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
       }),
       { threadId: args.threadId, resourceId: args.resourceId },
     );
+    // Await the persist write when the sender exposes one. When it does not, resolving here does
+    // NOT mean the answer is durable — delivery stays best-effort and in-process, and the tool's
+    // acceptance wording says exactly that rather than implying a durable queue.
     await result?.persisted;
   };
 
   const askMemory = createTool({
     id: 'ask_memory',
     description:
-      'Ask the reminder agent a question in natural language about what this session already knows or discussed, for example "when did that happen". It remembers this session\'s earlier reminders and questions, so follow-ups that refer back to an earlier turn resolve. Set wait to false to keep working and receive the answer later as a signal carrying the returned correlationId.',
+      'Ask the reminder agent a question in natural language about what this session already knows or discussed, for example "when did that happen". It remembers this session\'s earlier reminders and questions, so follow-ups that refer back to an earlier turn resolve. Set wait to false to keep working and receive the answer later as a signal carrying the returned correlationId. Detached answers are best-effort and in-process only: if this process exits before the answer lands, it is lost.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -286,7 +289,13 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
         }
       }
 
-      const sender = await resolveSignalSender(context);
+      // The registry lookup can itself fail; a broken registry is a tool error, not a thrown turn.
+      let sender: SignalSender | undefined;
+      try {
+        sender = await resolveSignalSender(context);
+      } catch (error) {
+        return { ok: false, ...describeAskFailure(error) };
+      }
       const resourceId = context.agent?.resourceId;
       if (!sender || !resourceId) {
         return {
@@ -343,7 +352,7 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
         ok: true,
         accepted: true,
         correlationId,
-        note: 'The answer will arrive as a remembered signal carrying this correlationId.',
+        note: 'Best effort: the answer is delivered in-process as a remembered signal carrying this correlationId. If the process exits first, the answer is lost and never retried.',
       };
     },
   });

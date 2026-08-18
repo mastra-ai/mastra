@@ -843,6 +843,26 @@ describe('Subconscious remind ask lane', () => {
     }
   });
 
+  it('reports a broken agent registry as a tool error instead of throwing', async () => {
+    const { tools, generateSpy } = createAskTool({ response: 'Tuesday.' });
+    try {
+      const result: any = await tools.ask_memory.execute!(
+        { question: 'when?', wait: false } as any,
+        askContext({
+          mastra: {
+            getAgentById: vi.fn(async () => {
+              throw new Error('agent registry unavailable');
+            }),
+          },
+        }),
+      );
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain('agent registry unavailable');
+    } finally {
+      generateSpy.mockRestore();
+    }
+  });
+
   it('delivers the non-blocking answer as a remembered signal', async () => {
     const { tools, generateSpy } = createAskTool({ response: 'Tuesday.' });
     const capture = signalCapture();
