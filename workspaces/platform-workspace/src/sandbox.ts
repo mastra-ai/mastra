@@ -47,7 +47,14 @@ export type PlatformSandboxNetworkIsolation = 'ISOLATED' | 'PRIVATE';
 export interface SandboxAddressRegistry {
   set(sandboxId: string, instanceUrl: string): void;
   get(sandboxId: string): string | undefined;
-  delete(sandboxId: string): void;
+  /**
+   * Remove the entry for a sandbox. Implementations may return `true` if an
+   * entry was actually removed and `false` if there was nothing to delete;
+   * returning `void` is also accepted so pre-existing external implementations
+   * remain compatible. Callers treat any truthy return as "an entry existed"
+   * to skip logging no-op evictions.
+   */
+  delete(sandboxId: string): void | boolean;
 }
 
 export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'processes'>, PlatformClientOptions {
@@ -421,6 +428,20 @@ export class PlatformSandbox extends MastraSandbox {
    * failed/timed out, but now coalesced via `_leaseInFlight`).
    */
   private _transportReadyPromise: Promise<void> | null = null;
+  /**
+   * State of the most recent sidecar probe. Combined with the address
+   * registry state at fallback time, this lets the one-shot lease warn
+   * (see {@link executeCommand}) attribute a lease-path exec to a specific
+   * cold-start or degradation cause without per-exec instrumentation.
+   */
+  private _probeState: 'never-started' | 'in-flight' | 'succeeded' | 'timed-out' = 'never-started';
+  /**
+   * One-shot latch for the "exec fell through to lease path" warn. Reset
+   * to `false` whenever the address registry becomes populated (fresh
+   * `start()` or successful probe) so each degradation window produces
+   * exactly one log regardless of how many execs it spans.
+   */
+  private _leaseFallbackLogged = false;
 
   constructor(options: PlatformSandboxOptions = {}) {
     super({ ...options, name: 'PlatformSandbox', processes: new PlatformProcessManager() });
@@ -618,7 +639,32 @@ export class PlatformSandbox extends MastraSandbox {
    */
   private _populateAddressFromResponse(json: CreateSandboxResponse): void {
     if (!this._addressRegistry) return;
-    if (!json.instanceUrl) return;
+    if (!json.instanceUrl) {
+      // Proxy returned no instanceUrl (discovery failed, or an older proxy
+      // that predates the field). The registry stays empty, so every exec
+      // for this sandbox's lifetime goes via the lease/proxy path. This is
+      // the single most important cold-start degradation signal: one line
+      // here explains any subsequent lease-path behaviour for this sandbox
+      // without needing per-exec instrumentation.
+      this.logger.warn('platform-workspace instance url missing', {
+        sandboxId: json.id,
+        sessionId: this._client.sessionId,
+      });
+      // Fresh start() opens a new degradation window even when no probe fires.
+      // Drop the previous probe's terminal state and re-arm the one-shot lease
+      // warn so the next lease-path exec reports `instance-url-missing` (the
+      // actual reason) rather than `registry-evicted` / `probe-timed-out`
+      // inferred from the prior window. We deliberately do NOT delete the
+      // registry entry here — an older proxy that predates the `instanceUrl`
+      // field may leave a caller-populated or previously-probed entry that is
+      // still valid; a real transport failure will evict via
+      // `_invalidateAddress`, which is the correct signal.
+      this._probeGeneration++;
+      this._probeState = 'never-started';
+      this._transportReadyPromise = null;
+      this._leaseFallbackLogged = false;
+      return;
+    }
     // Clear any stale entry before probing. On reattach, the registry may have
     // the old sandbox's address; execs should fall back to lease until the new
     // probe succeeds rather than dialing the stale address.
@@ -627,6 +673,9 @@ export class PlatformSandbox extends MastraSandbox {
     // Early execs wait for the probe (up to TRANSPORT_READY_WAIT_MS) rather
     // than all racing to the lease path independently.
     const generation = ++this._probeGeneration;
+    this._probeState = 'in-flight';
+    // New start() means a fresh degradation window; re-arm the one-shot warn.
+    this._leaseFallbackLogged = false;
     this._transportReadyPromise = this._probeSidecarThenRegister(json.id, json.instanceUrl, generation);
   }
 
@@ -674,6 +723,10 @@ export class PlatformSandbox extends MastraSandbox {
           // Sidecar is listening. Only populate if this probe is still current.
           if (generation === this._probeGeneration && this._sandboxId === sandboxId) {
             this._addressRegistry?.set(sandboxId, instanceUrl);
+            this._probeState = 'succeeded';
+            // Registry is warm again; re-arm the one-shot lease warn so a
+            // future eviction gets its own log.
+            this._leaseFallbackLogged = false;
           }
           return;
         }
@@ -683,6 +736,12 @@ export class PlatformSandbox extends MastraSandbox {
       await new Promise(r => setTimeout(r, SIDECAR_PROBE_INTERVAL_MS));
     }
     // Sidecar never came up. Leave registry entry unset — every exec goes lease.
+    // If a teardown or new start() bumped `_probeGeneration` while our final
+    // health request was in flight, this probe has been superseded — don't
+    // clobber the newer probe's state and don't emit a timeout log that
+    // describes an old attempt after a newer one already succeeded.
+    if (generation !== this._probeGeneration) return;
+    this._probeState = 'timed-out';
     this.logger.warn('platform-workspace probe timed out', {
       sandboxId,
       sessionId: this._client.sessionId,
@@ -810,6 +869,13 @@ export class PlatformSandbox extends MastraSandbox {
     // after we've deleted the entry below. The probe checks this generation
     // before calling set().
     this._probeGeneration++;
+    // Reset probe state and re-arm the one-shot lease warn so the next
+    // start()'s degradation window is inferred from a clean slate — otherwise
+    // `_logLeaseFallbackOnce` would still see `succeeded`/`timed-out` from the
+    // previous run and mis-report the reason (or stay latched at `logged`).
+    this._probeState = 'never-started';
+    this._transportReadyPromise = null;
+    this._leaseFallbackLogged = false;
     await this._client.request(`/sandbox/${encodeURIComponent(destroyedSandboxId)}`, { method: 'DELETE' });
     // Clear local state so a subsequent start() creates a fresh remote sandbox
     // instead of taking the reattach branch and pointing exec at a deleted resource.
@@ -1032,6 +1098,7 @@ export class PlatformSandbox extends MastraSandbox {
     // `PlatformApiError` for other `/exec-lease` errors (404/500/501).
     // See ./direct-exec.ts and `docs/factory/direct-sandbox-connection.md`
     // in the Platform repo.
+    this._logLeaseFallbackOnce();
     const result = await this._runDirectExec(fullCommand, effectiveTimeout, options);
     // `_runDirectExec` throws on transport failure (see its jsdoc), so a
     // `null` exitCode here can only mean `timedOut: true` — the sandbox
@@ -1209,12 +1276,16 @@ export class PlatformSandbox extends MastraSandbox {
       if (error instanceof PrivateNetExecHttpError) {
         // Application-level failure from a reachable sidecar. Fall back for
         // this call, but do NOT evict the registry entry — future calls
-        // should still prefer the private-network path.
+        // should still prefer the private-network path. Stamp the one-shot
+        // lease warn with an explicit reason so the fallback in
+        // `executeCommand` (which sees `hasRegistryEntry: true`) records
+        // http-error rather than the misleading `registry-evicted`.
+        this._logLeaseFallbackOnce('private-net-http-error');
         return undefined;
       }
       // Anything else escaping is unexpected (e.g. options validation). Treat
       // it like a transport failure so we don't wedge the caller.
-      this._invalidateAddress();
+      this._invalidateAddress('unexpected-error');
       return undefined;
     }
 
@@ -1226,7 +1297,7 @@ export class PlatformSandbox extends MastraSandbox {
     // still evicted so subsequent execs skip a dial we already know is slow —
     // but the timed-out result itself flows back to the caller unchanged.
     if (result.timedOut) {
-      if (!result.opened) this._invalidateAddress();
+      if (!result.opened) this._invalidateAddress('timeout-before-headers');
       return result;
     }
 
@@ -1236,7 +1307,7 @@ export class PlatformSandbox extends MastraSandbox {
     // means connection refused (no timeout to disambiguate).
     const transportFailed = !result.opened || result.exitCode === null;
     if (transportFailed) {
-      this._invalidateAddress();
+      this._invalidateAddress(result.opened ? 'no-exit-frame' : 'connection-refused');
       return undefined;
     }
 
@@ -1249,8 +1320,65 @@ export class PlatformSandbox extends MastraSandbox {
    * `instanceUrl` from a workspace-proxy response — until then, execs skip
    * the private-net dial and go straight to the lease path.
    */
-  private _invalidateAddress(): void {
-    if (this._sandboxId) this._addressRegistry?.delete(this._sandboxId);
+  private _invalidateAddress(
+    reason: 'connection-refused' | 'no-exit-frame' | 'timeout-before-headers' | 'unexpected-error',
+  ): void {
+    if (!this._sandboxId) return;
+    const existed = this._addressRegistry?.delete(this._sandboxId) ?? false;
+    // Only warn on real eviction — no-op deletes are uninteresting noise.
+    // This is the "we just downgraded this sandbox to the slow lease path"
+    // signal that used to be silent. Joined with `probe ok` at start time,
+    // the pair fully describes any sandbox's transport state at time T.
+    if (existed) {
+      this.logger.warn('platform-workspace address registry evicted', {
+        sandboxId: this._sandboxId,
+        sessionId: this._client.sessionId,
+        reason,
+      });
+    }
+  }
+
+  /**
+   * Emit exactly one warn per degradation window when `executeCommand` falls
+   * through to the WebSocket lease path. Re-armed by `_populateAddressFromResponse`
+   * (new `start()`) and by a successful probe (`_probeSidecarThenRegister`),
+   * so a healthy sandbox that briefly loses its registry entry and recovers
+   * still gets a warn on the next degradation.
+   *
+   * The `reason` is inferred from probe state + registry state at call time,
+   * covering all four known lease-fallback triggers:
+   *   - `no-registry-configured`: platform runtime not wired for private-net.
+   *   - `instance-url-missing`: proxy returned no `instanceUrl` on start().
+   *   - `probe-in-flight`: cold-start race — probe hasn't finished yet.
+   *   - `probe-timed-out`: sidecar never came up within SIDECAR_PROBE_TIMEOUT_MS.
+   *   - `registry-evicted`: probe succeeded once but a later exec hit a
+   *     transport failure (see `_invalidateAddress`).
+   *   - `private-net-http-error`: sidecar reachable but returned non-2xx —
+   *     stamped separately by `_tryExecViaPrivateNetwork` before the
+   *     registry-preserving fallback (registry entry is still present).
+   */
+  private _logLeaseFallbackOnce(explicitReason?: 'private-net-http-error'): void {
+    if (this._leaseFallbackLogged) return;
+    this._leaseFallbackLogged = true;
+    const hasRegistryEntry = !!(this._sandboxId && this._addressRegistry?.get(this._sandboxId));
+    const reason: string =
+      explicitReason ??
+      (!this._addressRegistry
+        ? 'no-registry-configured'
+        : this._probeState === 'never-started'
+          ? 'instance-url-missing'
+          : this._probeState === 'in-flight'
+            ? 'probe-in-flight'
+            : this._probeState === 'timed-out'
+              ? 'probe-timed-out'
+              : 'registry-evicted');
+    this.logger.warn('platform-workspace exec using lease path', {
+      sandboxId: this._sandboxId,
+      sessionId: this._client.sessionId,
+      reason,
+      probeState: this._probeState,
+      hasRegistryEntry,
+    });
   }
 
   /**
