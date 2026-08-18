@@ -83,8 +83,11 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
   return ({ requestContext }: { requestContext: RequestContext }) => {
     const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
     const state = controller?.getState() as MastraCodeState | undefined;
-    const ownerId = controller?.session.ownerId;
-    if (ownerId) requestContext.set('organizationId', ownerId);
+    const subconsciousEnabled = Boolean(vector) && process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
+    if (subconsciousEnabled) {
+      const ownerId = controller?.session.ownerId;
+      if (ownerId) requestContext.set('organizationId', ownerId);
+    }
 
     const omScope = state?.omScope ?? getOmScope(state?.projectPath);
 
@@ -94,7 +97,6 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
 
     const observerPreviousObservationTokens = 1000;
     const observeAttachments = state?.observeAttachments;
-    const subconsciousEnabled = Boolean(vector) && process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
     const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${subconsciousEnabled ? 1 : 0}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;
