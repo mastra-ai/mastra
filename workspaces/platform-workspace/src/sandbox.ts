@@ -653,8 +653,9 @@ export class PlatformSandbox extends MastraSandbox {
    * fall back to the lease path until the probe succeeds.
    *
    * If the sidecar never comes up within {@link SIDECAR_PROBE_TIMEOUT_MS},
-   * the registry stays unpopulated and all execs go via lease for this
-   * sandbox's lifetime (or until a future `start()` re-runs the probe).
+   * the registry stays unpopulated, `_transportReadyPromise` is cleared,
+   * and a later {@link _awaitTransportReady} call restarts the probe
+   * instead of pinning this sandbox to the lease path.
    *
    * @param generation - The probe generation captured at call time. If this
    *   no longer matches `_probeGeneration` when the probe succeeds, the probe
