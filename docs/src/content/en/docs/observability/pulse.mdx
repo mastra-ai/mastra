@@ -25,7 +25,7 @@ Nothing derived is ever stored. Flows, span trees, durations, and status are rec
 - Keep session-layer facts (tool approvals, the true abort outcome) next to span facts.
 - Experiment with the event-first storage direction on top of ClickHouse.
 
-Pulse runs alongside the existing exporters. Adding the [PulseExporter](/reference/observability/pulse-exporter) doesn't change what [MastraStorageExporter](/reference/observability/tracing/exporters/mastra-storage-exporter) or any other exporter records.
+Pulse runs alongside the existing exporters. Adding the [ClickHouseHttpPulseExporter](/reference/observability/pulse-exporter) doesn't change what [MastraStorageExporter](/reference/observability/tracing/exporters/mastra-storage-exporter) or any other exporter records.
 
 ## Install
 
@@ -92,7 +92,7 @@ export const mastra = new Mastra({
 ```
 
 :::note
-Visit the [PulseExporter reference](/reference/observability/pulse-exporter) for all configuration options and the storage domain methods.
+Visit the [ClickHouseHttpPulseExporter reference](/reference/observability/pulse-exporter) for all configuration options and the storage domain methods.
 :::
 
 ## Flow status
@@ -140,4 +140,4 @@ Pulse is a research preview. Known gaps:
 
 - [Observability overview](/docs/observability/overview)
 - [Traces](/docs/observability/tracing/overview)
-- [PulseExporter reference](/reference/observability/pulse-exporter)
+- [ClickHouseHttpPulseExporter reference](/reference/observability/pulse-exporter)

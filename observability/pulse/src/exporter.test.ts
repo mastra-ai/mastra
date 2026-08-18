@@ -37,7 +37,8 @@ function relationshipEvent(): PulseBusEvent {
       seq: 8,
       type: 'origin_of',
       from: { kind: 'pulse', id: 'span-1' },
-      to: { kind: 'flow', id: 'trace-1' },
+      to: { kind: 'external', id: 'C123', system: 'slack' },
+      metadata: { channel: 'C123' },
       traceId: 'trace-1',
     },
   };
@@ -96,9 +97,12 @@ describe('ClickHouseHttpPulseExporter', () => {
       type: 'origin_of',
       from_kind: 'pulse',
       from_id: 'span-1',
-      to_kind: 'flow',
-      to_id: 'trace-1',
+      from_system: '',
+      to_kind: 'external',
+      to_id: 'C123',
+      to_system: 'slack',
     });
+    expect(JSON.parse(rows.relationships![0].metadata)).toEqual({ channel: 'C123' });
   });
 
   it('flushes when the batch size is reached', async () => {

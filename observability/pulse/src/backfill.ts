@@ -106,8 +106,11 @@ export async function backfillFromObservability(opts: BackfillOptions): Promise<
           // Replay the SAME live path — emitTokenMetrics through a metrics
           // context whose bus feeds the bridge — so the token+cost fold on
           // the model end pulse is identical by construction.
+          // The synthetic replay object satisfies emitTokenMetrics's actual
+          // contract (it reads only `type` and `attributes`); it is not a
+          // live Span, hence the two-step cast.
           emitTokenMetrics(
-            span as Parameters<typeof emitTokenMetrics>[0],
+            span as unknown as Parameters<typeof emitTokenMetrics>[0],
             new MetricsContextImpl({
               traceId: span.traceId,
               spanId: span.id,

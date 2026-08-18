@@ -123,6 +123,7 @@ export class InMemoryPulseStorage extends PulseStorage {
     const first = sorted[0]!;
     const last = sorted[sorted.length - 1]!;
     const threadId = sorted.find(p => p.threadId)?.threadId;
+    const resourceId = sorted.find(p => p.resourceId)?.resourceId;
 
     const rootStart = sorted.find(p => !p.parentSpanId && p.action.endsWith('_started'));
     const rootEnd = [...sorted]
@@ -170,6 +171,7 @@ export class InMemoryPulseStorage extends PulseStorage {
     return {
       flowId,
       threadId,
+      resourceId,
       startedAt: first.timestamp,
       durationMs,
       status,
@@ -187,6 +189,7 @@ export class InMemoryPulseStorage extends PulseStorage {
     let flows = [...this.#spanPulsesByFlow().entries()].map(([flowId, pulses]) => this.#deriveSummary(flowId, pulses));
     if (filter?.status) flows = flows.filter(f => f.status === filter.status);
     if (filter?.threadId) flows = flows.filter(f => f.threadId === filter.threadId);
+    if (filter?.resourceId) flows = flows.filter(f => f.resourceId === filter.resourceId);
     if (filter?.entityName) flows = flows.filter(f => f.entityName === filter.entityName);
     if (filter?.fromDate) flows = flows.filter(f => f.startedAt >= filter.fromDate!);
     if (filter?.toDate) flows = flows.filter(f => f.startedAt <= filter.toDate!);
@@ -239,11 +242,15 @@ export class InMemoryPulseStorage extends PulseStorage {
   async getFlowTimeline(flowId: string): Promise<FlowTimelineEntry[]> {
     const spanPulses = this.#spanPulsesByFlow().get(flowId);
     if (!spanPulses?.length) return [];
-    const threadId = spanPulses.find(p => p.threadId)?.threadId;
+    // Non-span facts join by exact run membership, never by thread: two runs
+    // on one thread must not inherit each other's approvals/follow-ups.
+    // RunId-less thread facts stay thread-level (same exactness law as abort
+    // attribution — every real per-run path stamps the runId).
+    const flowRunIds = new Set(spanPulses.map(p => p.runId).filter(Boolean));
 
     return this.#pulses
       .filter(
-        p => p.traceId === flowId || (threadId != null && p.threadId === threadId && p.source !== 'span' && !p.traceId),
+        p => p.traceId === flowId || (p.source !== 'span' && !p.traceId && p.runId != null && flowRunIds.has(p.runId)),
       )
       .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime() || a.seq - b.seq)
       .map(p => ({

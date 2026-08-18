@@ -65,9 +65,12 @@ export interface RelationshipRow {
   type: string;
   from_kind: string;
   from_id: string;
+  from_system: string;
   to_kind: string;
   to_id: string;
+  to_system: string;
   attributes: string;
+  metadata: string;
   trace_id: string;
 }
 
@@ -108,9 +111,12 @@ export function recordToRelationshipRow(record: PulseRelationshipRecord): Relati
     type: record.type,
     from_kind: record.from.kind,
     from_id: record.from.id,
+    from_system: record.from.system ?? '',
     to_kind: record.to.kind,
     to_id: record.to.id,
+    to_system: record.to.system ?? '',
     attributes: JSON.stringify(record.attributes ?? {}),
+    metadata: JSON.stringify(record.metadata ?? {}),
     trace_id: record.traceId,
   };
 }

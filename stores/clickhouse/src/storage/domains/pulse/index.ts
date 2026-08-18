@@ -26,7 +26,6 @@ import type { ClickhouseDomainConfig } from '../../db';
 const STALE_THRESHOLD_S = 30;
 /** Aggregation guard for the derived flow list; real ingest would use a
  * materialized read model instead (see scale notes). */
-const FLOW_SCAN_CAP = 1000;
 
 /** Canonical Pulse DDL — the single source; @mastra/pulse's standalone
  * schema pins itself to these via a sync test. */
@@ -169,6 +168,7 @@ interface FlowIndexReadRow {
 interface FlowAggRow {
   flow_id: string;
   thread: string;
+  resource: string;
   started_at: string;
   ended_at: string;
   run_ms: number | null;
@@ -297,7 +297,17 @@ export class PulseStorageClickhouse extends PulseStorage {
   async #flowAggregates(flowId?: string): Promise<FlowAggRow[]> {
     const where = flowId ? `AND p.trace_id = {var_flow:String}` : '';
     const result = await this.client.query({
-      query: `
+      query: `${this.#aggregateSql(where)}
+        ORDER BY started_at DESC`,
+      query_params: flowId ? { var_flow: flowId } : {},
+      format: 'JSONEachRow',
+    });
+    return result.json<FlowAggRow>();
+  }
+
+  /** The derived-flow aggregate, without ordering/limits, for composition. */
+  #aggregateSql(where: string): string {
+    return `
         WITH exact_aborts AS (
           /* The abort names its run; the flow is aborted iff it contains
              that run. Exact join — no window guessing. */
@@ -316,6 +326,7 @@ export class PulseStorageClickhouse extends PulseStorage {
         )
         SELECT p.trace_id AS flow_id,
                anyIf(p.thread_id, p.thread_id != '') AS thread,
+               anyIf(p.resource_id, p.resource_id != '') AS resource,
                min(p.timestamp) AS started_at,
                max(p.timestamp) AS ended_at,
                dateDiff('ms',
@@ -337,13 +348,7 @@ export class PulseStorageClickhouse extends PulseStorage {
         FROM (SELECT * FROM pulses LIMIT 1 BY id) p
         LEFT JOIN costs c ON c.trace_id = p.trace_id
         WHERE p.source = 'span' AND p.trace_id != '' ${where}
-        GROUP BY p.trace_id
-        ORDER BY min(p.timestamp) DESC
-        LIMIT ${FLOW_SCAN_CAP}`,
-      query_params: flowId ? { var_flow: flowId } : {},
-      format: 'JSONEachRow',
-    });
-    return result.json<FlowAggRow>();
+        GROUP BY p.trace_id`;
   }
 
   #toSummary(row: FlowAggRow): FlowSummary {
@@ -351,6 +356,7 @@ export class PulseStorageClickhouse extends PulseStorage {
     return {
       flowId: row.flow_id,
       threadId: row.thread || undefined,
+      resourceId: row.resource || undefined,
       startedAt: parseTs(row.started_at),
       durationMs: terminal && row.run_ms != null ? Number(row.run_ms) : null,
       status: row.status,
@@ -364,13 +370,55 @@ export class PulseStorageClickhouse extends PulseStorage {
     const { filter, pagination } = args;
     const page = pagination?.page ?? 0;
     const perPage = pagination?.perPage ?? 40;
-    let flows = (await this.#flowAggregates()).map(r => this.#toSummary(r));
-    if (filter?.status) flows = flows.filter(f => f.status === filter.status);
-    if (filter?.threadId) flows = flows.filter(f => f.threadId === filter.threadId);
-    if (filter?.entityName) flows = flows.filter(f => f.entityName === filter.entityName);
-    if (filter?.fromDate) flows = flows.filter(f => f.startedAt >= filter.fromDate!);
-    if (filter?.toDate) flows = flows.filter(f => f.startedAt <= filter.toDate!);
-    return { flows: flows.slice(page * perPage, (page + 1) * perPage), total: flows.length };
+
+    // Filters, total and pagination are pushed into SQL: an in-memory page
+    // over a capped scan silently truncates totals once flows exceed the cap.
+    const conditions: string[] = [];
+    const params: Record<string, unknown> = {};
+    if (filter?.status) {
+      conditions.push(`status = {var_status:String}`);
+      params.var_status = filter.status;
+    }
+    if (filter?.threadId) {
+      conditions.push(`thread = {var_thread:String}`);
+      params.var_thread = filter.threadId;
+    }
+    if (filter?.resourceId) {
+      conditions.push(`resource = {var_resource:String}`);
+      params.var_resource = filter.resourceId;
+    }
+    if (filter?.entityName) {
+      conditions.push(`entity_name = {var_entity:String}`);
+      params.var_entity = filter.entityName;
+    }
+    if (filter?.fromDate) {
+      conditions.push(`started_at >= {var_from:DateTime64(3)}`);
+      params.var_from = chTime(filter.fromDate);
+    }
+    if (filter?.toDate) {
+      conditions.push(`started_at <= {var_to:DateTime64(3)}`);
+      params.var_to = chTime(filter.toDate);
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const agg = `(${this.#aggregateSql('')})`;
+
+    const [pageResult, countResult] = await Promise.all([
+      this.client.query({
+        query: `SELECT * FROM ${agg} ${where}
+                ORDER BY started_at DESC
+                LIMIT {var_limit:UInt32} OFFSET {var_offset:UInt32}`,
+        query_params: { ...params, var_limit: perPage, var_offset: page * perPage },
+        format: 'JSONEachRow',
+      }),
+      this.client.query({
+        query: `SELECT count() AS total FROM ${agg} ${where}`,
+        query_params: params,
+        format: 'JSONEachRow',
+      }),
+    ]);
+    const rows = await pageResult.json<FlowAggRow>();
+    const countRows = await countResult.json<{ total: string | number }>();
+    return { flows: rows.map(r => this.#toSummary(r)), total: Number(countRows[0]?.total ?? 0) };
   }
 
   async getFlow(flowId: string): Promise<FlowDetail | null> {
@@ -435,11 +483,11 @@ export class PulseStorageClickhouse extends PulseStorage {
   async getFlowTimeline(flowId: string): Promise<FlowTimelineEntry[]> {
     const result = await this.client.query({
       query: `
-        WITH (SELECT anyIf(thread_id, thread_id != '') FROM pulses WHERE trace_id = {var_flow:String} AND source = 'span') AS flow_thread
+        WITH (SELECT groupUniqArrayIf(run_id, run_id != '') FROM pulses WHERE trace_id = {var_flow:String} AND source = 'span') AS flow_runs
         SELECT timestamp, seq, source, type, surface, action, run_id
         FROM (SELECT * FROM pulses LIMIT 1 BY id)
         WHERE trace_id = {var_flow:String}
-           OR (flow_thread != '' AND thread_id = flow_thread AND source != 'span' AND trace_id = '')
+           OR (source != 'span' AND trace_id = '' AND run_id != '' AND has(flow_runs, run_id))
         ORDER BY timestamp, seq
         LIMIT 2000`,
       query_params: { var_flow: flowId },

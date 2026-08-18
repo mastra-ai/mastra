@@ -103,6 +103,15 @@ const MODEL_SPAN_TYPES = new Set(['model_generation', 'model_step', 'model_infer
  * Auto-extracted token metric name → data key on the semantic model pulse.
  * Source of truth: observability/mastra/src/metrics/types.ts (TokenMetrics).
  */
+/**
+ * Cost rides ONLY the two carrier totals. The metrics layer attaches an
+ * estimatedCost to every detail metric AND puts the SUM of those details on
+ * the matching total (observability/mastra/src/metrics/estimator.ts), and a
+ * provider-supplied costContext is attached to one total as `query_total`.
+ * Folding detail costs as well would double the true cost.
+ */
+const COST_CARRIER_METRICS = new Set(['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens']);
+
 const TOKEN_METRIC_FOLD: Record<string, string> = {
   mastra_model_total_input_tokens: 'total_input_tokens',
   mastra_model_total_output_tokens: 'total_output_tokens',
@@ -245,11 +254,23 @@ export class PulseBridge extends MastraBase implements ObservabilityExporter {
     try {
       s = JSON.stringify(value);
     } catch {
-      return { truncated: true, preview: String(value).slice(0, this.#payloadCap) };
+      return { truncated: true, preview: this.#truncateUtf8(String(value)) };
     }
     if (s == null) return undefined;
-    if (s.length <= this.#payloadCap) return value;
-    return { truncated: true, preview: s.slice(0, this.#payloadCap) };
+    // The cap is BYTES (what storage/wire actually pay), not UTF-16 units —
+    // multibyte text would otherwise blow the budget by up to 3x.
+    if (Buffer.byteLength(s, 'utf8') <= this.#payloadCap) return value;
+    return { truncated: true, preview: this.#truncateUtf8(s) };
+  }
+
+  /** Truncate to the byte cap without splitting a multibyte code point. */
+  #truncateUtf8(s: string): string {
+    const buf = Buffer.from(s, 'utf8');
+    if (buf.byteLength <= this.#payloadCap) return s;
+    let end = this.#payloadCap;
+    // Back off continuation bytes (0b10xxxxxx) to the code-point start.
+    while (end > 0 && (buf[end]! & 0xc0) === 0x80) end--;
+    return buf.subarray(0, end).toString('utf8');
   }
 
   #emitPulse(record: PulseRecord): void {
@@ -511,7 +532,7 @@ export class PulseBridge extends MastraBase implements ObservabilityExporter {
         this.#metricCache.set(metric.spanId, entry);
       }
       if (value !== undefined) entry.data[foldKey] = value;
-      if (hasCost) entry.data.cost_usd = (entry.data.cost_usd ?? 0) + cost;
+      if (hasCost && COST_CARRIER_METRICS.has(name)) entry.data.cost_usd = (entry.data.cost_usd ?? 0) + cost;
       return;
     }
 

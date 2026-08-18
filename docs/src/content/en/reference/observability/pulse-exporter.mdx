@@ -1,6 +1,6 @@
 ---
-title: 'Reference: PulseExporter | Observability'
-description: 'API reference for PulseExporter, the experimental event-first observability exporter, plus the pulse storage domain and client methods.'
+title: 'Reference: @mastra/pulse | Observability'
+description: 'API reference for the experimental @mastra/pulse package — the ClickHouseHttpPulseExporter, the pulse storage domain, and client methods.'
 packages:
   - '@mastra/pulse'
   - '@mastra/core'
@@ -9,7 +9,7 @@ packages:
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
-# PulseExporter
+# @mastra/pulse
 
 :::warning
 
@@ -17,79 +17,66 @@ DRAFT — experimental research preview; API subject to spec review. Interfaces,
 
 :::
 
-Translates every observability event family (spans, logs, metrics, scores, feedback, drop meta-events) into append-only pulse and relationship rows. Flows, trees, durations, and status are derived at read time. See [Pulse](/docs/observability/pulse) for the concept.
+The pulse pipeline lives in `@mastra/core` (bus, span bridge, storage writer) and is enabled with `new Mastra({ pulse })`. This package ships the standalone ClickHouse HTTP exporter, table helpers, and backfill; it also re-exports the core pipeline pieces (`PulseBus`, `PulseBridge`, `PulseStorageExporter`). Flows, trees, durations, and status are derived at read time. See [Pulse](/docs/observability/pulse) for the concept.
 
 ## Usage example
 
-Write directly to ClickHouse over HTTP:
+Write through a registered `pulse` storage domain (the usual setup):
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
-import { Observability } from '@mastra/observability'
-import { PulseExporter } from '@mastra/pulse'
-
-export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'my-app',
-        exporters: [
-          new PulseExporter({
-            url: 'http://localhost:8123',
-            database: 'pulse',
-          }),
-        ],
-      },
-    },
-  }),
-})
-```
-
-Or write through a registered `pulse` storage domain:
-
-```typescript
-import { PulseExporter } from '@mastra/pulse'
+import { createClient } from '@clickhouse/client'
 import { PulseStorageClickhouse } from '@mastra/clickhouse'
 
-const pulseStore = new PulseStorageClickhouse({
+const client = createClient({
   url: 'http://localhost:8123',
   username: 'default',
   password: process.env.CLICKHOUSE_PASSWORD!,
+  database: 'pulse',
 })
 
-const exporter = new PulseExporter({ storage: pulseStore })
+export const mastra = new Mastra({
+  pulse: { storage: new PulseStorageClickhouse({ client }) },
+})
 ```
 
-When neither `storage` nor `url` plus `database` is provided, the exporter disables itself and writes nothing.
+Or attach the standalone HTTP exporter to the pulse bus (no storage domain needed):
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { ClickHouseHttpPulseExporter, ensurePulseTables } from '@mastra/pulse'
+
+await ensurePulseTables({ url: 'http://localhost:8123', database: 'pulse' })
+
+export const mastra = new Mastra({
+  pulse: {
+    exporters: [
+      new ClickHouseHttpPulseExporter({
+        url: 'http://localhost:8123',
+        database: 'pulse',
+      }),
+    ],
+  },
+})
+```
 
 ## Constructor parameters
 
 ```typescript prettier:false
-new PulseExporter(config: PulseExporterConfig)
+new ClickHouseHttpPulseExporter(config: ClickHouseHttpPulseExporterConfig)
 ```
-
-`PulseExporterConfig` extends `BaseExporterConfig`, which includes `logger` and `logLevel`.
 
 <PropertiesTable
   content={[
   {
-    name: 'storage',
-    type: 'PulseStorageLike',
-    description:
-      'Pulse storage domain to write through (e.g. `PulseStorageClickhouse` from `@mastra/clickhouse`). When set, `url` and `database` are not required.',
-    isOptional: true,
-  },
-  {
     name: 'url',
     type: 'string',
-    description: 'ClickHouse HTTP endpoint, e.g. `http://localhost:8123`. Required unless `storage` is set.',
-    isOptional: true,
+    description: 'ClickHouse HTTP endpoint, e.g. `http://localhost:8123`.',
   },
   {
     name: 'database',
     type: 'string',
-    description: 'Target ClickHouse database. Required unless `storage` is set.',
-    isOptional: true,
+    description: 'Target ClickHouse database.',
   },
   {
     name: 'username',
@@ -120,12 +107,10 @@ new PulseExporter(config: PulseExporterConfig)
     defaultValue: '2000',
   },
   {
-    name: 'payloadCapBytes',
-    type: 'number',
-    description:
-      'Serialized payload cap for span input and output, in bytes. Larger payloads are truncated to a preview.',
+    name: 'logger',
+    type: '{ debug: (message: string) => void }',
+    description: 'Diagnostic sink for write failures. Silent by default.',
     isOptional: true,
-    defaultValue: '4096',
   },
 ]}
 />
@@ -302,14 +287,14 @@ await ensurePulseTables({
 
 #### `backfillFromObservability(options)`
 
-Replays spans already persisted by the observability storage domain through a `PulseExporter`, so historical traces gain a pulse read model.
+Replays spans already persisted by the observability storage domain onto a pulse bus (or directly through a pulse storage domain), so historical traces gain a pulse read model.
 
 ```typescript
 import { backfillFromObservability } from '@mastra/pulse'
 
 const result = await backfillFromObservability({
   observability: observabilityStore,
-  exporter,
+  storage: pulseStorage, // or: bus (an existing PulseBus) — one of the two is required
   pageSize: 50,
   maxTraces: 500,
 })
@@ -324,9 +309,16 @@ const result = await backfillFromObservability({
     description: 'Object exposing `listTraces` and `getTrace`, such as the observability storage domain.',
   },
   {
-    name: 'exporter',
-    type: 'PulseExporter',
-    description: 'Exporter to replay the spans through.',
+    name: 'bus',
+    type: 'PulseBus',
+    description: 'Existing pulse bus to emit onto. Mutually exclusive with `storage`; one of the two is required.',
+    isOptional: true,
+  },
+  {
+    name: 'storage',
+    type: 'PulseStorage',
+    description: 'Pulse storage domain to write through (an internal bus and writer are managed for you).',
+    isOptional: true,
   },
   {
     name: 'pageSize',

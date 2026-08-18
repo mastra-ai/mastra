@@ -55,6 +55,7 @@ describe('PulseStorageClickhouse (live)', () => {
       surface: 'agent',
       action: 'run_started',
       traceId: 'flow-1',
+      runId: 'run-1',
       source: 'span',
       ...o,
     });
@@ -91,11 +92,23 @@ describe('PulseStorageClickhouse (live)', () => {
       p({
         traceId: '',
         threadId: 't-1',
+        runId: 'run-1',
         source: 'session',
         surface: 'tool_approval',
         action: 'required',
         type: 'decision',
         timestamp: at(500),
+      }),
+      // ANOTHER run's fact on the same thread: timelines join by exact runId,
+      // so this must never leak into flow-1's timeline.
+      p({
+        traceId: '',
+        threadId: 't-1',
+        runId: 'run-other',
+        source: 'session',
+        surface: 'session',
+        action: 'config_changed',
+        timestamp: at(510),
       }),
       // a second flow, aborted via the session-layer override (exact runId join)
       p({ traceId: 'flow-2', spanId: 'root2', threadId: 't-2', runId: 'run-2', timestamp: at(0) }),
@@ -501,6 +514,43 @@ describe('status rule parity: ClickHouse must match the in-memory oracle', () =>
       'flow-ch': 'completed|dur=900',
       'flow-e': 'running|dur=null',
     });
+  });
+});
+
+describe('flow list pushdown (live)', () => {
+  it('filters by resourceId and reports true totals past 1000 flows', async ctx => {
+    if (!available) return ctx.skip();
+    const store = makeStore();
+    await store.init();
+    await store.dangerouslyClearAll();
+
+    // 1005 tiny flows: totals must come from SQL, not an in-memory page
+    // over a capped scan (the old FLOW_SCAN_CAP=1000 silently truncated).
+    const rows = [];
+    for (let i = 0; i < 1005; i++) {
+      rows.push({
+        id: `bulk-${i}`,
+        timestamp: at(i),
+        seq: i + 1,
+        type: 'state' as const,
+        surface: 'agent',
+        action: 'run_started',
+        traceId: `bulk-flow-${i}`,
+        spanId: `root-${i}`,
+        resourceId: i % 2 === 0 ? 'user-even' : 'user-odd',
+        source: 'span',
+      });
+    }
+    await store.batchCreatePulses(rows);
+
+    const all = await store.listFlows({ pagination: { page: 0, perPage: 10 } });
+    expect(all.total).toBe(1005);
+    expect(all.flows).toHaveLength(10);
+
+    const even = await store.listFlows({ filter: { resourceId: 'user-even' }, pagination: { page: 0, perPage: 5 } });
+    expect(even.total).toBe(503);
+    expect(even.flows).toHaveLength(5);
+    expect(even.flows.every(f => f.resourceId === 'user-even')).toBe(true);
   });
 });
 

@@ -145,13 +145,14 @@ describe('InMemoryPulseStorage (derivation rules)', () => {
     expect(flows[0]!.costUsd).toBeCloseTo(0.0002);
   });
 
-  it('interleaves session-lane facts into the timeline by thread', async () => {
+  it('interleaves non-span facts into the timeline by exact run membership', async () => {
     const s = store();
     await s.batchCreatePulses(completedFlow('flow-1', 't-1'));
     await s.batchCreatePulses([
       pulse({
         traceId: '',
         threadId: 't-1',
+        runId: 'run-flow-1',
         source: 'session',
         surface: 'tool_approval',
         action: 'required',
@@ -169,6 +170,42 @@ describe('InMemoryPulseStorage (derivation rules)', () => {
     ]);
   });
 
+  it("never leaks another run's thread-scoped facts into a flow timeline", async () => {
+    const s = store();
+    // Two runs share thread t-1. Each flow's timeline must contain ONLY its
+    // own run's non-span facts — membership is by exact runId, never by
+    // thread (two concurrent runs on one thread would otherwise inherit each
+    // other's approvals/follow-ups). RunId-less thread facts stay thread-level.
+    await s.batchCreatePulses(completedFlow('flow-1', 't-1'));
+    await s.batchCreatePulses(completedFlow('flow-2', 't-1'));
+    await s.batchCreatePulses([
+      pulse({
+        traceId: '',
+        threadId: 't-1',
+        runId: 'run-flow-2',
+        source: 'session',
+        surface: 'tool_approval',
+        action: 'required',
+        type: 'decision',
+        timestamp: at(500),
+      }),
+      pulse({
+        traceId: '',
+        threadId: 't-1',
+        source: 'session',
+        surface: 'session',
+        action: 'config_changed',
+        type: 'state',
+        timestamp: at(510),
+      }),
+    ]);
+    const t1 = await s.getFlowTimeline('flow-1');
+    expect(t1.every(e => e.source === 'span')).toBe(true);
+    const t2 = await s.getFlowTimeline('flow-2');
+    expect(t2.map(e => `${e.source}:${e.action}`)).toContain('session:required');
+    expect(t2.map(e => `${e.source}:${e.action}`)).not.toContain('session:config_changed');
+  });
+
   it('filters and paginates flow lists', async () => {
     const s = store();
     for (let i = 0; i < 5; i++) {
@@ -184,6 +221,16 @@ describe('InMemoryPulseStorage (derivation rules)', () => {
     expect(page.flows[0]!.flowId).toBe('flow-4'); // most recent first
     const filtered = await s.listFlows({ filter: { threadId: 't-2' } });
     expect(filtered.flows).toHaveLength(1);
+  });
+
+  it('filters flows by resourceId', async () => {
+    const s = store();
+    await s.batchCreatePulses(completedFlow('flow-a', 't-1').map(p => ({ ...p, resourceId: 'user-a' })));
+    await s.batchCreatePulses(completedFlow('flow-b', 't-2').map(p => ({ ...p, resourceId: 'user-b' })));
+    const { flows, total } = await s.listFlows({ filter: { resourceId: 'user-a' } });
+    expect(total).toBe(1);
+    expect(flows.map(f => f.flowId)).toEqual(['flow-a']);
+    expect(flows[0]!.resourceId).toBe('user-a');
   });
 });
 

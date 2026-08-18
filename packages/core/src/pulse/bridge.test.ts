@@ -21,7 +21,7 @@ function makeSpan(overrides: Record<string, any> = {}) {
   };
 }
 
-function harness() {
+function harness(config: Partial<ConstructorParameters<typeof PulseBridge>[0]> = {}) {
   const bus = new PulseBus();
   const pulses: PulseRecord[] = [];
   const relationships: PulseRelationshipRecord[] = [];
@@ -29,7 +29,7 @@ function harness() {
     if (event.type === 'pulse') pulses.push(event.record);
     else relationships.push(event.record);
   });
-  const bridge = new PulseBridge({ bus });
+  const bridge = new PulseBridge({ bus, ...config });
   return { bus, bridge, pulses, relationships };
 }
 
@@ -289,6 +289,64 @@ describe('PulseBridge enrichment switch (directive 3)', () => {
     bridge.onMetricEvent(tokenMetric('mastra_model_total_input_tokens', 30, { spanId: undefined }) as any);
     expect(pulses).toHaveLength(1);
     expect(pulses[0]).toMatchObject({ action: 'metric_recorded', surface: 'model' });
+  });
+
+  it('caps payloads by UTF-8 bytes, never splitting a code point', async () => {
+    const { bridge, pulses } = harness({ payloadCapBytes: 16 });
+    await bridge.exportTracingEvent({
+      type: TracingEventType.SPAN_ENDED,
+      exportedSpan: makeSpan({
+        id: 'model-span-1',
+        type: 'model_generation',
+        // 10 × '€' = 10 chars but 30 UTF-8 bytes — over a 16-byte cap even
+        // though the old char-count check would have passed it.
+        output: { text: '€€€€€€€€€€' },
+        attributes: { model: 'gpt-5', provider: 'openai' },
+      }) as any,
+    });
+    expect(pulses).toHaveLength(1);
+    const output = (pulses[0]!.attributes as any).output;
+    expect(output.truncated).toBe(true);
+    // Byte-truncated preview is valid UTF-8 (no lone surrogate/replacement).
+    expect(Buffer.byteLength(output.preview, 'utf8')).toBeLessThanOrEqual(16);
+    expect(output.preview.includes('\uFFFD')).toBe(false);
+  });
+
+  it('folds cost from carrier totals only — detail costs are constituents, not additions', async () => {
+    const { bridge, pulses } = harness();
+
+    // Real estimator shape (metrics/estimator.ts): each detail metric carries
+    // its own estimatedCost AND the total metric carries the SUM of those
+    // details. Folding all of them doubles the true cost.
+    bridge.onMetricEvent(
+      tokenMetric('mastra_model_input_text_tokens', 30, { costContext: { estimatedCost: 0.003 } }) as any,
+    );
+    bridge.onMetricEvent(
+      tokenMetric('mastra_model_total_input_tokens', 30, { costContext: { estimatedCost: 0.003 } }) as any,
+    );
+    bridge.onMetricEvent(
+      tokenMetric('mastra_model_output_text_tokens', 30, { costContext: { estimatedCost: 0.005 } }) as any,
+    );
+    bridge.onMetricEvent(
+      tokenMetric('mastra_model_output_reasoning_tokens', 10, { costContext: { estimatedCost: 0.002 } }) as any,
+    );
+    bridge.onMetricEvent(
+      tokenMetric('mastra_model_total_output_tokens', 40, { costContext: { estimatedCost: 0.007 } }) as any,
+    );
+
+    await bridge.exportTracingEvent({
+      type: TracingEventType.SPAN_ENDED,
+      exportedSpan: makeSpan({
+        id: 'model-span-1',
+        type: 'model_generation',
+        output: { text: 'hi' },
+        attributes: { model: 'gpt-5', provider: 'openai', usage: { totalTokens: 70 } },
+      }) as any,
+    });
+
+    expect(pulses).toHaveLength(1);
+    // True cost = 0.003 (input total) + 0.007 (output total) = 0.01 — NOT 0.02.
+    expect(pulses[0]!.data!.cost_usd).toBeCloseTo(0.01, 10);
   });
 
   it('drains leftover cache entries as metric_recorded pulses on flush and shutdown', async () => {

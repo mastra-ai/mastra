@@ -68,6 +68,7 @@ export type FlowStatus = 'running' | 'completed' | 'failed' | 'aborted' | 'stale
 export interface FlowSummary {
   flowId: string;
   threadId?: string;
+  resourceId?: string;
   startedAt: Date;
   /** Derived from paired root start/terminal pulses; null while running/stale. */
   durationMs: number | null;
