@@ -645,7 +645,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
             resolvedToolProvidersConfig,
             (providerId: string) => this.editor.getToolProviderOrThrow(providerId),
             {
-              requestContext: ctx,
+              requestContext,
               authorId: storedConfig!.authorId,
               logger: this.logger,
             },
@@ -856,7 +856,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
           resolvedToolProvidersConfig,
           (providerId: string) => this.editor.getToolProviderOrThrow(providerId),
           {
-            requestContext: ctx,
+            requestContext,
             authorId: storedAgent.authorId,
             logger: this.logger,
           },
