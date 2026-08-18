@@ -1,6 +1,7 @@
 import type {
   AgentControllerDisplayState,
   AgentControllerEvent as ControllerEvent,
+  AgentControllerThread,
   MastraDBMessage,
   MastraMessagePart,
 } from '@mastra/core/agent-controller';
@@ -44,6 +45,12 @@ import { BaseResource } from './base';
 
 /** A `MastraDBMessage` before {@link hydrateMessage} turns its `createdAt` back into a `Date`. */
 type SerializedMastraDBMessage = Omit<MastraDBMessage, 'createdAt'> & { createdAt: Date | string };
+
+/** An `AgentControllerThread` before {@link hydrateThread} turns its timestamps back into `Date`s. */
+type SerializedThread = Omit<AgentControllerThread, 'createdAt' | 'updatedAt'> & {
+  createdAt: Date | string;
+  updatedAt: Date | string;
+};
 
 /** One arm of the controller's event union, selected by its `type`. */
 type ControllerEventOf<T extends ControllerEvent['type']> = Extract<ControllerEvent, { type: T }>;
@@ -194,18 +201,29 @@ export function isKnownAgentControllerEvent(event: AgentControllerEvent): event 
   return KNOWN_AGENT_CONTROLLER_EVENT_TYPES.has(event.type);
 }
 
+const toDate = (value: Date | string): Date => (value instanceof Date ? value : new Date(value));
+
 function hydrateMessage(message: SerializedMastraDBMessage): MastraDBMessage {
-  return {
-    ...message,
-    createdAt: message.createdAt instanceof Date ? message.createdAt : new Date(message.createdAt),
-  };
+  return { ...message, createdAt: toDate(message.createdAt) };
 }
 
-function hydrateEventMessage(event: AgentControllerEvent): AgentControllerEvent {
-  if (!isKnownAgentControllerEvent(event)) return event;
-  if (event.type !== 'message_start' && event.type !== 'message_update' && event.type !== 'message_end') return event;
+function hydrateThread(thread: SerializedThread): AgentControllerThread {
+  return { ...thread, createdAt: toDate(thread.createdAt), updatedAt: toDate(thread.updatedAt) };
+}
 
-  return { ...event, message: hydrateMessage(event.message) };
+/** The stream carries every timestamp as an ISO string; give consumers back the `Date`s the type promises. */
+function hydrateEventTimestamps(event: AgentControllerEvent): AgentControllerEvent {
+  if (!isKnownAgentControllerEvent(event)) return event;
+  switch (event.type) {
+    case 'message_start':
+    case 'message_update':
+    case 'message_end':
+      return { ...event, message: hydrateMessage(event.message) };
+    case 'thread_created':
+      return { ...event, thread: hydrateThread(event.thread) };
+    default:
+      return event;
+  }
 }
 
 /** Resume payload for the built-in `submit_plan` suspension. */
@@ -418,7 +436,7 @@ export class AgentControllerSession extends BaseResource {
               if (!data) continue;
               let event: AgentControllerEvent;
               try {
-                event = hydrateEventMessage(JSON.parse(data) as AgentControllerEvent);
+                event = hydrateEventTimestamps(JSON.parse(data) as AgentControllerEvent);
               } catch {
                 continue;
               }

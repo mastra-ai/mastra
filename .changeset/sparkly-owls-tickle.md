@@ -8,6 +8,8 @@ Fixed the agent controller event types, which described payloads the server neve
 
 `isKnownAgentControllerEvent` now returns `true` for those seven events as well. If you route unrecognised events to a fallback branch, they no longer reach it — give them a case in your `switch` or they are silently dropped.
 
+`thread_created` now delivers `thread.createdAt` and `thread.updatedAt` as `Date`s, the way the `message_*` events already did — the stream carries them as ISO strings.
+
 Payload drift is now a compile error instead of a wrong field at runtime, so handlers reading the old fields need updating.
 
 ```ts
