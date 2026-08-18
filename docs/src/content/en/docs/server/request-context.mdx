@@ -300,7 +300,7 @@ These keys are used to implement user isolation in multi-tenant applications. Se
 
 ### Memory requires a resource scope
 
-`MASTRA_RESOURCE_ID_KEY` is the authorization boundary for memory. When a request is authenticated but no resource ID can be derived from the request context, memory routes fail closed with a 403 instead of returning every resource's threads. Client-provided resource IDs are ignored in this case, because a caller could otherwise pass another user's resource ID.
+`MASTRA_RESOURCE_ID_KEY` is the authorization boundary for memory. Memory routes return a 403 when a request is authenticated but no resource ID can be derived from the request context. Client-provided resource IDs are ignored in that case, because a caller could otherwise pass another user's resource ID.
 
 Configure `mapUserToResourceId` (or set `MASTRA_RESOURCE_ID_KEY` in middleware) so authenticated users are scoped to their own memory.
 
