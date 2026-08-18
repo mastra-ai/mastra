@@ -102,12 +102,25 @@ export type { ScreencastOptions, ScreencastStream } from '../browser/browser';
 export type ZodSchema = ZodSchemaV3 | ZodTypev4;
 
 /**
+ * Provider-defined tools as accepted in a tools map.
+ *
+ * The exported `ProviderDefinedTool` is intentionally wide — its `ToolV5` branch has
+ * only optional properties plus an index signature so that provider tools resolved
+ * from a different `@ai-sdk/provider-utils` copy still match structurally. That width
+ * also makes it match any object-like value, including plain functions. Requiring
+ * `id` here mirrors the runtime guard in `isProviderDefinedTool` (tools/toolchecks.ts),
+ * which already demands a string `id`, and is what keeps non-tool values out of
+ * `ToolsInput` without narrowing the public type.
+ */
+type ProviderDefinedToolInput = ProviderDefinedTool & { id: string };
+
+/**
  * Accepts Mastra tools, Vercel AI SDK tools, and provider-defined tools
  * (e.g., google.tools.googleSearch()).
  */
 export type ToolsInput = Record<
   string,
-  ToolAction<any, any, any, any, any> | VercelTool | VercelToolV5 | ProviderDefinedTool | WebSearchToolPlaceholder
+  ToolAction<any, any, any, any, any> | VercelTool | VercelToolV5 | ProviderDefinedToolInput | WebSearchToolPlaceholder
 >;
 
 export type AgentInstructions = SystemMessage;
