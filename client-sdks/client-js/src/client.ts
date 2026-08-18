@@ -99,7 +99,6 @@ import type {
   LegacyTracesPaginatedArg,
   LegacyGetTracesResponse,
 } from './resources/observability';
-import { Pulse } from './resources/pulse';
 import type {
   ClientOptions,
   CreateMemoryThreadParams,
@@ -220,15 +219,12 @@ export class MastraClient extends BaseResource {
   public readonly conversations: Conversations;
   public readonly responses: Responses;
   public readonly channels: Channels;
-  /** Experimental Pulse (event-first observability) API. */
-  public readonly pulse: Pulse;
   constructor(options: ClientOptions) {
     super(options);
     this.observability = new Observability(options);
     this.conversations = new Conversations(options);
     this.responses = new Responses(options);
     this.channels = new Channels(options);
-    this.pulse = new Pulse(options);
   }
 
   /**

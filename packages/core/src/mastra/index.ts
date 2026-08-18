@@ -1551,7 +1551,6 @@ export class Mastra<
             storage: config.pulse.storage ?? (async () => await this.#storage?.getStore('pulse')),
             batchSize: config.pulse.batchSize,
             flushIntervalMs: config.pulse.flushIntervalMs,
-            flowIndex: config.pulse.flowIndex,
             onDrop: event => this.#pulseBus?.emitDropEvent(event),
           }),
         );

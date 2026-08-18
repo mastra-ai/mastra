@@ -1,8 +1,9 @@
-import { numericLeaves, spanPulseId, surfaceAction } from './bridge';
+import { numericLeaves, spanPulseId, surfaceAction, usageTokenData } from './bridge';
+
+export { usageTokenData };
 import { emitPulseFact } from './emitter';
 import type { PulseFactInput } from './emitter';
 import { mintFactId } from './identity';
-import { takeFold } from './metric-fold';
 
 /**
  * First-hand span-lifecycle facts (the 'native' lane).
@@ -54,28 +55,6 @@ export interface LifecycleSiteContext {
   attributes?: Record<string, string | number | boolean | undefined>;
   /** Definition identities this fact used (uses_definition edges). */
   definitionIds?: string[];
-}
-
-/** Map a raw usage object to the canonical fold-key token data. */
-export function usageTokenData(usage: any): Record<string, number> | undefined {
-  if (!usage) return undefined;
-  const out: Record<string, number> = {};
-  const put = (k: string, v: unknown) => {
-    if (typeof v === 'number' && Number.isFinite(v)) out[k] = v;
-  };
-  put('total_input_tokens', usage.inputTokens);
-  put('total_output_tokens', usage.outputTokens);
-  put('usage.totalTokens', usage.totalTokens);
-  put('input_text_tokens', usage.inputDetails?.text);
-  put('input_cache_read_tokens', usage.inputDetails?.cacheRead);
-  put('input_cache_write_tokens', usage.inputDetails?.cacheWrite);
-  put('input_audio_tokens', usage.inputDetails?.audio);
-  put('input_image_tokens', usage.inputDetails?.image);
-  put('output_text_tokens', usage.outputDetails?.text);
-  put('output_reasoning_tokens', usage.outputDetails?.reasoning);
-  put('output_audio_tokens', usage.outputDetails?.audio);
-  put('output_image_tokens', usage.outputDetails?.image);
-  return Object.keys(out).length ? out : undefined;
 }
 
 /** The structural subset of a span this module reads. */
@@ -136,12 +115,6 @@ export function emitSpanFact(
 
   const pulseId = spanPulseId(traceId, span.id, isEnd && !isEventSpan ? 'ended' : 'started');
   const data = numericLeaves(span.attributes?.usage, 'usage');
-  // Token/cost fold — same shared store as the bridge, idempotent take, so
-  // both lanes' model end facts carry identical folded data.
-  if (isEnd && (span.type === 'model_generation' || span.type === 'model_step' || span.type === 'model_inference')) {
-    const folded = takeFold(span.id);
-    if (folded) Object.assign(data, folded);
-  }
   // First-hand usage from the site wins over anything derived.
   if (ctx?.usage) for (const [k, v] of Object.entries(ctx.usage)) if (typeof v === 'number') data[k] = v;
 

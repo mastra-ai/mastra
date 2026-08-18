@@ -2,7 +2,6 @@ import { TracingEventType } from '@mastra/core/observability';
 import type { MetricEvent } from '@mastra/core/observability';
 import { PulseBridge, PulseBus, PulseStorageExporter } from '@mastra/core/pulse';
 import type { PulseStorage } from '@mastra/core/storage';
-import { CardinalityFilter, MetricsContextImpl, emitTokenMetrics } from '@mastra/observability';
 
 /**
  * Backfill: replay spans already persisted by the observability storage domain
@@ -101,29 +100,9 @@ export async function backfillFromObservability(opts: BackfillOptions): Promise<
         }
         await bridge.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: span as any });
         if (span.endTime) {
-          // Cost parity with live capture: persisted spans carry usage+model
-          // but never cost (it is computed by the metric layer at emit time).
-          // Replay the SAME live path — emitTokenMetrics through a metrics
-          // context whose bus feeds the bridge — so the token+cost fold on
-          // the model end pulse is identical by construction.
-          // The synthetic replay object satisfies emitTokenMetrics's actual
-          // contract (it reads only `type` and `attributes`); it is not a
-          // live Span, hence the two-step cast.
-          emitTokenMetrics(
-            span as unknown as Parameters<typeof emitTokenMetrics>[0],
-            new MetricsContextImpl({
-              traceId: span.traceId,
-              spanId: span.id,
-              cardinalityFilter: new CardinalityFilter(),
-              // Minimal bus shim: metric events flow straight into the
-              // bridge's fold cache, exactly as on the live bus.
-              observabilityBus: {
-                emit: (event: MetricEvent) => {
-                  if (event?.metric) bridge.onMetricEvent(event);
-                },
-              } as unknown as ConstructorParameters<typeof MetricsContextImpl>[0]['observabilityBus'],
-            }),
-          );
+          // Usage rides the span attributes; cost is derived at read time
+          // from the pulse price table — nothing to replay from the metric
+          // layer.
           await bridge.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: span as any });
         }
       }

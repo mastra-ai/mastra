@@ -49,9 +49,4 @@ export interface PulseConfig {
   flushIntervalMs?: number;
   /** Additional pulse exporters (e.g. a standalone ClickHouse HTTP writer). */
   exporters?: PulseBusExporter[];
-  /**
-   * Maintain a materialized flow-summary index alongside the raw tables
-   * (adapter support required). Default false — flows are derived at read time.
-   */
-  flowIndex?: boolean;
 }

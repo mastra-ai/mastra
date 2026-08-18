@@ -13,7 +13,6 @@ import type {
 } from '../observability';
 import type { PulseEndpointKind, PulseRecord, PulseSemanticType } from '../storage/domains/pulse';
 import type { PulseBus } from './bus';
-import { drainLeftovers, recordTokenMetric, takeFold } from './metric-fold';
 import { nextPulseSeq } from './seq';
 
 /**
@@ -91,7 +90,6 @@ const CORE_REL_TYPES = [
   'drained_signal',
   'queued_follow_up',
   'schedule_triggered',
-  'scored_target',
 ] as const;
 
 /** Eric's 24-type core vocabulary — a typo here fails at compile time. */
@@ -104,20 +102,6 @@ const MODEL_SPAN_TYPES = new Set(['model_generation', 'model_step', 'model_infer
  * Auto-extracted token metric name → data key on the semantic model pulse.
  * Source of truth: observability/mastra/src/metrics/types.ts (TokenMetrics).
  */
-const TOKEN_METRIC_FOLD: Record<string, string> = {
-  mastra_model_total_input_tokens: 'total_input_tokens',
-  mastra_model_total_output_tokens: 'total_output_tokens',
-  mastra_model_input_text_tokens: 'input_text_tokens',
-  mastra_model_input_cache_read_tokens: 'input_cache_read_tokens',
-  mastra_model_input_cache_write_tokens: 'input_cache_write_tokens',
-  mastra_model_input_audio_tokens: 'input_audio_tokens',
-  mastra_model_input_image_tokens: 'input_image_tokens',
-  mastra_model_output_text_tokens: 'output_text_tokens',
-  mastra_model_output_reasoning_tokens: 'output_reasoning_tokens',
-  mastra_model_output_audio_tokens: 'output_audio_tokens',
-  mastra_model_output_image_tokens: 'output_image_tokens',
-};
-
 export interface PulseBridgeConfig {
   bus: PulseBus;
   /** Serialized payload cap for span input/output in bytes. Default 4096. */
@@ -143,6 +127,28 @@ export function spanPulseId(traceId: string, spanId: string, phase: 'started' | 
 }
 
 /** Collect numeric leaves (dotted keys, depth-limited) — `data` is strictly numeric. */
+/** Map a raw usage object to the canonical fold-key token data. */
+export function usageTokenData(usage: any): Record<string, number> | undefined {
+  if (!usage) return undefined;
+  const out: Record<string, number> = {};
+  const put = (k: string, v: unknown) => {
+    if (typeof v === 'number' && Number.isFinite(v)) out[k] = v;
+  };
+  put('total_input_tokens', usage.inputTokens);
+  put('total_output_tokens', usage.outputTokens);
+  put('usage.totalTokens', usage.totalTokens);
+  put('input_text_tokens', usage.inputDetails?.text);
+  put('input_cache_read_tokens', usage.inputDetails?.cacheRead);
+  put('input_cache_write_tokens', usage.inputDetails?.cacheWrite);
+  put('input_audio_tokens', usage.inputDetails?.audio);
+  put('input_image_tokens', usage.inputDetails?.image);
+  put('output_text_tokens', usage.outputDetails?.text);
+  put('output_reasoning_tokens', usage.outputDetails?.reasoning);
+  put('output_audio_tokens', usage.outputDetails?.audio);
+  put('output_image_tokens', usage.outputDetails?.image);
+  return Object.keys(out).length ? out : undefined;
+}
+
 export function numericLeaves(
   obj: unknown,
   prefix = '',
@@ -373,13 +379,10 @@ export class PulseBridge extends MastraBase implements ObservabilityExporter {
     }
     const data = numericLeaves(span.attributes?.usage, 'usage');
     numericLeaves(span.attributes?.internalUsage, 'internal_usage', 0, data);
-
-    // The enrichment fold: token/cost metrics cached for this model span
-    // become data on its semantic end pulse (directive 3 — one pulse carries
-    // the full token+cost JSON; the metric lane never stores token rows).
-    if (isEnd && spanId && MODEL_SPAN_TYPES.has(String(span.type))) {
-      const cached = takeFold(spanId);
-      if (cached) Object.assign(data, cached);
+    // Canonical token keys on model facts — metrics are items in `data`,
+    // and the read-time cost derivation keys on this one shape.
+    if (isEnd && MODEL_SPAN_TYPES.has(String(span.type))) {
+      Object.assign(data, usageTokenData(span.attributes?.usage) ?? {});
     }
 
     // metadata carries only what has no column of its own — runId/threadId/
@@ -510,117 +513,11 @@ export class PulseBridge extends MastraBase implements ObservabilityExporter {
     });
   }
 
-  /**
-   * The metric switch (R4):
-   * - `mastra_model_*_tokens` metrics with a spanId are cached for the fold —
-   *   they never become pulses of their own.
-   * - `*_duration_ms` metrics are dropped entirely — durations derive from
-   *   start/end pulse pairs.
-   * - Everything else (custom/user metrics) becomes a `metric_recorded`
-   *   pulse: the action stays a verb, the metric name travels in attributes.
-   */
-  onMetricEvent(event: MetricEvent): void {
-    const metric: any = event.metric;
-    if (!metric) return;
-    const name = String(metric.name ?? 'metric');
-    const value = typeof metric.value === 'number' && Number.isFinite(metric.value) ? metric.value : undefined;
-    const cost = metric.costContext?.estimatedCost;
-    const hasCost = typeof cost === 'number' && Number.isFinite(cost);
-
-    const foldKey = TOKEN_METRIC_FOLD[name];
-    if (foldKey && metric.spanId) {
-      // Shared store: the native lifecycle emitter folds the SAME data onto
-      // its model end fact, keeping the two lanes byte-identical.
-      // Tokens only: cost is DERIVED at read time from usage × the pulse
-      // price table (pulse/pricing.ts) — write-time cost folding is gone.
-      recordTokenMetric({
-        spanId: metric.spanId,
-        traceId: metric.traceId ?? '',
-        foldKey,
-        value,
-      });
-      return;
-    }
-
-    // Duration metrics are derivable from pulse pairs — never stored.
-    if (/_duration_ms$/.test(name)) return;
-
-    const data: Record<string, number> = {};
-    if (value !== undefined) data.value = value;
-    if (hasCost) data.cost_usd = cost;
-    this.#emitPulse({
-      ...this.#baseRecord('metric', metric.traceId, metric.spanId),
-      timestamp: metric.timestamp ? new Date(metric.timestamp) : new Date(),
-      type: 'state',
-      surface: /token|model/.test(name) ? 'model' : 'execution',
-      action: 'metric_recorded',
-      data,
-      attributes: { name, ...(metric.labels ?? {}) },
-    });
-  }
-
-  onScoreEvent(event: ScoreEvent): void {
-    const score: any = event.score;
-    if (!score) return;
-    const base = this.#baseRecord('score', score.traceId, score.spanId);
-    this.#emitPulse({
-      ...base,
-      timestamp: score.timestamp ? new Date(score.timestamp) : new Date(),
-      type: 'output',
-      surface: 'eval',
-      action: 'score_recorded',
-      data: typeof score.score === 'number' ? { score: score.score } : {},
-      attributes: {
-        scorerId: score.scorerId,
-        scorerName: score.scorerName,
-        reason: score.reason,
-        scoreSource: score.scoreSource,
-      },
-    });
-    if (score.spanId || score.traceId) {
-      this.#emitRelationship(
-        'scored_target',
-        'pulse',
-        base.id,
-        score.spanId ? 'pulse' : 'flow',
-        score.spanId ? spanPulseId(score.traceId ?? '', score.spanId, 'started') : score.traceId,
-        score.traceId ?? '',
-        new Date(),
-      );
-    }
-  }
-
-  onFeedbackEvent(event: FeedbackEvent): void {
-    const feedback: any = event.feedback;
-    if (!feedback) return;
-    const base = this.#baseRecord('feedback', feedback.traceId, feedback.spanId);
-    this.#emitPulse({
-      ...base,
-      timestamp: feedback.timestamp ? new Date(feedback.timestamp) : new Date(),
-      type: 'input',
-      surface: 'eval',
-      action: 'feedback_recorded',
-      data: typeof feedback.value === 'number' ? { value: feedback.value } : {},
-      attributes: {
-        feedbackType: feedback.feedbackType,
-        value: feedback.value,
-        comment: feedback.comment,
-        feedbackUserId: feedback.feedbackUserId,
-      },
-    });
-    if (feedback.spanId || feedback.traceId) {
-      this.#emitRelationship(
-        'scored_target',
-        'pulse',
-        base.id,
-        feedback.spanId ? 'pulse' : 'flow',
-        feedback.spanId ? spanPulseId(feedback.traceId ?? '', feedback.spanId, 'started') : feedback.traceId,
-        feedback.traceId ?? '',
-        new Date(),
-        { kind: 'feedback' },
-      );
-    }
-  }
+  // Metrics are not a lane: per the pulse model, a metric is just an item
+  // in the `data` field of a pulse. Agent-scope facts carry their usage
+  // first-hand at the call sites — there is no translation from
+  // observability metric events. Scores and feedback are skipped for the
+  // prototype (maintainer direction).
 
   onDroppedEvent(event: ObservabilityDropEvent): void {
     if (!event) return;
@@ -638,26 +535,7 @@ export class PulseBridge extends MastraBase implements ObservabilityExporter {
     });
   }
 
-  /**
-   * Drain the enrichment cache: entries whose span never ended (crash,
-   * export-filtered end, mid-run serverless flush) are emitted as
-   * `metric_recorded` pulses so token/cost data is never silently lost.
-   */
-  #drainMetricCache(): void {
-    for (const { spanId, traceId, data } of drainLeftovers()) {
-      this.#emitPulse({
-        ...this.#baseRecord('metric', traceId, spanId),
-        type: 'state',
-        surface: 'model',
-        action: 'metric_recorded',
-        data: { ...data },
-        attributes: { name: 'model_token_usage', reason: 'span_never_ended' },
-      });
-    }
-  }
-
   async flush(): Promise<void> {
-    this.#drainMetricCache();
     // Transitive drain: observability.flush() (durable engines' pre-freeze
     // hook) reaches the bridge via the o11y bus — without this, its promise
     // resolves while pulse rows still sit in writer buffers, and a process
@@ -673,6 +551,5 @@ export class PulseBridge extends MastraBase implements ObservabilityExporter {
     if (this.#skippedUpdates) {
       this.logger.debug(`pulse skipped ${this.#skippedUpdates} span_updated events`);
     }
-    this.#drainMetricCache();
   }
 }

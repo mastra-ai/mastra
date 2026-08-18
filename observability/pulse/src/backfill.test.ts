@@ -90,7 +90,7 @@ describe('backfill cost parity (the live fold, replayed)', () => {
    * — backfill must RECOMPUTE it through the same estimator path, or every
    * backfilled flow silently loses its bill (found by smoke S7).
    */
-  it('folds tokens AND estimated cost into the backfilled model pulse', async () => {
+  it('backfilled usage derives cost at read time', async () => {
     const storage = new InMemoryPulseStorage();
     const observability = fakeObservability([
       {
@@ -126,11 +126,22 @@ describe('backfill cost parity (the live fold, replayed)', () => {
       },
     ]);
 
+    // Read-time cost: seed a price row; the backfilled usage derives cost.
+    await storage.upsertModelPrices([
+      {
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        currency: 'USD',
+        version: 1,
+        validFrom: new Date('2026-01-01'),
+        tiers: [{ rates: { input_tokens: 0.00001, output_tokens: 0.00002 } }],
+      },
+    ]);
     await backfillFromObservability({ observability, storage });
 
     const detail = await storage.getFlow('trace-cost');
     expect(detail, 'flow must exist').toBeTruthy();
-    expect(detail!.costUsd, 'cost must be recomputed at backfill').toBeGreaterThan(0);
+    expect(detail!.costUsd, 'derived from backfilled usage × price').toBeCloseTo(1000 * 0.00001 + 500 * 0.00002, 10);
 
     const timeline = await storage.getFlowTimeline('trace-cost');
     // No metric-lane rows: the fold is the only cost carrier.

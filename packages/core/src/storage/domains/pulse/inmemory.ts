@@ -2,7 +2,6 @@ import { deriveCostUsd, latestPrices, priceFor } from '../../../pulse/pricing';
 import type { ModelPriceRow } from '../../../pulse/pricing';
 import type {
   FlowDetail,
-  FlowIndexRow,
   FlowStatus,
   FlowSummary,
   FlowTimelineEntry,
@@ -37,7 +36,6 @@ export class InMemoryPulseStorage extends PulseStorage {
   #pulseIds = new Set<string>();
   #relationshipIds = new Set<string>();
   /** Materialized flow index (experimental) — highest version per flow wins. */
-  #flowIndex = new Map<string, FlowIndexRow & { updatedAt: Date }>();
   #modelPrices: ModelPriceRow[] = [];
   #staleThresholdMs: number;
   #now: () => number;
@@ -77,51 +75,7 @@ export class InMemoryPulseStorage extends PulseStorage {
     this.#relationships = [];
     this.#pulseIds.clear();
     this.#relationshipIds.clear();
-    this.#flowIndex.clear();
     this.#modelPrices = [];
-  }
-
-  supportsFlowIndex(): boolean {
-    return true;
-  }
-
-  async upsertFlowSummaries(rows: FlowIndexRow[]): Promise<void> {
-    for (const row of rows) {
-      const existing = this.#flowIndex.get(row.flowId);
-      // ReplacingMergeTree(version) semantics: highest version wins.
-      if (existing && existing.version > row.version) continue;
-      this.#flowIndex.set(row.flowId, { ...row, updatedAt: new Date(this.#now()) });
-    }
-  }
-
-  async listFlowsFromIndex(args: ListFlowsArgs = {}): Promise<ListFlowsResult> {
-    const { filter, pagination } = args;
-    const page = pagination?.page ?? 0;
-    const perPage = pagination?.perPage ?? 40;
-
-    // Stale is presented at READ time: the index cannot self-expire, so a
-    // `running` row whose last upsert is older than the threshold is stale.
-    let flows: FlowSummary[] = [...this.#flowIndex.values()].map(row => ({
-      flowId: row.flowId,
-      threadId: row.threadId,
-      startedAt: row.startedAt,
-      durationMs: row.durationMs ?? null,
-      status:
-        row.status === 'running' && this.#now() - row.updatedAt.getTime() > this.#staleThresholdMs
-          ? 'stale'
-          : row.status,
-      pulseCount: row.pulseCount,
-      costUsd: row.costUsd,
-      entityName: row.entityName,
-    }));
-    if (filter?.status) flows = flows.filter(f => f.status === filter.status);
-    if (filter?.threadId) flows = flows.filter(f => f.threadId === filter.threadId);
-    if (filter?.entityName) flows = flows.filter(f => f.entityName === filter.entityName);
-    if (filter?.fromDate) flows = flows.filter(f => f.startedAt >= filter.fromDate!);
-    if (filter?.toDate) flows = flows.filter(f => f.startedAt <= filter.toDate!);
-    flows.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
-
-    return { flows: flows.slice(page * perPage, (page + 1) * perPage), total: flows.length };
   }
 
   #spanPulsesByFlow(): Map<string, PulseRecord[]> {

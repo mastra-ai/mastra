@@ -5,7 +5,6 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute, ValidationErrorHook } from '@mastra/core/server';
 import type * as z from 'zod/v4';
 import type { InMemoryTaskStore } from '../../a2a/store';
-import { PULSE_ROUTES } from '../../handlers/pulse';
 import type { OpenAPIRoute } from '../openapi-utils';
 import { A2A_ROUTES } from './a2a';
 import { AGENT_BUILDER_ROUTES } from './agent-builder';
@@ -174,7 +173,6 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...MEMORY_ROUTES,
   ...SCORES_ROUTES,
   ...OBSERVABILITY_ROUTES,
-  ...PULSE_ROUTES,
   ...LOGS_ROUTES,
   ...VECTORS_ROUTES,
   ...A2A_ROUTES,
@@ -215,7 +213,6 @@ export type ServerRoutes = readonly [
   ...typeof MEMORY_ROUTES,
   ...typeof SCORES_ROUTES,
   ...typeof OBSERVABILITY_ROUTES,
-  ...typeof PULSE_ROUTES,
   ...typeof LOGS_ROUTES,
   ...typeof VECTORS_ROUTES,
   ...typeof A2A_ROUTES,

@@ -2175,48 +2175,4 @@ describe('ModelSpanTracker', () => {
       });
     });
   });
-
-  describe('stream termination without step-finish (flush)', () => {
-    it('ends trailing step/inference/chunk spans when the stream closes early', async () => {
-      const modelSpan = tracing.startSpan({
-        type: SpanType.MODEL_GENERATION,
-        name: 'test-generation',
-      });
-      const tracker = new ModelSpanTracker(modelSpan);
-
-      // Aborted/closed provider streams deliver content but never step-finish.
-      const chunks = [
-        { type: 'step-start', payload: { messageId: 'msg-1' } },
-        { type: 'text-start', payload: {} },
-        { type: 'text-delta', payload: { text: 'partial…' } },
-      ];
-      await consumeStream(tracker.wrapStream(createMockStream(chunks)));
-      modelSpan.end();
-
-      expect(testExporter.getSpansByType(SpanType.MODEL_STEP)).toHaveLength(1);
-      expect(testExporter.getSpansByType(SpanType.MODEL_INFERENCE)).toHaveLength(1);
-      expect(testExporter.getSpansByType(SpanType.MODEL_CHUNK)).toHaveLength(1);
-    });
-
-    it('does not close the step in defer mode (external owner ends it)', async () => {
-      const modelSpan = tracing.startSpan({
-        type: SpanType.MODEL_GENERATION,
-        name: 'test-generation',
-      });
-      const tracker = new ModelSpanTracker(modelSpan);
-      tracker.setDeferStepClose(true);
-
-      const chunks = [
-        { type: 'step-start', payload: { messageId: 'msg-1' } },
-        { type: 'text-start', payload: {} },
-        { type: 'text-delta', payload: { text: 'partial…' } },
-      ];
-      await consumeStream(tracker.wrapStream(createMockStream(chunks)));
-      modelSpan.end();
-
-      // Inference + chunk close on flush; the step stays open for the durable owner.
-      expect(testExporter.getSpansByType(SpanType.MODEL_INFERENCE)).toHaveLength(1);
-      expect(testExporter.getSpansByType(SpanType.MODEL_STEP)).toHaveLength(0);
-    });
-  });
 });

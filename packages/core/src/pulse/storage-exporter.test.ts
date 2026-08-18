@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { FlowIndexRow, PulseRecord, PulseRelationshipRecord, PulseStorage } from '../storage/domains/pulse';
+import type { PulseRecord, PulseRelationshipRecord, PulseStorage } from '../storage/domains/pulse';
 import { PulseStorageExporter } from './storage-exporter';
 import type { PulseBusEvent, PulseDropEvent } from './types';
 
@@ -37,7 +37,6 @@ function relationshipEvent(id: string): PulseBusEvent {
 function fakeStorage(overrides: Partial<PulseStorage> = {}) {
   const pulses: PulseRecord[][] = [];
   const relationships: PulseRelationshipRecord[][] = [];
-  const upserts: FlowIndexRow[][] = [];
   const storage = {
     batchCreatePulses: vi.fn(async (records: PulseRecord[]) => {
       pulses.push(records);
@@ -45,13 +44,9 @@ function fakeStorage(overrides: Partial<PulseStorage> = {}) {
     batchCreateRelationships: vi.fn(async (records: PulseRelationshipRecord[]) => {
       relationships.push(records);
     }),
-    supportsFlowIndex: () => true,
-    upsertFlowSummaries: vi.fn(async (rows: FlowIndexRow[]) => {
-      upserts.push(rows);
-    }),
     ...overrides,
   } as unknown as PulseStorage;
-  return { storage, pulses, relationships, upserts };
+  return { storage, pulses, relationships };
 }
 
 describe('PulseStorageExporter', () => {
@@ -165,210 +160,6 @@ function span(traceId: string, overrides: Partial<PulseRecord> = {}): PulseBusEv
     },
   };
 }
-
-describe('PulseStorageExporter flow index', () => {
-  it('never upserts when flowIndex is off (the default)', async () => {
-    const { storage } = fakeStorage();
-    const exporter = new PulseStorageExporter({ storage });
-    exporter.onPulseEvent(span('flow-1', { timestamp: at(0) }));
-    exporter.onPulseEvent(span('flow-1', { action: 'run_completed', type: 'output', timestamp: at(1000) }));
-    await exporter.shutdown();
-    expect(storage.upsertFlowSummaries).not.toHaveBeenCalled();
-  });
-
-  it('upserts running then completed across two flushes with rising versions', async () => {
-    const { storage, upserts } = fakeStorage();
-    const exporter = new PulseStorageExporter({ storage, flowIndex: true });
-    exporter.onPulseEvent(span('flow-1', { timestamp: at(0), metadata: { entityName: 'support' } }));
-    await exporter.flush();
-    expect(upserts).toHaveLength(1);
-    expect(upserts[0]![0]).toMatchObject({
-      flowId: 'flow-1',
-      status: 'running',
-      durationMs: null,
-      threadId: 't-1',
-      entityName: 'support',
-      pulseCount: 1,
-      startedAt: at(0),
-    });
-
-    exporter.onPulseEvent(
-      span('flow-1', {
-        action: 'run_completed',
-        type: 'output',
-        timestamp: at(1000),
-        data: { total_output_tokens: 42, cost_usd: 0.0002 },
-      }),
-    );
-    await exporter.flush();
-    expect(upserts).toHaveLength(2);
-    expect(upserts[1]![0]).toMatchObject({
-      flowId: 'flow-1',
-      status: 'completed',
-      durationMs: 1000,
-      endedAt: at(1000),
-      pulseCount: 2,
-      costUsd: 0.0002,
-    });
-    expect(upserts[1]![0]!.version).toBeGreaterThan(upserts[0]![0]!.version);
-    await exporter.shutdown();
-  });
-
-  it('lets a session abort in the next batch override a completed flow', async () => {
-    const { storage, upserts } = fakeStorage();
-    const exporter = new PulseStorageExporter({ storage, flowIndex: true });
-    exporter.onPulseEvent(span('flow-1', { runId: 'run-1', timestamp: at(0) }));
-    exporter.onPulseEvent(
-      span('flow-1', { runId: 'run-1', action: 'run_completed', type: 'output', timestamp: at(1000) }),
-    );
-    await exporter.flush();
-    expect(upserts[0]![0]!.status).toBe('completed');
-
-    exporter.onPulseEvent(
-      span('', {
-        traceId: '',
-        threadId: 't-1',
-        runId: 'run-1',
-        spanId: undefined,
-        source: 'session',
-        surface: 'run_control',
-        action: 'abort_completed',
-        timestamp: at(1500),
-      }),
-    );
-    await exporter.flush();
-    expect(upserts[1]![0]).toMatchObject({ flowId: 'flow-1', status: 'aborted', durationMs: 1000 });
-    await exporter.shutdown();
-  });
-
-  it('ignores aborts naming an unknown run or carrying no runId', async () => {
-    const { storage, upserts } = fakeStorage();
-    const exporter = new PulseStorageExporter({ storage, flowIndex: true });
-    exporter.onPulseEvent(span('flow-1', { timestamp: at(0) }));
-    exporter.onPulseEvent(span('flow-1', { action: 'run_completed', type: 'output', timestamp: at(1000) }));
-    exporter.onPulseEvent(
-      span('', {
-        traceId: '',
-        threadId: 't-other',
-        spanId: undefined,
-        source: 'session',
-        surface: 'run_control',
-        action: 'abort_completed',
-        timestamp: at(1500), // no runId → never attributed
-      }),
-    );
-    exporter.onPulseEvent(
-      span('', {
-        traceId: '',
-        threadId: 't-1',
-        runId: 'run-elsewhere',
-        spanId: undefined,
-        source: 'session',
-        surface: 'run_control',
-        action: 'abort_completed',
-        timestamp: at(1600), // names a run this flow never contained
-      }),
-    );
-    await exporter.shutdown();
-    expect(upserts).toHaveLength(1);
-    expect(upserts[0]![0]!.status).toBe('completed');
-  });
-
-  it('marks a flow failed only on the ROOT terminal (child errors stay non-fatal)', async () => {
-    const { storage, upserts } = fakeStorage();
-    const exporter = new PulseStorageExporter({ storage, flowIndex: true });
-    exporter.onPulseEvent(span('flow-1', { timestamp: at(0) }));
-    exporter.onPulseEvent(
-      span('flow-1', {
-        spanId: 'gen',
-        parentSpanId: 'root',
-        surface: 'model',
-        action: 'generate_failed',
-        type: 'error',
-        timestamp: at(500),
-      }),
-    );
-    await exporter.flush();
-    // A child error alone leaves the flow running (mirrors the oracle).
-    expect(upserts[0]![0]).toMatchObject({ status: 'running', durationMs: null });
-
-    exporter.onPulseEvent(span('flow-1', { action: 'run_failed', type: 'error', timestamp: at(900) }));
-    await exporter.flush();
-    expect(upserts[1]![0]).toMatchObject({ status: 'failed' });
-    await exporter.shutdown();
-  });
-
-  it('skips upserts for adapters without flow-index support', async () => {
-    const upsert = vi.fn();
-    const { storage, pulses } = fakeStorage({
-      supportsFlowIndex: () => false,
-      upsertFlowSummaries: upsert,
-    } as Partial<PulseStorage>);
-    const exporter = new PulseStorageExporter({ storage, flowIndex: true });
-    exporter.onPulseEvent(span('flow-1', { timestamp: at(0) }));
-    await exporter.shutdown();
-    expect(pulses.flat()).toHaveLength(1); // raw write still happens
-    expect(upsert).not.toHaveBeenCalled();
-  });
-
-  it('evicts terminal flows one flush after their terminal upsert; late pulses bump nothing', async () => {
-    const { storage, upserts } = fakeStorage();
-    const exporter = new PulseStorageExporter({ storage, flowIndex: true });
-    exporter.onPulseEvent(span('flow-1', { timestamp: at(0) }));
-    exporter.onPulseEvent(span('flow-1', { action: 'run_completed', type: 'output', timestamp: at(1000) }));
-    await exporter.flush(); // terminal upserted
-    await exporter.flush(); // evicted
-
-    exporter.onPulseEvent(
-      span('flow-1', { spanId: 'late', parentSpanId: 'root', action: 'step_started', timestamp: at(3000) }),
-    );
-    await exporter.shutdown();
-    // the late pulse must not re-open the flow as running
-    expect(upserts).toHaveLength(1);
-    expect(upserts[0]![0]!.status).toBe('completed');
-  });
-});
-
-describe('exact abort attribution in the accumulators (runId join)', () => {
-  it('marks only the flow whose runId the abort names', async () => {
-    const { storage, upserts } = fakeStorage();
-    const exporter = new PulseStorageExporter({ storage, flowIndex: true });
-    // Two completed runs on one thread, inside the 2s legacy window.
-    exporter.onPulseEvent(span('flow-a', { runId: 'run-1', timestamp: at(0) }));
-    exporter.onPulseEvent(
-      span('flow-a', { runId: 'run-1', action: 'run_completed', type: 'output', timestamp: at(500) }),
-    );
-    exporter.onPulseEvent(span('flow-b', { runId: 'run-2', timestamp: at(700) }));
-    exporter.onPulseEvent(
-      span('flow-b', { runId: 'run-2', action: 'run_completed', type: 'output', timestamp: at(1200) }),
-    );
-    exporter.onPulseEvent({
-      type: 'pulse',
-      record: {
-        id: 'ab1',
-        timestamp: at(1400),
-        seq: 999,
-        type: 'state',
-        surface: 'run_control',
-        action: 'abort_completed',
-        traceId: '',
-        threadId: 't-1',
-        runId: 'run-1',
-        source: 'session',
-      },
-    });
-    await exporter.shutdown();
-
-    const rows = upserts.flat();
-    const last = (id: string) =>
-      rows
-        .filter(r => r.flowId === id)
-        .sort((a, b) => a.version - b.version)
-        .at(-1)!;
-    expect(last('flow-a').status).toBe('aborted');
-    expect(last('flow-b').status).toBe('completed');
-  });
-});
 
 describe('poison-record resilience', () => {
   /**

@@ -114,15 +114,17 @@ Two rules matter here:
 
 ## What gets captured
 
-The exporter consumes every observability event family and turns each into pulse rows:
+Agent-scope facts are recorded FIRST-HAND at the source call sites (run,
+model, steps, tools, memory, processors, signals, approvals, content) —
+pulse works with observability fully disabled. The bridge translates only
+what the native lane does not cover:
 
 | Event family | What Pulse records |
 | - | - |
-| Spans | Start, end, and error facts for all span types, with capped input/output payloads. Structure edges (`origin_of`, `parent_of`) are emitted at span start so running flows have a tree; `resume_of` and `uses_*` land on span end. Every trace-bearing pulse also gets a `flow_contains` membership edge, and all `pulse` endpoints reference pulse record ids. |
+| Workflow spans | Start, end, and error facts with capped payloads. Structure edges (`origin_of`, `parent_of`) at start; `resume_of` and `uses_*` at end. |
 | Logs | Log messages as pulse rows. Only levels at or above the observability logger's `minLevel` reach the bus; the default is `warn`. |
-| Metrics | Auto-extracted token metrics fold into the model pulse's `data` (with `cost_usd`); duration metrics are dropped; other metrics become `metric_recorded` pulses. Cost lives only on the folded span pulse — live capture and backfill both. |
-| Scores | Score results with a `scored_target` relationship to the scored span or flow |
-| Feedback | Feedback entries with a `scored_target` relationship to the target |
+| Metrics | Not a lane: a metric is just an item in the `data` field of a pulse. Model facts carry token usage first-hand; cost is derived at read time from the versioned `model_prices` table. |
+| Scores / Feedback | Skipped for the prototype (maintainer direction). |
 | Drops | Meta-events counting observability events dropped upstream |
 
 Session-layer facts (tool approvals, the true abort outcome with its run id, follow-up queueing, mode and model switches) aren't spans. They are forwarded natively: when `pulse` is configured on `Mastra`, every AgentController session gets an internal subscriber — no wiring required.
