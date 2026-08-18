@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { MastraCompositeStore } from './base';
 import type { StorageMastraRef } from './base';
+import { InMemoryDB } from './domains/inmemory-db';
+import { InMemoryKnowledgeStorage } from './domains/knowledge';
 import { InMemoryStore } from './mock';
 
 /**
@@ -104,6 +106,16 @@ describe('MastraCompositeStore — default delegation (issue #16782)', () => {
 
     await expect(composite.init()).rejects.toThrow('inner init failed');
   });
+
+  it('initializes a knowledge domain override', async () => {
+    const knowledge = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
+    const knowledgeInitSpy = vi.spyOn(knowledge, 'init');
+    const composite = new MastraCompositeStore({ id: 'outer-knowledge', domains: { knowledge } });
+
+    await composite.init();
+
+    expect(knowledgeInitSpy).toHaveBeenCalledOnce();
+  });
 });
 
 describe('MastraCompositeStore — disabled domains (`false` override)', () => {
@@ -119,6 +131,7 @@ describe('MastraCompositeStore — disabled domains (`false` override)', () => {
     expect(await composite.getStore('observability')).toBeUndefined();
     // Other domains still fall through to the default store.
     expect(await composite.getStore('memory')).toBe(inner.stores?.memory);
+    expect(await composite.getStore('knowledge')).toBe(inner.stores?.knowledge);
   });
 
   it('resolves a `false` domain to undefined instead of falling through to editor', async () => {
