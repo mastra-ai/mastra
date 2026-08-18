@@ -192,9 +192,16 @@ function hydrateThread(thread: SerializedThread): AgentControllerThread {
   return { ...thread, createdAt: toDate(thread.createdAt), updatedAt: toDate(thread.updatedAt) };
 }
 
+/** A frame straight off the stream: still wire-shaped, so its timestamps are strings. */
+type ParsedEvent = AgentControllerWireEvent | NotificationEvent | OtherAgentControllerEvent;
+
+function isKnownParsedEvent(event: ParsedEvent): event is AgentControllerWireEvent | NotificationEvent {
+  return KNOWN_AGENT_CONTROLLER_EVENT_TYPES.has(event.type);
+}
+
 /** The stream carries every timestamp as an ISO string; give consumers back the `Date`s the type promises. */
-function hydrateEventTimestamps(event: AgentControllerEvent): AgentControllerEvent {
-  if (!isKnownAgentControllerEvent(event)) return event;
+function hydrateEventTimestamps(event: ParsedEvent): AgentControllerEvent {
+  if (!isKnownParsedEvent(event)) return event;
   switch (event.type) {
     case 'message_start':
     case 'message_update':
@@ -417,7 +424,7 @@ export class AgentControllerSession extends BaseResource {
               if (!data) continue;
               let event: AgentControllerEvent;
               try {
-                event = hydrateEventTimestamps(JSON.parse(data) as AgentControllerEvent);
+                event = hydrateEventTimestamps(JSON.parse(data));
               } catch {
                 continue;
               }
