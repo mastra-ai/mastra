@@ -99,6 +99,7 @@ export function SignalDefinitionFormDialog({
 }: SignalDefinitionFormDialogProps) {
   const formId = useId();
   const [value, setValue] = useState(() => initialValue(definition));
+  const [extraOutputRules, setExtraOutputRules] = useState(() => initialValue(definition).extraOutputRules.join('\n'));
   const [validationError, setValidationError] = useState<string>();
   const editing = Boolean(definition);
 
@@ -120,18 +121,25 @@ export function SignalDefinitionFormDialog({
             className="space-y-4"
             onSubmit={event => {
               event.preventDefault();
-              const invalid = validate(value, editing);
+              const normalizedValue = {
+                ...value,
+                extraOutputRules: extraOutputRules
+                  .split('\n')
+                  .map(rule => rule.trim())
+                  .filter(Boolean),
+              };
+              const invalid = validate(normalizedValue, editing);
               setValidationError(invalid);
               if (invalid) return;
               const action = definition
                 ? onUpdate(definition.id, {
-                    displayLabel: value.displayLabel,
-                    description: value.description,
-                    taskPrompt: value.taskPrompt,
-                    extraOutputRules: value.extraOutputRules,
-                    artifactAllowlist: value.artifactAllowlist,
+                    displayLabel: normalizedValue.displayLabel,
+                    description: normalizedValue.description,
+                    taskPrompt: normalizedValue.taskPrompt,
+                    extraOutputRules: normalizedValue.extraOutputRules,
+                    artifactAllowlist: normalizedValue.artifactAllowlist,
                   })
-                : onCreate(value);
+                : onCreate(normalizedValue);
               void action.then(() => onOpenChange(false)).catch(() => undefined);
             }}
           >
@@ -182,10 +190,10 @@ export function SignalDefinitionFormDialog({
                 <Textarea
                   id="input-extraOutputRules"
                   rows={3}
-                  value={value.extraOutputRules.join('\n')}
+                  value={extraOutputRules}
                   disabled={pending}
                   placeholder="One optional rule per line"
-                  onChange={event => setField('extraOutputRules', event.target.value.split('\n').filter(Boolean))}
+                  onChange={event => setExtraOutputRules(event.target.value)}
                 />
               </FieldBlock.Column>
               <FieldBlock.Column>

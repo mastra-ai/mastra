@@ -120,6 +120,20 @@ describe('TraceSignalSettingsButton', () => {
     fireEvent.change(screen.getByLabelText('Task prompt'), {
       target: { value: 'Describe how the agent used tools in one sentence.' },
     });
+    fireEvent.change(screen.getByLabelText('Additional output rules'), {
+      target: { value: 'Mention failed calls' },
+    });
+    fireEvent.change(screen.getByLabelText('Additional output rules'), {
+      target: { value: 'Mention failed calls\n' },
+    });
+    expect(screen.getByLabelText('Additional output rules')).toHaveProperty('value', 'Mention failed calls\n');
+    fireEvent.change(screen.getByLabelText('Additional output rules'), {
+      target: { value: 'Mention failed calls\nExclude framework internals' },
+    });
+    expect(screen.getByLabelText('Additional output rules')).toHaveProperty(
+      'value',
+      'Mention failed calls\nExclude framework internals',
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Create signal' }));
     await waitFor(() =>
       expect(adapter.create).toHaveBeenCalledWith({
@@ -127,7 +141,7 @@ describe('TraceSignalSettingsButton', () => {
         displayLabel: 'Tool Usage',
         description: 'How the agent used tools.',
         taskPrompt: 'Describe how the agent used tools in one sentence.',
-        extraOutputRules: [],
+        extraOutputRules: ['Mention failed calls', 'Exclude framework internals'],
         artifactAllowlist: ['latestUserInput', 'minifiedTrace'],
       }),
     );
