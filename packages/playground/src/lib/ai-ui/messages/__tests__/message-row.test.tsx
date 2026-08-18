@@ -2,7 +2,7 @@ import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { MastraTextPart } from '@mastra/react';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
@@ -213,6 +213,85 @@ describe('MessageRow', () => {
       }),
     );
     expect(document.querySelector('[data-testid="tool-badge"]')).toBeTruthy();
+    expect(document.querySelector('[data-tool-call-rail]')).toBeNull();
+  });
+
+  it('adds the vertical tool rail to every rendered tool call in one message except the last one', () => {
+    renderRow(
+      baseMessage({
+        role: 'assistant',
+        content: {
+          format: 2,
+          metadata: { mode: 'stream' },
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolName: 'firstTool',
+                toolCallId: 'call-first',
+                state: 'result',
+                args: { first: true },
+                result: { ok: true },
+              },
+            } as never,
+            {
+              type: 'tool-secondTool',
+              toolName: 'secondTool',
+              toolCallId: 'call-second',
+              state: 'output-available',
+              input: { second: true },
+              output: { ok: true },
+            } as never,
+          ],
+        },
+      }),
+    );
+
+    const [firstTool, lastTool] = screen.getAllByTestId('tool-badge');
+    const rail = document.querySelector('[data-tool-call-rail]');
+
+    expect(rail).toBeTruthy();
+    expect(rail?.getAttribute('aria-hidden')).toBe('true');
+    expect(rail?.classList.contains('w-px')).toBe(true);
+    expect(firstTool.compareDocumentPosition(rail!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(rail!.compareDocumentPosition(lastTool) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+  });
+
+  it('does not count hidden tool parts when deciding whether to render a vertical rail', () => {
+    renderRow(
+      baseMessage({
+        role: 'assistant',
+        content: {
+          format: 2,
+          metadata: { mode: 'stream' },
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolName: 'visibleTool',
+                toolCallId: 'call-visible',
+                state: 'result',
+                args: {},
+                result: { ok: true },
+              },
+            } as never,
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolName: 'updateWorkingMemory',
+                toolCallId: 'call-hidden',
+                state: 'result',
+                args: {},
+                result: 'ok',
+              },
+            } as never,
+          ],
+        },
+      }),
+    );
+
+    expect(screen.getAllByTestId('tool-badge')).toHaveLength(1);
+    expect(document.querySelector('[data-tool-call-rail]')).toBeNull();
   });
 
   it('routes an OM observation tool into the observation marker badge', () => {
@@ -237,6 +316,60 @@ describe('MessageRow', () => {
       }),
     );
     expect(document.querySelector('[data-om-badge="cycle-1"]')).toBeTruthy();
+  });
+
+  describe('when every assistant part is hidden', () => {
+    it('removes a task-tool-only message instead of leaving an empty row', () => {
+      const { container } = renderRow(
+        baseMessage({
+          role: 'assistant',
+          content: {
+            format: 2,
+            metadata: { mode: 'stream' },
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  toolName: 'task_write',
+                  toolCallId: 'call-task',
+                  state: 'result',
+                  args: { tasks: [] },
+                  result: { tasks: [] },
+                },
+              } as never,
+              { type: 'step-start' } as never,
+            ],
+          },
+        }),
+      );
+
+      expect(container.innerHTML).toBe('');
+    });
+
+    it('hides updateWorkingMemory tool calls', () => {
+      const { container } = renderRow(
+        baseMessage({
+          role: 'assistant',
+          content: {
+            format: 2,
+            metadata: { mode: 'stream' },
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  toolName: 'updateWorkingMemory',
+                  toolCallId: 'call-wm',
+                  state: 'result',
+                  args: {},
+                  result: 'ok',
+                },
+              } as never,
+            ],
+          },
+        }),
+      );
+      expect(container.innerHTML).toBe('');
+    });
   });
 
   it('hides updateWorkingMemory tool calls', () => {
@@ -264,7 +397,7 @@ describe('MessageRow', () => {
     expect(container.querySelector('[data-testid="tool-badge"]')).toBeNull();
   });
 
-  it('renders approval buttons when requireApprovalMetadata is present for the tool', () => {
+  it('reveals approval buttons after the collapsed tool is opened', () => {
     renderRow(
       baseMessage({
         role: 'assistant',
@@ -290,6 +423,10 @@ describe('MessageRow', () => {
         },
       }),
     );
+    expect(screen.queryByText('Approve')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'DangerousTool' }));
+
     expect(screen.getByText('Approve')).toBeTruthy();
     expect(screen.getByText('Decline')).toBeTruthy();
   });
@@ -444,7 +581,7 @@ describe('MessageRow', () => {
   });
 
   describe('when a task signal carries an empty task snapshot', () => {
-    it('hides the signal badge (tasks render in the docked TaskPanel)', () => {
+    it('removes the message row because tasks render in the docked TaskPanel', () => {
       const { container } = renderRow(
         baseMessage({
           role: 'assistant',
@@ -459,7 +596,49 @@ describe('MessageRow', () => {
           },
         }),
       );
-      expect(container.textContent).toBe('');
+      expect(container.innerHTML).toBe('');
+    });
+  });
+
+  describe('when a persisted task signal contains display text', () => {
+    it('does not leave a read-aloud or copy action bar behind', () => {
+      const { container } = render(
+        <MessageRow
+          message={baseMessage({
+            id: 'task-signal',
+            role: 'signal' as MastraDBMessage['role'],
+            type: 'task-list-update' as MastraDBMessage['type'],
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: '✓ Completed task' }],
+              metadata: {
+                signal: {
+                  type: 'state',
+                  tagName: 'task-list-update',
+                  metadata: {
+                    value: {
+                      tasks: [
+                        {
+                          id: 'task-1',
+                          content: 'Verify tool UI',
+                          status: 'completed',
+                          activeForm: 'Verifying tool UI',
+                        },
+                      ],
+                    },
+                  },
+                },
+              },
+            } as never,
+          })}
+          onReadAloud={() => {}}
+        />,
+        { wrapper: Providers },
+      );
+
+      expect(container.innerHTML).toBe('');
+      expect(screen.queryByRole('button', { name: 'Read aloud' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Copy' })).toBeNull();
     });
   });
 

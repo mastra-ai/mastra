@@ -1,6 +1,6 @@
 import { ChevronRight, X } from 'lucide-react';
 import type { HTMLAttributes, ReactNode } from 'react';
-import { useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 
 import { CodeBlock } from '../../CodeBlock';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../Collapsible';
@@ -13,6 +13,172 @@ import { cn } from '@/lib/utils';
 
 export type ToolCallStatus = 'running' | 'success' | 'error';
 
+export interface ToolProps extends HTMLAttributes<HTMLDivElement> {
+  status: ToolCallStatus;
+  defaultOpen?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  collapsible?: boolean;
+}
+
+export interface ToolHeaderProps {
+  actions?: ReactNode;
+  children?: ReactNode;
+  className?: string;
+}
+
+export type ToolIconProps = HTMLAttributes<HTMLSpanElement>;
+export type ToolContentProps = HTMLAttributes<HTMLDivElement>;
+
+export interface ToolCallListItemProps extends HTMLAttributes<HTMLDivElement> {
+  /** Draw a connector from this item to the next item in the same tool-call sequence. */
+  continued?: boolean;
+}
+
+interface ToolContextValue {
+  collapsible: boolean;
+  expanded: boolean;
+  failed: boolean;
+  running: boolean;
+}
+
+const ToolContext = createContext<ToolContextValue | null>(null);
+
+function useToolContext(): ToolContextValue {
+  const context = useContext(ToolContext);
+  if (!context) throw new Error('Tool compound components must be rendered inside Tool');
+  return context;
+}
+
+export function Tool({
+  status,
+  defaultOpen = false,
+  open,
+  onOpenChange,
+  collapsible = true,
+  children,
+  className,
+  role = 'group',
+  ...props
+}: ToolProps) {
+  const [internalExpanded, setInternalExpanded] = useState(defaultOpen);
+  const expanded = open ?? internalExpanded;
+  const [arrivedLive] = useState(() => status === 'running');
+
+  useEffect(() => {
+    if (open === undefined) setInternalExpanded(defaultOpen);
+  }, [defaultOpen, open]);
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (open === undefined) setInternalExpanded(nextOpen);
+    onOpenChange?.(nextOpen);
+  };
+
+  const context: ToolContextValue = {
+    collapsible,
+    expanded,
+    failed: status === 'error',
+    running: status === 'running',
+  };
+
+  return (
+    <ToolContext.Provider value={context}>
+      <Collapsible
+        open={expanded}
+        onOpenChange={handleOpenChange}
+        className={cn(
+          'max-w-full min-w-0 rounded-md bg-surface2',
+          arrivedLive && 'fade-in-0 slide-in-from-bottom-1 motion-safe:animate-in',
+          className,
+        )}
+        role={role}
+        aria-busy={status === 'running'}
+        {...props}
+      >
+        {children}
+      </Collapsible>
+    </ToolContext.Provider>
+  );
+}
+
+export function ToolHeader({ actions, children, className }: ToolHeaderProps) {
+  const { collapsible, expanded, failed, running } = useToolContext();
+  const Line = running ? Shimmer : 'span';
+  const row = (
+    <Line className={cn(ROW_LINE, 'text-icon3 text-sm')}>
+      {children}
+      <span aria-hidden className="min-w-2 flex-1" />
+      {failed && <X size={13} role="img" aria-label="Failed" className="text-error shrink-0" />}
+      {collapsible && (
+        <span className="flex size-4 shrink-0 items-center justify-center">
+          <Chevron expanded={expanded} />
+        </span>
+      )}
+    </Line>
+  );
+
+  const trigger = collapsible ? (
+    <CollapsibleTrigger className={cn(ROW_TRIGGER, className)}>{row}</CollapsibleTrigger>
+  ) : (
+    <div className={cn(ROW, className)}>{row}</div>
+  );
+
+  if (!actions) return trigger;
+
+  return (
+    <div className="flex min-w-0 items-center gap-1">
+      <div className="min-w-0 flex-1">{trigger}</div>
+      <div className="flex shrink-0 items-center">{actions}</div>
+    </div>
+  );
+}
+
+export function ToolIcon({ className, ...props }: ToolIconProps) {
+  return (
+    <span
+      className={cn(
+        'flex size-4 shrink-0 items-center justify-center [&>svg]:size-4 [&>svg]:max-h-full [&>svg]:max-w-full',
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+export function ToolContent({ className, children, ...props }: ToolContentProps) {
+  const { collapsible } = useToolContext();
+  if (!collapsible) return null;
+
+  return (
+    <CollapsibleContent className="max-w-full min-w-0">
+      <div className={cn('flex w-full max-w-full min-w-0 flex-col gap-1.5 py-1.5 pr-1', className)} {...props}>
+        {children}
+      </div>
+    </CollapsibleContent>
+  );
+}
+
+/**
+ * Sequence wrapper for adjacent tool calls. The connector sits behind the
+ * item's own stacking context so expanded content always paints above it.
+ */
+export function ToolCallListItem({ continued = false, className, children, ...props }: ToolCallListItemProps) {
+  return (
+    <div className={cn('relative isolate min-w-0', continued && 'pb-1.5', className)} {...props}>
+      <div data-tool-call-list-item-content className="relative z-10 min-w-0">
+        {children}
+      </div>
+      {continued ? (
+        <span
+          aria-hidden="true"
+          data-tool-call-rail
+          className="bg-border1 pointer-events-none absolute top-7 bottom-0 left-[14px] z-0 w-px mask-b-from-[calc(100%-min(40%,80px))]"
+        />
+      ) : null}
+    </div>
+  );
+}
+
 export interface ToolCallProps extends HTMLAttributes<HTMLDivElement> {
   toolName: string;
   input?: unknown;
@@ -24,10 +190,8 @@ export interface ToolCallProps extends HTMLAttributes<HTMLDivElement> {
   children?: ReactNode;
 }
 
-const ROW_TRIGGER = 'group/row hover:bg-neutral6/5 w-full cursor-pointer rounded-md text-left transition-colors';
-
-const ROW_RAIL =
-  "relative ml-[14px] max-w-full min-w-0 py-1.5 pr-1 pl-4 before:bg-border1 before:absolute before:inset-y-0 before:left-0 before:w-px before:content-[''] before:mask-b-from-[calc(100%-min(40%,80px))]";
+const ROW = 'group/row w-full rounded-md text-left transition-colors';
+const ROW_TRIGGER = `${ROW} hover:bg-neutral6/5 cursor-pointer`;
 
 const ROW_LINE = 'flex w-full min-w-0 items-center gap-2 px-1.5 py-1';
 
@@ -65,38 +229,6 @@ function Chevron({ expanded }: { expanded: boolean }) {
     >
       <ChevronRight size={13} />
     </span>
-  );
-}
-
-interface ToolRowProps {
-  icon: ReactNode;
-  label: string;
-  detail?: string;
-  running: boolean;
-  expanded: boolean;
-  failed: boolean;
-}
-
-function ToolRow({ icon, label, detail, running, expanded, failed }: ToolRowProps) {
-  const Line = running ? Shimmer : 'span';
-
-  return (
-    <Line className={ROW_LINE}>
-      <span className="flex size-4 shrink-0 items-center justify-center">{icon}</span>
-      <Txt as="span" variant="ui-sm" className="text-icon3 max-w-[55%] shrink-0 truncate">
-        {label}
-      </Txt>
-      {detail !== undefined && (
-        <Txt as="span" variant="ui-xs" font="mono" className="text-icon3 min-w-0 truncate">
-          {detail}
-        </Txt>
-      )}
-      <span aria-hidden className="min-w-2 flex-1" />
-      {failed && <X size={13} role="img" aria-label="Failed" className="text-error shrink-0" />}
-      <span className="flex size-4 shrink-0 items-center justify-center">
-        <Chevron expanded={expanded} />
-      </span>
-    </Line>
   );
 }
 
@@ -294,53 +426,35 @@ export function ToolCall({
   'aria-label': ariaLabel,
   ...props
 }: ToolCallProps) {
-  const [expanded, setExpanded] = useState(defaultOpen);
-  const [arrivedLive] = useState(() => status === 'running');
   const { icon: Icon, label, detail, command } = presentTool(toolName, input);
-  const failed = status === 'error';
-
-  const trigger = (
-    <CollapsibleTrigger className={ROW_TRIGGER}>
-      <ToolRow
-        icon={<Icon size={14} strokeWidth={1.75} aria-hidden className={failed ? 'text-error/80' : 'text-icon2'} />}
-        label={label}
-        detail={detail}
-        running={status === 'running'}
-        expanded={expanded}
-        failed={failed}
-      />
-    </CollapsibleTrigger>
-  );
 
   return (
-    <Collapsible
-      open={expanded}
-      onOpenChange={setExpanded}
-      className={cn(
-        'max-w-full min-w-0',
-        arrivedLive && 'fade-in-0 slide-in-from-bottom-1 motion-safe:animate-in',
-        className,
-      )}
+    <Tool
+      status={status}
+      defaultOpen={defaultOpen}
+      className={className}
       role={role}
       aria-label={ariaLabel ?? `Tool: ${toolName}`}
-      aria-busy={status === 'running'}
       {...props}
     >
-      {headerActions ? (
-        <div className="flex min-w-0 items-center gap-1">
-          <div className="min-w-0 flex-1">{trigger}</div>
-          <div className="flex shrink-0 items-center">{headerActions}</div>
-        </div>
-      ) : (
-        trigger
-      )}
-      <CollapsibleContent className="max-w-full min-w-0">
-        <div className={cn(ROW_RAIL, 'flex flex-col gap-1.5')}>
-          <ToolBody toolName={toolName} input={input} result={result} output={output} status={status} command={command}>
-            {children}
-          </ToolBody>
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
+      <ToolHeader actions={headerActions}>
+        <ToolIcon>
+          <Icon width={14} height={14} strokeWidth={1.75} aria-hidden className="text-accent6" />
+        </ToolIcon>
+        <Txt as="span" variant="ui-sm" className="text-icon3 max-w-[55%] shrink-0 truncate">
+          {label}
+        </Txt>
+        {detail !== undefined && (
+          <Txt as="span" variant="ui-xs" font="mono" className="text-icon3 min-w-0 truncate">
+            {detail}
+          </Txt>
+        )}
+      </ToolHeader>
+      <ToolContent>
+        <ToolBody toolName={toolName} input={input} result={result} output={output} status={status} command={command}>
+          {children}
+        </ToolBody>
+      </ToolContent>
+    </Tool>
   );
 }

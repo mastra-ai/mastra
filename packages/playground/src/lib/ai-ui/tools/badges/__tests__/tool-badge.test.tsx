@@ -99,7 +99,7 @@ describe('ToolBadge', () => {
     expect(screen.getByRole('img', { name: 'Failed' })).toBeTruthy();
   });
 
-  it('opens pending approvals inside the shared tool rail', () => {
+  it('keeps pending approvals collapsed until requested', () => {
     renderWithProviders(
       <ToolBadge
         toolName="charge_card"
@@ -114,7 +114,13 @@ describe('ToolBadge', () => {
     );
 
     const tool = screen.getByRole('group', { name: 'Tool: charge_card' });
-    expect(tool.textContent).toContain('Approval required');
+    const trigger = screen.getByRole('button', { name: /Charge card/ });
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(tool.textContent).not.toContain('Approval is required to continue.');
+
+    fireEvent.click(trigger);
+
+    expect(tool.textContent).toContain('Approval is required to continue.');
     expect(screen.getByRole('button', { name: /Approve/ })).toBeTruthy();
   });
 });

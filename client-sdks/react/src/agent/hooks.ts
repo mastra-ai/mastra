@@ -14,6 +14,7 @@ import {
   CLIENT_MESSAGE_ID_KEY,
   finishStreamingAssistantMessage,
   fromCoreUserMessagesToMastraDBMessage,
+  normalizePersistedNetworkResults,
 } from '../lib/mastra-db';
 import type { MastraDBMessageMetadata } from '../lib/mastra-db';
 import { useMastraClient } from '../mastra-client-context';
@@ -106,10 +107,11 @@ const resolveInitialMessages = (messages: MastraDBMessage[]): MastraDBMessage[] 
             })()
           : message;
 
-      const normalizedMetadata = normalizedMessage.content?.metadata as MastraDBMessageMetadata | undefined;
+      const networkNormalizedMessage = normalizePersistedNetworkResults(normalizedMessage);
+      const normalizedMetadata = networkNormalizedMessage.content?.metadata as MastraDBMessageMetadata | undefined;
       const pendingToolApprovals = normalizedMetadata?.pendingToolApprovals;
       if (!pendingToolApprovals || typeof pendingToolApprovals !== 'object') {
-        return normalizedMessage;
+        return networkNormalizedMessage;
       }
 
       const stillPending = Object.fromEntries(
@@ -118,7 +120,7 @@ const resolveInitialMessages = (messages: MastraDBMessage[]): MastraDBMessage[] 
             approval &&
             typeof approval === 'object' &&
             typeof approval.toolCallId === 'string' &&
-            !toolCallHasOutput(normalizedMessage.content.parts, approval.toolCallId),
+            !toolCallHasOutput(networkNormalizedMessage.content.parts, approval.toolCallId),
         ),
       );
 
@@ -126,9 +128,9 @@ const resolveInitialMessages = (messages: MastraDBMessage[]): MastraDBMessage[] 
       const hasStillPending = Object.keys(stillPending).length > 0;
 
       return {
-        ...normalizedMessage,
+        ...networkNormalizedMessage,
         content: {
-          ...normalizedMessage.content,
+          ...networkNormalizedMessage.content,
           metadata: {
             ...restMetadata,
             mode: 'stream' as const,

@@ -1,11 +1,11 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
+import { Tool, ToolContent, ToolHeader, ToolIcon } from '@mastra/playground-ui/components/ai/tool-call';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 
 import { useContext, useEffect } from 'react';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
-import { BadgeWrapper } from './badge-wrapper';
 import { LoadingBadge } from './loading-badge';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
@@ -44,6 +44,7 @@ export const WorkflowBadge = ({
   isNetwork,
   toolCalled,
 }: WorkflowBadgeProps) => {
+  const { Link } = useLinkComponent();
   const { runId, status } = result || {};
   const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId);
   const { data: runs, isLoading: isRunsLoading } = useWorkflowRuns(workflowId, {
@@ -73,47 +74,62 @@ export const WorkflowBadge = ({
 
   if (isWorkflowLoading || !workflow) return <LoadingBadge />;
 
-  return (
-    <BadgeWrapper
-      data-testid="workflow-badge"
-      icon={<WorkflowIcon className="text-accent3" />}
-      title={workflow.name}
-      initialCollapsed={false}
-      extraInfo={
-        metadata?.mode === 'network' ? (
-          <NetworkChoiceMetadataDialogTrigger
-            selectionReason={selectionReason ?? ''}
-            input={agentNetworkInput as string | Record<string, unknown> | undefined}
-          />
-        ) : bgEntry?.taskId && bgEntry?.startedAt ? (
-          <BackgroundTaskMetadataDialogTrigger backgroundTask={bgEntry} />
-        ) : null
-      }
-    >
-      {!isStreaming && !isLoading && (
-        <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId} initialRunId={runId} withoutTimeTravel>
-          <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />
-        </WorkflowRunProvider>
-      )}
+  const toolCallStatus = status === 'failed' ? 'error' : result === undefined ? 'running' : 'success';
 
-      {isStreaming && <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />}
-
-      {suspendPayloadSlot !== undefined && suspendPayload && (
-        <div>
-          <p className="pb-2 font-medium">Workflow suspend payload</p>
-          {suspendPayloadSlot}
-        </div>
-      )}
-
-      <ToolApprovalButtons
-        toolCalled={toolCalled ?? !!status}
-        toolCallId={toolCallId}
-        toolApprovalMetadata={toolApprovalMetadata}
-        toolName={toolName}
-        isNetwork={isNetwork}
-        isGenerateMode={metadata?.mode === 'generate'}
+  const metadataAction =
+    metadata?.mode === 'network' ? (
+      <NetworkChoiceMetadataDialogTrigger
+        selectionReason={selectionReason ?? ''}
+        input={agentNetworkInput as string | Record<string, unknown> | undefined}
       />
-    </BadgeWrapper>
+    ) : bgEntry?.taskId && bgEntry?.startedAt ? (
+      <BackgroundTaskMetadataDialogTrigger backgroundTask={bgEntry} />
+    ) : null;
+
+  return (
+    <Tool data-testid="workflow-badge" status={toolCallStatus} aria-label={`Tool: ${toolName}`}>
+      <ToolHeader
+        actions={
+          <div className="flex items-center gap-1">
+            {metadataAction}
+            <Button as={Link} href={`/workflows/${workflowId}/graph`} size="xs" variant="ghost">
+              Go to workflow
+            </Button>
+          </div>
+        }
+      >
+        <ToolIcon>
+          <WorkflowIcon className="text-accent3" />
+        </ToolIcon>
+        {workflow.name}
+      </ToolHeader>
+
+      <ToolContent>
+        {!isStreaming && !isLoading && (
+          <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId} initialRunId={runId} withoutTimeTravel>
+            <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />
+          </WorkflowRunProvider>
+        )}
+
+        {isStreaming && <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />}
+
+        {suspendPayloadSlot !== undefined && suspendPayload && (
+          <div>
+            <p className="pb-2 font-medium">Workflow suspend payload</p>
+            {suspendPayloadSlot}
+          </div>
+        )}
+
+        <ToolApprovalButtons
+          toolCalled={toolCalled ?? !!status}
+          toolCallId={toolCallId}
+          toolApprovalMetadata={toolApprovalMetadata}
+          toolName={toolName}
+          isNetwork={isNetwork}
+          isGenerateMode={metadata?.mode === 'generate'}
+        />
+      </ToolContent>
+    </Tool>
   );
 };
 
@@ -128,16 +144,13 @@ const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExt
 
   return (
     <>
-      <div className="flex items-center gap-2 pb-2">
-        <Button as={Link} href={`/workflows/${workflowId}/graph`}>
-          Go to workflow
-        </Button>
-        {runId && (
-          <Button as={Link} href={`/workflows/${workflowId}/graph/${runId}`}>
+      {runId && (
+        <div className="flex items-center pb-1.5">
+          <Button as={Link} href={`/workflows/${workflowId}/graph/${runId}`} size="xs" variant="ghost">
             See run
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="h-[60vh] w-full overflow-hidden rounded-md">
         <WorkflowSelectedStepProvider>

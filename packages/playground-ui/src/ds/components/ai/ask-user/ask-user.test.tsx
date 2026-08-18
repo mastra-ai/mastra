@@ -1,9 +1,15 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import type { ComponentProps } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { AskUser } from './ask-user';
 import type { AskUserPayload } from './ask-user';
+
+beforeAll(() => {
+  if (typeof window.PointerEvent === 'undefined') {
+    window.PointerEvent = window.MouseEvent as unknown as typeof PointerEvent;
+  }
+});
 
 const renderAskUser = (payload: AskUserPayload, overrides: Partial<ComponentProps<typeof AskUser>> = {}) => {
   const onSubmit = vi.fn();
@@ -79,14 +85,15 @@ describe('AskUser', () => {
   });
 
   describe('when a single selection is chosen', () => {
-    it('submits the chosen label immediately', () => {
+    it('uses the design-system radio group and submits the chosen label immediately', () => {
       const { onSubmit } = renderAskUser({
         question: 'Pick a fruit',
         options: [{ label: 'Apple' }, { label: 'Banana' }],
         selectionMode: 'single_select',
       });
 
-      fireEvent.click(screen.getByRole<HTMLInputElement>('radio', { name: 'Apple' }));
+      const choices = screen.getByRole('radiogroup', { name: 'Pick a fruit' });
+      fireEvent.click(within(choices).getByRole('radio', { name: 'Apple' }));
 
       expect(onSubmit).toHaveBeenCalledWith('Apple');
     });
@@ -146,7 +153,7 @@ describe('AskUser', () => {
     it('disables the option controls', () => {
       renderAskUser(payload, { isSubmitting: true });
 
-      expect(screen.getByRole<HTMLInputElement>('radio', { name: 'Apple' }).disabled).toBe(true);
+      expect(screen.getByRole('radio', { name: 'Apple' }).getAttribute('aria-disabled')).toBe('true');
     });
 
     it('announces the pending state', () => {

@@ -1,8 +1,8 @@
 import { Agent } from '@mastra/core/agent';
+import { askUserTool, createCodeMode, createTool, submitPlanTool, webFetchTool, webSearchTool } from '@mastra/core/tools';
 import { lessComplexWorkflow, myWorkflow } from '../workflows';
 import { Memory } from '@mastra/memory';
 import { ModerationProcessor } from '@mastra/core/processors';
-import { submitPlanTool } from '@mastra/core/tools';
 import { cookingTool } from '../tools';
 import { TaskSignalProvider } from '@mastra/core/signals';
 import {
@@ -15,6 +15,7 @@ import { findUserWorkflow } from '../workflows/other';
 import { createScorer } from '@mastra/core/evals';
 import { cryptoResearchTool, cryptoPriceTool } from '../tools';
 import { weatherTool as weatherInfo } from '../tools/weather-tool';
+import { askUserAgent } from './ask-user-agent';
 import {
   createSubscription,
   getSubscription,
@@ -23,13 +24,15 @@ import {
   deleteSubscription,
 } from '../tools';
 
-import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
 import { createDurableAgent } from '@mastra/core/agent/durable';
+import { z } from 'zod';
 
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({
     basePath: './workspace',
   }),
+  sandbox: new LocalSandbox(),
   skills: ['.agents/skills'],
 });
 
@@ -81,6 +84,38 @@ export const moderationProcessor = new ModerationProcessor({
   instructions: 'Detect and flag inappropriate content in user messages',
 });
 
+const chefUiDemoApprovalTool = createTool({
+  id: 'confirm-tomato-prep',
+  description: 'Confirm a mise en place checklist before the sous-chef continues.',
+  inputSchema: z.object({ ingredient: z.string() }),
+  requireApproval: true,
+  execute: async ({ ingredient }) => ({ approvedIngredient: ingredient }),
+});
+
+const chefUiDemoSubAgent = new Agent({
+  id: 'sous-chef-ui-demo',
+  name: 'Sous-chef UI Demo',
+  description: 'Prepares a concise mise en place checklist for tool UI verification.',
+  instructions:
+    'Always call confirmTomatoPrep for the requested ingredient, then return a short mise en place checklist.',
+  model: 'openai/gpt-5-mini',
+  tools: {
+    confirmTomatoPrep: chefUiDemoApprovalTool,
+  },
+});
+
+const chefUiDemoCodeMode = createCodeMode({
+  id: 'chef_ui_code',
+  tools: {
+    weatherInfo,
+  },
+  sandbox: new LocalSandbox(),
+});
+
+// Keep the demo agent compatible with agent.network(); observational memory
+// requires context that network calls intentionally do not propagate.
+const chefUiDemoMemory = new Memory();
+
 export const chefModelV2Agent = new Agent({
   workspace,
   id: 'chef-model-v2-agent',
@@ -93,6 +128,14 @@ export const chefModelV2Agent = new Agent({
       You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
       For complex multi-step requests, use the task list tools to plan and track your progress.
       When asked to submit a plan, write its Markdown under .mastracode/plans/ in the workspace, then call submit_plan with that path.
+      When the user asks for the tool UI demo, call the requested primitive explicitly: cookingTool for a generic tool,
+      recipe-maker for a workflow, sous-chef-ui-demo for a sub-agent, chef_ui_code for Code Mode,
+      mastra_workspace_list_files for the file tree, mastra_workspace_execute_command for sandbox execution,
+      ask_user for an interactive question, submit_plan for plan review, web_fetch to fetch a specific URL,
+      or web_search to search the web.
+      The askUserAgent sub-agent provides a deterministic interactive-question demo.
+
+      ${chefUiDemoCodeMode.instructions}
       `,
     role: 'system',
   },
@@ -100,7 +143,15 @@ export const chefModelV2Agent = new Agent({
   tools: {
     weatherInfo,
     cookingTool,
+    chef_ui_code: chefUiDemoCodeMode.tool,
+    ask_user: askUserTool,
     submit_plan: submitPlanTool,
+    web_fetch: webFetchTool,
+    web_search: webSearchTool,
+  },
+  agents: {
+    chefUiDemoSubAgent,
+    askUserAgent,
   },
   workflows: {
     myWorkflow,
@@ -118,7 +169,7 @@ export const chefModelV2Agent = new Agent({
   //     scorer1: { scorer: scorer1, sampling: { rate: 1, type: 'ratio' } },
   //   };
   // },
-  memory,
+  memory: chefUiDemoMemory,
   signals: [new TaskSignalProvider()],
   inputProcessors: [moderationProcessor],
   defaultOptions: {

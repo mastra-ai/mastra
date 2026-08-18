@@ -1,3 +1,5 @@
+import { Tool, ToolContent, ToolHeader, ToolIcon } from '@mastra/playground-ui/components/ai/tool-call';
+import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { AskUserBadge } from './badges/ask-user-badge';
 import type { AskUserResult, AskUserSuspendPayload } from './badges/types';
 import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
@@ -44,5 +46,19 @@ export const AskUserTool = ({ toolName, toolCallId, output, metadata }: AskUserT
     return null;
   }
 
-  return <AskUserBadge toolCallId={toolCallId} suspendPayload={suspendPayload} result={asAskUserResult(output)} />;
+  const result = asAskUserResult(output);
+
+  return (
+    <Tool status={result ? 'success' : 'running'} defaultOpen aria-label={`Tool: ${toolName}`}>
+      <ToolHeader>
+        <ToolIcon>
+          <ToolsIcon className="text-accent6" />
+        </ToolIcon>
+        Ask user
+      </ToolHeader>
+      <ToolContent>
+        <AskUserBadge toolCallId={toolCallId} suspendPayload={suspendPayload} result={result} />
+      </ToolContent>
+    </Tool>
+  );
 };

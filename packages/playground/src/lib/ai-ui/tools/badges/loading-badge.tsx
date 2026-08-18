@@ -1,13 +1,16 @@
+import { Tool, ToolHeader, ToolIcon } from '@mastra/playground-ui/components/ai/tool-call';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { BadgeWrapper } from './badge-wrapper';
 
 export const LoadingBadge = () => {
   return (
-    <BadgeWrapper
-      icon={<Spinner className="text-neutral3" />}
-      title={<Skeleton className="ml-2 h-2 w-12" />}
-      collapsible={false}
-    />
+    <Tool status="running" collapsible={false} aria-label="Loading tool call">
+      <ToolHeader>
+        <ToolIcon>
+          <Spinner className="text-neutral3" />
+        </ToolIcon>
+        <Skeleton className="ml-2 h-2 w-12" />
+      </ToolHeader>
+    </Tool>
   );
 };

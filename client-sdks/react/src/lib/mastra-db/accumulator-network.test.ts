@@ -47,6 +47,19 @@ const workflowExecutionStartChunk = (primitiveId: string, runId: string): Networ
     },
   }) as unknown as NetworkChunkType;
 
+const workflowExecutionEndChunk = (primitiveId: string, runId: string): NetworkChunkType =>
+  ({
+    type: 'workflow-execution-end',
+    runId,
+    from: 'WORKFLOW',
+    payload: {
+      runId: 'workflow-step-1',
+      primitiveId,
+      primitiveType: 'workflow',
+      result: { status: 'success', steps: { input: { foo: 'bar' } }, result: { ok: true } },
+    },
+  }) as unknown as NetworkChunkType;
+
 const toolExecutionStartChunk = (toolName: string, toolCallId: string, runId: string): NetworkChunkType =>
   ({
     type: 'tool-execution-start',
@@ -102,6 +115,19 @@ const stepFinishChunk = (runId: string, result: string): NetworkChunkType =>
     from: 'AGENT',
     payload: { runId, result },
   }) as unknown as NetworkChunkType;
+
+const workflowResultEnvelope = JSON.stringify({
+  isNetwork: true,
+  primitiveType: 'workflow',
+  primitiveId: 'my-workflow',
+  selectionReason: 'workflow reason',
+  input: { foo: 'bar' },
+  finalResult: {
+    runId: RUN_ID,
+    runResult: { status: 'success', steps: { input: { foo: 'bar' } }, result: { ok: true } },
+    runSuccess: true,
+  },
+});
 
 // -----------------------------------------------------------------------------
 // Test helpers
@@ -235,6 +261,24 @@ describe('accumulateNetworkChunk', () => {
     expect(meta(msg).agentInput).toEqual({ foo: 'bar' });
   });
 
+  it('finalizes a streamed workflow as a completed dynamic tool', () => {
+    const afterStart = run([workflowExecutionStartChunk('my-workflow', RUN_ID)]);
+    const result = run([workflowExecutionEndChunk('my-workflow', RUN_ID)], afterStart);
+    const msg = lastMessage(result);
+    const part = firstPart(msg);
+
+    expect(part.type).toBe('dynamic-tool');
+    expect(part.toolName).toBe('my-workflow');
+    expect(part.state).toBe('output-available');
+    expect(part.output).toEqual({
+      status: 'success',
+      steps: { input: { foo: 'bar' } },
+      result: { ok: true },
+      runId: RUN_ID,
+    });
+    expect(meta(msg).from).toBe('WORKFLOW');
+  });
+
   it('handles tool-execution-start and tool-execution-end lifecycle', () => {
     const afterStart = run([toolExecutionStartChunk('getWeather', 'tc-1', RUN_ID)]);
     const startPart = firstPart(lastMessage(afterStart));
@@ -343,5 +387,30 @@ describe('accumulateNetworkChunk', () => {
     expect(part.type).toBe('text');
     expect(part.text).toBe('the result');
     expect(part.state).toBe('done');
+  });
+
+  it('keeps a delegated workflow result structured instead of rendering its JSON envelope as text', () => {
+    const afterStart = run([workflowExecutionStartChunk('my-workflow', RUN_ID)]);
+    const result = run([stepFinishChunk(RUN_ID, workflowResultEnvelope)], afterStart);
+    const msg = lastMessage(result);
+    const part = firstPart(msg);
+
+    expect(msg.content.parts).toHaveLength(1);
+    expect(part.type).toBe('dynamic-tool');
+    expect(part.toolName).toBe('my-workflow');
+    expect(part.state).toBe('output-available');
+    expect(part.output).toEqual({
+      status: 'success',
+      steps: { input: { foo: 'bar' } },
+      result: { ok: true },
+      runId: RUN_ID,
+    });
+    expect(meta(msg).routingDecision).toEqual({
+      isNetwork: true,
+      primitiveType: 'workflow',
+      primitiveId: 'my-workflow',
+      selectionReason: 'workflow reason',
+      input: { foo: 'bar' },
+    });
   });
 });

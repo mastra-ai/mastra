@@ -110,6 +110,37 @@ test.describe('Agent chat streaming', () => {
       await page.reload();
       await assertToolStream(page);
     });
+
+    /**
+     * FEATURE: Agent tool-call transcript spacing
+     * USER STORY: As a reader, I can distinguish a completed tool call from the prose it produced.
+     * BEHAVIOR UNDER TEST: The assistant prose starts at least one spacing-scale step after the tool row.
+     */
+    test('visually separates the tool call from the assistant prose', async () => {
+      const expectedTextResult = `The weather in Paris is sunny, with a temperature of 19°C (66°F). The humidity is at 50%, and there's a light wind blowing at 10 mph. Perfect weather for a lovely day out or a cozy meal at home!`;
+
+      await selectFixture(page, 'tool-stream');
+      await page.goto(`/agents/weather-agent/chat/new`);
+      await page.getByTestId('composer-model-settings-trigger').click();
+      await page.click('text=Stream');
+      await page.keyboard.press('Escape');
+
+      await fillAndSend(page, 'Give me the weather in Paris');
+
+      const toolCall = page.getByRole('group', { name: 'Tool: weatherInfo' });
+      const prose = page.locator('.mastra-markdown').filter({ hasText: expectedTextResult });
+      await expect(toolCall).toBeVisible({ timeout: 20000 });
+      await expect(prose).toBeVisible({ timeout: 20000 });
+
+      await expect
+        .poll(async () => {
+          const toolBox = await toolCall.boundingBox();
+          const proseBox = await prose.boundingBox();
+          if (!toolBox || !proseBox) return 0;
+          return proseBox.y - (toolBox.y + toolBox.height);
+        })
+        .toBeGreaterThanOrEqual(12);
+    });
   });
 
   test.describe('when the workflow-stream fixture drives the response', () => {

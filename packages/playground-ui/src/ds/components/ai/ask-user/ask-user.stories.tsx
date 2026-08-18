@@ -8,8 +8,10 @@ const meta: Meta<typeof AskUser> = {
   args: { onSubmit: fn() },
   decorators: [
     Story => (
-      <div className="w-full max-w-lg p-4">
-        <Story />
+      <div className="bg-surface1 min-h-screen w-full p-4">
+        <div className="max-w-lg">
+          <Story />
+        </div>
       </div>
     ),
   ],

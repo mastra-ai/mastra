@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { ToolsIcon } from '../../../icons/ToolsIcon';
 import { presentTool } from './tool-presentation';
 
 describe('presentTool', () => {
@@ -50,7 +51,10 @@ describe('presentTool', () => {
   });
 
   it('prettifies unknown tool names instead of surfacing raw identifiers', () => {
-    expect(presentTool('fetch_pull_request', undefined).label).toBe('Fetch pull request');
+    expect(presentTool('fetch_pull_request', undefined)).toMatchObject({
+      icon: ToolsIcon,
+      label: 'Fetch pull request',
+    });
   });
 
   it('omits the detail when the salient argument has not streamed yet', () => {

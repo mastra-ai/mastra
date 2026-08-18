@@ -12,12 +12,13 @@ import {
   SquarePen,
   SquareTerminal,
   Trash2,
-  Wrench,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
+import { ToolsIcon } from '../../../icons/ToolsIcon';
+
 export interface ToolPresentation {
-  icon: LucideIcon;
+  icon: LucideIcon | typeof ToolsIcon;
   label: string;
   /** Salient argument shown next to the label: command, path, pattern… */
   detail?: string;
@@ -91,7 +92,7 @@ function withoutCdPrefix(command: string): string {
 
 export function presentTool(toolName: string, args: unknown): ToolPresentation {
   const style = TOOL_STYLES[toolName.replace(/^mastra_workspace_/, '')];
-  if (!style) return { icon: Wrench, label: prettifyToolName(toolName) };
+  if (!style) return { icon: ToolsIcon, label: prettifyToolName(toolName) };
 
   const detail = style.detailKeys ? firstStringArg(args, style.detailKeys) : undefined;
   if (!detail) return { icon: style.icon, label: style.label };

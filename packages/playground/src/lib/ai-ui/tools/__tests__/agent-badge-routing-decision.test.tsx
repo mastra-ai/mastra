@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -19,12 +18,6 @@ vi.mock('@mastra/playground-ui/components/CodeEditor', () => ({
 
 vi.mock('@mastra/playground-ui/icons/AgentIcon', () => ({
   AgentIcon: () => null,
-}));
-
-vi.mock('../badges/badge-wrapper', () => ({
-  BadgeWrapper: ({ extraInfo }: { extraInfo: ReactNode }) => {
-    return extraInfo;
-  },
 }));
 
 vi.mock('../badges/background-task-metadata-dialog', () => ({

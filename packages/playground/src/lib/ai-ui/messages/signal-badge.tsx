@@ -1,8 +1,7 @@
-import type { TaskItem } from '@mastra/core/signals';
 import { Database, Radio } from 'lucide-react';
 
 import { NotificationSignalNotice } from './notification-signal-notice';
-import { formatSignalValue, isRecord, isSignalData, signalContentsToText } from './signal-data';
+import { formatSignalValue, getTaskSignalData, isRecord, isSignalData, signalContentsToText } from './signal-data';
 import type { SignalData } from './signal-data';
 
 export type SignalBadgeProps = {
@@ -22,33 +21,6 @@ const Pill = ({ children }: { children: string }) => (
     {children}
   </span>
 );
-
-function isTaskItemArray(value: unknown): value is TaskItem[] {
-  return (
-    Array.isArray(value) &&
-    value.every(
-      item =>
-        isRecord(item) &&
-        typeof item.id === 'string' &&
-        typeof item.content === 'string' &&
-        (item.status === 'pending' || item.status === 'in_progress' || item.status === 'completed') &&
-        typeof item.activeForm === 'string',
-    )
-  );
-}
-
-function getTaskSignalData(signal: SignalData): TaskItem[] | undefined {
-  const isTaskSignal =
-    signal.id === 'tasks' || signal.tagName === 'current-task-list' || signal.tagName === 'task-list-update';
-  if (!isTaskSignal) return undefined;
-
-  const metadata = signal.metadata;
-  const value = isRecord(metadata?.value) ? metadata.value : undefined;
-  const tasks = value?.tasks;
-  if (!isTaskItemArray(tasks)) return undefined;
-
-  return tasks;
-}
 
 export const SignalBadge = ({ signal: value }: SignalBadgeProps) => {
   if (!isSignalData(value)) return null;

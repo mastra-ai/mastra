@@ -91,8 +91,12 @@ describe('components/* subpath exports', () => {
     expect(mod.TaskList).toBeDefined();
   });
 
-  it('AI tool-call entry exports ToolCall and its presentation helper', async () => {
+  it('AI tool-call entry exports the composable shell and generic ToolCall', async () => {
     const mod = await import('./ds/components/ai/tool-call');
+    expect(Reflect.get(mod, 'Tool')).toBeDefined();
+    expect(Reflect.get(mod, 'ToolHeader')).toBeDefined();
+    expect(Reflect.get(mod, 'ToolIcon')).toBeDefined();
+    expect(Reflect.get(mod, 'ToolContent')).toBeDefined();
     expect(mod.ToolCall).toBeDefined();
     expect(mod.presentTool).toBeDefined();
   });

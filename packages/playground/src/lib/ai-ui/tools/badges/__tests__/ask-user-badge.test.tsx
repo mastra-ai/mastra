@@ -193,7 +193,7 @@ describe('AskUserBadge', () => {
     it('disables the option controls', () => {
       renderBadge({ toolCallId: 'call-5', suspendPayload, result: undefined }, { isRunning: true });
 
-      expect(within(badge()).getByRole<HTMLInputElement>('radio', { name: 'Apple' }).disabled).toBe(true);
+      expect(within(badge()).getByRole('radio', { name: 'Apple' }).getAttribute('aria-disabled')).toBe('true');
     });
 
     it('does not submit when a disabled option is clicked', () => {

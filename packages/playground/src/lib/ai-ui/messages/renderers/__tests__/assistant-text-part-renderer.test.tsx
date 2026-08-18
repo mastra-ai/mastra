@@ -1,5 +1,5 @@
 import type { TextPart } from '@mastra/react';
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { MessageMetadata } from '../../message-metadata';
@@ -46,14 +46,21 @@ describe('AssistantTextPartRenderer', () => {
     expect(screen.getByText('Error')).not.toBeNull();
   });
 
-  it('renders a collapsible completion-check notice from completionResult metadata', () => {
-    const part = { type: 'text', text: 'all good' } as TextPart;
-    const metadata: MessageMetadata = { completionResult: { passed: true } };
+  describe('when completionResult metadata is present', () => {
+    it('renders the completion check collapsed by default with the shared tool disclosure', () => {
+      const part = { type: 'text', text: 'all good' } as TextPart;
+      const metadata: MessageMetadata = { completionResult: { passed: true } };
 
-    render(<AssistantTextPartRenderer part={part} metadata={metadata} />);
+      render(<AssistantTextPartRenderer part={part} metadata={metadata} />);
 
-    expect(screen.getByText('Complete')).not.toBeNull();
-    expect(screen.getByText('all good')).not.toBeNull();
+      const completionCheck = screen.getByRole('group', { name: 'Completion check' });
+      expect(within(completionCheck).queryByText('all good')).toBeNull();
+      fireEvent.click(within(completionCheck).getByRole('button', { name: 'Show completion check' }));
+
+      const completionResult = within(completionCheck).getByRole('group', { name: 'Completion check result' });
+      expect(within(completionResult).getByText('Complete')).not.toBeNull();
+      expect(within(completionResult).getByText('all good')).not.toBeNull();
+    });
   });
 
   describe('when a chunk lands on a reply that is still streaming', () => {

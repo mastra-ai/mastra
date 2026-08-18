@@ -9,7 +9,6 @@ import {
   DialogBody,
 } from '@mastra/playground-ui/components/Dialog';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Share2 } from 'lucide-react';
 import { useState } from 'react';
 
 interface NetworkChoiceMetadataProps {
@@ -68,8 +67,8 @@ export const NetworkChoiceMetadataDialogTrigger = ({
   const [isOpen, setIsOpen] = useState(false);
   return (
     <>
-      <Button variant="default" size="icon-md" tooltip="Show selection reason" onClick={() => setIsOpen(s => !s)}>
-        <Share2 className="text-neutral3 size-5" />
+      <Button type="button" variant="ghost" size="xs" onClick={() => setIsOpen(true)}>
+        Selection reason
       </Button>
 
       <NetworkChoiceMetadata

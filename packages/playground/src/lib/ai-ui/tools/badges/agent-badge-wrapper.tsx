@@ -22,6 +22,8 @@ interface AgentBadgeWrapperProps extends Omit<ToolApprovalButtonsProps, 'toolCal
     subAgentThreadId?: string;
     subAgentToolResults?: SubAgentToolResult[];
     text?: string;
+    /** Full sub-agent transcript persisted by agent-network results. */
+    messages?: Parameters<typeof toAISdkV5Messages>[0];
   };
   metadata?: MessageMetadata;
   suspendPayload?: any;
@@ -42,7 +44,7 @@ export const AgentBadgeWrapper = ({
   isComplete,
 }: AgentBadgeWrapperProps) => {
   const shouldFetchAgentMessages = Boolean(
-    result?.subAgentThreadId && !result.text && !result.subAgentToolResults?.length,
+    result?.subAgentThreadId && !result.text && !result.messages && !result.subAgentToolResults?.length,
   );
   const { data, isLoading } = useAgentMessages({
     threadId: shouldFetchAgentMessages ? result?.subAgentThreadId : undefined,
@@ -54,12 +56,15 @@ export const AgentBadgeWrapper = ({
     return <LoadingBadge />;
   }
 
-  const convertedMessages = data?.messages ? toAISdkV5Messages(data.messages) : [];
+  const persistedMessages = result?.messages ? toAISdkV5Messages(result.messages) : [];
+  const fetchedMessages = data?.messages ? toAISdkV5Messages(data.messages) : [];
 
   // Build child messages from available sources:
   // 1. childMessages (built during live streaming by toUIMessageFromAgent)
   // 2. subAgentToolResults (from backend tool-result, available after approval or on refresh)
-  // 3. resolveToChildMessages (fetched from subagent thread via API)
+  // 3. messages (full transcript persisted by an agent-network result)
+  // 4. embedded final text
+  // 5. resolveToChildMessages (fetched from subagent thread via API)
   let childMessages = result?.childMessages?.length ? result.childMessages : undefined;
 
   if (!childMessages && result?.subAgentToolResults?.length) {
@@ -76,21 +81,22 @@ export const AgentBadgeWrapper = ({
     childMessages = toolMessages;
   }
 
+  if (!childMessages && persistedMessages.length) {
+    childMessages = resolveToChildMessages(persistedMessages) as AgentMessage[];
+  }
+
   if (!childMessages && result?.text) {
     childMessages = [{ type: 'text' as const, content: result.text }];
   }
 
   if (!childMessages) {
-    childMessages = resolveToChildMessages(convertedMessages) as AgentMessage[];
+    childMessages = resolveToChildMessages(fetchedMessages) as AgentMessage[];
   }
-
-  const hasStreamingChildMessages = Boolean(result && Object.prototype.hasOwnProperty.call(result, 'childMessages'));
 
   return (
     <AgentBadge
       agentId={agentId}
       messages={childMessages ?? []}
-      keepOpenForStreamingChildMessages={hasStreamingChildMessages}
       metadata={metadata}
       toolCallId={toolCallId}
       toolApprovalMetadata={toolApprovalMetadata}
