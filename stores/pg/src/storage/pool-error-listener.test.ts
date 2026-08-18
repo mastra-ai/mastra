@@ -108,6 +108,37 @@ describe('PostgresStore pool error listeners', () => {
     }
   });
 
+  // The guard's listener stays on the client after it goes back in the pool, so
+  // it also witnesses idle failures — which pg already routes to the pool's own
+  // listener. Reporting both would announce one dropped connection twice, the
+  // second time claiming a checkout that had already ended.
+  it('PgFactoryStorage leaves an idle client error to the pool listener', async () => {
+    const warn = vi.fn();
+    vi.spyOn(console, 'warn').mockImplementation(warn);
+    const storage = new PgFactoryStorage({ connectionString: DEAD_CONNECTION_STRING });
+    const db = storage.authDatabase();
+    if (db.dialect !== 'postgres') throw new Error('expected a postgres auth database');
+    const pool = db.pool as pg.Pool;
+
+    try {
+      const client = new EventEmitter();
+      pool.emit('connect', client as unknown as pg.PoolClient);
+      // Back in the pool: pg reattaches its idle listener here, and a failure now
+      // is the pool's to report.
+      pool.emit('release', undefined as unknown as Error, client as unknown as pg.PoolClient);
+
+      expect(() => client.emit('error', new Error('idle client dropped'))).not.toThrow();
+      expect(warn).not.toHaveBeenCalled();
+
+      // Borrowed again, the same connection is ours to report again.
+      pool.emit('acquire', client as unknown as pg.PoolClient);
+      expect(() => client.emit('error', new Error('Connection terminated unexpectedly'))).not.toThrow();
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('Connection terminated unexpectedly'));
+    } finally {
+      await storage.close();
+    }
+  });
+
   it('PostgresStoreVNext attaches an error listener to the observability pool it creates', async () => {
     const userPool = new pg.Pool({ connectionString: DEAD_CONNECTION_STRING });
     // The observability pool lives in a native private field, so track
