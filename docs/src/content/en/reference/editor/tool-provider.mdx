@@ -244,7 +244,7 @@ type ComposioUserIdResolver = (
     name: 'requestContext',
     type: 'RequestContext',
     description:
-      'Live per-request context. Read server-populated identity fields with getRaw(). Clients can set arbitrary non-reserved entries.',
+      'Live per-request context. Client-provided non-reserved entries are untrusted. Derive identity and authorize connectedAccountId only from validated, server-populated fields such as MASTRA_USER_KEY, read with getRaw().',
     isOptional: true,
   },
   {
