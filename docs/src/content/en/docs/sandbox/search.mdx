@@ -326,7 +326,8 @@ interface SearchResult {
 
 - Standalone BM25 search returns raw BM25 scores, which aren't limited to 0 through 1.
 - Vector score meaning depends on the configured vector store.
-- Hybrid search normalizes and combines scores using the `vectorWeight` parameter.
+- Hybrid search min-max normalizes BM25 for the weighted calculation but uses the vector provider's score unchanged. The combined score isn't clamped to 0 through 1.
+- `scoreDetails` retains the raw component scores, including the unnormalized BM25 score.
 - Choose `minScore` for the configured mode and provider instead of assuming one threshold works across modes.
 
 ### When to use each mode
