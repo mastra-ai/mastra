@@ -308,15 +308,17 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(await store.listSemanticOutbox()).toEqual([]);
     });
 
-    it('paginates activity newest-first', async () => {
-      await store.createNode({ name: 'Older activity', kind: 'task', scope: resource });
-      await store.createNode({ name: 'Newer activity', kind: 'task', scope: resource });
+    it('paginates activity from newest to oldest without duplicates', async () => {
+      await store.createNode({ name: 'Activity one', kind: 'task', scope: resource });
+      await store.createNode({ name: 'Activity two', kind: 'task', scope: resource });
+      await store.createNode({ name: 'Activity three', kind: 'task', scope: resource });
 
-      const firstPage = await store.listActivity({ scope: thread, limit: 1 });
-      const secondPage = await store.listActivity({ scope: thread, after: firstPage[0]!.id, limit: 1 });
+      const all = await store.listActivity({ scope: thread });
+      const first = await store.listActivity({ scope: thread, limit: 2 });
+      const second = await store.listActivity({ scope: thread, after: first.at(-1)!.id, limit: 2 });
 
-      expect(secondPage).toHaveLength(1);
-      expect(secondPage[0]!.id < firstPage[0]!.id).toBe(true);
+      expect(first.map(event => event.id)).toEqual(all.slice(0, 2).map(event => event.id));
+      expect(second.map(event => event.id)).toEqual(all.slice(2).map(event => event.id));
     });
 
     it('persists activity, cursors, and recoverable semantic work', async () => {

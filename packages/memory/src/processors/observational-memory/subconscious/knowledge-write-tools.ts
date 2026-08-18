@@ -197,19 +197,22 @@ export function createKnowledgeWriteTools(
           scope?: KnowledgeScopeLevel;
           expectedVersion?: number;
         };
-        if (value.name.trim().toLowerCase() === 'capture-guidance' && value.content.length > MAX_GUIDANCE_LENGTH) {
+        const trimmedName = value.name.trim();
+        const reservedName = trimmedName.toLowerCase();
+        const name = reservedName === 'capture-guidance' ? reservedName : trimmedName;
+        if (reservedName === 'capture-guidance' && value.content.length > MAX_GUIDANCE_LENGTH) {
           throw new Error(`capture-guidance is limited to ${MAX_GUIDANCE_LENGTH} characters.`);
         }
         const store = await getStore(memory);
         const scope = resolveWriteScope(options, value.scope);
-        const resolvedNode = await store.resolveNode({ name: value.name, scope });
+        const resolvedNode = await store.resolveNode({ name, scope });
         const existing =
           resolvedNode && knowledgeScopeKey(resolvedNode.scope) === knowledgeScopeKey(scope) ? resolvedNode : null;
         if (!existing) {
           if (value.expectedVersion !== undefined)
             throw new Error('expectedVersion is only valid for an existing node.');
           return store.createNode({
-            name: value.name,
+            name,
             kind: value.kind ?? 'document',
             content: value.content,
             scope,

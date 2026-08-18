@@ -84,9 +84,25 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
     const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
     const state = controller?.getState() as MastraCodeState | undefined;
     const subconsciousEnabled = Boolean(vector) && process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
+    const factoryProjectId = state?.factoryProjectId;
+    const isFactory = typeof factoryProjectId === 'string' && factoryProjectId.trim().length > 0;
+
     if (subconsciousEnabled) {
+      // Factory seeds the authoritative org id into session state; prefer it.
+      // The session owner is a USER id — mapping it into organizationId is only
+      // the legacy fallback for clients (TUI/studio) that never set factoryOrgId.
+      const factoryOrgId = state?.factoryOrgId;
       const ownerId = controller?.session.ownerId;
-      if (ownerId) requestContext.set('organizationId', ownerId);
+      if (typeof factoryOrgId === 'string' && factoryOrgId.trim()) {
+        requestContext.set('organizationId', factoryOrgId);
+      } else if (ownerId) {
+        requestContext.set('organizationId', ownerId);
+      }
+      // Factory runs share one knowledge graph per project: anchor the
+      // subconscious knowledge scope's resource rung on the project id.
+      if (isFactory) {
+        requestContext.set('knowledgeResourceId', factoryProjectId);
+      }
     }
 
     const omScope = state?.omScope ?? getOmScope(state?.projectPath);
@@ -97,7 +113,9 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
 
     const observerPreviousObservationTokens = 1000;
     const observeAttachments = state?.observeAttachments;
-    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${subconsciousEnabled ? 1 : 0}`;
+    // Factory sessions get a factory-only Subconscious config, so the cache key
+    // carries a factory presence bit to keep the two configs from cross-serving.
+    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}:${subconsciousEnabled ? 1 : 0}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;
     }
@@ -123,6 +141,16 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
             ? new Subconscious({
                 defaultScope: 'resource',
                 maxScope: 'resource',
+                // Capture-time pinning is a factory-only opinion; every other
+                // client keeps plain curator-maintained pins.
+                pins: isFactory ? { capturePinning: true } : true,
+                // Factory sessions run the curator every 3 observation runs;
+                // other clients leave the cadence trigger dormant.
+                ...(isFactory ? { curationCadence: 3 } : {}),
+                // Real curation over a factory worklist needs tool room: the
+                // default 5-step budget exhausts mid-batch and the curator never
+                // reaches its cursor acknowledgment (observed live 2026-08-13).
+                ...(isFactory ? { maxSteps: 25 } : {}),
               })
             : undefined,
           scope: omScope,
