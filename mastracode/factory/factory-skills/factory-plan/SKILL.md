@@ -40,7 +40,7 @@ Write the full plan into the conversation, structured as:
 - **Assumptions** — every recorded design decision and understanding correction from the run.
 - **Open questions** — only the decisions that genuinely need a human.
 
-The plan must be executable by someone with no access to this conversation beyond this message. If you write the plan or a PR description to disk, use `.artifacts/plans/issue-<number>.md` or `.artifacts/factory-plan/pr-description-issue-<number>.md`.
+The plan must be executable by someone with no access to this conversation beyond this message. Write it to `.artifacts/plans/issue-<number>.md` and include the same plan in the conversation.
 
 ## Phase 4: Transition
 

@@ -302,8 +302,8 @@ describe('getFactoryWorkspace', () => {
     );
 
     expect(triage).toContain('.artifacts/factory-triage/issue-<number>.md');
-    expect(plan).toContain('.artifacts/plans/issue-<number>.md');
-    expect(plan).toContain('.artifacts/factory-plan/pr-description-issue-<number>.md');
+    expect(plan).toContain('Write it to `.artifacts/plans/issue-<number>.md`');
+    expect(plan).toContain('include the same plan in the conversation');
     expect(review).toContain('.artifacts/factory-review/pr-<number>.md');
     expect(review).toContain('.artifacts/factory-review/follow-up-pr-<number>.md');
     expect(rereview).toContain('.artifacts/factory-rereview/pr-<number>.md');
