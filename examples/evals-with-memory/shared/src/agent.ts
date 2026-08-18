@@ -94,6 +94,16 @@ export function buildSupportAgent(opts: BuildOptions = {}): AgentBundle {
 
   const storage = new LibSQLStore({ id: `workshop-${storageMode}`, url });
 
+  /**
+   * Working memory stays off on this surface, unlike the Studio agent.
+   *
+   * Not an oversight — the exercises call `agent.generate(input)` with no
+   * thread and no resource, and Mastra skips memory tools entirely when there
+   * is neither (`listMemoryTools` returns early). Enabling it here would add a
+   * moving part to twelve exercises without changing a single one of their
+   * outputs. The Studio agent in `studio/src/mastra/index.ts` is where it is
+   * turned on, because that is where there is a UI to watch it in.
+   */
   const memory = new Memory({
     storage,
     options: {
