@@ -2358,7 +2358,7 @@ export class SessionDisplayState {
             const toolArgs = toolState.args as Record<string, unknown>;
             const filePath = toolArgs?.path as string;
             if (filePath) {
-              const existing = ds.modifiedFiles[filePath];
+              const existing = Object.hasOwn(ds.modifiedFiles, filePath) ? ds.modifiedFiles[filePath] : undefined;
               if (existing) {
                 existing.operations.push(toolState.name);
               } else {

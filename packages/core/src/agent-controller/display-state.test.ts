@@ -724,6 +724,13 @@ describe('modifiedFiles tracking', () => {
     expect(entry!.operations).toEqual(['string_replace_lsp', 'string_replace_lsp']);
   });
 
+  it('tracks a file whose path is an Object.prototype key', () => {
+    emit(session, { type: 'tool_start', toolCallId: 't1', toolName: 'write_file', args: { path: 'constructor' } });
+    emit(session, { type: 'tool_end', toolCallId: 't1', result: 'ok', isError: false });
+
+    expect(session.displayState.get().modifiedFiles['constructor']!.operations).toEqual(['write_file']);
+  });
+
   it('does not track file modifications for errored tools', () => {
     emit(session, { type: 'tool_start', toolCallId: 't1', toolName: 'write_file', args: { path: 'fail.ts' } });
     emit(session, { type: 'tool_end', toolCallId: 't1', result: 'error', isError: true });
