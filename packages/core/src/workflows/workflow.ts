@@ -354,7 +354,12 @@ export function createStep<
   TRequestContext extends Record<string, any> | unknown = unknown,
 >(
   tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext>,
-  toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata },
+  toolOptions?: {
+    retries?: number;
+    scorers?: DynamicArgument<MastraScorers>;
+    metadata?: StepMetadata;
+    actor?: ActorSignal;
+  },
 ): Step<TId, unknown, TSchemaIn, TSchemaOut, TSuspend, TResume, DefaultEngineType, TRequestContext>;
 
 /**

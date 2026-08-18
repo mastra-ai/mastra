@@ -356,6 +356,145 @@ describe('SkillsProcessor', () => {
       expect(mockSkills.maybeRefresh).toHaveBeenCalledWith({ requestContext });
     });
 
+    it('resolves without awaiting a slow maybeRefresh (fire-and-forget revalidation)', async () => {
+      // maybeRefresh never resolves - the step must still complete and serve the cache
+      const slowSkills = {
+        ...createMockWorkspaceSkills(),
+        maybeRefresh: vi.fn().mockReturnValue(new Promise<void>(() => {})),
+      };
+      const workspace = createMockWorkspace(slowSkills);
+      const proc = new SkillsProcessor({ workspace });
+
+      await proc.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+        stepNumber: 0,
+        requestContext: {},
+      } as any);
+
+      // Revalidation was fired...
+      expect(slowSkills.maybeRefresh).toHaveBeenCalledTimes(1);
+      // ...and the cached catalog was injected without waiting on it
+      const allSystemContent = mockMessageList.addSystem.mock.calls
+        .map((call: any) => call[0]?.content || call[0])
+        .join('\n');
+      expect(allSystemContent).toContain('code-review');
+    });
+
+    it('does not fail the step when maybeRefresh rejects, and warns via console fallback', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const rejectingSkills = {
+          ...createMockWorkspaceSkills(),
+          maybeRefresh: vi.fn().mockRejectedValue(new Error('sandbox unreachable')),
+        };
+        const workspace = createMockWorkspace(rejectingSkills);
+        const proc = new SkillsProcessor({ workspace });
+
+        await expect(
+          proc.processInputStep({
+            messageList: mockMessageList as any,
+            tools: {},
+            stepNumber: 0,
+            requestContext: {},
+          } as any),
+        ).resolves.not.toThrow();
+
+        // Fire-and-forget: the catch handler runs after the step resolves
+        await vi.waitFor(() => {
+          expect(warnSpy).toHaveBeenCalledWith(
+            'SkillsProcessor: skills refresh failed',
+            expect.objectContaining({ error: expect.any(Error) }),
+          );
+        });
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it('warns through the Mastra logger when registered and maybeRefresh rejects', async () => {
+      const rejectingSkills = {
+        ...createMockWorkspaceSkills(),
+        maybeRefresh: vi.fn().mockRejectedValue(new Error('sandbox unreachable')),
+      };
+      const workspace = createMockWorkspace(rejectingSkills);
+      const proc = new SkillsProcessor({ workspace });
+      const loggerWarn = vi.fn();
+      proc.__registerMastra({ getLogger: () => ({ warn: loggerWarn }) } as any);
+
+      await proc.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+        stepNumber: 0,
+        requestContext: {},
+      } as any);
+
+      await vi.waitFor(() => {
+        expect(loggerWarn).toHaveBeenCalledWith(
+          'SkillsProcessor: skills refresh failed',
+          expect.objectContaining({ error: expect.any(Error) }),
+        );
+      });
+    });
+
+    it('awaits maybeRefresh before step 0 when blockingRefresh is enabled', async () => {
+      // Gated maybeRefresh: the step must not complete until it resolves
+      let releaseRefresh!: () => void;
+      let refreshResolved = false;
+      const gatedSkills = {
+        ...createMockWorkspaceSkills(),
+        maybeRefresh: vi.fn().mockReturnValue(
+          new Promise<void>(resolve => {
+            releaseRefresh = () => {
+              refreshResolved = true;
+              resolve();
+            };
+          }),
+        ),
+      };
+      const workspace = createMockWorkspace(gatedSkills);
+      const proc = new SkillsProcessor({ workspace, blockingRefresh: true });
+
+      let stepDone = false;
+      const stepP = proc
+        .processInputStep({
+          messageList: mockMessageList as any,
+          tools: {},
+          stepNumber: 0,
+          requestContext: {},
+        } as any)
+        .then(() => {
+          stepDone = true;
+        });
+
+      // Give the step a chance to (incorrectly) complete without the refresh
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(stepDone).toBe(false);
+
+      releaseRefresh();
+      await stepP;
+      expect(refreshResolved).toBe(true);
+      expect(stepDone).toBe(true);
+    });
+
+    it('does not fail the step when maybeRefresh rejects under blockingRefresh', async () => {
+      const rejectingSkills = {
+        ...createMockWorkspaceSkills(),
+        maybeRefresh: vi.fn().mockRejectedValue(new Error('sandbox unreachable')),
+      };
+      const workspace = createMockWorkspace(rejectingSkills);
+      const proc = new SkillsProcessor({ workspace, blockingRefresh: true });
+
+      await expect(
+        proc.processInputStep({
+          messageList: mockMessageList as any,
+          tools: {},
+          stepNumber: 0,
+          requestContext: {},
+        } as any),
+      ).resolves.not.toThrow();
+    });
+
     it('should sort skills by name for deterministic output', async () => {
       // Mock skills in reverse alphabetical order
       const reverseSkills = {

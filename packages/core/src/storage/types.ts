@@ -436,6 +436,22 @@ export interface StorageConditionalVariant<T> {
 export type StorageConditionalField<T> = T | StorageConditionalVariant<T>[];
 
 /**
+ * Serializable subset of `AgentDurableOption` that can be persisted on a stored
+ * agent version snapshot. `cache` and `pubsub` are live runtime objects and are
+ * intentionally excluded — they are inherited from the Mastra instance at
+ * hydration time. `id`/`name` are excluded because a stored agent's durable
+ * wrapper must keep the agent's own id/name to stay addressable.
+ */
+export type StorageDurableConfig =
+  | boolean
+  | {
+      /** Maximum steps for the durable agentic loop. */
+      maxSteps?: number;
+      /** Auto-cleanup timer for durable stream state (ms). `0` disables cleanup. */
+      cleanupTimeoutMs?: number;
+    };
+
+/**
  * Agent version snapshot type containing ALL agent configuration fields.
  * These fields live exclusively in version snapshot rows, not on the agent record.
  */
@@ -486,6 +502,12 @@ export interface StorageAgentSnapshotType {
   skills?: StorageConditionalField<Record<string, StorageSkillConfig>>;
   /** Skill format for system message injection (default: 'xml') */
   skillsFormat?: 'xml' | 'json' | 'markdown';
+  /**
+   * Opt the hydrated agent into durable execution. Serializable subset of
+   * `AgentDurableOption` — `cache`/`pubsub` are live objects and stay code-level.
+   * Not conditional: durability is decided at registration time, not per request.
+   */
+  durable?: StorageDurableConfig;
   /** JSON Schema for validating request context values. Stored as JSON Schema since Zod is not serializable. */
   requestContextSchema?: Record<string, unknown>;
 }

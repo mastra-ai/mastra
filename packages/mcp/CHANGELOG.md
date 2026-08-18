@@ -1,5 +1,73 @@
 # @mastra/mcp
 
+## 1.17.0-alpha.2
+
+### Minor Changes
+
+- Added elicitation support on the `2026-07-28` protocol revision using the spec's multi round-trip mechanism, completing the opt-in `protocolVersion` support. ([#20931](https://github.com/mastra-ai/mastra/pull/20931))
+
+  **Server** — tools keep the same promise-shaped API on both eras:
+
+  ```typescript
+  execute: async (inputData, options) => {
+    const answer = await options.mcp.elicitation.sendRequest({
+      message: 'What is your favorite color?',
+      requestedSchema: { type: 'object', properties: { color: { type: 'string' } } },
+    });
+    // ...
+  };
+  ```
+
+  On a `2026-07-28` request, the tool call first returns an `input_required` result. After the client answers, the call retries with the answer attached. The tool function re-executes from the top on each retry, so keep side effects idempotent (or place them after the last elicitation) and keep the order of `sendRequest()` calls deterministic. Legacy connections keep the existing push-based `elicitation/create` flow unchanged.
+
+  **Client** — a handler registered with `elicitation.onRequest()` now fires on both eras: on `2026-07-28` connections, embedded elicitation requests are dispatched through the same handler and the originating tool call retries automatically. The warning that elicitation only works on legacy connections is removed.
+
+- Added opt-in support for the stateless MCP protocol revision `2026-07-28` behind a `protocolVersion` flag on both `MCPServer` and the MCP client. Omitting the flag keeps today's behavior unchanged. ([#20929](https://github.com/mastra-ai/mastra/pull/20929))
+
+  **Server**
+
+  ```typescript
+  const server = new MCPServer({
+    name: 'My Server',
+    version: '1.0.0',
+    tools: { weatherTool },
+    protocolVersion: '2026-07-28',
+    cacheHints: {
+      'tools/list': { ttlMs: 60_000, cacheScope: 'private' },
+    },
+  });
+  ```
+
+  With the flag set:
+
+  - One HTTP endpoint serves both protocol eras: `2026-07-28` clients are served natively (stateless), and legacy clients are served through an automatic stateless fallback.
+  - `startStdio()` serves both eras, selecting the era from the connection's opening exchange.
+  - Tool, prompt, and resource change notifications also reach `2026-07-28` clients through `subscriptions/listen`.
+  - Tool log messages honor the caller's per-request `logLevel` opt-in.
+  - Optional `cacheHints` advertise `ttlMs` / `cacheScope` on cacheable results such as `tools/list`.
+  - `startHTTP()` continues to enforce configured host and origin guards. Session and handler-lifetime transport options fail with a clear error instead of being ignored.
+
+  **Client**
+
+  ```typescript
+  const mcp = new MCPClient({
+    servers: {
+      weather: {
+        url: new URL('https://example.com/mcp'),
+        protocolVersion: 'auto', // probe, fall back to legacy
+        // or '2026-07-28' to pin the revision and fail loudly when unavailable
+      },
+    },
+  });
+  ```
+
+  Elicitation handlers currently only fire on legacy connections; support for the `2026-07-28` input-required mechanism ships separately.
+
+### Patch Changes
+
+- Updated dependencies [[`6223446`](https://github.com/mastra-ai/mastra/commit/6223446ddce6166e96e0ba5e00d628b615dee8ca), [`583e235`](https://github.com/mastra-ai/mastra/commit/583e23519c13af16c1746f9c49722d011216611b), [`a77f8d4`](https://github.com/mastra-ai/mastra/commit/a77f8d4740d2178a74c41e4bf678b4fcd8fa0bb2), [`40d358e`](https://github.com/mastra-ai/mastra/commit/40d358e29d55543803e64b49241122f598ffabc7), [`e80cd7e`](https://github.com/mastra-ai/mastra/commit/e80cd7e7683e7d732e1cc6784bcac1d2640d2ce3), [`20504b2`](https://github.com/mastra-ai/mastra/commit/20504b2ecebd0e077acda3d457ab57480a98ed3e)]:
+  - @mastra/core@1.60.0-alpha.11
+
 ## 1.17.0-alpha.1
 
 ### Minor Changes
