@@ -15,66 +15,66 @@ ignorecase: true
 # span.
 exceptions:
   # Common aircraft
-  - "(?i)planes?"
-  - "(?i)airplanes?"
-  - "(?i)jets?"
-  - "(?i)aircraft"
-  - "(?i)helicopters?"
-  - "(?i)drones?"
-  - "(?i)gliders?"
-  - "(?i)balloons?"
-  - "(?i)flights?"
+  - '(?i)planes?'
+  - '(?i)airplanes?'
+  - '(?i)jets?'
+  - '(?i)aircraft'
+  - '(?i)helicopters?'
+  - '(?i)drones?'
+  - '(?i)gliders?'
+  - '(?i)balloons?'
+  - '(?i)flights?'
   # Spacecraft
-  - "(?i)rockets?"
-  - "(?i)spacecraft"
-  - "(?i)probes?"
-  - "(?i)landers?"
-  - "(?i)rovers?"
-  - "(?i)capsules?"
-  - "(?i)shuttles?"
-  - "(?i)satellites?"
+  - '(?i)rockets?'
+  - '(?i)spacecraft'
+  - '(?i)probes?'
+  - '(?i)landers?'
+  - '(?i)rovers?'
+  - '(?i)capsules?'
+  - '(?i)shuttles?'
+  - '(?i)satellites?'
   # Birds (generic; rare species fire, so nature writing disables the rule)
-  - "(?i)birds?"
+  - '(?i)birds?'
   # Common falling or thrown things
-  - "(?i)balls?"
-  - "(?i)snow"
-  - "(?i)snowflakes?"
-  - "(?i)leaf"
-  - "(?i)leaves"
-  - "(?i)meteors?"
-  - "(?i)asteroids?"
+  - '(?i)balls?'
+  - '(?i)snow'
+  - '(?i)snowflakes?'
+  - '(?i)leaf'
+  - '(?i)leaves'
+  - '(?i)meteors?'
+  - '(?i)asteroids?'
   # People who land
-  - "(?i)skydivers?"
+  - '(?i)skydivers?'
   # "Lands" as a territory noun, not the verb (public lands in the west)
-  - "(?i)public"
-  - "(?i)federal"
-  - "(?i)tribal"
-  - "(?i)private"
-  - "(?i)ancestral"
-  - "(?i)indigenous"
-  - "(?i)native"
-  - "(?i)grazing"
-  - "(?i)crown"
-  - "(?i)common"
+  - '(?i)public'
+  - '(?i)federal'
+  - '(?i)tribal'
+  - '(?i)private'
+  - '(?i)ancestral'
+  - '(?i)indigenous'
+  - '(?i)native'
+  - '(?i)grazing'
+  - '(?i)crown'
+  - '(?i)common'
   # Assessment subjects owned by ColloquialAssessments ("the joke lands")
-  - "(?i)joke"
-  - "(?i)point"
-  - "(?i)argument"
-  - "(?i)line"
-  - "(?i)metaphor"
-  - "(?i)analogy"
-  - "(?i)comparison"
-  - "(?i)critique"
-  - "(?i)distinction"
-  - "(?i)observation"
-  - "(?i)framing"
-  - "(?i)insight"
-  - "(?i)takeaway"
-  - "(?i)punchline"
-  - "(?i)callback"
-  - "(?i)bit"
-  - "(?i)reference"
-  - "(?i)callout"
+  - '(?i)joke'
+  - '(?i)point'
+  - '(?i)argument'
+  - '(?i)line'
+  - '(?i)metaphor'
+  - '(?i)analogy'
+  - '(?i)comparison'
+  - '(?i)critique'
+  - '(?i)distinction'
+  - '(?i)observation'
+  - '(?i)framing'
+  - '(?i)insight'
+  - '(?i)takeaway'
+  - '(?i)punchline'
+  - '(?i)callback'
+  - '(?i)bit'
+  - '(?i)reference'
+  - '(?i)callout'
 tokens:
   # <subject> lands on/in/at: the figurative arrival with an explicit
   # destination ("the PR lands in main," "the request lands on the node").

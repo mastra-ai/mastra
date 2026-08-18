@@ -13,10 +13,10 @@ ignorecase: true
 # sugar," so disable this rule for terse spec lists where that is intended.
 # "No longer" and "no sooner" are temporal adverbs, a different construction.
 exceptions:
-  - "no longer"
-  - "no sooner"
+  - 'no longer'
+  - 'no sooner'
 tokens:
   # Stacked: "no X, no Y[, no Z]"
   - "\\bno [^,.;:!?]{2,}, no [^.!?]+"
   # Single clause-final fragment: "..., no <noun phrase>."
-  - ", no [a-z][^.!?,;:]*[.!?]"
+  - ', no [a-z][^.!?,;:]*[.!?]'

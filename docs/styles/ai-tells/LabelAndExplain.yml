@@ -4,7 +4,7 @@ message: "AI label-and-explain: '%s'. Fold the noun-phrase label into the senten
 level: error
 nonword: true
 scope:
-  - "~heading"
+  - '~heading'
 tokens:
   # Structural: a determiner-led noun-phrase label, a colon, then a lowercase
   # explanatory clause of 20+ characters ending in sentence punctuation
