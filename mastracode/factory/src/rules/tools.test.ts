@@ -176,6 +176,189 @@ describe('factory_transition_work_item', () => {
     });
   });
 
+  it('fires a fire-and-forget curation on the session thread after an accepted transition', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepareBoundItem(storage);
+    const transition = vi.fn(async () => ({
+      status: 'accepted' as const,
+      transitionId: 'transition-1',
+      itemId: prepared.item.id,
+      revision: 2,
+      stage: 'planning' as const,
+      decisions: [],
+    }));
+    const context = requestContext();
+    const tools = await createFactoryTransitionTools({
+      requestContext: context,
+      storage,
+      transitionService: { transition },
+    });
+
+    const runCuration = vi.fn(async () => ({ outcome: 'ran' }));
+    const memory = { runCuration };
+
+    const result = await (tools.factory_transition_work_item as ExecutableTool).execute(
+      { stage: 'planning', expectedRevision: 1, rationale: 'Done planning.' },
+      {
+        requestContext: context,
+        memory,
+        agent: { toolCallId: 'tool-call-1', threadId: 'thread-1', resourceId: 'resource-1' },
+      },
+    );
+
+    expect(result).toMatchObject({ status: 'accepted' });
+    await vi.waitFor(() => expect(runCuration).toHaveBeenCalledTimes(1));
+    expect(runCuration).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      requestContext: context,
+      prompt: expect.stringContaining('left the intake phase'),
+    });
+    // The curation must run under a request context that carries the org identity.
+    const passedContext = runCuration.mock.calls[0]![0].requestContext;
+    expect(passedContext?.get('user')).toMatchObject({ organizationId: expect.any(String) });
+  });
+
+  it('contains curation failures so the transition still returns the accepted result', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepareBoundItem(storage);
+    const transition = vi.fn(async () => ({
+      status: 'accepted' as const,
+      transitionId: 'transition-1',
+      itemId: prepared.item.id,
+      revision: 2,
+      stage: 'planning' as const,
+      decisions: [],
+    }));
+    const context = requestContext();
+    const tools = await createFactoryTransitionTools({
+      requestContext: context,
+      storage,
+      transitionService: { transition },
+    });
+
+    const runCuration = vi.fn(async () => {
+      throw new Error('curator exploded');
+    });
+    const memory = { runCuration };
+
+    const result = await (tools.factory_transition_work_item as ExecutableTool).execute(
+      { stage: 'planning', expectedRevision: 1, rationale: 'Done planning.' },
+      {
+        requestContext: context,
+        memory,
+        agent: { toolCallId: 'tool-call-1', threadId: 'thread-1', resourceId: 'resource-1' },
+      },
+    );
+
+    expect(result).toMatchObject({ status: 'accepted' });
+    await vi.waitFor(() => expect(runCuration).toHaveBeenCalledTimes(1));
+  });
+
+  it('works without memory on the execution context', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepareBoundItem(storage);
+    const transition = vi.fn(async () => ({
+      status: 'accepted' as const,
+      transitionId: 'transition-1',
+      itemId: prepared.item.id,
+      revision: 2,
+      stage: 'planning' as const,
+      decisions: [],
+    }));
+    const context = requestContext();
+    const tools = await createFactoryTransitionTools({
+      requestContext: context,
+      storage,
+      transitionService: { transition },
+    });
+
+    const result = await execute(tools.factory_transition_work_item as ExecutableTool, context, {
+      stage: 'planning',
+      expectedRevision: 1,
+      rationale: 'Done planning.',
+    });
+
+    expect(result).toMatchObject({ status: 'accepted' });
+  });
+
+  it('does not curate when the transition result is not accepted', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepareBoundItem(storage);
+    const transition = vi.fn(async () => ({
+      status: 'rejected' as const,
+      reason: 'invalid_transition' as const,
+      itemId: prepared.item.id,
+      message: 'no',
+    }));
+    const context = requestContext();
+    const tools = await createFactoryTransitionTools({
+      requestContext: context,
+      storage,
+      transitionService: { transition: transition as never },
+    });
+
+    const runCuration = vi.fn(async () => ({ outcome: 'ran' }));
+    const memory = { runCuration };
+
+    const result = await (tools.factory_transition_work_item as ExecutableTool).execute(
+      { stage: 'planning', expectedRevision: 1, rationale: 'Done planning.' },
+      {
+        requestContext: context,
+        memory,
+        agent: { toolCallId: 'tool-call-1', threadId: 'thread-1', resourceId: 'resource-1' },
+      },
+    );
+
+    expect(result).toMatchObject({ status: 'rejected' });
+    // Give any stray fire-and-forget a beat to fire before asserting it never did.
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(runCuration).not.toHaveBeenCalled();
+  });
+
+  it('returns the transition result without awaiting the curation promise', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepareBoundItem(storage);
+    const transition = vi.fn(async () => ({
+      status: 'accepted' as const,
+      transitionId: 'transition-1',
+      itemId: prepared.item.id,
+      revision: 2,
+      stage: 'planning' as const,
+      decisions: [],
+    }));
+    const context = requestContext();
+    const tools = await createFactoryTransitionTools({
+      requestContext: context,
+      storage,
+      transitionService: { transition },
+    });
+
+    let releaseCuration!: () => void;
+    const held = new Promise<{ outcome: string }>(resolve => {
+      releaseCuration = () => resolve({ outcome: 'ran' });
+    });
+    const runCuration = vi.fn(() => held);
+    const memory = { runCuration };
+
+    try {
+      const result = await (tools.factory_transition_work_item as ExecutableTool).execute(
+        { stage: 'planning', expectedRevision: 1, rationale: 'Done planning.' },
+        {
+          requestContext: context,
+          memory,
+          agent: { toolCallId: 'tool-call-1', threadId: 'thread-1', resourceId: 'resource-1' },
+        },
+      );
+
+      // The transition resolved while curation is still pending — non-blocking proven.
+      expect(result).toMatchObject({ status: 'accepted' });
+      await vi.waitFor(() => expect(runCuration).toHaveBeenCalledTimes(1));
+    } finally {
+      releaseCuration();
+    }
+  });
+
   it('rechecks authority at execution and rejects revoked or replaced bindings', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepareBoundItem(storage);
@@ -297,6 +480,7 @@ describe('factory_transition_work_item', () => {
     expect(sessions.getBySessionId).toHaveBeenCalledWith('resource-1');
     expect(setState).toHaveBeenCalledWith({
       factoryProjectId: PROJECT_ID,
+      factoryOrgId: 'org-1',
       projectRepositoryId: 'repo-1',
       untrustedCheckout: true,
       baseRef: 'main',
@@ -326,7 +510,11 @@ describe('factory_transition_work_item', () => {
     });
 
     expect(tools).toHaveProperty('factory_transition_work_item');
-    expect(setState).toHaveBeenCalledWith({ factoryProjectId: PROJECT_ID, untrustedCheckout: true });
+    expect(setState).toHaveBeenCalledWith({
+      factoryProjectId: PROJECT_ID,
+      factoryOrgId: 'org-1',
+      untrustedCheckout: true,
+    });
   });
 
   it('keeps untrustedCheckout when only the session lookup fails during enrichment', async () => {
@@ -344,7 +532,11 @@ describe('factory_transition_work_item', () => {
 
     expect(tools).toHaveProperty('factory_transition_work_item');
     expect(getBySessionId).toHaveBeenCalled();
-    expect(setState).toHaveBeenCalledWith({ factoryProjectId: PROJECT_ID, untrustedCheckout: true });
+    expect(setState).toHaveBeenCalledWith({
+      factoryProjectId: PROJECT_ID,
+      factoryOrgId: 'org-1',
+      untrustedCheckout: true,
+    });
   });
 
   it('recovers a work binding without marking the checkout untrusted', async () => {
@@ -360,7 +552,7 @@ describe('factory_transition_work_item', () => {
     });
 
     expect(tools).toHaveProperty('factory_transition_work_item');
-    expect(setState).toHaveBeenCalledWith({ factoryProjectId: PROJECT_ID });
+    expect(setState).toHaveBeenCalledWith({ factoryProjectId: PROJECT_ID, factoryOrgId: 'org-1' });
   });
 
   it('exposes nothing on crash-resume when no active binding matches the thread', async () => {

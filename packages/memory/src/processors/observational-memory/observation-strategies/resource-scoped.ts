@@ -18,6 +18,7 @@ import {
 } from '../markers';
 import { getLastObservedMessageCursor, sortThreadsByOldestMessage } from '../message-utils';
 import { buildMessageRange } from '../observational-memory';
+import { formatMessagesForObserver } from '../observer-agent';
 import { getMaxThreshold } from '../thresholds';
 
 import { ObservationStrategy } from './base';
@@ -309,12 +310,27 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         values: result.extractedValues,
         failures: result.extractionFailures,
         previousValues,
+        rawObservations: result.observations,
+        recentMessages: formatMessagesForObserver(threadMessages, { maxPartLength: 500 }),
         threadId,
         resourceId: this.resourceId,
         mainAgent: this.opts.agent,
         memory: this.deps.memory,
-        sendSignal: this.opts.sendSignal,
+        sendSignal: this.opts.agent
+          ? async signal => {
+              const delivery = this.opts.agent!.sendSignal(signal, {
+                resourceId: this.resourceId,
+                threadId,
+                ifActive: { behavior: 'deliver' },
+                ifIdle: { behavior: 'persist' },
+              });
+              await delivery.accepted;
+              return delivery.signal;
+            }
+          : undefined,
         sendStateSignal: this.opts.sendStateSignal,
+        writer: this.opts.writer,
+        abortSignal: this.opts.abortSignal,
         requestContext: this.opts.requestContext,
       });
       this.observationResults.push({
