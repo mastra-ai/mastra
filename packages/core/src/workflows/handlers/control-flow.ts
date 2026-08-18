@@ -1253,7 +1253,16 @@ export async function executeForeach(
     const execResults = {
       status: finalErrorResult.status,
       error: finalErrorResult.error,
-      suspendPayload: finalErrorResult.suspendPayload,
+      // Keep completed foreach iterations in the snapshot so time travel can
+      // resume from the failed iteration instead of replaying side effects.
+      suspendPayload: {
+        ...finalErrorResult.suspendPayload,
+        __workflow_meta: {
+          ...finalErrorResult.suspendPayload?.__workflow_meta,
+          foreachOutput: prevForeachOutput,
+          resumeLabels,
+        },
+      },
       suspendedAt: finalErrorResult.suspendedAt,
       endedAt: finalErrorResult.endedAt,
     };

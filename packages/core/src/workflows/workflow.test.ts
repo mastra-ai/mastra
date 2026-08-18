@@ -1638,4 +1638,49 @@ describe('concurrent stream close', () => {
     expect(firstDrain.types).toContain('workflow-finish');
     expect(secondDrain.types).toContain('workflow-finish');
   });
+
+  it('does not re-execute successful foreach iterations after time travel', async () => {
+    const executions = [0, 0];
+    const seed = createStep({
+      id: 'seed-for-time-travel',
+      inputSchema: z.object({}),
+      outputSchema: z.array(z.number()),
+      execute: async () => [0, 1],
+    });
+    const processItem = createStep({
+      id: 'process-item-for-time-travel',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      execute: async ({ inputData }) => {
+        executions[inputData] += 1;
+        if (inputData === 1 && executions[inputData] === 1) {
+          throw new Error('transient failure');
+        }
+        return inputData;
+      },
+    });
+    const workflow = createWorkflow({
+      id: 'foreach-time-travel-preserves-results',
+      inputSchema: z.object({}),
+      outputSchema: z.array(z.number()),
+    })
+      .then(seed)
+      .foreach(processItem, { concurrency: 1 })
+      .commit();
+
+    new Mastra({
+      logger: false,
+      storage: testStorage,
+      workflows: { 'foreach-time-travel-preserves-results': workflow },
+    });
+
+    const run = await workflow.createRun({ runId: 'foreach-time-travel-preserves-results-run' });
+    const failed = await run.start({ inputData: {} });
+    expect(failed.status).toBe('failed');
+    expect(executions).toEqual([1, 1]);
+
+    const replayed = await run.timeTravel({ step: 'process-item-for-time-travel' });
+    expect(replayed.status).toBe('success');
+    expect(executions).toEqual([1, 2]);
+  });
 });
