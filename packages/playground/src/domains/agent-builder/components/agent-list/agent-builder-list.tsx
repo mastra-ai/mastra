@@ -89,7 +89,7 @@ export function AgentBuilderList({ agents, search, rowTestId, showFavorites = tr
     return (
       <div className="flex items-center justify-center pt-10">
         <EmptyState
-          iconSlot={<SearchIcon className="h-8 w-8 text-neutral3" />}
+          iconSlot={<SearchIcon className="text-neutral3 h-8 w-8" />}
           titleSlot="No agents match your search"
           descriptionSlot="Try a different name or description."
         />
@@ -98,7 +98,7 @@ export function AgentBuilderList({ agents, search, rowTestId, showFavorites = tr
   }
 
   return (
-    <div className="bg-surface2 border h-full border-border1 rounded-xl divide-y divide-border1 overflow-y-auto content-start">
+    <div className="bg-surface2 border-border1 divide-border1 h-full content-start divide-y overflow-y-auto rounded-xl border">
       {filtered.map(agent => {
         const avatar = getAvatarUrl(agent);
 
@@ -106,17 +106,17 @@ export function AgentBuilderList({ agents, search, rowTestId, showFavorites = tr
           <Link
             key={agent.id}
             href={`/agent-builder/agents/${agent.id}/view`}
-            className="px-6 py-5 flex items-start gap-4 hover:bg-surface3 transition-colors md:items-center"
+            className="hover:bg-surface3 flex items-start gap-4 px-6 py-5 transition-colors md:items-center"
             data-testid={rowTestId}
           >
             <Avatar name={agent.name ?? ''} src={avatar} size="lg" />
 
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 min-w-0">
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-center gap-2">
                 <div className="text-ui-md text-neutral6 truncate">{agent.name}</div>
                 {agent.visibility === 'private' && <PrivateVisibilityIcon />}
               </div>
-              <div className="flex items-center gap-2 mt-0.5">
+              <div className="mt-0.5 flex items-center gap-2">
                 <span className="text-ui-sm text-neutral3 line-clamp-1">{agent.description || 'No description'}</span>
               </div>
               <AuthorBadge agent={agent} className="mt-2 md:hidden" />
@@ -131,14 +131,14 @@ export function AgentBuilderList({ agents, search, rowTestId, showFavorites = tr
                 </div>
               )}
             </div>
-            <AuthorBadge agent={agent} className="shrink-0 hidden md:flex max-w-[12rem]" />
+            <AuthorBadge agent={agent} className="hidden max-w-[12rem] shrink-0 md:flex" />
             {showFavorites && (
               <FavoriteButton
                 agentId={agent.id}
                 isFavorited={agent.isFavorited}
                 favoriteCount={agent.favoriteCount}
                 size="sm"
-                className="shrink-0 hidden md:inline-flex"
+                className="hidden shrink-0 md:inline-flex"
               />
             )}
           </Link>
@@ -150,12 +150,12 @@ export function AgentBuilderList({ agents, search, rowTestId, showFavorites = tr
 
 export function AgentBuilderListSkeleton({ rows = 4, rowTestId }: AgentBuilderListSkeletonProps) {
   return (
-    <div className="bg-surface2 border border-border1 rounded-xl divide-y divide-border1 overflow-hidden">
+    <div className="bg-surface2 border-border1 divide-border1 divide-y overflow-hidden rounded-xl border">
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="px-6 py-5 flex items-center gap-4" data-testid={rowTestId}>
-          <div className="flex-1 min-w-0 space-y-2">
-            <div className="h-3.5 w-48 bg-surface3 rounded animate-pulse" />
-            <div className="h-3 w-72 max-w-full bg-surface3 rounded animate-pulse" />
+        <div key={i} className="flex items-center gap-4 px-6 py-5" data-testid={rowTestId}>
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="bg-surface3 h-3.5 w-48 animate-pulse rounded" />
+            <div className="bg-surface3 h-3 w-72 max-w-full animate-pulse rounded" />
           </div>
         </div>
       ))}

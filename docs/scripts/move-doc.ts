@@ -4,7 +4,7 @@
  * At a high level, the script does the following in the docs package:
  * 1. Moves the mdx file(s) under src/content/en/<family>
  * 2. Updates matching Docusaurus sidebar doc ids for same-family moves
- * 3. Updates links in MDX files that point to the old route(s)
+ * 3. Updates links in Markdown and MDX source files that point to the old route(s)
  * 4. Adds redirect(s) to vercel.redirects.json
  * 5. Updates existing redirects to point to the new route(s)
  *
@@ -14,13 +14,16 @@
  * @example Batch move with glob patterns:
  * pnpm tsx scripts/move-doc.ts "/docs/old/**" "/docs/new/**"
  *
+ * Use --dry-run to preview changes without making any modifications.
+ *
  * Note:
  * - The .mdx extension should be omitted from routes.
- * - Supported editable route families are /docs, /reference, and /guides.
+ * - Supported editable route families are /docs, /integrations, /reference, and /guides.
  * - /models is auto-generated and intentionally unsupported.
  * - When using glob patterns, both source and destination must be glob patterns.
  * - Glob patterns should be quoted to prevent shell expansion.
  * - After a non-dry run, run `pnpm run generate-vercel-redirects` and commit vercel.json.
+ * - Use --skip-links to leave inbound MDX links unchanged.
  */
 
 import fs from 'fs/promises'
@@ -29,10 +32,13 @@ import path from 'path'
 import { glob } from 'tinyglobby'
 
 const VERCEL_REDIRECTS_FILE = 'vercel.redirects.json'
+const SOURCE_ROOT = 'src'
 const CONTENT_ROOT = 'src/content/en'
+const GENERATED_CONTENT_DIRS = [path.join(CONTENT_ROOT, 'models')]
 
 const FAMILIES = {
   '/docs': 'docs',
+  '/integrations': 'integrations',
   '/reference': 'reference',
   '/guides': 'guides',
 } as const
@@ -73,10 +79,12 @@ interface MoveDocumentsResult {
 interface MoveDocumentsOptions {
   verbose?: boolean
   dryRun?: boolean
+  skipLinks?: boolean
 }
 
 interface UpdateRedirectsOptions {
   glob?: boolean
+  verbose?: boolean
 }
 
 const splitPathAndHash = (url: string): PathWithHash => {
@@ -166,6 +174,19 @@ const routeToRelativeLink = (fromRoute: string, toRoute: string): string => {
   return `./${relativePath}`
 }
 
+const getLinkPathAliases = (route: string): string[] => {
+  const { path: routePath } = splitPathAndHash(route)
+  const aliases = new Set([routePath])
+
+  if (routePath.endsWith('/index')) {
+    const directoryRoute = routePath.slice(0, -'/index'.length)
+    aliases.add(directoryRoute)
+    aliases.add(`${directoryRoute}/`)
+  }
+
+  return [...aliases]
+}
+
 const readRedirectConfig = async (): Promise<RedirectConfig> => {
   const content = await fs.readFile(VERCEL_REDIRECTS_FILE, 'utf-8')
   const data = JSON.parse(content)
@@ -253,42 +274,58 @@ const updateSidebarDocIds = async (oldRoute: string, newRoute: string): Promise<
   }
 }
 
-const updateMdxLinks = async (oldPaths: string[], newPath: string): Promise<void> => {
+const updateMdxLinks = async (
+  oldPaths: string[],
+  newPath: string,
+  options: { verbose?: boolean } = {},
+): Promise<void> => {
+  const { verbose = true } = options
+
   const processFile = async (filePath: string): Promise<void> => {
     const content = await fs.readFile(filePath, 'utf-8')
     let updatedContent = content
-    const currentRoute = filePathToRoute(filePath)
+    const normalizedFilePath = filePath.split(path.sep).join('/')
+    const currentRoute =
+      normalizedFilePath.startsWith(`${CONTENT_ROOT}/`) && normalizedFilePath.endsWith('.mdx')
+        ? filePathToRoute(filePath)
+        : null
 
-    oldPaths.forEach(oldPath => {
+    oldPaths.flatMap(getLinkPathAliases).forEach(oldPath => {
       const { path: oldBasePath } = splitPathAndHash(oldPath)
       const { path: newBasePath, hash: newHash } = splitPathAndHash(newPath)
+      const externalDestination = newBasePath.startsWith('https://')
 
       const markdownLinkRegex = new RegExp(`(?<!!)(\\[[^\\]]+\\])\\(([^)]+)\\)`, 'g')
       updatedContent = updatedContent.replace(markdownLinkRegex, (match, label, linkPath) => {
         if (!linkPath.startsWith('./') && !linkPath.startsWith('../')) return match
+        if (!currentRoute) return match
 
         const { path: linkBasePath, hash: linkHash } = splitPathAndHash(linkPath)
         if (resolveRelativeRoute(currentRoute, linkBasePath) !== oldBasePath) return match
 
         const finalHash = newHash || linkHash || ''
-        return `${label}(${routeToRelativeLink(currentRoute, newBasePath)}${finalHash})`
+        const replacementPath = externalDestination ? newBasePath : routeToRelativeLink(currentRoute, newBasePath)
+        return `${label}(${replacementPath}${finalHash})`
       })
 
-      const absoluteMarkdownLinkRegex = new RegExp(`\\[([^\\]]+)\\]\\(${escapeRegExp(oldBasePath)}(?:#[^)]*)?\\)`, 'g')
-      updatedContent = updatedContent.replace(absoluteMarkdownLinkRegex, (match, linkText) => {
+      const absoluteMarkdownLinkRegex = new RegExp(
+        `\\[([^\\]]+)\\]\\((https://mastra\\.ai)?${escapeRegExp(oldBasePath)}(?:#[^)]*)?\\)`,
+        'g',
+      )
+      updatedContent = updatedContent.replace(absoluteMarkdownLinkRegex, (match, linkText, origin = '') => {
         const existingHash = match.match(/#[^)]*(?=\))/)?.[0] || ''
         const finalHash = newHash || existingHash || ''
-        return `[${linkText}](${newBasePath}${finalHash})`
+        return `[${linkText}](${origin}${newBasePath}${finalHash})`
       })
 
-      const jsxLinkRegex = new RegExp(`(link=["'])(${escapeRegExp(oldBasePath)}(?:#[^"']*)?)(["'])`, 'g')
+      const jsxLinkRegex = new RegExp(`((?:link|href)=["'])(${escapeRegExp(oldBasePath)}(?:#[^"']*)?)(["'])`, 'g')
       updatedContent = updatedContent.replace(jsxLinkRegex, (_match, prefix, linkPath, suffix) => {
         const { hash: linkHash } = splitPathAndHash(linkPath)
         const finalHash = newHash || linkHash || ''
         return `${prefix}${newBasePath}${finalHash}${suffix}`
       })
 
-      const arrayLinkRegex = new RegExp(`(link:\\s*["'])(${escapeRegExp(oldBasePath)}(?:#[^"']*)?)(["'])`, 'g')
+      const arrayLinkRegex = new RegExp(`((?:link|href):\\s*["'])(${escapeRegExp(oldBasePath)}(?:#[^"']*)?)(["'])`, 'g')
       updatedContent = updatedContent.replace(arrayLinkRegex, (_match, prefix, linkPath, suffix) => {
         const { hash: linkHash } = splitPathAndHash(linkPath)
         const finalHash = newHash || linkHash || ''
@@ -309,7 +346,7 @@ const updateMdxLinks = async (oldPaths: string[], newPath: string): Promise<void
 
     if (content !== updatedContent) {
       await fs.writeFile(filePath, updatedContent)
-      console.log(`Updated links in ${filePath}`)
+      if (verbose) console.log(`Updated links in ${filePath}`)
     }
   }
 
@@ -317,6 +354,7 @@ const updateMdxLinks = async (oldPaths: string[], newPath: string): Promise<void
     let entries: Dirent[]
     try {
       entries = await fs.readdir(dir, { withFileTypes: true })
+      entries.sort((a, b) => a.name.localeCompare(b.name))
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
       throw error
@@ -326,15 +364,15 @@ const updateMdxLinks = async (oldPaths: string[], newPath: string): Promise<void
       const fullPath = path.join(dir, entry.name)
 
       if (entry.isDirectory()) {
-        if (dir === CONTENT_ROOT && (GENERATED_ROUTE_PREFIXES as readonly string[]).includes(`/${entry.name}`)) continue
+        if (GENERATED_CONTENT_DIRS.includes(fullPath)) continue
         await processDirectory(fullPath)
-      } else if (entry.name.endsWith('.mdx')) {
+      } else if (entry.name.endsWith('.mdx') || entry.name.endsWith('.md')) {
         await processFile(fullPath)
       }
     }
   }
 
-  await processDirectory(CONTENT_ROOT)
+  await processDirectory(SOURCE_ROOT)
 }
 
 const isGlobPattern = (pattern: string): boolean => {
@@ -420,17 +458,18 @@ const updateRedirects = async (
   newPath: string,
   options: UpdateRedirectsOptions = {},
 ): Promise<string[]> => {
+  const { glob = false, verbose = true } = options
   const config = await readRedirectConfig()
   let redirects = config.redirects.map(redirect => ({ ...redirect, permanent: true }))
 
-  if (options.glob) {
+  if (glob) {
     const sourceDynamicPattern = globToDynamicPattern(oldPath)
     const destDynamicPattern = globToDynamicPattern(newPath)
 
     if (sourceDynamicPattern !== destDynamicPattern) {
       redirects.push({ source: sourceDynamicPattern, destination: destDynamicPattern, permanent: true })
-      console.log(`Added dynamic redirect: ${sourceDynamicPattern} -> ${destDynamicPattern}`)
-    } else {
+      if (verbose) console.log(`Added dynamic redirect: ${sourceDynamicPattern} -> ${destDynamicPattern}`)
+    } else if (verbose) {
       console.log(`Skipped redundant dynamic redirect: ${sourceDynamicPattern} -> ${destDynamicPattern}`)
     }
 
@@ -460,7 +499,7 @@ const updateRedirects = async (
 
   if (oldPath !== newPath) {
     redirects.push({ source: oldPath, destination: newPath, permanent: true })
-  } else {
+  } else if (verbose) {
     console.log(`Skipped redundant static redirect: ${oldPath} -> ${newPath}`)
   }
 
@@ -558,7 +597,7 @@ export async function moveDocuments(
   destination: string,
   options: MoveDocumentsOptions = {},
 ): Promise<MoveDocumentsResult> {
-  const { verbose = true, dryRun = false } = options
+  const { verbose = true, dryRun = false, skipLinks = false } = options
   const isSourceGlob = isGlobPattern(source)
   const isDestGlob = isGlobPattern(destination)
 
@@ -612,8 +651,10 @@ export async function moveDocuments(
       }
     }
 
-    for (const movedRoute of movedRoutes) {
-      await updateMdxLinks([movedRoute.source], movedRoute.destination)
+    if (!skipLinks) {
+      for (const movedRoute of movedRoutes) {
+        await updateMdxLinks([movedRoute.source], movedRoute.destination)
+      }
     }
 
     const successful = results.filter(r => r.status === 'success').length
@@ -656,7 +697,7 @@ export async function moveDocuments(
     await moveFile(source, destination)
     const pathsToUpdate = await updateRedirects(source, destination)
     await updateSidebarDocIds(source, destination)
-    await updateMdxLinks(pathsToUpdate, destination)
+    if (!skipLinks) await updateMdxLinks(pathsToUpdate, destination)
 
     if (verbose) {
       console.log('Document move completed successfully')
@@ -693,6 +734,7 @@ const main = async (): Promise<void> => {
   const result = await moveDocuments(source, destination, {
     verbose: !process.argv.includes('--silent'),
     dryRun: process.argv.includes('--dry-run'),
+    skipLinks: process.argv.includes('--skip-links'),
   })
 
   if (!result.success) {

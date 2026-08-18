@@ -1,0 +1,58 @@
+---
+extends: existence
+message: "AI overused verb: '%s'. Name the actual behavior. Disable this rule for athletics or plumbing prose."
+level: error
+nonword: true
+ignorecase: true
+# "Runs" is the hardest verb in the family: software literally runs (tests,
+# servers, commands, pipelines), so a broad subject rule would flood
+# instantly. Every token gates on a curated figurative complement instead,
+# and the everyday literal senses ("run the tests," "the server runs on
+# port 8080," "up and running") never match. "Run a tight ship" stays in
+# ShipOveruse. Athletics or plumbing writing disables the whole rule.
+tokens:
+  # --- Depth and opposition: a problem "runs deep," a choice "runs counter
+  # to" the design, a hack "runs afoul of" the linter.
+  - "\\brun(?:s|ning)? deep(?:er)?\\b"
+  - "\\brun(?:s|ning)? counter to\\b"
+  - "\\brun(?:s|ning)? afoul of\\b"
+  - "\\brun(?:s|ning)? roughshod over\\b"
+
+  # --- Range theater: coverage dressed as a sprint ("runs the gamut,"
+  # "runs the full spectrum").
+  - "\\brun(?:s|ning)? the (?:full )?(?:gamut|spectrum)\\b"
+
+  # --- Control and hazard idioms ("runs the show," "runs the risk of,"
+  # "runs interference," "runs circles around the old parser").
+  - "\\brun(?:s|ning)? the show\\b"
+  - "\\brun(?:s|ning)? the risk of\\b"
+  - "\\brun(?:s|ning)? interference\\b"
+  - "\\brun(?:s|ning)? (?:circles|rings) around\\b"
+
+  # --- Exhaustion: effort as a fuel gauge ("running on fumes," "the
+  # budget runs dry," "the experiment ran its course," "running on
+  # empty," "running out of runway").
+  - "\\brun(?:s|ning)? on (?:fumes|empty|borrowed time)\\b"
+  - "\\bran on (?:fumes|empty|borrowed time)\\b"
+  - "\\brun(?:s|ning)? dry\\b"
+  - "\\bran dry\\b"
+  - "\\brun(?:s|ning)? (?:its|their) course\\b"
+  - "\\bran (?:its|their) course\\b"
+  - "\\brun(?:s|ning)? out of runway\\b"
+  - "\\bran out of runway\\b"
+
+  # --- Pervasion: an abstraction threaded through the work ("one limit
+  # runs under the whole table," "one assumption runs through the entire
+  # design," "a tension runs beneath the surface"). The gate is a
+  # threading preposition plus a "the whole X" totality, or a threading
+  # subject noun. Deliberately not "every" or "all the": a cron that
+  # "runs across every region" and a suite that "runs through every
+  # fixture" are literal executions and stay quiet. A cable under "the
+  # whole house" fires, which is what the plumbing disable is for.
+  - "\\b(?:run(?:s|ning)?|ran) (?:under|underneath|beneath|behind|through) (?:the (?:whole|entire) \\w+|it all)\\b"
+  - "\\b(?:themes?|threads?|currents?|undercurrents?|tensions?|assumptions?|through-?lines?) (?:that )?(?:runs?|ran|running) (?:through|under|beneath|across)\\b"
+  - "\\b(?:run(?:s|ning)?|ran) beneath the surface\\b"
+
+  # --- Momentum idioms ("hit the ground running," "off and running").
+  - "\\bhit the ground running\\b"
+  - "\\boff and running\\b"

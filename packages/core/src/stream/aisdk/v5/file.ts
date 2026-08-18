@@ -1,4 +1,5 @@
 import { convertBase64ToUint8Array, convertUint8ArrayToBase64 } from '@ai-sdk/provider-utils-v5';
+import { isUrlString } from './compat/content';
 
 /**
  * A generated file.
@@ -46,6 +47,13 @@ export class DefaultGeneratedFile implements GeneratedFile {
   // lazy conversion with caching to avoid unnecessary conversion overhead:
   get uint8Array() {
     if (this.uint8ArrayData == null) {
+      // URL-backed generated files (AI SDK v7 models) store the URL string in
+      // place of base64. Fail loudly instead of decoding the URL as base64.
+      if (isUrlString(this.base64Data!)) {
+        throw new Error(
+          `Cannot convert URL-backed generated file to Uint8Array. Download the file from ${this.base64Data} instead.`,
+        );
+      }
       this.uint8ArrayData = convertBase64ToUint8Array(this.base64Data!);
     }
     return this.uint8ArrayData;

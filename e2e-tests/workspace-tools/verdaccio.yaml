@@ -5,6 +5,23 @@ max_body_size: 100mb
 uplinks:
   npmjs:
     url: https://registry.npmjs.org/
+    # Resilience settings for CI. Verdaccio defaults (max_fails: 2,
+    # fail_timeout: 5m) act as a circuit breaker: two slow/failed upstream
+    # requests mark the uplink dead, after which every *uncached* package
+    # lookup returns a bogus 404 for five minutes. Under concurrent e2e jobs
+    # npmjs regularly returns 502s or stalls, so the breaker would trip and
+    # unrelated packages would fail to install.
+    timeout: 60s
+    max_fails: 20
+    fail_timeout: 1s
+    # Retain cached upstream metadata so a flaky npmjs cannot break a run
+    # that already resolved the package once.
+    maxage: 30m
+    cache: true
+    agent_options:
+      keepAlive: true
+      maxSockets: 40
+      maxFreeSockets: 10
 
 packages:
   # Block npm fallback for @mastra/* packages - they MUST be published locally

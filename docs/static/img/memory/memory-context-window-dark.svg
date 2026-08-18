@@ -1,0 +1,116 @@
+<svg width="760" height="614" viewBox="0 0 760 614" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="How Mastra assembles the model context from system messages and conversation messages">
+  <style>
+    text { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .header { font-size: 12px; font-weight: 700; letter-spacing: 0.1em; fill: #cfcfcf; }
+    .header-desc { font-size: 11px; fill: #8a8a8a; }
+    .section { font-size: 10.5px; font-weight: 600; letter-spacing: 0.09em; fill: #8a8a8a; }
+    .title { font-size: 13px; font-weight: 600; fill: #f2f2f2; }
+    .desc { font-size: 13px; fill: #9a9a9a; }
+    .num { font-size: 11px; font-weight: 600; fill: #a8a8a8; }
+    .num-mem { font-size: 11px; font-weight: 600; fill: #2aed73; }
+    .legend { font-size: 12px; fill: #9a9a9a; }
+    .flow-label { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; fill: #7a7a7a; }
+    .bracket-label { font-size: 12px; font-weight: 600; fill: #2aed73; }
+    .opt { font-size: 11px; font-style: italic; fill: #6fae83; }
+    .outer { fill: #0e0e0e; stroke: #262626; }
+    .group { fill: #141414; stroke: #262626; }
+    .row { fill: #1c1c1c; stroke: #2c2c2c; }
+    .row-mem { fill: #0e2617; stroke: #1e4a2c; }
+    .chip { fill: #2c2c2c; }
+    .chip-mem { fill: #143621; }
+    .accent { fill: #2aed73; }
+    .flow { stroke: #4a4a4a; stroke-width: 1.5; fill: none; }
+    .bracket { stroke: #2aed73; stroke-width: 1.5; fill: none; }
+  </style>
+
+  <!-- Order-of-delivery arrow -->
+  <text x="28" y="56" text-anchor="middle" class="flow-label">FIRST</text>
+  <line x1="28" y1="66" x2="28" y2="504" class="flow"/>
+  <path d="M23 502 L28 512 L33 502" class="flow"/>
+  <text x="28" y="530" text-anchor="middle" class="flow-label">LAST</text>
+
+  <!-- Context window -->
+  <rect x="48" y="12" width="560" height="558" rx="16" class="outer"/>
+  <text x="68" y="40" class="header">CONTEXT WINDOW</text>
+  <text x="588" y="40" text-anchor="end" class="header-desc">one request to the model</text>
+
+  <!-- System messages group -->
+  <rect x="64" y="54" width="528" height="276" rx="12" class="group"/>
+  <text x="80" y="78" class="section">SYSTEM MESSAGES</text>
+
+  <!-- 1 Agent instructions -->
+  <rect x="80" y="88" width="496" height="40" rx="8" class="row"/>
+  <circle cx="102" cy="108" r="11" class="chip"/>
+  <text x="102" y="112" text-anchor="middle" class="num">1</text>
+  <text x="122" y="113"><tspan class="title">Agent instructions</tspan></text>
+
+  <!-- 2 Call-time system messages -->
+  <rect x="80" y="136" width="496" height="40" rx="8" class="row"/>
+  <circle cx="102" cy="156" r="11" class="chip"/>
+  <text x="102" y="160" text-anchor="middle" class="num">2</text>
+  <text x="122" y="161"><tspan class="title">System messages</tspan><tspan class="desc"> — passed at call time</tspan></text>
+
+  <!-- 3 Working memory -->
+  <rect x="80" y="184" width="496" height="40" rx="8" class="row-mem"/>
+  <rect x="80" y="191" width="3.5" height="26" rx="1.75" class="accent"/>
+  <circle cx="102" cy="204" r="11" class="chip-mem"/>
+  <text x="102" y="208" text-anchor="middle" class="num-mem">3</text>
+  <text x="122" y="209"><tspan class="title">Working memory</tspan><tspan class="desc"> — template + stored data</tspan></text>
+  <text x="564" y="209" text-anchor="end" class="opt">if enabled</text>
+
+  <!-- 4 Semantic recall (other threads) -->
+  <rect x="80" y="232" width="496" height="40" rx="8" class="row-mem"/>
+  <rect x="80" y="239" width="3.5" height="26" rx="1.75" class="accent"/>
+  <circle cx="102" cy="252" r="11" class="chip-mem"/>
+  <text x="102" y="256" text-anchor="middle" class="num-mem">4</text>
+  <text x="122" y="257"><tspan class="title">Semantic recall</tspan><tspan class="desc"> — matches from other threads</tspan></text>
+  <text x="564" y="257" text-anchor="end" class="opt">if enabled</text>
+
+  <!-- 5 Observational Memory -->
+  <rect x="80" y="280" width="496" height="40" rx="8" class="row-mem"/>
+  <rect x="80" y="287" width="3.5" height="26" rx="1.75" class="accent"/>
+  <circle cx="102" cy="300" r="11" class="chip-mem"/>
+  <text x="102" y="304" text-anchor="middle" class="num-mem">5</text>
+  <text x="122" y="305"><tspan class="title">Observational Memory</tspan><tspan class="desc"> — reflections + observations</tspan></text>
+  <text x="564" y="305" text-anchor="end" class="opt">if enabled</text>
+
+  <!-- Conversation messages group -->
+  <rect x="64" y="344" width="528" height="210" rx="12" class="group"/>
+  <text x="80" y="368" class="section">CONVERSATION MESSAGES · OLDEST → NEWEST</text>
+
+  <!-- 6 Message history + same-thread semantic recall (interleaved by timestamp) -->
+  <rect x="80" y="378" width="496" height="68" rx="8" class="row-mem"/>
+  <rect x="80" y="387" width="3.5" height="50" rx="1.75" class="accent"/>
+  <circle cx="102" cy="412" r="11" class="chip-mem"/>
+  <text x="102" y="416" text-anchor="middle" class="num-mem">6</text>
+  <text x="122" y="398"><tspan class="title">Message history + semantic recall</tspan><tspan class="desc"> — interleaved by timestamp</tspan></text>
+  <text x="122" y="416"><tspan class="desc">history on by default; recall matches merge in if enabled</tspan></text>
+  <text x="122" y="434"><tspan class="desc">only unobserved messages remain when Observational Memory is on</tspan></text>
+
+  <!-- 7 Call-time context messages -->
+  <rect x="80" y="454" width="496" height="40" rx="8" class="row"/>
+  <circle cx="102" cy="474" r="11" class="chip"/>
+  <text x="102" y="478" text-anchor="middle" class="num">7</text>
+  <text x="122" y="479"><tspan class="title">Context messages</tspan><tspan class="desc"> — passed at call time, never saved to memory</tspan></text>
+
+  <!-- 8 New user message -->
+  <rect x="80" y="502" width="496" height="40" rx="8" class="row"/>
+  <circle cx="102" cy="522" r="11" class="chip"/>
+  <text x="102" y="526" text-anchor="middle" class="num">8</text>
+  <text x="122" y="527"><tspan class="title">Your new message</tspan></text>
+
+  <!-- Memory brackets -->
+  <path d="M614 188 h4 q4 0 4 4 v120 q0 4 -4 4 h-4" class="bracket"/>
+  <text x="632" y="248" class="bracket-label">Mastra</text>
+  <text x="632" y="264" class="bracket-label">memory</text>
+
+  <path d="M614 382 h4 q4 0 4 4 v56 q0 4 -4 4 h-4" class="bracket"/>
+  <text x="632" y="405" class="bracket-label">Mastra</text>
+  <text x="632" y="421" class="bracket-label">memory</text>
+
+  <!-- Legend -->
+  <rect x="48" y="582" width="14" height="14" rx="4" class="row-mem"/>
+  <text x="70" y="593" class="legend">Injected by Mastra memory</text>
+  <rect x="270" y="582" width="14" height="14" rx="4" class="row"/>
+  <text x="292" y="593" class="legend">From your agent and the current call</text>
+</svg>

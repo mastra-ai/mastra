@@ -106,7 +106,7 @@ describe('mc send-message reproduction', () => {
         e.type === 'message_end' && e.message.role === 'assistant',
     );
     expect(assistantEnd).toBeDefined();
-    expect(assistantEnd!.message.content).toEqual([{ type: 'text', text: 'Hello from the agent!' }]);
+    expect(assistantEnd!.message.content.parts).toEqual([{ type: 'text', text: 'Hello from the agent!' }]);
   }, 30000);
 
   it('surfaces error event when model function throws during idle-start', async () => {
@@ -206,6 +206,6 @@ describe('mc send-message reproduction', () => {
         e.type === 'message_end' && e.message.role === 'assistant',
     );
     expect(assistantEnd).toBeDefined();
-    expect(assistantEnd!.message.content).toEqual([{ type: 'text', text: 'Hello from push-only!' }]);
+    expect(assistantEnd!.message.content.parts).toEqual([{ type: 'text', text: 'Hello from push-only!' }]);
   }, 30000);
 });

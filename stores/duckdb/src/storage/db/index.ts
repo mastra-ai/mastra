@@ -52,7 +52,25 @@ function toJsValue(val: unknown): unknown {
 export interface DuckDBStorageConfig {
   /** Path to the DuckDB file. Defaults to 'mastra.duckdb'. Use ':memory:' for ephemeral. */
   path?: string;
+  /**
+   * Maximum memory DuckDB may use (e.g. '2GB', '512MB').
+   * @default '2GB'
+   * DuckDB's own default is 80% of system RAM, which is far too aggressive for
+   * a store embedded in an application server — a single query against a large
+   * database can balloon the process by several GB and push the host into
+   * swap. Larger-than-memory operations spill to disk for file-backed
+   * databases. Raise this for dedicated analytical workloads.
+   */
+  memoryLimit?: string;
+  /**
+   * Number of threads DuckDB may use. Defaults to DuckDB's default (one per
+   * CPU core). Lower this to keep queries from monopolizing all cores of a
+   * shared application server.
+   */
+  threads?: number;
 }
+
+const DEFAULT_MEMORY_LIMIT = '2GB';
 
 /**
  * Shared DuckDB connection management for Mastra storage.
@@ -64,10 +82,15 @@ export class DuckDBConnection extends MastraBase {
   private initialized = false;
   private initPromise: Promise<void> | null = null;
   private path: string;
+  private instanceOptions: Record<string, string>;
 
   constructor(config: DuckDBStorageConfig = {}) {
     super({ component: 'STORAGE', name: 'DUCKDB' });
     this.path = config.path ?? 'mastra.duckdb';
+    this.instanceOptions = {
+      max_memory: config.memoryLimit ?? DEFAULT_MEMORY_LIMIT,
+      ...(config.threads !== undefined ? { threads: String(config.threads) } : {}),
+    };
   }
 
   private async initialize(): Promise<void> {
@@ -82,7 +105,7 @@ export class DuckDBConnection extends MastraBase {
 
     this.initPromise = (async () => {
       try {
-        this.instance = await DuckDBInstance.create(this.path);
+        this.instance = await DuckDBInstance.create(this.path, this.instanceOptions);
         this.initialized = true;
       } catch (error) {
         this.instance = null;

@@ -7,8 +7,10 @@ import type { ZodType as ZodTypev4 } from 'zod/v4';
 import type { ActorSignal } from '../auth/ee';
 import type { AgentBackgroundConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser';
+import type { MastraServerCache } from '../cache/base';
 import type { AgentChannels } from '../channels/agent-channels';
 import type { ChannelConfig } from '../channels/types';
+import type { WaitUntilFn } from '../channels/wait-until';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type { PubSub } from '../events/pubsub';
 import type {
@@ -54,6 +56,7 @@ import type { AgentSkillsInput } from '../skills/types';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { AgentChunkType, MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
 import type { ToolAction, ToolHooks, VercelTool, VercelToolV5 } from '../tools';
+import type { WebSearchToolPlaceholder } from '../tools/builtin/web-search';
 import type { ToolPayloadTransformPolicy } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import type { MastraVoice } from '../voice';
@@ -104,7 +107,7 @@ export type ZodSchema = ZodSchemaV3 | ZodTypev4;
  */
 export type ToolsInput = Record<
   string,
-  ToolAction<any, any, any, any, any> | VercelTool | VercelToolV5 | ProviderDefinedTool
+  ToolAction<any, any, any, any, any> | VercelTool | VercelToolV5 | ProviderDefinedTool | WebSearchToolPlaceholder
 >;
 
 export type AgentInstructions = SystemMessage;
@@ -349,6 +352,8 @@ export interface AgentSubscribeToThreadOptions {
 export interface AgentThreadSubscription<OUTPUT = unknown> {
   stream: AsyncIterable<AgentChunkType<OUTPUT>>;
   activeRunId: () => string | null;
+  /** @internal */
+  __getCurrentRunRequestContext?: () => RequestContext | undefined;
   abort: () => boolean;
   unsubscribe: () => void;
 }
@@ -379,9 +384,10 @@ export type StructuredOutputOptionsBase<OUTPUT = {}> = {
    * Whether to use prompt injection instead of native response format to coerce the LLM to respond with JSON text.
    * true and 'system' inject JSON instructions into the leading system message.
    * 'inline' appends JSON instructions to the latest user message.
+   * 'auto' uses native structured output when supported and inline injection otherwise.
    * false or omitted uses the provider's native response format.
    */
-  jsonPromptInjection?: boolean | 'system' | 'inline';
+  jsonPromptInjection?: boolean | 'system' | 'inline' | 'auto';
 
   /**
    * Optional logger instance for structured logging
@@ -503,6 +509,33 @@ export interface GoalConfig {
    */
   scorer?: MastraScorer | string;
 }
+
+/**
+ * Options for opting an {@link Agent} into durable execution via
+ * {@link AgentConfigBase.durable}.
+ *
+ * - `true`  → wrap with `createDurableAgent` using defaults on Mastra registration.
+ * - object  → forwarded to `createDurableAgent` (cache, pubsub, maxSteps,
+ *   cleanupTimeoutMs, id, name).
+ *
+ * See `packages/core/src/agent/durable/create-durable-agent.ts`.
+ */
+export type AgentDurableOption =
+  | boolean
+  | {
+      /** See createDurableAgent options: cache backend for resumable streams. */
+      cache?: MastraServerCache | false;
+      /** See createDurableAgent options: pubsub instance for streaming events. */
+      pubsub?: PubSub;
+      /** See createDurableAgent options: maximum steps for the agentic loop. */
+      maxSteps?: number;
+      /** Auto-cleanup timer for durable stream state (ms). */
+      cleanupTimeoutMs?: number;
+      /** Optional id override (defaults to agent.id). */
+      id?: string;
+      /** Optional name override (defaults to agent.name). */
+      name?: string;
+    };
 
 interface AgentConfigBase<
   TAgentId extends string = string,
@@ -635,6 +668,24 @@ interface AgentConfigBase<
    */
   workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any, any, any>>, TRequestContext>;
   /**
+   * Opt this agent into durable execution.
+   *
+   * - `true` → wraps with `createDurableAgent` using defaults when the agent is
+   *   registered on a `Mastra` instance.
+   * - object → forwarded to `createDurableAgent` (cache, pubsub, maxSteps,
+   *   cleanupTimeoutMs, id, name).
+   *
+   * Ignored when the agent is used standalone (not attached to a `Mastra`
+   * instance). See {@link AgentDurableOption}.
+   *
+   * @example
+   * ```typescript
+   * new Agent({ id: 'my-agent', instructions: '…', model, durable: true });
+   * new Agent({ id: 'my-agent', instructions: '…', model, durable: { maxSteps: 10 } });
+   * ```
+   */
+  durable?: AgentDurableOption;
+  /**
    * Default options used when calling `generate()`.
    */
   defaultGenerateOptionsLegacy?: DynamicArgument<AgentGenerateOptions, TRequestContext>;
@@ -731,7 +782,7 @@ interface AgentConfigBase<
    * }
    * ```
    */
-  skills?: AgentSkillsInput;
+  skills?: AgentSkillsInput<TRequestContext>;
   /**
    * Format for skill information injection when workspace has skills.
    * @default 'xml'
@@ -911,6 +962,8 @@ export type AgentMemoryOption = {
   thread: string | (Partial<StorageThreadType> & { id: string });
   resource?: string;
   options?: MemoryConfigInternal;
+  /** Callback fired when a thread title is generated and persisted to storage. */
+  onTitleGenerated?: (title: string) => void | Promise<void>;
 };
 
 /**
@@ -1117,6 +1170,12 @@ export type AgentExecuteOnFinishOptions = {
   threadExists: boolean;
   structuredOutput?: boolean;
   overrideScorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+  onTitleGenerated?: (title: string) => void | Promise<void>;
+  /**
+   * Optional platform `waitUntil` so detached title generation survives
+   * serverless freeze-after-response without blocking `generate()`/`stream()`.
+   */
+  waitUntil?: WaitUntilFn;
 };
 
 export type AgentMethodType = 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
@@ -1171,6 +1230,18 @@ export interface DurableAgentLike {
    * getMemory(), etc. to the wrapped Agent instance.
    */
   [key: string]: any;
+  /**
+   * Recover active runs for this durable agent.
+   */
+  recoverActiveRuns(): Promise<{
+    recovered: Array<{ runId: string }>;
+    succeeded: number;
+    failed: number;
+  }>;
+  /**
+   * Recover a specific run for this durable agent.
+   */
+  recover(runId: string, options?: any): Promise<any>;
 }
 
 /**
@@ -1185,6 +1256,8 @@ export function isDurableAgentLike(obj: any): obj is DurableAgentLike {
     obj.agent !== null &&
     typeof obj.agent === 'object' &&
     typeof obj.agent.id === 'string' &&
-    typeof obj.stream === 'function'
+    typeof obj.stream === 'function' &&
+    typeof obj.recover === 'function' &&
+    typeof obj.recoverActiveRuns === 'function'
   );
 }

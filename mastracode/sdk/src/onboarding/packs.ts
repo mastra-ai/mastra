@@ -4,6 +4,7 @@
  * Each pack assigns a default model to the build, plan, and fast modes,
  * plus an OM (observational memory) model.
  */
+import { DEFAULT_OM_MODEL_ID } from '../constants.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -25,6 +26,14 @@ export interface OMPack {
   name: string;
   description: string;
   modelId: string;
+}
+
+interface BuiltinOMPack {
+  id: string;
+  providerId: string;
+  name: string;
+  modelId: string;
+  description: (access: Exclude<ProviderAccessLevel, false>) => string;
 }
 
 /** How a provider is accessed: OAuth subscription, API key, or not at all. */
@@ -58,9 +67,9 @@ export function getAvailableModePacks(
 ): ModePack[] {
   const packs: ModePack[] = [];
 
-  const openaiCodex = 'openai/gpt-5.5';
+  const openaiCodex = 'openai/gpt-5.6-sol';
   const openaiFast = 'openai/gpt-5.4-mini';
-  const anthropicBuild = access.anthropic === 'oauth' ? 'anthropic/claude-opus-4-7' : 'anthropic/claude-sonnet-4-6';
+  const anthropicBuild = 'anthropic/claude-fable-5';
 
   if (access.anthropic) {
     packs.push({
@@ -133,44 +142,75 @@ export function getAvailableModePacks(
 // OM Packs
 // ---------------------------------------------------------------------------
 
+const BUILTIN_OM_PACKS: BuiltinOMPack[] = [
+  {
+    id: 'gemini',
+    providerId: 'google',
+    name: 'Gemini Flash',
+    modelId: 'google/gemini-3.5-flash',
+    description: access => (access === 'oauth' ? 'Via Google OAuth' : 'Via Google API key'),
+  },
+  {
+    id: 'anthropic',
+    providerId: 'anthropic',
+    name: 'Claude Haiku',
+    modelId: 'anthropic/claude-haiku-4-5',
+    description: access => (access === 'oauth' ? 'Via Max subscription' : 'Via Anthropic API key'),
+  },
+  {
+    id: 'openai',
+    providerId: 'openai',
+    name: 'OpenAI Mini',
+    modelId: 'openai/gpt-5.4-mini',
+    description: access => (access === 'oauth' ? 'Via Codex subscription' : 'Via OpenAI API key'),
+  },
+  {
+    id: 'deepseek',
+    providerId: 'deepseek',
+    name: 'DeepSeek',
+    modelId: 'deepseek/deepseek-v4-flash',
+    description: () => 'Via DeepSeek API key',
+  },
+];
+
+function normalizeOMProviderId(providerId: string): string {
+  return providerId === 'openai-codex' ? 'openai' : providerId;
+}
+
+/** A provider's low-cost OM pack, or a custom pack on `fallbackModelId` when it has none. */
+export function resolveProviderOMDefault(providerId: string, fallbackModelId = DEFAULT_OM_MODEL_ID): OMPack {
+  const normalizedProviderId = normalizeOMProviderId(providerId);
+  const builtin = BUILTIN_OM_PACKS.find(pack => pack.providerId === normalizedProviderId);
+  if (builtin) {
+    return {
+      id: builtin.id,
+      name: builtin.name,
+      description: builtin.description('apikey'),
+      modelId: builtin.modelId,
+    };
+  }
+
+  return {
+    id: 'custom',
+    name: 'Custom',
+    description: 'Uses the selected provider model',
+    modelId: fallbackModelId || DEFAULT_OM_MODEL_ID,
+  };
+}
+
 export function getAvailableOmPacks(access: ProviderAccess): OMPack[] {
-  const packs: OMPack[] = [];
-
-  if (access.google) {
-    packs.push({
-      id: 'gemini',
-      name: 'Gemini Flash',
-      description: access.google === 'oauth' ? 'Via Google OAuth' : 'Via Google API key',
-      modelId: 'google/gemini-2.5-flash',
-    });
-  }
-
-  if (access.anthropic) {
-    packs.push({
-      id: 'anthropic',
-      name: 'Claude Haiku',
-      description: access.anthropic === 'oauth' ? 'Via Max subscription' : 'Via Anthropic API key',
-      modelId: 'anthropic/claude-haiku-4-5',
-    });
-  }
-
-  if (access.openai) {
-    packs.push({
-      id: 'openai',
-      name: 'OpenAI Mini',
-      description: access.openai === 'oauth' ? 'Via Codex subscription' : 'Via OpenAI API key',
-      modelId: 'openai/gpt-5.4-mini',
-    });
-  }
-
-  if (access.deepseek) {
-    packs.push({
-      id: 'deepseek',
-      name: 'DeepSeek',
-      description: 'Via DeepSeek API key',
-      modelId: 'deepseek/deepseek-chat',
-    });
-  }
+  const packs = BUILTIN_OM_PACKS.flatMap(pack => {
+    const providerAccess = access[pack.providerId];
+    if (!providerAccess) return [];
+    return [
+      {
+        id: pack.id,
+        name: pack.name,
+        description: pack.description(providerAccess),
+        modelId: pack.modelId,
+      },
+    ];
+  });
 
   // Custom — always available; user picks any model
   packs.push({
@@ -181,6 +221,23 @@ export function getAvailableOmPacks(access: ProviderAccess): OMPack[] {
   });
 
   return packs;
+}
+
+/** Best reachable built-in OM pack: preferred provider, then OAuth, then built-in order. */
+export function selectPreferredOMPack(access: ProviderAccess, preferredProviderId?: string): OMPack | undefined {
+  const available = getAvailableOmPacks(access).filter(pack => pack.id !== 'custom');
+
+  if (preferredProviderId) {
+    const preferredPackId = resolveProviderOMDefault(preferredProviderId).id;
+    const preferred = available.find(pack => pack.id === preferredPackId);
+    if (preferred) return preferred;
+  }
+
+  const oauth = available.find(pack => {
+    const definition = BUILTIN_OM_PACKS.find(candidate => candidate.id === pack.id);
+    return definition ? access[definition.providerId] === 'oauth' : false;
+  });
+  return oauth ?? available[0];
 }
 
 // ---------------------------------------------------------------------------

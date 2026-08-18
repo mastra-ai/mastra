@@ -11,10 +11,12 @@ import type {
   IUserProvider,
   ISSOProvider,
   ISessionProvider,
+  MastraAuthRequest,
   Session,
   SSOCallbackResult,
   SSOLoginConfig,
 } from '@internal/auth';
+import { getRequestHeader } from '@internal/auth';
 import type { EEUser } from '@internal/auth/ee';
 import type { MastraAuthProviderOptions } from '@internal/auth/provider';
 import { MastraAuthProvider } from '@internal/auth/provider';
@@ -22,22 +24,6 @@ import { MastraAuthProvider } from '@internal/auth/provider';
 import { MastraCloudAuth } from './client';
 import { parseSessionCookie } from './session/cookie';
 import type { CloudUser } from './types';
-
-type HonoRequestLike = {
-  raw?: Request;
-  headers?: Headers;
-  header(name: string): string | undefined;
-};
-
-type MastraAuthRequest = Request | HonoRequestLike;
-
-function getRequestHeader(request: MastraAuthRequest, name: string): string | null {
-  if (request instanceof Request) {
-    return request.headers.get(name);
-  }
-
-  return request.raw?.headers.get(name) ?? request.headers?.get(name) ?? request.header(name) ?? null;
-}
 
 /**
  * Configuration options for MastraCloudAuthProvider.
@@ -171,10 +157,11 @@ export class MastraCloudAuthProvider
   // ============================================================================
 
   /**
-   * Cached login result for getLoginCookies() to retrieve cookies.
+   * Cached login results for getLoginCookies() to retrieve cookies.
+   * Keyed by the OAuth state parameter to prevent race conditions.
    * @internal
    */
-  private _lastLoginResult: { url: string; cookies: string[] } | null = null;
+  private _loginResults = new Map<string, { url: string; cookies: string[] }>();
 
   /**
    * Get URL to redirect user to for SSO login.
@@ -208,8 +195,14 @@ export class MastraCloudAuthProvider
       requestOrigin: origin,
     });
 
-    // Cache result for getLoginCookies() to retrieve
-    this._lastLoginResult = result;
+    // Clean up old entries if map grows too large to prevent memory leaks
+    if (this._loginResults.size > 100) {
+      const firstKey = this._loginResults.keys().next().value;
+      if (firstKey) this._loginResults.delete(firstKey);
+    }
+
+    // Cache result by state for getLoginCookies() to retrieve
+    this._loginResults.set(state, result);
 
     return result.url;
   }
@@ -218,12 +211,17 @@ export class MastraCloudAuthProvider
    * Get cookies to set during login redirect (PKCE verifier).
    * Must be called after getLoginUrl() in same request.
    *
+   * @param _redirectUri - OAuth callback URL
+   * @param state - State parameter
    * @returns Array of Set-Cookie header values
    */
-  getLoginCookies(): string[] | undefined {
-    const cookies = this._lastLoginResult?.cookies;
-    this._lastLoginResult = null; // Clear after retrieval
-    return cookies;
+  getLoginCookies(_redirectUri: string, state: string): string[] | undefined {
+    const result = this._loginResults.get(state);
+    if (result) {
+      this._loginResults.delete(state); // Clear after retrieval
+      return result.cookies;
+    }
+    return undefined;
   }
 
   /**

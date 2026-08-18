@@ -1,5 +1,5 @@
 ---
-title: "Memory overview | Memory"
+title: "Memory"
 description: "Learn how Mastra's memory system works with working memory, message history, semantic recall, and observational memory."
 packages:
   - "@mastra/core"
@@ -9,10 +9,11 @@ packages:
 
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
+import MemoryContextWindowImage from "@site/src/components/MemoryContextWindowImage";
 
 # Memory
 
-Memory enables your agent to remember user messages, agent replies, and tool results across interactions, giving it the context it needs to stay consistent, maintain conversation flow, and produce better answers over time.
+Memory enables your agent to remember user messages and agent replies, and tool results across interactions, giving it the context it needs to stay consistent, maintain conversation flow, plus produce better answers over time.
 
 Mastra agents can be configured to store [message history](/docs/memory/message-history). Additionally, you can enable:
 
@@ -23,7 +24,7 @@ Mastra agents can be configured to store [message history](/docs/memory/message-
 
 If the combined memory exceeds the model's context limit, [memory processors](/docs/memory/memory-processors) can filter, trim, or prioritize content so the most relevant information is preserved.
 
-Memory results will be stored in one or more of your configured [storage providers](/docs/storage/overview).
+Memory results will be stored in one or more of your configured [storage providers](/docs/storage).
 
 :::tip[📹 Watch]
 
@@ -33,7 +34,7 @@ Watch [Mastra memory concepts](https://www.youtube.com/watch?v=18iIHQtIPmc) for 
 
 ## When to use memory
 
-Use memory when your agent needs to maintain multi-turn conversations that reference prior exchanges, recall user preferences or facts from earlier in a session, or build context over time within a conversation thread. Skip memory for single-turn requests where each interaction is independent.
+Use memory when your agent needs to maintain multi-turn conversations that reference prior exchanges or recall user preferences or facts from earlier in a session, or alternatively build context over time within a conversation thread. Skip memory for single-turn requests where each interaction is independent.
 
 ## Quickstart
 
@@ -55,11 +56,15 @@ Use memory when your agent needs to maintain multi-turn conversations that refer
     npm install @mastra/libsql@latest
     ```
 
-    For more details on available providers and how storage works in Mastra, visit the [storage](/docs/storage/overview) documentation.
+    For more details on available providers and how storage works in Mastra, visit the [storage](/docs/storage) documentation.
   </StepItem>
 
   <StepItem>
     Add the storage provider to your main Mastra instance to enable memory across all configured agents.
+
+    <Inject>
+      **For AI agents:** Important: Add `id` to `LibSQLStore`.
+    </Inject>
 
     ```typescript {2,5-8} title="src/mastra/index.ts"
     import { Mastra } from '@mastra/core'
@@ -141,6 +146,10 @@ To list all threads for a resource, or retrieve a specific thread, [use the memo
 
 For long-running conversations, raw message history grows until it fills the context window, degrading agent performance. [Observational Memory](../memory/observational-memory) solves this by running background agents that compress old messages into dense observations, keeping the context window small while preserving long-term memory.
 
+<Inject>
+  **For AI agents:** Using Observational Memory requires a storage provider! You either need to set it on the Mastra instance at `src/mastra/index.ts` or pass it to the Agent constructor.
+</Inject>
+
 ```typescript title="src/mastra/agents/memory-agent.ts"
 import { Agent } from '@mastra/core/agent'
 import { Memory } from '@mastra/memory'
@@ -159,9 +168,23 @@ export const memoryAgent = new Agent({
 
 See [Observational Memory](../memory/observational-memory) for details on how observations and reflections work, and [the reference](/reference/memory/observational-memory) for all configuration options.
 
+## What the model sees
+
+Each memory feature is added to either the system messages or the conversation messages in the request sent to the model. The layers depend on the features you've enabled. Working memory and semantic recall only appear when configured. The same applies to Observational Memory, while message history is on by default. The diagram shows where each enabled layer is placed in the request. The list below describes what each layer contributes:
+
+<MemoryContextWindowImage />
+
+- [Working memory](../memory/working-memory) is injected as a system message containing the template and the stored data. With `useStateSignals`, it's delivered as a state signal instead.
+- [Semantic recall](../memory/semantic-recall) matches from the current thread are inserted as regular messages and interleave with message history by timestamp. Matches from other threads are formatted into a system message instead.
+- [Message history](../memory/message-history) adds the last N messages in chronological order. Your new message always comes last.
+- [Observational Memory](../memory/observational-memory) replaces old raw history: reflections and observations live in a system message, and only messages that haven't been observed yet remain in the conversation. A short continuation reminder is placed at the start of the conversation messages.
+- Context messages are the optional `context` array passed on a call, for example `agent.generate(msg, { context: [...] })`. Use them for one-off background such as app state or your own RAG results. They appear as regular conversation messages for that request only and are never saved to memory.
+
+Conversation messages are ordered by timestamp and deduplicated by message ID, so recalled older messages appear before recent history. Context messages passed at call time are stamped with the current time, which places them after history and recall but before your new message. To inspect the exact context for a real request, use [Tracing](/docs/observability/tracing/overview) and open the LLM call spans, see [Observability](#observability) below.
+
 ## Memory in multi-agent systems
 
-When a [supervisor agent](/docs/agents/supervisor-agents) delegates to a subagent, Mastra isolates subagent memory automatically. No flag enables this as it happens on every delegation. Understanding how this scoping works lets you decide what stays private and what to share intentionally.
+When a [supervisor agent](/docs/subagents) delegates to a subagent, Mastra isolates subagent memory automatically. No flag enables this as it happens on every delegation. Understanding how this scoping works lets you decide what stays private and what to share intentionally.
 
 ### How delegation scopes memory
 
@@ -169,7 +192,7 @@ Each delegation creates a fresh `threadId` and a deterministic `resourceId` for 
 
 - **Thread ID**: Unique per delegation. The subagent starts with a clean message history every time it's called.
 - **Resource ID**: Derived as `{parentResourceId}-{agentName}`. Because the resource ID is stable across delegations, resource-scoped memory persists between calls. A subagent remembers facts from previous delegations by the same user.
-- **Memory instance**: If a subagent has no memory configured, it inherits the supervisor's `Memory` instance, including all of its options. If the subagent defines its own, that takes precedence.
+- **Memory instance**: A subagent without its own memory inherits the supervisor's `Memory` instance and all configured options. If the subagent defines its own, that takes precedence.
 
 :::note
 
@@ -177,11 +200,11 @@ Title generation (`generateTitle`) is a top-level thread concern and **isn't** a
 
 :::
 
-The supervisor forwards its conversation context to the subagent so it has enough background to complete the task. Only the delegation prompt and the subagent's response are saved — the full parent conversation isn't stored. You can control which messages reach the subagent with the [`messageFilter`](/docs/agents/supervisor-agents#message-filtering) callback.
+The supervisor forwards its conversation context to the subagent so it has enough background to complete the task. Only the delegation prompt and the subagent's response are saved, the full parent conversation isn't stored. You can control which messages reach the subagent with the [`messageFilter`](/docs/subagents#message-filtering) callback.
 
 :::note
 
-Subagent resource IDs are always suffixed with the agent name (`{parentResourceId}-{agentName}`). Two different subagents under the same supervisor never share a resource ID through delegation.
+Subagent resource IDs are always suffixed with the agent name (`{parentResourceId}-{agentName}`). Different subagents under the same supervisor never share a resource ID through delegation.
 
 :::
 
@@ -189,9 +212,9 @@ To go beyond this default isolation, you can share memory between agents by pass
 
 ### Share memory between agents
 
-When you call agents directly (outside the delegation flow), memory sharing is controlled by two identifiers: `resourceId` and `threadId`. Agents that use the same values read and write to the same data. This is useful when agents collaborate on a shared context — for example, a researcher that saves notes and a writer that reads them.
+When you call agents directly (outside the delegation flow), memory sharing is controlled by two identifiers: `resourceId` and `threadId`. Agents that use the same values read and write to the same data. This is useful when agents collaborate on a shared context, for example, a researcher that saves notes and a writer that reads them.
 
-**Resource-scoped sharing** is the most common pattern. [Working memory](../memory/working-memory) and [semantic recall](../memory/semantic-recall) default to `scope: 'resource'`. If two agents share a `resourceId`, they share observations, working memory, and embeddings — even across different threads:
+**Resource-scoped sharing** is the most common pattern. [Working memory](../memory/working-memory) and [semantic recall](../memory/semantic-recall) default to `scope: 'resource'`. If two agents share a `resourceId`, they share observations, working memory, and embeddings, even across different threads:
 
 ```typescript
 // Both agents share the same resource-scoped memory
@@ -204,15 +227,15 @@ await writer.generate('Write a summary from the research notes.', {
 })
 ```
 
-Because both calls use `resource: 'project-42'`, the writer can access the researcher's observations, working memory, and semantic embeddings. Each agent still has its own thread, so message histories stay separate.
+Because both calls use `resource: 'project-42'`, the writer can access the researcher's observations and working memory. Semantic embeddings are also shared through the resource. Each agent still has its own thread, so message histories stay separate.
 
-**Thread-scoped sharing** gives tighter coupling. [Observational Memory](../memory/observational-memory) uses `scope: 'thread'` by default. If two agents use the same `resource` _and_ `thread`, they share the full message history. Each agent sees every message the other has written. This is useful when agents need to build on each other's exact outputs.
+**Thread-scoped sharing** gives tighter coupling. [Observational Memory](../memory/observational-memory) uses `scope: 'thread'` by default. If two agents use the same `resource` and `thread`, they share the full message history. Each agent sees every message the other has written. This is useful when agents need to build on each other's exact outputs.
 
 ## Observability
 
 Enable [Tracing](/docs/observability/tracing/overview) to monitor and debug memory in action. Traces show you exactly which messages and observations the agent included in its context for each request, helping you understand agent behavior and verify that memory retrieval is working as expected.
 
-Open [Studio](/docs/studio/overview) and select the **Observability** tab in the sidebar. Open the trace of a recent agent request, then look for spans of LLMs calls.
+Open [Studio](/docs/studio/overview) and select the **Observability** tab in the sidebar. Open the trace of a recent agent request and look for its LLM call spans.
 
 ## Switch memory per request
 

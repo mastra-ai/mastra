@@ -1,0 +1,36 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Goal: Preserve terminal API errors without autonomous continuation.",
+        "sequenceIndex": 0
+      },
+      "response": {
+        "content": "{\"decision\":\"continue\",\"reason\":\"Continue once so the next primary turn can fail mid-stream.\"}"
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Goal: Preserve terminal API errors without autonomous continuation.",
+        "sequenceIndex": 1
+      },
+      "response": {
+        "content": "{\"decision\":\"continue\",\"reason\":\"The failed primary turn did not complete the objective.\"}"
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Preserve terminal API errors without autonomous continuation."
+      },
+      "response": {
+        "content": "Initial goal work completed before the injected failure."
+      }
+    }
+  ]
+}

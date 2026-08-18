@@ -10,32 +10,36 @@ import TabItem from "@theme/TabItem";
 
 # createTool()
 
-The `createTool()` function is used to define custom tools that your Mastra agents can execute. Tools extend an agent's capabilities by allowing it to interact with external systems, perform calculations, or access specific data.
+The `createTool()` function is used to define custom tools that your Mastra agents can execute. Tools extend an agent's capabilities by allowing it to interact with external systems or perform calculations. They can also access specific data.
 
 ## Usage example
 
-```typescript title="src/mastra/tools/reverse-tool.ts"
+```typescript title="src/mastra/tools/weather-tool.ts"
 import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
-export const tool = createTool({
-  id: 'test-tool',
-  description: 'Reverse the input string',
+export const weatherTool = createTool({
+  id: 'weather-tool',
+  description: 'Get the current weather for a location',
   inputSchema: z.object({
-    input: z.string(),
+    location: z.string(),
   }),
   outputSchema: z.object({
-    output: z.string(),
+    location: z.string(),
+    temperatureCelsius: z.number(),
+    conditions: z.string(),
   }),
-  execute: async inputData => {
-    const reversed = inputData.input.split('').reverse().join('')
-
+  execute: async ({ location }) => {
     return {
-      output: reversed,
+      location,
+      temperatureCelsius: 21,
+      conditions: 'sunny',
     }
   },
 })
 ```
+
+The first `execute` parameter is the validated value from `inputSchema`. Destructure schema fields directly in the function signature, as shown with `{ location }`. The optional second parameter contains the execution context.
 
 ## Parameters
 
@@ -298,7 +302,7 @@ export const tool = createTool({
     name: 'onOutput',
     type: 'function',
     description:
-      "Optional callback invoked after the tool has successfully executed and returned output. Signature: `({ output, toolName, ...options }: { output: TSchemaOut; toolName: string } & Omit<ToolCallOptions, 'messages'>) => void | PromiseLike<void>`.",
+      "Optional callback invoked after a server-executed tool returns output or after a successful client-executed tool result arrives on a follow-up request. Error results don't invoke the hook. For client-executed results, `TSchemaOut` is a static type only: the server doesn't validate the result against `outputSchema`, so treat the output as untrusted. Signature: `({ output, toolName, ...options }: { output: TSchemaOut; toolName: string } & Omit<ToolCallOptions, 'messages'>) => void | PromiseLike<void>`.",
     isOptional: true,
   },
 ]}
@@ -337,10 +341,12 @@ You can define the tool's `inputSchema` and `outputSchema` with any library that
         location: z.string(),
       }),
       outputSchema: z.object({
-        weather: z.string(),
+        location: z.string(),
+        temperatureCelsius: z.number(),
+        conditions: z.string(),
       }),
-      execute: async inputData => {
-        // Fetch weather data
+      execute: async ({ location }) => {
+        return { location, temperatureCelsius: 21, conditions: 'sunny' }
       },
     })
     ```
@@ -362,11 +368,13 @@ You can define the tool's `inputSchema` and `outputSchema` with any library that
       ),
       outputSchema: toStandardJsonSchema(
         v.object({
-          weather: v.string(),
+          location: v.string(),
+          temperatureCelsius: v.number(),
+          conditions: v.string(),
         }),
       ),
-      execute: async inputData => {
-        // Fetch weather data
+      execute: async ({ location }) => {
+        return { location, temperatureCelsius: 21, conditions: 'sunny' }
       },
     })
     ```
@@ -384,10 +392,12 @@ You can define the tool's `inputSchema` and `outputSchema` with any library that
         location: 'string',
       }),
       outputSchema: type({
-        weather: 'string',
+        location: 'string',
+        temperatureCelsius: 'number',
+        conditions: 'string',
       }),
-      execute: async inputData => {
-        // Fetch weather data
+      execute: async ({ location }) => {
+        return { location, temperatureCelsius: 21, conditions: 'sunny' }
       },
     })
     ```
@@ -403,18 +413,22 @@ import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
 export const weatherTool = createTool({
-  id: 'get-weather',
-  description: 'Get weather for a city',
+  id: 'weather-tool',
+  description: 'Get the current weather for a location',
   strict: true,
   inputSchema: z.object({
-    city: z.string(),
-    units: z.enum(['metric', 'imperial']),
+    location: z.string(),
   }),
-  execute: async ({ city, units }) => {
+  outputSchema: z.object({
+    location: z.string(),
+    temperatureCelsius: z.number(),
+    conditions: z.string(),
+  }),
+  execute: async ({ location }) => {
     return {
-      city,
-      units,
-      forecast: 'sunny',
+      location,
+      temperatureCelsius: 21,
+      conditions: 'sunny',
     }
   },
 })
@@ -431,28 +445,31 @@ import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
 export const weatherTool = createTool({
-  id: 'get-weather',
-  description: 'Get weather for a city',
+  id: 'weather-tool',
+  description: 'Get the current weather for a location',
   inputSchema: z.object({
-    city: z.string(),
+    location: z.string(),
   }),
   outputSchema: z.object({
-    city: z.string(),
-    temperature: z.number(),
-    condition: z.string(),
+    location: z.string(),
+    temperatureCelsius: z.number(),
+    conditions: z.string(),
     radarImageUrl: z.string().url(),
   }),
-  execute: async ({ city }) => ({
-    city,
-    temperature: 72,
-    condition: 'sunny',
+  execute: async ({ location }) => ({
+    location,
+    temperatureCelsius: 21,
+    conditions: 'sunny',
     radarImageUrl: 'https://example.com/radar/seattle.png',
   }),
   toModelOutput: output => {
     return {
       type: 'content',
       value: [
-        { type: 'text', text: `${output.city}: ${output.temperature}F and ${output.condition}` },
+        {
+          type: 'text',
+          text: `${output.location}: ${output.temperatureCelsius}°C and ${output.conditions}`,
+        },
         { type: 'image-url', url: output.radarImageUrl },
       ],
     }
@@ -521,10 +538,15 @@ import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
 export const weatherTool = createTool({
-  id: 'get-weather',
-  description: 'Get current weather for a location',
+  id: 'weather-tool',
+  description: 'Get the current weather for a location',
   inputSchema: z.object({
     location: z.string().describe('City name or coordinates'),
+  }),
+  outputSchema: z.object({
+    location: z.string(),
+    temperatureCelsius: z.number(),
+    conditions: z.string(),
   }),
   // MCP-specific properties
   mcp: {
@@ -542,9 +564,11 @@ export const weatherTool = createTool({
       category: 'weather',
     },
   },
-  execute: async inputData => {
+  execute: async ({ location }) => {
     return {
-      weather: `Current weather for ${inputData.location}: sunny`,
+      location,
+      temperatureCelsius: 21,
+      conditions: 'sunny',
     }
   },
 })
@@ -561,19 +585,21 @@ import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
 export const weatherTool = createTool({
-  id: 'get-weather',
-  description: 'Get weather for a city',
+  id: 'weather-tool',
+  description: 'Get the current weather for a location',
   inputSchema: z.object({
-    city: z.string(),
+    location: z.string(),
   }),
   outputSchema: z.object({
-    city: z.string(),
-    forecast: z.string(),
+    location: z.string(),
+    temperatureCelsius: z.number(),
+    conditions: z.string(),
   }),
-  execute: async ({ city }) => {
+  execute: async ({ location }) => {
     return {
-      city,
-      forecast: 'sunny',
+      location,
+      temperatureCelsius: 21,
+      conditions: 'sunny',
     }
   },
   onInputStart: ({ toolCallId }) => {
@@ -583,10 +609,10 @@ export const weatherTool = createTool({
     console.log(`Tool call ${toolCallId} received input chunk: ${inputTextDelta}`)
   },
   onInputAvailable: ({ input, toolCallId }) => {
-    console.log(`Tool call ${toolCallId} received city: ${input.city}`)
+    console.log(`Tool call ${toolCallId} received location: ${input.location}`)
   },
   onOutput: ({ output, toolCallId, toolName }) => {
-    console.log(`Tool ${toolName} call ${toolCallId} returned forecast: ${output.forecast}`)
+    console.log(`Tool ${toolName} call ${toolCallId} returned conditions: ${output.conditions}`)
   },
 })
 ```
@@ -630,7 +656,7 @@ export const tool = createTool({
   id: 'example-tool',
   description: 'Example tool with hooks',
   inputSchema: z.object({
-    city: z.string(),
+    location: z.string(),
   }),
   onInputAvailable: ({ input, toolCallId, messages, abortSignal }) => {
     console.log(`Tool received complete input:`, input)
@@ -641,7 +667,7 @@ export const tool = createTool({
 
 #### `onOutput`
 
-Called after the tool has successfully executed and returned output. Useful for logging results, triggering follow-up actions, or analytics.
+Called after a server-executed tool returns output or after a successful client-executed tool result arrives on a follow-up request. Use it to log results or trigger follow-up actions.
 
 ```typescript
 export const tool = createTool({
@@ -660,15 +686,23 @@ export const tool = createTool({
 })
 ```
 
+Client-executed tools don't define an `execute` function. The browser runs the tool and sends the result on a follow-up request. `onOutput` then runs on the server. Only a correlated successful result invokes the hook: error results, such as the AI SDK `error-text` and `error-json` output types, don't invoke `onOutput`.
+
+For client-executed results, the follow-up request must include both the assistant tool call and the tool result, which `@mastra/client-js` sends automatically. A request that carries only the tool result doesn't fire the hook. In this case the callback receives `{ toolCallId, toolName, output, abortSignal }` only.
+
+Delivery is at least once, so a retried request runs the hook again. Keep the hook idempotent and treat client output as untrusted data: the server doesn't validate the result against `outputSchema`, so the `output` type is a static type only.
+
 ### Hook execution order
 
-For a typical streaming tool call, the hooks are invoked in this order:
+For a typical streaming tool call on a server-executed tool, the hooks are invoked in this order:
 
 1. **onInputStart**: Input streaming begins
 1. **onInputDelta**: Called multiple times as chunks arrive
 1. **onInputAvailable**: Complete input is parsed and validated
 1. Tool's **execute** function runs
 1. **onOutput**: Tool has completed successfully
+
+For a client-executed tool, steps 1-3 run while the model streams the tool call, the client runs the tool instead of a server-side `execute`, and `onOutput` runs on the follow-up request that carries a successful result.
 
 ### Hook parameters
 
@@ -741,8 +775,8 @@ These annotations follow the [MCP specification](https://spec.modelcontextprotoc
 
 ## Related
 
-- [MCP Overview](/docs/mcp/overview)
-- [Using Tools with Agents](/docs/agents/using-tools)
-- [Agent Approval](/docs/agents/agent-approval)
-- [Tool Streaming](/docs/agents/using-tools#streaming)
+- [MCP Overview](/docs/connections/mcp)
+- [Using Tools with Agents](/docs/agents/tools)
+- [Agent Approval](/docs/agents/human-in-the-loop)
+- [Tool Streaming](/docs/agents/tools#streaming)
 - [Request Context](/docs/server/request-context#accessing-values-with-tools)

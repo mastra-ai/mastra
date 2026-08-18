@@ -7,7 +7,7 @@ packages:
 
 # filterRun()
 
-Creates a `prepareRun` function from declarative options. Pass the result to `createScorer()` to filter messages, limit context size, and drop unnecessary fields before the scorer pipeline runs.
+Creates a `prepareRun` function from declarative options. Pass the result to `createScorer()` to filter messages and limit context size. It also drops unnecessary fields before the scorer pipeline runs.
 
 Use [`filterRun()`](#usage-example) for declarative filtering. Write a custom `prepareRun` function directly when you need imperative logic that `filterRun()` doesn't cover. See [Custom scorers: input filtering](/docs/evals/custom-scorers#input-filtering) for more.
 
@@ -141,7 +141,7 @@ const simpleScorer = createScorer({
 ]}
 />
 
-**Returns:** `(run: ScorerRun) => ScorerRun` — A function suitable for the `prepareRun` option on [`createScorer()`](/reference/evals/create-scorer).
+**Returns:** `(run: ScorerRun) => ScorerRun`. A function suitable for the `prepareRun` option on [`createScorer()`](/reference/evals/create-scorer).
 
 ## Part types
 

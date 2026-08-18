@@ -10,8 +10,14 @@ const __dirname = path.dirname(__filename);
 
 async function generateProviderRegistry(gateways: MastraModelGateway[]) {
   // Fetch providers from all gateways
-  const { providers, models, attachmentCapabilities, temperatureCapabilities, failedGateways } =
-    await fetchProvidersFromGateways(gateways);
+  const {
+    providers,
+    models,
+    attachmentCapabilities,
+    temperatureCapabilities,
+    structuredOutputCapabilities,
+    failedGateways,
+  } = await fetchProvidersFromGateways(gateways);
 
   if (failedGateways.length > 0) {
     console.warn(
@@ -31,6 +37,7 @@ async function generateProviderRegistry(gateways: MastraModelGateway[]) {
     models,
     attachmentCapabilities,
     temperatureCapabilities,
+    structuredOutputCapabilities,
   );
 
   // Write registry files to dist/ (for build output)
@@ -43,6 +50,7 @@ async function generateProviderRegistry(gateways: MastraModelGateway[]) {
     models,
     attachmentCapabilities,
     temperatureCapabilities,
+    structuredOutputCapabilities,
   );
 
   // Log summary

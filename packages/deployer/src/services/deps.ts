@@ -3,8 +3,10 @@ import fsPromises from 'node:fs/promises';
 import path, { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MastraBase } from '@mastra/core/base';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { readJSON, writeJSON, ensureFile } from 'fs-extra/esm';
 import type { PackageJson } from 'type-fest';
+import { parse } from 'yaml';
 
 import { createChildProcessLogger } from '../deploy/log.js';
 
@@ -14,6 +16,11 @@ interface ArchitectureOptions {
   os?: string[];
   cpu?: string[];
   libc?: string[];
+}
+
+interface InstallOptions extends ArchitectureOptions {
+  pnpmOverrides?: Record<string, string>;
+  pnpmNodeLinker?: 'hoisted';
 }
 
 const PNPM_CONFIG_KEYS_TO_COPY = new Set([
@@ -34,12 +41,76 @@ function getTopLevelYamlKey(line: string) {
   return match?.[1];
 }
 
-export function copyPnpmWorkspaceSettings(source: string, options: ArchitectureOptions = {}) {
+const PNPM_IGNORED_BUILDS_ERROR = 'ERR_PNPM_IGNORED_BUILDS';
+
+export function getPnpmIgnoredBuildPackages(output: string): string[] {
+  const match = new RegExp(`\\[?${PNPM_IGNORED_BUILDS_ERROR}\\]?[^\\n]*Ignored build scripts:\\s*([^\\n]+)`).exec(
+    output,
+  );
+  if (!match?.[1]) return [];
+
+  return match[1]
+    .split(',')
+    .map(specifier => specifier.trim())
+    .filter(Boolean)
+    .map(specifier => {
+      if (specifier.startsWith('@')) {
+        const versionSeparator = specifier.indexOf('@', 1);
+        return versionSeparator === -1 ? specifier : specifier.slice(0, versionSeparator);
+      }
+      return specifier.split('@', 1)[0]!;
+    });
+}
+
+function validatePnpmBuildApprovals(key: string, block: string): void {
+  if (key !== 'allowBuilds' && key !== 'onlyBuiltDependencies') return;
+
+  let value: unknown;
+  try {
+    value = (parse(block) as Record<string, unknown>)[key];
+  } catch (error) {
+    throw new MastraError(
+      {
+        id: 'DEPLOYER_INVALID_PNPM_BUILD_APPROVAL_CONFIG',
+        domain: ErrorDomain.DEPLOYER,
+        category: ErrorCategory.USER,
+        details: { key },
+        text: `Invalid pnpm ${key} configuration`,
+      },
+      error,
+    );
+  }
+
+  const invalidEntries =
+    key === 'allowBuilds'
+      ? value && typeof value === 'object' && !Array.isArray(value)
+        ? Object.entries(value).filter(
+            ([dependency, approval]) => dependency.trim().length === 0 || typeof approval !== 'boolean',
+          )
+        : [[key, value]]
+      : Array.isArray(value) &&
+          value.every(dependency => typeof dependency === 'string' && dependency.trim().length > 0)
+        ? []
+        : [[key, value]];
+
+  if (invalidEntries.length === 0) return;
+  const invalidEntryNames = invalidEntries.map(([entry]) => entry).join(', ');
+
+  throw new MastraError({
+    id: 'DEPLOYER_INVALID_PNPM_BUILD_APPROVAL_CONFIG',
+    domain: ErrorDomain.DEPLOYER,
+    category: ErrorCategory.USER,
+    details: { key, invalidEntries: invalidEntryNames },
+    text: `Invalid pnpm ${key} entries: ${invalidEntryNames}`,
+  });
+}
+
+export function copyPnpmWorkspaceSettings(source: string, options: InstallOptions = {}) {
   const hasArchitecture = Boolean(options.os?.length || options.cpu?.length || options.libc?.length);
   const lines = source.split(/\r?\n/);
   const blocks: string[] = [];
 
-  for (let index = 0; index < lines.length; ) {
+  for (let index = 0; index < lines.length;) {
     const key = getTopLevelYamlKey(lines[index] ?? '');
     if (!key) {
       index += 1;
@@ -58,6 +129,7 @@ export function copyPnpmWorkspaceSettings(source: string, options: ArchitectureO
 
     const block = lines.slice(start, index).join('\n').trimEnd();
     if (block) {
+      validatePnpmBuildApprovals(key, block);
       blocks.push(block);
     }
   }
@@ -74,6 +146,21 @@ export function copyPnpmWorkspaceSettings(source: string, options: ArchitectureO
       architectureBlock.push(`  libc: ${JSON.stringify(options.libc)}`);
     }
     blocks.push(architectureBlock.join('\n'));
+  }
+
+  if (options.pnpmOverrides && Object.keys(options.pnpmOverrides).length > 0) {
+    blocks.push(
+      [
+        'overrides:',
+        ...Object.entries(options.pnpmOverrides).map(
+          ([key, value]) => `  ${JSON.stringify(key)}: ${JSON.stringify(value)}`,
+        ),
+      ].join('\n'),
+    );
+  }
+
+  if (options.pnpmNodeLinker) {
+    blocks.push(`nodeLinker: ${options.pnpmNodeLinker}`);
   }
 
   return ["packages:\n  - '.'", ...blocks].join('\n\n') + '\n';
@@ -167,7 +254,7 @@ export class Deps extends MastraBase {
     return null;
   }
 
-  private async writePnpmConfig(dir: string, options: ArchitectureOptions = {}) {
+  private async writePnpmConfig(dir: string, options: InstallOptions = {}) {
     const sourceWorkspaceYamlPath = this.findPnpmWorkspaceFile(this.rootDir);
     const sourceWorkspaceYaml = sourceWorkspaceYamlPath
       ? await fsPromises.readFile(sourceWorkspaceYamlPath, 'utf-8')
@@ -230,14 +317,21 @@ export class Deps extends MastraBase {
   public async install({
     dir = this.rootDir,
     architecture,
-  }: { dir?: string; architecture?: ArchitectureOptions } = {}) {
+    pnpmOverrides,
+    pnpmNodeLinker,
+  }: {
+    dir?: string;
+    architecture?: ArchitectureOptions;
+    pnpmOverrides?: Record<string, string>;
+    pnpmNodeLinker?: 'hoisted';
+  } = {}) {
     const pm = this.packageManager;
     const installCommand = this.getPackageManagerCommand(pm, 'install');
     let args: string[] = [];
 
     switch (pm) {
       case 'pnpm':
-        await this.writePnpmConfig(dir, architecture);
+        await this.writePnpmConfig(dir, { ...architecture, pnpmOverrides, pnpmNodeLinker });
         break;
       case 'yarn':
         // similar to --ignore-workspace but for yarn
@@ -260,11 +354,33 @@ export class Deps extends MastraBase {
       root: dir,
     });
 
-    return cpLogger({
-      cmd: `${pm} ${installCommand}`,
-      args,
-      env: process.env as Record<string, string>,
-    });
+    try {
+      return await cpLogger({
+        cmd: `${pm} ${installCommand}`,
+        args,
+        env: process.env as Record<string, string>,
+      });
+    } catch (error) {
+      if (pm !== 'pnpm') throw error;
+
+      const processOutput =
+        error && typeof error === 'object'
+          ? `${'stdout' in error ? String(error.stdout) : ''}\n${'stderr' in error ? String(error.stderr) : ''}`
+          : '';
+      const ignoredPackages = getPnpmIgnoredBuildPackages(processOutput);
+      if (ignoredPackages.length === 0) throw error;
+
+      throw new MastraError(
+        {
+          id: 'DEPLOYER_PNPM_IGNORED_BUILDS',
+          domain: ErrorDomain.DEPLOYER,
+          category: ErrorCategory.USER,
+          details: { packageNames: ignoredPackages.join(', ') },
+          text: `pnpm blocked build scripts for: ${ignoredPackages.join(', ')}. Add these packages to allowBuilds in pnpm-workspace.yaml and retry the build.`,
+        },
+        error,
+      );
+    }
   }
 
   public async installPackages(packages: string[]) {

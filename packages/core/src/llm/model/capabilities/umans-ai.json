@@ -1,4 +1,14 @@
 {
-  "attachment": ["umans-coder", "umans-flash", "umans-kimi-k2.7"],
-  "temperature": ["umans-glm-5.1", "umans-glm-5.2"]
+  "attachment": ["umans-coder", "umans-flash", "umans-kimi-k2.7", "umans-kimi-k3"],
+  "temperature": ["umans-deepseek-v4-flash-0731", "umans-deepseek-v4-pro-0813", "umans-glm-5.1", "umans-glm-5.2"],
+  "structuredOutput": [
+    "umans-coder",
+    "umans-deepseek-v4-flash-0731",
+    "umans-deepseek-v4-pro-0813",
+    "umans-flash",
+    "umans-glm-5.1",
+    "umans-glm-5.2",
+    "umans-kimi-k2.7",
+    "umans-kimi-k3"
+  ]
 }

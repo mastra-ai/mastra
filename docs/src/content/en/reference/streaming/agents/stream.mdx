@@ -9,7 +9,7 @@ import { MODEL_SETTINGS_OBJECT } from "@site/src/components/ModelSettingsPropert
 
 # Agent.stream()
 
-The `.stream()` method enables real-time streaming of responses from an agent with enhanced capabilities and format flexibility. This method accepts messages and optional streaming options, providing a next-generation streaming experience with support for both Mastra's native format and AI SDK v5+ compatibility.
+The `.stream()` method enables real-time streaming of responses from an agent with enhanced capabilities and format flexibility. This method accepts messages and optional streaming options, providing a current streaming experience with support for both Mastra's native format and AI SDK v5+ compatibility.
 
 ## Usage example
 
@@ -17,7 +17,7 @@ The `.stream()` method enables real-time streaming of responses from an agent wi
 const stream = await agent.stream('message for agent')
 ```
 
-:::info
+:::note
 
 **Model Compatibility**: This method is designed for V2 models. V1 models should use the [`.streamLegacy()`](./streamLegacy) method. The framework automatically detects your model version and will throw an error if there's a mismatch.
 
@@ -253,6 +253,18 @@ const stream = await agent.stream('message for agent')
                   },
                 ],
               },
+              {
+                parameters: [
+                  {
+                    name: 'suppressFeedback',
+                    type: 'boolean',
+                    isOptional: true,
+                    defaultValue: 'false',
+                    description:
+                      'When true, marks the completion check feedback so consumers can hide it from displayed output. Feedback is only added to the conversation when the check fails, to guide the next iteration.',
+                  },
+                ],
+              },
             ],
           },
           {
@@ -269,7 +281,7 @@ const stream = await agent.stream('message for agent')
                     type: '(context: DelegationStartContext) => DelegationStartResult | void | Promise<DelegationStartResult | void>',
                     isOptional: true,
                     description:
-                      'Called before delegating to a subagent. Use this to modify the delegation parameters or reject the delegation entirely.',
+                      "Called before delegating to a subagent. Use this to modify the delegation parameters, reject the delegation entirely, or mutate `context.requestContext` to add entries to the subagent run's request context.",
                   },
                 ],
               },
@@ -414,10 +426,10 @@ const stream = await agent.stream('message for agent')
                 parameters: [
                   {
                     name: 'jsonPromptInjection',
-                    type: 'boolean',
+                    type: "boolean | 'system' | 'inline' | 'auto'",
                     isOptional: true,
                     description:
-                      'Injects system prompt into the main agent instructing it to return structured output, useful for when a model does not natively support structured outputs.',
+                      "Controls how the JSON schema reaches the model. Set to 'auto' to use native structured output when supported and inline prompt injection otherwise.",
                   },
                 ],
               },
@@ -510,6 +522,17 @@ const stream = await agent.stream('message for agent')
                     isOptional: true,
                     description:
                       'Configuration for memory behavior including lastMessages, readOnly, semanticRecall, workingMemory, and filterIncompleteToolCalls.',
+                  },
+                ],
+              },
+              {
+                parameters: [
+                  {
+                    name: 'onTitleGenerated',
+                    type: '(title: string) => void | Promise<void>',
+                    isOptional: true,
+                    description:
+                      'Callback fired asynchronously when a thread title is generated and persisted to storage. Title generation runs in the background and may complete after the stream ends. Only fires when `generateTitle` is enabled in memory options and the thread has no existing title.',
                   },
                 ],
               },
@@ -649,6 +672,13 @@ const stream = await agent.stream('message for agent')
             type: 'boolean',
             isOptional: true,
             description: 'Save messages incrementally after each stream step completes (default: false).',
+          },
+          {
+            name: 'persistPartialOnAbort',
+            type: 'boolean',
+            isOptional: true,
+            description:
+              'Save the assistant text that was streamed before an abort to memory (default: false). Only text emitted before the abort is persisted; output a provider keeps producing after cancellation is discarded, and nothing is saved when no text was streamed.',
           },
           {
             name: 'requireToolApproval',
@@ -820,7 +850,7 @@ const stream = await agent.stream('message for agent')
             type: 'VersionOverrides',
             isOptional: true,
             description:
-              'Per-invocation version overrides for sub-agent delegation. Merged on top of Mastra instance-level versions and propagated automatically through sub-agent calls via requestContext. Requires the editor package. See [Sub-agent versioning](/docs/editor/overview#sub-agent-versioning).',
+              'Per-invocation version overrides for sub-agent delegation. Merged on top of Mastra instance-level versions and propagated automatically through sub-agent calls via requestContext. Requires the editor package. See [Editor versioning](/docs/studio/editor#versioning).',
             properties: [
               {
                 type: 'VersionOverrides',
@@ -1077,4 +1107,4 @@ Responses WebSocket connections run one response at a time. Mastra rejects overl
 
 - [Generating responses](/docs/agents/overview#use-your-agent)
 - [Streaming responses](/docs/agents/overview#use-your-agent)
-- [Agent Approval](/docs/agents/agent-approval)
+- [Agent Approval](/docs/agents/human-in-the-loop)

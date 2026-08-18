@@ -1,12 +1,9 @@
-import child_process from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import util from 'node:util';
 import * as p from '@clack/prompts';
 import type { ModelRouterModelId } from '@mastra/core/llm';
 import fsExtra from 'fs-extra/esm';
 import color from 'picocolors';
-import shellQuote from 'shell-quote';
 import yoctoSpinner from 'yocto-spinner';
 
 import { DepsService } from '../../services/service.deps';
@@ -19,8 +16,6 @@ import {
   antigravityGlobalMCPConfigPath,
 } from './mcp-docs-server-install';
 import type { Editor } from './mcp-docs-server-install';
-
-const exec = util.promisify(child_process.exec);
 
 export const LLMProvider = ['openai', 'anthropic', 'groq', 'google', 'cerebras', 'mistral'] as const;
 export const COMPONENTS = ['agents', 'workflows', 'tools', 'scorers'] as const;
@@ -678,45 +673,94 @@ export const writeAPIKey = async ({ provider, apiKey }: { provider: LLMProvider;
   const envFileName = apiKey ? '.env' : '.env.example';
 
   const key = await getAPIKey(provider);
-  const escapedKey = shellQuote.quote([key]);
-  const escapedApiKey = shellQuote.quote([apiKey ? apiKey : 'your-api-key']);
-  await exec(`echo ${escapedKey}=${escapedApiKey} >> ${envFileName}`);
+  await fs.appendFile(
+    envFileName,
+    `${key}=${apiKey || 'your-api-key'}\n`,
+    apiKey ? { encoding: 'utf8', mode: 0o600 } : 'utf8',
+  );
+  if (apiKey && process.platform !== 'win32') await fs.chmod(envFileName, 0o600);
 };
 
 /**
- * Append Mastra Observability credentials to the project's `.env` file.
+ * Append Mastra platform credentials to the project's `.env` file.
  *
  * The generated `src/mastra/index.ts` template already registers a
  * `MastraPlatformExporter` which no-ops unless `MASTRA_PLATFORM_ACCESS_TOKEN`
- * is set, so enabling Observability is a pure env-var concern from the
+ * is set, so enabling platform is a pure env-var concern from the
  * scaffolder's side.
  *
  * When called with no token, writes empty placeholders so the user can paste
  * a key minted manually from the dashboard.
  */
+const MASTRA_PLATFORM_ENV_KEYS = [
+  'MASTRA_PLATFORM_ACCESS_TOKEN',
+  'MASTRA_PROJECT_ID',
+  'MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT',
+] as const;
+
+function upsertEnvValue(content: string, key: string, value: string): string {
+  const lines = content.split(/\r?\n/);
+  const assignment = `${key}=${value}`;
+  let updated = false;
+
+  const nextLines = lines.filter(line => {
+    if (!line.startsWith(`${key}=`)) return true;
+    if (updated) return false;
+    updated = true;
+    return true;
+  });
+
+  if (updated) {
+    const index = nextLines.findIndex(line => line.startsWith(`${key}=`));
+    nextLines[index] = assignment;
+  } else {
+    if (nextLines.at(-1) === '') nextLines.pop();
+    nextLines.push(assignment, '');
+  }
+
+  return nextLines.join('\n');
+}
+
 export const writeObservabilityEnv = async ({
+  projectPath,
   token,
   projectId,
   endpoint,
-}: { token?: string; projectId?: string; endpoint?: string } = {}) => {
-  const envFilePath = path.join(process.cwd(), '.env');
-  const lines = [
-    '',
-    '# Mastra Observability — https://projects.mastra.ai',
-    '# Access token and project id wired up automatically when you ran',
-    '# `mastra init` / `create-mastra` with Observability enabled.',
-    `MASTRA_PLATFORM_ACCESS_TOKEN=${token ?? ''}`,
-    `MASTRA_PROJECT_ID=${projectId ?? ''}`,
-  ];
-  // Only emit the traces endpoint when caller provided one (e.g. local dev or
-  // staging). In production the MastraPlatformExporter falls back to its
-  // built-in https://observability.mastra.ai default and per-project URLs are
-  // derived from MASTRA_PROJECT_ID.
-  if (endpoint) {
-    lines.push(`MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT=${endpoint}`);
+}: { projectPath?: string; token?: string; projectId?: string; endpoint?: string } = {}) => {
+  const envFilePath = path.join(projectPath ?? process.cwd(), '.env');
+  let content = '';
+  try {
+    content = await fs.readFile(envFilePath, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
-  lines.push('');
-  await fs.appendFile(envFilePath, lines.join('\n'));
+
+  const hasObservabilityValues = MASTRA_PLATFORM_ENV_KEYS.some(key =>
+    content.split(/\r?\n/).some(line => line.startsWith(`${key}=`)),
+  );
+
+  if (!hasObservabilityValues) {
+    if (content && !content.endsWith('\n')) content += '\n';
+    content += [
+      '',
+      '# Mastra platform — https://projects.mastra.ai',
+      '# Access token and project id wired up automatically when you ran',
+      '# `mastra init` / `create-mastra` with Mastra platform enabled.',
+      `MASTRA_PLATFORM_ACCESS_TOKEN=${token ?? ''}`,
+      `MASTRA_PROJECT_ID=${projectId ?? ''}`,
+      ...(endpoint ? [`MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT=${endpoint}`] : []),
+      '',
+    ].join('\n');
+  } else {
+    content = upsertEnvValue(content, 'MASTRA_PLATFORM_ACCESS_TOKEN', token ?? '');
+    content = upsertEnvValue(content, 'MASTRA_PROJECT_ID', projectId ?? '');
+    if (endpoint) {
+      content = upsertEnvValue(content, 'MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT', endpoint);
+    }
+  }
+
+  await fs.writeFile(envFilePath, content, { encoding: 'utf8', mode: 0o600 });
+  if (process.platform !== 'win32') await fs.chmod(envFilePath, 0o600);
 };
 export const createMastraDir = async (directory: string): Promise<{ ok: true; dirPath: string } | { ok: false }> => {
   let dir = directory

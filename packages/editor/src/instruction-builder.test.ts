@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { resolveInstructionBlocks } from './instruction-builder';
-import { InMemoryDB } from '@mastra/core/storage';
-import { InMemoryPromptBlocksStorage } from '@mastra/core/storage';
+import { InMemoryDB, InMemoryPromptBlocksStorage } from '@mastra/core/storage';
 import type { AgentInstructionBlock } from '@mastra/core/storage';
 
 describe('resolveInstructionBlocks', () => {

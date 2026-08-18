@@ -1,16 +1,52 @@
 {
-  "attachment": ["moonshotai/Kimi-K2.5", "moonshotai/Kimi-K2.6", "moonshotai/Kimi-K2.7-Code"],
-  "temperature": [
-    "deepseek-ai/DeepSeek-V4-Pro",
+  "attachment": [
     "moonshotai/Kimi-K2.5",
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K2.7-Code",
+    "moonshotai/Kimi-K3",
+    "thinkingmachines/inkling",
+    "thinkingmachines/inkling-small",
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.2-Fast"
+  ],
+  "temperature": [
+    "MiniMaxAI/MiniMax-M2.5",
+    "deepseek-ai/DeepSeek-V3.1",
+    "deepseek-ai/DeepSeek-V4-Flash-0731",
+    "deepseek-ai/DeepSeek-V4-Pro",
+    "deepseek-ai/DeepSeek-V4-Pro-0813",
+    "moonshotai/Kimi-K2.5",
+    "moonshotai/Kimi-K2.6",
+    "moonshotai/Kimi-K2.7-Code",
+    "moonshotai/Kimi-K3",
     "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B",
     "nvidia/Nemotron-120B-A12B",
     "openai/gpt-oss-120b",
+    "thinkingmachines/inkling",
+    "thinkingmachines/inkling-small",
     "zai-org/GLM-4.7",
     "zai-org/GLM-5",
     "zai-org/GLM-5.1",
-    "zai-org/GLM-5.2"
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.2-Fast"
+  ],
+  "structuredOutput": [
+    "deepseek-ai/DeepSeek-V4-Flash-0731",
+    "deepseek-ai/DeepSeek-V4-Pro",
+    "deepseek-ai/DeepSeek-V4-Pro-0813",
+    "moonshotai/Kimi-K2.5",
+    "moonshotai/Kimi-K2.6",
+    "moonshotai/Kimi-K2.7-Code",
+    "moonshotai/Kimi-K3",
+    "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B",
+    "nvidia/Nemotron-120B-A12B",
+    "openai/gpt-oss-120b",
+    "thinkingmachines/inkling",
+    "thinkingmachines/inkling-small",
+    "zai-org/GLM-4.7",
+    "zai-org/GLM-5",
+    "zai-org/GLM-5.1",
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.2-Fast"
   ]
 }

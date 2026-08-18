@@ -44,7 +44,7 @@ export const mastra = new Mastra({
 })
 ```
 
-You can also use dynamic agent routing based on an `agentId`. The URL `/chat/weatherAgent` will resolve to the agent with the ID `weatherAgent`.
+You can also use runtime-defined agent routing based on an `agentId`. The URL `/chat/weatherAgent` will resolve to the agent with the ID `weatherAgent`.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -90,7 +90,7 @@ export const mastra = new Mastra({
     name: 'agentVersion',
     type: "{ versionId: string } | { status?: 'draft' | 'published' }",
     description:
-      "Selects a specific agent version. Pass `{ versionId: '<id>' }` to target an exact version, or `{ status: 'draft' }` / `{ status: 'published' }` to resolve by status. When the route is called, query parameters `?versionId=<id>` or `?status=draft|published` take precedence over this static value. Requires the [Editor](/docs/editor/overview) to be configured.",
+      "Selects a specific agent version. Pass `{ versionId: '<id>' }` to target an exact version, or `{ status: 'draft' }` / `{ status: 'published' }` to resolve by status. When the route is called, query parameters `?versionId=<id>` or `?status=draft|published` take precedence over this static value. Requires the [Editor](/docs/studio/editor) to be configured.",
     isOptional: true,
   },
   {
@@ -127,6 +127,13 @@ export const mastra = new Mastra({
     description: 'Whether to include source citations in the stream.',
     isOptional: true,
     defaultValue: 'false',
+  },
+  {
+    name: 'heartbeatMs',
+    type: 'number',
+    description:
+      'Interval in milliseconds for SSE heartbeats that keep connections active through infrastructure with idle timeouts.',
+    isOptional: true,
   },
 ]}
 />

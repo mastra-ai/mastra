@@ -87,7 +87,7 @@ export function MemoryDetailView({ agentId, threadId }: MemoryDetailViewProps) {
   });
 
   return (
-    <div data-testid="memory-sidebar-om-detail-subpanel" className="h-full min-h-0 min-w-0 overflow-hidden bg-surface3">
+    <div data-testid="memory-sidebar-om-detail-subpanel" className="bg-surface3 h-full min-h-0 min-w-0 overflow-hidden">
       <MemoryStudioPanel
         messages={messagesData?.messages ?? []}
         omRecords={omData?.history ?? []}

@@ -26,6 +26,10 @@ const approveToolCallMock = vi.fn(async () => ({
   body: { cancel: vi.fn() },
   processDataStream: approveToolCallProcessDataStreamMock,
 }));
+const resumeStreamMock = vi.fn(async () => ({
+  body: { cancel: vi.fn() },
+  processDataStream: approveToolCallProcessDataStreamMock,
+}));
 const sendToolApprovalMock = vi.fn(async () => ({
   accepted: true,
   runId: 'run-approval',
@@ -104,6 +108,7 @@ vi.mock('@mastra/client-js', () => ({
         sendSignal: sendSignalMock,
         sendMessage: sendMessageMock,
         approveToolCall: approveToolCallMock,
+        resumeStream: resumeStreamMock,
         sendToolApproval: sendToolApprovalMock,
         declineToolCall: declineToolCallMock,
         stream: streamMock,
@@ -150,6 +155,7 @@ describe('useChat forwards clientTools', () => {
     sendSignalMock.mockClear();
     sendMessageMock.mockClear();
     approveToolCallMock.mockClear();
+    resumeStreamMock.mockClear();
     sendToolApprovalMock.mockClear();
     declineToolCallMock.mockClear();
     approveToolCallProcessDataStreamMock.mockClear();
@@ -197,6 +203,115 @@ describe('useChat forwards clientTools', () => {
     expect(subscribeToThreadMock).not.toHaveBeenCalled();
     expect(sendSignalMock).not.toHaveBeenCalled();
     expect(streamMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('retains the model override for stream approval', async () => {
+    const { result } = renderHook(() => useChat({ agentId: 'test-agent' }), { wrapper });
+
+    await act(async () => {
+      await result.current.sendMessage({
+        mode: 'stream',
+        message: 'hi',
+        model: 'google/gemini-2.5-flash',
+      });
+      await result.current.approveToolCall('tool-call-approval-1');
+    });
+
+    expect(streamMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ model: 'google/gemini-2.5-flash' }),
+    );
+    expect(approveToolCallMock).toHaveBeenCalledWith(expect.objectContaining({ model: 'google/gemini-2.5-flash' }));
+  });
+
+  it('uses resumeStream for custom resume data on the legacy stream transport', async () => {
+    const { result } = renderHook(
+      () => useChat({ agentId: 'test-agent', threadId: 'thread-1', enableThreadSignals: false }),
+      { wrapper },
+    );
+    const resumeData = {
+      action: 'approved',
+      path: '.mastracode/plans/ship.md',
+      title: 'Ship',
+      plan: '# Ship',
+    };
+
+    await act(async () => {
+      await result.current.sendMessage({
+        mode: 'stream',
+        message: 'hi',
+      });
+      await result.current.approveToolCall('submit-plan-call', resumeData);
+    });
+
+    expect(resumeStreamMock).toHaveBeenCalledWith(
+      resumeData,
+      expect.objectContaining({ toolCallId: 'submit-plan-call' }),
+    );
+    expect(approveToolCallMock).not.toHaveBeenCalled();
+  });
+
+  it('resets approval state when custom resume data is rejected on the legacy stream transport', async () => {
+    const { result } = renderHook(
+      () => useChat({ agentId: 'test-agent', threadId: 'thread-1', enableThreadSignals: false }),
+      { wrapper },
+    );
+    const error = new Error('resume failed');
+    let rejectResume!: (error: Error) => void;
+    resumeStreamMock.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectResume = reject;
+        }),
+    );
+
+    await act(async () => {
+      await result.current.sendMessage({
+        mode: 'stream',
+        message: 'hi',
+      });
+    });
+
+    const approval = result.current.approveToolCall('submit-plan-call', { action: 'approved' });
+    await waitFor(() => {
+      expect(result.current.toolCallApprovals).toHaveProperty('submit-plan-call', { status: 'approved' });
+      expect(result.current.isRunning).toBe(true);
+    });
+
+    let rejection: unknown;
+    await act(async () => {
+      rejectResume(error);
+      try {
+        await approval;
+      } catch (caught) {
+        rejection = caught;
+      }
+    });
+
+    expect(rejection).toBe(error);
+    expect(result.current.toolCallApprovals).not.toHaveProperty('submit-plan-call');
+    expect(result.current.isRunning).toBe(false);
+  });
+
+  it('retains the model override for network approval', async () => {
+    const { result } = renderHook(() => useChat({ agentId: 'test-agent' }), { wrapper });
+
+    await act(async () => {
+      await result.current.sendMessage({
+        mode: 'network',
+        message: 'hi',
+        model: 'google/gemini-2.5-flash',
+      });
+      await result.current.approveNetworkToolCall('tool', 'run-net-1');
+    });
+
+    expect(networkMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ model: 'google/gemini-2.5-flash' }),
+    );
+    expect(approveNetworkToolCallMock).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'google/gemini-2.5-flash' }),
+    );
   });
 
   it('marks subscription streams idle while waiting for tool approval', async () => {

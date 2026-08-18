@@ -13,10 +13,11 @@ const mockAuthStorageInstance = vi.hoisted(() => ({
 vi.mock('../../auth/storage.js', () => {
   return {
     AuthStorage: class MockAuthStorage {
-      reload = mockAuthStorageInstance.reload;
-      get = mockAuthStorageInstance.get;
-      getStoredApiKey = mockAuthStorageInstance.getStoredApiKey;
-      isLoggedIn = mockAuthStorageInstance.isLoggedIn;
+      constructor() {
+        // Every construction resolves to the shared singleton so tests can
+        // assert the exact instance handed to provider factories.
+        return mockAuthStorageInstance as unknown as MockAuthStorage;
+      }
     },
   };
 });
@@ -28,6 +29,7 @@ vi.mock('../../providers/claude-max.js', () => ({
   claudeCodeMiddleware: { specificationVersion: 'v3', transformParams: vi.fn() },
   promptCacheMiddleware: { specificationVersion: 'v3', transformParams: vi.fn() },
   buildAnthropicOAuthFetch: vi.fn(() => mockAnthropicOAuthFetch),
+  createAnthropicThinkingMiddleware: vi.fn(() => undefined),
 }));
 
 // Mock openai-codex provider
@@ -43,6 +45,7 @@ vi.mock('../../providers/openai-codex.js', () => ({
     medium: 'medium',
     high: 'high',
     xhigh: 'xhigh',
+    max: 'max',
   },
 }));
 
@@ -168,16 +171,20 @@ const mockLoadSettings = vi.hoisted(() =>
   })),
 );
 
-vi.mock('../../onboarding/settings.js', () => ({
-  loadSettings: mockLoadSettings,
-  getCustomProviderId: (name: string) =>
-    name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, ''),
-  MASTRA_GATEWAY_PROVIDER: 'mastra-gateway',
-  MASTRA_GATEWAY_DEFAULT_URL: 'https://gateway-api.mastra.ai',
-}));
+vi.mock('../../onboarding/settings.js', async importOriginal => {
+  const actual = await importOriginal<typeof import('../../onboarding/settings.js')>();
+  return {
+    ...actual,
+    loadSettings: mockLoadSettings,
+    getCustomProviderId: (name: string) =>
+      name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, ''),
+    MASTRA_GATEWAY_PROVIDER: 'mastra-gateway',
+    MASTRA_GATEWAY_DEFAULT_URL: 'https://gateway-api.mastra.ai',
+  };
+});
 
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { createAnthropic } from '@ai-sdk/anthropic';
@@ -197,6 +204,7 @@ import {
   getOpenAIApiKey,
   MastraCodeGateway,
   resolveAuth,
+  resolveRequestThinkingLevel,
 } from '../model.js';
 
 function makeRequestContext({ threadId, resourceId }: { threadId?: string; resourceId?: string } = {}) {
@@ -224,7 +232,9 @@ describe('resolveModel', () => {
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;
     delete process.env.OPENAI_BASE_URL;
+    delete process.env.MOONSHOT_API_KEY;
     delete process.env.MOONSHOT_AI_API_KEY;
+    delete process.env.DEEPSEEK_API_KEY;
     delete process.env.MASTRA_GATEWAY_API_KEY;
     delete process.env.MASTRA_GATEWAY_URL;
   });
@@ -271,6 +281,23 @@ describe('resolveModel', () => {
     expect(mockGetCopilotModelCatalog).toHaveBeenCalled();
   });
 
+  it('claims models.dev providers authenticated by the injected credential store', () => {
+    const gateway = createMastraCodeGateway({
+      mastraGatewayBaseUrl: 'https://gateway-api.mastra.ai',
+      routeThroughMastraGateway: false,
+      credentialStore: {
+        allowEnvironmentFallback: false,
+        reload() {},
+        get: provider =>
+          provider === 'alibaba-coding-plan' ? { type: 'api_key', key: 'sk-alibaba-tenant' } : undefined,
+        getStoredApiKey: () => undefined,
+        getApiKey: async () => undefined,
+      },
+    });
+
+    expect(gateway.handlesModel('alibaba-coding-plan/glm-5')).toBe(true);
+  });
+
   describe('anthropic/* models', () => {
     it('prefers Claude Max OAuth when stored OAuth credential exists', () => {
       mockAuthStorageInstance.get.mockReturnValue({
@@ -282,7 +309,10 @@ describe('resolveModel', () => {
 
       resolveModel('anthropic/claude-sonnet-4-20250514');
 
-      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', { headers: undefined });
+      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', {
+        headers: undefined,
+        authStorage: mockAuthStorageInstance,
+      });
     });
 
     it('parses provider/model ids and delegates directly through the MastraCode gateway', () => {
@@ -356,7 +386,10 @@ describe('resolveModel', () => {
 
       resolveModel('anthropic/claude-sonnet-4-20250514');
 
-      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', { headers: undefined });
+      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', {
+        headers: undefined,
+        authStorage: mockAuthStorageInstance,
+      });
     });
 
     it('passes controller headers to the Anthropic OAuth provider', () => {
@@ -376,6 +409,7 @@ describe('resolveModel', () => {
           'x-thread-id': 'thread-123',
           'x-resource-id': 'resource-456',
         },
+        authStorage: mockAuthStorageInstance,
       });
     });
 
@@ -389,7 +423,10 @@ describe('resolveModel', () => {
 
       resolveModel('anthropic/claude-opus-4.6');
 
-      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-opus-4-6', { headers: undefined });
+      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-opus-4-6', {
+        headers: undefined,
+        authStorage: mockAuthStorageInstance,
+      });
     });
 
     it('reloads auth storage before resolving', () => {
@@ -457,6 +494,7 @@ describe('resolveModel', () => {
           'x-thread-id': 'thread-123',
           'x-resource-id': 'resource-456',
         },
+        authStorage: mockAuthStorageInstance,
       });
     });
 
@@ -485,7 +523,67 @@ describe('resolveModel', () => {
       expect(openaiCodexProvider).toHaveBeenCalledWith('gpt-5.2-codex', {
         thinkingLevel: 'high',
         headers: undefined,
+        authStorage: mockAuthStorageInstance,
       });
+    });
+  });
+
+  describe('moonshotai/* models', () => {
+    it('uses a stored moonshot API key with the Anthropic-compatible endpoint', () => {
+      mockAuthStorageInstance.getStoredApiKey.mockImplementation((provider: string) =>
+        provider === 'moonshotai' ? 'sk-moonshot-stored' : undefined,
+      );
+
+      const result = resolveModel('moonshotai/kimi-k2.6') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('anthropic-direct');
+      expect(result.modelId).toBe('kimi-k2.6');
+      expect(createAnthropic).toHaveBeenCalledWith({
+        apiKey: 'sk-moonshot-stored',
+        baseURL: 'https://api.moonshot.ai/anthropic/v1',
+        name: 'moonshotai.anthropicv1',
+        headers: undefined,
+      });
+    });
+
+    it('falls back to MOONSHOT_API_KEY when no stored credential exists', () => {
+      process.env.MOONSHOT_API_KEY = 'sk-moonshot-env';
+      mockAuthStorageInstance.get.mockReturnValue(undefined);
+      mockAuthStorageInstance.getStoredApiKey.mockReturnValue(undefined);
+
+      const result = resolveModel('moonshotai/kimi-k2.6') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('anthropic-direct');
+      expect(result.modelId).toBe('kimi-k2.6');
+      expect(createAnthropic).toHaveBeenCalledWith({
+        apiKey: 'sk-moonshot-env',
+        baseURL: 'https://api.moonshot.ai/anthropic/v1',
+        name: 'moonshotai.anthropicv1',
+        headers: undefined,
+      });
+    });
+
+    it('falls back to legacy MOONSHOT_AI_API_KEY for compatibility', () => {
+      process.env.MOONSHOT_AI_API_KEY = 'sk-moonshot-legacy';
+      mockAuthStorageInstance.get.mockReturnValue(undefined);
+      mockAuthStorageInstance.getStoredApiKey.mockReturnValue(undefined);
+
+      const result = resolveModel('moonshotai/kimi-k2.6') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('anthropic-direct');
+      expect(createAnthropic).toHaveBeenCalledWith({
+        apiKey: 'sk-moonshot-legacy',
+        baseURL: 'https://api.moonshot.ai/anthropic/v1',
+        name: 'moonshotai.anthropicv1',
+        headers: undefined,
+      });
+    });
+
+    it('throws Need MOONSHOT_API_KEY when no key is available', () => {
+      mockAuthStorageInstance.get.mockReturnValue(undefined);
+      mockAuthStorageInstance.getStoredApiKey.mockReturnValue(undefined);
+
+      expect(() => resolveModel('moonshotai/kimi-k2.6')).toThrow(/Need MOONSHOT_API_KEY/);
     });
   });
 
@@ -493,6 +591,17 @@ describe('resolveModel', () => {
     it('uses model router for unknown providers', () => {
       const result = resolveModel('google/gemini-2.0-flash') as Record<string, unknown>;
       expect(result.__provider).toBe('model-router');
+    });
+
+    it('passes stored API keys to model router providers', () => {
+      mockAuthStorageInstance.get.mockImplementation((provider: string) =>
+        provider === 'alibaba-coding-plan' ? { type: 'api_key', key: 'sk-alibaba-stored' } : undefined,
+      );
+
+      const result = resolveModel('alibaba-coding-plan/glm-5') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('model-router');
+      expect(result.apiKey).toBe('sk-alibaba-stored');
     });
 
     it('resolves gateway auth through the MastraCode gateway hook', () => {
@@ -519,6 +628,40 @@ describe('resolveModel', () => {
         'x-thread-id': 'thread-123',
         'x-resource-id': 'resource-456',
       });
+    });
+
+    it('normalizes legacy mastracode/-prefixed custom provider ids at resolution time (#20799)', () => {
+      mockLoadSettings.mockReturnValue({
+        customProviders: [
+          {
+            name: 'Acme',
+            url: 'https://llm.acme.dev/v1',
+            apiKey: 'acme-secret',
+          },
+        ],
+        memoryGateway: {},
+      });
+
+      // Previously-saved settings may carry the gateway-qualified catalog id.
+      const result = resolveModel('mastracode/acme/reasoner-v1') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('custom-openai-compatible');
+      expect(result.modelId).toBe('reasoner-v1');
+      expect(result.url).toBe('https://llm.acme.dev/v1');
+      expect(result.apiKey).toBe('acme-secret');
+    });
+
+    it('leaves mastracode/-prefixed ids alone when the segment is not a configured custom provider', () => {
+      mockLoadSettings.mockReturnValue({
+        customProviders: [],
+        memoryGateway: {},
+      });
+
+      const result = resolveModel('mastracode/acme/reasoner-v1') as Record<string, unknown>;
+
+      // No matching custom provider: id passes through to the model router unchanged.
+      expect(result.__provider).toBe('model-router');
+      expect(result.modelId).toBe('mastracode/acme/reasoner-v1');
     });
 
     it('passes controller headers to custom providers', () => {
@@ -595,6 +738,33 @@ describe('resolveModel', () => {
       mockAuthStorageInstance.getStoredApiKey.mockImplementation((providerId: string) =>
         providerId === 'mastra-gateway' ? 'msk_gateway_key_123' : undefined,
       );
+    });
+
+    it('does not pass the Mastra Gateway key to an unprefixed DeepSeek model', () => {
+      process.env.DEEPSEEK_API_KEY = 'sk-deepseek-env-fixture';
+      mockAuthStorageInstance.get.mockReturnValue(undefined);
+
+      const result = resolveModel('deepseek/deepseek-v4-flash') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('model-router');
+      expect(result.modelId).toBe('deepseek/deepseek-v4-flash');
+      expect(result.apiKey).toBe('');
+    });
+
+    it('prefers a stored DeepSeek key over the stored Mastra Gateway key', () => {
+      process.env.DEEPSEEK_API_KEY = 'sk-deepseek-env-fixture';
+      mockAuthStorageInstance.get.mockReturnValue(undefined);
+      mockAuthStorageInstance.getStoredApiKey.mockImplementation((providerId: string) => {
+        if (providerId === 'deepseek') return 'sk-deepseek-stored-fixture';
+        if (providerId === 'mastra-gateway') return 'msk_gateway_key_123';
+        return undefined;
+      });
+
+      const result = resolveModel('deepseek/deepseek-v4-flash') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('model-router');
+      expect(result.modelId).toBe('deepseek/deepseek-v4-flash');
+      expect(result.apiKey).toBe('sk-deepseek-stored-fixture');
     });
 
     it('routes explicit mastra-prefixed anthropic model through gateway', () => {
@@ -689,7 +859,7 @@ describe('resolveModel', () => {
         'Bearer msk_gateway_key_123',
       );
       expect(buildOpenAICodexOAuthFetch).toHaveBeenCalledWith({
-        authStorage: expect.anything(),
+        authStorage: mockAuthStorageInstance,
         rewriteUrl: false,
       });
       expect(wrapLanguageModel).toHaveBeenCalled();
@@ -808,7 +978,10 @@ describe('resolveModel', () => {
       resolveModel('anthropic/claude-sonnet-4');
 
       expect(MastraGateway).toHaveBeenCalledWith({ baseUrl: 'https://gateway-api.mastra.ai' });
-      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4', { headers: undefined });
+      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4', {
+        headers: undefined,
+        authStorage: mockAuthStorageInstance,
+      });
       delete process.env['MASTRA_GATEWAY_API_KEY'];
     });
 
@@ -831,6 +1004,16 @@ describe('resolveModel', () => {
     });
   });
 });
+
+function makeTenantCredentialStore() {
+  return {
+    allowEnvironmentFallback: false,
+    reload: vi.fn(),
+    get: vi.fn(() => undefined),
+    getStoredApiKey: vi.fn(() => undefined),
+    getApiKey: vi.fn(async () => undefined),
+  };
+}
 
 describe('getAnthropicApiKey', () => {
   const originalEnv = { ...process.env };
@@ -864,6 +1047,11 @@ describe('getAnthropicApiKey', () => {
     mockAuthStorageInstance.get.mockReturnValue(undefined);
     expect(getAnthropicApiKey()).toBe('sk-env-key');
   });
+
+  it('ignores the env var when the credential store disables environment fallback', () => {
+    process.env.ANTHROPIC_API_KEY = 'sk-env-key';
+    expect(getAnthropicApiKey(makeTenantCredentialStore())).toBeUndefined();
+  });
 });
 
 describe('getOpenAIApiKey', () => {
@@ -891,5 +1079,80 @@ describe('getOpenAIApiKey', () => {
   it('returns undefined when stored credential is OAuth type', () => {
     mockAuthStorageInstance.get.mockReturnValue({ type: 'oauth', access: 'token', refresh: 'r', expires: 0 });
     expect(getOpenAIApiKey()).toBeUndefined();
+  });
+
+  it('falls back to env var in local mode', () => {
+    process.env.OPENAI_API_KEY = 'sk-env-key';
+    mockAuthStorageInstance.get.mockReturnValue(undefined);
+    expect(getOpenAIApiKey()).toBe('sk-env-key');
+  });
+
+  it('ignores the env var when the credential store disables environment fallback', () => {
+    process.env.OPENAI_API_KEY = 'sk-env-key';
+    expect(getOpenAIApiKey(makeTenantCredentialStore())).toBeUndefined();
+  });
+});
+
+describe('resolveRequestThinkingLevel', () => {
+  const settingsWithThinking = (overrides?: {
+    modeThinkingDefaults?: Record<string, string>;
+    thinkingLevel?: string;
+  }) =>
+    ({
+      customProviders: [],
+      memoryGateway: {},
+      models: { modeThinkingDefaults: overrides?.modeThinkingDefaults ?? {} },
+      preferences: { thinkingLevel: overrides?.thinkingLevel ?? 'off' },
+    }) as any;
+
+  beforeEach(() => {
+    mockLoadSettings.mockReset();
+    mockLoadSettings.mockImplementation(() => settingsWithThinking());
+  });
+
+  it('prefers the session override over all defaults', () => {
+    mockLoadSettings.mockImplementation(() =>
+      settingsWithThinking({ modeThinkingDefaults: { build: 'high' }, thinkingLevel: 'low' }),
+    );
+
+    const level = resolveRequestThinkingLevel({
+      state: { thinkingLevel: 'xhigh' },
+      session: { modeId: 'build' },
+    } as any);
+
+    expect(level).toBe('xhigh');
+    expect(mockLoadSettings).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the mode default when no session override is set', () => {
+    mockLoadSettings.mockImplementation(() =>
+      settingsWithThinking({ modeThinkingDefaults: { build: 'high' }, thinkingLevel: 'low' }),
+    );
+
+    const level = resolveRequestThinkingLevel({ state: {}, session: { modeId: 'build' } } as any);
+
+    expect(level).toBe('high');
+  });
+
+  it('falls back to the global default when neither override nor mode default exist', () => {
+    mockLoadSettings.mockImplementation(() =>
+      settingsWithThinking({ modeThinkingDefaults: { build: 'high' }, thinkingLevel: 'medium' }),
+    );
+
+    const level = resolveRequestThinkingLevel({ state: {}, session: { modeId: 'plan' } } as any);
+
+    expect(level).toBe('medium');
+  });
+
+  it('resolves defaults when no controller context exists at all', () => {
+    mockLoadSettings.mockImplementation(() => settingsWithThinking({ thinkingLevel: 'low' }));
+
+    expect(resolveRequestThinkingLevel(undefined)).toBe('low');
+  });
+
+  it('passes the settings path through to loadSettings', () => {
+    resolveRequestThinkingLevel(undefined, '/tmp/custom-settings.json');
+
+    expect(mockLoadSettings).toHaveBeenCalledWith('/tmp/custom-settings.json');
   });
 });

@@ -1,0 +1,143 @@
+---
+title: "Reference: Prompt blocks | Editor"
+description: "Reference for Editor prompt block types, template values, display conditions, versions, and APIs."
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+---
+
+# Prompt blocks
+
+Prompt blocks are reusable instruction templates managed by Editor. An agent's instructions can combine inline text with embedded prompt blocks and references to independently versioned prompt blocks.
+
+See [Prompt blocks](/docs/studio/editor#prompt-blocks) for the Studio workflow and common uses.
+
+## Block types
+
+| Type | Description |
+| - | - |
+| `text` | Free-form text stored only in the agent version |
+| `prompt_block` | A prompt block embedded in the agent version |
+| `prompt_block_ref` | A reference to an independently stored and versioned prompt block |
+
+Referenced blocks resolve at runtime. A missing or unpublished reference is omitted from the final instructions. Resolved nonempty blocks are joined with two newlines.
+
+The following example attaches a stored block and inline text to an agent:
+
+```typescript title="src/scripts/attach-prompt.ts"
+import { mastra } from '../mastra'
+
+const editor = mastra.getEditor()!
+
+await editor.agent.update({
+  id: 'support-agent',
+  instructions: [
+    { type: 'prompt_block_ref', id: 'brand-voice' },
+    { type: 'text', content: 'Answer only questions about Acme products.' },
+  ],
+})
+```
+
+## Template values
+
+Templates resolve values from the request context at runtime.
+
+| Syntax | Request context | Output |
+| - | - | - |
+| <code>{'{{userName}}'}</code> | `{ userName: 'Maya' }` | `Maya` |
+| <code>{'{{user.name}}'}</code> | `{ user: { name: 'Maya' } }` | `Maya` |
+| <code>{"{{task \u007c\u007c 'request'}}"}</code> | `{}` | `request` |
+| <code>{'{{missingValue}}'}</code> | `{}` | `{{missingValue}}` |
+
+Variable names must begin with a letter or underscore. Fallbacks must be single-quoted or double-quoted strings. Unresolved placeholders without a fallback remain unchanged. Objects and arrays are serialized as JSON. Other values are converted to strings.
+
+Pass values through [request context](/docs/server/request-context). Editor doesn't read a separate agent `variables` field.
+
+## Display conditions
+
+A prompt block can include a display condition that controls whether it's included in the final instructions. Each condition has three parts:
+
+- **Key**: The request-context field to check, such as `user.role` or `account.plan`.
+- **Operator**: The comparison to make, such as `equals`, `contains`, or `exists`.
+- **Value**: The value to compare against. The `exists` and `not_exists` operators don't need one.
+
+For example, the condition `user.role` `equals` `admin` includes the block only when request context contains `{ user: { role: 'admin' } }`.
+
+| Operator | Example | The block is included when |
+| - | - | - |
+| `equals` / `not_equals` | `user.role` equals `admin` | The field strictly equals, or doesn't equal, the value |
+| `contains` / `not_contains` | `user.tags` contains `beta` | A string contains the value or an array contains the item |
+| `greater_than` / `less_than` | `order.total` greater than `100` | The numeric field is above or below the value |
+| `greater_than_or_equal` / `less_than_or_equal` | `account.seats` greater than or equal to `10` | The numeric field is at or beyond the value |
+| `in` / `not_in` | `user.region` in `['US', 'CA']` | The field is, or isn't, in the supplied array |
+| `exists` / `not_exists` | `account.plan` exists | The field has, or doesn't have, a non-null value |
+
+Groups combine conditions with `AND` or `OR`. For example, this group includes a block for admins on a paid plan:
+
+```typescript
+const rules = {
+  operator: 'AND',
+  conditions: [
+    {
+      field: 'user.role',
+      operator: 'equals',
+      value: 'admin',
+    },
+    {
+      field: 'account.plan',
+      operator: 'in',
+      value: ['pro', 'enterprise'],
+    },
+  ],
+}
+```
+
+Dot paths are supported. An empty group evaluates to `true`, and an unknown operator evaluates to `false`. The storage type supports up to three nested group levels.
+
+Blocks without conditions are always included.
+
+## Programmatic API
+
+Access prompt blocks through `mastra.getEditor().prompt`. See the [`prompt` namespace](/reference/editor/mastra-editor#namespaces) for complete method signatures.
+
+Create a prompt block:
+
+```typescript title="src/scripts/seed-prompts.ts"
+import { mastra } from '../mastra'
+
+const editor = mastra.getEditor()!
+
+await editor.prompt.create({
+  id: 'brand-voice',
+  name: 'Brand voice',
+  description: 'Acme tone and style guidelines',
+  content: 'Write in a friendly, concise tone. Address the user as {{userName || "there"}}.',
+})
+```
+
+Update an existing block:
+
+```typescript title="src/scripts/update-prompt.ts"
+await editor.prompt.update({
+  id: 'brand-voice',
+  content: 'Write in a friendly, concise tone. Greet the user by name when available.',
+})
+```
+
+`update()` creates a new draft when the content changes. Use `list()` to paginate through stored blocks, `getById()` to fetch one block, and `preview(blocks, context)` to resolve templates and conditions with draft references.
+
+## REST API
+
+The default Mastra server prefix is `/api`. A custom server prefix changes the paths below.
+
+| Method | Path | Description |
+| - | - | - |
+| `GET` | `/api/stored/prompt-blocks` | List stored prompt blocks |
+| `POST` | `/api/stored/prompt-blocks` | Create a stored prompt block |
+| `GET` | `/api/stored/prompt-blocks/:storedPromptBlockId` | Get a stored prompt block |
+| `PATCH` | `/api/stored/prompt-blocks/:storedPromptBlockId` | Update a stored prompt block |
+| `DELETE` | `/api/stored/prompt-blocks/:storedPromptBlockId` | Delete a stored prompt block |
+
+## Version resolution
+
+Runtime references resolve the active published block. Editor previews resolve the latest draft. See [Editor versioning](/docs/studio/editor#versioning) for the shared draft, publish, and restore lifecycle.

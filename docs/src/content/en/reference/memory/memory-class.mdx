@@ -1,6 +1,6 @@
 ---
 title: "Reference: Memory class | Memory"
-description: "Documentation for the `Memory` class in Mastra, which provides a robust system for managing conversation history and thread-based message storage."
+description: "Documentation for the `Memory` class in Mastra, which provides a reliable system for managing conversation history and thread-based message storage."
 packages:
   - "@mastra/core"
   - "@mastra/libsql"
@@ -10,7 +10,7 @@ packages:
 
 # Memory class
 
-The `Memory` class provides a robust system for managing conversation history and thread-based message storage in Mastra. It enables persistent storage of conversations, semantic search capabilities, and efficient message retrieval. You must configure a storage provider for conversation history, and if you enable semantic recall you will also need to provide a vector store and embedder.
+The `Memory` class provides a reliable system for managing conversation history and thread-based message storage in Mastra. It enables persistent storage of conversations, semantic search capabilities, and efficient message retrieval. You must configure a storage provider for conversation history, and if you enable semantic recall you will also need to provide a vector store and embedder.
 
 ## Usage example
 
@@ -115,7 +115,7 @@ To enable `workingMemory` on an agent, you’ll need a storage provider configur
             name: 'generateTitle',
             type: 'boolean | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> }',
             description:
-              "Controls automatic thread title generation from the user's first message. Can be a boolean or an object with custom model and instructions.",
+              'Controls automatic thread title generation from the conversation transcript. Can be a boolean or an object with custom model and instructions.',
             isOptional: true,
             defaultValue: 'false',
           },

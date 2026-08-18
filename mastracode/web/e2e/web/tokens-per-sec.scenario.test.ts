@@ -1,7 +1,8 @@
+import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { transcriptReducer, initialTranscript } from '../../src/web/ui/domains/chat/services/transcript';
-import type { TranscriptState } from '../../src/web/ui/domains/chat/services/transcript';
+import { transcriptReducer, initialTranscript } from '../../../factory-ui/src/ui/domains/chat/services/transcript';
+import type { TranscriptState } from '../../../factory-ui/src/ui/domains/chat/services/transcript';
 
 /**
  * Tokens/sec computation — tested by driving the transcript reducer directly
@@ -10,6 +11,15 @@ import type { TranscriptState } from '../../src/web/ui/domains/chat/services/tra
  * token usage (usage_update). The rate is measured over the decode window only,
  * so TTFT and inter-step tool gaps do not deflate it. No server round-trip.
  */
+
+function assistantTextMessage(text: string): MastraDBMessage {
+  return {
+    id: `assistant-${Date.now()}`,
+    role: 'assistant',
+    createdAt: new Date(),
+    content: { format: 2, parts: [{ type: 'text', text }] },
+  };
+}
 
 /**
  * Drives one decode step: message_update opens the decode window at `startMs`,
@@ -22,7 +32,7 @@ function decodeStep(
   vi.setSystemTime(opts.startMs);
   let next = transcriptReducer(state, {
     type: 'event',
-    event: { type: 'message_update', message: { role: 'assistant', content: [{ type: 'text', text: 'x' }] } } as any,
+    event: { type: 'message_update', message: assistantTextMessage('x') } as any,
   });
   vi.setSystemTime(opts.endMs);
   next = transcriptReducer(next, {
@@ -63,7 +73,7 @@ describe('tokens/sec (reducer-level)', () => {
     vi.setSystemTime(4000);
     let state = transcriptReducer(initialTranscript, {
       type: 'event',
-      event: { type: 'message_update', message: { role: 'assistant', content: [{ type: 'text', text: 'x' }] } } as any,
+      event: { type: 'message_update', message: assistantTextMessage('x') } as any,
     });
     vi.setSystemTime(5000);
     state = transcriptReducer(state, {
@@ -136,7 +146,6 @@ describe('tokens/sec (reducer-level)', () => {
       type: 'event',
       event: { type: 'agent_start' } as any,
     });
-    expect(state.running).toBe(true);
     expect(state.tokensPerSec).toBe(0);
 
     // Step 1: 10 tokens over 0.5s decode = 20 tok/s (first EMA).
@@ -153,7 +162,6 @@ describe('tokens/sec (reducer-level)', () => {
       type: 'event',
       event: { type: 'agent_end', reason: 'done' } as any,
     });
-    expect(state.running).toBe(false);
     expect(state.tokensPerSec).toBe(23);
 
     // The next turn clears it on agent_start.

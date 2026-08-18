@@ -1,7 +1,7 @@
 import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
 import { join } from 'path';
 import { setupMonorepo } from './prepare';
-import { mkdtemp, mkdir, rm, readFile, writeFile } from 'fs/promises';
+import { mkdtemp, mkdir, readdir, rm, readFile, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import getPort from 'get-port';
 import { execa, execaNode } from 'execa';
@@ -14,7 +14,8 @@ async function cleanupAllProcesses() {
   for (const { controller, proc } of activeProcesses) {
     try {
       controller.abort();
-      await proc.catch(() => {});
+      proc.kill('SIGKILL');
+      await Promise.race([proc.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
     } catch {}
   }
   activeProcesses.length = 0;
@@ -30,15 +31,37 @@ process.once('SIGTERM', async () => {
   process.exit(143);
 });
 
-describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
+describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
   let fixturePath: string;
 
+  let buildQueue: Promise<unknown> = Promise.resolve();
+
+  async function removeOutputDir(path: string) {
+    const outputDir = join(path, 'apps', 'custom', '.mastra', 'output');
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        await rm(outputDir, { recursive: true, force: true });
+        return;
+      } catch (err) {
+        if (attempt === 4) {
+          throw err;
+        }
+        await new Promise(resolve => setTimeout(resolve, 1_000));
+      }
+    }
+  }
+
   async function runBuild(path: string) {
-    await execa(pkgManager, ['build'], {
-      cwd: join(path, 'apps', 'custom'),
-      stdio: 'inherit',
-      env: process.env,
+    const build = buildQueue.then(async () => {
+      await removeOutputDir(path);
+      return execa(pkgManager, ['build'], {
+        cwd: join(path, 'apps', 'custom'),
+        stdio: 'inherit',
+        env: process.env,
+      });
     });
+    buildQueue = build.catch(() => {});
+    await build;
   }
 
   beforeAll(
@@ -93,7 +116,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       const res = await fetch(`http://localhost:${port}/transitive-workspace`);
       const body = await res.json();
       expect(res.status).toBe(200);
-      expect(body).toEqual({ value: 'a -> b -> c' });
+      expect(body).toEqual({ value: 'a -> b -> c', app: 'App value is BEFORE.' });
     });
 
     it('should return tools from the api', async () => {
@@ -152,6 +175,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       if (proc) {
         try {
           proc.kill('SIGKILL');
+          await Promise.race([proc.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
         } catch (err) {
           // @ts-expect-error - isCanceled is not typed
           if (!err.killed) {
@@ -162,6 +186,73 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     }, timeout);
 
     runApiTests(port);
+
+    it(
+      'hot-reloads workspace package changes without a full process restart',
+      async () => {
+        const packageSource = join(fixturePath, 'packages', 'transitive-c', 'src', 'index.js');
+        const appRoute = join(
+          fixturePath,
+          'apps',
+          'custom',
+          'src',
+          'mastra',
+          'api',
+          'route',
+          'transitive-workspace.ts',
+        );
+
+        const originalPackageSource = await readFile(packageSource, 'utf-8');
+        const originalAppRoute = await readFile(appRoute, 'utf-8');
+
+        const waitForReload = async (predicate: (body: { value: string; app: string }) => boolean) => {
+          const started = Date.now();
+          let lastBody: { value: string; app: string } | undefined;
+          while (Date.now() - started < 60_000) {
+            try {
+              const res = await fetch(`http://localhost:${port}/transitive-workspace`);
+              if (res.ok) {
+                lastBody = (await res.json()) as { value: string; app: string };
+                if (predicate(lastBody)) {
+                  return lastBody;
+                }
+              }
+            } catch {
+              // Server may be restarting.
+            }
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+          throw new Error(`Timed out waiting for hot reload. Last body: ${JSON.stringify(lastBody)}`);
+        };
+
+        try {
+          // 1. Baseline
+          const baseline = await waitForReload(
+            body => body.value === 'a -> b -> c' && body.app === 'App value is BEFORE.',
+          );
+          expect(baseline).toEqual({ value: 'a -> b -> c', app: 'App value is BEFORE.' });
+
+          // 2. Edit workspace package only
+          await writeFile(packageSource, `export const valueC = 'c-AFTER';\n`);
+          const afterPackage = await waitForReload(
+            body => body.value === 'a -> b -> c-AFTER' && body.app === 'App value is BEFORE.',
+          );
+          expect(afterPackage).toEqual({ value: 'a -> b -> c-AFTER', app: 'App value is BEFORE.' });
+
+          // 3. Edit app only — package AFTER must still be present (no stale optimizer cache)
+          await writeFile(appRoute, originalAppRoute.replace('App value is BEFORE.', 'App value is AFTER.'));
+          const afterApp = await waitForReload(
+            body => body.value === 'a -> b -> c-AFTER' && body.app === 'App value is AFTER.',
+          );
+          expect(afterApp).toEqual({ value: 'a -> b -> c-AFTER', app: 'App value is AFTER.' });
+        } finally {
+          // Restore fixture so subsequent build/start suites see the original sources.
+          await writeFile(packageSource, originalPackageSource);
+          await writeFile(appRoute, originalAppRoute);
+        }
+      },
+      timeout,
+    );
   });
 
   describe.sequential('build', async () => {
@@ -225,6 +316,35 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       const hasWorkspaceMappedPath = content.includes('~/utils');
 
       expect(hasWorkspaceMappedPath).toBeFalsy();
+    });
+
+    it('should keep deprecated externals out of optimized dependency bundles', async () => {
+      const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+      const outputFiles = await readdir(outputDir);
+      const output = (
+        await Promise.all(
+          outputFiles.filter(file => file.endsWith('.mjs')).map(file => readFile(join(outputDir, file), 'utf-8')),
+        )
+      ).join('\n');
+      const packageJson = JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf-8'));
+
+      expect(outputFiles).not.toContain('nodemailer.mjs');
+      expect(output).not.toContain('nodemailer/lib');
+      expect(packageJson.dependencies?.nodemailer).toBe('^7.0.0');
+    });
+
+    // This stays in the monorepo E2E suite because it builds the generated fixture and validates its output manifest.
+    it('should keep default and user-configured externals in the output manifest', async () => {
+      const packageJsonPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'package.json');
+      const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf-8'));
+
+      expect(packageJson.dependencies).toEqual(
+        expect.objectContaining({
+          '@mastra/core': expect.any(String),
+          bcrypt: expect.any(String),
+          typescript: expect.any(String),
+        }),
+      );
     });
 
     afterAll(async () => {
@@ -294,6 +414,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       if (proc) {
         try {
           proc.kill('SIGKILL');
+          await Promise.race([proc.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
         } catch (err) {
           // @ts-expect-error - isCanceled is not typed
           if (!err.isCanceled) {
@@ -398,6 +519,121 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
           expect(dependencies[pkg]).toMatch(/^[\d^~>=<]/);
         }
       }
+
+      // Automatic version resolution must read the copy installed for the app (0.4.0),
+      // not the older copy installed at the workspace root (0.2.0) (#18849).
+      expect(dependencies['unicorn-magic']).toBe('0.4.0');
     });
+  });
+
+  describe.sequential('subpath-only externals', () => {
+    it(
+      'should build transitive workspace dependencies with subpath-only exports and externals true',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-subpath-test-${pkgManager}-`));
+        await setupMonorepo(isolatedFixturePath, pkgManager);
+
+        const corePath = join(isolatedFixturePath, 'apps', 'custom', 'node_modules', '@mastra', 'core', 'dist');
+        await mkdir(join(corePath, 'runtime-context'), { recursive: true });
+        await writeFile(
+          join(corePath, 'runtime-context', 'index.js'),
+          `export { RequestContext as RuntimeContext } from '../request-context/index.js';`,
+        );
+
+        const mastraConfigPath = join(isolatedFixturePath, 'apps', 'custom', 'src', 'mastra', 'index.ts');
+        const originalMastraConfig = await readFile(mastraConfigPath, 'utf-8');
+
+        const port = await getPort();
+        const controller = new AbortController();
+        let proc: ReturnType<typeof execaNode> | undefined;
+
+        try {
+          await writeFile(mastraConfigPath, originalMastraConfig.replace(/externals:\s*\[[^\]]*\]/, 'externals: true'));
+
+          await runBuild(isolatedFixturePath);
+
+          proc = execaNode('index.mjs', {
+            cwd: join(isolatedFixturePath, 'apps', 'custom', '.mastra', 'output'),
+            cancelSignal: controller.signal,
+            env: {
+              OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+              MASTRA_PORT: port.toString(),
+            },
+          });
+          activeProcesses.push({ controller, proc });
+
+          await new Promise<void>((resolve, reject) => {
+            proc!.stderr?.on('data', data => {
+              const errMsg = data?.toString();
+              if (errMsg && errMsg.includes('punycode')) {
+                return;
+              }
+              if (errMsg && errMsg.includes('falling back to an in-memory store')) {
+                return;
+              }
+              reject(new Error('failed to start subpath-only externals build: ' + errMsg));
+            });
+            proc!.stdout?.on('data', data => {
+              console.log(data?.toString());
+              if (data?.toString()?.includes(`http://localhost:${port}`)) {
+                resolve();
+              }
+            });
+          });
+
+          const res = await fetch(`http://localhost:${port}/transitive-workspace`);
+          const body = await res.json();
+          expect(res.status).toBe(200);
+          expect(body).toEqual({ value: 'a -> b -> c', app: 'App value is BEFORE.' });
+        } finally {
+          if (proc) {
+            try {
+              setImmediate(() => controller.abort());
+              await proc;
+            } catch (err) {
+              // @ts-expect-error - isCanceled is not typed
+              if (!err.isCanceled) {
+                console.log('failed to kill subpath-only externals build proc', err);
+              }
+            }
+          }
+
+          await writeFile(mastraConfigPath, originalMastraConfig);
+          await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+  });
+
+  describe.sequential('pnpm build approvals', () => {
+    it(
+      'reports blocked native build scripts as a user configuration error',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-build-approval-test-${pkgManager}-`));
+        try {
+          await setupMonorepo(isolatedFixturePath, pkgManager);
+          const workspacePath = join(isolatedFixturePath, 'pnpm-workspace.yaml');
+          const workspace = await readFile(workspacePath, 'utf8');
+          await writeFile(workspacePath, workspace.replace('  bcrypt: true\n', ''));
+
+          await removeOutputDir(isolatedFixturePath);
+          const build = await execa(pkgManager, ['build'], {
+            cwd: join(isolatedFixturePath, 'apps', 'custom'),
+            env: process.env,
+            reject: false,
+          });
+          const output = `${build.stdout}\n${build.stderr}`;
+
+          expect(build.exitCode).not.toBe(0);
+          expect(output).toContain('pnpm blocked build scripts for: bcrypt');
+          expect(output).toContain('Add these packages to allowBuilds in pnpm-workspace.yaml and retry the build.');
+          expect(output).not.toContain('DEPLOYER_BUNDLER_BUNDLE_STAGE_FAILED');
+        } finally {
+          await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
   });
 });

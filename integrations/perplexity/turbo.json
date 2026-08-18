@@ -6,7 +6,7 @@
       "dependsOn": ["^build"],
       "inputs": [
         "src/**",
-        "tsup.config.ts",
+        "tsdown.config.ts",
         "tsconfig.json",
         "tsconfig.build.json",
         "package.json",

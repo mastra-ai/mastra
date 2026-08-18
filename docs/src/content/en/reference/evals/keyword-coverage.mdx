@@ -86,11 +86,11 @@ Final score: `(matched_keywords / total_keywords) * scale`
 
 A coverage score between 0 and 1:
 
-- **1.0**: Complete coverage – all keywords present.
-- **0.7–0.9**: High coverage – most keywords included.
-- **0.4–0.6**: Partial coverage – some keywords present.
-- **0.1–0.3**: Low coverage – few keywords matched.
-- **0.0**: No coverage – no keywords found.
+- **1.0**: Complete coverage, all keywords present.
+- **0.7 to 0.9**: High coverage, most keywords included.
+- **0.4 to 0.6**: Partial coverage, some keywords present.
+- **0.1 to 0.3**: Low coverage, few keywords matched.
+- **0.0**: The response contains none of the keywords.
 
 ### Special Cases
 
@@ -100,7 +100,7 @@ The scorer handles several special cases:
 - Single word: Treated as a single keyword
 - Technical terms: Preserves compound technical terms (e.g., "React.js", "machine learning")
 - Case differences: "JavaScript" matches "javascript"
-- Common words: Ignored in scoring to focus on meaningful keywords
+- Common words: Ignored in scoring to focus on useful keywords
 
 ## Example
 

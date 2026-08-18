@@ -85,12 +85,23 @@ export interface MongoDBConfig {
   numCandidates?: number;
 }
 
+export interface TurbopufferConfig {
+  /**
+   * The consistency level for queries.
+   * - 'strong': Queries see all data written before the query started. Higher latency (default).
+   * - 'eventual': Lower latency, but recently written data may not be visible yet.
+   * See: https://turbopuffer.com/docs/query
+   */
+  consistency?: 'strong' | 'eventual';
+}
+
 // Union type for all database-specific configs
 export type DatabaseConfig = {
   pinecone?: PineconeConfig;
   pgvector?: PgVectorConfig;
   chroma?: ChromaConfig;
   mongodb?: MongoDBConfig;
+  turbopuffer?: TurbopufferConfig;
   // Add other database configs as needed
   [key: string]: any; // Allow for future database extensions
 };

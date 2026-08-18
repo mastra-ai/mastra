@@ -3,7 +3,7 @@ import type { DescribeRouteOptions } from 'hono-openapi';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
-import type { ApiRoute, ApiRouteHandler, MastraAuthConfig, Methods } from './types';
+import type { ApiRoute, ApiRouteHandler, CorsOptions, MastraAuthConfig, Methods } from './types';
 
 export type {
   MastraAuthConfig,
@@ -20,8 +20,28 @@ export type {
   StudioConfig,
   Middleware,
 } from './types';
-export { MastraAuthProvider } from './auth';
-export type { IMastraAuthProvider, MastraAuthProviderOptions } from './auth';
+export {
+  MastraAuthProvider,
+  isSSOProvider,
+  isSessionProvider,
+  isUserProvider,
+  isCredentialsProvider,
+  isOrganizationsProvider,
+  isAuthHttpHandler,
+  hasAuthInit,
+} from './auth';
+export type {
+  IMastraAuthProvider,
+  MastraAuthProviderOptions,
+  AuthInitContext,
+  IAuthHttpHandler,
+  IAuthInit,
+  ICredentialsProvider,
+  IOrganizationsProvider,
+  ISessionProvider,
+  ISSOProvider,
+  IUserProvider,
+} from './auth';
 export type { HonoRequestLike, MastraAuthRequest } from './request-types';
 export { getRequestHeader, getWebRequest } from './request-types';
 export { CompositeAuth } from './composite-auth';
@@ -58,7 +78,7 @@ type RegisterApiRouteOptions<P extends string> = {
   /**
    * Route-specific CORS configuration.
    */
-  cors?: ApiRoute['cors'];
+  cors?: CorsOptions;
   /**
    * When false, skips Mastra auth for this route (defaults to true)
    */

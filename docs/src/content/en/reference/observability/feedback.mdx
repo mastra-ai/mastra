@@ -87,7 +87,7 @@ await observability.createFeedback({
 })
 ```
 
-The HTTP and client SDK create route accepts `CreateFeedbackBody`, sets `timestamp` server-side, and generates `feedbackId` when omitted:
+The HTTP and client SDK create route accepts `CreateFeedbackBody` and sets `timestamp` server-side. It generates `feedbackId` when omitted:
 
 ```typescript
 await mastraClient.createFeedback({

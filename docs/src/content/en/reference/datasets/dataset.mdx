@@ -18,9 +18,7 @@ The `Dataset` class provides methods for item CRUD, versioning, and experiment m
 ```typescript title="src/mastra/datasets/usage.ts"
 import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({
-  /* storage config */
-})
+const mastra = new Mastra({/* storage config */})
 
 const dataset = await mastra.datasets.create({
   name: 'QA pairs',
@@ -49,9 +47,7 @@ console.log(`${summary.succeededCount}/${summary.totalItems} succeeded`)
 ```typescript title="src/mastra/datasets/versioning.ts"
 import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({
-  /* storage config */
-})
+const mastra = new Mastra({/* storage config */})
 
 const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 

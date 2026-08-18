@@ -1,0 +1,24 @@
+{
+  "name": "experiment-worker-e2e-test",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Installed-package E2E tests for the experiment worker artifact",
+  "scripts": {
+    "test": "vitest run",
+    "test:experiment": "MASTRA_EXPERIMENT_E2E_SCENARIO= MASTRA_EXPERIMENT_E2E_TIER=pr vitest run",
+    "test:full": "MASTRA_EXPERIMENT_E2E_SCENARIO= MASTRA_EXPERIMENT_E2E_TIER=full vitest run",
+    "test:full:strict": "MASTRA_EXPERIMENT_E2E_SCENARIO= MASTRA_EXPERIMENT_E2E_TIER=full MASTRA_EXPERIMENT_E2E_REQUIRE_PUBLISHED_REGISTRY=1 vitest run",
+    "test:scenario": "node scripts/run-scenario.mjs",
+    "test:workflow-routing": "vitest run --config vitest.routing.config.ts"
+  },
+  "devDependencies": {
+    "@libsql/client": "^0.17.4",
+    "@types/node": "^26.0.0",
+    "get-port": "^7.2.0",
+    "tinyglobby": "^0.2.17",
+    "verdaccio": "^6.7.4",
+    "verdaccio-auth-memory": "^13.0.3",
+    "vitest": "^4.1.10"
+  }
+}

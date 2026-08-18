@@ -16,9 +16,7 @@ Runs an experiment on the dataset and waits for completion. Executes all items a
 ```typescript
 import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({
-  /* storage config */
-})
+const mastra = new Mastra({/* storage config */})
 
 const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 
@@ -81,7 +79,7 @@ console.log(`Status: ${summary2.status}`)
     type: '(MastraScorer | string)[] | AgentScorerConfig | WorkflowScorerConfig',
     isOptional: true,
     description:
-      'Scorers to evaluate each result. Accepts a flat array of `MastraScorer` instances or registered scorer IDs, or the same categorised config shape used by `runEvals` (`AgentScorerConfig` / `WorkflowScorerConfig`). Trajectory scorers (`type: "trajectory"`) automatically receive a pre-extracted `Trajectory` as their output regardless of which form is used. For workflow targets, per-step scorers can be passed via `scorers: { steps: { stepId: [...] } }` and run against each step\'s output; their results carry the originating `stepId` and keep `targetScope: "span"` (matching `runEvals`).',
+      'Scorers to evaluate each result. Accepts a flat array of `MastraScorer` instances or registered scorer IDs, or the same categorised config shape used by `runEvals` (`AgentScorerConfig` / `WorkflowScorerConfig`). When this option is provided, including as `[]` or an empty categorized config, it overrides item-level and dataset-level scorer IDs for every item. When omitted, each item uses its own `scorerIds` when present, then falls back to the dataset scorer IDs. Sources aren\'t merged. Trajectory scorers (`type: "trajectory"`) automatically receive a pre-extracted `Trajectory` as their output regardless of which form is used. Workflow step scorers are supported only through this run-level categorized configuration. Their results carry the originating `stepId` and keep `targetScope: "span"` (matching `runEvals`).',
   },
   {
     name: 'name',
@@ -130,6 +128,71 @@ console.log(`Status: ${summary2.status}`)
     type: 'number',
     isOptional: true,
     description: 'Maximum retries per item on failure. Defaults to `0` (no retries). Abort errors are never retried.',
+  },
+  {
+    name: 'unmockedToolPolicy',
+    type: "'allow' | 'deny'",
+    isOptional: true,
+    defaultValue: "'allow'",
+    description:
+      'Controls undeclared agent tool calls. `allow` executes them live. `deny` fails the item with `TOOL_MOCK_NOT_DECLARED` before execution. An item-level value overrides this experiment default.',
+  },
+  {
+    name: 'beforeAll',
+    type: '(args: ExperimentHookArgs) => void | Promise<void>',
+    isOptional: true,
+    description:
+      'Runs once before any item executes. Receives `experimentId`, `mastra`, and `signal`. A failure fails the experiment and no items run.',
+  },
+  {
+    name: 'beforeEach',
+    type: '(args: ExperimentItemHookArgs) => void | Promise<void>',
+    isOptional: true,
+    description:
+      'Runs before each item executes. Also receives the `item` (`id`, `input`, `groundTruth`, `metadata`). A failure fails that item with `EXPERIMENT_ITEM_BEFORE_EACH_FAILED` and skips its target, scorers, and `afterEach`.',
+  },
+  {
+    name: 'afterEach',
+    type: '(args: ExperimentItemResultHookArgs) => void | Promise<void>',
+    isOptional: true,
+    description:
+      "Runs after each item completes. Also receives the item's `result` with its scores. Skipped when `beforeEach` failed. A failure is logged and doesn't change the item's outcome.",
+  },
+  {
+    name: 'afterAll',
+    type: '(args: ExperimentRunResultHookArgs) => void | Promise<void>',
+    isOptional: true,
+    description:
+      "Runs once after the experiment finishes, on every exit path including failure. Also receives the `summary`. A failure is logged and doesn't change the summary.",
+  },
+  {
+    name: 'persistence',
+    type: 'ExperimentPersistencePolicy',
+    isOptional: true,
+    description:
+      'Controls whether this run writes experiment records and score records. Targets and scorers still execute, and results remain available in the returned summary.',
+    properties: [
+      {
+        type: 'ExperimentPersistencePolicy',
+        parameters: [
+          {
+            name: 'experiments',
+            type: "'default' | 'none'",
+            isOptional: true,
+            defaultValue: "'default'",
+            description:
+              'Set to `none` to skip experiment creation, item results, progress, and terminal status writes.',
+          },
+          {
+            name: 'scores',
+            type: "'default' | 'none'",
+            isOptional: true,
+            defaultValue: "'default'",
+            description: 'Set to `none` to skip score writes while still running scorers.',
+          },
+        ],
+      },
+    ],
   },
 ]}
 />

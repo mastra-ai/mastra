@@ -26,8 +26,24 @@ Use this file as the default writing guide for Mastra's documentation.
 - Do not explain third-party technologies in depth unless the Mastra-specific integration requires it.
 - Link to external docs when non-Mastra background is helpful.
 
-## Tone and wording
+## Writing style
 
+When writing or editing prose, vary your structure:
+
+- Mix sentence lengths: follow long explanations with short punchy statements
+- Vary paragraph lengths—not every paragraph needs 3-4 sentences
+- Avoid the "topic sentence, three supporting points, conclusion" formula
+- Don't start consecutive paragraphs or sentences with the same word
+- Skip the "In conclusion" wrapper—just end when you're done
+- Let some points stand alone without hedging or qualifications
+- Be willing to be direct, even blunt, rather than diplomatically balanced
+- Avoid AI vocabulary fingerprints: "delve," "tapestry," "multifaceted," "leverage," "foster," "underscores," "comprehensive," "robust"
+- Don't open with generic phrases like "In today's rapidly evolving..."
+- Skip hedging ("It's important to note...") and filler ("in order to")
+- Use commas or periods instead of em-dashes
+- Cut sycophantic openers: "Great question!" "Absolutely!"
+- Prefer simple words: "use" not "utilize," "help" not "facilitate"
+- Start paragraphs with your actual point, not rhetorical wind-up
 - Use a neutral, factual tone.
 - Do not be funny, whimsical, or story-driven.
 - Keep each page self-contained.

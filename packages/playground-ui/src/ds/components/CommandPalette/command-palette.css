@@ -1,0 +1,135 @@
+/* Fixed height: dialog is centred, so a content-driven one slides the input while typing.
+ * Unlayered on purpose — `Command`'s own `size-full` height would otherwise win by utility order. */
+.command-palette-shell {
+  height: var(--command-palette-height, min(34rem, calc(100dvh - 2rem)));
+  max-height: calc(100dvh - 2rem);
+}
+
+.command-palette-popup[data-open] {
+  animation: none !important;
+}
+
+.command-palette-popup[data-closed] {
+  animation: command-palette-popup-hold 260ms linear both !important;
+}
+
+.command-palette-surface {
+  --command-palette-enter-delay: 0ms;
+  --command-palette-exit-delay: 0ms;
+
+  transform-origin: center;
+  will-change: opacity, transform;
+}
+
+.command-palette-surface-input {
+  --command-palette-enter-delay: 20ms;
+  --command-palette-exit-delay: 80ms;
+}
+
+.command-palette-surface-rail {
+  --command-palette-enter-delay: 60ms;
+  --command-palette-exit-delay: 40ms;
+}
+
+.command-palette-surface-results {
+  --command-palette-enter-delay: 100ms;
+  --command-palette-exit-delay: 0ms;
+}
+
+.command-palette-results-panel {
+  --command-palette-footer-height: 4.75rem;
+
+  isolation: isolate;
+}
+
+.command-palette-results-panel::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 10;
+  height: var(--command-palette-footer-height);
+  pointer-events: none;
+  content: '';
+  background: linear-gradient(
+    to top,
+    var(--surface2) 0%,
+    var(--surface2) 28%,
+    color-mix(in oklab, var(--surface2) 94%, transparent) 68%,
+    transparent 100%
+  );
+  border-bottom-right-radius: 1rem;
+  border-bottom-left-radius: 1rem;
+}
+
+.command-palette-list {
+  padding: 0.5rem 0.5rem var(--command-palette-footer-height);
+}
+
+.command-palette-scroll-viewport {
+  scroll-padding-bottom: var(--command-palette-footer-height);
+}
+
+.command-palette-footer {
+  min-height: calc(var(--command-palette-footer-height) - 1.25rem);
+  border-bottom-right-radius: 1rem;
+  border-bottom-left-radius: 1rem;
+}
+
+.command-palette-popup[data-open] .command-palette-surface {
+  animation: command-palette-surface-in 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--command-palette-enter-delay);
+}
+
+.command-palette-popup[data-closed] .command-palette-surface {
+  animation: command-palette-surface-out 180ms cubic-bezier(0.5, 0, 0.75, 0) both;
+  animation-delay: var(--command-palette-exit-delay);
+}
+
+@keyframes command-palette-surface-in {
+  from {
+    opacity: 0;
+    transform: scale(1.02);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes command-palette-surface-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(1.01);
+  }
+}
+
+@keyframes command-palette-popup-hold {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .command-palette-popup[data-open],
+  .command-palette-popup[data-closed],
+  .command-palette-popup[data-open] .command-palette-surface,
+  .command-palette-popup[data-closed] .command-palette-surface {
+    animation: none !important;
+  }
+
+  .command-palette-surface {
+    opacity: 1;
+    transform: none;
+  }
+}

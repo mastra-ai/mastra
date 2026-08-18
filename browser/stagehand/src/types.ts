@@ -12,6 +12,33 @@ import type { StagehandToolName } from './tools/constants';
 export type ModelConfiguration = StagehandModelConfiguration;
 
 /**
+ * Providers Stagehand can resolve from a `provider/model` string.
+ *
+ * Stagehand splits the model id on its first slash and looks the prefix up in
+ * its internal AI SDK provider registry; an unknown prefix throws during
+ * browser startup rather than at configuration time. Mirrored here so callers
+ * can reject a bad provider up front. Keep in sync with `AISDKProviders` in
+ * `@browserbasehq/stagehand`.
+ */
+export const STAGEHAND_MODEL_PROVIDERS = [
+  'anthropic',
+  'azure',
+  'bedrock',
+  'cerebras',
+  'deepseek',
+  'gateway',
+  'google',
+  'groq',
+  'mistral',
+  'ollama',
+  'openai',
+  'perplexity',
+  'togetherai',
+  'vertex',
+  'xai',
+] as const;
+
+/**
  * Stagehand-specific configuration fields.
  */
 export interface StagehandLogLine {
@@ -46,6 +73,16 @@ interface StagehandConfigExtensions {
    * @default 'openai/gpt-4o'
    */
   model?: ModelConfiguration;
+
+  /**
+   * Enable Stagehand experimental features.
+   */
+  experimental?: boolean;
+
+  /**
+   * Disable the Stagehand API so model execution runs locally.
+   */
+  disableAPI?: boolean;
 
   /**
    * Enable self-healing selectors.

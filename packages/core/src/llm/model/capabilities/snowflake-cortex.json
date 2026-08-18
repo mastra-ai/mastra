@@ -2,10 +2,14 @@
   "attachment": [
     "claude-fable-5",
     "claude-haiku-4-5",
+    "claude-opus-4-5",
+    "claude-opus-4-6",
     "claude-opus-4-7",
     "claude-opus-4-8",
+    "claude-opus-5",
     "claude-sonnet-4-5",
     "claude-sonnet-4-6",
+    "claude-sonnet-5",
     "gemini-3.1-pro",
     "mistral-large2",
     "openai-gpt-4.1",
@@ -23,6 +27,8 @@
   ],
   "temperature": [
     "claude-haiku-4-5",
+    "claude-opus-4-5",
+    "claude-opus-4-6",
     "claude-sonnet-4-5",
     "claude-sonnet-4-6",
     "deepseek-r1",
@@ -30,5 +36,19 @@
     "mistral-large2",
     "openai-gpt-4.1",
     "snowflake-llama3.3-70b"
+  ],
+  "structuredOutput": [
+    "gemini-3.1-pro",
+    "openai-gpt-4.1",
+    "openai-gpt-5",
+    "openai-gpt-5-mini",
+    "openai-gpt-5-nano",
+    "openai-gpt-5.1",
+    "openai-gpt-5.2",
+    "openai-gpt-5.4",
+    "openai-gpt-5.5",
+    "openai-gpt-5.6-luna",
+    "openai-gpt-5.6-sol",
+    "openai-gpt-5.6-terra"
   ]
 }

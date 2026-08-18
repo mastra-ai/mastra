@@ -1,0 +1,32 @@
+---
+extends: existence
+message: "AI strategy buzzword: '%s'. Describe the actual mechanism or advantage plainly."
+level: error
+nonword: true
+ignorecase: true
+# Strategy-deck buzzword metaphors: the flywheel, the moat, the north star. Each
+# term is scoped to its figurative shape so the literal homograph stays clean
+# without a domain toggle (the engine's flywheel, a castle's moat, the actual
+# North Star). Network effects and first-mover advantage are the most legitimate
+# as analytical terms; they are here because the deck-speak form is overused, but
+# they are the first to drop if they fire on genuine analysis.
+tokens:
+  # flywheel (self-reinforcing loop), not the mechanical part
+  - "\\bflywheel effect\\b"
+  - "\\b(?:growth|data|content|engagement|customer|revenue|sales|marketing|business|virtuous|self-?reinforcing) flywheels?\\b"
+  - "\\b(?:build|building|built|create|creates|created|creating|spin|spins|spinning|start|starts|started|starting) (?:a |the |our |its |their )?flywheels?\\b"
+  # moat (competitive advantage), not the castle
+  - "\\b(?:competitive|economic|defensible|durable|structural|wide|deep|business|data|regulatory|technological|distribution) moats?\\b"
+  - "\\b(?:build|building|built|widen|widens|widening|widened|deepen|deepens|deepening|deepened|create|creates|created|creating) (?:a |the |our |its |their |wider |deeper )?moats?\\b"
+  - "\\bmoats? (?:around|against)\\b"
+  # north star (guiding metric), not Polaris
+  - "\\bnorth[- ]star metric\\b"
+  - "\\bnorth-star\\b"
+  - "\\b(?:our|your|their|its) north star\\b"
+  # network effects (econ deck-speak)
+  - "\\bnetwork effects?\\b"
+  # first-mover advantage (cliche form, not bare "first mover")
+  - "\\bfirst[- ]mover advantage\\b"
+  # land grab (figurative), not the historical kind
+  - "\\b(?:market|customer|data|talent|competitive|global|massive|enterprise) land[- ]grab\\b"
+  - "\\bland[- ]grab for\\b"

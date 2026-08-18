@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "1.19.0",
+  "version": "1.25.1-alpha.7",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -11,6 +11,7 @@
   },
   "exports": {
     ".": "./dist/index.js",
+    "./internal/auth": "./dist/internal/auth.js",
     "./package.json": "./package.json",
     "./dist/*": [
       "./dist/*",
@@ -23,13 +24,14 @@
   ],
   "scripts": {
     "generate:api-manifest": "pnpm --filter @mastra/server generate:api-cli-route-metadata",
-    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:lib": "tsdown --silent --config tsdown.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "clean": "rm -rf dist && rm -rf node_modules",
     "typecheck": "tsc --noEmit --incremental",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "keywords": [
     "mastra",
@@ -50,8 +52,8 @@
     "devtools"
   ],
   "dependencies": {
-    "@babel/parser": "^7.29.7",
-    "@babel/types": "^7.29.7",
+    "@babel/parser": "^8.0.4",
+    "@babel/types": "^8.0.4",
     "@clack/prompts": "^1.7.0",
     "@expo/devcert": "^1.2.1",
     "@mastra/deployer": "workspace:^",
@@ -65,7 +67,7 @@
     "local-pkg": "^1.1.2",
     "openapi-fetch": "^0.17.0",
     "picocolors": "^1.1.1",
-    "posthog-node": "^5.37.0",
+    "posthog-node": "^5.46.1",
     "semver": "^7.7.4",
     "serve": "^14.2.6",
     "serve-handler": "^6.1.7",
@@ -76,6 +78,7 @@
   },
   "devDependencies": {
     "@commander-js/extra-typings": "^14.0.0",
+    "@internal/factory-ui": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/playground": "workspace:*",
     "@internal/types-builder": "workspace:*",
@@ -88,10 +91,10 @@
     "@types/shell-quote": "^1.7.5",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.4.1",
+    "eslint": "^10.7.0",
     "memfs": "^4.56.11",
     "rollup": "^4.62.2",
-    "tsup": "^8.5.1",
+    "tsdown": "0.22.9",
     "tsx": "catalog:",
     "type-fest": "^5.4.4",
     "typescript": "catalog:",

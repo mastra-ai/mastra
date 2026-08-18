@@ -1,9 +1,9 @@
 ---
-title: "Reference: RedisStreamsPubSub | PubSub"
+title: 'Reference: RedisStreamsPubSub | PubSub'
 description: API reference for RedisStreamsPubSub, the Redis Streams pub/sub implementation for distributed event delivery.
 packages:
-  - "@mastra/core"
-  - "@mastra/redis-streams"
+  - '@mastra/core'
+  - '@mastra/redis-streams'
 ---
 
 # RedisStreamsPubSub
@@ -125,6 +125,12 @@ export const mastra = new Mastra({
     type: 'ReadonlyArray<"pull" | "push">',
     description: 'Returns `["pull"]`.',
   },
+  {
+    name: 'supportsOffsets',
+    type: 'boolean',
+    description:
+      'Returns `false`. Redis stream anchors support start positions, but not the numeric indexes used by `subscribeFromOffset()`.',
+  },
 ]}
 />
 
@@ -136,10 +142,16 @@ export const mastra = new Mastra({
 
 Subscribes to a topic. With `options.group`, members of the group share events through a Redis consumer group. Without a group, the subscriber receives every event through a private consumer group.
 
+Set `options.startFrom` to `"latest"` to skip retained entries when Redis creates the consumer group. The default, `"earliest"`, reads retained entries first. This option doesn't reset an existing group's checkpoint.
+
 ```typescript
-await pubsub.subscribe('workflow.events', (event, ack, nack) => {
-  console.log(event)
-})
+await pubsub.subscribe(
+  'workflow.events',
+  (event, ack, nack) => {
+    console.log(event)
+  },
+  { group: 'live-workers', startFrom: 'latest' },
+)
 ```
 
 ### `flush()`
@@ -152,7 +164,7 @@ await pubsub.flush()
 
 ### `clearTopic(topic)`
 
-Deletes a topic's stream and every consumer group on it, freeing the memory a finished topic would otherwise hold. Mastra's run lifecycles — durable agents and the evented workflow engine — call this automatically when a run reaches a terminal state; call it yourself only once nothing will read the topic again. It's best-effort and never throws — failures are logged at warn level. A subscriber still attached when the stream is deleted recovers on its own but misses the deleted entries.
+Deletes a topic's stream and every consumer group on it, freeing the memory a finished topic would otherwise hold. Mastra's run lifecycles (durable agents and the evented workflow engine) call this automatically when a run reaches a terminal state. Call it yourself only once nothing will read the topic again. It's best-effort and never throws. Failures are logged at warn level. A subscriber still attached when the stream is deleted recovers on its own but misses the deleted entries.
 
 Automatic cleanup requires `@mastra/core` and `@mastra/redis-streams` versions that both support `clearTopic`: the runtime routes the call through its caching layer, so upgrade the two packages together to get end-of-run stream deletion.
 
@@ -174,7 +186,7 @@ When a subscriber calls `nack`, the event is republished with an incremented `de
 
 ## Distributed leasing
 
-`RedisStreamsPubSub` implements the [`LeaseProvider`](/reference/pubsub/lease-provider) contract on top of the same Redis connection. The [signals runtime](/docs/long-running-agents/signals) uses it to elect a single owner (usually per thread key) so that across instances only one process wakes and runs the agent, and others route follow-up work to the holder. This is what makes signals work on serverless and multi-instance deployments; without a shared lease, each instance would start its own competing run.
+`RedisStreamsPubSub` implements the [`LeaseProvider`](/reference/pubsub/lease-provider) contract on top of the same Redis connection. The [signals runtime](/docs/harness/signals) uses it to elect a single owner (usually per thread key) so that across instances only one process wakes and runs the agent, and others route follow-up work to the holder. This is what makes signals work on serverless and multi-instance deployments; without a shared lease, each instance would start its own competing run.
 
 Lease keys are namespaced under the same `keyPrefix` as topics, as `<keyPrefix>:lease:<key>`. All operations are atomic: `acquireLease` uses `SET NX PX` and refreshes its own TTL idempotently, while `releaseLease`, `renewLease`, and `transferLease` use Lua scripts that check ownership before mutating, so a concurrent renewal from another owner is never clobbered.
 

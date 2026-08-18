@@ -641,7 +641,11 @@ export class StoreOperationsMySQL extends StoreOperations {
       params.push(db);
     }
     const [rows] = await this.pool.execute<RowDataPacket[]>(sql, params);
-    const existing = new Set((rows || []).map((row: RowDataPacket) => String(row.column_name).toLowerCase()));
+    // MySQL returns information_schema fields with uppercase keys through mysql2, but the
+    // casing can vary with server settings, so read whichever key shape is present.
+    const existing = new Set(
+      (rows || []).map((row: RowDataPacket) => String(row.column_name ?? row.COLUMN_NAME).toLowerCase()),
+    );
 
     for (const columnName of ifNotExists) {
       if (existing.has(columnName.toLowerCase())) {

@@ -316,7 +316,7 @@ export class ObserverRunner {
       extractors: activeExtractors,
       memory: temporaryMemory?.options,
       priorExtractedValues: options?.priorExtractedValues,
-      requestContext: options?.requestContext,
+      requestContext: internalRequestContext,
       observabilityContext: options?.observabilityContext,
       abortSignal,
     });

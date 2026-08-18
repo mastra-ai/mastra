@@ -1,18 +1,19 @@
 # Local-dev backing services for MastraCode Web.
 #
-# app-db is the separate "application database" referenced by APP_DATABASE_URL
+# app-db is the separate "application database" referenced by DATABASE_URL
 # (distinct from Mastra's own storage). The web server runs the GitHub schema
-# migrations automatically on boot when the feature is enabled.
+# migrations automatically on boot when the feature is enabled. The
+# deprecated APP_DATABASE_URL name is still honored as a fallback.
 #
 # redis backs RedisStreamsPubSub (@mastra/redis-streams) for distributed event
 # delivery across web server processes.
 #
 # Usage:
 #   docker compose up -d
-#   export APP_DATABASE_URL=postgres://user:pass@localhost:54329/mastracode_web
+#   export DATABASE_URL=postgres://user:pass@localhost:54329/mastracode_web
 #   export REDIS_URL=redis://localhost:63799
 #
-# The default credentials below match the APP_DATABASE_URL example in
+# The default credentials below match the DATABASE_URL example in
 # src/web/.env.example.
 services:
   app-db:

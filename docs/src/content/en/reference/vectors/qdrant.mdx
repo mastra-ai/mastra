@@ -65,7 +65,7 @@ It provides a production-ready service with a convenient API to store, search, a
 ]}
 />
 
-#### Creating a Named Vectors Collection
+#### Creating a `named vectors` Collection
 
 ```typescript
 // Create a collection with multiple named vector spaces
@@ -178,9 +178,9 @@ await store.upsert({
 ]}
 />
 
-#### Named Vectors
+#### `named vectors`
 
-Qdrant supports [named vectors](https://qdrant.tech/documentation/concepts/vectors/#named-vectors), allowing multiple vector fields per collection. Use the `using` parameter to specify which named vector to query against:
+Qdrant supports [multiple vectors per collection](https://qdrant.tech/documentation/concepts/vectors/#named-vectors), with a name assigned to each vector field. Use the `using` parameter to select the vector field to query:
 
 ```typescript
 const results = await store.query({
@@ -260,7 +260,7 @@ Update a single vector by ID or by metadata filter. Either `id` or `filter` must
 ]}
 />
 
-Updates a vector and/or its metadata in the specified index. If both vector and metadata are provided, both will be updated. If only one is provided, only that will be updated.
+Updates a vector and/or its metadata in the specified index. If both vector and metadata are provided, both will be updated. Providing either value updates that value alone.
 
 ### `deleteVector()`
 

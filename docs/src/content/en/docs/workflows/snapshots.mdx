@@ -30,11 +30,11 @@ Snapshots are the key mechanism enabling Mastra's suspend and resume capabilitie
 1. Later, when `resume()` is called on the suspended step, the snapshot is retrieved
 1. The workflow execution resumes from exactly where it left off
 
-This mechanism provides a powerful way to implement human-in-the-loop workflows, handle rate limiting, wait for external resources, and implement complex branching workflows that may need to pause for extended periods.
+The mechanism provides a powerful way to implement human-in-the-loop workflows, handle rate limiting, wait for external resources, and implement complex branching workflows that may need to pause for extended periods.
 
 ## Snapshot anatomy
 
-Each snapshot includes the `runId`, input, step status (`success`, `suspended`, etc.), any suspend and resume payloads, and the final output. This ensures full context is available when resuming execution.
+Each snapshot includes the `runId`, input, step status (`success`, `suspended`, etc.), any suspend and resume payloads, and the final output. As a result, full context is available when resuming execution.
 
 ```json
 {
@@ -87,13 +87,14 @@ Each snapshot includes the `runId`, input, step status (`success`, `suspended`, 
 
 ## How snapshots are saved and retrieved
 
-Snapshots are saved to the configured storage system. By default, they use libSQL, but you can configure Upstash or PostgreSQL instead. Each snapshot is saved in the `workflow_snapshots` table and identified by the workflow's `runId`.
+Snapshots are saved to the configured storage system. By default, they use libSQL, but you can configure Upstash, PostgreSQL, or OracleDB instead. Each snapshot is saved in the `workflow_snapshots` table and identified by the workflow's `runId`.
 
 Read more about:
 
-- [libSQL Storage](/reference/storage/libsql)
-- [Upstash Storage](/reference/storage/upstash)
-- [PostgreSQL Storage](/reference/storage/postgresql)
+- [libSQL Storage](/integrations/databases/libsql)
+- [Upstash Storage](/integrations/databases/upstash)
+- [PostgreSQL Storage](/integrations/databases/postgresql)
+- [OracleDB Storage](/integrations/databases/oracledb)
 
 ### Saving snapshots
 
@@ -145,20 +146,21 @@ export const mastra = new Mastra({
 })
 ```
 
-- [libSQL Storage](/reference/storage/libsql)
-- [PostgreSQL Storage](/reference/storage/postgresql)
-- [MongoDB Storage](/reference/storage/mongodb)
-- [Upstash Storage](/reference/storage/upstash)
-- [Cloudflare D1](/reference/storage/cloudflare-d1)
-- [DynamoDB](/reference/storage/dynamodb)
-- [More storage providers](/docs/storage/overview)
+- [libSQL Storage](/integrations/databases/libsql)
+- [PostgreSQL Storage](/integrations/databases/postgresql)
+- [OracleDB Storage](/integrations/databases/oracledb)
+- [MongoDB Storage](/integrations/databases/mongodb)
+- [Upstash Storage](/integrations/databases/upstash)
+- [Cloudflare D1](/integrations/databases/cloudflare-d1)
+- [DynamoDB](/integrations/databases/dynamodb)
+- [More storage providers](/docs/storage)
 
 ## Best practices
 
 1. **Ensure Serializability**: Any data that needs to be included in the snapshot must be serializable (convertible to JSON).
 1. **Minimize Snapshot Size**: Avoid storing large data objects directly in the workflow context. Instead, store references to them (like IDs) and retrieve the data when needed.
 1. **Handle Resume Context Carefully**: When resuming a workflow, carefully consider what context to provide. This will be merged with the existing snapshot data.
-1. **Set Up Proper Monitoring**: Implement monitoring for suspended workflows, especially long-running ones, to ensure they're properly resumed.
+1. **Set Up Proper Monitoring**: Implement monitoring for suspended workflows and especially long-running ones, plus to ensure they're properly resumed.
 1. **Consider Storage Scaling**: For applications with many suspended workflows, ensure your storage solution is appropriately scaled.
 
 ## Custom snapshot metadata

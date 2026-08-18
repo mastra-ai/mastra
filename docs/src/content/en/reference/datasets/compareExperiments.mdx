@@ -16,9 +16,7 @@ Compares two or more experiments, producing per-item and per-scorer comparisons.
 ```typescript
 import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({
-  /* storage config */
-})
+const mastra = new Mastra({/* storage config */})
 
 const comparison = await mastra.datasets.compareExperiments({
   experimentIds: ['exp-baseline', 'exp-new'],

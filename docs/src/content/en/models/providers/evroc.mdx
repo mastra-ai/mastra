@@ -35,7 +35,7 @@ for await (const chunk of stream) {
 }
 ```
 
-:::info
+:::note
 
 Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [evroc documentation](https://docs.evroc.com/products/think/overview.html) for details.
 
@@ -202,18 +202,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "evroc/Qwen/Qwen3-VL-30B-A3B-Instruct",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 100000,
-    "maxOutput": 100000,
-    "inputCost": 0.23,
-    "outputCost": 0.92
-  },
-  {
     "model": "evroc/Qwen/Qwen3.6-35B-A3B-FP8",
     "imageInput": true,
     "audioInput": true,
@@ -224,6 +212,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 65536,
     "inputCost": 0.345,
     "outputCost": 1.38
+  },
+  {
+    "model": "evroc/zai-org/GLM-5.2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 524288,
+    "maxOutput": 131072,
+    "inputCost": 1.4375,
+    "outputCost": 5.75
   }
 ]}
 />
@@ -256,7 +256,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "evroc/openai/whisper-large-v3-turbo"
+      ? "evroc/zai-org/GLM-5.2"
       : "evroc/KBLab/kb-whisper-large";
   }
 });

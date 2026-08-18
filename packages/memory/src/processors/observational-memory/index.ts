@@ -48,9 +48,12 @@ export type {
   ObservationalMemoryConfig,
   ObservationDebugEvent,
   ObserveHooks,
+  ObserveHookContext,
   ObserveHookUsage,
+  ObserveTrigger,
   ObservationConfig,
   ReflectionConfig,
+  ContinuationHintsConfig,
   ObserverResult,
   ReflectorResult,
   // Observation marker config

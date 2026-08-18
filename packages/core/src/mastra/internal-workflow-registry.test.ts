@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, vi, afterAll, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod/v4';
 import { createWorkflow } from '../workflows/create';
 import { createStep } from '../workflows/workflow';
@@ -14,6 +14,19 @@ import { Mastra } from './index';
  *    and prepare-stream workflows.  These carry a timestamp and are evicted
  *    by a lazy sweep when they exceed `Mastra.INTERNAL_WORKFLOW_TTL_MS`.
  */
+
+// The TTL is read once at module load, so the knob has to be set before `./index` is
+// imported. A short TTL suits every test here — they all advance time symbolically.
+const { CONFIGURED_TTL_MS } = vi.hoisted(() => {
+  const ttlMs = 60_000;
+  process.env.MASTRA_SUSPENDED_RUN_TTL_MS = String(ttlMs);
+  return { CONFIGURED_TTL_MS: ttlMs };
+});
+// Vitest reuses a worker process across test files, so leave the default TTL in place
+// for whichever file this worker picks up next.
+afterAll(() => {
+  delete process.env.MASTRA_SUSPENDED_RUN_TTL_MS;
+});
 
 const dummyStep = createStep({
   id: 'noop',
@@ -117,6 +130,15 @@ describe('internal workflow registry', () => {
     });
   });
 
+  describe('TTL configuration', () => {
+    it('reads the shared MASTRA_SUSPENDED_RUN_TTL_MS knob', () => {
+      // One bound for both halves of a suspended run's in-memory state: this registry
+      // and the agent thread-stream runtime. If the two ever diverge, one of them keeps
+      // a suspended run's state alive after the other has already let it go.
+      expect(Mastra.INTERNAL_WORKFLOW_TTL_MS).toBe(CONFIGURED_TTL_MS);
+    });
+  });
+
   describe('lazy TTL sweep', () => {
     beforeEach(() => {
       vi.useFakeTimers();
@@ -192,6 +214,64 @@ describe('internal workflow registry', () => {
       expect(m.__hasInternalWorkflow('loop', 'run-b')).toBe(false);
       expect(m.__hasInternalWorkflow('loop', 'run-c')).toBe(false);
       expect(m.__hasInternalWorkflow('loop', 'run-fresh')).toBe(true);
+    });
+
+    // The TTL bounds idle time, not total run duration. A run that keeps
+    // resolving its own registration — which the evented run loop does on
+    // every step event — must never be swept out from under itself, however
+    // long it legitimately runs.
+    it('does NOT evict a run that keeps resolving itself via __hasInternalWorkflow', () => {
+      const m = makeMastra();
+      m.__registerInternalWorkflow(makeWorkflow('loop'), 'run-active');
+
+      // Run for 5x the TTL, touching the registration each "step".
+      for (let i = 0; i < 10; i++) {
+        vi.advanceTimersByTime(Mastra.INTERNAL_WORKFLOW_TTL_MS / 2);
+        expect(m.__hasInternalWorkflow('loop', 'run-active')).toBe(true);
+      }
+
+      // Trigger the sweep from an unrelated run.
+      m.__registerInternalWorkflow(makeWorkflow('loop'), 'run-fresh');
+
+      expect(m.__hasInternalWorkflow('loop', 'run-active')).toBe(true);
+      expect(m.__getRunScope('run-active')).toBeDefined();
+    });
+
+    it('does NOT evict a run that keeps resolving itself via __getInternalWorkflow', () => {
+      const m = makeMastra();
+      const active = makeWorkflow('loop');
+      m.__registerInternalWorkflow(active, 'run-active');
+
+      for (let i = 0; i < 10; i++) {
+        vi.advanceTimersByTime(Mastra.INTERNAL_WORKFLOW_TTL_MS / 2);
+        expect(m.__getInternalWorkflow('loop', 'run-active')).toBe(active);
+      }
+
+      m.__registerInternalWorkflow(makeWorkflow('loop'), 'run-fresh');
+
+      expect(m.__hasInternalWorkflow('loop', 'run-active')).toBe(true);
+      expect(m.__getRunScope('run-active')).toBeDefined();
+    });
+
+    // Resolving the bare unscoped slot says nothing about a run's liveness, so
+    // it must not keep an idle run-scoped entry alive.
+    it('does NOT treat an unscoped-slot hit as activity on a run-scoped entry', () => {
+      const m = makeMastra();
+      m.__registerInternalWorkflow(makeWorkflow('bg-task')); // unscoped
+      m.__registerInternalWorkflow(makeWorkflow('loop'), 'run-idle');
+
+      for (let i = 0; i < 4; i++) {
+        vi.advanceTimersByTime(Mastra.INTERNAL_WORKFLOW_TTL_MS / 2);
+        // A lookup for a *different*, unscoped workflow — and a run-scoped
+        // lookup that only resolves through the unscoped slot.
+        expect(m.__hasInternalWorkflow('bg-task')).toBe(true);
+        expect(m.__hasInternalWorkflow('bg-task', 'run-idle')).toBe(true);
+      }
+
+      m.__registerInternalWorkflow(makeWorkflow('loop'), 'run-fresh');
+
+      expect(m.__hasInternalWorkflow('loop', 'run-idle')).toBe(false);
+      expect(m.__getRunScope('run-idle')).toBeUndefined();
     });
 
     it('sweep is not triggered by unscoped registration', () => {

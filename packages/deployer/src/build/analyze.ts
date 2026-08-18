@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { basename, isAbsolute, join, relative } from 'node:path';
-import * as babel from '@babel/core';
+import { transformAsync, transformSync } from '@babel/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { OutputAsset, OutputChunk } from 'rollup';
@@ -11,7 +11,8 @@ import type { WorkspacePackageInfo } from '../bundler/workspaceDependencies';
 import { validate, ValidationError } from '../validator/validate';
 import { analyzeEntry } from './analyze/analyzeEntry';
 import { bundleExternals } from './analyze/bundleExternals';
-import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS } from './analyze/constants';
+import { DEPS_TO_IGNORE } from './analyze/constants';
+import { normalizeExternals } from './analyze/externals';
 import { checkConfigExport } from './babel/check-config-export';
 import { detectPinoTransports } from './babel/detect-pino-transports';
 import { getPackageMetadata } from './package-info';
@@ -284,6 +285,7 @@ async function validateOutput(
     output,
     reverseVirtualReferenceMap,
     usedExternals,
+    mergedExternals,
     outputDir,
     projectRoot,
     workspaceMap,
@@ -292,6 +294,7 @@ async function validateOutput(
     output: (OutputChunk | OutputAsset)[];
     reverseVirtualReferenceMap: Map<string, string>;
     usedExternals: Record<string, Record<string, string>>;
+    mergedExternals: string[];
     outputDir: string;
     projectRoot: string;
     workspaceMap: Map<string, WorkspacePackageInfo>;
@@ -341,6 +344,8 @@ async function validateOutput(
     binaryMapData = JSON.parse(binaryMap);
   }
 
+  const stubbedExternals = [...new Set([...mergedExternals, ...DEPS_TO_IGNORE, ...result.externalDependencies.keys()])];
+
   for (const file of output) {
     if (file.type === 'asset') {
       continue;
@@ -357,7 +362,7 @@ async function validateOutput(
       moduleResolveMapLocation: join(outputDir, 'module-resolve-map.json'),
       logger,
       workspaceMap,
-      stubbedExternals: [...GLOBAL_EXTERNALS, ...DEPS_TO_IGNORE],
+      stubbedExternals,
     });
   }
 
@@ -391,14 +396,12 @@ export async function analyzeBundle(
   logger: IMastraLogger,
 ) {
   const mastraConfig = await readFile(mastraEntry, 'utf-8');
-  const mastraConfigResult = {
-    hasValidConfig: false,
-  } as const;
+  const mastraConfigResult: { hasValidConfig: boolean; projectType?: string } = { hasValidConfig: false };
 
-  await babel.transformAsync(mastraConfig, {
+  await transformAsync(mastraConfig, {
     filename: mastraEntry,
     presets: [import.meta.resolve('@babel/preset-typescript')],
-    plugins: [checkConfigExport(mastraConfigResult)],
+    plugins: [() => checkConfigExport(mastraConfigResult)],
   });
 
   if (!mastraConfigResult.hasValidConfig) {
@@ -410,17 +413,11 @@ export async function analyzeBundle(
 
   const { workspaceMap, workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile: mastraEntry });
 
-  let externalsPreset = false;
-
-  const userExternals = Array.isArray(bundlerOptions?.externals) ? bundlerOptions?.externals : [];
+  const { externalsPreset, mergedExternals } = normalizeExternals(bundlerOptions?.externals);
   const userDynamicPackages = bundlerOptions?.dynamicPackages ?? [];
-  if (bundlerOptions?.externals === true) {
-    externalsPreset = true;
-  }
 
   let index = 0;
   const depsToOptimize = new Map<string, DependencyMetadata>();
-  const allExternals: string[] = [...GLOBAL_EXTERNALS, ...userExternals].filter(Boolean) as string[];
 
   // Collect pino transports detected across all entries
   const detectedPinoTransports = new Set<string>();
@@ -443,9 +440,9 @@ export async function analyzeBundle(
     });
 
     // Detect pino transports in the bundled output
-    babel.transformSync(analyzeResult.output.code, {
+    transformSync(analyzeResult.output.code, {
       filename: 'pino-detection.js',
-      plugins: [detectPinoTransports(detectedPinoTransports)],
+      plugins: [() => detectPinoTransports(detectedPinoTransports)],
       configFile: false,
       babelrc: false,
       code: false,
@@ -456,7 +453,7 @@ export async function analyzeBundle(
 
     // Merge dependencies from each entry (main, tools, etc.)
     for (const [dep, metadata] of analyzeResult.dependencies.entries()) {
-      const isPartOfExternals = allExternals.some(external => isDependencyPartOfPackage(dep, external));
+      const isPartOfExternals = mergedExternals.some(external => isDependencyPartOfPackage(dep, external));
       if (isPartOfExternals || (externalsPreset && !metadata.isWorkspace)) {
         // Add all packages coming from src/mastra with their version info
         const pkgName = getPackageName(dep);
@@ -513,8 +510,8 @@ export async function analyzeBundle(
 
   const { output, fileNameToDependencyMap, usedExternals } = await bundleExternals(depsToOptimize, outputDir, {
     bundlerOptions: {
-      ...bundlerOptions,
-      externals: bundlerOptions?.externals ?? allExternals,
+      externalsPreset,
+      mergedExternals,
       isDev,
     },
     projectRoot,
@@ -583,6 +580,7 @@ export async function analyzeBundle(
       output,
       reverseVirtualReferenceMap: fileNameToDependencyMap,
       usedExternals,
+      mergedExternals,
       outputDir,
       projectRoot: workspaceRoot || projectRoot,
       workspaceMap,
@@ -641,5 +639,13 @@ export async function analyzeBundle(
   return {
     ...result,
     externalDependencies: mergedExternalDeps,
+    /**
+     * Workspace deps that were optimized (after isDev/externalsPreset pruning).
+     * Used by the watcher to re-run optimization when workspace sources change.
+     */
+    depsToOptimize,
+    workspaceRoot,
+    outputDir,
+    ...(mastraConfigResult.projectType ? { projectType: mastraConfigResult.projectType } : {}),
   };
 }

@@ -11,7 +11,7 @@ export { LocalSandbox, type LocalSandboxOptions } from './sandbox';
 
 // Base Classes for External Providers
 export { MastraFilesystem, type FilesystemLifecycleHook, type MastraFilesystemOptions } from './filesystem';
-export { MastraSandbox, SandboxProcessManager, ProcessHandle } from './sandbox';
+export { MastraSandbox, SandboxProcessManager, ProcessHandle, UnsupportedStdinCloseError } from './sandbox';
 
 // Errors
 export * from './errors';
@@ -83,9 +83,12 @@ export type {
 export type { FilesystemMountConfig, MountResult, FilesystemIcon } from './filesystem';
 
 // Sandbox
-export { MountManager } from './sandbox';
+export { MountManager, supportsNetworking } from './sandbox';
 export type {
   WorkspaceSandbox,
+  SandboxNetworking,
+  SandboxFileInput,
+  SandboxCloneOptions,
   ExecutionResult,
   CommandOptions,
   CommandResult,

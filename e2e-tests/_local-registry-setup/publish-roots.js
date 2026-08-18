@@ -33,6 +33,20 @@ const SHARED_REGISTRY_SUITES = {
     extraRoots: ['create-mastra'],
     includeCreateMastraBuildRoots: true,
   },
+  'experiment-worker': {
+    tag: 'experiment-worker-e2e-test',
+    manifestGlobs: ['e2e-tests/experiment-worker/fixtures/**/package.json'],
+    extraRoots: ['@mastra/deployer'],
+  },
+  softwarefactory: {
+    tag: 'softwarefactory-e2e-test',
+    manifestGlobs: [],
+    // The Software Factory template is generated from the mastracode/web
+    // server scaffold by create-factory's sync-template.mjs. Discover its
+    // linked package roots from that manifest instead of hardcoding a list
+    // that can drift; the browser app is bundled by the CLI and not copied.
+    linkManifests: ['mastracode/web/package.json'],
+  },
 };
 
 function readJson(path) {
@@ -109,6 +123,28 @@ async function getFixtureRoots(rootDir, suite) {
   return roots;
 }
 
+/** Collect deps declared with `link:` or `workspace:` specs (standalone projects like mastracode/web and workspace members like mastracode/factory-ui). */
+function collectLinkDependencies(manifest) {
+  const roots = [];
+  for (const field of DEPENDENCY_FIELDS) {
+    for (const [name, version] of Object.entries(manifest[field] || {})) {
+      if (version.startsWith('link:') || version.startsWith('workspace:')) {
+        if (name.startsWith('@internal/')) continue; // private package, not published
+        roots.push(name);
+      }
+    }
+  }
+  return roots;
+}
+
+function getLinkManifestRoots(rootDir, suite) {
+  const roots = [];
+  for (const manifestPath of suite.linkManifests || []) {
+    roots.push(...collectLinkDependencies(readJson(join(rootDir, manifestPath))));
+  }
+  return roots;
+}
+
 function getCreateMastraBuildRoots(rootDir) {
   const turbo = readJson(join(rootDir, 'packages/create-mastra/turbo.json'));
   return (turbo.tasks?.build?.dependsOn || [])
@@ -126,7 +162,11 @@ export async function getSuitePublishRoots(rootDir, suiteName) {
     throw new Error(`Unknown shared E2E registry suite: ${suiteName}`);
   }
 
-  const roots = [...(suite.extraRoots || []), ...(await getFixtureRoots(rootDir, suite))];
+  const roots = [
+    ...(suite.extraRoots || []),
+    ...(await getFixtureRoots(rootDir, suite)),
+    ...getLinkManifestRoots(rootDir, suite),
+  ];
   if (suite.includeCreateMastraBuildRoots) {
     roots.push(...getCreateMastraBuildRoots(rootDir));
   }

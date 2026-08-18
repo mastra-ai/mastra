@@ -7,11 +7,11 @@ packages:
 
 # summarizeConversation()
 
-The standalone `summarizeConversation()` function summarizes a conversation in one shot. It distills the messages you pass in with the same Observer plumbing that powers [Observational Memory](/reference/memory/observational-memory) — without Observational Memory attached to an agent, and without reading from or writing to storage.
+The standalone `summarizeConversation()` function summarizes a conversation in one shot. It distills the messages you pass in with the same Observer plumbing that powers [Observational Memory](/reference/memory/observational-memory): without Observational Memory attached to an agent, and without reading from or writing to storage.
 
-Nothing is written back to memory. The summary and extracted values are returned to you (and to each extractor's `onExtracted` hook), so you decide where they go — for example your own database.
+Nothing is written back to memory. The summary and extracted values are returned to you (and to each extractor's `onExtracted` hook), so you decide where they go: for example your own database.
 
-Use this when you already have the messages in hand and want explicit control over what gets summarized. To summarize a stored thread by ID instead, use [`Memory.summarizeThread()`](/reference/memory/summarizeThread), which loads the messages for you.
+Use this when you already have the messages in hand and want explicit control over what gets summarized. For a stored thread identified by ID, use [`Memory.summarizeThread()`](/reference/memory/summarizeThread), which loads the messages for you.
 
 ## Usage example
 

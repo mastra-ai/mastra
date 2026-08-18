@@ -3,7 +3,6 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { FileJson, FormInput } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
@@ -13,7 +12,7 @@ import { RequestContextLabel } from '@/domains/request-context/components/reques
 import { RequestContextSchemaForm } from '@/domains/request-context/components/request-context-schema-form';
 import { useSchemaRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { DynamicForm } from '@/lib/form';
-import { resolveSerializedZodOutput } from '@/lib/form/utils';
+import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 
 interface AgentRequestContextRunOptionsProps {
   requestContextSchema?: string;
@@ -46,7 +45,7 @@ function VariablesRequestContextForm({
 
   const zodSchema = useMemo(() => {
     try {
-      return resolveSerializedZodOutput(jsonSchemaToZod(variablesSchema as Parameters<typeof jsonSchemaToZod>[0]));
+      return jsonSchemaToZodRuntime(variablesSchema as Parameters<typeof jsonSchemaToZodRuntime>[0]);
     } catch (error) {
       console.error('Failed to parse variables schema:', error);
       return null;
@@ -82,7 +81,7 @@ function VariablesRequestContextForm({
 
 function ModeSwitcher({ mode, onModeChange }: { mode: InputMode; onModeChange: (mode: InputMode) => void }) {
   return (
-    <div className="flex items-center gap-1 rounded-md border border-border1 p-0.5">
+    <div className="border-border1 flex items-center gap-1 rounded-md border p-0.5">
       <button
         type="button"
         aria-pressed={mode === 'form'}

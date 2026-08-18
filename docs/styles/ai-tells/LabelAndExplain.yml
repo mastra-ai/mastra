@@ -1,0 +1,45 @@
+---
+extends: existence
+message: "AI label-and-explain: '%s'. Fold the noun-phrase label into the sentence it introduces."
+level: error
+nonword: true
+scope:
+  - '~heading'
+tokens:
+  # Structural: a determiner-led noun-phrase label, a colon, then a lowercase
+  # explanatory clause of 20+ characters ending in sentence punctuation
+  # ("The dominant attendee report: developers build from scratch because ...").
+  # The clause is a lookahead, so %s reports only the label and colon. The
+  # lowercase requirement leaves "Label: Capital" to ColonUsage; the 20+ char,
+  # period-free clause skips short values ("The output: green.") and dotted
+  # file lists ("The three files: a.go, b.go."); the copula lookbehind skips
+  # clause-labels ("The following options are available: ..."). A capitalized
+  # noun-phrase label ("The Redis cache: it evicts ...") needs POS tagging to
+  # catch, so it stays out of scope here.
+  - "\\b(?:The|A|An|One|Our|Their|Its) (?:[a-z][a-z'-]* ){0,3}[a-z][a-z'-]*(?<! (?:is|are|was|were|be|been|being) [a-z][a-z'-]{0,20}):(?= [a-z][^.!?:]{20,}[.!?])"
+
+  # Curated dramatic labels (moved from RhetoricalDevices). Each reads as a
+  # tell whatever follows the colon, so they are listed bare to catch the
+  # short and capitalized continuations the structural token skips to stay
+  # false-positive-safe on unknown labels ("The takeaway: always test.").
+  - "\\bThe price:"
+  - "\\bThe catch:"
+  - "\\bThe kicker:"
+  - "\\bThe upshot:"
+  - "\\bThe tradeoff:"
+  - "\\bThe trade-off:"
+  - "\\bThe trick:"
+  - "\\bThe cost:"
+  - "\\bThe downside:"
+  - "\\bThe flip side:"
+  - "\\bThe bottom line:"
+  - "\\bThe takeaway:"
+  - "\\bThe result:"
+  - "\\bThe answer:"
+  - "\\bThe reason:"
+  - "\\bThe lesson:"
+  - "\\bThe moral:"
+  - "\\bThe point:"
+  - "\\bThe pitch:"
+  - "\\bThe fix:"
+  - "\\bThe payoff:"

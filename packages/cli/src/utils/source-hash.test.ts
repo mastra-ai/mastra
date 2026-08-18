@@ -119,6 +119,67 @@ describe.sequential('source-hash', () => {
 
       await rm(workspaceRoot, { recursive: true, force: true });
     });
+
+    it('should include Factory UI inputs when projectType is factory', async () => {
+      // Set up a Factory-style project with UI source outside src/mastra
+      await writeFileSynced(join(mastraDir, 'index.ts'), 'export const mastra = {}');
+      await writeFileSynced(join(testDir, 'package.json'), '{"name": "test"}');
+      await writeFileSynced(join(testDir, 'src', 'web', 'ui', 'App.tsx'), 'export const App = () => null');
+
+      const hash1 = await computeSourceHash(testDir, mastraDir, 'factory');
+
+      // Change a UI file — hash must change
+      await writeFileSynced(join(testDir, 'src', 'web', 'ui', 'App.tsx'), 'export const App = () => <div/>');
+
+      const hash2 = await computeSourceHash(testDir, mastraDir, 'factory');
+
+      expect(hash1).not.toBe(hash2);
+    });
+
+    it('should include Vite config when projectType is factory', async () => {
+      await writeFileSynced(join(mastraDir, 'index.ts'), 'export const mastra = {}');
+      await writeFileSynced(join(testDir, 'package.json'), '{"name": "test"}');
+      await writeFileSynced(join(testDir, 'src', 'web', 'vite.config.ts'), 'export default {}');
+
+      const hash1 = await computeSourceHash(testDir, mastraDir, 'factory');
+
+      await writeFileSynced(join(testDir, 'src', 'web', 'vite.config.ts'), 'export default { changed: true }');
+
+      const hash2 = await computeSourceHash(testDir, mastraDir, 'factory');
+
+      expect(hash1).not.toBe(hash2);
+    });
+
+    it('should NOT include Factory UI inputs when projectType is undefined', async () => {
+      await writeFileSynced(join(mastraDir, 'index.ts'), 'export const mastra = {}');
+      await writeFileSynced(join(testDir, 'package.json'), '{"name": "test"}');
+      await writeFileSynced(join(testDir, 'src', 'web', 'ui', 'App.tsx'), 'export const App = () => null');
+
+      const hash1 = await computeSourceHash(testDir, mastraDir);
+
+      // Change a UI file — hash must NOT change (UI inputs not included)
+      await writeFileSynced(join(testDir, 'src', 'web', 'ui', 'App.tsx'), 'export const App = () => <div/>');
+
+      const hash2 = await computeSourceHash(testDir, mastraDir);
+
+      expect(hash1).toBe(hash2);
+    });
+
+    it('should NOT hash generated src/mastra/public/factory output', async () => {
+      await writeFileSynced(join(mastraDir, 'index.ts'), 'export const mastra = {}');
+      await writeFileSynced(join(testDir, 'package.json'), '{"name": "test"}');
+      // Simulate generated Factory UI output
+      await writeFileSynced(join(mastraDir, 'public', 'factory', 'index.html'), '<html></html>');
+
+      const hash1 = await computeSourceHash(testDir, mastraDir, 'factory');
+
+      // Change generated output — hash must NOT change
+      await writeFileSynced(join(mastraDir, 'public', 'factory', 'index.html'), '<html><body>changed</body></html>');
+
+      const hash2 = await computeSourceHash(testDir, mastraDir, 'factory');
+
+      expect(hash1).toBe(hash2);
+    });
   });
 
   describe('writeBuildManifest / readBuildManifest', () => {

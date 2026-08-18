@@ -5,5 +5,5 @@ export const weatherAgent = new Agent({
   id: 'weather-agent',
   name: 'weather-agent',
   instructions: 'You answer questions about the weather concisely.',
-  model: openai('gpt-4o-mini'),
+  model: openai('gpt-5-mini'),
 });

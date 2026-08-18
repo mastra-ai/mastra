@@ -401,6 +401,37 @@ describe('StreamErrorRetryProcessor', () => {
       vi.useRealTimers();
     });
 
+    it('calls the per-matcher retry callback before waiting', async () => {
+      vi.useFakeTimers();
+      const onRetry = vi.fn();
+      const error = { statusCode: 400, message: 'Bad Request' };
+      const args = makeArgs({ error, retryCount: 1 });
+      const processor = new StreamErrorRetryProcessor({
+        matchers: [{ match: isBadRequestError, maxRetries: 2, delayMs: 100, onRetry }],
+      });
+
+      const promise = processor.processAPIError(args);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(onRetry).toHaveBeenCalledWith({ ...args, delayMs: 100 });
+      await vi.advanceTimersByTimeAsync(100);
+      await expect(promise).resolves.toEqual({ retry: true });
+      vi.useRealTimers();
+    });
+
+    it('prefers an explicit matcher policy over provider retry metadata', async () => {
+      const onRetry = vi.fn();
+      const error = { isRetryable: true, code: 'EPIPE' };
+      const args = makeArgs({ error, retryCount: 2 });
+      const processor = new StreamErrorRetryProcessor({
+        maxRetries: 1,
+        matchers: [{ match: candidate => candidate === error, maxRetries: 3, onRetry }],
+      });
+
+      await expect(processor.processAPIError(args)).resolves.toEqual({ retry: true });
+      expect(onRetry).toHaveBeenCalledWith({ ...args, delayMs: 0 });
+    });
+
     it('falls back to processor-level defaults when per-matcher policy omits fields', async () => {
       const processor = new StreamErrorRetryProcessor({
         maxRetries: 2,

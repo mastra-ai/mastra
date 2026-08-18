@@ -1,6 +1,6 @@
 {
   "name": "@mastra/pg",
-  "version": "1.16.0",
+  "version": "1.20.1-alpha.0",
   "description": "Postgres provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -19,7 +19,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:lib": "tsdown --silent --config tsdown.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build:lib --watch",
     "pretest": "docker compose up -d && (for i in $(seq 1 30); do docker compose exec -T db pg_isready -U postgres && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
@@ -38,12 +38,13 @@
     "pretest:watch": "docker compose up -d",
     "test:watch": "vitest watch",
     "posttest:watch": "docker compose down -v",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {
     "async-mutex": "^0.5.0",
-    "pg": "^8.21.0",
+    "pg": "^8.22.0",
     "pg-connection-string": "^2.12.0",
     "xxhash-wasm": "^1.1.0"
   },
@@ -53,17 +54,17 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/node": "22.20.1",
-    "@types/pg": "^8.18.0",
+    "@types/pg": "^8.20.0",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.4.1",
-    "tsup": "^8.5.1",
+    "eslint": "^10.7.0",
+    "tsdown": "0.22.9",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.51.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.53.0-0 <2.0.0-0"
   },
   "files": [
     "dist",

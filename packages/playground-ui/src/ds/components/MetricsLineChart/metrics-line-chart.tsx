@@ -18,24 +18,31 @@ export function MetricsLineChart({
   height = 210,
   yDomain,
   onPointClick,
+  xAxisInterval = 5,
+  xAxisMinTickGap,
 }: {
   data: Record<string, unknown>[];
   series: MetricsLineChartSeries[];
   height?: number;
   yDomain?: [number, number];
   onPointClick?: MetricsLineChartPointClickHandler;
+  /** X-axis tick density. Default `5` (every 6th point). Pass
+   * `"preserveStartEnd"` with `xAxisMinTickGap` for a width-responsive axis. */
+  xAxisInterval?: number | 'preserveStart' | 'preserveEnd' | 'preserveStartEnd';
+  /** Minimum px gap between rendered ticks; recharts drops labels to honor it. */
+  xAxisMinTickGap?: number;
 }) {
   const isClickable = typeof onPointClick === 'function';
 
   return (
     <div>
-      <div className="mb-4 flex w-full flex-wrap items-end gap-4 gap-y-1 ">
+      <div className="mb-4 flex w-full flex-wrap items-end gap-4 gap-y-1">
         {series.map(s => {
           const aggregated = s.aggregate?.(data);
           return (
             <div key={s.dataKey} className="inline-flex items-baseline gap-2">
               <div className="size-2 shrink-0 -translate-y-px rounded-full" style={{ backgroundColor: s.color }} />
-              <span className="max-w-24 truncate text-ui-sm text-neutral3">{s.label}</span>
+              <span className="text-ui-sm text-neutral3 max-w-24 truncate">{s.label}</span>
               {aggregated && (
                 <span className="text-ui-sm text-neutral4">
                   {aggregated.value}
@@ -60,7 +67,8 @@ export function MetricsLineChart({
               tick={{ fontSize: 10, fill: LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
               tickLine={false}
               axisLine={false}
-              interval={5}
+              interval={xAxisInterval}
+              minTickGap={xAxisMinTickGap}
             />
             <YAxis
               tick={{ fontSize: 10, fill: LABEL_COLOR, fontFamily: 'var(--font-mono)' }}

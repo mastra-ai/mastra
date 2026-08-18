@@ -9,9 +9,9 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # Noise sensitivity scorer
 
-The `createNoiseSensitivityScorerLLM()` function creates a **CI/testing scorer** that evaluates how robust an agent is when exposed to irrelevant, distracting, or misleading information. Unlike live scorers that evaluate single production runs, this scorer requires predetermined test data including both baseline responses and noisy variations.
+The `createNoiseSensitivityScorerLLM()` function creates a **CI/testing scorer** that evaluates how reliable an agent is when exposed to irrelevant, distracting, or misleading information. Unlike live scorers that evaluate single production runs, this scorer requires predetermined test data including both baseline responses and noisy variations.
 
-**Important:** This isn't a live scorer. It requires pre-computed baseline responses and can't be used for real-time agent evaluation. Use this scorer in your CI/CD pipeline or testing suites only.
+This isn't a live scorer. It requires pre-computed baseline responses and can't be used for real-time agent evaluation. Use this scorer in your CI/CD pipeline or testing suites only.
 
 Before using the noise sensitivity scorer, prepare your test data:
 
@@ -302,7 +302,7 @@ Include in your test harness to:
 
 - Benchmark different models' noise resistance before deployment
 - Identify agents vulnerable to manipulation during development
-- Create comprehensive test coverage for various noise types
+- Create detailed test coverage for multiple noise types
 - Ensure consistent behavior across updates
 
 ### Security Testing
@@ -319,7 +319,7 @@ Evaluate resistance in controlled environments:
 - **1.0**: Perfect robustness - no impact detected
 - **0.8-0.9**: Excellent - minimal impact, core functionality preserved
 - **0.6-0.7**: Good - some impact but acceptable for most use cases
-- **0.4-0.5**: Concerning - significant vulnerabilities detected
+- **0.4-0.5**: Concerning - substantial vulnerabilities detected
 - **0.0-0.3**: Critical - agent severely compromised by noise
 
 ### Dimension analysis
@@ -597,7 +597,7 @@ const strictScorer = createNoiseSensitivityScorerLLM({
 
 ## CI test suite: Testing different noise types
 
-Create comprehensive test suites to evaluate agent performance across various noise categories in your CI pipeline:
+Create detailed test suites to evaluate agent performance across noise categories in your CI pipeline:
 
 ```typescript
 import { createNoiseSensitivityScorerLLM } from '@mastra/evals'

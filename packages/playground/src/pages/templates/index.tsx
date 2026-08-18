@@ -90,7 +90,7 @@ export default function Templates() {
         <TemplatesList
           templates={filteredTemplates}
           linkComponent={Link}
-          className="max-w-[80rem] mx-auto"
+          className="mx-auto max-w-[80rem]"
           isLoading={isLoading}
         />
       </div>

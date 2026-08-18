@@ -75,7 +75,7 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
         </div>
       ) : (
         <div>
-          <div className="px-5 pb-2 pt-3 text-left">
+          <div className="px-5 pt-3 pb-2 text-left">
             <Txt as="h2" variant="ui-md" className="text-neutral3">
               Recent runs
             </Txt>
@@ -107,17 +107,17 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
                         )}
                         <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
                           <span className="flex w-full min-w-0 items-center gap-2 text-xs">
-                            <span className="min-w-0 flex-1 truncate font-medium text-neutral5" title={run.runId}>
+                            <span className="text-neutral5 min-w-0 flex-1 truncate font-medium" title={run.runId}>
                               {run.runId}
                             </span>
                             {run?.snapshot && typeof run.snapshot === 'object' && run.snapshot.timestamp && (
-                              <span className="shrink-0 text-neutral3">
+                              <span className="text-neutral3 shrink-0">
                                 {formatDate(run.snapshot.timestamp, 'MMM d, yyyy h:mm a')}
                               </span>
                             )}
                           </span>
                           {runInput && (
-                            <span className="block w-full min-w-0 truncate text-xs text-neutral3">{runInput}</span>
+                            <span className="text-neutral3 block w-full min-w-0 truncate text-xs">{runInput}</span>
                           )}
                         </span>
                       </span>
@@ -126,7 +126,7 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
                 })}
 
                 {isFetchingNextPage && (
-                  <li className="flex justify-center items-center py-2">
+                  <li className="flex items-center justify-center py-2">
                     <Icon>
                       <Spinner />
                     </Icon>

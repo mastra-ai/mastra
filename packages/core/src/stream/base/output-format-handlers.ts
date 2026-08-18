@@ -78,6 +78,53 @@ export function escapeUnescapedControlCharsInJsonStrings(text: string): string {
   return result;
 }
 
+function extractBalancedJsonObject(text: string): string | undefined {
+  const trimmed = text.trim();
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) return undefined;
+
+  let start = -1;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  let lastBalanced: string | undefined;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === '\\') {
+      escaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (char === '{') {
+      if (depth === 0) start = i;
+      depth++;
+      continue;
+    }
+
+    if (char === '}' && depth > 0) {
+      depth--;
+      if (depth === 0 && start !== -1) {
+        lastBalanced = text.slice(start, i + 1);
+      }
+    }
+  }
+
+  return lastBalanced;
+}
+
 interface ProcessPartialChunkParams {
   /** Text accumulated from streaming so far */
   accumulatedText: string;
@@ -289,6 +336,11 @@ abstract class BaseFormatHandler<OUTPUT = undefined> {
         // No complete code block yet - just remove the opening ```json prefix
         processedText = trimmedStart.replace(/^```json\s*\n?/, '');
       }
+    }
+
+    const extractedObject = extractBalancedJsonObject(processedText);
+    if (extractedObject) {
+      processedText = extractedObject;
     }
 
     // LLMs often output actual newlines/tabs inside JSON strings instead of
@@ -706,7 +758,14 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
 export function createJsonTextStreamTransformer<OUTPUT = undefined>(schema?: StandardSchemaWithJSON<OUTPUT>) {
   let previousArrayLength = 0;
   let hasStartedArray = false;
-  let chunkCount = 0;
+  // The first array chunk is held back instead of being emitted immediately.
+  // A single object chunk may already contain the complete array (coarse or
+  // batched provider deltas), in which case it should be emitted as one closed
+  // JSON string. But the same first chunk can also be the first slice of a
+  // longer incremental sequence, so we can only decide once the next chunk
+  // arrives or the stream ends. Emitting it closed too early produced invalid
+  // JSON like a closed array followed by more elements (see #18758).
+  let pendingFirstArrayChunk: unknown[] | undefined;
   const outputSchema = getTransformedSchema(schema);
 
   return new TransformStream<ChunkType<OUTPUT>, string>({
@@ -716,24 +775,21 @@ export function createJsonTextStreamTransformer<OUTPUT = undefined>(schema?: Sta
       }
 
       if (outputSchema?.outputFormat === 'array' && Array.isArray(chunk.object)) {
-        chunkCount++;
-
-        // If this is the first chunk, decide between complete vs incremental streaming
-        if (chunkCount === 1) {
-          // If the first chunk already has multiple elements or is complete,
-          // emit as single JSON string
-          if (chunk.object.length > 0) {
-            controller.enqueue(JSON.stringify(chunk.object));
-            previousArrayLength = chunk.object.length;
-            hasStartedArray = true;
-            return;
-          }
-        }
-
-        // Incremental streaming mode (multiple chunks)
-        if (!hasStartedArray) {
+        if (pendingFirstArrayChunk !== undefined) {
+          // A second chunk arrived, so the buffered chunk was only the first
+          // slice. Switch to incremental mode and replay the buffered elements.
           controller.enqueue('[');
           hasStartedArray = true;
+          for (let i = 0; i < pendingFirstArrayChunk.length; i++) {
+            const elementJson = JSON.stringify(pendingFirstArrayChunk[i]);
+            controller.enqueue(i > 0 ? ',' + elementJson : elementJson);
+          }
+          previousArrayLength = pendingFirstArrayChunk.length;
+          pendingFirstArrayChunk = undefined;
+        } else if (!hasStartedArray) {
+          // First chunk -- buffer it and wait to see whether the stream ends here.
+          pendingFirstArrayChunk = chunk.object;
+          return;
         }
 
         // Emit new elements that were added
@@ -752,8 +808,18 @@ export function createJsonTextStreamTransformer<OUTPUT = undefined>(schema?: Sta
       }
     },
     flush(controller) {
-      // Close the array when the stream ends (only for incremental streaming)
-      if (hasStartedArray && outputSchema?.outputFormat === 'array' && chunkCount > 1) {
+      if (outputSchema?.outputFormat !== 'array') {
+        return;
+      }
+      if (pendingFirstArrayChunk !== undefined) {
+        // The stream ended after a single array chunk: it was the complete
+        // array, so emit it as one closed JSON string. An empty single chunk
+        // still needs a well-formed '[]'.
+        const firstChunk = pendingFirstArrayChunk;
+        pendingFirstArrayChunk = undefined;
+        controller.enqueue(firstChunk.length > 0 ? JSON.stringify(firstChunk) : '[]');
+      } else if (hasStartedArray) {
+        // Close the incrementally-streamed array.
         controller.enqueue(']');
       }
     },

@@ -66,14 +66,14 @@ const mastra = new Mastra({
 
 ### Configuration Options
 
-| Option             | Type                      | Description                                                    |
-| ------------------ | ------------------------- | -------------------------------------------------------------- |
-| `apiKey`           | `string`                  | Braintrust API key. Defaults to `BRAINTRUST_API_KEY` env var   |
-| `endpoint`         | `string`                  | Custom endpoint URL. Defaults to `BRAINTRUST_ENDPOINT` env var |
-| `projectName`      | `string`                  | Project name. Defaults to `'mastra-tracing'`                   |
-| `braintrustLogger` | `Logger<true>`            | Optional Braintrust logger instance for context integration    |
-| `currentSpan`      | `() => Span \| undefined` | Optional resolver from the app's Braintrust package instance   |
-| `tuningParameters` | `Record<string,any>`      | Support tuning parameters                                      |
+| Option             | Type                                | Description                                                    |
+| ------------------ | ----------------------------------- | -------------------------------------------------------------- |
+| `apiKey`           | `string`                            | Braintrust API key. Defaults to `BRAINTRUST_API_KEY` env var   |
+| `endpoint`         | `string`                            | Custom endpoint URL. Defaults to `BRAINTRUST_ENDPOINT` env var |
+| `projectName`      | `string`                            | Project name. Defaults to `'mastra-tracing'`                   |
+| `braintrustLogger` | `BraintrustLogger`                  | Optional compatible Braintrust logger for context integration  |
+| `currentSpan`      | `() => BraintrustSpan \| undefined` | Optional resolver from the app's Braintrust package instance   |
+| `tuningParameters` | `Record<string,any>`                | Support tuning parameters                                      |
 
 ## Features
 

@@ -7,8 +7,9 @@ packages:
 
 # Time travel
 
-Time travel allows you to re-execute a workflow starting from any specific step, using either stored snapshot data or custom context you provide. This is useful for debugging failed workflows, testing individual steps with different inputs, or recovering from errors without re-running the entire workflow.
-You can also use time travel to execute a workflow that hasn't been run yet, starting from any specific step.
+Time travel allows you to re-execute a workflow starting from any specific step, using either stored snapshot data or custom context you provide.
+
+This is useful for debugging failed workflows or testing individual steps with different inputs, or alternatively recovering from errors without re-running the entire workflow. You can also use time travel to execute a workflow that hasn't been run yet, starting from any specific step.
 
 ## How time travel works
 
@@ -18,6 +19,8 @@ When you call `timeTravel()` on a workflow run:
 1. Step results before the target step are reconstructed from the snapshot or provided context
 1. Execution begins from the specified step with the provided or reconstructed input data
 1. The workflow continues to completion from that point forward
+
+If the workflow definition has changed since the run was recorded (for example, a step was renamed), or the recorded run never reached a step that precedes the target, time travel fails with a descriptive error before anything executes, and the stored snapshot is left unchanged.
 
 Time travel requires storage to be configured since it relies on persisted workflow snapshots.
 

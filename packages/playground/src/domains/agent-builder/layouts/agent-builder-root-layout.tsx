@@ -23,7 +23,7 @@ export const AgentBuilderRootLayout = ({ paths }: AgentBuilderRootLayoutProps) =
 
   if (isLoading) {
     return (
-      <div className="h-screen w-full flex items-center justify-center">
+      <div className="flex h-screen w-full items-center justify-center">
         <Spinner />
       </div>
     );
@@ -44,7 +44,7 @@ const AgentBuilderPermissionsGuard = ({ paths }: AgentBuilderRootLayoutProps) =>
 
   if (isLoading) {
     return (
-      <div className="h-screen w-full flex items-center justify-center">
+      <div className="flex h-screen w-full items-center justify-center">
         <Spinner />
       </div>
     );
@@ -113,7 +113,7 @@ function AccessDeniedScreen() {
           descriptionSlot="You don't have permission to access the Agent Builder."
         />
         <div className="flex items-center gap-2">
-          <Button as="a" href="/agents" variant="outline" size="sm">
+          <Button as={Link} href="/agents" variant="outline" size="sm">
             <ArrowLeft className="h-3.5 w-3.5" />
             Back to Studio
           </Button>

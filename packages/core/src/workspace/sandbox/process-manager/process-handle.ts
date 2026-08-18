@@ -24,42 +24,37 @@ export function validateMaxRetainedProcessOutputBytes(maxRetainedBytes: number):
   return maxRetainedBytes;
 }
 
-function getPreviousCodePointStart(value: string, end: number): number {
-  let start = end - 1;
-  const codeUnit = value.charCodeAt(start);
+function advanceStartByUtf8Bytes(
+  value: string,
+  start: number,
+  minimumBytesToDrop: number,
+): { start: number; droppedBytes: number } {
+  let nextStart = start;
+  let droppedBytes = 0;
 
-  if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff && start > 0) {
-    const previousCodeUnit = value.charCodeAt(start - 1);
-    if (previousCodeUnit >= 0xd800 && previousCodeUnit <= 0xdbff) {
-      start -= 1;
-    }
+  while (nextStart < value.length && droppedBytes < minimumBytesToDrop) {
+    const codePoint = value.codePointAt(nextStart)!;
+
+    if (codePoint < 0x80) droppedBytes += 1;
+    else if (codePoint < 0x800) droppedBytes += 2;
+    else if (codePoint < 0x10000) droppedBytes += 3;
+    else droppedBytes += 4;
+
+    nextStart += codePoint > 0xffff ? 2 : 1;
   }
 
-  return start;
+  return { start: nextStart, droppedBytes };
 }
 
-function trimToMaxBytes(value: string, maxBytes: number): string {
-  if (maxBytes <= 0) return '';
-
-  let retainedBytes = 0;
-  let end = value.length;
-  let start = end;
-
-  while (start > 0) {
-    const characterStart = getPreviousCodePointStart(value, start);
-    const characterBytes = Buffer.byteLength(value.slice(characterStart, end));
-    if (retainedBytes + characterBytes > maxBytes) break;
-    retainedBytes += characterBytes;
-    end = characterStart;
-    start = characterStart;
-  }
-
-  const retained = value.slice(start);
-  return retained.length === value.length ? retained : Buffer.from(retained, 'utf8').toString('utf8');
+interface RetainedOutputChunk {
+  data: string;
+  start: number;
+  bytes: number;
+  dataBytes: number;
 }
 
 class RetainedOutputBuffer {
-  private chunks: Array<{ data: string; bytes: number }> = [];
+  private chunks: RetainedOutputChunk[] = [];
   private bytes = 0;
   private droppedBytes = 0;
   private cachedValue: string | undefined;
@@ -74,7 +69,7 @@ class RetainedOutputBuffer {
       return;
     }
 
-    this.chunks.push({ data, bytes: dataBytes });
+    this.chunks.push({ data, start: 0, bytes: dataBytes, dataBytes });
     this.bytes += dataBytes;
     this.cachedValue = undefined;
 
@@ -83,7 +78,7 @@ class RetainedOutputBuffer {
   }
 
   toString(): string {
-    this.cachedValue ??= this.chunks.map(chunk => chunk.data).join('');
+    this.cachedValue ??= this.chunks.map(chunk => chunk.data.slice(chunk.start)).join('');
     return this.cachedValue;
   }
 
@@ -109,20 +104,23 @@ class RetainedOutputBuffer {
         continue;
       }
 
-      const retainedData = trimToMaxBytes(firstChunk.data, firstChunk.bytes - overflowBytes);
-      const retainedBytes = Buffer.byteLength(retainedData);
-      const droppedBytes = firstChunk.bytes - retainedBytes;
+      const { start, droppedBytes } = advanceStartByUtf8Bytes(firstChunk.data, firstChunk.start, overflowBytes);
+      firstChunk.start = start;
+      firstChunk.bytes -= droppedBytes;
+      this.bytes -= droppedBytes;
+      this.droppedBytes += droppedBytes;
 
-      if (retainedBytes === 0) {
+      if (firstChunk.bytes === 0) {
         this.chunks.shift();
-        this.bytes -= droppedBytes;
-        this.droppedBytes += droppedBytes;
         continue;
       }
 
-      this.chunks[0] = { data: retainedData, bytes: retainedBytes };
-      this.bytes -= droppedBytes;
-      this.droppedBytes += droppedBytes;
+      if (firstChunk.dataBytes > this.maxBytes) {
+        // V8 sliced strings retain their parent, so detach a bounded suffix from an oversized source chunk.
+        firstChunk.data = Buffer.from(firstChunk.data.slice(firstChunk.start), 'utf8').toString('utf8');
+        firstChunk.start = 0;
+        firstChunk.dataBytes = firstChunk.bytes;
+      }
     }
   }
 
@@ -130,9 +128,20 @@ class RetainedOutputBuffer {
     if (this.chunks.length <= RETAINED_OUTPUT_COMPACT_CHUNK_THRESHOLD) return;
     const data = this.toString();
     this.bytes = Buffer.byteLength(data);
-    this.chunks = this.bytes === 0 ? [] : [{ data, bytes: this.bytes }];
+    this.chunks = this.bytes === 0 ? [] : [{ data, start: 0, bytes: this.bytes, dataBytes: this.bytes }];
     this.cachedValue = data;
   }
+}
+
+/**
+ * Thrown by {@link ProcessHandle.closeStdin} when the sandbox provider has no
+ * way to close a running process's stdin.
+ *
+ * `handle.writer.end()` treats this error as a successful finish, so piping to
+ * a process stays safe on providers without stdin close support.
+ */
+export class UnsupportedStdinCloseError extends Error {
+  readonly name = 'UnsupportedStdinCloseError';
 }
 
 /**
@@ -192,18 +201,35 @@ export abstract class ProcessHandle {
   abstract sendStdin(data: string): Promise<void>;
 
   /**
+   * Close the process's stdin, signaling EOF.
+   *
+   * Providers that cannot close stdin throw {@link UnsupportedStdinCloseError}.
+   * The default implementation is the unsupported case, so providers only
+   * override this when their transport exposes a stdin close primitive.
+   */
+  async closeStdin(): Promise<void> {
+    throw new UnsupportedStdinCloseError(`${this.constructor.name} does not support closing stdin`);
+  }
+
+  /**
    * Wait for the process to finish and return the result.
    *
    * Optionally pass `onStdout`/`onStderr` callbacks to stream output chunks
    * while waiting. The callbacks are automatically removed when `wait()`
    * resolves, so there's no cleanup needed by the caller.
    *
-   * Subclasses implement `wait()` with platform-specific logic — the base
+   * Optionally pass an `abortSignal` to couple the blocking wait to a caller
+   * lifetime: on abort the process is killed (mirroring the spawn-time
+   * `abortSignal` convention in {@link CommandOptions}), which lets the wait
+   * settle with the killed process's result instead of blocking forever.
+   *
+   * Subclasses implement `wait()` with platform-specific logic; the base
    * constructor wraps it to handle the optional streaming callbacks.
    */
   async wait(_options?: {
     onStdout?: (data: string) => void;
     onStderr?: (data: string) => void;
+    abortSignal?: AbortSignal;
   }): Promise<CommandResult> {
     throw new Error(`${this.constructor.name} must implement wait()`);
   }
@@ -230,9 +256,22 @@ export abstract class ProcessHandle {
     // with a wrapper that handles optional streaming callbacks.
     const implWait = this.wait.bind(this);
 
-    this.wait = async (waitOptions?: { onStdout?: (data: string) => void; onStderr?: (data: string) => void }) => {
+    this.wait = async (waitOptions?: {
+      onStdout?: (data: string) => void;
+      onStderr?: (data: string) => void;
+      abortSignal?: AbortSignal;
+    }) => {
       if (waitOptions?.onStdout) this._stdoutListeners.add(waitOptions.onStdout);
       if (waitOptions?.onStderr) this._stderrListeners.add(waitOptions.onStderr);
+      // Abort kills the process (same convention as spawn-time `abortSignal`
+      // in the process manager) so the wait settles via the normal exit path
+      // instead of blocking past the caller's lifetime.
+      const abortSignal = waitOptions?.abortSignal;
+      const onAbort = () => {
+        void this.kill().catch(() => {});
+      };
+      if (abortSignal?.aborted) onAbort();
+      else abortSignal?.addEventListener('abort', onAbort, { once: true });
       try {
         const result = await implWait();
         return {
@@ -243,6 +282,7 @@ export abstract class ProcessHandle {
           stderrDroppedBytes: this.stderrDroppedBytes,
         };
       } finally {
+        abortSignal?.removeEventListener('abort', onAbort);
         if (waitOptions?.onStdout) this._stdoutListeners.delete(waitOptions.onStdout);
         if (waitOptions?.onStderr) this._stderrListeners.delete(waitOptions.onStderr);
       }
@@ -316,6 +356,12 @@ export abstract class ProcessHandle {
       this._writer = new Writable({
         write: (chunk, _encoding, cb) => {
           this.sendStdin(chunk.toString()).then(() => cb(), cb);
+        },
+        final: cb => {
+          this.closeStdin().then(
+            () => cb(),
+            (err: unknown) => cb(err instanceof UnsupportedStdinCloseError ? null : (err as Error)),
+          );
         },
       });
     }

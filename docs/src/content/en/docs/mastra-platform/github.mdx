@@ -33,7 +33,9 @@ The CLI flow (`mastra studio deploy` and `mastra server deploy`) is still availa
 
 ## Install the Mastra GitHub App
 
-The integration is powered by the Mastra GitHub App. The App reads repository contents, listens for `push` events on the configured branches, and writes deploy status back as check runs.
+The integration is powered by the Mastra GitHub App.
+
+The App reads repository contents and listens for `push` events on the configured branches. It writes deploy status back as check runs.
 
 <Steps>
   <StepItem>
@@ -69,7 +71,7 @@ To cancel a pending request, select **Cancel** next to it in the dashboard.
 
 ## Create a project from a template
 
-Templates are the fastest way to get started. The platform creates a new repository from a Mastra template, links it to a fresh project, provisions any managed databases the template declares, and runs the first deploy.
+Templates are the fastest way to get started. The platform creates a new repository from a Mastra template and links it to a fresh project. It then provisions any managed databases declared by the template and runs the first deploy.
 
 <Steps>
   <StepItem>

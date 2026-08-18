@@ -1,5 +1,3 @@
-import crypto from 'node:crypto';
-
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type {
   ListScoresResponse,

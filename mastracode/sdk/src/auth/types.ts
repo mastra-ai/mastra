@@ -81,3 +81,25 @@ export type OAuthCredential = {
 export type AuthCredential = ApiKeyCredential | OAuthCredential;
 
 export type AuthStorageData = Record<string, AuthCredential>;
+
+/**
+ * The read surface model resolution and the OAuth fetch wrappers need from a
+ * credential source. `AuthStorage` satisfies it structurally (file-backed,
+ * server-global); deployed web injects a per-tenant implementation backed by
+ * the app database so each caller's own credentials are used.
+ */
+export interface CredentialStore {
+  /** Whether model resolution may fall back to process environment credentials. */
+  readonly allowEnvironmentFallback?: boolean;
+  /** Refresh any cached view (no-op for sources that are always fresh). */
+  reload(): void;
+  /** Credential in the provider's main slot (`anthropic`, `openai-codex`, …). */
+  get(provider: string): AuthCredential | undefined;
+  /** Dedicated stored API key for a provider, if any. */
+  getStoredApiKey(provider: string): string | undefined;
+  /**
+   * Ready-to-use key/token for a provider, refreshing expired OAuth
+   * credentials first. Implementations own refresh serialization.
+   */
+  getApiKey(provider: string): Promise<string | undefined>;
+}

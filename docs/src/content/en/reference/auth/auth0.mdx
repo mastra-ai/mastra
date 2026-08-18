@@ -28,7 +28,7 @@ export const mastra = new Mastra({
 
 :::note
 
-You can omit the constructor parameters if you have the appropriately named environment variables (`AUTH0_DOMAIN` and `AUTH0_AUDIENCE`) set. In that case, use `new MastraAuthAuth0()` without any arguments.
+You can omit the constructor parameters if the required environment variables (`AUTH0_DOMAIN` and `AUTH0_AUDIENCE`) are set. In that case, use `new MastraAuthAuth0()` without any arguments.
 
 :::
 
@@ -47,7 +47,7 @@ You can omit the constructor parameters if you have the appropriately named envi
   {
     name: 'audience',
     type: 'string',
-    description: 'Your Auth0 API identifier/audience. This ensures tokens are intended for your specific API.',
+    description: 'Your Auth0 API identifier/audience, which restricts tokens to your API.',
     isOptional: true,
     defaultValue: 'process.env.AUTH0_AUDIENCE',
   },
@@ -122,4 +122,4 @@ The exact properties available depend on your Auth0 configuration, scopes reques
 
 ## Related
 
-[MastraAuthAuth0 Class](/docs/server/auth/auth0)
+[MastraAuthAuth0 Class](/integrations/auth/auth0)

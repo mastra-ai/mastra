@@ -444,7 +444,11 @@ export class SentryExporter extends BaseExporter {
     const toolAttr = span.attributes as ToolCallAttributes;
 
     this.setAttributeIfDefined(attributes, ATTRIBUTE_KEYS.TOOL_SUCCESS, toolAttr.success);
-    this.setAttributeIfDefined(attributes, ATTRIBUTE_KEYS.GEN_AI_TOOL_CALL_ID, span.metadata?.toolCallId);
+    this.setAttributeIfDefined(
+      attributes,
+      ATTRIBUTE_KEYS.GEN_AI_TOOL_CALL_ID,
+      toolAttr.toolCallId ?? span.metadata?.toolCallId,
+    );
   }
 
   /**
@@ -540,7 +544,7 @@ export class SentryExporter extends BaseExporter {
 
     parentSpanData.toolCalls.push({
       name: this.getEntityName(span),
-      id: span.metadata?.toolCallId,
+      id: toolAttr.toolCallId ?? span.metadata?.toolCallId,
       type: toolAttr.toolType || 'function',
     });
   }

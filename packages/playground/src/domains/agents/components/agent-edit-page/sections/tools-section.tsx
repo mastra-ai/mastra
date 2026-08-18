@@ -38,16 +38,16 @@ export function ToolsSection({ control, error, readOnly = false }: ToolsSectionP
   };
 
   return (
-    <div className="rounded-md border border-border1 bg-surface2">
+    <div className="border-border1 bg-surface2 rounded-md border">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CollapsibleTrigger className="flex items-center gap-1 w-full p-3 bg-surface3">
-          <ChevronRight className="h-4 w-4 text-neutral3" />
+        <CollapsibleTrigger className="bg-surface3 flex w-full items-center gap-1 p-3">
+          <ChevronRight className="text-neutral3 h-4 w-4" />
           <SectionTitle icon={<ToolsIcon className="text-accent6" />}>
             Tools{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
           </SectionTitle>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="p-3 border-t border-border1">
+          <div className="border-border1 border-t p-3">
             <Controller
               name="tools"
               control={control}
@@ -95,7 +95,7 @@ export function ToolsSection({ control, error, readOnly = false }: ToolsSectionP
                       error={error}
                     />
                     {selectedOptions.length > 0 && (
-                      <div className="flex flex-col gap-3 mt-2">
+                      <div className="mt-2 flex flex-col gap-3">
                         {selectedOptions.map(tool => (
                           <EntityAccordionItem
                             key={tool.value}

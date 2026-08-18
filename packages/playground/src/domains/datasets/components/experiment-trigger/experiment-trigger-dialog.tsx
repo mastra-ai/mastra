@@ -11,7 +11,6 @@ import {
 } from '@mastra/playground-ui/components/Dialog';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { format } from 'date-fns';
 import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -20,7 +19,7 @@ import { ScorerSelector } from './scorer-selector';
 import type { TargetType } from './target-selector';
 import { TargetSelector } from './target-selector';
 import { DynamicForm } from '@/lib/form';
-import { resolveSerializedZodOutput } from '@/lib/form/utils';
+import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 
 export interface ExperimentTriggerDialogProps {
   datasetId: string;
@@ -44,7 +43,7 @@ function RequestContextForm({
 }) {
   const zodSchema = useMemo(() => {
     try {
-      return resolveSerializedZodOutput(jsonSchemaToZod(requestContextSchema as Parameters<typeof jsonSchemaToZod>[0]));
+      return jsonSchemaToZodRuntime(requestContextSchema as Parameters<typeof jsonSchemaToZodRuntime>[0]);
     } catch (error) {
       console.error('Failed to parse requestContextSchema:', error);
       return null;
@@ -52,7 +51,7 @@ function RequestContextForm({
   }, [requestContextSchema]);
 
   if (!zodSchema) {
-    return <p className="text-sm text-destructive">Failed to parse request context schema</p>;
+    return <p className="text-destructive text-sm">Failed to parse request context schema</p>;
   }
 
   return (
@@ -206,7 +205,7 @@ export function ExperimentTriggerDialog({
           <Button variant="primary" onClick={handleRun} disabled={!canRun || isRunning}>
             {isRunning ? (
               <>
-                <Spinner className="w-4 h-4" />
+                <Spinner className="h-4 w-4" />
                 Running...
               </>
             ) : (

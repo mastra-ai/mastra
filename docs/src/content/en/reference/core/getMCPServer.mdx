@@ -17,9 +17,7 @@ const myServer = new MCPServer({
   id: 'my-mcp-server',
   name: 'My Server',
   version: '1.0.0',
-  tools: {
-    /* ... */
-  },
+  tools: {/* ... */},
 })
 
 export const mastra = new Mastra({
@@ -43,7 +41,7 @@ const serverById = mastra.getMCPServerById('my-mcp-server')
     name: 'registryKey',
     type: 'string',
     description:
-      "The registry key used when registering the MCP server in the mcpServers configuration object. This is the key in the key-value pair, not the server's intrinsic id property.",
+      "The registry key used when registering the MCP server in the mcpServers configuration object. It is the configuration key in the key-value pair, not the server's intrinsic id property.",
   },
 ]}
 />
@@ -67,5 +65,5 @@ const serverById = mastra.getMCPServerById('my-mcp-server')
 
 ## See also
 
-- [MCP overview](/docs/mcp/overview)
+- [MCP overview](/docs/connections/mcp)
 - [MCP server reference](/reference/tools/mcp-server)

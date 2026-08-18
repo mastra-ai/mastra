@@ -76,6 +76,29 @@ const validParams = {
   org: 'org-1',
 };
 
+function mockInteractiveStdin() {
+  const isTTYDescriptor = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
+  const setRawModeDescriptor = Object.getOwnPropertyDescriptor(process.stdin, 'setRawMode');
+  const setRawMode = vi.fn().mockReturnValue(process.stdin);
+  Object.defineProperties(process.stdin, {
+    isTTY: { configurable: true, value: true },
+    setRawMode: { configurable: true, value: setRawMode },
+  });
+  vi.spyOn(process.stdin, 'isPaused').mockReturnValue(true);
+  vi.spyOn(process.stdin, 'resume').mockReturnValue(process.stdin);
+  vi.spyOn(process.stdin, 'pause').mockReturnValue(process.stdin);
+
+  return {
+    setRawMode,
+    restore() {
+      if (isTTYDescriptor) Object.defineProperty(process.stdin, 'isTTY', isTTYDescriptor);
+      else delete (process.stdin as Partial<NodeJS.ReadStream>).isTTY;
+      if (setRawModeDescriptor) Object.defineProperty(process.stdin, 'setRawMode', setRawModeDescriptor);
+      else delete (process.stdin as Partial<NodeJS.ReadStream>).setRawMode;
+    },
+  };
+}
+
 beforeEach(() => {
   vi.restoreAllMocks();
   vi.spyOn(console, 'info').mockImplementation(() => {});
@@ -135,6 +158,80 @@ describe('login() server lifecycle', () => {
         req.on('error', reject);
       }),
     ).rejects.toThrow();
+  });
+
+  it('closes the callback server when login is aborted', async () => {
+    const { login } = await import('./credentials.js');
+    const controller = new AbortController();
+    const loginPromise = login(controller.signal);
+
+    await vi.waitFor(
+      () => {
+        extractPort();
+      },
+      { timeout: 5000 },
+    );
+    const port = extractPort();
+    controller.abort();
+
+    await expect(loginPromise).rejects.toMatchObject({ name: 'AbortError' });
+    await expect(
+      new Promise((resolve, reject) => {
+        const req = http.get(`http://127.0.0.1:${port}/`, resolve);
+        req.on('error', reject);
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('skips login when any key is pressed', async () => {
+    const stdin = mockInteractiveStdin();
+    try {
+      const { login, LoginCancelledError } = await import('./credentials.js');
+      const loginPromise = login(undefined, { skipOnInput: true });
+
+      await vi.waitFor(
+        () => {
+          extractPort();
+        },
+        { timeout: 5000 },
+      );
+      process.stdin.emit('data', Buffer.from('x'));
+
+      await expect(loginPromise).rejects.toBeInstanceOf(LoginCancelledError);
+      expect(stdin.setRawMode).toHaveBeenNthCalledWith(1, true);
+      expect(stdin.setRawMode).toHaveBeenLastCalledWith(false);
+      expect(console.info).toHaveBeenCalledWith(
+        expect.stringContaining('Waiting for browser sign-in. Press any key to skip this step.'),
+      );
+    } finally {
+      stdin.restore();
+    }
+  });
+
+  it('forwards Ctrl+C as SIGINT instead of treating it as a skip key', async () => {
+    const stdin = mockInteractiveStdin();
+    const controller = new AbortController();
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => {
+      controller.abort();
+      return true;
+    });
+    try {
+      const { login } = await import('./credentials.js');
+      const loginPromise = login(controller.signal, { skipOnInput: true });
+
+      await vi.waitFor(
+        () => {
+          extractPort();
+        },
+        { timeout: 5000 },
+      );
+      process.stdin.emit('data', Buffer.from([3]));
+
+      await expect(loginPromise).rejects.toMatchObject({ name: 'AbortError' });
+      expect(kill).toHaveBeenCalledWith(process.pid, 'SIGINT');
+    } finally {
+      stdin.restore();
+    }
   });
 
   it('returns 400 when callback params are missing', async () => {

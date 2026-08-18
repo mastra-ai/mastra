@@ -100,22 +100,22 @@ describe('createCodingAgent', () => {
     expect(agent).toBeInstanceOf(Agent);
   });
 
-  it('does not include TaskSignalProvider when no memory is configured', () => {
+  it('does not include TaskSignalProvider when no memory is configured', async () => {
     const agent = createCodingAgent(baseConfig());
-    const tools = agent.listTools();
+    const tools = await agent.listTools();
     expect(Object.keys(tools)).not.toContain('task_write');
     expect(Object.keys(tools)).not.toContain('task_check');
   });
 
-  it('includes TaskSignalProvider when memory is configured', () => {
+  it('includes TaskSignalProvider when memory is configured', async () => {
     const memory = {} as any;
     const agent = createCodingAgent(baseConfig({ memory }));
-    const tools = agent.listTools();
+    const tools = await agent.listTools();
     expect(Object.keys(tools)).toContain('task_write');
     expect(Object.keys(tools)).toContain('task_check');
   });
 
-  it('merges TaskSignalProvider into caller-provided signals when memory is configured', () => {
+  it('merges TaskSignalProvider into caller-provided signals when memory is configured', async () => {
     const memory = {} as any;
     const agent = createCodingAgent(
       baseConfig({
@@ -123,17 +123,17 @@ describe('createCodingAgent', () => {
         signals: [],
       }),
     );
-    const tools = agent.listTools();
+    const tools = await agent.listTools();
     expect(Object.keys(tools)).toContain('task_write');
   });
 
-  it('does not add TaskSignalProvider to caller-provided signals when no memory', () => {
+  it('does not add TaskSignalProvider to caller-provided signals when no memory', async () => {
     const agent = createCodingAgent(
       baseConfig({
         signals: [],
       }),
     );
-    const tools = agent.listTools();
+    const tools = await agent.listTools();
     expect(Object.keys(tools)).not.toContain('task_write');
   });
 });

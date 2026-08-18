@@ -6,6 +6,7 @@ import type { AgentControllerEvent, AgentControllerThread } from '@mastra/core/a
 import type { TaskItemSnapshot } from '@mastra/core/signals';
 import type { AskUserSelectionMode } from '@mastra/core/tools';
 
+import { getMessageText } from './db-message-parts.js';
 import {
   handleAgentStart,
   handleAgentEnd,
@@ -114,9 +115,7 @@ export async function dispatchEvent(
       // Only open the decode window when an assistant message carries actual
       // streamed text — tool-result-only updates (e.g. plan approval resume) and
       // user/system message updates must not count toward tokens/sec.
-      const hasAssistantText =
-        event.message.role === 'assistant' &&
-        event.message.content.some(part => part.type === 'text' && 'text' in part && part.text.trim().length > 0);
+      const hasAssistantText = event.message.role === 'assistant' && getMessageText(event.message).trim().length > 0;
       if (hasAssistantText) {
         state.agentRunLastStreamPartAt = Date.now();
         if (state.decodeStartedAt === 0) {
@@ -168,7 +167,10 @@ export async function dispatchEvent(
       break;
 
     case 'tool_input_delta':
-      handleToolInputDelta(ectx, event.toolCallId, event.argsTextDelta);
+      // Display processors may transform argsTextDelta to a non-string payload.
+      if (typeof event.argsTextDelta === 'string') {
+        handleToolInputDelta(ectx, event.toolCallId, event.argsTextDelta);
+      }
       break;
 
     case 'tool_input_end':

@@ -1,5 +1,5 @@
 {
-  "attachment": ["kimi-k2.6", "qwen3.5-flash", "qwen3.6-flash"],
+  "attachment": ["kimi-k2.6", "qwen3.5-flash", "qwen3.6-flash", "qwen3.7-flash", "qwen3.7-plus", "qwen3.8-max"],
   "temperature": [
     "MiniMax-M2.5",
     "MiniMax/MiniMax-M2.7",
@@ -74,8 +74,10 @@
     "qwen3.6-flash",
     "qwen3.6-max-preview",
     "qwen3.6-plus",
+    "qwen3.7-flash",
     "qwen3.7-max",
     "qwen3.7-plus",
+    "qwen3.8-max",
     "qwq-32b",
     "qwq-plus",
     "siliconflow/deepseek-r1-0528",
@@ -83,5 +85,22 @@
     "siliconflow/deepseek-v3.1-terminus",
     "siliconflow/deepseek-v3.2",
     "tongyi-intent-detect-v3"
+  ],
+  "structuredOutput": [
+    "deepseek-v4-flash",
+    "deepseek-v4-pro",
+    "glm-5.1",
+    "glm-5.2",
+    "kimi-k2-thinking",
+    "kimi/kimi-k2.5",
+    "qwen3.5-flash",
+    "qwen3.6-flash",
+    "qwen3.6-max-preview",
+    "qwen3.7-flash",
+    "qwen3.8-max",
+    "siliconflow/deepseek-r1-0528",
+    "siliconflow/deepseek-v3-0324",
+    "siliconflow/deepseek-v3.1-terminus",
+    "siliconflow/deepseek-v3.2"
   ]
 }

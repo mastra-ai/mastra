@@ -10,10 +10,12 @@ import { StructuredOutputProcessor } from '../../../processors';
 import type { RequestContext } from '../../../request-context';
 import type { Step } from '../../../workflows/step';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
+import type { MessageList } from '../../message-list';
 import type { SaveQueueManager } from '../../save-queue';
 import { getModelOutputForTripwire } from '../../trip-wire';
 import type { AgentMethodType } from '../../types';
 import { isSupportedLanguageModel } from '../../utils';
+import { fireClientToolOutputHooks } from './client-tool-output-hooks';
 import type { PrepareStreamRunScope } from './run-scope';
 import {
   CONVERTED_TOOLS_KEY,
@@ -23,6 +25,28 @@ import {
   PROCESSOR_STATES_KEY,
 } from './run-scope-keys';
 import type { AgentCapabilities, PrepareMemoryStepOutput, PrepareToolsStepOutput } from './schema';
+
+/**
+ * Assistant text that was already streamed to the caller when the abort happened.
+ *
+ * Prefers the snapshot taken when the abort signal fired. Falls back to the aborted finish
+ * payload, which the stream builds from its own buffer at the abort event. Text a provider
+ * emitted after cancellation is never included.
+ */
+function getPartialAbortedText(
+  payload: { text?: string; finishReason?: string },
+  streamedTextAtAbort?: string,
+): string {
+  if (typeof streamedTextAtAbort === 'string' && streamedTextAtAbort.length > 0) {
+    return streamedTextAtAbort;
+  }
+
+  if (payload.finishReason === 'aborted' && typeof payload.text === 'string') {
+    return payload.text;
+  }
+
+  return '';
+}
 
 interface MapResultsStepOptions<OUTPUT = undefined> {
   capabilities: AgentCapabilities;
@@ -72,6 +96,25 @@ export function createMapResultsStep<OUTPUT = undefined>({
     const convertedTools = runScope.get(CONVERTED_TOOLS_KEY);
 
     let threadCreatedByStep = false;
+    const persistPartialOnAbort = options.persistPartialOnAbort === true;
+    // Text already handed to the caller. Snapshotted the moment the abort signal fires so
+    // chunks a provider keeps producing after cancellation can never widen the snapshot.
+    let streamedText = '';
+    let streamedTextAtAbort: string | undefined;
+
+    if (persistPartialOnAbort && options.abortSignal) {
+      if (options.abortSignal.aborted) {
+        streamedTextAtAbort = streamedText;
+      } else {
+        options.abortSignal.addEventListener(
+          'abort',
+          () => {
+            streamedTextAtAbort = streamedText;
+          },
+          { once: true },
+        );
+      }
+    }
 
     const result = {
       ...options,
@@ -168,6 +211,18 @@ export function createMapResultsStep<OUTPUT = undefined>({
       }
     }
 
+    // Client-executed tool results arrive as trailing tool-role input messages on
+    // a follow-up request (the browser ran the tool and re-invoked the agent).
+    // The tool already resolved on the client, so fire `onOutput` for matching
+    // execute-less tools. This runs after the tripwire check on purpose: a
+    // request rejected by input processors must not trigger hook side effects.
+    await fireClientToolOutputHooks({
+      messages: options.messages,
+      tools: convertedTools,
+      abortSignal: options.abortSignal,
+      logger: capabilities.logger,
+    });
+
     // Resolve output processors - overrides replace user-configured but auto-derived (memory) are kept
     let effectiveOutputProcessors = capabilities.outputProcessors
       ? typeof capabilities.outputProcessors === 'function'
@@ -232,6 +287,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       agentId,
       requestContext: result.requestContext!,
       actor: options.actor,
+      mcp: options.mcp,
       ...createObservabilityContext({ currentSpan: agentSpan }),
       runId,
       toolChoice: result.toolChoice,
@@ -242,6 +298,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       maxSteps: result.maxSteps,
       providerOptions: result.providerOptions,
       includeRawChunks: options.includeRawChunks,
+      experimentalTransform: options.experimentalTransform,
       options: {
         ...(options.prepareStep && { prepareStep: options.prepareStep }),
         onFinish: async (payload: any) => {
@@ -305,27 +362,76 @@ export function createMapResultsStep<OUTPUT = undefined>({
             return;
           }
 
-          if (payload.finishReason === 'aborted') {
-            agentSpan?.end({
-              output: {
-                status: 'aborted',
-                reason: 'abort',
-              },
-            });
-            return;
-          }
+          // Both abort exits share one policy: persist nothing by default, and when the caller
+          // opts in persist only the assistant text that was streamed before the abort.
+          const aborted = payload.finishReason === 'aborted' || options.abortSignal?.aborted === true;
 
-          // Skip memory persistence when the abort signal has fired.
-          // The LLM response may have continued after the caller disconnected,
-          // and we should not persist a partial or full response for an aborted request.
-          const aborted = options.abortSignal?.aborted;
+          if (aborted) {
+            const endAbortedSpan = () => {
+              if (payload.finishReason === 'aborted') {
+                agentSpan?.end({ output: { status: 'aborted', reason: 'abort' } });
+              } else {
+                agentSpan?.end();
+              }
+            };
 
-          if (!aborted) {
+            const partialText = getPartialAbortedText(payload, streamedTextAtAbort);
+
+            if (!persistPartialOnAbort || partialText.trim().length === 0) {
+              endAbortedSpan();
+            } else {
+              try {
+                await capabilities.executeOnFinish({
+                  // Bound the persisted response to the pre-abort snapshot. The raw payload may carry
+                  // a complete post-abort response (providers can ignore cancellation).
+                  result: {
+                    ...payload,
+                    text: partialText,
+                    response: {
+                      ...(payload.response ?? {}),
+                      dbMessages: undefined,
+                      messages: [{ role: 'assistant', content: [{ type: 'text', text: partialText }] }],
+                    },
+                  },
+                  outputText: partialText,
+                  thread: result.thread,
+                  threadId: result.threadId,
+                  readOnlyMemory: memoryConfig?.readOnly,
+                  resourceId,
+                  memoryConfig,
+                  requestContext,
+                  agentSpan,
+                  runId,
+                  messageList,
+                  threadExists: memoryData.threadExists || threadCreatedByStep,
+                  structuredOutput: false,
+                  overrideScorers: options.scorers,
+                  onTitleGenerated: options.memory?.onTitleGenerated,
+                  waitUntil: options.serverless?.waitUntil,
+                });
+
+                if (saveQueueManager && result.threadId && !memoryConfig?.readOnly) {
+                  await saveQueueManager.flushMessages(messageList, result.threadId, memoryConfig);
+                }
+              } catch (e) {
+                capabilities.logger.error('Error saving partial memory on abort', {
+                  error: e,
+                  runId,
+                });
+                endAbortedSpan();
+              }
+            }
+
+            // The aborted finish payload is synthetic; the caller already received onAbort.
+            if (payload.finishReason === 'aborted') {
+              return;
+            }
+          } else {
             try {
               const outputText =
                 options.structuredOutput?.schema && payload.object != null
                   ? JSON.stringify(payload.object)
-                  : (payload.text ?? '');
+                  : payload.text || '';
 
               await capabilities.executeOnFinish({
                 result: payload,
@@ -339,9 +445,11 @@ export function createMapResultsStep<OUTPUT = undefined>({
                 agentSpan: agentSpan,
                 runId,
                 messageList,
-                threadExists: memoryData.threadExists,
+                threadExists: memoryData.threadExists || threadCreatedByStep,
                 structuredOutput: !!options.structuredOutput?.schema,
                 overrideScorers: options.scorers,
+                onTitleGenerated: options.memory?.onTitleGenerated,
+                waitUntil: options.serverless?.waitUntil,
               });
             } catch (e) {
               capabilities.logger.error('Error saving memory on finish', {
@@ -364,8 +472,6 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
               agentSpan?.error({ error: spanError, endSpan: true });
             }
-          } else {
-            agentSpan?.end();
           }
 
           await options?.onFinish?.({
@@ -377,7 +483,14 @@ export function createMapResultsStep<OUTPUT = undefined>({
           });
         },
         onStepFinish: result.onStepFinish,
-        onChunk: options.onChunk,
+        onChunk: persistPartialOnAbort
+          ? async (chunk: any) => {
+              if (chunk.type === 'text-delta') {
+                streamedText += chunk.payload.text;
+              }
+              await options.onChunk?.(chunk);
+            }
+          : options.onChunk,
         onError: options.onError,
         onAbort: options.onAbort,
         abortSignal: options.abortSignal,

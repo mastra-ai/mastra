@@ -10,7 +10,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # Span filtering
 
-Span filtering controls which spans are exported from an observability config. Use it to reduce noise, lower per-span costs, or keep only the spans that matter for a specific exporter or environment.
+Span filtering controls which spans are exported from an observability config. Use it to reduce noise or lower per-span costs. It can also keep only the spans that matter for a specific exporter or environment.
 
 For a shorter overview of tracing configuration, see [Tracing](/docs/observability/tracing/overview).
 
@@ -117,4 +117,4 @@ If `spanFilter` throws an error, Mastra keeps the span and logs the error to avo
 
 - [Tracing overview](/docs/observability/tracing/overview) for setup and concepts
 - [Configuration API](/reference/observability/tracing/configuration) for `ObservabilityInstanceConfig`
-- [Sensitive data filter](/docs/observability/integrations/processors/sensitive-data-filter) for redacting span data
+- [Sensitive data filter](/reference/observability/tracing/processors/sensitive-data-filter) for redacting span data

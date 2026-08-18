@@ -1,0 +1,59 @@
+---
+extends: existence
+message: "AI narrative pivot: '%s'. State your point directly."
+level: error
+ignorecase: true
+tokens:
+  - something shifted
+  - something changed
+  - something clicked
+  - something snapped
+  - everything changed
+  - everything shifted
+  - everything clicked
+  - and then everything changed
+  - and then it clicked
+  - and then it hit me
+  - that changed everything
+  - that changes everything
+  - this changes everything
+  - this changed everything
+  - and that made all the difference
+  - and that makes all the difference
+  - but then something interesting happened
+  - but then something unexpected happened
+  - but then I realized
+  - and that's when it hit me
+  - and that's when I realized
+  - it was a turning point
+  - it was an inflection point
+  - it was a watershed moment
+  - it was a game-changer
+  - it was a wake-up call
+  - a light bulb went off
+  - a lightbulb went off
+  - the penny dropped
+  - it all came together
+  - it all made sense
+  - things started to click
+  - things fell into place
+  - changed the game
+  - changes the game
+  - changing the game
+  - change the game
+  - changed the game forever
+  - changes the game forever
+  - changed everything forever
+  - changed the landscape
+  - changes the landscape
+  - rewrote the rules
+  - rewrites the rules
+  - rewriting the rules
+  - rewrote the playbook
+  - rewrites the playbook
+  - rewriting the playbook
+  - flipped the script
+  - flips the script
+  - flipping the script
+  - moved the goalposts
+  - shifted the paradigm

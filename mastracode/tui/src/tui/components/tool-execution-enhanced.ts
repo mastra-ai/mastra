@@ -205,6 +205,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   private streamingOutput = ''; // Buffer for streaming shell output
   private quietDisplayMode: QuietToolDisplayMode;
   private quietPreviewLineLimit: number;
+  private quietPreviewRowFloor = 0;
   private compactToolContinuation = false;
   private compactToolHasFollowingContinuation = false;
   private compactToolPreviousSummary: string | undefined;
@@ -280,6 +281,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   setQuietPreviewLineLimit(limit: number): void {
     const normalizedLimit = Number.isFinite(limit) ? limit : 2;
     this.quietPreviewLineLimit = Math.min(8, Math.max(0, Math.floor(normalizedLimit)));
+    this.quietPreviewRowFloor = Math.min(this.quietPreviewRowFloor, this.quietPreviewLineLimit);
     this.rebuild();
   }
 
@@ -308,7 +310,12 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   }
 
   hasQuietStreamingPreview(): boolean {
-    return this.quietDisplayMode === 'quiet' && this.quietPreviewLineLimit > 0 && this.getQuietActivePreview() !== '';
+    return (
+      this.quietDisplayMode === 'quiet' &&
+      this.toolName !== MC_TOOLS.EXECUTE_COMMAND &&
+      this.quietPreviewLineLimit > 0 &&
+      (this.quietPreviewRowFloor > 0 || this.getQuietActivePreview() !== '')
+    );
   }
 
   setCompactToolContinuation(continuation: boolean, previousSummary?: string): void {
@@ -445,22 +452,31 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       return [];
 
     const preview = this.getQuietActivePreview();
-    if (!preview) return [];
+    let lines: string[] = [];
 
-    if (this.isQuietCodePreviewTool()) {
-      return this.getQuietCodePreviewLines(preview, maxLineWidth);
+    if (preview) {
+      if (this.isQuietCodePreviewTool()) {
+        lines = this.getQuietCodePreviewLines(preview, maxLineWidth);
+      } else {
+        const firstLineWidth = Math.max(10, maxLineWidth - 4);
+        const continuationWidth = Math.max(10, maxLineWidth - 4);
+        const wrapped = this.wrapPreviewLines(preview, firstLineWidth, continuationWidth).slice(
+          -this.quietPreviewLineLimit,
+        );
+
+        lines = wrapped.map(line => {
+          const linePrefix = `  ${chalk.hex(this.getQuietToolRailColor())('│')} `;
+          return truncateAnsi(`${linePrefix}${this.formatQuietActivePreview(line)}`, maxLineWidth);
+        });
+      }
     }
 
-    const firstLineWidth = Math.max(10, maxLineWidth - 4);
-    const continuationWidth = Math.max(10, maxLineWidth - 4);
-    const wrapped = this.wrapPreviewLines(preview, firstLineWidth, continuationWidth).slice(
-      -this.quietPreviewLineLimit,
-    );
-
-    return wrapped.map(line => {
+    this.quietPreviewRowFloor = Math.min(this.quietPreviewLineLimit, Math.max(this.quietPreviewRowFloor, lines.length));
+    const padding = Array.from({ length: this.quietPreviewRowFloor - lines.length }, () => {
       const linePrefix = `  ${chalk.hex(this.getQuietToolRailColor())('│')} `;
-      return truncateAnsi(`${linePrefix}${this.formatQuietActivePreview(line)}`, maxLineWidth);
+      return truncateAnsi(linePrefix, maxLineWidth);
     });
+    return [...padding, ...lines];
   }
 
   private getQuietCodePreviewLines(preview: string, maxLineWidth: number): string[] {

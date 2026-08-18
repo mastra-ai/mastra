@@ -1,5 +1,26 @@
 import type { SessionNotification, RequestPermissionRequest, AgentSideConnection } from '@agentclientprotocol/sdk';
-import type { AgentControllerEvent, Session, TokenUsage } from '@mastra/core/agent-controller';
+import type { AgentControllerEvent, MastraDBMessage, Session, TokenUsage } from '@mastra/core/agent-controller';
+import { mastraDBMessageToSignal } from '@mastra/core/signals';
+
+/** Concatenate the text of all `text` parts on a DB-native assistant message. */
+function getMessageText(message: MastraDBMessage): string {
+  const content = message.content;
+  if (typeof content === 'string' || !content?.parts) return '';
+  return content.parts
+    .filter((part): part is Extract<(typeof content.parts)[number], { type: 'text' }> => part.type === 'text')
+    .map(part => part.text)
+    .join('');
+}
+
+function getSignalText(message: MastraDBMessage): string {
+  const contents = mastraDBMessageToSignal(message).contents;
+  if (typeof contents === 'string') return contents;
+  if (!Array.isArray(contents)) return '';
+  return contents
+    .filter((part): part is Extract<(typeof contents)[number], { type: 'text' }> => part.type === 'text')
+    .map(part => part.text)
+    .join('\n');
+}
 
 let autoApprove = false;
 
@@ -64,12 +85,21 @@ export function handleAgentControllerEvent(
       state.lastTextLength = 0;
       break;
 
+    case 'message_start': {
+      if (event.message.role !== 'signal') break;
+      const text = getSignalText(event.message);
+      if (text) {
+        sendUpdate(connection, state.sessionId, {
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text },
+        });
+      }
+      break;
+    }
+
     case 'message_update': {
       if (event.message.role !== 'assistant') break;
-      const fullText = event.message.content
-        .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
-        .map(p => p.text)
-        .join('');
+      const fullText = getMessageText(event.message);
       if (fullText.length > state.lastTextLength) {
         const delta = fullText.slice(state.lastTextLength);
         state.lastTextLength = fullText.length;
@@ -82,7 +112,7 @@ export function handleAgentControllerEvent(
     }
 
     case 'message_end':
-      state.lastTextLength = 0;
+      if (event.message.role === 'assistant') state.lastTextLength = 0;
       break;
 
     case 'tool_start':

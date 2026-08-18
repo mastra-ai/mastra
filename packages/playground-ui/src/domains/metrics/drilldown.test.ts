@@ -16,7 +16,7 @@ describe('buildTracesDrilldownUrl', () => {
       scope: {},
     });
     const { path, params } = parseUrl(url);
-    expect(path).toBe('/observability');
+    expect(path).toBe('/traces');
     expect(params.get('datePreset')).toBe('last-24h');
   });
 
@@ -102,7 +102,7 @@ describe('buildTracesDrilldownUrl', () => {
       scope: { status: 'error', entityName: 'researcher', rootEntityType: EntityType.AGENT },
     });
     const { path, params } = parseUrl(url);
-    expect(path).toBe('/observability');
+    expect(path).toBe('/traces');
     expect(params.get('status')).toBe('error');
     expect(params.get('filterEntityName')).toBe('researcher');
   });

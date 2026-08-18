@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, it } from 'vitest';
 import type { AgentExecutionOptionsBase } from '../agent.types';
 import type { SerializableDurableOptions, RunRegistryEntry } from './types';
@@ -52,6 +51,8 @@ type ConsumedDuringPreparation =
   | 'memory'
   // savePerStep is extracted and stored in workflow state during preparation
   | 'savePerStep'
+  // Partial abort persistence is specific to the non-durable stream finalization path.
+  | 'persistPartialOnAbort'
   // RunId is generated/used during preparation, not forwarded as an "option"
   | 'runId'
   // RequestContext is resolved during preparation and stored on registry
@@ -67,6 +68,7 @@ type ConsumedDuringPreparation =
   | 'onFinish'
   | 'onError'
   | 'onAbort'
+  | 'experimentalTransform'
   // AbortSignal is managed via the registry's abortController/abortSignal
   | 'abortSignal'
   // Toolsets and clientTools are resolved into the `tools` record during
@@ -83,6 +85,9 @@ type ConsumedDuringPreparation =
   | '_skipBgTaskWait'
   // untilIdle is handled by DurableAgent.streamUntilIdle() before preparation
   | 'untilIdle'
+  // Serverless waitUntil is call-site only for non-durable generate/stream.
+  // Durable finish already awaits title generation, so this is intentionally unused.
+  | 'serverless'
   // Observability context keys from Partial<ObservabilityContext>
   | 'tracing'
   | 'loggerVNext'

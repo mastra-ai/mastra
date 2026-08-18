@@ -21,15 +21,15 @@ vi.mock('../sandbox-filesystem.js', () => ({
   },
 }));
 
-const reattachCalls: string[] = [];
+const reattachCalls: Array<{ sandboxId: string; actingUserId?: string }> = [];
 vi.mock('../sandbox-reattach.js', () => ({
-  reattachProjectSandbox: vi.fn(async (sandboxId: string) => {
-    reattachCalls.push(sandboxId);
+  reattachProjectSandbox: vi.fn(async (sandboxId: string, options?: { actingUserId?: string }) => {
+    reattachCalls.push({ sandboxId, actingUserId: options?.actingUserId });
     return { executeCommand: vi.fn(), getInfo: vi.fn() };
   }),
 }));
 
-function createSandboxRequestContext(state: Record<string, unknown>) {
+function createSandboxRequestContext(state: Record<string, unknown>, user?: { workosId?: string; id?: string }) {
   const requestContext = new RequestContext();
   const getState = () => state;
   requestContext.set('controller', {
@@ -37,6 +37,7 @@ function createSandboxRequestContext(state: Record<string, unknown>) {
     getState,
     session: { state: { get: getState } },
   });
+  if (user) requestContext.set('user', user);
   return requestContext;
 }
 
@@ -56,7 +57,8 @@ function createWorkspaceRegistry() {
 }
 
 const baseState = {
-  githubProjectId: 'proj-1',
+  factoryProjectId: 'factory-project-1',
+  projectRepositoryId: 'project-repository-1',
   sandboxId: 'sbx-1',
   sandboxWorkdir: '/workspace/hello',
   sandboxAllowedPaths: [],
@@ -92,7 +94,7 @@ describe('S5 — worktree reattach round-trip through the workspace seam', () =>
       branch: 'feat/x',
     });
     expect(sandboxFsCalls.at(-1)?.workdir).toBe('/workspace/worktrees/feat-x');
-    expect(first.id).toBe('mastra-code-workspace-gh-proj-1-sbx-1-/workspace/worktrees/feat-x');
+    expect(first.id).toBe('mastra-code-workspace-repository-project-repository-1-sbx-1-/workspace/worktrees/feat-x');
     expect(reattachCalls).toHaveLength(1);
     const fsCallsAfterFirst = sandboxFsCalls.length;
 
@@ -116,7 +118,7 @@ describe('S5 — worktree reattach round-trip through the workspace seam', () =>
       branch: 'feat/y',
     });
     expect(third).not.toBe(first);
-    expect(third.id).toBe('mastra-code-workspace-gh-proj-1-sbx-1-/workspace/worktrees/feat-y');
+    expect(third.id).toBe('mastra-code-workspace-repository-project-repository-1-sbx-1-/workspace/worktrees/feat-y');
     expect(sandboxFsCalls.at(-1)?.workdir).toBe('/workspace/worktrees/feat-y');
     expect(reattachCalls).toHaveLength(2);
     expect(reg.size()).toBe(2);
@@ -144,6 +146,32 @@ describe('S5 — worktree reattach round-trip through the workspace seam', () =>
     const wtAgain = await resolve({ ...baseState, worktreePath: '/workspace/worktrees/feat-x' });
     expect(baseAgain).toBe(base);
     expect(wtAgain).toBe(wt);
+    expect(reg.size()).toBe(2);
+  });
+
+  it('isolates reused sandbox workspaces by acting user', async () => {
+    const { getDynamicWorkspace } = await import('../workspace.js');
+    const reg = createWorkspaceRegistry();
+    const resolve = async (actingUserId: string) => {
+      const ws = await getDynamicWorkspace({
+        requestContext: createSandboxRequestContext(baseState, { id: actingUserId }) as any,
+        mastra: reg as any,
+      });
+      reg.register(ws as { id: string });
+      return ws;
+    };
+
+    const firstUser = await resolve('user-1');
+    const firstUserAgain = await resolve('user-1');
+    const secondUser = await resolve('user-2');
+
+    expect(firstUserAgain).toBe(firstUser);
+    expect(secondUser).not.toBe(firstUser);
+    expect(firstUser.id).not.toBe(secondUser.id);
+    expect(reattachCalls).toEqual([
+      { sandboxId: 'sbx-1', actingUserId: 'user-1' },
+      { sandboxId: 'sbx-1', actingUserId: 'user-2' },
+    ]);
     expect(reg.size()).toBe(2);
   });
 });

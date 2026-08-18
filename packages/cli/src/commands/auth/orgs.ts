@@ -12,6 +12,15 @@ export interface ResolveCurrentOrgOptions {
    * Ignored if MASTRA_ORG_ID is set or the user only belongs to one org.
    */
   forcePrompt?: boolean;
+  exitOnCancel?: boolean;
+  signal?: AbortSignal;
+}
+
+export class OrgSelectionCancelledError extends Error {
+  constructor() {
+    super('Organization selection cancelled');
+    this.name = 'OrgSelectionCancelledError';
+  }
 }
 
 function isInteractive(): boolean {
@@ -58,17 +67,25 @@ export async function resolveCurrentOrg(
     throw new Error('Multiple organizations found. Run `mastra auth orgs switch` interactively or set MASTRA_ORG_ID.');
   }
 
-  const selected = await p.select({
-    message: 'Select an organization',
-    initialValue: currentOrgId ?? undefined,
-    options: orgs.map(o => ({
-      value: o.id,
-      label: `${o.name}${o.id === currentOrgId ? ' (current)' : ''}`,
-      hint: o.id,
-    })),
-  });
+  let selected: string | symbol;
+  try {
+    selected = await p.select({
+      message: 'Select an organization',
+      initialValue: currentOrgId ?? undefined,
+      options: orgs.map(o => ({
+        value: o.id,
+        label: `${o.name}${o.id === currentOrgId ? ' (current)' : ''}`,
+        hint: o.id,
+      })),
+      ...(opts.signal ? { signal: opts.signal } : {}),
+    });
+  } catch (error) {
+    if (opts.signal?.aborted && opts.exitOnCancel === false) throw new OrgSelectionCancelledError();
+    throw error;
+  }
 
   if (p.isCancel(selected)) {
+    if (opts.exitOnCancel === false) throw new OrgSelectionCancelledError();
     p.cancel('Cancelled.');
     process.exit(0);
   }

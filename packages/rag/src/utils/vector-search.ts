@@ -30,6 +30,7 @@ enum DatabaseType {
   PgVector = 'pgvector',
   Chroma = 'chroma',
   MongoDB = 'mongodb',
+  Turbopuffer = 'turbopuffer',
 }
 
 const DATABASE_TYPE_MAP = Object.keys(DatabaseType);
@@ -192,6 +193,13 @@ const databaseSpecificParams = (databaseConfig: DatabaseConfig) => {
     if (databaseConfig.mongodb) {
       if (databaseConfig.mongodb.numCandidates !== undefined) {
         databaseSpecificParams.numCandidates = databaseConfig.mongodb.numCandidates;
+      }
+    }
+
+    // Turbopuffer-specific configurations
+    if (databaseConfig.turbopuffer) {
+      if (databaseConfig.turbopuffer.consistency !== undefined) {
+        databaseSpecificParams.consistency = databaseConfig.turbopuffer.consistency;
       }
     }
 

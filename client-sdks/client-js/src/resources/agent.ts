@@ -9,7 +9,7 @@ import type {
   UseChatOptions,
 } from '@ai-sdk/ui-utils';
 import { v4 as uuid } from '@lukeed/uuid';
-import type { AgentExecutionOptionsBase, SerializableStructuredOutputOptions } from '@mastra/core/agent';
+import type { SerializableStructuredOutputOptions } from '@mastra/core/agent';
 import type { AIV5Type, MessageListInput } from '@mastra/core/agent/message-list';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
@@ -46,6 +46,7 @@ import type {
   SubscribeAgentThreadParams,
   ListAgentSuspendedRunsParams,
   ListAgentSuspendedRunsResponse,
+  GetAgentPlanResponse,
   ProcessAgentThreadStreamOptions,
   CreateCodeAgentVersionParams,
   ActivateAgentVersionResponse,
@@ -541,6 +542,16 @@ export class Agent extends BaseResource {
    */
   details(requestContext?: RequestContext | Record<string, any>): Promise<GetAgentResponse> {
     return this.request(`/agents/${this.agentId}${this.getQueryString(requestContext)}`);
+  }
+
+  /**
+   * Reads a markdown plan submitted by this agent through the core submit_plan tool.
+   * The server only serves paths under `.mastracode/plans/` and only when the
+   * agent exposes that capability.
+   */
+  readPlan(path: string, requestContext?: RequestContext | Record<string, any>): Promise<GetAgentPlanResponse> {
+    const contextQuery = this.getQueryString(requestContext, '&');
+    return this.request(`/agents/${this.agentId}/plans/file?path=${encodeURIComponent(path)}${contextQuery}`);
   }
 
   /**
@@ -2067,6 +2078,21 @@ export class Agent extends BaseResource {
 
       // Use tee() to split the stream into two branches
       const [streamForController, streamForProcessing] = response.body.tee();
+      const decoder = new TextDecoder();
+      let pendingText = '';
+
+      const enqueueReadableText = (text: string, isFinal = false) => {
+        pendingText += text;
+        const lines = pendingText.split('\n\n');
+        pendingText = isFinal ? '' : (lines.pop() ?? '');
+
+        const readableLines = lines
+          .filter(line => line.trim() !== '[DONE]' && line.trim() !== 'data: [DONE]')
+          .join('\n\n');
+        if (readableLines) {
+          controller.enqueue(new TextEncoder().encode(`${readableLines}\n\n`));
+        }
+      };
 
       // Pipe one branch directly to the controller
       const pipePromise = streamForController
@@ -2075,19 +2101,14 @@ export class Agent extends BaseResource {
             async write(chunk) {
               // Filter out terminal markers so the client stream doesn't end before recursion
               try {
-                const text = new TextDecoder().decode(chunk);
-                const lines = text.split('\n\n');
-                const readableLines = lines
-                  .filter(line => line.trim() !== '[DONE]' && line.trim() !== 'data: [DONE]')
-                  .join('\n\n');
-                if (readableLines) {
-                  const encoded = new TextEncoder().encode(readableLines);
-                  controller.enqueue(encoded);
-                }
+                enqueueReadableText(decoder.decode(chunk, { stream: true }));
               } catch (error) {
                 console.error('Error enqueueing to controller:', error);
                 controller.enqueue(chunk);
               }
+            },
+            close() {
+              enqueueReadableText(decoder.decode(), true);
             },
           }),
         )
@@ -2421,6 +2442,7 @@ export class Agent extends BaseResource {
 
   async approveNetworkToolCall(params: {
     runId: string;
+    model?: string;
     requestContext?: RequestContext | Record<string, any>;
   }): Promise<
     Response & {
@@ -2470,6 +2492,9 @@ export class Agent extends BaseResource {
 
   async declineNetworkToolCall(params: {
     runId: string;
+    model?: string;
+    /** Optional explanation surfaced in place of the default decline message. */
+    reason?: string;
     requestContext?: RequestContext | Record<string, any>;
   }): Promise<
     Response & {
@@ -2559,8 +2584,8 @@ export class Agent extends BaseResource {
   >;
   async stream<OUTPUT>(
     messagesOrParams: MessageListInput,
-    options?: AgentExecutionOptionsBase<any> & {
-      structuredOutput?: StreamParamsBaseWithoutMessages<any>;
+    options?: StreamParamsBaseWithoutMessages<any> & {
+      structuredOutput?: StructuredOutputOptions<any>;
     },
   ): Promise<
     Response & {
@@ -2680,8 +2705,8 @@ export class Agent extends BaseResource {
   >;
   async streamUntilIdle<OUTPUT>(
     messagesOrParams: MessageListInput,
-    options?: AgentExecutionOptionsBase<any> & {
-      structuredOutput?: StreamParamsBaseWithoutMessages<any>;
+    options?: StreamParamsBaseWithoutMessages<any> & {
+      structuredOutput?: StructuredOutputOptions<any>;
       maxIdleMs?: number;
     },
   ): Promise<
@@ -2781,6 +2806,7 @@ export class Agent extends BaseResource {
   async approveToolCall(params: {
     runId: string;
     toolCallId: string;
+    model?: string;
     requestContext?: RequestContext | Record<string, any>;
   }): Promise<
     Response & {
@@ -2856,6 +2882,9 @@ export class Agent extends BaseResource {
   async declineToolCall(params: {
     runId: string;
     toolCallId: string;
+    model?: string;
+    /** Optional explanation surfaced to the model in place of the default decline message. */
+    reason?: string;
     requestContext?: RequestContext | Record<string, any>;
   }): Promise<
     Response & {
@@ -3167,6 +3196,7 @@ export class Agent extends BaseResource {
   async approveToolCallGenerate(params: {
     runId: string;
     toolCallId: string;
+    model?: string;
     requestContext?: RequestContext | Record<string, any>;
   }): Promise<any> {
     const { requestContext, ...rest } = params;
@@ -3183,6 +3213,9 @@ export class Agent extends BaseResource {
   async declineToolCallGenerate(params: {
     runId: string;
     toolCallId: string;
+    model?: string;
+    /** Optional explanation surfaced to the model in place of the default decline message. */
+    reason?: string;
     requestContext?: RequestContext | Record<string, any>;
   }): Promise<any> {
     const { requestContext, ...rest } = params;

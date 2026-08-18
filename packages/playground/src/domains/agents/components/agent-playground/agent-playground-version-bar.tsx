@@ -15,8 +15,8 @@ import {
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
-import { HoverPopover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Check, ChevronDown, Download, GitPullRequest, Info, MessageSquare, Save } from 'lucide-react';
@@ -130,7 +130,7 @@ export function AgentPlaygroundVersionBar({
 
   return {
     versionSelector: (
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-border1 bg-surface3">
+      <div className="border-border1 bg-surface3 flex items-center gap-2 border-b px-4 py-3">
         {versions.length > 0 ? (
           <Combobox
             options={versionOptions}
@@ -148,33 +148,28 @@ export function AgentPlaygroundVersionBar({
 
         {currentValue && <CopyButton content={currentValue} tooltip="Copy version ID" size="sm" />}
 
-        <HoverPopover>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              aria-label="Version information"
-              className="text-neutral3 hover:text-neutral5 transition-colors shrink-0 rounded-sm focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-white/30"
-            >
-              <Icon size="sm">
-                <Info />
-              </Icon>
-            </button>
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-56">
-            <Txt variant="ui-sm" className="text-neutral3">
-              {versionInfoText}
-            </Txt>
-          </PopoverContent>
-        </HoverPopover>
+        <Tooltip>
+          <TooltipTrigger
+            aria-label="Version information"
+            className="text-neutral3 hover:text-neutral5 shrink-0 rounded-sm transition-colors focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:outline-hidden"
+          >
+            <Icon size="sm">
+              <Info />
+            </Icon>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" align="start" className="max-w-56">
+            {versionInfoText}
+          </TooltipContent>
+        </Tooltip>
 
-        <div className="flex items-center gap-2 ml-auto shrink-0">
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           {readOnly && <Badge variant="warning">Read-only</Badge>}
           {!readOnly && hasDraft && !isCodeSourceAgent && <Badge variant="info">Unpublished</Badge>}
         </div>
       </div>
     ),
     actionBar: (
-      <div className="flex items-center justify-end px-3 py-2 border-t border-border1 bg-surface3">
+      <div className="border-border1 bg-surface3 flex items-center justify-end border-t px-3 py-2">
         {showCodeModeActions ? (
           <ButtonsGroup className="flex-wrap justify-end">
             <Button variant="default" size="md" onClick={() => void onDownloadJson?.()}>

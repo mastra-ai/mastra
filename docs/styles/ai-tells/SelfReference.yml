@@ -1,0 +1,52 @@
+---
+extends: existence
+message: "AI cross-reference: '%s'. Rewrite the passage to work without the cross-reference."
+level: error
+ignorecase: true
+tokens:
+  - as mentioned above
+  - as mentioned earlier
+  - as mentioned before
+  - as noted above
+  - as noted earlier
+  - as noted before
+  - as discussed above
+  - as discussed earlier
+  - as discussed before
+  - as stated above
+  - as stated earlier
+  - as stated before
+  - as outlined above
+  - as outlined earlier
+  - as described above
+  - as described earlier
+  - as referenced above
+  - as referenced earlier
+  - as we saw
+  - as we saw above
+  - as we saw earlier
+  - as we'll see
+  - as we'll explore
+  - as we'll discuss
+  - as we discussed
+  - as we explored
+  - as we covered
+  - as covered above
+  - as covered earlier
+  - as shown above
+  - as shown earlier
+  - as explained above
+  - as explained earlier
+  - as we noted
+  - recall that
+  - remember that
+  - as previously mentioned
+  - as previously noted
+  - as previously discussed
+  - as previously stated
+  - as previously described
+  - as I mentioned
+  - as I noted
+  - as I discussed
+  - as I said
+  - as I explained

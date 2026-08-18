@@ -23,8 +23,9 @@ export type InngestWorkflowConfig<
   TState,
   TInput,
   TOutput,
-  TSteps extends Step<string, any, any, any, any, any, InngestEngineType>[],
-> = WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps> &
+  TSteps extends Step<string, any, any, any, any, any, InngestEngineType, any>[],
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> = WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext> &
   InngestFlowControlConfig &
   InngestFlowCronConfig<TInput, TState>;
 

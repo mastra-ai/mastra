@@ -6,6 +6,9 @@
  */
 
 import type {
+  AuthInitContext,
+  IAuthInit,
+  IOrganizationsProvider,
   IUserProvider,
   ISSOProvider,
   ISessionProvider,
@@ -52,6 +55,33 @@ const DEV_COOKIE_PASSWORD = crypto.randomUUID() + crypto.randomUUID(); // 72 cha
 const MEMBERSHIP_CACHE_TTL_MS = 60 * 1000;
 const MEMBERSHIP_CACHE_MAX_SIZE = 1000;
 
+/** Pull a stable error code out of a WorkOS SDK error, if present. */
+function workosErrorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const e = error as { code?: unknown; rawData?: { code?: unknown } };
+  if (typeof e.code === 'string') return e.code;
+  if (e.rawData && typeof e.rawData.code === 'string') return e.rawData.code;
+  return undefined;
+}
+
+/**
+ * True when `createOrganization` rejected because an org is already bound to
+ * this `externalId` — i.e. a prior bootstrap created the org but never attached
+ * the membership. The org can be recovered via `getOrganizationByExternalId`.
+ */
+function isExternalIdAlreadyUsed(error: unknown): boolean {
+  return workosErrorCode(error) === 'external_id_already_used';
+}
+
+/**
+ * True when `createOrganizationMembership` rejected because the user is already
+ * a member of the org. Safe to ignore: the desired end state already holds.
+ */
+function isMembershipAlreadyExists(error: unknown): boolean {
+  const code = workosErrorCode(error);
+  return code === 'organization_membership_already_exists' || code === 'entity_already_exists';
+}
+
 /**
  * Mastra authentication provider for WorkOS.
  *
@@ -72,7 +102,7 @@ const MEMBERSHIP_CACHE_MAX_SIZE = 1000;
  */
 export class MastraAuthWorkos
   extends MastraAuthProvider<WorkOSUser>
-  implements IUserProvider<EEUser>, ISSOProvider<EEUser>, ISessionProvider<Session>
+  implements IUserProvider<EEUser>, ISSOProvider<EEUser>, ISessionProvider<Session>, IOrganizationsProvider, IAuthInit
 {
   protected workos: WorkOS;
   protected clientId: string;
@@ -91,7 +121,10 @@ export class MastraAuthWorkos
 
     const apiKey = options?.apiKey ?? process.env.WORKOS_API_KEY;
     const clientId = options?.clientId ?? process.env.WORKOS_CLIENT_ID;
-    const redirectUri = options?.redirectUri ?? process.env.WORKOS_REDIRECT_URI;
+    // The redirect URI may be resolved later: `init()` derives it from the
+    // host's `publicUrl` when neither the option nor the env var is set.
+    // `getLoginUrl()` fails with a clear error if it never resolves.
+    const redirectUri = options?.redirectUri ?? process.env.WORKOS_REDIRECT_URI ?? '';
     const cookiePassword =
       options?.session?.cookiePassword ?? process.env.WORKOS_COOKIE_PASSWORD ?? DEV_COOKIE_PASSWORD;
 
@@ -99,13 +132,6 @@ export class MastraAuthWorkos
       throw new Error(
         'WorkOS API key and client ID are required. ' +
           'Provide them in the options or set WORKOS_API_KEY and WORKOS_CLIENT_ID environment variables.',
-      );
-    }
-
-    if (!redirectUri) {
-      throw new Error(
-        'WorkOS redirect URI is required. ' +
-          'Provide it in the options or set WORKOS_REDIRECT_URI environment variable.',
       );
     }
 
@@ -488,9 +514,17 @@ export class MastraAuthWorkos
    * Get the URL to redirect users to for SSO login.
    */
   getLoginUrl(redirectUri: string, state: string): string {
+    const resolvedRedirectUri = redirectUri || this.redirectUri;
+    if (!resolvedRedirectUri) {
+      throw new Error(
+        'WorkOS redirect URI is required. ' +
+          'Provide it in the options, set the WORKOS_REDIRECT_URI environment variable, or call init() with a publicUrl.',
+      );
+    }
+
     const baseOptions = {
       clientId: this.clientId,
-      redirectUri: redirectUri || this.redirectUri,
+      redirectUri: resolvedRedirectUri,
       state,
     };
 
@@ -725,6 +759,136 @@ export class MastraAuthWorkos
   getClearSessionHeaders(): Record<string, string> {
     const cookieParts = [`${this.config.cookieName}=`, 'Path=/', 'Max-Age=0', 'HttpOnly'];
     return { 'Set-Cookie': cookieParts.join('; ') };
+  }
+
+  // ============================================================================
+  // IAuthInit Implementation
+  // ============================================================================
+
+  /**
+   * One-time host initialization. Resolves the redirect URI from the host's
+   * `publicUrl` (`<publicUrl>/auth/callback`) when it was not provided in the
+   * options or via `WORKOS_REDIRECT_URI`.
+   *
+   * Fails at prepare time rather than handing WorkOS an empty redirect URI on
+   * the first login (which breaks hosted login with an opaque provider error).
+   */
+  async init(ctx: AuthInitContext): Promise<void> {
+    if (!this.redirectUri && ctx.publicUrl) {
+      this.redirectUri = `${ctx.publicUrl}/auth/callback`;
+      this.config.redirectUri = this.redirectUri;
+      // Rebuild the session storage/auth service so they observe the resolved
+      // redirect URI rather than the empty placeholder from construction.
+      const storage = new WebSessionStorage(this.config);
+      this.authService = new AuthService(this.config, storage, this.workos as any, sessionEncryption);
+    }
+    if (!this.redirectUri) {
+      throw new Error(
+        'MastraAuthWorkos could not resolve a callback URL: pass `redirectUri` (WORKOS_REDIRECT_URI) or configure the host `publicUrl`.',
+      );
+    }
+  }
+
+  // ============================================================================
+  // IOrganizationsProvider Implementation
+  // ============================================================================
+
+  /**
+   * Ensure the user belongs to a WorkOS organization, creating a personal org
+   * on first use when they have none.
+   *
+   * - ≥1 membership → return the first org id (they already belong somewhere;
+   *   we never auto-create when a membership exists).
+   * - 0 memberships → create a personal org + membership and return its id.
+   *
+   * Idempotency: the create call carries `externalId = userId` and a stable
+   * `idempotencyKey`, so concurrent/retried first logins never create duplicate
+   * personal orgs. If a prior run created the org but never attached the
+   * membership, the create rejects with `external_id_already_used`; we recover
+   * the existing org by `externalId` and (re)attach the membership instead of
+   * failing.
+   *
+   * Best-effort: any WorkOS error (e.g. API key lacking org-create permission)
+   * is swallowed and returns `undefined`, leaving the user in their no-org
+   * state rather than failing the request.
+   */
+  async ensureOrganization(userId: string): Promise<string | undefined> {
+    try {
+      const memberships = await this.workos.userManagement
+        .listOrganizationMemberships({ userId })
+        .then(page => page.autoPagination());
+
+      const firstExisting = memberships.find(m => m.organizationId)?.organizationId;
+      if (firstExisting) return firstExisting;
+
+      // Build a predictable personal-org name from the user's profile.
+      const profile = await this.workos.userManagement.getUser(userId).catch(() => null);
+      const label = profile?.email ?? userId;
+
+      // Create the personal org. A prior partial bootstrap (org created, but
+      // the membership step never landed) leaves an org already bound to this
+      // externalId, so the create 400s with `external_id_already_used`.
+      // Recover by looking the existing org up by externalId instead of
+      // dead-ending forever.
+      let organizationId: string;
+      try {
+        const organization = await this.workos.organizations.createOrganization(
+          {
+            name: `${label}'s org`,
+            externalId: userId,
+            metadata: { mastraPersonalOrg: 'true', workosUserId: userId },
+          },
+          { idempotencyKey: `mastra-personal-org:${userId}` },
+        );
+        organizationId = organization.id;
+      } catch (error) {
+        if (!isExternalIdAlreadyUsed(error)) throw error;
+        const existing = await this.workos.organizations.getOrganizationByExternalId(userId);
+        organizationId = existing.id;
+      }
+
+      // Idempotently attach the user. If they are already a member (e.g. the
+      // org existed from a prior run), tolerate the conflict and keep the org id.
+      try {
+        await this.workos.userManagement.createOrganizationMembership({ organizationId, userId });
+      } catch (error) {
+        if (!isMembershipAlreadyExists(error)) throw error;
+      }
+
+      // Drop any cached (empty) membership list so the next authenticated
+      // request observes the new membership immediately.
+      this.membershipCache.delete(userId);
+
+      return organizationId;
+    } catch (error) {
+      console.warn(
+        `[WorkOS] Failed to bootstrap personal organization for user ${userId}. ` +
+          'The user will see organization_required until this succeeds. ' +
+          'Ensure the WorkOS API key can create organizations/memberships.',
+        error,
+      );
+      return undefined;
+    }
+  }
+
+  /**
+   * Whether the user holds an admin-equivalent role (`admin` or `owner`) in
+   * the organization. Provider errors resolve to `false`.
+   */
+  async isOrganizationAdmin(organizationId: string, userId: string): Promise<boolean> {
+    try {
+      const memberships = await this.workos.userManagement
+        .listOrganizationMemberships({ userId })
+        .then(page => page.autoPagination());
+      const membership = memberships.find(item => item.organizationId === organizationId);
+      if (!membership) return false;
+      // Multi-role environments report assigned roles in `roles`; single-role
+      // environments only populate the legacy `role` field.
+      const slugs = membership.roles?.length ? membership.roles.map(role => role.slug) : [membership.role.slug];
+      return slugs.some(slug => slug === 'admin' || slug === 'owner');
+    } catch {
+      return false;
+    }
   }
 
   // ============================================================================

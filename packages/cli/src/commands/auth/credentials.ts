@@ -24,6 +24,17 @@ export interface Credentials {
   currentOrgId?: string;
 }
 
+export interface LoginOptions {
+  skipOnInput?: boolean;
+}
+
+export class LoginCancelledError extends Error {
+  constructor() {
+    super('Login skipped.');
+    this.name = 'LoginCancelledError';
+  }
+}
+
 export async function saveCredentials(creds: Credentials): Promise<void> {
   await mkdir(CREDENTIALS_DIR, { recursive: true, mode: 0o700 });
   await writeFile(CREDENTIALS_FILE, JSON.stringify(creds, null, 2), { mode: 0o600 });
@@ -88,12 +99,13 @@ function openBrowser(url: string) {
   }
 }
 
-export async function verifyToken(token: string): Promise<boolean> {
+export async function verifyToken(token: string, signal?: AbortSignal): Promise<boolean> {
   // Use plain fetch — NOT authenticatedFetch — to avoid its 401 interceptor
   // triggering a redundant refresh cycle.
   try {
     const res = await fetch(`${MASTRA_PLATFORM_API_URL}/v1/auth/verify`, {
       headers: { Authorization: `Bearer ${token}` },
+      signal,
     });
     return res.ok;
   } catch {
@@ -101,7 +113,7 @@ export async function verifyToken(token: string): Promise<boolean> {
   }
 }
 
-export async function tryRefreshToken(creds: Credentials): Promise<string | null> {
+export async function tryRefreshToken(creds: Credentials, signal?: AbortSignal): Promise<string | null> {
   if (!creds.refreshToken) return null;
 
   try {
@@ -112,6 +124,7 @@ export async function tryRefreshToken(creds: Credentials): Promise<string | null
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken: creds.refreshToken }),
+      signal,
     });
     if (!res.ok) return null;
 
@@ -177,8 +190,41 @@ function callbackPage({ success }: { success: boolean }): string {
 </html>`;
 }
 
-export async function login(): Promise<Credentials> {
-  console.info('\nLogging in to Mastra...\n');
+function listenForSkipInput(onSkip: () => void): () => void {
+  const stdin = process.stdin;
+  if (!stdin.isTTY || typeof stdin.setRawMode !== 'function') return () => {};
+
+  const wasRaw = stdin.isRaw;
+  const wasPaused = stdin.isPaused();
+  let listening = true;
+
+  const cleanup = () => {
+    if (!listening) return;
+    listening = false;
+    stdin.removeListener('data', handleInput);
+    if (!wasRaw) stdin.setRawMode(false);
+    if (wasPaused) stdin.pause();
+  };
+
+  const handleInput = (input: Buffer | string) => {
+    const data = typeof input === 'string' ? Buffer.from(input) : input;
+    cleanup();
+    if (data.includes(3)) {
+      process.kill(process.pid, 'SIGINT');
+      return;
+    }
+    onSkip();
+  };
+
+  stdin.setRawMode(true);
+  stdin.resume();
+  stdin.once('data', handleInput);
+  return cleanup;
+}
+
+export async function login(signal?: AbortSignal, options: LoginOptions = {}): Promise<Credentials> {
+  signal?.throwIfAborted();
+  console.info('\n   Logging in to Mastra...\n');
 
   const server = createServer();
   const state = randomBytes(16).toString('hex');
@@ -194,6 +240,11 @@ export async function login(): Promise<Credentials> {
 
   const loginUrl = `${MASTRA_PLATFORM_API_URL}/v1/auth/login?product=cli&cli_port=${port}&state=${state}`;
   console.info(`   Opening browser...\n`);
+  console.info(
+    options.skipOnInput
+      ? `   Waiting for browser sign-in. Press any key to skip this step.\n`
+      : `   Waiting for browser sign-in...\n`,
+  );
 
   try {
     openBrowser(loginUrl);
@@ -211,12 +262,32 @@ export async function login(): Promise<Credentials> {
     user: Credentials['user'];
     organizationId: string;
   }>((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      server.close(() => {
-        reject(new Error('Login timed out (60s)'));
-      });
+    let settled = false;
+    let stopListeningForSkip = () => {};
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      signal?.removeEventListener('abort', handleAbort);
+      stopListeningForSkip();
+      server.close(callback);
       server.closeAllConnections();
+    };
+    const handleAbort = () => {
+      finish(() => reject(signal?.reason instanceof Error ? signal.reason : new Error('Login cancelled')));
+    };
+    const timeout = setTimeout(() => {
+      finish(() => reject(new Error('Login timed out (60s)')));
     }, 60000);
+
+    signal?.addEventListener('abort', handleAbort, { once: true });
+    if (signal?.aborted) {
+      handleAbort();
+      return;
+    }
+    if (options.skipOnInput) {
+      stopListeningForSkip = listenForSkipInput(() => finish(() => reject(new LoginCancelledError())));
+    }
 
     server.on('request', (req, res) => {
       const url = new URL(req.url!, `http://localhost:${port}`);
@@ -239,11 +310,7 @@ export async function login(): Promise<Credentials> {
         res.writeHead(200, { 'Content-Type': 'text/html', Connection: 'close' });
         res.end(callbackPage({ success: true }));
 
-        clearTimeout(timeout);
-        server.close(() => {
-          resolve({ token, refreshToken, user, organizationId: orgId });
-        });
-        server.closeAllConnections();
+        finish(() => resolve({ token, refreshToken, user, organizationId: orgId }));
       }
     });
   });
@@ -264,31 +331,36 @@ function isInteractive(): boolean {
   return Boolean(process.stdin.isTTY && process.stdout.isTTY) && !process.env.CI;
 }
 
-export async function getToken(): Promise<string> {
+export async function getToken(signal?: AbortSignal, options: LoginOptions = {}): Promise<string> {
+  signal?.throwIfAborted();
+
   // CI/CD headless path
   const envToken = process.env.MASTRA_API_TOKEN;
   if (envToken) return envToken;
 
   const creds = await loadCredentials();
+  signal?.throwIfAborted();
   if (!creds) {
     if (!isInteractive()) {
       throw new Error('Not logged in. Run `mastra auth login` interactively or set MASTRA_API_TOKEN.');
     }
-    const newCreds = await login();
+    const newCreds = await login(signal, options);
     return newCreds.token;
   }
 
   // Try a quick verify to see if the token is still valid.
-  if (await verifyToken(creds.token)) return creds.token;
+  if (await verifyToken(creds.token, signal)) return creds.token;
+  signal?.throwIfAborted();
 
   // Token might be expired — attempt refresh
-  const refreshed = await tryRefreshToken(creds);
+  const refreshed = await tryRefreshToken(creds, signal);
   if (refreshed) return refreshed;
+  signal?.throwIfAborted();
 
   if (!isInteractive()) {
     throw new Error('Session expired. Run `mastra auth login` interactively or set MASTRA_API_TOKEN.');
   }
-  const newCreds = await login();
+  const newCreds = await login(signal, options);
   return newCreds.token;
 }
 

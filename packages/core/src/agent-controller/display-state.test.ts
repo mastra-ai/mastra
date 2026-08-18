@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { ChunkFrom } from '../stream/types';
@@ -423,9 +423,19 @@ describe('tool lifecycle', () => {
       new RequestContext(),
     );
 
-    expect(result.message.content).toEqual([
-      { type: 'tool_call', id: 'call-1', name: 'lookupCustomer', args: { customerId: 'cus_123' } },
-      { type: 'tool_result', id: 'call-1', name: 'lookupCustomer', result: { displayName: 'Acme' }, isError: false },
+    // DB-native: tool call + result collapse into a single tool-invocation part.
+    expect(result.message.content.parts).toEqual([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          toolCallId: 'call-1',
+          toolName: 'lookupCustomer',
+          args: { customerId: 'cus_123' },
+          state: 'result',
+          result: { displayName: 'Acme' },
+          isError: false,
+        },
+      },
     ]);
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -515,9 +525,18 @@ describe('tool lifecycle', () => {
       new RequestContext(),
     );
 
-    expect(result.message.content).toEqual([
-      { type: 'tool_call', id: 'call-1', name: 'lookupCustomer', args: null },
-      { type: 'tool_result', id: 'call-1', name: 'lookupCustomer', result: null, isError: false },
+    expect(result.message.content.parts).toEqual([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          toolCallId: 'call-1',
+          toolName: 'lookupCustomer',
+          args: null,
+          state: 'result',
+          result: null,
+          isError: false,
+        },
+      },
     ]);
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -1561,30 +1580,46 @@ describe('display_state_changed emission', () => {
     expect(dscEvents.length).toBe(4);
   });
 
-  it('raw subscribe receives every source event and every display_state_changed event', () => {
+  it('raw subscribe receives every source event, with high-frequency snapshots coalesced', async () => {
+    emit(session, { type: 'tool_input_start', toolCallId: 't1', toolName: 'read_file' });
     for (let i = 0; i < 5; i++) {
-      emit(session, {
-        type: 'tool_input_delta',
-        toolCallId: 'missing',
-        argsTextDelta: String(i),
-      });
+      emit(session, { type: 'tool_input_delta', toolCallId: 't1', argsTextDelta: String(i) });
     }
 
     const eventTypes = events.map(event => event.type);
+    // Every source event still reaches the subscriber untouched.
     expect(eventTypes.filter(type => type === 'tool_input_delta')).toHaveLength(5);
-    expect(eventTypes.filter(type => type === 'display_state_changed')).toHaveLength(5);
-    expect(eventTypes).toEqual([
-      'tool_input_delta',
-      'display_state_changed',
-      'tool_input_delta',
-      'display_state_changed',
-      'tool_input_delta',
-      'display_state_changed',
-      'tool_input_delta',
-      'display_state_changed',
-      'tool_input_delta',
-      'display_state_changed',
-    ]);
+    // Snapshots are state-of-the-world, so the burst collapses instead of
+    // re-sending the whole display state once per delta.
+    expect(eventTypes.filter(type => type === 'display_state_changed').length).toBeLessThan(5);
+
+    // The trailing flush still delivers the final state.
+    await vi.waitFor(() => {
+      expect(events.at(-1)?.type).toBe('display_state_changed');
+    });
+    const final = events.at(-1) as Extract<AgentControllerEvent, { type: 'display_state_changed' }>;
+    expect(final.displayState.toolInputBuffers.get('t1')?.text).toBe('01234');
+  });
+
+  it('flushes a coalesced snapshot before the next non-coalescible event', () => {
+    emit(session, { type: 'tool_input_start', toolCallId: 't1', toolName: 'read_file' });
+    for (let i = 0; i < 5; i++) {
+      emit(session, { type: 'tool_input_delta', toolCallId: 't1', argsTextDelta: String(i) });
+    }
+    emit(session, { type: 'agent_end', reason: 'complete' });
+
+    // The snapshot withheld during the burst must land before agent_end, never
+    // after it, so a subscriber never sees stale state overwrite fresh state.
+    const agentEndIndex = events.findIndex(event => event.type === 'agent_end');
+    const lastBurstSnapshot = events
+      .slice(0, agentEndIndex)
+      .map(event => event.type)
+      .lastIndexOf('display_state_changed');
+    expect(lastBurstSnapshot).toBeGreaterThan(-1);
+
+    const beforeEnd = events[agentEndIndex - 1] as Extract<AgentControllerEvent, { type: 'display_state_changed' }>;
+    expect(beforeEnd.type).toBe('display_state_changed');
+    expect(beforeEnd.displayState.toolInputBuffers.get('t1')?.text).toBe('01234');
   });
 
   it('display_state_changed reflects state at time of each event', () => {

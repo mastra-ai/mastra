@@ -22,6 +22,7 @@ import type {
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
 import { subscribe } from 'inngest/realtime';
+import type { Realtime } from 'inngest/realtime';
 import type { InngestEngineType } from './types';
 
 export class InngestRun<
@@ -38,7 +39,8 @@ export class InngestRun<
   TState = unknown,
   TInput = unknown,
   TOutput = unknown,
-> extends Run<TEngineType, TSteps, TState, TInput, TOutput> {
+  TRequestContext = unknown,
+> extends Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext> {
   private inngest: Inngest;
   serializedStepGraph: SerializedStepFlowEntry[];
   #mastra: Mastra;
@@ -114,17 +116,15 @@ export class InngestRun<
       };
 
       // Start realtime subscription for workflow-finish event
-      let realtimeStreamPromise: ReturnType<typeof subscribe> | null = null;
+      let realtimeSubscriptionPromise: Promise<Realtime.Subscribe.CallbackSubscription> | null = null;
 
       const startRealtimeSubscription = async () => {
         try {
-          realtimeStreamPromise = subscribe(
-            {
-              channel: `workflow:${this.workflowId}:${this.runId}`,
-              topics: ['watch'],
-              app: this.inngest,
-            },
-            async (message: any) => {
+          realtimeSubscriptionPromise = subscribe({
+            channel: `workflow:${this.workflowId}:${this.runId}`,
+            topics: ['watch'],
+            app: this.inngest,
+            onMessage: async (message: any) => {
               if (resolved) return;
 
               const event = message.data;
@@ -156,14 +156,14 @@ export class InngestRun<
                 handleResult(result, 'realtime');
               }
             },
-          );
+          });
 
-          // Set unsubscribe immediately so cleanup can cancel even before await resolves
+          // Set unsubscribe immediately so cleanup can close the subscription even before setup resolves.
           unsubscribe = () => {
-            realtimeStreamPromise?.then(stream => stream.cancel().catch(() => {})).catch(() => {});
+            realtimeSubscriptionPromise?.then(subscription => subscription.close()).catch(() => {});
           };
 
-          await realtimeStreamPromise;
+          await realtimeSubscriptionPromise;
         } catch {
           // Realtime subscription failed - polling will still work as fallback
         }
@@ -285,7 +285,7 @@ export class InngestRun<
         : {
             initialState: TState;
           }) & {
-        requestContext?: RequestContext;
+        requestContext?: RequestContext<TRequestContext>;
         actor?: ActorSignal;
         outputWriter?: OutputWriter;
         tracingContext?: TracingContext;
@@ -321,7 +321,7 @@ export class InngestRun<
         : {
             initialState: TState;
           }) & {
-        requestContext?: RequestContext;
+        requestContext?: RequestContext<TRequestContext>;
         actor?: ActorSignal;
         tracingOptions?: TracingOptions;
         outputOptions?: {
@@ -392,7 +392,7 @@ export class InngestRun<
     perStep,
   }: {
     inputData?: TInput;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<TRequestContext>;
     actor?: ActorSignal;
     initialState?: TState;
     tracingOptions?: TracingOptions;
@@ -473,7 +473,7 @@ export class InngestRun<
       | string
       | string[];
     label?: string;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<TRequestContext>;
     actor?: ActorSignal;
     perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
@@ -505,7 +505,7 @@ export class InngestRun<
       | string
       | string[];
     label?: string;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<TRequestContext>;
     actor?: ActorSignal;
     perStep?: boolean;
   }): Promise<{ eventId: string }> {
@@ -568,13 +568,10 @@ export class InngestRun<
         name: `workflow.${this.workflowId}`,
         data: {
           inputData: resumeDataToUse,
-          initialState: snapshot?.value ?? {},
           runId: this.runId,
           workflowId: this.workflowId,
-          stepResults: snapshot?.context as any,
           resume: {
             steps,
-            stepResults: snapshot?.context as any,
             resumePayload: resumeDataToUse,
             resumePath: steps?.[0] ? (snapshot?.suspendedPaths?.[steps?.[0]] as any) : undefined,
           },
@@ -622,7 +619,7 @@ export class InngestRun<
       | string
       | string[];
     label?: string;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<TRequestContext>;
     actor?: ActorSignal;
     perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
@@ -656,7 +653,7 @@ export class InngestRun<
       | string
       | string[];
     label?: string;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<TRequestContext>;
     actor?: ActorSignal;
     perStep?: boolean;
   }): Promise<{ runId: string }> {
@@ -676,7 +673,7 @@ export class InngestRun<
       | string[];
     context?: TimeTravelContext<any, any, any, any>;
     nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<TRequestContext>;
     actor?: ActorSignal;
     tracingOptions?: TracingOptions;
     outputOptions?: {
@@ -708,7 +705,7 @@ export class InngestRun<
       | string[];
     context?: TimeTravelContext<any, any, any, any>;
     nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<TRequestContext>;
     actor?: ActorSignal;
     tracingOptions?: TracingOptions;
     outputOptions?: {
@@ -898,7 +895,7 @@ export class InngestRun<
     inputData,
     requestContext,
     actor,
-  }: { inputData?: TInput; requestContext?: RequestContext; actor?: ActorSignal } = {}): {
+  }: { inputData?: TInput; requestContext?: RequestContext<TRequestContext>; actor?: ActorSignal } = {}): {
     stream: ReadableStream<StreamEvent>;
     getWorkflowState: () => Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
   } {
@@ -969,7 +966,7 @@ export class InngestRun<
     perStep,
   }: {
     inputData?: TInput;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<TRequestContext>;
     actor?: ActorSignal;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
@@ -990,8 +987,8 @@ export class InngestRun<
     const self = this;
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
-        // TODO: fix this, watch doesn't have a type
-        const unwatch = self.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
+        const unwatch = self.watch(async (event: WorkflowStreamEvent) => {
+          const { type, from = ChunkFrom.WORKFLOW, payload } = event;
           controller.enqueue({
             type,
             runId: self.runId,
@@ -1080,7 +1077,7 @@ export class InngestRun<
       | string[];
     context?: TimeTravelContext<any, any, any, any>;
     nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<TRequestContext>;
     actor?: ActorSignal;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
@@ -1095,8 +1092,8 @@ export class InngestRun<
     const self = this;
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
-        // TODO: fix this, watch doesn't have a type
-        const unwatch = self.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
+        const unwatch = self.watch(async (event: WorkflowStreamEvent) => {
+          const { type, from = ChunkFrom.WORKFLOW, payload } = event;
           controller.enqueue({
             type,
             runId: self.runId,

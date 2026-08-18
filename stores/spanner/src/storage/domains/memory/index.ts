@@ -8,6 +8,7 @@ import {
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
+  validateStorageMetadataFilter,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
@@ -19,6 +20,7 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
+  StorageMetadataFilter,
   CreateIndexOptions,
 } from '@mastra/core/storage';
 import { SpannerDB, resolveSpannerConfig } from '../../db';
@@ -26,11 +28,52 @@ import type { SpannerDomainConfig } from '../../db';
 import { quoteIdent } from '../../db/utils';
 import { buildDateRangeFilter, transformFromSpannerRow } from '../utils';
 
+function buildSpannerMessageMetadataFilter(metadataFilter: StorageMetadataFilter | undefined): {
+  clauses: string[];
+  params: Record<string, unknown>;
+} {
+  if (!metadataFilter) return { clauses: [], params: {} };
+
+  const clauses: string[] = [];
+  const params: Record<string, unknown> = {};
+
+  Object.entries(metadataFilter).forEach(([key, value], index) => {
+    const path = `$.metadata.${key}`;
+    const valueExpr = `JSON_VALUE(SAFE.PARSE_JSON(content), '${path}')`;
+    const queryExpr = `JSON_QUERY(SAFE.PARSE_JSON(content), '${path}')`;
+    const typeExpr = `JSON_TYPE(${queryExpr})`;
+
+    if (value === null) {
+      clauses.push(`${queryExpr} = 'null'`);
+      return;
+    }
+
+    const paramName = `metadataValue${index}`;
+    if (typeof value === 'string') {
+      params[paramName] = value;
+      clauses.push(`${typeExpr} = 'string' AND ${valueExpr} = @${paramName}`);
+      return;
+    }
+
+    if (typeof value === 'number') {
+      params[paramName] = String(value);
+      clauses.push(`${typeExpr} = 'number' AND ${valueExpr} = @${paramName}`);
+      return;
+    }
+
+    params[paramName] = value ? 'true' : 'false';
+    clauses.push(`${typeExpr} = 'boolean' AND ${valueExpr} = @${paramName}`);
+  });
+
+  return { clauses, params };
+}
+
 /**
  * Spanner-backed storage for memory primitives: threads, messages, and resources
  * (the durable state surface used by `@mastra/memory`).
  */
 export class MemorySpanner extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate = true;
   private database: Database;
   private db: SpannerDB;
   private readonly skipDefaultIndexes?: boolean;
@@ -306,8 +349,8 @@ export class MemorySpanner extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const tableThreads = quoteIdent(TABLE_THREADS, 'table name');
     const now = new Date();
@@ -332,7 +375,7 @@ export class MemorySpanner extends MemoryStorage {
                 domain: ErrorDomain.STORAGE,
                 category: ErrorCategory.USER,
                 text: `Thread ${id} not found`,
-                details: { threadId: id, title },
+                details: { threadId: id, title: title ?? null },
               });
             }
             existingThread = this.formatThreadRow(row);
@@ -341,7 +384,7 @@ export class MemorySpanner extends MemoryStorage {
               tableName: TABLE_THREADS,
               keys: { id },
               data: {
-                title,
+                title: title ?? existingThread.title,
                 metadata: merged,
                 updatedAt: now,
               },
@@ -369,7 +412,7 @@ export class MemorySpanner extends MemoryStorage {
           id: createStorageErrorId('SPANNER', 'UPDATE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { threadId: id, title },
+          details: { threadId: id, title: title ?? null },
         },
         error,
       );
@@ -469,17 +512,32 @@ export class MemorySpanner extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      return { messages: [] };
+      throw mastraError;
     }
   }
 
-  /** Resolves the `include` clause: pinned messages plus their before/after windows. */
-  private async getIncludedMessages({ include }: { include: StorageListMessagesInput['include'] }) {
+  /**
+   * Resolves the `include` clause: pinned messages plus their before/after windows.
+   *
+   * @param include - Message ids to pin, each with an optional before/after window.
+   * @param resourceId - When set, restricts both the pinned messages and their context
+   * to that resource so an id from another resource returns nothing.
+   */
+  private async getIncludedMessages({
+    include,
+    resourceId,
+  }: {
+    include: StorageListMessagesInput['include'];
+    resourceId?: string;
+  }) {
     if (!include || include.length === 0) return null;
+
+    const resourceCondition = resourceId ? ` AND ${quoteIdent('resourceId', 'column name')} = @scopedResourceId` : '';
+    const resourceParams = resourceId ? { scopedResourceId: resourceId } : {};
 
     const ids = include.map(i => i.id);
     const placeholders: string[] = [];
-    const idParams: Record<string, any> = {};
+    const idParams: Record<string, any> = { ...resourceParams };
     ids.forEach((id, i) => {
       const name = `tid${i}`;
       placeholders.push(`@${name}`);
@@ -487,7 +545,7 @@ export class MemorySpanner extends MemoryStorage {
     });
     const targetsSql = `SELECT id, content, role, type, ${quoteIdent('createdAt', 'column name')}, ${quoteIdent('thread_id', 'column name')} AS threadId, ${quoteIdent('resourceId', 'column name')}
                         FROM ${quoteIdent(TABLE_MESSAGES, 'table name')}
-                        WHERE id IN (${placeholders.join(', ')})`;
+                        WHERE id IN (${placeholders.join(', ')})${resourceCondition}`;
     const [targetRows] = await this.database.run({ sql: targetsSql, params: idParams, json: true });
     const targetsById = new Map<string, Record<string, any>>();
     for (const t of targetRows as Array<Record<string, any>>) targetsById.set(t.id as string, t);
@@ -513,10 +571,10 @@ export class MemorySpanner extends MemoryStorage {
           sql: `SELECT id, content, role, type, ${quoteIdent('createdAt', 'column name')}, ${quoteIdent('thread_id', 'column name')} AS threadId, ${quoteIdent('resourceId', 'column name')}
                 FROM ${quoteIdent(TABLE_MESSAGES, 'table name')}
                 WHERE ${quoteIdent('thread_id', 'column name')} = @threadId
-                  AND (${quoteIdent('createdAt', 'column name')} < @ts OR (${quoteIdent('createdAt', 'column name')} = @ts AND id < @id))
+                  AND (${quoteIdent('createdAt', 'column name')} < @ts OR (${quoteIdent('createdAt', 'column name')} = @ts AND id < @id))${resourceCondition}
                 ORDER BY ${quoteIdent('createdAt', 'column name')} DESC, id DESC
                 LIMIT @lim`,
-          params: { threadId, ts: targetCreatedAt, id: target.id, lim: withPreviousMessages },
+          params: { threadId, ts: targetCreatedAt, id: target.id, lim: withPreviousMessages, ...resourceParams },
           json: true,
         });
         for (const row of (prev as Array<Record<string, any>>).reverse()) {
@@ -532,10 +590,10 @@ export class MemorySpanner extends MemoryStorage {
           sql: `SELECT id, content, role, type, ${quoteIdent('createdAt', 'column name')}, ${quoteIdent('thread_id', 'column name')} AS threadId, ${quoteIdent('resourceId', 'column name')}
                 FROM ${quoteIdent(TABLE_MESSAGES, 'table name')}
                 WHERE ${quoteIdent('thread_id', 'column name')} = @threadId
-                  AND (${quoteIdent('createdAt', 'column name')} > @ts OR (${quoteIdent('createdAt', 'column name')} = @ts AND id > @id))
+                  AND (${quoteIdent('createdAt', 'column name')} > @ts OR (${quoteIdent('createdAt', 'column name')} = @ts AND id > @id))${resourceCondition}
                 ORDER BY ${quoteIdent('createdAt', 'column name')} ASC, id ASC
                 LIMIT @lim`,
-          params: { threadId, ts: targetCreatedAt, id: target.id, lim: withNextMessages },
+          params: { threadId, ts: targetCreatedAt, id: target.id, lim: withNextMessages, ...resourceParams },
           json: true,
         });
         for (const row of next as Array<Record<string, any>>) {
@@ -553,6 +611,7 @@ export class MemorySpanner extends MemoryStorage {
   /** Paginated message listing for a thread, with optional pinned-include and date-range filters. */
   async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
     const threadIds = Array.isArray(threadId) ? threadId : [threadId];
     if (threadIds.length === 0 || threadIds.some(id => !id || !id.trim())) {
       throw new MastraError(
@@ -584,10 +643,16 @@ export class MemorySpanner extends MemoryStorage {
         ...buildDateRangeFilter(filter?.dateRange, 'createdAt'),
       };
       const {
-        sql: whereSql,
+        sql: preparedWhereSql,
         params: whereParams,
         types: whereTypes,
       } = this.db.prepareWhereClause(filters, TABLE_MESSAGES);
+      const metadataWhere = buildSpannerMessageMetadataFilter(metadataFilter);
+      const whereSql = [preparedWhereSql, ...metadataWhere.clauses].reduce((sql, clause) => {
+        if (!clause) return sql;
+        return sql ? `${sql} AND ${clause}` : ` WHERE ${clause}`;
+      }, '');
+      Object.assign(whereParams, metadataWhere.params);
 
       if (perPage === 0 && (!include || include.length === 0)) {
         return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
@@ -596,7 +661,7 @@ export class MemorySpanner extends MemoryStorage {
       // perPage=0 with includes: skip COUNT and base queries; only fetch the
       // included messages.
       if (perPage === 0 && include && include.length > 0) {
-        const includeMessages = (await this.getIncludedMessages({ include })) ?? [];
+        const includeMessages = (await this.getIncludedMessages({ include, resourceId })) ?? [];
         const parsedIncludes = this.parseAndFormatMessages(includeMessages, 'v2') as MastraDBMessage[];
         const dirMul = direction === 'ASC' ? 1 : -1;
         const sortedIncludes = parsedIncludes.sort((a, b) => {
@@ -654,6 +719,7 @@ export class MemorySpanner extends MemoryStorage {
       const messages: Record<string, any>[] = baseRows.map(r =>
         transformFromSpannerRow<Record<string, any>>({ tableName: TABLE_MESSAGES, row: r }),
       );
+      const primaryPageCount = messages.length;
 
       if (total === 0 && messages.length === 0 && (!include || include.length === 0)) {
         return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
@@ -662,7 +728,7 @@ export class MemorySpanner extends MemoryStorage {
       // Includes
       if (include?.length) {
         const seen = new Set(messages.map(m => m.id));
-        const includeMessages = await this.getIncludedMessages({ include });
+        const includeMessages = await this.getIncludedMessages({ include, resourceId });
         includeMessages?.forEach(msg => {
           if (!seen.has(msg.id)) {
             messages.push(msg);
@@ -687,17 +753,14 @@ export class MemorySpanner extends MemoryStorage {
         return a.id.localeCompare(b.id) * mult;
       });
 
-      // Counting `include`d rows toward "all returned" is intentional: the
-      // shared storage contract treats hasMore=false once the caller has the
-      // entire thread in hand, regardless of whether the base page or the
-      // include path delivered the trailing messages. The shared
-      // `should respect pagination when using include` test pins this.
       const threadIdSet = new Set(threadIds);
       const returnedThreadMessageIds = new Set(
         finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).map(m => m.id),
       );
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore = perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
+      const hasMore = metadataFilter
+        ? perPageInput !== false && offset + primaryPageCount < total
+        : perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
 
       return {
         messages: finalMessages,

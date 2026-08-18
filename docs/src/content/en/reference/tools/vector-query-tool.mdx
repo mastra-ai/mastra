@@ -12,7 +12,7 @@ import TabItem from "@theme/TabItem";
 
 # createVectorQueryTool()
 
-The `createVectorQueryTool()` function creates a tool for semantic search over vector stores. It supports filtering, reranking, database-specific configurations, and integrates with various vector store backends.
+The `createVectorQueryTool()` function creates a tool for semantic search over vector stores. It supports filtering, reranking, database-specific configurations, and integrates with vector store backends.
 
 ## Basic usage
 
@@ -240,7 +240,7 @@ time.
     name: 'providerOptions',
     type: 'Record<string, Record<string, any>>',
     description:
-      'Provider-specific options for the embedding model (e.g., outputDimensionality). **Important**: Only works with AI SDK EmbeddingModelV2 models. For V1 models, configure options when creating the model itself.',
+      'Provider-specific options for the embedding model (e.g., outputDimensionality). Only works with AI SDK EmbeddingModelV2 models. For V1 models, configure options when creating the model itself.',
     isOptional: true,
   },
   {
@@ -374,7 +374,7 @@ This example shows how to customize the tool description for a specific use case
 
 ## Database-specific configuration examples
 
-The `databaseConfig` parameter allows you to leverage unique features and optimizations specific to each vector database. These configurations are automatically applied during query execution.
+The `databaseConfig` parameter allows you to use features and optimizations specific to each vector database. These configurations are automatically applied during query execution.
 
 <Tabs>
   <TabItem value="pinecone" label="Pinecone">
@@ -462,6 +462,28 @@ The `databaseConfig` parameter allows you to leverage unique features and optimi
     - **Use Cases**: Advanced filtering, content-based search
   </TabItem>
 
+  <TabItem value="turbopuffer" label="Turbopuffer">
+    ### Turbopuffer Configuration
+
+    ```typescript
+    const turbopufferQueryTool = createVectorQueryTool({
+      vectorStoreName: 'turbopuffer',
+      indexName: 'docs',
+      model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
+      databaseConfig: {
+        turbopuffer: {
+          consistency: 'eventual', // Lower latency, recently written data may not be visible yet
+        },
+      },
+    })
+    ```
+
+    **Turbopuffer Features:**
+
+    - **consistency**: Choose between `strong` (default, read-your-writes) and `eventual` (lower latency)
+    - **Use Cases**: Latency-sensitive queries where slightly stale data is acceptable
+  </TabItem>
+
   <TabItem value="multiple-configs" label="Multiple Configs">
     ### Multiple Database Configurations
 
@@ -525,7 +547,7 @@ const response = await agent.generate('Find information about deployment', {
 })
 ```
 
-This approach allows you to:
+Runtime configuration supports these use cases:
 
 - Switch between environments (dev/staging/prod)
 - Adjust performance parameters based on load
@@ -647,7 +669,7 @@ const result = await vectorQueryTool.execute(
 )
 ```
 
-This pattern is similar to how `Agent.memory` supports dynamic configuration and enables:
+This pattern is similar to how `Agent.memory` supports runtime-defined configuration and enables:
 
 - **Schema isolation**: Each tenant's data in separate PostgreSQL schemas
 - **Database isolation**: Route to different database instances per tenant

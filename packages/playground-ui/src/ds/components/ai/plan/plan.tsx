@@ -217,8 +217,8 @@ export function PlanContent({ children, className, style, ...props }: PlanConten
       style={!isExpanded ? { ...style, maxHeight: collapsedHeight } : style}
       {...props}
     >
-      <div className="text-neutral6 [&_code]:bg-surface4 [&_h1]:text-header-md [&_h1]:leading-header-md [&_h2]:text-header-sm [&_h2]:leading-header-sm [&_h3]:text-ui-lg [&_h3]:leading-ui-lg [&_p]:text-ui-md [&_p]:leading-6">
-        <MarkdownRenderer>{children}</MarkdownRenderer>
+      <div className="[&_code]:bg-surface4 [&_h1]:text-header-md [&_h1]:leading-header-md [&_h2]:text-header-sm [&_h2]:leading-header-sm [&_h3]:text-ui-lg [&_h3]:leading-ui-lg [&_p]:text-ui-md [&_p]:leading-6">
+        <MarkdownRenderer className="text-neutral6">{children}</MarkdownRenderer>
       </div>
     </div>
   );
@@ -231,10 +231,10 @@ export interface PlanFileProps extends Omit<ComponentProps<'div'>, 'children'> {
 export function PlanFile({ children, className, ...props }: PlanFileProps) {
   return (
     <div data-slot="plan-file" className={className} {...props}>
-      <Txt as="p" variant="ui-xs" className="mb-2 text-neutral3">
+      <Txt as="p" variant="ui-xs" className="text-neutral3 mb-2">
         Plan file
       </Txt>
-      <Txt as="p" variant="ui-sm" className="font-mono break-all text-neutral6">
+      <Txt as="p" variant="ui-sm" className="text-neutral6 font-mono break-all">
         {children}
       </Txt>
     </div>
@@ -272,14 +272,15 @@ export type PlanExpandButtonProps = Omit<
   'aria-label' | 'children' | 'onClick' | 'size' | 'type' | 'variant'
 >;
 
-export function PlanExpandButton(props: PlanExpandButtonProps) {
+export function PlanExpandButton({ className, ...props }: PlanExpandButtonProps) {
   const { isExpanded, toggleExpanded } = usePlanContext();
 
   return (
     <Button
       {...props}
+      className={cn('shrink-0 whitespace-nowrap', className)}
       type="button"
-      variant="primary"
+      variant="default"
       size="sm"
       aria-label={isExpanded ? 'Collapse plan' : 'Expand plan'}
       onClick={toggleExpanded}

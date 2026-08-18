@@ -405,6 +405,104 @@ user-invocable: false
     });
   });
 
+  describe('registerLocationAlias()', () => {
+    it('should resolve a registered alias via get() and has()', async () => {
+      const filesystem = createMockFilesystem({
+        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+      });
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills'],
+      });
+
+      skills.registerLocationAlias('/mnt/bundle/test-skill/SKILL.md', 'skills/test-skill');
+
+      const result = await skills.get('/mnt/bundle/test-skill/SKILL.md');
+      expect(result?.name).toBe('test-skill');
+      expect(await skills.has('/mnt/bundle/test-skill/SKILL.md')).toBe(true);
+    });
+
+    it('should resolve an alias whether or not the /SKILL.md suffix is preserved', async () => {
+      const filesystem = createMockFilesystem({
+        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+      });
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills'],
+      });
+
+      skills.registerLocationAlias('/mnt/bundle/test-skill/SKILL.md', 'skills/test-skill');
+
+      // Model stripped the suffix from the advertised location
+      expect((await skills.get('/mnt/bundle/test-skill'))?.name).toBe('test-skill');
+
+      // Alias registered without suffix, model appends it
+      skills.registerLocationAlias('/opt/skills/test-skill', 'skills/test-skill');
+      expect((await skills.get('/opt/skills/test-skill/SKILL.md'))?.name).toBe('test-skill');
+    });
+
+    it('should let canonical names and paths win over aliases', async () => {
+      const otherSkillMd = VALID_SKILL_MD.replace('name: test-skill', 'name: other-skill');
+      const filesystem = createMockFilesystem({
+        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        'skills/other-skill/SKILL.md': otherSkillMd,
+      });
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills'],
+      });
+
+      // Alias collides with a real skill name — the real skill must win
+      skills.registerLocationAlias('other-skill', 'skills/test-skill');
+      expect((await skills.get('other-skill'))?.name).toBe('other-skill');
+
+      // Alias collides with a real skill path — the real skill must win
+      skills.registerLocationAlias('skills/other-skill', 'skills/test-skill');
+      expect((await skills.get('skills/other-skill'))?.name).toBe('other-skill');
+    });
+
+    it('should return null when an alias points at a path that no longer exists', async () => {
+      const filesystem = createMockFilesystem({
+        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+      });
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills'],
+      });
+
+      skills.registerLocationAlias('/mnt/bundle/gone/SKILL.md', 'skills/gone');
+
+      expect(await skills.get('/mnt/bundle/gone/SKILL.md')).toBeNull();
+      expect(await skills.has('/mnt/bundle/gone/SKILL.md')).toBe(false);
+    });
+
+    it('should round-trip SkillsProcessor formatLocation overrides back to the skill', async () => {
+      const { SkillsProcessor } = await import('../../processors/processors/skills');
+      const filesystem = createMockFilesystem({
+        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+      });
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills'],
+      });
+
+      const processor = new SkillsProcessor({
+        skills,
+        formatLocation: skill => `/mnt/bundle/${skill.name}/SKILL.md`,
+      });
+      const addSystem = vi.fn();
+      await processor.processInputStep({ messageList: { addSystem }, tools: {} } as any);
+
+      // The advertised location is the remapped one...
+      const contents = addSystem.mock.calls.map(c => c[0].content).join('\n');
+      expect(contents).toContain('/mnt/bundle/test-skill/SKILL.md');
+
+      // ...and it resolves back to the skill via get() (what the skill/skill_read tools call)
+      const resolved = await skills.get('/mnt/bundle/test-skill/SKILL.md');
+      expect(resolved?.name).toBe('test-skill');
+    });
+  });
+
   describe('refresh()', () => {
     it('should re-discover skills after refresh', async () => {
       const filesystem = createMockFilesystem({
@@ -861,6 +959,82 @@ This skill helps with endpoint design and API patterns.`;
         call => call[0] === 'skills',
       );
       expect(readdirCalls.length).toBe(1);
+    });
+  });
+
+  describe('request-scoped dynamic resolvers', () => {
+    it('keeps concurrent requests pinned to their own skill paths', async () => {
+      const filesystem = createMockFilesystem({
+        'tenant-a/alpha/SKILL.md': `---\nname: alpha\ndescription: Alpha skill\n---\n\nAlpha-only instructions`,
+        'tenant-b/beta/SKILL.md': `---\nname: beta\ndescription: Beta skill\n---\n\nBeta-only instructions`,
+      });
+      const searchEngine = createMockSearchEngine();
+      const requestA = {};
+      const requestB = {};
+      const resolver = vi.fn(async ({ requestContext }) => (requestContext === requestA ? ['tenant-a'] : ['tenant-b']));
+      const skills = new WorkspaceSkillsImpl({ source: filesystem, skills: resolver, searchEngine });
+
+      const [scopedA, scopedB] = await Promise.all([
+        skills.getScoped({ requestContext: requestA }),
+        skills.getScoped({ requestContext: requestB }),
+      ]);
+      const [listA, listB] = await Promise.all([scopedA.list(), scopedB.list()]);
+
+      expect(listA.map(skill => skill.name)).toEqual(['alpha']);
+      expect(listB.map(skill => skill.name)).toEqual(['beta']);
+      expect(await scopedA.get('beta')).toBeNull();
+      expect(await scopedB.get('alpha')).toBeNull();
+      expect((await scopedA.search('Beta-only')).map(result => result.skill.name)).toEqual([]);
+      expect((await scopedB.search('Alpha-only')).map(result => result.skill.name)).toEqual([]);
+
+      expect(await skills.getScoped({ requestContext: requestA })).toBe(scopedA);
+      expect(await skills.getScoped({ requestContext: requestB })).toBe(scopedB);
+      expect(resolver).toHaveBeenCalledTimes(2);
+    });
+
+    it('prevents foreign search documents from crowding out scoped results', async () => {
+      const filesystem = createMockFilesystem({
+        'tenant-a/alpha/SKILL.md': `---\nname: alpha\ndescription: Alpha skill\n---\n\nShared search term`,
+        'tenant-b/beta/SKILL.md': `---\nname: beta\ndescription: Beta skill\n---\n\nShared search term`,
+      });
+      const indexedDocs: IndexDocument[] = [];
+      const searchEngine: MockSearchEngine = {
+        index: vi.fn(async doc => {
+          indexedDocs.push(doc);
+        }),
+        search: vi.fn(async (_query, options) =>
+          indexedDocs
+            .map(doc => ({
+              id: doc.id,
+              content: doc.content,
+              score: doc.metadata?.skillPath === 'tenant-b/beta' ? 2 : 1,
+              metadata: doc.metadata,
+            }))
+            .sort((a, b) => b.score - a.score)
+            .slice(0, options?.topK ?? 10),
+        ),
+        clear: vi.fn(),
+        canBM25: true,
+        canVector: false,
+        canHybrid: false,
+      };
+      const requestA = {};
+      const requestB = {};
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: async ({ requestContext }) => (requestContext === requestA ? ['tenant-a'] : ['tenant-b']),
+        searchEngine,
+      });
+
+      const [scopedA, scopedB] = await Promise.all([
+        skills.getScoped({ requestContext: requestA }),
+        skills.getScoped({ requestContext: requestB }),
+      ]);
+      await Promise.all([scopedA.list(), scopedB.list()]);
+
+      expect((await scopedA.search('Shared', { topK: 1 })).map(result => result.skillName)).toEqual(['alpha']);
+      expect((await scopedB.search('Shared', { topK: 1 })).map(result => result.skillName)).toEqual(['beta']);
+      expect(new Set(indexedDocs.map(doc => doc.id)).size).toBe(2);
     });
   });
 

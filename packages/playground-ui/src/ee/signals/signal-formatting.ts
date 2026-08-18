@@ -1,0 +1,89 @@
+import type { TraceSignalName } from './types';
+
+/** Order signals are produced during an interaction. */
+export const SIGNAL_PROCESSING_ORDER: TraceSignalName[] = ['goal', 'sentiment', 'behavior', 'outcome'];
+
+export function formatSignalName(signalName: TraceSignalName) {
+  return signalName.charAt(0).toUpperCase() + signalName.slice(1);
+}
+
+/** Plain-language meaning of each trace signal, shown wherever a signal heading appears. */
+export const SIGNAL_DESCRIPTIONS: Record<TraceSignalName, string> = {
+  goal: 'What the user wanted from the interaction.',
+  sentiment: 'The tone the user expressed during the interaction.',
+  behavior: 'What the agent did in response.',
+  outcome: 'How the interaction ended.',
+};
+
+function isTraceSignalName(value: string): value is TraceSignalName {
+  return Object.prototype.hasOwnProperty.call(SIGNAL_DESCRIPTIONS, value);
+}
+
+/** Signal description lookup for callers that only hold an untyped column id. */
+export function getSignalDescription(signalName: string): string | undefined {
+  return isTraceSignalName(signalName) ? SIGNAL_DESCRIPTIONS[signalName] : undefined;
+}
+
+export function traceLabel(count: number) {
+  return `${count} ${count === 1 ? 'trace' : 'traces'}`;
+}
+
+export function themeLabel(count: number) {
+  return `${count} ${count === 1 ? 'theme' : 'themes'}`;
+}
+
+/** "28 of 70 traces in this snapshot (40%)" — replaces the old "Stage share" stat. */
+export function shareSentence(traceCount: number, coverage: number) {
+  if (coverage <= 0) return `${traceLabel(traceCount)} in this snapshot`;
+  const stageTotal = Math.round(traceCount / coverage);
+  return `${traceCount} of ${stageTotal} traces in this snapshot (${Math.round(coverage * 100)}%)`;
+}
+
+// Hoisted: TimelineTrack formats every tick on each render.
+const SNAPSHOT_CUTOFF_FORMAT = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+  timeZone: 'UTC',
+});
+
+const SNAPSHOT_DATE_FORMAT = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+  timeZone: 'UTC',
+});
+
+export function formatSnapshotDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return SNAPSHOT_DATE_FORMAT.format(date);
+}
+
+export function formatSnapshotCutoff(cutoffAt: string) {
+  const date = new Date(cutoffAt);
+  // Fall back to the raw server value instead of letting Intl throw on Invalid Date.
+  if (Number.isNaN(date.getTime())) return cutoffAt;
+  return SNAPSHOT_CUTOFF_FORMAT.format(date);
+}
+
+export function formatSnapshotWindow(startedAt: string, endedAt: string) {
+  const start = new Date(startedAt);
+  const end = new Date(endedAt);
+  // Fall back to the raw server values instead of letting Intl throw on Invalid Date.
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return `${startedAt}–${endedAt}`;
+  const monthDay = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  const day = new Intl.DateTimeFormat('en-US', { day: 'numeric', timeZone: 'UTC' });
+  const year = new Intl.DateTimeFormat('en-US', { year: 'numeric', timeZone: 'UTC' });
+  const sameYear = start.getUTCFullYear() === end.getUTCFullYear();
+  const sameMonth = sameYear && start.getUTCMonth() === end.getUTCMonth();
+  const sameDay = sameMonth && start.getUTCDate() === end.getUTCDate();
+
+  if (sameDay) return `${monthDay.format(start)}, ${year.format(start)}`;
+  if (sameMonth) return `${monthDay.format(start)}–${day.format(end)}, ${year.format(end)}`;
+  if (sameYear) return `${monthDay.format(start)}–${monthDay.format(end)}, ${year.format(end)}`;
+  return `${monthDay.format(start)}, ${year.format(start)}–${monthDay.format(end)}, ${year.format(end)}`;
+}

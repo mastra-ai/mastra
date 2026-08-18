@@ -1,0 +1,52 @@
+{
+  "attachment": [
+    "minimax/minimax-m3",
+    "moonshotai/kimi-k2.5",
+    "moonshotai/kimi-k2.6",
+    "moonshotai/kimi-k2.7-code",
+    "moonshotai/kimi-k3",
+    "qwen/qwen3-vl-235b-a22b-instruct",
+    "qwen/qwen3.5-122b-a10b",
+    "qwen/qwen3.5-9b",
+    "z-ai/glm-5v-turbo"
+  ],
+  "temperature": [
+    "deepseek/deepseek-chat-v3.1",
+    "deepseek/deepseek-r1-0528",
+    "deepseek/deepseek-v3.2",
+    "deepseek/deepseek-v4-flash",
+    "deepseek/deepseek-v4-flash-0731",
+    "deepseek/deepseek-v4-pro",
+    "minimax/minimax-m2.5",
+    "minimax/minimax-m3",
+    "moonshotai/kimi-k2.6",
+    "nvidia/nemotron-3-super-120b-a12b",
+    "openai/gpt-oss-120b",
+    "qwen/qwen3-235b-a22b-2507",
+    "qwen/qwen3-coder-30b-a3b-instruct",
+    "qwen/qwen3-vl-235b-a22b-instruct",
+    "qwen/qwen3.5-122b-a10b",
+    "qwen/qwen3.5-9b",
+    "z-ai/glm-4.7",
+    "z-ai/glm-5",
+    "z-ai/glm-5-turbo",
+    "z-ai/glm-5.1",
+    "z-ai/glm-5.2",
+    "z-ai/glm-5v-turbo"
+  ],
+  "structuredOutput": [
+    "deepseek/deepseek-v4-flash",
+    "deepseek/deepseek-v4-flash-0731",
+    "deepseek/deepseek-v4-pro",
+    "moonshotai/kimi-k2.5",
+    "moonshotai/kimi-k2.6",
+    "moonshotai/kimi-k2.7-code",
+    "moonshotai/kimi-k3",
+    "openai/gpt-oss-120b",
+    "qwen/qwen3.5-122b-a10b",
+    "qwen/qwen3.5-9b",
+    "z-ai/glm-5-turbo",
+    "z-ai/glm-5.1",
+    "z-ai/glm-5.2"
+  ]
+}

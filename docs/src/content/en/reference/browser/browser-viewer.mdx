@@ -7,7 +7,7 @@ packages:
 
 # BrowserViewer
 
-The `BrowserViewer` class provides browser automation for CLI-based tools. It launches Chrome via Playwright, exposes a Chrome DevTools Protocol (CDP) URL, and automatically injects it into CLI commands run through workspace tools.
+The `BrowserViewer` class provides browser automation for CLI-based tools. It launches Chrome through Playwright and exposes a Chrome DevTools Protocol (CDP) URL. It automatically injects that URL into CLI commands run through workspace tools.
 
 Use `BrowserViewer` when your agent drives a browser through a CLI tool like `browser-use`, `agent-browser`, or `browse`. For SDK-based browser automation, use [`AgentBrowser`](/reference/browser/agent-browser) or [`StagehandBrowser`](/reference/browser/stagehand-browser).
 
@@ -271,7 +271,7 @@ await viewer.injectKeyboardEvent({
 
 ## Supported CLIs
 
-Each CLI must be installed separately. Each also publishes a [skill](/docs/workspace/skills) that teaches the agent its commands and workflows. When a CLI command runs through `workspace_execute_command`, Mastra detects it and injects the CDP URL automatically using the correct flag.
+Each CLI must be installed separately. Each also publishes a [skill](/docs/sandbox/skills) that teaches the agent its commands and workflows. When a CLI command runs through `workspace_execute_command`, Mastra detects it and injects the CDP URL automatically using the correct flag.
 
 Unlike SDK providers, `BrowserViewer` doesn't provide agent tools. The agent uses CLI commands through `workspace_execute_command` instead.
 
@@ -304,6 +304,6 @@ browse skills install
 
 ## Related
 
-- [BrowserViewer guide](/docs/browser/browser-viewer) — setup and usage walkthrough
-- [MastraBrowser](/reference/browser/mastra-browser) — base class API reference
-- [Workspace overview](/docs/workspace/overview) — workspace configuration
+- [BrowserViewer guide](/integrations/browsers/browser-viewer): Setup and usage walkthrough
+- [MastraBrowser](/reference/browser/mastra-browser): Base class API reference
+- [Sandbox](/docs/sandbox/overview): Workspace configuration

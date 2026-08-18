@@ -1,5 +1,5 @@
-import { execSync } from 'child_process';
-import fs from 'fs';
+import { execSync } from 'node:child_process';
+import fs from 'node:fs';
 
 const matcherCache = new Map();
 const BASE_REF = process.env.BASE_REF || 'origin/main';

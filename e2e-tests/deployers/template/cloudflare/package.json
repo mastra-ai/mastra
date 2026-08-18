@@ -28,6 +28,6 @@
     "@types/node": "22.20.1",
     "mastra": "deployers-e2e-test",
     "wrangler": "^4.110.0",
-    "typescript": "^6.0.3"
+    "typescript": "^7.0.2"
   }
 }

@@ -3,7 +3,6 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import type { JsonSchema } from '@mastra/schema-compat/json-to-zod';
-import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
 import { z } from 'zod';
@@ -11,7 +10,7 @@ import { McpAppViewer } from './mcp-app-viewer';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useExecuteMCPTool, useMCPServerTool } from '@/domains/mcps/hooks/use-mcp-server-tool';
 import ToolExecutor from '@/domains/tools/components/ToolExecutor';
-import { resolveSerializedZodOutput } from '@/lib/form/utils';
+import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 
 export interface MCPToolPanelProps {
   toolId: string;
@@ -75,7 +74,7 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
   if (isLoading) {
     return (
       <div className="p-6">
-        <Skeleton className="h-8 w-48 mb-4" />
+        <Skeleton className="mb-4 h-8 w-48" />
         <Skeleton className="h-32 w-full" />
       </div>
     );
@@ -85,7 +84,7 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
 
   if (!tool)
     return (
-      <div className="py-12 text-center px-6">
+      <div className="px-6 py-12 text-center">
         <Txt variant="header-md" className="text-neutral3">
           Tool not found
         </Txt>
@@ -94,7 +93,7 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
 
   if (!canExecuteTool)
     return (
-      <div className="py-12 text-center px-6">
+      <div className="px-6 py-12 text-center">
         <Txt variant="ui-sm" className="text-neutral3">
           You don't have permission to execute tools.
         </Txt>
@@ -103,7 +102,7 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
 
   let zodInputSchema;
   try {
-    zodInputSchema = resolveSerializedZodOutput(jsonSchemaToZod(tool.inputSchema as unknown as JsonSchema));
+    zodInputSchema = jsonSchemaToZodRuntime(tool.inputSchema as unknown as JsonSchema);
   } catch (e) {
     console.error('Error processing input schema:', e);
     toast.error('Failed to process tool input schema.');
@@ -113,7 +112,7 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
   return (
     <div className="flex flex-col gap-4">
       {appHtml && (
-        <div className="border-b border-border1 p-4">
+        <div className="border-border1 border-b p-4">
           <McpAppViewer html={appHtml} toolName={tool.name ?? tool.id} onToolCall={handleToolCall} />
         </div>
       )}

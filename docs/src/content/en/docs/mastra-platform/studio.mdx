@@ -8,7 +8,7 @@ import StepItem from "@site/src/components/StepItem";
 
 # Studio on Mastra platform
 
-Studio on Mastra platform is a hosted visual workspace for testing agents, running workflows, and inspecting traces. Use it when you want to share Studio with your team without hosting the Studio UI yourself.
+Studio on Mastra platform is a hosted visual workspace for testing agents and running workflows, plus inspecting traces. Use it when you want to share Studio with your team without hosting the Studio UI yourself.
 
 You can deploy Studio from the CLI as shown below, or link a GitHub repository for push-to-deploy. See the [GitHub integration](/docs/mastra-platform/github) for the repository-linked flow.
 
@@ -46,7 +46,7 @@ On your first deploy, the CLI prompts you to create a new project or select an e
 
 ## How deploy works
 
-The `mastra studio deploy` command builds your project, compiles `src/mastra/` into `.mastra/output`, packages the output as an artifact ZIP, uploads it, and deploys it to a cloud sandbox.
+The `mastra studio deploy` command builds your project and compiles `src/mastra/` into `.mastra/output`. It packages that output as an artifact ZIP, then uploads and deploys it to a cloud sandbox.
 
 A deploy transitions through **queued → uploading → starting → running** or **failed** if something goes wrong. If a sandbox is already running for your project, the platform updates it in place with no downtime. Otherwise, it creates a fresh sandbox. Your instance URL is assigned per project slug and remains stable across deploys.
 

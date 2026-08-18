@@ -16,9 +16,7 @@ Lists experiments (runs) for this dataset with optional filters and pagination. 
 ```typescript
 import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({
-  /* storage config */
-})
+const mastra = new Mastra({/* storage config */})
 
 const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 

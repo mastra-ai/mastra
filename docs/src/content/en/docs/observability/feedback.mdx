@@ -39,6 +39,22 @@ await mastra.observability.addFeedback({
 })
 ```
 
+## Find the trace for a message
+
+Feedback is usually collected against a message a user has already read, so you need the `traceId` for that message. Assistant messages carry it in `content.metadata`, both in the stream result and when the message is recalled later from memory:
+
+```typescript title="src/mastra/message-trace.ts"
+const agent = mastra.getAgent('weatherAgent')
+const memory = await agent.getMemory()
+
+const { messages } = await memory!.recall({ threadId, perPage: false })
+
+const message = messages.find(m => m.id === messageId)
+const traceId = message?.content.metadata?.traceId
+```
+
+The value is the same trace the run reports as `traceId` on its result, so feedback collected at generation time and feedback collected later against a stored message anchor to the same trace. Messages produced while tracing is disabled have no `traceId`.
+
 ## Create feedback
 
 Every `createFeedback()` requires `feedbackType` and `value`. Add `traceId` or `spanId` when the feedback should be anchored to a trace or a specific span. Use `feedbackSource` as optional string metadata, such as `user`, `qa`, `studio`, or `system`.
@@ -132,6 +148,10 @@ const ratingsOverTime = await observability!.getFeedbackTimeSeries({
 ```
 
 See the [feedback reference](/reference/observability/feedback) for all fields, filters, return types, and percentile query parameters.
+
+## Export feedback to external platforms
+
+Feedback flows through the observability event bus, so exporters that support feedback forward it automatically. The [PostHog exporter](/reference/observability/tracing/exporters/posthog#feedback-export) sends feedback as native `$ai_feedback` events that appear on the linked trace in PostHog.
 
 ## Related
 

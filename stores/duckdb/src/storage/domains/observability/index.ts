@@ -202,10 +202,10 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
 
   override getFeatures() {
     if (!deltaPollingFeatureEnabled()) {
-      return undefined;
+      return ['metrics', 'logs'] as const;
     }
 
-    return ['delta-polling'] as const;
+    return ['metrics', 'logs', 'delta-polling'] as const;
   }
 
   // Tracing
@@ -237,6 +237,9 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
     return tracingOps.listTraces(this.db, args);
   }
   async listTracesLight(args: ListTracesArgs): Promise<ListTracesLightResponse> {
+    if (args.mode === 'delta') {
+      return super.listTracesLight(args);
+    }
     return tracingOps.listTracesLight(this.db, args);
   }
   async listBranches(args: ListBranchesArgs): Promise<ListBranchesResponse> {

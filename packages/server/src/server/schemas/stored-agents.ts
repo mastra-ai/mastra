@@ -182,6 +182,7 @@ const processorPhaseSchema = z.enum([
   'processOutputStream',
   'processOutputResult',
   'processOutputStep',
+  'processToolResult',
 ]);
 
 /**
@@ -348,6 +349,14 @@ export const createStoredAgentBodySchema = z
       .enum(['private', 'public'])
       .optional()
       .describe('Agent visibility: private (owner/admin only) or public (any reader)'),
+    autoPublish: z
+      .boolean()
+      .optional()
+      .describe(
+        'Publish the initial version so the agent resolves at status="published". Defaults to true when omitted. ' +
+          'Pass false to stage the agent as an unpublished draft — useful when overriding a code-defined agent, ' +
+          'whose code definition keeps serving traffic until the override is published.',
+      ),
   })
   .merge(snapshotConfigCreateSchema);
 
@@ -375,6 +384,10 @@ export const updateStoredAgentBodySchema = agentMetadataSchema
       .max(500)
       .optional()
       .describe('Optional message describing the changes for the auto-created version'),
+    autoPublish: z
+      .boolean()
+      .optional()
+      .describe('Immediately activate the auto-created version. Defaults to false when omitted.'),
   });
 
 export const exportStoredAgentBodySchema = snapshotConfigUpdateSchema.partial();

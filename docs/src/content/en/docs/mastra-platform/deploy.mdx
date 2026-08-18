@@ -1,6 +1,6 @@
 ---
 title: "Deploy | Mastra platform"
-description: Deploy your Mastra application to the Mastra platform with a single command. Build, validate, provision, and ship to any environment with mastra deploy.
+description: Deploy your Mastra application to the Mastra platform with a single command. Build, validate, provision, and release to any environment with mastra deploy.
 ---
 
 import Steps from "@site/src/components/Steps";
@@ -8,7 +8,9 @@ import StepItem from "@site/src/components/StepItem";
 
 # Deploy to Mastra platform
 
-[`mastra deploy`](/reference/cli/mastra#mastra-deploy) is the single command for shipping a Mastra application to the [Mastra platform](/docs/mastra-platform/overview). One command builds your project, validates it before anything ships, creates the platform project and environment on your first run, deploys, streams build logs, and prints your public URL once the deploy is serving traffic.
+[`mastra deploy`](/reference/cli/mastra#mastra-deploy) is the single command for releasing a Mastra application to the [Mastra platform](/docs/mastra-platform/overview).
+
+One command builds your project and validates it before anything includes, plus creates the platform project and environment on your first run, deploys, streams build logs, and prints your public URL once the deploy is serving traffic.
 
 ```bash
 mastra deploy
@@ -20,7 +22,7 @@ This page covers the unified deploy flow. The earlier split commands, [`mastra s
 
 ## Before you begin
 
-You'll need a [Mastra application](/guides/getting-started/quickstart) and a [Mastra platform](https://projects.mastra.ai) account. If you're not authenticated, the CLI prompts you to log in on first use.
+You'll need a [Mastra application](/docs) and a [Mastra platform](https://projects.mastra.ai) account. If you're not authenticated, the CLI prompts you to log in on first use.
 
 A local `.env` file is optional. Environment variables stored on the platform are used as-is at deploy time, and managed resources like [hosted databases](/docs/mastra-platform/database) inject their own variables. Pass `--env-file` only when you want to layer local values on top.
 
@@ -38,25 +40,32 @@ A local `.env` file is optional. Environment variables stored on the platform ar
   </StepItem>
 
   <StepItem>
-    The CLI runs a preflight check before anything ships. Storage that would fall back to a local file path blocks the deploy, because local files don't survive on the platform's ephemeral filesystem:
+    The CLI runs a preflight check before anything ships. Storage that would fall back to a local file path (which doesn't survive on the platform's ephemeral filesystem) would normally block the deploy:
 
     ```
-    [LOCAL_STORAGE_PATH] file:./mastra.db will be used at runtime because TURSO_DATABASE_URL is not set
+    file:./mastra.db will be used at runtime because TURSO_DATABASE_URL is not set
     ```
 
-    Attach a [hosted database](/docs/mastra-platform/database) that provides the missing variables:
+    Instead of erroring out, the CLI offers to fix it inline for you:
+
+    ```
+    Preflight needs TURSO_DATABASE_URL for the production environment. Create a managed turso database now and attach it? (Y/n)
+    ```
+
+    Accept the prompt and provisioning takes a few seconds — the database's connection variables are injected into your deploys automatically, with nothing to copy into an `.env` file. Decline it, or run in a non-interactive shell (CI, `--yes`), and the CLI falls back to the previous behavior: it prints the exact command to run yourself.
 
     ```bash
-    mastra env db create --kind turso
+    mastra env db create production --kind turso
     ```
 
-    Provisioning takes a few seconds. The database's connection variables are injected into your deploys automatically, with nothing to copy into an `.env` file.
+    The environment slug (`production` above) matches the environment the CLI would have deployed to — this is important because `mastra env db create` requires an environment argument in non-interactive shells when the project has more than one environment.
 
     :::note
-    If preflight reports a hard-coded local path instead (`Build contains a host-local storage URL`), guard it with an environment variable first so the file is only used during local development:
+    If preflight reports a hard-coded local path instead (`Build contains a host-local storage URL`), it can't offer the inline fix — guard the path with an environment variable first so the file is only used during local development:
 
     ```ts title="src/mastra/index.ts"
     new LibSQLStore({
+      id: 'mastra-storage',
       // Uses the hosted database when deployed, a local file during development
       url: process.env.TURSO_DATABASE_URL ?? 'file:./mastra.db',
       authToken: process.env.TURSO_AUTH_TOKEN,
@@ -74,7 +83,7 @@ A local `.env` file is optional. Environment variables stored on the platform ar
     Verify your deployment at the URL printed by the CLI. Append `/api/agents` to confirm it returns a JSON list of your agents.
 
     :::warning
-    Set up [authentication](/docs/server/auth) before exposing your endpoints publicly.
+    Set up [authentication](/docs/auth/overview) before exposing your endpoints publicly.
     :::
   </StepItem>
 </Steps>
@@ -89,7 +98,9 @@ The first deploy writes a `.mastra-project.json` file linking your directory to 
 mastra deploy --env staging
 ```
 
-Each environment gets its own URL, its own environment variables, and optionally its own [hosted database](/docs/mastra-platform/database). See [Environments](/docs/mastra-platform/environments) for the full model.
+Each environment gets a separate URL and environment variables. It can also have its own [hosted database](/docs/mastra-platform/database).
+
+See [Environments](/docs/mastra-platform/environments) for the full model.
 
 ## Choose a region
 
@@ -99,18 +110,19 @@ Pass `--region` when a deploy creates a new environment to control where it runs
 mastra deploy --env production --region eu
 ```
 
-The region is fixed when the environment is created. Databases attached to an environment are placed near that environment's region automatically.
+The region is fixed when the environment is created. Databases attached to an environment are placed near that environment's region automatically, and observability data is routed to the ingest region that matches the environment's residency zone. See [Regions](/docs/mastra-platform/regions) for the full list of supported regions, database placement, and observability co-location.
 
 ## Preflight checks
 
-Preflight validates the built output before anything ships, and only flags issues in your own code:
+Preflight validates the built output before anything includes, and only flags issues in your own code:
 
-- **Local storage paths**: A hard block. File-backed storage (for example `file:./mastra.db`) is lost on every deploy. Preflight passes when the path is guarded by an environment variable that is set locally, stored on the platform, or provided by a managed database:
+- **Local storage paths**: A hard block. File-backed storage (for example `file:./mastra.db`) is lost on every deploy. Preflight passes when the path is guarded by an environment variable that's set locally or stored on the platform, including values provided by a managed database:
 
   ```ts title="src/mastra/storage.ts"
   import { LibSQLStore } from '@mastra/libsql'
 
   export const storage = new LibSQLStore({
+    id: 'mastra-storage',
     // Uses the hosted database when deployed, a local file during development
     url: process.env.TURSO_DATABASE_URL ?? 'file:./mastra.db',
     authToken: process.env.TURSO_AUTH_TOKEN,
@@ -135,13 +147,48 @@ Deploys resolve environment variables from three sources:
 
 - **Managed variables**: Injected by platform resources like hosted databases (for example `TURSO_DATABASE_URL`). The platform defines these, and you can't edit them.
 - **Stored variables**: Saved on the project or environment through the dashboard. Used as-is on every deploy with no local file needed.
-- **Local env files**: An explicit `--env-file`, or ambient `.env` and `.env.local` files, layered on top at deploy time.
+- **Local env files**: Deployments layer an explicit `--env-file` or the ambient `.env` and `.env.local` files on top.
 
 ```bash
 mastra deploy --env staging --env-file .env.staging
 ```
 
 To change variables on a running service without a redeploy, update them in the dashboard and run [`mastra env restart`](/reference/cli/mastra#mastra-env-restart).
+
+## Private npm packages
+
+Projects that depend on packages from a private registry install them during the deploy using the standard `NPM_TOKEN` contract.
+
+<Steps>
+  <StepItem>
+    Store a read-only registry token as `NPM_TOKEN` on the project or environment through the dashboard.
+  </StepItem>
+
+  <StepItem>
+    Commit a token-free `.npmrc` that points your scope at the registry and reads the token from the environment:
+
+    ```ini title=".npmrc"
+    @your-org:registry=https://npm.pkg.github.com
+    //npm.pkg.github.com/:_authToken=${NPM_TOKEN}
+    ```
+
+    Keep the `${NPM_TOKEN}` reference literal. The package manager resolves it at install time, so the token itself never lands in your repository.
+  </StepItem>
+
+  <StepItem>
+    Deploy as usual:
+
+    ```bash
+    mastra deploy
+    ```
+  </StepItem>
+</Steps>
+
+In a monorepo, a `.npmrc` in your project directory takes precedence over one at the repository root.
+
+`NPM_TOKEN` is available during dependency installation. Mastra redacts its value from the Mastra source-build logs that it streams. The generated Dockerfile receives it as a build argument, so the runtime image stays free of the token. `NPM_TOKEN` is also injected into the running service as a regular environment variable, so treat it as a secret your application can read.
+
+Projects without a private-registry `.npmrc` need no changes. When your `.npmrc` references `${NPM_TOKEN}`, set the variable or the dependency install fails.
 
 ## Project resolution
 
@@ -160,6 +207,7 @@ mastra deploy --env production --yes
 ## Related
 
 - [Environments](/docs/mastra-platform/environments)
+- [Regions](/docs/mastra-platform/regions)
 - [Hosted databases](/docs/mastra-platform/database)
 - [`mastra deploy` CLI reference](/reference/cli/mastra#mastra-deploy)
 - [Configuration](/docs/mastra-platform/configuration)

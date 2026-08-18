@@ -76,7 +76,27 @@ export function extractSuspendedToolsFromMessages(
       );
   }
 
-  return suspendedToolObj ? (Object.values(suspendedToolObj) as Array<Record<string, unknown>>) : [];
+  if (!suspendedToolObj) return [];
+
+  // The auto-resume directive tells the model to pass the entry's `runId` back
+  // as `suspendedToolRunId`, which the resume leg uses to resume the suspended
+  // (inner) run. Persisted metadata stores the OUTER resumable runId with the
+  // inner run as `delegatedRunId`, so surface the inner run under `runId` here.
+  return Object.values(suspendedToolObj).map(entry => {
+    if (!entry || typeof entry !== 'object') return entry as Record<string, unknown>;
+    const { delegatedRunId, parentToolName, parentArgs, ...rest } = entry as Record<string, unknown>;
+    const resumableEntry =
+      typeof parentToolName === 'string'
+        ? {
+            ...rest,
+            approvalToolName: rest.toolName,
+            approvalArgs: rest.args,
+            toolName: parentToolName,
+            args: parentArgs,
+          }
+        : rest;
+    return typeof delegatedRunId === 'string' ? { ...resumableEntry, runId: delegatedRunId } : resumableEntry;
+  });
 }
 
 /**
@@ -87,8 +107,15 @@ export function extractSuspendedToolsFromMessages(
 export function buildAutoResumeSystemMessageSuffix(
   suspendedTools: ReadonlyArray<Record<string, unknown>>,
 ): string | null {
-  if (suspendedTools.length === 0) return null;
-  return `\n\nAnalyse the suspended tools: ${JSON.stringify(suspendedTools)}, using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.
+  // Approval is a consent boundary and must only be resolved through the
+  // explicit approval APIs, never reconstructed by the model from a message.
+  const resumableTools = suspendedTools.filter(tool => tool.type !== 'approval');
+  if (resumableTools.length === 0) return null;
+  // parentRunId is internal bookkeeping for channel resume routing; the model
+  // only needs runId (as suspendedToolRunId). Omitting it keeps the prompt
+  // byte-identical to existing LLM recordings.
+  const toolsForPrompt = resumableTools.map(({ parentRunId: _parentRunId, ...rest }) => rest);
+  return `\n\nAnalyse the suspended tools: ${JSON.stringify(toolsForPrompt)}, using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.
                       resumeData can not be an empty object nor null/undefined.
                       When you find that and call that tool, add the resumeData to the tool call arguments/input.
                       Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.

@@ -1,0 +1,185 @@
+---
+extends: existence
+message: "AI anaphora: '%s'. Vary the sentence openings or combine into a single statement."
+level: error
+nonword: true
+tokens:
+  # "No X. No Y. No Z." pattern (3+ consecutive)
+  - "No [^.]+\\. No [^.]+\\. No [^.]+"
+
+  # "No X. No Y." pattern (2 consecutive)
+  - "No \\w[^.]+\\. No \\w[^.]+"
+
+  # "No X, no Y, no Z." pattern (3+ comma-separated)
+  - 'No [^,]+, no [^,]+, no [^.!?]+'
+
+  # "No X, no Y." pattern (2 comma-separated)
+  - 'No [^,]+, no [^.!?]+'
+
+  # "Not X. Not Y. Not Z." pattern
+  - "Not [^.]+\\. Not [^.]+\\. Not [^.]+"
+
+  # "Not X. Not Y." pattern (2 consecutive)
+  - "Not \\w[^.]+\\. Not \\w[^.]+"
+
+  # "No more X. No more Y. No more Z." pattern
+  - "No more [^.]+\\. No more [^.]+\\. No more [^.]+"
+
+  # "No more X. No more Y." pattern (2 consecutive)
+  - "No more \\w[^.]+\\. No more \\w[^.]+"
+
+  # "It's X. It's Y. It's Z." pattern
+  - "[Ii]t'?s [^.]+\\. [Ii]t'?s [^.]+\\. [Ii]t'?s [^.]+"
+
+  # "This is X. This is Y. This is Z." pattern
+  - "[Tt]his is [^.]+\\. [Tt]his is [^.]+\\. [Tt]his is [^.]+"
+
+  # Three consecutive rhetorical questions
+  - "(?:What|Why|How|Where|When|Who|Which|Is|Are|Can|Could|Should|Would|Do|Does) [^?]+\\? (?:What|Why|How|Where|When|Who|Which|Is|Are|Can|Could|Should|Would|Do|Does) [^?]+\\? (?:What|Why|How|Where|When|Who|Which|Is|Are|Can|Could|Should|Would|Do|Does) [^?]+\\?"
+
+  # "X works because Y. Z works because W." parallel justifications
+  - "[A-Z][^.]+works because [^.]+\\. [A-Z][^.]+works because [^.]+\\. [A-Z][^.]+works because [^.]+"
+
+  # "One X. One Y. One Z." pattern (3+ consecutive)
+  - "One [^.]+\\. One [^.]+\\. One [^.]+"
+
+  # "One X, one Y, one Z." pattern (3+ comma-separated)
+  - 'One [^,]+, one [^,]+, one [^.!?]+'
+
+  # "One X, one Y." pattern (2 comma-separated)
+  - 'One [^,]+, one [^.!?]+'
+
+  # "Every X. Every Y. Every Z." pattern (3+ consecutive)
+  - "Every [^.]+\\. Every [^.]+\\. Every [^.]+"
+
+  # "Every X, every Y, every Z." pattern (3+ comma-separated)
+  - 'Every [^,]+, every [^,]+, every [^.!?]+'
+
+  # "Every X, every Y." pattern (2 comma-separated)
+  - 'Every [^,]+, every [^.!?]+'
+
+  # "Each X. Each Y. Each Z." pattern (3+ consecutive)
+  - "Each [^.]+\\. Each [^.]+\\. Each [^.]+"
+
+  # "Each X, each Y, each Z." pattern (3+ comma-separated)
+  - 'Each [^,]+, each [^,]+, each [^.!?]+'
+
+  # "Each X, each Y." pattern (2 comma-separated)
+  - 'Each [^,]+, each [^.!?]+'
+
+  # "Zero X. Zero Y. Zero Z." pattern (3+ consecutive)
+  - "Zero [^.]+\\. Zero [^.]+\\. Zero [^.]+"
+
+  # "Zero X, zero Y, zero Z." pattern (3+ comma-separated)
+  - 'Zero [^,]+, zero [^,]+, zero [^.!?]+'
+
+  # "Zero X, zero Y." pattern (2 comma-separated)
+  - 'Zero [^,]+, zero [^.!?]+'
+
+  # "A single X. A single Y." pattern (2+ consecutive)
+  - "A single [^.]+\\. A single [^.]+"
+
+  # "A single X, a single Y." pattern (2+ comma-separated)
+  - 'A single [^,]+, a single [^.!?]+'
+
+  # "Many X. Many Y." pattern (2+ consecutive)
+  - "Many [^.]+\\. Many [^.]+\\."
+
+  # "Few X. Few Y." pattern (2+ consecutive)
+  - "Few [^.]+\\. Few [^.]+\\."
+
+  # "All X. All Y. All Z." pattern (3+ consecutive)
+  - "All [^.]+\\. All [^.]+\\. All [^.]+"
+
+  # Three prepositional phrase chains: "with X, through Y, and for Z" style
+  - '(?:with|through|by|for|via|within) [^,]+, (?:with|through|by|for|via|within) [^,]+, (?:and )?(?:with|through|by|for|via|within) [^.!?]+'
+
+  # === Adverb anaphora ===
+
+  # "Always X. Always Y." pattern (2+ consecutive)
+  - "Always [^.]+\\. Always [^.]+\\."
+
+  # "always X, always Y." pattern (2+ comma-separated)
+  - '[Aa]lways [^,]+, always [^.!?]+'
+
+  # "Never X. Never Y." pattern (2+ consecutive)
+  - "Never [^.]+\\. Never [^.]+\\."
+
+  # "never X, never Y." pattern (2+ comma-separated)
+  - '[Nn]ever [^,]+, never [^.!?]+'
+
+  # "Fully X. Fully Y." pattern (2+ consecutive)
+  - "Fully [^.]+\\. Fully [^.]+\\."
+
+  # "fully X, fully Y." pattern (2+ comma-separated)
+  - '[Ff]ully [^,]+, fully [^.!?]+'
+
+  # "Completely X. Completely Y." pattern (2+ consecutive)
+  - "Completely [^.]+\\. Completely [^.]+\\."
+
+  # "completely X, completely Y." pattern (2+ comma-separated)
+  - '[Cc]ompletely [^,]+, completely [^.!?]+'
+
+  # "Entirely X. Entirely Y." pattern (2+ consecutive)
+  - "Entirely [^.]+\\. Entirely [^.]+\\."
+
+  # "entirely X, entirely Y." pattern (2+ comma-separated)
+  - '[Ee]ntirely [^,]+, entirely [^.!?]+'
+
+  # "Truly X. Truly Y." pattern (2+ consecutive)
+  - "Truly [^.]+\\. Truly [^.]+\\."
+
+  # "truly X, truly Y." pattern (2+ comma-separated)
+  - '[Tt]ruly [^,]+, truly [^.!?]+'
+
+  # "Purely X. Purely Y." pattern (2+ consecutive)
+  - "Purely [^.]+\\. Purely [^.]+\\."
+
+  # "purely X, purely Y." pattern (2+ comma-separated)
+  - '[Pp]urely [^,]+, purely [^.!?]+'
+
+  # "Only X. Only Y." pattern (2+ consecutive)
+  - "Only [^.]+\\. Only [^.]+\\."
+
+  # "only X, only Y." pattern (2+ comma-separated)
+  - '[Oo]nly [^,]+, only [^.!?]+'
+
+  # "Just X. Just Y." pattern (2+ consecutive)
+  - "Just [^.]+\\. Just [^.]+\\."
+
+  # "just X, just Y." pattern (2+ comma-separated)
+  - '[Jj]ust [^,]+, just [^.!?]+'
+
+  # === Indefinite-article exemplification stack ===
+  # AI loves stacking hypothetical scenarios as parallel sentences:
+  # "A hook wants to count failures. A subagent wants to record a
+  # result. A skill wants to stash a value." The shape — A/An +
+  # noun (1-3 words) + present-tense verb — paired across 3
+  # sentences is distinctive enough to flag even when verbs differ.
+  - "(?:A|An) \\w+(?: \\w+){0,2} \\w+s [^.]+\\. (?:A|An) \\w+(?: \\w+){0,2} \\w+s [^.]+\\. (?:A|An) \\w+(?: \\w+){0,2} \\w+s [^.!?]+"
+
+  # 2-sentence parallel-mirror pair: "An unset X counts as Y.
+  # A set-but-wrong value belongs to Z." Same A/An + NP + verb-s
+  # shape but paired instead of tripled. Common in technical prose
+  # written by humans too, but the dramatic shared-verb framing
+  # reads as an AI tell in practice.
+  - "(?:A|An) \\w+(?: \\w+){0,2} \\w+s [^.]+\\. (?:A|An) \\w+(?: \\w+){0,2} \\w+s [^.!?]+"
+
+  # === Definite-article noun-list fragment ===
+  # "The X, the Y, the Z." — three or more comma-separated
+  # definite noun phrases as a verbless sentence. AI uses this
+  # as a faux-summary closer. Subjects are up to 5 words to
+  # tolerate parenthetical glosses like "Time-To-Live (TTL)".
+  # Sentence-initial capital "The" reduces mid-sentence
+  # false positives.
+  - "The [\\w-]+(?: [\\w-]+){0,4}(?:, the [\\w-]+(?: [\\w-]+){0,4}){2,}\\."
+
+  # === "Whether X, or whether Y." subordinate-clause fragment ===
+  # AI promotes a "whether... or whether..." subordinate-clause
+  # pair to a standalone sentence with no main clause. The
+  # paired "whether" markers carry the rhetorical weight a real
+  # verb would carry.
+  - "Whether [^.]+, or whether [^.!?]+\\."
+
+  # Two consecutive "Whether X." sentences — same shape, paired.
+  - "Whether [^.]+\\. Whether [^.]+\\."

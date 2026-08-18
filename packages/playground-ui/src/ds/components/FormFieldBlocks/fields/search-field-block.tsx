@@ -86,14 +86,15 @@ export function SearchFieldBlock({
         </FieldBlock.Column>
       ) : null}
       <FieldBlock.Column>
-        {layout === 'vertical' && label && !labelIsHidden ? (
+        {layout === 'vertical' && label ? (
           <FieldBlock.Label name={name} required={required}>
-            {label}
+            {labelIsHidden ? <VisuallyHidden>{label}</VisuallyHidden> : label}
           </FieldBlock.Label>
         ) : null}
         <div className="group relative">
           <Input
             ref={inputRef}
+            id={`input-${name}`}
             name={name}
             disabled={disabled}
             value={value}

@@ -139,6 +139,7 @@ const resolveInitialMessages = (messages: MastraDBMessage[]): MastraDBMessage[] 
     });
 
 type SignalContinuationOptions = {
+  model?: string;
   maxSteps?: number;
   modelSettings?: {
     frequencyPenalty?: number;
@@ -153,6 +154,11 @@ type SignalContinuationOptions = {
   providerOptions?: ModelSettings['providerOptions'];
   requireToolApproval?: boolean;
   tracingOptions?: TracingOptions;
+};
+
+type ActiveContinuation = {
+  model?: string;
+  requestContext?: RequestContext;
 };
 
 export interface MastraChatProps {
@@ -180,6 +186,7 @@ export interface MastraChatProps {
 
 interface SharedArgs {
   coreUserMessages: CoreUserMessage[];
+  model?: string;
   requestContext?: RequestContext;
   threadId?: string;
   modelSettings?: ModelSettings;
@@ -281,7 +288,7 @@ export const useChat = ({
   const _onChunk = useRef<((chunk: ChunkType) => Promise<void>) | undefined>(undefined);
   const _networkRunId = useRef<string | undefined>(undefined);
   const _onNetworkChunk = useRef<((chunk: NetworkChunkType) => Promise<void>) | undefined>(undefined);
-  const _requestContext = useRef<RequestContext | undefined>(propsRequestContext);
+  const _activeContinuation = useRef<ActiveContinuation>({ requestContext: propsRequestContext });
   // Tracks the active stream (untilIdle) request so a subsequent stream() call
   // can abort the previous one. Without this, a still-open prior stream keeps
   // its background-task pubsub subscription alive and fans events into a second
@@ -319,7 +326,10 @@ export const useChat = ({
   }, [initialMessages]);
 
   useEffect(() => {
-    _requestContext.current = propsRequestContext;
+    _activeContinuation.current = {
+      ..._activeContinuation.current,
+      requestContext: propsRequestContext,
+    };
   }, [propsRequestContext]);
 
   type SignalContentPart =
@@ -546,6 +556,7 @@ export const useChat = ({
 
   const generate = async ({
     coreUserMessages,
+    model,
     requestContext,
     threadId,
     modelSettings,
@@ -569,7 +580,10 @@ export const useChat = ({
     } = modelSettings || {};
     const resolvedRequestContext = requestContext ?? propsRequestContext;
     const resolvedClientTools = clientTools ?? hookClientTools;
-    _requestContext.current = resolvedRequestContext;
+    _activeContinuation.current = {
+      model,
+      requestContext: resolvedRequestContext,
+    };
     setIsRunning(true);
 
     const clientWithAbort = new MastraClient({
@@ -583,6 +597,7 @@ export const useChat = ({
     _currentRunId.current = runId;
 
     const response = await agent.generate(coreUserMessages, {
+      model,
       runId,
       maxSteps,
       modelSettings: {
@@ -636,6 +651,7 @@ export const useChat = ({
 
   const stream = async ({
     coreUserMessages,
+    model,
     requestContext,
     threadId,
     onChunk,
@@ -663,6 +679,7 @@ export const useChat = ({
     const resolvedRequestContext = requestContext ?? propsRequestContext;
     const resolvedClientTools = clientTools ?? hookClientTools;
     const signalContinuationOptions: SignalContinuationOptions = {
+      model,
       maxSteps,
       modelSettings: {
         frequencyPenalty,
@@ -678,7 +695,10 @@ export const useChat = ({
       requireToolApproval,
       tracingOptions,
     };
-    _requestContext.current = resolvedRequestContext;
+    _activeContinuation.current = {
+      model,
+      requestContext: resolvedRequestContext,
+    };
     setIsRunning(true);
 
     _streamAbortRef.current?.abort();
@@ -700,6 +720,7 @@ export const useChat = ({
     const streamWithLegacyRoute = async () => {
       const runId = uuid();
       const response = await agent.stream(coreUserMessages, {
+        model,
         runId,
         maxSteps,
         untilIdle: true,
@@ -750,7 +771,11 @@ export const useChat = ({
 
     const resolvedSignalId = signalId ?? uuid();
     const messageContents = getSignalContents(coreUserMessages);
+    // RequestContext serializes to a plain record via its toJSON(), but the class has no
+    // index signature, so it isn't assignable to the generated `Record<string, unknown>` body type.
+    const requestContextRecord = resolvedRequestContext as Record<string, unknown> | undefined;
     const streamOptions = {
+      model,
       maxSteps,
       modelSettings: {
         frequencyPenalty,
@@ -762,7 +787,7 @@ export const useChat = ({
         topP,
       },
       instructions,
-      requestContext: resolvedRequestContext,
+      requestContext: requestContextRecord,
       providerOptions: providerOptions as any,
       requireToolApproval,
       tracingOptions,
@@ -778,7 +803,7 @@ export const useChat = ({
         ifIdle: {
           streamOptions: {
             ...signalContinuationOptions,
-            requestContext: resolvedRequestContext,
+            requestContext: requestContextRecord,
             clientTools: resolvedClientTools,
           },
         },
@@ -830,6 +855,7 @@ export const useChat = ({
 
   const network = async ({
     coreUserMessages,
+    model,
     requestContext,
     threadId,
     onNetworkChunk,
@@ -841,7 +867,10 @@ export const useChat = ({
       modelSettings || {};
 
     const resolvedRequestContext = requestContext ?? propsRequestContext;
-    _requestContext.current = resolvedRequestContext;
+    _activeContinuation.current = {
+      model,
+      requestContext: resolvedRequestContext,
+    };
     setIsRunning(true);
 
     const clientWithAbort = new MastraClient({
@@ -854,6 +883,7 @@ export const useChat = ({
     const runId = uuid();
 
     const response = await agent.network(coreUserMessages, {
+      model,
       maxSteps,
       modelSettings: {
         frequencyPenalty,
@@ -903,12 +933,13 @@ export const useChat = ({
     _onChunk.current = undefined;
     _networkRunId.current = undefined;
     _onNetworkChunk.current = undefined;
-    _requestContext.current = undefined;
+    _activeContinuation.current = {};
   };
 
   const approveToolCall = async (toolCallId: string, resumeData?: unknown) => {
     const onChunk = _onChunk.current;
     const currentRunId = _currentRunId.current;
+    const continuation = _activeContinuation.current;
 
     if (!currentRunId)
       return console.info('[approveToolCall] approveToolCall can only be called after a stream has started');
@@ -924,8 +955,9 @@ export const useChat = ({
           threadId,
           toolCallId,
           approved: true,
+          ...(continuation.model !== undefined ? { streamOptions: { model: continuation.model } } : {}),
           ...(resumeData !== undefined ? { resumeData } : {}),
-          requestContext: _requestContext.current,
+          requestContext: continuation.requestContext,
         });
         pendingToolApprovalIdsRef.current.delete(toolCallId);
         setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
@@ -942,23 +974,41 @@ export const useChat = ({
       return;
     }
 
-    const response = await agent.approveToolCall({
-      runId: currentRunId,
-      toolCallId,
-      requestContext: _requestContext.current,
-    });
+    try {
+      const response =
+        resumeData !== undefined
+          ? await agent.resumeStream(resumeData as Parameters<typeof agent.resumeStream>[0], {
+              runId: currentRunId,
+              toolCallId,
+              ...continuation,
+            })
+          : await agent.approveToolCall({
+              runId: currentRunId,
+              toolCallId,
+              ...continuation,
+            });
 
-    await response.processDataStream({
-      onChunk: async (chunk: ChunkType) => {
-        await processStreamChunk(chunk, onChunk);
-      },
-    });
-    setIsRunning(false);
+      await response.processDataStream({
+        onChunk: async (chunk: ChunkType) => {
+          await processStreamChunk(chunk, onChunk);
+        },
+      });
+      setIsRunning(false);
+    } catch (error) {
+      setToolCallApprovals(prev => {
+        const next = { ...prev };
+        delete next[toolCallId];
+        return next;
+      });
+      setIsRunning(false);
+      throw error;
+    }
   };
 
   const declineToolCall = async (toolCallId: string) => {
     const onChunk = _onChunk.current;
     const currentRunId = _currentRunId.current;
+    const continuation = _activeContinuation.current;
 
     if (!currentRunId)
       return console.info('[declineToolCall] declineToolCall can only be called after a stream has started');
@@ -973,7 +1023,8 @@ export const useChat = ({
           threadId,
           toolCallId,
           approved: false,
-          requestContext: _requestContext.current,
+          ...(continuation.model !== undefined ? { streamOptions: { model: continuation.model } } : {}),
+          requestContext: continuation.requestContext,
         });
         pendingToolApprovalIdsRef.current.delete(toolCallId);
         setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
@@ -993,7 +1044,7 @@ export const useChat = ({
     const response = await agent.declineToolCall({
       runId: currentRunId,
       toolCallId,
-      requestContext: _requestContext.current,
+      ...continuation,
     });
 
     await response.processDataStream({
@@ -1006,6 +1057,7 @@ export const useChat = ({
 
   const approveToolCallGenerate = async (toolCallId: string) => {
     const currentRunId = _currentRunId.current;
+    const continuation = _activeContinuation.current;
 
     if (!currentRunId)
       return console.info(
@@ -1019,7 +1071,7 @@ export const useChat = ({
     const response = await agent.approveToolCallGenerate({
       runId: currentRunId,
       toolCallId,
-      requestContext: _requestContext.current,
+      ...continuation,
     });
 
     if (response && 'uiMessages' in response.response && response.response.uiMessages) {
@@ -1032,6 +1084,7 @@ export const useChat = ({
 
   const declineToolCallGenerate = async (toolCallId: string) => {
     const currentRunId = _currentRunId.current;
+    const continuation = _activeContinuation.current;
 
     if (!currentRunId)
       return console.info(
@@ -1045,7 +1098,7 @@ export const useChat = ({
     const response = await agent.declineToolCallGenerate({
       runId: currentRunId,
       toolCallId,
-      requestContext: _requestContext.current,
+      ...continuation,
     });
 
     if (response && 'uiMessages' in response.response && response.response.uiMessages) {
@@ -1059,6 +1112,7 @@ export const useChat = ({
   const approveNetworkToolCall = async (toolName: string, runId?: string) => {
     const onNetworkChunk = _onNetworkChunk.current;
     const networkRunId = runId || _networkRunId.current;
+    const continuation = _activeContinuation.current;
 
     if (!networkRunId)
       return console.info(
@@ -1074,7 +1128,7 @@ export const useChat = ({
     const agent = baseClient.getAgent(agentId);
     const response = await agent.approveNetworkToolCall({
       runId: networkRunId,
-      requestContext: _requestContext.current,
+      ...continuation,
     });
 
     await response.processDataStream({
@@ -1091,6 +1145,7 @@ export const useChat = ({
   const declineNetworkToolCall = async (toolName: string, runId?: string) => {
     const onNetworkChunk = _onNetworkChunk.current;
     const networkRunId = runId || _networkRunId.current;
+    const continuation = _activeContinuation.current;
 
     if (!networkRunId)
       return console.info(
@@ -1106,7 +1161,7 @@ export const useChat = ({
     const agent = baseClient.getAgent(agentId);
     const response = await agent.declineNetworkToolCall({
       runId: networkRunId,
-      requestContext: _requestContext.current,
+      ...continuation,
     });
 
     await response.processDataStream({

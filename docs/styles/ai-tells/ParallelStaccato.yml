@@ -1,0 +1,34 @@
+---
+extends: existence
+message: "AI staccato: '%s'. Combine these clipped parallel sentences or vary the structure."
+level: error
+nonword: true
+tokens:
+  # === Parallel pairs (any verb — the structure is the tell) ===
+
+  # "Noun verbs. Noun verbs."
+  # "Shippers scan. Practitioners read." "Engineers build. Managers ship."
+  - "[A-Z][a-z]+ [a-z]+s?\\. [A-Z][a-z]+ [a-z]+s?\\."
+
+  # "The noun verbs. The noun verbs."
+  - "The [a-z]+ [a-z]+s?\\. The [a-z]+ [a-z]+s?\\."
+
+  # "Noun verb-phrase. Noun doesn't/don't."
+  # "Content carries the personality. Chrome doesn't."
+  - "[A-Z][a-z]+ [^.!?]+\\. [A-Z][a-z]+ doesn'?t\\."
+  - "[A-Z][a-z]+ [^.!?]+\\. [A-Z][a-z]+ don'?t\\."
+  - "[A-Z][a-z]+ [^.!?]+\\. [A-Z][a-z]+ does not\\."
+  - "[A-Z][a-z]+ [^.!?]+\\. [A-Z][a-z]+ do not\\."
+
+  # Multi-word-subject parallel-staccato:
+  # "Concurrent readers don't block each other. One writer at a time
+  # doesn't block readers."
+  # Subjects up to 5 words; second sentence carries the verb pattern.
+  # Matches both "doesn't"/"don't" and "does not"/"do not" forms.
+  - "[A-Z][a-z]+(?: [\\w-]+){1,4} [^.!?]+\\. [A-Z][a-z]+(?: [\\w-]+){1,4} (?:doesn'?t|don'?t|does not|do not)\\b[^.!?]*\\."
+
+  # === Solo two-word staccato (enumerated verbs) ===
+  # Single "Subject verb." sentences that AI drops for dramatic effect.
+  # Only flagged for verbs commonly used this way.
+
+  - "[A-Z][a-z]+ (?:scales?|ships?|breaks?|builds?|flows?|lands?|wins?|fails?|works?|scans?|reads?|stays?|drops?|clicks?|runs?|falls?|grows?|fades?|leads?|counts?|hits?|fits?|stops?|starts?|moves?|waits?|holds?|lives?|dies?|rises?|shines?|shifts?|sticks?|stands?|spreads?|bends?|flips?|snaps?|locks?|fires?|loads?|calls?|pulls?|pushes?|pays?|sells?|talks?|walks?)\\."

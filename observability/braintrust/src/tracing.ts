@@ -12,18 +12,73 @@ import { omitKeys } from '@mastra/core/utils';
 import { TrackingExporter } from '@mastra/observability';
 import type { TraceData, TrackingExporterConfig } from '@mastra/observability';
 import { initLogger, currentSpan } from 'braintrust';
-import type { Span, Logger } from 'braintrust';
 import { removeNullish, convertAISDKMessage, serializeToolResult } from './formatter';
 import type { OpenAIMessage } from './formatter';
 import { formatUsageMetrics } from './metrics';
 import { reconstructThreadOutput } from './thread-reconstruction';
 import type { ThreadData, ThreadStepData, PendingToolResult } from './thread-reconstruction';
 
+type BraintrustSpanType = 'llm' | 'score' | 'function' | 'eval' | 'task' | 'tool';
+
+/**
+ * Explicit span parentage accepted by Braintrust's `startSpan()`.
+ * `rootSpanId` groups rows into a trace; `spanId` / `parentSpanIds` populate
+ * the row's `span_parents`.
+ */
+export type BraintrustParentSpanIds =
+  | { spanId: string; rootSpanId: string }
+  | { parentSpanIds: string[]; rootSpanId: string };
+
+/**
+ * The subset of a Braintrust span used by the exporter.
+ *
+ * This structural interface lets applications provide spans from a different
+ * compatible Braintrust SDK instance without coupling Mastra's public types to
+ * a specific SDK version.
+ */
+export interface BraintrustSpan {
+  id: string;
+  startSpan(args: {
+    spanId: string;
+    name: string;
+    type: BraintrustSpanType;
+    startTime: number;
+    parentSpanIds?: BraintrustParentSpanIds;
+    event: Record<string, any>;
+  }): BraintrustSpan;
+  log(event: Record<string, any>): void;
+  end(args?: { endTime?: number }): number;
+}
+
+/**
+ * The subset of a Braintrust logger used by the exporter.
+ *
+ * Logger instances from compatible Braintrust SDK versions satisfy this
+ * interface without sharing the same nominal SDK types as the exporter.
+ */
+export interface BraintrustLogger {
+  startSpan(args: {
+    spanId: string;
+    name: string;
+    type: BraintrustSpanType;
+    startTime: number;
+    parentSpanIds?: BraintrustParentSpanIds;
+    event: Record<string, any>;
+  }): BraintrustSpan;
+  logFeedback(event: {
+    id: string;
+    scores: Record<string, number>;
+    comment?: string;
+    metadata?: Record<string, any>;
+    source: 'external';
+  }): void;
+}
+
 /**
  * Extended Braintrust span data that includes span type and thread reconstruction data
  */
 interface BraintrustSpanData {
-  span: Span;
+  span: BraintrustSpan;
   spanType: SpanType;
   threadData?: ThreadData; // only populated for MODEL_GENERATION spans
   // Tool results stored when TOOL_CALL ends (may arrive before MODEL_STEP ends)
@@ -38,7 +93,7 @@ export interface BraintrustExporterConfig extends TrackingExporterConfig {
    * - logger.traced(): Agent traces nest inside traced spans
    * - Parent spans: Auto-detects and attaches to external Braintrust spans
    */
-  braintrustLogger?: Logger<true>;
+  braintrustLogger?: BraintrustLogger;
 
   /**
    * Optional resolver for the active Braintrust span.
@@ -47,7 +102,7 @@ export interface BraintrustExporterConfig extends TrackingExporterConfig {
    * `Eval()` or `logger.traced()` spans when your app and Mastra may resolve
    * different copies of the `braintrust` package.
    */
-  currentSpan?: () => Span | undefined;
+  currentSpan?: () => BraintrustSpan | undefined;
 
   /** Braintrust API key. Required if logger is not provided. */
   apiKey?: string;
@@ -59,11 +114,11 @@ export interface BraintrustExporterConfig extends TrackingExporterConfig {
   tuningParameters?: Record<string, any>;
 }
 
-type BraintrustRoot = Logger<true> | Span;
-type BraintrustSpan = BraintrustSpanData;
-type BraintrustEvent = Span;
+type BraintrustRoot = BraintrustLogger | BraintrustSpan;
+type BraintrustTrackedSpan = BraintrustSpanData;
+type BraintrustEvent = BraintrustSpan;
 type BraintrustMetadata = unknown;
-type BraintrustTraceData = TraceData<BraintrustRoot, BraintrustSpan, BraintrustEvent, BraintrustMetadata>;
+type BraintrustTraceData = TraceData<BraintrustRoot, BraintrustTrackedSpan, BraintrustEvent, BraintrustMetadata>;
 
 // Default span type for all spans
 const DEFAULT_SPAN_TYPE = 'task';
@@ -85,7 +140,7 @@ function mapSpanType(spanType: SpanType): 'llm' | 'score' | 'function' | 'eval' 
 
 export class BraintrustExporter extends TrackingExporter<
   BraintrustRoot,
-  BraintrustSpan,
+  BraintrustTrackedSpan,
   BraintrustEvent,
   BraintrustMetadata,
   BraintrustExporterConfig
@@ -94,8 +149,8 @@ export class BraintrustExporter extends TrackingExporter<
 
   // Flags and logger for context-aware mode
   #useProvidedLogger: boolean;
-  #providedLogger?: Logger<true>;
-  #localLogger?: Logger<true>;
+  #providedLogger?: BraintrustLogger;
+  #localLogger?: BraintrustLogger;
 
   constructor(config: BraintrustExporterConfig = {}) {
     // Resolve env vars BEFORE calling super (config is readonly in base class)
@@ -126,7 +181,7 @@ export class BraintrustExporter extends TrackingExporter<
     }
   }
 
-  private async getLocalLogger(): Promise<Logger<true> | undefined> {
+  private async getLocalLogger(): Promise<BraintrustLogger | undefined> {
     if (this.#localLogger) {
       return this.#localLogger;
     }
@@ -184,8 +239,12 @@ export class BraintrustExporter extends TrackingExporter<
     }
   }
 
-  private startSpan(args: { parent: Span | Logger<true>; span: AnyExportedSpan }): BraintrustSpanData {
-    const { parent, span } = args;
+  private startSpan(args: {
+    parent: BraintrustSpan | BraintrustLogger;
+    span: AnyExportedSpan;
+    parentSpanIds?: BraintrustParentSpanIds;
+  }): BraintrustSpanData {
+    const { parent, span, parentSpanIds } = args;
     const payload = this.buildSpanPayload(span);
 
     // Braintrust's startSpan() accepts data properties via the `event` parameter
@@ -196,6 +255,7 @@ export class BraintrustExporter extends TrackingExporter<
       name: span.name,
       type: mapSpanType(span.type),
       startTime: span.startTime.getTime() / 1000,
+      ...(parentSpanIds ? { parentSpanIds } : {}),
       event: {
         id: span.id, // Use Mastra span ID as Braintrust row ID for logFeedback() compatibility
         ...payload,
@@ -213,6 +273,36 @@ export class BraintrustExporter extends TrackingExporter<
     };
   }
 
+  /**
+   * Explicit parentage for a root span started directly from a logger.
+   *
+   * Pinning `rootSpanId` to the Mastra trace ID makes every root sharing a
+   * trace land in the same Braintrust trace — required for a resumed workflow
+   * run to rejoin the trace of its suspended half, which was exported by an
+   * earlier process. Genuine roots keep empty `span_parents` so Braintrust
+   * still treats them as trace roots; only a resumed continuation (marked by
+   * core with `resumedFromSpanId`) links to its persisted parent span. Roots
+   * with other parent IDs (e.g. an ambient OTEL span from the bridge) are not
+   * linked — their parent was never exported to Braintrust.
+   *
+   * Spans nested under an enclosing Braintrust span (Eval(), logger.traced(),
+   * or a span passed as `braintrustLogger`) get no explicit parentage: the
+   * startSpan() chain already inherits the external trace's rootSpanId.
+   */
+  private rootParentSpanIds(root: BraintrustRoot, span: AnyExportedSpan): BraintrustParentSpanIds | undefined {
+    // Braintrust SDK objects carry a `kind` discriminant ('logger' | 'span').
+    // Structural stand-ins may omit it; for those, spans are the ones that end().
+    const kind = (root as { kind?: string }).kind;
+    const isLoggerRoot = kind ? kind === 'logger' : !('end' in root);
+    if (!isLoggerRoot) {
+      return undefined;
+    }
+    if (span.parentSpanId && span.parentSpanId === span.metadata?.resumedFromSpanId) {
+      return { spanId: span.parentSpanId, rootSpanId: span.traceId };
+    }
+    return { parentSpanIds: [], rootSpanId: span.traceId };
+  }
+
   protected override async _buildRoot(_args: {
     span: AnyExportedSpan;
     traceData: BraintrustTraceData;
@@ -221,7 +311,7 @@ export class BraintrustExporter extends TrackingExporter<
       // Try to find a Braintrust span to attach to:
       // 1. Auto-detect from Braintrust's current span (logger.traced(), Eval(), etc.)
       // 2. Fall back to the configured logger
-      let externalSpan: Span | undefined;
+      let externalSpan: BraintrustSpan | undefined;
       try {
         externalSpan = this.config.currentSpan?.();
       } catch (err) {
@@ -252,7 +342,7 @@ export class BraintrustExporter extends TrackingExporter<
     if (span.isRootSpan) {
       const root = traceData.getRoot();
       if (root) {
-        return this.startSpan({ parent: root, span });
+        return this.startSpan({ parent: root, span, parentSpanIds: this.rootParentSpanIds(root, span) });
       }
     } else {
       const parent = traceData.getParent(args);
@@ -267,7 +357,7 @@ export class BraintrustExporter extends TrackingExporter<
   protected override async _buildEvent(args: {
     span: AnyExportedSpan;
     traceData: BraintrustTraceData;
-  }): Promise<Span | undefined> {
+  }): Promise<BraintrustEvent | undefined> {
     const spanData = await this._buildSpan(args);
 
     if (!spanData) {
@@ -297,10 +387,14 @@ export class BraintrustExporter extends TrackingExporter<
       return;
     }
 
-    // Handle thread data accumulation for MODEL_STEP and TOOL_CALL spans
+    // Handle thread data accumulation for MODEL_STEP and tool spans.
+    // PROVIDER_TOOL_CALL is excluded: provider results are not merged into the
+    // reconstructed thread output. Since @mastra/core parents these spans under
+    // the delivering MODEL_STEP, findModelGenerationAncestor would now succeed,
+    // so accumulating them is possible as a follow-up.
     if (span.type === SpanType.MODEL_STEP) {
       this.accumulateModelStepData(span, traceData);
-    } else if (span.type === SpanType.TOOL_CALL) {
+    } else if (span.type === SpanType.TOOL_CALL || span.type === SpanType.MCP_TOOL_CALL) {
       this.accumulateToolCallResult(span, traceData);
     }
 
@@ -319,7 +413,7 @@ export class BraintrustExporter extends TrackingExporter<
     }
   }
 
-  protected override async _abortSpan(args: { span: BraintrustSpan; reason: SpanErrorInfo }): Promise<void> {
+  protected override async _abortSpan(args: { span: BraintrustTrackedSpan; reason: SpanErrorInfo }): Promise<void> {
     const { span: spanData, reason } = args;
     spanData.span.log({
       error: reason.message,
@@ -384,8 +478,8 @@ export class BraintrustExporter extends TrackingExporter<
   }
 
   /**
-   * Store TOOL_CALL result in parent MODEL_GENERATION's pendingToolResults.
-   * Called when a TOOL_CALL span ends.
+   * Store a tool result (TOOL_CALL or MCP_TOOL_CALL) in parent MODEL_GENERATION's pendingToolResults.
+   * Called when the tool span ends.
    * Results are merged into threadData when MODEL_GENERATION ends.
    */
   private accumulateToolCallResult(span: AnyExportedSpan, traceData: BraintrustTraceData): void {
@@ -394,12 +488,7 @@ export class BraintrustExporter extends TrackingExporter<
       return;
     }
 
-    // Extract tool call ID from TOOL_CALL span input
-    const input = span.input as { toolCallId?: string } | undefined;
-    const toolCallId = input?.toolCallId;
-    if (!toolCallId) {
-      return;
-    }
+    const toolCallId = this.resolveToolCallId(span);
 
     // Store the result for later merging
     modelGenSpanData.pendingToolResults.set(toolCallId, {
@@ -507,9 +596,14 @@ export class BraintrustExporter extends TrackingExporter<
     return match?.[1] ?? span.name;
   }
 
-  private getToolCallId(span: AnyExportedSpan): string {
+  private resolveToolCallId(span: AnyExportedSpan): string {
     const attrs = span.attributes as { toolCallId?: string } | undefined;
-    return attrs?.toolCallId ?? (span.input as { toolCallId?: string } | undefined)?.toolCallId ?? span.id;
+    return (
+      attrs?.toolCallId ??
+      span.metadata?.toolCallId ??
+      (span.input as { toolCallId?: string } | undefined)?.toolCallId ??
+      span.id
+    );
   }
 
   private toToolCallInput(span: AnyExportedSpan): OpenAIMessage[] {
@@ -530,7 +624,7 @@ export class BraintrustExporter extends TrackingExporter<
         content: '',
         tool_calls: [
           {
-            id: this.getToolCallId(span),
+            id: this.resolveToolCallId(span),
             type: 'function',
             function: {
               name: this.getToolName(span),
@@ -546,7 +640,7 @@ export class BraintrustExporter extends TrackingExporter<
     return {
       role: 'tool',
       content: serializeToolResult(span.output),
-      tool_call_id: this.getToolCallId(span),
+      tool_call_id: this.resolveToolCallId(span),
     };
   }
 

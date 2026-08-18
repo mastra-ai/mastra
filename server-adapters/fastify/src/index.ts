@@ -212,7 +212,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     const cancelReader = (reason: string) => {
       if (readerCanceled) return;
       readerCanceled = true;
-      void reader.cancel(reason);
+      void reader.cancel(reason).catch(() => {});
     };
     const cancelReaderOnResponseClose = () => cancelReader('request aborted');
     const cancelReaderOnRequestClose = () => {
@@ -399,7 +399,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         const cancelReader = (reason: string) => {
           if (readerCanceled) return;
           readerCanceled = true;
-          void reader.cancel(reason);
+          void reader.cancel(reason).catch(() => {});
         };
 
         const cancelReaderOnResponseClose = () => cancelReader('request aborted');
@@ -629,14 +629,10 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         }
       }
 
-      const body = typeof params.body === 'object' && params.body !== null ? params.body : {};
       const handlerParams = {
         ...params.urlParams,
         ...params.queryParams,
-        ...body,
-        ...('requestContext' in body
-          ? { bodyRequestContext: body.requestContext as Record<string, unknown> | undefined }
-          : {}),
+        ...(typeof params.body === 'object' ? params.body : {}),
         requestContext: request.requestContext,
         mastra: this.mastra,
         registeredTools: request.registeredTools,
@@ -712,10 +708,14 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     };
 
     // Add body limit if configured
-    const shouldApplyBodyLimit = this.bodyLimitOptions && ['POST', 'PUT', 'PATCH'].includes(route.method.toUpperCase());
+    const shouldApplyBodyLimit =
+      this.bodyLimitOptions && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(route.method.toUpperCase());
     const maxSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
 
-    const config = shouldApplyBodyLimit && maxSize ? { bodyLimit: maxSize } : undefined;
+    // Fastify enforces body size limits via the route-level `bodyLimit` option,
+    // not `config` (which is arbitrary metadata exposed as request.routeOptions.config
+    // and is never read by Fastify's body-parsing pipeline).
+    const bodyLimit = shouldApplyBodyLimit && maxSize ? maxSize : undefined;
 
     // Handle ALL method by registering for each HTTP method
     // Fastify doesn't support 'ALL' method natively like Express
@@ -729,7 +729,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             method,
             url: fastifyPath,
             handler,
-            config,
+            bodyLimit,
           });
         } catch (err) {
           // Skip duplicate route errors - can happen if route is registered multiple times
@@ -744,15 +744,14 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         method: route.method as 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
         url: fastifyPath,
         handler,
-        config,
+        bodyLimit,
       });
     }
   }
 
   async registerCustomApiRoutes(): Promise<void> {
-    if (!(await this.buildCustomRouteHandler())) return;
-
-    const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes ?? [];
+    const routes = await this.registerSchemaApiRoutes();
+    if (!(await this.buildCustomRouteHandler(routes))) return;
 
     for (const route of routes) {
       // Create pseudo ServerRoute for auth checking
@@ -913,6 +912,11 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     });
 
     this.app.addHook('preHandler', this.createContextMiddleware());
+
+    this.app.addHook('onResponse', async (request, reply) => {
+      const path = request.url.split('?')[0]!;
+      this.warnIfUnregisteredChannelWebhook(path, request.method, reply.statusCode);
+    });
   }
 
   registerAuthMiddleware(): void {

@@ -22,6 +22,24 @@ export type NotificationSignalMetadata = {
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+export const signalContentsToText = (contents: unknown): string => {
+  if (typeof contents === 'string') return contents;
+  if (!Array.isArray(contents)) return '';
+
+  return contents
+    .flatMap(part => {
+      if (!isRecord(part)) return [];
+      return part.type === 'text' && typeof part.text === 'string' && part.text.length > 0 ? [part.text] : [];
+    })
+    .join('\n');
+};
+
+export const formatSignalValue = (value: unknown): string | undefined => {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return undefined;
+};
+
 export const isSignalData = (value: unknown): value is SignalData => {
   if (!isRecord(value)) return false;
   return value.type === 'notification' || value.type === 'state' || value.type === 'reactive';

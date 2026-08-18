@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { describe, expect, it } from 'vitest';
 
 import { HTTPException } from '../http-exception';
@@ -29,6 +30,23 @@ describe('handleError', () => {
       const sideEffectPattern = /(?:^|\n)\s*import\s+['"]@mastra\/core\/agent-builder\/ee['"]/;
       expect(src).not.toMatch(sideEffectPattern);
     });
+  });
+
+  it('uses an explicit status from MastraError details', () => {
+    const err = new MastraError({
+      id: 'OBSERVATIONAL_MEMORY_THREAD_ID_REQUIRED',
+      domain: ErrorDomain.MASTRA_MEMORY,
+      category: ErrorCategory.USER,
+      text: 'ObservationalMemory requires a threadId',
+      details: { status: 400 },
+    });
+
+    expect(() => handleError(err, 'default')).toThrow(
+      expect.objectContaining({
+        status: 400,
+        message: 'ObservationalMemory requires a threadId',
+      }),
+    );
   });
 
   describe('MODEL_NOT_ALLOWED handling', () => {

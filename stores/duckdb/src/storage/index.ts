@@ -12,7 +12,8 @@ import type {
 const OBSERVABILITY_UPGRADE_MESSAGE =
   'DuckDB observability storage requires `@mastra/core` with observability storage support. Upgrade `@mastra/core` to use this store.';
 const OBSERVABILITY_DELTA_POLLING_FEATURE = 'observability-delta-polling';
-const DUCKDB_OBSERVABILITY_FEATURES = ['delta-polling'] as const;
+const DUCKDB_OBSERVABILITY_FEATURES = ['metrics', 'logs'] as const;
+const DUCKDB_OBSERVABILITY_DELTA_FEATURES = ['metrics', 'logs', 'delta-polling'] as const;
 
 function isObservabilityCompatibilityError(error: unknown): boolean {
   if (!(error instanceof Error)) {
@@ -117,12 +118,12 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
 
   getFeatures(): ReturnType<ObservabilityStoreImpl['getFeatures']> {
     // Deliberately mirrored here so the lazy facade can advertise DuckDB's
-    // static delta polling feature before the delegate is instantiated.
+    // static observability features before the delegate is instantiated.
     if (!coreFeatures.has(OBSERVABILITY_DELTA_POLLING_FEATURE)) {
-      return undefined;
+      return DUCKDB_OBSERVABILITY_FEATURES;
     }
 
-    return DUCKDB_OBSERVABILITY_FEATURES;
+    return DUCKDB_OBSERVABILITY_DELTA_FEATURES;
   }
 
   async init(...args: Parameters<ObservabilityStoreImpl['init']>): ReturnType<ObservabilityStoreImpl['init']> {
@@ -463,6 +464,19 @@ export interface DuckDBStoreConfig {
    * Use ':memory:' for an ephemeral in-memory database.
    */
   path?: string;
+  /**
+   * Maximum memory DuckDB may use (e.g. '2GB', '512MB').
+   * @default '2GB'
+   * DuckDB's own default is 80% of system RAM, which is far too aggressive
+   * for a store embedded in an application server.
+   */
+  memoryLimit?: string;
+  /**
+   * Number of threads DuckDB may use. Defaults to DuckDB's default (one per
+   * CPU core). Lower this to keep queries from monopolizing all cores of a
+   * shared application server.
+   */
+  threads?: number;
 }
 
 /**
@@ -497,7 +511,7 @@ export class DuckDBStore extends MastraCompositeStore {
     const id = config.id ?? 'duckdb';
     super({ id, name: 'DuckDBStore' });
 
-    this.db = new DuckDBConnection({ path: config.path });
+    this.db = new DuckDBConnection({ path: config.path, memoryLimit: config.memoryLimit, threads: config.threads });
     this.observabilityStore = new ObservabilityStorageDuckDB({ db: this.db });
 
     this.stores = {

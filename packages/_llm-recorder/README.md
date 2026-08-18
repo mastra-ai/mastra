@@ -38,9 +38,7 @@ import { llmRecorderPlugin } from '@internal/llm-recorder/vite-plugin';
 
 export default defineConfig({
   plugins: [llmRecorderPlugin()],
-  test: {
-    /* ... */
-  },
+  test: {/* ... */},
 });
 ```
 

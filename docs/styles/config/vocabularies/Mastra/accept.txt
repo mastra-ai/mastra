@@ -61,6 +61,8 @@ IAM
 JSONB
 (?i)JWT
 JWKS
+Kubernetes
+kubectl
 (?i)Lambda
 (?i)Laminar
 LanceDB
@@ -134,4 +136,4 @@ Vectorize
 WebSocket
 WhatsApp
 (?i)WorkOS
-Zod
+(?i)Zod

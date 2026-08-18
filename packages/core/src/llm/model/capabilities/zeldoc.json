@@ -1,3 +1,5 @@
 {
-  "temperature": ["z-code"]
+  "attachment": ["zdev"],
+  "temperature": ["zdev"],
+  "structuredOutput": ["zdev"]
 }

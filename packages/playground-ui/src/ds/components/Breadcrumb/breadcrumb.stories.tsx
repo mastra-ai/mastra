@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ChevronDown } from 'lucide-react';
+import { Icon } from '../../icons/Icon';
+import { WorkspacesIcon } from '../../icons/WorkspacesIcon';
 import { Breadcrumb, Crumb } from './Breadcrumb';
 
 const meta: Meta<typeof Breadcrumb> = {
@@ -75,8 +77,8 @@ export const WithAction: Story = {
         to="/agents/my-agent"
         isCurrent
         action={
-          <button className="rounded p-1 hover:bg-surface2">
-            <ChevronDown className="size-4 text-neutral3" />
+          <button className="hover:bg-surface2 rounded p-1">
+            <ChevronDown className="text-neutral3 size-4" />
           </button>
         }
       >
@@ -91,6 +93,23 @@ export const SingleItem: Story = {
     <Breadcrumb label="Navigation">
       <Crumb as="span" to="/dashboard" isCurrent>
         Dashboard
+      </Crumb>
+    </Breadcrumb>
+  ),
+};
+
+/** A clamped label must ellipsize, not cut mid-glyph, and keep its descenders. */
+export const TruncatedLabel: Story = {
+  render: () => (
+    <Breadcrumb label="Navigation">
+      <Crumb as="a" to="/workspaces" className="max-w-40">
+        <Icon>
+          <WorkspacesIcon />
+        </Icon>
+        Staging deployment registry
+      </Crumb>
+      <Crumb as="span" to="/workspaces/playground" isCurrent className="max-w-40">
+        Agent playground copy
       </Crumb>
     </Breadcrumb>
   ),

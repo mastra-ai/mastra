@@ -1,0 +1,22 @@
+---
+extends: existence
+message: "AI contrast by negation: '%s'. State the positive directly without the trailing negation."
+level: error
+nonword: true
+ignorecase: true
+# Telegraphic negation cadence, often the agent's workaround once the
+# "not X; it's Y" formula gets flagged: a positive spec paired with a negated
+# one. Two shapes. Stacked anaphora ("no setup, no config, no hassle") catches
+# the marketing cadence and its idioms ("no pain, no gain"), which read as tells
+# here. The single clause-final fragment ("cleartext repo names, no k-anonymity
+# gate") is aggressive by design and will also catch a literal "coffee, no
+# sugar," so disable this rule for terse spec lists where that is intended.
+# "No longer" and "no sooner" are temporal adverbs, a different construction.
+exceptions:
+  - 'no longer'
+  - 'no sooner'
+tokens:
+  # Stacked: "no X, no Y[, no Z]"
+  - "\\bno [^,.;:!?]{2,}, no [^.!?]+"
+  # Single clause-final fragment: "..., no <noun phrase>."
+  - ', no [a-z][^.!?,;:]*[.!?]'

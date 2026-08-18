@@ -127,7 +127,7 @@ export const PickMultiPanelSingle: Story = {
     const field = FIELDS.find(f => f.id === 'status') as Extract<PropertyFilterField, { kind: 'pick-multi' }>;
     const { tokens, setTokens } = useTokens([{ fieldId: 'status', value: 'running' }]);
     return (
-      <div className="w-64 rounded-md border border-border1 bg-surface3 p-2">
+      <div className="border-border1 bg-surface3 w-64 rounded-md border p-2">
         <PickMultiPanel
           field={field}
           tokens={tokens}
@@ -154,7 +154,7 @@ export const PickMultiPanelMulti: Story = {
     const field = FIELDS.find(f => f.id === 'tags') as Extract<PropertyFilterField, { kind: 'pick-multi' }>;
     const { tokens, setTokens } = useTokens([{ fieldId: 'tags', value: ['production'] }]);
     return (
-      <div className="w-64 rounded-md border border-border1 bg-surface3 p-2">
+      <div className="border-border1 bg-surface3 w-64 rounded-md border p-2">
         <PickMultiPanel
           field={field}
           tokens={tokens}
@@ -191,7 +191,7 @@ export const PickMultiPanelLoading: Story = {
       isLoading: true,
     };
     return (
-      <div className="w-64 rounded-md border border-border1 bg-surface3 p-2">
+      <div className="border-border1 bg-surface3 w-64 rounded-md border p-2">
         <PickMultiPanel field={field} tokens={[]} onChange={() => {}} />
       </div>
     );

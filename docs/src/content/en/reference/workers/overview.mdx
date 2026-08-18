@@ -1,0 +1,100 @@
+---
+title: "Reference: Workers | Workers"
+description: "API reference for Mastra workers, the background processing units that handle workflow orchestration, cron scheduling, and background task execution."
+packages:
+  - "@mastra/core"
+  - "@mastra/redis-streams"
+  - "@mastra/google-cloud-pubsub"
+---
+
+# Workers
+
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
+For usage patterns and deployment topologies, see [Workers](/docs/deployment/workers).
+
+## Environment variables
+
+### `MASTRA_WORKERS`
+
+Controls which workers start in the current process.
+
+| Value | Behavior |
+| - | - |
+| _(not set)_ | Default workers are auto-created based on configuration |
+| `"false"` | Disables worker event processing. The process serves HTTP requests and can still publish events to PubSub (e.g., workflow starts) without consuming them. |
+| `"orchestration"` | Only the orchestration worker starts |
+| `"scheduler"` | Only the scheduler worker starts |
+| `"backgroundTasks"` | Only the background task worker starts |
+| `"orchestration,scheduler"` | Multiple workers (comma-separated) |
+
+Use this to run different worker types in separate containers from the same build artifact.
+
+### `MASTRA_STEP_EXECUTION_URL`
+
+The base URL of the API server, used by the orchestration worker to execute workflow steps remotely. Required when the orchestration worker runs in a separate process from the API.
+
+```
+MASTRA_STEP_EXECUTION_URL=http://api:4111/api
+```
+
+Use HTTPS URLs in production. See [Security recommendations](/docs/auth/workers#security-recommendations).
+
+The orchestration worker sends step execution requests to:
+
+```
+${MASTRA_STEP_EXECUTION_URL}/workflows/:workflowId/runs/:runId/steps/execute
+```
+
+### `MASTRA_WORKER_AUTH_TOKEN`
+
+A bearer token sent by the orchestration worker when calling the API's step execution endpoint. The API's configured auth provider must recognize this token. See [Worker authentication](/docs/auth/workers).
+
+```
+MASTRA_WORKER_AUTH_TOKEN=sk-worker-secret-token
+```
+
+## Worker types
+
+### OrchestrationWorker
+
+Processes workflow events from the PubSub `workflows` topic. Requires a pull-capable PubSub like `@mastra/redis-streams` or `@mastra/google-cloud-pubsub` configured with a pull subscription.
+
+- **Name**: `orchestration`
+- **PubSub topic**: `workflows`
+- **Consumer group**: `mastra-orchestration`
+
+### SchedulerWorker
+
+Polls storage for due cron schedules and publishes `workflow.start` events.
+
+- **Name**: `scheduler`
+- **Single instance only**: Run exactly one instance to avoid duplicate fires
+
+### BackgroundTaskWorker
+
+Executes background tool calls dispatched by agents.
+
+- **Name**: `backgroundTasks`
+- **PubSub topic**: `background-tasks`
+- **Consumer group**: `background-task-workers`
+- **Supports multiple replicas**: Instances share the consumer group
+
+## Supported storage backends
+
+A deployment running all worker types requires a storage backend that implements the `workflows`, `backgroundTasks`, and `schedules` domains. The `schedules` domain is specifically required by the SchedulerWorker. If you don't use scheduled workflows, backends without it can still support orchestration and background tasks. The following backends support all three:
+
+| Backend | Package |
+| - | - |
+| PostgreSQL | [`@mastra/pg`](/integrations/databases/postgresql) |
+| LibSQL | [`@mastra/libsql`](/integrations/databases/libsql) |
+| MySQL | `@mastra/mysql` |
+| MongoDB | [`@mastra/mongodb`](/integrations/databases/mongodb) |
+| Spanner | [`@mastra/spanner`](/integrations/databases/spanner) |
+| Convex | [`@mastra/convex`](/integrations/databases/convex) |
+
+Other storage backends (Upstash, DynamoDB, Cloudflare D1, ClickHouse, Redis) support workflows and some worker features, but are missing the `schedules` domain. They can still be used for orchestration and background task workers if you don't deploy the scheduler.

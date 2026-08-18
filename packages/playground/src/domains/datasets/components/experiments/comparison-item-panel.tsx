@@ -96,7 +96,7 @@ export function ComparisonItemPanel({
             <Sections>
               {sortedScorerIds.length > 0 && (
                 <div className="grid gap-3">
-                  <h4 className="text-sm font-medium text-neutral5">Scores</h4>
+                  <h4 className="text-neutral5 text-sm font-medium">Scores</h4>
                   <div className="grid gap-2">
                     {sortedScorerIds.map(scorerId => {
                       const baselineScore = baselineResult?.scores[scorerId] ?? null;
@@ -107,11 +107,11 @@ export function ComparisonItemPanel({
                       return (
                         <div
                           key={scorerId}
-                          className="flex items-center justify-between gap-4 px-3 py-2 rounded-lg bg-surface2"
+                          className="bg-surface2 flex items-center justify-between gap-4 rounded-lg px-3 py-2"
                         >
-                          <span className="text-sm text-neutral5 font-medium">{scorerId}</span>
+                          <span className="text-neutral5 text-sm font-medium">{scorerId}</span>
                           <div className="flex items-center gap-4">
-                            <span className="text-sm text-neutral3">
+                            <span className="text-neutral3 text-sm">
                               {baselineScore != null ? baselineScore.toFixed(3) : '-'} →{' '}
                               {contenderScore != null ? contenderScore.toFixed(3) : '-'}
                             </span>

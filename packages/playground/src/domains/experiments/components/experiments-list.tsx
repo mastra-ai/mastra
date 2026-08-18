@@ -5,7 +5,9 @@ import {
   DataListSkeleton as EntityListSkeleton,
 } from '@mastra/playground-ui/components/DataList';
 import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
+import { getShortId } from '@mastra/playground-ui/components/Text';
 import { useMemo } from 'react';
+import { ExperimentNameLabel } from './experiment-name-label';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface ExperimentsListProps {
@@ -18,7 +20,8 @@ export interface ExperimentsListProps {
   datasetFilter?: string;
 }
 
-const COLUMNS = 'auto 1fr auto auto auto auto auto auto auto';
+// experiment name is free-form — an `auto` track would let it starve its neighbours
+const COLUMNS = 'minmax(9rem,1fr) 1fr auto auto auto auto auto auto auto';
 
 function formatDate(dateStr: string | Date | undefined | null): string {
   if (!dateStr) return '—';
@@ -65,6 +68,7 @@ export function ExperimentsList({
       const matchesSearch =
         !term ||
         exp.id.toLowerCase().includes(term) ||
+        (exp.name ?? '').toLowerCase().includes(term) ||
         dsName.toLowerCase().includes(term) ||
         (exp.targetId ?? '').toLowerCase().includes(term);
       const matchesStatus = statusFilter === 'all' || exp.status === statusFilter;
@@ -92,7 +96,9 @@ export function ExperimentsList({
       </EntityList.Top>
 
       {filteredData.map(exp => {
-        const dsName = exp.datasetId ? (datasetMap.get(exp.datasetId) ?? exp.datasetId.slice(0, 8)) : '—';
+        const dsName = exp.datasetId
+          ? (datasetMap.get(exp.datasetId) ?? getShortId(exp.datasetId) ?? exp.datasetId)
+          : '—';
         const status = exp.status ?? 'pending';
         const succeeded = exp.succeededCount ?? 0;
         const failed = exp.failedCount ?? 0;
@@ -101,7 +107,9 @@ export function ExperimentsList({
 
         return (
           <EntityList.RowLink key={exp.id} to={paths.experimentLink(exp.id)} LinkComponent={Link}>
-            <EntityList.NameCell className="font-mono">{exp.id.slice(0, 8)}</EntityList.NameCell>
+            <EntityList.Cell>
+              <ExperimentNameLabel experiment={exp} />
+            </EntityList.Cell>
             <EntityList.TextCell>{dsName}</EntityList.TextCell>
             <EntityList.Cell>
               <span className="truncate">

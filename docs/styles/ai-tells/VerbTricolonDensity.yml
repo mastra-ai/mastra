@@ -1,0 +1,7 @@
+---
+extends: occurrence
+message: 'AI tricolon: multiple verb tricolons in one paragraph (found %s). Rewrite some with two or four items.'
+level: error
+scope: paragraph
+max: 1
+token: '((?:\w+ly )?\w+s [^,]+, (?:\w+ly )?\w+s [^,]+, (?:and|or) (?:\w+ly )?\w+s [^.!?]+|(?:\w+ly )?\w+ing [^,]+, (?:\w+ly )?\w+ing [^,]+, (?:and|or) (?:\w+ly )?\w+ing [^.!?]+|(?:\w+ly )?\w+ed [^,]+, (?:\w+ly )?\w+ed [^,]+, (?:and|or) (?:\w+ly )?\w+ed [^.!?]+)'

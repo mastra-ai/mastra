@@ -1,6 +1,6 @@
 import { createVectorTestSuite } from '@internal/storage-test-utils';
 import dotenv from 'dotenv';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { TurbopufferVectorFilter } from './filter';
 import { TurbopufferVector } from './';
@@ -1067,4 +1067,55 @@ function waitUntilVectorsIndexed(vectorDB: TurbopufferVector, indexName: string,
       },
     });
   }
+});
+
+describe('TurbopufferVector consistency option', () => {
+  const indexName = 'consistency-test-index';
+
+  beforeAll(() => {
+    vi.stubEnv('TURBOPUFFER_REGION', 'gcp-us-central1');
+  });
+
+  afterAll(() => {
+    vi.unstubAllEnvs();
+  });
+
+  async function setupVectorWithMockedClient(opts?: { consistency?: 'strong' | 'eventual' }) {
+    const vectorDB = new TurbopufferVector({
+      id: 'turbopuffer-consistency-test',
+      apiKey: 'fake-api-key',
+      ...opts,
+    });
+    // createIndex only registers the index in a local cache; no network calls
+    await vectorDB.createIndex({ indexName, dimension: 3 });
+    const queryMock = vi.fn().mockResolvedValue({ rows: [] });
+    (vectorDB as any).client = {
+      namespace: vi.fn(() => ({ query: queryMock })),
+    };
+    return { vectorDB, queryMock };
+  }
+
+  it('defaults to strong consistency', async () => {
+    const { vectorDB, queryMock } = await setupVectorWithMockedClient();
+    await vectorDB.query({ indexName, queryVector: [1, 0, 0], topK: 10 });
+    expect(queryMock).toHaveBeenCalledWith(expect.objectContaining({ consistency: { level: 'strong' } }));
+  });
+
+  it('uses the instance-level consistency option', async () => {
+    const { vectorDB, queryMock } = await setupVectorWithMockedClient({ consistency: 'eventual' });
+    await vectorDB.query({ indexName, queryVector: [1, 0, 0], topK: 10 });
+    expect(queryMock).toHaveBeenCalledWith(expect.objectContaining({ consistency: { level: 'eventual' } }));
+  });
+
+  it('per-query consistency overrides the instance-level option', async () => {
+    const { vectorDB, queryMock } = await setupVectorWithMockedClient({ consistency: 'eventual' });
+    await vectorDB.query({ indexName, queryVector: [1, 0, 0], topK: 10, consistency: 'strong' });
+    expect(queryMock).toHaveBeenCalledWith(expect.objectContaining({ consistency: { level: 'strong' } }));
+  });
+
+  it('per-query consistency can relax the default', async () => {
+    const { vectorDB, queryMock } = await setupVectorWithMockedClient();
+    await vectorDB.query({ indexName, queryVector: [1, 0, 0], topK: 10, consistency: 'eventual' });
+    expect(queryMock).toHaveBeenCalledWith(expect.objectContaining({ consistency: { level: 'eventual' } }));
+  });
 });

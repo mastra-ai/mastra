@@ -60,6 +60,11 @@ describe('VoyageTextEmbeddingModelV2', () => {
     expect(mockConstructor).toHaveBeenCalledWith({ apiKey: 'custom-key' });
   });
 
+  it('passes baseUrl through to the VoyageAIClient when provided', () => {
+    new VoyageTextEmbeddingModelV2({ model: 'voyage-3.5', apiKey: 'custom-key', baseUrl: 'https://ai.mongodb.com/v1' });
+    expect(mockConstructor).toHaveBeenCalledWith({ apiKey: 'custom-key', baseUrl: 'https://ai.mongodb.com/v1' });
+  });
+
   it('should throw error if no API key is available', () => {
     delete process.env.VOYAGE_API_KEY;
 

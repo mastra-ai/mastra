@@ -82,7 +82,7 @@ export class VoyageContextualizedEmbeddingModel {
       );
     }
 
-    this.client = new VoyageAIClient({ apiKey });
+    this.client = new VoyageAIClient({ apiKey, ...(config.baseUrl ? { baseUrl: config.baseUrl } : {}) });
   }
 
   /**

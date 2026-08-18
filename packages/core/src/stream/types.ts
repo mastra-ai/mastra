@@ -1,3 +1,4 @@
+import type { TransformStream } from 'node:stream/web';
 import type {
   LanguageModelV2FinishReason,
   LanguageModelV2Usage,
@@ -143,6 +144,7 @@ export interface FilePayload {
   data: string | Uint8Array;
   base64?: string;
   mimeType: string;
+  filename?: string;
   providerMetadata?: ProviderMetadata;
 }
 
@@ -236,6 +238,8 @@ interface FinishPayload<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   stepResult: {
     /** Includes 'tripwire' and 'retry' for processor scenarios */
     reason: LanguageModelV2FinishReason | 'tripwire' | 'retry';
+    /** Provider's own finish reason (e.g. 'MALFORMED_FUNCTION_CALL'), when the provider reports one */
+    rawReason?: string;
     warnings?: LanguageModelV2CallWarning[];
     isContinued?: boolean;
     logprobs?: LanguageModelV1LogProbs;
@@ -295,6 +299,8 @@ export interface StepFinishPayload<Tools extends ToolSet = ToolSet, OUTPUT = und
     isContinued?: boolean;
     warnings?: LanguageModelV2CallWarning[];
     reason: LanguageModelV2FinishReason;
+    /** Provider's own finish reason (e.g. 'MALFORMED_FUNCTION_CALL'), when the provider reports one */
+    rawReason?: string;
   };
   output: {
     text?: string;
@@ -317,7 +323,7 @@ export interface StepFinishPayload<Tools extends ToolSet = ToolSet, OUTPUT = und
   [key: string]: unknown;
 }
 
-interface ToolErrorPayload {
+export interface ToolErrorPayload {
   id?: string;
   providerMetadata?: ProviderMetadata;
   toolCallId: string;
@@ -325,6 +331,18 @@ interface ToolErrorPayload {
   args?: Record<string, unknown>;
   error: unknown;
   providerExecuted?: boolean;
+}
+
+/** Terminal stream payload when a requireApproval tool call is declined. */
+export interface ToolOutputDeniedPayload {
+  toolCallId: string;
+  toolName: string;
+  args?: Record<string, unknown>;
+  approval: {
+    id: string;
+    approved: false;
+    reason?: string;
+  };
 }
 
 interface AbortPayload {
@@ -453,6 +471,15 @@ export interface GoalEvaluationPayload {
   maxRunsReached: boolean;
   /** Whether the goal feedback message is suppressed from memory. */
   suppressFeedback: boolean;
+  /**
+   * The goal gate's continuation decision: `true` when the run loops into
+   * another judged iteration, `false` on a terminal evaluation (completion,
+   * waiting for user, judge failure, or budget exhaustion). Only set on final
+   * (non-pending) evaluation chunks. A `true` value marks an iteration
+   * boundary — the turn's messages are persisted and the stream may safely
+   * truncate its run-lifetime buffers.
+   */
+  shouldContinue?: boolean;
   /**
    * True on the "pre-evaluation" chunk emitted before scoring starts. Display
    * layers use this to show a loading/evaluating indicator while the scorer
@@ -841,6 +868,7 @@ export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'step-start'; payload: StepStartPayload })
   | (BaseChunkType & { type: 'step-finish'; payload: StepFinishPayload<ToolSet, OUTPUT> })
   | (BaseChunkType & { type: 'tool-error'; payload: ToolErrorPayload })
+  | (BaseChunkType & { type: 'tool-output-denied'; payload: ToolOutputDeniedPayload })
   | (BaseChunkType & { type: 'abort'; payload: AbortPayload })
   | (BaseChunkType & {
       type: 'object';
@@ -907,6 +935,7 @@ export type WorkflowStreamEvent =
       type: 'workflow-finish';
       payload: {
         workflowStatus: WorkflowRunStatus;
+        finalWorkflowResult?: unknown;
         output: {
           usage: {
             inputTokens: number;
@@ -1023,6 +1052,7 @@ export type SourceChunk = BaseChunkType & { type: 'source'; payload: SourcePaylo
 export type FileChunk = BaseChunkType & { type: 'file'; payload: FilePayload };
 export type ToolCallChunk = BaseChunkType & { type: 'tool-call'; payload: ToolCallPayload };
 export type ToolResultChunk = BaseChunkType & { type: 'tool-result'; payload: ToolResultPayload };
+export type ToolOutputDeniedChunk = BaseChunkType & { type: 'tool-output-denied'; payload: ToolOutputDeniedPayload };
 export type ReasoningChunk = BaseChunkType & { type: 'reasoning'; payload: ReasoningDeltaPayload };
 
 export type PendingToolCall = {
@@ -1056,6 +1086,8 @@ export type LanguageModelUsage = LanguageModelV2Usage & {
   reasoningTokens?: number;
   cachedInputTokens?: number;
   cacheCreationInputTokens?: number;
+  cacheCreationInputTokens5m?: number;
+  cacheCreationInputTokens1h?: number;
   /**
    * Raw usage data from the provider, preserved for advanced use cases.
    * For V3 models, contains the full nested structure:
@@ -1087,6 +1119,18 @@ export type MastraOnFinishCallback<OUTPUT = undefined> = (
   event: MastraOnFinishCallbackArgs<OUTPUT>,
 ) => Promise<void> | void;
 
+/**
+ * Creates a fresh transform for a Mastra model output stream.
+ *
+ * @experimental This API may change in a future release.
+ */
+export type MastraStreamTransform<OUTPUT = undefined> = () => TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>;
+
+/** @experimental This API may change in a future release. */
+export type MastraStreamTransformOptions<OUTPUT = undefined> =
+  | MastraStreamTransform<OUTPUT>
+  | readonly MastraStreamTransform<OUTPUT>[];
+
 export type MastraModelOutputOptions<OUTPUT = undefined> = {
   runId: string;
   toolCallStreaming?: boolean;
@@ -1107,6 +1151,8 @@ export type MastraModelOutputOptions<OUTPUT = undefined> = {
   processorStates?: Map<string, any>;
   requestContext?: RequestContext;
   transportRef?: StreamTransportRef;
+  /** Experimental transforms applied whenever `fullStream` is consumed. */
+  experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
 } & Partial<ObservabilityContext>;
 
 /**

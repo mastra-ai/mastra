@@ -151,6 +151,58 @@ describe('Agent Type Tests', () => {
 
       expectTypeOf(config.id).toEqualTypeOf<'test-agent'>();
     });
+
+    it('should type requestContext in skills function based on requestContextSchema', () => {
+      // No explicit TRequestContext generic — the type must be inferred from
+      // requestContextSchema so a regression to RequestContext<unknown> fails.
+      new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        model: {} as any,
+        requestContextSchema: z.object({
+          documentId: z.string(),
+          userId: z.string(),
+        }),
+        instructions: 'You are a helpful assistant',
+        skills: ({ requestContext }) => {
+          // Verify requestContext is typed
+          expectTypeOf(requestContext).toEqualTypeOf<RequestContext<{ documentId: string; userId: string }>>();
+
+          // Verify get() returns the correct type
+          const documentId = requestContext.get('documentId');
+          expectTypeOf(documentId).toEqualTypeOf<string>();
+
+          // Verify unknown keys are rejected on the strict API
+          // @ts-expect-error - key does not exist in the request context schema
+          requestContext.get('nonexistentKey');
+
+          // Runtime-only keys are available through the open-map escape hatch
+          const raw = requestContext.getRaw('nonexistentKey');
+          expectTypeOf(raw).toEqualTypeOf<unknown>();
+
+          return [];
+        },
+      });
+    });
+
+    it('should keep a schema-typed agent assignable to Agent (issue #21286)', () => {
+      const schemaAgent = new Agent({
+        id: 'schema-agent',
+        name: 'Schema Agent',
+        model: {} as any,
+        instructions: 'You are a helpful assistant',
+        requestContextSchema: z.object({
+          tenantTier: z.enum(['free', 'pro']).optional(),
+          verbose: z.boolean().optional(),
+        }),
+      });
+
+      // Generic helpers typed as bare `Agent` must accept schema-narrowed agents.
+      expectTypeOf(schemaAgent).toExtend<Agent>();
+
+      const driveAgent = (_agent: Agent): Promise<void> => Promise.resolve();
+      void driveAgent(schemaAgent);
+    });
   });
 
   describe('Issue #16732: AgentExecutionOptions<undefined> should not require structuredOutput', () => {
@@ -250,6 +302,30 @@ describe('Agent Type Tests', () => {
         // @ts-expect-error - both fields owned by the editor
         instructions: 'hi',
       });
+    });
+  });
+
+  describe('Issue #20201: tool-approval resume methods expose a typed `model` override', () => {
+    // `resumeStream`/`resumeGenerate` already accept and consume a per-resume `model`
+    // override, but the public approve/decline entry points previously omitted it from
+    // their option types — forcing callers to cast past the signature (the source even
+    // carried a `// @ts-expect-error - the types here are wrong`). A `model` key on the
+    // options literal must now type-check against each method's parameter type; without
+    // the fix these object literals fail excess-property checking.
+    const agent = new Agent({ id: 'a', name: 'A', model: {} as any, instructions: 'hi' });
+
+    it('accepts `model` on approveToolCall / declineToolCall (stream)', () => {
+      const approve: Parameters<typeof agent.approveToolCall>[0] = { runId: 'r', model: {} as any };
+      const decline: Parameters<typeof agent.declineToolCall>[0] = { runId: 'r', model: {} as any };
+      assertType<string>(approve.runId);
+      assertType<string>(decline.runId);
+    });
+
+    it('accepts `model` on approveToolCallGenerate / declineToolCallGenerate (generate)', () => {
+      const approve: Parameters<typeof agent.approveToolCallGenerate>[0] = { runId: 'r', model: {} as any };
+      const decline: Parameters<typeof agent.declineToolCallGenerate>[0] = { runId: 'r', model: {} as any };
+      assertType<string>(approve.runId);
+      assertType<string>(decline.runId);
     });
   });
 });

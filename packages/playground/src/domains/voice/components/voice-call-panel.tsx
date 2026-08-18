@@ -29,7 +29,7 @@ export const VoiceCallPanel = ({ voiceCall }: VoiceCallPanelProps) => {
   return (
     <div
       data-testid="voice-call-panel"
-      className="max-w-3xl w-full mx-auto mb-2 rounded-[16px] border border-border2/40 bg-surface3 px-4 py-3"
+      className="border-border2/40 bg-surface3 mx-auto mb-2 w-full max-w-3xl rounded-[16px] border px-4 py-3"
     >
       <div className="flex items-center gap-2">
         <span
@@ -43,12 +43,12 @@ export const VoiceCallPanel = ({ voiceCall }: VoiceCallPanelProps) => {
         <span className="text-ui-sm text-neutral4">{stateLabel}</span>
       </div>
       {lastUserCaption && (
-        <p className="mt-2 text-ui-sm text-neutral3 truncate" data-testid="voice-caption-user">
+        <p className="text-ui-sm text-neutral3 mt-2 truncate" data-testid="voice-caption-user">
           {lastUserCaption.text}
         </p>
       )}
       {lastAgentCaption && (
-        <p className="mt-1 text-ui-sm text-neutral6" data-testid="voice-caption-agent">
+        <p className="text-ui-sm text-neutral6 mt-1" data-testid="voice-caption-agent">
           {lastAgentCaption.text}
         </p>
       )}

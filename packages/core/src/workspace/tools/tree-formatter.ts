@@ -170,7 +170,7 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
         const relativePath = getRelativePath('', currentPath, e.name);
         // Append trailing slash for directories so gitignore dir patterns match
         const checkPath = e.type === 'directory' ? `${relativePath}/` : relativePath;
-        return !ignoreFilter!(checkPath);
+        return !ignoreFilter(checkPath);
       });
     }
 
@@ -197,7 +197,7 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
       filtered = filtered.filter(e => {
         if (e.type === 'directory') return true;
         const relativePath = getRelativePath(path, currentPath, e.name);
-        return globMatcher!(relativePath);
+        return globMatcher(relativePath);
       });
     }
 

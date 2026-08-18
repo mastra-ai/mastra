@@ -1,0 +1,205 @@
+---
+extends: existence
+message: "AI mic-drop: '%s'. Integrate the point into the surrounding text or cut it."
+level: error
+nonword: true
+tokens:
+  # ==========================================================================
+  # Staccato declarations: short punchy sentences AI drops in for dramatic
+  # effect. "All four are thin." "It matters." "And it shows."
+  #
+  # These read like someone slamming a gavel in what should be a calm
+  # technical discussion. Human technical writers state facts inline;
+  # AI punctuates with mic-drops.
+  # ==========================================================================
+
+  # ---- Pronoun + intransitive verb mic-drops ----
+  # "It matters." "This works." "That scales."
+  - "(?:It|This|That) matters\\."
+  - "(?:It|This|That) works\\."
+  - "(?:It|This|That) shows\\."
+  - "(?:It|This|That) helps\\."
+  - "(?:It|This|That) scales\\."
+  - "(?:It|This|That) compounds\\."
+  - "(?:It|This|That) counts\\."
+  - "(?:It|This|That) adds up\\."
+  - "(?:It|This|That) pays off\\."
+  - "(?:It|This|That) depends\\."
+
+  # ---- Explicit-NP subject + intransitive mic-drop verb ----
+  # Same family as the pronoun set above, but with definite or demonstrative
+  # noun-phrase subjects instead of bare pronouns. AI punctuates technical
+  # discussion with these terminal one-liners.
+  # "The unset-versus-bogus distinction matters." "The trust compounds."
+  # [\w-] catches hyphenated subjects ("load-bearing", "user-facing").
+  - "(?:The|This|That) [\\w-]+(?: [\\w-]+){0,2} (?:matters|compounds|pays off|adds up)\\."
+
+  # Plural form: "These details matter." "Those choices add up."
+  - "(?:These|Those) [\\w-]+(?: [\\w-]+){0,2} (?:matter|compound|pay off|add up)\\."
+
+  # ---- "This/That/It + copula + adjective" emphatic declarations ----
+  # "This is key." "That's intentional." "It was deliberate."
+  - "(?:It|This|That)(?:'s| is| was) (?:key|crucial|critical|intentional|deliberate|powerful|elegant|subtle|clean|simple|clear|important|significant|telling|striking|notable|profound|revealing|transformative|remarkable|essential|fundamental|beautiful|paramount|vital|obvious|neat|real|enough)\\."
+  - "(?:It|This|That)(?:'s| is| was) (?:by design|on purpose|no accident|no coincidence|worth it|worth noting|not optional)\\."
+
+  # ---- "They/These/Those + copula + adjective" ----
+  # "These are thin." "Those were deliberate."
+  - "(?:They|These|Those)(?:'re| are| were) (?:thin|key|crucial|critical|intentional|deliberate|powerful|elegant|subtle|clean|simple|clear|important|significant|telling|striking|notable|profound|essential|vital|obvious|neat|enough)\\."
+
+  # ---- "The [noun] is [adjective]." short dramatic assessments ----
+  # "The result is clean." "The difference is subtle."
+  - "The \\w+ (?:is|are|was|were) (?:thin|clean|simple|subtle|clear|key|crucial|critical|intentional|deliberate|powerful|elegant|important|significant|telling|striking|notable|straightforward|profound|revealing|transformative|remarkable|essential|fundamental|beautiful|obvious|neat|real|paramount|vital)\\."
+  - "The \\w+ \\w+ (?:is|are|was|were) (?:thin|clean|simple|subtle|clear|key|crucial|critical|intentional|deliberate|powerful|elegant|important|significant|telling|striking|notable|straightforward|profound|revealing|transformative|remarkable|essential|fundamental|beautiful|obvious|neat|real|paramount|vital)\\."
+
+  # ---- Quantifier/determiner + copula + adjective mic-drops ----
+  # Short declarations with a quantifier subject and a single-adjective verdict.
+
+  # "All [noun] are [adjective]." — "All four are thin." "All three are identical."
+  - "All \\w+ (?:are|were) (?:thin|clean|simple|subtle|clear|key|crucial|critical|intentional|deliberate|powerful|elegant|important|significant|telling|striking|notable|straightforward|profound|essential|obvious|neat|identical|interchangeable|equivalent)\\."
+
+  # "Both [are/noun are] [adjective]." — "Both are thin." "Both layers are thin."
+  - "Both (?:are|were) (?:thin|clean|simple|subtle|clear|key|crucial|critical|intentional|deliberate|powerful|elegant|important|significant|telling|notable|straightforward|essential|obvious|identical|interchangeable|equivalent)\\."
+  - "Both \\w+ (?:are|were) (?:thin|clean|simple|subtle|clear|key|crucial|critical|intentional|deliberate|powerful|elegant|important|significant|telling|notable|straightforward|essential|obvious|identical|interchangeable|equivalent)\\."
+
+  # "Each/Every [noun] is [adjective]." — "Each handler is clean." "Every choice is deliberate."
+  - "(?:Each|Every) \\w+ (?:is|was) (?:thin|clean|simple|subtle|clear|key|crucial|critical|intentional|deliberate|powerful|elegant|important|significant|telling|striking|notable|straightforward|profound|essential|obvious|neat|identical|independent|self-contained)\\."
+  # "Each is [adjective]." — standalone without noun
+  - "Each (?:(?:one )?(?:is|was)) (?:thin|clean|simple|subtle|clear|key|crucial|critical|intentional|deliberate|powerful|elegant|important|significant|telling|notable|straightforward|essential|obvious|identical|independent|self-contained)\\."
+
+  # "Everything/Nothing is [adjective]." — "Everything is intentional." "Nothing is accidental."
+  - "Everything (?:is|was) (?:intentional|deliberate|purposeful|connected|composable|explicit|visible|traceable|testable|optional)\\."
+  - "Nothing (?:is|was) (?:accidental|random|hidden|implicit|optional|wasted|redundant|superfluous|arbitrary|magical|surprising)\\."
+
+  # "None are [adjective]." — "None are optional." "None are accidental."
+  - "None (?:are|were|is|was) (?:optional|accidental|random|redundant|superfluous|arbitrary|wasted|surprising|hidden|magical)\\."
+
+  # ---- Antithetical balance: "X changes, Y stays the same." ----
+  # Two balanced clauses with change/permanence verb opposition, creating
+  # a pithy aphorism. AI reaches for this structure constantly.
+  # "The adapter changes, the service call stays the same."
+  # "Tools change, principles don't."
+  # "Frameworks come and go, fundamentals remain."
+
+  # Change-verb, then stay-verb (comma / semicolon / em-dash separated)
+  - "(?:changes?|evolves?|shifts?|varies|vary|comes? and go(?:es)?)[,;—] (?:the |a |an )?(?:\\w+ ){0,4}(?:stays? the same|remains?(?: the same)?|holds?|persists?|endures?|(?:doesn't|don't) change)\\."
+
+  # Stay-verb, then change-verb (reverse order)
+  - "(?:stays? the same|remains?(?: the same)?|holds?|persists?|endures?)[,;—] (?:the |a |an )?(?:\\w+ ){0,4}(?:changes?|evolves?|shifts?|varies|vary|comes? and go(?:es)?)\\."
+
+  # Period-separated: "Tools change. Principles don't."
+  - "(?:changes?|evolves?|shifts?|varies|vary)\\. [A-Z](?:\\w+ ){0,3}(?:stays? the same|remains?|holds?|persists?|endures?|(?:doesn't|don't) change)\\."
+  - "(?:stays? the same|remains?|holds?|persists?|endures?)\\. [A-Z](?:\\w+ ){0,3}(?:changes?|evolves?|shifts?|varies|vary)\\."
+
+  # ---- Verbless fragment mic-drops ----
+  # Short sentences with no main verb, used as paragraph closers.
+  # Distinct from the copula patterns above — these have no verb at all.
+
+  # Bare adjective list fragments: "Simple, predictable, testable."
+  - "(?:Pure|Clean|Simple|Clear|Fast|Small|Thin|Lean|Cheap|Safe|Flat|Sane|Strict|Minimal|Explicit|Composable|Predictable|Testable|Readable|Maintainable|Reproducible|Intentional|Deliberate|Declarative|Idiomatic|Immutable|Ergonomic|Deterministic|Straightforward|Opinionated), (?:\\w+, )*(?:and )?\\w+\\."
+
+  # Parallel noun-phrase fragment pairs: "Clean separation, clear ownership."
+  - "(?:Clean|Clear|Pure|Simple|Single|One|Zero|Full|Same|Thin|Flat|Strict|Minimal|Explicit|Complete|Total|Direct|Separate) \\w+, (?:clean|clear|pure|simple|single|one|zero|full|same|thin|flat|strict|minimal|explicit|complete|total|direct|separate|different|no|fewer?) \\w+\\."
+
+  # Comparative-adjective balanced fragments:
+  # "Stronger isolation, more lifecycle machinery."
+  # "Faster delivery, fewer surprises."
+  # Comparative adjective + 1-2 word noun, paired with another
+  # comparative + noun. The balanced tradeoff aphorism shape.
+  - "(?:Stronger|Weaker|Faster|Slower|Better|Worse|Cleaner|Simpler|Smaller|Larger|Bigger|Higher|Lower|Tighter|Looser|Smoother|Newer|Older|Richer|Leaner|Safer|Saner|More|Less|Fewer) [\\w-]+(?: [\\w-]+)?, (?:stronger|weaker|faster|slower|better|worse|cleaner|simpler|smaller|larger|bigger|higher|lower|tighter|looser|smoother|newer|older|richer|leaner|safer|saner|more|less|fewer) [\\w-]+(?: [\\w-]+)?\\."
+
+  # "Just/Pure/Clean + noun" standalone fragments: "Pure orchestration." "Just data."
+  - "(?:Just|Pure|Clean|Plain|Bare|Raw|Straight|Strict|Simple|Mere) \\w+\\."
+
+  # "Just X, nothing more/else" closers: "Just data, nothing more."
+  - "Just \\w+, nothing (?:more|else|fancy|special|clever)\\."
+
+  # Fragment + dramatic qualifier spliced with "and":
+  # "Pure orchestration, and the one package that imports from all layers."
+  - "(?:Pure|Clean|Just|Simple|Plain|Bare|Raw|Mere|Thin|Flat) \\w+, and [^.]+\\."
+
+  # Terse prepositional callback: "With PostgreSQL, one."
+  # A telegraphic fragment that only makes sense as a parallel to the
+  # preceding sentence. The single-word answer is the mic-drop.
+  - "With \\w+(?:[ -]\\w+)?, \\w+\\."
+
+  # ---- Dramatic codas: "And [short clause]." ----
+  # "And it shows." "And that's okay."
+  - "And it shows\\."
+  - "And it works\\."
+  - "And it matters\\."
+  - "And it helps\\."
+  - "And it scales\\."
+  - "And that'?s okay\\."
+  - "And that'?s fine\\."
+  - "And that'?s enough\\."
+  - "And that'?s it\\."
+  - "And that'?s the point\\."
+
+  # ---- "Full stop" / "Period" as emphasis ----
+  - "Full stop\\."
+  - "[Pp]eriod\\."
+
+  # ---- Contrastive fragment mic-drops ----
+  # "X, not Y." — contrastive fragment with no verb
+  # "Dense, not cramped." "Fast, not sloppy." "Opinionated, not rigid."
+  - "[A-Z][a-z]+, not [a-z]+\\."
+  - "[A-Z][a-z]+, never [a-z]+\\."
+
+  # Bare "Not X." / "No X." standalone fragment: "Not now."
+  # "No singleton." AI deploys these as one-word verdicts — a tiny
+  # period-bound answer that the surrounding prose pretends to be
+  # responding to. The broader regex catches both negation forms
+  # with any single-word tail. Some conversational fragments
+  # ("No idea.", "No way.", "Not bad.") fire too; acceptable for
+  # an error-level rule in technical-doc contexts.
+  - "Not? \\w+\\."
+
+  # Verb-led contrastive: the extended-sentence remediation cheat
+  # that appears after the bare-fragment form above gets flagged.
+  # "Isolation here stays logical, not physical."
+  # "The output reads clean, not cluttered."
+  # "Code becomes declarative, not imperative."
+  # Subject is 1-3 words; the linking-ish verb list mirrors the
+  # copula sense ("X stays/remains/becomes Y" = "X is Y").
+  - "[A-Z][a-z]+(?: \\w+){0,2} (?:stays?|remains?|becomes?|feels?|reads?|seems?|sounds?|looks?|appears?|grows?|ends? up|comes? across) [a-z-]+, not [a-z-]+\\."
+  - "[A-Z][a-z]+(?: \\w+){0,2} (?:stays?|remains?|becomes?|feels?|reads?|seems?|sounds?|looks?|appears?|grows?|ends? up|comes? across) [a-z-]+, never [a-z-]+\\."
+
+  # Verb-led contrastive with non-linking verbs + noun objects:
+  # "They share a contract, not code."
+  # "Custom signals belong in stderr text, not in the exit number."
+  # Different shape from the linking-verb family above — the object
+  # is a noun phrase rather than an adjective.
+  - "[A-Z][a-z]+(?: \\w+){0,2} (?:shares?|keeps?|holds?|lives?|belongs?|sits?|points?|goes|go|gives?|takes?) (?:(?:in|on|to|at|with|for) )?[\\w-]+(?: [\\w-]+){0,3}, not (?:(?:in|on|to|at|with|for) )?[\\w-]+(?: [\\w-]+){0,3}[.:]"
+
+  # "X over Y." — preference fragment
+  # "Clarity over cleverness." "Depth over breadth."
+  - "[A-Z][a-z]+ over [a-z]+\\."
+
+  # Comparative aphorism: "X verbs comparative-adjective than Y."
+  # "Disk costs less than lost context."
+  # "Tests run faster than docs."
+  # Concise, sentence-final, AI tutorial-blog tone.
+  - "[A-Z][a-z]+(?: \\w+){0,2} \\w+s (?:more|less|fewer|faster|slower|cheaper|cleaner|simpler|safer|tighter|better|worse|larger|smaller|bigger|higher|lower|longer|shorter) than [^.!?]+\\."
+
+  # "X, not Y, not Z." — extended contrastive
+  - "[A-Z][a-z]+, not [a-z]+, not [a-z]+\\."
+
+  # "X, then Y." — sequencing fragment
+  # "Scannable, then readable." "Simple, then fast."
+  - "[A-Z][a-z]+, then [a-z]+\\."
+
+  # "X first, Y second." — priority fragment
+  - "[A-Z][a-z]+ first, [a-z]+ second\\."
+  - "[A-Z][a-z]+ first, [a-z]+ never\\."
+
+  # "Verb in the noun." — imperative mic-drop
+  # "Invest in the system." "Trust the process." "Ship the thing."
+  - "(?:Invest|Trust|Embrace|Ship|Build|Start|Keep|Focus|Lean|Bet|Play|Own|Do) (?:in |on |into )?the [a-z]+\\."
+
+  # "[Noun] is a [noun]." — categorical declaration as closer
+  # "Density is a feature." "Complexity is a choice."
+  - "[A-Z][a-z]+ is an? [a-z]+\\."
+
+  # "the X, not the Y" — tagline gloss after a colon
+  # "Implicit positioning: the reference shelf, not the opinion column."
+  - ': the [^,]+, not the [^.]+'

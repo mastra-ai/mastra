@@ -7,7 +7,7 @@ import type { AgentControllerRequestContext } from '@mastra/core/agent-controlle
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { Workspace, LocalFilesystem, LocalSandbox, createWorkspaceTools } from '@mastra/core/workspace';
-import type { LSPConfig } from '@mastra/core/workspace';
+import type { LSPConfig, SkillSource } from '@mastra/core/workspace';
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { loadSettings } from '../onboarding/settings.js';
 import type { MastraCodeState } from '../schema.js';
@@ -146,6 +146,15 @@ export function buildSkillPaths(
   });
 }
 
+export interface WorkspaceSkillExtension {
+  /** Distinguishes extended workspaces from the default resolver cache. */
+  id: string;
+  /** Additional read-only skill roots prepended to normal project/global skill roots. */
+  paths: string[];
+  /** Compose the additional roots with the workspace's normal skill source. */
+  createSource: (fallback: SkillSource, fallbackSkillRoots: string[]) => SkillSource;
+}
+
 /**
  * Paths the agent is always allowed to access (in addition to the project root
  * and any per-thread sandboxAllowedPaths). The OS temp directory is included
@@ -172,33 +181,41 @@ function detectPackageRunner(projectPath: string): string | undefined {
 }
 
 /**
- * Build (or reuse) a sandbox-backed Workspace for a GitHub project. The sandbox
+ * Build (or reuse) a sandbox-backed Workspace for a linked project repository. The sandbox
  * is reattached by its persisted provider id and a `SandboxFilesystem` is layered
  * over the in-sandbox checkout so file tools and command tools share one VM.
  */
 async function getSandboxWorkspace({
-  githubProjectId,
+  projectRepositoryId,
   sandboxId,
   workdir,
   worktreePath,
+  configDir,
   mastra,
+  skillExtension,
+  actingUserId,
 }: {
-  githubProjectId: string;
+  projectRepositoryId: string;
   sandboxId: string;
   workdir: string;
   worktreePath?: string;
+  configDir: string;
   mastra?: Mastra;
+  skillExtension?: WorkspaceSkillExtension;
+  actingUserId?: string;
 }): Promise<Workspace> {
   // Bind the workspace to the active worktree when one is set, so file tools and
   // command tools operate inside the feature branch's working tree rather than
   // the base checkout. Falls back to the repo root when no worktree is active.
   const boundWorkdir = worktreePath || workdir;
 
-  // Include the sandbox id *and* worktree path in the reuse key: a new sandbox
-  // (e.g. the previous one expired) or a different worktree must each get a
-  // fresh Workspace/ProcessManager instead of reusing one bound to a stale
-  // sandbox or the wrong working tree.
-  const workspaceId = `${WORKSPACE_ID_PREFIX}-gh-${githubProjectId}-${sandboxId}-${boundWorkdir}`;
+  // Include the sandbox id, worktree path, and acting user in the reuse key: a
+  // new sandbox, different worktree, or different caller must each get a fresh
+  // Workspace/ProcessManager instead of reusing one bound to stale resources or
+  // another user's PlatformSandbox credentials.
+  const extensionId = skillExtension ? `-${skillExtension.id}` : '';
+  const actingUserScope = actingUserId ? `-user-${encodeURIComponent(actingUserId)}` : '';
+  const workspaceId = `${WORKSPACE_ID_PREFIX}-repository-${projectRepositoryId}-${sandboxId}-${boundWorkdir}${extensionId}${actingUserScope}`;
 
   // Reuse the existing remote workspace if already registered (preserves the
   // reattached sandbox + ProcessManager state across re-opens).
@@ -212,8 +229,10 @@ async function getSandboxWorkspace({
     // Not registered yet.
   }
 
-  const sandbox = await reattachProjectSandbox(sandboxId);
+  const sandbox = await reattachProjectSandbox(sandboxId, { actingUserId });
   const filesystem = new SandboxFilesystem({ sandbox, workdir: boundWorkdir });
+  const projectSkillPaths = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'];
+  const skillPaths = [...(skillExtension?.paths ?? []), ...projectSkillPaths];
 
   return new Workspace({
     id: workspaceId,
@@ -221,31 +240,40 @@ async function getSandboxWorkspace({
     filesystem,
     sandbox: sandbox as unknown as ConstructorParameters<typeof Workspace>[0]['sandbox'],
     tools: MASTRACODE_WORKSPACE_TOOLS,
+    skills: skillPaths,
+    skillSource: skillExtension?.createSource(filesystem, projectSkillPaths) ?? filesystem,
   });
 }
 
 export async function getDynamicWorkspace({
   requestContext,
   mastra,
+  skillExtension,
 }: {
   requestContext: RequestContext;
   mastra?: Mastra;
+  skillExtension?: WorkspaceSkillExtension;
 }) {
   const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const state = ctx?.getState();
+  const user = requestContext.get('user') as { workosId?: unknown; id?: unknown } | undefined;
+  const actingUserId =
+    typeof user?.workosId === 'string' ? user.workosId : typeof user?.id === 'string' ? user.id : undefined;
 
-  // GitHub/cloud-sandbox-backed project: the repo lives inside a remote sandbox,
-  // not on the server host. Reattach to the already-provisioned + materialized
-  // sandbox (the SPA called `.../ensure` first, persisting sandboxId/workdir on
-  // controller state) and build a sandbox-backed Workspace. LSP/host skill paths
-  // are skipped for these workspaces (follow-up).
-  if (state?.githubProjectId && state.sandboxId && state.sandboxWorkdir) {
+  // Repository-backed project: the repo lives inside a remote sandbox, not on
+  // the server host. Reattach to the already-provisioned + materialized sandbox
+  // and build a sandbox-backed Workspace. Optional embedders may add read-only
+  // skill roots while project skills remain sandbox-backed.
+  if (state?.projectRepositoryId && state.sandboxId && state.sandboxWorkdir) {
     return getSandboxWorkspace({
-      githubProjectId: state.githubProjectId,
+      projectRepositoryId: state.projectRepositoryId,
       sandboxId: state.sandboxId,
       workdir: state.sandboxWorkdir,
       worktreePath: state.worktreePath,
+      configDir: state.configDir ?? DEFAULT_CONFIG_DIR,
       mastra,
+      skillExtension,
+      actingUserId,
     });
   }
 
@@ -257,10 +285,16 @@ export async function getDynamicWorkspace({
 
   const projectPath = path.resolve(rawProjectPath);
   const configDir = state?.configDir ?? DEFAULT_CONFIG_DIR;
-  const skillPaths = buildSkillPaths(projectPath, configDir, state?.homeDir, state?.pluginSkillPaths ?? []);
-  const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectPath}`;
+  const projectSkillPaths = buildSkillPaths(projectPath, configDir, state?.homeDir, state?.pluginSkillPaths ?? []);
+  const skillPaths = [...(skillExtension?.paths ?? []), ...projectSkillPaths];
+  const extensionId = skillExtension ? `-${skillExtension.id}` : '';
+  const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectPath}${extensionId}`;
   const sandboxPaths = state?.sandboxAllowedPaths ?? [];
-  const allowedPaths = [...skillPaths, ...DEFAULT_ALLOWED_PATHS, ...sandboxPaths.map((p: string) => path.resolve(p))];
+  const allowedPaths = [
+    ...projectSkillPaths,
+    ...DEFAULT_ALLOWED_PATHS,
+    ...sandboxPaths.map((p: string) => path.resolve(p)),
+  ];
 
   // All modes share the same workspace tool configuration.  Per-mode tool
   // visibility is enforced at LLM-call time via `availableTools` /
@@ -284,25 +318,28 @@ export async function getDynamicWorkspace({
   const userLsp = loadSettings().lsp ?? {};
   const mcModulePath = join(dirname(fileURLToPath(import.meta.url)), '..');
   const lspConfig: LSPConfig = {
+    maxOpenClients: 4,
     ...userLsp,
     packageRunner: userLsp.packageRunner || detectPackageRunner(projectPath), // Detected runner is the fallback — user's packageRunner always wins
     searchPaths: [mcModulePath, ...(userLsp.searchPaths ?? [])],
   };
 
   // First call for this project — create the workspace
+  const filesystem = new LocalFilesystem({
+    basePath: projectPath,
+    allowedPaths,
+  });
   return new Workspace({
     id: workspaceId,
     name: 'Mastra Code Workspace',
-    filesystem: new LocalFilesystem({
-      basePath: projectPath,
-      allowedPaths,
-    }),
+    filesystem,
     sandbox: new LocalSandbox({
       workingDirectory: projectPath,
       env: buildSandboxEnv(),
     }),
     tools: workspaceTools,
-    ...(skillPaths.length > 0 ? { skills: skillPaths } : {}),
+    skills: skillPaths,
+    ...(skillExtension ? { skillSource: skillExtension.createSource(filesystem, projectSkillPaths) } : {}),
     lsp: lspConfig,
   });
 }

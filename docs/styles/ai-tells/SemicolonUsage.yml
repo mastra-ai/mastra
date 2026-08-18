@@ -1,0 +1,31 @@
+---
+extends: existence
+message: "AI punctuation: '%s'. Replace the semicolon with a period or two sentences."
+level: error
+nonword: true
+# Semicolons are an em-dash workaround: once the em-dash gets flagged, the agent
+# swaps in a semicolon to tack a punchy clause onto a sentence. Per Google's
+# guidance the legitimate uses nearly always carry a comma (a series of items
+# with their own punctuation, a "; however," join, a complex clause), so the
+# token flags only a comma-free clause-final continuation and exempts the
+# conjunctive adverbs that join clauses without one. Google.Semicolons still
+# warns on the rest.
+exceptions:
+  - '(?i)however'
+  - '(?i)therefore'
+  - '(?i)thus'
+  - '(?i)hence'
+  - '(?i)moreover'
+  - '(?i)furthermore'
+  - '(?i)consequently'
+  - '(?i)nevertheless'
+  - '(?i)nonetheless'
+  - '(?i)otherwise'
+  - '(?i)meanwhile'
+  - '(?i)accordingly'
+  - '(?i)besides'
+  - '(?i)indeed'
+  - '(?i)namely'
+  - '(?i)instead'
+tokens:
+  - "; [^,;\\n]*[.!?]"

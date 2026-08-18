@@ -1,9 +1,9 @@
-import { spawn } from 'child_process';
+import { spawn } from 'node:child_process';
 import { builtinModules } from 'node:module';
 import { glob as globby } from 'tinyglobby';
-import fs from 'fs/promises';
-import path from 'path';
-import { statSync } from 'fs';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { statSync } from 'node:fs';
 import { replaceTypes } from './replace-types.js';
 
 const rgxFrom = /(?<=from )['|"](.*)['|"]/gm;

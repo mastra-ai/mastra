@@ -1,10 +1,12 @@
 /**
  * MCP server configuration loading from filesystem.
- * Loads from:
- *   1. .claude/settings.local.json  (Claude Code compat — lowest priority)
- *   2. ~/.mastracode/mcp.json       (global)
- *   3. .mcp.json                    (project root — Claude Code compatible)
- *   4. .mastracode/mcp.json         (project — highest priority)
+ * Loads from, lowest to highest priority:
+ *   1. ~/.claude.json               (Claude Code global — opt-in)
+ *   2. $CODEX_HOME/config.toml      (Codex CLI global — opt-in)
+ *   3. .claude/settings.local.json  (Claude Code project compatibility)
+ *   4. ~/.mastracode/mcp.json       (Mastra Code global)
+ *   5. .mcp.json                    (project root — Claude Code compatible)
+ *   6. .mastracode/mcp.json         (Mastra Code project)
  *
  * Higher-priority configs override lower ones by server name. The project root
  * `.mcp.json` is read so a project that already keeps MCP servers there for
@@ -14,16 +16,65 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { parse as parseToml } from 'smol-toml';
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import type { McpConfig, McpHttpOAuthConfig, McpServerConfig, McpSkippedServer } from './types.js';
 
-export function loadMcpConfig(projectDir: string, configDirName = DEFAULT_CONFIG_DIR): McpConfig {
+/**
+ * Default OAuth redirect URL for servers that do not configure one.
+ * Port 1458 is stable across sessions so persisted tokens keep the same
+ * storage fingerprint; it sits clear of the ports the Codex login flow
+ * reserves (1455/1457). When 1458 is busy the callback server falls back
+ * to the next sequential port, which stays covered by the client
+ * registration (see `@mastra/mcp`'s `getCallbackUrlCandidates`).
+ */
+export const DEFAULT_OAUTH_REDIRECT_URL = 'http://127.0.0.1:1458/oauth/callback';
+
+// Matches the entire 127.0.0.0/8 range in dotted-quad form. `URL` normalizes
+// IPv4 hosts to four octets (so `127.1` becomes `127.0.0.1`), so anchoring the
+// pattern is enough — and it rejects lookalikes like `127.evil.com` that a
+// `startsWith('127.')` check would wrongly accept.
+const LOOPBACK_IPV4 = /^127\.(?:\d{1,3})\.(?:\d{1,3})\.(?:\d{1,3})$/;
+
+function isLoopbackHostname(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '[::1]' || hostname === '::1' || LOOPBACK_IPV4.test(hostname);
+}
+
+/**
+ * Resolve the effective OAuth redirect URL for a server config.
+ *
+ * `callbackPort` (the Claude Code / Codex convention) takes precedence and
+ * synthesizes `http://localhost:<port>/callback`. Config-file entries are
+ * normalized by `parseOAuthConfig` (which also enforces that `callbackPort`
+ * and `redirectUrl` are mutually exclusive), but programmatically registered
+ * servers bypass the parser, so every consumer of the redirect URL must
+ * resolve it through this helper rather than reading `redirectUrl` directly.
+ */
+export function resolveOAuthRedirectUrl(oauth: McpHttpOAuthConfig | undefined): string {
+  if (oauth?.callbackPort !== undefined) {
+    return `http://localhost:${oauth.callbackPort}/callback`;
+  }
+  return oauth?.redirectUrl ?? DEFAULT_OAUTH_REDIRECT_URL;
+}
+
+export interface ExternalMcpDiscoveryOptions {
+  claudeCodeGlobal?: boolean;
+  codexGlobal?: boolean;
+}
+
+export function loadMcpConfig(
+  projectDir: string,
+  configDirName = DEFAULT_CONFIG_DIR,
+  externalDiscovery: ExternalMcpDiscoveryOptions = {},
+): McpConfig {
+  const claudeGlobalConfig = externalDiscovery.claudeCodeGlobal ? loadClaudeGlobalConfig() : {};
+  const codexGlobalConfig = externalDiscovery.codexGlobal ? loadCodexGlobalConfig() : {};
   const claudeConfig = loadClaudeSettings(projectDir);
   const globalConfig = loadSingleConfig(getGlobalMcpPath(configDirName));
   const rootConfig = loadSingleConfig(getRootMcpPath(projectDir));
   const projectConfig = loadSingleConfig(getProjectMcpPath(projectDir, configDirName));
 
-  return mergeConfigs(claudeConfig, globalConfig, rootConfig, projectConfig);
+  return mergeConfigs(claudeGlobalConfig, codexGlobalConfig, claudeConfig, globalConfig, rootConfig, projectConfig);
 }
 
 export function getProjectMcpPath(projectDir: string, configDirName = DEFAULT_CONFIG_DIR): string {
@@ -40,6 +91,88 @@ export function getGlobalMcpPath(configDirName = DEFAULT_CONFIG_DIR): string {
 
 export function getClaudeSettingsPath(projectDir: string): string {
   return path.join(projectDir, '.claude', 'settings.local.json');
+}
+
+export function getClaudeGlobalMcpPath(): string {
+  return path.join(os.homedir(), '.claude.json');
+}
+
+export function getCodexGlobalMcpPath(): string {
+  const codexHome = process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
+  return path.join(codexHome, 'config.toml');
+}
+
+function withoutSkippedServers(config: McpConfig): McpConfig {
+  return config.mcpServers ? { mcpServers: config.mcpServers } : {};
+}
+
+function loadClaudeGlobalConfig(): McpConfig {
+  try {
+    const filePath = getClaudeGlobalMcpPath();
+    if (!fs.existsSync(filePath)) return {};
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    return withoutSkippedServers(validateConfig({ mcpServers: parsed?.mcpServers }));
+  } catch {
+    return {};
+  }
+}
+
+function stringRecord(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const entries = Object.entries(value as Record<string, unknown>).filter(
+    (entry): entry is [string, string] => typeof entry[1] === 'string',
+  );
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function normalizeCodexServer(entry: unknown): Record<string, unknown> | undefined {
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return undefined;
+  const raw = entry as Record<string, unknown>;
+  if (raw.enabled === false) return undefined;
+
+  if (typeof raw.command === 'string') {
+    return {
+      command: raw.command,
+      args: Array.isArray(raw.args) && raw.args.every(arg => typeof arg === 'string') ? raw.args : undefined,
+      env: stringRecord(raw.env),
+    };
+  }
+
+  if (typeof raw.url === 'string') {
+    const headers = stringRecord(raw.http_headers) ?? {};
+    if (
+      typeof raw.bearer_token_env_var === 'string' &&
+      /^[A-Za-z_][A-Za-z0-9_]*$/.test(raw.bearer_token_env_var) &&
+      !Object.keys(headers).some(name => name.toLowerCase() === 'authorization')
+    ) {
+      headers.Authorization = `Bearer \${${raw.bearer_token_env_var}}`;
+    }
+    return {
+      url: raw.url,
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
+    };
+  }
+
+  return undefined;
+}
+
+function loadCodexGlobalConfig(): McpConfig {
+  try {
+    const filePath = getCodexGlobalMcpPath();
+    if (!fs.existsSync(filePath)) return {};
+    const parsed = parseToml(fs.readFileSync(filePath, 'utf-8')) as Record<string, unknown>;
+    const rawServers = parsed.mcp_servers;
+    if (!rawServers || typeof rawServers !== 'object' || Array.isArray(rawServers)) return {};
+
+    const mcpServers: Record<string, unknown> = {};
+    for (const [name, entry] of Object.entries(rawServers as Record<string, unknown>)) {
+      const normalized = normalizeCodexServer(entry);
+      if (normalized) mcpServers[name] = normalized;
+    }
+    return withoutSkippedServers(validateConfig({ mcpServers }));
+  } catch {
+    return {};
+  }
 }
 
 function loadSingleConfig(filePath: string): McpConfig {
@@ -202,20 +335,40 @@ function parseOAuthConfig(raw: unknown): { config?: McpHttpOAuthConfig; reason?:
   }
 
   const obj = raw as Record<string, unknown>;
-  if (typeof obj.redirectUrl !== 'string') {
-    return { reason: 'Invalid OAuth config: missing required field "redirectUrl"' };
+  if (obj.redirectUrl !== undefined && typeof obj.redirectUrl !== 'string') {
+    return { reason: 'Invalid OAuth config: "redirectUrl" must be a string' };
   }
+  // `callbackPort` is a shorthand for a loopback redirect URL. It synthesizes
+  // `http://localhost:<port>/callback` — the convention Claude Code and Codex
+  // emit — so those clients' config (e.g. Slack's official MCP plugin config)
+  // can be pasted verbatim. `redirectUrl` stays as the full-control escape
+  // hatch (any loopback host/path). The two are mutually exclusive to avoid
+  // an ambiguous redirect.
+  let callbackPortRedirectUrl: string | undefined;
+  if (obj.callbackPort !== undefined) {
+    if (obj.redirectUrl !== undefined) {
+      return { reason: 'Invalid OAuth config: set either "redirectUrl" or "callbackPort", not both' };
+    }
+    if (
+      typeof obj.callbackPort !== 'number' ||
+      !Number.isInteger(obj.callbackPort) ||
+      obj.callbackPort < 1 ||
+      obj.callbackPort > 65535
+    ) {
+      return { reason: 'Invalid OAuth config: "callbackPort" must be an integer between 1 and 65535' };
+    }
+    callbackPortRedirectUrl = resolveOAuthRedirectUrl({ callbackPort: obj.callbackPort });
+  }
+
+  const rawRedirectUrl = callbackPortRedirectUrl ?? obj.redirectUrl ?? DEFAULT_OAUTH_REDIRECT_URL;
   try {
-    const redirectUrl = new URL(obj.redirectUrl);
-    const isLoopback =
-      redirectUrl.hostname === 'localhost' ||
-      redirectUrl.hostname.startsWith('127.') ||
-      redirectUrl.hostname === '[::1]';
+    const redirectUrl = new URL(rawRedirectUrl);
+    const isLoopback = isLoopbackHostname(redirectUrl.hostname);
     if (redirectUrl.protocol !== 'https:' && !(redirectUrl.protocol === 'http:' && isLoopback)) {
       return { reason: 'Invalid OAuth redirectUrl: must use HTTPS unless it is a loopback HTTP URL' };
     }
   } catch {
-    return { reason: `Invalid OAuth redirectUrl: "${obj.redirectUrl}"` };
+    return { reason: `Invalid OAuth redirectUrl: "${rawRedirectUrl}"` };
   }
 
   if (obj.scopes !== undefined && (!Array.isArray(obj.scopes) || obj.scopes.some(scope => typeof scope !== 'string'))) {
@@ -224,7 +377,7 @@ function parseOAuthConfig(raw: unknown): { config?: McpHttpOAuthConfig; reason?:
 
   return {
     config: {
-      redirectUrl: obj.redirectUrl,
+      redirectUrl: rawRedirectUrl,
       clientName: typeof obj.clientName === 'string' ? obj.clientName : undefined,
       scopes: obj.scopes as string[] | undefined,
       clientId: typeof obj.clientId === 'string' ? obj.clientId : undefined,

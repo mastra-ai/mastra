@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.51.0",
+  "version": "1.60.0-alpha.7",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -39,6 +39,16 @@
       "require": {
         "types": "./dist/a2a/client.d.ts",
         "default": "./dist/a2a/client.cjs"
+      }
+    },
+    "./a2a/v1": {
+      "import": {
+        "types": "./dist/a2a/v1.d.ts",
+        "default": "./dist/a2a/v1.js"
+      },
+      "require": {
+        "types": "./dist/a2a/v1.d.ts",
+        "default": "./dist/a2a/v1.cjs"
       }
     },
     "./agent": {
@@ -581,6 +591,16 @@
         "default": "./dist/workflows/index.cjs"
       }
     },
+    "./workflows/builder": {
+      "import": {
+        "types": "./dist/workflows/builder/index.d.ts",
+        "default": "./dist/workflows/builder/index.js"
+      },
+      "require": {
+        "types": "./dist/workflows/builder/index.d.ts",
+        "default": "./dist/workflows/builder/index.cjs"
+      }
+    },
     "./workflows/evented": {
       "import": {
         "types": "./dist/workflows/evented/index.d.ts",
@@ -721,6 +741,16 @@
         "default": "./dist/utils/collect-tool-mocks.cjs"
       }
     },
+    "./utils/safe-stringify": {
+      "import": {
+        "types": "./dist/utils/safe-stringify.d.ts",
+        "default": "./dist/utils/safe-stringify.js"
+      },
+      "require": {
+        "types": "./dist/utils/safe-stringify.d.ts",
+        "default": "./dist/utils/safe-stringify.cjs"
+      }
+    },
     "./loop/server": {
       "import": {
         "types": "./dist/loop/server.d.ts",
@@ -827,33 +857,33 @@
   "scripts": {
     "check": "tsc --noEmit",
     "typecheck": "tsc --noEmit -p tsconfig.build.json",
-    "lint": "eslint .",
-    "build:lib": "tsup --silent --config tsup.config.ts --no-dts",
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix .",
+    "build:lib": "tsdown --silent --config tsdown.config.ts --no-dts",
     "build:patch-commonjs": "node ../../scripts/commonjs-tsc-fixer.js",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build:lib --watch",
     "generate:providers": "tsx scripts/generate-providers.ts",
-    "generate:model-router": "tsx scripts/generate-providers.ts && tsx scripts/generate-model-docs.ts && cd ../.. && pnpm prettier:changed",
+    "generate:model-router": "tsx scripts/generate-providers.ts && tsx scripts/generate-model-docs.ts && cd ../.. && pnpm oxfmt:changed",
     "test:unit": "vitest run --exclude '**/tool-builder/**'",
     "test": "npm run test:unit"
   },
   "dependencies": {
-    "@a2a-js/sdk": "~0.3.14",
-    "@ai-sdk/provider-utils-v5": "npm:@ai-sdk/provider-utils@3.0.28",
-    "@ai-sdk/provider-utils-v6": "npm:@ai-sdk/provider-utils@4.0.38",
-    "@ai-sdk/provider-utils-v7": "npm:@ai-sdk/provider-utils@5.0.7",
+    "@a2a-js/sdk-v0_3": "npm:@a2a-js/sdk@~0.3.14",
+    "@a2a-js/sdk-v1": "npm:@a2a-js/sdk@~1.0.1",
+    "@ai-sdk/provider-utils-v5": "npm:@ai-sdk/provider-utils@3.0.30",
+    "@ai-sdk/provider-utils-v6": "npm:@ai-sdk/provider-utils@4.0.40",
+    "@ai-sdk/provider-utils-v7": "npm:@ai-sdk/provider-utils@5.0.13",
     "@ai-sdk/provider-v5": "npm:@ai-sdk/provider@2.0.3",
     "@ai-sdk/provider-v6": "npm:@ai-sdk/provider@3.0.14",
-    "@ai-sdk/provider-v7": "npm:@ai-sdk/provider@4.0.3",
-    "@ai-sdk/ui-utils-v5": "npm:@ai-sdk/ui-utils@1.2.11",
-    "@isaacs/ttlcache": "^2.1.4",
+    "@ai-sdk/provider-v7": "npm:@ai-sdk/provider@4.0.4",
+    "@isaacs/ttlcache": "^2.1.5",
     "@lukeed/uuid": "^2.0.1",
     "@mastra/schema-compat": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.29.0",
     "@sindresorhus/slugify": "^2.2.1",
     "@standard-schema/spec": "^1.1.0",
     "ajv": "^8.20.0",
-    "chat": "^4.29.0",
+    "chat": "^4.34.0",
     "croner": "^10.0.1",
     "dotenv": "^17.3.1",
     "execa": "^9.6.1",
@@ -866,43 +896,42 @@
     "p-map": "^7.0.4",
     "p-retry": "^7.1.1",
     "picomatch": "^4.0.3",
-    "posthog-node": "^5.37.0",
+    "posthog-node": "^5.46.1",
     "tokenx": "^1.3.0",
     "ws": "^8.21.0",
-    "xxhash-wasm": "^1.1.0"
+    "xxhash-wasm": "^1.1.0",
+    "@modelcontextprotocol/server": "2.0.0"
   },
   "peerDependencies": {
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
-    "@ai-sdk/alibaba-v6": "npm:@ai-sdk/alibaba@1.0.37",
-    "@ai-sdk/anthropic-v5": "npm:@ai-sdk/anthropic@2.0.85",
-    "@ai-sdk/anthropic-v6": "npm:@ai-sdk/anthropic@3.0.96",
-    "@ai-sdk/anthropic-v7": "npm:@ai-sdk/anthropic@4.0.12",
-    "@ai-sdk/azure": "^2.0.114",
-    "@ai-sdk/cerebras-v5": "npm:@ai-sdk/cerebras@1.0.47",
-    "@ai-sdk/deepinfra-v5": "npm:@ai-sdk/deepinfra@1.0.45",
-    "@ai-sdk/deepseek-v5": "npm:@ai-sdk/deepseek@1.0.45",
-    "@ai-sdk/google-v5": "npm:@ai-sdk/google@2.0.78",
-    "@ai-sdk/google-v6": "npm:@ai-sdk/google@3.0.91",
-    "@ai-sdk/google-v7": "npm:@ai-sdk/google@4.0.12",
-    "@ai-sdk/groq-v5": "npm:@ai-sdk/groq@2.0.43",
-    "@ai-sdk/groq-v6": "npm:@ai-sdk/groq@3.0.50",
-    "@ai-sdk/mistral-v5": "npm:@ai-sdk/mistral@2.0.37",
-    "@ai-sdk/mistral-v6": "npm:@ai-sdk/mistral@3.0.48",
+    "@ai-sdk/alibaba-v6": "npm:@ai-sdk/alibaba@1.0.40",
+    "@ai-sdk/anthropic-v5": "npm:@ai-sdk/anthropic@2.0.91",
+    "@ai-sdk/anthropic-v6": "npm:@ai-sdk/anthropic@3.0.103",
+    "@ai-sdk/anthropic-v7": "npm:@ai-sdk/anthropic@4.0.22",
+    "@ai-sdk/azure": "^2.0.120",
+    "@ai-sdk/cerebras-v6": "npm:@ai-sdk/cerebras@2.0.68",
+    "@ai-sdk/deepinfra-v6": "npm:@ai-sdk/deepinfra@2.0.66",
+    "@ai-sdk/deepseek-v6": "npm:@ai-sdk/deepseek@2.0.50",
+    "@ai-sdk/google-v5": "npm:@ai-sdk/google@2.0.85",
+    "@ai-sdk/google-v6": "npm:@ai-sdk/google@3.0.101",
+    "@ai-sdk/google-v7": "npm:@ai-sdk/google@4.0.25",
+    "@ai-sdk/groq-v6": "npm:@ai-sdk/groq@3.0.53",
+    "@ai-sdk/mistral-v6": "npm:@ai-sdk/mistral@3.0.52",
     "@ai-sdk/openai": "^1.3.24",
-    "@ai-sdk/openai-compatible-v5": "npm:@ai-sdk/openai-compatible@1.0.42",
-    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.110",
-    "@ai-sdk/openai-v6": "npm:@ai-sdk/openai@3.0.84",
-    "@ai-sdk/openai-v7": "npm:@ai-sdk/openai@4.0.11",
-    "@ai-sdk/perplexity-v5": "npm:@ai-sdk/perplexity@2.0.33",
+    "@ai-sdk/openai-compatible-v5": "npm:@ai-sdk/openai-compatible@1.0.46",
+    "@ai-sdk/openai-compatible-v6": "npm:@ai-sdk/openai-compatible@2.0.62",
+    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.115",
+    "@ai-sdk/openai-v6": "npm:@ai-sdk/openai@3.0.88",
+    "@ai-sdk/openai-v7": "npm:@ai-sdk/openai@4.0.21",
+    "@ai-sdk/perplexity-v6": "npm:@ai-sdk/perplexity@3.0.47",
     "@ai-sdk/provider-utils-v4": "npm:@ai-sdk/provider-utils@2.2.8",
     "@ai-sdk/provider-v4": "npm:@ai-sdk/provider@1.1.3",
-    "@ai-sdk/togetherai-v5": "npm:@ai-sdk/togetherai@1.0.45",
-    "@ai-sdk/xai-v5": "npm:@ai-sdk/xai@2.0.76",
-    "@ai-sdk/xai-v6": "npm:@ai-sdk/xai@3.0.106",
+    "@ai-sdk/togetherai-v6": "npm:@ai-sdk/togetherai@2.0.68",
+    "@ai-sdk/xai-v6": "npm:@ai-sdk/xai@3.0.111",
     "@ast-grep/napi": "^0.40.5",
-    "@babel/core": "^7.29.7",
+    "@babel/core": "^8.0.1",
     "@copilotkit/aimock": "^1.29.0",
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
@@ -918,7 +947,7 @@
     "@internal/voice": "workspace:*",
     "@openrouter/ai-sdk-provider": "^0.7.5",
     "@openrouter/ai-sdk-provider-v5": "npm:@openrouter/ai-sdk-provider@1.5.4",
-    "@types/babel__core": "^7.20.5",
+    "@openrouter/ai-sdk-provider-v6": "npm:@openrouter/ai-sdk-provider@2.10.0",
     "@types/json-schema": "^7.0.15",
     "@types/node": "22.20.1",
     "@types/picomatch": "4.0.2",
@@ -926,14 +955,14 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "arktype": "^2.2.0",
-    "eslint": "^10.4.1",
+    "eslint": "^10.7.0",
     "fast-deep-equal": "^3.1.3",
     "hono": "^4.12.8",
     "hono-openapi": "^1.3.1",
     "rollup": "^4.62.2",
     "tinyglobby": "^0.2.17",
     "ts-morph": "^27.0.2",
-    "tsup": "^8.5.1",
+    "tsdown": "0.22.9",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "valibot": "^1.4.1",

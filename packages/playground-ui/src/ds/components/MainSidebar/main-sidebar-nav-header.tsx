@@ -1,6 +1,6 @@
 import type { ComponentPropsWithoutRef } from 'react';
 import type { SidebarState } from './main-sidebar-context';
-import { useMaybeSidebar } from './main-sidebar-context';
+import { useMaybeSidebarState } from './main-sidebar-context';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
@@ -22,7 +22,7 @@ export function MainSidebarNavHeader({
   LinkComponent: LinkProp,
   ...props
 }: MainSidebarNavHeaderProps) {
-  const ctx = useMaybeSidebar();
+  const ctx = useMaybeSidebarState();
   const state: SidebarState = stateProp ?? ctx?.state ?? 'default';
   const isMobile = ctx?.isMobile ?? false;
   const Link: LinkComponent = LinkProp ?? ctx?.LinkComponent ?? 'a';
@@ -59,7 +59,7 @@ export function MainSidebarNavHeader({
           <VisuallyHidden asChild>
             <header {...props}>{children}</header>
           </VisuallyHidden>
-          <div aria-hidden="true" className="mx-3 h-px flex-1 bg-border1" />
+          <div aria-hidden="true" className="bg-border1 mx-3 h-px flex-1" />
         </>
       )}
     </div>

@@ -45,18 +45,19 @@
  *
  * @example Custom cache backend (e.g., Redis)
  * ```typescript
- * import { RedisServerCache } from '@mastra/redis'; // hypothetical
+ * import { RedisServerCache } from '@mastra/redis';
+ * import Redis from 'ioredis';
  *
  * const durableAgent = createDurableAgent({
  *   agent,
- *   cache: new RedisServerCache({ url: 'redis://...' }),
+ *   cache: new RedisServerCache({ client: new Redis('redis://...') }),
  * });
  * ```
  *
  * @example Cache inheritance from Mastra
  * ```typescript
  * const mastra = new Mastra({
- *   cache: new RedisServerCache({ url: 'redis://...' }),
+ *   cache: new RedisServerCache({ client: new Redis('redis://...') }),
  *   agents: {
  *     myAgent: createDurableAgent({ agent }), // Inherits Redis cache from Mastra
  *   },
@@ -114,7 +115,15 @@ export {
 } from './stream-adapter';
 
 // Constants
-export { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableAgentDefaults, DurableStepIds } from './constants';
+export {
+  AGENT_STREAM_TOPIC,
+  AGENT_CONTROL_TOPIC,
+  AgentStreamEventTypes,
+  AgentControlEventTypes,
+  DurableAgentDefaults,
+  DurableStepIds,
+} from './constants';
+export { publishAbortRequest, subscribeToAbortRequests, ensureRemoteAbortListener } from './abort-transport';
 
 // Types
 export type {
@@ -167,7 +176,13 @@ export {
 } from './utils/resolve-runtime';
 
 // Workflow creation
-export { createDurableAgenticWorkflow, type DurableAgenticWorkflowOptions } from './workflows';
+export {
+  createDurableAgenticWorkflow,
+  runDurableFinishSideEffects,
+  type DurableAgenticWorkflowOptions,
+  type DurableFinishSideEffectsOptions,
+  type DurableFinishSideEffectsResult,
+} from './workflows';
 
 // Workflow steps (for advanced customization)
 export {
@@ -179,6 +194,7 @@ export {
 
 // Shared workflow utilities
 export {
+  executeDurableAgentScorers,
   executeDurableToolCalls,
   modelConfigSchema,
   modelListEntrySchema,
@@ -192,6 +208,7 @@ export {
   resolveDurableToolCallConcurrency,
 } from './workflows/shared';
 export type {
+  ExecuteDurableAgentScorersParams,
   ToolExecutionContext,
   ToolExecutionError,
   BaseIterationState,

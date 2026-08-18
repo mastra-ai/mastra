@@ -153,6 +153,8 @@ export type ListAgentSuspendedRunsParams = GeneratedRequest<QueryParams<'GET /ag
  */
 export type ListAgentSuspendedRunsResponse = GeneratedResponse<'GET /agents/:agentId/suspended-runs'>;
 
+export type GetAgentPlanResponse = GeneratedResponse<'GET /agents/:agentId/plans/file'>;
+
 export type AgentSuspendedRun = ListAgentSuspendedRunsResponse['runs'][number];
 
 export type AgentSuspendedRunToolCall = AgentSuspendedRun['toolCalls'][number];
@@ -470,8 +472,9 @@ type WithoutMethods<T> = {
 
 export type NetworkStreamParams<OUTPUT = undefined> = {
   messages: MessageListInput;
+  model?: string;
   tracingOptions?: TracingOptions;
-} & MultiPrimitiveExecutionOptions<OUTPUT>;
+} & Omit<MultiPrimitiveExecutionOptions<OUTPUT>, 'model'>;
 
 export interface GetAgentResponse {
   id: string;
@@ -534,24 +537,32 @@ export interface GetAgentBrowserSessionResponse {
 
 export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
+  model?: string;
   output?: T;
   experimental_output?: T;
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
 } & WithoutMethods<
   // Use `any` to avoid "Type instantiation is excessively deep" error from complex ZodSchema generics
-  Omit<AgentGenerateOptions<any>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
+  Omit<
+    AgentGenerateOptions<any>,
+    'model' | 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'
+  >
 >;
 
 export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
+  model?: string;
   output?: T;
   experimental_output?: T;
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
 } & WithoutMethods<
   // Use `any` to avoid "Type instantiation is excessively deep" error from complex ZodSchema generics
-  Omit<AgentStreamOptions<any>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
+  Omit<
+    AgentStreamOptions<any>,
+    'model' | 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'
+  >
 >;
 
 export type StructuredOutputOptions<OUTPUT = undefined> = Omit<
@@ -561,11 +572,15 @@ export type StructuredOutputOptions<OUTPUT = undefined> = Omit<
   schema: PublicSchema<OUTPUT>;
 };
 export type StreamParamsBase<OUTPUT = undefined> = {
+  model?: string;
   tracingOptions?: TracingOptions;
   requestContext?: RequestContext;
   clientTools?: ToolsInput;
 } & WithoutMethods<
-  Omit<AgentExecutionOptions<OUTPUT>, 'requestContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'>
+  Omit<
+    AgentExecutionOptions<OUTPUT>,
+    'model' | 'requestContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'
+  >
 >;
 export type StreamParamsBaseWithoutMessages<OUTPUT = undefined> = StreamParamsBase<OUTPUT>;
 export type StreamParams<OUTPUT = undefined> = StreamParamsBase<OUTPUT> & {
@@ -623,7 +638,32 @@ export interface ListWorkflowRunsParams {
 
 export type ListWorkflowRunsResponse = WorkflowRuns;
 
+export interface WorkflowRunCounts {
+  running: number;
+  suspended: number;
+}
+
+export type ListWorkflowRunCountsResponse = Record<string, WorkflowRunCounts>;
+
 export type GetWorkflowRunByIdResponse = WorkflowState;
+
+export type ListDynamicWorkflowsParams = GeneratedRequest<QueryParams<'GET /stored/workflows'>>;
+export type ListDynamicWorkflowsResponse = GeneratedResponse<'GET /stored/workflows'>;
+export type UpsertDynamicWorkflowParams = GeneratedRequest<Body<'POST /stored/workflows'>>;
+export type UpsertDynamicWorkflowResponse = GeneratedResponse<'POST /stored/workflows'>;
+type DynamicWorkflowDefinitionField =
+  | 'description'
+  | 'inputSchema'
+  | 'outputSchema'
+  | 'stateSchema'
+  | 'requestContextSchema'
+  | 'graph';
+export type DynamicWorkflowDefinition = Omit<
+  GeneratedResponse<'GET /stored/workflows/:dynamicWorkflowId'>,
+  DynamicWorkflowDefinitionField
+> &
+  Pick<UpsertDynamicWorkflowParams, DynamicWorkflowDefinitionField>;
+export type DeleteDynamicWorkflowResponse = GeneratedResponse<'DELETE /stored/workflows/:dynamicWorkflowId'>;
 
 export interface GetWorkflowResponse {
   name: string;
@@ -662,6 +702,12 @@ export interface GetWorkflowResponse {
   requestContextSchema?: string;
   /** Whether this workflow is a processor workflow (auto-generated from agent processors) */
   isProcessorWorkflow?: boolean;
+  /**
+   * How this workflow got into the live registry. `'code'` for statically
+   * authored or `addWorkflow()`-added workflows, `'dynamic'` for anything
+   * hydrated or added via `addDynamicWorkflow()`. Absent on older servers.
+   */
+  origin?: 'code' | 'dynamic';
 }
 
 export type WorkflowRunResult = WorkflowResult<any, any, any, any>;
@@ -1411,13 +1457,20 @@ export interface CreateStoredAgentParams {
   /** Browser config. `true` = use admin default, `false` = no browser. */
   browser?: ConditionalField<StoredBrowserRef> | boolean | null;
   requestContextSchema?: Record<string, unknown>;
+  /**
+   * Publish the initial version so the agent resolves at `status: 'published'`.
+   * Defaults to true when omitted. Pass false to stage the agent as an unpublished
+   * draft — useful when overriding a code-defined agent, whose code definition keeps
+   * serving traffic until the override is published.
+   */
+  autoPublish?: boolean;
 }
 
 /**
  * Parameters for updating a stored agent
  */
 export type ExportStoredAgentParams = Partial<
-  Omit<CreateStoredAgentParams, 'id' | 'authorId' | 'visibility' | 'metadata'>
+  Omit<CreateStoredAgentParams, 'id' | 'authorId' | 'visibility' | 'metadata' | 'autoPublish'>
 >;
 
 export type OpenStoredAgentChangeRequestParams = ExportStoredAgentParams & {
@@ -1470,6 +1523,8 @@ export interface UpdateStoredAgentParams {
   requestContextSchema?: Record<string, unknown>;
   /** Optional message describing the changes for the auto-created version */
   changeMessage?: string;
+  /** Immediately activate the auto-created version. Defaults to false when omitted. */
+  autoPublish?: boolean;
 }
 
 /**
@@ -2625,6 +2680,7 @@ export interface DatasetItem {
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
   toolMocks?: DatasetItemToolMock[];
+  scorerIds?: string[];
   requestContext?: Record<string, unknown>;
   metadata?: unknown;
   source?: DatasetItemSource;
@@ -2649,6 +2705,31 @@ export interface DatasetRecord {
   updatedAt: string | Date;
 }
 
+export interface ExperimentProvenance {
+  source?: string;
+  sourceId?: string;
+  sourceVersion?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ExperimentRunnerAttestation {
+  runnerId: string;
+  invocationId: string;
+  runnerVersion?: string;
+}
+
+export interface ExperimentGrouping {
+  experimentSetId?: string;
+  comparisonId?: string;
+  variantId?: string;
+  trialIndex?: number;
+}
+
+export interface ListExperimentsParams extends ExperimentGrouping {
+  page?: number;
+  perPage?: number;
+}
+
 export interface DatasetExperiment {
   id: string;
   datasetId: string | null;
@@ -2656,6 +2737,16 @@ export interface DatasetExperiment {
   agentVersion: string | null;
   targetType: 'agent' | 'workflow' | 'scorer' | 'processor';
   targetId: string;
+  /** Human-readable name used as the primary label wherever the experiment is displayed. */
+  name?: string;
+  /** Longer description shown as secondary detail (e.g. in a tooltip). */
+  description?: string;
+  provenance: ExperimentProvenance | null;
+  runnerAttestation: ExperimentRunnerAttestation | null;
+  experimentSetId: string | null;
+  comparisonId: string | null;
+  variantId: string | null;
+  trialIndex: number | null;
   status: 'pending' | 'running' | 'completed' | 'failed';
   totalItems: number;
   succeededCount: number;
@@ -2681,6 +2772,7 @@ export interface DatasetExperimentResult {
   traceId: string | null;
   status: 'needs-review' | 'reviewed' | 'complete' | null;
   tags: string[] | null;
+  comment?: string | null;
   toolMockReport?: ToolMockReport | null;
   scores: Array<{
     scorerId: string;
@@ -2698,6 +2790,7 @@ export interface UpdateExperimentResultParams {
   resultId: string;
   status?: 'needs-review' | 'reviewed' | 'complete' | null;
   tags?: string[];
+  comment?: string | null;
 }
 
 export interface CreateDatasetParams {
@@ -2737,6 +2830,7 @@ export interface AddDatasetItemParams {
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
   toolMocks?: DatasetItemToolMock[];
+  scorerIds?: string[];
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2749,6 +2843,7 @@ export interface UpdateDatasetItemParams {
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
   toolMocks?: DatasetItemToolMock[];
+  scorerIds?: string[] | null;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2762,6 +2857,7 @@ export interface BatchInsertDatasetItemsParams {
     groundTruth?: unknown;
     expectedTrajectory?: unknown;
     toolMocks?: DatasetItemToolMock[];
+    scorerIds?: string[];
     requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
     source?: DatasetItemSource;
@@ -2794,10 +2890,15 @@ export interface TriggerDatasetExperimentParams {
   datasetId: string;
   targetType: 'agent' | 'workflow' | 'scorer';
   targetId: string;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
   scorerIds?: string[];
   version?: number;
   agentVersion?: string;
   maxConcurrency?: number;
+  provenance?: ExperimentProvenance;
+  grouping?: ExperimentGrouping;
   requestContext?: Record<string, unknown>;
 }
 
@@ -2822,6 +2923,7 @@ export interface DatasetItemVersionResponse {
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
   toolMocks?: DatasetItemToolMock[];
+  scorerIds?: string[];
   metadata?: Record<string, unknown>;
   validTo: number | null;
   isDeleted: boolean;
@@ -3470,3 +3572,72 @@ export interface BuilderRegistryInstallResponse {
   name: string;
   filesWritten: number;
 }
+
+// ============================================================================
+// AgentController
+// ============================================================================
+
+// Wire shapes derive from the published route contracts, vocabulary from core.
+// Event-stream types can't derive this way (SSE routes carry no response
+// schema) and stay hand-written in `resources/agent-controller`.
+export type { PermissionPolicy, ToolCategory } from '@mastra/core/agent-controller';
+export type { TaskItemSnapshot as AgentControllerTaskSnapshot } from '@mastra/core/tools';
+
+export type AgentControllerInfo = GeneratedResponse<'GET /agent-controller'>['agentControllers'][number];
+
+export type CreateAgentControllerSessionResponse = GeneratedResponse<'POST /agent-controller/:controllerId/sessions'>;
+
+export type AgentControllerSessionState = GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:resourceId'>;
+
+/**
+ * Agent behavior settings, mirroring the TUI's `/settings` toggles. An absent
+ * `thinkingLevel` means the session inherits the configured default rather than
+ * overriding it.
+ */
+export type AgentControllerSessionSettings = NonNullable<AgentControllerSessionState['settings']>;
+
+/**
+ * Status-line relevant slice of observational-memory progress, mirroring the
+ * TUI status line. `msg` reads `pendingTokens/threshold ↓projectedMessageRemoval`
+ * (the active message window before an observation fires); `mem` reads
+ * `observationTokens/reflectionThreshold ↓projectedReflectionSavings`
+ * (accumulated observations before a reflection fires).
+ */
+export type AgentControllerOMProgress = NonNullable<AgentControllerSessionState['omProgress']>;
+
+export type AgentControllerModeInfo = GeneratedResponse<'GET /agent-controller/:controllerId/modes'>['modes'][number];
+
+export type AgentControllerAvailableModel =
+  GeneratedResponse<'GET /agent-controller/:controllerId/models'>['models'][number];
+
+export type AgentControllerActiveRun =
+  GeneratedResponse<'GET /agent-controller/:controllerId/active-runs'>['runs'][number];
+
+/**
+ * A thread as it appears in `listThreads()`. Carries the session scoping tags
+ * it was stamped with (e.g. `{ projectPath }`) and whether a run is currently
+ * executing on it, so one listing can report activity across every scope
+ * sharing the resourceId.
+ */
+export type AgentControllerThreadInfo =
+  GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/threads'>['threads'][number];
+
+/** A thread as returned by `createThread()` and `cloneThread()`. */
+export type CreateAgentControllerThreadResponse =
+  GeneratedResponse<'POST /agent-controller/:controllerId/sessions/:resourceId/threads'>;
+
+export type AgentControllerWorkspaceStatus = GeneratedResponse<'GET /agent-controller/:controllerId/workspace'>;
+
+export type AgentControllerGoalRecord = NonNullable<
+  GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/goal'>['goal']
+>;
+
+/** Per-category and per-tool approval policies. */
+export type PermissionRules = GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/permissions'>;
+
+export type SendNotificationInput = GeneratedRequest<
+  Body<'POST /agent-controller/:controllerId/sessions/:resourceId/notifications'>
+>;
+
+export type SendNotificationResult =
+  GeneratedResponse<'POST /agent-controller/:controllerId/sessions/:resourceId/notifications'>;

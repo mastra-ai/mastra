@@ -44,13 +44,14 @@ import {
   runDurableStreamUntilIdle,
   runResumeDurableStreamUntilIdle,
   globalRunRegistry,
+  publishAbortRequest,
 } from '@mastra/core/agent/durable';
 import type { AgentStepFinishEventData, AgentSuspendedEventData } from '@mastra/core/agent/durable';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import { InMemoryServerCache } from '@mastra/core/cache';
 import type { MastraServerCache } from '@mastra/core/cache';
 import { CachingPubSub } from '@mastra/core/events';
-import type { PubSub } from '@mastra/core/events';
+import type { Event, PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import { SpanType, EntityType } from '@mastra/core/observability';
 import type { MastraModelOutput, ChunkType, FullOutput, MastraOnFinishCallback } from '@mastra/core/stream';
@@ -60,6 +61,20 @@ import type { Inngest } from 'inngest';
 import { InngestPubSub } from '../pubsub';
 import type { InngestWorkflow } from '../workflow';
 import { createInngestDurableAgenticWorkflow, InngestDurableStepIds } from './create-inngest-agentic-workflow';
+
+class InngestWorkflowCachingPubSub extends CachingPubSub {
+  override publish(
+    topic: string,
+    event: Omit<Event, 'id' | 'createdAt' | 'index'>,
+    options?: { localOnly?: boolean },
+  ): Promise<void> {
+    if (topic.startsWith('workflow.events.v2.')) {
+      return super.publish(topic, event, { ...options, localOnly: true });
+    }
+
+    return super.publish(topic, event, options);
+  }
+}
 
 /**
  * Internal sentinel used by {@link InngestAgent.generate} and
@@ -251,8 +266,13 @@ export interface InngestAgentStreamResult<OUTPUT = undefined> {
    * durable LLM step short-circuits (when the step worker shares the same
    * process) and emits an ABORT event over pubsub so the consumer stream
    * closes. Safe to call after the run has already finished.
+   *
+   * Also publishes an abort request over pubsub, which is what stops work
+   * already running on a step worker — a different process from this one.
+   * Await the returned promise to know the request has been dispatched;
+   * ignoring it keeps the previous fire-and-forget behaviour.
    */
-  abort: (reason?: unknown) => void;
+  abort: (reason?: unknown) => Promise<void>;
 }
 
 /**
@@ -261,6 +281,7 @@ export interface InngestAgentStreamResult<OUTPUT = undefined> {
 export interface InngestAgentResumeOptions<OUTPUT = undefined> {
   threadId?: string;
   resourceId?: string;
+  requestContext?: AgentExecutionOptions<OUTPUT>['requestContext'];
   onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
   onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
   onFinish?: MastraOnFinishCallback<OUTPUT>;
@@ -570,7 +591,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     // Ensure the agent's CachingPubSub (and its cache) is resolved so workflow
     // events and agent.stream events share the same history backend.
     getPubsub();
-    return new CachingPubSub(defaultPubsub, resolveCache());
+    return new InngestWorkflowCachingPubSub(defaultPubsub, resolveCache());
   });
 
   // Lazily resolve cache
@@ -607,6 +628,31 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
    */
   async function emitError(runId: string, error: Error): Promise<void> {
     await emitErrorEvent(getPubsub(), runId, error);
+  }
+
+  /**
+   * Stop a run in whichever worker is executing it.
+   *
+   * An Inngest agent's steps run on Inngest's infrastructure, essentially never
+   * in the process that called `stream()`. The local `AbortController` is
+   * therefore invisible to the step worker, and on its own `abort()` cannot
+   * stop anything. Publishing an abort request lets the worker flip its own
+   * controller and unwind the run gracefully, emitting the terminal stream
+   * event consumers wait on — which a hard workflow cancel would skip.
+   *
+   * Best-effort: the local abort has already happened, and a caller asking to
+   * stop a run should not get a rejection because the publish failed.
+   */
+  async function requestRemoteAbort(runId: string): Promise<void> {
+    try {
+      await publishAbortRequest(getPubsub(), runId);
+    } catch (error) {
+      mastra?.getLogger?.()?.warn?.('Failed to publish Inngest durable agent abort request', {
+        agentId,
+        runId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   // Return the InngestAgent object (Agent methods are added by the Proxy below)
@@ -830,10 +876,12 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         streamCleanup();
         finalizeGlobalRegistry();
       };
-      const abort = (reason?: unknown) => {
+      const abort = async (reason?: unknown) => {
         if (!abortController.signal.aborted) {
           abortController.abort(reason);
         }
+        // The step worker is a different process — see `requestRemoteAbort`.
+        await requestRemoteAbort(runId);
       };
       const result = {
         output,
@@ -981,19 +1029,27 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           // Find the suspended step from the snapshot
           const suspendedStepIds = snapshot?.suspendedPaths ? Object.keys(snapshot.suspendedPaths) : [];
           const steps = suspendedStepIds.length > 0 ? suspendedStepIds : [];
+          const requestContext = {
+            ...(snapshot?.requestContext ?? {}),
+            ...(resumeOptions?.requestContext?.toJSON() ?? {}),
+          };
+          const tracingOptions = snapshot?.tracingContext
+            ? {
+                traceId: snapshot.tracingContext.traceId,
+                parentSpanId: snapshot.tracingContext.spanId,
+              }
+            : undefined;
 
           await inngest.send({
             name: eventName,
             data: {
               inputData: resumeData,
-              initialState: snapshot?.value ?? {},
               runId,
               resourceId: resumeOptions?.resourceId,
-              requestContext: snapshot?.requestContext ?? {},
-              stepResults: snapshot?.context,
+              requestContext,
+              tracingOptions,
               resume: {
                 steps,
-                stepResults: snapshot?.context,
                 resumePayload: resumeData,
                 resumePath: steps[0] ? snapshot?.suspendedPaths?.[steps[0]] : undefined,
               },
@@ -1006,10 +1062,12 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
       existingEntry.workflowExecution = workflowExecution;
 
-      const abort = (reason?: unknown) => {
+      const abort = async (reason?: unknown) => {
         if (!abortController.signal.aborted) {
           abortController.abort(reason);
         }
+        // The step worker is a different process — see `requestRemoteAbort`.
+        await requestRemoteAbort(runId);
       };
 
       const cleanup = () => {
@@ -1079,13 +1137,12 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
       await ready;
 
-      // `observe()` is a read-only re-subscription — it does not own the run
-      // so it cannot abort the underlying workflow. We still expose `abort()`
-      // on the result for type parity with stream()/resume(); calling it
-      // closes the local subscription via cleanup but is a no-op against the
-      // running workflow.
-      const abort = (_reason?: unknown) => {
+      // `observe()` does not own the run, but it can still stop it: closing the
+      // local subscription and publishing an abort request, which reaches the
+      // worker actually executing it.
+      const abort = async (_reason?: unknown) => {
         streamCleanup();
+        await requestRemoteAbort(runId);
       };
 
       return {

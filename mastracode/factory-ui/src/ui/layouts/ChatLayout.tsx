@@ -1,0 +1,19 @@
+import type { ReactNode } from 'react';
+
+import { ViewportLayout } from './PageLayout';
+
+type ChatLayoutProps = {
+  sidebar: ReactNode;
+  /** Optional bar above the chat content (e.g. mobile sidebar toggle). */
+  header?: ReactNode;
+  main: ReactNode;
+};
+
+/** Chat pages inside the shared application page frame. The main area owns its own scrolling. */
+export function ChatLayout({ sidebar, header, main }: ChatLayoutProps) {
+  return (
+    <ViewportLayout sidebar={sidebar} header={header}>
+      <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">{main}</div>
+    </ViewportLayout>
+  );
+}

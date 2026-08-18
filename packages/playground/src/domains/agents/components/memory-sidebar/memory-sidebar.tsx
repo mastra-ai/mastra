@@ -4,6 +4,7 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useObservationalMemory } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronDown, ChevronUp, Eye, MessageSquare, NotebookPen, Search } from 'lucide-react';
@@ -11,6 +12,8 @@ import type { LucideIcon } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { AgentCapabilitiesFooter } from './agent-capabilities-footer';
 import { AgentMemory } from './agent-memory';
+import { getObservationWindowTokens } from './lib/observation-window';
+import type { OmAgentConfig } from './lib/observation-window';
 import { MemoryDetailView } from './memory-detail-view';
 import { useMemoryFeatureFlags } from './use-memory-feature-flags';
 import { useMemorySidebarTab } from './use-memory-sidebar-tab';
@@ -19,6 +22,7 @@ import { ChatThreads } from '@/domains/agents/components/chat-threads';
 import { SidebarPanel } from '@/domains/agents/components/sidebar-panel';
 import { useMemoryTimeline, useObservationalMemoryContext } from '@/domains/agents/context';
 
+import { useMemoryConfig, useThread } from '@/domains/memory/hooks';
 import { useMemory } from '@/domains/memory/hooks/use-memory';
 
 export interface MemorySidebarProps {
@@ -53,7 +57,7 @@ function ConfigBadge({ icon: Icon, tooltip, enabled, value }: ConfigBadgeProps) 
         >
           <Icon className="h-3 w-3 shrink-0" />
           {value !== undefined && (
-            <Txt as="span" variant="ui-xs" className="font-medium tabular-nums leading-none">
+            <Txt as="span" variant="ui-xs" className="leading-none font-medium tabular-nums">
               {value}
             </Txt>
           )}
@@ -107,10 +111,28 @@ function MemorySidebarBody({ agentId, threadId, threads, onDelete }: MemorySideb
   // streamProgress is intentionally retained across thread switches (for reload
   // display), so only trust it for the thread this card belongs to — otherwise the
   // collapsed bar keeps the previous thread's percentage.
-  const messagesWindow = streamProgress?.threadId === threadId ? streamProgress.windows?.active?.messages : undefined;
+  const liveProgress = streamProgress?.threadId === threadId ? streamProgress : null;
+  // Status parts are streamed but not persisted, so on a fresh load there is no live
+  // progress yet. Fall back to the durable OM record the same way the expanded OM
+  // section and the timeline panel do, otherwise the bar stays empty after a reload.
+  const { data: thread } = useThread({ threadId, agentId });
+  const { data: memoryConfigData } = useMemoryConfig(agentId);
+  const { data: omData } = useObservationalMemory(
+    observationalOn ? agentId : undefined,
+    observationalOn ? threadId : undefined,
+    thread?.resourceId ?? agentId,
+  );
+  const omAgentConfig = (memoryConfigData?.config as { observationalMemory?: OmAgentConfig } | undefined)
+    ?.observationalMemory;
+  const { messageTokens, messageThreshold } = getObservationWindowTokens({
+    record: omData?.record,
+    liveProgress,
+    agentConfig: omAgentConfig,
+  });
+  const hasObservationWindow = Boolean(liveProgress) || Boolean(omData?.record);
   const observationPercent =
-    messagesWindow && messagesWindow.threshold > 0
-      ? Math.min(100, Math.round((messagesWindow.tokens / messagesWindow.threshold) * 100))
+    hasObservationWindow && messageThreshold > 0
+      ? Math.min(100, Math.round((messageTokens / messageThreshold) * 100))
       : undefined;
 
   useLayoutEffect(() => {
@@ -232,16 +254,16 @@ function MemorySidebarBody({ agentId, threadId, threads, onDelete }: MemorySideb
               className="group/memory-card w-full shrink-0 cursor-pointer bg-transparent px-3 py-2.5 text-left"
             >
               <span className="flex items-center justify-between gap-2">
-                <span className="flex min-w-0 items-center gap-1.5 text-neutral6">
+                <span className="text-neutral6 flex min-w-0 items-center gap-1.5">
                   <MemoryIcon className="h-4 w-4 shrink-0" />
                   <Txt as="span" variant="ui-sm" className="font-medium">
                     Memory
                   </Txt>
                 </span>
                 {showMemory ? (
-                  <ChevronDown className="h-4 w-4 shrink-0 text-neutral3" />
+                  <ChevronDown className="text-neutral3 h-4 w-4 shrink-0" />
                 ) : (
-                  <ChevronUp className="h-4 w-4 shrink-0 text-neutral3" />
+                  <ChevronUp className="text-neutral3 h-4 w-4 shrink-0" />
                 )}
               </span>
 
@@ -291,7 +313,11 @@ function MemorySidebarBody({ agentId, threadId, threads, onDelete }: MemorySideb
               ) : null}
 
               {observationPercent !== undefined ? (
-                <span className="mt-2 block h-1 w-full overflow-hidden rounded-full bg-surface5">
+                <span
+                  data-testid="memory-card-observation-bar"
+                  data-percent={observationPercent}
+                  className="bg-surface5 mt-2 block h-1 w-full overflow-hidden rounded-full"
+                >
                   <span
                     className={cn(
                       'block h-full rounded-full transition-all duration-normal',
@@ -304,7 +330,7 @@ function MemorySidebarBody({ agentId, threadId, threads, onDelete }: MemorySideb
             </button>
 
             {showMemory && (
-              <div className="memory-card-content min-h-0 flex-1 overflow-y-auto border-t border-border1">
+              <div className="memory-card-content border-border1 min-h-0 flex-1 overflow-y-auto border-t">
                 <AgentMemory agentId={agentId} threadId={threadId} memoryType={memoryType} />
               </div>
             )}

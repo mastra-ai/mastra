@@ -1,8 +1,20 @@
-import type { LanguageModelV4, LanguageModelV4CallOptions } from '@ai-sdk/provider-v7';
+import type { LanguageModelV4, LanguageModelV4CallOptions, LanguageModelV4StreamPart } from '@ai-sdk/provider-v7';
 import { describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../../../../agent/message-list';
 import { MastraError } from '../../../../error';
+import { convertFullStreamChunkToMastra } from '../../../../stream/aisdk/v5/transform';
 import { AISDKV7LanguageModel } from './model';
+
+async function collectStream(stream: ReadableStream): Promise<any[]> {
+  const chunks: any[] = [];
+  const reader = stream.getReader();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  return chunks;
+}
 
 function createMockV4Model() {
   return {
@@ -206,6 +218,186 @@ describe('AISDKV7LanguageModel', () => {
         error => error instanceof MastraError && error.id === 'INVALID_DATA_URL_FORMAT',
       );
       expect(model.doGenerate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('response file untagging', () => {
+    it('untags generated file data from doStream so the shared pipeline receives the flat shape', async () => {
+      const model = createMockV4Model();
+      const generatedBytes = new Uint8Array([137, 80, 78, 71]);
+      (model.doStream as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+        stream: new ReadableStream<LanguageModelV4StreamPart>({
+          start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({
+              type: 'file',
+              mediaType: 'image/png',
+              data: { type: 'data', data: generatedBytes },
+            });
+            controller.enqueue({
+              type: 'file',
+              mediaType: 'image/jpeg',
+              data: { type: 'url', url: new URL('https://example.com/generated.jpeg') },
+            });
+            controller.enqueue({
+              type: 'finish',
+              finishReason: 'stop',
+              usage: {},
+            } as unknown as LanguageModelV4StreamPart);
+            controller.close();
+          },
+        }),
+      });
+      const wrapped = new AISDKV7LanguageModel(model);
+
+      const result = await wrapped.doStream({ prompt: [] } as unknown as LanguageModelV4CallOptions);
+      const chunks = await collectStream(result.stream);
+      const fileChunks = chunks.filter(chunk => chunk.type === 'file');
+
+      expect(fileChunks).toEqual([
+        { type: 'file', mediaType: 'image/png', data: generatedBytes },
+        { type: 'file', mediaType: 'image/jpeg', data: 'https://example.com/generated.jpeg' },
+      ]);
+      expect(chunks[0]).toEqual({ type: 'stream-start', warnings: [] });
+    });
+
+    it('untags generated file data from doGenerate in both content and the derived stream', async () => {
+      const model = createMockV4Model();
+      const generatedBase64 = 'iVBORw0KGgo=';
+      (model.doGenerate as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+        content: [
+          { type: 'text', text: 'Here is your image.' },
+          { type: 'file', mediaType: 'image/png', data: { type: 'data', data: generatedBase64 } },
+        ],
+        finishReason: 'stop',
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        warnings: [],
+      });
+      const wrapped = new AISDKV7LanguageModel(model);
+
+      const result = await wrapped.doGenerate({ prompt: [] } as unknown as LanguageModelV4CallOptions);
+
+      expect(result.content).toContainEqual({
+        type: 'file',
+        mediaType: 'image/png',
+        data: generatedBase64,
+      });
+
+      const chunks = await collectStream(result.stream);
+      expect(chunks).toContainEqual({
+        type: 'file',
+        mediaType: 'image/png',
+        data: generatedBase64,
+      });
+    });
+
+    it('untags reasoning-file data in both doStream parts and doGenerate content', async () => {
+      const model = createMockV4Model();
+      const reasoningBytes = new Uint8Array([1, 2, 3]);
+      (model.doStream as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+        stream: new ReadableStream<LanguageModelV4StreamPart>({
+          start(controller) {
+            controller.enqueue({
+              type: 'reasoning-file',
+              mediaType: 'image/png',
+              data: { type: 'data', data: reasoningBytes },
+            } as unknown as LanguageModelV4StreamPart);
+            controller.close();
+          },
+        }),
+      });
+      (model.doGenerate as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+        content: [{ type: 'reasoning-file', mediaType: 'image/png', data: { type: 'data', data: 'aGVsbG8=' } }],
+        finishReason: 'stop',
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        warnings: [],
+      });
+      const wrapped = new AISDKV7LanguageModel(model);
+
+      const streamResult = await wrapped.doStream({ prompt: [] } as unknown as LanguageModelV4CallOptions);
+      const chunks = await collectStream(streamResult.stream);
+      expect(chunks).toEqual([{ type: 'reasoning-file', mediaType: 'image/png', data: reasoningBytes }]);
+
+      const generateResult = await wrapped.doGenerate({ prompt: [] } as unknown as LanguageModelV4CallOptions);
+      expect(generateResult.content).toContainEqual({
+        type: 'reasoning-file',
+        mediaType: 'image/png',
+        data: 'aGVsbG8=',
+      });
+    });
+
+    it('produces flat data the shared chunk transform maps to a valid FileChunk payload', async () => {
+      const model = createMockV4Model();
+      const generatedBase64 = 'iVBORw0KGgo=';
+      (model.doStream as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+        stream: new ReadableStream<LanguageModelV4StreamPart>({
+          start(controller) {
+            controller.enqueue({
+              type: 'file',
+              mediaType: 'image/png',
+              data: { type: 'data', data: generatedBase64 },
+            });
+            controller.enqueue({
+              type: 'file',
+              mediaType: 'image/jpeg',
+              data: { type: 'url', url: new URL('https://example.com/generated.jpeg') },
+            });
+            controller.close();
+          },
+        }),
+      });
+      const wrapped = new AISDKV7LanguageModel(model);
+
+      const result = await wrapped.doStream({ prompt: [] } as unknown as LanguageModelV4CallOptions);
+      const parts = await collectStream(result.stream);
+      const fileChunks = parts.map(part => convertFullStreamChunkToMastra(part, { runId: 'test-run' }));
+
+      // base64-backed file: data flows through flat and is labeled as base64.
+      expect(fileChunks[0]).toMatchObject({
+        type: 'file',
+        payload: { data: generatedBase64, base64: generatedBase64, mimeType: 'image/png' },
+      });
+      // URL-backed file: the URL string is preserved but never mislabeled as base64.
+      expect(fileChunks[1]).toMatchObject({
+        type: 'file',
+        payload: { data: 'https://example.com/generated.jpeg', base64: undefined, mimeType: 'image/jpeg' },
+      });
+    });
+
+    it('passes unsupported tagged variants (reference/text) through unchanged instead of untagging to undefined', async () => {
+      const model = createMockV4Model();
+      const referenceData = { type: 'reference', reference: { openai: 'file-123' } };
+      (model.doGenerate as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+        content: [{ type: 'file', mediaType: 'image/png', data: referenceData }],
+        finishReason: 'stop',
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        warnings: [],
+      });
+      const wrapped = new AISDKV7LanguageModel(model);
+
+      const result = await wrapped.doGenerate({ prompt: [] } as unknown as LanguageModelV4CallOptions);
+
+      expect(result.content).toContainEqual({
+        type: 'file',
+        mediaType: 'image/png',
+        data: referenceData,
+      });
+    });
+
+    it('passes flat response file data through unchanged', async () => {
+      const model = createMockV4Model();
+      const content = [{ type: 'file', mediaType: 'image/png', data: 'iVBORw0KGgo=' }];
+      (model.doGenerate as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+        content,
+        finishReason: 'stop',
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        warnings: [],
+      });
+      const wrapped = new AISDKV7LanguageModel(model);
+
+      const result = await wrapped.doGenerate({ prompt: [] } as unknown as LanguageModelV4CallOptions);
+
+      expect(result.content).toBe(content);
     });
   });
 });

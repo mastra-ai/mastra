@@ -9,7 +9,7 @@ description: "Use AI models through OpenRouter."
 
 # <img src="https://models.dev/logos/openrouter.svg" alt="OpenRouter logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenRouter
 
-OpenRouter aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 342 models through Mastra's model router.
+OpenRouter aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 352 models through Mastra's model router.
 
 Learn more in the [OpenRouter documentation](https://openrouter.ai/models).
 
@@ -26,7 +26,7 @@ const agent = new Agent({
 });
 ```
 
-:::info
+:::note
 
 Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [OpenRouter documentation](https://openrouter.ai/models) for details.
 
@@ -52,6 +52,7 @@ ANTHROPIC_API_KEY=ant-...
 | `~anthropic/claude-haiku-latest` |
 | `~anthropic/claude-opus-latest` |
 | `~anthropic/claude-sonnet-latest` |
+| `~deepseek/deepseek-v4-flash-latest` |
 | `~google/gemini-flash-latest` |
 | `~google/gemini-pro-latest` |
 | `~moonshotai/kimi-latest` |
@@ -81,21 +82,23 @@ ANTHROPIC_API_KEY=ant-...
 | `anthropic/claude-opus-4.7-fast` |
 | `anthropic/claude-opus-4.8` |
 | `anthropic/claude-opus-4.8-fast` |
+| `anthropic/claude-opus-5` |
+| `anthropic/claude-opus-5-fast` |
 | `anthropic/claude-sonnet-4` |
 | `anthropic/claude-sonnet-4.5` |
 | `anthropic/claude-sonnet-4.6` |
 | `anthropic/claude-sonnet-5` |
-| `arcee-ai/coder-large` |
 | `arcee-ai/trinity-large-thinking` |
 | `arcee-ai/virtuoso-large` |
 | `baidu/ernie-4.5-vl-424b-a47b` |
 | `bytedance-seed/seed-1.6` |
 | `bytedance-seed/seed-1.6-flash` |
+| `bytedance-seed/seed-2-1-turbo` |
+| `bytedance-seed/seed-2.0-code` |
 | `bytedance-seed/seed-2.0-lite` |
 | `bytedance-seed/seed-2.0-mini` |
 | `bytedance/ui-tars-1.5-7b` |
 | `cognitivecomputations/dolphin-mistral-24b-venice-edition` |
-| `cognitivecomputations/dolphin-mistral-24b-venice-edition:free` |
 | `cohere/command-a` |
 | `cohere/command-r-08-2024` |
 | `cohere/command-r-plus-08-2024` |
@@ -112,7 +115,10 @@ ANTHROPIC_API_KEY=ant-...
 | `deepseek/deepseek-v3.2` |
 | `deepseek/deepseek-v3.2-exp` |
 | `deepseek/deepseek-v4-flash` |
+| `deepseek/deepseek-v4-flash-0731` |
 | `deepseek/deepseek-v4-pro` |
+| `deepseek/deepseek-v4-pro-0813` |
+| `dots-studio/dots-3-note-preview:free` |
 | `google/gemini-2.5-flash` |
 | `google/gemini-2.5-flash-image` |
 | `google/gemini-2.5-flash-lite` |
@@ -130,6 +136,9 @@ ANTHROPIC_API_KEY=ant-...
 | `google/gemini-3.1-pro-preview` |
 | `google/gemini-3.1-pro-preview-customtools` |
 | `google/gemini-3.5-flash` |
+| `google/gemini-3.5-flash-lite` |
+| `google/gemini-3.6-flash` |
+| `google/gemini-3.7-flash` |
 | `google/gemma-2-27b-it` |
 | `google/gemma-3-12b-it` |
 | `google/gemma-3-27b-it` |
@@ -147,24 +156,25 @@ ANTHROPIC_API_KEY=ant-...
 | `inception/mercury-2` |
 | `inclusionai/ling-2.6-1t` |
 | `inclusionai/ling-2.6-flash` |
+| `inclusionai/ling-3.0-flash` |
 | `inclusionai/ring-2.6-1t` |
-| `inflection/inflection-3-pi` |
-| `inflection/inflection-3-productivity` |
 | `kwaipilot/kat-coder-air-v2.5` |
 | `kwaipilot/kat-coder-pro-v2` |
 | `kwaipilot/kat-coder-pro-v2.5` |
+| `liquid/lfm-2.5-2.6b:free` |
 | `mancer/weaver` |
+| `meituan/longcat-2.0` |
 | `meta-llama/llama-3.1-70b-instruct` |
 | `meta-llama/llama-3.1-8b-instruct` |
-| `meta-llama/llama-3.2-11b-vision-instruct` |
 | `meta-llama/llama-3.2-1b-instruct` |
 | `meta-llama/llama-3.2-3b-instruct` |
-| `meta-llama/llama-3.2-3b-instruct:free` |
 | `meta-llama/llama-3.3-70b-instruct` |
-| `meta-llama/llama-3.3-70b-instruct:free` |
 | `meta-llama/llama-4-maverick` |
 | `meta-llama/llama-4-scout` |
 | `meta-llama/llama-guard-4-12b` |
+| `meta/muse-glimmer-30b` |
+| `meta/muse-spark-1.1` |
+| `meta/muse-spark-1.2` |
 | `microsoft/phi-4` |
 | `microsoft/wizardlm-2-8x22b` |
 | `minimax/minimax-01` |
@@ -199,16 +209,15 @@ ANTHROPIC_API_KEY=ant-...
 | `moonshotai/kimi-k2.5` |
 | `moonshotai/kimi-k2.6` |
 | `moonshotai/kimi-k2.7-code` |
+| `moonshotai/kimi-k3` |
 | `morph/morph-v3-fast` |
 | `morph/morph-v3-large` |
 | `nex-agi/nex-n2-mini` |
 | `nex-agi/nex-n2-pro` |
 | `nousresearch/hermes-3-llama-3.1-405b` |
-| `nousresearch/hermes-3-llama-3.1-405b:free` |
 | `nousresearch/hermes-3-llama-3.1-70b` |
 | `nousresearch/hermes-4-405b` |
 | `nousresearch/hermes-4-70b` |
-| `nvidia/llama-3.3-nemotron-super-49b-v1.5` |
 | `nvidia/nemotron-3-nano-30b-a3b` |
 | `nvidia/nemotron-3-nano-30b-a3b:free` |
 | `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free` |
@@ -217,6 +226,8 @@ ANTHROPIC_API_KEY=ant-...
 | `nvidia/nemotron-3-ultra-550b-a55b` |
 | `nvidia/nemotron-3-ultra-550b-a55b:free` |
 | `nvidia/nemotron-3.5-content-safety:free` |
+| `nvidia/nemotron-3.5-lightning` |
+| `nvidia/nemotron-3.5-lightning:free` |
 | `nvidia/nemotron-nano-12b-v2-vl:free` |
 | `nvidia/nemotron-nano-9b-v2:free` |
 | `openai/gpt-3.5-turbo` |
@@ -235,18 +246,13 @@ ANTHROPIC_API_KEY=ant-...
 | `openai/gpt-4o-2024-11-20` |
 | `openai/gpt-4o-mini` |
 | `openai/gpt-4o-mini-2024-07-18` |
-| `openai/gpt-4o-mini-search-preview` |
-| `openai/gpt-4o-search-preview` |
 | `openai/gpt-5` |
-| `openai/gpt-5-chat` |
-| `openai/gpt-5-codex` |
 | `openai/gpt-5-image` |
 | `openai/gpt-5-image-mini` |
 | `openai/gpt-5-mini` |
 | `openai/gpt-5-nano` |
 | `openai/gpt-5-pro` |
 | `openai/gpt-5.1` |
-| `openai/gpt-5.1-chat` |
 | `openai/gpt-5.1-codex` |
 | `openai/gpt-5.1-codex-max` |
 | `openai/gpt-5.1-codex-mini` |
@@ -254,7 +260,6 @@ ANTHROPIC_API_KEY=ant-...
 | `openai/gpt-5.2-chat` |
 | `openai/gpt-5.2-codex` |
 | `openai/gpt-5.2-pro` |
-| `openai/gpt-5.3-chat` |
 | `openai/gpt-5.3-codex` |
 | `openai/gpt-5.4` |
 | `openai/gpt-5.4-image-2` |
@@ -279,12 +284,10 @@ ANTHROPIC_API_KEY=ant-...
 | `openai/o1` |
 | `openai/o1-pro` |
 | `openai/o3` |
-| `openai/o3-deep-research` |
 | `openai/o3-mini` |
 | `openai/o3-mini-high` |
 | `openai/o3-pro` |
 | `openai/o4-mini` |
-| `openai/o4-mini-deep-research` |
 | `openai/o4-mini-high` |
 | `openrouter/auto` |
 | `openrouter/bodybuilder` |
@@ -297,8 +300,8 @@ ANTHROPIC_API_KEY=ant-...
 | `perplexity/sonar-pro` |
 | `perplexity/sonar-pro-search` |
 | `perplexity/sonar-reasoning-pro` |
-| `poolside/laguna-m.1` |
-| `poolside/laguna-m.1:free` |
+| `poolside/laguna-s-2.1` |
+| `poolside/laguna-s-2.1:free` |
 | `poolside/laguna-xs-2.1` |
 | `poolside/laguna-xs-2.1:free` |
 | `qwen/qwen-2.5-72b-instruct` |
@@ -322,11 +325,9 @@ ANTHROPIC_API_KEY=ant-...
 | `qwen/qwen3-coder-flash` |
 | `qwen/qwen3-coder-next` |
 | `qwen/qwen3-coder-plus` |
-| `qwen/qwen3-coder:free` |
 | `qwen/qwen3-max` |
 | `qwen/qwen3-max-thinking` |
 | `qwen/qwen3-next-80b-a3b-instruct` |
-| `qwen/qwen3-next-80b-a3b-instruct:free` |
 | `qwen/qwen3-next-80b-a3b-thinking` |
 | `qwen/qwen3-vl-235b-a22b-instruct` |
 | `qwen/qwen3-vl-235b-a22b-thinking` |
@@ -348,13 +349,18 @@ ANTHROPIC_API_KEY=ant-...
 | `qwen/qwen3.6-flash` |
 | `qwen/qwen3.6-max-preview` |
 | `qwen/qwen3.6-plus` |
+| `qwen/qwen3.7-flash` |
 | `qwen/qwen3.7-max` |
 | `qwen/qwen3.7-plus` |
+| `qwen/qwen3.8-2.4t-a95b` |
+| `qwen/qwen3.8-27b` |
+| `qwen/qwen3.8-max` |
 | `rekaai/reka-edge` |
 | `rekaai/reka-flash-3` |
 | `relace/relace-apply-3` |
 | `relace/relace-search` |
 | `sakana/fugu-ultra` |
+| `sakana/sakana-namazu` |
 | `sao10k/l3-lunaris-8b` |
 | `sao10k/l3.1-euryale-70b` |
 | `sao10k/l3.3-euryale-70b` |
@@ -363,18 +369,21 @@ ANTHROPIC_API_KEY=ant-...
 | `tencent/hunyuan-a13b-instruct` |
 | `tencent/hy3` |
 | `tencent/hy3-preview` |
-| `tencent/hy3:free` |
 | `thedrummer/cydonia-24b-v4.1` |
 | `thedrummer/rocinante-12b` |
 | `thedrummer/skyfall-36b-v2` |
 | `thedrummer/unslopnemo-12b` |
+| `thinkingmachines/inkling` |
+| `thinkingmachines/inkling-small` |
 | `undi95/remm-slerp-l2-13b` |
 | `upstage/solar-pro-3` |
+| `upstage/solar-pro4` |
 | `writer/palmyra-x5` |
 | `x-ai/grok-4.20` |
 | `x-ai/grok-4.20-multi-agent` |
 | `x-ai/grok-4.3` |
 | `x-ai/grok-4.5` |
+| `x-ai/grok-4.6` |
 | `x-ai/grok-build-0.1` |
 | `xiaomi/mimo-v2.5` |
 | `xiaomi/mimo-v2.5-pro` |
@@ -389,5 +398,6 @@ ANTHROPIC_API_KEY=ant-...
 | `z-ai/glm-5-turbo` |
 | `z-ai/glm-5.1` |
 | `z-ai/glm-5.2` |
+| `z-ai/glm-5.2:free` |
 | `z-ai/glm-5v-turbo` |
 

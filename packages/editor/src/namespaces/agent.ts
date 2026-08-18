@@ -18,10 +18,6 @@ import type {
   StorageToolConfig,
   StorageMCPClientToolsConfig,
   StorageSkillConfig,
-} from '@mastra/core/storage';
-import { convertSchemaToZod } from '@mastra/schema-compat';
-
-import type {
   StorageCreateAgentInput,
   StorageUpdateAgentInput,
   StorageListAgentsInput,
@@ -36,6 +32,8 @@ import type {
   StorageWorkspaceRef,
   StorageBrowserRef,
 } from '@mastra/core/storage';
+import { convertSchemaToZod } from '@mastra/schema-compat';
+
 import type { AgentVersion, CreateVersionInput } from '@mastra/core/storage/domains/agents';
 import type { MastraBrowser } from '@mastra/core/browser';
 
@@ -267,23 +265,19 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       await this.ensureStoredWorkspaceRefs(providedConfig.workspace);
     }
 
-    const versionResult =
-      Object.keys(providedConfig).length > 0
-        ? await createVersionFromSnapshotUpdate<AgentVersion, CreateVersionInput, StorageAgentSnapshotType>({
-            store,
-            parentId: input.id,
-            parentIdField: 'agentId',
-            snapshotFields: AGENT_SNAPSHOT_CONFIG_FIELDS,
-            providedConfig,
-          })
-        : { versionCreated: false as const };
+    if (Object.keys(providedConfig).length > 0) {
+      await createVersionFromSnapshotUpdate<AgentVersion, CreateVersionInput, StorageAgentSnapshotType>({
+        store,
+        parentId: input.id,
+        parentIdField: 'agentId',
+        snapshotFields: AGENT_SNAPSHOT_CONFIG_FIELDS,
+        providedConfig,
+      });
+    }
 
     const recordFields = getProvidedAgentRecordFields(input);
-    if (recordFields || versionResult.versionCreated) {
-      await store.update({
-        ...(recordFields ?? { id: input.id }),
-        ...(versionResult.versionCreated ? { activeVersionId: versionResult.version.id } : {}),
-      });
+    if (recordFields) {
+      await store.update(recordFields);
     }
 
     this._cache.delete(input.id);
@@ -503,6 +497,19 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     const toolsEditable = toolsConfig === true;
     const toolDescriptionsEditable =
       typeof toolsConfig === 'object' && toolsConfig !== null && toolsConfig.description === true;
+    // Instructions are exclusively owned by the editor only when `editor: { instructions: true }`
+    // is set explicitly — code is then forbidden from providing instructions at all (see
+    // `EditorOwnsInstructions` in `@mastra/core/agent/types`). When `editor` is omitted, code still
+    // carries real instructions as a fallback, so there is nothing to fail closed on.
+    const instructionsOwnedByEditor = editorConfig !== undefined && editorConfig.instructions === true;
+    const requestedStatus = options && !('versionId' in options) ? (options.status ?? 'draft') : undefined;
+
+    const failClosed = (reason: string): never => {
+      throw new Error(
+        `Agent "${agent.id}" delegates instructions to the editor ("editor: { instructions: true }") but ${reason}. ` +
+          `Publish a version in Studio before running this agent${requestedStatus === 'published' ? ", or request status: 'draft' instead" : ''}.`,
+      );
+    };
 
     let storedConfig: StorageResolvedAgentType | null = null;
     try {
@@ -518,18 +525,36 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       if (options && 'versionId' in options) {
         throw error;
       }
+      if (instructionsOwnedByEditor) {
+        throw new Error(
+          `Agent "${agent.id}" delegates instructions to the editor ("editor: { instructions: true }") but the stored configuration could not be loaded: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
       // Editor not registered, storage not available, or agent not found — return unchanged
       return agent;
     }
 
     if (!storedConfig) {
+      if (instructionsOwnedByEditor) {
+        failClosed('no stored agent configuration exists yet');
+      }
       return agent;
     }
 
     // If requesting published status but no version has been published, don't override the code-defined agent
     const requestedPublished = options && !('versionId' in options) && options.status === 'published';
     if (requestedPublished && !storedConfig.activeVersionId) {
+      if (instructionsOwnedByEditor) {
+        failClosed('no version has been published');
+      }
       return agent;
+    }
+
+    // A resolved record can still carry no instructions (e.g. a version published before any
+    // were written). That leaves an editor-owned agent with its empty code default just like the
+    // unresolved cases above, so it must fail closed here too.
+    if (instructionsOwnedByEditor && (storedConfig.instructions === undefined || storedConfig.instructions === null)) {
+      failClosed('the stored agent configuration has no instructions');
     }
 
     // Fork the agent so overrides don't mutate the singleton instance

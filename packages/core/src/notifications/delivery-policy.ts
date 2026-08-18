@@ -4,7 +4,32 @@ import type {
   NotificationDeliveryThreadState,
   NotificationPriority,
   NotificationRecord,
+  NotificationStatus,
 } from './types';
+
+/**
+ * Delivery attempts allowed before a notification is marked `failed`. A failed
+ * record is no longer due, so a deterministic delivery error (a missing model,
+ * a rejected request context) stops being retried on every dispatch tick.
+ */
+export const MAX_NOTIFICATION_DELIVERY_ATTEMPTS = 5;
+
+/**
+ * Attempt bookkeeping applied when a delivery attempt throws, spread into the
+ * `updateNotification` call at each failure site.
+ */
+export function resolveDeliveryFailureUpdate(record: NotificationRecord): {
+  deliveryAttempts: number;
+  status?: NotificationStatus;
+} {
+  const attempts = record.deliveryAttempts ?? 0;
+  // Records written before the cap existed can already be past it. Terminalize
+  // them at their recorded count instead of inflating it further.
+  if (attempts >= MAX_NOTIFICATION_DELIVERY_ATTEMPTS) return { deliveryAttempts: attempts, status: 'failed' };
+  const deliveryAttempts = attempts + 1;
+  if (deliveryAttempts < MAX_NOTIFICATION_DELIVERY_ATTEMPTS) return { deliveryAttempts };
+  return { deliveryAttempts, status: 'failed' };
+}
 
 export type NotificationDeliveryPolicyDecision = NotificationDeliveryAction | NotificationDeliveryDecision;
 
@@ -14,6 +39,14 @@ export type NotificationDeliveryPolicyInput = {
   now: Date;
 };
 
+/**
+ * Custom delivery decision logic. Runs at receipt time (when the notification
+ * is sent) and, for records the receipt-time decision deferred or scheduled
+ * for summary, AGAIN at delivery time when the dispatch workflow picks them
+ * up. At delivery time only the decision's `streamOptions` is honored — the
+ * record's persisted schedule already fixed when and how it delivers — so
+ * deciders should be side-effect free.
+ */
 export type NotificationDeliveryPolicyDecider = (
   input: NotificationDeliveryPolicyInput,
 ) => NotificationDeliveryPolicyDecision | undefined | Promise<NotificationDeliveryPolicyDecision | undefined>;

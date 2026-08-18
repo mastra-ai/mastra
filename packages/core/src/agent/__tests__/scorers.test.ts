@@ -10,7 +10,7 @@ vi.mock('../../evals/hooks', () => ({
   runScorer: vi.fn(),
 }));
 
-function scorersTests(version: 'v1' | 'v2') {
+function scorersTests(version: 'v1' | 'v2' | 'v3' | 'v4') {
   const dummyModel = getDummyResponseModel(version);
 
   describe('scorer output data', () => {
@@ -317,3 +317,5 @@ function scorersTests(version: 'v1' | 'v2') {
 
 scorersTests('v1');
 scorersTests('v2');
+scorersTests('v3');
+scorersTests('v4');

@@ -1,1 +1,0 @@
-../../.mastracode/commands/understand-pr.md

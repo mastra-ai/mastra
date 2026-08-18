@@ -613,6 +613,42 @@ describe('convertFullStreamChunkToMastra', () => {
       });
     });
 
+    it('should forward text-delta chunks that only carry providerMetadata', () => {
+      const chunk: StreamPart = {
+        type: 'text-delta',
+        id: 'text-1',
+        delta: '',
+        providerMetadata: {
+          google: { thoughtSignature: 'sig-abc' },
+        },
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result).toEqual({
+        type: 'text-delta',
+        runId: 'test-run-123',
+        from: ChunkFrom.AGENT,
+        payload: {
+          id: 'text-1',
+          providerMetadata: {
+            google: { thoughtSignature: 'sig-abc' },
+          },
+          text: '',
+        },
+      });
+    });
+
+    it('should drop empty text-delta chunks with no providerMetadata', () => {
+      const chunk: StreamPart = {
+        type: 'text-delta',
+        id: 'text-1',
+        delta: '',
+      };
+
+      expect(convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' })).toBeUndefined();
+    });
+
     it('should handle finish chunks correctly', () => {
       const chunk: StreamPart = {
         type: 'finish',
@@ -647,6 +683,10 @@ describe('convertFullStreamChunkToMastra', () => {
         anthropic: {
           cacheReadInputTokens: 94,
           cacheCreationInputTokens: 6,
+          cacheCreation: {
+            ephemeral_5m_input_tokens: 4,
+            ephemeral_1h_input_tokens: 2,
+          },
         },
       };
       const chunk: StreamPart = {
@@ -671,6 +711,8 @@ describe('convertFullStreamChunkToMastra', () => {
         expect(result.payload.stepResult.reason).toBe('stop');
         expect(result.payload.output.usage.cachedInputTokens).toBe(94);
         expect(result.payload.output.usage.cacheCreationInputTokens).toBe(6);
+        expect(result.payload.output.usage.cacheCreationInputTokens5m).toBe(4);
+        expect(result.payload.output.usage.cacheCreationInputTokens1h).toBe(2);
         expect(result.payload.providerMetadata).toEqual(providerMetadata);
         expect(result.payload.metadata.providerMetadata).toEqual(providerMetadata);
       }

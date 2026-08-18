@@ -223,7 +223,7 @@ const result = await agent.generate('message for agent')
                     type: '(context: DelegationStartContext) => DelegationStartResult | void | Promise<DelegationStartResult | void>',
                     isOptional: true,
                     description:
-                      'Called before delegating to a subagent. Use this to modify the delegation parameters or reject the delegation entirely.',
+                      "Called before delegating to a subagent. Use this to modify the delegation parameters, reject the delegation entirely, or mutate `context.requestContext` to add entries to the subagent run's request context.",
                   },
                 ],
               },
@@ -353,7 +353,7 @@ const result = await agent.generate('message for agent')
             type: 'boolean',
             isOptional: true,
             description:
-              "When true, all tool calls require explicit approval before execution. The generate() method will return with `finishReason: 'suspended'` and include a `suspendPayload` with tool call details (`toolCallId`, `toolName`, `args`). Use `approveToolCallGenerate()` or `declineToolCallGenerate()` to proceed. See [Agent Approval](/docs/agents/agent-approval#tool-approval-with-generate) for details.",
+              "When true, all tool calls require explicit approval before execution. The generate() method will return with `finishReason: 'suspended'` and include a `suspendPayload` with tool call details (`toolCallId`, `toolName`, `args`). Use `approveToolCallGenerate()` or `declineToolCallGenerate()` to proceed. See [Agent Approval](/docs/agents/human-in-the-loop#tool-approval-with-generate) for details.",
           },
           {
             name: 'autoResumeSuspendedTools',
@@ -438,10 +438,10 @@ const result = await agent.generate('message for agent')
                 parameters: [
                   {
                     name: 'jsonPromptInjection',
-                    type: 'boolean',
+                    type: "boolean | 'system' | 'inline' | 'auto'",
                     isOptional: true,
                     description:
-                      'Injects system prompt into the main agent instructing it to return structured output, useful for when a model does not natively support structured outputs.',
+                      "Controls how the JSON schema reaches the model. Set to 'auto' to use native structured output when supported and inline prompt injection otherwise.",
                   },
                 ],
               },
@@ -544,6 +544,17 @@ const result = await agent.generate('message for agent')
                     isOptional: true,
                     description:
                       'Additional memory configuration options including lastMessages, readOnly, semanticRecall, workingMemory, and filterIncompleteToolCalls.',
+                  },
+                ],
+              },
+              {
+                parameters: [
+                  {
+                    name: 'onTitleGenerated',
+                    type: '(title: string) => void | Promise<void>',
+                    isOptional: true,
+                    description:
+                      'Callback fired asynchronously when a thread title is generated and persisted to storage. Title generation runs in the background and may complete after `generate()` returns. Only fires when `generateTitle` is enabled in memory options and the thread has no existing title.',
                   },
                 ],
               },
@@ -836,7 +847,7 @@ const result = await agent.generate('message for agent')
             type: 'VersionOverrides',
             isOptional: true,
             description:
-              'Per-invocation version overrides for sub-agent delegation. Merged on top of Mastra instance-level versions and propagated automatically through sub-agent calls via requestContext. Requires the editor package. See [Sub-agent versioning](/docs/editor/overview#sub-agent-versioning).',
+              'Per-invocation version overrides for sub-agent delegation. Merged on top of Mastra instance-level versions and propagated automatically through sub-agent calls via requestContext. Requires the editor package. See [Editor versioning](/docs/studio/editor#versioning).',
             properties: [
               {
                 type: 'VersionOverrides',
@@ -1346,7 +1357,7 @@ const limitedResult = await agent.generate('Write a short poem about coding', {
 
 ### With memory
 
-Give your agent access to conversation history and persistence by configuring memory options. This allows the agent to remember previous interactions and maintain context across messages.
+Give your agent access to conversation history and persistence by configuring memory options. It allows the agent to remember previous interactions and maintain context across messages.
 
 ```ts
 const memoryResult = await agent.generate('Remember my favorite color is blue', {
@@ -1395,7 +1406,7 @@ console.log(response.text)
 
 ### Using `maxSteps`
 
-The `maxSteps` parameter controls the maximum number of sequential LLM calls an agent can make. Each step includes generating a response, executing any tool calls, and processing the result. Limiting steps helps prevent infinite loops, reduce latency, and control token usage for agents that use tools. The default is 5, but can be increased:
+The `maxSteps` parameter controls the maximum number of sequential LLM calls an agent can make. Each step generates a response and executes any tool calls before processing the result. Limiting steps helps prevent infinite loops and reduce latency. It also controls token usage for agents that use tools. The default is 5, but can be increased:
 
 ```typescript
 const response = await agent.generate('Help me organize my day', {
@@ -1415,6 +1426,22 @@ You can monitor the progress of multi-step operations using the `onStepFinish` c
 const response = await agent.generate('Help me organize my day', {
   onStepFinish: ({ text, toolCalls, toolResults, finishReason, usage }) => {
     console.log({ text, toolCalls, toolResults, finishReason, usage })
+  },
+})
+```
+
+### Using `onTitleGenerated`
+
+When `generateTitle` is enabled in memory options, title generation runs asynchronously after the response completes. Use `onTitleGenerated` to react when the title is ready, for example by pushing it to the client via SSE.
+
+```typescript
+const response = await agent.generate('What is quantum computing?', {
+  memory: {
+    thread: threadId,
+    resource: userId,
+    onTitleGenerated: title => {
+      console.log('Thread title:', title)
+    },
   },
 })
 ```

@@ -1,5 +1,6 @@
 import type { AgentSideConnection } from '@agentclientprotocol/sdk';
 import type { AgentControllerEvent, Session } from '@mastra/core/agent-controller';
+import { createSignal } from '@mastra/core/signals';
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -42,6 +43,98 @@ describe('ACP Event Mapper', () => {
     };
   }
 
+  describe('standalone signal messages', () => {
+    it('emits system reminders and notification summaries from message_start', () => {
+      const state = createPromptState('session-1');
+      const messages = [
+        createSignal({
+          id: 'reminder-1',
+          type: 'system-reminder',
+          tagName: 'system-reminder',
+          contents: 'Follow the package instructions.',
+          createdAt: new Date('2026-07-15T10:00:00.000Z'),
+          attributes: { type: 'dynamic-agents-md', path: '/repo/AGENTS.md' },
+        }).toDBMessage(),
+        createSignal({
+          id: 'summary-1',
+          type: 'notification',
+          tagName: 'notification-summary',
+          contents: [{ type: 'text', text: 'github: 2 pending notifications' }],
+          createdAt: new Date('2026-07-15T10:00:01.000Z'),
+          attributes: { pending: 2 },
+        }).toDBMessage(),
+      ];
+
+      for (const message of messages) {
+        handleAgentControllerEvent({ type: 'message_start', message }, state, mockConnection, mockSession);
+        handleAgentControllerEvent({ type: 'message_end', message }, state, mockConnection, mockSession);
+      }
+
+      expect(sessionUpdateSpy).toHaveBeenNthCalledWith(1, {
+        sessionId: 'session-1',
+        update: {
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text: 'Follow the package instructions.' },
+        },
+      });
+      expect(sessionUpdateSpy).toHaveBeenNthCalledWith(2, {
+        sessionId: 'session-1',
+        update: {
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text: 'github: 2 pending notifications' },
+        },
+      });
+      expect(sessionUpdateSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('preserves the cumulative assistant cursor across an interleaved signal', () => {
+      const state = createPromptState('session-1');
+      const assistant = {
+        id: 'assistant-1',
+        role: 'assistant' as const,
+        content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'Before signal' }] },
+        createdAt: new Date('2026-07-15T10:00:00.000Z'),
+      };
+      const signal = createSignal({
+        id: 'reminder-1',
+        type: 'system-reminder',
+        tagName: 'system-reminder',
+        contents: 'Remember this.',
+        createdAt: new Date('2026-07-15T10:00:01.000Z'),
+      }).toDBMessage();
+
+      handleAgentControllerEvent({ type: 'message_update', message: assistant }, state, mockConnection, mockSession);
+      handleAgentControllerEvent({ type: 'message_start', message: signal }, state, mockConnection, mockSession);
+      handleAgentControllerEvent({ type: 'message_end', message: signal }, state, mockConnection, mockSession);
+      expect(state.lastTextLength).toBe('Before signal'.length);
+
+      const updatedAssistant = {
+        ...assistant,
+        content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'Before signal after' }] },
+      };
+      handleAgentControllerEvent(
+        { type: 'message_update', message: updatedAssistant },
+        state,
+        mockConnection,
+        mockSession,
+      );
+
+      expect(sessionUpdateSpy.mock.calls.map(([notification]) => notification.update.content.text)).toEqual([
+        'Before signal',
+        'Remember this.',
+        ' after',
+      ]);
+
+      handleAgentControllerEvent(
+        { type: 'message_end', message: updatedAssistant },
+        state,
+        mockConnection,
+        mockSession,
+      );
+      expect(state.lastTextLength).toBe(0);
+    });
+  });
+
   describe('message_update - text delta computation', () => {
     it('emits agent_message_chunk with delta text', () => {
       const state = createPromptState('session-1');
@@ -52,7 +145,7 @@ describe('ACP Event Mapper', () => {
         message: {
           id: 'msg-1',
           role: 'assistant',
-          content: [{ type: 'text', text: 'Hello' }],
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
           createdAt: new Date(),
         },
       };
@@ -79,7 +172,7 @@ describe('ACP Event Mapper', () => {
         message: {
           id: 'msg-1',
           role: 'assistant',
-          content: [{ type: 'text', text: 'Hello, world!' }],
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello, world!' }] },
           createdAt: new Date(),
         },
       };
@@ -96,6 +189,52 @@ describe('ACP Event Mapper', () => {
       expect(state.lastTextLength).toBe(13);
     });
 
+    it('concatenates adjacent text parts without inserting a separator', () => {
+      const state = createPromptState('session-1');
+      const createdAt = new Date();
+
+      handleAgentControllerEvent(
+        {
+          type: 'message_update',
+          message: {
+            id: 'msg-1',
+            role: 'assistant',
+            content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+            createdAt,
+          },
+        },
+        state,
+        mockConnection,
+        mockSession,
+      );
+      handleAgentControllerEvent(
+        {
+          type: 'message_update',
+          message: {
+            id: 'msg-1',
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [
+                { type: 'text', text: 'Hello' },
+                { type: 'text', text: 'world' },
+              ],
+            },
+            createdAt,
+          },
+        },
+        state,
+        mockConnection,
+        mockSession,
+      );
+
+      expect(sessionUpdateSpy.mock.calls.map(([notification]) => notification.update.content.text)).toEqual([
+        'Hello',
+        'world',
+      ]);
+      expect(state.lastTextLength).toBe('Helloworld'.length);
+    });
+
     it('ignores non-assistant messages', () => {
       const state = createPromptState('session-1');
 
@@ -104,7 +243,7 @@ describe('ACP Event Mapper', () => {
         message: {
           id: 'msg-1',
           role: 'user',
-          content: [{ type: 'text', text: 'User message' }],
+          content: { format: 2, parts: [{ type: 'text', text: 'User message' }] },
           createdAt: new Date(),
         },
       };
@@ -490,7 +629,7 @@ describe('ACP Event Mapper', () => {
         message: {
           id: 'msg-1',
           role: 'assistant',
-          content: [{ type: 'text', text: 'Hello' }],
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
           createdAt: new Date(),
         },
       };

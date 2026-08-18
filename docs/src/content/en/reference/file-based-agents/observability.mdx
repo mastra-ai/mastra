@@ -8,9 +8,15 @@ packages:
 
 # Observability
 
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 Mastra configures [observability](/docs/observability/overview) from an `observability.ts` file directly under `src/mastra/`. The file default-exports an `Observability` instance that sets up tracing, logging, metrics, and feedback for the project.
 
-Use this page for the file-based convention. For the signal model, exporters, storage, and multi-config setup, see [Observability overview](/docs/observability/overview) and [Observability configuration](/docs/observability/config).
+Use this page for the file-based convention. For the signal model, exporters, storage, and multi-config setup, see the [observability overview](/docs/observability/overview) and [observability configuration](/docs/observability/overview#configuration).
 
 ## Quickstart
 
@@ -31,8 +37,8 @@ export default new Observability({
 
 ## Observability and storage
 
-`observability.ts` configures which signals are collected and where they're exported. [`storage.ts`](/reference/file-based-agents/storage) configures the project store that can persist observability records. For storage support by signal, see [Observability storage](/docs/observability/storage).
+`observability.ts` configures which signals are collected and where they're exported. [`storage.ts`](/reference/file-based-agents/storage) configures the project store that can persist observability records. For storage support by signal, see [observability signal support](/docs/observability/overview#signal-support).
 
 ## Precedence with code
 
-Code-registered observability wins over `observability.ts`. Use `observability.ts` when one project-wide configuration is enough; use code registration when setup depends on runtime wiring in `src/mastra/index.ts`.
+Code-registered observability wins over `observability.ts`. Use `observability.ts` when one project-wide configuration is enough. Use code registration when setup depends on runtime wiring in `src/mastra/index.ts`.

@@ -115,8 +115,9 @@ const processor = new TokenLimiterProcessor({
   },
   {
     name: 'processOutputStream',
-    type: '(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never }) => Promise<ChunkType | null>',
-    description: 'Processes streaming output parts to limit token count during streaming',
+    type: '(args: ProcessOutputStreamArgs) => Promise<ChunkType | null>',
+    description:
+      'Processes streaming output parts to limit token count during streaming. Only text and object parts count against the limit and can be withheld; lifecycle, reasoning and tool parts always pass through.',
     isOptional: false,
   },
   {
@@ -133,6 +134,20 @@ const processor = new TokenLimiterProcessor({
   },
 ]}
 />
+
+## Output stream behavior
+
+As an output processor, only parts that carry generated output count against the limit: `text-delta` and `object`. Lifecycle parts (such as `step-start`), reasoning deltas, response metadata, and tool parts (`tool-call`, `tool-result`) are neither counted nor withheld, so tool calls always reach the agentic loop and get executed.
+
+With the default `truncate` strategy, the first time output is withheld the processor emits a transient `data-token-limit-reached` part on the stream:
+
+```typescript
+for await (const part of stream.fullStream) {
+  if (part.type === 'data-token-limit-reached') {
+    console.log('output truncated at', part.data.limit, 'tokens')
+  }
+}
+```
 
 ## Error behavior
 
@@ -169,9 +184,7 @@ export const agent = new Agent({
   name: 'context-limited-agent',
   instructions: 'You are a helpful assistant',
   model: '__GATEWAY_OPENAI_MODEL__',
-  memory: new Memory({
-    /* ... */
-  }),
+  memory: new Memory({/* ... */}),
   inputProcessors: [
     new TokenLimiterProcessor({ limit: 4000 }), // Limits historical messages to ~4000 tokens
   ],
@@ -180,7 +193,7 @@ export const agent = new Agent({
 
 ### As a per-step input processor (limit multi-step token growth)
 
-When an agent uses tools across multiple steps (e.g. `maxSteps > 1`), each step accumulates conversation history from all previous steps. Use `inputProcessors` to also limit tokens at each step of the agentic loop — the `TokenLimiterProcessor` automatically applies to both the initial input and every subsequent step:
+When an agent uses tools across multiple steps (e.g. `maxSteps > 1`), each step accumulates conversation history from all previous steps. Use `inputProcessors` to also limit tokens at each step of the agentic loop. The `TokenLimiterProcessor` automatically applies to both the initial input and every subsequent step:
 
 ```typescript title="src/mastra/agents/multi-step-agent.ts"
 import { Agent } from '@mastra/core/agent'

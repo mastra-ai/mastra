@@ -9,6 +9,7 @@ import type { ModelMessage, ObjectStreamPart, TextStreamPart, ToolSet } from '@i
 import type { AIV5ResponseMessage } from '../../../agent/message-list';
 import type { ChunkType, LanguageModelUsage } from '../../types';
 import { ChunkFrom } from '../../types';
+import { isUrlString } from './compat/content';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from './file';
 
 /**
@@ -132,7 +133,9 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         },
       };
     case 'text-delta':
-      if (value.delta) {
+      // Keep empty deltas that carry provider metadata (e.g. Gemini thought signatures),
+      // otherwise that metadata is dropped before it reaches the consumer.
+      if (value.delta || value.providerMetadata != null) {
         return {
           type: 'text-delta',
           runId: ctx.runId,
@@ -212,7 +215,8 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         from: ChunkFrom.AGENT,
         payload: {
           data: value.data,
-          base64: typeof value.data === 'string' ? value.data : undefined,
+          // URL-backed generated files flatten to URL strings, which are not base64.
+          base64: typeof value.data === 'string' && !isUrlString(value.data) ? value.data : undefined,
           mimeType: value.mediaType,
           ...(pm != null ? { providerMetadata: pm } : {}),
         },
@@ -319,6 +323,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
 
     case 'finish':
       const { finishReason, usage, providerMetadata, messages, ...rest } = value;
+      const rawFinishReason = extractRawFinishReason(finishReason);
       return {
         type: 'finish',
         runId: ctx.runId,
@@ -327,10 +332,11 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           providerMetadata: value.providerMetadata,
           stepResult: {
             reason: normalizeFinishReason(value.finishReason),
+            ...(rawFinishReason !== undefined && { rawReason: rawFinishReason }),
           },
           output: {
             // Normalize usage to handle both V2 (flat) and V3 (nested) formats
-            usage: normalizeUsage(value.usage),
+            usage: normalizeUsage(value.usage, value.providerMetadata),
           },
           metadata: {
             providerMetadata: value.providerMetadata,
@@ -613,7 +619,27 @@ function isV3Usage(usage: unknown): usage is LanguageModelV3Usage {
  *
  * The original usage data is preserved in the `raw` field for advanced use cases.
  */
-function normalizeUsage(usage: LanguageModelV2Usage | LanguageModelV3Usage | undefined): LanguageModelUsage {
+function getAnthropicCacheCreationUsage(providerMetadata?: SharedV2ProviderMetadata): {
+  cacheCreationInputTokens5m?: number;
+  cacheCreationInputTokens1h?: number;
+} {
+  const cacheCreation = providerMetadata?.anthropic?.cacheCreation;
+  if (typeof cacheCreation !== 'object' || cacheCreation === null) return {};
+
+  const details = cacheCreation as Record<string, unknown>;
+  const cacheCreationInputTokens5m = details.ephemeral_5m_input_tokens ?? details.ephemeral5mInputTokens;
+  const cacheCreationInputTokens1h = details.ephemeral_1h_input_tokens ?? details.ephemeral1hInputTokens;
+  return {
+    ...(typeof cacheCreationInputTokens5m === 'number' && { cacheCreationInputTokens5m }),
+    ...(typeof cacheCreationInputTokens1h === 'number' && { cacheCreationInputTokens1h }),
+  };
+}
+
+function normalizeUsage(
+  usage: LanguageModelV2Usage | LanguageModelV3Usage | undefined,
+  providerMetadata?: SharedV2ProviderMetadata,
+): LanguageModelUsage {
+  const cacheCreationUsage = getAnthropicCacheCreationUsage(providerMetadata);
   if (!usage) {
     return {
       inputTokens: undefined,
@@ -622,6 +648,7 @@ function normalizeUsage(usage: LanguageModelV2Usage | LanguageModelV3Usage | und
       reasoningTokens: undefined,
       cachedInputTokens: undefined,
       cacheCreationInputTokens: undefined,
+      ...cacheCreationUsage,
       raw: undefined,
     };
   }
@@ -637,6 +664,7 @@ function normalizeUsage(usage: LanguageModelV2Usage | LanguageModelV3Usage | und
       reasoningTokens: usage.outputTokens.reasoning,
       cachedInputTokens: usage.inputTokens.cacheRead,
       cacheCreationInputTokens: usage.inputTokens.cacheWrite,
+      ...cacheCreationUsage,
       raw: usage,
     };
   }
@@ -650,6 +678,7 @@ function normalizeUsage(usage: LanguageModelV2Usage | LanguageModelV3Usage | und
     reasoningTokens: (v2Usage as { reasoningTokens?: number }).reasoningTokens,
     cachedInputTokens: (v2Usage as { cachedInputTokens?: number }).cachedInputTokens,
     cacheCreationInputTokens: (v2Usage as { cacheCreationInputTokens?: number }).cacheCreationInputTokens,
+    ...cacheCreationUsage,
     raw: usage,
   };
 }
@@ -691,4 +720,20 @@ function normalizeFinishReason(
 
   // V2/V5 format - already a string, but normalize 'unknown' to 'other' for consistency with V6
   return finishReason === 'unknown' ? 'other' : finishReason;
+}
+
+/**
+ * Extract the provider's raw finish reason, when the provider supplies one.
+ *
+ * V3/V6 providers report both a unified reason and the provider's own string
+ * (e.g. Google sends `raw: 'MALFORMED_FUNCTION_CALL'` alongside `unified: 'error'`).
+ * The unified value alone collapses distinct provider outcomes into one bucket,
+ * so we keep the raw value next to it — mirroring how `normalizeUsage` retains `raw`.
+ *
+ * V2/V5 providers only ever send a string, so there is no raw value to preserve.
+ */
+function extractRawFinishReason(
+  finishReason: LanguageModelV2FinishReason | LanguageModelV3FinishReason | 'tripwire' | 'retry' | undefined,
+): string | undefined {
+  return isV3FinishReason(finishReason) ? finishReason.raw : undefined;
 }

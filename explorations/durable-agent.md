@@ -128,9 +128,7 @@ const agent = new Agent({
   name: 'Assistant',
   instructions: 'You are helpful',
   model: openai('gpt-4o'),
-  tools: {
-    /* your tools */
-  },
+  tools: {/* your tools */},
 });
 
 // Pattern 1: Resumable streams only

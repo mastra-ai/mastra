@@ -290,8 +290,8 @@ export function GenerateReviewDialog({
         <DialogHeader>
           <DialogTitle>Review Generated Items</DialogTitle>
         </DialogHeader>
-        <DialogBody className="max-h-[70vh] flex flex-col">
-          <div className="flex flex-col flex-1 min-h-0 gap-4">
+        <DialogBody className="flex max-h-[70vh] flex-col">
+          <div className="flex min-h-0 flex-1 flex-col gap-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Checkbox checked={selectedIndices.size === generatedItems.length} onCheckedChange={toggleAll} />
@@ -306,10 +306,10 @@ export function GenerateReviewDialog({
               )}
             </div>
 
-            <ScrollArea className="flex-1 min-h-0">
+            <ScrollArea className="min-h-0 flex-1">
               <div className="space-y-2">
                 {generatedItems.map((item, index) => (
-                  <div key={index} className="border border-border1 rounded-lg">
+                  <div key={index} className="border-border1 rounded-lg border">
                     <div className="flex items-center gap-2 px-3 py-2">
                       <Checkbox checked={selectedIndices.has(index)} onCheckedChange={() => toggleIndex(index)} />
                       <button type="button" className="flex-1 text-left" onClick={() => toggleExpanded(index)}>
@@ -325,12 +325,12 @@ export function GenerateReviewDialog({
                     </div>
 
                     {expandedIndices.has(index) && (
-                      <div className="border-t border-border1 px-3 py-2 space-y-2">
+                      <div className="border-border1 space-y-2 border-t px-3 py-2">
                         <div>
                           <Txt variant="ui-xs" className="text-neutral3 font-medium">
                             Input
                           </Txt>
-                          <pre className="text-xs text-neutral5 bg-surface1 rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap wrap-break-word max-h-32 overflow-y-auto mt-1">
+                          <pre className="text-neutral5 bg-surface1 mt-1 max-h-32 overflow-x-auto overflow-y-auto rounded px-2 py-1.5 text-xs wrap-break-word whitespace-pre-wrap">
                             {JSON.stringify(item.input, null, 2)}
                           </pre>
                         </div>
@@ -339,7 +339,7 @@ export function GenerateReviewDialog({
                             <Txt variant="ui-xs" className="text-neutral3 font-medium">
                               Ground Truth
                             </Txt>
-                            <pre className="text-xs text-neutral5 bg-surface1 rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap wrap-break-word max-h-32 overflow-y-auto mt-1">
+                            <pre className="text-neutral5 bg-surface1 mt-1 max-h-32 overflow-x-auto overflow-y-auto rounded px-2 py-1.5 text-xs wrap-break-word whitespace-pre-wrap">
                               {JSON.stringify(item.groundTruth, null, 2)}
                             </pre>
                           </div>

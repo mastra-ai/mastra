@@ -227,6 +227,78 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       expect(result.messages.every(m => new Date(m.createdAt) >= yesterday)).toBe(true);
     });
 
+    it('should filter by shallow scalar metadata with AND semantics before pagination', async () => {
+      const metadataThread = createSampleThread();
+      await memoryStorage.saveThread({ thread: metadataThread });
+      const now = Date.now();
+      const message = (content: string, metadata: Record<string, unknown>, offset: number) =>
+        createSampleMessageV2({
+          threadId: metadataThread.id,
+          resourceId: metadataThread.resourceId,
+          content: { content, metadata },
+          createdAt: new Date(now + offset),
+        });
+      const metadataMessages = [
+        message('match 1', { tag: 'alpha', score: 1, active: true, cleared: null }, 1),
+        message('type mismatch', { tag: 'alpha', score: '1', active: true, cleared: null }, 2),
+        message('missing null', { tag: 'alpha', score: 1, active: true }, 3),
+        message('match 2', { tag: 'alpha', score: 1, active: true, cleared: null }, 4),
+      ];
+      await memoryStorage.saveMessages({ messages: metadataMessages });
+
+      const result = await memoryStorage.listMessages({
+        threadId: metadataThread.id,
+        filter: { metadata: { tag: 'alpha', score: 1, active: true, cleared: null } },
+        perPage: 1,
+        page: 0,
+      });
+
+      expect(result.total).toBe(2);
+      expect(result.messages).toHaveLength(1);
+      expect(result.hasMore).toBe(true);
+      expect(result.messages.map((m: any) => m.content.content)).toEqual(['match 1']);
+    });
+
+    it('should treat an empty metadata filter as a no-op', async () => {
+      const result = await memoryStorage.listMessages({ threadId: thread.id, filter: { metadata: {} } });
+      expect(result.total).toBe(5);
+    });
+
+    it.each([{ 'bad-key': true }, { nested: {} }, { score: Number.NaN }])(
+      'should reject invalid metadata filters before listing messages',
+      async metadata => {
+        await expect(
+          memoryStorage.listMessages({ threadId: thread.id, filter: { metadata: metadata as any } }),
+        ).rejects.toBeInstanceOf(TypeError);
+      },
+    );
+
+    it('should keep include/context augmentation unfiltered and out of pagination metadata', async () => {
+      const includeThread = createSampleThread();
+      await memoryStorage.saveThread({ thread: includeThread });
+
+      const includeMessages = ['beta', 'alpha'].map((tag, index) =>
+        createSampleMessageV2({
+          threadId: includeThread.id,
+          resourceId: includeThread.resourceId,
+          content: { content: tag, metadata: { tag } },
+          createdAt: new Date(Date.now() + index),
+        }),
+      );
+      await memoryStorage.saveMessages({ messages: includeMessages });
+
+      const result = await memoryStorage.listMessages({
+        threadId: includeThread.id,
+        filter: { metadata: { tag: 'alpha' } },
+        perPage: 1,
+        include: [{ id: includeMessages[1]!.id, withPreviousMessages: 1 }],
+      });
+
+      expect(result.total).toBe(1);
+      expect(result.hasMore).toBe(false);
+      expect(result.messages.map((m: any) => m.content.content)).toEqual(['beta', 'alpha']);
+    });
+
     it('should include specific messages with previous context', async () => {
       const result = await memoryStorage.listMessages({
         threadId: thread.id,
@@ -305,6 +377,110 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       expect(result.messages).toHaveLength(6);
       expect(result.messages.filter(m => m.threadId === thread.id)).toHaveLength(5);
       expect(result.messages.some(m => m.threadId === thread2.id)).toBe(true);
+    });
+
+    it('should still include a message from another thread in the same resource', async () => {
+      const siblingThread = createSampleThread();
+      siblingThread.resourceId = thread.resourceId;
+      await memoryStorage.saveThread({ thread: siblingThread });
+
+      const siblingMessage = createSampleMessageV2({
+        threadId: siblingThread.id,
+        resourceId: thread.resourceId,
+        content: { content: 'Sibling message' },
+        createdAt: new Date(new Date(messages[4]!.createdAt).getTime() + 1000),
+      });
+      await memoryStorage.saveMessages({ messages: [siblingMessage] });
+
+      const result = await memoryStorage.listMessages({
+        threadId: thread.id,
+        resourceId: thread.resourceId,
+        include: [{ id: siblingMessage.id }],
+      });
+
+      const contents = result.messages.map((m: any) => m.content.content);
+      expect(contents).toContain('Sibling message');
+      expect(result.messages).toHaveLength(6);
+    });
+
+    it('should keep include context inside the resource when the thread holds another resource', async () => {
+      const foreignMessage = createSampleMessageV2({
+        threadId: thread.id,
+        resourceId: 'different-resource',
+        content: { content: 'Foreign message' },
+        createdAt: new Date(new Date(messages[2]!.createdAt).getTime() + 500),
+      });
+      await memoryStorage.saveMessages({ messages: [foreignMessage] });
+
+      const result = await memoryStorage.listMessages({
+        threadId: thread.id,
+        resourceId: thread.resourceId,
+        perPage: 0,
+        include: [
+          {
+            id: messages[1]!.id,
+            withPreviousMessages: 1,
+            withNextMessages: 1,
+          },
+          {
+            id: messages[3]!.id,
+            withPreviousMessages: 1,
+            withNextMessages: 1,
+          },
+        ],
+      });
+
+      const contents = result.messages.map((m: any) => m.content.content);
+      expect(contents).toContain('Message 2');
+      expect(contents).toContain('Message 3');
+      expect(contents).toContain('Message 4');
+      expect(contents).not.toContain('Foreign message');
+      expect(result.messages.every(m => m.resourceId === thread.resourceId)).toBe(true);
+    });
+
+    it('should keep paginated results free of another resource when include is used', async () => {
+      const foreignMessage = createSampleMessageV2({
+        threadId: thread.id,
+        resourceId: 'different-resource',
+        content: { content: 'Foreign message' },
+        createdAt: new Date(new Date(messages[2]!.createdAt).getTime() + 500),
+      });
+      await memoryStorage.saveMessages({ messages: [foreignMessage] });
+
+      const result = await memoryStorage.listMessages({
+        threadId: thread.id,
+        resourceId: thread.resourceId,
+        include: [
+          {
+            id: messages[2]!.id,
+            withPreviousMessages: 2,
+            withNextMessages: 2,
+          },
+        ],
+      });
+
+      const contents = result.messages.map((m: any) => m.content.content);
+      expect(contents).not.toContain('Foreign message');
+      expect(result.messages.every(m => m.resourceId === thread.resourceId)).toBe(true);
+      expect(result.messages).toHaveLength(5);
+    });
+
+    it('should not include messages from another resource when resourceId is provided', async () => {
+      const result = await memoryStorage.listMessages({
+        threadId: thread2.id,
+        resourceId: thread2.resourceId,
+        include: [
+          {
+            id: messages[3]!.id,
+            withPreviousMessages: 2,
+            withNextMessages: 2,
+          },
+        ],
+      });
+
+      expect(result.messages.every(m => m.resourceId === thread2.resourceId)).toBe(true);
+      expect(result.messages.some(m => m.threadId === thread.id)).toBe(false);
+      expect(result.messages).toHaveLength(1);
     });
 
     it('should deduplicate messages when include has overlapping context', async () => {
@@ -415,7 +591,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         page: 0,
       });
 
-      // Pagination gets first 3 (1,2,3) + include adds remaining (4,5)
+      // Pagination gets first 3 (1,2,3) + include adds remaining (4,5).
       expect(result.messages).toHaveLength(5);
       expect(result.total).toBe(5);
       expect(result.hasMore).toBe(false);
@@ -560,6 +736,22 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         // Should get first 2 from pagination (Message 1, 2) + included Message 3 (Message 2 already in paginated set)
         expect(result.messages).toHaveLength(3);
         expect(result.messages.map((m: any) => m.content.content)).toEqual(['Message 1', 'Message 2', 'Message 3']);
+      });
+
+      it('should report no more pages when includes cover multiple queried threads', async () => {
+        const result = await memoryStorage.listMessages({
+          threadId: [thread.id, thread2.id],
+          perPage: 1,
+          include: messages.slice(1).map(message => ({
+            id: message.id,
+            withPreviousMessages: 0,
+            withNextMessages: 0,
+          })),
+        });
+
+        expect(result.total).toBe(6);
+        expect(result.messages).toHaveLength(6);
+        expect(result.hasMore).toBe(false);
       });
 
       it('should work with perPage and date range', async () => {
@@ -894,6 +1086,34 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         );
       });
 
+      it('should filter by metadata before pagination when querying by resourceId', async () => {
+        const resourceThread = createSampleThread();
+        await memoryStorage.saveThread({ thread: resourceThread });
+        const now = Date.now();
+        await memoryStorage.saveMessages({
+          messages: ['alpha', 'beta', 'alpha'].map((tag, index) =>
+            createSampleMessageV2({
+              threadId: resourceThread.id,
+              resourceId: resourceThread.resourceId,
+              content: { content: `${tag} ${index}`, metadata: { tag, score: 1 } },
+              createdAt: new Date(now + index),
+            }),
+          ),
+        });
+
+        const result = await memoryStorage.listMessagesByResourceId({
+          resourceId: resourceThread.resourceId,
+          filter: { metadata: { tag: 'alpha', score: 1 } },
+          perPage: 1,
+          page: 1,
+        });
+
+        expect(result.total).toBe(2);
+        expect(result.messages).toHaveLength(1);
+        expect(result.hasMore).toBe(false);
+        expect((result.messages[0]!.content as any).content).toBe('alpha 2');
+      });
+
       it('should filter by dateRange.start across multiple threads for the same resource', async () => {
         // Create two threads with the same resourceId
         const sharedResourceId = `shared-resource-${Date.now()}`;
@@ -982,6 +1202,24 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         expect(result.messages).toHaveLength(5);
         expect(result.messages.every(m => m.resourceId === thread.resourceId)).toBe(true);
         expect(result.messages.every(m => m.threadId === thread.id)).toBe(true);
+      });
+
+      it('should not include messages from another resource', async () => {
+        const result = await memoryStorage.listMessagesByResourceId({
+          resourceId: thread2.resourceId,
+          perPage: false,
+          include: [
+            {
+              id: messages[3]!.id,
+              withPreviousMessages: 2,
+              withNextMessages: 2,
+            },
+          ],
+        });
+
+        expect(result.messages.every(m => m.resourceId === thread2.resourceId)).toBe(true);
+        expect(result.messages.some(m => m.threadId === thread.id)).toBe(false);
+        expect(result.messages).toHaveLength(1);
       });
 
       it('should support pagination when querying by resourceId', async () => {

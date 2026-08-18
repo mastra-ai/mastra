@@ -8,7 +8,7 @@ import StepItem from "@site/src/components/StepItem";
 
 # Hosted databases
 
-Provision a fully managed database from the CLI or your [platform](/docs/mastra-platform/overview) project settings and attach it to your project. Mastra creates it with your provider, stores credentials securely, and injects connection details as runtime environment variables when the database is ready, so there are no connection strings to copy or configure.
+Provision a fully managed database from the CLI or your [platform](/docs/mastra-platform/overview) project settings and attach it to your project. Mastra creates it with your provider and stores credentials securely, plus injects connection details as runtime environment variables when the database is ready, so there are no connection strings to copy or configure.
 
 ```bash
 mastra env db create --kind turso
@@ -18,15 +18,15 @@ mastra env db create --kind turso
 
 Use a hosted database when your project needs durable storage that's managed by the platform, including:
 
-- **Agent memory**: Persist conversation history, working memory, and semantic recall across sessions.
+- **Agent memory**: Persist conversation history and working memory, plus semantic recall across sessions.
 - **Application data**: Store and retrieve relational or structured data your project needs at runtime.
 - **Vector search**: Store embeddings for Retrieval-Augmented Generation and semantic search.
 
 ## Providers
 
-Hosted databases are available through two providers today — Turso and Postgres — with MongoDB coming soon. Pick one when you attach a database, then wire its injected variables into the matching Mastra storage adapter in your code.
+Hosted databases are available through two providers today, Turso and Postgres, with MongoDB coming soon. Pick one when you attach a database, then wire its injected variables into the matching Mastra storage adapter in your code.
 
-Each provider injects a fixed set of variable names — for example, a single `DATABASE_URL` for Postgres and separate `TURSO_*` variables for Turso. Those names must be unique within each environment, which means an environment can use at most one database per provider. Attach Turso and Postgres to the same project when you need separate stores for different workloads.
+Each provider injects a fixed set of variable names, for example, a single `DATABASE_URL` for Postgres and separate `TURSO_*` variables for Turso. Those names must be unique within each environment, which means an environment can use at most one database per provider. Attach Turso and Postgres to the same project when you need separate stores for different workloads.
 
 For most agent-focused projects, **Turso** is the simplest starting point. It provides a lightweight, SQLite-compatible engine well suited to agent memory, conversation history, and per-tenant isolation. Choose **Postgres** when your workload needs full SQL, relational schemas, or structured application data beyond Mastra runtime state. **MongoDB** (_coming soon_) will add document storage and built-in vector search for workloads that don't map cleanly to SQL.
 
@@ -40,31 +40,37 @@ For most agent-focused projects, **Turso** is the simplest starting point. It pr
 
 A database is attached at one of two scopes:
 
-- **Project scope**: The default. One database shared by all of the project's [environments](/docs/mastra-platform/environments). Its variables are injected into every deploy.
-- **Environment scope**: Attached to a single environment. Use this to isolate data between environments, for example separate production and staging databases.
+- **Environment scope**: The default. Attached to a single environment so data stays isolated between environments (for example separate production and staging databases). When your project has one environment, `mastra env db create` picks it automatically; with several, the CLI prompts you to select one.
+- **Project scope**: One database shared by all of the project's [environments](/docs/mastra-platform/environments). Opt in with `--shared`. Its variables are injected into every deploy.
 
 The scope is set when you attach the database and shown in `mastra env db list`.
 
-The two scopes can't overlap for the same provider. Because a project-scoped database already injects its variables into every environment, attaching an environment-scoped database of the same provider is rejected with a variable name conflict. To move from a shared database to per-environment databases, delete the project-scoped database first, then attach one database per environment. Deleting a database destroys it with the provider along with all of its data — export anything you need to keep before switching scopes. Environment-scoped databases on different environments never conflict — each deploy only receives the variables for its own environment.
+The scopes can't overlap for the same provider. Because a project-scoped database already injects its variables into every environment, attaching an environment-scoped database of the same provider is rejected with a variable name conflict. To move from a shared database to per-environment databases, delete the project-scoped database first, then attach one database per environment. Deleting a database destroys it with the provider along with all of its data, export anything you need to keep before switching scopes. Environment-scoped databases on different environments never conflict, each deploy only receives the variables for its own environment.
 
 ## Attach with the CLI
 
-Create and attach a database in one command. The CLI polls until it's ready, which takes a few seconds:
+You don't have to run this command up front. If your project needs a hosted database but doesn't have one yet, `mastra deploy` offers to attach one for you when the deploy preflight check runs. Say yes and the deploy continues without leaving the CLI.
+
+Alternatively, create and attach a database ahead of time. The CLI polls until it's ready, which takes a few seconds:
 
 ```bash
-# Shared by all environments
+# Scoped to a single environment (the CLI picks the only one, or prompts if there are several)
 mastra env db create --kind turso
 
-# Scoped to the staging environment
+# Scoped to a specific environment
 mastra env db create staging --kind turso
+
+# Shared by all environments
+mastra env db create --kind turso --shared
 ```
 
 Supported kinds are `turso` and `neon` (Postgres). Useful flags:
 
+- `--shared`: Attach a project-scoped database shared by every environment. Can't be combined with an environment argument.
 - `--name <name>`: Database name. Defaults to a name derived from the project slug.
 - `--region <region>`: Provider region ID for project-scoped databases (for example `fra`). Environment-scoped databases are placed near the environment's region automatically, and an explicit `--region` is ignored.
 - `--no-wait`: Return immediately instead of polling. Check progress later with `mastra env db show`.
-- `--json`: Machine-readable output.
+- `--json`: Machine-readable output. When the project has multiple environments, `--json` requires an environment argument or `--shared` (no interactive prompt).
 
 Inspect and manage attached databases:
 
@@ -74,7 +80,7 @@ mastra env db show <database>
 mastra env db delete <database>
 ```
 
-`mastra env db list` shows each database's kind, status, scope, and injected variable names. `mastra env db show` prints connection instructions with secret values masked; pass `--show-secrets` to reveal them. `mastra env db delete` permanently deletes the database and all of its data with the provider. Creating and deleting databases requires the admin role in your organization.
+`mastra env db list` shows each database's kind, status, scope, and injected variable names. `mastra env db show` prints connection instructions with secret values masked. Pass `--show-secrets` to reveal them. `mastra env db delete` permanently deletes the database and all of its data with the provider. Creating and deleting databases requires the admin role in your organization.
 
 ## Attach from project settings
 
@@ -107,16 +113,17 @@ Databases attached from project settings are project-scoped. Use the [CLI](#atta
 
 ## Connect from your code
 
-When a database is `ready`, the provider has finished provisioning and the platform has injected connection details as managed environment variables. Check status in **Project Settings → Database** — each attached database shows `provisioning` while setup runs in the background, then `ready` when you can connect. Open a `ready` database to view its environment variables and a copy-pasteable code snippet. Wire those variables into a Mastra storage adapter, with no manual configuration required.
+When a database is `ready`, the provider has finished provisioning and the platform has injected connection details as managed environment variables. Check status in **Project Settings → Database**, each attached database shows `provisioning` while setup runs in the background, then `ready` when you can connect. Open a `ready` database to view its environment variables and a copy-pasteable code snippet. Wire those variables into a Mastra storage adapter, with no manual configuration required.
 
 ### Turso (LibSQL)
 
-Turso exposes two environment variables: `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`. The following example connects a [LibSQLStore](/reference/storage/libsql) using those variables.
+Turso exposes two environment variables: `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`. The following example connects a [LibSQLStore](/integrations/databases/libsql) using those variables.
 
 ```ts title="src/mastra/storage.ts" caption="Connect a Turso (LibSQL) database"
 import { LibSQLStore } from '@mastra/libsql'
 
 export const storage = new LibSQLStore({
+  id: 'mastra-storage',
   url: process.env.TURSO_DATABASE_URL!,
   authToken: process.env.TURSO_AUTH_TOKEN!,
 })
@@ -130,7 +137,7 @@ npm install @mastra/libsql@latest
 
 ### PostgreSQL
 
-PostgreSQL exposes a single `DATABASE_URL` connection string. The following example connects a [PostgresStore](/reference/storage/postgresql) using that variable.
+PostgreSQL exposes a single `DATABASE_URL` connection string. The following example connects a [PostgresStore](/integrations/databases/postgresql) using that variable.
 
 ```ts title="src/mastra/storage.ts" caption="Connect a Postgres database"
 import { PostgresStore } from '@mastra/pg'

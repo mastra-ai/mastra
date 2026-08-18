@@ -21,13 +21,13 @@ Use multi-user threads when several people collaborate on the same subject throu
 
 ## Share one `resourceId` across all participants
 
-A thread belongs to exactly one `resourceId`, so all participants on a shared thread need to pass the same value. Instead of using a user id (the default for single-user apps), key `resourceId` on the conversation itself — for example `doc_${docId}` for a shared document, or `room_${roomId}` for a group chat. With everyone pointing at the same `resourceId`, they read and write the same history.
+A thread belongs to exactly one `resourceId`, so all participants on a shared thread need to pass the same value. Instead of using a user id (the default for single-user apps), key `resourceId` on the conversation itself, for example `doc_${docId}` for a shared document, or `room_${roomId}` for a group chat. With everyone pointing at the same `resourceId`, they read and write the same history.
 
 ## Tag each user message with the speaker's identity
 
 The model needs to know who's talking on every turn. Since the message body is the one place that survives into history and back into context, wrap each user message in a small `<turn>` tag with the speaker's id, name, and role. The tag stays attached to the message, so when prior turns are recalled the model still sees who said what.
 
-Build the tag with a small helper. The example below is one way to do it — copy it into your project and adapt it to your shape of user data:
+Build the tag with a small helper. The example below is one way to do it, copy it into your project and adapt it to your shape of user data:
 
 ```typescript title="src/mastra/identity.ts"
 export type Speaker = {
@@ -65,7 +65,7 @@ import { Memory } from '@mastra/memory'
 import { LibSQLStore } from '@mastra/libsql'
 
 const memory = new Memory({
-  storage: new LibSQLStore({ url: 'file:./collab.db' }),
+  storage: new LibSQLStore({ id: 'collab-storage', url: 'file:./collab.db' }),
   options: {
     lastMessages: 20,
   },
@@ -120,11 +120,11 @@ The `<turn>` tag persists in the message body, so when history is recalled on la
 
 The user-tagging pattern composes with every memory layer. Pick the layer based on how long the conversation needs to remember per-user facts:
 
-- **Short conversations** (a single session, or a thread small enough to fit in `lastMessages`), or when you need a verbatim record of who said what: use [message history alone](#message-history-alone). The user tags in history are enough; no extra memory layer needed.
+- **Short conversations** (a single session, or a thread small enough to fit in `lastMessages`), or when you need a verbatim record of who said what: use [message history alone](#message-history-alone). The user tags in history are enough. No extra memory layer needed.
 - **Long-running threads** (conversations that outgrow `lastMessages`, where you need per-user facts to survive history eviction): use [observational memory](#with-observational-memory-recommended).
 - **Need a structured participants list, or your storage adapter doesn't support OM** (OM requires LibSQL, PG, or MongoDB): use [working memory](#with-working-memory).
 
-We recommend using observational memory or working memory, not both — they cover overlapping needs, and running both at once adds latency and token cost without much benefit.
+We recommend using either observational memory or working memory because they cover overlapping needs. Running both adds latency and token cost without much benefit.
 
 ### Message history alone
 
@@ -135,7 +135,7 @@ import { Memory } from '@mastra/memory'
 import { LibSQLStore } from '@mastra/libsql'
 
 const memory = new Memory({
-  storage: new LibSQLStore({ url: 'file:./collab.db' }),
+  storage: new LibSQLStore({ id: 'collab-storage', url: 'file:./collab.db' }),
   options: {
     lastMessages: 20,
   },
@@ -146,7 +146,7 @@ The model reads identity from the `<turn>` tag on the current message and from p
 
 ### With Observational Memory (recommended)
 
-[Observational Memory](../memory/observational-memory) (OM) extracts per-user facts into a background log without burning the agent's tool budget. The default Observer model reads `<turn>` tags natively and produces named attribution like `Alice stated her favorite color is teal.` and `Bob asked for QA sign-off before publish.`
+[Observational Memory](../memory/observational-memory) (OM) extracts per-user facts into a background log without burning the agent's tool budget. The default Observer model reads `<turn>` tags natively and produces attribution like `Alice stated her favorite color is teal.` and `Bob asked for QA sign-off before publish.`
 
 Prefer OM over working memory for multi-user threads when your storage supports it. OM extracts facts automatically, scales to any number of participants, and doesn't need template upkeep. Enable it with no overrides:
 
@@ -155,7 +155,7 @@ import { Memory } from '@mastra/memory'
 import { LibSQLStore } from '@mastra/libsql'
 
 const memory = new Memory({
-  storage: new LibSQLStore({ url: 'file:./collab.db' }),
+  storage: new LibSQLStore({ id: 'collab-storage', url: 'file:./collab.db' }),
   options: {
     lastMessages: 20,
     observationalMemory: true,
@@ -163,7 +163,7 @@ const memory = new Memory({
 })
 ```
 
-OM requires a storage adapter that supports it: `@mastra/libsql`, `@mastra/pg`, or `@mastra/mongodb`.
+OM requires a storage adapter that supports it: `@mastra/libsql`, `@mastra/pg`, `@mastra/mongodb`, or `@mastra/oracledb`.
 
 :::note
 
@@ -173,7 +173,7 @@ If you switch the Observer to a weaker model and see facts collapse to a generic
 
 ### With working memory
 
-Use working memory when OM isn't an option — for example, when your storage adapter doesn't support OM, or when you need a structured, deterministic participants list the agent can read and write on every turn.
+Use working memory when OM isn't an option, for example, when your storage adapter doesn't support OM, or when you need a structured, deterministic participants list the agent can read and write on every turn.
 
 The default [working memory](../memory/working-memory) template assumes one user per thread ("First Name", "Last Name", etc.). For multi-user threads, provide a template with a participants list:
 
@@ -182,7 +182,7 @@ import { Memory } from '@mastra/memory'
 import { LibSQLStore } from '@mastra/libsql'
 
 const memory = new Memory({
-  storage: new LibSQLStore({ url: 'file:./collab.db' }),
+  storage: new LibSQLStore({ id: 'collab-storage', url: 'file:./collab.db' }),
   options: {
     lastMessages: 20,
     workingMemory: {

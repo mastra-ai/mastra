@@ -2,6 +2,7 @@
 
 import type { SpanRecord } from '@mastra/core/storage';
 import { collectToolMocks } from '@mastra/core/utils/collect-tool-mocks';
+import { safeStringify } from '@mastra/core/utils/safe-stringify';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
 import { TextAndIcon, getShortId } from '@mastra/playground-ui/components/Text';
 import { useSpanDetail } from '@mastra/playground-ui/domains/traces/hooks/use-span-detail';
@@ -34,7 +35,7 @@ function getInitialInput(traceDetails?: SpanRecord): string {
     'messages' in spanInput;
   const rawInput = isWrappedAgentInput ? (spanInput.messages ?? traceDetails.input) : traceDetails.input;
 
-  return JSON.stringify(rawInput, null, 2);
+  return safeStringify(rawInput, 2);
 }
 
 export function TraceAsItemDialog({
@@ -64,7 +65,7 @@ export function TraceAsItemDialog({
   // Convert trajectory to a TrajectoryExpectation JSON string
   const initialTrajectory =
     trajectory?.steps && trajectory.steps.length > 0
-      ? JSON.stringify(
+      ? safeStringify(
           {
             steps: trajectory.steps.map(step => {
               const { name, stepType, children, ...rest } = step as Record<string, unknown>;
@@ -78,19 +79,18 @@ export function TraceAsItemDialog({
             }),
             ordering: 'relaxed',
           },
-          null,
           2,
         )
       : undefined;
 
   // Derive item-level tool mocks from the recorded tool calls in the trajectory
   const toolMocks = trajectory?.steps ? collectToolMocks(trajectory.steps) : [];
-  const initialToolMocks = toolMocks.length > 0 ? JSON.stringify(toolMocks, null, 2) : undefined;
+  const initialToolMocks = toolMocks.length > 0 ? safeStringify(toolMocks, 2) : undefined;
 
   return (
     <SaveAsDatasetItemDialog
       initialInput={getInitialInput(traceDetails)}
-      initialGroundTruth={traceDetails?.output != null ? JSON.stringify(traceDetails.output, null, 2) : ''}
+      initialGroundTruth={traceDetails?.output != null ? safeStringify(traceDetails.output, 2) : ''}
       initialTrajectory={initialTrajectory}
       trajectoryLoading={isTrajectoryLoading}
       initialToolMocks={initialToolMocks}

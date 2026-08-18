@@ -114,6 +114,13 @@ export const codeSupervisor = new Agent({
     isOptional: true,
   },
   {
+    name: 'createClient',
+    type: '(defaultClient: Client) => Client',
+    description:
+      'Customize the ACP client used to answer agent requests. Receives the default client so it can be wrapped or extended, for example with `extMethod` and `extNotification` handlers.',
+    isOptional: true,
+  },
+  {
     name: 'workspace',
     type: 'Workspace',
     description:
@@ -190,7 +197,7 @@ export const codeSupervisor = new Agent({
 
 ## Session lifecycle
 
-Each tool execution creates an ACP connection, starts the configured `command`, initializes the ACP client, creates an ACP session, and sends the `task` with ACP `session/prompt`.
+Each tool execution creates an ACP connection and starts the configured `command`. It initializes the ACP client and creates an ACP session before sending the `task` with ACP `session/prompt`.
 
 By default, `persistSession` is `true` for the ACP connection created during tool execution. Set `persistSession: false` when the ACP process should stop as soon as that prompt completes.
 
@@ -227,11 +234,37 @@ export const codeAgentTool = createACPTool({
 })
 ```
 
-Use this callback to enforce local policy, inspect the permission title, or route the decision to your own approval flow.
+Use this callback to enforce local policy or inspect the permission title. It can also route the decision to your own approval flow.
+
+## Extension methods
+
+Some ACP agents call custom extension methods on the client, outside the standard ACP request set. The default client rejects unknown methods with a "Method not found" error, which can abort the agent's turn.
+
+Pass `createClient` to extend or replace the default client. The callback receives the default client and returns the client used for the connection:
+
+```typescript title="src/mastra/agents/code-agent.ts"
+import { createACPTool } from '@mastra/acp'
+
+export const codeAgentTool = createACPTool({
+  id: 'code-agent',
+  description: 'Use an ACP-compatible coding agent',
+  command: 'acp-agent',
+  args: ['--stdio'],
+  createClient: defaultClient =>
+    Object.assign(defaultClient, {
+      async extMethod(method: string, params: Record<string, unknown>) {
+        return {}
+      },
+      async extNotification(method: string, params: Record<string, unknown>) {},
+    }),
+})
+```
+
+Return a fully custom `Client` implementation when you need to change the standard handlers as well. The `Client` type is re-exported from `@mastra/acp`.
 
 ## Related
 
-- [Agent Client Protocol docs](/docs/agents/acp)
+- [Agent Client Protocol docs](/docs/connections/acp)
 - [AcpAgent class reference](/reference/acp/acp-agent)
 - [Tool reference](/reference/tools/create-tool)
 - [Agent Client Protocol introduction](https://agentclientprotocol.com/overview/introduction)

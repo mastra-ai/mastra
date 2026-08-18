@@ -1,176 +1,215 @@
-import React from 'react';
+import { memo, useMemo, useState } from 'react';
+import type { MouseEvent, MouseEventHandler, ReactNode } from 'react';
 import Markdown from 'react-markdown';
-import type { Components } from 'react-markdown';
+import type { Components, ExtraProps, Options } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remend from 'remend';
 
-import { Code } from '@/ds/components/Code';
-import { CopyButton } from '@/ds/components/CopyButton';
+import { rehypeArriving } from './arriving';
+import { splitBlocks } from './blocks';
+import { useReveal } from './use-reveal';
+import { CodeBlock } from '@/ds/components/CodeBlock';
 import { cn } from '@/lib/utils';
 
-export type MarkdownRendererProps = {
+import './markdown-renderer.css';
+
+export type MarkdownExternalLinkTarget = 'tab' | 'window';
+
+export interface MarkdownRendererProps {
   children: string;
-};
-
-export function MarkdownRenderer({ children }: MarkdownRendererProps) {
-  const processedText = children.replace(/\\n/g, '\n');
-
-  return (
-    <Markdown remarkPlugins={[remarkGfm]} components={COMPONENTS} className="space-y-3">
-      {processedText}
-    </Markdown>
-  );
-}
-
-interface CodeBlockProps extends React.HTMLAttributes<HTMLPreElement> {
-  children: React.ReactNode;
   className?: string;
-  language: string;
+  externalLinkTarget?: MarkdownExternalLinkTarget;
+  /** The text is still being written: reveal it at a steady pace, word by word. */
+  streaming?: boolean;
 }
 
-const CodeBlock = ({ children, className, language, ...restProps }: CodeBlockProps) => {
-  const code = typeof children === 'string' ? children : childrenTakeAllStringContents(children);
+/**
+ * Renders a markdown string. Agent output can carry attacker-influenced text
+ * (file contents, tool output, web pages): react-markdown escapes raw HTML and
+ * drops dangerous link schemes, so nothing here reaches the DOM as markup.
+ *
+ * react-markdown re-parses on every render, and a streaming reply re-renders
+ * its whole transcript on every delta. Memoizing spares the settled messages;
+ * rendering block by block — streaming or not — spares every block of the live
+ * one but the last, and lets a reply settle without remounting what is already
+ * on screen.
+ *
+ * A streamed reply is paced here rather than by the caller, so the text a block
+ * parses and the text a reader sees are one and the same string. Only what lands
+ * after the reader joined plays an entrance: a reply opened part-written is
+ * already there, and fading in what someone is halfway through reading would be
+ * both a lie and a screenful of animations at once.
+ */
+export const MarkdownRenderer = memo(function MarkdownRenderer({
+  children,
+  className,
+  externalLinkTarget = 'tab',
+  streaming = false,
+}: MarkdownRendererProps) {
+  const full = decodeEscapedNewlines(children);
+  const shown = useReveal(full, streaming);
+  const blocks = useMemo(() => splitBlocks(shown), [shown]);
+  const last = blocks.length - 1;
+  const components = externalLinkTarget === 'window' ? WINDOW_COMPONENTS : COMPONENTS;
+  const growing = streaming || shown !== full;
 
-  const preClass = cn(
-    'overflow-x-scroll rounded-md border bg-surface1/50 p-4 font-mono text-sm [scrollbar-width:none]',
-    className,
+  const [joined] = useState(() =>
+    streaming ? { blocks: blocks.length, words: countWords(blocks[last] ?? '') } : undefined,
   );
 
-  return (
-    <div className="group/code relative mb-4">
-      <Code code={code} lang={language} className={preClass} {...restProps} />
+  // What a block held when the reader joined, and so never animates. A block
+  // already whole by then holds all of itself, which is what `undefined` says:
+  // leave it as plain text, no spans at all. Position decides it, so it never
+  // changes under a word — and counting the source counts its markers too, so
+  // the boundary only ever errs towards leaving a word unanimated.
+  const settledWords = (index: number): number | undefined => {
+    if (!joined || index < joined.blocks - 1) return undefined;
 
-      <div className="invisible absolute top-2 right-2 flex gap-1 rounded-lg p-1 opacity-0 transition-all duration-200 group-hover/code:visible group-hover/code:opacity-100">
-        <CopyButton content={code} copyMessage="Copied code to clipboard" />
-      </div>
+    return index === joined.blocks - 1 ? joined.words : 0;
+  };
+
+  const tail = blocks[last] ?? '';
+  const mended = useMemo(() => (growing ? remend(tail, REMEND_OPTIONS) : tail), [growing, tail]);
+
+  return (
+    <div className={cn('mastra-markdown', className)}>
+      {blocks.map((block, index) => (
+        <MarkdownBlock
+          key={index}
+          content={index === last ? mended : block}
+          settledWords={settledWords(index)}
+          components={components}
+        />
+      ))}
     </div>
   );
-};
+});
 
-function childrenTakeAllStringContents(element: any): string {
-  if (typeof element === 'string') {
-    return element;
-  }
+/** Keyed by position at the call site: a content key remounts on every character. */
+const MarkdownBlock = memo(function MarkdownBlock({
+  components,
+  content,
+  settledWords,
+}: {
+  components: Components;
+  content: string;
+  settledWords?: number;
+}) {
+  const rehypePlugins = useMemo(
+    () => (settledWords === undefined ? SETTLED : [rehypeArriving(settledWords)]),
+    [settledWords],
+  );
 
-  if (element?.props?.children) {
-    let children = element.props.children;
+  return (
+    <Markdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={rehypePlugins} components={components}>
+      {content}
+    </Markdown>
+  );
+});
 
-    if (Array.isArray(children)) {
-      return children.map(child => childrenTakeAllStringContents(child)).join('');
-    } else {
-      return childrenTakeAllStringContents(children);
-    }
-  }
+const SETTLED: Options['rehypePlugins'] = [];
 
-  return '';
+function countWords(text: string): number {
+  return text.match(/\S+/g)?.length ?? 0;
 }
 
-// Create component wrappers with className
-const COMPONENTS: Components = {
-  h1: ({ children, ...props }) => (
-    <h1 className="text-2xl font-semibold" {...props}>
-      {children}
-    </h1>
-  ),
-  h2: ({ children, ...props }) => (
-    <h2 className="text-xl font-semibold" {...props}>
-      {children}
-    </h2>
-  ),
-  h3: ({ children, ...props }) => (
-    <h3 className="text-lg font-semibold" {...props}>
-      {children}
-    </h3>
-  ),
-  h4: ({ children, ...props }) => (
-    <h4 className="text-base font-semibold" {...props}>
-      {children}
-    </h4>
-  ),
-  h5: ({ children, ...props }) => (
-    <h5 className="font-medium" {...props}>
-      {children}
-    </h5>
-  ),
-  strong: ({ children, ...props }) => (
-    <strong className="font-semibold" {...props}>
-      {children}
-    </strong>
-  ),
-  a: ({ children, ...props }) => (
-    <a className="underline underline-offset-2" {...props}>
-      {children}
-    </a>
-  ),
-  blockquote: ({ children, ...props }) => (
-    <blockquote className="border-l-2 border-neutral6 pl-4" {...props}>
-      {children}
-    </blockquote>
-  ),
-  code: ({ children, className, ...rest }: any) => {
-    const match = /language-(\w+)/.exec(className || '');
-    return match ? (
-      <CodeBlock className={className} language={match[1]} {...rest}>
-        {children}
-      </CodeBlock>
-    ) : (
-      <code
-        className={cn(
-          'font-mono [:not(pre)>&]:rounded-md [:not(pre)>&]:bg-surface1/50 [:not(pre)>&]:px-1 [:not(pre)>&]:py-0.5',
-        )}
-        {...rest}
+// Agent networks emit their text with literal `\n`. Only unescape when the text
+// has no real newline, otherwise a `"a\nb"` inside a code fence gets shredded.
+function decodeEscapedNewlines(text: string): string {
+  return text.includes('\n') ? text : text.replace(/\\n/g, '\n');
+}
+
+type MarkdownNode = NonNullable<ExtraProps['node']>;
+
+function languageOf(node: MarkdownNode): string | undefined {
+  const classNames = node.properties.className;
+  if (!Array.isArray(classNames)) return undefined;
+
+  const language = classNames.find(entry => typeof entry === 'string' && entry.startsWith('language-'));
+  return typeof language === 'string' ? language.slice('language-'.length) : undefined;
+}
+
+function fencedCode(node: MarkdownNode | undefined): { code: string; language?: string } | undefined {
+  const child = node?.children.find(entry => entry.type === 'element' && entry.tagName === 'code');
+  if (child?.type !== 'element') return undefined;
+
+  const code = child.children.map(entry => (entry.type === 'text' ? entry.value : '')).join('');
+  return { code: code.replace(/\n$/, ''), language: languageOf(child) };
+}
+
+function MarkdownCodeBlock({
+  node,
+  children,
+  className,
+}: {
+  node?: MarkdownNode;
+  children?: ReactNode;
+  className?: string;
+}) {
+  const fenced = fencedCode(node);
+  if (!fenced) return <pre className={className}>{children}</pre>;
+
+  return (
+    <CodeBlock
+      code={fenced.code}
+      lang={fenced.language}
+      overflow="scroll"
+      className={cn('my-3 bg-surface1', className)}
+      copyMessage="Copied code to clipboard"
+    />
+  );
+}
+
+const POPUP_WINDOW_FEATURES = 'popup=yes,width=720,height=800,resizable=yes,scrollbars=yes';
+
+function isPlainLeftClick(event: MouseEvent): boolean {
+  return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+}
+
+function markdownLink(externalLinkTarget: MarkdownExternalLinkTarget): NonNullable<Components['a']> {
+  return function MarkdownLink({ href, title, children }) {
+    const isExternal = /^https?:\/\//i.test(href ?? '');
+
+    const openInPopup: MouseEventHandler<HTMLAnchorElement> = event => {
+      if (!isExternal || externalLinkTarget !== 'window' || !isPlainLeftClick(event)) return;
+
+      const popup = window.open(href, '_blank', POPUP_WINDOW_FEATURES);
+      if (!popup) return;
+
+      popup.opener = null;
+      event.preventDefault();
+    };
+
+    return (
+      <a
+        href={href}
+        title={title}
+        onClick={openInPopup}
+        target={isExternal ? '_blank' : undefined}
+        rel={isExternal ? 'noopener noreferrer' : undefined}
       >
         {children}
-      </code>
+      </a>
     );
-  },
-  pre: ({ children }: any) => children,
-  ol: ({ children, ...props }) => (
-    <ol className="list-decimal space-y-2 pl-6" {...props}>
-      {children}
-    </ol>
-  ),
-  ul: ({ children, ...props }) => (
-    <ul className="list-disc space-y-2 pl-6" {...props}>
-      {children}
-    </ul>
-  ),
-  li: ({ children, ...props }) => (
-    <li className="my-1.5" {...props}>
-      {children}
-    </li>
-  ),
-  table: ({ children, ...props }) => (
-    <table className="w-full border-collapse overflow-y-auto rounded-md border border-neutral6/20" {...props}>
-      {children}
-    </table>
-  ),
-  th: ({ children, ...props }) => (
-    <th
-      className="border border-neutral6/20 px-4 py-2 text-left font-bold [[align=center]]:text-center [[align=right]]:text-right"
-      {...props}
-    >
-      {children}
-    </th>
-  ),
-  td: ({ children, ...props }) => (
-    <td
-      className="border border-neutral6/20 px-4 py-2 text-left [[align=center]]:text-center [[align=right]]:text-right"
-      {...props}
-    >
-      {children}
-    </td>
-  ),
-  tr: ({ children, ...props }) => (
-    <tr className="m-0 border-t p-0 even:bg-surface4" {...props}>
-      {children}
-    </tr>
-  ),
-  p: ({ children, ...props }) => (
-    <p className="leading-relaxed whitespace-pre-wrap" {...props}>
-      {children}
-    </p>
-  ),
-  hr: ({ ...props }) => <hr className="border-neutral6/20" {...props} />,
+  };
+}
+
+const REMARK_PLUGINS = [remarkGfm];
+
+// Links stay text until their URL lands: remend's placeholder href would render
+// a live anchor to nowhere. No math is rendered here, so pairing `$$` would only
+// turn one literal into another.
+const REMEND_OPTIONS = { katex: false, linkMode: 'text-only' } as const;
+
+// Elements are listed one by one: react-markdown also passes its `node`, which
+// React would forward to the DOM as a stray attribute. Everything else is
+// styled from markdown-renderer.css.
+const COMPONENTS: Components = {
+  pre: MarkdownCodeBlock,
+  a: markdownLink('tab'),
 };
 
-export default MarkdownRenderer;
+const WINDOW_COMPONENTS: Components = {
+  ...COMPONENTS,
+  a: markdownLink('window'),
+};

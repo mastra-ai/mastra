@@ -23,6 +23,7 @@ vi.mock('../display.js', () => ({
   notify: vi.fn(),
 }));
 
+import { JudgeDisplayComponent } from '../components/judge-display.js';
 import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
 import { handleAgentAborted, handleAgentEnd, handleGoalEvaluation } from '../handlers/agent-lifecycle.js';
 import type { EventHandlerContext } from '../handlers/types.js';
@@ -54,7 +55,7 @@ function createQueueState(overrides: Partial<TUIState> = {}): TUIState {
   return {
     session,
     controller: { session, ...(agentControllerOverride ?? {}) },
-    goalManager: { stopActiveTimer: vi.fn() },
+    goalManager: {},
     gradientAnimator: undefined,
     projectInfo: { rootPath: '.', gitBranch: 'main' } as TUIState['projectInfo'],
     streamingComponent: undefined,
@@ -162,6 +163,10 @@ describe('MastraTUI queueing', () => {
     tui.queueFollowUpMessage = vi.fn();
     tui.signalMessage = vi.fn();
 
+    // Object.create bypasses field initializers; getUserInput reads the queue.
+
+    (tui as any).queuedUserInput = [];
+
     const pendingInput = tui.getUserInput();
     editor.onSubmit?.('queued follow-up');
 
@@ -207,6 +212,10 @@ describe('MastraTUI queueing', () => {
     tui.signalMessage = vi.fn();
     tui.handleSlashCommand = vi.fn().mockResolvedValue(true);
 
+    // Object.create bypasses field initializers; getUserInput reads the queue.
+
+    (tui as any).queuedUserInput = [];
+
     tui.getUserInput();
     editor.onSubmit?.('/help');
 
@@ -243,6 +252,10 @@ describe('MastraTUI queueing', () => {
     };
     tui.state = state;
     tui.queueFollowUpMessage = vi.fn();
+
+    // Object.create bypasses field initializers; getUserInput reads the queue.
+
+    (tui as any).queuedUserInput = [];
 
     const pendingInput = tui.getUserInput();
     editor.onSubmit?.('wait for judge');
@@ -395,7 +408,7 @@ describe('MastraTUI queueing', () => {
     expect(mocks.addUserMessage).toHaveBeenCalledWith(state, {
       id: 'signal-after-new',
       role: 'user',
-      content: [{ type: 'text', text: 'new thread follow-up' }],
+      content: { format: 2, parts: [{ type: 'text', text: 'new thread follow-up' }] },
       createdAt: expect.any(Date),
     });
     expect(state.pendingNewThread).toBe(false);
@@ -432,7 +445,7 @@ describe('MastraTUI queueing', () => {
     expect(mocks.addUserMessage).toHaveBeenCalledWith(state, {
       id: 'signal-idle-1',
       role: 'user',
-      content: [{ type: 'text', text: 'render directly' }],
+      content: { format: 2, parts: [{ type: 'text', text: 'render directly' }] },
       createdAt: expect.any(Date),
     });
   });
@@ -469,10 +482,13 @@ describe('MastraTUI queueing', () => {
     expect(mocks.addUserMessage).toHaveBeenCalledWith(state, {
       id: 'signal-image-1',
       role: 'user',
-      content: [
-        { type: 'text', text: "what's in this image?" },
-        { type: 'image', data: 'data:image/png;base64,abc', mimeType: 'image/png' },
-      ],
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text: "what's in this image?" },
+          { type: 'file', data: 'data:image/png;base64,abc', mimeType: 'image/png' },
+        ],
+      },
       createdAt: expect.any(Date),
     });
   });
@@ -517,6 +533,17 @@ describe('MastraTUI queueing', () => {
     expect(tui.state.ui.requestRender).toHaveBeenCalledTimes(3);
   });
 
+  it('does not notify agent_done from the queued handler (#20860 — moved to receipt-time tap)', () => {
+    const state = createQueueState();
+    const ctx = createQueueContext(state);
+
+    handleAgentEnd(ctx);
+
+    // The agent_done ping fires at event receipt in notifyForInputRequest;
+    // a second notify here would double-ping every completion.
+    expect(ctx.notify).not.toHaveBeenCalledWith('agent_done');
+  });
+
   it('removes the grey pending slash command when the queued command drains', () => {
     const state = createQueueState();
     const tui = Object.create(MastraTUI.prototype) as {
@@ -549,7 +576,7 @@ describe('MastraTUI queueing', () => {
     expect(ctx.addUserMessage).toHaveBeenCalledWith({
       id: expect.stringMatching(/^user-/),
       role: 'user',
-      content: [{ type: 'text', text: 'first' }],
+      content: { format: 2, parts: [{ type: 'text', text: 'first' }] },
       createdAt: expect.any(Date),
     });
     expect(ctx.fireMessage).toHaveBeenCalledWith('first', undefined);
@@ -562,7 +589,7 @@ describe('MastraTUI queueing', () => {
     expect(ctx.addUserMessage).toHaveBeenLastCalledWith({
       id: expect.stringMatching(/^user-/),
       role: 'user',
-      content: [{ type: 'text', text: 'third' }],
+      content: { format: 2, parts: [{ type: 'text', text: 'third' }] },
       createdAt: expect.any(Date),
     });
     expect(ctx.fireMessage).toHaveBeenLastCalledWith('third', undefined);
@@ -600,6 +627,40 @@ describe('MastraTUI queueing', () => {
     expect((state.activeGoalJudge?.component as any).activity).toEqual(['read']);
     expect(state.goalManager.applyEvaluation).not.toHaveBeenCalled();
     expect(state.ui.requestRender).toHaveBeenCalled();
+  });
+
+  it('clears completed judge state and places the next iteration after continuation output', () => {
+    const applyEvaluation = vi.fn();
+    const state = createQueueState({
+      goalManager: {
+        applyEvaluation,
+        getGoal: vi.fn(() => ({
+          id: 'continuing-goal',
+          status: 'active',
+          judgeModelId: 'openai/gpt-5.4-mini',
+          turnsUsed: 1,
+          maxTurns: 20,
+        })),
+      } as any,
+    });
+    const ctx = createQueueContext(state);
+
+    handleGoalEvaluation(ctx, createGoalPayload({ iteration: 1 }));
+    expect(state.activeGoalJudge).toBeUndefined();
+
+    const continuationOutput = { kind: 'assistant-output' };
+    state.chatContainer.addChild(continuationOutput as any);
+    handleGoalEvaluation(ctx, createGoalPayload({ iteration: 2 }));
+
+    const judgeComponents = state.chatContainer.children.filter(child => child instanceof JudgeDisplayComponent);
+    expect(judgeComponents).toHaveLength(2);
+    expect(judgeComponents[1]).not.toBe(judgeComponents[0]);
+    expect(state.chatContainer.children.indexOf(judgeComponents[1]!)).toBeGreaterThan(
+      state.chatContainer.children.indexOf(continuationOutput as any),
+    );
+    expect(state.activeGoalJudge).toBeUndefined();
+    expect(applyEvaluation).toHaveBeenNthCalledWith(1, { runsUsed: 1, status: 'active' });
+    expect(applyEvaluation).toHaveBeenNthCalledWith(2, { runsUsed: 2, status: 'active' });
   });
 
   it('ignores late goal chunks after the user has aborted and paused the goal', () => {
@@ -829,7 +890,6 @@ describe('MastraTUI queueing', () => {
       isActive: vi.fn(() => true),
       pause: vi.fn(),
       saveToThread: vi.fn(),
-      stopActiveTimer: vi.fn(),
     };
     const state = createQueueState({
       userInitiatedAbort: true,
@@ -839,7 +899,6 @@ describe('MastraTUI queueing', () => {
 
     handleAgentAborted(ctx);
 
-    expect(goalManager.stopActiveTimer).toHaveBeenCalled();
     expect(goalManager.pause).not.toHaveBeenCalled();
     expect(goalManager.saveToThread).not.toHaveBeenCalled();
     expect(state.userInitiatedAbort).toBe(false);

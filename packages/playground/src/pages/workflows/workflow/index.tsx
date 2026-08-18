@@ -30,7 +30,7 @@ const WorkflowContent = ({ workflowId, workflow, isLoading }: WorkflowContentPro
         </div>
       </div>
       {stepDetail && (
-        <div className="w-[420px] min-h-0 overflow-hidden border-l border-border1">
+        <div className="border-border1 min-h-0 w-[420px] overflow-hidden border-l">
           <WorkflowStepDetailContent />
         </div>
       )}

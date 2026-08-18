@@ -15,8 +15,8 @@ export const AgentBuilderTitle = ({ className, isLoading = false }: AgentBuilder
 
   return (
     <div className={className} data-testid="agent-builder-title">
-      <div className="flex items-center gap-2 min-w-0">
-        <span className="block text-ui-md leading-ui-md text-white truncate" data-testid="agent-builder-title-name">
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="text-ui-md leading-ui-md block truncate text-white" data-testid="agent-builder-title-name">
           {isLoading ? (
             <Skeleton className="inline-block h-4 w-24 align-middle" data-testid="agent-builder-title-skeleton" />
           ) : (

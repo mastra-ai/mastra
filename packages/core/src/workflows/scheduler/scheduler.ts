@@ -96,7 +96,9 @@ export class Scheduler extends MastraBase {
       // scripts that create a Mastra instance (which auto-creates the
       // notification dispatch workflow with a cron schedule) and exit
       // after a single agent.generate() call.
-      this.#intervalHandle.unref();
+      // Optional call: on runtimes where setInterval returns a number
+      // (e.g. Cloudflare Workers) there is no unref and nothing to release.
+      this.#intervalHandle.unref?.();
     } catch (err) {
       // Reset state so a future start() can retry. Without this, a failed
       // warm-up tick would leave #started=true with no interval armed and
@@ -184,7 +186,7 @@ export class Scheduler extends MastraBase {
     const predicate = this.#config.isTargetReady;
     if (!predicate) return true;
 
-    if (predicate(schedule.target)) {
+    if (await predicate(schedule.target)) {
       this.#missingWorkflowCounts.delete(schedule.id);
       return true;
     }

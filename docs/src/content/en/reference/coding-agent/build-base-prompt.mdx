@@ -7,11 +7,11 @@ packages:
 
 # buildBasePrompt()
 
-`buildBasePrompt()` builds the shared base system prompt for a coding agent — the behavioral instructions that make the agent a good coding assistant. It takes a `PromptContext` describing the current environment (project, platform, git branch, mode, model) and returns the prompt as a string.
+`buildBasePrompt()` builds the shared base system prompt for a coding agent: the behavioral instructions that make the agent a good coding assistant. It takes a `PromptContext` describing the current environment (project, platform, git branch, mode, model) and returns the prompt as a string.
 
 Product-specific strings are parameterized through `productName`, `coAuthorName`, and `coAuthorEmail`, so you can rebrand the prompt and commit trailer without forking it. They default to `"Mastra Code"` / `"noreply@mastra.ai"`, so existing callers keep identical output.
 
-Use this with [`createCodingAgent()`](/reference/coding-agent/create-coding-agent) when you build dynamic instructions for the agent.
+Use this with [`createCodingAgent()`](/reference/coding-agent/create-coding-agent) when you build runtime-defined instructions for the agent.
 
 ## Usage example
 
@@ -142,3 +142,4 @@ const prompt = buildBasePrompt({
 ## Related
 
 - [`createCodingAgent()`](/reference/coding-agent/create-coding-agent)
+- [Mastra Code](https://code.mastra.ai)

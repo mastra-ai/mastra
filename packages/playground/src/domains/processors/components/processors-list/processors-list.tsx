@@ -100,7 +100,7 @@ export function ProcessorsList({ processors, isLoading, search = '' }: Processor
             <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
             {phaseKeys.map(key => (
               <EntityList.TextCell key={key} className="text-center">
-                {phaseSet.has(key) && <CheckIcon className="size-4 mx-auto" />}
+                {phaseSet.has(key) && <CheckIcon className="mx-auto size-4" />}
               </EntityList.TextCell>
             ))}
             <EntityList.TextCell className="text-center">{agentsCount || ''}</EntityList.TextCell>

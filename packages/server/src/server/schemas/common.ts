@@ -1,4 +1,23 @@
+import type { MessageInput } from '@mastra/core/agent/message-list';
 import { z } from 'zod/v4';
+
+/**
+ * Brands a permissive runtime schema with a concrete compile-time type.
+ *
+ * Some request-body fields carry values the server cannot fully validate with
+ * zod: functions (stop conditions, client tools), Zod schemas (structured
+ * output), or complex core types that would drift if re-declared here. For
+ * those fields runtime validation stays permissive and the receiving
+ * agent/workflow API performs the real validation, while handlers and
+ * generated route types still get the concrete type.
+ *
+ * Every call site is an intentional, documented gap between runtime
+ * validation and the declared type. Prefer a real zod schema whenever the
+ * shape can reasonably be expressed — only reach for this when it cannot.
+ */
+export function typedPermissive<T>(schema: z.ZodType): z.ZodType<T> {
+  return schema as unknown as z.ZodType<T>;
+}
 
 // Path parameter schemas
 export const runIdSchema = z.object({
@@ -29,23 +48,35 @@ export const paginationInfoSchema = z.object({
 });
 
 /**
+ * Pagination values are non-negative integers. Constraining them here keeps
+ * malformed input a 400 at the request boundary: without `.int().min(0)`,
+ * `z.coerce.number()` only rejects values that coerce to `NaN`, so `page=-1`
+ * and `perPage=2.5` reach the storage layer, which rejects them with a plain
+ * `Error` that `handleError` can only report as a 500.
+ *
+ * The lower bound is 0 rather than 1 because `perPage: 0` is a supported
+ * storage contract (the include-only fast path).
+ */
+const paginationNumber = () => z.coerce.number().int().min(0);
+
+/**
  * Factory function for page/perPage pagination query params
  * @param defaultPerPage - Default value for perPage (omit for no default)
  */
 export const createPagePaginationSchema = (defaultPerPage?: number) => {
   const baseSchema = {
-    page: z.coerce.number().optional().default(0),
+    page: paginationNumber().optional().default(0),
   };
 
   if (defaultPerPage !== undefined) {
     return z.object({
       ...baseSchema,
-      perPage: z.coerce.number().optional().default(defaultPerPage),
+      perPage: paginationNumber().optional().default(defaultPerPage),
     });
   } else {
     return z.object({
       ...baseSchema,
-      perPage: z.coerce.number().optional(),
+      perPage: paginationNumber().optional(),
     });
   }
 };
@@ -56,16 +87,16 @@ export const createPagePaginationSchema = (defaultPerPage?: number) => {
  */
 export const createCombinedPaginationSchema = () => {
   return z.object({
-    page: z.coerce.number().optional(),
-    perPage: z.coerce.number().optional(),
+    page: paginationNumber().optional(),
+    perPage: paginationNumber().optional(),
     /**
      * @deprecated Use page and perPage instead
      */
-    offset: z.coerce.number().optional(),
+    offset: paginationNumber().optional(),
     /**
      * @deprecated Use page and perPage instead
      */
-    limit: z.coerce.number().optional(),
+    limit: paginationNumber().optional(),
   });
 };
 
@@ -96,7 +127,10 @@ export const tracingOptionsSchema = z.object({
  * Represents messages exchanged with AI models
  * Content can be string, array of content parts, or object (for complex message types)
  */
-export const coreMessageSchema = z.any();
+// Runtime validation stays permissive (z.unknown()) so generated route types
+// don't leak `any`; typedPermissive gives handlers the concrete message type
+// expected by agent APIs (agent.generate/stream/network).
+export const coreMessageSchema = typedPermissive<MessageInput>(z.unknown());
 // .object({
 //   role: z.enum(['system', 'user', 'assistant', 'tool']),
 //   content: z.union([
@@ -108,7 +142,7 @@ export const coreMessageSchema = z.any();
 //         })
 //         .passthrough(), // Preserve additional fields like text, image, toolCall, etc.
 //     ),
-//     z.any(), // For complex message content objects
+//     z.unknown(), // For complex message content objects
 //   ]),
 // })
 // .passthrough();

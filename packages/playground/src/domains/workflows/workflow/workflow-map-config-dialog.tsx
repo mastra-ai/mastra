@@ -26,7 +26,7 @@ export function WorkflowMapConfigDialog({ stepName, mapConfig }: WorkflowMapConf
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-4xl w-full">
+        <DialogContent className="w-full max-w-4xl">
           <DialogHeader>
             <DialogTitle>{stepName} config</DialogTitle>
             <DialogDescription>View the map configuration for this step</DialogDescription>

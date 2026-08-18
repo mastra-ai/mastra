@@ -7,11 +7,11 @@ packages:
 
 # Scheduled workflows
 
-Declare a `schedule` field on a workflow and Mastra will fire it on the cron you specify. The same workflow remains callable directly with `workflow.start()` — scheduled fires and manual runs share a single execution path.
+Declare a `schedule` field on a workflow and Mastra will fire it on the cron you specify. The same workflow remains callable directly with `workflow.start()`, scheduled fires and manual runs share a single execution path.
 
 ## Quickstart
 
-The following workflow runs every day at 9am New York time. Register it on `Mastra` as you would any other workflow — the scheduler picks it up automatically.
+The following workflow runs every day at 9am New York time. Register it on `Mastra` as you would any other workflow, the scheduler picks it up automatically.
 
 ```typescript title="src/mastra/workflows/daily-report.ts"
 import { createWorkflow, createStep } from '@mastra/core/workflows'
@@ -45,7 +45,7 @@ A separate "register schedule" call won't happen. The scheduler reads `schedule`
 
 ## What `schedule` changes
 
-A workflow that declares `schedule` is auto-promoted to the **evented execution engine**. The public API (`workflow.start()`, `workflow.startAsync()`, `streamLegacy()`, `resume()`) is unchanged — `EventedWorkflow extends Workflow` and overrides each method with matching signatures. From your code, scheduled fires and manual runs are indistinguishable.
+A workflow that declares `schedule` is auto-promoted to the **evented execution engine**. The public API (`workflow.start()`, `workflow.startAsync()`, `streamLegacy()`, `resume()`) is unchanged, `EventedWorkflow extends Workflow` and overrides each method with matching signatures. From your code, scheduled fires and manual runs are indistinguishable.
 
 The promotion has one practical implication: evented runs require a storage adapter that supports concurrent updates, for example `@mastra/libsql`. If your adapter doesn't, `createRun()` throws a clear error pointing at the `schedule` field. Switch adapters or remove the schedule.
 
@@ -89,7 +89,7 @@ const statusCheck = createWorkflow({
 })
 ```
 
-Each entry creates an independent schedule row, fires on its own cron, and shows up separately in the Studio Schedules view.
+Each entry creates an independent schedule row and fires on its own cron, plus shows up separately in the Studio Schedules view.
 
 ## Viewing schedules in Studio
 
@@ -97,11 +97,11 @@ Studio surfaces schedules as a top-level area, not as a tab inside a workflow:
 
 - **All schedules**: open `/workflows/schedules` for a cross-workflow list. Each row shows the workflow id, cron, next fire, and the most recent run's status, so the list answers "is anything broken?" at a glance.
 - **Filtered by workflow**: append `?workflowId=<id>` to scope the list to a single workflow, for example `/workflows/schedules?workflowId=daily-report`.
-- **Schedule detail**: select any row to open `/workflows/schedules/:scheduleId`, which shows the schedule's metadata, **Pause** / **Resume** controls, and the full trigger history.
+- **Schedule detail**: Select any row to open `/workflows/schedules/:scheduleId`. The page shows schedule metadata and **Pause** / **Resume** controls, followed by the full trigger history.
 
 A workflow's header includes a **Schedules** action when the workflow has at least one schedule:
 
-- One schedule: the action links straight to that schedule's detail page.
+- When one schedule matches, the action links straight to its detail page.
 - Multiple schedules: the action links to the workflow-filtered list at `/workflows/schedules?workflowId=<id>`.
 - No schedules: the action is hidden.
 
@@ -140,9 +140,9 @@ A few rules worth knowing:
 
 - Pause is durable. The status is written to the schedules table and survives process restarts and redeploys. The declarative-config upsert never overwrites a user-set status, even when you change `cron`, `timezone`, or other fields.
 - Resume recomputes `nextFireAt` from now. A schedule paused for a week doesn't fire seven backlogged runs the moment you resume it. It fires on the next regular cron tick.
-- The only way to unpause is `resumeSchedule` (or the **Resume** button in Studio). Editing the workflow's `schedule` config doesn't unpause a paused row.
+- Unpause with `resumeSchedule` or the **Resume** button in Studio. Editing the workflow's `schedule` config doesn't unpause a paused row.
 - Pause and resume are idempotent. Calling pause on an already-paused schedule is a no-op.
-- This is an operational override, not a way to author schedules. Declarative schedules are created, deleted, and edited in code via the `schedule` field on `createWorkflow`. To create schedules imperatively at runtime instead, use the unified [`mastra.schedules`](/docs/long-running-agents/schedules) service with a `workflowId`.
+- This operational override controls existing schedules. Author declarative schedules in code. Declarative schedules are created, deleted, and edited in code via the `schedule` field on `createWorkflow`. To create schedules imperatively at runtime instead, use the unified [`mastra.schedules`](/docs/harness/schedules) service with a `workflowId`.
 
 The underlying HTTP routes are `POST /api/schedules/:scheduleId/pause` and `POST /api/schedules/:scheduleId/resume`. Both require the `schedules:write` permission.
 
@@ -158,15 +158,15 @@ Removing a schedule entry from a workflow's `schedule` array deletes its row on 
 
 ## Deployment topology
 
-The built-in scheduler is a `setInterval` tick loop that polls the schedules table, claims due rows, and dispatches workflow runs through the in-process pubsub. It assumes a long-lived host process.
+The built-in scheduler uses a `setInterval` tick loop to poll the schedules table and claim due rows. It dispatches workflow runs through the in-process pubsub. It assumes a long-lived host process.
 
 ### Long-lived host (recommended)
 
-Deploy targets such as Fly Machines, Railway, Render, AWS ECS, GKE, or your own server keep the Mastra process alive between cron ticks. Schedules work without extra setup.
+Deploy targets such as Fly Machines, Railway, Render, AWS ECS, GKE, or your own server keep the Mastra process alive between cron ticks. Schedules work without extra setup. For production deployments, you can run the scheduler as a [dedicated worker process](/docs/deployment/workers#scheduler-worker) to isolate it from the API layer.
 
 ### Serverless platforms
 
-Functions-as-a-service platforms such as Vercel, Netlify, AWS Lambda, and Cloudflare Workers shut the process down after each request. The tick loop never gets a second tick. Schedules declared in code don't fire on these platforms with the built-in scheduler today.
+Functions-as-a-service platforms such as Vercel, Netlify, AWS Lambda, and Cloudflare Workers shut the process down after each request, so the tick loop doesn't get a second tick and schedules declared in code don't fire with the built-in scheduler today.
 
 On these platforms, use [`@mastra/inngest`](#inngest-workflows) instead. Inngest is serverless-native and holds the cron state for you.
 
@@ -186,4 +186,5 @@ Manage Inngest schedules from the [Inngest dashboard](https://www.inngest.com/do
 
 - [Workflow overview](/docs/workflows/overview)
 - [Suspend and resume](/docs/workflows/suspend-and-resume)
-- [Agent schedules](/docs/long-running-agents/schedules): run an agent, rather than a workflow, on a cron schedule, and manage both kinds at runtime through `mastra.schedules`.
+- [Workers](/docs/deployment/workers): The [scheduler worker](/docs/deployment/workers#scheduler-worker) runs cron schedules in a dedicated process
+- [Agent schedules](/docs/harness/schedules): Run an agent rather than a workflow on a cron schedule, and manage both schedule types at runtime through `mastra.schedules`.

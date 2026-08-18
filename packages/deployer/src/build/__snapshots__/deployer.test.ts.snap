@@ -19,6 +19,16 @@ export { deployer };
 "
 `;
 
+exports[`getDeployer > should be able to extract the deployer from ./plugins/__fixtures__/basic-with-exported-const.js 1`] = `
+"import { TestDeployer } from '@mastra/deployer/test';
+
+const _deployer = new TestDeployer();
+const deployer = _deployer;
+
+export { deployer };
+"
+`;
+
 exports[`getDeployer > should be able to extract the deployer from ./plugins/__fixtures__/basic-with-function.js 1`] = `
 "import { testDeployer } from '@mastra/deployer/test';
 

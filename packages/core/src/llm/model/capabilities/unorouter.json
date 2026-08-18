@@ -31,5 +31,22 @@
     "nemotron-3-ultra-550b-a55b:free",
     "qwen3.5-397b-a17b:free",
     "step-3.7-flash:free"
+  ],
+  "structuredOutput": [
+    "deepseek-v4-flash",
+    "deepseek-v4-flash:free",
+    "deepseek-v4-pro",
+    "deepseek-v4-pro:free",
+    "gemini-3.5-flash",
+    "gemma-4-31b-it:free",
+    "glm-5.2",
+    "glm-5.2:free",
+    "gpt-5.2",
+    "gpt-5.4",
+    "gpt-5.4:free",
+    "gpt-5.5",
+    "gpt-5.5:free",
+    "kimi-k2.6",
+    "qwen3.5-397b-a17b:free"
   ]
 }

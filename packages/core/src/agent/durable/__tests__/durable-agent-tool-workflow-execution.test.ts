@@ -8,14 +8,15 @@
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import { MockStore } from '../../../storage/mock';
-import { createTool } from '../../../tools';
+import { askUserTool, createTool } from '../../../tools';
 import { delay } from '../../../utils';
+import { createStep, createWorkflow } from '../../../workflows';
 import { Agent } from '../../agent';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
@@ -285,6 +286,81 @@ describe('DurableAgent tool approval workflow execution', () => {
     cleanup();
   });
 
+  it('should forward string resume data when an approval-gated tool suspends during execution', async () => {
+    const mockModel = createToolCallThenTextModel('interactiveApprovalTool', { input: 'test' }, 'All done');
+    const receivedResumeData: unknown[] = [];
+
+    const interactiveApprovalTool = createTool({
+      id: 'interactiveApprovalTool',
+      description: 'An approval-gated tool that also asks for input',
+      inputSchema: z.object({ input: z.string() }),
+      requireApproval: true,
+      execute: async (_inputData: { input: string }, context?: any) => {
+        const suspend = context?.agent?.suspend || context?.suspend;
+        const resumeData = context?.agent?.resumeData ?? context?.resumeData;
+        receivedResumeData.push(resumeData);
+        if (suspend && resumeData === undefined) {
+          await suspend({ reason: 'Waiting for user input' });
+        }
+        return { result: `completed with ${String(resumeData)}` };
+      },
+    });
+
+    const baseAgent = new Agent({
+      id: 'approval-then-suspension-agent',
+      name: 'Approval Then Suspension Agent',
+      instructions: 'Use the interactive approval tool',
+      model: mockModel as LanguageModelV2,
+      tools: { interactiveApprovalTool },
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      agents: { 'approval-then-suspension-agent': durableAgent as any },
+    });
+
+    let approvalData: any = null;
+    const { runId, cleanup } = await durableAgent.stream('Use the interactive approval tool', {
+      onSuspended: data => {
+        approvalData = data;
+      },
+    });
+
+    await delay(500);
+    expect(approvalData?.type).toBe('approval');
+
+    let suspensionData: any = null;
+    const approvalResult = await durableAgent.resume(
+      runId,
+      { approved: true },
+      {
+        onSuspended: data => {
+          suspensionData = data;
+        },
+      },
+    );
+
+    await delay(500);
+    expect(suspensionData?.type).toBe('suspension');
+
+    let finishData: any = null;
+    const resumeResult = await durableAgent.resume(runId, 'Yes', {
+      onFinish: data => {
+        finishData = data;
+      },
+    });
+
+    await delay(500);
+
+    expect(receivedResumeData).toEqual([undefined, 'Yes']);
+    expect(finishData).not.toBeNull();
+    resumeResult.cleanup();
+    approvalResult.cleanup();
+    cleanup();
+  });
+
   it('should return not-approved result when tool approval is denied', async () => {
     const mockModel = createToolCallThenTextModel('searchTool', { query: 'test' }, 'Done');
 
@@ -447,6 +523,56 @@ describe('DurableAgent in-execution tool suspension', () => {
     cleanup();
   });
 
+  it('stops goal activity when a tool requests approval during execution', async () => {
+    const mockModel = createToolCallModel('interactiveApprovalTool', { input: 'test' });
+    const interactiveApprovalTool = createTool({
+      id: 'interactiveApprovalTool',
+      description: 'An interactive tool that requests approval while executing',
+      inputSchema: z.object({ input: z.string() }),
+      execute: async (_inputData: { input: string }, context?: any) => {
+        const suspend = context?.agent?.suspend || context?.suspend;
+        await delay(20);
+        await suspend({}, { requireToolApproval: true, runId: 'inner-tool-run' });
+        return { result: 'completed' };
+      },
+    });
+    const baseAgent = new Agent({
+      id: 'in-execution-approval-goal-agent',
+      name: 'In-Execution Approval Goal Agent',
+      instructions: 'Use the interactive approval tool',
+      model: mockModel as LanguageModelV2,
+      tools: { interactiveApprovalTool },
+      memory: new MockMemory(),
+      goal: {},
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    const storage = new MockStore();
+    new Mastra({ logger: false, storage, agents: { durableAgent } });
+    const memory = { thread: 'in-execution-approval-thread', resource: 'in-execution-approval-resource' };
+    await durableAgent.setObjective('Finish after approval', {
+      threadId: memory.thread,
+      resourceId: memory.resource,
+    });
+
+    const result = await durableAgent.stream('Use the interactive approval tool', { memory });
+    let sawApproval = false;
+    for await (const chunk of result.fullStream) {
+      if (chunk.type === 'tool-call-approval') {
+        sawApproval = true;
+        break;
+      }
+    }
+    expect(sawApproval).toBe(true);
+
+    let durationAtApproval = 0;
+    await vi.waitFor(async () => {
+      durationAtApproval = (await durableAgent.getObjective({ threadId: memory.thread }))?.activeDurationMs ?? 0;
+      expect(durationAtApproval).toBeGreaterThan(0);
+    });
+    await delay(20);
+    expect((await durableAgent.getObjective({ threadId: memory.thread }))?.activeDurationMs).toBe(durationAtApproval);
+  });
+
   it('should resume tool execution after suspension with resume data', async () => {
     const mockModel = createToolCallThenTextModel('interactiveTool', { input: 'test' }, 'All done');
 
@@ -504,6 +630,55 @@ describe('DurableAgent in-execution tool suspension', () => {
     );
 
     // Wait for completion
+    await delay(500);
+
+    expect(finishData).not.toBeNull();
+    resumeResult.cleanup();
+    cleanup();
+  });
+
+  it('should resume the native ask_user tool with string resume data', async () => {
+    const mockModel = createToolCallThenTextModel(
+      'ask_user',
+      {
+        question: 'Choose one',
+        options: [{ label: 'Yes' }, { label: 'No' }],
+      },
+      'Thanks',
+    );
+
+    const baseAgent = new Agent({
+      id: 'resume-ask-user-agent',
+      name: 'Resume Ask User Agent',
+      instructions: 'Ask the user a question',
+      model: mockModel as LanguageModelV2,
+      tools: { ask_user: askUserTool },
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      agents: { 'resume-ask-user-agent': durableAgent as any },
+    });
+
+    let suspendedData: any = null;
+    const { runId, cleanup } = await durableAgent.stream('Ask me a question', {
+      onSuspended: data => {
+        suspendedData = data;
+      },
+    });
+
+    await delay(500);
+    expect(suspendedData).not.toBeNull();
+
+    let finishData: any = null;
+    const resumeResult = await durableAgent.resume(runId, 'Yes', {
+      onFinish: data => {
+        finishData = data;
+      },
+    });
+
     await delay(500);
 
     expect(finishData).not.toBeNull();
@@ -873,6 +1048,117 @@ describe('DurableAgent foreach tool execution', () => {
 
     expect(toolErrors.length).toBeGreaterThan(0);
 
+    cleanup();
+  });
+});
+
+// ============================================================================
+// Workflow-as-Tool Suspension and Resume Tests
+// ============================================================================
+
+describe('DurableAgent workflow-as-tool suspension and resume', () => {
+  let pubsub: EventEmitterPubSub;
+
+  beforeEach(() => {
+    pubsub = new EventEmitterPubSub();
+  });
+
+  afterEach(async () => {
+    await pubsub.close();
+  });
+
+  it('should resume a suspended workflow tool with the preserved runId and deliver resumeData', async () => {
+    const mockModel = createToolCallThenTextModel(
+      'workflow-askUserWorkflow',
+      { inputData: { topic: 'lunch' } },
+      'All done',
+    );
+
+    const receivedResumeData: any[] = [];
+    let stepExecutions = 0;
+
+    const askStep = createStep({
+      id: 'ask-user',
+      inputSchema: z.object({ topic: z.string() }),
+      outputSchema: z.object({ answer: z.string() }),
+      resumeSchema: z.object({ answer: z.string() }),
+      suspendSchema: z.object({ question: z.string() }),
+      execute: async ({ inputData, resumeData, suspend }) => {
+        stepExecutions++;
+        if (!resumeData?.answer) {
+          return suspend({ question: `What do you want for ${inputData.topic}?` });
+        }
+        receivedResumeData.push(resumeData);
+        return { answer: resumeData.answer };
+      },
+    });
+
+    const askUserWorkflow = createWorkflow({
+      id: 'askUserWorkflow',
+      inputSchema: z.object({ topic: z.string() }),
+      outputSchema: z.object({ answer: z.string() }),
+    })
+      .then(askStep)
+      .commit();
+
+    const baseAgent = new Agent({
+      id: 'workflow-resume-agent',
+      name: 'Workflow Resume Agent',
+      instructions: 'Use the askUserWorkflow to ask the user questions',
+      model: mockModel as LanguageModelV2,
+      workflows: { askUserWorkflow },
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    // Register with Mastra for storage (needed for the inner workflow's snapshot persistence)
+    new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      agents: { 'workflow-resume-agent': durableAgent as any },
+    });
+
+    let suspendedData: any = null;
+    const { runId, cleanup } = await durableAgent.stream('Ask me about lunch', {
+      onSuspended: data => {
+        suspendedData = data;
+      },
+    });
+
+    await vi.waitFor(() => expect(suspendedData).not.toBeNull(), { timeout: 10000 });
+
+    // The workflow suspended with its question payload
+    expect(suspendedData.type).toBe('suspension');
+    expect(suspendedData.toolName).toBe('workflow-askUserWorkflow');
+    expect(suspendedData.suspendPayload).toEqual({ question: 'What do you want for lunch?' });
+    expect(stepExecutions).toBe(1);
+
+    // Resume with the user's answer
+    let finishData: any = null;
+    const resumeResult = await durableAgent.resume(
+      runId,
+      { answer: 'pizza' },
+      {
+        onFinish: data => {
+          finishData = data;
+        },
+      },
+    );
+
+    await vi.waitFor(() => expect(finishData).not.toBeNull(), { timeout: 10000 });
+
+    // The suspended step received the answer (a fresh run would have re-suspended
+    // without resumeData, and a lost runId fails with
+    // AGENT_WORKFLOW_TOOL_EXECUTION_FAILED before reaching the step)
+    expect(receivedResumeData).toEqual([{ answer: 'pizza' }]);
+    expect(stepExecutions).toBe(2);
+
+    // No workflow tool execution error in the finish payload
+    const toolErrors = (finishData?.steps ?? [])
+      .flatMap((step: any) => step?.toolResults ?? [])
+      .filter((result: any) => result?.error);
+    expect(toolErrors).toEqual([]);
+
+    resumeResult.cleanup();
     cleanup();
   });
 });

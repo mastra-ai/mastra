@@ -86,7 +86,7 @@ export default function AgentBuilderFavoritePage() {
         return (
           <div className="flex items-center justify-center pt-16">
             <EmptyState
-              iconSlot={<StarIcon className="h-8 w-8 text-neutral3" />}
+              iconSlot={<StarIcon className="text-neutral3 h-8 w-8" />}
               titleSlot="No favorite agents yet"
               descriptionSlot="Star agents to keep them here for quick access."
             />
@@ -103,7 +103,7 @@ export default function AgentBuilderFavoritePage() {
       return (
         <div className="flex items-center justify-center pt-16">
           <EmptyState
-            iconSlot={<SparklesIcon className="h-8 w-8 text-neutral3" />}
+            iconSlot={<SparklesIcon className="text-neutral3 h-8 w-8" />}
             titleSlot="No favorite skills yet"
             descriptionSlot="Star skills to keep them here for quick access."
           />
@@ -131,7 +131,7 @@ export default function AgentBuilderFavoritePage() {
           </div>
           <div className="flex items-center gap-4">
             {features.skills && (
-              <div className="flex rounded-lg border border-border1 overflow-hidden">
+              <div className="border-border1 flex overflow-hidden rounded-lg border">
                 <button
                   onClick={() => setTab('agents')}
                   className={`px-3 py-1.5 text-xs font-medium transition-colors ${
@@ -150,7 +150,7 @@ export default function AgentBuilderFavoritePage() {
                 </button>
               </div>
             )}
-            <div className="flex-1 max-w-120">
+            <div className="max-w-120 flex-1">
               <ListSearch onSearch={setSearch} label="Filter favorites" placeholder="Filter by name or description" />
             </div>
           </div>

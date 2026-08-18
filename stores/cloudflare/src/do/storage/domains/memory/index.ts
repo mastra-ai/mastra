@@ -13,11 +13,14 @@ import {
   TABLE_SCHEMAS,
   normalizePerPage,
   calculatePagination,
+  validateStorageMetadataFilter,
 } from '@mastra/core/storage';
 import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
+  StorageMetadataFilter,
+  StorageMetadataFilterValue,
   StorageListThreadsInput,
   StorageListThreadsOutput,
 } from '@mastra/core/storage';
@@ -27,7 +30,57 @@ import type { DODomainConfig } from '../../db';
 import { createSqlBuilder } from '../../sql-builder';
 import { deserializeValue, isArrayOfRecords } from '../utils';
 
+function addSqliteMetadataFilter(
+  conditions: string[],
+  params: unknown[],
+  metadataFilter: StorageMetadataFilter | undefined,
+): void {
+  if (!metadataFilter) return;
+
+  for (const [key, value] of Object.entries(metadataFilter)) {
+    const path = `$.metadata.${key}`;
+    conditions.push(`CASE WHEN json_valid(content) THEN json_type(content, ?) IS NOT NULL ELSE 0 END`);
+    params.push(path);
+    addSqliteMetadataValuePredicate(conditions, params, path, value);
+  }
+}
+
+function addSqliteMetadataValuePredicate(
+  conditions: string[],
+  params: unknown[],
+  path: string,
+  value: StorageMetadataFilterValue,
+): void {
+  if (value === null) {
+    conditions.push(`CASE WHEN json_valid(content) THEN json_type(content, ?) = 'null' ELSE 0 END`);
+    params.push(path);
+    return;
+  }
+
+  if (typeof value === 'string') {
+    conditions.push(
+      `CASE WHEN json_valid(content) THEN json_type(content, ?) = 'text' AND json_extract(content, ?) = ? ELSE 0 END`,
+    );
+    params.push(path, path, value);
+    return;
+  }
+
+  if (typeof value === 'number') {
+    conditions.push(
+      `CASE WHEN json_valid(content) THEN json_type(content, ?) IN ('integer', 'real') AND json_extract(content, ?) = ? ELSE 0 END`,
+    );
+    params.push(path, path, value);
+    return;
+  }
+
+  conditions.push(
+    `CASE WHEN json_valid(content) THEN json_type(content, ?) = ? AND json_extract(content, ?) = ? ELSE 0 END`,
+  );
+  params.push(path, value ? 'true' : 'false', path, value ? 1 : 0);
+}
+
 export class MemoryStorageDO extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate = true;
   #db: DODB;
 
   constructor(config: DODomainConfig) {
@@ -446,8 +499,8 @@ export class MemoryStorageDO extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const thread = await this.getThreadById({ threadId: id });
     try {
@@ -461,9 +514,25 @@ export class MemoryStorageDO extends MemoryStorage {
         ...metadata,
       };
 
+      const updatedTitle = title !== undefined ? title : thread.title;
       const updatedAt = new Date();
-      const columns = ['title', 'metadata', 'updatedAt'];
-      const values = [title, JSON.stringify(mergedMetadata), updatedAt.toISOString()];
+
+      // Only write the columns the caller supplied. Writing a title read moments
+      // ago would clobber one generated in between, and the same applies to
+      // metadata on a title-only update.
+      const columns: string[] = [];
+      const values: (string | null)[] = [];
+
+      if (title !== undefined) {
+        columns.push('title');
+        values.push(title);
+      }
+      if (metadata !== undefined) {
+        columns.push('metadata');
+        values.push(JSON.stringify(mergedMetadata));
+      }
+      columns.push('updatedAt');
+      values.push(updatedAt.toISOString());
 
       const query = createSqlBuilder().update(fullTableName, columns, values).where('id = ?', id);
 
@@ -473,7 +542,7 @@ export class MemoryStorageDO extends MemoryStorage {
 
       return {
         ...thread,
-        title,
+        title: updatedTitle,
         metadata: mergedMetadata,
         updatedAt,
       };
@@ -598,13 +667,21 @@ export class MemoryStorageDO extends MemoryStorage {
     }
   }
 
-  private async _getIncludedMessages(include: StorageListMessagesInput['include']) {
+  /**
+   * Fetches the messages named by `include` together with their surrounding context.
+   *
+   * @param include - Message ids to pin, each with an optional before/after window.
+   * @param resourceId - When set, restricts both the pinned messages and their context
+   * to that resource so an id from another resource returns nothing.
+   */
+  private async _getIncludedMessages(include: StorageListMessagesInput['include'], resourceId?: string) {
     if (!include || include.length === 0) return null;
 
     const unionQueries: string[] = [];
     const params: unknown[] = [];
     let paramIdx = 1;
     const tableName = this.#db.getTableName(TABLE_MESSAGES);
+    const resourceCondition = resourceId ? ` AND resourceId = ?` : '';
 
     for (const inc of include) {
       const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
@@ -613,14 +690,14 @@ export class MemoryStorageDO extends MemoryStorage {
       unionQueries.push(`
                 SELECT * FROM (
                   WITH target_thread AS (
-                    SELECT thread_id FROM ${tableName} WHERE id = ?
+                    SELECT thread_id FROM ${tableName} WHERE id = ?${resourceCondition}
                   ),
                   ordered_messages AS (
                     SELECT
                       *,
                       ROW_NUMBER() OVER (ORDER BY createdAt ASC) AS row_num
                     FROM ${tableName}
-                    WHERE thread_id = (SELECT thread_id FROM target_thread)
+                    WHERE thread_id = (SELECT thread_id FROM target_thread)${resourceCondition}
                   )
                   SELECT
                     m.id,
@@ -644,7 +721,9 @@ export class MemoryStorageDO extends MemoryStorage {
                 ) AS query_${paramIdx}
             `);
 
-      params.push(id, id, id, withNextMessages, withPreviousMessages);
+      params.push(id);
+      if (resourceId) params.push(resourceId, resourceId);
+      params.push(id, id, withNextMessages, withPreviousMessages);
       paramIdx++;
     }
 
@@ -755,6 +834,7 @@ export class MemoryStorageDO extends MemoryStorage {
 
     const perPage = normalizePerPage(perPageInput, 40);
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
 
     try {
       const fullTableName = this.#db.getTableName(TABLE_MESSAGES);
@@ -790,8 +870,15 @@ export class MemoryStorageDO extends MemoryStorage {
         queryParams.push(endDate);
       }
 
+      const metadataConditions: string[] = [];
+      addSqliteMetadataFilter(metadataConditions, queryParams, metadataFilter);
+      if (metadataConditions.length > 0) {
+        query += ` AND ${metadataConditions.join(' AND ')}`;
+      }
+
       // Build ORDER BY clause
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
+
       query += ` ORDER BY "${field}" ${direction}`;
 
       // Apply pagination
@@ -842,6 +929,12 @@ export class MemoryStorageDO extends MemoryStorage {
         countParams.push(endDate);
       }
 
+      const countMetadataConditions: string[] = [];
+      addSqliteMetadataFilter(countMetadataConditions, countParams, metadataFilter);
+      if (countMetadataConditions.length > 0) {
+        countQuery += ` AND ${countMetadataConditions.join(' AND ')}`;
+      }
+
       const countResult = (await this.#db.executeQuery({
         sql: countQuery,
         params: countParams as (string | number | boolean | null | undefined)[],
@@ -867,7 +960,7 @@ export class MemoryStorageDO extends MemoryStorage {
 
       if (include && include.length > 0) {
         // Use the existing _getIncludedMessages helper, but adapt it for listMessages format
-        const includeResult = (await this._getIncludedMessages(include)) as MastraDBMessage[];
+        const includeResult = (await this._getIncludedMessages(include, resourceId)) as MastraDBMessage[];
         if (Array.isArray(includeResult)) {
           includeMessages = includeResult;
 
@@ -913,9 +1006,10 @@ export class MemoryStorageDO extends MemoryStorage {
       // If all thread messages have been returned (through pagination or include), hasMore = false
       // Otherwise, check if there are more pages in the pagination window
       const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
-      const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
       const hasMore =
-        perPageInput === false ? false : allThreadMessagesReturned ? false : offset + paginatedCount < total;
+        perPageInput !== false &&
+        (metadataFilter || returnedThreadMessageIds.size < total) &&
+        offset + paginatedCount < total;
 
       return {
         messages: finalMessages,

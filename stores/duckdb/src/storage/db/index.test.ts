@@ -108,4 +108,33 @@ describe('DuckDBConnection', () => {
       }
     });
   });
+
+  describe('resource limits', () => {
+    it('applies the 2GB default memory limit', async () => {
+      const db = new DuckDBConnection({ path: ':memory:' });
+
+      try {
+        const rows = await db.query<{ value: string }>(`SELECT current_setting('memory_limit') AS value`);
+        expect(rows[0]?.value).toMatch(/^(1\.8|1\.9|2\.0) GiB$/);
+      } finally {
+        await db.close();
+      }
+    });
+
+    it('applies configured memoryLimit and threads', async () => {
+      const db = new DuckDBConnection({ path: ':memory:', memoryLimit: '512MB', threads: 2 });
+
+      try {
+        const rows = await db.query<{ memoryLimit: string; threads: number }>(`
+          SELECT
+            current_setting('memory_limit') AS memoryLimit,
+            current_setting('threads') AS threads
+        `);
+        expect(rows[0]?.memoryLimit).toMatch(/^(476\.\d+|488\.\d+|512\.0) MiB$/);
+        expect(Number(rows[0]?.threads)).toBe(2);
+      } finally {
+        await db.close();
+      }
+    });
+  });
 });

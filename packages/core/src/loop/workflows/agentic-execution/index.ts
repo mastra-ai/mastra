@@ -1,6 +1,6 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { InternalSpans } from '../../../observability';
-import { createWorkflow as createDirectWorkflow, createEventedWorkflow } from '../../../workflows/create';
+import { createWorkflow } from '../../../workflows/create';
 import type { OuterLLMRun } from '../../types';
 import { pruneAgentLoopSnapshot } from '../prune-snapshot';
 import { llmIterationOutputSchema } from '../schema';
@@ -11,7 +11,7 @@ import { createIsTaskCompleteStep } from './is-task-complete-step';
 import { createLLMExecutionStep } from './llm-execution-step';
 import { createLLMMappingStep } from './llm-mapping-step';
 import { createSignalDrainStep } from './signal-drain-step';
-import { resolveConfiguredToolCallConcurrency, resolveToolCallConcurrency } from './tool-call-concurrency';
+import { normalizeToolCallConcurrency, resolveToolCallConcurrency } from './tool-call-concurrency';
 import type { ToolCallForeachOptions } from './tool-call-concurrency';
 import { createToolCallStep } from './tool-call-step';
 
@@ -22,10 +22,15 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
   _internal,
   ...rest
 }: OuterLLMRun<Tools, OUTPUT>) {
-  const configuredToolCallConcurrency = resolveConfiguredToolCallConcurrency(rest.toolCallConcurrency);
+  const { limit: configuredToolCallConcurrency, strategy: toolCallConcurrencyStrategy } = normalizeToolCallConcurrency(
+    rest.toolCallConcurrency,
+  );
   const toolCallForeachOptions: ToolCallForeachOptions = {
     // This initial value is a conservative fallback for resume paths that can enter
     // a suspended foreach before llm-execution recomputes the effective step tools.
+    // Use the 'available' strategy here regardless of the configured strategy: the
+    // called tool set is not known yet, and map-tool-calls narrows it before the
+    // foreach actually consumes this value.
     concurrency: resolveToolCallConcurrency({
       requireToolApproval: rest.requireToolApproval,
       tools: rest.tools,
@@ -80,8 +85,6 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
     ...rest,
   });
 
-  const createWorkflow = process.env.MASTRA_EVENTED_EXECUTION === 'true' ? createEventedWorkflow : createDirectWorkflow;
-
   return createWorkflow({
     id: AGENTIC_EXECUTION_WORKFLOW_ID,
     inputSchema: llmIterationOutputSchema,
@@ -115,17 +118,25 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
       async ({ inputData }) => {
         const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
         const toolCalls = typedInputData.output.toolCalls || [];
-        // Recompute concurrency from the step's effective active tool set (set by
-        // llm-execution-step), NOT from the tools the model actually called. A
-        // registered approval/suspending tool that the model did not call this
-        // step must still force sequential execution, so narrowing to called
-        // tool names here would incorrectly allow concurrent execution.
+        // Recompute concurrency now that the model has emitted its tool calls.
+        //
+        // Default ('available') strategy: resolve from the step's effective
+        // active tool set (set by llm-execution-step), NOT from the tools the
+        // model actually called. A registered approval/suspending tool that the
+        // model did not call this step must still force sequential execution.
+        //
+        // Opt-in ('called') strategy: resolve from the tools the model actually
+        // called this step. A pure-safe batch parallelizes even while an
+        // approval/suspend tool stays registered; a batch that calls one still
+        // serializes; run-wide requireToolApproval still forces sequential.
         const stepActiveTools = _internal?.stepActiveTools as string[] | undefined;
         toolCallForeachOptions.concurrency = resolveToolCallConcurrency({
           requireToolApproval: rest.requireToolApproval,
           tools: ((_internal?.stepTools as Tools | undefined) ?? rest.tools) as Tools | undefined,
           activeTools: stepActiveTools,
           configuredConcurrency: configuredToolCallConcurrency,
+          strategy: toolCallConcurrencyStrategy,
+          calledToolNames: toolCalls.map(toolCall => toolCall.toolName),
         });
         return toolCalls;
       },

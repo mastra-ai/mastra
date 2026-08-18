@@ -1,16 +1,16 @@
 ---
-title: "Reference: Observational Memory | Memory"
-description: "API reference for Observational Memory in Mastra — a three-tier memory system that uses Observer and Reflector agents to maintain long-term memory across conversations."
+title: 'Reference: Observational Memory | Memory'
+description: 'API reference for Observational Memory in Mastra: a three-tier memory system that uses Observer and Reflector agents to maintain long-term memory across conversations.'
 packages:
-  - "@mastra/core"
-  - "@mastra/memory"
+  - '@mastra/core'
+  - '@mastra/memory'
 ---
 
 # Observational Memory
 
 **Added in:** `@mastra/memory@1.1.0`
 
-Observational Memory (OM) is Mastra's memory system for long-context agentic memory. Two background agents — an **Observer** that watches conversations and creates observations, and a **Reflector** that restructures observations by combining related items, reflecting on overarching patterns, and condensing where possible — maintain an observation log that replaces raw message history as it grows.
+Observational Memory (OM) is Mastra's memory system for long-context agentic memory. An **Observer** watches conversations and creates observations. A **Reflector** restructures those observations by combining related items and condensing overarching patterns. Together, they maintain an observation log that replaces raw message history as it grows.
 
 ## Usage
 
@@ -33,7 +33,7 @@ export const agent = new Agent({
 
 ## Configuration
 
-The `observationalMemory` option accepts `true`, a configuration object, or `false`. Setting `true` enables OM with `google/gemini-2.5-flash` as the default model. When passing a config object, a `model` must be explicitly set — either at the top level, or on `observation.model` and/or `reflection.model`.
+The `observationalMemory` option accepts `true`, a configuration object, or `false`. Setting `true` enables OM with `__GATEWAY_GOOGLE_MODEL_FLASH__` as the default model. When passing a config object, set `model` at the top level or on `observation.model` and/or `reflection.model`; when all model fields are omitted, OM falls back to `__GATEWAY_GOOGLE_MODEL_FLASH__`.
 
 Observer input is multimodal-aware. OM keeps text placeholders like `[Image #1: screenshot.png]` in the transcript it builds for the Observer, and also sends the underlying image parts when possible. This applies to both single-thread observation and batched multi-thread observation. Non-image files appear as placeholders only.
 
@@ -53,9 +53,9 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
     name: 'model',
     type: 'string | LanguageModel | DynamicModel | ModelByInputTokens | ModelWithRetries[]',
     description:
-      'Model for both the Observer and Reflector agents. Sets the model for both at once. Cannot be used together with `observation.model` or `reflection.model` — an error will be thrown if both are set. When using `observationalMemory: true`, defaults to `google/gemini-2.5-flash`. When passing a config object, this or `observation.model`/`reflection.model` must be set. Use `"default"` to explicitly use the default model (`google/gemini-2.5-flash`).',
+      'Model for both the Observer and Reflector agents. Sets the model for both at once. Cannot be used together with `observation.model` or `reflection.model` — an error will be thrown if both are set. When this and `observation.model`/`reflection.model` are all omitted, OM falls back to `google/gemini-2.5-flash`. Use `"default"` to explicitly use the default model (`google/gemini-2.5-flash`).',
     isOptional: true,
-    defaultValue: "'google/gemini-2.5-flash' (when using observationalMemory: true)",
+    defaultValue: "'google/gemini-2.5-flash'",
   },
   {
     name: 'scope',
@@ -98,11 +98,18 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
   },
   {
     name: 'retrieval',
-    type: "boolean | { vector?: boolean; scope?: 'thread' | 'resource' }",
+    type: "boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string }",
     description:
-      "Enable retrieval-mode observation groups as durable pointers to raw message history. `true` enables cross-thread browsing by default. `{ vector: true }` also enables semantic search using Memory's vector store and embedder. `{ scope: 'thread' }` restricts the recall tool to the current thread only. Default scope is `'resource'`.",
+      "Let the agent look up the raw message history behind its observations. Observation groups keep durable pointers to the original messages, and a `recall` tool is registered so the agent can browse them. `true` enables cross-thread browsing by default. `{ vector: true }` also enables semantic search using Memory's vector store and embedder. `{ scope: 'thread' }` restricts the recall tool to the current thread only. Default scope is `'resource'`. `{ instructions: '...' }` appends application-specific recall guidance after Mastra's built-in retrieval instructions.",
     isOptional: true,
     defaultValue: 'false',
+  },
+  {
+    name: 'hooks',
+    type: 'ObserveHooks',
+    description:
+      "Lifecycle hooks fired for every observation/reflection cycle — the manual `observe()`/`reflect()` APIs, turn-driven synchronous observation, and fire-and-forget async buffering. Callbacks receive `threadId`/`resourceId`/`trigger` call context (`'manual' | 'turn-sync' | 'async-buffer'`), and the end hooks (`onObservationEnd`/`onReflectionEnd`) additionally receive the OM model call's token `usage` and `providerMetadata` (where providers such as the AI Gateway report per-call cost), so apps can account for OM model spend without wrapping the observer/reflector models in middleware. Failed async-buffered cycles never throw; they report through the end hook's `error` field. Errors thrown by these hooks are caught and logged — they never fail the cycle.",
+    isOptional: true,
   },
   {
     name: 'observation',
@@ -128,6 +135,14 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             isOptional: true,
           },
           {
+            name: 'continuationHints',
+            type: 'boolean | { currentTask?: boolean; suggestedResponse?: boolean }',
+            description:
+              'Which continuation-hint sections the Observer emits. Pass `false` to disable both, or an object to disable them individually. Agents that drive their own control flow generally want `{ suggestedResponse: false }` so memory does not compete for what the agent says next. A previously stored hint stops being injected into context once both observation and reflection disable its section.',
+            isOptional: true,
+            defaultValue: 'true',
+          },
+          {
             name: 'threadTitle',
             type: 'boolean',
             description:
@@ -143,10 +158,18 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             isOptional: true,
           },
           {
-            name: 'observeAttachments',
-            type: 'boolean | string[]',
+            name: 'manageWorkingMemory',
+            type: 'boolean',
             description:
-              "Controls which image/file attachments are forwarded to the Observer model alongside their placeholder text lines. `true` (default) forwards all attachments. `false` drops all attachments while keeping placeholders visible. An array is a case-insensitive mimeType allowlist supporting exact matches (`'application/pdf'`), wildcard subtypes (`'image/*'`), and bare `'*'` for everything. Useful when the Observer model is text-only (e.g. some DeepSeek endpoints) while the main agent uses a multimodal model. Tool-result attachments are filtered using the same rule.",
+              'Let the Observer manage working memory through OM extraction. Adds `WorkingMemoryExtractor`, defaults `workingMemory.agentManaged` to `false`, and defaults `workingMemory.useStateSignals` to `true`. See [Working memory updates](#working-memory-updates).',
+            isOptional: true,
+            defaultValue: 'false',
+          },
+          {
+            name: 'observeAttachments',
+            type: "'auto' | boolean | string[]",
+            description:
+              "Controls which image/file attachments are forwarded to the Observer model alongside their placeholder text lines. `true` (default) forwards all attachments. `false` drops all attachments while keeping placeholders visible. `'auto'` uses the provider capabilities registry to decide: attachments are forwarded when the Observer model supports multimodal input, dropped otherwise, and forwarded when no capability data is available for the model. An array is a case-insensitive mimeType allowlist supporting exact matches (`'application/pdf'`), wildcard subtypes (`'image/*'`), and bare `'*'` for everything. Useful when the Observer model is text-only (e.g. some DeepSeek endpoints) while the main agent uses a multimodal model. Tool-result attachments are filtered using the same rule.",
             isOptional: true,
             defaultValue: 'true',
           },
@@ -169,9 +192,10 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
           {
             name: 'modelSettings',
             type: 'ObservationalMemoryModelSettings',
-            description: 'Model settings for the Observer agent.',
+            description:
+              'Model settings for the Observer agent. The `maxOutputTokens: 100_000` default is only applied with default model selection (no model set, `"default"`, or a `ModelByInputTokens` selector). Custom models get no `maxOutputTokens` default.',
             isOptional: true,
-            defaultValue: '{ temperature: 0.3, maxOutputTokens: 100_000 }',
+            defaultValue: '{ temperature: 0.3, maxOutputTokens: 100_000 (default model selection only) }',
             properties: [
               {
                 type: 'ObservationalMemoryModelSettings',
@@ -186,19 +210,28 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
                   {
                     name: 'maxOutputTokens',
                     type: 'number',
-                    description: 'Maximum output tokens. Set high to prevent truncation of observations.',
+                    description:
+                      'Maximum output tokens. Set high to prevent truncation of observations. The `100000` default is only applied with default model selection; custom models get no default.',
                     isOptional: true,
-                    defaultValue: '100000',
+                    defaultValue: '100000 (default model selection only)',
                   },
                 ],
               },
             ],
           },
           {
+            name: 'providerOptions',
+            type: 'ProviderOptions',
+            description:
+              'Provider-specific options passed to the Observer agent, such as Google thinking configuration.',
+            isOptional: true,
+            defaultValue: '{ google: { thinkingConfig: { thinkingBudget: 215 } } }',
+          },
+          {
             name: 'bufferTokens',
             type: 'number | false',
             description:
-              'Token interval for async background observation buffering. Can be an absolute token count (e.g. `5000`) or a fraction of `messageTokens` (e.g. `0.25` = buffer every 25% of threshold). When set, observations run in the background at this interval, storing results in a buffer. When the main `messageTokens` threshold is reached, buffered observations activate instantly without a blocking LLM call. Must resolve to less than `messageTokens`. Set to `false` to explicitly disable all async buffering (both observation and reflection).',
+              'How often background observation buffering runs. Values between `0` and `1` are fractions of `messageTokens`: `0.25` buffers every 25% of the threshold (7.5k tokens with the default 30k). Values of `1` or more are absolute token counts: `5000` buffers every 5k tokens. Buffered observations are stored until the `messageTokens` threshold is reached, then activate instantly without a blocking LLM call. Must resolve to less than `messageTokens`. Set to `false` to disable all async buffering (both observation and reflection).',
             isOptional: true,
             defaultValue: '0.2',
           },
@@ -214,7 +247,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             name: 'bufferActivation',
             type: 'number',
             description:
-              'Controls how much of the message window to retain after activation. Accepts a ratio (0-1) or an absolute token count (≥ 1000). For example, `0.8` means: activate enough buffers to remove 80% of `messageTokens` and leave 20% as active message history. An absolute token count like `4000` targets a goal of keeping ~4k message tokens remaining after activation. Higher values remove more message history per activation when using a ratio. Higher values keep more message history when using a token count.',
+              'How much of the message window to clear when buffered observations activate. Values between `0` and `1` are the fraction of `messageTokens` to remove: `0.8` removes ~80% of the message history and keeps ~20% (6k tokens with the default 30k). Values of `1000` or more are the token count to keep: `4000` keeps ~4k message tokens after activation. Note the direction flips: a higher ratio removes more history, while a higher token count keeps more.',
             isOptional: true,
             defaultValue: '0.8',
           },
@@ -222,21 +255,21 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             name: 'activateAfterIdle',
             type: 'number | string | false | "auto"',
             description:
-              'Time before buffered observations are forced to activate after inactivity. Accepts milliseconds, a duration string, `"auto"` for a provider-aware prompt cache TTL, or `false`. If unset, the top-level `activateAfterIdle` value is used for observations. Set `false` to disable the top-level idle setting for observations.',
+              'Time before buffered observations are forced to activate after inactivity. Accepts milliseconds, a duration string, `"auto"` for a provider-aware prompt cache TTL, or `false`. If unset, the top-level `activateAfterIdle` value is used for observations. Set `false` to disable the top-level idle setting for observations. Currently only applied when using the standalone `ObservationalMemory` class; `new Memory(...)` applies the top-level `activateAfterIdle` only.',
             isOptional: true,
           },
           {
             name: 'activateOnProviderChange',
             type: 'boolean',
             description:
-              'Force buffered observations to activate when the actor provider or model changes. If unset, the top-level `activateOnProviderChange` value is used for observations.',
+              'Force buffered observations to activate when the actor provider or model changes. If unset, the top-level `activateOnProviderChange` value is used for observations. Currently only applied when using the standalone `ObservationalMemory` class; `new Memory(...)` applies the top-level `activateOnProviderChange` only.',
             isOptional: true,
           },
           {
             name: 'blockAfter',
             type: 'number',
             description:
-              'Token threshold above which synchronous (blocking) observation is forced. Between `messageTokens` and `blockAfter`, only async buffering/activation is used. Above `blockAfter`, a synchronous observation runs as a last resort, while buffered activation still preserves a minimum remaining context (min(1000, retention floor)). Accepts a multiplier (1 < value < 2, multiplied by `messageTokens`) or an absolute token count (≥ 2, must be greater than `messageTokens`). Only relevant when `bufferTokens` is set. Defaults to `1.2` when async buffering is enabled.',
+              "Safety net for when background buffering can't keep up. Values from `1` up to (but not including) `100` are multipliers of `messageTokens`: `1.2` resolves to 120% of the threshold (36k tokens with the default 30k). Values of `100` or more are absolute token counts and must be greater than `messageTokens`. Above this point, activation uses the smallest set of buffered chunks that reaches the retention target, even when that overshoots the target by more than the usual safeguard allows. It never activates more chunks than are needed to reach the retention target, so it removes only slightly more history than a normal activation. It changes the result only when the retention floor is above roughly 20,000 tokens; with the default `bufferActivation` (a 6k floor) it has no observable effect. Activation usually keeps a minimum remaining context (the smaller of 1000 tokens or the retention floor), but a single buffered chunk that covers the whole pending window still activates and can leave less. Crossing `blockAfter` does not trigger a blocking observation. A synchronous (blocking) observation runs when the `messageTokens` threshold is reached and buffered activation did not happen. Only relevant when `bufferTokens` is set. Defaults to `1.2` when async buffering is enabled.",
             isOptional: true,
             defaultValue: '1.2 (when bufferTokens is set)',
           },
@@ -276,6 +309,14 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             isOptional: true,
           },
           {
+            name: 'continuationHints',
+            type: 'boolean | { currentTask?: boolean; suggestedResponse?: boolean }',
+            description:
+              'Which continuation-hint sections the Reflector emits. Pass `false` to disable both, or an object to disable them individually. A previously stored hint stops being injected into context once both observation and reflection disable its section.',
+            isOptional: true,
+            defaultValue: 'true',
+          },
+          {
             name: 'extract',
             type: 'Extractor[]',
             description:
@@ -293,9 +334,10 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
           {
             name: 'modelSettings',
             type: 'ObservationalMemoryModelSettings',
-            description: 'Model settings for the Reflector agent.',
+            description:
+              'Model settings for the Reflector agent. The `maxOutputTokens: 100_000` default is only applied with default model selection (no model set, `"default"`, or a `ModelByInputTokens` selector). Custom models get no `maxOutputTokens` default.',
             isOptional: true,
-            defaultValue: '{ temperature: 0, maxOutputTokens: 100_000 }',
+            defaultValue: '{ temperature: 0, maxOutputTokens: 100_000 (default model selection only) }',
             properties: [
               {
                 type: 'ObservationalMemoryModelSettings',
@@ -310,19 +352,28 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
                   {
                     name: 'maxOutputTokens',
                     type: 'number',
-                    description: 'Maximum output tokens. Set high to prevent truncation of observations.',
+                    description:
+                      'Maximum output tokens. Set high to prevent truncation of observations. The `100000` default is only applied with default model selection; custom models get no default.',
                     isOptional: true,
-                    defaultValue: '100000',
+                    defaultValue: '100000 (default model selection only)',
                   },
                 ],
               },
             ],
           },
           {
+            name: 'providerOptions',
+            type: 'ProviderOptions',
+            description:
+              'Provider-specific options passed to the Reflector agent, such as Google thinking configuration.',
+            isOptional: true,
+            defaultValue: '{ google: { thinkingConfig: { thinkingBudget: 1024 } } }',
+          },
+          {
             name: 'bufferActivation',
             type: 'number',
             description:
-              'Ratio (0-1) controlling when async reflection buffering starts. When observation tokens reach `observationTokens * bufferActivation`, reflection runs in the background. On activation at the full threshold, the buffered reflection replaces the observations it covers, preserving any new observations appended after that range.',
+              'When background reflection starts, as a ratio (0-1) of `observationTokens`: `0.5` starts reflecting in the background once observations reach 50% of the threshold (20k tokens with the default 40k). When the full threshold is reached, the buffered reflection replaces the observations it covers, preserving any new observations appended after that range.',
             isOptional: true,
             defaultValue: '0.5',
           },
@@ -330,14 +381,14 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             name: 'activateAfterIdle',
             type: 'number | string | false | "auto"',
             description:
-              'Time before buffered reflections are forced to activate after inactivity. Accepts milliseconds, a duration string, `"auto"` for a provider-aware prompt cache TTL, or `false`. Reflections do not inherit top-level `activateAfterIdle`; set this explicitly to opt reflections into idle activation.',
+              'Time before buffered reflections are forced to activate after inactivity. Accepts milliseconds, a duration string, `"auto"` for a provider-aware prompt cache TTL, or `false`. Reflections do not inherit top-level `activateAfterIdle`; set this explicitly to opt reflections into idle activation. Currently only applied when using the standalone `ObservationalMemory` class; this setting has no effect through `new Memory(...)`.',
             isOptional: true,
           },
           {
             name: 'activateOnProviderChange',
             type: 'boolean',
             description:
-              'Force buffered reflections to activate when the actor provider or model changes. Reflections do not inherit top-level `activateOnProviderChange`; set this explicitly to opt reflections into provider-change activation.',
+              'Force buffered reflections to activate when the actor provider or model changes. Reflections do not inherit top-level `activateOnProviderChange`; set this explicitly to opt reflections into provider-change activation. Currently only applied when using the standalone `ObservationalMemory` class; this setting has no effect through `new Memory(...)`.',
             isOptional: true,
             defaultValue: 'false',
           },
@@ -345,7 +396,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             name: 'blockAfter',
             type: 'number',
             description:
-              'Token threshold above which synchronous (blocking) reflection is forced. Between `observationTokens` and `blockAfter`, only async buffering/activation is used. Above `blockAfter`, a synchronous reflection runs as a last resort. Accepts a multiplier (1 < value < 2, multiplied by `observationTokens`) or an absolute token count (≥ 2, must be greater than `observationTokens`). Only relevant when `bufferActivation` is set. Defaults to `1.2` when async reflection is enabled.',
+              "Safety net that forces a synchronous (blocking) reflection when background reflection can't keep up. Values from `1` up to (but not including) `100` are multipliers of `observationTokens`: `1.2` forces a blocking reflection at 120% of the threshold (48k tokens with the default 40k). Values of `100` or more are absolute token counts and must be greater than `observationTokens`. Between `observationTokens` and `blockAfter`, only async buffering and activation run. Only relevant when `bufferActivation` is set. Defaults to `1.2` when async reflection is enabled.",
             isOptional: true,
             defaultValue: '1.2 (when bufferActivation is set)',
           },
@@ -407,7 +458,7 @@ const memory = new Memory({
     name: 'slug',
     type: 'string',
     description:
-      'Generated stable identifier for persisted values and XML tags. Slugs use lowercase letters, numbers, and hyphens. Built-in slugs and reserved XML tags cannot be used by custom extractors.',
+      'Read-only property derived from `name` — not a constructor option. Generated stable identifier for persisted values and XML tags. Slugs use lowercase letters, numbers, and hyphens. Built-in slugs and reserved XML tags cannot be used by custom extractors.',
   },
   {
     name: 'instructions',
@@ -431,6 +482,14 @@ const memory = new Memory({
     defaultValue: 'true',
   },
   {
+    name: 'metadataKeyPath',
+    type: 'string | false',
+    description:
+      'Dot-separated OM metadata path used to persist the extracted value. Set to `false` to skip OM metadata persistence entirely.',
+    isOptional: true,
+    defaultValue: "'extracted.<slug>'",
+  },
+  {
     name: 'onExtracted',
     type: '(context) => T | void | Promise<T | void>',
     description:
@@ -450,7 +509,7 @@ const memory = new Memory({
 - Schema-less extractors are inline string extractors emitted directly in the Observer or Reflector output.
 - Dynamic extractor functions receive runtime context, including `source`, `threadId`, `resourceId`, `mainAgent`, `memory`, and `requestContext` when available.
 - `WorkingMemoryExtractor` uses the normal extractor pipeline to update working memory through the active `Memory` instance. It uses structured extraction when working memory has a JSON schema and skips OM metadata persistence, so the working memory payload isn't duplicated under OM extracted metadata.
-- `observationalMemory.observation.manageWorkingMemory` adds `WorkingMemoryExtractor`, defaults `workingMemory.agentManaged` to `false`, and defaults `workingMemory.useStateSignals` to `true` when working memory is enabled.
+- `observationalMemory.observation.manageWorkingMemory` adds `WorkingMemoryExtractor` and defaults `workingMemory.agentManaged` to `false`. It defaults `workingMemory.useStateSignals` to `true` when working memory is enabled.
 - Extraction failures are reported in OM marker data and don't discard other successful extracted values.
 
 ## Examples
@@ -624,16 +683,16 @@ export const agent = new Agent({
 
 ### Async buffering
 
-Async buffering is **enabled by default**. It pre-computes observations in the background as the conversation grows — when the `messageTokens` threshold is reached, buffered observations activate instantly with no blocking LLM call.
+Async buffering is **enabled by default**. It pre-computes observations in the background as the conversation grows: when the `messageTokens` threshold is reached, buffered observations activate instantly with no blocking LLM call.
 
-The lifecycle is: **buffer → activate → remove messages → repeat**. Background Observer calls run at `bufferTokens` intervals, each producing a chunk of observations. At threshold, chunks activate: observations move into the log, raw messages are removed from context. The `blockAfter` threshold forces a synchronous fallback if buffering can't keep up.
+The lifecycle follows **buffer → activate → remove messages → repeat**. Background Observer calls run at `bufferTokens` intervals, each producing a chunk of observations. At threshold, chunks activate: observations move into the log, raw messages are removed from context. Above the `blockAfter` threshold, activation may overshoot the retention target instead of activating fewer chunks. If the threshold is reached and no buffered chunk activates, a synchronous observation runs instead.
 
 Default settings:
 
-- `observation.bufferTokens: 0.2` — buffer every 20% of `messageTokens` (e.g. every \~6k tokens with a 30k threshold)
-- `observation.bufferActivation: 0.8` — on activation, remove enough messages to keep only 20% of the threshold remaining
+- `observation.bufferTokens: 0.2`: Buffer every 20% of `messageTokens` (e.g. every \~6k tokens with a 30k threshold)
+- `observation.bufferActivation: 0.8`: On activation, remove enough messages to keep only 20% of the threshold remaining
 - Buffered observations include continuation hints (`suggestedResponse`, `currentTask`) that survive activation to maintain conversational continuity
-- `reflection.bufferActivation: 0.5` — start background reflection at 50% of observation threshold
+- `reflection.bufferActivation: 0.5`: start background reflection at 50% of observation threshold
 
 To customize:
 
@@ -656,7 +715,7 @@ export const agent = new Agent({
           bufferTokens: 5_000,
           // Activate to retain 30% of threshold
           bufferActivation: 0.7,
-          // Force synchronous observation at 1.5x threshold
+          // Above 1.5x the threshold, let activation overshoot the retention target
           blockAfter: 1.5,
         },
         reflection: {
@@ -694,6 +753,27 @@ Async buffering isn't supported with `scope: 'resource'` and is automatically di
 ## Streaming data parts
 
 Observational Memory emits typed data parts during agent execution that clients can use for real-time UI feedback. These are streamed alongside the agent's response.
+
+### Read extractor results
+
+Both completion events carry extractor output in their `data` payload. The extractor fields are:
+
+```typescript
+interface DataOmObservationEndPart {
+  type: 'data-om-observation-end'
+  data: {
+    /** Whether the completed work was an observation or reflection */
+    operationType: 'observation' | 'reflection'
+    /** Values extracted during this OM operation, keyed by extractor slug */
+    extractedValues?: Record<string, unknown>
+    /** Extractor failures from this OM operation. Successful extractor values are still included */
+    extractionFailures?: Array<{ slug: string; error: string }>
+    // ...other fields documented in the tables below
+  }
+}
+```
+
+Both extractor fields are optional. A completion can include values, failures, both, or neither. `data-om-observation-end` reports synchronous completion. `data-om-buffering-end` reports completed background work whose buffered content still awaits activation, although extractor metadata is already persisted. `DataOmBufferingEndPart` carries the same extractor fields, and both types are exported from `@mastra/memory/processors`. See [Read extracted values from a stream](/docs/memory/observational-memory#read-extracted-values-from-a-stream) for a consumer example.
 
 ### `data-om-status`
 
@@ -742,7 +822,7 @@ interface DataOmStatusPart {
 }
 ```
 
-`buffered.reflection.inputObservationTokens` is the size of the observations that were sent to the Reflector. `buffered.reflection.observationTokens` is the compressed result — the size of what will replace those observations when the reflection activates. A client can use these two values to show a compression ratio.
+`buffered.reflection.inputObservationTokens` is the size of the observations that were sent to the Reflector. `buffered.reflection.observationTokens` is the compressed result: the size of what will replace those observations when the reflection activates. A client can use these two values to show a compression ratio.
 
 Clients can derive percentages and post-activation estimates from the raw values:
 
@@ -849,7 +929,12 @@ Emitted when observation or reflection fails. The system falls back to synchrono
   { name: 'durationMs', type: 'number', description: 'Duration until failure in milliseconds.' },
   { name: 'tokensAttempted', type: 'number', description: 'Message tokens (input) that were attempted.' },
   { name: 'error', type: 'string', description: 'Error message.' },
-  { name: 'observations', type: 'string', description: 'Any partial content available for display.', isOptional: true },
+  {
+    name: 'observations',
+    type: 'string',
+    description: 'Any partial content available for display.',
+    isOptional: true,
+  },
   { name: 'recordId', type: 'string', description: 'The OM record ID.' },
   { name: 'threadId', type: 'string', description: "This thread's ID." },
 ]}
@@ -879,7 +964,11 @@ Emitted when async buffering completes. The content is stored but not yet activa
 <PropertiesTable
   content={[
   { name: 'cycleId', type: 'string', description: 'Matches the corresponding `buffering-start` marker.' },
-  { name: 'operationType', type: "'observation' | 'reflection'", description: 'Type of operation that was buffered.' },
+  {
+    name: 'operationType',
+    type: "'observation' | 'reflection'",
+    description: 'Type of operation that was buffered.',
+  },
   { name: 'completedAt', type: 'string', description: 'ISO timestamp when buffering completed.' },
   { name: 'durationMs', type: 'number', description: 'Duration in milliseconds.' },
   { name: 'tokensBuffered', type: 'number', description: 'Message tokens (input) that were buffered.' },
@@ -926,7 +1015,7 @@ Emitted when async buffering fails. The system falls back to synchronous process
 
 ### `data-om-activation`
 
-Emitted when buffered observations or reflections are activated (moved into the active context window). This is an instant operation — no LLM call is involved.
+Emitted when buffered observations or reflections are activated (moved into the active context window). This is an instant operation: no LLM call is involved.
 
 <PropertiesTable
   content={[
@@ -944,9 +1033,63 @@ Emitted when buffered observations or reflections are activated (moved into the 
   { name: 'messagesActivated', type: 'number', description: 'Number of messages that were observed via activation.' },
   { name: 'generationCount', type: 'number', description: 'Current reflection generation count.' },
   { name: 'observations', type: 'string', description: 'The activated observations text.', isOptional: true },
+  {
+    name: 'triggeredBy',
+    type: "'threshold' | 'ttl' | 'provider_change'",
+    description:
+      'Whether activation was triggered by threshold crossing, `activateAfterIdle` expiry, or a model/provider change.',
+    isOptional: true,
+  },
+  {
+    name: 'lastActivityAt',
+    type: 'number',
+    description: 'Unix-ms timestamp of the last assistant message part used for TTL checks.',
+    isOptional: true,
+  },
+  {
+    name: 'ttlExpiredMs',
+    type: 'number',
+    description: 'How long `activateAfterIdle` had been exceeded when activation fired.',
+    isOptional: true,
+  },
+  {
+    name: 'previousModel',
+    type: 'string',
+    description: 'Previous assistant model identifier that triggered activation (e.g. `openai/gpt-4o`).',
+    isOptional: true,
+  },
+  {
+    name: 'currentModel',
+    type: 'string',
+    description: 'Current actor model identifier that triggered activation.',
+    isOptional: true,
+  },
   { name: 'recordId', type: 'string', description: 'The OM record ID.' },
   { name: 'threadId', type: 'string', description: "This thread's ID." },
   { name: 'config', type: 'ObservationMarkerConfig', description: 'Snapshot of config at activation time.' },
+]}
+/>
+
+### `data-om-thread-update`
+
+Emitted when the Observer updates the thread title. Only emitted when `observation.threadTitle` is enabled.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'cycleId',
+    type: 'string',
+    description: 'Unique ID for this observation cycle — shared with observation markers.',
+  },
+  { name: 'threadId', type: 'string', description: 'The thread ID that was updated.' },
+  {
+    name: 'oldTitle',
+    type: 'string',
+    description: 'The previous thread title. Undefined if the thread had no title.',
+    isOptional: true,
+  },
+  { name: 'newTitle', type: 'string', description: 'The new thread title.' },
+  { name: 'timestamp', type: 'string', description: 'When this update occurred.' },
 ]}
 />
 
@@ -954,8 +1097,11 @@ Emitted when buffered observations or reflections are activated (moved into the 
 
 Most users should use the `Memory` class above. Using `ObservationalMemory` directly is mainly useful for benchmarking, experimentation, or when you need to control processor ordering with other processors (like [guardrails](/docs/agents/guardrails)).
 
+The `ObservationalMemory` class is the engine; to attach it to an agent, wrap it in an `ObservationalMemoryProcessor`, which needs a `Memory` instance for loading and persisting messages. Note that `stores.memory` is typed as optional on storage adapters, so a non-null assertion (or a runtime check) is needed:
+
 ```typescript title="src/mastra/agents/agent.ts"
-import { ObservationalMemory } from '@mastra/memory/processors'
+import { ObservationalMemory, ObservationalMemoryProcessor } from '@mastra/memory/processors'
+import { Memory } from '@mastra/memory'
 import { Agent } from '@mastra/core/agent'
 import { LibSQLStore } from '@mastra/libsql'
 
@@ -964,9 +1110,12 @@ const storage = new LibSQLStore({
   url: 'file:./memory.db',
 })
 
+const memory = new Memory({ storage })
+
 const om = new ObservationalMemory({
-  storage: storage.stores.memory,
-  model: 'google/gemini-2.5-flash',
+  storage: storage.stores.memory!,
+  memory,
+  model: '__GATEWAY_GOOGLE_MODEL_FLASH__',
   scope: 'resource',
   observation: {
     messageTokens: 20_000,
@@ -976,13 +1125,15 @@ const om = new ObservationalMemory({
   },
 })
 
+const omProcessor = new ObservationalMemoryProcessor(om, memory)
+
 export const agent = new Agent({
   id: 'my-agent',
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
   model: '__GATEWAY_OPENAI_MODEL_MINI__',
-  inputProcessors: [om],
-  outputProcessors: [om],
+  inputProcessors: [omProcessor],
+  outputProcessors: [omProcessor],
 })
 ```
 
@@ -1019,7 +1170,9 @@ The standalone `ObservationalMemory` class accepts all the same options as the `
 
 ## Recall tool
 
-When `retrieval` is set (any truthy value), a `recall` tool is registered so the agent can page through raw messages behind observation group ranges. By default (scope `'resource'`), the tool supports listing threads (`mode: "threads"`), browsing other threads (`threadId`), and cross-thread search. With `retrieval: { vector: true }`, semantic search is available (`mode: "search"`). Set `scope: 'thread'` to restrict the tool to the current thread only. The tool is automatically added to the agent's tool list — no manual registration is needed.
+When `retrieval` is set (any truthy value), a `recall` tool is registered so the agent can page through raw messages behind observation group ranges. By default (scope `'resource'`), the tool supports listing threads (`mode: "threads"`), browsing other threads (`threadId`), and cross-thread search. With `retrieval: { vector: true }`, semantic search is available (`mode: "search"`). Set `scope: 'thread'` to restrict the tool to the current thread only. The tool is automatically added to the agent's tool list.
+
+Mastra also injects scope-aware usage instructions into the agent's context. For resource scope with `vector: true`, these cover routing between `search`, `threads`, and `messages`, including fallback to thread discovery when search results are unsuitable. Without `vector: true`, the instructions only cover `threads` and `messages` browsing, so the agent isn't steered toward a search mode that isn't configured. Resource-scoped instructions are injected even before any observation group exists, so the agent can browse other threads from the first message. Use `retrieval: { instructions: '...' }` to append application-specific guidance after the built-in instructions.
 
 ### Parameters
 
@@ -1045,14 +1198,22 @@ When `retrieval` is set (any truthy value), a `recall` tool is registered so the
     type: 'string',
     isOptional: true,
     description:
-      'A message ID to anchor the recall query. Required for `mode: "messages"` when browsing the current thread. Extract the start or end ID from an observation group range (e.g. from `_range: \\`startId:endId\\`_`, use either `startId` or `endId`). If a range string is passed directly, the tool returns a hint explaining how to extract the correct ID. Can be omitted when `threadId` is provided to start reading from the beginning of that thread.',
+      'A message ID to anchor the recall query. Extract the start or end ID from an observation group range (e.g. from `_range: \\`startId:endId\\`_`, use either `startId` or `endId`). If a range string is passed directly, the tool returns a hint explaining how to extract the correct ID. When both `cursor` and `threadId` are omitted for `mode: "messages"`, the tool browses the current thread from the position set by `anchor`.',
   },
   {
     name: 'threadId',
     type: 'string',
     isOptional: true,
     description:
-      'Browse a different thread by its ID. Use `mode: "threads"` first to discover thread IDs. When provided without a `cursor`, reading starts from the beginning of the thread.',
+      'Browse a different thread by its ID, or pass `"current"` for the active thread. Use `mode: "threads"` first to discover thread IDs. When provided without a `cursor`, reading starts from the beginning of the thread.',
+  },
+  {
+    name: 'anchor',
+    type: "'start' | 'end'",
+    isOptional: true,
+    defaultValue: "'start'",
+    description:
+      'For `mode: "messages"` without a `cursor`, page from the start (oldest-first) or end (newest-first) of the thread.',
   },
   {
     name: 'page',
@@ -1078,11 +1239,32 @@ When `retrieval` is set (any truthy value), a `recall` tool is registered so the
       "Controls how much content is shown per message part. `'low'` shows truncated text and tool names with positional indices (`[p0]`, `[p1]`). `'high'` shows full content including tool arguments and results, clamped to one part per call with continuation hints.",
   },
   {
+    name: 'partType',
+    type: "'text' | 'tool-call' | 'tool-result' | 'reasoning' | 'image' | 'file'",
+    isOptional: true,
+    description: 'Filter results to only include message parts of this type. Only applies to `mode: "messages"`.',
+  },
+  {
+    name: 'toolName',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Filter results to only include tool-call and tool-result parts matching this tool name. Only applies to `mode: "messages"`.',
+  },
+  {
     name: 'partIndex',
     type: 'number',
     isOptional: true,
     description:
       'Fetch a single message part at full detail by its positional index. Use this when a low-detail recall shows an interesting part at `[p1]` — call again with `partIndex: 1` to see the full content without loading every part.',
+  },
+  {
+    name: 'charOffset',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '0',
+    description:
+      'Character position to continue reading a truncated single part. Only applies with `cursor` and `partIndex`. When a part is larger than the token budget, the result includes `nextCharOffset` — pass that exact value here in the next call to read the following chunk. The chunks concatenate to the original part text.',
   },
   {
     name: 'before',
@@ -1131,6 +1313,11 @@ When `retrieval` is set (any truthy value), a `recall` tool is registered so the
     description: 'The limit used for this query.',
   },
   {
+    name: 'detail',
+    type: "'low' | 'high'",
+    description: 'The detail level used for this query.',
+  },
+  {
     name: 'hasNextPage',
     type: 'boolean',
     description: 'Whether more messages exist after this page.',
@@ -1145,13 +1332,33 @@ When `retrieval` is set (any truthy value), a `recall` tool is registered so the
     type: 'boolean',
     isOptional: true,
     description:
-      'Present and `true` when the output was capped by the token budget. The agent can paginate or use `partIndex` to access remaining content.',
+      'Present and `true` when the output was capped by the token budget. The agent can paginate or use `partIndex` to access remaining content. When a single part is itself too large, the `partIndex` result includes `nextCharOffset` for continuing within the part.',
   },
   {
     name: 'tokenOffset',
     type: 'number',
     isOptional: true,
     description: 'Approximate number of tokens that were trimmed when `truncated` is true.',
+  },
+  {
+    name: 'charOffset',
+    type: 'number',
+    isOptional: true,
+    description:
+      'On single-part results (`partIndex`), the character position this chunk starts at. `0` unless the call passed a `charOffset`.',
+  },
+  {
+    name: 'nextCharOffset',
+    type: 'number',
+    isOptional: true,
+    description:
+      'On single-part results, present when the part was truncated and more content remains. Pass this value as `charOffset` in the next call to continue reading from where this chunk ended.',
+  },
+  {
+    name: 'note',
+    type: 'string',
+    isOptional: true,
+    description: 'On truncated single-part results, the exact follow-up call for retrieving the next chunk.',
   },
 ]}
 />

@@ -13,7 +13,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 :::warning[Deprecated]
 
-`CloudExporter` is retained for backward compatibility and will be removed in a future major version. Use [`MastraPlatformExporter`](/reference/observability/tracing/exporters/mastra-platform-exporter) for new projects. The two classes share the same constructor, environment variables, and runtime behavior; `CloudExporter` keeps its original `mastra-cloud-observability-exporter` exporter `name` and `CLOUD_EXPORTER_*` error IDs so monitoring rules built against it keep working.
+`CloudExporter` is retained for backward compatibility and will be removed in a future major version. Use [`MastraPlatformExporter`](/reference/observability/tracing/exporters/mastra-platform-exporter) for new projects. Both classes share the same constructor, environment variables, and runtime behavior. `CloudExporter` keeps its original `mastra-cloud-observability-exporter` exporter `name` and `CLOUD_EXPORTER_*` error IDs so monitoring rules built against it keep working.
 
 :::
 
@@ -150,7 +150,7 @@ async onMetricEvent(event: MetricEvent): Promise<void>
 
 Processes metric signals for Cloud export.
 
-Every `MetricEvent` passed to this handler is buffered and exported to the Cloud metrics endpoint derived from the configured base endpoint. Additional filtering by metric subtype or status inside `CloudExporter` isn't performed; the exporter forwards every metric event it receives unless it's disabled.
+Every `MetricEvent` passed to this handler is buffered and exported to the Cloud metrics endpoint derived from the configured base endpoint. Additional filtering by metric subtype or status inside `CloudExporter` isn't performed. The exporter forwards every metric event it receives unless it's disabled.
 
 <PropertiesTable
   props={[
@@ -196,7 +196,7 @@ async onFeedbackEvent(event: FeedbackEvent): Promise<void>
 
 Processes feedback signals for Cloud export.
 
-Every `FeedbackEvent` passed to this handler is buffered and exported to the Cloud feedback endpoint derived from the configured base endpoint. No feedback-type filtering inside `CloudExporter` is performed; all feedback events received here are forwarded unless the exporter is disabled.
+Every `FeedbackEvent` passed to this handler is buffered and exported to the Cloud feedback endpoint derived from the configured base endpoint. No feedback-type filtering inside `CloudExporter` is performed. All feedback events received here are forwarded unless the exporter is disabled.
 
 <PropertiesTable
   props={[
@@ -260,7 +260,7 @@ The exporter batches tracing spans, logs, metrics, scores, and feedback for effi
 ### Signal Processing
 
 - `exportTracingEvent()` only exports `SPAN_ENDED` tracing events
-- `onLogEvent()`, `onMetricEvent()`, `onScoreEvent()`, and `onFeedbackEvent()` buffer every event they receive for their respective signal type
+- `onLogEvent()`, `onMetricEvent()`, `onScoreEvent()`, and `onFeedbackEvent()` buffer every event they receive for that signal type
 - All supported signal batches are uploaded to their matching Cloud publish endpoints during `flush()` and `shutdown()`
 
 ## `MastraCloudSpanRecord`
@@ -310,7 +310,6 @@ const customExporter = new CloudExporter({
 ### Documentation
 
 - [Tracing Overview](/docs/observability/tracing/overview): Complete guide
-- [Exporters](/docs/observability/integrations/overview#exporters): Exporter concepts
 
 ### Other Exporters
 

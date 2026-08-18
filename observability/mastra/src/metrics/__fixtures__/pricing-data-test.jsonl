@@ -1,6 +1,13 @@
 {"i":"openai-gpt-4o-mini","p":"openai","m":"gpt-4o-mini","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"icrt":{"c":7.5e-8},"it":{"c":1.5e-7},"ot":{"c":6e-7}}}]}}}
+{"i":"google-gemini-2-0-flash","p":"google","m":"gemini-2-0-flash","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"icrt":{"c":2.5e-8},"it":{"c":1e-7},"ot":{"c":4e-7}}}]}}}
 {"i":"google-gemini-2-5-pro","p":"google","m":"gemini-2-5-pro","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"icrt":{"c":1.25e-7},"it":{"c":0.00000125},"ot":{"c":0.00001}}},{"w":[{"f":"tit","op":"gt","value":200000}],"r":{"icrt":{"c":2.5e-7},"it":{"c":0.0000025},"ot":{"c":0.000015}}}]}}}
+{"i":"google-vertex-gemini-2-0-flash","p":"google-vertex","m":"gemini-2-0-flash","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"icrt":{"c":2.5e-8},"it":{"c":1.5e-7},"ot":{"c":6e-7}}}]}}}
+{"i":"google-vertex-deepseek-v3-1-maas","p":"google-vertex","m":"deepseek-ai-deepseek-v3-1-maas","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"it":{"c":6e-7},"ot":{"c":0.0000017}}}]}}}
+{"i":"google-vertex-anthropic-claude-sonnet-4-5","p":"google-vertex-anthropic","m":"claude-sonnet-4-5","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"icrt":{"c":3e-7},"icwt":{"c":0.00000375},"it":{"c":0.000003},"ot":{"c":0.000015}}}]}}}
 {"i":"anthropic-claude-sonnet-4-5","p":"anthropic","m":"claude-sonnet-4-5","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"icrt":{"c":3e-7},"icwt":{"c":0.00000375},"it":{"c":0.000003},"ot":{"c":0.000015}}}]}}}
+{"i":"anthropic-claude-haiku-4-5","p":"anthropic","m":"claude-haiku-4-5","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"icrt":{"c":1e-7},"icwt":{"c":0.00000125},"it":{"c":0.000001},"ot":{"c":0.000005}}}]}}}
+{"i":"vercel-claude-haiku-4-5","p":"vercel","m":"claude-haiku-4-5","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"icrt":{"c":1e-7},"icwt":{"c":0.00000125},"it":{"c":0.000001},"ot":{"c":0.000005}}}]}}}
+{"i":"vercel-amazon-nova-micro","p":"vercel","m":"amazon-nova-micro","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"icrt":{"c":8.75e-9},"it":{"c":3.5e-8},"ot":{"c":1.4e-7}}}]}}}
 {"i":"openrouter-xiaomi-mimo-v2-pro","p":"openrouter","m":"xiaomi-mimo-v2-pro","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"icrt":{"c":2e-7},"it":{"c":1e-6},"ot":{"c":3e-6}}}]}}}
 {"i":"openrouter-gpt-5-mini","p":"openrouter","m":"gpt-5-mini","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"icrt":{"c":2.5e-8},"it":{"c":2.5e-7},"ot":{"c":2e-6}}}]}}}
 {"i":"openrouter-anthropic-claude-sonnet-4-6","p":"openrouter","m":"claude-sonnet-4-6","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"icrt":{"c":3e-7},"icwt":{"c":0.00000375},"it":{"c":0.000003},"ot":{"c":0.000015}}}]}}}

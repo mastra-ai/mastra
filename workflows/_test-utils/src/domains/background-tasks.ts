@@ -7,8 +7,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { Agent } from '@mastra/core/agent';
-import { createDurableAgent } from '@mastra/core/agent/durable';
-import { baseIterationStateSchema } from '@mastra/core/agent/durable';
+import { createDurableAgent, baseIterationStateSchema } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
 import { MockStore } from '@mastra/core/storage';
 import type { DurableAgentTestContext } from '../types';

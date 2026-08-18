@@ -191,7 +191,7 @@ export class D1DB extends MastraBase {
         params: formattedParams,
       });
       const result = response.result || [];
-      const results = result.flatMap(r => r.results || []);
+      const results = result.flatMap((r: { results?: unknown[] }) => (r.results || []) as Record<string, any>[]);
 
       if (first) {
         return results[0] || null;

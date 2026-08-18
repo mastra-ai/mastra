@@ -3,32 +3,30 @@ import { describe, expect, it } from 'vitest';
 import { transformAgent } from '../transformers';
 
 /**
- * Regression test for A2AAgent sub-agent delegation through handleChatStream.
+ * Regression coverage for start-less sub-agent streams and the legacy
+ * A2AAgent chunk contract through handleChatStream.
  *
- * A2AAgent remote streams differ from regular Agent streams in two ways:
+ * Resumed Agent and A2AAgent streams omit `start`, so the buffered run state
+ * may not exist when the first content chunk arrives. A2AAgent versions from
+ * before the chunk contracts were aligned also omitted `start` on fresh runs
+ * and emitted a flat `{ finishReason, usage }` payload.
  *
- * 1. They never emit a `start` chunk — the first chunks are
- *    `text-start` / `text-delta` — so the buffered run state for the runId
- *    does not exist when the first content chunk arrives.
- * 2. Their `finish` chunk carries a flat `{ finishReason, usage }` payload
- *    instead of the regular Agent shape `{ stepResult: { reason }, output: { usage } }`.
- *
- * Both previously crashed transformAgent ("Cannot read properties of
+ * Both cases previously crashed transformAgent ("Cannot read properties of
  * undefined (reading 'text')" and "... (reading 'reason')"), killing the UI
  * stream with an error chunk.
  */
-describe('transformAgent A2A sub-agent streams', () => {
+describe('transformAgent start-less and legacy A2A sub-agent streams', () => {
   function makePayload(type: string, runId: string, payload: any) {
     return { type, runId, payload } as any;
   }
 
   const EMPTY_USAGE = { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined };
 
-  it('handles a full A2A-shaped stream without a start chunk', () => {
+  it('handles a legacy A2A-shaped stream without a start chunk', () => {
     const bufferedSteps = new Map<string, any>();
     const runId = 'a2a-run';
 
-    // No `start` chunk — A2A streams begin with text-start/text-delta.
+    // Older A2AAgent streams began with text-start/text-delta.
     const firstDelta = transformAgent(
       makePayload('text-delta', runId, { id: 'text-1', text: 'Shipment ord_1003 ' }),
       bufferedSteps,
@@ -42,7 +40,7 @@ describe('transformAgent A2A sub-agent streams', () => {
 
     transformAgent(makePayload('text-delta', runId, { id: 'text-1', text: 'is in transit.' }), bufferedSteps);
 
-    // Flat A2A finish payload: no stepResult / output wrappers.
+    // Legacy flat A2A finish payload: no stepResult / output wrappers.
     const finish = transformAgent(
       makePayload('finish', runId, { finishReason: 'stop', usage: EMPTY_USAGE }),
       bufferedSteps,

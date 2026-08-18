@@ -4,6 +4,11 @@ import { safelyParseJSON, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
+// Guards against unbounded recursion on pathologically deep values (e.g. long
+// chained Error.cause), which would otherwise throw an uncaught
+// `RangeError: Maximum call stack size exceeded`.
+const MAX_DEPTH = 100;
+
 /**
  * Safely serializes a value to JSON string with pre-sanitization.
  * Handles RPC proxies (Cloudflare Workers), functions, symbols, BigInt, and circular references.
@@ -21,12 +26,16 @@ export const safeStringify = (value: unknown): string => {
   // of the same object graph.
   const ancestors = new Set<object>();
 
-  const sanitize = (val: unknown): unknown => {
+  const sanitize = (val: unknown, depth: number = 0): unknown => {
     if (val === null || val === undefined) return val;
     if (typeof val === 'function') return undefined;
     if (typeof val === 'symbol') return undefined;
     if (typeof val === 'bigint') return val.toString();
     if (typeof val !== 'object') return val;
+
+    // Depth guard: stop recursing once the nesting exceeds the cap and return a
+    // sentinel instead of overflowing the call stack.
+    if (depth > MAX_DEPTH) return '[Max depth exceeded]';
 
     // Circular reference check: only drop if this object is an ancestor on the
     // current path. Shared sibling references must still be serialized.
@@ -42,20 +51,20 @@ export const safeStringify = (value: unknown): string => {
 
     // Call toJSON if available (like RequestContext)
     if (typeof (val as Record<string, unknown>).toJSON === 'function') {
-      return sanitize((val as { toJSON: () => unknown }).toJSON());
+      return sanitize((val as { toJSON: () => unknown }).toJSON(), depth + 1);
     }
 
     ancestors.add(val);
     try {
       // Recursively sanitize arrays
       if (Array.isArray(val)) {
-        return val.map(item => sanitize(item));
+        return val.map(item => sanitize(item, depth + 1));
       }
 
       // Recursively sanitize objects
       const result: Record<string, unknown> = {};
       for (const key of Object.keys(val)) {
-        const sanitized = sanitize((val as Record<string, unknown>)[key]);
+        const sanitized = sanitize((val as Record<string, unknown>)[key], depth + 1);
         if (sanitized !== undefined) {
           result[key] = sanitized;
         }

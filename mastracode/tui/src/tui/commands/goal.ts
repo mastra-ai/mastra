@@ -12,8 +12,10 @@
  */
 import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
+import { createGoalReminderSignal } from '@mastra/code-sdk/goal-signal';
 import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
-import type { AgentControllerMessage } from '@mastra/core/agent-controller';
+import type { MastraDBMessage } from '@mastra/core/agent-controller';
+import { createSignal } from '@mastra/core/signals';
 import { GoalCyclesDialogComponent } from '../components/goal-cycles-dialog.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
@@ -327,27 +329,44 @@ async function startGoal(
   const { state } = ctx;
   const goalManager = state.goalManager;
 
-  if (state.pendingNewThread) {
-    await state.session.thread.create();
-    state.pendingNewThread = false;
+  // `thread_created` is dispatched through a serial async queue, so its handler
+  // runs later — during the `setGoal` await below. Without this flag already set
+  // it takes the `loadFromThreadMetadata` branch and nulls the goal we are about
+  // to set, and the save below then clears the stored objective. Must be decided
+  // before the create: afterwards `getId()` always returns the new thread.
+  const shouldPersistToCreatedThread = state.pendingNewThread || !state.session.thread.getId();
+  if (shouldPersistToCreatedThread) {
+    goalManager.persistOnNextThreadCreate();
   }
 
-  const shouldPersistToCreatedThread = !state.session.thread.getId();
-  const goal = await goalManager.setGoal(state, objective, judgeModelId, maxTurns);
+  // Arming the flag ahead of the create means any failure between here and a
+  // successful start would otherwise leave it armed for an unrelated later
+  // thread to consume. Disarm on every exit that isn't a started goal — but
+  // only when this call is the one that armed it.
+  let goal: Awaited<ReturnType<typeof goalManager.setGoal>>;
+  try {
+    if (state.pendingNewThread) {
+      await state.session.thread.create();
+      state.pendingNewThread = false;
+    }
+
+    goal = await goalManager.setGoal(state, objective, judgeModelId, maxTurns);
+  } catch (error) {
+    if (shouldPersistToCreatedThread) {
+      goalManager.consumePersistOnNextThreadCreate();
+    }
+    throw error;
+  }
+
   if (!goal) {
+    if (shouldPersistToCreatedThread) {
+      goalManager.consumePersistOnNextThreadCreate();
+    }
     ctx.showError('Failed to set goal.');
     return;
   }
 
   state.planStartedGoalId = undefined;
-  if (options.trigger === 'none') {
-    // Plan-started goals don't begin accruing active time until the user
-    // actually triggers them.
-    goalManager.resetActiveTimer();
-  }
-  if (shouldPersistToCreatedThread) {
-    goalManager.persistOnNextThreadCreate();
-  }
   await goalManager.saveToThread(state);
   ctx.updateStatusLine();
 
@@ -364,39 +383,20 @@ async function startGoal(
   }
 }
 
-function createGoalReminderSignal(goal: GoalState) {
-  return {
-    type: 'system-reminder' as const,
-    contents: goal.objective,
-    attributes: { type: 'goal' },
-    metadata: {
-      goalId: goal.id,
-      maxTurns: goal.maxTurns,
-      judgeModelId: goal.judgeModelId,
-    },
-  };
-}
-
 export function createGoalReminderMessage(
   goalId: string,
   objective: string,
   maxTurns: number,
   judgeModelId: string,
-): AgentControllerMessage {
-  return {
+): MastraDBMessage {
+  return createSignal({
     id: `goal-${goalId}`,
-    role: 'user',
-    createdAt: new Date(),
-    content: [
-      {
-        type: 'system_reminder',
-        reminderType: 'goal',
-        message: objective,
-        goalMaxTurns: maxTurns,
-        judgeModelId,
-      },
-    ],
-  } as unknown as AgentControllerMessage;
+    type: 'reactive',
+    tagName: 'system-reminder',
+    contents: objective,
+    attributes: { type: 'goal' },
+    metadata: { goalMaxTurns: maxTurns, judgeModelId },
+  } as Parameters<typeof createSignal>[0]).toDBMessage();
 }
 
 export function createGoalReminderXml(message: string): string {

@@ -26,6 +26,7 @@ jobs:
     steps:
       - name: Initial checkout
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           # Use default GITHUB_TOKEN for initial checkout
           # This is needed to access the .github/actions/app-auth action
@@ -44,6 +45,7 @@ jobs:
 
       - name: Re-checkout with app token
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           ref: main
           token: ${{ steps.app-auth.outputs.token }}
@@ -69,12 +71,13 @@ jobs:
       - name: Generate model documentation
         run: pnpx tsx packages/core/scripts/generate-model-docs.ts
 
-      - name: Format generated files with Prettier
+      - name: Format generated files
         run: |
-          pnpm prettier --write packages/core/src/llm/model/provider-registry.json
-          pnpm prettier --write packages/core/src/llm/model/provider-types.generated.d.ts
-          pnpm prettier --write packages/core/src/llm/model/capabilities/
-          pnpm prettier --write docs/src/content/en/models/**/*.{mdx,ts,js}
+          pnpm oxfmt packages/core/src/llm/model/provider-registry.json
+          pnpm oxfmt packages/core/src/llm/model/provider-types.generated.d.ts
+          pnpm oxfmt packages/core/src/llm/model/capabilities/
+          cd docs
+          pnpm oxfmt 'src/content/en/models/**/*.{ts,js}' --ignore-path /dev/null --no-error-on-unmatched-pattern
       - name: Check for changes
         id: git-check
         run: |

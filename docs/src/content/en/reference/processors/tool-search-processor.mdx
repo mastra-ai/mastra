@@ -1,13 +1,13 @@
 ---
 title: "Reference: ToolSearchProcessor | Processors"
-description: "Documentation for the ToolSearchProcessor in Mastra, which enables dynamic tool discovery and loading for agents with large tool libraries."
+description: "Documentation for the ToolSearchProcessor in Mastra, which enables runtime-defined tool discovery and loading for agents with large tool libraries."
 packages:
   - "@mastra/core"
 ---
 
 # ToolSearchProcessor
 
-The `ToolSearchProcessor` is an **input processor** that enables dynamic tool discovery and loading. Instead of providing all tools to the agent upfront, it gives the agent two meta-tools (`search_tools` and `load_tool`) that let it find and load tools on demand. This reduces context token usage when working with large tool libraries.
+The `ToolSearchProcessor` is an **input processor** that enables runtime-defined tool discovery and loading. Instead of providing all tools to the agent upfront, it gives the agent two meta-tools (`search_tools` and `load_tool`) that let it find and load tools on demand. This reduces context token usage when working with large tool libraries.
 
 ## Usage example
 
@@ -47,6 +47,14 @@ const toolSearch = new ToolSearchProcessor({
             description:
               'All tools that can be searched and loaded dynamically. These tools are not immediately available to the agent — they must be discovered via search and loaded on demand.',
             isOptional: false,
+          },
+          {
+            name: 'includeResolvedTools',
+            type: 'boolean',
+            description:
+              "Also make the tools the agent resolved for this request (MCP tools requiring the caller's credentials, or anything returned by a dynamic tools function) searchable, and withhold them from the prompt until the agent loads them. The meta-tools are never withheld. Request-resolved tools are indexed per request, so each request searches and loads its own tool instances.",
+            isOptional: true,
+            default: 'false',
           },
           {
             name: 'search',
@@ -172,11 +180,11 @@ Immediately runs TTL cleanup instead of waiting for the scheduled sweep.
 const cleaned = processor.cleanupNow()
 ```
 
-Returns: `number` — the count of threads cleaned up.
+Returns: `number`: the count of threads cleaned up.
 
 ## Request-aware filtering
 
-Use `filter` to apply request-specific policy to dynamic tools. The hook receives the resolved tool ID as `toolName`, the tool, request context, and phase. `toolName` is the ID returned by `search_tools`, which may differ from the key used in the `tools` object.
+Use `filter` to apply request-specific policy to runtime-defined tools. The hook receives the resolved tool ID as `toolName`, the tool, request context, and phase. `toolName` is the ID returned by `search_tools`, which may differ from the key used in the `tools` object.
 
 ```typescript
 import { ToolSearchProcessor } from '@mastra/core/processors'
@@ -201,7 +209,37 @@ The `phase` value describes where the filter is being applied:
 - `load`: Blocks `load_tool` from loading disallowed tools.
 - `active`: Hides already-loaded tools from the current request if they're no longer allowed.
 
-If the hook throws or rejects, `ToolSearchProcessor` treats the tool as disallowed for that request. The hook may run for every matching search candidate, so keep async policy checks cheap or cached. The `search_tools` meta-tool is always available; `load_tool` is available unless `search.autoLoad` is enabled. Tools passed directly through the agent or `processInputStep` remain available unless you filter them outside `ToolSearchProcessor`.
+If the hook throws or rejects, `ToolSearchProcessor` treats the tool as disallowed for that request. The hook may run for every matching search candidate, so keep async policy checks cheap or cached. The `search_tools` meta-tool is always available. `load_tool` is available unless `search.autoLoad` is enabled. Tools passed directly through the agent or `processInputStep` remain available unless you filter them outside `ToolSearchProcessor`, or enable `includeResolvedTools`.
+
+## Searching request-resolved tools
+
+The `tools` option is fixed at construction, so you can't list tools that only exist per request (MCP tools that need the caller's credentials, or anything returned by a dynamic `tools` function). By default those tools bypass search and occupy prompt space on every turn.
+
+Set `includeResolvedTools: true` to index them for the request and withhold them from the prompt until the agent loads them:
+
+```typescript title="src/mastra/agents/mcp-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { ToolSearchProcessor } from '@mastra/core/processors'
+
+const toolSearch = new ToolSearchProcessor({
+  tools: staticTools,
+  includeResolvedTools: true,
+})
+
+const agent = new Agent({
+  id: 'mcp-agent',
+  name: 'mcp-agent',
+  instructions: 'Search for a tool when you need a capability you do not have.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  // Resolved per request, then searchable alongside staticTools
+  tools: async ({ requestContext }) => mcpClient.getTools(requestContext.get('userToken')),
+  inputProcessors: [toolSearch],
+})
+```
+
+Each request is indexed on its own, so a tool loaded by one caller never resolves to another caller's instance of the same tool name.
+
+This option applies to every tool resolved for the request, including memory, workspace, skill, and browser tools. Only the `search_tools` and `load_tool` meta-tools stay in the prompt, so any tool the agent relies on implicitly must be found through search before it can be called.
 
 ## Extended usage example
 
@@ -269,7 +307,7 @@ Every match is activated, so keep `topK` small (for example, `3`) to avoid addin
 
 ## Loaded-tool storage
 
-The `storage` option controls where the set of loaded tools is tracked. The default is `'in-memory'`; the `'context'` store is opt-in.
+The `storage` option controls where the set of loaded tools is tracked. The default is `'in-memory'`. The `'context'` store is opt-in.
 
 ### `'in-memory'` (default)
 
@@ -286,7 +324,7 @@ Use `clearState`, `clearAllState`, `getStateStats`, and `cleanupNow` to inspect 
 Loaded state is derived from the conversation messages: a tool is loaded while a `search_tools` or `load_tool` result naming it remains in the messages. This mode:
 
 - Requires no memory configuration.
-- Is restart-safe — the durable record is the persisted message history.
+- Is restart-safe: the durable record is the persisted message history.
 - De-loads a tool automatically once that result is no longer present in the messages.
 
 ```typescript
@@ -300,7 +338,7 @@ const toolSearch = new ToolSearchProcessor({
 
 Loading tools is cache-friendly in both modes: loads are append-only, so the cached prompt prefix stays stable for providers that support prompt caching.
 
-Unloading a tool changes the tool definitions sent to the model, which shifts the cached prefix and causes the next turn to pay a cache write instead of a cache hit. In `'in-memory'` mode this happens when a thread's state is evicted by `ttl`. In `'context'` mode it happens when a tool's discovery result is no longer present in the messages (for example, when older messages are trimmed) — the tool de-loads and the model must search for it again before reuse. This is expected: removing an unused tool trades one cache write for a smaller prefix on later turns.
+Unloading a tool changes the tool definitions sent to the model, which shifts the cached prefix and causes the next turn to pay a cache write instead of a cache hit. In `'in-memory'` mode this happens when a thread's state is evicted by `ttl`. In `'context'` mode it happens when a tool's discovery result is no longer present in the messages (for example, when older messages are trimmed). The tool de-loads, and the model must search for it again before reuse. This is expected: removing an unused tool trades one cache write for a smaller prefix on later turns.
 
 ## Combining with other processors
 
@@ -326,4 +364,4 @@ const agent = new Agent({
 ## Related
 
 - [Processors](/docs/agents/processors)
-- [Using Tools](/docs/agents/using-tools)
+- [Using Tools](/docs/agents/tools)

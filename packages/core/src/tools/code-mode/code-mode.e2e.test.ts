@@ -4,7 +4,7 @@ import { LocalSandbox } from '../../workspace/sandbox/local-sandbox';
 import { createTool } from '../tool';
 import { createCodeMode } from './code-mode';
 import { StdioCodeModeTransport } from './transport';
-import type { CodeModeToolResult } from './types';
+import type { CodeModeToolResult, CodeModeTransport } from './types';
 
 // Minimal execution context the tool needs (observe + abortSignal).
 const ctx = () => ({
@@ -111,6 +111,26 @@ describe('Code Mode e2e (LocalSandbox)', () => {
     expect(result.error?.message).toBe('boom');
   }, 30_000);
 
+  it('returns results larger than the stdout pipe buffer', async () => {
+    const sandbox = new LocalSandbox();
+    const { tool } = createCodeMode({ tools: { getTopProducts }, sandbox });
+    const payload = 'x'.repeat(1024 * 1024);
+    const result = await run(tool, `return 'x'.repeat(${payload.length});`);
+
+    expect(result.success).toBe(true);
+    expect(result.result).toBe(payload);
+  }, 30_000);
+
+  it('reports errors larger than the stdout pipe buffer', async () => {
+    const sandbox = new LocalSandbox();
+    const { tool } = createCodeMode({ tools: { getTopProducts }, sandbox });
+    const message = 'x'.repeat(1024 * 1024);
+    const result = await run(tool, `throw new Error('x'.repeat(${message.length}));`);
+
+    expect(result.success).toBe(false);
+    expect(result.error?.message).toBe(message);
+  }, 30_000);
+
   it('enforces the allow-list for tools not exposed', async () => {
     // Build a transport directly and dispatch only known ids; call an unlisted one.
     const transport = new StdioCodeModeTransport();
@@ -139,5 +159,20 @@ describe('Code Mode e2e (LocalSandbox)', () => {
   it('throws when no sandbox is configured (no implicit host fallback)', async () => {
     const { tool } = createCodeMode({ tools: { getTopProducts } });
     await expect(run(tool, `return 1;`)).rejects.toThrow(/requires a sandbox/);
+  });
+
+  it('runs without a sandbox when the transport declares requiresSandbox: false', async () => {
+    const seen: { sandbox?: unknown } = {};
+    const transport: CodeModeTransport = {
+      requiresSandbox: false,
+      run: async opts => {
+        seen.sandbox = opts.sandbox;
+        return { success: true, result: 'isolate-ran', logs: [] };
+      },
+    };
+    const { tool } = createCodeMode({ tools: { getTopProducts } }, transport);
+    const result = await run(tool, `return 1;`);
+    expect(result).toEqual({ success: true, result: 'isolate-ran', logs: [] });
+    expect(seen.sandbox).toBeUndefined();
   });
 });

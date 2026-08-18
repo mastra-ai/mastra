@@ -29,7 +29,7 @@ export const serializedProcessorSchema = z.object({
   id: z.string(),
   name: z.string().optional(),
   description: z.string().optional(),
-  phases: z.array(z.enum(['input', 'inputStep', 'outputStream', 'outputResult', 'outputStep'])),
+  phases: z.array(z.enum(['input', 'inputStep', 'outputStream', 'outputResult', 'outputStep', 'toolResult'])),
   agentIds: z.array(z.string()),
   configurations: z.array(processorListConfigurationSchema),
   isWorkflow: z.boolean(),
@@ -42,7 +42,7 @@ export const serializedProcessorDetailSchema = z.object({
   id: z.string(),
   name: z.string().optional(),
   description: z.string().optional(),
-  phases: z.array(z.enum(['input', 'inputStep', 'outputStream', 'outputResult', 'outputStep'])),
+  phases: z.array(z.enum(['input', 'inputStep', 'outputStream', 'outputResult', 'outputStep', 'toolResult'])),
   configurations: z.array(processorConfigurationSchema),
   isWorkflow: z.boolean(),
 });
@@ -58,7 +58,7 @@ export const listProcessorsResponseSchema = z.record(z.string(), serializedProce
 const messageContentSchema = z
   .object({
     format: z.literal(2).optional(),
-    parts: z.array(z.any()).optional(),
+    parts: z.array(z.unknown()).optional(),
     content: z.string().optional(),
   })
   .passthrough();
@@ -79,10 +79,10 @@ const processorMessageSchema = z
  * Body schema for executing a processor
  */
 export const executeProcessorBodySchema = z.object({
-  phase: z.enum(['input', 'inputStep', 'outputStream', 'outputResult', 'outputStep']),
+  phase: z.enum(['input', 'inputStep', 'outputStream', 'outputResult', 'outputStep', 'toolResult']),
   messages: z.array(processorMessageSchema),
   agentId: z.string().optional(),
-  requestContext: z.record(z.string(), z.any()).optional(),
+  requestContext: z.record(z.string(), z.unknown()).optional(),
 });
 
 /**
@@ -91,7 +91,7 @@ export const executeProcessorBodySchema = z.object({
 const tripwireSchema = z.object({
   triggered: z.boolean(),
   reason: z.string().optional(),
-  metadata: z.any().optional(),
+  metadata: z.unknown().optional(),
 });
 
 /**

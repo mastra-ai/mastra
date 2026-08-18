@@ -81,6 +81,94 @@ const keepalive = setInterval(() => {}, 1000);
 setTimeout(() => { clearInterval(keepalive); process.exit(0); }, 15000).unref();
 `;
 
+/**
+ * A minimal fake pull-diagnostics LSP server (mirrors TypeScript 7's native
+ * server): advertises `diagnosticProvider` in its initialize response, never
+ * pushes `textDocument/publishDiagnostics`, and answers
+ * `textDocument/diagnostic` requests with a full report.
+ */
+const PULL_DIAGNOSTICS_SERVER_SCRIPT = `
+let buf = Buffer.alloc(0);
+function send(payload) {
+  const body = JSON.stringify(payload);
+  process.stdout.write('Content-Length: ' + Buffer.byteLength(body) + '\\r\\n\\r\\n' + body);
+}
+process.stdin.on('data', (chunk) => {
+  buf = Buffer.concat([buf, chunk]);
+  for (;;) {
+    const headerEnd = buf.indexOf('\\r\\n\\r\\n');
+    if (headerEnd === -1) return;
+    const match = buf.subarray(0, headerEnd).toString('utf8').match(/Content-Length: (\\d+)/);
+    if (!match) return;
+    const bodyStart = headerEnd + 4;
+    const length = parseInt(match[1], 10);
+    if (buf.length < bodyStart + length) return;
+    let msg;
+    try { msg = JSON.parse(buf.subarray(bodyStart, bodyStart + length).toString('utf8')); } catch { return; }
+    buf = buf.subarray(bodyStart + length);
+    if (msg.method === 'initialize') {
+      send({ jsonrpc: '2.0', id: msg.id, result: { capabilities: { diagnosticProvider: { identifier: 'fake', interFileDependencies: true } } } });
+    } else if (msg.method === 'textDocument/diagnostic') {
+      send({ jsonrpc: '2.0', id: msg.id, result: { kind: 'full', items: [
+        { range: { start: { line: 0, character: 0 }, end: { line: 0, character: 5 } }, severity: 1, code: 2322, message: 'fake type error' },
+      ] } });
+    } else if (msg.id !== undefined) {
+      send({ jsonrpc: '2.0', id: msg.id, result: null });
+    }
+  }
+});
+setTimeout(() => process.exit(0), 15000).unref();
+setInterval(() => {}, 1000);
+`;
+
+describe('LSPClient — pull diagnostics (TS 7+ style server)', () => {
+  let dir: string;
+  let sandbox: LocalSandbox;
+  let client: LSPClient;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(path.join(tmpdir(), 'lsp-pull-test-'));
+    sandbox = new LocalSandbox({ workingDirectory: dir });
+    await sandbox.start();
+  });
+
+  afterEach(async () => {
+    await client?.shutdown().catch(() => {});
+    await sandbox.stop().catch(() => {});
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('detects diagnosticProvider and pulls diagnostics instead of waiting for push', async () => {
+    const scriptPath = path.join(dir, 'fake-pull-server.cjs');
+    await writeFile(scriptPath, PULL_DIAGNOSTICS_SERVER_SCRIPT, 'utf8');
+
+    const serverDef: LSPServerDef = {
+      id: 'fake-pull',
+      name: 'Fake Pull LSP',
+      languageIds: ['typescript'],
+      markers: [],
+      command: () => `node "${scriptPath}"`,
+    };
+
+    client = new LSPClient(serverDef, dir, sandbox.processes);
+    await client.initialize(5000);
+
+    const filePath = path.join(dir, 'broken.ts');
+    client.notifyOpen(filePath, 'const x: number = "nope";', 'typescript');
+
+    const start = Date.now();
+    const diagnostics = await client.waitForDiagnostics(filePath, 5000);
+    const elapsed = Date.now() - start;
+
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0].message).toBe('fake type error');
+    expect(diagnostics[0].code).toBe(2322);
+    // Pull returns as soon as the server responds — it must not sit in the
+    // push-polling settle window (500ms) or run to the 5s timeout.
+    expect(elapsed).toBeLessThan(2000);
+  }, 20000);
+});
+
 describe('LSPClient — server write failures', () => {
   let dir: string;
   let sandbox: LocalSandbox;

@@ -1,3 +1,4 @@
 {
-  "temperature": ["Qwen/Qwen3.6-35B-A3B-FP8", "Qwen3.6-27B"]
+  "temperature": ["Qwen/Qwen3.6-35B-A3B-FP8", "Qwen3.6-27B"],
+  "structuredOutput": ["Qwen/Qwen3.6-35B-A3B-FP8", "Qwen3.6-27B"]
 }

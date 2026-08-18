@@ -1,9 +1,10 @@
-Use @styleguides/STYLEGUIDE.md first. @styleguides/ also includes guides for docs and reference docs
+Use @styleguides/STYLEGUIDE.md first.
 
 When working check src/content/en/docs/ and src/content/en/reference/ update existing docs or create new docs
 @CONTRIBUTING.md for setup, local development, and components / frontmatter
-When adding model name/ID to docs, use placeholder token from src/plugins/remark-model-tokens/models.ts (remark replaces them at build time)
-When deleting/renaming doc, redirect needs to be added to vercel.redirects.json. Use pnpm run generate-vercel-redirects to update generated vercel.json
+When adding model name/ID to docs, use placeholder token from src/plugins/remark-model-tokens/models.ts
+When moving doc, use scripts/move-doc.ts
+When deleting a doc, use scripts/delete-doc.ts. Run pnpm run generate-vercel-redirects afterwards
 
 main documentation src/content/en/docs
 step by step guides src/content/en/guides
@@ -30,6 +31,6 @@ pnpm test:navigation # Navigation tests desktop + tablet + mobile
 
 Linting
 pnpm validate # Check frontmatter values & if all sidebars are valid
-pnpm lint:prose # Check prose with Vale & Remark
+pnpm lint:prose # Check prose with Vale & Remark, first time setup: pnpm vale:download \n npm install -g mdx2vast
 
 Tests live in tests/ helpers in tests/helpers/ & playwright.config.ts starts pnpm serve

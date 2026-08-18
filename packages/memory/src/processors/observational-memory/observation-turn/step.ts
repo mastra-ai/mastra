@@ -1,7 +1,8 @@
+import type { MastraDBMessage } from '@mastra/core/agent';
 import { getThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
-import { filterObservedMessages } from '../message-utils';
+import { filterObservedMessages, getObservableMessages } from '../message-utils';
 import { getLastActivityFromMessages, getLatestStepParts } from '../observational-memory';
 import { resolveRetentionFloor } from '../thresholds';
 
@@ -18,6 +19,12 @@ import type { StepContext } from './types';
 export class ObservationStep {
   private _prepared = false;
   private _context?: StepContext;
+  /**
+   * True when this step seeded an empty assistant response message for a step-0
+   * observation. While set, the response-id rotation hook must NOT run — rotating
+   * would orphan the seed (markers would sit on a message the agent never streams into).
+   */
+  private seededResponseMessage = false;
 
   constructor(
     private readonly turn: ObservationTurn,
@@ -70,17 +77,19 @@ export class ObservationStep {
 
     // ── Step 0: Activate buffered chunks ──────────────────────
     if (this.stepNumber === 0) {
-      const step0Messages = messageList.get.all.db();
+      const step0Messages = getObservableMessages(messageList);
       const activation = await om.activate({
         threadId,
         resourceId,
         checkThreshold: true,
         messages: step0Messages,
+        record: this.turn.record,
         currentModel: this.turn.actorModelContext,
         writer: this.turn.writer,
         messageList,
       });
 
+      this.turn.setRecord(activation.record);
       if (activation.activated) {
         activated = true;
         if (activation.activatedMessageIds?.length) {
@@ -109,7 +118,8 @@ export class ObservationStep {
         currentModel: this.turn.actorModelContext,
         requestContext: this.turn.requestContext,
         observabilityContext: this.turn.observabilityContext,
-        lastActivityAt: getLastActivityFromMessages(messageList.get.all.db()),
+        lastActivityAt: getLastActivityFromMessages(getObservableMessages(messageList)),
+        reflectionHooks: om.composeHooks(undefined, { threadId, resourceId, trigger: 'turn-sync' }),
       });
       await this.turn.refreshRecord();
       if (this.turn.record.generationCount > preReflectGeneration) {
@@ -120,7 +130,7 @@ export class ObservationStep {
     // ── Check for incomplete tool calls ────────────────────────
     // Provider-executed tools (e.g. Anthropic web_search) may still be in state:'call'
     // while the agent loop continues. We must not observe/buffer until they complete.
-    const allMsgsForToolCheck = messageList.get.all.db();
+    const allMsgsForToolCheck = getObservableMessages(messageList);
     const lastMessage = allMsgsForToolCheck[allMsgsForToolCheck.length - 1];
     const pendingStepMessages = [...messageList.get.input.db(), ...messageList.get.response.db()];
     const latestStepParts = [
@@ -138,12 +148,13 @@ export class ObservationStep {
     let statusSnapshot = await om.getStatus({
       threadId,
       resourceId,
-      messages: messageList.get.all.db(),
+      record: this.turn.record,
+      messages: getObservableMessages(messageList),
     });
 
     // Trigger buffering if interval boundary crossed (fire-and-forget, all steps)
     if (statusSnapshot.shouldBuffer && !hasIncompleteToolCalls) {
-      const allMessages = messageList.get.all.db();
+      const allMessages = getObservableMessages(messageList);
       const unobservedMessages = om.getUnobservedMessages(allMessages, statusSnapshot.record);
 
       // Seal, rotate, and persist candidates SYNCHRONOUSLY before the fire-and-forget
@@ -197,21 +208,68 @@ export class ObservationStep {
       buffered = true;
     }
 
-    // ── Step > 0: Save messages + threshold observation ──────
-    if (this.stepNumber > 0) {
-      // Save messages from previous step
-      const newInput = messageList.clear.input.db();
-      const newOutput = messageList.clear.response.db();
-      const messagesToSave = [...newInput, ...newOutput];
-      if (messagesToSave.length > 0) {
-        await om.persistMessages(messagesToSave, threadId, resourceId);
-        for (const msg of messagesToSave) {
-          messageList.add(msg, 'memory');
+    // ── Save messages + threshold observation ──────
+    // Historically gated to step > 0 (pre-async-buffering relic, 27d7398c51). A single
+    // over-threshold message at step 0 hit neither the buffer path (shouldBuffer requires
+    // pendingTokens < threshold) nor this one — the #16523 dead zone. Now the block also
+    // runs at step 0, but ONLY when observation is imminent, so buckets aren't drained on
+    // turns where nothing will fire.
+    const willObserveNow = statusSnapshot.shouldObserve && !hasIncompleteToolCalls;
+    /** In-flight message ids the step-0 cleanup must never remove from live context. */
+    let step0PreserveIds: string[] | undefined;
+    if (this.stepNumber > 0 || willObserveNow) {
+      if (this.stepNumber > 0) {
+        // Save messages from previous step
+        const newInput = messageList.clear.input.db();
+        const newOutput = messageList.clear.response.db();
+        const messagesToSave = [...newInput, ...newOutput];
+        if (messagesToSave.length > 0) {
+          await om.persistMessages(messagesToSave, threadId, resourceId);
+          for (const msg of messagesToSave) {
+            messageList.add(msg, 'memory');
+          }
         }
+      } else {
+        // Step 0: persist pending input WITHOUT draining the buckets. The input bucket is
+        // read downstream by consumers that only see single-step turns after this point —
+        // semantic recall embeds `messageList.get.input.db()` and the durable loop reads
+        // the first input message for task tracking — so draining here would silently
+        // starve them. Persisting alone is enough for post-observation cleanup to operate
+        // on stored state; persistMessages is an upsert, so the step > 0 drain re-saving
+        // these messages later is harmless.
+        const pending = [...messageList.get.input.db(), ...messageList.get.response.db()];
+        if (pending.length > 0) {
+          await om.persistMessages(pending, threadId, resourceId);
+        }
+        // The in-flight prompt was just observed, but the model still needs it to answer —
+        // protect it (and everything else pending) from cleanup by identity rather than
+        // relying on the token-based retention floor, which resolves to 0 for sync-only,
+        // resource-scope, and explicit `bufferActivation: 1` configs.
+        step0PreserveIds = pending.map(msg => msg.id);
       }
 
-      // Threshold observation (step > 0 only, skip if tool calls pending)
-      if (statusSnapshot.shouldObserve && !hasIncompleteToolCalls) {
+      // Step-0 observation: seed an empty assistant message under the active response id
+      // (after the persist above so it isn't flushed empty). Lifecycle markers land on it
+      // via streamMarker → persistMarkerToMessage (targets the last assistant message),
+      // and the agent's real response streams into the same id afterwards — markers never
+      // land on a user message (binding constraint from PR #16612 review).
+      if (this.stepNumber === 0 && willObserveNow && this.turn.responseMessageId) {
+        const seed: MastraDBMessage = {
+          id: this.turn.responseMessageId,
+          role: 'assistant',
+          content: { format: 2, parts: [] },
+          type: 'text',
+          createdAt: new Date(),
+          threadId,
+          resourceId,
+        };
+        messageList.add(seed, 'response');
+        this.seededResponseMessage = true;
+        omDebug(`[OM:step0] seeded response message ${seed.id} for step-0 observation markers`);
+      }
+
+      // Threshold observation (skip if tool calls pending)
+      if (willObserveNow) {
         const preObsGeneration = this.turn.record.generationCount;
         const obsResult = await this.runThresholdObservation();
         observerExchange = obsResult.observerExchange;
@@ -219,7 +277,11 @@ export class ObservationStep {
           observed = true;
           didThresholdCleanup = true;
 
-          // Cleanup after observation
+          // Cleanup after observation. At step 0 the just-observed messages include the
+          // fresh prompt the model is about to answer — preserve the in-flight messages
+          // by identity (the token-based retention floor resolves to 0 for sync-only,
+          // resource-scope, and explicit `bufferActivation: 1` configs, so it cannot be
+          // relied on to keep them). Step > 0 semantics are unchanged.
           const observedIds = obsResult.activatedMessageIds ?? obsResult.record.observedMessageIds ?? [];
           const minRemaining = resolveRetentionFloor(
             om.getObservationConfig().bufferActivation ?? 1,
@@ -232,6 +294,7 @@ export class ObservationStep {
             messages: messageList,
             observedMessageIds: observedIds,
             retentionFloor: minRemaining,
+            preserveMessageIds: step0PreserveIds,
           });
 
           if (statusSnapshot.asyncObservationEnabled) {
@@ -254,7 +317,8 @@ export class ObservationStep {
       statusSnapshot = await om.getStatus({
         threadId,
         resourceId,
-        messages: messageList.get.all.db(),
+        record: this.turn.record,
+        messages: getObservableMessages(messageList),
       });
     }
 
@@ -312,7 +376,8 @@ export class ObservationStep {
 
   /**
    * Run the full threshold observation pipeline:
-   * waitForBuffering → re-check → activate → reflect → blockAfter gate → observe
+   * waitForBuffering → re-check → activate → reflect → observe (sync fallback when
+   * buffered activation did not happen)
    */
   private async runThresholdObservation(): Promise<{
     succeeded: boolean;
@@ -323,14 +388,25 @@ export class ObservationStep {
     const { threadId, resourceId, messageList } = this.turn;
     const om = this.turn.om;
 
-    // Wait for any in-flight buffering to settle
+    // Wait for any in-flight buffering to settle, then refresh the turn cache once.
     await om.waitForBuffering(threadId, resourceId);
+    await this.turn.refreshRecord();
+
+    // A step-0 seeded response message exists ONLY as a marker anchor in the live list.
+    // It must never be part of the observation input: the sync strategy records
+    // opts.messages ids as observed and seals the newest message — either would
+    // seal/consume the active response message the agent is about to stream into.
+    // (Nothing mutates the list between here and the observe call, so compute once.)
+    const observableMessages = this.seededResponseMessage
+      ? getObservableMessages(messageList).filter(msg => msg.id !== this.turn.responseMessageId)
+      : getObservableMessages(messageList);
 
     // Re-check status with fresh state
     const freshStatus = await om.getStatus({
       threadId,
       resourceId,
-      messages: messageList.get.all.db(),
+      record: this.turn.record,
+      messages: observableMessages,
     });
 
     if (!freshStatus.shouldObserve) {
@@ -342,11 +418,13 @@ export class ObservationStep {
       const activation = await om.activate({
         threadId,
         resourceId,
-        messages: messageList.get.all.db(),
+        record: this.turn.record,
+        messages: observableMessages,
         currentModel: this.turn.actorModelContext,
         writer: this.turn.writer,
         messageList,
       });
+      this.turn.setRecord(activation.record);
 
       if (activation.activated) {
         // Check reflection after activation — use maybeReflect so that a
@@ -362,7 +440,8 @@ export class ObservationStep {
           currentModel: this.turn.actorModelContext,
           requestContext: this.turn.requestContext,
           observabilityContext: this.turn.observabilityContext,
-          lastActivityAt: getLastActivityFromMessages(messageList.get.all.db()),
+          lastActivityAt: getLastActivityFromMessages(getObservableMessages(messageList)),
+          reflectionHooks: om.composeHooks(undefined, { threadId, resourceId, trigger: 'turn-sync' }),
         });
 
         return {
@@ -378,7 +457,9 @@ export class ObservationStep {
     const obsResult = await om.observe({
       threadId,
       resourceId,
-      messages: messageList.get.all.db(),
+      messages: observableMessages,
+      messageList,
+      trigger: 'turn-sync',
       requestContext: this.turn.requestContext,
       writer: this.turn.writer,
       observabilityContext: this.turn.observabilityContext,
@@ -386,7 +467,7 @@ export class ObservationStep {
 
     if (obsResult.observed) {
       const observedMessageIds = new Set(obsResult.record.observedMessageIds ?? []);
-      const liveMessages = messageList.get.all.db();
+      const liveMessages = getObservableMessages(messageList);
       let latestObservedIndex = -1;
 
       for (let i = liveMessages.length - 1; i >= 0; i--) {
@@ -397,16 +478,34 @@ export class ObservationStep {
         }
       }
 
-      const messageToSeal = latestObservedIndex >= 0 ? liveMessages[latestObservedIndex] : undefined;
+      let messageToSeal = latestObservedIndex >= 0 ? liveMessages[latestObservedIndex] : undefined;
+      // At step 0 the newest observed message is the fresh USER prompt (the seed is
+      // excluded from observation). Sealing it would persist `sealed` metadata on a
+      // user message, permanently routing any future same-id re-add through the
+      // MessageList re-id branch. The seal exists to stop later streaming/buffering
+      // from merging into observed ASSISTANT content — a user message needs no seal,
+      // so skip it. Step > 0 is unaffected (input was drained before observation, so
+      // the newest observed message there is the pre-drain state, same as main).
+      if (this.stepNumber === 0 && messageToSeal?.role !== 'assistant') {
+        messageToSeal = undefined;
+      }
       const messagesToSeal = messageToSeal ? [messageToSeal] : [];
       om.sealMessagesForBuffering(messagesToSeal);
 
-      try {
-        await this.turn.hooks?.onSyncObservationComplete?.();
-      } catch (error) {
-        omDebug(
-          `[OM:observe] onSyncObservationComplete hook failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
+      // Suppress the response-id rotation when this step seeded the response message:
+      // the seed holds the ACTIVE id so the agent's response merges into it; rotating
+      // here would orphan the seed and its markers. (Suppression must live at this
+      // invocation site — the hook is re-wired on every step via turn.addHooks.)
+      if (this.seededResponseMessage) {
+        omDebug('[OM:observe] skipping response-id rotation — step-0 seeded response message holds the active id');
+      } else {
+        try {
+          await this.turn.hooks?.onSyncObservationComplete?.();
+        } catch (error) {
+          omDebug(
+            `[OM:observe] onSyncObservationComplete hook failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
       }
 
       if (messagesToSeal.length > 0) {

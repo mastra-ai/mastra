@@ -1,0 +1,62 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Exercise two sequential approval boundaries while tracking active goal time.",
+        "sequenceIndex": 0
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_goal_duration_approval_one",
+            "name": "execute_command",
+            "arguments": {
+              "command": "node -e \"setTimeout(() => console.log('APPROVAL_ONE_DONE'), 250)\"",
+              "timeout": 5,
+              "cwd": null,
+              "tail": 20,
+              "background": false
+            }
+          },
+          {
+            "id": "call_goal_duration_approval_two",
+            "name": "execute_command",
+            "arguments": {
+              "command": "printf 'APPROVAL_TWO_SHOULD_NOT_RUN\\n'",
+              "timeout": 5,
+              "cwd": null,
+              "tail": 20,
+              "background": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Sequential tool approval timing complete."
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Exercise two sequential approval boundaries while tracking active goal time.",
+        "sequenceIndex": 1
+      },
+      "response": {
+        "content": {
+          "decision": "done",
+          "reason": "Both approval boundaries were exercised."
+        }
+      }
+    }
+  ]
+}

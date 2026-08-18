@@ -1,17 +1,14 @@
 {
   "attachment": [
-    "gemma-3-27b-it",
     "gemma-4-26b-a4b-it",
     "gpt-oss-120b",
     "llama-3.3-70b-instruct",
     "mistral-medium-3.5-128b",
     "pixtral-12b-2409",
     "qwen3.5-397b-a17b",
-    "qwen3.6-35b-a3b",
-    "voxtral-small-24b-2507"
+    "qwen3.6-35b-a3b"
   ],
   "temperature": [
-    "gemma-3-27b-it",
     "gemma-4-26b-a4b-it",
     "glm-5.2",
     "gpt-oss-120b",
@@ -22,7 +19,13 @@
     "qwen3-235b-a22b-instruct-2507",
     "qwen3-coder-30b-a3b-instruct",
     "qwen3.5-397b-a17b",
-    "qwen3.6-35b-a3b",
-    "voxtral-small-24b-2507"
+    "qwen3.6-35b-a3b"
+  ],
+  "structuredOutput": [
+    "gemma-4-26b-a4b-it",
+    "glm-5.2",
+    "mistral-medium-3.5-128b",
+    "qwen3.5-397b-a17b",
+    "qwen3.6-35b-a3b"
   ]
 }

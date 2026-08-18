@@ -82,6 +82,9 @@ describe('handleSandboxAccessRequest', () => {
       path: '/tmp/project',
       reason: 'Read workspace files',
     });
+    // #20398: the notification now fires at event receipt in the subscription
+    // listener, not inside the queued handler.
+    expect(ctx.notify).not.toHaveBeenCalled();
   });
 });
 
@@ -100,6 +103,10 @@ describe('handleAskQuestion goal mode', () => {
 
     state.activeInlineQuestion!.handleInput('\r');
     await promise;
+
+    // #20398: the notification now fires at event receipt in the subscription
+    // listener, not inside the queued handler.
+    expect(ctx.notify).not.toHaveBeenCalled();
   });
 
   it('resolves a multi_select prompt with an array of every toggled option label', async () => {
@@ -154,7 +161,7 @@ function createPlanApprovalCtx(projectPath?: string) {
       }),
       invalidate: vi.fn(),
     },
-    ui: { requestRender: vi.fn(), setFocus: vi.fn() },
+    ui: { requestRender: vi.fn(), setFocus: vi.fn(), hasOverlay: vi.fn(() => false) },
     editor: {},
     pendingSubmitPlanComponents: new Map(),
     planStartedGoalId: undefined,
@@ -250,6 +257,9 @@ describe('handlePlanApproval regular approval', () => {
     expect(state.activeInlinePlanApproval).toBe(streamedComponent);
     expect(state.ui.setFocus).toHaveBeenCalledWith(streamedComponent);
     expect(streamedComponent.render(80).join('\n')).toContain('Use as /goal');
+    // #20398: the notification now fires at event receipt in the subscription
+    // listener, not inside the queued handler.
+    expect(ctx.notify).not.toHaveBeenCalled();
   });
 
   it('approves the plan without sending a handoff signal', async () => {
@@ -387,5 +397,55 @@ describe('handlePlanApproval regular approval', () => {
       path: samePlanPath,
       plan: 'Build the feature\nAdd focused tests\nUpdate docs',
     });
+  });
+});
+
+describe('handlePlanApproval with a command overlay open (#21139)', () => {
+  // Regression tests for the overlay focus-steal deadlock: a plan approval
+  // arriving while an overlay (e.g. the model pack selector) is focused must
+  // not steal focus, and resolving it must not force editor focus while an
+  // overlay is still up (pi-tui transfers its blocked overlay-restore state
+  // onto the editor, permanently deadlocking the overlay).
+
+  it('does not steal focus on arrival while an overlay is open; defers via pendingFocus', async () => {
+    const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
+    const { state, ctx } = createPlanApprovalCtx(projectPath);
+    state.ui.hasOverlay.mockReturnValue(true);
+
+    const { component } = await renderPlanApproval(ctx, state, PLAN_PATH);
+
+    expect(state.ui.setFocus).not.toHaveBeenCalledWith(component);
+    expect(state.pendingFocus).toBe(component);
+  });
+
+  it.each([['onApprove'], ['onGoal'], ['onReject']])(
+    'does not force editor focus on %s while an overlay is open',
+    async method => {
+      const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
+      const { state, ctx } = createPlanApprovalCtx(projectPath);
+      state.ui.hasOverlay.mockReturnValue(true);
+
+      const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
+      state.ui.setFocus.mockClear();
+
+      await (component as any)[method]();
+      await promise;
+
+      expect(state.ui.setFocus).not.toHaveBeenCalled();
+      expect(state.pendingFocus).toBeUndefined();
+    },
+  );
+
+  it('keeps the no-overlay behavior: arrival focuses the approval, approve focuses the editor', async () => {
+    const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
+    const { state, ctx } = createPlanApprovalCtx(projectPath);
+
+    const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
+    expect(state.ui.setFocus).toHaveBeenCalledWith(component);
+    expect(state.pendingFocus).toBeUndefined();
+
+    await (component as any).onApprove();
+    await promise;
+    expect(state.ui.setFocus).toHaveBeenLastCalledWith(state.editor);
   });
 });

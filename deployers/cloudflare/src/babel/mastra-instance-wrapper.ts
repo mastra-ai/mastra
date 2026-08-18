@@ -1,4 +1,4 @@
-import type { PluginObj } from '@babel/core';
+import type { PluginObject } from '@babel/core';
 import * as babel from '@babel/core';
 
 /**
@@ -13,7 +13,7 @@ import * as babel from '@babel/core';
  * The transformation ensures the Mastra instance is properly scoped and initialized
  * for each request in the Cloudflare Workers environment.
  *
- * @returns {PluginObj} A Babel plugin object with a visitor that performs the transformation
+ * @returns {PluginObject} A Babel plugin object with a visitor that performs the transformation
  *
  * @example
  * // Before transformation:
@@ -22,7 +22,7 @@ import * as babel from '@babel/core';
  * // After transformation:
  * export const mastra = () => new Mastra();
  */
-export function mastraInstanceWrapper(): PluginObj {
+export function mastraInstanceWrapper(): PluginObject {
   const exportName = 'mastra';
   const className = 'Mastra';
   const t = babel.types;
@@ -46,5 +46,5 @@ export function mastraInstanceWrapper(): PluginObj {
         }
       },
     },
-  } as PluginObj;
+  };
 }

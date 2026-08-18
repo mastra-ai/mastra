@@ -50,6 +50,7 @@ export class StoreOperationsInMemory extends StoreOperations {
       mastra_notifications: new Map(),
       mastra_harness_sessions: new Map(),
       mastra_thread_state: new Map(),
+      mastra_workflow_definitions: new Map(),
     };
   }
 

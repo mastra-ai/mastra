@@ -14,8 +14,8 @@
  * the loop, identical to a code-registered subagent map.
  *
  * The matrix `'fs'` variant cannot model this on its own (it spreads a code
- * `agents:` map), so this is a standalone file. It runs on the normal/evented
- * engines; durable wraps the agent and is orthogonal to the assembly path.
+ * `agents:` map), so this is a standalone file. It runs on the normal engine;
+ * durable wraps the agent and is orthogonal to the assembly path.
  */
 
 import { createOpenAI } from '@ai-sdk/openai-v5';

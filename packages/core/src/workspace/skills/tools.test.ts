@@ -57,9 +57,13 @@ function makeMetadata(overrides: Partial<SkillMetadata> = {}): SkillMetadata {
   };
 }
 
-/** Shorthand for calling tool.execute with an empty context (second arg). */
-async function exec(tool: { execute?: (...args: any[]) => any }, input: Record<string, unknown>) {
-  return tool.execute!(input, {});
+/** Shorthand for calling tool.execute with an optional context (second arg). */
+async function exec(
+  tool: { execute?: (...args: any[]) => any },
+  input: Record<string, unknown>,
+  context: Record<string, unknown> = {},
+) {
+  return tool.execute!(input, context);
 }
 
 // =============================================================================
@@ -74,6 +78,25 @@ describe('createSkillTools', () => {
     expect(tools).toHaveProperty('skill');
     expect(tools).toHaveProperty('skill_search');
     expect(tools).toHaveProperty('skill_read');
+  });
+
+  it('uses the executing request context to resolve a scoped skills view', async () => {
+    const requestContext = {};
+    const scopedSkills = createMockWorkspaceSkills({ get: vi.fn(async () => makeSkill()) });
+    const getScoped = vi.fn(async () => scopedSkills);
+    const skills = createMockWorkspaceSkills({ getScoped });
+    const tools = createSkillTools(skills);
+
+    await Promise.all([
+      exec(tools.skill, { name: 'test-skill' }, { requestContext }),
+      exec(tools.skill_search, { query: 'test' }, { requestContext }),
+      exec(tools.skill_read, { skillName: 'test-skill', path: 'references/missing.md' }, { requestContext }),
+    ]);
+
+    expect(getScoped).toHaveBeenCalledTimes(3);
+    expect(getScoped).toHaveBeenCalledWith({ requestContext });
+    expect(skills.maybeRefresh).not.toHaveBeenCalled();
+    expect(scopedSkills.maybeRefresh).toHaveBeenCalledTimes(3);
   });
 });
 
@@ -591,7 +614,65 @@ describe('skill_read tool', () => {
 
     const result = await exec(tool, { skillName: 'test-skill', path: 'references/file.md', startLine: 2, endLine: 4 });
 
-    expect(result).toBe('line 2\nline 3\nline 4');
+    expect(result).toBe('references/file.md (lines 2-4 of 5)\nline 2\nline 3\nline 4');
+  });
+
+  it('reports the total line count when a range is requested', async () => {
+    const skill = makeSkill({ name: 'test-skill', path: 'skills/test-skill' });
+    const content = Array.from({ length: 428 }, (_, i) => `line ${i + 1}`).join('\n');
+    const skills = createMockWorkspaceSkills({
+      get: vi.fn(async () => skill),
+      getReference: vi.fn(async () => content),
+    });
+    const { skill_read: tool } = createSkillTools(skills);
+
+    const result = await exec(tool, {
+      skillName: 'test-skill',
+      path: 'references/workflow.md',
+      startLine: 350,
+      endLine: 449,
+    });
+
+    // The window is clamped to EOF, so the header tells the model it reached the end.
+    expect(result).toContain('references/workflow.md (lines 350-428 of 428)');
+    expect(result).toContain('line 428');
+  });
+
+  it('returns an explicit EOF message when startLine is past the end of the file', async () => {
+    const skill = makeSkill({ name: 'test-skill', path: 'skills/test-skill' });
+    const content = Array.from({ length: 428 }, (_, i) => `line ${i + 1}`).join('\n');
+    const skills = createMockWorkspaceSkills({
+      get: vi.fn(async () => skill),
+      getReference: vi.fn(async () => content),
+    });
+    const { skill_read: tool } = createSkillTools(skills);
+
+    const result = await exec(tool, {
+      skillName: 'test-skill',
+      path: 'references/workflow.md',
+      startLine: 450,
+      endLine: 549,
+    });
+
+    expect(result).not.toBe('');
+    expect(result).toContain('has 428 lines');
+    expect(result).toContain('valid range 1-428');
+    expect(result).toContain('past the end of the file');
+    expect(result).toContain('stop paginating');
+  });
+
+  it('explains an inverted range without claiming end of file', async () => {
+    const skill = makeSkill({ name: 'test-skill', path: 'skills/test-skill' });
+    const skills = createMockWorkspaceSkills({
+      get: vi.fn(async () => skill),
+      getReference: vi.fn(async () => 'line 1\nline 2\nline 3\nline 4\nline 5'),
+    });
+    const { skill_read: tool } = createSkillTools(skills);
+
+    const result = await exec(tool, { skillName: 'test-skill', path: 'references/file.md', startLine: 4, endLine: 2 });
+
+    expect(result).toContain('startLine is greater than endLine');
+    expect(result).not.toContain('past the end of the file');
   });
 
   it('returns full content when startLine and endLine are omitted', async () => {

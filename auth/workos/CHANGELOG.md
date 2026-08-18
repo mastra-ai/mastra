@@ -1,5 +1,29 @@
 # @mastra/auth-workos
 
+## 1.6.4
+
+### Patch Changes
+
+- dependencies updates: ([#19787](https://github.com/mastra-ai/mastra/pull/19787))
+  - Updated dependency [`@workos-inc/node@8.13.0` ↗︎](https://www.npmjs.com/package/@workos-inc/node/v/8.13.0) (from `8.8.0`, in `dependencies`)
+  - Updated dependency [`@workos/authkit-session@^0.7.1` ↗︎](https://www.npmjs.com/package/@workos/authkit-session/v/0.7.1) (from `^0.5.0`, in `dependencies`)
+
+- Added organization management and host integration to MastraAuthWorkos so it can be passed directly to a server host without a wrapper adapter. The provider now bootstraps a personal organization for new users (ensureOrganization), checks organization admin roles (isOrganizationAdmin), and resolves its redirect URI from the host public URL during init when not configured explicitly. ([#19765](https://github.com/mastra-ai/mastra/pull/19765))
+
+## 1.6.4-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#19787](https://github.com/mastra-ai/mastra/pull/19787))
+  - Updated dependency [`@workos-inc/node@8.13.0` ↗︎](https://www.npmjs.com/package/@workos-inc/node/v/8.13.0) (from `8.8.0`, in `dependencies`)
+  - Updated dependency [`@workos/authkit-session@^0.7.1` ↗︎](https://www.npmjs.com/package/@workos/authkit-session/v/0.7.1) (from `^0.5.0`, in `dependencies`)
+
+## 1.6.4-alpha.0
+
+### Patch Changes
+
+- Added organization management and host integration to MastraAuthWorkos so it can be passed directly to a server host without a wrapper adapter. The provider now bootstraps a personal organization for new users (ensureOrganization), checks organization admin roles (isOrganizationAdmin), and resolves its redirect URI from the host public URL during init when not configured explicitly. ([#19765](https://github.com/mastra-ai/mastra/pull/19765))
+
 ## 1.6.3
 
 ### Patch Changes
@@ -325,9 +349,7 @@
   ```typescript
   import { MastraRBACWorkos } from '@mastra/auth-workos';
 
-  const rbac = new MastraRBACWorkos({
-    /* config */
-  });
+  const rbac = new MastraRBACWorkos({/* config */});
 
   // List all available roles
   const roles = await rbac.getAvailableRoles();
@@ -353,9 +375,7 @@
   ```typescript
   import { MastraRBACWorkos } from '@mastra/auth-workos';
 
-  const rbac = new MastraRBACWorkos({
-    /* config */
-  });
+  const rbac = new MastraRBACWorkos({/* config */});
 
   // List all available roles
   const roles = await rbac.getAvailableRoles();
