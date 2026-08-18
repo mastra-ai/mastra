@@ -215,7 +215,7 @@ Lists all metadata field indexes for an index.
 
 ### `updateVector()`
 
-Updates the vector and optionally the metadata for a specific ID within an index. Vectorize has no partial-update operation, so `update.vector` is required; metadata-only updates are not supported and throw an error.
+Updates the vector and optionally the metadata for a specific ID within an index. Vectorize has no partial-update operation, so `update.vector` is required. Metadata-only updates aren't supported and throw an error.
 
 <PropertiesTable
   content={[
@@ -259,7 +259,7 @@ Deletes a vector and its associated metadata for a specific ID within an index.
 
 ### `deleteVectors()`
 
-Deletes multiple vectors and their associated metadata by ID. Vectorize has no filtered-delete operation, so deleting by metadata filter is not supported and throws an error.
+Deletes multiple vectors and their associated metadata by ID. Vectorize has no filtered-delete operation, so deleting by metadata filter isn't supported and throws an error.
 
 <PropertiesTable
   content={[
