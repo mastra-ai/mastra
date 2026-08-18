@@ -5,10 +5,10 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import SignalsOverviewPage from '..';
 import { navHandleWithChildren } from '../../../lib/nav';
 import { RouteHeader } from '../../../lib/route-header/route-header';
 import { SignalsEntityCrumb } from '../signals-entity-crumb';
+import SignalsOverviewPage from '../signals-entity-detail-page';
 import {
   allThemePathsResponse,
   drilldownThemeFlowResponse,

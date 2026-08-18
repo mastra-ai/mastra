@@ -27,6 +27,11 @@ export interface ThemeLearningEntity {
   entityType: string;
   availableSignals: TraceSignalName[];
   signalCatalog?: SignalCatalogEntry[];
+  traceCount?: number;
+  readySignalCount?: number;
+  enabledSignalCount?: number;
+  status?: EntityLearningProgressStatus;
+  updatedAt?: string;
   latestWindow?: {
     startedAt: string;
     endedAt: string;

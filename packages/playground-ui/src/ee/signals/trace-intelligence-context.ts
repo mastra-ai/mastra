@@ -9,7 +9,9 @@ export type TraceIntelligenceRequest = <Response>(path: string) => Promise<Respo
 async function defaultRequest<Response>(path: string): Promise<Response> {
   const response = await fetch(path, { credentials: 'include' });
   if (!response.ok) {
-    throw new Error(`Agent Learning request failed (${response.status})`);
+    throw Object.assign(new Error(`Trace Intelligence request failed (${response.status})`), {
+      status: response.status,
+    });
   }
   return response.json() as Promise<Response>;
 }
