@@ -150,7 +150,7 @@ describe('Subconscious LibSQL integration', () => {
     const scope = ['org:acme', `resource:${resourceId}`, `thread:${threadId}`];
     const atlas = await knowledge.resolveNode({ name: 'Project Atlas', scope });
     expect(atlas).toMatchObject({ kind: 'project', scope: scope.slice(0, 2) });
-    expect((await knowledge.knowledgeAbout({ node: atlas!.id, scope })).records).toHaveLength(2);
+    expect((await knowledge.listKnowledgeAbout({ node: atlas!.id, scope })).records).toHaveLength(2);
 
     const betaThreadId = randomUUID();
     await memory.createThread({ threadId: betaThreadId, resourceId, title: 'Sibling thread' });
