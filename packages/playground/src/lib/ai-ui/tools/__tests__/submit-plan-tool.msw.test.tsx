@@ -92,6 +92,9 @@ describe('SubmitPlanTool', () => {
 
       renderSubmitPlan(pendingProps);
 
+      expect(screen.getByRole('group', { name: 'Plan approval' })).not.toBeNull();
+      expect(screen.getByTitle(submittedPlanPath)).not.toBeNull();
+      expect(screen.getByText('add-dark-mode.md')).not.toBeNull();
       expect(await screen.findByRole('heading', { name: 'Add dark mode' })).not.toBeNull();
       expect(screen.getByText('Use semantic color tokens throughout the interface.')).not.toBeNull();
     });
