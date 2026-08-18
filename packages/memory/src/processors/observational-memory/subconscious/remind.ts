@@ -103,6 +103,15 @@ async function dropFreshOwnItems(
   return sources.filter((_, index) => checks[index]);
 }
 
+/**
+ * The id of the reminder agent's own conversation thread, derived from the parent session's thread
+ * id. The derived thread is owned by the session: it is created on demand when the session first
+ * reminds, and `Memory.deleteThread()` cascades to it when the session's thread is deleted.
+ */
+export function remindThreadKey(parentThreadId: string): string {
+  return `subconscious:${parentThreadId}:remind`;
+}
+
 export interface SubconsciousRemindOptions {
   /**
    * Returns the Memory that backs the reminder agent's own conversation. Called on demand so a
@@ -169,7 +178,7 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
               ...(remindMemory
                 ? {
                     memory: {
-                      thread: `subconscious:${context.threadId}:remind`,
+                      thread: remindThreadKey(context.threadId),
                       // A reminder always has a thread; a resource is optional on the observation
                       // path, so fall back to the thread to keep the conversation addressable.
                       resource: context.resourceId ?? context.threadId,

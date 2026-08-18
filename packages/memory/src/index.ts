@@ -57,6 +57,7 @@ import {
   composeReflectionAgentHandlers,
   createLearnerHandler,
 } from './processors/observational-memory/subconscious/learn';
+import { remindThreadKey } from './processors/observational-memory/subconscious/remind';
 import { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
 import type {
   SummarizeConversationOptions,
@@ -923,6 +924,14 @@ export class Memory extends MastraMemory {
     }
     if (this.vector) {
       this.trackVectorCleanup(this.deleteThreadVectors(threadId));
+    }
+    // The session's derived reminder conversation lives and dies with the session. Delete it
+    // through the same path so its observational memory and vectors are cleaned up too; the
+    // recursion terminates because a derived thread has no derived thread of its own.
+    const derivedRemindThreadId = remindThreadKey(threadId);
+    const derivedRemindThread = await memoryStore.getThreadById({ threadId: derivedRemindThreadId });
+    if (derivedRemindThread) {
+      await this.deleteThread(derivedRemindThreadId);
     }
   }
 

@@ -598,6 +598,51 @@ describe('Subconscious remind', () => {
       expect(JSON.stringify(prompts)).toContain('marker-first-reminder');
     });
 
+    it('deletes the derived reminder conversation when the session thread is deleted', async () => {
+      const { Memory } = await import('../../../index');
+      const storage = new InMemoryStore();
+      const memory = new Memory({ storage });
+      const now = new Date();
+      const thread = (id: string) => ({
+        id,
+        resourceId: 'user-42',
+        title: id,
+        createdAt: now,
+        updatedAt: now,
+        metadata: {},
+      });
+      await memory.saveThread({ thread: thread('alpha') });
+      await memory.saveThread({ thread: thread('subconscious:alpha:remind') });
+
+      await memory.deleteThread('alpha');
+
+      // The session owns its derived reminder conversation: both die together.
+      expect(await memory.getThreadById({ threadId: 'alpha' })).toBeNull();
+      expect(await memory.getThreadById({ threadId: 'subconscious:alpha:remind' })).toBeNull();
+    });
+
+    it('leaves other sessions reminder conversations alone when a thread is deleted', async () => {
+      const { Memory } = await import('../../../index');
+      const storage = new InMemoryStore();
+      const memory = new Memory({ storage });
+      const now = new Date();
+      const thread = (id: string) => ({
+        id,
+        resourceId: 'user-42',
+        title: id,
+        createdAt: now,
+        updatedAt: now,
+        metadata: {},
+      });
+      await memory.saveThread({ thread: thread('alpha') });
+      await memory.saveThread({ thread: thread('beta') });
+      await memory.saveThread({ thread: thread('subconscious:beta:remind') });
+
+      await memory.deleteThread('alpha');
+
+      expect(await memory.getThreadById({ threadId: 'subconscious:beta:remind' })).not.toBeNull();
+    });
+
     it('routes a remind memory construction failure into the extractor failure path', async () => {
       const extractor = new SubconsciousRemindExtractor({ name: 'remind', maxSteps: 3, builtIn: true }, undefined, {
         createRemindMemory: () => {
