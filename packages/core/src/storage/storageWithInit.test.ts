@@ -24,8 +24,9 @@ describe('augmentWithInit', () => {
     const knowledgeInitSpy = vi.spyOn(knowledge, 'init');
     const composite = augmentWithInit(new MastraCompositeStore({ id: 'knowledge-composite', domains: { knowledge } }));
 
-    await composite.getStore('knowledge');
+    const initializedKnowledge = await composite.getStore('knowledge');
 
+    expect(initializedKnowledge).toBe(knowledge);
     expect(knowledgeInitSpy).toHaveBeenCalledOnce();
   });
 

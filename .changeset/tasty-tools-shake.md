@@ -3,4 +3,4 @@
 '@mastra/core': patch
 ---
 
-Added LibSQL persistence for scoped knowledge nodes and items.
+Added the experimental knowledge storage contract in `@mastra/core` and its LibSQL persistence in `@mastra/libsql`. Create a node with `storage.stores.knowledge.createNode(...)`, then attach durable knowledge with `appendKnowledge({ node, ... })`.

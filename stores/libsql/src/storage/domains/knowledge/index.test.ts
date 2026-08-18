@@ -74,7 +74,8 @@ describe('KnowledgeLibSQL initialization', () => {
   it('is repeatable and adds knowledge tables to an existing store', async () => {
     const client = createClient({ url: 'file::memory:?cache=shared' });
     try {
-      await client.execute('CREATE TABLE existing_domain (id TEXT PRIMARY KEY)');
+      await client.execute('CREATE TABLE IF NOT EXISTS existing_domain (id TEXT PRIMARY KEY)');
+      await client.execute('DELETE FROM existing_domain');
       await client.execute("INSERT INTO existing_domain (id) VALUES ('preserved')");
       const store = new KnowledgeLibSQL({ client });
 
