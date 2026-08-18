@@ -1,5 +1,5 @@
 ---
-'@internal/mastra-factory': patch
+'@mastra/factory': patch
 ---
 
 Start the implementation run when a work item enters Building.

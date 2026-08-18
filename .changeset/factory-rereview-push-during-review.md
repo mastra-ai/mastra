@@ -1,5 +1,5 @@
 ---
-'@internal/mastra-factory': patch
+'@mastra/factory': patch
 ---
 
 Re-review a pull request when a push lands while its card is still in Reviewing.

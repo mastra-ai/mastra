@@ -1,5 +1,5 @@
 ---
-'@internal/factory': patch
+'@mastra/factory': patch
 ---
 
 Send Factory's own pull requests straight to Review.

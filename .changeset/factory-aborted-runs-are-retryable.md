@@ -1,5 +1,5 @@
 ---
-'@internal/mastra-factory': patch
+'@mastra/factory': patch
 ---
 
 Resume a skill run that was aborted out from under it.

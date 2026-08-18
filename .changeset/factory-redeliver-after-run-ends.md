@@ -1,5 +1,5 @@
 ---
-'@internal/mastra-factory': patch
+'@mastra/factory': patch
 ---
 
 Wait for the run that swallowed a kickoff, instead of racing it.

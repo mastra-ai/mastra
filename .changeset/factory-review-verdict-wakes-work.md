@@ -1,5 +1,5 @@
 ---
-'@internal/mastra-factory': patch
+'@mastra/factory': patch
 ---
 
 Let a Factory review verdict reach the agent that authored the pull request.
