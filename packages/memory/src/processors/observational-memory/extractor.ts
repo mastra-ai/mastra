@@ -1,4 +1,4 @@
-import type { ProcessorContext } from '@mastra/core/processors';
+import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import { z } from 'zod';
 
@@ -22,8 +22,12 @@ export interface ExtractorOnExtractedContext<T = unknown> extends ExtractorRunti
   previous?: T;
   current: T;
   rawObservations?: string;
+  /** Formatted recent conversation messages from the observed window — content already visible to the main agent. */
+  recentMessages?: string;
   sendSignal?: ProcessorContext['sendSignal'];
   sendStateSignal?: ProcessorContext['sendStateSignal'];
+  writer?: ProcessorStreamWriter;
+  abortSignal?: AbortSignal;
 }
 
 type MaybePromise<T> = T | Promise<T>;

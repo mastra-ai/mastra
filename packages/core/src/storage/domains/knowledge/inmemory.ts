@@ -28,6 +28,7 @@ import type {
   KnowledgeSemanticDocumentType,
   KnowledgeSemanticOperation,
   KnowledgeSemanticOutboxEntry,
+  QueryKnowledgeBySourceInput,
   QueryKnowledgeInput,
   QueryKnowledgeOutput,
   ListKnowledgeNodesInput,
@@ -315,6 +316,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       capturedAt: new Date(),
       when: input.when ? new Date(input.when) : undefined,
       maxScope: input.maxScope,
+      metadata: input.metadata,
     };
     if (this.#db.knowledgeRecords.has(record.id)) throw new Error(`Knowledge already exists: ${record.id}`);
     this.#db.knowledgeRecords.set(record.id, record);
@@ -347,6 +349,25 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
 
   async listKnowledgeRelatedTo(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput> {
     return this.#queryKnowledge(input, 'related');
+  }
+
+  async knowledgeBySource(input: QueryKnowledgeBySourceInput): Promise<QueryKnowledgeOutput> {
+    const scope = canonicalizeKnowledgeScope(input.scope);
+    const limit = input.limit ?? 100;
+    const records = [...this.#db.knowledgeRecords.values()]
+      .filter(
+        record =>
+          record.sourceThreadId === input.sourceThreadId &&
+          isKnowledgeScopeVisible(record.scope, scope) &&
+          (input.includeDeleted || !record.deletedAt) &&
+          (!input.after || record.id > input.after),
+      )
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .slice(0, limit + 1);
+    return {
+      records: records.slice(0, limit).map(cloneRecord),
+      nextCursor: records.length > limit ? records[limit - 1]?.id : undefined,
+    };
   }
 
   async removeKnowledge({ id, deletedBy }: { id: string; deletedBy: string }): Promise<KnowledgeRecord> {
