@@ -1319,6 +1319,27 @@ describe('ensure (materialize)', () => {
     // A per-user sandbox binding row was created for the caller.
     expect(tables.sandboxes).toHaveLength(1);
     expect(tables.sandboxes[0]).toMatchObject({ projectRepositoryId: 'p1', userId: 'u1' });
+    // No base checkpoint on this repo → no seed name is passed.
+    expect(ensureProjectSandbox.mock.calls[0]![0].seedCheckpointName).toBeUndefined();
+  });
+
+  it('seeds provisioning from the repo base checkpoint when one exists', async () => {
+    tables.projectRepositories.push(
+      projectRepositoryRow({
+        id: 'p1',
+        orgId: 'org1',
+        userId: 'u1',
+        installationId: 7,
+        repoFullName: 'octo/hello',
+        defaultBranch: 'main',
+        sandboxWorkdir: '/workspace/hello',
+        baseCheckpoint: { name: 'repo-p1', sha: 'abc123', builtAt: new Date(), setupCommandHash: null },
+      }),
+    );
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
+    expect(res.status).toBe(200);
+    expect(ensureProjectSandbox).toHaveBeenCalledOnce();
+    expect(ensureProjectSandbox).toHaveBeenCalledWith(expect.objectContaining({ seedCheckpointName: 'repo-p1' }));
   });
 
   it('404s for a project the user does not own', async () => {

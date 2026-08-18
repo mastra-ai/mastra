@@ -1,6 +1,7 @@
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { baseCheckpointIsStale } from '../../../sandbox/base-checkpoint-triggers.js';
 import { FactoryProjectsStorage } from '../projects/base.js';
 import { SourceControlStorage } from './base.js';
 import type { ProjectRepository, SourceControlStorageHandle } from './base.js';
@@ -236,6 +237,104 @@ describe('SourceControlStorage', () => {
     });
     expect(secondLink).toMatchObject({ repositoryId: repository.id, branch: 'develop', sandboxProvider: 'railway' });
     expect(firstLink.id).not.toBe(secondLink.id);
+  });
+
+  it('stores, reads, and clears base-checkpoint metadata', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    expect(link.baseCheckpoint).toBeNull();
+
+    const builtAt = new Date();
+    await github.projectRepositories.setBaseCheckpoint({
+      id: link.id,
+      checkpoint: { name: `repo-${link.id}`, sha: 'abc123', builtAt, setupCommandHash: 'hash-1' },
+    });
+    let fresh = await github.projectRepositories.get({ orgId: 'org-1', id: link.id });
+    expect(fresh?.baseCheckpoint).toMatchObject({ name: `repo-${link.id}`, sha: 'abc123', setupCommandHash: 'hash-1' });
+
+    await github.projectRepositories.setBaseCheckpoint({ id: link.id, checkpoint: null });
+    fresh = await github.projectRepositories.get({ orgId: 'org-1', id: link.id });
+    expect(fresh?.baseCheckpoint).toBeNull();
+  });
+
+  it('preserves base-checkpoint metadata when link() is retried for the same connection', async () => {
+    const project = await createProject();
+    const installation = await createInstallation(github);
+    const repository = await github.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, ...repositoryInput },
+    });
+    const connection = await github.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    const firstLink = await github.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection.id,
+      repositoryId: repository.id,
+      ...projectRepositoryInput,
+    });
+    await github.projectRepositories.setBaseCheckpoint({
+      id: firstLink.id,
+      checkpoint: { name: `repo-${firstLink.id}`, sha: 'abc123', builtAt: new Date(), setupCommandHash: 'hash-1' },
+    });
+
+    const retried = await github.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection.id,
+      repositoryId: repository.id,
+      ...projectRepositoryInput,
+      branch: 'retry-should-not-overwrite',
+    });
+    const fresh = await github.projectRepositories.get({ orgId: 'org-1', id: firstLink.id });
+
+    expect(retried.id).toBe(firstLink.id);
+    expect(retried.branch).toBeNull();
+    expect(retried.baseCheckpoint).toMatchObject({
+      name: `repo-${firstLink.id}`,
+      sha: 'abc123',
+      setupCommandHash: 'hash-1',
+    });
+    expect(fresh?.baseCheckpoint).toMatchObject({
+      name: `repo-${firstLink.id}`,
+      sha: 'abc123',
+      setupCommandHash: 'hash-1',
+    });
+  });
+
+  it('round-trips a null setupCommandHash so no-setup-command checkpoints stay fresh', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    await github.projectRepositories.setBaseCheckpoint({
+      id: link.id,
+      checkpoint: { name: `repo-${link.id}`, sha: 'abc123', builtAt: new Date(), setupCommandHash: null },
+    });
+    const fresh = await github.projectRepositories.get({ orgId: 'org-1', id: link.id });
+    // Must stay null (not ''), otherwise baseCheckpointIsStale() compares
+    // '' !== hashSetupCommand(null) and permanently marks the checkpoint stale.
+    expect(fresh?.baseCheckpoint?.setupCommandHash).toBeNull();
+    expect(baseCheckpointIsStale(fresh!)).toBe(false);
+  });
+
+  it('invalidates base-checkpoint metadata when the setup command changes', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    await github.projectRepositories.setBaseCheckpoint({
+      id: link.id,
+      checkpoint: { name: `repo-${link.id}`, sha: 'abc123', builtAt: new Date(), setupCommandHash: 'hash-1' },
+    });
+
+    // Unrelated update keeps the checkpoint.
+    await github.projectRepositories.update({ orgId: 'org-1', id: link.id, input: { branch: 'develop' } });
+    let fresh = await github.projectRepositories.get({ orgId: 'org-1', id: link.id });
+    expect(fresh?.baseCheckpoint).not.toBeNull();
+
+    // Setup-command change invalidates it.
+    await github.projectRepositories.update({ orgId: 'org-1', id: link.id, input: { setupCommand: 'pnpm i' } });
+    fresh = await github.projectRepositories.get({ orgId: 'org-1', id: link.id });
+    expect(fresh?.baseCheckpoint).toBeNull();
   });
 
   it('scopes sandboxes and worktrees to the project-repository link', async () => {

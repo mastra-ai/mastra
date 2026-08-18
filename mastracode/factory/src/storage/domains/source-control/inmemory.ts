@@ -9,6 +9,7 @@ import type {
   LinkProjectRepositoryInput,
   PooledSandbox,
   ProjectRepository,
+  ProjectRepositoryBaseCheckpoint,
   ProjectRepositorySandbox,
   ProjectSourceControlConnection,
   ReleasePooledSandboxInput,
@@ -301,6 +302,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         sandboxProvider: input.sandboxProvider,
         sandboxWorkdir: input.sandboxWorkdir,
         setupCommand: input.setupCommand ?? null,
+        baseCheckpoint: null,
         teardownCommand: input.teardownCommand ?? null,
         createdAt: now,
         updatedAt: now,
@@ -319,8 +321,22 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
     }): Promise<ProjectRepository | null> => {
       const row = await this.projectRepositories.get({ orgId, id });
       if (!row) return null;
+      if (input.setupCommand !== undefined && input.setupCommand !== row.setupCommand) {
+        row.baseCheckpoint = null;
+      }
       Object.assign(row, input, { updatedAt: new Date() });
       return row;
+    },
+    setBaseCheckpoint: async ({
+      id,
+      checkpoint,
+    }: {
+      id: string;
+      checkpoint: ProjectRepositoryBaseCheckpoint | null;
+    }): Promise<void> => {
+      const row = this.projectRepositoriesRows.find(candidate => candidate.id === id);
+      if (!row) throw new Error('Project repository not found');
+      row.baseCheckpoint = checkpoint;
     },
     unlink: async ({ orgId, id }: { orgId: string; id: string }): Promise<boolean> => {
       if (!(await this.projectRepositories.get({ orgId, id }))) return false;

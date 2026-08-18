@@ -91,6 +91,10 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       sandbox_provider: { type: 'text' },
       sandbox_workdir: { type: 'text' },
       setup_command: { type: 'text', nullable: true },
+      base_checkpoint_name: { type: 'text', nullable: true },
+      base_checkpoint_sha: { type: 'text', nullable: true },
+      base_checkpoint_built_at: { type: 'timestamp', nullable: true },
+      base_checkpoint_setup_hash: { type: 'text', nullable: true },
       teardown_command: { type: 'text', nullable: true },
       created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
@@ -265,9 +269,25 @@ export interface ProjectRepository {
   sandboxProvider: string;
   sandboxWorkdir: string;
   setupCommand: string | null;
+  /** Base checkpoint metadata — set by the base-checkpoint build job. */
+  baseCheckpoint: ProjectRepositoryBaseCheckpoint | null;
   teardownCommand: string | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+/**
+ * Metadata for a repo's warm base checkpoint (cloned default branch + setup
+ * command already run). New sessions boot from it instead of a cold clone.
+ */
+export interface ProjectRepositoryBaseCheckpoint {
+  /** Provider checkpoint name, e.g. `repo-<projectRepositoryId>`. */
+  name: string;
+  /** Default-branch HEAD sha the checkpoint was built at. */
+  sha: string;
+  builtAt: Date;
+  /** Hash of the setup command at build time (null when no setup command) — mismatch invalidates the checkpoint. */
+  setupCommandHash: string | null;
 }
 
 export interface ExternalRepositoryProjectTarget {
@@ -444,6 +464,11 @@ export interface SourceControlStorageHandle {
     get(args: { orgId: string; id: string }): Promise<ProjectRepository | null>;
     link(args: LinkProjectRepositoryInput): Promise<ProjectRepository>;
     update(args: { orgId: string; id: string; input: UpdateProjectRepositoryInput }): Promise<ProjectRepository | null>;
+    /**
+     * Record (or clear, with `checkpoint: null`) the repo's base-checkpoint
+     * metadata after a build job snapshots the prepared workdir.
+     */
+    setBaseCheckpoint(args: { id: string; checkpoint: ProjectRepositoryBaseCheckpoint | null }): Promise<void>;
     unlink(args: { orgId: string; id: string }): Promise<boolean>;
   };
   readonly sandboxes: {
@@ -572,6 +597,10 @@ interface ProjectRepositoryDbRow extends Record<string, unknown> {
   sandbox_provider: string;
   sandbox_workdir: string;
   setup_command: string | null;
+  base_checkpoint_name: string | null;
+  base_checkpoint_sha: string | null;
+  base_checkpoint_built_at: Date | null;
+  base_checkpoint_setup_hash: string | null;
   teardown_command: string | null;
   created_at: Date;
   updated_at: Date;
@@ -674,6 +703,15 @@ function toProjectRepository(row: ProjectRepositoryDbRow): ProjectRepository {
     sandboxProvider: row.sandbox_provider,
     sandboxWorkdir: row.sandbox_workdir,
     setupCommand: row.setup_command,
+    baseCheckpoint:
+      row.base_checkpoint_name && row.base_checkpoint_sha && row.base_checkpoint_built_at
+        ? {
+            name: row.base_checkpoint_name,
+            sha: row.base_checkpoint_sha,
+            builtAt: row.base_checkpoint_built_at,
+            setupCommandHash: row.base_checkpoint_setup_hash ?? null,
+          }
+        : null,
     teardownCommand: row.teardown_command,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -1085,10 +1123,8 @@ export class SourceControlStorage extends FactoryStorageDomain {
             throw new Error('Repository does not belong to the connection installation.');
           }
           const now = new Date();
-          const row = await db().upsertOne<ProjectRepositoryDbRow>(
-            PROJECT_REPOSITORIES,
-            ['connection_id', 'repository_id'],
-            {
+          try {
+            const row = await db().insertOne<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {
               connection_id: input.connectionId,
               repository_id: input.repositoryId,
               created_by_user_id: input.createdByUserId,
@@ -1099,9 +1135,20 @@ export class SourceControlStorage extends FactoryStorageDomain {
               teardown_command: input.teardownCommand ?? null,
               created_at: now,
               updated_at: now,
-            },
-          );
-          return toProjectRepository(row);
+            });
+            return toProjectRepository(row);
+          } catch (error) {
+            // Retrying link() after setBaseCheckpoint() must not wipe the
+            // existing checkpoint. Match the in-memory handle: return the
+            // existing row unchanged on a unique-constraint race.
+            if (!(error instanceof UniqueViolationError)) throw error;
+            const row = await db().findOne<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {
+              connection_id: input.connectionId,
+              repository_id: input.repositoryId,
+            });
+            if (!row) throw error;
+            return toProjectRepository(row);
+          }
         },
         update: async ({ orgId, id, input }) => {
           const existing = await getProjectRepository({ orgId, id });
@@ -1111,9 +1158,37 @@ export class SourceControlStorage extends FactoryStorageDomain {
           if (input.sandboxProvider !== undefined) patch.sandbox_provider = input.sandboxProvider;
           if (input.sandboxWorkdir !== undefined) patch.sandbox_workdir = input.sandboxWorkdir;
           if (input.setupCommand !== undefined) patch.setup_command = input.setupCommand;
+          // A changed setup command invalidates the base checkpoint — it was
+          // built with the old command baked in.
+          if (input.setupCommand !== undefined && input.setupCommand !== existing.setupCommand) {
+            patch.base_checkpoint_name = null;
+            patch.base_checkpoint_sha = null;
+            patch.base_checkpoint_built_at = null;
+            patch.base_checkpoint_setup_hash = null;
+          }
           if (input.teardownCommand !== undefined) patch.teardown_command = input.teardownCommand;
           await db().updateMany(PROJECT_REPOSITORIES, { id }, patch);
           return getProjectRepository({ orgId, id });
+        },
+        setBaseCheckpoint: async ({ id, checkpoint }) => {
+          await requireProjectRepositoryById(id);
+          await db().updateMany(
+            PROJECT_REPOSITORIES,
+            { id },
+            checkpoint
+              ? {
+                  base_checkpoint_name: checkpoint.name,
+                  base_checkpoint_sha: checkpoint.sha,
+                  base_checkpoint_built_at: checkpoint.builtAt,
+                  base_checkpoint_setup_hash: checkpoint.setupCommandHash,
+                }
+              : {
+                  base_checkpoint_name: null,
+                  base_checkpoint_sha: null,
+                  base_checkpoint_built_at: null,
+                  base_checkpoint_setup_hash: null,
+                },
+          );
         },
         unlink: async ({ orgId, id }) => {
           const existing = await getProjectRepository({ orgId, id });

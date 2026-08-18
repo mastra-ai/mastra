@@ -42,9 +42,17 @@ interface RepoMaterializationBinding {
 }
 
 /** Adapt a per-(project,user) sandbox binding row to the fleet's persistence seam. */
-function bindingStore(row: ProjectRepositorySandbox, storage: SourceControlSandboxStorage): SandboxBindingStore {
+function bindingStore(
+  row: ProjectRepositorySandbox,
+  storage: SourceControlSandboxStorage,
+  seedCheckpointName?: string,
+): SandboxBindingStore {
   return {
     sandboxId: row.sandboxId,
+    // Boot-only fallback: fresh provisions seed from the repo base checkpoint
+    // (when the builder has produced one) so materialization pulls instead of
+    // cloning. Snapshots never write here.
+    ...(seedCheckpointName ? { seedCheckpointName } : {}),
     setSandboxId: id =>
       id === null ? storage.clearBinding({ id: row.id }) : storage.setSandboxId({ id: row.id, sandboxId: id }),
     clear: () => storage.clearBinding({ id: row.id }),
@@ -61,9 +69,11 @@ export async function ensureProjectSandbox(options: {
   storage: SourceControlSandboxStorage;
   token: string;
   onProgress?: ProgressFn;
+  /** Repo base checkpoint to seed a fresh provision from (boot-only). */
+  seedCheckpointName?: string;
 }): Promise<MaterializationSandbox> {
-  const { fleet, row, storage, token, onProgress } = options;
-  return fleet.ensureSandbox(bindingStore(row, storage), { GH_TOKEN: token }, onProgress, {
+  const { fleet, row, storage, token, onProgress, seedCheckpointName } = options;
+  return fleet.ensureSandbox(bindingStore(row, storage, seedCheckpointName), { GH_TOKEN: token }, onProgress, {
     actingUserId: row.userId,
   });
 }
@@ -138,7 +148,7 @@ const SH_RETRY_DELAY_MS = 2000;
  * to re-run. Hang-guard timeouts are NOT retried — the budget applies to the
  * command as a whole.
  */
-async function sh(
+export async function sh(
   sandbox: MaterializationSandbox,
   script: string,
   options: ShOptions = {},
@@ -284,6 +294,14 @@ export interface MaterializeRepoOptions {
   token: string;
   storage: MaterializationStore;
   onProgress?: ProgressFn;
+  /**
+   * Skip the default-branch `git pull --ff-only` when the workdir already
+   * holds a checkout. Set when the checkout was just seeded from a fresh base
+   * checkpoint (rebuilt on every default-branch push), where the pull is
+   * redundant network cost: session work happens on a branch that
+   * `checkoutSessionBranch` fetches fresh regardless.
+   */
+  skipPullOnExistingCheckout?: boolean;
 }
 
 /**
@@ -297,7 +315,7 @@ export async function materializeRepo(options: MaterializeRepoOptions): Promise<
 }
 
 async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<void> {
-  const { row: sandboxRow, repoInfo, sandbox, token, storage, onProgress } = options;
+  const { row: sandboxRow, repoInfo, sandbox, token, storage, onProgress, skipPullOnExistingCheckout } = options;
   const workdir = sandboxRow.sandboxWorkdir;
   const repo = repoInfo.repoFullName;
 
@@ -334,6 +352,9 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
   // exists. Disk is the source of truth: detect the checkout instead of
   // trusting the row.
   const alreadyMaterialized = await hasExistingCheckout(sandbox, workdir, repo);
+  process.stderr.write(
+    `[factory:timing] workspace.materialize.path ${!alreadyMaterialized ? 'clone' : skipPullOnExistingCheckout ? 'seeded-skip' : 'pull'}\n`,
+  );
 
   let tokenInRemote = false;
   try {
@@ -345,6 +366,14 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
         phase: 'cloning',
         message: `Cloning ${repo} (first open can take a minute)…`,
       });
+      // The workdir holds no usable checkout of this repo, but it may not be
+      // empty: a checkpoint seed or a clone that died partway (a crashed or
+      // OOM-killed server) leaves a partial tree behind, and `git clone`
+      // refuses a non-empty destination with a non-retryable fatal. Nothing
+      // here is recoverable — `hasExistingCheckout` already ruled out a
+      // checkout of this repo — so clear it before cloning, exactly as the
+      // retry path does.
+      await sh(sandbox, `rm -rf ${shellQuote(workdir)}`);
       const clone = await gitTransfer(
         sandbox,
         `git clone --depth=1 --single-branch --branch ${shellQuote(repoInfo.defaultBranch)} ${shellQuote(authUrl)} ${shellQuote(workdir)}`,
@@ -367,6 +396,17 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
         // disk instead of assuming the failed clone left nothing behind.
         tokenInRemote = await hasGitDir(sandbox, workdir);
         throw classifyGitFailure(clone, 'clone-failed');
+      }
+      tokenInRemote = true;
+    } else if (skipPullOnExistingCheckout) {
+      // 2b'. Checkpoint-seeded checkout: the base checkpoint is rebuilt on
+      // every default-branch push, so the seeded default branch is already at
+      // (or minutes behind) HEAD. Skip the network pull — the session branch
+      // is fetched fresh by `checkoutSessionBranch` right after — but still
+      // point origin at the token URL so that fetch can authenticate.
+      const setUrl = await sh(sandbox, `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(authUrl)}`);
+      if (setUrl.exitCode !== 0) {
+        throw new MaterializeError(`Failed to set git remote: ${setUrl.stderr}`, 'pull-failed');
       }
       tokenInRemote = true;
     } else {
@@ -537,7 +577,7 @@ function isBlockedByLocalWork(result: SandboxCommandResult): boolean {
  * this exact repo. Matches both the clean and token-auth URL forms; any other
  * remote (or no git dir at all) falls back to the clone path.
  */
-async function hasExistingCheckout(
+export async function hasExistingCheckout(
   sandbox: MaterializationSandbox,
   workdir: string,
   repoFullName: string,
