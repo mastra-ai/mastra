@@ -1,10 +1,10 @@
 /**
  * Stable, scoped React Query keys for the settings API.
  *
- * Resource-scoped lists (model packs, OM) include the `resourceId` so switching
+ * Resource-scoped lists such as OM include the `resourceId` so switching
  * factories yields a distinct cache entry instead of leaking another factory's
- * data. Keeping every key in one place makes invalidation in the mutation hooks
- * unambiguous.
+ * data. Personal settings such as model packs use one user-scoped key. Keeping
+ * every key in one place makes mutation invalidation unambiguous.
  */
 /**
  * Initial (and grow-step) size of the bounded transcript window. Opening a long
@@ -59,9 +59,8 @@ export const queryKeys = {
   providers: () => ['providers'] as const,
   availableModels: () => ['available-models'] as const,
   customProviders: () => ['custom-providers'] as const,
-  modelPacks: (resourceId: string | undefined) => ['model-packs', resourceId ?? null] as const,
-  /** Prefix that matches every `modelPacks(*)` entry — pack CRUD is global, so it invalidates all of them. */
   modelPacksAll: () => ['model-packs'] as const,
+  modelPacks: (resourceId: string | undefined) => [...queryKeys.modelPacksAll(), resourceId ?? null] as const,
   om: (resourceId: string | undefined) => ['om', resourceId ?? null] as const,
   thinkingConfig: () => ['thinking-config'] as const,
   factorySkills: () => ['factory', 'skills'] as const,

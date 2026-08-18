@@ -67,6 +67,7 @@ import { observeSessionFilesystem } from './session/filesystem-capture.js';
 import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
 import { hydrateSessionMemorySettings } from './session/memory-settings-hydration.js';
+import { hydrateSessionModelPack } from './session/model-pack-hydration.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
 import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
@@ -836,6 +837,18 @@ export class MastraFactory {
         hydrateSessionMemorySettings(session, {
           sourceControl: sourceControlStorage.forIntegration('github'),
           memorySettings: memorySettingsStorage,
+        }),
+      { blocking: true },
+    );
+
+    // Personal model packs seed interactive user sessions only. Active Factory
+    // run bindings are excluded and continue to use the project default model.
+    prepared.base.controller.onSessionCreated(
+      session =>
+        hydrateSessionModelPack(session, {
+          sourceControl: sourceControlStorage.forIntegration('github'),
+          workItems: workItemsStorage,
+          modelPacks: modelPacksStorage,
         }),
       { blocking: true },
     );

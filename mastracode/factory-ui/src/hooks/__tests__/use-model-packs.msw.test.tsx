@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query';
 import { waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { act } from 'react';
@@ -5,52 +6,37 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderHookWithProviders, waitForMutationsIdle } from '../../../e2e/ui/render';
+import { queryKeys } from '../../api/keys';
+import { AGENT_CONTROLLER_ID } from '../../ui/domains/chat/services/constants';
 import { useActivateModelPack, useModelPacksQuery, useRemoveModelPack, useSaveModelPack } from '../use-model-packs';
 import { packsResponse } from './fixtures/model-packs';
 
 const URL = `${TEST_BASE_URL}/web/config/model-packs`;
 
 describe('useModelPacksQuery', () => {
-  describe('when no resourceId is provided', () => {
-    it('still loads packs but without a resourceId query param', async () => {
+  describe('when packs are loaded', () => {
+    it('returns the personal active pack without session-scoped query parameters', async () => {
       let seenUrl = '';
       server.use(
         http.get(URL, ({ request }) => {
           seenUrl = request.url;
-          return HttpResponse.json(packsResponse(null));
-        }),
-      );
-
-      const { result } = renderHookWithProviders(() => useModelPacksQuery(undefined));
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(result.current.data?.packs).toHaveLength(2);
-      expect(new global.URL(seenUrl).searchParams.has('resourceId')).toBe(false);
-    });
-  });
-
-  describe('when a resourceId is provided', () => {
-    it('passes resourceId and returns the active pack', async () => {
-      let seenResource: string | null = null;
-      server.use(
-        http.get(URL, ({ request }) => {
-          seenResource = new global.URL(request.url).searchParams.get('resourceId');
           return HttpResponse.json(packsResponse('builtin:balanced'));
         }),
       );
 
-      const { result } = renderHookWithProviders(() => useModelPacksQuery('res-1'));
+      const { result } = renderHookWithProviders(() => useModelPacksQuery());
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(seenResource).toBe('res-1');
+      expect(result.current.data?.packs).toHaveLength(2);
       expect(result.current.data?.activePackId).toBe('builtin:balanced');
+      expect(new globalThis.URL(seenUrl).search).toBe('');
     });
   });
 });
 
 describe('useActivateModelPack', () => {
   describe('when a pack is activated', () => {
-    it('POSTs resourceId and invalidates the resource-scoped list', async () => {
+    it('sets the personal default without changing the current session', async () => {
       let activeId: string | null = null;
       let activateBody: unknown;
       server.use(
@@ -63,19 +49,48 @@ describe('useActivateModelPack', () => {
       );
 
       const { result, client } = renderHookWithProviders(() => ({
-        query: useModelPacksQuery('res-1'),
+        query: useModelPacksQuery(),
         activate: useActivateModelPack('res-1'),
       }));
 
       await waitFor(() => expect(result.current.query.data?.activePackId).toBe(null));
 
       await act(async () => {
-        await result.current.activate.mutateAsync({ id: 'builtin:balanced' });
+        await result.current.activate.mutateAsync({ id: 'builtin:balanced', target: 'default' });
       });
       await waitForMutationsIdle(client);
 
-      expect(activateBody).toEqual({ resourceId: 'res-1' });
+      expect(activateBody).toEqual({ target: 'default' });
       await waitFor(() => expect(result.current.query.data?.activePackId).toBe('builtin:balanced'));
+    });
+
+    it('refreshes the active session model after applying a thread pack', async () => {
+      let modelId = 'p/build';
+      const readState = vi.fn(async () => ({ modelId }));
+      server.use(
+        http.post(`${URL}/${encodeURIComponent('mine')}/activate`, async () => {
+          modelId = 'p/build-2';
+          return HttpResponse.json({ ok: true, activePackId: 'mine' });
+        }),
+      );
+
+      const { result, client } = renderHookWithProviders(() => ({
+        state: useQuery({
+          queryKey: queryKeys.agentControllerConnectionState(AGENT_CONTROLLER_ID, 'res-1', '/tmp/res-1'),
+          queryFn: readState,
+          staleTime: Infinity,
+        }),
+        activate: useActivateModelPack('res-1', '/tmp/res-1'),
+      }));
+
+      await waitFor(() => expect(result.current.state.data?.modelId).toBe('p/build'));
+      await act(async () => {
+        await result.current.activate.mutateAsync({ id: 'mine', target: 'session' });
+      });
+      await waitForMutationsIdle(client);
+
+      expect(readState).toHaveBeenCalledTimes(2);
+      expect(result.current.state.data?.modelId).toBe('p/build-2');
     });
   });
 });
@@ -94,7 +109,7 @@ describe('useSaveModelPack', () => {
       );
 
       const { result, client } = renderHookWithProviders(() => ({
-        query: useModelPacksQuery('res-1'),
+        query: useModelPacksQuery(),
         save: useSaveModelPack(),
       }));
 
@@ -129,7 +144,7 @@ describe('useRemoveModelPack', () => {
       );
 
       const { result, client } = renderHookWithProviders(() => ({
-        query: useModelPacksQuery('res-1'),
+        query: useModelPacksQuery(),
         remove: useRemoveModelPack(),
       }));
 
