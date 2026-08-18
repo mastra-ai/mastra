@@ -62,6 +62,18 @@ const omPart = (name: string, data: Record<string, unknown>) => ({
   data,
 });
 
+const completedToolPart = (toolName: string, toolCallId: string) =>
+  ({
+    type: 'tool-invocation',
+    toolInvocation: {
+      toolName,
+      toolCallId,
+      state: 'result',
+      args: {},
+      result: { ok: true },
+    },
+  }) as never;
+
 const baseMessage = (over: Partial<MastraDBMessage>): MastraDBMessage =>
   ({
     id: 'msg-1',
@@ -292,6 +304,70 @@ describe('MessageRow', () => {
 
     expect(screen.getAllByTestId('tool-badge')).toHaveLength(1);
     expect(document.querySelector('[data-tool-call-rail]')).toBeNull();
+  });
+
+  describe('when visible content separates two tool calls', () => {
+    it('does not connect tools across assistant prose', () => {
+      renderRow(
+        baseMessage({
+          role: 'assistant',
+          content: {
+            format: 2,
+            metadata: { mode: 'stream' },
+            parts: [
+              completedToolPart('firstTool', 'call-first'),
+              { type: 'text', text: 'The first result needs explanation.' },
+              completedToolPart('secondTool', 'call-second'),
+            ],
+          },
+        }),
+      );
+
+      expect(screen.getAllByTestId('tool-badge')).toHaveLength(2);
+      expect(document.querySelector('[data-tool-call-rail]')).toBeNull();
+    });
+
+    it('does not connect tools across reasoning', () => {
+      renderRow(
+        baseMessage({
+          role: 'assistant',
+          content: {
+            format: 2,
+            metadata: { mode: 'stream' },
+            parts: [
+              completedToolPart('firstTool', 'call-first'),
+              { type: 'reasoning', reasoning: 'Checking whether another tool is needed.' } as never,
+              completedToolPart('secondTool', 'call-second'),
+            ],
+          },
+        }),
+      );
+
+      expect(screen.getAllByTestId('tool-badge')).toHaveLength(2);
+      expect(document.querySelector('[data-tool-call-rail]')).toBeNull();
+    });
+  });
+
+  describe('when only non-rendered content separates two tool calls', () => {
+    it('connects the visible tools across a hidden tool part', () => {
+      renderRow(
+        baseMessage({
+          role: 'assistant',
+          content: {
+            format: 2,
+            metadata: { mode: 'stream' },
+            parts: [
+              completedToolPart('firstTool', 'call-first'),
+              completedToolPart('updateWorkingMemory', 'call-hidden'),
+              completedToolPart('secondTool', 'call-second'),
+            ],
+          },
+        }),
+      );
+
+      expect(screen.getAllByTestId('tool-badge')).toHaveLength(2);
+      expect(document.querySelectorAll('[data-tool-call-rail]')).toHaveLength(1);
+    });
   });
 
   it('routes an OM observation tool into the observation marker badge', () => {

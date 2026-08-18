@@ -248,22 +248,23 @@ export const MessageRow = forwardRef<HTMLDivElement, MessageRowProps>(
     const metadata = getMessageMetadata(message);
     const modelMetadata = hasModelList ? getModelMetadata(metadata) : undefined;
     const dataParts = useMemo(() => getDataParts(message), [message]);
-    const visibleToolParts = useMemo(
-      () =>
-        (displayMessage?.content.parts ?? []).filter(part => {
-          const toolName = getToolPartName(part);
-          return toolName !== undefined && !isInlineToolCallHidden(toolName);
-        }),
-      [displayMessage],
-    );
+    const continuedToolParts = useMemo(() => {
+      const parts = displayMessage?.content.parts ?? [];
+      const continued = new Set<object>();
+
+      for (let index = 0; index < parts.length - 1; index += 1) {
+        if (getToolPartName(parts[index]) && getToolPartName(parts[index + 1])) {
+          continued.add(parts[index]);
+        }
+      }
+
+      return continued;
+    }, [displayMessage]);
     const renderToolPart = useCallback(
       (part: object, children: ReactNode) => {
-        const visibleIndex = visibleToolParts.findIndex(candidate => candidate === part);
-        const hasFollowingVisibleTool = visibleIndex >= 0 && visibleIndex < visibleToolParts.length - 1;
-
-        return <ToolCallListItem continued={hasFollowingVisibleTool}>{children}</ToolCallListItem>;
+        return <ToolCallListItem continued={continuedToolParts.has(part)}>{children}</ToolCallListItem>;
       },
-      [visibleToolParts],
+      [continuedToolParts],
     );
 
     const sharedRenderers = useMemo<MessageRenderers>(
