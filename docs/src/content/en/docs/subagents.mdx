@@ -180,6 +180,36 @@ The `context` object includes:
 | `error` | Error if the delegation failed |
 | `bail()` | Function to stop the parent agent's loop |
 
+### Hook errors
+
+If a delegation hook throws, the delegation continues by default: `onDelegationStart` proceeds with the original prompt, `messageFilter` falls back to the unfiltered context, and `onDelegationComplete` keeps the subagent's original result. Set `hookErrorStrategy: 'throw'` to fail the delegation instead.
+
+```typescript title="src/mastra/agents/parent-agent.ts"
+const stream = await parentAgent.stream('Research AI trends', {
+  maxSteps: 10,
+  delegation: {
+    hookErrorStrategy: 'throw',
+    onDelegationComplete: async ({ result }) => {
+      // If this throws, the parent sees a failed delegation instead of a
+      // successful one whose result was silently dropped.
+      await reportToAnalytics(result)
+    },
+  },
+})
+```
+
+Either way, every hook failure is recorded on the run's request context under `__mastra_delegationHookErrors` as a list of `{ hook, primitiveId, toolCallId, runId, name, message }` entries, so you can detect a hook failure programmatically:
+
+```typescript title="src/mastra/agents/parent-agent.ts"
+const requestContext = new RequestContext()
+
+await parentAgent.generate('Research AI trends', { maxSteps: 10, requestContext })
+
+const hookErrors = requestContext.get('__mastra_delegationHookErrors') ?? []
+```
+
+When `hookErrorStrategy` is `'throw'`, a throwing `onDelegationStart` blocks the subagent from running at all, and a throwing `messageFilter` or `onDelegationComplete` surfaces to the parent as a failed tool call. If `onDelegationComplete` throws while handling a failed delegation, the original delegation error is still what surfaces, and the hook is never re-invoked for its own failure.
+
 ## Message filtering
 
 By default, subagents receive the full conversation context from the parent agent. Use `messageFilter` to control what messages are shared, for example, to remove sensitive data or limit context size.

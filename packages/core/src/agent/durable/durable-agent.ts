@@ -5,6 +5,7 @@ import { CachingPubSub } from '../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { isLeaseProvider, NoopLeaseProvider } from '../../events/pubsub';
 import type { LeaseProvider, PubSub } from '../../events/pubsub';
+import { isRunLocalTopic } from '../../events/topics';
 import type { Mastra } from '../../mastra';
 import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
 import { RequestContext } from '../../request-context';
@@ -1053,7 +1054,15 @@ export class DurableAgent<
       // Resolve cache: user-provided > mastra's cache > default InMemoryServerCache
       const resolvedCache = this.#cacheConfig ?? this.#mastra?.serverCache ?? new InMemoryServerCache();
       this.#resolvedCache = resolvedCache;
-      this.#cachingPubsub = new CachingPubSub(this.#innerPubsub, resolvedCache);
+      // Run-local topics must never reach the cache. This wrapper sits *above*
+      // the `mastra.pubsub` proxy that tags publishes `localOnly`, so that flag
+      // is set too late for `CachingPubSub` to observe it — the policy has to be
+      // declared here instead. Without it, per-run `workflow.events.v2.*` watch
+      // events (cumulative step results, often megabytes) are RPUSHed into a
+      // shared store that no other instance can ever read from (issue #20646).
+      this.#cachingPubsub = new CachingPubSub(this.#innerPubsub, resolvedCache, {
+        shouldCache: topic => !isRunLocalTopic(topic),
+      });
     }
   }
 

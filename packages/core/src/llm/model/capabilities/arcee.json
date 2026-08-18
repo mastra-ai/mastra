@@ -1,0 +1,18 @@
+{
+  "temperature": [
+    "deepseek/deepseek-v4-flash-latest",
+    "deepseek/deepseek-v4-pro",
+    "deepseek/deepseek-v4-pro-0813",
+    "moonshotai/kimi-k3",
+    "thinkingmachines/inkling-small",
+    "trinity-large-thinking",
+    "zai-org/glm-5.2"
+  ],
+  "structuredOutput": [
+    "deepseek/deepseek-v4-flash-latest",
+    "deepseek/deepseek-v4-pro",
+    "deepseek/deepseek-v4-pro-0813",
+    "moonshotai/kimi-k3",
+    "zai-org/glm-5.2"
+  ]
+}

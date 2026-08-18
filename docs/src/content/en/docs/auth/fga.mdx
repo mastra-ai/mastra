@@ -295,6 +295,32 @@ class MyFGAProvider implements IFGAProvider {
 }
 ```
 
+### Propagating an actor into workflow steps
+
+A workflow run's `actor` reaches each step's execute context, but it isn't passed to the agent and tool calls that step makes. Steps that call an agent without an `actor` fall back to user membership resolution, which fails on system runs that have no user.
+
+Set `propagate: true` on the actor to have the framework forward it into the agent and tool calls it makes for declarative `.then(agent)` and `.then(tool)` steps in the run:
+
+```typescript
+await run.start({
+  inputData: { city: 'London' },
+  actor: { actorKind: 'system', sourceWorkflow: 'nightly-report', propagate: true },
+})
+```
+
+Propagation is opt-in and deliberately narrow:
+
+- The `true` shorthand never propagates. Use the object form to opt in.
+- Custom step `execute` functions are never covered. Read `actor` from the step context and pass it explicitly, so a step that acts on a user's behalf can't silently inherit system trust.
+- Pass `actor` when creating the step to override the run actor for that step, including `actor: undefined` to drop back to user authorization mid-run.
+
+```typescript
+// Runs as the system actor even though it loads user-supplied data.
+workflow.then(createStep(reportAgent))
+// Explicitly runs as the user instead.
+workflow.then(createStep(summaryAgent, { actor: undefined }))
+```
+
 ### Trust requirements
 
 The actor signal is trusted input, so construct it server-side:
