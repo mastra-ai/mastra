@@ -632,7 +632,7 @@ describe('Subconscious LibSQL integration', () => {
     expect(skills).toHaveLength(1);
     const evidence = await knowledge.listKnowledgeAbout({ node: skills[0]!.id, scope });
     expect(evidence.records).toHaveLength(4);
-    expect(new Set(evidence.records.map(item => item.id)).size).toBe(4);
+    expect(new Set(evidence.records.map(record => record.id)).size).toBe(4);
     expect(await knowledge.getCurationCursor({ sourceThreadId: threadId, agent: 'learn' })).toMatchObject({
       lastKnowledgeId: fourth.id,
     });
