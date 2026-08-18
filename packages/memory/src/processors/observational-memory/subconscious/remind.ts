@@ -129,11 +129,6 @@ const ASK_INSTRUCTIONS = `The main agent is asking you a direct question. This i
 
 Use everything you already remember from this conversation plus the knowledge tools. A follow-up may refer back to something discussed earlier in this thread, so resolve references against your own history before searching. Answer plainly and include source node or item IDs when the answer rests on stored knowledge. If you do not know, say so plainly instead of guessing, and never respond with ${NO_REMINDER} to a question.`;
 
-/** The reminder agent's thread key. Derived from the PARENT thread id, never from the agent id. */
-function remindThreadKey(threadId: string): string {
-  return `subconscious:${threadId}:remind`;
-}
-
 type AskToolAgentContext = {
   agentId?: string;
   threadId?: string;

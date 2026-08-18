@@ -1,5 +1,6 @@
 import type { RequestContext } from '@mastra/core/request-context';
 
+import { OBSERVATIONAL_MEMORY_DEFAULTS } from '../constants';
 import { ModelByInputTokens } from '../model-by-input-tokens';
 import type { ObservationalMemoryModel, ReflectionCommittedContext } from '../types';
 import type { ResolvedSubconsciousAgent, SubconsciousModel } from './types';
@@ -45,5 +46,28 @@ export async function resolveSubconsciousAgentModel(options: {
   const fromOm = usableObservationalMemoryModel(omModel);
   if (fromOm) return fromOm;
   if (mainAgent) return (await mainAgent.getModel({ requestContext })) as SubconsciousModel;
+  return lastResortObservationalMemoryModel(omModel);
+}
+
+/**
+ * Resolve the OM model forms that cannot stand alone, used only when no better source exists
+ * (no per-agent model, no main agent). The 'default' sentinel maps to the observational memory
+ * default model, the same substitution the OM constructor makes. A token-routed model resolves
+ * at its smallest tier: a subconscious agent's prompt is a question plus instructions, not a
+ * transcript, so the smallest threshold is the honest input-size estimate.
+ */
+function lastResortObservationalMemoryModel(
+  model: ObservationalMemoryModel | undefined,
+): SubconsciousModel | undefined {
+  if (model === 'default') {
+    return OBSERVATIONAL_MEMORY_DEFAULTS.observation.model as SubconsciousModel;
+  }
+  if (model instanceof ModelByInputTokens) {
+    const smallestTier = model.getThresholds()[0]!;
+    const resolved = model.resolve(smallestTier);
+    return Array.isArray(resolved)
+      ? (resolved[0]?.model as SubconsciousModel | undefined)
+      : (resolved as SubconsciousModel);
+  }
   return undefined;
 }

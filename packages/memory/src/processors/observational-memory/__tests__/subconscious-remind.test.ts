@@ -5,9 +5,12 @@ import { InMemoryStore } from '@mastra/core/storage';
 import type { MemoryStorage } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
+import { OBSERVATIONAL_MEMORY_DEFAULTS } from '../constants';
 import { applyExtractorHooks } from '../extracted-values';
 import { buildExtractorOutputSections, Extractor } from '../extractor';
+import { ModelByInputTokens } from '../model-by-input-tokens';
 import { SubconsciousRemindExtractor } from '../subconscious';
+import { resolveSubconsciousAgentModel } from '../subconscious/model';
 import { createRemindAskTool } from '../subconscious/remind';
 
 function createModel(response: string) {
@@ -785,6 +788,45 @@ describe('Subconscious remind ask lane', () => {
   async function settle() {
     for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0));
   }
+
+  it('answers when the observational memory model is the default sentinel', async () => {
+    const { tools, generateSpy } = createAskTool({ omModel: 'default', response: 'Answered on the default model.' });
+    try {
+      const result: any = await tools.ask_memory.execute!({ question: 'what happened?' } as any, askContext());
+      expect(result.ok).toBe(true);
+      expect(result.answer).toBe('Answered on the default model.');
+    } finally {
+      generateSpy.mockRestore();
+    }
+  });
+
+  it('answers when the observational memory model routes by input tokens', async () => {
+    const tiered = new ModelByInputTokens({ upTo: { 1000: 'openai/gpt-5-nano', 100000: 'openai/gpt-5' } });
+    const { tools, generateSpy } = createAskTool({ omModel: tiered, response: 'Answered on the tiered model.' });
+    try {
+      const result: any = await tools.ask_memory.execute!({ question: 'what happened?' } as any, askContext());
+      expect(result.ok).toBe(true);
+      expect(result.answer).toBe('Answered on the tiered model.');
+    } finally {
+      generateSpy.mockRestore();
+    }
+  });
+
+  it('resolves default and token-routed models only as a last resort', async () => {
+    const config = { name: 'remind', maxSteps: 3, builtIn: true } as any;
+    // The default sentinel falls back to the observational memory default model.
+    await expect(resolveSubconsciousAgentModel({ config, omModel: 'default' })).resolves.toBe(
+      OBSERVATIONAL_MEMORY_DEFAULTS.observation.model,
+    );
+    // A token-routed model resolves at the smallest tier: an ask prompt is a question, not a transcript.
+    const tiered = new ModelByInputTokens({ upTo: { 1000: 'openai/gpt-5-nano', 100000: 'openai/gpt-5' } });
+    await expect(resolveSubconsciousAgentModel({ config, omModel: tiered })).resolves.toBe('openai/gpt-5-nano');
+    // The main agent still wins over the fallback so extractor precedence is unchanged.
+    const mainAgent = { getModel: vi.fn(async () => 'main-agent-model') } as any;
+    await expect(resolveSubconsciousAgentModel({ config, omModel: 'default', mainAgent })).resolves.toBe(
+      'main-agent-model',
+    );
+  });
 
   it('returns the answer as the tool result when wait is true', async () => {
     const { tools, generateSpy } = createAskTool({ response: 'The deploy happened on Tuesday.' });
