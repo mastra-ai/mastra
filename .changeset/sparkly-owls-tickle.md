@@ -6,6 +6,8 @@ Fixed the agent controller event types, which described payloads the server neve
 
 `KnownAgentControllerEvent` was written by hand and had drifted from the controller. Narrowing on `om_activation` gave you an `enabled` boolean that does not exist, `om_status` a `status` string instead of the token windows, `om_thread_title_updated` a `title` instead of `newTitle`, and `subagent_end` only a `toolCallId` — its `agentType`, `result`, `isError` and `durationMs` were missing. `usage_update` typed its payload as `unknown`, so every consumer cast it. Seven events the controller emits (`state_changed`, `command_exit`, `tool_suspension_cancelled`, and the four remaining `subagent_*` events) were not typed at all and fell through `isKnownAgentControllerEvent`.
 
+`isKnownAgentControllerEvent` now returns `true` for those seven events as well. If you route unrecognised events to a fallback branch, they no longer reach it — give them a case in your `switch` or they are silently dropped.
+
 Payload drift is now a compile error instead of a wrong field at runtime, so handlers reading the old fields need updating.
 
 ```ts
