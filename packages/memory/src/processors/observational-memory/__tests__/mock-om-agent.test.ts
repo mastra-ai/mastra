@@ -554,12 +554,9 @@ describe('Mock OM Agent Integration', () => {
 
     // Second generate — appends observations with a boundary
     await boundaryAgent.generate('Can you also help me with another task?', { memory: memoryOpts });
+    const afterSecondCall = new Date();
 
     const secondRecord = await memoryStore!.getObservationalMemory(threadId, resourceId);
-    // Sampled only once the record has been read back, so every message write that can
-    // contribute to the boundary date has already happened. Sampling right after generate()
-    // returns races with the final message saves and can land a millisecond too early.
-    const afterSecondCall = new Date();
     expect(secondRecord).toBeTruthy();
 
     // Appending must have inserted at least one NEW message boundary delimiter with a date
