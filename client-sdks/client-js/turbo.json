@@ -19,6 +19,12 @@
     "build": {
       "dependsOn": ["build:lib"],
       "inputs": ["package.json"]
+    },
+    "test": {
+      "dependsOn": ["^build", "@mastra/server#build"]
+    },
+    "test:unit": {
+      "dependsOn": ["^build", "@mastra/server#build"]
     }
   }
 }
