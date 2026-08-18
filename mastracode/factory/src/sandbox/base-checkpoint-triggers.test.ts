@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ParsedGithubWebhook } from '../integrations/github/webhook.js';
 import type { ProjectRepository } from '../storage/domains/source-control/base.js';
 import {
+  BASE_CHECKPOINT_MAX_AGE_MS,
   baseCheckpointIsStale,
   classifyDefaultBranchUpdate,
   createBaseCheckpointTriggers,
@@ -113,6 +114,22 @@ describe('baseCheckpointIsStale', () => {
     });
     expect(baseCheckpointIsStale(row)).toBe(false);
   });
+
+  it('is stale once the build ages past the rebuild bound, even with a matching hash', () => {
+    const builtAt = new Date('2026-08-01T00:00:00Z');
+    const row = projectRepository({
+      baseCheckpoint: {
+        name: 'repo-pr-1',
+        sha: 'abc',
+        builtAt,
+        setupCommandHash: hashSetupCommand('pnpm install'),
+      },
+    });
+    const justFresh = new Date(builtAt.getTime() + BASE_CHECKPOINT_MAX_AGE_MS);
+    const justStale = new Date(builtAt.getTime() + BASE_CHECKPOINT_MAX_AGE_MS + 1);
+    expect(baseCheckpointIsStale(row, justFresh)).toBe(false);
+    expect(baseCheckpointIsStale(row, justStale)).toBe(true);
+  });
 });
 
 function triggerHarness(options: { stale?: boolean } = {}) {
@@ -206,6 +223,30 @@ describe('createBaseCheckpointTriggers', () => {
     const fresh = triggerHarness({ stale: false });
     await fresh.triggers.sweep();
     expect(fresh.request).not.toHaveBeenCalled();
+  });
+
+  it('sweep runs builds with bounded concurrency instead of one at a time', async () => {
+    const { triggers, request, storage } = triggerHarness();
+    const rows = Array.from({ length: 6 }, (_, index) => ({
+      orgId: 'org-1',
+      factoryProjectId: 'proj-1',
+      projectRepository: projectRepository({ id: `pr-${index}` }),
+    }));
+    storage.projectRepositories.listByExternalRepository.mockResolvedValue(rows);
+
+    let inflight = 0;
+    let maxInflight = 0;
+    request.mockImplementation(async () => {
+      inflight += 1;
+      maxInflight = Math.max(maxInflight, inflight);
+      await new Promise(resolve => setTimeout(resolve, 0));
+      inflight -= 1;
+    });
+
+    await triggers.sweep();
+    expect(request).toHaveBeenCalledTimes(6);
+    expect(maxInflight).toBeGreaterThan(1);
+    expect(maxInflight).toBeLessThanOrEqual(3);
   });
 
   it('does nothing when the fleet is disabled', async () => {

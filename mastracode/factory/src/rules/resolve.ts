@@ -32,7 +32,11 @@ export function resolveFactoryStageRules(
   if (input.fromStage === input.toStage && !input.initialEntry && !input.reenter) return [];
   const boardRules = rules[input.board];
   const resolved: ResolvedFactoryStageRule[] = [];
-  const onExit = input.initialEntry ? undefined : boardRules[input.fromStage]?.[input.source]?.onExit;
+  // Same-stage reentry re-runs the stage's entry work; the item never left the
+  // stage, so its exit rules must not fire.
+  const sameStageReentry = input.fromStage === input.toStage && input.reenter === true;
+  const onExit =
+    input.initialEntry || sameStageReentry ? undefined : boardRules[input.fromStage]?.[input.source]?.onExit;
   if (onExit) resolved.push({ phase: 'exit', handler: onExit });
   const onEnter = boardRules[input.toStage]?.[input.source]?.onEnter;
   if (onEnter) resolved.push({ phase: 'enter', handler: onEnter });

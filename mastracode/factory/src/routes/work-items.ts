@@ -511,12 +511,9 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         const now = new Date();
         const decision = await settle(resolved.orgId, resolved.factoryProjectId, decisionId, now);
         if (!decision) return c.json({ error: 'decision_not_proposed' }, 409);
-        // Releasing a proposal is a person taking the item on. What follows —
-        // the review of the branch this run pushes, the fix a review asks for —
-        // is the same request continuing, so it no longer waits to be approved.
-        if (verb === 'approve' && decision.workItemId) {
-          await workItems.armAutonomy({ orgId: resolved.orgId, id: decision.workItemId, now });
-        }
+        // Releasing a proposal is a person taking the item on. Approval arms the
+        // item's autonomy inside the same storage transaction (see
+        // approveDeferredDecision), so follow-up runs no longer wait for approval.
         await audit.emit({
           context,
           input: {
@@ -788,6 +785,11 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if (!input) return c.json({ error: 'invalid_factory_start' }, 400);
           input.requestContext = loose(c).get('requestContext');
           input.defaultModelId = resolved.defaultModelId ?? undefined;
+          // This route is only reached by a person pressing a run action, so
+          // reaching it is the commitment the approval gate is asking for.
+          // Arming rides inside prepareRunStart's transaction so a crash can't
+          // start the run while leaving its follow-up work waiting on approval.
+          input.armAutonomy = true;
           if (
             !input.workItem.id &&
             ((input.workItem.input.stages ?? ['intake']).length !== 1 ||
@@ -808,10 +810,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             }
             throw error;
           }
-          // This route is only reached by a person pressing a run action, so
-          // reaching it is the commitment the approval gate is asking for. The
-          // runs that carry this item on to review are that request continuing.
-          await workItems.armAutonomy({ orgId: resolved.orgId, id: prepared.workItemId, now: new Date() });
           await audit.emit({
             context: loose(c),
             input: {

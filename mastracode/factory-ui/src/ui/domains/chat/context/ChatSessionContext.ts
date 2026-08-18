@@ -42,12 +42,17 @@ export interface ChatSessionContextApi {
   sandboxProgress: PrepareProgress | undefined;
   resourceEnabled: boolean;
   /**
+   * Failure resolving the session itself (denied/missing/errored session
+   * query). Fatal — the chat surface replaces its content with an error state.
+   */
+  sessionError?: Error;
+  /**
    * Failure from the background workspace warm-up (`/ensure`). Non-fatal —
    * the run path materializes lazily — so surfaces show it as a banner with a
    * retry affordance rather than disabling the session.
    */
-  sessionError?: Error;
-  /** Re-runs the workspace warm-up after a `sessionError`. */
+  warmupError?: Error;
+  /** Re-runs the failed session query and/or workspace warm-up. */
   retrySession?: () => void;
   projectPath?: string;
   /**

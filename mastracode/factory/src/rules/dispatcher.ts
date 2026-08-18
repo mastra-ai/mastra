@@ -571,12 +571,15 @@ export class FactoryDecisionDispatcher {
               }
             }
           }
-          if (settled.action === 'wake') {
+          // A landed `deliver` still runs on the in-flight session, so the run's
+          // terminal outcome matters as much as a fresh wake's: a run that ends
+          // in error after accepting the prompt has still failed this decision.
+          {
             const observed = await waitForAgentEndOrTimeout(agentEnd);
             if (!observed) {
               console.warn('Factory skill run terminal event was not observed before timeout', {
                 decisionId: record.id,
-                runId: settled.runId,
+                runId: settled.action === 'wake' ? settled.runId : undefined,
               });
             } else if (endReason === 'error') {
               throw new Error('Factory skill run ended in error.');

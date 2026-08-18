@@ -32,7 +32,7 @@ describe('observeSessionCheckpoint', () => {
     },
   );
 
-  it('does not block the agent-end event on snapshot completion', () => {
+  it('does not block the agent-end event on snapshot completion', async () => {
     let resolveSnapshot: (() => void) | undefined;
     const snapshot = vi.fn<() => Promise<void>>(
       () =>
@@ -45,7 +45,10 @@ describe('observeSessionCheckpoint', () => {
 
     // The listener must return synchronously (void) even while the snapshot is pending.
     expect(listeners[0]!({ type: 'agent_end', reason: 'complete' })).toBeUndefined();
-    resolveSnapshot?.();
+    // Wait for the snapshot to actually start before resolving it, so the
+    // resolver is guaranteed to exist and the pending promise never leaks.
+    await vi.waitFor(() => expect(snapshot).toHaveBeenCalledTimes(1));
+    resolveSnapshot!();
   });
 
   it('skips snapshotting when the session has no workspace sandbox', async () => {

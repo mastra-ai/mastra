@@ -269,6 +269,8 @@ export interface CommitFactoryTransitionInput {
   evaluation:
     | { outcome: 'accepted'; decisions: Record<string, unknown>[] }
     | { outcome: 'rejected'; code: string; reason: string };
+  /** Arm autonomy in the same revision-checked update that commits the transition. */
+  armAutonomy?: boolean;
 }
 
 export type CommitFactoryTransitionResult =
@@ -286,6 +288,8 @@ export interface PrepareFactoryRunStartInput {
   resourceId: string;
   kickoffKey: string;
   kickoffMessage: string | null;
+  /** Arm the item's autonomy in the same transaction that prepares the run. */
+  armAutonomy?: boolean;
 }
 
 export interface PrepareFactoryRunStartResult {
@@ -447,6 +451,9 @@ function patchColumns(changes: Partial<WorkItemRow>): Partial<WorkItemDbRow> {
     ...(changes.stageHistory !== undefined ? { stage_history: changes.stageHistory } : {}),
     ...(changes.sessions !== undefined ? { sessions: changes.sessions } : {}),
     ...(changes.metadata !== undefined ? { metadata: changes.metadata } : {}),
+    ...(changes.autonomyArmedAt !== undefined && changes.autonomyArmedAt !== null
+      ? { autonomy_armed_at: changes.autonomyArmedAt }
+      : {}),
     ...(changes.revision !== undefined ? { revision: changes.revision } : {}),
     ...(changes.updatedAt !== undefined ? { updated_at: changes.updatedAt } : {}),
   };
@@ -1004,8 +1011,14 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               reason = input.evaluation.reason;
               return null;
             }
-            if (existing.stages.length === 1 && existing.stages[0] === input.destinationStage) return null;
+            const arm = input.armAutonomy === true && !existing.autonomyArmedAt;
+            if (existing.stages.length === 1 && existing.stages[0] === input.destinationStage) {
+              // No stage change to commit; still honor arming without a revision
+              // bump, matching armAutonomy's standalone semantics.
+              return arm ? patchColumns({ autonomyArmedAt: now }) : null;
+            }
             return patchColumns({
+              ...(arm ? { autonomyArmedAt: now } : {}),
               stages: [input.destinationStage],
               stageHistory: applyStageTransition(
                 existing.stageHistory,
@@ -1340,17 +1353,38 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return proposed && row ? toDeferredDecision(row) : null;
   }
 
-  /** Release an approved effect back to the dispatcher; only `proposed` rows are approvable. */
+  /**
+   * Release an approved effect back to the dispatcher; only `proposed` rows are
+   * approvable. Approval is a person taking the item on, so the item's autonomy
+   * is armed in the same transaction — a crash cannot release the run while
+   * leaving its follow-up work parked for re-approval.
+   */
   async approveDeferredDecision(
     orgId: string,
     factoryProjectId: string,
     decisionId: string,
     now: Date,
   ): Promise<FactoryDeferredDecisionRecord | null> {
-    return this.#settleProposedDecision(
-      { orgId, factoryProjectId, decisionId },
-      { status: 'pending', attempts: 0, available_at: now, approved_at: now, updated_at: now },
-    );
+    return this.storage.withTransaction(async ops => {
+      let settled = false;
+      const row = await ops.updateAtomic<GovernanceDbRow>(
+        'factory_deferred_decisions',
+        { id: decisionId, org_id: orgId, factory_project_id: factoryProjectId },
+        current => {
+          if (current.status !== 'proposed') return null;
+          settled = true;
+          return { status: 'pending', attempts: 0, available_at: now, approved_at: now, updated_at: now };
+        },
+      );
+      if (!settled || !row) return null;
+      const record = toDeferredDecision(row);
+      if (record.workItemId) {
+        await ops.updateAtomic<WorkItemDbRow>('work_items', { org_id: orgId, id: record.workItemId }, current =>
+          current.autonomy_armed_at ? null : { autonomy_armed_at: now },
+        );
+      }
+      return record;
+    });
   }
 
   /** Retire a proposal nobody wants: `dismissed` is terminal, so the run never happens. */
@@ -1699,6 +1733,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             updated_at: now,
           });
           item = toRow(row);
+        }
+        if (input.armAutonomy && !item.autonomyArmedAt) {
+          const armedRow = await ops.updateAtomic<WorkItemDbRow>('work_items', { id: item.id }, current =>
+            current.autonomy_armed_at ? null : { autonomy_armed_at: now },
+          );
+          if (armedRow) item = toRow(armedRow);
         }
         await ops.updateMany(
           'factory_run_bindings',

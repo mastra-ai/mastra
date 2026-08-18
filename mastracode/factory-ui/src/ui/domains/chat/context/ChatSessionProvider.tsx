@@ -52,7 +52,12 @@ export function ChatSessionConfigProvider({
   // here provisioned a sandbox just for visiting the board, metrics or settings.
   // In-session it runs as a background warm-up only — nothing below blocks on it.
   const inSession = Boolean(userScoped ? threadId : sessionId);
-  const ensureQuery = useEnsureMaterializedSandbox(inSession ? repository?.projectRepositoryId : undefined);
+  // Warm-up also waits for session metadata: before `storedSession` resolves
+  // the `repository` fallback is the factory's first repository, which in a
+  // multi-repository factory could warm the wrong workspace.
+  const ensureQuery = useEnsureMaterializedSandbox(
+    inSession && storedSession ? repository?.projectRepositoryId : undefined,
+  );
   const resolvingSession = inSession && sessionQuery.isPending;
   // Sessions and their threads are provisioned with the session's own id as the
   // memory resourceId and no scope (see FactoryStartCoordinator.prepare and
@@ -78,10 +83,12 @@ export function ChatSessionConfigProvider({
   // use (and revives dead ones), so the `/ensure` call above is only a
   // background warm-up that usually wins the race against the first command.
   const sandboxReady = resourceOverride ? Boolean(resourceOverride) : Boolean(storedSession) && !resolvingSession;
-  // A failed warm-up is surfaced non-fatally (banner + retry) — the run path
-  // no longer depends on `/ensure`. A denied or missing session (404 from the
-  // session query) must surface the error state, not the eternal preparing loader.
-  const sessionError = ensureQuery.error ?? sessionQuery.error ?? undefined;
+  // A denied or missing session (404 from the session query) is fatal and must
+  // surface the error state, not the eternal preparing loader. A failed warm-up
+  // is surfaced non-fatally (banner + retry) — the run path no longer depends
+  // on `/ensure` — so the two errors are kept apart.
+  const sessionError = sessionQuery.error ?? undefined;
+  const warmupError = ensureQuery.error ?? undefined;
   // `resourceReady` — safe to address the agent-controller session by
   // `resourceId` for reads/streaming as soon as server-side session metadata
   // resolves. Does NOT wait on `/ensure` — the agent-controller endpoints are
@@ -118,12 +125,14 @@ export function ChatSessionConfigProvider({
     sandboxProgress,
     resourceEnabled,
     sessionError,
-    retrySession: sessionError
-      ? () => {
-          void ensureQuery.refetch();
-          if (sessionQuery.isError) void sessionQuery.refetch();
-        }
-      : undefined,
+    warmupError,
+    retrySession:
+      sessionError || warmupError
+        ? () => {
+            if (ensureQuery.isError) void ensureQuery.refetch();
+            if (sessionQuery.isError) void sessionQuery.refetch();
+          }
+        : undefined,
     projectPath,
     sessionThreadId: storedSession?.sessionId,
     workspacePending: storedSession !== undefined && !storedSession.materializedAt,
@@ -208,13 +217,13 @@ export function ChatSessionBoundary({
 export function ChatMessageBoundary({ children }: { children: ReactNode }) {
   const value = useContext(ChatThreadMessagesContext);
   if (!value) throw new Error('ChatMessageBoundary must be used within a ChatSessionBoundary');
-  const { sessionError, sandboxPreparing, sandboxReady } = useChatSessionContext();
+  const { sessionError, warmupError, sandboxPreparing } = useChatSessionContext();
 
   // A denied or missing session is fatal — replace the chat instead of
   // spinning on the preparing loader. A failed workspace warm-up is
   // non-fatal (the run path materializes lazily), so that stays a banner.
-  if (sessionError && !sandboxReady) return <ChatMessageFeedback />;
-  const warmupBanner = sessionError ? <ChatMessageFeedback /> : null;
+  if (sessionError) return <ChatMessageFeedback error={sessionError} />;
+  const warmupBanner = warmupError ? <ChatMessageFeedback error={warmupError} /> : null;
 
   // Any pre-transcript wait — session metadata resolution OR the initial
   // thread messages fetch — is shown as the step loader. Splitting these into
@@ -248,18 +257,17 @@ export function ChatMessageBoundary({ children }: { children: ReactNode }) {
   );
 }
 
-function ChatMessageFeedback() {
-  const { sessionError, retrySession } = useChatSessionContext();
-  if (!sessionError) return null;
+function ChatMessageFeedback({ error }: { error: Error }) {
+  const { retrySession } = useChatSessionContext();
   // The server intentionally returns the same 404 for a missing session and a
   // private one owned by someone else, so the message covers both.
-  const notFound = (sessionError as { status?: number }).status === 404;
+  const notFound = (error as { status?: number }).status === 404;
   return (
     <div className="flex flex-col items-stretch gap-4">
       <Notice variant="destructive">
         {notFound
           ? 'This session was not found or is private to another user.'
-          : `Failed to prepare the workspace: ${sessionError.message}`}
+          : `Failed to prepare the workspace: ${error.message}`}
       </Notice>
       {retrySession && (
         <div>

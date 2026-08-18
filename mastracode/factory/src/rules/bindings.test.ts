@@ -5,7 +5,10 @@ import { createFactoryStorageForTests } from '../storage/test-utils.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 
-async function prepareBinding(storage: WorkItemsStorage, options: { issue?: number; kickoffKey?: string } = {}) {
+async function prepareBinding(
+  storage: WorkItemsStorage,
+  options: { issue?: number; kickoffKey?: string; armAutonomy?: boolean } = {},
+) {
   const issue = options.issue ?? 1;
   return storage.prepareRunStart({
     orgId: 'org-1',
@@ -29,6 +32,7 @@ async function prepareBinding(storage: WorkItemsStorage, options: { issue?: numb
     resourceId: 'resource-1',
     kickoffKey: options.kickoffKey ?? 'kickoff-1',
     kickoffMessage: null,
+    armAutonomy: options.armAutonomy,
   });
 }
 
@@ -41,6 +45,16 @@ describe('Factory run binding authority', () => {
     expect([first.replayed, second.replayed].sort()).toEqual([false, true]);
     expect(second.binding.id).toBe(first.binding.id);
     expect(second.pendingStart.id).toBe(first.pendingStart.id);
+  });
+
+  it('arms autonomy inside the same preparation when requested', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+
+    const unarmed = await prepareBinding(storage);
+    expect(unarmed.item.autonomyArmedAt).toBeNull();
+
+    const armed = await prepareBinding(storage, { issue: 2, kickoffKey: 'kickoff-2', armAutonomy: true });
+    expect(armed.item.autonomyArmedAt).toBeInstanceOf(Date);
   });
 
   it('keeps only the newest active binding for an exact session address', async () => {

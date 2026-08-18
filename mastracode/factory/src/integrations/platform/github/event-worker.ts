@@ -34,12 +34,19 @@ const SUPPORTED_EVENTS = new Set([
   'pull_request',
   'pull_request_review',
   'pull_request_review_comment',
+  // Pushes never reach the subscription dispatcher; they feed the factory
+  // ingest path so base checkpoints rebuild on default-branch updates.
+  'push',
 ]);
+// Kinds emitted by `classifyGithubWebhook` that carry untrusted sender-authored
+// content and must pass the sender authorization gate below.
 const AUTHOR_GATED_KINDS = new Set([
-  'issue-comment',
-  'pull-request-comment',
-  'pull-request-review',
-  'pull-request-review-comment',
+  'issue-comment-created',
+  'review-comment-created',
+  'review-approved',
+  'review-changes-requested',
+  'review-submitted',
+  'review-dismissed',
 ]);
 const AUTHORIZED_PERMISSIONS = new Set<GithubRepositoryPermission>(['admin', 'maintain', 'write']);
 const PERMISSION_CHECK_TIMEOUT_MS = 5_000;
@@ -589,6 +596,9 @@ function isFactoryIngestedEvent(event: ParsedGithubWebhook): boolean {
   }
   if (event.event === 'pull_request_review' && event.payload.action === 'submitted') return true;
   if (event.event === 'issue_comment' && event.payload.action === 'created') return true;
+  // Default-branch pushes drive base-checkpoint rebuilds
+  // (`withBaseCheckpointWebhookTrigger` wraps the ingest callback).
+  if (event.event === 'push') return true;
   return false;
 }
 

@@ -185,8 +185,14 @@ describe('PlatformGithubEventWorker', () => {
                 event: 'pull_request',
                 payload: { action: 'closed' },
               },
+              {
+                id: '1004-0',
+                deliveryId: 'delivery-push',
+                event: 'push',
+                payload: { ref: 'refs/heads/main' },
+              },
             ],
-            nextCursor: '1003-0',
+            nextCursor: '1004-0',
           });
         }
         return json({ events: [], nextCursor: null });
@@ -225,6 +231,11 @@ describe('PlatformGithubEventWorker', () => {
       deliveryId: 'delivery-1',
       payload: { action: 'closed' },
     };
+    const parsedPush = {
+      event: 'push',
+      deliveryId: 'delivery-push',
+      payload: { ref: 'refs/heads/main' },
+    };
     const dispatchDependencies = expect.objectContaining({
       controller: expect.anything(),
       listSubscriptions: expect.any(Function),
@@ -235,12 +246,14 @@ describe('PlatformGithubEventWorker', () => {
     // reach the rules engine; synchronize and review_requested feed the
     // re-review path, and closed feeds the reconciler. An opened *issue* is
     // deliberately absent — the factory picks new issues up via the reconciler.
-    expect(ingestFactoryEvent).toHaveBeenCalledTimes(4);
+    // Pushes feed the base-checkpoint trigger wrapped around the ingest.
+    expect(ingestFactoryEvent).toHaveBeenCalledTimes(5);
     expect(ingestFactoryEvent).toHaveBeenNthCalledWith(1, parsedPullRequestOpened);
     expect(ingestFactoryEvent).toHaveBeenNthCalledWith(2, parsedSynchronize);
     expect(ingestFactoryEvent).toHaveBeenNthCalledWith(3, parsedReviewRequested);
     expect(ingestFactoryEvent).toHaveBeenNthCalledWith(4, parsedClosed);
-    expect(dispatch).toHaveBeenCalledTimes(5);
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(5, parsedPush);
+    expect(dispatch).toHaveBeenCalledTimes(6);
     expect(dispatch).toHaveBeenNthCalledWith(
       1,
       {
@@ -254,11 +267,12 @@ describe('PlatformGithubEventWorker', () => {
     expect(dispatch).toHaveBeenNthCalledWith(3, parsedSynchronize, dispatchDependencies);
     expect(dispatch).toHaveBeenNthCalledWith(4, parsedReviewRequested, dispatchDependencies);
     expect(dispatch).toHaveBeenNthCalledWith(5, parsedClosed, dispatchDependencies);
+    expect(dispatch).toHaveBeenNthCalledWith(6, parsedPush, dispatchDependencies);
     expect(eventRequests[0]?.searchParams.get('afterTimestamp')).toBe('999');
-    expect(eventRequests[1]?.searchParams.get('afterEventId')).toBe('1003-0');
+    expect(eventRequests[1]?.searchParams.get('afterEventId')).toBe('1004-0');
     expect(settings.read()).toEqual({
       version: 1,
-      repositories: { '101': { afterEventId: '1003-0' } },
+      repositories: { '101': { afterEventId: '1004-0' } },
     });
     await worker.stop();
 
@@ -268,7 +282,7 @@ describe('PlatformGithubEventWorker', () => {
     await resumed.start();
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(eventRequests[0]?.searchParams.get('afterEventId')).toBe('1003-0');
+    expect(eventRequests[0]?.searchParams.get('afterEventId')).toBe('1004-0');
     expect(eventRequests[0]?.searchParams.has('afterTimestamp')).toBe(false);
     await resumed.stop();
   });
@@ -976,9 +990,9 @@ describe('PlatformGithubEventWorker', () => {
   });
 
   describe('sender gate', () => {
-    function notification(sender: string, senderType = 'Bot') {
+    function notification(sender: string, senderType = 'Bot', kind = 'review-changes-requested') {
       return {
-        kind: 'pull-request-review',
+        kind,
         metadata: {
           sender,
           senderType,
@@ -994,6 +1008,7 @@ describe('PlatformGithubEventWorker', () => {
       const dispatch = vi.fn<typeof dispatchGithubWebhook>().mockResolvedValue({
         delivered: 1,
         failed: 0,
+        skipped: 0,
         ignored: false,
       });
       const fetchImpl = vi.fn<typeof fetch>(async input => {
@@ -1059,6 +1074,29 @@ describe('PlatformGithubEventWorker', () => {
       expect(github.getRepositoryCollaboratorPermission).not.toHaveBeenCalled();
     });
 
+    it('gates the kinds the webhook classifier actually emits', async () => {
+      const github = createGithub();
+      const { dependencies } = await captureGate(github);
+
+      // Sender-authored kinds emitted by classifyGithubWebhook must hit the gate.
+      for (const kind of [
+        'issue-comment-created',
+        'review-comment-created',
+        'review-approved',
+        'review-changes-requested',
+        'review-submitted',
+        'review-dismissed',
+      ]) {
+        await expect(dependencies.isAuthorizedSender?.(notification('other-reviewer[bot]', 'Bot', kind))).resolves.toBe(
+          false,
+        );
+      }
+      // Non-authored lifecycle kinds bypass the gate.
+      await expect(
+        dependencies.isAuthorizedSender?.(notification('other-reviewer[bot]', 'Bot', 'pull-request-merged')),
+      ).resolves.toBe(true);
+    });
+
     it('still permission-checks human senders', async () => {
       const github = createGithub();
       const { dependencies } = await captureGate(github);
@@ -1079,7 +1117,7 @@ describe('PlatformGithubEventWorker', () => {
 
       expect(deps.logger.debug).toHaveBeenCalledWith(
         'Platform GitHub event dropped: sender not authorized',
-        expect.objectContaining({ sender: 'openswebot', repository: 'acme/repo', kind: 'pull-request-review' }),
+        expect.objectContaining({ sender: 'openswebot', repository: 'acme/repo', kind: 'review-changes-requested' }),
       );
     });
   });

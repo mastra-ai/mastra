@@ -286,13 +286,12 @@ export class FactoryTransitionService {
       evaluation = { outcome: 'rejected', ...failed };
     }
     // Moving a card by hand is itself the request to do the work. Arm the item
-    // before the decisions this transition emits become visible to the
-    // dispatcher, so they run instead of parking as proposals a person would
-    // only have to approve again.
-    if (evaluation.outcome === 'accepted' && humanBoardDrag) {
-      await this.#storage.armAutonomy({ orgId: request.orgId, id: request.workItemId, now: new Date() });
-    }
-    return this.#commit(request, transitionId, evaluation);
+    // inside the same revision-checked update that commits the transition, so
+    // the decisions it emits run instead of parking as proposals — and so a
+    // stale or rejected commit does not leave the item spuriously armed.
+    return this.#commit(request, transitionId, evaluation, {
+      armAutonomy: evaluation.outcome === 'accepted' && humanBoardDrag,
+    });
   }
 
   async #commitRejection(
@@ -310,8 +309,10 @@ export class FactoryTransitionService {
     evaluation:
       | { outcome: 'accepted'; decisions: Record<string, unknown>[] }
       | { outcome: 'rejected'; code: string; reason: string },
+    options: { armAutonomy?: boolean } = {},
   ): Promise<FactoryTransitionResult> {
     const committed = await this.#storage.commitTransition({
+      armAutonomy: options.armAutonomy === true,
       orgId: request.orgId,
       factoryProjectId: request.factoryProjectId,
       workItemId: request.workItemId,

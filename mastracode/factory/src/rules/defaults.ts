@@ -370,8 +370,9 @@ function requestsChangesVerdict(body: string | undefined): boolean {
     .replaceAll(/[*_`#>\s]+/g, ' ')
     .trim()
     .toLowerCase();
-  if (!normalized.startsWith('verdict:')) return false;
-  return normalized.includes('request changes') || normalized.includes('changes requested');
+  // Match the verdict exactly so negated phrasings ("Verdict: do not request
+  // changes") cannot wake the author.
+  return /^verdict: ?(request changes|changes requested)$/.test(normalized);
 }
 
 function addressPullRequestComment(context: FactoryGithubRuleContext) {

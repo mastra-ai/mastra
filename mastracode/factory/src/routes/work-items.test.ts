@@ -468,9 +468,9 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
     });
 
     expect(res.status).toBe(202);
-    expect(await seed.workItems.get({ orgId: 'org1', id: workItem.id })).toMatchObject({
-      autonomyArmedAt: expect.any(Date),
-    });
+    // Arming rides inside prepareRunStart's transaction; the route's contract
+    // is passing the flag through to the coordinator.
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ armAutonomy: true }));
   });
 
   it('rejects a non-UUID kickoff identity before coordination', async () => {

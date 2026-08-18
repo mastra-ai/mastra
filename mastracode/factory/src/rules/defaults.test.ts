@@ -683,6 +683,9 @@ describe('defaultFactoryRules', () => {
       const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestCommentCreated?.onEvent;
       expect(await rule?.(commentContext({ board: 'review' }))).toBeUndefined();
       expect(await rule?.(commentContext({ issueComment: undefined }))).toBeUndefined();
+      const openPr = commentContext().pullRequest!;
+      expect(await rule?.(commentContext({ pullRequest: { ...openPr, state: 'closed' } }))).toBeUndefined();
+      expect(await rule?.(commentContext({ pullRequest: { ...openPr, merged: true } }))).toBeUndefined();
     });
 
     it('wakes on the review verdict Factory had to post as a comment on its own pull request', async () => {
@@ -720,6 +723,15 @@ describe('defaultFactoryRules', () => {
           commentContext({
             actor: factoryActor,
             issueComment: { id: 558, body: 'Pushed the fixes.\n\n> Verdict: request changes', author: 'factory[bot]' },
+          }),
+        ),
+      ).toBeUndefined();
+      // A negated first line must not read as a request for changes.
+      expect(
+        await rule?.(
+          commentContext({
+            actor: factoryActor,
+            issueComment: { id: 559, body: '**Verdict: do not request changes**\n\nAll good.', author: 'factory[bot]' },
           }),
         ),
       ).toBeUndefined();

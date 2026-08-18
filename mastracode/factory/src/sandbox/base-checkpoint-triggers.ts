@@ -75,11 +75,25 @@ export function classifyDefaultBranchUpdate(
   return null;
 }
 
-/** A checkpoint is stale when absent or built against a different setup command. */
-export function baseCheckpointIsStale(projectRepository: ProjectRepository): boolean {
+/**
+ * Rebuild sweep age bound: even when webhooks are healthy, a checkpoint older
+ * than this is rebuilt so a missed default-branch webhook cannot pin sessions
+ * to an old commit indefinitely.
+ */
+export const BASE_CHECKPOINT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/** How many sweep-triggered checkpoint builds may run at once. */
+const SWEEP_BUILD_CONCURRENCY = 3;
+
+/**
+ * A checkpoint is stale when absent, built against a different setup command,
+ * or older than {@link BASE_CHECKPOINT_MAX_AGE_MS}.
+ */
+export function baseCheckpointIsStale(projectRepository: ProjectRepository, now: Date = new Date()): boolean {
   const checkpoint = projectRepository.baseCheckpoint;
   if (!checkpoint) return true;
-  return checkpoint.setupCommandHash !== hashSetupCommand(projectRepository.setupCommand);
+  if (checkpoint.setupCommandHash !== hashSetupCommand(projectRepository.setupCommand)) return true;
+  return now.getTime() - checkpoint.builtAt.getTime() > BASE_CHECKPOINT_MAX_AGE_MS;
 }
 
 export function createBaseCheckpointTriggers(options: {
@@ -117,9 +131,8 @@ export function createBaseCheckpointTriggers(options: {
     if (job) await builder.request(job);
   };
 
-  const requestTargets = async (targets: ExternalRepositoryProjectTarget[], onlyStale: boolean): Promise<void> => {
+  const requestTargets = async (targets: ExternalRepositoryProjectTarget[]): Promise<void> => {
     for (const target of targets) {
-      if (onlyStale && !baseCheckpointIsStale(target.projectRepository)) continue;
       await request(target.orgId, target.projectRepository);
     }
   };
@@ -139,16 +152,27 @@ export function createBaseCheckpointTriggers(options: {
       if (!key) return;
       void storage.projectRepositories
         .listByExternalRepository(key)
-        .then(targets => requestTargets(targets, false))
+        .then(targets => requestTargets(targets))
         .catch(error => warn('webhook', error));
     },
     async sweep() {
       try {
         const keys = await storage.projectRepositories.listConfiguredExternalKeys();
+        const stale: ExternalRepositoryProjectTarget[] = [];
         for (const key of keys) {
           const targets = await storage.projectRepositories.listByExternalRepository(key);
-          await requestTargets(targets, true);
+          stale.push(...targets.filter(target => baseCheckpointIsStale(target.projectRepository)));
         }
+        // Builds run for minutes each; a sequential walk over many stale repos
+        // would overrun the sweep lease TTL. Run them with bounded concurrency
+        // so one sweep still finishes promptly without stampeding the fleet.
+        const queue = [...stale];
+        const workers = Array.from({ length: Math.min(SWEEP_BUILD_CONCURRENCY, queue.length) }, async () => {
+          for (let target = queue.shift(); target; target = queue.shift()) {
+            await request(target.orgId, target.projectRepository).catch(error => warn('sweep-build', error));
+          }
+        });
+        await Promise.all(workers);
       } catch (error) {
         warn('sweep', error);
       }

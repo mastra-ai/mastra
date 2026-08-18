@@ -709,7 +709,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         return materializedSandboxes.get(workspaceId)?.supportsCheckpoints ?? false;
       },
       getInstructions() {
-        return '';
+        // Prefer the live sandbox's instructions once materialized; before
+        // that, forward the configured template machine's instructions so
+        // tool descriptions are accurate without forcing materialization.
+        return materializedSandboxes.get(workspaceId)?.getInstructions?.() ?? fleet.getInstructions();
       },
       clone(): never {
         throw new Error('The Factory session sandbox cannot be cloned from a lazy handle.');

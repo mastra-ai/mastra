@@ -97,6 +97,10 @@ function createSession(
         // The busy run finishes without ever answering the queued prompt, which
         // is the moment the session becomes free to take it again.
         queueMicrotask(() => emitAgentEnd('complete'));
+      } else if (!options?.signalAccepted && !options?.dropDeliveredSignal) {
+        // Default landed-deliver path: the in-flight run drains the prompt and
+        // finishes, which is what the dispatcher now waits to observe.
+        queueMicrotask(() => emitAgentEnd(options?.agentEndReason ?? 'complete'));
       }
       if (redelivered) return { accepted: Promise.resolve({ accepted: true as const, action: 'wake' }) };
       return { accepted: options?.signalAccepted ?? Promise.resolve({ accepted: true, action: 'deliver' }) };

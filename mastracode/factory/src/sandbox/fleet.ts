@@ -36,6 +36,16 @@ export interface SandboxCommandResult {
  */
 export interface MaterializationSandbox {
   readonly id: string;
+  /** Human-readable provider name, forwarded from the underlying sandbox. */
+  readonly name?: string;
+  /** Provider type discriminator, forwarded from the underlying sandbox. */
+  readonly provider?: string;
+  /** Sandbox usage instructions surfaced in tool descriptions. */
+  getInstructions?(opts?: { requestContext?: unknown }): string;
+  /** Long-running process capability, when the provider supports it. */
+  readonly processes?: WorkspaceSandbox['processes'];
+  /** Mount capability, when the provider supports it. */
+  readonly mounts?: WorkspaceSandbox['mounts'];
   start(): Promise<void>;
   getInfo(): Promise<{ metadata?: Record<string, unknown> }>;
   executeCommand(
@@ -182,6 +192,12 @@ function toMaterializationSandbox(
   const environment = { ...initialEnvironment };
   return {
     id: sandbox.id,
+    name: sandbox.name,
+    provider: sandbox.provider,
+    getInstructions: opts =>
+      sandbox.getInstructions?.(opts as Parameters<NonNullable<WorkspaceSandbox['getInstructions']>>[0]) ?? '',
+    processes: sandbox.processes,
+    mounts: sandbox.mounts,
     start: async () => {
       await (lifecycle._start ?? sandbox.start)?.call(sandbox);
     },
@@ -280,6 +296,15 @@ export class SandboxFleet {
    */
   get provider(): string {
     return this.#config?.machine.provider ?? 'none';
+  }
+
+  /**
+   * Usage instructions from the configured template machine, for surfacing in
+   * tool descriptions before any per-session sandbox has materialized.
+   * Empty string when no machine is configured or it exposes none.
+   */
+  getInstructions(): string {
+    return this.#config?.machine.getInstructions?.() ?? '';
   }
 
   /**
