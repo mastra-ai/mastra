@@ -41,7 +41,7 @@ export const MessageText = ({ text, metadata, externalLinkTarget, streaming }: M
     );
   }
 
-  const taskCompleteResult = metadata?.completionResult;
+  const taskCompleteResult = metadata?.completionResult ?? metadata?.isTaskCompleteResult;
   if (taskCompleteResult) {
     return (
       <Tool

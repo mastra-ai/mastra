@@ -63,6 +63,20 @@ describe('AssistantTextPartRenderer', () => {
     });
   });
 
+  describe('when isTaskCompleteResult metadata is present', () => {
+    it('renders the supervisor completion check with the shared collapsed disclosure', () => {
+      const part = { type: 'text', text: 'supervisor approved the task' } as TextPart;
+      const metadata: MessageMetadata = { isTaskCompleteResult: { passed: true } };
+
+      render(<AssistantTextPartRenderer part={part} metadata={metadata} />);
+
+      const completionCheck = screen.getByRole('group', { name: 'Completion check' });
+      expect(within(completionCheck).queryByText('supervisor approved the task')).toBeNull();
+      fireEvent.click(within(completionCheck).getByRole('button', { name: 'Show completion check' }));
+      expect(within(completionCheck).getByText('supervisor approved the task')).not.toBeNull();
+    });
+  });
+
   describe('when a chunk lands on a reply that is still streaming', () => {
     it('reveals it over time instead of dumping it on arrival', () => {
       vi.useFakeTimers();

@@ -77,9 +77,10 @@ describe('WorkflowBadge', () => {
     expect(screen.queryByTestId('workflow-graph-viewport')).toBeNull();
 
     const workflowLink = screen.getByRole('link', { name: 'Go to workflow' });
-    expect(workflowLink.getAttribute('href')).toBe(`/workflows/${WORKFLOW_ID}/graph`);
+    expect(workflowLink.getAttribute('href')).toBe(`/workflows/${WORKFLOW_ID}/graph/${RUN_ID}`);
 
     fireEvent.click(screen.getByRole('button', { name: new RegExp(badgeWorkflow.name) }));
     await waitFor(() => expect(screen.getByTestId('workflow-graph-viewport')).toBeTruthy());
+    expect(screen.queryByRole('link', { name: 'See run' })).toBeNull();
   });
 });

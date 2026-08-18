@@ -85,6 +85,7 @@ export const WorkflowBadge = ({
     ) : bgEntry?.taskId && bgEntry?.startedAt ? (
       <BackgroundTaskMetadataDialogTrigger backgroundTask={bgEntry} />
     ) : null;
+  const workflowHref = runId ? `/workflows/${workflowId}/graph/${runId}` : `/workflows/${workflowId}/graph`;
 
   return (
     <Tool data-testid="workflow-badge" status={toolCallStatus} aria-label={`Tool: ${toolName}`}>
@@ -92,7 +93,7 @@ export const WorkflowBadge = ({
         actions={
           <div className="flex items-center gap-1">
             {metadataAction}
-            <Button as={Link} href={`/workflows/${workflowId}/graph`} size="xs" variant="ghost">
+            <Button as={Link} href={workflowHref} size="xs" variant="ghost">
               Go to workflow
             </Button>
           </div>
@@ -107,11 +108,11 @@ export const WorkflowBadge = ({
       <ToolContent>
         {!isStreaming && !isLoading && (
           <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId} initialRunId={runId} withoutTimeTravel>
-            <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />
+            <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} />
           </WorkflowRunProvider>
         )}
 
-        {isStreaming && <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />}
+        {isStreaming && <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} />}
 
         {suspendPayloadSlot !== undefined && suspendPayload && (
           <div>
@@ -135,31 +136,18 @@ export const WorkflowBadge = ({
 
 interface WorkflowBadgeExtendedProps {
   workflowId: string;
-  runId?: string;
   workflow: GetWorkflowResponse;
 }
 
-const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExtendedProps) => {
-  const { Link } = useLinkComponent();
-
+const WorkflowBadgeExtended = ({ workflowId, workflow }: WorkflowBadgeExtendedProps) => {
   return (
-    <>
-      {runId && (
-        <div className="flex items-center pb-1.5">
-          <Button as={Link} href={`/workflows/${workflowId}/graph/${runId}`} size="xs" variant="ghost">
-            See run
-          </Button>
-        </div>
-      )}
-
-      <div className="h-[60vh] w-full overflow-hidden rounded-md">
-        <WorkflowSelectedStepProvider>
-          <WorkflowStepDetailProvider>
-            <WorkflowGraph workflowId={workflowId} workflow={workflow!} />
-          </WorkflowStepDetailProvider>
-        </WorkflowSelectedStepProvider>
-      </div>
-    </>
+    <div className="h-[60vh] w-full overflow-hidden rounded-md">
+      <WorkflowSelectedStepProvider>
+        <WorkflowStepDetailProvider>
+          <WorkflowGraph workflowId={workflowId} workflow={workflow!} />
+        </WorkflowStepDetailProvider>
+      </WorkflowSelectedStepProvider>
+    </div>
   );
 };
 

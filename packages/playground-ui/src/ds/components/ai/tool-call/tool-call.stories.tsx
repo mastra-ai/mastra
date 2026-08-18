@@ -80,6 +80,17 @@ export const GenericTool: Story = {
     input: { owner: 'mastra-ai', repository: 'mastra', number: 42 },
     result: { title: 'Share the Factory tool UI', state: 'open' },
     status: 'success',
+    defaultOpen: true,
+  },
+};
+
+export const GenericTextTool: Story = {
+  args: {
+    toolName: 'weatherInfo',
+    input: 'city=Paris',
+    result: 'Sunny, 18°C',
+    status: 'success',
+    defaultOpen: true,
   },
 };
 
