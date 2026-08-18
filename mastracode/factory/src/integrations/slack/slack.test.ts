@@ -442,7 +442,19 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
       userId: 'user-1',
       branch: 'slack/1700-42',
       baseBranch: 'main',
+      visibility: 'org',
     });
+  });
+
+  it('a DM thread creates a private session; channel threads stay org-visible', async () => {
+    const deps = makeResolverDeps();
+    const resolve = createChannelResourceIdResolver(deps as any);
+
+    await expect(resolve(resolveArgs({ id: 'slack:D-1:1700.42', isDM: true } as any))).resolves.toBe('us-new');
+
+    expect(deps.sourceControl.sessions.create).toHaveBeenCalledWith(
+      expect.objectContaining({ visibility: 'private' }),
+    );
   });
 
   // Top-level DM and channel conversations use the empty-threadTs thread form

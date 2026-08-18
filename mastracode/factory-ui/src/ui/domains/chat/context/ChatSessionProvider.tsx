@@ -79,8 +79,9 @@ export function ChatSessionConfigProvider({
   // background warm-up that usually wins the race against the first command.
   const sandboxReady = resourceOverride ? Boolean(resourceOverride) : Boolean(storedSession) && !resolvingSession;
   // A failed warm-up is surfaced non-fatally (banner + retry) — the run path
-  // no longer depends on `/ensure`.
-  const sessionError = ensureQuery.error ?? undefined;
+  // no longer depends on `/ensure`. A denied or missing session (404 from the
+  // session query) must surface the error state, not the eternal preparing loader.
+  const sessionError = ensureQuery.error ?? sessionQuery.error ?? undefined;
   // `resourceReady` — safe to address the agent-controller session by
   // `resourceId` for reads/streaming as soon as server-side session metadata
   // resolves. Does NOT wait on `/ensure` — the agent-controller endpoints are
@@ -91,8 +92,9 @@ export function ChatSessionConfigProvider({
     : Boolean(resourceOverride) || (Boolean(storedSession) && !resolvingSession);
   // `sandboxPreparing` — true only while session metadata is still resolving
   // for an in-session mount. Distinct from `!sandboxReady`, which is also
-  // false outside any session.
-  const sandboxPreparing = inSession && !sandboxReady;
+  // false outside any session. A denied/missing session must not keep the
+  // preparing loader up forever.
+  const sandboxPreparing = inSession && !sandboxReady && !sessionError;
   const sandboxProgressQuery = useEnsureProgress(inSession ? repository?.projectRepositoryId : undefined);
   // Warm-up progress is informational only — it never blocks the chat UI.
   const sandboxWarming = inSession && !resourceOverride && ensureQuery.isPending;
@@ -116,7 +118,12 @@ export function ChatSessionConfigProvider({
     sandboxProgress,
     resourceEnabled,
     sessionError,
-    retrySession: sessionError ? () => void ensureQuery.refetch() : undefined,
+    retrySession: sessionError
+      ? () => {
+          void ensureQuery.refetch();
+          if (sessionQuery.isError) void sessionQuery.refetch();
+        }
+      : undefined,
     projectPath,
     sessionThreadId: storedSession?.sessionId,
     workspacePending: storedSession !== undefined && !storedSession.materializedAt,
@@ -201,11 +208,12 @@ export function ChatSessionBoundary({
 export function ChatMessageBoundary({ children }: { children: ReactNode }) {
   const value = useContext(ChatThreadMessagesContext);
   if (!value) throw new Error('ChatMessageBoundary must be used within a ChatSessionBoundary');
-  const { sessionError, sandboxPreparing } = useChatSessionContext();
+  const { sessionError, sandboxPreparing, sandboxReady } = useChatSessionContext();
 
-  // A failed workspace warm-up is non-fatal — the run path materializes the
-  // sandbox lazily on first use — so surface it as a banner with a retry
-  // affordance instead of replacing the chat content.
+  // A denied or missing session is fatal — replace the chat instead of
+  // spinning on the preparing loader. A failed workspace warm-up is
+  // non-fatal (the run path materializes lazily), so that stays a banner.
+  if (sessionError && !sandboxReady) return <ChatMessageFeedback />;
   const warmupBanner = sessionError ? <ChatMessageFeedback /> : null;
 
   // Any pre-transcript wait — session metadata resolution OR the initial
@@ -243,9 +251,16 @@ export function ChatMessageBoundary({ children }: { children: ReactNode }) {
 function ChatMessageFeedback() {
   const { sessionError, retrySession } = useChatSessionContext();
   if (!sessionError) return null;
+  // The server intentionally returns the same 404 for a missing session and a
+  // private one owned by someone else, so the message covers both.
+  const notFound = (sessionError as { status?: number }).status === 404;
   return (
     <div className="flex flex-col items-stretch gap-4">
-      <Notice variant="destructive">Failed to prepare the workspace: {sessionError.message}</Notice>
+      <Notice variant="destructive">
+        {notFound
+          ? 'This session was not found or is private to another user.'
+          : `Failed to prepare the workspace: ${sessionError.message}`}
+      </Notice>
       {retrySession && (
         <div>
           <Button variant="default" onClick={retrySession}>

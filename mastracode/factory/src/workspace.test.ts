@@ -1486,11 +1486,56 @@ describe('GitHub session workspace preparation', () => {
   it('enforces exact session scope ownership', async () => {
     const { workspace } = await createLocalFactory();
     addProject();
-    addSession({ id: 'session-a', userId: 'someone-else' });
+    addSession({ id: 'session-a', userId: 'someone-else', visibility: 'private' });
 
     await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toThrow(
       /Factory session session-a is not available/,
     );
+  });
+
+  it('opens org-visible sessions to same-org non-owners', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a', userId: 'someone-else', visibility: 'org' });
+
+    await expect(
+      workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') }),
+    ).resolves.toBeDefined();
+  });
+
+  it('refuses private sessions to same-org non-owners', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a', userId: 'someone-else', visibility: 'private' });
+
+    await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toThrow(
+      /Factory session session-a is not available/,
+    );
+  });
+
+  it('refuses cross-org callers regardless of visibility', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a', userId: 'someone-else', visibility: 'org' });
+
+    await expect(
+      workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a', {
+          organizationId: 'org-2',
+          workosId: 'user-2',
+        }),
+      }),
+    ).rejects.toThrow(/Factory session session-a is not available/);
+  });
+
+  it('opens legacy sessions without stored visibility to same-org non-owners', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a', userId: 'someone-else', visibility: null });
+
+    await expect(
+      workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') }),
+    ).resolves.toBeDefined();
   });
 
   it('accepts session owners identified by provider-neutral id instead of workosId', async () => {
