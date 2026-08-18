@@ -45,9 +45,6 @@ import { BaseResource } from './base';
 /** One arm of the wire union, selected by its `type`. */
 type WireEventOf<T extends AgentControllerWireEvent['type']> = Extract<AgentControllerWireEvent, { type: T }>;
 
-/** An `Error` as it serializes — controller errors carry `toJSON`, so JSON keeps their message. */
-export type WireError = WireEventOf<'workspace_error'>['error'];
-
 /** A `MastraDBMessage` before {@link hydrateMessage} turns its `createdAt` back into a `Date`. */
 type SerializedMastraDBMessage = WireEventOf<'message_start'>['message'];
 
@@ -79,7 +76,7 @@ type NotificationEvent =
       notificationIds: string[];
     };
 
-/** The timestamps the SDK gives back as `Date`s; mirrors {@link hydrateEventTimestamps}. */
+/** The timestamps the SDK gives back as `Date`s. {@link hydrateKnownEvent} is typed against this, so the two cannot drift. */
 type Hydrated<T> = T extends { type: 'thread_created' }
   ? Omit<T, 'thread'> & { thread: AgentControllerThread }
   : T extends { type: 'message_start' | 'message_update' | 'message_end' }
@@ -91,10 +88,7 @@ type Hydrated<T> = T extends { type: 'thread_created' }
  * derives from the controller's own events, with timestamps hydrated. This is a
  * discriminated union, so narrowing on `event.type` gives the right payload.
  */
-export type KnownAgentControllerEvent =
-  | Hydrated<Exclude<AgentControllerWireEvent, { type: 'error' }>>
-  | (Omit<WireEventOf<'error'>, 'error'> & { error: WireError | string })
-  | NotificationEvent;
+export type KnownAgentControllerEvent = Hydrated<AgentControllerWireEvent> | NotificationEvent;
 
 /** Any other agent controller event the SDK doesn't model explicitly. */
 export interface OtherAgentControllerEvent {
@@ -192,9 +186,8 @@ function isKnownParsedEvent(event: ParsedEvent): event is AgentControllerWireEve
   return KNOWN_AGENT_CONTROLLER_EVENT_TYPES.has(event.type);
 }
 
-/** The stream carries every timestamp as an ISO string; give consumers back the `Date`s the type promises. */
-function hydrateEventTimestamps(event: ParsedEvent): AgentControllerEvent {
-  if (!isKnownParsedEvent(event)) return event;
+/** The stream carries every timestamp as an ISO string; give consumers back the `Date`s {@link Hydrated} promises. */
+function hydrateKnownEvent(event: AgentControllerWireEvent | NotificationEvent): KnownAgentControllerEvent {
   switch (event.type) {
     case 'message_start':
     case 'message_update':
@@ -205,6 +198,10 @@ function hydrateEventTimestamps(event: ParsedEvent): AgentControllerEvent {
     default:
       return event;
   }
+}
+
+function hydrateEventTimestamps(event: ParsedEvent): AgentControllerEvent {
+  return isKnownParsedEvent(event) ? hydrateKnownEvent(event) : event;
 }
 
 /** Resume payload for the built-in `submit_plan` suspension. */
