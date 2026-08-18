@@ -111,7 +111,7 @@ function ackBackgroundSessionWork({
   operation: string;
 }): void {
   void work.catch((error: unknown) => {
-    const failure = getErrorFromUnknown(error, { serializeStack: false });
+    const failure = getErrorFromUnknown(error);
     mastra.getLogger?.()?.error?.(`AgentController ${operation} failed after the request was acknowledged`, {
       operation,
       error: failure,

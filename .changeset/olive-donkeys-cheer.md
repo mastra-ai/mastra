@@ -31,12 +31,12 @@ session.emit({ type: 'error', error: new Error('run failed') });
 // After
 import { getErrorFromUnknown } from '@mastra/core/error';
 
-session.emit({ type: 'error', error: getErrorFromUnknown('run failed', { serializeStack: false }) });
+session.emit({ type: 'error', error: getErrorFromUnknown('run failed') });
 ```
 
 **New: `AgentControllerWireEvent`**
 
-The event union as it arrives on a client after JSON — timestamps as ISO strings, errors as `{ name, message }`. Clients can type their stream handlers from it instead of re-describing the payloads by hand.
+The event union as it arrives on a client after JSON — timestamps as ISO strings, errors as their `toJSON` output. Clients can type their stream handlers from it instead of re-describing the payloads by hand.
 
 ```ts
 import type { AgentControllerWireEvent } from '@mastra/core/agent-controller';
