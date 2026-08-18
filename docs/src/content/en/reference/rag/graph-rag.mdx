@@ -176,7 +176,7 @@ Returns a `GraphRAGSnapshot` object containing:
   {
     name: 'version',
     type: 'number',
-    description: 'Snapshot format version, used to reject snapshots this version of the class cannot load',
+    description: "Snapshot format version, used to reject snapshots this version of the class can't load",
   },
   {
     name: 'dimension',
@@ -201,7 +201,7 @@ Returns a `GraphRAGSnapshot` object containing:
 ]}
 />
 
-The snapshot is a deep copy, so mutating it does not affect the graph it came from. Every node carries its full embedding, so snapshots of large graphs can be several megabytes of JSON. Size your storage column accordingly.
+The snapshot is a deep copy, so mutating it doesn't affect the graph it came from. Every node carries its full embedding, so snapshots are large: a 1,000-node graph built with 1536-dimension embeddings serializes to about 20 MB of JSON. Size your storage column accordingly.
 
 ### `deserialize`
 
@@ -223,11 +223,11 @@ static deserialize(snapshot: GraphRAGSnapshot): GraphRAG
 ]}
 />
 
-Throws if the snapshot version is unsupported, if a node embedding does not match the snapshot dimension, or if an edge references a node that is not in the snapshot. This means a bad snapshot fails when you load it rather than later when you query it.
+Throws if the snapshot version is unsupported, if a node embedding doesn't match the snapshot dimension, or if an edge references a node that isn't in the snapshot. A bad snapshot therefore fails at load time instead of during a later query.
 
 ## Persisting a graph
 
-Building a graph is O(n²) in the number of chunks, so rebuilding it on every process start is wasteful. Serialize the graph once and store the snapshot wherever you already keep state. A snapshot is plain JSON, so any store works — a file, a blob column, a key-value cache — and `GraphRAG` does not depend on any particular storage backend.
+Building a graph is O(n²) in the number of chunks, so rebuilding it on every process start is wasteful. Serialize the graph once and store the snapshot wherever you already keep state. A snapshot is plain JSON, so any store works (a file, a blob column, a key-value cache), and `GraphRAG` doesn't depend on a storage backend.
 
 ```typescript
 import { readFile, writeFile } from 'node:fs/promises'
@@ -253,7 +253,7 @@ async function loadOrBuildGraph() {
 }
 ```
 
-Rebuild the graph rather than reusing a snapshot when the underlying documents change: a snapshot reflects the chunks it was built from and is not updated incrementally.
+A snapshot reflects the chunks it was built from and isn't updated incrementally. When the underlying documents change, build the graph again and store a new snapshot.
 
 ## Advanced example
 

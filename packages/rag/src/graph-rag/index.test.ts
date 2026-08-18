@@ -419,6 +419,16 @@ describe('GraphRAG', () => {
       expect(graph.getEdges()[0]!.weight).not.toBe(999);
     });
 
+    it('should deep copy nested node metadata', () => {
+      const graph = new GraphRAG(3, 0.5);
+      graph.createGraph([{ text: 'Chunk 1', metadata: { nested: { tags: ['a'] } } }], [{ vector: [1, 2, 3] }]);
+
+      const snapshot = graph.serialize();
+      snapshot.nodes[0]!.metadata!.nested.tags.push('mutated');
+
+      expect(graph.getNodes()[0]!.metadata!.nested.tags).toEqual(['a']);
+    });
+
     it('should round trip through JSON without changing graph state', () => {
       const graph = buildGraph();
       const restored = GraphRAG.deserialize(JSON.parse(JSON.stringify(graph.serialize())));

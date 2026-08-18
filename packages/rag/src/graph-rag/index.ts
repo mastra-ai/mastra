@@ -107,7 +107,8 @@ export class GraphRAG {
    * Produce a JSON-safe snapshot of the graph so it can be persisted and
    * restored later instead of rebuilt with `createGraph`.
    *
-   * The snapshot is a deep copy, so mutating it does not affect this instance.
+   * The snapshot is a deep copy, including nested node metadata, so mutating it
+   * does not affect this instance.
    * Note that every node carries its full embedding, so snapshots of large
    * graphs can be several megabytes of JSON.
    */
@@ -119,7 +120,7 @@ export class GraphRAG {
       nodes: Array.from(this.nodes.values()).map(node => ({
         ...node,
         ...(node.embedding ? { embedding: [...node.embedding] } : {}),
-        ...(node.metadata ? { metadata: { ...node.metadata } } : {}),
+        ...(node.metadata ? { metadata: structuredClone(node.metadata) } : {}),
       })),
       edges: this.edges.map(edge => ({ ...edge })),
     };
@@ -144,7 +145,7 @@ export class GraphRAG {
       graph.addNode({
         ...node,
         ...(node.embedding ? { embedding: [...node.embedding] } : {}),
-        ...(node.metadata ? { metadata: { ...node.metadata } } : {}),
+        ...(node.metadata ? { metadata: structuredClone(node.metadata) } : {}),
       });
     }
 
