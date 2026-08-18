@@ -864,7 +864,7 @@ const agent = await mastraClient.createStoredAgent({
 })
 ```
 
-Only serializable options are accepted. The durable cache and pubsub are inherited from the server's `Mastra` instance — if it has no distributed cache or pubsub configured, durability is process-local. Automatic recovery is still configured in code through `recovery.durableAgents`.
+Only serializable options are accepted. The durable cache and pubsub are inherited from the server's `Mastra` instance. If it has no distributed cache or pubsub configured, durability is process-local. Automatic recovery is still configured in code through `recovery.durableAgents`.
 
 ### `getStoredAgent()`
 
