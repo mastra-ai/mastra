@@ -221,6 +221,43 @@ describe('MastraAuthBetterAuth', () => {
       }
     });
 
+    it('evicts expired cache entries for users who never authenticate again', async () => {
+      vi.useFakeTimers();
+      try {
+        const findMany = vi.fn(async () => [{ organizationId: 'org_member' }]);
+        const auth = new MastraAuthBetterAuth({
+          auth: {
+            ...mockAuth,
+            $context: Promise.resolve({
+              authCookies: { sessionToken: { name: 'better-auth.session_token' } },
+              adapter: { findMany },
+            }),
+          } as any,
+        });
+
+        for (let i = 0; i < 5; i++) {
+          const user = { ...mockUser, id: `user_stale_${i}`, email: `stale${i}@example.com` };
+          mockAuth.api.getSession.mockResolvedValue({
+            session: { ...mockSession, id: `session_stale_${i}`, userId: user.id, activeOrganizationId: null },
+            user,
+          });
+          await auth.authenticateToken(`token-${i}`, mockRawRequest());
+        }
+        expect(auth.orgCacheSize).toBe(5);
+
+        vi.advanceTimersByTime(61_000);
+        mockAuth.api.getSession.mockResolvedValue({
+          session: { ...mockSession, activeOrganizationId: null },
+          user: mockUser,
+        });
+        await auth.authenticateToken('token-fresh', mockRawRequest());
+
+        expect(auth.orgCacheSize).toBe(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('does not mutate the session object returned by better-auth', async () => {
       const storedSession = { ...mockSession, activeOrganizationId: null };
       mockAuth.api.getSession.mockResolvedValue({ session: storedSession, user: mockUser });

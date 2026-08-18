@@ -195,6 +195,25 @@ export class MastraAuthBetterAuth
     }
     return entry.orgId;
   }
+
+  /**
+   * Cache a resolved `userId → orgId` mapping. Sweeps expired entries first so
+   * users who never authenticate again do not accumulate in the map for the
+   * process lifetime: every write bounds the cache to entries touched within
+   * the last TTL window.
+   */
+  #storeOrgId(userId: string, orgId: string): void {
+    const now = Date.now();
+    for (const [key, entry] of this.#orgCache) {
+      if (now >= entry.expiresAt) this.#orgCache.delete(key);
+    }
+    this.#orgCache.set(userId, { orgId, expiresAt: now + ORG_CACHE_TTL_MS });
+  }
+
+  /** @internal Test hook: current org-cache cardinality. */
+  get orgCacheSize(): number {
+    return this.#orgCache.size;
+  }
   /** Set from `init()`: cross-origin SPA deploys need SameSite=None; Secure cookies. */
   #crossSite = false;
   protected signUpEnabledConfig: boolean;
@@ -366,7 +385,7 @@ export class MastraAuthBetterAuth
       sortBy: { field: 'createdAt', direction: 'asc' },
     })) as MemberRow[];
     const orgId = memberships.find(m => m.organizationId)?.organizationId;
-    if (orgId) this.#orgCache.set(userId, { orgId, expiresAt: Date.now() + ORG_CACHE_TTL_MS });
+    if (orgId) this.#storeOrgId(userId, orgId);
     return orgId;
   }
 
@@ -483,7 +502,7 @@ export class MastraAuthBetterAuth
         if (!member) throw error;
       }
 
-      this.#orgCache.set(userId, { orgId: organizationId, expiresAt: Date.now() + ORG_CACHE_TTL_MS });
+      this.#storeOrgId(userId, organizationId);
       return organizationId;
     } catch (error) {
       console.warn(
