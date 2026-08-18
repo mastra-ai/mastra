@@ -803,10 +803,13 @@ export class Mastra<
     [topic: string]: ((event: Event) => Promise<void> | void)[];
   } = {};
   #internalMastraWorkflows: Record<string, AnyWorkflow> = {};
-  // Tracks registration timestamps for run-scoped internal workflows so a lazy
+  // Tracks last-activity timestamps for run-scoped internal workflows so a lazy
   // TTL sweep can evict entries from abandoned suspended runs that were never
-  // resumed. Unscoped (singleton) entries are not tracked — they live forever.
-  #runScopedWorkflowTimestamps: Map<string, { registeredAt: number; runId: string }> = new Map();
+  // resumed. The timestamp is refreshed every time the run resolves its own
+  // registration, so the TTL bounds *idle* time rather than total run duration —
+  // a run that legitimately executes for hours is never swept out from under
+  // itself. Unscoped (singleton) entries are not tracked — they live forever.
+  #runScopedWorkflowTimestamps: Map<string, { lastActivityAt: number; runId: string }> = new Map();
   // Per-run bag of non-serializable runtime state (SaveQueueManager,
   // BackgroundTaskManager, MessageList, abort controllers, dynamic tool sets…)
   // shared across step factories within a single run. Never persisted, never
@@ -816,8 +819,8 @@ export class Mastra<
   // last unregisters. See `./run-scope.ts`.
   #runScopes: Map<string, RunScope> = new Map();
   #runScopeRefcounts: Map<string, number> = new Map();
-  // Run-scoped internal workflows older than this TTL (ms) are evicted during the
-  // lazy sweep that runs on each new registration. Reads the shared
+  // Run-scoped internal workflows idle for longer than this TTL (ms) are evicted
+  // during the lazy sweep that runs on each new registration. Reads the shared
   // `MASTRA_SUSPENDED_RUN_TTL_MS` so this registry and the agent thread-stream
   // runtime expire a suspended run's state on one bound; production keeps the 30
   // minute default.
@@ -3388,7 +3391,7 @@ export class Mastra<
       const key = `${workflow.id}:${runId}`;
       const isNewRegistration = !this.#internalMastraWorkflows[key];
       this.#internalMastraWorkflows[key] = workflow;
-      this.#runScopedWorkflowTimestamps.set(key, { registeredAt: Date.now(), runId });
+      this.#runScopedWorkflowTimestamps.set(key, { lastActivityAt: Date.now(), runId });
       // Pair the registration with a runScope. Multiple workflows can share a
       // runId (parent + nested); we refcount so the scope outlives the first
       // unregister and dies with the last.
@@ -3473,9 +3476,27 @@ export class Mastra<
     if (runId) {
       // Only the exact run-scoped entry or the genuinely-unscoped slot — never
       // another run's `${id}:${otherRunId}` registration.
-      return !!this.#internalMastraWorkflows[`${id}:${runId}`] || !!this.#internalMastraWorkflows[id];
+      if (this.#internalMastraWorkflows[`${id}:${runId}`]) {
+        this.#touchRunScopedWorkflow(id, runId);
+        return true;
+      }
+      return !!this.#internalMastraWorkflows[id];
     }
     return !!this.#internalMastraWorkflows[id];
+  }
+
+  /**
+   * Mark a run-scoped registration as active so the lazy TTL sweep measures
+   * idle time rather than total run duration. Only refreshes an entry that
+   * already exists at the exact `${id}:${runId}` key — resolving the bare
+   * unscoped `${id}` slot says nothing about a run's liveness, and this must
+   * never create an entry.
+   */
+  #touchRunScopedWorkflow(id: string, runId: string) {
+    const entry = this.#runScopedWorkflowTimestamps.get(`${id}:${runId}`);
+    if (entry) {
+      entry.lastActivityAt = Date.now();
+    }
   }
 
   /**
@@ -3516,9 +3537,17 @@ export class Mastra<
   }
 
   __getInternalWorkflow(id: string, runId?: string): AnyWorkflow {
-    const workflow = runId
-      ? (this.#internalMastraWorkflows[`${id}:${runId}`] ?? this.#internalMastraWorkflows[id])
-      : this.#internalMastraWorkflows[id];
+    let workflow: AnyWorkflow | undefined;
+    if (runId) {
+      workflow = this.#internalMastraWorkflows[`${id}:${runId}`];
+      if (workflow) {
+        this.#touchRunScopedWorkflow(id, runId);
+      } else {
+        workflow = this.#internalMastraWorkflows[id];
+      }
+    } else {
+      workflow = this.#internalMastraWorkflows[id];
+    }
     if (!workflow) {
       throw new MastraError({
         id: 'MASTRA_GET_INTERNAL_WORKFLOW_BY_ID_NOT_FOUND',
@@ -3556,15 +3585,23 @@ export class Mastra<
   }
 
   /**
-   * Lazily evict run-scoped internal workflow entries that have exceeded
-   * {@link Mastra.INTERNAL_WORKFLOW_TTL_MS}. Called on every new run-scoped
-   * registration so cleanup is proportional to activity — zero overhead when
-   * the system is idle.
+   * Lazily evict run-scoped internal workflow entries that have been *idle*
+   * longer than {@link Mastra.INTERNAL_WORKFLOW_TTL_MS}. Called on every new
+   * run-scoped registration so cleanup is proportional to activity — zero
+   * overhead when the system is idle.
+   *
+   * Idleness, not age: every lookup a run makes against its own registration
+   * refreshes `lastActivityAt` (see `#touchRunScopedWorkflow`), so a run that
+   * executes for longer than the TTL is never evicted mid-flight. Only a run
+   * that has stopped touching its registration — suspended and never resumed,
+   * or abandoned — ages out. This matches how the agent thread-stream runtime
+   * treats the shared `MASTRA_SUSPENDED_RUN_TTL_MS` bound, which only expires
+   * records that are actually parked.
    */
   #sweepStaleRunScopedWorkflows() {
     const now = Date.now();
     for (const [key, entry] of this.#runScopedWorkflowTimestamps) {
-      if (now - entry.registeredAt > Mastra.INTERNAL_WORKFLOW_TTL_MS) {
+      if (now - entry.lastActivityAt > Mastra.INTERNAL_WORKFLOW_TTL_MS) {
         delete this.#internalMastraWorkflows[key];
         this.#runScopedWorkflowTimestamps.delete(key);
         // Release the matching scope using the runId we stored at registration
@@ -3574,10 +3611,10 @@ export class Mastra<
         // Surface the eviction so operators can investigate long-suspended
         // runs that never resumed. The refcounted lifecycle in
         // `__createRunScope`/`__releaseRunScope` covers the happy path; this
-        // branch only fires when a registration was abandoned past the TTL.
+        // branch only fires when a registration went idle past the TTL.
         this.#logger.warn('Evicted stale run-scoped workflow after TTL expired', {
           runId: entry.runId,
-          ageMs: now - entry.registeredAt,
+          idleMs: now - entry.lastActivityAt,
           ttlMs: Mastra.INTERNAL_WORKFLOW_TTL_MS,
         });
       }

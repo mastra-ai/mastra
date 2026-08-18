@@ -191,6 +191,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/arcee',
+          label: 'Arcee',
+        },
+        {
+          type: 'doc',
           id: 'providers/atomic-chat',
           label: 'Atomic Chat',
         },

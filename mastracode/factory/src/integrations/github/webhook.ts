@@ -69,6 +69,11 @@ export type FactorySessionOwner = { userId: string; orgId: string };
  */
 export interface GithubWebhookDispatchIntegration {
   readonly integrationStorage: GithubSubscriptionStorage;
+  /**
+   * Extra bot logins this deployment authorizes to trigger author-gated
+   * notifications, merged over `DEFAULT_AUTHORIZED_BOTS`.
+   */
+  readonly authorizedBots?: readonly string[];
   readonly sourceControlStorage: {
     sessions: { getBySessionId(sessionId: string): Promise<FactorySessionOwner | null> };
   };
@@ -95,6 +100,8 @@ export interface GithubWebhookDispatchDependencies {
   ) => Promise<GithubSignalSubscriptionRow[]>;
   retireSubscription?: (id: string, status: 'open' | 'closed' | 'merged') => Promise<void>;
   isAuthorizedSender?: (notification: GithubWebhookNotification) => Promise<boolean>;
+  /** Called when the sender gate drops a notification, so the drop is observable. */
+  onSenderRejected?: (notification: GithubWebhookNotification) => void;
   onTargetError?: (subscription: GithubSignalSubscriptionRow, error: unknown) => void;
 }
 
@@ -350,7 +357,34 @@ async function resolveSubscriptionSession(
   return session;
 }
 
-const AUTHORIZED_BOTS = new Set(['coderabbitai[bot]', 'devin-ai-integration[bot]']);
+/**
+ * Reviewer bots authorized out of the box. Deployments extend — never replace —
+ * this set through the integration's `authorizedBots`.
+ */
+export const DEFAULT_AUTHORIZED_BOTS: readonly string[] = ['coderabbitai[bot]', 'devin-ai-integration[bot]'];
+
+/**
+ * Parse a comma-separated `MASTRACODE_GITHUB_AUTHORIZED_BOTS` value into extra
+ * bot logins. Returns undefined when nothing usable was configured.
+ */
+export function parseAuthorizedBotsEnv(value: string | undefined): string[] | undefined {
+  const bots = (value ?? '')
+    .split(',')
+    .map(bot => bot.trim())
+    .filter(Boolean);
+  return bots.length > 0 ? bots : undefined;
+}
+
+/** Lowercased union of the default bot logins and any the deployment opted in. */
+export function resolveAuthorizedBots(extra?: readonly string[]): Set<string> {
+  const bots = new Set(DEFAULT_AUTHORIZED_BOTS);
+  for (const bot of extra ?? []) {
+    const normalized = bot.trim().toLowerCase();
+    if (normalized) bots.add(normalized);
+  }
+  return bots;
+}
+
 const AUTHORIZED_PERMISSIONS = new Set(['admin', 'maintain', 'write']);
 const PERMISSION_CHECK_TIMEOUT_MS = 5_000;
 const AUTHOR_GATED_KINDS = new Set([
@@ -364,7 +398,7 @@ const AUTHOR_GATED_KINDS = new Set([
 
 async function isAuthorizedGithubSender(
   notification: GithubWebhookNotification,
-  github: Pick<GithubWebhookDispatchIntegration, 'getRepositoryCollaboratorPermission'> | undefined,
+  github: Pick<GithubWebhookDispatchIntegration, 'getRepositoryCollaboratorPermission' | 'authorizedBots'> | undefined,
 ): Promise<boolean> {
   if (!AUTHOR_GATED_KINDS.has(notification.kind)) return true;
   const sender = notification.metadata.sender;
@@ -372,7 +406,7 @@ async function isAuthorizedGithubSender(
   if (!sender || !repository) return false;
   const normalizedSender = sender.toLowerCase();
   if (notification.metadata.senderType?.toLowerCase() === 'bot' || normalizedSender.endsWith('[bot]')) {
-    return AUTHORIZED_BOTS.has(normalizedSender);
+    return resolveAuthorizedBots(github?.authorizedBots).has(normalizedSender);
   }
   if (!github) return false;
   const abortController = new AbortController();
@@ -410,6 +444,7 @@ export async function dispatchGithubWebhook(
     dependencies.isAuthorizedSender ??
     ((n: GithubWebhookNotification) => isAuthorizedGithubSender(n, dependencies.github));
   if (!(await isAuthorizedSender(notification))) {
+    dependencies.onSenderRejected?.(notification);
     return { delivered: 0, failed: 0, ignored: true };
   }
 
@@ -498,7 +533,17 @@ export async function handleGithubWebhook(
     return { status: 202, body: { ok: true } };
   }
 
-  const result = await dispatchGithubWebhook(parsed, options as GithubWebhookDispatchDependencies);
+  const result = await dispatchGithubWebhook(parsed, {
+    onSenderRejected: notification => {
+      console.info('[GitHub Webhook] sender not authorized', {
+        deliveryId: parsed.deliveryId,
+        repository: notification.metadata.repository,
+        sender: notification.metadata.sender,
+        kind: notification.kind,
+      });
+    },
+    ...(options as GithubWebhookDispatchDependencies),
+  });
   if (result.failed > 0) {
     console.warn(`[GitHub Webhook] ${result.failed} subscribed target(s) failed for delivery ${parsed.deliveryId}.`);
   }

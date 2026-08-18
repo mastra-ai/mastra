@@ -7,7 +7,12 @@ import type { MemoryConfig, MemoryConfig as _MemoryConfig, StorageThreadType } f
 import { EntityType, SpanType, createObservabilityContext, getOrCreateSpan } from '../../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcessorOrWorkflow } from '../../processors';
 import type { ProcessorState } from '../../processors/runner';
-import { RequestContext, MASTRA_VERSIONS_KEY, mergeVersionOverrides } from '../../request-context';
+import {
+  RequestContext,
+  MASTRA_INHERITED_MEMORY_KEY,
+  MASTRA_VERSIONS_KEY,
+  mergeVersionOverrides,
+} from '../../request-context';
 import type { VersionOverrides } from '../../request-context';
 import { toStandardSchema } from '../../schema';
 import { normalizeToolPayloadTransformPolicy } from '../../tools/payload-transform';
@@ -48,6 +53,11 @@ function snapshotRequestContextEntries(
   const out: Record<string, unknown> = {};
   let any = false;
   for (const [key, value] of requestContext.entries()) {
+    // Holds a live MastraMemory instance, which stringifies into a large, method-less
+    // husk of the memory and its storage adapter. Persisting that would bloat the
+    // workflow input and hand the resumed run an object whose methods are gone; the
+    // resumed agent resolves memory from its own config instead.
+    if (key === MASTRA_INHERITED_MEMORY_KEY) continue;
     // Serialize each entry exactly once with a bounded pass: a shared-reference
     // graph would otherwise make JSON.stringify expand exponentially and wedge
     // the event loop on every durable step, and reading the value twice (probe
