@@ -9,6 +9,10 @@ const execFileAsync = promisify(execFile);
 
 const PKG_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
+// Resolve the tsx binary from the package's own node_modules rather than going through `npx`,
+// which can reach outside the workspace or fetch from the registry.
+const TSX_BIN = join(PKG_ROOT, 'node_modules', '.bin', process.platform === 'win32' ? 'tsx.cmd' : 'tsx');
+
 /**
  * Ratchet gate for SDK <-> server contract drift.
  *
@@ -25,7 +29,7 @@ describe('SDK <-> server contract audit', () => {
   it('introduces no new contract drift', async () => {
     let stdout: string;
     try {
-      ({ stdout } = await execFileAsync('npx', ['tsx', 'scripts/audit-contract.ts', '--check'], {
+      ({ stdout } = await execFileAsync(TSX_BIN, ['scripts/audit-contract.ts', '--check'], {
         cwd: PKG_ROOT,
         maxBuffer: 32 * 1024 * 1024,
       }));
