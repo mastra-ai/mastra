@@ -324,6 +324,12 @@ describe('InMemoryKnowledgeStorage', () => {
         ?.id,
     ).toBe(first.id);
 
+    const sourcePage = await store.knowledgeBySource({ sourceThreadId: 't1', scope: thread, limit: 1 });
+    expect(sourcePage).toMatchObject({ records: [{ id: first.id }], nextCursor: first.id });
+    expect(
+      (await store.knowledgeBySource({ sourceThreadId: 't1', scope: thread, after: sourcePage.nextCursor })).records,
+    ).toEqual([expect.objectContaining({ id: second.id })]);
+
     const pending = await store.listSemanticOutbox({ status: 'pending' });
     const tooEarly = new Date(Math.min(...pending.map(entry => entry.availableAt.getTime())) - 1);
     expect(await store.claimSemanticOutbox({ workerId: 'one', limit: 1, now: tooEarly })).toHaveLength(0);

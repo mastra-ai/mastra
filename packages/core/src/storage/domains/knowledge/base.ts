@@ -210,6 +210,15 @@ export interface QueryKnowledgeOutput {
   nextCursor?: string;
 }
 
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface QueryKnowledgeBySourceInput {
+  sourceThreadId: string;
+  scope: KnowledgeScope;
+  after?: string;
+  limit?: number;
+  includeDeleted?: boolean;
+}
+
 export interface SearchKnowledgeInput {
   query: string;
   scope: KnowledgeScope;
@@ -407,6 +416,7 @@ export abstract class KnowledgeStorage extends StorageDomain {
   abstract listKnowledgeAbout(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput>;
   abstract listKnowledgeMentioning(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput>;
   abstract listKnowledgeRelatedTo(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput>;
+  abstract knowledgeBySource(input: QueryKnowledgeBySourceInput): Promise<QueryKnowledgeOutput>;
   abstract removeKnowledge(input: { id: string; deletedBy: string }): Promise<KnowledgeRecord>;
   abstract restoreKnowledge(input: { id: string }): Promise<KnowledgeRecord>;
   abstract rescopeKnowledge(input: { id: string; scope: KnowledgeScope }): Promise<KnowledgeRecord>;

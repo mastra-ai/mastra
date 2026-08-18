@@ -228,7 +228,7 @@ describe('Subconscious LibSQL integration', () => {
     await storage.init();
 
     let streamCall = 0;
-    const reminder = 'Project Atlas launches January 15. Source KnowledgeItem: item-atlas-launch.';
+    const reminder = 'Project Atlas launches January 15. Source KnowledgeRecord: record-atlas-launch.';
     const model = new MockLanguageModelV2({
       doStream: async () => {
         streamCall += 1;
@@ -274,7 +274,7 @@ describe('Subconscious LibSQL integration', () => {
     const knowledge = (await storage.getStore('knowledge'))!;
     const atlas = await knowledge.createNode({ name: 'Project Atlas', kind: 'project', scope: scope.slice(0, 2) });
     await knowledge.appendKnowledge({
-      id: 'item-atlas-launch',
+      id: 'record-atlas-launch',
       node: atlas.id,
       text: '[[Project Atlas]] launches January 15.',
       scope: scope.slice(0, 2),
@@ -340,7 +340,7 @@ describe('Subconscious LibSQL integration', () => {
         content: [
           {
             type: 'text' as const,
-            text: 'Project Atlas launches January 15. Source KnowledgeItem: item-atlas-resource-launch.',
+            text: 'Project Atlas launches January 15. Source KnowledgeRecord: record-atlas-resource-launch.',
           },
         ],
       }),
@@ -366,7 +366,7 @@ describe('Subconscious LibSQL integration', () => {
       scope: ['org:acme', `resource:${resourceId}`],
     });
     await knowledge.appendKnowledge({
-      id: 'item-atlas-resource-launch',
+      id: 'record-atlas-resource-launch',
       node: node.id,
       text: '[[Project Atlas]] launches January 15.',
       scope: ['org:acme', `resource:${resourceId}`],
@@ -415,5 +415,128 @@ describe('Subconscious LibSQL integration', () => {
         ifIdle: { behavior: 'persist' },
       }),
     ]);
+  });
+
+  it('runs curate after reflection with cursor recovery, CAS, and application restore', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'subconscious-curate-libsql-'));
+    directories.push(directory);
+    const databaseUrl = `file:${join(directory, 'knowledge.db')}`;
+    const storage = new LibSQLStore({ id: randomUUID(), url: databaseUrl });
+    const vector = new LibSQLVector({ id: randomUUID(), url: databaseUrl });
+    await storage.init();
+    const threadId = randomUUID();
+    const resourceId = randomUUID();
+    const streamCall = vi.fn(async () => ({
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start', warnings: [] },
+        { type: 'response-metadata', id: randomUUID(), modelId: 'aimock', timestamp: new Date() },
+        { type: 'text-start', id: 'text' },
+        {
+          type: 'text-delta',
+          id: 'text',
+          delta:
+            streamCall.mock.calls.length === 1
+              ? '<observations>- Project Atlas launches soon.</observations>'
+              : '- Project Atlas launches soon.',
+        },
+        { type: 'text-end', id: 'text' },
+        { type: 'finish', finishReason: 'stop', usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 } },
+      ]),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+    }));
+    const model = new MockLanguageModelV2({ doStream: streamCall as never });
+    let completionItemId = '';
+    const curateGenerate = vi.fn(async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop' as const,
+      usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+      warnings: [],
+      content: [{ type: 'text' as const, text: `<curation-complete through="${completionItemId}" />` }],
+    }));
+    const curatorModel = new MockLanguageModelV2({ doGenerate: curateGenerate as never });
+    const memory = new Memory({
+      storage,
+      vector,
+      embedder,
+      options: {
+        observationalMemory: {
+          enabled: true,
+          model,
+          experimental_subconscious: new Subconscious({
+            observation: [],
+            reflection: [{ name: 'curate', model: curatorModel }],
+          }),
+          observation: { messageTokens: 1, bufferTokens: false, previousObserverTokens: 1_000 },
+          reflection: { observationTokens: 1, bufferActivation: 0 },
+        },
+      },
+    });
+    await memory.createThread({ threadId, resourceId, title: 'Curator lifecycle' });
+    const knowledge = (await storage.getStore('knowledge'))!;
+    const scope = ['org:acme', `resource:${resourceId}`, `thread:${threadId}`];
+    const node = await knowledge.createNode({ name: 'Project Atlas', kind: 'project', scope });
+    const record = await knowledge.appendKnowledge({
+      node: node.id,
+      text: '[[Project Atlas]] launches soon.',
+      scope,
+      sourceThreadId: threadId,
+      resolutionScope: scope,
+      defaultScope: scope,
+    });
+    completionItemId = record.id;
+    await memory.saveMessages({ messages: [message(threadId, resourceId, 'Project Atlas launches soon.')] });
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'acme');
+
+    const mainAgent = new Agent({ id: 'main', name: 'Main', instructions: 'Help.', model });
+    const om = (await memory.omEngine)!;
+    const result = await om.observe({
+      threadId,
+      resourceId,
+      agent: mainAgent,
+      requestContext,
+      sendStateSignal: vi.fn(async () => ({ skipped: false }) as any),
+    });
+    if (curateGenerate.mock.calls.length === 0) {
+      const memoryStore = (await storage.getStore('memory'))!;
+      const record = (await memoryStore.getObservationalMemory(threadId, resourceId))!;
+      await om.reflector.maybeReflect({
+        record,
+        observationTokens: 100_000,
+        threadId,
+        mainAgent,
+        requestContext,
+        sendStateSignal: vi.fn(async () => ({ skipped: false }) as any),
+      });
+    }
+
+    expect(result.observed).toBe(true);
+    expect(curateGenerate).toHaveBeenCalledOnce();
+    expect(await knowledge.getCurationCursor({ sourceThreadId: threadId, agent: 'curate' })).toMatchObject({
+      lastKnowledgeId: record.id,
+    });
+    await expect(knowledge.updateNode({ id: node.id, version: node.version + 1, name: 'Stale Atlas' })).rejects.toThrow(
+      'version',
+    );
+
+    await knowledge.removeKnowledge({ id: record.id, deletedBy: 'subconscious:curate' });
+    expect(await knowledge.getKnowledge({ id: record.id })).toBeNull();
+    await memory.drainKnowledgeSemanticIndex(scope);
+    const indexName = (await vector.listIndexes()).find(name => name.startsWith('knowledge_documents_dimension'))!;
+    const queryVector = (await embedder.doEmbed({ values: ['Project Atlas launch'] })).embeddings[0]!;
+    expect((await vector.query({ indexName, queryVector, topK: 20 })).some(match => match.id.endsWith(record.id))).toBe(
+      false,
+    );
+
+    await knowledge.restoreKnowledge({ id: record.id });
+    await memory.drainKnowledgeSemanticIndex(scope);
+    expect(await knowledge.getKnowledge({ id: record.id })).toMatchObject({
+      deletedAt: undefined,
+      deletedBy: undefined,
+    });
+    expect((await vector.query({ indexName, queryVector, topK: 20 })).some(match => match.id.endsWith(record.id))).toBe(
+      true,
+    );
   });
 });

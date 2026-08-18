@@ -127,7 +127,7 @@ describe('Subconscious remind', () => {
     );
   });
 
-  it.each(['Project Atlas launches January 15.', 'Project Atlas launches January 15. Source: invented-item-id'])(
+  it.each(['Project Atlas launches January 15.', 'Project Atlas launches January 15. Source: invented-record-id'])(
     'suppresses an ungrounded reminder: %s',
     async response => {
       const extractor = new SubconsciousRemindExtractor({
