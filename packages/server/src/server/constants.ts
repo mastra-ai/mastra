@@ -21,6 +21,12 @@ export const MASTRA_AUTH_TOKEN_KEY = 'mastra__authToken';
 export const MASTRA_IS_STUDIO_KEY = 'mastra__isStudio';
 
 /**
+ * Carries a delegating agent's memory into a delegated sub-agent run. Set only
+ * by the delegation path inside a single process.
+ */
+export const MASTRA_INHERITED_MEMORY_KEY = 'mastra__inheritedMemory';
+
+/**
  * Tracks which auth mode was used for the current request.
  * Set to 'studio' when studio auth was used, 'server' when server auth was used.
  * Used to determine which RBAC/FGA provider to use for permission checks.
@@ -42,6 +48,9 @@ const RESERVED_CONTEXT_KEYS = new Set([
   MASTRA_AUTH_TOKEN_KEY,
   MASTRA_IS_STUDIO_KEY,
   MASTRA_AUTH_MODE_KEY,
+  // Delegation stores a live memory instance here. A body-supplied value would
+  // be handed to the agent as its memory and throw on the first memory call.
+  MASTRA_INHERITED_MEMORY_KEY,
   // Tenant scope must be established server-side, never self-asserted by a
   // client. The trusted-actor FGA gate keys off `organizationId`, so a
   // body-supplied value must not be merged into the request context.

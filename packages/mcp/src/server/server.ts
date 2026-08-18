@@ -21,10 +21,16 @@ import { makeCoreTool } from '@mastra/core/utils';
 import type { Workflow } from '@mastra/core/workflows';
 import { PromptSchema } from '@modelcontextprotocol/core';
 import { RESOURCE_MIME_TYPE, RESOURCE_URI_META_KEY } from '@modelcontextprotocol/ext-apps';
-import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
-import type { StreamableHTTPServerTransportOptions } from '@modelcontextprotocol/node';
-import { Server, ProtocolError, ProtocolErrorCode } from '@modelcontextprotocol/server';
+import {
+  hostHeaderValidation,
+  NodeStreamableHTTPServerTransport,
+  originValidation,
+  toNodeHandler,
+} from '@modelcontextprotocol/node';
+import type { StreamableHTTPServerTransportOptions, NodeMcpRequestHandler } from '@modelcontextprotocol/node';
+import { Server, ProtocolError, ProtocolErrorCode, createMcpHandler } from '@modelcontextprotocol/server';
 import type {
+  McpHttpHandler,
   RequestOptions,
   TextResourceContents,
   BlobResourceContents,
@@ -37,7 +43,7 @@ import type {
   LoggingLevel,
   jsonSchemaValidator,
 } from '@modelcontextprotocol/server';
-import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
+import { StdioServerTransport, serveStdio } from '@modelcontextprotocol/server/stdio';
 import { SSEServerTransport } from '@modelcontextprotocol/server-legacy/sse';
 import type { Context } from 'hono';
 import type { SSEStreamingApi } from 'hono/streaming';
@@ -45,6 +51,12 @@ import { streamSSE } from 'hono/streaming';
 import { SSETransport } from 'hono-mcp-server-sse-transport';
 
 import { withMastraToolStrictMeta } from '../shared/mastra-tool-meta';
+import {
+  createReplayElicitation,
+  ElicitationReplayInterrupt,
+  isModernEraRequest,
+  replayInterruptToInputRequired,
+} from './mrtrElicitation';
 import { broadcastNotification } from './notificationBroadcast';
 import { ServerPromptActions } from './promptActions';
 import { ServerResourceActions } from './resourceActions';
@@ -56,6 +68,8 @@ import type {
   ElicitationActions,
   MastraPrompt,
   AppResources,
+  MCPServerProtocolVersion,
+  MCPServerCacheHints,
 } from './types';
 
 /**
@@ -91,6 +105,26 @@ const LOG_LEVEL_SEVERITY: Record<LoggingLevel, number> = {
   emergency: 7,
 };
 
+type MCPServerStreamableHTTPOptions = Partial<StreamableHTTPServerTransportOptions> & {
+  serverless?: boolean;
+  /**
+   * Opt into request-scoped SSE streaming for legacy serverless requests.
+   *
+   * The `2026-07-28` handler accepts `true` as a compatibility declaration because
+   * its automatic response mode already streams request-scoped messages when needed.
+   */
+  serverlessStreaming?: boolean;
+};
+
+const ACCEPTED_MODERN_ERA_HTTP_OPTION_KEYS = new Set([
+  'allowedHosts',
+  'allowedOrigins',
+  'enableDnsRebindingProtection',
+  'serverless',
+  'serverlessStreaming',
+  'sessionIdGenerator',
+]);
+
 /**
  * MCPServer exposes Mastra tools, agents, and workflows as a Model Context Protocol (MCP) server.
  *
@@ -124,6 +158,8 @@ export class MCPServer extends MCPServerBase {
   private stdioTransport?: StdioServerTransport;
   private sseTransport?: SSEServerTransport;
   private sseHonoTransports: Map<string, SSETransport>;
+  /** Auth info for the in-flight Hono SSE message POST, keyed by session id. */
+  private sseHonoAuthInfo: Map<string, unknown> = new Map();
   private streamableHTTPTransports: Map<string, NodeStreamableHTTPServerTransport> = new Map();
   // Track server instances for each HTTP session
   private httpServerInstances: Map<string, Server> = new Map();
@@ -144,6 +180,20 @@ export class MCPServer extends MCPServerBase {
   private subscriptionsByInstance: WeakMap<Server, Set<string>> = new WeakMap();
   // Minimum logging level per server instance (main + per HTTP session), set via logging/setLevel
   private loggingLevels: WeakMap<Server, LoggingLevel> = new WeakMap();
+  // Protocol revision the server is pinned to. Undefined or '2025-11-25' keeps the
+  // legacy (2025) era behavior exactly; '2026-07-28' routes HTTP/serverless/stdio
+  // through the SDK's dual-era serving entries.
+  private protocolVersion?: MCPServerProtocolVersion;
+  // Cache hints advertised on cacheable 2026-07-28 results. Only applied under the flag.
+  private cacheHints?: MCPServerCacheHints;
+  // Lazily created dual-era HTTP handler (modern era native + stateless legacy fallback).
+  private modernEraHandler?: McpHttpHandler;
+  // Node (req, res) adapter over modernEraHandler.fetch.
+  private modernEraNodeHandler?: NodeMcpRequestHandler;
+  // Handle and connected Server instance for the dual-era stdio serving entry.
+  // The instance is retained so runtime notifications can reach stdio subscriptions.
+  private stdioHandle?: { close(): Promise<void> };
+  private stdioServerInstance?: Server;
 
   /**
    * Provides methods to notify clients about resource changes.
@@ -355,9 +405,49 @@ export class MCPServer extends MCPServerBase {
        * ```
        */
       jsonSchemaValidator?: jsonSchemaValidator;
+      /**
+       * Opt-in MCP protocol revision.
+       *
+       * Omitted (or `'2025-11-25'`) keeps today's behavior exactly. Set to
+       * `'2026-07-28'` to serve the stateless MCP revision: HTTP and serverless
+       * requests go through the SDK's dual-era handler (modern clients served
+       * natively, legacy clients via the built-in stateless fallback on the same
+       * endpoint), and stdio serves both eras via the `server/discover` probe.
+       *
+       * @example
+       * ```typescript
+       * const server = new MCPServer({
+       *   name: 'My Server',
+       *   version: '1.0.0',
+       *   tools: { ... },
+       *   protocolVersion: '2026-07-28',
+       * });
+       * ```
+       */
+      protocolVersion?: MCPServerProtocolVersion;
+      /**
+       * Cache hints (`ttlMs` / `cacheScope`) advertised on cacheable results of the
+       * `2026-07-28` protocol revision, keyed by operation (e.g. `'tools/list'`).
+       * Only applied when `protocolVersion: '2026-07-28'` is set; legacy responses
+       * are never affected.
+       *
+       * @example
+       * ```typescript
+       * const server = new MCPServer({
+       *   name: 'My Server',
+       *   version: '1.0.0',
+       *   tools: { ... },
+       *   protocolVersion: '2026-07-28',
+       *   cacheHints: { 'tools/list': { ttlMs: 60_000, cacheScope: 'private' } },
+       * });
+       * ```
+       */
+      cacheHints?: MCPServerCacheHints;
     },
   ) {
     super(opts);
+    this.protocolVersion = opts.protocolVersion;
+    this.cacheHints = opts.cacheHints;
 
     // Merge appResources into the resource system
     this.resourceOptions = this.mergeAppResources(opts.resources, opts.appResources);
@@ -403,6 +493,9 @@ export class MCPServer extends MCPServerBase {
         capabilities,
         ...(this.instructions ? { instructions: this.instructions } : {}),
         ...(this.jsonSchemaValidator ? { jsonSchemaValidator: this.jsonSchemaValidator } : {}),
+        // Cache hints only apply to cacheable 2026-07-28 results; the 2025 codec has
+        // no cache path, but gate on the flag anyway so it is the single opt-in.
+        ...(this.servesModernEra() && this.cacheHints ? { cacheHints: this.cacheHints } : {}),
       },
     );
 
@@ -419,11 +512,16 @@ export class MCPServer extends MCPServerBase {
     // Register all handlers on the main server instance
     this.registerHandlersOnServer(this.server);
 
+    // Only notify the 2026-07-28 subscription bus when the flag is on and the
+    // handler was actually created (no HTTP served yet means no subscribers).
+    const getModernEraNotifier = () => (this.servesModernEra() ? this.modernEraHandler?.notify : undefined);
+
     this.resources = new ServerResourceActions({
       getSubscribedServers: (uri: string) =>
         this.getAllSdkServers().filter(server => this.subscriptionsByInstance.get(server)?.has(uri)),
       getLogger: () => this.logger,
       getSdkServers: () => this.getAllSdkServers(),
+      getModernEraNotifier,
     });
 
     this.prompts = new ServerPromptActions({
@@ -432,6 +530,7 @@ export class MCPServer extends MCPServerBase {
       clearDefinedPrompts: () => {
         this.definedPrompts = undefined;
       },
+      getModernEraNotifier,
     });
 
     this.toolActions = new ServerToolActions({
@@ -439,6 +538,7 @@ export class MCPServer extends MCPServerBase {
       getSdkServers: () => this.getAllSdkServers(),
       addTools: tools => this.addTools(tools),
       removeTools: toolIds => this.removeTools(toolIds),
+      getModernEraNotifier,
     });
 
     this.elicitation = {
@@ -458,7 +558,93 @@ export class MCPServer extends MCPServerBase {
    * cannot receive notifications.
    */
   private getAllSdkServers(): Server[] {
-    return [this.server, ...this.httpServerInstances.values()].filter(server => server.transport !== undefined);
+    return [this.server, this.stdioServerInstance, ...this.httpServerInstances.values()].filter(
+      (server): server is Server => server?.transport !== undefined,
+    );
+  }
+
+  /**
+   * Whether the server is pinned to the `2026-07-28` protocol revision.
+   * When false (the default), all behavior is byte-identical to the legacy era.
+   */
+  private servesModernEra(): boolean {
+    return this.protocolVersion === '2026-07-28';
+  }
+
+  private assertModernEraHTTPOptions(options?: MCPServerStreamableHTTPOptions): void {
+    if (!options) return;
+
+    const incompatibleOptions = new Set(
+      Object.keys(options).filter(option => !ACCEPTED_MODERN_ERA_HTTP_OPTION_KEYS.has(option)),
+    );
+
+    if (options.sessionIdGenerator !== undefined) incompatibleOptions.add('sessionIdGenerator');
+    if (options.serverless === false) incompatibleOptions.add('serverless');
+    if (options.serverlessStreaming === false) incompatibleOptions.add('serverlessStreaming');
+
+    if (incompatibleOptions.size === 0) return;
+
+    const names = [...incompatibleOptions].sort();
+    throw new MastraError({
+      id: 'MCP_SERVER_MODERN_HTTP_OPTIONS_INCOMPATIBLE',
+      domain: ErrorDomain.MCP,
+      category: ErrorCategory.USER,
+      text: `startHTTP options ${names.map(name => `"${name}"`).join(', ')} are incompatible with protocolVersion "2026-07-28"`,
+      details: { incompatibleOptions: names.join(', ') },
+    });
+  }
+
+  private validateHTTPRequestHeaders(
+    req: http.IncomingMessage,
+    res: http.ServerResponse<http.IncomingMessage>,
+    options?: MCPServerStreamableHTTPOptions,
+  ): boolean {
+    if (!options?.enableDnsRebindingProtection) return true;
+
+    if (options.allowedHosts?.length) {
+      const allowedHostnames = options.allowedHosts.map(host => new URL(`http://${host}`).hostname);
+      if (!hostHeaderValidation(allowedHostnames)(req, res)) return false;
+    }
+
+    if (options.allowedOrigins?.length) {
+      const allowedOriginHostnames = options.allowedOrigins.map(origin => new URL(origin).hostname);
+      if (!originValidation(allowedOriginHostnames)(req, res)) return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Lazily creates the dual-era HTTP handler used when `protocolVersion: '2026-07-28'`
+   * is set: modern (per-request envelope) clients are served natively and legacy
+   * clients are served through the SDK's built-in stateless fallback, both from the
+   * same endpoint. Each request gets a fresh server instance from
+   * `createServerInstance()`, so all registered handlers apply to both eras.
+   */
+  private getModernEraHandler(): McpHttpHandler {
+    if (!this.modernEraHandler) {
+      this.modernEraHandler = createMcpHandler(() => this.createServerInstance(), {
+        legacy: 'stateless',
+        onerror: error => {
+          this.logger.error('MCP handler error', { error: error.toString() });
+        },
+      });
+    }
+    return this.modernEraHandler;
+  }
+
+  /**
+   * Node `(req, res)` adapter over the dual-era handler's web-standard `fetch`.
+   */
+  private getModernEraNodeHandler(): NodeMcpRequestHandler {
+    if (!this.modernEraNodeHandler) {
+      this.modernEraNodeHandler = toNodeHandler(this.getModernEraHandler(), {
+        onerror: error => {
+          this.logger.error('MCP Node handler adapter error', { error: error.toString() });
+        },
+      });
+    }
+    return this.modernEraNodeHandler;
   }
 
   /**
@@ -772,6 +958,9 @@ export class MCPServer extends MCPServerBase {
         capabilities,
         ...(this.instructions ? { instructions: this.instructions } : {}),
         ...(this.jsonSchemaValidator ? { jsonSchemaValidator: this.jsonSchemaValidator } : {}),
+        // Cache hints only apply to cacheable 2026-07-28 results; the 2025 codec has
+        // no cache path, but gate on the flag anyway so it is the single opt-in.
+        ...(this.servesModernEra() && this.cacheHints ? { cacheHints: this.cacheHints } : {}),
       },
     );
 
@@ -827,6 +1016,7 @@ export class MCPServer extends MCPServerBase {
     serverInstance.setRequestHandler('tools/call', async (request, ctx) => {
       const startTime = Date.now();
       const extra = toMCPRequestHandlerExtra(ctx);
+      let replayInterrupt: ElicitationReplayInterrupt | undefined;
       try {
         const tool = this.convertedTools[request.params.name];
         if (!tool) {
@@ -872,22 +1062,37 @@ export class MCPServer extends MCPServerBase {
           };
         }
 
-        // Create session-aware elicitation for this tool execution
-        const sessionElicitation: ElicitationActions = {
-          sendRequest: async (request: ElicitRequest['params'], options?: RequestOptions) => {
-            return this.handleElicitationRequest(request, serverInstance, options);
-          },
-        };
+        // Create session-aware elicitation for this tool execution.
+        // On a 2026-07-28 request there is no server→client request channel, so
+        // elicitation runs through the multi-round-trip replay seam instead of
+        // the legacy elicitation/create push. The interrupt is captured out of
+        // band because tool wrappers re-wrap thrown errors.
+        const sessionElicitation: ElicitationActions = isModernEraRequest(extra)
+          ? createReplayElicitation(extra, interrupt => {
+              replayInterrupt = interrupt;
+            })
+          : {
+              sendRequest: async (request: ElicitRequest['params'], options?: RequestOptions) => {
+                return this.handleElicitationRequest(request, serverInstance, options);
+              },
+            };
 
         const proxiedContext = await this.createProxiedRequestContext(extra);
 
         // Session-aware log emission: sends notifications/message to the calling
         // client, honoring the minimum level it set via logging/setLevel.
+        // On the 2026-07-28 path, delivery goes through the per-request log context
+        // instead, which honors the caller's per-request `logLevel` opt-in (messages
+        // are dropped when the caller did not opt in).
         const sessionLog = async (
           level: LoggingLevel,
           message: string,
           data?: Record<string, unknown>,
         ): Promise<void> => {
+          if (this.servesModernEra()) {
+            await extra.mcpReq.log(level, { message, ...data }, this.name);
+            return;
+          }
           if (!this.shouldSendLog(serverInstance, level)) return;
           await extra.sendNotification({
             method: 'notifications/message',
@@ -1009,6 +1214,16 @@ export class MCPServer extends MCPServerBase {
 
         return response;
       } catch (error) {
+        // Tool wrappers may re-wrap the interrupt (e.g. into MastraError), so the
+        // out-of-band capture — not instanceof on the thrown error — is the signal.
+        if (replayInterrupt !== undefined) {
+          // Not an error: the tool asked for user input on a 2026-07-28 request.
+          // Return input_required so the client answers and retries the call.
+          this.logger.debug(`CallTool: Tool '${request.params.name}' requires client input (multi-round-trip).`, {
+            key: replayInterrupt.key,
+          });
+          return replayInterruptToInputRequired(replayInterrupt);
+        }
         const duration = Date.now() - startTime;
         if (error instanceof Error && 'issues' in error && Array.isArray((error as any).issues)) {
           const issues: Array<{ path: string[]; message: string }> = (error as any).issues;
@@ -1558,6 +1773,25 @@ export class MCPServer extends MCPServerBase {
    * ```
    */
   public async startStdio(): Promise<void> {
+    if (this.servesModernEra()) {
+      // Dual-era stdio: the opening exchange selects the era (server/discover probe
+      // for modern clients, initialize handshake for legacy clients) and one fresh
+      // instance from the factory is pinned for the connection lifetime.
+      this.stdioHandle = serveStdio(
+        () => {
+          const serverInstance = this.createServerInstance();
+          this.stdioServerInstance = serverInstance;
+          return serverInstance;
+        },
+        {
+          onerror: error => {
+            this.logger.error('MCP stdio handler error', { error: error.toString() });
+          },
+        },
+      );
+      this.logger.info('Started MCP Server (stdio, 2026-07-28 dual-era)');
+      return;
+    }
     this.stdioTransport = new StdioServerTransport();
     try {
       await this.server.connect(this.stdioTransport);
@@ -1690,7 +1924,7 @@ export class MCPServer extends MCPServerBase {
    * export default app;
    * ```
    */
-  public async startHonoSSE({ url, ssePath, messagePath, context }: MCPServerHonoSSEOptions) {
+  public async startHonoSSE({ url, ssePath, messagePath, context, authInfo }: MCPServerHonoSSEOptions) {
     const honoContext = context as unknown as Context;
 
     try {
@@ -1710,6 +1944,11 @@ export class MCPServer extends MCPServerBase {
         }
         if (!this.sseHonoTransports.has(sessionId)) {
           return honoContext.text(`No transport found for sessionId ${sessionId}`, 400);
+        }
+        if (authInfo) {
+          this.sseHonoAuthInfo.set(sessionId, authInfo);
+        } else {
+          this.sseHonoAuthInfo.delete(sessionId);
         }
         const message = await this.sseHonoTransports.get(sessionId)?.handlePostMessage(honoContext);
         if (!message) {
@@ -1813,22 +2052,14 @@ export class MCPServer extends MCPServerBase {
     httpPath: string;
     req: http.IncomingMessage;
     res: http.ServerResponse<http.IncomingMessage>;
-    options?: Partial<StreamableHTTPServerTransportOptions> & {
-      serverless?: boolean;
-      /**
-       * Opt into request-scoped SSE streaming for serverless requests.
-       *
-       * When `true`, the transient serverless transport is created with
-       * `enableJsonResponse: false`, which allows in-request `notifications/progress`
-       * to stream back to the client before the final result. Defaults to `false`,
-       * preserving the JSON-response behavior that buffers only the final result.
-       *
-       * This only enables notifications scoped to the current request (e.g. progress).
-       * Elicitation, subscriptions, and out-of-request resource/list-change
-       * notifications still require a stateful session or another protocol model.
-       */
-      serverlessStreaming?: boolean;
-    };
+    /**
+     * Streamable HTTP transport options for the legacy protocol path.
+     *
+     * With `protocolVersion: '2026-07-28'`, stateless declarations and DNS rebinding
+     * protection remain supported. Session and response-mode options are rejected
+     * because they cannot configure the shared modern-era handler per request.
+     */
+    options?: MCPServerStreamableHTTPOptions;
   }) {
     this.logger.debug('Received HTTP request', { method: req.method, path: url.pathname });
 
@@ -1838,6 +2069,44 @@ export class MCPServer extends MCPServerBase {
       res.end();
       return;
     }
+
+    if (this.servesModernEra()) this.assertModernEraHTTPOptions(options);
+    if (!this.validateHTTPRequestHeaders(req, res, options)) return;
+
+    // 2026-07-28 revision: serve every request through the SDK's dual-era handler.
+    // Modern clients are served natively (stateless, per-request envelope); legacy
+    // clients are served by the handler's built-in stateless fallback on the same
+    // endpoint. Stateless declarations and request security guards remain valid;
+    // session and handler-lifetime options fail explicitly instead of being ignored.
+    if (this.servesModernEra()) {
+      try {
+        await this.getModernEraNodeHandler()(req, res);
+      } catch (error) {
+        const mastraError = new MastraError(
+          {
+            id: 'MCP_SERVER_HTTP_CONNECTION_FAILED',
+            domain: ErrorDomain.MCP,
+            category: ErrorCategory.USER,
+            text: 'Failed to handle MCP request on the 2026-07-28 protocol path',
+          },
+          error,
+        );
+        this.logger.trackException(mastraError);
+        this.logger.error('Error handling HTTP request (2026-07-28 path)', { error: mastraError });
+        if (!res.headersSent) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              error: { code: -32603, message: 'Internal server error' },
+              id: null,
+            }),
+          );
+        }
+      }
+      return;
+    }
+
     // Serverless/stateless mode: single request/response without session management
     // Triggered by either: serverless: true OR sessionIdGenerator: undefined
     const isStatelessMode =
@@ -2193,12 +2462,30 @@ export class MCPServer extends MCPServerBase {
     stream.onAbort(() => {
       this.logger.debug('SSE Transport aborted with sessionId:', { sessionId });
       this.sseHonoTransports.delete(sessionId);
+      this.sseHonoAuthInfo.delete(sessionId);
     });
     try {
       await this.server.connect(sseTransport);
+
+      // The Hono SSE transport has no Node request to carry `req.auth`, so the
+      // SDK never receives auth info for these messages. Inject whatever the
+      // adapter resolved for the current POST so tools still see
+      // `extra.authInfo`, matching the streamable HTTP transport.
+      const onmessage = sseTransport.onmessage?.bind(sseTransport);
+      if (onmessage) {
+        sseTransport.onmessage = (message: Parameters<typeof onmessage>[0], extra?: unknown) => {
+          const authInfo = this.sseHonoAuthInfo.get(sessionId);
+          (onmessage as (message: unknown, extra?: unknown) => void)(
+            message,
+            authInfo ? { ...(extra as Record<string, unknown> | undefined), authInfo } : extra,
+          );
+        };
+      }
+
       this.server.onclose = async () => {
         this.logger.debug('SSE Transport closed with sessionId:', { sessionId });
         this.sseHonoTransports.delete(sessionId);
+        this.sseHonoAuthInfo.delete(sessionId);
         await this.server.close();
       };
 
@@ -2247,6 +2534,16 @@ export class MCPServer extends MCPServerBase {
    */
   async close() {
     try {
+      if (this.stdioHandle) {
+        await this.stdioHandle.close();
+        this.stdioHandle = undefined;
+        this.stdioServerInstance = undefined;
+      }
+      if (this.modernEraHandler) {
+        await this.modernEraHandler.close();
+        this.modernEraHandler = undefined;
+        this.modernEraNodeHandler = undefined;
+      }
       if (this.stdioTransport) {
         await this.stdioTransport.close?.();
         this.stdioTransport = undefined;

@@ -1,3 +1,4 @@
+import type { JSONValue, ToolInvocationUIPart } from '@ai-sdk/ui-utils';
 import type {
   AgentExecutionOptions,
   MultiPrimitiveExecutionOptions,
@@ -54,6 +55,22 @@ import type { ZodType as ZodTypeV4 } from 'zod/v4';
 import type { Body, QueryParams, RouteKey, RouteResponse, Simplify } from './route-types.generated.js';
 
 export type ZodSchema = ZodSchemaV3 | ZodTypeV4;
+
+/**
+ * Provider metadata as it travels on a message part: a two-level map of
+ * provider namespace -> key -> value (e.g. `{ vertex: { thoughtSignature: '...' } }`).
+ */
+export type PartProviderMetadata = Record<string, Record<string, JSONValue>>;
+
+/** Stream chunk payloads may carry provider metadata; the AI SDK payload types don't declare it. */
+export type MaybeProviderMetadata = { providerMetadata?: PartProviderMetadata };
+
+/**
+ * `ToolInvocationUIPart` from `@ai-sdk/ui-utils` has no `providerMetadata` field, but the
+ * server reads provider metadata from the part itself (not from the nested `toolInvocation`),
+ * so the SDK has to be able to set it there.
+ */
+export type ToolInvocationUIPartWithMeta = ToolInvocationUIPart & MaybeProviderMetadata;
 
 type OptionalizeUndefined<T> = T extends Date
   ? Date
@@ -1318,6 +1335,21 @@ export interface ResolvedAuthor {
 }
 
 /**
+ * Serializable durable-execution opt-in for a stored agent.
+ *
+ * `cache` and `pubsub` are live runtime objects and cannot be sent over the API —
+ * the server inherits them from its Mastra instance.
+ */
+export type StoredAgentDurableConfig =
+  | boolean
+  | {
+      /** Maximum steps for the durable agentic loop. */
+      maxSteps?: number;
+      /** Auto-cleanup timer for durable stream state (ms). `0` disables cleanup. */
+      cleanupTimeoutMs?: number;
+    };
+
+/**
  * Stored agent data returned from API
  */
 export interface StoredAgentResponse {
@@ -1355,6 +1387,7 @@ export interface StoredAgentResponse {
   workspace?: ConditionalField<StoredWorkspaceRef>;
   browser?: ConditionalField<StoredBrowserRef> | boolean | null;
   requestContextSchema?: Record<string, unknown>;
+  durable?: StoredAgentDurableConfig;
   // Favorites (EE feature, present when `favorites` feature is enabled)
   isFavorited?: boolean;
   favoriteCount?: number;
@@ -1458,6 +1491,12 @@ export interface CreateStoredAgentParams {
   browser?: ConditionalField<StoredBrowserRef> | boolean | null;
   requestContextSchema?: Record<string, unknown>;
   /**
+   * Run this agent with durable execution once it is hydrated by the server.
+   * Cache and pubsub are inherited from the server's Mastra instance — without
+   * distributed backends durability is process-local.
+   */
+  durable?: StoredAgentDurableConfig;
+  /**
    * Publish the initial version so the agent resolves at `status: 'published'`.
    * Defaults to true when omitted. Pass false to stage the agent as an unpublished
    * draft — useful when overriding a code-defined agent, whose code definition keeps
@@ -1521,6 +1560,8 @@ export interface UpdateStoredAgentParams {
   /** Browser config. `true` = use admin default, `false` = no browser. */
   browser?: ConditionalField<StoredBrowserRef> | boolean | null;
   requestContextSchema?: Record<string, unknown>;
+  /** Run this agent with durable execution once it is hydrated by the server. */
+  durable?: StoredAgentDurableConfig;
   /** Optional message describing the changes for the auto-created version */
   changeMessage?: string;
   /** Immediately activate the auto-created version. Defaults to false when omitted. */

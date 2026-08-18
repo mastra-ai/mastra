@@ -1,5 +1,65 @@
 # @mastra/factory
 
+## 0.8.0-alpha.12
+
+### Patch Changes
+
+- Speed up the local dev watch for the design system: `pnpm dev:ui` now rebuilds `@mastra/playground-ui` on save, so design-system edits show up in the Factory UI without a manual rebuild. `pnpm dev:playground` picks up the same watch. The watch starts from a full build and then skips type declaration emit on every rebuild, which brings each save from ~9s down to ~1.5s. ([#21646](https://github.com/mastra-ai/mastra/pull/21646))
+
+  Declarations stay frozen at that starting build for the length of a dev session — run `pnpm --filter @mastra/playground-ui build` after changing a component's props. The published build is unchanged and still emits declarations.
+
+- Fixed how the Factory chat transcript reads agent controller events. It branched on an `om_activation.enabled` flag the controller never sends, and cast token usage and memory progress into hand-written shapes that had drifted from the streamed payloads. Both now read the shapes the controller actually emits, so the status line and memory rings stay correct as those payloads evolve. ([#21739](https://github.com/mastra-ai/mastra/pull/21739))
+
+- Updated dependencies [[`6223446`](https://github.com/mastra-ai/mastra/commit/6223446ddce6166e96e0ba5e00d628b615dee8ca), [`583e235`](https://github.com/mastra-ai/mastra/commit/583e23519c13af16c1746f9c49722d011216611b), [`a77f8d4`](https://github.com/mastra-ai/mastra/commit/a77f8d4740d2178a74c41e4bf678b4fcd8fa0bb2), [`40d358e`](https://github.com/mastra-ai/mastra/commit/40d358e29d55543803e64b49241122f598ffabc7), [`e80cd7e`](https://github.com/mastra-ai/mastra/commit/e80cd7e7683e7d732e1cc6784bcac1d2640d2ce3), [`20504b2`](https://github.com/mastra-ai/mastra/commit/20504b2ecebd0e077acda3d457ab57480a98ed3e)]:
+  - @mastra/core@1.60.0-alpha.11
+  - @mastra/code-sdk@1.3.0-alpha.11
+
+## 0.8.0-alpha.11
+
+### Patch Changes
+
+- Updated dependencies [[`b860493`](https://github.com/mastra-ai/mastra/commit/b86049391100e665d579f700c8a2034c036defc3)]:
+  - @mastra/core@1.60.0-alpha.10
+  - @mastra/code-sdk@1.3.0-alpha.10
+
+## 0.8.0-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [[`b0a2a07`](https://github.com/mastra-ai/mastra/commit/b0a2a07800d42bd9823292e7db832374ed084c9c), [`ccbbcd9`](https://github.com/mastra-ai/mastra/commit/ccbbcd974eedff4367a54ed0e24c9ee742ab2f61), [`3f5c6f7`](https://github.com/mastra-ai/mastra/commit/3f5c6f728ea35da344248de9aa070f12849f3aa0), [`77e6b1b`](https://github.com/mastra-ai/mastra/commit/77e6b1bc4c46ce94fe501023fb4393c812ec6be3), [`2e1d098`](https://github.com/mastra-ai/mastra/commit/2e1d0984e325fd319d32ea182f596b3170be3847)]:
+  - @mastra/core@1.60.0-alpha.9
+  - @mastra/code-sdk@1.3.0-alpha.9
+
+## 0.8.0-alpha.9
+
+### Minor Changes
+
+- Added a configurable allowlist of reviewer bots that can trigger GitHub review and comment notifications. Set MASTRACODE_GITHUB_AUTHORIZED_BOTS (comma-separated logins) or pass authorizedBots to GithubIntegration to trust bots beyond the built-in defaults; previously only coderabbitai[bot] and devin-ai-integration[bot] were accepted and every other bot was dropped without a log line. Bot logins now match case-insensitively and rejected senders are logged. Fixes #21621 ([#21697](https://github.com/mastra-ai/mastra/pull/21697))
+
+### Patch Changes
+
+- Fixed the Factory chat transcript drawing the same content twice after coming back to a tab. While a run streams, leaving the tab drops the event stream and the transcript refetches on return: an assistant reply the server had persisted as its own step, and a steer whose live event was missed, both landed on screen a second time. The refetched window is now paired against what is already drawn — by message id, by tool call, then by the text itself — so it only inserts what is genuinely missing. ([#21651](https://github.com/mastra-ai/mastra/pull/21651))
+
+  Also fixed a tool call rendering as two half-filled cards when a steer interrupted it: live tool state followed the newest assistant message instead of staying with the call it belongs to.
+
+- The turn-end filesystem capture no longer blocks agent turn completion. Readers of the persisted workspace file listing wait up to 10 seconds for the in-flight capture to observe the just-ended turn's files; if a capture takes longer, a reader can temporarily receive the previous listing. ([#21679](https://github.com/mastra-ai/mastra/pull/21679))
+
+- Fixed Linear intake so issues only land in the Factory project their Linear project is routed to. Previously, opening any board pulled in every selected Linear project's open issues and auto-triaged them there, repeating for each Factory project you viewed. ([#21698](https://github.com/mastra-ai/mastra/pull/21698))
+
+  **Routing Linear projects**
+
+  In Settings › Intake, each selected Linear project now picks the Factory it feeds. A project left unrouted no longer feeds any board, and boards only show the Linear intake feed for projects routed to them. Organizations with a single Factory keep working with no configuration.
+
+  **Deleted cards stay deleted**
+
+  Removing an intake card now also clears the stored routing decision behind it, so it no longer reappears on the next intake poll.
+
+  Fixes #21614
+
+- Updated dependencies [[`4e7a421`](https://github.com/mastra-ai/mastra/commit/4e7a421dce8a48742f785d1e93ad2f43a572b282), [`242e324`](https://github.com/mastra-ai/mastra/commit/242e3241e73cbd5c9bb86a31ebb49ca0256488d4), [`217e967`](https://github.com/mastra-ai/mastra/commit/217e9672d8b3160eb729d8e9f0044949e88da239), [`d774e89`](https://github.com/mastra-ai/mastra/commit/d774e8930c781df8c9effe3763e6b501c099b6cc), [`9c27a53`](https://github.com/mastra-ai/mastra/commit/9c27a53cd9d3de4f3f025bc387d94ce371c33f95), [`3a634e9`](https://github.com/mastra-ai/mastra/commit/3a634e9b32e3c47db3f287292ce37e862a02e005), [`dff25a1`](https://github.com/mastra-ai/mastra/commit/dff25a1103fa72ee082a9b6f805ebeb5ce400753), [`217e967`](https://github.com/mastra-ai/mastra/commit/217e9672d8b3160eb729d8e9f0044949e88da239), [`7f78585`](https://github.com/mastra-ai/mastra/commit/7f785857e401570e2ffb316911f126ed363aa537), [`f2a4afd`](https://github.com/mastra-ai/mastra/commit/f2a4afd7e37e809669001ed17724b341a5c1f45e), [`d438148`](https://github.com/mastra-ai/mastra/commit/d438148e222c1e2fb3c652725ce75680962ebec4), [`ba05fe0`](https://github.com/mastra-ai/mastra/commit/ba05fe0738f70cb686777546e968237d09269142), [`d26a8d4`](https://github.com/mastra-ai/mastra/commit/d26a8d4281f28414715b333c85bedaf70d0b2890), [`677cdc6`](https://github.com/mastra-ai/mastra/commit/677cdc6af564dec29a13464d12b7ab2a4efc22e9), [`a318490`](https://github.com/mastra-ai/mastra/commit/a318490e17da32f338d50929c770d901a9b3dd72), [`763e0c6`](https://github.com/mastra-ai/mastra/commit/763e0c61e04d76ad9a9efd301aa57525ca0cbea9), [`298aafd`](https://github.com/mastra-ai/mastra/commit/298aafd70d7fea6517b6e2a4b55f3ef9e824d96b), [`23e0be2`](https://github.com/mastra-ai/mastra/commit/23e0be261381e49534b4ff3101c60ee64a946cbf), [`7fc8806`](https://github.com/mastra-ai/mastra/commit/7fc880627d3cbf995d31ea0e8b807bf15417e651), [`0e02eac`](https://github.com/mastra-ai/mastra/commit/0e02eacdb2e30e1697a41910b41163742a181dc1), [`4df174c`](https://github.com/mastra-ai/mastra/commit/4df174c32bddf093a82f273070b8380aef7c9e90), [`f7c25b5`](https://github.com/mastra-ai/mastra/commit/f7c25b5106ddfb48e591f98df7a51e0f2dd01dba), [`dc09cc1`](https://github.com/mastra-ai/mastra/commit/dc09cc1083d861cde192c1cd235324dc75b8c731), [`36b4649`](https://github.com/mastra-ai/mastra/commit/36b4649045a3a380cbab8ceca866db4086223aff), [`377eb81`](https://github.com/mastra-ai/mastra/commit/377eb81ce43b964e3a6b541df172da74a8ff3716)]:
+  - @mastra/core@1.60.0-alpha.8
+  - @mastra/code-sdk@1.3.0-alpha.8
+
 ## 0.8.0-alpha.8
 
 ### Patch Changes

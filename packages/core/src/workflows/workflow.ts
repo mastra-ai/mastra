@@ -42,6 +42,7 @@ import {
 } from '../processors/span-payload';
 import { ProcessorStepOutputSchema, ProcessorStepInputSchema } from '../processors/step-schema';
 import type { ProcessorStepInput, ProcessorStepOutput } from '../processors/step-schema';
+import { getRequestContextInputValues } from '../request-context/input-source';
 import { standardSchemaToJSONSchema, toStandardSchema } from '../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { StorageListWorkflowRunsInput } from '../storage';
@@ -352,7 +353,12 @@ export function createStep<
   TRequestContext extends Record<string, any> | unknown = unknown,
 >(
   tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext>,
-  toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata },
+  toolOptions?: {
+    retries?: number;
+    scorers?: DynamicArgument<MastraScorers>;
+    metadata?: StepMetadata;
+    actor?: ActorSignal;
+  },
 ): Step<TId, unknown, TSchemaIn, TSchemaOut, TSuspend, TResume, DefaultEngineType, TRequestContext>;
 
 /**
@@ -3441,7 +3447,7 @@ export class Run<
 
   protected async _validateRequestContext(requestContext?: RequestContext) {
     if (this.validateInputs && this.requestContextSchema) {
-      const contextValues = requestContext?.all ?? {};
+      const contextValues = getRequestContextInputValues(requestContext);
       const validation = this.requestContextSchema['~standard'].validate(contextValues);
 
       if (validation instanceof Promise) {
