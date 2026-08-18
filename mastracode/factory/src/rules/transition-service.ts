@@ -42,6 +42,8 @@ export interface FactoryTransitionRequest {
   causalChain?: readonly FactoryRuleCausalEntry[];
   /** Internal materialization path: evaluate only the destination onEnter leaf even when already at that stage. */
   initialEntry?: boolean;
+  /** Re-runs the stage's entry rules when the item already holds that stage, to restart work the entry invalidated. */
+  reenter?: boolean;
 }
 
 export interface FactoryTransitionServiceOptions {
@@ -195,6 +197,9 @@ export class FactoryTransitionService {
       );
     }
 
+    const humanBoardDrag =
+      request.actor.type === 'human' && request.cause === 'board_drag' && fromStage !== request.stage;
+
     const contextBase = {
       tenant: { orgId: request.orgId, projectId: request.factoryProjectId },
       actor: request.actor,
@@ -233,6 +238,7 @@ export class FactoryTransitionService {
             fromStage,
             toStage: request.stage,
             initialEntry: request.initialEntry,
+            reenter: request.reenter,
           })) {
             const context: FactoryStageRuleContext = Object.freeze({
               ...contextBase,
@@ -247,7 +253,7 @@ export class FactoryTransitionService {
             decisions.push(decision);
           }
           const validated = validateFactoryRuleDecisions(decisions);
-          if (request.actor.type === 'human' && request.cause === 'board_drag' && fromStage !== request.stage) {
+          if (humanBoardDrag) {
             const message = stageTransitionMessage(fromStage, request.stage);
             const skill = validated.find(decision => decision.type === 'invokeSkill');
             if (skill) {
@@ -277,6 +283,13 @@ export class FactoryTransitionService {
           ? { code: 'timeout' as const, reason: 'Factory rule evaluation timed out.' }
           : ruleFailure(error);
       evaluation = { outcome: 'rejected', ...failed };
+    }
+    // Moving a card by hand is itself the request to do the work. Arm the item
+    // before the decisions this transition emits become visible to the
+    // dispatcher, so they run instead of parking as proposals a person would
+    // only have to approve again.
+    if (evaluation.outcome === 'accepted' && humanBoardDrag) {
+      await this.#storage.armAutonomy({ orgId: request.orgId, id: request.workItemId, now: new Date() });
     }
     return this.#commit(request, transitionId, evaluation);
   }
