@@ -442,7 +442,19 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
       userId: 'user-1',
       branch: 'slack/1700-42',
       baseBranch: 'main',
+      visibility: 'org',
     });
+  });
+
+  it('a DM thread creates a private session; channel threads stay org-visible', async () => {
+    const deps = makeResolverDeps();
+    const resolve = createChannelResourceIdResolver(deps as any);
+
+    await expect(resolve(resolveArgs({ id: 'slack:D-1:1700.42', isDM: true } as any))).resolves.toBe('us-new');
+
+    expect(deps.sourceControl.sessions.create).toHaveBeenCalledWith(
+      expect.objectContaining({ visibility: 'private' }),
+    );
   });
 
   // Top-level DM and channel conversations use the empty-threadTs thread form
@@ -791,10 +803,10 @@ describe('session start (onSessionStart)', () => {
       },
       model: { switch: vi.fn(async () => {}) },
       om: {
-        observer: { switchModel: vi.fn(async () => {}) },
-        reflector: { switchModel: vi.fn(async () => {}) },
+        observer: { modelId: vi.fn(() => 'initial/model'), switchModel: vi.fn(async () => {}) },
+        reflector: { modelId: vi.fn(() => 'initial/model'), switchModel: vi.fn(async () => {}) },
       },
-      state: { set: vi.fn(async () => {}) },
+      state: { get: vi.fn(() => ({})), set: vi.fn(async () => {}) },
     };
   }
 

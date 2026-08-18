@@ -1234,6 +1234,7 @@ export class MastraTUI {
       analytics: this.state.analytics,
       authStorage: this.state.authStorage,
       processMemoryDiagnostics: this.state.options.processMemoryDiagnostics,
+      knowledgeInspector: this.state.options.knowledgeInspector,
       customSlashCommands: this.state.customSlashCommands,
       showInfo: msg => showInfo(this.state, msg),
       showError: msg => showError(this.state, msg),

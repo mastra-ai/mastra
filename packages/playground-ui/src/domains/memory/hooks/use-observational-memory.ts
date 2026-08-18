@@ -18,5 +18,10 @@ export function useObservationalMemory(agentId: string | undefined, threadId: st
               resourceId,
             })
         : skipToken,
+    // The record is read by several surfaces at once (collapsed memory bar, OM
+    // section, detail panel). A short stale window lets a newly mounted consumer
+    // reuse the cached record instead of refiring the request; freshness still
+    // comes from the explicit refetch on stream finish/observation signals.
+    staleTime: 5_000,
   });
 }

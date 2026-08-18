@@ -1,0 +1,343 @@
+---
+title: "Editor"
+description: Let collaborators update an agent in Studio, test their changes, and publish without editing code.
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+  - "@mastra/client-js"
+  - "@mastra/libsql"
+---
+
+# Editor
+
+Editor works like a CMS for Mastra agents. Collaborators can change an agent's instructions and tools in Studio without accessing the codebase or writing code. They can test changes before making them live.
+
+TypeScript defines the agent's default values. Editor saves changes separately instead of updating the source code, so collaborators can improve the agent while developers retain control over its model, identity, and runtime.
+
+A [deployed Studio](/docs/studio/deployment) makes Editor available to collaborators outside local development.
+
+:::tip[📹 Watch]
+
+Watch the [Mastra Editor workshop](https://www.youtube.com/watch?v=XTjuRoI7t_k\&pp=ygUWbWFzdHJhIGVkaXRvciB3b3Jrc2hvcA%3D%3D) for a guided walkthrough.
+
+:::
+
+## When to use Editor
+
+Use Editor when an agent is defined in code but the people responsible for its behavior shouldn't edit the codebase. It works well when instructions or tools change often and need testing before they reach users. If developers own every change and release agent configuration with the application, keep the [agent configuration in code](/docs/agents/overview) instead.
+
+Use [Agent Builder](https://agent-builder.mastra.ai) instead when collaborators need to create and manage fully stored agents in a browser rather than start from agents defined in code.
+
+## Quickstart
+
+Install `@mastra/editor`. This quickstart uses LibSQL to store Editor changes:
+
+```bash npm2yarn
+npm install @mastra/editor @mastra/libsql
+```
+
+Add `MastraEditor` and storage to the `Mastra` instance. Existing storage can be reused instead of adding the LibSQL store shown here.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraEditor } from '@mastra/editor'
+import { LibSQLStore } from '@mastra/libsql'
+
+export const mastra = new Mastra({
+  agents: {/* existing agents */},
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: 'file:./mastra.db',
+  }),
+  editor: new MastraEditor(),
+})
+```
+
+## Use Editor in Studio
+
+In [Studio](/docs/studio/overview), open **Agents**, select an agent, then select **Editor**. Collaborators can update the agent's instructions and tools based on its Editor permissions.
+
+With database storage, save changes as a draft to test them without affecting the live agent. Publish the draft when it's ready to use.
+
+## Instructions
+
+The **Instructions** section shows the agent's system prompt defined in code. Collaborators can override it or add instruction blocks.
+
+An instruction block can include values from the current request. For example, <code>{'{{userName}}'}</code> inserts a name supplied through [request context](/docs/server/request-context). A [display condition](/reference/editor/prompt-blocks#display-conditions) can show a block only for a customer, role, or feature flag.
+
+### Prompt blocks
+
+A prompt block is a saved piece of instruction text that can be used by more than one agent. Create one under **Prompts**, publish it, then open an agent's **Instructions** section and select **Add block**.
+
+For example, agents for support, returns, and order status may all need the same refund policy. Save the policy as a prompt block and add it to each agent. When the policy changes, update and publish the block once instead of editing three agents.
+
+When a prompt block changes, every agent that references its published version receives the update. Draft changes are used only while previewing, so they don't affect the live agents until the block is published.
+
+See the [prompt blocks reference](/reference/editor/prompt-blocks) for template syntax, conditions, versions, and APIs.
+
+## Tools
+
+Tools let an agent take actions. Collaborators choose from the tools available to Editor, but they can't implement new tools in Studio. How tools become available depends on their source:
+
+- **Project tools** must be implemented and registered in the Mastra project by a developer.
+- **Integration tools** become available after a developer registers a provider such as Composio or Arcade. Collaborators can then browse the provider's catalog and add tools without each tool being added in code first.
+- **MCP tools** become available when an MCP client is configured. A collaborator with access can create the client in Studio, then choose from the tools exposed by its servers.
+
+In the agent's **Tools** section, collaborators can add the tools it needs or rewrite a tool's description for that agent. A more specific description helps the agent understand when to use the tool without changing the tool itself.
+
+### Project tools
+
+Developers can register a project tool on the `Mastra` instance to make it available in Editor:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraEditor } from '@mastra/editor'
+import { searchOrders } from './tools/search-orders'
+
+export const mastra = new Mastra({
+  tools: {
+    searchOrders,
+  },
+  agents: {/* agents */},
+  editor: new MastraEditor(),
+})
+```
+
+The Studio tool picker lists the tool. A collaborator can add it to an agent when that agent allows tool editing. The agent's Editor view also lists tools attached in code.
+
+### Composio
+
+[Composio](https://composio.dev) provides tools for services such as GitHub, Slack, and Gmail. Register the provider with a Composio API key to make its tool catalog available in Editor:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraEditor } from '@mastra/editor'
+import { ComposioToolProvider } from '@mastra/editor/composio'
+
+export const mastra = new Mastra({
+  agents: {/* agents */},
+  editor: new MastraEditor({
+    toolProviders: {
+      composio: new ComposioToolProvider({
+        apiKey: process.env.COMPOSIO_API_KEY!,
+      }),
+    },
+  }),
+})
+```
+
+Composio tool IDs look like `GITHUB_CREATE_ISSUE`. By default, a selected tool uses the connection associated with the agent's author. See [connection scope](https://agent-builder.mastra.ai/tool-providers#connection-scope) to use each caller's connection instead.
+
+### Arcade
+
+[Arcade](https://arcade.dev) provides another catalog of tools with built-in authentication. Register it with an Arcade API key:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraEditor } from '@mastra/editor'
+import { ArcadeToolProvider } from '@mastra/editor/arcade'
+
+export const mastra = new Mastra({
+  agents: {/* agents */},
+  editor: new MastraEditor({
+    toolProviders: {
+      arcade: new ArcadeToolProvider({
+        apiKey: process.env.ARCADE_API_KEY!,
+      }),
+    },
+  }),
+})
+```
+
+Arcade tool IDs use `Toolkit.ToolName` format, such as `Github.GetRepository`.
+
+### MCP clients
+
+Collaborators can also create a reusable MCP client in Studio and add its tools to an agent. Stored clients can start a local `stdio` server or connect to a remote HTTP server. Tool filters let each agent use only the tools it needs from that server.
+
+See the [Editor tools reference](/reference/editor/tools) for MCP configuration, conditions, filtering, and resolution order. See [`ToolProvider`](/reference/editor/tool-provider) for provider options.
+
+## Decide what collaborators can edit
+
+By default, collaborators can change an agent's instructions and manage its tools, including their descriptions. The agent's `id`, `name`, and `model` always come from code.
+
+Use the agent's `editor` field to limit what can be changed:
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support agent',
+  instructions: 'Help customers with Acme products.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  editor: {
+    instructions: true,
+    tools: {
+      description: true,
+    },
+  },
+})
+```
+
+This agent lets collaborators change its instructions and improve the descriptions of tools already attached to it. They can't add or remove tools.
+
+| `editor` value | What collaborators can change |
+| - | - |
+| Omitted | Instructions, tools, and tool descriptions |
+| `false` | Nothing |
+| `{ instructions: true }` | Instructions |
+| `{ tools: true }` | Tools and tool descriptions |
+| `{ tools: { description: true } }` | Descriptions of tools already added in code |
+
+Studio shows everything else as read-only. See [editor overrides](/reference/agents/agent#editor-overrides) for the complete configuration.
+
+## Choose where changes are stored
+
+Editor can save changes in the configured database or as files in the repository.
+
+### Database storage
+
+The database option is the default. Editor uses the storage configured on the `Mastra` instance, so the application and Editor can share the same backend.
+
+To use a separate backend for Editor data, set the `editor` option on [`MastraCompositeStore`](/reference/storage/composite#options). Storage domains without an explicit route continue to use its `default` store.
+
+The following example keeps application and Editor data in separate LibSQL files:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { MastraEditor } from '@mastra/editor'
+import { LibSQLStore } from '@mastra/libsql'
+
+export const mastra = new Mastra({
+  agents: {/* existing agents */},
+  storage: new MastraCompositeStore({
+    id: 'mastra-storage',
+    default: new LibSQLStore({
+      id: 'app-storage',
+      url: 'file:./mastra.db',
+    }),
+    editor: new LibSQLStore({
+      id: 'editor-storage',
+      url: 'file:./editor.db',
+    }),
+  }),
+  editor: new MastraEditor(),
+})
+```
+
+### Repository files
+
+Use the code source to keep overrides alongside application code. Developers can review the files in pull requests and deploy them with the application:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraEditor } from '@mastra/editor'
+
+export const mastra = new Mastra({
+  agents: {/* existing agents */},
+  editor: new MastraEditor({
+    source: 'code',
+    codePath: './mastra/editor',
+  }),
+})
+```
+
+In this mode, each edited agent has one JSON override file. Editor doesn't generate TypeScript or change the file where the agent was created. By default, an agent with the ID `support-agent` gets this file:
+
+```text
+mastra/editor/agents/support-agent.json
+```
+
+The file contains only the parts managed by Editor. For example:
+
+```json title="mastra/editor/agents/support-agent.json"
+{
+  "instructions": "Help customers with Acme products and answer in their language.",
+  "tools": {
+    "searchOrders": {
+      "description": "Look up an order by its number"
+    }
+  }
+}
+```
+
+The agent's model, name, and other code-owned fields stay in its TypeScript file. Mastra reads the JSON and applies these values when the agent runs.
+
+When a collaborator saves in Studio, they can write the file to the local filesystem or download it. With a source-control integration, Studio can open a pull request instead. Git then provides the review and version history.
+
+See [`MastraEditor`](/reference/editor/mastra-editor#source) for file locations and source options.
+
+## Versioning
+
+Database-backed agents and prompt blocks use draft and published versions. Saving creates a draft while the live agent continues using the published version. Publishing makes the draft live. Restoring an older version creates a draft that collaborators can test before publishing.
+
+Code-backed agent overrides use JSON files and Git history.
+
+### Select a version
+
+An application can choose a stored version for each request by passing a status (`published` or `draft`) or an exact version ID:
+
+```typescript title="Version selection"
+const publishedAgent = await mastra.getAgentById('support-agent', {
+  status: 'published',
+})
+
+const draftAgent = await mastra.getAgentById('support-agent', {
+  status: 'draft',
+})
+
+const versionedAgent = await mastra.getAgentById('support-agent', {
+  versionId: 'abc-123',
+})
+```
+
+Version selection supports:
+
+- Compare two versions in an A/B test.
+- Give a draft to a small group before publishing it for everyone.
+- Keep production on the published version while staging uses the latest draft.
+- Pin a customer to a specific version.
+
+The same version controls work when a supervisor calls sub-agents. Developers can test a draft sub-agent without changing the rest of the system.
+
+See the [Editor versioning reference](/reference/editor/versioning) for version selection, sub-agent behavior, REST endpoints, and SDK methods.
+
+## Programmatic access
+
+Everything available in Studio is also available programmatically through [`mastra.getEditor()`](/reference/core/getEditor), the REST API, or the Client SDK. Use it to script bulk updates or seed stored configurations from code. It can also power automation that tunes agents based on [evaluation results](/docs/datasets/running-experiments).
+
+Call `mastra.getEditor()` when application code has access to the Mastra instance:
+
+```typescript title="src/scripts/update-agent.ts"
+import { mastra } from '../mastra'
+
+const editor = mastra.getEditor()!
+
+await editor.agent.update({
+  id: 'support-agent',
+  instructions: 'Help customers with Acme products. Reply in their language.',
+})
+```
+
+The direct `editor.agent.update()` method activates the new version immediately. To create a draft without changing the live agent, use the stored-agent REST API or Client SDK instead:
+
+```bash title="Create a draft through the REST API"
+curl -X PATCH http://localhost:4111/api/stored/agents/support-agent \
+  -H "Content-Type: application/json" \
+  -d '{
+    "instructions": "Help customers with Acme products. Reply in their language."
+  }'
+```
+
+The default server prefix is `/api`. Developers can set a custom prefix in the server configuration.
+
+See the [`MastraEditor` namespaces](/reference/editor/mastra-editor#namespaces) and [Client SDK agents API](/reference/client-js/agents#stored-agents) for available operations.
+
+## Next steps
+
+- [MastraEditor reference](/reference/editor/mastra-editor)
+- [Prompt blocks reference](/reference/editor/prompt-blocks)
+- [Editor tools reference](/reference/editor/tools)
+- [Editor versioning reference](/reference/editor/versioning)

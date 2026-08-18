@@ -10,13 +10,37 @@ import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
+import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
+import { useUserSessionActivity } from '../../../../hooks/useUserSessionActivity';
+import { useWorkspaceAttention } from '../../../../hooks/useWorkspaceAttention';
 import { removeCachedSession, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
 import { deleteUserSession } from '../services/github';
 import type { FactoryUserSession } from '../services/github';
 import { getUserSessionLabel, getUserSessionTooltip } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
+import type { SessionRowStatus } from './SessionNavRow';
+
+function userSessionStatus({
+  session,
+  running,
+  attention,
+}: {
+  session: FactoryUserSession;
+  running: boolean;
+  attention: boolean;
+}): SessionRowStatus | undefined {
+  if (running) return 'working';
+  if (!session.materializedAt) return 'initializing';
+  if (attention) return 'ready';
+  return undefined;
+}
+
+/** WorkOS user ids are long and opaque; keep enough to tell owners apart. */
+function truncateOwnerId(userId: string): string {
+  return userId.length > 13 ? `${userId.slice(0, 13)}…` : userId;
+}
 
 export function UserSessionsSection() {
   const { baseUrl } = useApiConfig();
@@ -31,9 +55,22 @@ export function UserSessionsSection() {
   const repository = factoryQuery.data?.repositories[0];
   const sessionsEnabled = Boolean(repository);
   const sessionsQuery = useWorkspacesQuery(repository?.projectRepositoryId);
+  const auth = useFactoryAuth();
+  const viewerUserId = auth.data?.user?.userId;
+  // Pinned rows stay on top; within each pin group the viewer's own sessions
+  // sort before sessions started by other org members.
+  const isOwn = (session: FactoryUserSession) => Boolean(viewerUserId) && session.userId === viewerUserId;
   const sessions = [...(sessionsQuery.data?.userSessions ?? [])].sort(
-    (a, b) => Number(pinnedSessions.has(b.sessionId)) - Number(pinnedSessions.has(a.sessionId)),
+    (a, b) =>
+      Number(pinnedSessions.has(b.sessionId)) - Number(pinnedSessions.has(a.sessionId)) ||
+      Number(isOwn(b)) - Number(isOwn(a)),
   );
+  const runningBySessionId = useUserSessionActivity({
+    baseUrl,
+    sessionIds: sessions.map(session => session.sessionId),
+    enabled: sessionsEnabled,
+  });
+  const { attentionByPath: attentionBySessionId, clearAttention } = useWorkspaceAttention(runningBySessionId);
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(repository?.projectRepositoryId) });
@@ -90,18 +127,34 @@ export function UserSessionsSection() {
             const url = `/factories/${factoryId}/user/threads/${session.sessionId}`;
             const active = location.pathname === url;
 
+            const status = userSessionStatus({
+              session,
+              running: runningBySessionId[session.sessionId] === true,
+              attention: attentionBySessionId[session.sessionId] === true,
+            });
             return (
               <SessionNavRow
                 key={session.sessionId}
                 name={name}
                 title={getUserSessionTooltip(session)}
+                // No org-member display-name lookup exists in factory-ui yet, so
+                // non-owned sessions show a truncated owner id.
+                owner={viewerUserId && !isOwn(session) ? truncateOwnerId(session.userId) : undefined}
                 url={url}
                 active={active}
                 disabled={pending}
+                status={status}
                 pinned={pinnedSessions.has(session.sessionId)}
-                onSelect={() => void navigate(url)}
+                onSelect={() => {
+                  clearAttention(session.sessionId);
+                  void navigate(url);
+                }}
                 onPinChange={pinned => setPinned(session.sessionId, pinned)}
-                onDelete={() => setConfirmDelete(session)}
+                // The DELETE route is owner-only and 404s for non-owners, which
+                // deleteUserSession treats as an idempotent success; offering
+                // delete on a known non-owned row would fake-succeed and the
+                // row would reappear. Unknown viewer (auth disabled) keeps it.
+                onDelete={viewerUserId && !isOwn(session) ? undefined : () => setConfirmDelete(session)}
               />
             );
           })}

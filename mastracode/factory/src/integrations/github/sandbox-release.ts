@@ -19,6 +19,8 @@ export async function cleanReleasedSandbox(options: {
   projectRepositoryId: string;
   sandboxId: string;
   sandboxWorkdir: string;
+  actingUserId: string;
+  sandbox?: MaterializationSandbox;
 }): Promise<void> {
   try {
     const projectRepository = await options.sourceControl.projectRepositories.get({
@@ -31,7 +33,11 @@ export async function cleanReleasedSandbox(options: {
       id: projectRepository.repositoryId,
     });
     if (!repository) return;
-    const sandbox = await options.fleet.reattachSandbox(options.sandboxId);
+    const sandbox =
+      options.sandbox ??
+      (await options.fleet.reattachSandbox(options.sandboxId, {
+        actingUserId: options.actingUserId,
+      }));
     await recycleClaimedWorkdir(sandbox, options.sandboxWorkdir, repository.defaultBranch);
   } catch {
     // Reaped, unreachable, or wedged — the claim-side recycle is the
@@ -69,6 +75,7 @@ export async function reclaimDeletedSessionSandbox(options: {
       projectRepositoryId: session.projectRepositoryId,
       sandboxId: session.sandboxId,
       sandboxWorkdir: session.sandboxWorkdir,
+      actingUserId: session.userId,
     });
     await sourceControl.sandboxPool.release({
       orgId: session.orgId,
@@ -81,7 +88,7 @@ export async function reclaimDeletedSessionSandbox(options: {
   }
   let sandbox: MaterializationSandbox | undefined;
   try {
-    sandbox = await fleet.reattachSandbox(session.sandboxId);
+    sandbox = await fleet.reattachSandbox(session.sandboxId, { actingUserId: session.userId });
   } catch {
     // The provider may already have reclaimed the sandbox.
   }
@@ -124,6 +131,7 @@ export async function releaseWorkItemSandboxes(options: {
       projectRepositoryId: session.projectRepositoryId,
       sandboxId: session.sandboxId,
       sandboxWorkdir: session.sandboxWorkdir,
+      actingUserId: session.userId,
     });
     await sourceControl.sandboxPool.release({
       orgId: session.orgId,

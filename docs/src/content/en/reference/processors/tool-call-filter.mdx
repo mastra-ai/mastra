@@ -7,7 +7,9 @@ packages:
 
 # ToolCallFilter
 
-The `ToolCallFilter` is an **input processor** that filters out tool calls and their results from the message history before sending to the model. This is useful when you want to exclude specific tool interactions from context or remove all tool calls entirely.
+The `ToolCallFilter` is an **input processor** that filters out tool calls and their results from the prompt sent to the model. This is useful when you want to exclude specific tool interactions from context or remove all tool calls entirely.
+
+Filtering happens in the `processLLMRequest` hook, which runs after the message list is converted to a model prompt. Changes are transient: they affect only what's sent to the model on that call. Stored messages, memory, and UI history keep their original tool calls and results.
 
 ## Usage example
 
@@ -92,16 +94,10 @@ const filterWithCompactToolHistory = new ToolCallFilter({
     isOptional: false,
   },
   {
-    name: 'processInput',
-    type: '(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>',
-    description: 'Processes input messages to filter out tool calls and their results based on configuration',
-    isOptional: false,
-  },
-  {
-    name: 'processInputStep',
-    type: '(args: ProcessInputStepArgs) => Promise<ProcessInputStepResult>',
+    name: 'processLLMRequest',
+    type: '(args: ProcessLLMRequestArgs) => Promise<ProcessLLMRequestResult | undefined>',
     description:
-      'Processes agent loop step input when filterAfterToolSteps is configured. Returns no changes when step filtering is disabled',
+      'Filters tool calls and results out of the model prompt before it is sent to the provider. Returns undefined when nothing is filtered. Changes are transient and are not persisted to the message list or memory',
     isOptional: false,
   },
 ]}
@@ -109,7 +105,7 @@ const filterWithCompactToolHistory = new ToolCallFilter({
 
 ## Step filtering
 
-By default, `ToolCallFilter` filters only the initial input before the agent loop starts. Set `filterAfterToolSteps` to also filter during each loop step.
+By default, `ToolCallFilter` filters tool calls from history but leaves tool calls made during the current agent loop in place. Set `filterAfterToolSteps` to also filter tool calls produced by the current loop.
 
 `filterAfterToolSteps` counts tool-producing steps. For example, `filterAfterToolSteps: 2` keeps tool calls and results from the two most recent tool-producing steps and filters older tool calls and results. Non-tool text remains in context.
 
@@ -123,9 +119,9 @@ const filter = new ToolCallFilter({
 
 ## Preserve compact model output
 
-Set `preserveModelOutput: true` to retain compact `toModelOutput` history for completed tool results that the filter removes. This keeps the model-facing output as text in the prompt while removing the raw `toolInvocation.args` and raw `toolInvocation.result` payloads.
+Set `preserveModelOutput: true` to retain compact `toModelOutput` history for tool results that the filter removes. The removed tool call and result are replaced with a single text part in the prompt, so the model still sees the output while the raw tool arguments are dropped.
 
-Only completed tool results with `providerMetadata.mastra.modelOutput` are preserved. Tool calls, incomplete results, and results without stored model output are still filtered.
+Tool results without model output that can be represented as text are removed entirely.
 
 ```typescript
 const filter = new ToolCallFilter({

@@ -224,7 +224,6 @@ function ColumnBody({
         ) : null}
       </div>
       {headerExtras}
-      {/* Cards scroll inside the swimlane; the page stays fixed. */}
       <div className="min-h-16 flex-1">
         <ScrollArea className="h-full">
           <div ref={cardListRef} className="relative flex flex-col gap-2.5 pb-2">

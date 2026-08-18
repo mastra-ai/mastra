@@ -3,9 +3,10 @@ import { randomUUID } from 'node:crypto';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 
-import type { MemorySettingsRecord, MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
+import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import { applyStoredMemorySettings } from './memory-settings-hydration.js';
 
 type FactorySession = Awaited<ReturnType<AgentController<MastraCodeState>['createSession']>>;
 
@@ -185,6 +186,7 @@ export async function ensureFactorySourceSession(
     userId,
     branch,
     baseBranch: resolved.baseBranch,
+    visibility: 'org',
   });
   return {
     sessionId: session.sessionId,
@@ -193,18 +195,6 @@ export async function ensureFactorySourceSession(
     branch: session.branch,
     baseBranch: resolved.baseBranch,
   };
-}
-
-async function applyMemorySettings(session: FactorySession, record: MemorySettingsRecord | null): Promise<void> {
-  if (record?.observerModelId) await session.om.observer.switchModel({ modelId: record.observerModelId });
-  if (record?.reflectorModelId) await session.om.reflector.switchModel({ modelId: record.reflectorModelId });
-
-  const state = {
-    ...(record?.observationThreshold != null ? { observationThreshold: record.observationThreshold } : {}),
-    ...(record?.reflectionThreshold != null ? { reflectionThreshold: record.reflectionThreshold } : {}),
-    ...(record?.observeAttachments != null ? { observeAttachments: record.observeAttachments } : {}),
-  };
-  if (Object.keys(state).length > 0) await session.state.set(state);
 }
 
 export interface HydrateFactorySessionArgs {
@@ -228,7 +218,7 @@ export async function hydrateFactorySession(session: FactorySession, args: Hydra
   if (args.memorySettings) {
     try {
       const record = await args.memorySettings.get({ orgId: args.orgId, userId: args.userId });
-      await applyMemorySettings(session, record);
+      await applyStoredMemorySettings(session, record);
     } catch (error) {
       console.warn('[Factory Start] Failed to apply observational-memory settings', {
         error: error instanceof Error ? error.message : String(error),

@@ -13,7 +13,7 @@ The [Mastra platform](https://projects.mastra.ai) provides three products for de
 
 Deploy with a single command, [`mastra deploy`](/docs/mastra-platform/deploy), or connect a GitHub repository for push-to-deploy. See the [GitHub integration](/docs/mastra-platform/github) for the repository-linked flow.
 
-Each project can run multiple [**Environments**](/docs/mastra-platform/environments) (for example `production` and `staging`), provision [**Hosted databases**](/docs/mastra-platform/database) from the CLI or project settings to persist application data, and get a managed [**Workspaces**](/docs/mastra-platform/workspaces) per environment that gives agents a filesystem and a sandbox with no manual configuration.
+Each project can run multiple [**Environments**](/docs/mastra-platform/environments) (for example `production` and `staging`) and provision [**Hosted databases**](/docs/mastra-platform/database) from the CLI or project settings to persist application data. Each environment also gets a managed [**Workspace**](/docs/mastra-platform/workspaces) that gives agents a filesystem and sandbox with no manual configuration.
 
 [**Trace Intelligence**](/docs/mastra-platform/trace-intelligence) finds recurring goals, outcomes, behaviors, and sentiment across your agent traces. Trace Intelligence is available in private beta for selected projects.
 
@@ -24,7 +24,7 @@ Choose the path that matches what you want to do:
 - **Add hosted observability**: Use [Observability](/docs/mastra-platform/observability) to collect searchable traces, logs, and metrics
   across projects and deploys. Start here if you want monitoring without deploying Studio or Server first.
 - **Deploy Studio**: Use [Studio](/docs/mastra-platform/studio) to host the visual development environment for your team. Start here if you
-  want a shared UI for testing agents, running workflows, and inspecting traces.
+  want a shared UI for testing agents and running workflows, as well as inspecting traces.
 - **Deploy Server**: Use [Server](/docs/mastra-platform/server) to run your Mastra application as a production API server. Start here when
   you’re ready to serve agents, tools, and workflows from the cloud.
 
@@ -34,8 +34,8 @@ Choose the path that matches what you want to do:
 
 Your Mastra application is built from three building blocks:
 
-- [Agents](/docs/agents/overview): AI agents that can use tools, follow instructions, and maintain context
-- [Tools](/docs/agents/using-tools): Callable functions and integrations available to your agents
+- [Agents](/docs/agents/overview): AI agents that can use tools and follow instructions while maintaining context
+- [Tools](/docs/agents/tools): Callable functions and integrations available to your agents
 - [Workflows](/docs/workflows/overview): Multi-step orchestration pipelines that coordinate agents and tools
 
 ## Going to production

@@ -19,6 +19,16 @@
       "response": {
         "content": "MC review command response"
       }
+    },
+    {
+      "match": {
+        "userMessage": "Present the review findings.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "MC presentation command response"
+      }
     }
   ]
 }

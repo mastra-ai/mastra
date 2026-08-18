@@ -11,6 +11,7 @@ import { NotificationComponent } from '../../components/notification.js';
 import { ReactiveSignalComponent } from '../../components/reactive-signal.js';
 import { StateSignalComponent } from '../../components/state-signal.js';
 import { SubagentExecutionComponent } from '../../components/subagent-execution.js';
+import { SubconsciousActivityComponent } from '../../components/subconscious-activity.js';
 import { SystemReminderComponent } from '../../components/system-reminder.js';
 import { TemporalGapComponent } from '../../components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from '../../components/tool-execution-enhanced.js';
@@ -228,6 +229,38 @@ describe('handleMessageStart signals', () => {
     const rendered = stripAnsi((stateSignal as StateSignalComponent).render(80).join('\n'));
     expect(rendered).toContain('browser');
     expect(rendered).toContain('changed: browser opened');
+  });
+
+  it('renders streamed Subconscious activity with the specialized component', () => {
+    handleMessageStart(
+      ctx,
+      signalMessage({
+        type: 'state',
+        tagName: 'subconscious-activity',
+        contents: 'Hot: [[Atlas launch]] (1)',
+        metadata: {
+          state: { id: 'subconscious-activity', mode: 'snapshot', cacheKey: 'subconscious-activity:v1' },
+          value: {
+            updates: [
+              {
+                id: 'activity-1',
+                action: 'fact-created',
+                type: 'fact',
+                recordId: 'fact-1',
+                name: 'Atlas launch',
+                targetId: 'atlas',
+                targetType: 'entity',
+                createdAt: '2026-07-15T00:00:00.000Z',
+              },
+            ],
+            hot: [{ type: 'entity', id: 'atlas', name: 'Atlas launch', updates: 1 }],
+          },
+        },
+      } as Parameters<typeof createSignal>[0]),
+    );
+
+    expect(state.chatContainer.children.some(child => child instanceof SubconsciousActivityComponent)).toBe(true);
+    expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(false);
   });
 
   it('does not render the tasks state signal inline (the pinned task UI shows it)', () => {

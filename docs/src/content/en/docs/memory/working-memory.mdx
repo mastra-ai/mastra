@@ -234,7 +234,7 @@ const paragraphMemory = new Memory({
 
 ## Structured working memory
 
-Working memory can also be defined using a structured schema instead of a Markdown template. This allows you to specify the exact fields and types that should be tracked, using a [Standard JSON Schema](https://standardschema.dev/json-schema) ([Zod](https://zod.dev/), [Valibot](https://valibot.dev/), [ArkType](https://arktype.io/), etc.). When using a schema, the agent will see and update working memory as a JSON object matching your schema.
+Working memory can also be defined using a structured schema instead of a Markdown template. A [Standard JSON Schema](https://standardschema.dev/json-schema) ([Zod](https://zod.dev/), [Valibot](https://valibot.dev/), [ArkType](https://arktype.io/), etc.). When using a schema, the agent will see and update working memory as a JSON object matching your schema.
 
 **Requirement:** You must specify either `template` or `schema`, but not both.
 
@@ -424,7 +424,7 @@ const response = await agent.generate('What do you know about me?', {
 
 ## Opt in to state signals (experimental)
 
-By default, working memory reaches the model as part of the system message. You can opt into delivering it as a [state signal](/docs/long-running-agents/signals) instead by setting `useStateSignals: true`:
+By default, working memory reaches the model as part of the system message. You can opt into delivering it as a [state signal](/docs/harness/signals) instead by setting `useStateSignals: true`:
 
 ```typescript
 const memory = new Memory({

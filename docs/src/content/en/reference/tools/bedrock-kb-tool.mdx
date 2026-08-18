@@ -118,7 +118,7 @@ The tool returns an object with:
 | - | - | - |
 | `content` | `string` | The text content of the retrieved passage. |
 | `source` | `string \| undefined` | The source URI when Bedrock provides one. Agentic retrieval only includes this field when the result metadata contains `_source_uri`. |
-| `score` | `number \| undefined` | The relevance score returned by standard retrieval. The agentic API doesn't return a score for result items. |
+| `score` | `number \| undefined` | The relevance score returned by standard retrieval, which the agentic API omits from result items. |
 | `metadata` | `Record<string, unknown>` | Additional metadata from the retrieval result. |
 
 ## Retrieval Modes

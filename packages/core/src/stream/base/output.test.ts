@@ -714,6 +714,12 @@ describe('MastraModelOutput', () => {
           from: ChunkFrom.AGENT,
           payload: {},
         },
+        {
+          type: 'text-delta',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { text: ' post-abort provider output' },
+        },
       ] as ChunkType[]);
 
       const output = new MastraModelOutput({
@@ -735,9 +741,9 @@ describe('MastraModelOutput', () => {
       expect(finishPayload).toMatchObject({
         finishReason: 'aborted',
       });
-      // Empty defaults keep the aborted callback payload contract-complete without
-      // reconstructing partial buffered state from a mid-flight canceled stream.
-      expect(finishPayload.text).toBe('');
+      // The abort payload snapshots only text buffered before the terminal abort chunk.
+      expect(finishPayload.text).toBe('partial answer');
+      expect(finishPayload.text).not.toContain('post-abort provider output');
       expect(finishPayload.toolCalls).toEqual([]);
       expect(finishPayload.toolResults).toEqual([]);
       expect(finishPayload.steps).toEqual([]);
@@ -813,6 +819,8 @@ describe('MastraModelOutput', () => {
           totalTokens: 4670,
           cachedInputTokens: 3584,
           cacheCreationInputTokens: 967,
+          cacheCreationInputTokens5m: 900,
+          cacheCreationInputTokens1h: 67,
         },
         {
           inputTokens: 4848,
@@ -820,6 +828,8 @@ describe('MastraModelOutput', () => {
           totalTokens: 4965,
           cachedInputTokens: 4551,
           cacheCreationInputTokens: 296,
+          cacheCreationInputTokens5m: 200,
+          cacheCreationInputTokens1h: 96,
         },
         {
           inputTokens: 8557,
@@ -827,6 +837,8 @@ describe('MastraModelOutput', () => {
           totalTokens: 9827,
           cachedInputTokens: 4551,
           cacheCreationInputTokens: 4005,
+          cacheCreationInputTokens5m: 3000,
+          cacheCreationInputTokens1h: 1005,
         },
       ];
       const messageList = new MessageList({ threadId: 'test-thread' });
@@ -858,6 +870,8 @@ describe('MastraModelOutput', () => {
       expect(finishPayload?.totalUsage?.outputTokens).toBe(1500);
       expect(finishPayload?.totalUsage?.cachedInputTokens).toBe(12686);
       expect(finishPayload?.totalUsage?.cacheCreationInputTokens).toBe(5268);
+      expect(finishPayload?.totalUsage?.cacheCreationInputTokens5m).toBe(4100);
+      expect(finishPayload?.totalUsage?.cacheCreationInputTokens1h).toBe(1168);
     });
 
     it('should omit raw when upstream usage has no raw field', async () => {

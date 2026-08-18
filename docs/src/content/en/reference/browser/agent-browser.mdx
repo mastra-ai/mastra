@@ -94,7 +94,7 @@ then interact with elements using their refs (e.g., @e5).`,
     name: 'recording',
     type: 'BrowserRecordingOptions',
     description:
-      'Alpha option for adding browser recording tools. Provide outputDir to add browser_record and browser_record_caption to the toolset. You can also set maxDurationMs, maxWidth, and maxHeight as defaults for every recording.',
+      'Beta option for adding browser recording tools. Provide outputDir to add browser_record and browser_record_caption to the toolset. You can also set maxDurationMs, maxWidth, and maxHeight as defaults for every recording.',
     isOptional: true,
   },
   {
@@ -111,7 +111,7 @@ then interact with elements using their refs (e.g., @e5).`,
 
 `AgentBrowser` provides 16 deterministic tools for browser automation. All tools that interact with elements use refs from the accessibility tree snapshot.
 
-When `recording` is configured, `AgentBrowser` also adds the alpha `browser_record` and `browser_record_caption` tools. See [Browser recording (alpha)](/docs/browser/recording).
+When `recording` is configured, `AgentBrowser` also adds the Beta `browser_record` and `browser_record_caption` tools. See [Browser recording (Beta)](/docs/browser#record-browser-sessions).
 
 ### Core tools
 
@@ -461,5 +461,5 @@ The `browser_snapshot` tool returns an accessibility tree with element refs like
 
 - [MastraBrowser](/reference/browser/mastra-browser): Base class reference
 - [StagehandBrowser](/reference/browser/stagehand-browser): AI-powered alternative
-- [Browser overview](/docs/browser/overview): Conceptual guide
+- [Browser overview](/docs/browser): Conceptual guide
 - [agent-browser guide](/integrations/browsers/agent-browser): Usage guide
