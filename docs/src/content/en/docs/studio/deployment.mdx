@@ -23,7 +23,7 @@ On this page you'll learn how to deploy Studio on your own infrastructure. As th
 
 The easiest way to run Studio is the [`mastra studio`](/reference/cli/mastra#mastra-studio) command.
 
-Whereas `mastra dev` runs both Studio and an API for development purposes, the purpose of `mastra studio` is to serve a standalone, static UI that connects to an already-running Mastra server. This allows you to deploy Studio on its own, separate from the Mastra server, if desired.
+Whereas `mastra dev` runs both Studio and an API for development purposes, the purpose of `mastra studio` is to serve a standalone, static UI that connects to an already-running Mastra server. You can deploy Studio separately from the Mastra server.
 
 Open a terminal and install the `mastra` CLI globally:
 
@@ -59,7 +59,7 @@ For hosted Studio on Mastra platform, see [Studio on Mastra platform](/docs/mast
 
 ## Running a server
 
-Running `mastra studio` as a long-running process is no different from running any other Node.js service. All the best practices, tools, and options for deployment apply here as well. You can use process managers like PM2, use Docker, or cloud services that support Node.js applications. You'll need to ensure CORS is configured correctly and errors are monitored, as with any web service.
+Running `mastra studio` as a long-running process is no different from running any other Node.js service. The same deployment practices and tools apply here. Use process managers such as PM2 or Docker. Cloud services that support Node.js applications are another option. As with any web service, configure CORS correctly and monitor errors.
 
 :::warning
 

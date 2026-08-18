@@ -1,17 +1,22 @@
 import { Hono } from 'hono';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { ProjectRoutes } from './projects.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 
-const projectRoutes = (seed: FactoryStorageTestSeed, versionControlIntegrationIds?: string[]) =>
+const projectRoutes = (
+  seed: FactoryStorageTestSeed,
+  versionControlIntegrationIds?: string[],
+  sessionRetirement?: ConstructorParameters<typeof ProjectRoutes>[0]['sessionRetirement'],
+) =>
   new ProjectRoutes({
     auth: fakeRouteAuth(),
     projects: seed.projects,
     sourceControl: seed.sourceControl,
     versionControlIntegrationIds,
+    sessionRetirement,
   }).routes();
 
 describe('ProjectRoutes', () => {
@@ -76,6 +81,128 @@ describe('ProjectRoutes', () => {
       (await buildApp({ workosId: 'user-2', organizationId: 'org-2' }).request(`/web/factory/projects/${project.id}`))
         .status,
     ).toBe(404);
+  });
+
+  it('retires active repository sessions before destructive project deletion', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
+    const github = seed.sourceControl.forIntegration('github');
+    const installation = await github.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: 'gh-1',
+    });
+    const repository = await github.repositories.upsert({
+      orgId: 'org-1',
+      input: {
+        installationId: installation.id,
+        externalId: 'repo-1',
+        slug: 'acme/api',
+        defaultBranch: 'main',
+      },
+    });
+    const connection = await github.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    const link = await github.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection.id,
+      repositoryId: repository.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/workspace/acme/api',
+      teardownCommand: 'pnpm local teardown',
+    });
+    await github.sessions.create({
+      sessionId: 'session-1',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'feat/x',
+      baseBranch: 'main',
+    });
+    const retireProjectRepositorySessions = vi.fn(async () => {
+      expect(await github.sessions.listByProjectRepository({ projectRepositoryId: link.id })).toHaveLength(1);
+    });
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, projectRoutes(seed, ['github'], { retireProjectRepositorySessions } as any));
+
+    const response = await app.request(`/web/factory/projects/${project.id}`, { method: 'DELETE' });
+
+    expect(response.status).toBe(204);
+    expect(retireProjectRepositorySessions).toHaveBeenCalledOnce();
+    expect(retireProjectRepositorySessions.mock.calls[0]?.[0]).toMatchObject({
+      sourceControl: { integrationId: 'github' },
+      orgId: 'org-1',
+      projectRepositoryId: link.id,
+    });
+  });
+
+  it('rejects destructive project deletion when materialized sessions cannot be retired', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
+    const github = seed.sourceControl.forIntegration('github');
+    const installation = await github.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: 'gh-1',
+    });
+    const repository = await github.repositories.upsert({
+      orgId: 'org-1',
+      input: {
+        installationId: installation.id,
+        externalId: 'repo-1',
+        slug: 'acme/api',
+        defaultBranch: 'main',
+      },
+    });
+    const connection = await github.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    const link = await github.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection.id,
+      repositoryId: repository.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/workspace/acme/api',
+      teardownCommand: 'pnpm local teardown',
+    });
+    const session = await github.sessions.create({
+      sessionId: 'session-1',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'feat/x',
+      baseBranch: 'main',
+    });
+    await github.sessions.setSandbox({
+      id: session.id,
+      sandboxId: 'sandbox-1',
+      sandboxWorkdir: '/workspace/acme/api/session-1',
+    });
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, projectRoutes(seed, ['github']));
+
+    const response = await app.request(`/web/factory/projects/${project.id}`, { method: 'DELETE' });
+
+    expect(response.status).toBe(409);
+    expect(await seed.projects.get({ orgId: 'org-1', id: project.id })).not.toBeNull();
+    expect(await github.sessions.getBySessionId('session-1')).not.toBeNull();
   });
 
   it('links installations and repositories from multiple source-control providers', async () => {
@@ -144,6 +271,7 @@ describe('ProjectRoutes', () => {
             sandboxProvider: 'local',
             sandboxWorkdir: `/workspace/${repositoryId}`,
             setupCommand: 'pnpm install',
+            teardownCommand: 'pnpm local worktree teardown',
           }),
         },
       );
@@ -166,11 +294,16 @@ describe('ProjectRoutes', () => {
     const updateResponse = await app.request(`/web/factory/projects/${project.id}/repositories/${githubLink.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ branch: 'stable', setupCommand: null }),
+      body: JSON.stringify({ branch: 'stable', setupCommand: null, teardownCommand: 'docker compose down' }),
     });
     expect(updateResponse.status).toBe(200);
     expect((await updateResponse.json()) as unknown).toMatchObject({
-      projectRepository: { branch: 'stable', setupCommand: null, repository: { slug: 'acme/api' } },
+      projectRepository: {
+        branch: 'stable',
+        setupCommand: null,
+        teardownCommand: 'docker compose down',
+        repository: { slug: 'acme/api' },
+      },
     });
   });
 

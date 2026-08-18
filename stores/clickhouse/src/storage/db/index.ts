@@ -14,7 +14,6 @@ import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import {
   addOnClusterToDDL,
   applyReplicationToDDL,
-  buildLocalTableReplicationError,
   isReplicationConfigured,
   isReplicatedOrSharedEngine,
   validateReplicationConfig,
@@ -194,9 +193,12 @@ export class ClickhouseDB extends MastraBase {
       format: 'JSONEachRow',
     });
     const rows = (await result.json()) as Array<{ name: string; engine: string }>;
-    const localTables = rows.filter(row => row.engine && !isReplicatedOrSharedEngine(row.engine));
-    if (localTables.length > 0) {
-      throw buildLocalTableReplicationError(localTables);
+    const localTable = rows.find(row => row.engine && !isReplicatedOrSharedEngine(row.engine));
+    if (localTable) {
+      this.logger.warn(
+        `ClickHouse replication is enabled, but pre-existing table '${localTable.name}' uses local engine '${localTable.engine}'. ` +
+          `CREATE TABLE IF NOT EXISTS will leave the existing table untouched.`,
+      );
     }
   }
 

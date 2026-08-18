@@ -9,9 +9,10 @@ import type { WorkerDeps } from '@mastra/core/worker';
 import type { IntegrationStorageHandle } from '../../../storage/domains/integrations/base.js';
 import type { GithubRepositoryPermission } from '../../github/integration.js';
 import type { GithubIssueReconciler } from '../../github/issue-reconciler.js';
+import type { GithubReconcileRepositorySource } from '../../github/reconcile-worker.js';
 import type { GithubPullRequestReconciler, ReconcileRepository } from '../../github/rules.js';
 import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from '../../github/subscriptions.js';
-import { dispatchGithubWebhook } from '../../github/webhook.js';
+import { dispatchGithubWebhook, isFactoryAppSender, resolveAuthorizedBots } from '../../github/webhook.js';
 import type {
   GithubWebhookDispatchIntegration,
   GithubWebhookNotification,
@@ -33,14 +34,20 @@ const SUPPORTED_EVENTS = new Set([
   'pull_request',
   'pull_request_review',
   'pull_request_review_comment',
+  // Pushes never reach the subscription dispatcher; they feed the factory
+  // ingest path so base checkpoints rebuild on default-branch updates.
+  'push',
 ]);
+// Kinds emitted by `classifyGithubWebhook` that carry untrusted sender-authored
+// content and must pass the sender authorization gate below.
 const AUTHOR_GATED_KINDS = new Set([
-  'issue-comment',
-  'pull-request-comment',
-  'pull-request-review',
-  'pull-request-review-comment',
+  'issue-comment-created',
+  'review-comment-created',
+  'review-approved',
+  'review-changes-requested',
+  'review-submitted',
+  'review-dismissed',
 ]);
-const AUTHORIZED_BOTS = new Set(['coderabbitai[bot]', 'devin-ai-integration[bot]']);
 const AUTHORIZED_PERMISSIONS = new Set<GithubRepositoryPermission>(['admin', 'maintain', 'write']);
 const PERMISSION_CHECK_TIMEOUT_MS = 5_000;
 
@@ -72,18 +79,26 @@ export interface PlatformGithubEventWorkerConfig {
   controller: MountedMastraCode['controller'];
   github: PlatformGithubEventDispatchIntegration;
   storage: PlatformGithubEventStorage;
+  /**
+   * Source-control storage used to resolve the set of repositories the worker
+   * should poll. The worker restricts itself to `(installation, repository)`
+   * pairs linked to a factory project — the same set the reconciler uses —
+   * so polling scales with Factory usage, not with the size of the underlying
+   * GitHub org.
+   */
+  sourceControl: GithubReconcileRepositorySource;
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
   reconcileFactoryState?: GithubPullRequestReconciler;
-  /**
-   * Optional issue-metadata reconciler. When set, folded into the same
-   * reconcile tick as `reconcileFactoryState` so a single lease covers both
-   * writers of card state for the currently discovered repositories.
-   */
   reconcileIssuesFactoryState?: GithubIssueReconciler;
-  /** When false the worker skips event tailing and only runs the reconcile sweep. */
+  /** Base-checkpoint freshness sweep, run after the reconcilers within the lease. */
+  sweepBaseCheckpoints?: () => Promise<void>;
+  /** When false the worker skips event tailing and only runs enabled reconciliation sweeps. */
   pollEventsEnabled?: boolean;
   intervalMs?: number;
+  /** Legacy shared reconciliation cadence. */
   reconcileIntervalMs?: number;
+  pullRequestReconcileIntervalMs?: number;
+  issueReconcileIntervalMs?: number;
   now?: () => number;
   dispatch?: typeof dispatchGithubWebhook;
 }
@@ -98,11 +113,14 @@ export class PlatformGithubEventWorker extends MastraWorker {
   readonly #ingestFactoryEvent: ((event: ParsedGithubWebhook) => Promise<unknown>) | undefined;
   readonly #reconcileFactoryState: GithubPullRequestReconciler | undefined;
   readonly #reconcileIssuesFactoryState: GithubIssueReconciler | undefined;
+  readonly #sweepBaseCheckpoints: (() => Promise<void>) | undefined;
   readonly #pollEventsEnabled: boolean;
-  readonly #reconcileIntervalMs: number;
+  readonly #pullRequestReconcileIntervalMs: number;
+  readonly #issueReconcileIntervalMs: number;
   readonly #intervalMs: number;
   readonly #now: () => number;
   readonly #dispatch: typeof dispatchGithubWebhook;
+  readonly #sourceControl: GithubReconcileRepositorySource;
   readonly #leaseOwner = randomUUID();
 
   #running = false;
@@ -113,7 +131,8 @@ export class PlatformGithubEventWorker extends MastraWorker {
   #leaseTtlMs: number;
   #hasLease = false;
   #startedAt = 0;
-  #lastReconcileAt = 0;
+  #lastPullRequestReconcileAt = 0;
+  #lastIssueReconcileAt = 0;
   #settings: PlatformGithubEventWorkerSettings = { version: 1, repositories: {} };
 
   constructor(config: PlatformGithubEventWorkerConfig) {
@@ -125,15 +144,28 @@ export class PlatformGithubEventWorker extends MastraWorker {
     this.#ingestFactoryEvent = config.ingestFactoryEvent;
     this.#reconcileFactoryState = config.reconcileFactoryState;
     this.#reconcileIssuesFactoryState = config.reconcileIssuesFactoryState;
+    this.#sweepBaseCheckpoints = config.sweepBaseCheckpoints;
     this.#pollEventsEnabled = config.pollEventsEnabled ?? true;
-    this.#reconcileIntervalMs = config.reconcileIntervalMs ?? DEFAULT_RECONCILE_INTERVAL_MS;
+    const legacyReconcileIntervalMs = config.reconcileIntervalMs ?? DEFAULT_RECONCILE_INTERVAL_MS;
+    this.#pullRequestReconcileIntervalMs = config.pullRequestReconcileIntervalMs ?? legacyReconcileIntervalMs;
+    this.#issueReconcileIntervalMs = config.issueReconcileIntervalMs ?? legacyReconcileIntervalMs;
     this.#intervalMs = config.intervalMs ?? DEFAULT_POLL_INTERVAL_MS;
     if (!Number.isFinite(this.#intervalMs) || this.#intervalMs <= 0) {
       throw new Error('Platform GitHub event polling interval must be a positive number.');
     }
-    this.#leaseTtlMs = Math.max(MIN_LEASE_TTL_MS, this.#intervalMs * 3);
+    if (!Number.isFinite(this.#pullRequestReconcileIntervalMs) || this.#pullRequestReconcileIntervalMs <= 0) {
+      throw new Error('Platform GitHub pull request reconcile interval must be a positive number.');
+    }
+    if (!Number.isFinite(this.#issueReconcileIntervalMs) || this.#issueReconcileIntervalMs <= 0) {
+      throw new Error('Platform GitHub issue reconcile interval must be a positive number.');
+    }
+    this.#leaseTtlMs = Math.max(
+      MIN_LEASE_TTL_MS,
+      Math.min(this.#intervalMs, this.#pullRequestReconcileIntervalMs, this.#issueReconcileIntervalMs) * 3,
+    );
     this.#now = config.now ?? Date.now;
     this.#dispatch = config.dispatch ?? dispatchGithubWebhook;
+    this.#sourceControl = config.sourceControl;
   }
 
   async init(deps: WorkerDeps): Promise<void> {
@@ -241,9 +273,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
 
   async #poll(): Promise<number> {
     const repositories = await this.#discoverRepositories();
-    // Reconcile-only mode has no event tail to keep fresh, so tick on the
-    // slower reconcile cadence instead of the polling interval.
-    let retryInMs = this.#pollEventsEnabled ? this.#intervalMs : this.#reconcileIntervalMs;
+    let retryInMs = this.#pollEventsEnabled ? this.#intervalMs : this.#reconcileCadence();
 
     if (this.#pollEventsEnabled) {
       for (const repository of repositories) {
@@ -264,107 +294,134 @@ export class PlatformGithubEventWorker extends MastraWorker {
     }
 
     await this.#maybeReconcile(repositories);
-
     return retryInMs;
   }
 
-  /**
-   * State-based safety net: event tailing can miss merges (cursor gaps,
-   * downtime, terminally failed decisions), so on a slower cadence we compare
-   * still-open PR cards against actual GitHub state and replay missed merges
-   * through the normal ingress, which dedupes against the event path.
-   */
+  #reconcileCadence(): number {
+    const cadences = [
+      this.#reconcileFactoryState ? this.#pullRequestReconcileIntervalMs : undefined,
+      this.#reconcileIssuesFactoryState ? this.#issueReconcileIntervalMs : undefined,
+    ].filter((interval): interval is number => interval !== undefined);
+    return cadences.length > 0 ? Math.min(...cadences) : this.#intervalMs;
+  }
+
   async #maybeReconcile(repositories: Repository[]): Promise<void> {
-    if (!this.#reconcileFactoryState || !this.#running || !this.#hasLease) return;
+    if (!this.#running || !this.#hasLease) return;
     const now = this.#now();
-    if (now - this.#lastReconcileAt < this.#reconcileIntervalMs) return;
-    // Advance the clock before sweeping so a persistently failing sweep stays
-    // on cadence instead of retrying every poll tick.
-    this.#lastReconcileAt = now;
+    const reconcilePullRequests = Boolean(
+      this.#reconcileFactoryState && now - this.#lastPullRequestReconcileAt >= this.#pullRequestReconcileIntervalMs,
+    );
+    const reconcileIssues = Boolean(
+      this.#reconcileIssuesFactoryState && now - this.#lastIssueReconcileAt >= this.#issueReconcileIntervalMs,
+    );
+    if (!reconcilePullRequests && !reconcileIssues) return;
+    if (reconcilePullRequests) this.#lastPullRequestReconcileAt = now;
+    if (reconcileIssues) this.#lastIssueReconcileAt = now;
+
     const targets: ReconcileRepository[] = repositories.flatMap(repository =>
       repository.fullName
         ? [{ id: repository.id, fullName: repository.fullName, installationId: repository.installationId }]
         : [],
     );
     if (targets.length === 0) {
-      this.deps?.logger.debug('Platform GitHub pull request reconcile skipped: no named repositories');
+      this.deps?.logger.debug('Platform GitHub reconciliation skipped: no named repositories');
       return;
     }
-    this.deps?.logger.debug('Platform GitHub pull request reconcile sweep starting', {
-      candidateRepositories: targets.length,
-    });
-    const startedAt = Date.now();
-    try {
-      // `counts.repositories` is the factory-configured subset actually swept;
-      // `candidateRepositories` is everything the installations exposed.
-      const { errors, ...counts } = await this.#reconcileFactoryState(targets);
-      const context = { ...counts, candidateRepositories: targets.length, durationMs: Date.now() - startedAt };
-      if (counts.failed > 0) {
-        this.deps?.logger.warn('Platform GitHub pull request reconcile sweep completed with failures', {
-          ...context,
-          errors,
+
+    if (reconcilePullRequests && this.#reconcileFactoryState) {
+      const startedAt = Date.now();
+      try {
+        const { errors, ...counts } = await this.#reconcileFactoryState(targets);
+        const context = { ...counts, candidateRepositories: targets.length, durationMs: Date.now() - startedAt };
+        if (counts.failed > 0) {
+          this.deps?.logger.warn('Platform GitHub pull request reconcile sweep completed with failures', {
+            ...context,
+            errors,
+          });
+        } else if (counts.merged > 0 || counts.closed > 0) {
+          this.deps?.logger.info('Platform GitHub pull request reconcile replayed missed merges/closes', context);
+        } else {
+          this.deps?.logger.info('Platform GitHub pull request reconcile sweep completed', context);
+        }
+      } catch (error) {
+        this.deps?.logger.error('Platform GitHub pull request reconcile failed', {
+          repositories: targets.length,
+          durationMs: Date.now() - startedAt,
+          error: error instanceof Error ? error.message : String(error),
         });
-      } else if (counts.merged > 0 || counts.closed > 0) {
-        this.deps?.logger.info('Platform GitHub pull request reconcile replayed missed merges/closes', context);
-      } else {
-        this.deps?.logger.info('Platform GitHub pull request reconcile sweep completed', context);
       }
-    } catch (error) {
-      this.deps?.logger.error('Platform GitHub pull request reconcile failed', {
-        repositories: targets.length,
-        durationMs: Date.now() - startedAt,
-        error: error instanceof Error ? error.message : String(error),
-      });
     }
 
-    // Same tick as the PR reconciler: repository set already discovered, lease
-    // already held, cadence already gated. Issues have no closed-webhook replay
-    // so this only patches drifted metadata (state/author/assignees/labels).
-    if (!this.#reconcileIssuesFactoryState) return;
-    const issueStartedAt = Date.now();
-    try {
-      const { errors, ...counts } = await this.#reconcileIssuesFactoryState(targets);
-      const context = { ...counts, candidateRepositories: targets.length, durationMs: Date.now() - issueStartedAt };
-      if (counts.failed > 0) {
-        this.deps?.logger.warn('Platform GitHub issue reconcile sweep completed with failures', {
-          ...context,
-          errors,
+    if (reconcileIssues && this.#reconcileIssuesFactoryState && this.#hasLease) {
+      const startedAt = Date.now();
+      try {
+        const { errors, ...counts } = await this.#reconcileIssuesFactoryState(targets);
+        const context = { ...counts, candidateRepositories: targets.length, durationMs: Date.now() - startedAt };
+        if (counts.failed > 0) {
+          this.deps?.logger.warn('Platform GitHub issue reconcile sweep completed with failures', { ...context, errors });
+        } else if (counts.closed > 0) {
+          this.deps?.logger.info('Platform GitHub issue reconcile replayed closed work items', context);
+        } else if (counts.updated > 0) {
+          this.deps?.logger.info('Platform GitHub issue reconcile patched stale metadata', context);
+        } else {
+          this.deps?.logger.debug('Platform GitHub issue reconcile sweep completed', context);
+        }
+      } catch (error) {
+        this.deps?.logger.error('Platform GitHub issue reconcile failed', {
+          repositories: targets.length,
+          durationMs: Date.now() - startedAt,
+          error: error instanceof Error ? error.message : String(error),
         });
-      } else if (counts.updated > 0) {
-        this.deps?.logger.info('Platform GitHub issue reconcile patched stale metadata', context);
-      } else {
-        this.deps?.logger.debug('Platform GitHub issue reconcile sweep completed', context);
       }
-    } catch (error) {
-      this.deps?.logger.error('Platform GitHub issue reconcile failed', {
-        repositories: targets.length,
-        durationMs: Date.now() - issueStartedAt,
-        error: error instanceof Error ? error.message : String(error),
-      });
+    }
+
+    if (this.#sweepBaseCheckpoints && this.#hasLease) {
+      try {
+        await this.#sweepBaseCheckpoints();
+      } catch (error) {
+        this.deps?.logger.warn('Platform GitHub base-checkpoint freshness sweep failed', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
   }
 
+  /**
+   * Configured `(installation, repository)` pairs — the same set the
+   * reconciler sweeps — resolved to the numeric ids and slug the poll
+   * addresses GitHub with. Repositories not linked to any factory project
+   * cannot produce work for Factory, so polling and reconciling them is
+   * wasted `/events` bandwidth and platform load.
+   */
   async #discoverRepositories(): Promise<Repository[]> {
-    const result = await this.#client.request<{
-      installations: Array<{
-        installationId: number;
-        usable: boolean;
-        suspendedAt: string | null;
-      }>;
-    }>('GET', `${API_PREFIX}/installations`);
+    const keys = await this.#sourceControl.projectRepositories.listConfiguredExternalKeys();
     const repositories = new Map<number, Repository>();
-
-    for (const installation of result.installations) {
-      if (!installation.usable || installation.suspendedAt) continue;
-      const page = await this.#client.request<{ repositories: Array<{ id: number; fullName?: string }> }>(
-        'GET',
-        `${API_PREFIX}/installations/${installation.installationId}/repositories`,
-      );
-      for (const repository of page.repositories) {
-        repositories.set(repository.id, { ...repository, installationId: installation.installationId });
+    for (const key of keys) {
+      const installationId = Number(key.installationExternalId);
+      const repositoryId = Number(key.repositoryExternalId);
+      if (
+        !Number.isSafeInteger(installationId) ||
+        installationId <= 0 ||
+        !Number.isSafeInteger(repositoryId) ||
+        repositoryId <= 0
+      ) {
+        continue;
       }
+      if (repositories.has(repositoryId)) continue;
+      // A configured key exists per project link, so `listByExternalRepository`
+      // always yields at least one row; the first row's orgId is enough to
+      // look up the repository row for its slug.
+      const projects = await this.#sourceControl.projectRepositories.listByExternalRepository(key);
+      const orgId = projects[0]?.orgId;
+      const repository = orgId
+        ? await this.#sourceControl.repositories.findByExternalId({ orgId, externalId: key.repositoryExternalId })
+        : null;
+      repositories.set(repositoryId, {
+        id: repositoryId,
+        installationId,
+        fullName: repository?.slug,
+      });
     }
-
     return [...repositories.values()];
   }
 
@@ -414,6 +471,23 @@ export class PlatformGithubEventWorker extends MastraWorker {
             retirePullRequestSubscription(id, status, this.#github.integrationStorage),
           github: this.#github,
           isAuthorizedSender: notification => this.#isAuthorizedSender(notification),
+          onTargetSkipped: subscription => {
+            // Routine when a subscription's thread belongs to another
+            // deployment, so this stays at debug rather than warning on a loop.
+            this.deps?.logger.debug('Platform GitHub event skipped: thread is not held here', {
+              deliveryId: event.deliveryId,
+              subscriptionId: subscription.id,
+              threadId: subscription.threadId,
+            });
+          },
+          onSenderRejected: notification => {
+            this.deps?.logger.debug('Platform GitHub event dropped: sender not authorized', {
+              deliveryId: event.deliveryId,
+              repository: notification.metadata.repository,
+              sender: notification.metadata.sender,
+              kind: notification.kind,
+            });
+          },
           onTargetError: (subscription, error) => {
             this.deps?.logger.error('Platform GitHub event delivery failed for a subscription', {
               deliveryId: event.deliveryId,
@@ -445,7 +519,22 @@ export class PlatformGithubEventWorker extends MastraWorker {
     const sender = notification.metadata.sender;
     const repository = notification.metadata.repository;
     if (!sender || !repository) return false;
-    if (AUTHORIZED_BOTS.has(sender)) return true;
+    // Factory's own app has to clear the gate before the bot rules below, which
+    // fail closed for every bot that is not explicitly allowlisted. GitHub
+    // forbids an app from reviewing its own pull request, so `factory-review`
+    // posts its verdict as a comment under this login and that comment is the
+    // handoff the authoring agent wakes on.
+    if (this.#github.identity?.matches(sender)) return true;
+    if (isFactoryAppSender(sender, this.#github.slug)) return true;
+    const normalizedSender = sender.toLowerCase();
+    const authorizedBots = resolveAuthorizedBots(this.#github.authorizedBots);
+    if (authorizedBots.has(normalizedSender)) return true;
+    // Any other bot is gated purely by the allowlist: a GitHub App never holds a
+    // collaborator permission under its sender login, so falling through to the
+    // permission lookup would only fail closed after a wasted API call.
+    if (notification.metadata.senderType?.toLowerCase() === 'bot' || normalizedSender.endsWith('[bot]')) {
+      return false;
+    }
 
     const abortController = new AbortController();
     const timeout = setTimeout(() => abortController.abort(), PERMISSION_CHECK_TIMEOUT_MS);
@@ -488,18 +577,28 @@ function normalizeSettings(value: PlatformGithubEventWorkerSettings | null): Pla
 
 // Events the polling worker forwards to the factory rules engine. Closures
 // let the reconciler finalize cards; `synchronize` and `review_requested` on a
-// pull request are the two triggers the review board's re-review path listens
-// for. Direct-webhook consumers ingest every parsed event; the platform path
-// gates because most other events (comments, reviews, edits) only interest the
-// subscription dispatcher, not the factory rules.
+// pull request are the triggers the review board's re-review path listens for;
+// submitted reviews and pull request comments are how review feedback reaches
+// the agent that authored the branch. Direct-webhook consumers ingest every
+// parsed event; the platform path gates because the remaining events (issue
+// edits, comment edits and deletions) only interest the subscription
+// dispatcher, not the factory rules.
 function isFactoryIngestedEvent(event: ParsedGithubWebhook): boolean {
   if ((event.event === 'issues' || event.event === 'pull_request') && event.payload.action === 'closed') {
     return true;
   }
   if (event.event === 'pull_request') {
     const action = event.payload.action;
-    if (action === 'synchronize' || action === 'review_requested') return true;
+    // `opened` is what mints the Review card for a pull request. Without it a
+    // factory-authored PR never gets reviewed on the polling path, which is the
+    // only path a local deployment has.
+    if (action === 'opened' || action === 'synchronize' || action === 'review_requested') return true;
   }
+  if (event.event === 'pull_request_review' && event.payload.action === 'submitted') return true;
+  if (event.event === 'issue_comment' && event.payload.action === 'created') return true;
+  // Default-branch pushes drive base-checkpoint rebuilds
+  // (`withBaseCheckpointWebhookTrigger` wraps the ingest callback).
+  if (event.event === 'push') return true;
   return false;
 }
 

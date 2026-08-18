@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { lstat, readFile, readdir, readlink, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdtemp, readFile, readdir, readlink, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Config } from '@mastra/core/mastra';
@@ -57,7 +58,29 @@ export class ExperimentBundler extends Bundler {
     mastraEntryFile: string,
     outputDirectory: string,
   ): Promise<NonNullable<Config['bundler']>> {
-    const bundlerOptions = await super.getUserBundlerOptions(mastraEntryFile, outputDirectory);
+    const existingOutputFiles = await collectFileSignatures(outputDirectory);
+    const scratchDirectory = await mkdtemp(join(tmpdir(), 'mastra-experiment-config-'));
+    const originalWorkingDirectory = process.cwd();
+    let bundlerOptions: NonNullable<Config['bundler']>;
+    try {
+      process.chdir(scratchDirectory);
+      bundlerOptions = await super.getUserBundlerOptions(mastraEntryFile, outputDirectory);
+    } finally {
+      process.chdir(originalWorkingDirectory);
+      await rm(scratchDirectory, { recursive: true, force: true });
+    }
+
+    const currentOutputFiles = await collectFileSignatures(outputDirectory);
+    const outputPaths = new Set([...existingOutputFiles.keys(), ...currentOutputFiles.keys()]);
+    const unexpectedOutputFiles = [...outputPaths]
+      .filter(path => path !== 'bundler-config.mjs' && existingOutputFiles.get(path) !== currentOutputFiles.get(path))
+      .sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
+    if (unexpectedOutputFiles.length > 0) {
+      throw new Error(
+        `Mastra configuration initialization created or modified unexpected files in the experiment worker artifact: ${unexpectedOutputFiles.join(', ')}`,
+      );
+    }
+
     if (!Array.isArray(bundlerOptions.externals)) return bundlerOptions;
 
     return {
@@ -86,7 +109,6 @@ export class ExperimentBundler extends Bundler {
   async writeArtifactManifest(outputDirectory: string, cliVersion: string): Promise<void> {
     await Promise.all([
       removePnpmInstallMetadata(outputDirectory),
-      removeLocalStorageArtifacts(outputDirectory),
       rm(join(outputDirectory, this.analyzeOutputDir), { recursive: true, force: true }),
     ]);
     const files = await collectFileDigests(outputDirectory);
@@ -163,26 +185,42 @@ export function resolveRuntimePath(
 
 type ArtifactFileDigest = { path: string; sha256: string; type?: 'file' | 'symlink'; target?: string };
 
-const LOCAL_STORAGE_ARTIFACT_PATTERN = /(?:\.db(?:-.+)?|\.duckdb(?:\.wal)?|\.sqlite(?:-.+)?)$/;
-
-export async function removeLocalStorageArtifacts(root: string): Promise<void> {
+async function collectFileSignatures(root: string): Promise<Map<string, string>> {
+  const files = new Map<string, string>();
   const visit = async (directory: string): Promise<void> => {
-    const entries = await readdir(directory, { withFileTypes: true });
-    await Promise.all(
-      entries.map(async entry => {
-        const entryPath = join(directory, entry.name);
-        if (entry.isDirectory()) {
-          if (entry.name !== 'node_modules') await visit(entryPath);
-          return;
-        }
-        if (LOCAL_STORAGE_ARTIFACT_PATTERN.test(entry.name)) {
-          await rm(entryPath, { force: true });
-        }
-      }),
-    );
+    let entries;
+    try {
+      entries = await readdir(directory, { withFileTypes: true });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+      throw error;
+    }
+    for (const entry of entries.sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0))) {
+      const entryPath = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        await visit(entryPath);
+        continue;
+      }
+
+      const artifactPath = relative(root, entryPath).replaceAll('\\', '/');
+      const stats = await lstat(entryPath);
+      if (stats.isFile()) {
+        files.set(
+          artifactPath,
+          `file:${createHash('sha256')
+            .update(await readFile(entryPath))
+            .digest('hex')}`,
+        );
+      } else if (stats.isSymbolicLink()) {
+        files.set(artifactPath, `symlink:${await readlink(entryPath)}`);
+      } else {
+        files.set(artifactPath, `other:${stats.mode}`);
+      }
+    }
   };
 
   await visit(root);
+  return files;
 }
 
 export async function removePnpmInstallMetadata(root: string): Promise<void> {

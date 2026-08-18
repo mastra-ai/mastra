@@ -3,6 +3,7 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { HoverCard, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { GitBranch, MoreHorizontal, Pin, PinOff, Trash2 } from 'lucide-react';
 import { useRef } from 'react';
@@ -32,6 +33,7 @@ export function SessionNavRow({
   merged,
   preview,
   pinned = false,
+  owner,
   onSelect,
   onPinChange,
   onDelete,
@@ -39,6 +41,8 @@ export function SessionNavRow({
   name: string;
   /** Hover tooltip, typically the branch name. */
   title?: string;
+  /** Owner marker shown on sessions the viewer does not own. */
+  owner?: string;
   url: string;
   active: boolean;
   disabled: boolean;
@@ -46,25 +50,31 @@ export function SessionNavRow({
   loading?: boolean;
   /** Merged pull request for this session's branch — shown only when the row is otherwise idle. */
   merged?: boolean;
-  status?: 'running' | 'attention';
+  status?: SessionRowStatus;
   preview?: SessionPreviewDetails;
   pinned?: boolean;
   onSelect: () => void;
   onPinChange: (pinned: boolean) => void;
-  onDelete: () => void;
+  /** Omit on sessions the viewer does not own: the server only lets owners delete. */
+  onDelete?: () => void;
 }) {
   const anchor = useRef<HTMLLIElement>(null);
   const button = (
     <button
       type="button"
       aria-current={active ? 'page' : undefined}
-      aria-label={name}
+      aria-label={owner ? `${name}, started by ${owner}` : name}
       disabled={disabled || loading}
       onClick={onSelect}
       title={preview ? undefined : title}
     >
       <GitBranch />
       <MainSidebar.NavLabel className="flex-initial">{name}</MainSidebar.NavLabel>
+      {owner ? (
+        <Txt as="span" variant="ui-xs" className="text-icon3 shrink-0 truncate">
+          {owner}
+        </Txt>
+      ) : null}
       {pinned && !loading ? (
         <Pin aria-label={`${name} pinned`} className="text-icon3/70 size-2 shrink-0 rotate-45" />
       ) : null}
@@ -114,7 +124,14 @@ const trailingSlot = 'size-form-sm shrink-0 place-items-center *:col-start-1 *:r
 const revealedSlot =
   'hidden group-focus-within/session:grid group-hover/session:grid group-has-[[data-popup-open]]/session:grid';
 
-type IndicatorKind = 'loading' | 'running' | 'attention' | 'merged';
+/**
+ * Session lifecycle states surfaced by the row's status dot. The color scheme
+ * mirrors `SessionFavicon` so the sidebar and the tab-favicon read the same
+ * way at a glance.
+ */
+export type SessionRowStatus = 'initializing' | 'working' | 'ready';
+
+type IndicatorKind = 'loading' | SessionRowStatus | 'merged';
 
 function indicatorKind({
   loading,
@@ -122,7 +139,7 @@ function indicatorKind({
   merged,
 }: {
   loading?: boolean;
-  status?: 'running' | 'attention';
+  status?: SessionRowStatus;
   merged?: boolean;
 }): IndicatorKind | undefined {
   if (loading) return 'loading';
@@ -143,7 +160,7 @@ function SessionActionsMenu({
   disabled: boolean;
   pinned: boolean;
   onPinChange: (pinned: boolean) => void;
-  onDelete: () => void;
+  onDelete?: () => void;
 }) {
   return (
     <DropdownMenu>
@@ -166,10 +183,12 @@ function SessionActionsMenu({
           {pinned ? <PinOff /> : <Pin />}
           {pinned ? 'Unpin' : 'Pin session'}
         </DropdownMenu.Item>
-        <DropdownMenu.Item variant="destructive" onClick={onDelete}>
-          <Trash2 />
-          Delete
-        </DropdownMenu.Item>
+        {onDelete ? (
+          <DropdownMenu.Item variant="destructive" onClick={onDelete}>
+            <Trash2 />
+            Delete
+          </DropdownMenu.Item>
+        ) : null}
       </DropdownMenu.Content>
     </DropdownMenu>
   );
@@ -182,23 +201,33 @@ const yieldsToActions =
 function SessionRowIndicator({ kind, name }: { kind: IndicatorKind; name: string }) {
   if (kind === 'loading') return <Spinner size="sm" aria-label={`Opening ${name}`} className="text-icon3" />;
 
-  if (kind === 'running')
+  if (kind === 'initializing')
+    return (
+      <span
+        role="status"
+        aria-label={`Initializing ${name}`}
+        title="Initializing"
+        className={cn('bg-warning1 size-2 animate-pulse rounded-full', yieldsToActions)}
+      />
+    );
+
+  if (kind === 'working')
     return (
       <span
         role="status"
         aria-label={`Agent working in ${name}`}
-        title="Agent working"
-        className={cn('bg-accent1 size-2 animate-pulse rounded-full', yieldsToActions)}
+        title="Working"
+        className={cn('bg-positive1 size-2 animate-pulse rounded-full', yieldsToActions)}
       />
     );
 
-  if (kind === 'attention')
+  if (kind === 'ready')
     return (
       <span
         role="status"
-        aria-label={`Agent finished in ${name}`}
-        title="Agent finished — open to dismiss"
-        className={cn('bg-accent1 size-2 rounded-full', yieldsToActions)}
+        aria-label={`${name} ready — open to dismiss`}
+        title="Ready"
+        className={cn('bg-accent3 size-2 rounded-full', yieldsToActions)}
       />
     );
 

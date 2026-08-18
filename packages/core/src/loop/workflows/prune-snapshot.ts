@@ -44,6 +44,15 @@ function isPlainObject(value: unknown): value is Record<string, any> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function mapForeachOutput(
+  foreachOutput: unknown,
+  mapEntry: (entry: unknown) => unknown,
+): Record<string, unknown> | unknown[] | undefined {
+  if (Array.isArray(foreachOutput)) return foreachOutput.map(mapEntry);
+  if (!isPlainObject(foreachOutput)) return undefined;
+  return Object.fromEntries(Object.entries(foreachOutput).map(([index, entry]) => [index, mapEntry(entry)]));
+}
+
 /**
  * Strips the heavy agent-iteration fields from a step payload/output without
  * mutating the original object:
@@ -130,11 +139,33 @@ function stripTerminalOutputFields<T>(value: T): T {
   return pruned as T;
 }
 
+/**
+ * Drops `stepResult.request`: the raw provider request the engine echoes back
+ * into the iteration state, carrying the full serialized prompt and the entire
+ * tool JSON schema on BOTH sides of every step result, rewritten at every step
+ * boundary. Nothing reads it back (there are zero `stepResult.request` reads
+ * in the codebase) and resume rebuilds the next request from
+ * `messageListState`, never from this echo. The sibling `metadata.request` is
+ * already deleted unconditionally for exactly this reason; `stepResult` itself
+ * stays because core documents it as a preserved routing field, but `request`
+ * is the one member of it that carries no routing. Measured over 300 real
+ * production snapshots it was 86.7 MB of 360.7 MB persisted, 24% of
+ * everything written.
+ */
+function stripStepResultRequest<T>(value: T): T {
+  if (!isPlainObject(value) || !isPlainObject(value.stepResult)) return value;
+  if (!('request' in value.stepResult)) return value;
+  const { request: _request, ...stepResult } = value.stepResult;
+  return { ...value, stepResult } as T;
+}
+
 /** Applies the pruning rules to a single serialized step result. */
 function pruneStepResult(result: Record<string, any>): Record<string, any> {
   if (!isPlainObject(result) || typeof result.status !== 'string') return result;
 
   const pruned: Record<string, any> = { ...result };
+  pruned.payload = stripStepResultRequest(pruned.payload);
+  if ('output' in pruned) pruned.output = stripStepResultRequest(pruned.output);
   pruned.payload = stripHeavyIterationFields(pruned.payload);
   if ('prevOutput' in pruned) pruned.prevOutput = stripHeavyIterationFields(pruned.prevOutput);
 
@@ -160,15 +191,16 @@ function pruneStepResult(result: Record<string, any>): Record<string, any> {
   // iterations stripped, still-suspended ones preserved).
   if (isPlainObject(pruned.suspendPayload)) {
     const meta = pruned.suspendPayload.__workflow_meta;
-    if (isPlainObject(meta) && isPlainObject(meta.foreachOutput)) {
-      const foreachOutput: Record<string, any> = {};
-      for (const [index, entry] of Object.entries(meta.foreachOutput)) {
-        foreachOutput[index] = pruneStepResult(entry as Record<string, any>);
+    if (isPlainObject(meta)) {
+      const foreachOutput = mapForeachOutput(meta.foreachOutput, entry =>
+        pruneStepResult(entry as Record<string, any>),
+      );
+      if (foreachOutput) {
+        pruned.suspendPayload = {
+          ...pruned.suspendPayload,
+          __workflow_meta: { ...meta, foreachOutput },
+        };
       }
-      pruned.suspendPayload = {
-        ...pruned.suspendPayload,
-        __workflow_meta: { ...meta, foreachOutput },
-      };
     }
   }
 
@@ -183,15 +215,13 @@ function stripStreamState(suspendPayload: unknown): unknown {
   const pruned = { ...suspendPayload };
   delete pruned.__streamState;
   const meta = pruned.__workflow_meta;
-  if (isPlainObject(meta) && isPlainObject(meta.foreachOutput)) {
-    const foreachOutput: Record<string, any> = {};
-    for (const [index, entry] of Object.entries(meta.foreachOutput)) {
-      foreachOutput[index] =
-        isPlainObject(entry) && 'suspendPayload' in entry
-          ? { ...entry, suspendPayload: stripStreamState(entry.suspendPayload) }
-          : entry;
-    }
-    pruned.__workflow_meta = { ...meta, foreachOutput };
+  if (isPlainObject(meta)) {
+    const foreachOutput = mapForeachOutput(meta.foreachOutput, entry =>
+      isPlainObject(entry) && 'suspendPayload' in entry
+        ? { ...entry, suspendPayload: stripStreamState(entry.suspendPayload) }
+        : entry,
+    );
+    if (foreachOutput) pruned.__workflow_meta = { ...meta, foreachOutput };
   }
   return pruned;
 }

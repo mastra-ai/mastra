@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Run deterministic docs-audit checks and capture raw output.
 #
-# Runs docs validation, repo-wide remark/Vale checks, target-scoped
-# remark/Vale checks, and a file-scoped Prettier check for audited docs.
+# Runs docs validation, repo-wide Remark/Vale checks, target-scoped
+# Remark/Vale checks, and a file-scoped oxfmt-mdx check for audited docs.
 # Outputs are written to $RUN_DIR/commands/.
 #
 # Run from anywhere; resolves paths relative to this script's location.
@@ -238,10 +238,10 @@ else
   vale_target_hits="$(count_target_hits "$vale_target_out")"
 fi
 
-prettier_state=pass
-run_check prettier-check "$COMMANDS_DIR/prettier-check.txt" pnpm exec prettier --check "${DOCS_REL[@]}" || {
+format_state=pass
+run_check format-check "$COMMANDS_DIR/format-check.txt" pnpm exec oxfmt-mdx --check "${DOCS_REL[@]}" || {
   overall=1
-  prettier_state=fail
+  format_state=fail
 }
 
 validate_target_state="$(validate_target_state "$validate_state")"
@@ -253,7 +253,7 @@ fi
 
 summary_out="$COMMANDS_DIR/summary.txt"
 {
-  printf 'prettier-target=%s\n' "$prettier_state"
+  printf 'format-target=%s\n' "$format_state"
   printf 'remark-target=%s\n' "$remark_target_state"
   printf 'vale-target=%s (%s hits)\n' "$vale_target_state" "$vale_target_hits"
   printf 'validate-target=%s\n' "$validate_target_state"

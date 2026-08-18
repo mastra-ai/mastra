@@ -20,6 +20,10 @@ export const server = setupServer(
   // Ambient provider catalog (read by the NewPage credential guard wherever
   // it renders); credential-specific tests override it with `server.use(...)`.
   http.get('*/web/config/providers', () => HttpResponse.json({ providers: [] })),
+  // Experimental surfaces stay hidden unless a test explicitly enables them.
+  http.get('*/web/config/features', () => HttpResponse.json({ knowledge: false })),
+  // Ambient activity poll (sidebar running dots); activity tests override it with `server.use(...)`.
+  http.get('*/api/agent-controller/:controllerId/active-runs', () => HttpResponse.json({ runs: [] })),
   http.get('*/web/factory/projects', () => HttpResponse.json({ projects: [] })),
   http.get('*/web/factory/projects/:id/source-control-connections', () => HttpResponse.json({ connections: [] })),
   http.get('*/web/factory/projects/:id/audit', () => HttpResponse.json({ events: [], actors: {} })),

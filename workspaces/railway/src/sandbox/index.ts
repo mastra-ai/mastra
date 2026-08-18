@@ -341,6 +341,9 @@ export class RailwaySandbox extends MastraSandbox {
     await this.captureCheckpoint();
   }
 
+  /** Snapshots persist real checkpoints that can seed future sandboxes. */
+  readonly supportsCheckpoints: boolean = true;
+
   /**
    * Capture the sandbox's checkpoint on demand, outside the idle-timer schedule.
    *

@@ -20,7 +20,7 @@ import { BufferingCoordinator } from '../buffering-coordinator';
 import { Extractor } from '../extractor';
 import { ModelByInputTokens } from '../model-by-input-tokens';
 import { ObservationalMemory } from '../observational-memory';
-import type { ObserveHooks } from '../types';
+import type { ContinuationHintsConfig, ObserveHooks } from '../types';
 
 // =============================================================================
 // Helpers
@@ -155,6 +155,8 @@ function createOM(
     reflectorModel?: any;
     observationExtract?: Extractor<any>[];
     reflectionExtract?: Extractor<any>[];
+    observationContinuationHints?: ContinuationHintsConfig;
+    reflectionContinuationHints?: ContinuationHintsConfig;
     activateAfterIdle?: number | string;
     hooks?: ObserveHooks;
   },
@@ -169,11 +171,13 @@ function createOM(
       messageTokens: opts?.messageTokens ?? 100,
       bufferTokens: opts?.bufferTokens ?? false,
       extract: opts?.observationExtract,
+      continuationHints: opts?.observationContinuationHints,
     },
     reflection: {
       model: opts?.reflectorModel ?? createMockReflectorModel(),
       observationTokens: opts?.observationTokens ?? 50_000,
       extract: opts?.reflectionExtract,
+      continuationHints: opts?.reflectionContinuationHints,
     },
   });
 }
@@ -1730,6 +1734,61 @@ describe('buildContextSystemMessage()', () => {
     });
 
     expect(result).toBeTruthy();
+  });
+
+  describe('continuation hints injection', () => {
+    // Observe to create the record, then overwrite thread metadata to simulate hints
+    // persisted by an earlier configuration — the injection decision must depend only
+    // on the current config, not on what some previous config stored.
+    const seedPersistedHints = async () => {
+      await storage.saveMessages({ messages: createBulkMessages(10, threadId) });
+      await om.observe({ threadId });
+      await storage.saveThread({
+        thread: {
+          id: threadId,
+          resourceId: 'ctx-resource',
+          title: 'Context thread',
+          metadata: setThreadOMMetadata(
+            {},
+            { currentTask: 'Ship the report', suggestedResponse: 'Ask about the deadline' },
+          ),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+    };
+
+    it('injects persisted hints by default', async () => {
+      await seedPersistedHints();
+
+      const result = await om.buildContextSystemMessage({ threadId });
+
+      expect(result).toContain('<current-task>\nShip the report\n</current-task>');
+      expect(result).toContain('<suggested-response>\nAsk about the deadline\n</suggested-response>');
+    });
+
+    it('does not inject persisted hints once both pipelines disable them', async () => {
+      om = createOM(storage, { observationContinuationHints: false, reflectionContinuationHints: false });
+      await seedPersistedHints();
+
+      const result = await om.buildContextSystemMessage({ threadId });
+
+      expect(result).toBeTruthy();
+      expect(result).not.toContain('<current-task>');
+      expect(result).not.toContain('<suggested-response>');
+    });
+
+    it('keeps injecting a hint while the other pipeline still produces it', async () => {
+      om = createOM(storage, { observationContinuationHints: { suggestedResponse: false } });
+      await seedPersistedHints();
+
+      const result = await om.buildContextSystemMessage({ threadId });
+
+      // Reflection still registers the suggested-response extractor, so the persisted
+      // value keeps flowing until reflection disables it too.
+      expect(result).toContain('<suggested-response>\nAsk about the deadline\n</suggested-response>');
+      expect(result).toContain('<current-task>\nShip the report\n</current-task>');
+    });
   });
 });
 

@@ -46,8 +46,7 @@ import type {
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
 import type { GithubIntegration, GithubRepositoryPermission, RepoSummary } from '../../github/integration.js';
 import { attachGithubIssueReconciler } from '../../github/issue-reconciler.js';
-import type { GithubIssueTriageInput, GithubIssueTriageResult } from '../../github/issue-triage.js';
-import { runGithubIssueTriage } from '../../github/issue-triage.js';
+import { reconcileInterval, reconciliationEnabled } from '../../github/reconciliation-config.js';
 import { buildGithubRoutes } from '../../github/routes.js';
 import { attachGithubReconciler, attachGithubRules } from '../../github/rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from '../../github/rules.js';
@@ -57,6 +56,7 @@ import {
   subscribeCurrentSessionToPullRequest,
 } from '../../github/session-subscriptions.js';
 import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
+import { parseAuthorizedBotsEnv } from '../../github/webhook.js';
 import {
   logPlatformInfo,
   logPlatformWarn,
@@ -193,16 +193,23 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   readonly #client: PlatformApiClient;
   readonly #endpointHost: string;
   readonly #slug: string | undefined;
+  /**
+   * Extra reviewer bot logins this deployment trusts for author-gated
+   * notifications, merged over the built-in defaults.
+   */
+  readonly authorizedBots: readonly string[];
   readonly #pollingEnabled: boolean;
   readonly #pollingIntervalMs: number | undefined;
-  readonly #reconcileEnabled: boolean;
+  readonly #pullRequestReconcileEnabled: boolean;
+  readonly #issueReconcileEnabled: boolean;
+  readonly #pullRequestReconcileIntervalMs: number | undefined;
+  readonly #issueReconcileIntervalMs: number | undefined;
   #storage: SourceControlStorageHandle | undefined;
   #integrationStorage: GithubSubscriptionStorage | undefined;
   /** installationId → cached repository listing (TTL-bounded). */
   readonly #installationReposCache = new Map<number, { repos: RepoSummary[]; expiresAt: number }>();
   /** `orgId:repositoryId` → cached repository access (TTL-bounded). */
   readonly #repositoryAccessCache = new Map<string, { access: RepositoryAccess; expiresAt: number }>();
-  readonly #runIssueTriage?: (input: GithubIssueTriageInput) => Promise<GithubIssueTriageResult>;
 
   readonly intake: Intake = {
     resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
@@ -450,7 +457,6 @@ export class PlatformGithubIntegration implements FactoryIntegration {
 
   constructor(
     options: {
-      runIssueTriage?: (input: GithubIssueTriageInput) => Promise<GithubIssueTriageResult>;
       /** GitHub App slug used to recognize Factory's own webhook writes. */
       slug?: string;
     } = {},
@@ -459,10 +465,23 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     this.#client = new PlatformApiClient(config);
     this.#endpointHost = new URL(config.baseUrl).host;
     this.#slug = options.slug;
+    this.authorizedBots = parseAuthorizedBotsEnv(process.env.MASTRACODE_GITHUB_AUTHORIZED_BOTS) ?? [];
     this.#pollingEnabled = process.env.MASTRA_PLATFORM_GITHUB_POLLING_ENABLED?.trim().toLowerCase() !== 'false';
     this.#pollingIntervalMs = optionalPositiveIntegerEnv('MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS');
-    this.#reconcileEnabled = process.env.MASTRA_PLATFORM_GITHUB_RECONCILE_ENABLED?.trim().toLowerCase() !== 'false';
-    this.#runIssueTriage = options.runIssueTriage;
+    const legacyReconcileEnabled = process.env.MASTRA_PLATFORM_GITHUB_RECONCILE_ENABLED;
+    this.#pullRequestReconcileEnabled = reconciliationEnabled(
+      process.env.MASTRACODE_PLATFORM_GITHUB_PR_RECONCILE_ENABLED,
+      legacyReconcileEnabled,
+    );
+    this.#issueReconcileEnabled = reconciliationEnabled(
+      process.env.MASTRACODE_PLATFORM_GITHUB_ISSUE_RECONCILE_ENABLED,
+      legacyReconcileEnabled,
+    );
+    const legacyReconcileIntervalMs = reconcileInterval(process.env.MASTRACODE_PLATFORM_GITHUB_RECONCILE_INTERVAL_MS);
+    this.#pullRequestReconcileIntervalMs =
+      reconcileInterval(process.env.MASTRACODE_PLATFORM_GITHUB_PR_RECONCILE_INTERVAL_MS) ?? legacyReconcileIntervalMs;
+    this.#issueReconcileIntervalMs =
+      reconcileInterval(process.env.MASTRACODE_PLATFORM_GITHUB_ISSUE_RECONCILE_INTERVAL_MS) ?? legacyReconcileIntervalMs;
   }
 
   /** GitHub App slug when the deployment explicitly provides it. */
@@ -513,7 +532,8 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       endpointHost: this.#endpointHost,
       pollingEnabled: this.#pollingEnabled,
       pollingIntervalMs: this.#pollingIntervalMs,
-      reconcileEnabled: this.#reconcileEnabled,
+      pullRequestReconcileEnabled: this.#pullRequestReconcileEnabled,
+      issueReconcileEnabled: this.#issueReconcileEnabled,
     });
   }
 
@@ -534,9 +554,6 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         projects: ctx.storage.projects,
         emitAudit: ctx.hooks?.emitAudit,
         ingestFactoryEvent,
-        runIssueTriage:
-          this.#runIssueTriage ??
-          (ctx.controller ? input => runGithubIssueTriage({ controller: ctx.controller!, input }) : undefined),
       }).filter(
         route =>
           route.path !== '/web/github/status' &&
@@ -696,7 +713,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   }
 
   workers(ctx: IntegrationContext): MastraWorker[] {
-    if (!this.#pollingEnabled && !this.#reconcileEnabled) return [];
+    if (!this.#pollingEnabled && !this.#pullRequestReconcileEnabled && !this.#issueReconcileEnabled) return [];
     if (!ctx.controller) {
       throw new Error('Platform GitHub event polling requires the mounted Mastra Code controller.');
     }
@@ -707,14 +724,28 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         github: this,
         storage: ctx.storage.generic as unknown as PlatformGithubEventStorage,
         ingestFactoryEvent: attachGithubRules(this, ctx),
-        reconcileFactoryState: this.#reconcileEnabled
+        reconcileFactoryState: this.#pullRequestReconcileEnabled
           ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
           : undefined,
-        reconcileIssuesFactoryState: this.#reconcileEnabled
+        reconcileIssuesFactoryState: this.#issueReconcileEnabled
           ? attachGithubIssueReconciler(this, ctx, input => this.fetchIssueState(input))
           : undefined,
         pollEventsEnabled: this.#pollingEnabled,
         intervalMs: this.#pollingIntervalMs,
+        pullRequestReconcileIntervalMs: this.#pullRequestReconcileIntervalMs,
+        issueReconcileIntervalMs: this.#issueReconcileIntervalMs,
+        // Resolved lazily: workers are constructed before versionControl
+        // storage is initialized, and the worker only reads these slices once
+        // it is running.
+        sourceControl: {
+          projectRepositories: {
+            listConfiguredExternalKeys: () => this.storage.projectRepositories.listConfiguredExternalKeys(),
+            listByExternalRepository: args => this.storage.projectRepositories.listByExternalRepository(args),
+          },
+          repositories: {
+            findByExternalId: args => this.storage.repositories.findByExternalId(args),
+          },
+        },
       }),
     ];
   }
@@ -853,7 +884,18 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         enabled: this.#pollingEnabled,
         ...(this.#pollingIntervalMs === undefined ? {} : { intervalMs: this.#pollingIntervalMs }),
       },
-      reconcile: { enabled: this.#reconcileEnabled },
+      reconcile: {
+        pullRequests: {
+          enabled: this.#pullRequestReconcileEnabled,
+          ...(this.#pullRequestReconcileIntervalMs === undefined
+            ? {}
+            : { intervalMs: this.#pullRequestReconcileIntervalMs }),
+        },
+        issues: {
+          enabled: this.#issueReconcileEnabled,
+          ...(this.#issueReconcileIntervalMs === undefined ? {} : { intervalMs: this.#issueReconcileIntervalMs }),
+        },
+      },
     };
   }
 

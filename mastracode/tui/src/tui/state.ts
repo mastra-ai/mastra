@@ -6,6 +6,7 @@
  */
 import { Container, TUI, ProcessTerminal } from '@earendil-works/pi-tui';
 import type { CombinedAutocompleteProvider, Component, Terminal, Text } from '@earendil-works/pi-tui';
+import type { KnowledgeInspector } from '@mastra/code-sdk';
 import type { MastraCodeAnalytics } from '@mastra/code-sdk/analytics';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import type { HookManager } from '@mastra/code-sdk/hooks/index';
@@ -148,6 +149,9 @@ export interface MastraTUIOptions {
 
   /** Process-wide memory diagnostics handle for /profile. */
   processMemoryDiagnostics?: ProcessMemoryDiagnostics;
+
+  /** Session-scoped, read-only Subconscious knowledge inspection capability. */
+  knowledgeInspector?: KnowledgeInspector;
 
   /** Optional terminal injection for in-process tests. Defaults to ProcessTerminal. */
   terminal?: Terminal;
