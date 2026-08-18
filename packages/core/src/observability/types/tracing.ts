@@ -610,7 +610,7 @@ export interface WorkspaceActionAttributes extends AIBaseAttributes {
   /** Human-readable workspace name */
   workspaceName?: string;
   /** Action category */
-  category: 'filesystem' | 'sandbox' | 'search' | 'skill' | 'mount';
+  category: 'filesystem' | 'sandbox' | 'search' | 'skill' | 'mount' | 'computer';
   /** Sandbox provider name (e.g. 'e2b', 'docker', 'local') */
   sandboxProvider?: string;
   /** Filesystem provider name (e.g. 'local', 'agentfs', 's3') */
