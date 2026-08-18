@@ -37,7 +37,7 @@ function DraftChatModelsProvider({ children }: ChatModelsProviderProps) {
       : undefined;
   const value: ChatModelsApi = {
     activeModelId: draftModelId ?? packModelId ?? factoryProjectQuery.data?.defaultModelId ?? undefined,
-    isLoading: factoryProjectQuery.isPending,
+    isLoading: factoryProjectQuery.isPending || modelPacksQuery.isPending,
     error: factoryProjectQuery.error ?? undefined,
     setModel: modelId => {
       setDraftModelId(modelId);

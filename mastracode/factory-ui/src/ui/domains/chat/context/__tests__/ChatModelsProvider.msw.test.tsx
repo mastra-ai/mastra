@@ -33,6 +33,11 @@ function ActiveModelProbe() {
   return <div>{activeModelId}</div>;
 }
 
+function LoadingProbe() {
+  const { isLoading } = useChatModels();
+  return <div>{isLoading ? 'loading' : 'ready'}</div>;
+}
+
 describe('ChatModelsProvider', () => {
   it('uses the personal default pack for a new interactive chat', async () => {
     server.use(
@@ -81,6 +86,45 @@ describe('ChatModelsProvider', () => {
     );
 
     expect(await screen.findByText('anthropic/claude-opus-4-1')).toBeVisible();
+  });
+
+  it('keeps a new chat loading until the personal default pack resolves', async () => {
+    let resolvePacks = () => {};
+    const packsPending = new Promise<void>(resolve => {
+      resolvePacks = resolve;
+    });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1`, () =>
+        HttpResponse.json({ project: { id: 'factory-1', defaultModelId: 'openrouter/fable-5' } }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/config/model-packs`, async () => {
+        await packsPending;
+        return HttpResponse.json({ packs: [], activePackId: null, sessionPackId: null });
+      }),
+    );
+
+    renderWithProviders(
+      <ChatSessionContext.Provider value={draftSession}>
+        <ChatModesContext.Provider
+          value={{
+            modes: [],
+            activeMode: undefined,
+            activeModeId: 'build',
+            isLoading: false,
+            error: undefined,
+            setMode: async () => {},
+          }}
+        >
+          <ChatModelsProvider>
+            <LoadingProbe />
+          </ChatModelsProvider>
+        </ChatModesContext.Provider>
+      </ChatSessionContext.Provider>,
+    );
+
+    expect(await screen.findByText('loading')).toBeVisible();
+    resolvePacks();
+    expect(await screen.findByText('ready')).toBeVisible();
   });
 
   it('falls back to the Factory model when personal pack loading fails', async () => {
