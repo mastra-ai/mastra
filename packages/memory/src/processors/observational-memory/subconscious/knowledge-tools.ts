@@ -142,7 +142,10 @@ function mergeHybridResults(
     .slice(0, limit);
 }
 
-export function createKnowledgeTools(memory: KnowledgeToolsMemory): Record<string, ToolAction<any, any, any>> {
+export function createKnowledgeTools(
+  memory: KnowledgeToolsMemory,
+  fixedScope?: KnowledgeScope,
+): Record<string, ToolAction<any, any, any>> {
   const knowledgeSearch = createTool({
     id: 'knowledge_search',
     description:
@@ -158,7 +161,7 @@ export function createKnowledgeTools(memory: KnowledgeToolsMemory): Record<strin
     } satisfies JSONSchema7,
     execute: async (input, context) => {
       const { query, limit: requestedLimit } = input as { query: string; limit?: number };
-      const scope = resolveScope(context as KnowledgeToolContext);
+      const scope = fixedScope ?? resolveScope(context as KnowledgeToolContext);
       const limit = normalizeLimit(requestedLimit);
       const store = await getKnowledgeStore(memory);
       const semanticCandidates = await memory
@@ -205,7 +208,7 @@ export function createKnowledgeTools(memory: KnowledgeToolsMemory): Record<strin
         limit?: number;
       };
       if (!id && !name) throw new Error('knowledge_read requires id or name.');
-      const scope = resolveScope(context as KnowledgeToolContext);
+      const scope = fixedScope ?? resolveScope(context as KnowledgeToolContext);
       const store = await getKnowledgeStore(memory);
       const node = id ? await store.getNode(id) : await store.resolveNode({ name: name!, scope });
       if (!node || node.mergedInto || !isKnowledgeScopeVisible(node.scope, scope)) return { found: false };
@@ -261,7 +264,7 @@ export function createKnowledgeTools(memory: KnowledgeToolsMemory): Record<strin
         cursor?: string;
         limit?: number;
       };
-      const scope = resolveScope(context as KnowledgeToolContext);
+      const scope = fixedScope ?? resolveScope(context as KnowledgeToolContext);
       const limit = normalizeLimit(requestedLimit);
       const store = await getKnowledgeStore(memory);
       if (nodeReference) {
