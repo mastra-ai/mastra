@@ -5,7 +5,9 @@
     "moonshotai/Kimi-K2.7-Code",
     "moonshotai/Kimi-K3",
     "thinkingmachines/inkling",
-    "thinkingmachines/inkling-small"
+    "thinkingmachines/inkling-small",
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.2-Fast"
   ],
   "temperature": [
     "MiniMaxAI/MiniMax-M2.5",

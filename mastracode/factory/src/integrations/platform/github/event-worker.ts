@@ -9,9 +9,10 @@ import type { WorkerDeps } from '@mastra/core/worker';
 import type { IntegrationStorageHandle } from '../../../storage/domains/integrations/base.js';
 import type { GithubRepositoryPermission } from '../../github/integration.js';
 import type { GithubIssueReconciler } from '../../github/issue-reconciler.js';
+import type { GithubReconcileRepositorySource } from '../../github/reconcile-worker.js';
 import type { GithubPullRequestReconciler, ReconcileRepository } from '../../github/rules.js';
 import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from '../../github/subscriptions.js';
-import { dispatchGithubWebhook } from '../../github/webhook.js';
+import { dispatchGithubWebhook, resolveAuthorizedBots } from '../../github/webhook.js';
 import type {
   GithubWebhookDispatchIntegration,
   GithubWebhookNotification,
@@ -40,7 +41,6 @@ const AUTHOR_GATED_KINDS = new Set([
   'pull-request-review',
   'pull-request-review-comment',
 ]);
-const AUTHORIZED_BOTS = new Set(['coderabbitai[bot]', 'devin-ai-integration[bot]']);
 const AUTHORIZED_PERMISSIONS = new Set<GithubRepositoryPermission>(['admin', 'maintain', 'write']);
 const PERMISSION_CHECK_TIMEOUT_MS = 5_000;
 
@@ -72,6 +72,14 @@ export interface PlatformGithubEventWorkerConfig {
   controller: MountedMastraCode['controller'];
   github: PlatformGithubEventDispatchIntegration;
   storage: PlatformGithubEventStorage;
+  /**
+   * Source-control storage used to resolve the set of repositories the worker
+   * should poll. The worker restricts itself to `(installation, repository)`
+   * pairs linked to a factory project — the same set the reconciler uses —
+   * so polling scales with Factory usage, not with the size of the underlying
+   * GitHub org.
+   */
+  sourceControl: GithubReconcileRepositorySource;
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
   reconcileFactoryState?: GithubPullRequestReconciler;
   reconcileIssuesFactoryState?: GithubIssueReconciler;
@@ -102,6 +110,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
   readonly #intervalMs: number;
   readonly #now: () => number;
   readonly #dispatch: typeof dispatchGithubWebhook;
+  readonly #sourceControl: GithubReconcileRepositorySource;
   readonly #leaseOwner = randomUUID();
 
   #running = false;
@@ -145,6 +154,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
     );
     this.#now = config.now ?? Date.now;
     this.#dispatch = config.dispatch ?? dispatchGithubWebhook;
+    this.#sourceControl = config.sourceControl;
   }
 
   async init(deps: WorkerDeps): Promise<void> {
@@ -355,27 +365,42 @@ export class PlatformGithubEventWorker extends MastraWorker {
     }
   }
 
+  /**
+   * Configured `(installation, repository)` pairs — the same set the
+   * reconciler sweeps — resolved to the numeric ids and slug the poll
+   * addresses GitHub with. Repositories not linked to any factory project
+   * cannot produce work for Factory, so polling and reconciling them is
+   * wasted `/events` bandwidth and platform load.
+   */
   async #discoverRepositories(): Promise<Repository[]> {
-    const result = await this.#client.request<{
-      installations: Array<{
-        installationId: number;
-        usable: boolean;
-        suspendedAt: string | null;
-      }>;
-    }>('GET', `${API_PREFIX}/installations`);
+    const keys = await this.#sourceControl.projectRepositories.listConfiguredExternalKeys();
     const repositories = new Map<number, Repository>();
-
-    for (const installation of result.installations) {
-      if (!installation.usable || installation.suspendedAt) continue;
-      const page = await this.#client.request<{ repositories: Array<{ id: number; fullName?: string }> }>(
-        'GET',
-        `${API_PREFIX}/installations/${installation.installationId}/repositories`,
-      );
-      for (const repository of page.repositories) {
-        repositories.set(repository.id, { ...repository, installationId: installation.installationId });
+    for (const key of keys) {
+      const installationId = Number(key.installationExternalId);
+      const repositoryId = Number(key.repositoryExternalId);
+      if (
+        !Number.isSafeInteger(installationId) ||
+        installationId <= 0 ||
+        !Number.isSafeInteger(repositoryId) ||
+        repositoryId <= 0
+      ) {
+        continue;
       }
+      if (repositories.has(repositoryId)) continue;
+      // A configured key exists per project link, so `listByExternalRepository`
+      // always yields at least one row; the first row's orgId is enough to
+      // look up the repository row for its slug.
+      const projects = await this.#sourceControl.projectRepositories.listByExternalRepository(key);
+      const orgId = projects[0]?.orgId;
+      const repository = orgId
+        ? await this.#sourceControl.repositories.findByExternalId({ orgId, externalId: key.repositoryExternalId })
+        : null;
+      repositories.set(repositoryId, {
+        id: repositoryId,
+        installationId,
+        fullName: repository?.slug,
+      });
     }
-
     return [...repositories.values()];
   }
 
@@ -425,6 +450,14 @@ export class PlatformGithubEventWorker extends MastraWorker {
             retirePullRequestSubscription(id, status, this.#github.integrationStorage),
           github: this.#github,
           isAuthorizedSender: notification => this.#isAuthorizedSender(notification),
+          onSenderRejected: notification => {
+            this.deps?.logger.debug('Platform GitHub event dropped: sender not authorized', {
+              deliveryId: event.deliveryId,
+              repository: notification.metadata.repository,
+              sender: notification.metadata.sender,
+              kind: notification.kind,
+            });
+          },
           onTargetError: (subscription, error) => {
             this.deps?.logger.error('Platform GitHub event delivery failed for a subscription', {
               deliveryId: event.deliveryId,
@@ -456,7 +489,15 @@ export class PlatformGithubEventWorker extends MastraWorker {
     const sender = notification.metadata.sender;
     const repository = notification.metadata.repository;
     if (!sender || !repository) return false;
-    if (AUTHORIZED_BOTS.has(sender)) return true;
+    const normalizedSender = sender.toLowerCase();
+    const authorizedBots = resolveAuthorizedBots(this.#github.authorizedBots);
+    if (authorizedBots.has(normalizedSender)) return true;
+    // Any other bot is gated purely by the allowlist: a GitHub App never holds a
+    // collaborator permission under its sender login, so falling through to the
+    // permission lookup would only fail closed after a wasted API call.
+    if (notification.metadata.senderType?.toLowerCase() === 'bot' || normalizedSender.endsWith('[bot]')) {
+      return false;
+    }
 
     const abortController = new AbortController();
     const timeout = setTimeout(() => abortController.abort(), PERMISSION_CHECK_TIMEOUT_MS);

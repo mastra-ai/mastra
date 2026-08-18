@@ -128,6 +128,22 @@ const agent = new Agent({
 export const eventedWriter = createEventedAgent({ agent })
 ```
 
+### Stored agents created through the API
+
+Agents created with [`createStoredAgent()`](/reference/client-js/agents#createstoredagent) opt in with a `durable` field on the agent config. The server wraps the agent with `createDurableAgent()` when it hydrates it, so no code deployment is needed:
+
+```typescript
+await mastraClient.createStoredAgent({
+  id: 'helper',
+  name: 'Helper',
+  instructions: 'You are a helpful assistant.',
+  model: { provider: 'openai', name: '__AI_SDK_OPENAI_MODEL_BASE__' },
+  durable: true,
+})
+```
+
+`durable` also accepts `{ maxSteps, cleanupTimeoutMs }`. Cache and pubsub are inherited from the server's `Mastra` instance, so configure distributed backends there if you need durability across replicas. Automatic recovery is still configured in code through `recovery.durableAgents`.
+
 ### Inngest-powered with `createInngestAgent()`
 
 Run the workflow on the [Inngest](https://www.inngest.com/docs) platform. Each tool call becomes a memoized step that Inngest can retry independently, and you get a dashboard for monitoring runs:

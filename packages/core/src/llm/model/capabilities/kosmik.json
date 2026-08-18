@@ -1,0 +1,5 @@
+{
+  "attachment": ["qwen/qwen3.8-27b"],
+  "temperature": ["qwen/qwen3.8-27b"],
+  "structuredOutput": ["qwen/qwen3.8-27b"]
+}

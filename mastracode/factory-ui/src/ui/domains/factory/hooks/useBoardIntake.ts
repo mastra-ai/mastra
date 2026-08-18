@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 
+import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useProjectIssuesQuery, useProjectPullRequestsQuery } from '../../../../hooks/useFactoryData';
-import { useIntakeConfigQuery } from '../../../../hooks/useIntakeConfig';
+import { useIntakeBindingsQuery, useIntakeConfigQuery } from '../../../../hooks/useIntakeConfig';
 import { useLinearIssuesQuery, useLinearStatusQuery } from '../../../../hooks/useLinearData';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { issueCandidate, linearCandidate, pullRequestCandidate } from '../boardCandidates';
@@ -38,8 +39,20 @@ export function useBoardIntake({
   const githubSelected = config ? (config.github.sourceIds?.includes(repository.slug) ?? false) : true;
   const linearFeature = linearStatusQuery.data?.enabled ?? false;
   const linearConnected = Boolean(linearFeature && linearStatusQuery.data?.connected);
+  // Linear sources route to one Factory project. Once any routing exists, a board
+  // only offers the Linear feed when a source points at the project being viewed —
+  // otherwise every board would list (and ingest) every selected Linear project.
+  // With no routing at all the server still serves single-Factory orgs, where the
+  // destination is unambiguous; mirror that here so the feed is never offered empty.
+  const bindingsQuery = useIntakeBindingsQuery();
+  const factoriesQuery = useFactoriesQuery();
+  const linearBindings = (bindingsQuery.data ?? []).filter(binding => binding.integrationId === 'linear');
+  const linearRouted =
+    linearBindings.length === 0
+      ? (factoriesQuery.data?.length ?? 0) <= 1
+      : linearBindings.some(binding => binding.factoryProjectId === factoryProjectId);
   const linearReady =
-    (config?.linear.enabled ?? false) && linearConnected && (config?.linear.sourceIds?.length ?? 0) > 0;
+    (config?.linear.enabled ?? false) && linearConnected && (config?.linear.sourceIds?.length ?? 0) > 0 && linearRouted;
 
   // Work intake owns issues; Review intake owns pull requests. Keeping the
   // feeds on separate routes prevents review-producing PR work from being

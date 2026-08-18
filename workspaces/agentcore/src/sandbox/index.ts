@@ -23,7 +23,7 @@ import type {
   ProviderStatus,
   SandboxInfo,
 } from '@mastra/core/workspace';
-import { MastraSandbox, ProcessHandle } from '@mastra/core/workspace';
+import { MastraSandbox, ProcessHandle, UnsupportedStdinCloseError } from '@mastra/core/workspace';
 
 const LOG_PREFIX = '[AgentCoreRuntimeSandbox]';
 const DEFAULT_COMMAND_TIMEOUT_MS = 300_000;
@@ -70,6 +70,10 @@ class CommandOutputAccumulator extends ProcessHandle {
 
   async sendStdin(): Promise<void> {
     throw new Error('AgentCore Runtime command execution does not support stdin');
+  }
+
+  async closeStdin(): Promise<void> {
+    throw new UnsupportedStdinCloseError('AgentCore Runtime command execution does not support closing stdin');
   }
 
   async wait(): Promise<CommandResult> {

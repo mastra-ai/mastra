@@ -10,7 +10,7 @@ packages:
 
 Mastra supports the [Agent Client Protocol (ACP)](https://agentclientprotocol.com/overview/introduction) for running ACP-compatible coding agents from a Mastra agent. Use `@mastra/acp` to wrap a coding agent process as a Mastra tool or as a subagent.
 
-ACP is useful for coding agents such as Claude Code, Amp, Codex, or any other executable that implements ACP over standard input and output.
+ACP is useful for coding agents such as Claude Code, Cline, OpenCode, Amp, Codex, or any other executable that implements ACP over standard input and output.
 
 ## When to use ACP
 
@@ -35,6 +35,18 @@ The flow is:
 1. The ACP connection stops the process after the prompt when `persistSession` is `false`. `AcpAgent` can keep a reusable process alive across calls by default.
 
 During execution, the ACP client also handles permission requests and file operations. File reads and writes go through Mastra's `Workspace`, so the ACP agent operates inside the workspace you provide.
+
+## Compatible agents
+
+Any executable that implements ACP over standard input and output works with `@mastra/acp`. You don't need a dedicated Mastra package for each agent. Install the agent, then pass its launch command through `command` and `args`.
+
+| Agent | `command` | `args` |
+| - | - | - |
+| Cline | `cline` | `['--acp']` |
+| OpenCode | `opencode` | `['acp']` |
+| Gemini CLI | `gemini` | `['--acp']` |
+
+Each agent documents its own ACP mode, and launch flags change between releases. Check the agent's documentation for the current command, such as [Cline ACP](https://docs.cline.bot/usage/acp) or [OpenCode ACP](https://opencode.ai/docs/acp/).
 
 ## Getting started
 
@@ -61,8 +73,8 @@ const codeAgent = new AcpAgent({
   id: 'code-agent',
   name: 'Code Agent',
   description: 'An ACP-compatible coding agent that can inspect and edit files',
-  command: 'acp-agent',
-  args: ['--stdio'],
+  command: 'opencode',
+  args: ['acp'],
   cwd: process.cwd(),
 })
 
@@ -90,8 +102,8 @@ import { Agent } from '@mastra/core/agent'
 const codeAgentTool = createACPTool({
   id: 'code-agent',
   description: 'Use an ACP-compatible coding agent to inspect and edit code',
-  command: 'acp-agent',
-  args: ['--stdio'],
+  command: 'opencode',
+  args: ['acp'],
   cwd: process.cwd(),
 })
 

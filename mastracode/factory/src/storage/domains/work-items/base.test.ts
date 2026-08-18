@@ -62,6 +62,41 @@ describe('WorkItemsStorage', () => {
     expect(reused.item.title).toBe('Updated title');
   });
 
+  it('purges replay state when a linked work item is deleted', async () => {
+    const storage = await makeStorage();
+    const scope = { orgId: 'org1', factoryProjectId: 'p1' };
+    const created = await storage.upsert({ ...scope, userId: 'u', input });
+    const commit = () =>
+      storage.commitRuleEvaluation({
+        ...scope,
+        workItemId: null,
+        ingress: { identity: 'linear:issue:ENG-1:1', triggerType: 'issue.observed' },
+        ruleSetVersion: 'v1',
+        expectedRevision: null,
+        actor: { type: 'system', id: 'rules' },
+        outcome: { status: 'accepted' },
+        decisions: [
+          {
+            type: 'upsertLinkedWorkItem',
+            sourceKey: 'github:issue:42',
+            idempotencyKey: 'decision-1',
+            board: 'work',
+            stage: 'triage',
+          } as never,
+        ],
+        causalChain: [],
+        now: new Date(),
+      });
+
+    expect((await commit()).status).toBe('committed');
+    expect((await commit()).status).toBe('replayed');
+
+    await storage.delete({ orgId: 'org1', id: created.item.id });
+
+    // Stale ingress no longer short-circuits, so nothing resurrects the deleted card.
+    expect((await commit()).status).toBe('committed');
+  });
+
   it('lists newest-first within the org/project scope and updates atomically', async () => {
     const storage = await makeStorage();
 
