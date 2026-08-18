@@ -8,7 +8,7 @@ Use this file to choose the canonical home for content before writing it.
 | --------------- | ---------------------------------- | -------------------------------------------------------------------------- |
 | `/docs`         | `docs/src/content/en/docs`         | Mastra concepts, capabilities, setup, decisions, and focused usage         |
 | `/integrations` | `docs/src/content/en/integrations` | External products, providers, frameworks, channels, and deployment targets |
-| `/reference`    | `docs/src/content/en/reference`    | API, configuration, CLI, types, and lookup material                         |
+| `/reference`    | `docs/src/content/en/reference`    | API, configuration, CLI, types, and lookup material                        |
 | `/models`       | `docs/src/content/en/models`       | Generated model and provider information; do not edit manually             |
 
 Route tooling may understand older families so redirects can be maintained. That compatibility does not make an old route family the right destination for new pages.
