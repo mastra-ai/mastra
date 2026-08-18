@@ -40,15 +40,21 @@ export type {
 } from './extractor';
 export { WorkingMemoryExtractor } from './working-memory-extractor';
 export {
+  buildSubconsciousActivitySnapshot,
   KnowledgeSemanticIndexCoordinator,
+  publishSubconsciousActivity,
+  renderSubconsciousActivity,
   StaleKnowledgeSemanticIndexError,
   Subconscious,
+  SUBCONSCIOUS_ACTIVITY_STATE_ID,
   SubconsciousCaptureExtractor,
   subconsciousCaptureSchema,
 } from './subconscious';
 export type {
   KnowledgeSemanticIndexCoordinatorConfig,
   ResolvedSubconsciousAgent,
+  SubconsciousActivitySnapshot,
+  SubconsciousActivityUpdate,
   ResolvedSubconsciousConfig,
   SubconsciousBuiltInObservationAgent,
   SubconsciousBuiltInObservationConfig,

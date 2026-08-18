@@ -242,6 +242,7 @@ export async function applyExtractorHooks(opts: {
   mainAgent?: ProcessorContext['agent'];
   memory?: Memory;
   sendSignal?: ProcessorContext['sendSignal'];
+  sendStateSignal?: ProcessorContext['sendStateSignal'];
   requestContext?: RequestContext;
 }): Promise<{ values?: Record<string, unknown>; failures?: ExtractionFailure[] }> {
   const values = normalizeExtractedValues(opts.values) ?? {};
@@ -273,6 +274,7 @@ export async function applyExtractorHooks(opts: {
         mainAgent: opts.mainAgent,
         memory: opts.memory,
         sendSignal: opts.sendSignal,
+        sendStateSignal: opts.sendStateSignal,
         requestContext: opts.requestContext,
       });
       if (hookValue === undefined) {

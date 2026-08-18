@@ -3069,6 +3069,7 @@ ${formattedMessages}
     writer?: ProcessorStreamWriter;
     agent?: ProcessorContext['agent'];
     sendSignal?: ProcessorContext['sendSignal'];
+    sendStateSignal?: ProcessorContext['sendStateSignal'];
     requestContext?: RequestContext;
     currentModel?: ObservationModelContext;
     observabilityContext?: ObservabilityContext;
@@ -3241,6 +3242,7 @@ ${formattedMessages}
             writer,
             agent: opts.agent,
             sendSignal: opts.sendSignal,
+            sendStateSignal: opts.sendStateSignal,
             requestContext,
             currentModel: opts.currentModel,
             observabilityContext,
@@ -3648,6 +3650,8 @@ ${formattedMessages}
     /** Which pipeline path initiated this cycle; defaults to 'manual'. */
     trigger?: ObserveTrigger;
     agent?: ProcessorContext['agent'];
+    sendSignal?: ProcessorContext['sendSignal'];
+    sendStateSignal?: ProcessorContext['sendStateSignal'];
     requestContext?: RequestContext;
     writer?: ProcessorStreamWriter;
     observabilityContext?: ObservabilityContext;
@@ -3700,6 +3704,8 @@ ${formattedMessages}
           messageList: opts.messageList,
           reflectionHooks,
           agent: opts.agent,
+          sendSignal: opts.sendSignal,
+          sendStateSignal: opts.sendStateSignal,
           requestContext,
           writer: opts.writer,
           observabilityContext: opts.observabilityContext,
@@ -3970,6 +3976,8 @@ ${formattedMessages}
     resourceId?: string;
     messageList: MessageList;
     agent?: ProcessorContext['agent'];
+    sendSignal?: ProcessorContext['sendSignal'];
+    sendStateSignal?: ProcessorContext['sendStateSignal'];
     observabilityContext?: ObservabilityContext;
     hooks?: ObservationTurnHooks;
   }): ObservationTurn {
@@ -3979,6 +3987,8 @@ ${formattedMessages}
       resourceId: opts.resourceId,
       messageList: opts.messageList,
       agent: opts.agent,
+      sendSignal: opts.sendSignal,
+      sendStateSignal: opts.sendStateSignal,
       observabilityContext: opts.observabilityContext,
       hooks: opts.hooks,
     });
