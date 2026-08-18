@@ -3,6 +3,7 @@ import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { NotificationPriority } from '@mastra/core/notifications';
 import { RequestContext } from '@mastra/core/request-context';
 import type { Context } from 'hono';
+import { GithubAppIdentity } from './app-identity.js';
 import type { GithubIntegration, GithubRepositoryPermission } from './integration.js';
 import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from './subscriptions.js';
 import type {
@@ -23,6 +24,9 @@ const SUPPORTED_GITHUB_WEBHOOK_EVENTS = new Set([
   'pull_request',
   'pull_request_review',
   'pull_request_review_comment',
+  // Direct pushes to the default branch drive base-checkpoint rebuilds. The
+  // rules engine and subscription dispatcher both ignore push events.
+  'push',
 ]);
 
 export interface GithubWebhookMetadata {
@@ -68,6 +72,14 @@ export type FactorySessionOwner = { userId: string; orgId: string };
  * much is common to both.
  */
 export interface GithubWebhookDispatchIntegration {
+  /** App slug, used to recognize Factory's own bot identity. */
+  readonly slug?: string;
+  /**
+   * Resolved identity of the App this integration posts as. Preferred over
+   * {@link slug}, which names the deployment's own self-hosted App and is unset
+   * on deployments that run against Platform's App.
+   */
+  readonly identity?: GithubAppIdentity;
   readonly integrationStorage: GithubSubscriptionStorage;
   /**
    * Extra bot logins this deployment authorizes to trigger author-gated
@@ -103,6 +115,8 @@ export interface GithubWebhookDispatchDependencies {
   /** Called when the sender gate drops a notification, so the drop is observable. */
   onSenderRejected?: (notification: GithubWebhookNotification) => void;
   onTargetError?: (subscription: GithubSignalSubscriptionRow, error: unknown) => void;
+  /** Called when a subscription names a thread this deployment does not hold. */
+  onTargetSkipped?: (subscription: GithubSignalSubscriptionRow) => void;
 }
 
 function normalizeHeader(value: string | undefined | null): string | null {
@@ -321,8 +335,23 @@ async function resolveSubscriptionSession(
   if (!sessionId || !resourceId || !threadId) {
     throw new Error(`GitHub subscription ${subscription.id} is missing its session binding.`);
   }
+  // Read the thread straight from storage before touching sessions. This answers
+  // two questions at once, and `queryThreadById` does it without constructing a
+  // session (so no workspace or sandbox is provisioned just to make the check).
+  //
+  // First: do we even have this thread? A pull request's events can reach a
+  // deployment that never owned the subscribed thread, and delivery must not
+  // fabricate a session for a thread that lives somewhere else.
+  //
+  // Second: which resource owns it? The subscription records the Factory project
+  // as its `resourceId`, but an unscoped session is registered under its own id,
+  // so the stored value routinely names a resource that does not own the thread.
+  // The thread row is the authoritative answer; the stored id is only a fallback.
+  const thread = await controller.queryThreadById({ threadId });
+  if (!thread) return undefined;
+  const ownerResourceId = thread.resourceId || resourceId;
   const scope = subscription.sessionScope || undefined;
-  let session = await controller.getSessionByResource(resourceId, scope);
+  let session = await controller.getSessionByResource(ownerResourceId, scope);
   if (!session) {
     const tags = {
       factoryProjectId: resourceId,
@@ -331,8 +360,9 @@ async function resolveSubscriptionSession(
     };
     // Creating the session resolves its workspace, which authorizes the caller
     // against the Factory session row — no signed-in user, so run as its owner.
-    // The controller resource is the Factory project for scoped sessions; the
-    // persisted Factory session is keyed by the subscription's session ID.
+    // The session is created under the resource that owns the thread, so the
+    // thread switch below resolves; the persisted Factory session is keyed by
+    // the subscription's session ID.
     const sessionRow = await github?.sourceControlStorage.sessions.getBySessionId(sessionId);
     if (!sessionRow) {
       throw new Error(`GitHub subscription ${subscription.id} has no Factory session ${sessionId} to run as.`);
@@ -342,7 +372,7 @@ async function resolveSubscriptionSession(
     session = await controller.createSession({
       id: sessionId,
       ownerId: sessionRow.userId,
-      resourceId,
+      resourceId: ownerResourceId,
       scope,
       tags,
       requestContext,
@@ -396,14 +426,33 @@ const AUTHOR_GATED_KINDS = new Set([
   'review-dismissed',
 ]);
 
+/**
+ * Recognizes Factory's own GitHub App identity. GitHub forbids an app from
+ * reviewing a pull request it authored, so `factory-review` falls back to
+ * posting its verdict as a comment under this login. Those comments have to
+ * clear the author gate for the review handoff to reach the authoring agent;
+ * the rules layer still decides which of them are worth acting on.
+ */
+export function isFactoryAppSender(sender: string | undefined, slug: string | undefined): boolean {
+  if (!sender || !slug) return false;
+  return sender.toLowerCase() === `${slug.toLowerCase()}[bot]`;
+}
+
 async function isAuthorizedGithubSender(
   notification: GithubWebhookNotification,
-  github: Pick<GithubWebhookDispatchIntegration, 'getRepositoryCollaboratorPermission' | 'authorizedBots'> | undefined,
+  github:
+    | Pick<
+        GithubWebhookDispatchIntegration,
+        'getRepositoryCollaboratorPermission' | 'slug' | 'identity' | 'authorizedBots'
+      >
+    | undefined,
 ): Promise<boolean> {
   if (!AUTHOR_GATED_KINDS.has(notification.kind)) return true;
   const sender = notification.metadata.sender;
   const repository = notification.metadata.repository;
   if (!sender || !repository) return false;
+  if (github?.identity?.matches(sender)) return true;
+  if (isFactoryAppSender(sender, github?.slug)) return true;
   const normalizedSender = sender.toLowerCase();
   if (notification.metadata.senderType?.toLowerCase() === 'bot' || normalizedSender.endsWith('[bot]')) {
     return resolveAuthorizedBots(github?.authorizedBots).has(normalizedSender);
@@ -437,15 +486,15 @@ async function isAuthorizedGithubSender(
 export async function dispatchGithubWebhook(
   parsed: ParsedGithubWebhook,
   dependencies: GithubWebhookDispatchDependencies,
-): Promise<{ delivered: number; failed: number; ignored: boolean }> {
+): Promise<{ delivered: number; failed: number; skipped: number; ignored: boolean }> {
   const notification = classifyGithubWebhook(parsed);
-  if (!notification) return { delivered: 0, failed: 0, ignored: true };
+  if (!notification) return { delivered: 0, failed: 0, skipped: 0, ignored: true };
   const isAuthorizedSender =
     dependencies.isAuthorizedSender ??
     ((n: GithubWebhookNotification) => isAuthorizedGithubSender(n, dependencies.github));
   if (!(await isAuthorizedSender(notification))) {
     dependencies.onSenderRejected?.(notification);
-    return { delivered: 0, failed: 0, ignored: true };
+    return { delivered: 0, failed: 0, skipped: 0, ignored: true };
   }
 
   const target = {
@@ -472,10 +521,20 @@ export async function dispatchGithubWebhook(
   const subscriptions = await listSubscriptions(target, { includeTerminal: notification.action === 'reopened' });
   let delivered = 0;
   let failed = 0;
+  let skipped = 0;
 
   for (const subscription of subscriptions) {
     try {
       const session = await resolveSubscriptionSession(dependencies.controller, subscription, dependencies.github);
+      // No session means this deployment does not hold the subscribed thread.
+      // That is not a delivery failure, so it must not be retried or counted as
+      // one; the subscription is left untouched because the thread may exist
+      // wherever the subscription was created.
+      if (!session) {
+        skipped += 1;
+        dependencies.onTargetSkipped?.(subscription);
+        continue;
+      }
       const result = await session.sendNotificationSignal({
         source: 'github',
         kind: notification.kind,
@@ -508,7 +567,7 @@ export async function dispatchGithubWebhook(
     }
   }
 
-  return { delivered, failed, ignored: false };
+  return { delivered, failed, skipped, ignored: false };
 }
 
 export async function handleGithubWebhook(

@@ -107,6 +107,7 @@ function projectRepositoryRow(row: Record<string, any>) {
     sandboxProvider: row.sandboxProvider ?? 'railway',
     sandboxWorkdir: row.sandboxWorkdir,
     setupCommand: row.setupCommand ?? null,
+    baseCheckpoint: row.baseCheckpoint ?? null,
     teardownCommand: row.teardownCommand ?? null,
     createdAt: now,
     updatedAt: now,
@@ -399,6 +400,7 @@ const ensureProjectSandbox = vi.fn(
     storage: SourceControlStorageInMemory['sandboxes'];
     token: string;
     onProgress?: (e: any) => void;
+    seedCheckpointName?: string;
   }) => {
     await opts.storage.setSandboxId({ id: opts.row.id, sandboxId: 'sb' });
     opts.onProgress?.({ phase: 'provisioning', message: 'Provisioning a new sandbox…' });
@@ -782,6 +784,9 @@ describe('webhook route', () => {
       sendNotificationSignal,
     };
     const controller = {
+      // Delivery confirms this deployment holds the subscribed thread and reads
+      // the resource that owns it; here that is the subscription's own resource.
+      queryThreadById: vi.fn(async ({ threadId }: { threadId: string }) => ({ id: threadId, resourceId: 'resource-1' })),
       getSessionByResource: vi.fn(async () => session),
       createSession: vi.fn(),
     } as unknown as NonNullable<Parameters<typeof buildGithubRoutes>[0]>['controller'];
@@ -1704,6 +1709,7 @@ describe('Factory session routes', () => {
       branch: 'feat/x',
       baseBranch: 'main',
       title: null,
+      visibility: 'org',
       sandboxId: null,
       sandboxWorkdir: null,
     });
@@ -1751,6 +1757,82 @@ describe('Factory session routes', () => {
 
     expect((await second.json()).session).toEqual((await first.json()).session);
     expect(tables.sessions).toHaveLength(1);
+  });
+
+  it('returns an org-visible session to a same-org non-owner', async () => {
+    seedMaterializedProject();
+    const owner = buildApp({ workosId: 'u1' });
+    const created = await postJson(owner, '/web/github/projects/p1/sessions', {
+      sessionId: '00000000-0000-4000-8000-000000000010',
+    });
+    expect(created.status).toBe(200);
+
+    const viewer = buildApp({ workosId: 'u2' });
+    const res = await viewer.request('/web/user-sessions/00000000-0000-4000-8000-000000000010');
+    expect(res.status).toBe(200);
+    expect((await res.json()).session).toMatchObject({ userId: 'u1', visibility: 'org' });
+  });
+
+  it('404s a private session for a same-org non-owner with the exact not-found body', async () => {
+    seedMaterializedProject();
+    const now = new Date();
+    tables.sessions.push({
+      id: 'row-private',
+      sessionId: '00000000-0000-4000-8000-000000000011',
+      projectRepositoryId: 'p1',
+      orgId: 'org1',
+      userId: 'u1',
+      branch: 'user/session-private',
+      title: null,
+      baseBranch: 'main',
+      visibility: 'private',
+      sandboxId: null,
+      sandboxWorkdir: null,
+      materializedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const viewer = buildApp({ workosId: 'u2' });
+    const denied = await viewer.request('/web/user-sessions/00000000-0000-4000-8000-000000000011');
+    const missing = await viewer.request('/web/user-sessions/00000000-0000-4000-8000-00000000dead');
+    expect(denied.status).toBe(404);
+    expect(missing.status).toBe(404);
+    // Byte-identical bodies so private session IDs never leak existence.
+    expect(await denied.text()).toBe(await missing.text());
+
+    const owner = buildApp({ workosId: 'u1' });
+    const allowed = await owner.request('/web/user-sessions/00000000-0000-4000-8000-000000000011');
+    expect(allowed.status).toBe(200);
+  });
+
+  it('lists org-visible sessions from other users plus the caller\'s own private ones', async () => {
+    seedMaterializedProject();
+    const now = new Date();
+    const row = (overrides: Record<string, unknown>) => ({
+      projectRepositoryId: 'p1',
+      orgId: 'org1',
+      branch: `user/session-${overrides.sessionId}`,
+      title: null,
+      baseBranch: 'main',
+      sandboxId: null,
+      sandboxWorkdir: null,
+      materializedAt: null,
+      createdAt: now,
+      updatedAt: now,
+      ...overrides,
+    });
+    tables.sessions.push(
+      row({ id: 'r1', sessionId: 's-org-other', userId: 'u1', visibility: 'org' }),
+      row({ id: 'r2', sessionId: 's-private-other', userId: 'u1', visibility: 'private' }),
+      row({ id: 'r3', sessionId: 's-private-mine', userId: 'u2', visibility: 'private' }),
+      row({ id: 'r4', sessionId: 's-legacy-null', userId: 'u1', visibility: null }),
+    );
+
+    const res = await buildApp({ workosId: 'u2' }).request('/web/github/projects/p1/sessions');
+    expect(res.status).toBe(200);
+    const listed = (await res.json()).sessions.map((s: { sessionId: string }) => s.sessionId).sort();
+    expect(listed).toEqual(['s-legacy-null', 's-org-other', 's-private-mine']);
   });
 
   it('derives a branch from a server-generated UUID when no session ID is supplied', async () => {
@@ -2016,13 +2098,14 @@ describe('Factory session routes', () => {
     await vi.waitFor(() => expect(sourceControlStorage.sandboxPoolRows).toHaveLength(1));
   });
 
-  it('does not expose another user or organization session', async () => {
+  it('does not expose another organization\'s session regardless of visibility', async () => {
     seedMaterializedProject();
     const created = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', {
       branch: 'feat/x',
     });
     const sessionId = (await created.json()).session.sessionId;
-    expect((await buildApp({ workosId: 'u2' }).request(`/web/user-sessions/${sessionId}`)).status).toBe(404);
+    const crossOrg = buildApp({ workosId: 'u2', organizationId: 'org2' });
+    expect((await crossOrg.request(`/web/user-sessions/${sessionId}`)).status).toBe(404);
   });
 
   it('rejects invalid branch names', async () => {

@@ -445,12 +445,93 @@ describe('SourceControlStorage', () => {
     await expect(github.sessions.getBySessionId(titled.sessionId)).resolves.toMatchObject({
       title: 'Fix login flow',
     });
-    await expect(github.sessions.list({ projectRepositoryId: link.id, userId: 'user-1' })).resolves.toEqual(
+    await expect(github.sessions.list({ projectRepositoryId: link.id, viewerUserId: 'user-1' })).resolves.toEqual(
       expect.arrayContaining([
         expect.objectContaining({ sessionId: titled.sessionId, title: 'Fix login flow' }),
         expect.objectContaining({ sessionId: untitled.sessionId, title: null }),
       ]),
     );
+  });
+
+  it('defaults session visibility to org and round-trips private', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const defaulted = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000011',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-000000000011',
+      baseBranch: 'main',
+    });
+    expect(defaulted.visibility).toBe('org');
+
+    const dm = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000012',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'slack/1786574059-209929',
+      baseBranch: 'main',
+      visibility: 'private',
+    });
+    expect(dm.visibility).toBe('private');
+    await expect(github.sessions.getBySessionId(dm.sessionId)).resolves.toMatchObject({
+      visibility: 'private',
+    });
+    await expect(
+      github.sessions.getForBranch({
+        projectRepositoryId: link.id,
+        userId: 'user-1',
+        branch: 'slack/1786574059-209929',
+      }),
+    ).resolves.toMatchObject({ visibility: 'private' });
+  });
+
+  it('reads NULL visibility as org for rows created before the column existed', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const session = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000013',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-000000000013',
+      baseBranch: 'main',
+      visibility: 'private',
+    });
+
+    // Simulate a legacy row from before the visibility column existed.
+    await backend.ops.updateMany('source_control_sessions', { session_id: session.sessionId }, { visibility: null });
+    await expect(github.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+      visibility: 'org',
+    });
+  });
+
+  it("lists org-visible sessions from all users plus the viewer's own private ones", async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const create = (sessionId: string, userId: string, visibility?: 'org' | 'private') =>
+      github.sessions.create({
+        sessionId,
+        projectRepositoryId: link.id,
+        orgId: 'org-1',
+        userId,
+        branch: `user/session-${sessionId}`,
+        baseBranch: 'main',
+        ...(visibility ? { visibility } : {}),
+      });
+    const orgOther = await create('00000000-0000-4000-8000-000000000021', 'user-1', 'org');
+    const privateOther = await create('00000000-0000-4000-8000-000000000022', 'user-1', 'private');
+    const privateMine = await create('00000000-0000-4000-8000-000000000023', 'user-2', 'private');
+    const legacyNull = await create('00000000-0000-4000-8000-000000000024', 'user-1');
+    // Simulate a legacy row from before the visibility column existed.
+    await backend.ops.updateMany('source_control_sessions', { session_id: legacyNull.sessionId }, { visibility: null });
+
+    const listed = await github.sessions.list({ projectRepositoryId: link.id, viewerUserId: 'user-2' });
+    const ids = listed.map(s => s.sessionId).sort();
+    expect(ids).toEqual([orgOther.sessionId, privateMine.sessionId, legacyNull.sessionId].sort());
+    expect(ids).not.toContain(privateOther.sessionId);
   });
 
   it('records first_message_at write-once via markFirstMessage', async () => {

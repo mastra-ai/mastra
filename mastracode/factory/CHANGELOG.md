@@ -1,5 +1,62 @@
 # @mastra/factory
 
+## 0.8.0-alpha.13
+
+### Minor Changes
+
+- Added org-visible Factory sessions: sessions store a visibility property derived from origin, org members can open org-visible sessions, and factory-ui shows session owners and access errors. ([#21460](https://github.com/mastra-ai/mastra/pull/21460))
+
+### Patch Changes
+
+- Prevent Factory handoff files from colliding across work items ([#21763](https://github.com/mastra-ai/mastra/pull/21763))
+
+- Fixed workspace failures vanishing from the chat transcript. A workspace that failed to clone or start only flipped an internal flag that nothing rendered, so the session simply looked stuck with no reason given. The failure now appears as an error notice in the transcript — the same message the terminal already printed — for both the `workspace_error` and the failing `workspace_status_changed` event. ([#21746](https://github.com/mastra-ai/mastra/pull/21746))
+
+- Make the board honest about runs it is waiting on, and about clicks that fail. ([#21766](https://github.com/mastra-ai/mastra/pull/21766))
+
+  Four gaps closed on the work board:
+
+  - A card click that failed while refreshing workspaces before starting a run did
+    nothing at all — no run, no error. It now surfaces the failure instead of
+    swallowing it, so an expired session reads as an expired session.
+  - A run a rule proposed could not be approved from the card. The card menu now
+    offers it.
+  - After a plan was approved, the Building run became unreachable from the card,
+    leaving the item stranded mid-loop.
+  - A card with a proposed run looked idle. It now says it is waiting on someone,
+    with the approval inline.
+
+- Stop showing "Linked card could not be filed" when nothing failed. ([#21766](https://github.com/mastra-ai/mastra/pull/21766))
+
+  A linked-card decision that already succeeded is deliberately reset to `retry`
+  when its card is rematerialized, so the card gets re-filed. The board read any
+  `retry` as "already failed at least once" and put an error on the card, so a
+  routine replay looked like a broken automation — 16 cards were showing a failure
+  nobody caused.
+
+  A card now reports an error only when the effect has actually been attempted or
+  left an error behind. A replay reads as what it is: the work it is doing.
+
+- Platform GitHub event polling is now scoped to the repositories linked to a Factory project. Previously the worker polled every repository the underlying GitHub App installation exposed, which for customers who grant broad org access meant hundreds of unnecessary requests per polling cycle. With this change, no polling happens for repositories that are not linked to a project, and repositories added or removed from a project are picked up automatically on the next polling cycle — no worker restart or additional configuration required. ([#21772](https://github.com/mastra-ai/mastra/pull/21772))
+
+- Updated dependencies [[`6db7a5d`](https://github.com/mastra-ai/mastra/commit/6db7a5dd3dd2b6f7ef75dcd804fcffef5fa83963), [`0cdc5dc`](https://github.com/mastra-ai/mastra/commit/0cdc5dc69024957815da4f51acc4119eb4f447d7)]:
+  - @mastra/core@1.60.0-alpha.12
+  - @mastra/code-sdk@1.3.0-alpha.12
+
+## 0.8.0-alpha.12
+
+### Patch Changes
+
+- Speed up the local dev watch for the design system: `pnpm dev:ui` now rebuilds `@mastra/playground-ui` on save, so design-system edits show up in the Factory UI without a manual rebuild. `pnpm dev:playground` picks up the same watch. The watch starts from a full build and then skips type declaration emit on every rebuild, which brings each save from ~9s down to ~1.5s. ([#21646](https://github.com/mastra-ai/mastra/pull/21646))
+
+  Declarations stay frozen at that starting build for the length of a dev session — run `pnpm --filter @mastra/playground-ui build` after changing a component's props. The published build is unchanged and still emits declarations.
+
+- Fixed how the Factory chat transcript reads agent controller events. It branched on an `om_activation.enabled` flag the controller never sends, and cast token usage and memory progress into hand-written shapes that had drifted from the streamed payloads. Both now read the shapes the controller actually emits, so the status line and memory rings stay correct as those payloads evolve. ([#21739](https://github.com/mastra-ai/mastra/pull/21739))
+
+- Updated dependencies [[`6223446`](https://github.com/mastra-ai/mastra/commit/6223446ddce6166e96e0ba5e00d628b615dee8ca), [`583e235`](https://github.com/mastra-ai/mastra/commit/583e23519c13af16c1746f9c49722d011216611b), [`a77f8d4`](https://github.com/mastra-ai/mastra/commit/a77f8d4740d2178a74c41e4bf678b4fcd8fa0bb2), [`40d358e`](https://github.com/mastra-ai/mastra/commit/40d358e29d55543803e64b49241122f598ffabc7), [`e80cd7e`](https://github.com/mastra-ai/mastra/commit/e80cd7e7683e7d732e1cc6784bcac1d2640d2ce3), [`20504b2`](https://github.com/mastra-ai/mastra/commit/20504b2ecebd0e077acda3d457ab57480a98ed3e)]:
+  - @mastra/core@1.60.0-alpha.11
+  - @mastra/code-sdk@1.3.0-alpha.11
+
 ## 0.8.0-alpha.11
 
 ### Patch Changes

@@ -2341,15 +2341,6 @@
       "docUrl": "https://blueclaw.network",
       "gateway": "models.dev"
     },
-    "scx": {
-      "url": "https://api.scx.ai/v1",
-      "apiKeyEnvVar": "SCX_API_KEY",
-      "apiKeyHeader": "Authorization",
-      "name": "SCX.ai",
-      "models": ["MiniMax-M2.7", "gpt-oss-120b"],
-      "docUrl": "https://platform.scx.ai/docs",
-      "gateway": "models.dev"
-    },
     "auriko": {
       "url": "https://api.auriko.ai/v1",
       "apiKeyEnvVar": "AURIKO_API_KEY",
@@ -4582,6 +4573,15 @@
         "zai-org/GLM-4.5-FP8"
       ],
       "docUrl": "https://submodel.gitbook.io",
+      "gateway": "models.dev"
+    },
+    "scx-ai": {
+      "url": "https://api.scx.ai/v1",
+      "apiKeyEnvVar": "SCX_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "SCX.ai",
+      "models": ["GLM-5.2", "MiniMax-M2.7", "Qwen3.8-Max", "gpt-oss-120b"],
+      "docUrl": "https://platform.scx.ai/docs",
       "gateway": "models.dev"
     },
     "freemodel": {
@@ -10472,7 +10472,6 @@
       "lucidquery-nexus-coder"
     ],
     "blueclaw": ["Qwen/Qwen3.6-35B-A3B-FP8", "Qwen3.6-27B"],
-    "scx": ["MiniMax-M2.7", "gpt-oss-120b"],
     "auriko": [
       "claude-opus-4-6",
       "claude-opus-4-7",
@@ -11903,6 +11902,7 @@
       "zai-org/GLM-4.5-Air",
       "zai-org/GLM-4.5-FP8"
     ],
+    "scx-ai": ["GLM-5.2", "MiniMax-M2.7", "Qwen3.8-Max", "gpt-oss-120b"],
     "freemodel": [
       "claude-fable-5",
       "claude-haiku-4-5-20251001",
