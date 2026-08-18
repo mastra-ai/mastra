@@ -216,7 +216,7 @@ describe('Subconscious LibSQL integration', () => {
     const hidden = await tools.knowledge_read!.execute?.({ name: 'Alpha Secret' }, toolContext);
     expect(hidden).toEqual({ found: false });
     const browse = await tools.knowledge_browse!.execute?.({}, toolContext);
-    expect((browse as any).records.map((record: any) => record.name)).not.toContain('Alpha Secret');
+    expect((browse as any).nodes.map((node: any) => node.name)).not.toContain('Alpha Secret');
   });
 
   it('runs remind after observation and emits one scoped remembered signal', async () => {
