@@ -936,6 +936,7 @@ export class PgDB extends MastraBase {
 
         if (snapshot) {
           snapshot.tables.add(tableName);
+          snapshot.createdTables.add(tableName);
           // generateTableSQL emits the declared columns plus a `Z` twin for
           // every timestamp column; record both so the alterTable pass below
           // and later domains don't re-probe for them.
@@ -1605,8 +1606,9 @@ export class PgDB extends MastraBase {
         }
       }
 
+      const deferTo = snapshot?.createdTables.has(table) ? snapshot : null;
       const uniqueStr = unique ? 'UNIQUE ' : '';
-      const concurrentStr = concurrent ? 'CONCURRENTLY ' : '';
+      const concurrentStr = concurrent && !deferTo ? 'CONCURRENTLY ' : '';
       const methodStr = method !== 'btree' ? `USING ${method} ` : '';
 
       const columnsStr = columns
@@ -1637,6 +1639,12 @@ export class PgDB extends MastraBase {
 
       const quotedIndexName = `"${parseSqlIdentifier(name, 'index name')}"`;
       const sql = `CREATE ${uniqueStr}INDEX ${concurrentStr}${quotedIndexName} ON ${fullTableName} ${methodStr}(${columnsStr})${withStr}${tablespaceStr}${whereStr}`;
+
+      if (deferTo) {
+        deferTo.pendingIndexes.push(sql);
+        deferTo.indexes.add(name);
+        return;
+      }
 
       await this.client.none(sql);
       snapshot?.indexes.add(name);
@@ -1674,8 +1682,13 @@ export class PgDB extends MastraBase {
     const snapshot = this.schemaSnapshot;
     if (snapshot?.indexes.has(indexName)) return;
 
+    if (snapshot) {
+      snapshot.pendingIndexes.push(sql);
+      snapshot.indexes.add(indexName);
+      return;
+    }
+
     await this.client.none(sql);
-    snapshot?.indexes.add(indexName);
   }
 
   async dropIndex(indexName: string): Promise<void> {

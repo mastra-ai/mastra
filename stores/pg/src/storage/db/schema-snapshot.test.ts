@@ -421,3 +421,131 @@ describe('init catalog snapshot', () => {
     expect(versionColumns.has('instructions')).toBe(true);
   }, 60000);
 });
+
+const CONCURRENT_INDEX = /CREATE (UNIQUE )?INDEX CONCURRENTLY/i;
+
+function shortSchema(prefix: string): string {
+  const name = `${prefix}${Date.now().toString(36).slice(-5)}${Math.random().toString(36).slice(2, 6)}`;
+  schemasToDrop.push(name);
+  return name;
+}
+
+async function droppableIndexesIn(schemaName: string): Promise<string[]> {
+  const rows = await admin(
+    `SELECT c.relname AS indexname
+       FROM pg_catalog.pg_index i
+       JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid
+       JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = $1
+        AND NOT i.indisprimary
+        AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint k WHERE k.conindid = i.indexrelid)
+      ORDER BY c.relname`,
+    [schemaName],
+  );
+  return rows.map(r => r.indexname);
+}
+
+describe('init index batching', () => {
+  it('creates every default index in one statement, without CONCURRENTLY, on a cold schema', async () => {
+    const schema = shortSchema('idxcold');
+    await admin(`CREATE SCHEMA "${schema}"`);
+    const store = new PostgresStore({ ...TEST_CONFIG, id: `idx-${schema}`, schemaName: schema });
+    storesToClose.push(store);
+
+    const statements = await captureStatements(() => store.init());
+
+    expect(count(statements, CONCURRENT_INDEX)).toBe(0);
+    expect(count(statements, CREATE_INDEX)).toBe(1);
+    expect(await indexesIn(schema)).toContain(`${schema}_mastra_threads_resourceid_createdat_idx`);
+  }, 60000);
+
+  it('produces the same indexes as the per-statement path', async () => {
+    const schema = shortSchema('idxsame');
+    await admin(`CREATE SCHEMA "${schema}"`);
+    const batched = new PostgresStore({ ...TEST_CONFIG, id: `idx-${schema}-a`, schemaName: schema });
+    storesToClose.push(batched);
+    await batched.init();
+    const batchedIndexes = await indexesIn(schema);
+
+    for (const indexName of await droppableIndexesIn(schema)) {
+      await admin(`DROP INDEX "${schema}"."${indexName}"`);
+    }
+
+    const rebuilt = new PostgresStore({ ...TEST_CONFIG, id: `idx-${schema}-b`, schemaName: schema });
+    storesToClose.push(rebuilt);
+    const statements = await captureStatements(() => rebuilt.init());
+
+    expect(count(statements, CONCURRENT_INDEX)).toBeGreaterThan(0);
+    expect(await indexesIn(schema)).toEqual(batchedIndexes);
+  }, 90000);
+
+  it('keeps CONCURRENTLY for an index added to a table that already existed', async () => {
+    const schema = shortSchema('idxexist');
+    await admin(`CREATE SCHEMA "${schema}"`);
+    const cold = new PostgresStore({ ...TEST_CONFIG, id: `idx-${schema}-a`, schemaName: schema });
+    storesToClose.push(cold);
+    await cold.init();
+
+    const dropped = `${schema}_mastra_threads_resourceid_createdat_idx`;
+    await admin(`DROP INDEX "${schema}"."${dropped}"`);
+
+    const warm = new PostgresStore({ ...TEST_CONFIG, id: `idx-${schema}-b`, schemaName: schema });
+    storesToClose.push(warm);
+    const statements = await captureStatements(() => warm.init());
+
+    expect(count(statements, CONCURRENT_INDEX)).toBe(1);
+    expect(await indexesIn(schema)).toContain(dropped);
+  }, 90000);
+
+  it('creates the remaining indexes when one index in the batch fails', async () => {
+    const schema = shortSchema('idxpart');
+    await admin(`CREATE SCHEMA "${schema}"`);
+    const store = new PostgresStore({
+      ...TEST_CONFIG,
+      id: `idx-${schema}`,
+      schemaName: schema,
+      indexes: [{ name: `${schema}_broken`, table: 'mastra_threads', columns: ['column_that_does_not_exist'] }],
+    });
+    storesToClose.push(store);
+
+    await expect(store.init()).resolves.toBeUndefined();
+
+    const indexes = await indexesIn(schema);
+    expect(indexes).not.toContain(`${schema}_broken`);
+    expect(indexes).toContain(`${schema}_mastra_threads_resourceid_createdat_idx`);
+    expect(indexes).toContain(`${schema}_mastra_messages_thread_id_createdat_idx`);
+  }, 90000);
+
+  it('creates a valid custom index on a cold schema', async () => {
+    const schema = shortSchema('idxcust');
+    await admin(`CREATE SCHEMA "${schema}"`);
+    const store = new PostgresStore({
+      ...TEST_CONFIG,
+      id: `idx-${schema}`,
+      schemaName: schema,
+      indexes: [{ name: `${schema}_custom`, table: 'mastra_threads', columns: ['resourceId'] }],
+    });
+    storesToClose.push(store);
+
+    await store.init();
+
+    expect(await indexesIn(schema)).toContain(`${schema}_custom`);
+  }, 90000);
+
+  it('creates no default indexes when skipDefaultIndexes is set', async () => {
+    const schema = shortSchema('idxskip');
+    await admin(`CREATE SCHEMA "${schema}"`);
+    const store = new PostgresStore({
+      ...TEST_CONFIG,
+      id: `idx-${schema}`,
+      schemaName: schema,
+      skipDefaultIndexes: true,
+    });
+    storesToClose.push(store);
+
+    const statements = await captureStatements(() => store.init());
+
+    expect(count(statements, CONCURRENT_INDEX)).toBe(0);
+    expect(await indexesIn(schema)).not.toContain(`${schema}_mastra_threads_resourceid_createdat_idx`);
+  }, 60000);
+});

@@ -357,6 +357,14 @@ export class PinnedClientAdapter implements DbClient {
     );
   }
 
+  async drain(): Promise<void> {
+    let seen: Promise<unknown> | undefined;
+    while (seen !== this.#tail) {
+      seen = this.#tail;
+      await seen.catch(() => undefined);
+    }
+  }
+
   none(query: string, values?: QueryValues): Promise<null> {
     return this.#enqueue(async () => {
       await this.pinnedClient.query(query, values);

@@ -18,6 +18,7 @@ import type { DbClient, PoolClient } from './client';
 import type { PgDomainClientConfig } from './db';
 import { getSchemaName } from './db';
 import { loadSchemaSnapshot } from './db/schema-snapshot';
+import type { SchemaSnapshot } from './db/schema-snapshot';
 import { AgentsPG } from './domains/agents';
 import { BackgroundTasksPG } from './domains/background-tasks';
 import { BlobsPG } from './domains/blobs';
@@ -340,17 +341,20 @@ export class PostgresStore extends MastraCompositeStore {
     // blip during boot) is caught below and resets #initPromise, keeping
     // init() retryable instead of permanently rejecting.
     let pinnedClient: PoolClient | undefined;
+    let pinned: PinnedClientAdapter | undefined;
 
     try {
       pinnedClient = await this.#pool.connect();
-      const pinned = new PinnedClientAdapter(this.#pool, pinnedClient);
+      pinned = new PinnedClientAdapter(this.#pool, pinnedClient);
       this.#db.pin(pinned);
       // Read the schema's catalog once, up front, so the domains below can
       // answer "does this table/column/index already exist?" locally instead of
       // asking the server ~350 times over this one serialized connection.
       // Cleared in the finally: the snapshot never outlives init().
-      this.#db.setSchemaSnapshot(await loadSchemaSnapshot(pinned, this.schema));
+      const snapshot = await loadSchemaSnapshot(pinned, this.schema);
+      this.#db.setSchemaSnapshot(snapshot);
       await super.init();
+      await this.#flushPendingIndexes(pinned, snapshot);
       // Only mark initialized after schema creation actually finishes so a
       // racing second init() caller can't return early and issue runtime
       // queries against tables that aren't yet created.
@@ -373,6 +377,9 @@ export class PostgresStore extends MastraCompositeStore {
         error,
       );
     } finally {
+      if (pinned) {
+        await pinned.drain();
+      }
       // Drop the snapshot unconditionally — including when loading it or
       // super.init() threw — so no code path can read a stale catalog picture
       // after init returns.
@@ -382,6 +389,25 @@ export class PostgresStore extends MastraCompositeStore {
       if (pinnedClient) {
         this.#db.unpin();
         pinnedClient.release();
+      }
+    }
+  }
+
+  async #flushPendingIndexes(client: DbClient, snapshot: SchemaSnapshot): Promise<void> {
+    const pending = snapshot.pendingIndexes.splice(0);
+    if (pending.length === 0) {
+      return;
+    }
+
+    try {
+      await client.none(pending.join(';\n'));
+    } catch {
+      for (const sql of pending) {
+        try {
+          await client.none(sql);
+        } catch (error) {
+          this.logger?.warn?.(`Failed to create index: ${sql}`, error);
+        }
       }
     }
   }

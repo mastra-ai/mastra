@@ -35,6 +35,8 @@ export interface SchemaSnapshot {
   readonly schemaName: string;
   /** Unqualified names of tables present in the schema. */
   tables: Set<string>;
+  createdTables: Set<string>;
+  pendingIndexes: string[];
   /** table name -> column names present on that table. */
   columns: Map<string, Set<string>>;
   /** table name -> column name -> Postgres type name (`jsonb`, `text`, ...). */
@@ -143,6 +145,8 @@ export async function loadSchemaSnapshot(client: DbClient, schemaName: string | 
   return {
     schemaName: schema,
     tables: new Set(tableRows.map(r => r.tablename)),
+    createdTables: new Set(),
+    pendingIndexes: [],
     columns,
     columnTypes,
     indexes,
