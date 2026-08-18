@@ -391,7 +391,7 @@ describe('Memory Handlers', () => {
       await mockMemory.createThread({ resourceId: 'test-resource' });
 
       const spy = vi.spyOn(mockMemory, 'listThreads');
-      const ctx = createTestContextWithReservedKeys({ mastra });
+      const ctx = createTestContextWithReservedKeys({ mastra, resourceId: 'test-resource' });
       ctx.requestContext.set('user', { id: 'user-1' });
 
       const result = await LIST_THREADS_ROUTE.handler({
