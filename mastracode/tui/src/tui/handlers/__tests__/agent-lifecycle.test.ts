@@ -105,4 +105,45 @@ describe('assistant render ownership at agent terminal paths', () => {
     expect(output).toContain('visible output plus pending suffix');
     expect(output).toContain('Interrupted');
   });
+
+  it('does not duplicate pre-tool output when aborting with pending post-tool output', () => {
+    const { ctx, state } = createContext();
+    state.assistantRenderRegistry.finalizeActive('assistant-1');
+
+    const postToolMessage = {
+      ...assistantMessage(),
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'pending post-tool output' }],
+      },
+    } as MastraDBMessage;
+    const { segment } = state.assistantRenderRegistry.reconcile(
+      postToolMessage.id,
+      'assistant-1:after:tool-1',
+      postToolMessage,
+      () => new AssistantMessageComponent(),
+    );
+    state.streamingComponent = segment.component;
+    state.streamingMessage = {
+      ...postToolMessage,
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'visible output' },
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'result', toolCallId: 'tool-1', toolName: 'view', args: {}, result: 'ok' },
+          },
+          { type: 'text', text: 'pending post-tool output' },
+        ],
+      },
+    } as MastraDBMessage;
+
+    handleAgentAborted(ctx);
+
+    const output = segment.component.render(80).join('\n');
+    expect(output).toContain('pending post-tool output');
+    expect(output).toContain('Interrupted');
+    expect(output).not.toContain('visible output');
+  });
 });
