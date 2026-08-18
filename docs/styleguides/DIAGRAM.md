@@ -44,7 +44,7 @@ prefixed with the class name:
 flowchart LR
   start(( start )) -- in --> step1([step1])
   step1 accent1@-- out --> stop(( end ))
-  step1 pending1@-. suspend .-> paused@{ shape: manual-input, label: "awaiting human input" }
+  step1 pending1@-. suspend .-> paused@{ shape: manual-input, label: "awaiting<br/>human input" }
 
   class paused pending
   class stop accent
@@ -60,8 +60,8 @@ the first chain it reads as the spine and hangs later edges off it. Declare a
 branch early and the spine bends around it, which is the single most common way
 these diagrams end up looking wrong.
 
-Use `flowchart LR`. Switch to `TB` only past eight nodes, where left-to-right
-runs off the page on a phone.
+Use `flowchart LR`. Switch to `TB` only when an eight-node diagram runs off the
+page on a phone. Past eight nodes, split the diagram or drop to prose.
 
 Never set `layout:` or `look:` in a diagram. The site sets ELK globally, and one
 page opting out is how a docs site stops looking like one site.

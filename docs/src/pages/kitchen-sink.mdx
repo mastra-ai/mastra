@@ -274,12 +274,11 @@ person is `manual-input`, storage is `cyl`, and a condition is a diamond.
 ```mermaid
 flowchart LR
   accTitle: Shape vocabulary
-  accDescr: A run moves from start through a step to a decision, then either to a human input wait and storage, or to end.
+  accDescr: A run moves from start through a step to a decision, then either to a human input wait or to end. A snapshot shows the storage shape.
   human@{ shape: manual-input, label: "human input" }
   store@{ shape: cyl, label: "snapshot" }
   start(( start )) --> step([step]) --> decide{approved?}
   decide pending1@-. no .-> human
-  human -.-> store
   decide accent1@-- yes --> stop(( end ))
 
   class human pending
@@ -294,8 +293,8 @@ flowchart LR
   accTitle: Outcome colors
   accDescr: A step either completes at end, or stops at bail when rejected.
   start(( start )) -- in --> step1([step1])
-  step1 accent1@-. approved .-> stop(( end ))
-  step1 danger1@-. rejected .-> bailed([bail])
+  step1 accent1@-- approved --> stop(( end ))
+  step1 danger1@-- rejected --> bailed(( bail ))
 
   class bailed danger
   class stop accent

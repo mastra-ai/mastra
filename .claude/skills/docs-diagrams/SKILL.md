@@ -81,10 +81,12 @@ it, and say which pages still use it.
 
 ## Extend the color language
 
-Three classes exist: `accent`, `pending`, `danger`. Adding a fourth means one
-entry in `docs/src/theme/Mermaid/mastra-mermaid-theme.ts`, with a light and a
-dark value, and a row in the `DIAGRAM.md` table. Never add a color by writing
-hex in a diagram; it will be wrong in one of the two modes.
+Three classes exist: `accent`, `pending`, `danger`. Adding a fourth requires
+light and dark palette values in `docs/src/theme/Mermaid/mastra-mermaid-theme.ts`,
+plus registrations through `semanticClassCSS(...)` for nodes and
+`semanticEdgeCSS(...)` for edges. Add the class to the `DIAGRAM.md` table too.
+Never add a color by writing hex in a diagram; it will be wrong in one of the
+two modes.
 
 ## Check the work
 
