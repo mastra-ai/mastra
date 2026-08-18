@@ -1,4 +1,4 @@
-import type { ThemeEntitiesResponse } from '@mastra/client-js';
+import type { ThemeEntitiesResponse, ThemeSnapshotsResponse } from '@mastra/client-js';
 
 export const entityIndexResponse: ThemeEntitiesResponse = {
   entities: [
@@ -44,3 +44,40 @@ export const oldShapeEntityIndexResponse: ThemeEntitiesResponse = {
     },
   ],
 };
+
+export const customSignalEntityResponse: ThemeEntitiesResponse = {
+  entities: [
+    {
+      entityId: 'custom-agent',
+      entityType: 'agent',
+      availableSignals: ['tool_usage', 'response_quality'],
+      signalCatalog: [
+        {
+          name: 'tool_usage',
+          label: 'Tool usage',
+          description: 'How effectively the agent uses tools.',
+          order: 0,
+          builtIn: false,
+          enabled: true,
+          status: 'ready',
+        },
+        {
+          name: 'response_quality',
+          label: 'Response quality',
+          description: 'How useful the final answer is.',
+          order: 1,
+          builtIn: false,
+          enabled: true,
+          status: 'ready',
+        },
+      ],
+      traceCount: 12,
+      readySignalCount: 2,
+      enabledSignalCount: 2,
+      status: 'ready',
+      updatedAt: '2026-08-18T16:00:00.000Z',
+    },
+  ],
+};
+
+export const emptyThemeSnapshotsResponse: ThemeSnapshotsResponse = { snapshots: [] };

@@ -1,54 +1,21 @@
 import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
-import {
-  SankeySignals,
-  SignalsErrorState,
-  SignalsLoadingSkeleton,
-  BUILT_IN_SIGNAL_CATALOG,
-  orderedSignals,
-  SignalsOverviewPage as SignalsEmptyState,
-  TraceIntelligenceProvider,
-  useEntityLearningProgress,
-} from '@mastra/playground-ui/ee/signals';
+import { TraceIntelligenceEntityDetail, TraceIntelligenceProvider } from '@mastra/playground-ui/ee/signals';
+import { useParams } from 'react-router';
 
 import { Link } from '../../lib/link';
-import { useSelectedThemeEntity } from './use-selected-theme-entity';
 import { useSignalsDateUrlState } from './use-signals-date-url-state';
 
 export function SignalsEntityDetailPage() {
+  const { entityType, entityId } = useParams();
+  const url = useSignalsDateUrlState();
+
+  if (!entityType || !entityId) return null;
+
   return (
     <TraceIntelligenceProvider cacheScope="oss-studio" LinkComponent={Link}>
-      <SignalsEntityDetailContent />
-    </TraceIntelligenceProvider>
-  );
-}
-
-function SignalsEntityDetailContent() {
-  const { entitiesQuery, entity } = useSelectedThemeEntity();
-  const url = useSignalsDateUrlState();
-  const signalCatalog = entity?.signalCatalog ?? BUILT_IN_SIGNAL_CATALOG;
-  const signalNames = entity ? orderedSignals(signalCatalog, entity.availableSignals) : [];
-  const progressQuery = useEntityLearningProgress(
-    entity?.entityId,
-    entity?.entityType ?? 'agent',
-    !entitiesQuery.isPending && !entitiesQuery.isError && signalNames.length < 2,
-  );
-
-  if (entitiesQuery.isPending) return <SignalsLoadingSkeleton />;
-  if (entitiesQuery.isError) {
-    return (
-      <SignalsErrorState message="Unable to load trace signal entities." onRetry={() => void entitiesQuery.refetch()} />
-    );
-  }
-  if (!entity) return <SignalsEmptyState LinkComponent={Link} />;
-  if (signalNames.length < 2) return <SignalsEmptyState LinkComponent={Link} progress={progressQuery.data} />;
-
-  return (
-    <TraceIntelligenceProvider cacheScope="oss-studio" LinkComponent={Link} signalCatalog={signalCatalog}>
-      <SankeySignals
-        key={`${entity.entityId}:${signalNames.join(',')}:${url.selectedDateFrom?.toISOString() ?? 'open'}:${url.selectedDateTo?.toISOString() ?? 'open'}`}
-        entityId={entity.entityId}
-        entityType="agent"
-        signalNames={signalNames}
+      <TraceIntelligenceEntityDetail
+        entityId={entityId}
+        entityType={entityType}
         dateFrom={url.selectedDateFrom}
         dateTo={url.selectedDateTo}
         dateRangePicker={

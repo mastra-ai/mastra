@@ -7,6 +7,7 @@ import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import SignalsOverviewPage from '..';
+import { intelligenceIndexLoader } from '../intelligence-index-loader';
 import { populatedThemeEntitiesResponse } from './fixtures/theme-flow';
 import { server } from '@/test/msw-server';
 
@@ -38,6 +39,19 @@ function renderIndex(initialEntry = '/intelligence') {
 }
 
 describe('Trace Intelligence index route', () => {
+  describe('when a legacy agent query parameter is present', () => {
+    it('redirects to the canonical entity path and preserves other search parameters', () => {
+      const response = intelligenceIndexLoader({
+        request: new Request('http://localhost/intelligence?agent=support-agent&datePreset=last-14d&search=support'),
+      });
+
+      expect(response).toBeInstanceOf(Response);
+      expect((response as Response).headers.get('Location')).toBe(
+        '/intelligence/entities/agent/support-agent?datePreset=last-14d&search=support',
+      );
+    });
+  });
+
   describe('when entities are available', () => {
     it('shows the index without selecting or loading entity analysis', async () => {
       server.use(
@@ -51,6 +65,22 @@ describe('Trace Intelligence index route', () => {
       expect(screen.getByRole('link', { name: 'Open entity support-agent' }).getAttribute('href')).toBe(
         '/intelligence/entities/agent/support-agent',
       );
+    });
+
+    it('preserves date range state in entity detail links', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(populatedThemeEntitiesResponse)),
+      );
+
+      renderIndex(
+        '/intelligence?datePreset=custom&dateFrom=2026-07-01T00%3A00%3A00.000Z&dateTo=2026-07-15T00%3A00%3A00.000Z',
+      );
+
+      const href = (await screen.findByRole('link', { name: 'Open entity support-agent' })).getAttribute('href');
+      expect(href).toContain('/intelligence/entities/agent/support-agent?');
+      expect(href).toContain('datePreset=custom');
+      expect(href).toContain('dateFrom=2026-07-01T00%3A00%3A00.000Z');
+      expect(href).toContain('dateTo=2026-07-15T00%3A00%3A00.000Z');
     });
 
     it('restores search, sort, and view from URL search parameters', async () => {
