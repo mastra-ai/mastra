@@ -39,6 +39,7 @@ function supportsModelInference(): boolean {
 }
 
 import { extractOpenRouterCost, extractUsageMetrics } from './usage';
+import type { OpenRouterCostResult } from './usage';
 
 type StepInputPreview = Array<{ role: string; content: string }> | Record<string, unknown> | string | undefined;
 
@@ -94,18 +95,28 @@ function getOpenRouterCostContext({ providerMetadata, stepProviderMetadata }: En
   const metadata = stepProviderMetadata ?? (providerMetadata ? [providerMetadata] : undefined);
   if (!metadata?.some(step => step?.openrouter !== undefined)) return undefined;
 
-  const costs = metadata.map(extractOpenRouterCost);
-  if (costs.some(cost => cost === undefined)) return undefined;
+  const results = metadata.map(extractOpenRouterCost);
+  if (results.some(result => result === undefined)) return undefined;
+
+  const costs = results as OpenRouterCostResult[];
+  const estimatedCost = costs.reduce((total, result) => total + result.total, 0);
+  if (!Number.isFinite(estimatedCost)) return undefined;
+
+  const sdkCostFields: string[] = [];
+  if (costs.some(result => result.usedCost)) sdkCostFields.push('openrouter.usage.cost');
+  if (costs.some(result => result.usedUpstreamCost)) {
+    sdkCostFields.push('openrouter.usage.costDetails.upstreamInferenceCost');
+  }
 
   return {
     provider: 'openrouter',
     model,
-    estimatedCost: (costs as number[]).reduce((total, cost) => total + cost, 0),
+    estimatedCost,
     costUnit: 'USD',
     costMetadata: {
       source: 'provider_reported',
       sdkProvider: 'openrouter',
-      sdkCostField: 'openrouter.usage',
+      sdkCostField: sdkCostFields.join('+'),
       scope: 'query_total',
       reportedStepCount: costs.length,
     },

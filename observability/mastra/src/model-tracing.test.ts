@@ -91,7 +91,7 @@ describe('ModelSpanTracker', () => {
   });
 
   describe('provider-reported costs', () => {
-    it('plumbs the complete OpenRouter cost into the generation span', () => {
+    it('sums a BYOK upstream cost across steps, even when the OpenRouter surcharge is zero', () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
         name: 'test-generation',
@@ -102,8 +102,12 @@ describe('ModelSpanTracker', () => {
       tracker.endGeneration({
         attributes: {},
         stepProviderMetadata: [
-          { openrouter: { usage: { cost: 0, isByok: true, costDetails: { upstreamInferenceCost: 0.00002615 } } } },
-          { openrouter: { usage: { cost: 0.000001 } } },
+          {
+            openrouter: {
+              usage: { cost: 0, isByok: true, costDetails: { upstreamInferenceCost: 0.00002615 } },
+            },
+          },
+          { openrouter: { usage: { cost: 0.000001, isByok: false } } },
         ],
       });
 
@@ -116,14 +120,14 @@ describe('ModelSpanTracker', () => {
         costMetadata: {
           source: 'provider_reported',
           sdkProvider: 'openrouter',
-          sdkCostField: 'openrouter.usage',
+          sdkCostField: 'openrouter.usage.cost+openrouter.usage.costDetails.upstreamInferenceCost',
           scope: 'query_total',
           reportedStepCount: 2,
         },
       });
     });
 
-    it('does not double-count a non-BYOK upstream cost', () => {
+    it('does not double-count the non-BYOK upstream cost breakdown', () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
         name: 'test-generation',
@@ -146,6 +150,9 @@ describe('ModelSpanTracker', () => {
 
       const [span] = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
       expect(span?.attributes?.costContext?.estimatedCost).toBe(0.000003);
+      expect(span?.attributes?.costContext?.costMetadata).toMatchObject({
+        sdkCostField: 'openrouter.usage.cost',
+      });
     });
   });
 

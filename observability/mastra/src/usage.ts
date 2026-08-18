@@ -23,7 +23,20 @@ interface GoogleMetadata {
   usageMetadata?: GoogleUsageMetadata;
 }
 
-export function extractOpenRouterCost(providerMetadata?: ProviderMetadata): number | undefined {
+export interface OpenRouterCostResult {
+  total: number;
+  usedCost: boolean;
+  usedUpstreamCost: boolean;
+}
+
+/**
+ * For non-BYOK requests, `usage.cost` is the complete OpenRouter charge and
+ * `usage.costDetails.upstreamInferenceCost` is only its upstream breakdown. For BYOK requests,
+ * the upstream cost is billed separately and must be added to OpenRouter's own `usage.cost`.
+ * Require the provider's `isByok` discriminator so older ambiguous metadata falls back to model
+ * price inference instead of either double-counting non-BYOK cost or dropping BYOK cost.
+ */
+export function extractOpenRouterCost(providerMetadata?: ProviderMetadata): OpenRouterCostResult | undefined {
   const usage = providerMetadata?.openrouter?.usage;
   if (!usage || typeof usage !== 'object' || Array.isArray(usage)) return undefined;
 
@@ -38,10 +51,23 @@ export function extractOpenRouterCost(providerMetadata?: ProviderMetadata): numb
   const isValid = (value: unknown): value is number =>
     typeof value === 'number' && Number.isFinite(value) && value >= 0;
 
-  if (cost == null && upstreamCost == null) return undefined;
+  if (typeof isByok !== 'boolean') return undefined;
   if ((cost != null && !isValid(cost)) || (upstreamCost != null && !isValid(upstreamCost))) return undefined;
 
-  return isByok === true ? (cost ?? 0) + (upstreamCost ?? 0) : (cost ?? upstreamCost ?? undefined);
+  if (!isByok) {
+    if (cost == null) return undefined;
+    return { total: cost, usedCost: true, usedUpstreamCost: false };
+  }
+
+  if (cost == null && upstreamCost == null) return undefined;
+  const total = (cost ?? 0) + (upstreamCost ?? 0);
+  if (!Number.isFinite(total)) return undefined;
+
+  return {
+    total,
+    usedCost: cost != null,
+    usedUpstreamCost: upstreamCost != null,
+  };
 }
 
 interface V3InputUsage {
