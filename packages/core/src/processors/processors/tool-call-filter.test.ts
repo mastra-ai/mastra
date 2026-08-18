@@ -2039,6 +2039,7 @@ describe('ToolCallFilter', () => {
           { type: 'text' as const, text: 'Let me look that up.' },
           {
             type: 'tool-invocation' as const,
+            providerMetadata: { mastra: { modelOutput: 'Found pricing: $99' } },
             toolInvocation: {
               state: 'result' as const,
               toolCallId: 'call-1',
@@ -2102,6 +2103,11 @@ describe('ToolCallFilter', () => {
       });
 
       await runner.runInputProcessors(messageList);
+
+      // With preserveModelOutput the LLM-input view keeps the model-facing text
+      // instead of dropping the tool result entirely, so this exercises that branch.
+      const promptContent = JSON.stringify(messageList.get.remembered.db()[0].content);
+      expect(promptContent).toContain('Found pricing: $99');
 
       const persisted = messageList.getPersisted.remembered.db()[0];
       expect(hasToolInvocation(persisted)).toBe(true);
