@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../test/msw-server';
+import type { TraceSignalManagement } from '../../trace-intelligence-context';
 import { TraceIntelligenceProvider } from '../../trace-intelligence-provider';
 import { TraceIntelligenceEntityIndex } from '../trace-intelligence-entity-index';
 import type { TraceIntelligenceEntitySort, TraceIntelligenceEntityView } from '../trace-intelligence-entity-index';
@@ -46,11 +47,11 @@ function IndexHarness({
   );
 }
 
-function renderIndex(options?: Parameters<typeof IndexHarness>[0]) {
+function renderIndex(options?: Parameters<typeof IndexHarness>[0], signalManagement?: TraceSignalManagement) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <TraceIntelligenceProvider cacheScope="entity-index-test">
+      <TraceIntelligenceProvider cacheScope="entity-index-test" signalManagement={signalManagement}>
         <IndexHarness {...options} />
       </TraceIntelligenceProvider>
     </QueryClientProvider>,
@@ -85,6 +86,36 @@ describe('TraceIntelligenceEntityIndex', () => {
       renderIndex();
 
       expect(screen.getByRole('status', { name: 'Loading Trace Intelligence entities' })).toBeTruthy();
+    });
+  });
+
+  describe('when the host supplies signal management', () => {
+    it('shows the settings action in the index header', async () => {
+      useEntityFixture();
+      const unsupported = async () => {
+        throw new Error('not used');
+      };
+      renderIndex(undefined, {
+        canManage: true,
+        list: async () => ({ definitions: [], limits: { maxDefinitionsPerOrganization: 10 } }),
+        create: unsupported,
+        update: unsupported,
+        archive: unsupported,
+        restore: unsupported,
+        setProjectEnabled: unsupported,
+      });
+
+      expect(await screen.findByRole('button', { name: 'Signal settings' })).toBeTruthy();
+    });
+  });
+
+  describe('when the host omits signal management', () => {
+    it('does not show the settings action', async () => {
+      useEntityFixture();
+      renderIndex();
+
+      await screen.findByText('support-agent');
+      expect(screen.queryByRole('button', { name: 'Signal settings' })).toBeNull();
     });
   });
 

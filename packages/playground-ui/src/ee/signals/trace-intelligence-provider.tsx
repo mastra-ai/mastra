@@ -5,6 +5,7 @@ import {
   defaultTraceIntelligenceContextValue,
   TraceIntelligenceContext,
   type TraceIntelligenceRequest,
+  type TraceSignalManagement,
 } from './trace-intelligence-context';
 import type { LinkComponent } from '@/ds/types/link-component';
 
@@ -15,6 +16,7 @@ export interface TraceIntelligenceProviderProps {
   LinkComponent?: LinkComponent;
   getTraceHref?: (traceId: string) => string;
   signalCatalog?: SignalCatalogEntry[];
+  signalManagement?: TraceSignalManagement;
 }
 
 export function TraceIntelligenceProvider({
@@ -24,9 +26,12 @@ export function TraceIntelligenceProvider({
   LinkComponent = defaultTraceIntelligenceContextValue.LinkComponent,
   getTraceHref = defaultTraceIntelligenceContextValue.getTraceHref,
   signalCatalog = defaultTraceIntelligenceContextValue.signalCatalog,
+  signalManagement,
 }: TraceIntelligenceProviderProps) {
   return (
-    <TraceIntelligenceContext.Provider value={{ cacheScope, request, LinkComponent, getTraceHref, signalCatalog }}>
+    <TraceIntelligenceContext.Provider
+      value={{ cacheScope, request, LinkComponent, getTraceHref, signalCatalog, signalManagement }}
+    >
       {children}
     </TraceIntelligenceContext.Provider>
   );

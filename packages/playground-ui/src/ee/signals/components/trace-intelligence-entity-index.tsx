@@ -3,6 +3,7 @@ import { Columns2, List, Radar } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { useThemeEntities } from '../hooks';
+import { TraceSignalSettingsButton } from '../settings/trace-signal-settings';
 import { useTraceIntelligence } from '../use-trace-intelligence';
 import { EntityIndexCompactGrid } from './entity-index-compact-grid';
 import { EntityIndexList } from './entity-index-list';
@@ -131,20 +132,9 @@ export function TraceIntelligenceEntityIndex({
   headerAction,
 }: TraceIntelligenceEntityIndexProps) {
   const entitiesQuery = useThemeEntities(entityType);
-  const { LinkComponent } = useTraceIntelligence();
+  const { LinkComponent, signalManagement } = useTraceIntelligence();
 
   if (entitiesQuery.error) return <EntityIndexError error={entitiesQuery.error} />;
-  if (!entitiesQuery.isPending && entitiesQuery.data.entities.length === 0) {
-    return (
-      <NoDataPageLayout>
-        <EmptyState
-          iconSlot={<Radar aria-hidden="true" />}
-          titleSlot="No Trace Intelligence entities yet"
-          descriptionSlot="Entities appear after Trace Intelligence begins collecting generated signal data."
-        />
-      </NoDataPageLayout>
-    );
-  }
 
   const entities = filterAndSortEntities(entitiesQuery.data?.entities ?? [], search, sort);
   const hasSearch = search.trim().length > 0;
@@ -161,6 +151,14 @@ export function TraceIntelligenceEntityIndex({
       <div role="status" aria-label="Loading Trace Intelligence entities">
         <DataListSkeleton columns={listColumns} />
       </div>
+    );
+  } else if (entitiesQuery.data.entities.length === 0 && !hasSearch) {
+    body = (
+      <EmptyState
+        iconSlot={<Radar aria-hidden="true" />}
+        titleSlot="No Trace Intelligence entities yet"
+        descriptionSlot="Entities appear after Trace Intelligence begins collecting generated signal data."
+      />
     );
   } else if (view === 'compact') {
     body = (
@@ -183,7 +181,14 @@ export function TraceIntelligenceEntityIndex({
           onSearchChange={onSearchChange}
           onSortChange={onSortChange}
           onViewChange={onViewChange}
-          headerAction={headerAction}
+          headerAction={
+            headerAction || signalManagement ? (
+              <>
+                {headerAction}
+                {signalManagement ? <TraceSignalSettingsButton /> : null}
+              </>
+            ) : undefined
+          }
         />
       </PageLayout.TopArea>
       {body}
