@@ -1,6 +1,7 @@
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import { estimateTokenCount, sliceByTokens } from 'tokenx';
 import type { MastraDBMessage } from '../../agent/message-list';
+import { parseDataUri, resolveFilePartMediaTypeAndData } from '../../agent/message-list/prompt/image-utils';
 import { TripWire } from '../../agent/trip-wire';
 import type { ChunkType } from '../../stream';
 import type { ProcessInputStepArgs, ProcessOutputStreamArgs, Processor } from '../index';
@@ -44,6 +45,56 @@ type TokenLimiterTripWireMetadata = {
   remainingBudget?: number;
   messageCount?: number;
 };
+
+/**
+ * Flat estimate for an image payload. Providers bill images at a near-flat
+ * per-image cost, so the encoded size is a poor predictor of the real cost.
+ */
+const TOKENS_PER_IMAGE = 765;
+
+/** Estimate used when a media payload's decoded size cannot be determined. */
+const TOKENS_PER_MEDIA_FALLBACK = 258;
+
+/** Rough bytes-per-token ratio for non-image media, which is usually text-like once decoded. */
+const BYTES_PER_TOKEN = 4;
+
+type MediaPayload = { data: string; mediaType?: string; mimeType?: string };
+
+/**
+ * Detects the `{ data, mediaType | mimeType }` shape that tools return for images
+ * and file attachments, so the payload is estimated rather than tokenized as text.
+ */
+function isMediaPayload(value: unknown): value is MediaPayload {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const candidate = value as Record<string, unknown>;
+  if (typeof candidate.data !== 'string') return false;
+  return typeof candidate.mediaType === 'string' || typeof candidate.mimeType === 'string';
+}
+
+/**
+ * Estimate the token cost of a media payload without tokenizing its encoded bytes.
+ * A base64 image is tens of thousands of characters but costs a small, near-flat
+ * number of tokens, so stringifying it would inflate the count by an order of magnitude.
+ */
+function estimateMediaTokens(data: unknown, mediaType?: string): number {
+  if (mediaType?.startsWith('image/')) return TOKENS_PER_IMAGE;
+
+  let byteLength: number | undefined;
+
+  if (typeof data === 'string') {
+    const { isDataUri, base64Content } = parseDataUri(data);
+    // Remote URLs and provider file ids carry no locally knowable size.
+    if (isDataUri || !/^[a-z][a-z0-9+.-]*:/i.test(data)) {
+      byteLength = Math.floor((base64Content.length * 3) / 4);
+    }
+  } else if (data instanceof Uint8Array) {
+    byteLength = data.byteLength;
+  }
+
+  if (byteLength === undefined) return TOKENS_PER_MEDIA_FALLBACK;
+
+  return Math.max(1, Math.floor(byteLength / BYTES_PER_TOKEN));
+}
 
 export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLimiterTripWireMetadata> {
   public readonly id = 'token-limiter';
@@ -195,6 +246,8 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
   private async countInputMessageTokens(message: MastraDBMessage): Promise<number> {
     let tokenString = message.role;
     let overhead = 0;
+    // Media is estimated rather than tokenized, so it is accumulated separately.
+    let mediaTokens = 0;
 
     // Handle content based on MastraMessageV2 structure
     let toolResultCount = 0; // Track tool results that will become separate messages
@@ -234,12 +287,31 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
               if (invocation.result !== undefined) {
                 if (typeof invocation.result === 'string') {
                   tokenString += invocation.result;
+                } else if (isMediaPayload(invocation.result)) {
+                  const { data, ...rest } = invocation.result;
+                  mediaTokens += estimateMediaTokens(data, invocation.result.mediaType ?? invocation.result.mimeType);
+                  tokenString += JSON.stringify(rest);
+                  overhead -= 12;
+                } else if (
+                  Array.isArray(invocation.result) &&
+                  invocation.result.length > 0 &&
+                  invocation.result.every(isMediaPayload)
+                ) {
+                  for (const entry of invocation.result as MediaPayload[]) {
+                    const { data, ...rest } = entry;
+                    mediaTokens += estimateMediaTokens(data, entry.mediaType ?? entry.mimeType);
+                    tokenString += JSON.stringify(rest);
+                  }
+                  overhead -= 12;
                 } else {
                   tokenString += JSON.stringify(invocation.result);
                   overhead -= 12;
                 }
               }
             }
+          } else if (part.type === 'file') {
+            const { data, mediaType } = resolveFilePartMediaTypeAndData(part);
+            mediaTokens += estimateMediaTokens(data, mediaType);
           } else {
             tokenString += JSON.stringify(part);
           }
@@ -257,7 +329,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     }
 
     const tokenCount = this.countTokens(tokenString);
-    const total = tokenCount + overhead;
+    const total = tokenCount + overhead + mediaTokens;
     return total;
   }
 
