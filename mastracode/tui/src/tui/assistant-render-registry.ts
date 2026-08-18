@@ -183,20 +183,41 @@ export class AssistantRenderRegistry {
     const record = this.records.get(messageId);
     if (!record) return;
     for (const segment of record.segments.values()) {
-      segment.source = undefined;
-      segment.pendingApply = false;
-      segment.afterApply = undefined;
-      segment.component.disposeRenderState();
+      this.disposeSegment(segment);
     }
     record.segments.clear();
     record.activeSegmentKey = undefined;
     this.records.delete(messageId);
   }
 
+  disposeComponents(components: ReadonlySet<unknown>): string[] {
+    const disposedMessageIds: string[] = [];
+    for (const [messageId, record] of this.records) {
+      for (const [segmentKey, segment] of record.segments) {
+        if (!components.has(segment.component)) continue;
+        this.disposeSegment(segment);
+        record.segments.delete(segmentKey);
+        if (record.activeSegmentKey === segmentKey) record.activeSegmentKey = undefined;
+      }
+      if (record.segments.size === 0) {
+        this.records.delete(messageId);
+        disposedMessageIds.push(messageId);
+      }
+    }
+    return disposedMessageIds;
+  }
+
   clear(): void {
     for (const messageId of [...this.records.keys()]) {
       this.dispose(messageId);
     }
+  }
+
+  private disposeSegment(segment: AssistantRenderSegment): void {
+    segment.source = undefined;
+    segment.pendingApply = false;
+    segment.afterApply = undefined;
+    segment.component.disposeRenderState();
   }
 
   private queueSegment(

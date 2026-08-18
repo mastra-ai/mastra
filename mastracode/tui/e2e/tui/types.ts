@@ -85,6 +85,7 @@ export type ScenarioName =
   | 'prompt-queue-interleave'
   | 'profile-command'
   | 'prune-command'
+  | 'prune-render-state'
   | 'visible-commands'
   | 'integration-commands'
   | 'lifecycle-hooks-configured'

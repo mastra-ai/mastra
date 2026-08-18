@@ -191,6 +191,32 @@ describe('AssistantRenderRegistry', () => {
     expect(contentChildren(segment.component)).toEqual([]);
   });
 
+  it('disposes only removed segments and releases their pending callbacks', () => {
+    const registry = new AssistantRenderRegistry();
+    const retained = registry.start('assistant-1', 'retained-segment', () => new AssistantMessageComponent()).segment;
+    const removed = registry.start('assistant-1', 'removed-segment', () => new AssistantMessageComponent()).segment;
+    const afterApply = vi.fn();
+    registry.queueActive('assistant-1', assistantMessage([{ type: 'text', text: 'pending removal' }]), afterApply);
+
+    expect(registry.disposeComponents(new Set([removed.component]))).toEqual([]);
+
+    expect(registry.get('assistant-1')?.segments.has('removed-segment')).toBe(false);
+    expect(registry.get('assistant-1')?.segments.get('retained-segment')?.component).toBe(retained.component);
+    expect(registry.getActive('assistant-1')).toBeUndefined();
+    expect(contentChildren(removed.component)).toEqual([]);
+    expect(registry.applyPending()).toEqual([]);
+    expect(afterApply).not.toHaveBeenCalled();
+  });
+
+  it('drops an empty record after all of its components are disposed', () => {
+    const registry = new AssistantRenderRegistry();
+    const removed = registry.start('assistant-1', 'removed-segment', () => new AssistantMessageComponent()).segment;
+
+    expect(registry.disposeComponents(new Set([removed.component]))).toEqual(['assistant-1']);
+    expect(registry.get('assistant-1')).toBeUndefined();
+    expect(registry.size).toBe(0);
+  });
+
   it('clears all render ownership and streaming references at a thread boundary', () => {
     const registry = new AssistantRenderRegistry();
     const key = getAssistantSegmentKey('assistant-1');
