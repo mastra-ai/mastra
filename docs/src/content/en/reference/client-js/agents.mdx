@@ -350,7 +350,7 @@ await subscription.processDataStream({
 
 ### `streamUntilIdle()`
 
-Stream a response and keep the stream open until every [background task](/docs/long-running-agents/background-tasks) dispatched during the run completes. The server re-enters the agentic loop on each task completion so the LLM can react to results in the same call. Requires background tasks to be [enabled on the Mastra instance](/reference/configuration#backgroundtasks) and a memory thread; otherwise the call uses a plain `stream()`.
+Stream a response and keep the stream open until every [background task](/docs/harness/background-tasks) dispatched during the run completes. The server re-enters the agentic loop on each task completion so the LLM can react to results in the same call. Requires background tasks to be [enabled on the Mastra instance](/reference/configuration#backgroundtasks) and a memory thread; otherwise the call uses a plain `stream()`.
 
 ```typescript
 const response = await agent.streamUntilIdle('Research solana for me', {
@@ -372,7 +372,7 @@ response.processDataStream({
 
 ### `resumeStreamUntilIdle()`
 
-Resume a suspended agent stream with custom data and keep the stream open until every [background task](/docs/long-running-agents/background-tasks) dispatched during the run completes. Use this to continue execution after a suspension point, such as a workflow suspend within an agent. Requires background tasks to be [enabled on the Mastra instance](/reference/configuration#backgroundtasks) and a memory thread; otherwise the call uses a plain `resumeStream()`:
+Resume a suspended agent stream with custom data and keep the stream open until every [background task](/docs/harness/background-tasks) dispatched during the run completes. Use this to continue execution after a suspension point, such as a workflow suspend within an agent. Requires background tasks to be [enabled on the Mastra instance](/reference/configuration#backgroundtasks) and a memory thread; otherwise the call uses a plain `resumeStream()`:
 
 ```typescript
 const response = await agent.resumeStreamUntilIdle(
@@ -562,7 +562,7 @@ if (output.finishReason === 'suspended') {
 
 ## Agent schedules
 
-Use the client SDK schedule methods to manage persisted agent schedules over the `/api/schedules` routes. For concepts and server-side examples, see [Schedules](/docs/long-running-agents/schedules) and the [`mastra.schedules` reference](/reference/schedules/overview).
+Use the client SDK schedule methods to manage persisted agent schedules over the `/api/schedules` routes. For concepts and server-side examples, see [Schedules](/docs/harness/schedules) and the [`mastra.schedules` reference](/reference/schedules/overview).
 
 ### `createSchedule()`
 
@@ -843,8 +843,28 @@ const agent = await mastraClient.createStoredAgent({
     version: '1.0',
     team: 'engineering',
   },
+  durable: true,
 })
 ```
+
+#### Durable stored agents
+
+Set `durable` to run the agent as a [durable agent](/docs/harness/durable-agents) once the server hydrates it. Pass `true` to accept the defaults, or an object to tune the durable loop:
+
+```typescript
+const agent = await mastraClient.createStoredAgent({
+  id: 'durable-agent',
+  name: 'Durable Agent',
+  instructions: 'You are a helpful assistant.',
+  model: {
+    provider: 'openai',
+    name: 'gpt-5.4',
+  },
+  durable: { maxSteps: 50, cleanupTimeoutMs: 0 },
+})
+```
+
+Only serializable options are accepted. The durable cache and pubsub are inherited from the server's `Mastra` instance. If it has no distributed cache or pubsub configured, durability is process-local. Automatic recovery is still configured in code through `recovery.durableAgents`.
 
 ### `getStoredAgent()`
 
@@ -904,7 +924,7 @@ console.log(result.success) // true
 
 ## Version management
 
-Both `Agent` (code-defined) and `StoredAgent` instances have methods for managing configuration versions. See [Editor versioning](/docs/editor/overview#versioning) for lifecycle and selection behavior.
+Both `Agent` (code-defined) and `StoredAgent` instances have methods for managing configuration versions. See [Editor versioning](/docs/studio/editor#versioning) for lifecycle and selection behavior.
 
 ### Getting an agent with a specific version
 

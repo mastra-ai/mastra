@@ -265,6 +265,51 @@ const fetchUserData = createTool({
 })
 ```
 
+#### Where `authInfo` comes from
+
+When an MCP server is served by a Mastra server, `extra.authInfo` is populated from the principal resolved by `server.auth`. Nothing extra is required:
+
+```typescript
+export const mastra = new Mastra({
+  mcpServers: { myServer },
+  server: {
+    auth: new MastraJwtAuth({ secret: process.env.JWT_SECRET! }),
+  },
+})
+```
+
+The authenticated user is mapped to `authInfo` as:
+
+| `authInfo` field | Value |
+| - | - |
+| `token` | The bearer token or session cookie value used for the request |
+| `clientId` | The first present of `user.id`, `user.sub`, `user.userId`, `user.email` |
+| `scopes` | `user.scopes`, `user.scope`, or `user.permissions`, normalized to an array |
+| `extra.user` | The full user object returned by the auth provider |
+
+If your own middleware performs the verification, set `server.mcpOptions.setRequestAuth` to build `authInfo` yourself. The hook replaces the default mapping and applies to both the streamable HTTP and SSE transports:
+
+```typescript
+export const mastra = new Mastra({
+  mcpServers: { myServer },
+  server: {
+    middleware: [verifyBearerToken], // stores the payload on the request context
+    mcpOptions: {
+      setRequestAuth: (req, requestContext) => {
+        const payload = requestContext.get('bearerPayload')
+        req.auth = {
+          token: payload.token,
+          clientId: payload.sub,
+          scopes: payload.scope.split(' '),
+        }
+      },
+    },
+  },
+})
+```
+
+Leaving `req.auth` unset inside the hook opts the request out of auth info entirely.
+
 ## Methods
 
 These are the functions you can call on an `MCPServer` instance to control its behavior and get information.
@@ -1140,7 +1185,7 @@ Notification methods (`resources.notifyListChanged()`, `prompts.notifyListChange
 
 ## Examples
 
-For a practical example of packaging a stdio server, see [Publish a stdio server package](/docs/mcp/overview#publish-a-stdio-server-package).
+For a practical example of packaging a stdio server, see [Publish a stdio server package](/docs/connections/mcp#publish-a-stdio-server-package).
 
 The example at the beginning of this page also demonstrates how to instantiate `MCPServer` with both tools and agents.
 
@@ -1917,7 +1962,7 @@ const server = new MCPServer({
 })
 ```
 
-Link a tool to its app resource by setting `mcp._meta.ui.resourceUri` in `createTool()` to the matching `ui://` URI. The server normalizes this metadata for older hosts when listing tools. Visit [MCP Apps](/docs/mcp/overview) for the full app bridge API and usage patterns.
+Link a tool to its app resource by setting `mcp._meta.ui.resourceUri` in `createTool()` to the matching `ui://` URI. The server normalizes this metadata for older hosts when listing tools. Visit [MCP Apps](/docs/connections/mcp) for the full app bridge API and usage patterns.
 
 ## Related information
 

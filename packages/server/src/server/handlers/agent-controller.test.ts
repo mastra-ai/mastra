@@ -584,6 +584,67 @@ describe('agent-controller routes', () => {
       } as any)) as { running?: boolean };
       expect(res.running).toBe(true);
     });
+
+    it('returns the durable task list for initial UI hydration', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-1', id: 'user-1', ownerId: controller.id });
+      const threadId = session.thread.requireId();
+      const tasks = [
+        { id: 'investigate', content: 'Investigate the bug', status: 'completed', activeForm: 'Investigating the bug' },
+        { id: 'fix', content: 'Fix the bug', status: 'in_progress', activeForm: 'Fixing the bug' },
+      ] as const;
+      const threadState = await mastra.getStorage()!.getStore('threadState');
+      await threadState!.setState({ threadId, type: 'task', value: tasks });
+
+      const res = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+        threadId,
+      } as any)) as { tasks?: unknown };
+
+      expect(res.tasks).toEqual(tasks);
+    });
+
+    it('returns tasks for the explicitly requested thread instead of the session current thread', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-1', id: 'user-1', ownerId: controller.id });
+      const currentThreadId = session.thread.requireId();
+      const requestedThread = await session.thread.create({ title: 'Requested thread' });
+      await session.thread.switch({ threadId: currentThreadId });
+      const tasks = [
+        { id: 'requested', content: 'Requested task', status: 'pending', activeForm: 'Working on requested task' },
+      ] as const;
+      const threadState = await mastra.getStorage()!.getStore('threadState');
+      await threadState!.setState({ threadId: requestedThread.id, type: 'task', value: tasks });
+
+      const res = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+        threadId: requestedThread.id,
+      } as any)) as { threadId?: string; tasks?: unknown };
+
+      expect(res).toMatchObject({ threadId: requestedThread.id, tasks });
+    });
+
+    it('returns an empty task list when the requested thread has no durable task state', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-1', id: 'user-1', ownerId: controller.id });
+      const requestedThread = await session.thread.create({ title: 'No tasks' });
+
+      const res = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+        threadId: requestedThread.id,
+      } as any)) as { tasks?: unknown };
+
+      expect(res.tasks).toEqual([]);
+    });
   });
 
   describe('LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE message shape', () => {

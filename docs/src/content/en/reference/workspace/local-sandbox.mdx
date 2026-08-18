@@ -223,10 +223,11 @@ await sandbox.start()
 // Spawn a background process
 const handle = await sandbox.processes.spawn('node server.js')
 
-// Read output, send stdin, kill
+// Read output, send stdin, signal EOF, and wait for completion
 console.log(handle.stdout)
 await handle.sendStdin('input\n')
-await handle.kill()
+await handle.closeStdin()
+await handle.wait()
 ```
 
 When native isolation is enabled (`seatbelt` or `bwrap`), spawned processes are also wrapped with the same isolation backend.
@@ -323,4 +324,4 @@ This separation prevents sandboxed processes from reading or modifying their own
 - [SandboxProcessManager reference](/reference/workspace/process-manager)
 - [WorkspaceSandbox Interface](/reference/workspace/sandbox)
 - [Workspace Class](/reference/workspace/workspace-class)
-- [Sandbox](/docs/workspace/sandbox)
+- [Sandbox](/docs/sandbox/overview)

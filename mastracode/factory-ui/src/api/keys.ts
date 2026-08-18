@@ -35,6 +35,7 @@ export const queryKeys = {
   linearIssues: (githubProjectId: string | undefined) =>
     [...queryKeys.linearIssuesAll(), githubProjectId ?? null] as const,
   intakeConfig: () => ['intake', 'config'] as const,
+  intakeBindings: () => ['intake', 'bindings'] as const,
   channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
   factoryMetrics: (githubProjectId: string | undefined, from: string, to: string) =>
@@ -104,7 +105,13 @@ export const queryKeys = {
     agentControllerId: string | undefined,
     resourceId: string | undefined,
     projectPath: string | undefined,
-  ) => [...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath), 'state'] as const,
+    threadId?: string,
+  ) =>
+    [
+      ...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath),
+      'state',
+      ...(threadId ? [threadId] : []),
+    ] as const,
   // Session state must stay out of the key: it would reset the query on navigation, and a reset reads as every run going idle.
   agentControllerActivity: (agentControllerId: string | undefined) =>
     ['agent-controller', agentControllerId ?? null, 'activity'] as const,

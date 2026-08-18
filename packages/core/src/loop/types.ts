@@ -17,6 +17,7 @@ import type { GoalConfig, StructuredOutputOptions } from '../agent/types';
 import type { ActorSignal } from '../auth/ee';
 import type { AgentBackgroundConfig, BackgroundTaskManager, BackgroundTaskManagerConfig } from '../background-tasks';
 import type { ModelRouterModelId } from '../llm/model';
+import type { MastraModelSettings } from '../llm/model/model-settings';
 import type { ModelMethodType } from '../llm/model/model.loop.types';
 import type { MastraLanguageModelV2, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { IMastraLogger } from '../logger';
@@ -184,7 +185,11 @@ export type LoopConfig<OUTPUT = undefined> = {
   onError?: ({ error }: { error: Error | string }) => Promise<void> | void;
   onFinish?: MastraOnFinishCallback<OUTPUT>;
   onStepFinish?: MastraOnStepFinishCallback<OUTPUT>;
-  onAbort?: (event: any) => Promise<void> | void;
+  /**
+   * Called when the run is cancelled mid-stream. `steps` holds the steps that completed before the
+   * abort; `text` holds the assistant text streamed so far for the step that was in flight.
+   */
+  onAbort?: (event: { steps: any[]; text?: string }) => Promise<void> | void;
   abortSignal?: AbortSignal;
   returnScorerData?: boolean;
   prepareStep?: PrepareStepFunction;
@@ -206,18 +211,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   messageList: MessageList;
   includeRawChunks?: boolean;
   experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
-  modelSettings?: Omit<CallSettings, 'abortSignal'> & {
-    /**
-     * Reasoning effort level for the model. Controls how much reasoning
-     * the model performs before generating a response.
-     *
-     * Only effective with LanguageModelV4 (AI SDK v7) model providers that support reasoning.
-     * When used with older model providers (V2/V3), this option is a no-op.
-     *
-     * @default undefined (provider default behavior)
-     */
-    reasoning?: ReasoningLevel;
-  };
+  modelSettings?: MastraModelSettings;
   toolChoice?: ToolChoice<TOOLS>;
   activeTools?: Array<keyof TOOLS>;
   options?: LoopConfig<OUTPUT>;
