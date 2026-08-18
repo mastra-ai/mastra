@@ -484,6 +484,21 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     return result.exitCode === 0;
   }
 
+  /**
+   * Warmup probe for skill discovery coalescing.
+   *
+   * When used as a SkillSource, WorkspaceSkillsImpl calls this once before
+   * fanning out parallel skill discovery. This lets the sandbox network settle
+   * (private-net dial, lease handshake) in a single probe rather than N
+   * parallel failures during cold-start.
+   *
+   * The probe is a cheap `true` command that exercises the exec transport
+   * without doing real work. Failures are swallowed by the caller.
+   */
+  async warmup(): Promise<void> {
+    await this.exec('true');
+  }
+
   getInfo(): FilesystemInfo {
     return {
       id: this.id,

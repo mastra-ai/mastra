@@ -3403,4 +3403,98 @@ description: A skill referenced by an absolute path
       expect(result?.name).toBe('my-skill');
     });
   });
+
+  describe('warmup coalescing', () => {
+    it('calls source.warmup() once before parallel skill discovery', async () => {
+      const warmup = vi.fn().mockResolvedValue(undefined);
+      const filesystem = createMockFilesystem({
+        'skills/skill-a/SKILL.md': VALID_SKILL_MD,
+        'skills/skill-b/SKILL.md': VALID_SKILL_MD.replace('test-skill', 'skill-b'),
+      });
+      // Add warmup to the mock source
+      const sourceWithWarmup = { ...filesystem, warmup };
+
+      const skills = new WorkspaceSkillsImpl({
+        source: sourceWithWarmup,
+        skills: ['skills'],
+      });
+
+      await skills.list();
+
+      expect(warmup).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not fail discovery if warmup throws', async () => {
+      const warmup = vi.fn().mockRejectedValue(new Error('Sandbox not ready'));
+      const filesystem = createMockFilesystem({
+        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+      });
+      const sourceWithWarmup = { ...filesystem, warmup };
+
+      const skills = new WorkspaceSkillsImpl({
+        source: sourceWithWarmup,
+        skills: ['skills'],
+      });
+
+      // Should not throw, discovery proceeds anyway
+      const result = await skills.list();
+      expect(result).toHaveLength(1);
+      expect(result[0]?.name).toBe('test-skill');
+      expect(warmup).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not call warmup if source does not provide it', async () => {
+      const filesystem = createMockFilesystem({
+        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills'],
+      });
+
+      // Should work normally without warmup
+      const result = await skills.list();
+      expect(result).toHaveLength(1);
+    });
+
+    it('calls warmup only once per discovery, not per skill', async () => {
+      const warmup = vi.fn().mockResolvedValue(undefined);
+      const filesystem = createMockFilesystem({
+        'skills/skill-a/SKILL.md': VALID_SKILL_MD,
+        'skills/skill-b/SKILL.md': VALID_SKILL_MD.replace('test-skill', 'skill-b'),
+        'skills/skill-c/SKILL.md': VALID_SKILL_MD.replace('test-skill', 'skill-c'),
+      });
+      const sourceWithWarmup = { ...filesystem, warmup };
+
+      const skills = new WorkspaceSkillsImpl({
+        source: sourceWithWarmup,
+        skills: ['skills'],
+      });
+
+      await skills.list();
+
+      // Warmup called once, not 3 times (once per skill)
+      expect(warmup).toHaveBeenCalledTimes(1);
+    });
+
+    it('calls warmup again on refresh()', async () => {
+      const warmup = vi.fn().mockResolvedValue(undefined);
+      const filesystem = createMockFilesystem({
+        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+      });
+      const sourceWithWarmup = { ...filesystem, warmup };
+
+      const skills = new WorkspaceSkillsImpl({
+        source: sourceWithWarmup,
+        skills: ['skills'],
+      });
+
+      await skills.list();
+      expect(warmup).toHaveBeenCalledTimes(1);
+
+      await skills.refresh();
+      expect(warmup).toHaveBeenCalledTimes(2);
+    });
+  });
 });

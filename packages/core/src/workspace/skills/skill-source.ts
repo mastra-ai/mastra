@@ -72,4 +72,20 @@ export interface SkillSource {
    * Sources without aliases or symlinks can return the input path unchanged.
    */
   realpath?(path: string): Promise<string>;
+
+  /**
+   * Optional warmup probe for sources backed by remote sandboxes.
+   *
+   * When provided, WorkspaceSkillsImpl calls this once before fanning out
+   * parallel skill discovery. This coalesces the "is the sandbox network
+   * ready?" check into a single probe, avoiding N parallel transport failures
+   * during sandbox warmup.
+   *
+   * Implementations should perform a cheap operation (e.g., `exists('.')` or
+   * a no-op exec) that exercises the transport layer. The result is ignored;
+   * the goal is to let the transport settle before parallel loads begin.
+   *
+   * Local filesystem sources should not implement this (no warmup needed).
+   */
+  warmup?(): Promise<void>;
 }
