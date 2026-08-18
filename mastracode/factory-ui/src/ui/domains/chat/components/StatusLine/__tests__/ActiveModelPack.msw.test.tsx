@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../../e2e/ui/render';
 import { ChatConnectionContext } from '../../../context/ChatConnectionContext';
 import { ChatSessionContext } from '../../../context/ChatSessionContext';
 import type { ChatSessionContextApi } from '../../../context/ChatSessionContext';
@@ -60,7 +60,7 @@ describe('ActiveModelPack', () => {
     );
 
     const user = userEvent.setup();
-    renderWithProviders(
+    const { client } = renderWithProviders(
       <ChatSessionContext.Provider value={session}>
         <ChatConnectionContext.Provider value={{ status: 'ready' }}>
           <ActiveModelPack />
@@ -83,6 +83,7 @@ describe('ActiveModelPack', () => {
         scope: '/tmp/session-1',
       }),
     );
-    await waitFor(() => expect(trigger).toHaveTextContent('Pack · Mine'));
+    await waitForMutationsIdle(client);
+    expect(trigger).toHaveTextContent('Pack · Mine');
   });
 });
