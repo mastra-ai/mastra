@@ -5,29 +5,29 @@ description: "Deploy Mastra with Render"
 
 # Render
 
-Deploy Mastra applications and workflows on [Render](https://render.com/). Use a [Render web service](https://render.com/docs/web-services) for your Mastra API and [Render Workflows](https://render.com/docs/workflows) for long-running, parallel, or independently retriable workflows.
+Deploy Mastra applications on [Render](https://render.com/). Host the Mastra API as a [web service](https://render.com/docs/web-services), or use [Render Workflows](https://render.com/docs/workflows) for long-running tasks with independent retry policies.
 
-Render can be used in a variety of ways:
+Choose the deployment path that fits your application:
 
-- **Mastra API**: Use a Render web service to deploy Mastra's [server](/docs/server/overview) and get an API endpoint at a public URL. Read the [Web Services](https://render.com/docs/web-services) guide to learn how to deploy your custom code or one of the supported [server adapters](/docs/server/server-adapters).
-- **Mastra Workflows**: Run a complete Mastra workflow inside a single Render task. In that setup, Render manages the outer task run and Mastra manages the workflow's internal steps and state. Read the [Defining Workflow Tasks](https://render.com/docs/workflows-defining) guide to learn more.
-- **Render Workflows**: A managed execution platform for long-running and distributed application tasks. It handles task queuing, on-demand compute, retries, timeouts, parallel execution, and run observability. With Mastra, you can use Render Workflows to run agent operations as independently configured tasks.
+- **Mastra API**: Deploy Mastra's [server](/docs/server/overview) as a web service with a public endpoint. The [Web Services guide](https://render.com/docs/web-services) explains how to deploy custom code or a supported [server adapter](/docs/server/server-adapters).
+- **Mastra workflow**: Run an entire Mastra workflow within one task. Render controls the outer run, while Mastra manages its steps and state. See [Defining Workflow Tasks](https://render.com/docs/workflows-defining) for configuration details.
+- **Distributed agent operations**: Give each operation its own compute plan, timeout, and retry policy. Render Workflows handles the execution queue and provides run observability.
 
-This guide builds an editorial pipeline (using Render Workflows) that reviews a draft from three perspectives in parallel, then uses a Mastra editor agent to produce a revised version. For instructions on deploying Mastra API or workflows visit the linked documentation.
+This guide builds an editorial pipeline that reviews a draft from three perspectives in parallel, then passes the feedback to an editor agent. Use the links above if you want to deploy a Mastra API or execute an entire Mastra workflow as one task.
 
 ## How Render Workflows integrates with Mastra
 
-Mastra provides the agents and application logic. Render Workflows provides the execution boundaries around that logic. A typical pipeline has three layers:
+Mastra supplies the agents and application logic, while Render Workflows defines the execution boundaries. A typical pipeline has three layers:
 
-1. A parent Render task coordinates the run.
-1. Child Render tasks invoke Mastra agents for focused pieces of work.
-1. A final Render task combines the results.
+1. A parent task coordinates the run.
+1. Child tasks invoke Mastra agents for focused work.
+1. A final task combines the results.
 
-Calling one Render task from another creates a chained task run. Each chained run executes in its own instance and can have its own compute plan, timeout, and retry policy.
+Calling one task from another creates a chained run in a separate instance, with its own compute plan, timeout, and retry policy.
 
 ## Setup
 
-Create a new boilerplate Mastra project called `render-workflows`:
+Create an empty Mastra project named `render-workflows`:
 
 ```bash npm2yarn
 npm create mastra@latest render-workflows -- --empty
@@ -39,19 +39,19 @@ Install two additional dependencies:
 npm install @renderinc/sdk tsx
 ```
 
-Create an `.env` file and add your API key. This guide uses OpenAI, but you can use any supported [model provider](/models).
+Add your API key to an `.env` file. This example uses OpenAI, but any supported [model provider](/models) works.
 
 ```text title=".env"
 OPENAI_API_KEY=your_openai_api_key
 ```
 
-Install the [Render CLI](https://render.com/docs/cli) to be able to run commands from your terminal.
+Install the [Render CLI](https://render.com/docs/cli) to run workflow commands from your terminal.
 
 ## Distributed agent pipeline
 
 ### Create the agents
 
-Navigate to `src/mastra` and create a new folder called `agents`. Inside that folder, create `reviewer-agent.ts` and `editor-agent.ts`. Define the agents as following:
+In `src/mastra`, create an `agents` directory with `reviewer-agent.ts` and `editor-agent.ts`. Define both agents:
 
 ```ts title="src/mastra/agents/reviewer-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -102,11 +102,11 @@ export const mastra = new Mastra({
 
 ### Create the tasks
 
-Navigate to `src` and create a new folder called `tasks`. Inside that folder, create three files: `review-task.ts`, `revision-task.ts`, and `editorial-task.ts`.
+In `src`, create a `tasks` directory with `review-task.ts`, `revision-task.ts`, and `editorial-task.ts`.
 
 #### Review task
 
-The task will invoke the reviewer agent for one area of focus. The task has its own compute plan, five-minute timeout, and retry policy. A temporary model-provider failure retries this review without restarting the other review tasks.
+The reviewer agent handles one area of focus. Its compute plan, five-minute timeout, and retry policy apply only to that analysis. A temporary model-provider failure can trigger another attempt without restarting the other reviewers.
 
 ```typescript title="src/tasks/review-task.ts"
 import { task } from '@renderinc/sdk/workflows'
@@ -147,7 +147,7 @@ export const reviewDraft = task(
 
 #### Revision task
 
-The revision task will combine the reviews and produces a revised draft. This task uses a larger compute plan and a longer timeout than the individual review tasks.
+This task combines the feedback and produces a revised draft. It uses a larger compute plan and a longer timeout than each reviewer.
 
 ```typescript title="src/tasks/revision-task.ts"
 import { task } from '@renderinc/sdk/workflows'
@@ -188,7 +188,7 @@ export const reviseDraft = task(
 
 #### Editorial task
 
-This parent task fans out the reviews and passes their results to the revision task. `Promise.all()` dispatches the three review tasks in parallel. After they finish, the parent task starts the revision task with their combined results. The parent task disables retries because its child tasks already have retry policies. If you enable retries on an orchestration task, make sure repeating the parent cannot duplicate external side effects or other non-idempotent work.
+The parent dispatches three reviews in parallel with `Promise.all()`, then sends their combined feedback to the revision step. Retries are disabled at this level because each child defines its own policy. If you enable orchestration retries, ensure that another attempt can't duplicate external side effects or other non-idempotent work.
 
 ```typescript title="src/tasks/editorial-task.ts"
 import { task } from '@renderinc/sdk/workflows'
@@ -216,13 +216,13 @@ export const editorialPipeline = task(
 
 ### Set up the entry point
 
-Inside `src` create a new file called `index.ts`. Import the editorial task:
+Create `src/index.ts` and import the editorial task:
 
 ```ts title="src/index.ts"
 import './tasks/editorial-task.js'
 ```
 
-Navigate to `package.json` and edit the `scripts` section to include a TypeScript build and commands to run the workflow locally:
+In `package.json`, add scripts to build the TypeScript project and run the workflow:
 
 ```json title="package.json"
 {
@@ -234,7 +234,7 @@ Navigate to `package.json` and edit the `scripts` section to include a TypeScrip
 }
 ```
 
-Change the `tsconfig.json` file:
+Configure `tsconfig.json` for the build:
 
 ```json title="tsconfig.json"
 {
@@ -252,7 +252,7 @@ Change the `tsconfig.json` file:
 }
 ```
 
-Inside your terminal, run a build. You should see a `dist` folder with the compiled JavaScript files.
+Build the project. The command compiles the JavaScript files into `dist`.
 
 ```bash npm2yarn
 npm run build
@@ -262,33 +262,46 @@ npm run build
 
 ### Locally
 
-Using the Render CLI, start the local Render Workflows development server:
+Start the local development server with the Render CLI:
 
 ```bash
-render workflows dev -- "npm run dev:workflows"
+render workflows dev -- npm run dev:workflows
 ```
 
-You can check that it successfully registered your tasks by opening a new terminal window and running:
+The server lists the registered tasks:
+
+```bash
+➜ render workflows dev -- npm run dev:workflows
+Workflow server listening on port 8120
+Loaded environment variables from .env
+3 tasks found in npm run dev:workflows
+  • editorial_pipeline
+  • review_draft
+  • revise_draft
+
+To browse and run tasks, open another terminal and run:
+  render workflows tasks list --local
+```
+
+In another terminal, confirm that the tasks are available:
 
 ```bash
 render workflows tasks list --local
 ```
 
-It should show you TODO.
-
-Start the editorial pipeline:
+The command displays each task's name, ID, and creation time. Press `Ctrl+C`, then start the editorial pipeline from the same terminal:
 
 ```bash
-render workflows tasks start editorial_pipeline \
+render workflows tasks runs start editorial_pipeline \
   --local \
   --input='["Render Workflows runs long-running tasks outside the request lifecycle."]'
 ```
 
-The local server records the parent run, three parallel review runs, and the final revision run.
+The development server records the parent run, three parallel reviews, and the final revision.
 
 ### Production
 
-Use the Render CLI to create a workflow service from the current repository:
+Create a workflow service from the current repository:
 
 ```bash
 render workflows create \
@@ -299,9 +312,9 @@ render workflows create \
   --run-command "npm run start:workflows"
 ```
 
-Add `OPENAI_API_KEY` (or a different model provider's API key) to the workflow service's environment variables.
+Add `OPENAI_API_KEY`, or the key for your chosen model provider, to the service's environment variables.
 
-Once the workflow has been deployed, start a production run. Replace `mastra-workflows/editorial_pipeline` with the task slug shown in the Render Dashboard if your workflow uses a different slug.
+After deployment, start a production run. If needed, replace `mastra-workflows/editorial_pipeline` with the task slug shown in the Render Dashboard.
 
 ```bash
 render workflows tasks start mastra-workflows/editorial_pipeline \
