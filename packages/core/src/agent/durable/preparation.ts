@@ -16,6 +16,7 @@ import { boundedStringify, deepMerge } from '../../utils';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
 import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
+import { assertThreadOwnedByResource } from '../memory-thread-ownership';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
@@ -348,6 +349,9 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   const memoryConfig = execOptions?.memory?.options;
   if (memory && threadId && resourceId) {
     const existingThread = await memory.getThreadById({ threadId });
+    if (existingThread) {
+      assertThreadOwnedByResource({ thread: existingThread, resourceId, agentName: publicAgentName });
+    }
     threadObject =
       existingThread ??
       (await memory.createThread({
