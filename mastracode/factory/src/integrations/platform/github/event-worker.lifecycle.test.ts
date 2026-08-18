@@ -104,7 +104,7 @@ describe('Platform GitHub event worker factory lifecycle', () => {
         return json({ installations: [{ installationId: 7, usable: true, suspendedAt: null }] });
       }
       if (url.pathname.endsWith('/installations/7/repositories')) {
-        return json({ repositories: [{ id: 99 }] });
+        return json({ repositories: [{ id: 99, fullName: 'octo/hello' }] });
       }
       if (url.pathname.endsWith('/repositories/99/events')) {
         if (url.searchParams.has('afterTimestamp')) {
