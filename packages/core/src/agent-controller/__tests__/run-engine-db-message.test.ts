@@ -291,10 +291,25 @@ describe('SessionRunEngine — MastraDBMessage contract', () => {
     const firstUpdate = lastMessageEvent(events);
     await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't1', text: ' world' } }), ctx);
     const secondUpdate = lastMessageEvent(events);
+    await engine.processStreamChunk(
+      state,
+      chunk({
+        type: 'data-user-message',
+        data: { id: 'user-signal-1', message: 'next input', createdAt: '2026-01-02T03:04:05.000Z' },
+      }),
+      ctx,
+    );
+    const ended = events.find(event => event.type === 'message_end' && event.message.role === 'assistant');
+    if (!ended || ended.type !== 'message_end') throw new Error('no assistant message_end event');
 
     expect(firstUpdate).toBe(started);
     expect(secondUpdate).toBe(started);
-    expect(started.content.parts).toEqual([{ type: 'text', text: 'Hello world' }]);
+    expect(ended.message).toBe(started);
+    expect(started.content).toEqual({
+      format: 2,
+      parts: [{ type: 'text', text: 'Hello world' }],
+      metadata: { stopReason: 'complete' },
+    });
   });
 
   /**
