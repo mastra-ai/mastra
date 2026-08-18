@@ -636,4 +636,63 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       timeout,
     );
   });
+
+  describe.sequential('pnpm patched dependencies', () => {
+    it(
+      'keeps source workspace patches applied in the built output',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-patch-test-${pkgManager}-`));
+        try {
+          await setupMonorepo(isolatedFixturePath, pkgManager);
+
+          // Adding a file is version-independent, so the patch stays valid as the package moves.
+          await mkdir(join(isolatedFixturePath, 'patches'), { recursive: true });
+          await writeFile(
+            join(isolatedFixturePath, 'patches', 'unicorn-magic.patch'),
+            [
+              'diff --git a/mastra-patch-marker.txt b/mastra-patch-marker.txt',
+              'new file mode 100644',
+              '--- /dev/null',
+              '+++ b/mastra-patch-marker.txt',
+              '@@ -0,0 +1 @@',
+              '+patched-by-mastra-e2e',
+              '',
+            ].join('\n'),
+          );
+
+          const workspacePath = join(isolatedFixturePath, 'pnpm-workspace.yaml');
+          const workspace = await readFile(workspacePath, 'utf8');
+          await writeFile(
+            workspacePath,
+            `${workspace}\npatchedDependencies:\n  unicorn-magic@0.4.0: patches/unicorn-magic.patch\n`,
+          );
+          await execa(pkgManager, ['install', '--config.minimum-release-age=0'], {
+            cwd: isolatedFixturePath,
+            env: process.env,
+          });
+
+          await removeOutputDir(isolatedFixturePath);
+          await execa(pkgManager, ['build'], {
+            cwd: join(isolatedFixturePath, 'apps', 'custom'),
+            env: process.env,
+          });
+
+          const outputDir = join(isolatedFixturePath, 'apps', 'custom', '.mastra', 'output');
+          const outputWorkspace = await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8');
+
+          expect(outputWorkspace).toContain('"unicorn-magic@0.4.0": "pnpm-patches/unicorn-magic.patch"');
+          expect(outputWorkspace).toContain('allowUnusedPatches: true');
+          expect(await readFile(join(outputDir, 'pnpm-patches', 'unicorn-magic.patch'), 'utf8')).toContain(
+            'patched-by-mastra-e2e',
+          );
+          expect(
+            await readFile(join(outputDir, 'node_modules', 'unicorn-magic', 'mastra-patch-marker.txt'), 'utf8'),
+          ).toContain('patched-by-mastra-e2e');
+        } finally {
+          await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+  });
 });
