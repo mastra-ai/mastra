@@ -182,8 +182,8 @@ export function createLearnerHandler(
         },
       );
       const acknowledgedId = result.text.match(/<learning-complete\s+through=["']([^"']+)["']\s*\/>/i)?.[1];
-      if (!acknowledgedId || !worklist.records.some(item => item.id === acknowledgedId)) {
-        throw new Error('Learner did not acknowledge a valid reviewed item cursor.');
+      if (!acknowledgedId || !worklist.records.some(record => record.id === acknowledgedId)) {
+        throw new Error('Learner did not acknowledge a valid reviewed record cursor.');
       }
       await store.advanceCurationCursor({
         sourceThreadId: context.parentThreadId,
