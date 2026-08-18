@@ -48,7 +48,8 @@ type SerializedMastraDBMessage = Omit<MastraDBMessage, 'createdAt'> & { createdA
 /** One arm of the controller's event union, selected by its `type`. */
 type ControllerEventOf<T extends ControllerEvent['type']> = Extract<ControllerEvent, { type: T }>;
 
-type MapToRecord<T> = T extends Map<string, infer V> ? Record<string, V> : T;
+/** `Object.fromEntries` stringifies keys, so the record is keyed by string whatever the Map was. */
+type MapToRecord<T> = T extends Map<unknown, infer V> ? Record<string, V> : T;
 
 /** An `Error` as the stream handler flattens it — JSON drops a real `Error` to `{}`. */
 export interface WireError {
