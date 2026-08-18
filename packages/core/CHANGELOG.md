@@ -1,5 +1,43 @@
 # @mastra/core
 
+## 1.60.0-alpha.11
+
+### Minor Changes
+
+- Added a `durable` option to stored agents so agents created through the Agents API can run with durable execution — no code deployment required. ([#21715](https://github.com/mastra-ai/mastra/pull/21715))
+
+  ```typescript
+  await mastraClient.createStoredAgent({
+    id: 'helper',
+    name: 'Helper',
+    instructions: 'You are a helpful assistant.',
+    model: { provider: 'openai', name: 'gpt-5' },
+    durable: true,
+  });
+  ```
+
+  Pass `true` for defaults, or `{ maxSteps, cleanupTimeoutMs }` to tune the durable loop. Cache and pubsub are inherited from the server's Mastra instance, so configure distributed backends there for durability across replicas. Automatic recovery is still configured in code via `recovery.durableAgents`.
+
+### Patch Changes
+
+- Fixed model-backed processors (language detector, prompt injection detector, PII detector, system prompt scrubber, and moderation) dropping the request context. Their internal detection agents now receive the caller's RequestContext, so dynamic model resolvers and gateways can select models per request. ([#21709](https://github.com/mastra-ai/mastra/pull/21709))
+
+- Retry transient Windows file locks when atomically replacing provider registry cache files. ([#21425](https://github.com/mastra-ai/mastra/pull/21425))
+
+- Exported `ReservedThreadMetadataKey`, the list of thread-metadata keys an agent controller session owns for its own bookkeeping (selected model and mode, observer/reflector config, token usage, persisted preferences). Packages that cannot import the list as a value can now pin their copy of it to the real one: ([#21739](https://github.com/mastra-ai/mastra/pull/21739))
+
+  ```ts
+  import type { ReservedThreadMetadataKey } from '@mastra/core/agent-controller';
+
+  const RESERVED = { currentModelId: true /* … */ } satisfies Record<ReservedThreadMetadataKey, true>;
+  ```
+
+  The list itself is unchanged — only its keys are now nameable, so a package that mirrors it fails to compile the moment the two fall out of step.
+
+- Sub-agent delegation no longer attempts to resume when the model supplies `resumeData` without a suspended run. Previously the delegation step chose the resume path on `resumeData` alone and called `resumeGenerate`/`resumeStream` with an undefined run id, throwing `AGENT_RESUME_NO_SNAPSHOT_FOUND` before the sub-agent executed. It now starts a fresh delegation in that case. ([#21729](https://github.com/mastra-ai/mastra/pull/21729))
+
+- Estimate media token cost in TokenLimiterProcessor instead of serializing base64 payloads as text. File parts and media-shaped tool results (`{ data, mediaType }`) previously fell through to `JSON.stringify`, so a single image could add thousands of phantom tokens and truncate history unnecessarily (#21731). ([#21737](https://github.com/mastra-ai/mastra/pull/21737))
+
 ## 1.60.0-alpha.10
 
 ### Minor Changes
