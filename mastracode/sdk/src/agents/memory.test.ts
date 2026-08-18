@@ -165,10 +165,13 @@ describe('getDynamicMemory', () => {
     });
   });
 
-  it('keeps Subconscious memory disabled unless explicitly opted in', async () => {
-    const { config } = await createMemoryConfig({ projectPath: '/tmp/project' }, 'thread', { vector: true });
+  it('keeps Subconscious memory inert unless explicitly opted in', async () => {
+    const { config, requestContext } = await createMemoryConfig({ projectPath: '/tmp/project' }, 'thread', {
+      vector: true,
+    });
 
     expect(config.options.observationalMemory.experimental_subconscious).toBeUndefined();
+    expect(requestContext.get('organizationId')).toBeUndefined();
   });
 
   it('enables project-scoped Subconscious memory when explicitly opted in with vector storage', async () => {
