@@ -102,14 +102,16 @@ export interface SandboxCloneOptions {
   /** Idle teardown window (minutes) for the sandbox clone. */
   idleTimeoutMinutes?: number;
   /**
-   * Provider checkpoint used to seed and preserve the sandbox clone.
+   * Named checkpoint (the persisted artifact written by `snapshot()`) used to
+   * seed the sandbox clone on boot and preserve its state across restarts.
    * Providers without checkpoint support may ignore this option.
    */
   checkpointName?: string;
   /**
    * Fallback checkpoint used to seed the sandbox when `checkpointName` has no
-   * stored state yet (e.g. a repo-level warm base image for a brand-new
-   * session). Boot-only: snapshots keep writing to `checkpointName`.
+   * stored state yet (e.g. a repo-level warm base checkpoint for a brand-new
+   * session). Boot-only: `snapshot()` keeps writing to `checkpointName` and
+   * never overwrites the seed.
    * Providers without checkpoint support may ignore this option.
    */
   seedCheckpointName?: string;
@@ -148,8 +150,11 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
   readonly provider: string;
 
   /**
-   * Persist the sandbox's current state when the provider supports snapshots.
-   * Providers without snapshot support resolve without performing work.
+   * Capture the sandbox's current state as a checkpoint when the provider
+   * supports it. Terminology: *snapshot* is the act of capturing; the named,
+   * persisted artifact it writes is a *checkpoint*
+   * (see `SandboxCloneOptions.checkpointName`).
+   * Providers without checkpoint support resolve without performing work.
    */
   snapshot(): Promise<void>;
 
