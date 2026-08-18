@@ -96,7 +96,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
         threadIds: [this.opts.threadId],
         config: this.getObservationMarkerConfig(),
       });
-      await this.streamMarker(startMarker);
+      await this.streamMarker(startMarker, { anchorMessageId: this.lastMessage?.id });
     }
   }
 
@@ -260,7 +260,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
         recordId: this.opts.record.id,
         threadId: this.opts.threadId,
       });
-      await this.streamMarker(endMarker);
+      await this.streamMarker(endMarker, { anchorMessageId: this.lastMessage?.id });
     }
   }
 
@@ -275,7 +275,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
         recordId: this.opts.record.id,
         threadId: this.opts.threadId,
       });
-      await this.streamMarker(failedMarker);
+      await this.streamMarker(failedMarker, { anchorMessageId: this.lastMessage?.id });
     }
   }
 }

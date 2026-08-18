@@ -195,6 +195,65 @@ export function getObservableMessages(messageList: MessageList): MastraDBMessage
 }
 
 /**
+ * Append a lifecycle marker part to a message, unless an identical marker is already there.
+ *
+ * `writer.custom()` streams the marker and the AI SDK may have already appended it to the
+ * message's parts before persistence runs, so the cycle id is used to de-duplicate.
+ */
+export function appendMarkerPart(message: MastraDBMessage, marker: { type: string; data: unknown }): void {
+  const parts = message.content?.parts;
+  if (!Array.isArray(parts)) return;
+  const markerData = marker.data as { cycleId?: string } | undefined;
+  const alreadyPresent =
+    markerData?.cycleId && parts.some((p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId);
+  if (alreadyPresent) return;
+  parts.push(marker as any);
+}
+
+function canCarryMarker(message: MastraDBMessage | undefined): boolean {
+  return message?.role === 'assistant' && Array.isArray(message.content?.parts);
+}
+
+/**
+ * Pick the message a lifecycle marker should be attached to.
+ *
+ * Observation boundary markers must land on the last assistant message *within the
+ * observed set*. When callers pass an explicit message list to `observe()`, the newest
+ * assistant message in the thread may be newer than anything the observer actually saw —
+ * writing the boundary there would hide unobserved parts from the next prompt.
+ *
+ * @param messages Candidate messages in ascending (oldest → newest) order.
+ * @param anchorMessageId The last message of the observed set, when known.
+ * @returns Index of the message to attach to, or -1 when no suitable message exists.
+ */
+export function findMarkerTargetIndex(messages: MastraDBMessage[], anchorMessageId?: string): number {
+  if (anchorMessageId) {
+    const anchorIndex = messages.findIndex(message => message.id === anchorMessageId);
+    if (anchorIndex !== -1) {
+      // Prefer the last assistant inside the observed set.
+      for (let i = anchorIndex; i >= 0; i--) {
+        if (canCarryMarker(messages[i])) return i;
+      }
+      // The observed set contains no assistant message at all — the common case during a
+      // live turn, where observation runs on user input before the reply exists. Use the
+      // *nearest* following assistant (the pending reply), which carries no observed
+      // content of its own. Never the newest one: that is what hid unobserved messages.
+      for (let i = anchorIndex + 1; i < messages.length; i++) {
+        if (canCarryMarker(messages[i])) return i;
+      }
+      return -1;
+    }
+    // Anchor absent from this view (e.g. a live MessageList that never saw it) —
+    // fall through to the newest-assistant scan.
+  }
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (canCarryMarker(messages[i])) return i;
+  }
+  return -1;
+}
+
+/**
  * Safely extract buffered observation chunks from a record.
  * Handles both array and JSON-string formats, returning empty array if malformed.
  */
