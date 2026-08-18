@@ -296,33 +296,6 @@ export class SessionRunEngine {
     return state.currentMessage.content.parts.length > 0;
   }
 
-  /**
-   * Emit one live accumulated message throughout the current assistant turn.
-   * `processStreamChunk()` mutates this object as text, reasoning, tool state,
-   * and terminal metadata arrive, so earlier `message_start`/`message_update`
-   * events intentionally observe the latest state rather than point-in-time
-   * snapshots.
-   *
-   * Do not restore per-delta cloning here. The old `structuredClone()` copied
-   * the complete accumulated message—including large completed tool results—on
-   * every small text delta. Event queues could then retain every full copy,
-   * making allocation quadratic and driving long sessions to the V8 heap limit.
-   *
-   * Nik Aiyer's PR #20314 significantly reduced that cost by copying only the
-   * parts array and mutable part/metadata shells. It still allocates a complete
-   * message shape per delta, however, and a delayed subscriber can retain all of
-   * those intermediate shapes. Long-running dogfood profiles showed this work
-   * moving allocation and retained-heap pressure out of the stream producer.
-   *
-   * Consumers that require a historical value must copy or serialize at their
-   * own ownership boundary. That makes the cost explicit and local to the few
-   * consumers that need temporal isolation instead of charging every listener
-   * for every streamed token.
-   */
-  private messageForEmission(message: MastraDBMessage): MastraDBMessage {
-    return message;
-  }
-
   private setStopReason(message: MastraDBMessage, stopReason: string, force = false): void {
     message.content.metadata ??= {};
     const metadata = message.content.metadata;
@@ -410,7 +383,7 @@ export class SessionRunEngine {
       isError,
       ...(providerMetadata ? { providerMetadata } : {}),
     });
-    this.#session.emit({ type: 'message_update', message: this.messageForEmission(state.currentMessage) });
+    this.#session.emit({ type: 'message_update', message: state.currentMessage });
   }
 
   private abortForOmFailure({ operationType, stage, error }: { operationType: string; stage: string; error: string }) {
@@ -500,6 +473,13 @@ export class SessionRunEngine {
     return result;
   }
 
+  /**
+   * Mutates and emits one live accumulated message throughout the assistant turn.
+   * Consumers that require a point-in-time value must copy or serialize at their
+   * ownership boundary. Do not restore producer-side per-delta snapshots: even
+   * selective snapshots retain growing historical text and allocate message/part
+   * shells for every token.
+   */
   async processStreamChunk(
     state: StreamState,
     chunk: StreamChunk,
@@ -529,7 +509,7 @@ export class SessionRunEngine {
         const textIndex = state.currentMessage.content.parts.length;
         state.currentMessage.content.parts.push({ type: 'text', text: '' });
         state.textContentById.set(getString(getPayload(chunk).id) ?? '', { index: textIndex, text: '' });
-        this.#session.emit({ type: 'message_start', message: this.messageForEmission(state.currentMessage) });
+        this.#session.emit({ type: 'message_start', message: state.currentMessage });
         break;
       }
 
@@ -541,7 +521,7 @@ export class SessionRunEngine {
           if (textContent && textContent.type === 'text') {
             textContent.text = textState.text;
           }
-          this.#session.emit({ type: 'message_update', message: this.messageForEmission(state.currentMessage) });
+          this.#session.emit({ type: 'message_update', message: state.currentMessage });
         }
         break;
       }
@@ -550,7 +530,7 @@ export class SessionRunEngine {
         const thinkingIndex = state.currentMessage.content.parts.length;
         state.currentMessage.content.parts.push({ type: 'reasoning', reasoning: '', details: [] });
         state.thinkingContentById.set(getString(getPayload(chunk).id) ?? '', { index: thinkingIndex, text: '' });
-        this.#session.emit({ type: 'message_update', message: this.messageForEmission(state.currentMessage) });
+        this.#session.emit({ type: 'message_update', message: state.currentMessage });
         break;
       }
 
@@ -563,7 +543,7 @@ export class SessionRunEngine {
             thinkingContent.reasoning = thinkingState.text;
             thinkingContent.details = [{ type: 'text', text: thinkingState.text }];
           }
-          this.#session.emit({ type: 'message_update', message: this.messageForEmission(state.currentMessage) });
+          this.#session.emit({ type: 'message_update', message: state.currentMessage });
         }
         break;
       }
@@ -621,7 +601,7 @@ export class SessionRunEngine {
           toolName,
           args,
         });
-        this.#session.emit({ type: 'message_update', message: this.messageForEmission(state.currentMessage) });
+        this.#session.emit({ type: 'message_update', message: state.currentMessage });
         break;
       }
 
@@ -681,7 +661,7 @@ export class SessionRunEngine {
         }
 
         this.#session.emit({ type: 'tool_end', toolCallId, result: reason, isError: false });
-        this.#session.emit({ type: 'message_update', message: this.messageForEmission(state.currentMessage) });
+        this.#session.emit({ type: 'message_update', message: state.currentMessage });
         break;
       }
 
@@ -1200,7 +1180,7 @@ export class SessionRunEngine {
     }
 
     this.#session.emit({ type: 'tool_end', toolCallId, result: ABORTED_BY_USER_REASON, isError: false });
-    this.#session.emit({ type: 'message_update', message: this.messageForEmission(state.currentMessage) });
+    this.#session.emit({ type: 'message_update', message: state.currentMessage });
   }
 
   private finishStreamState(state: StreamState): { message: MastraDBMessage; suspended?: boolean } {
