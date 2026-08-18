@@ -136,15 +136,12 @@ export const knowledgeBrowserScenario: McE2eScenario = {
     terminal.write('\x1b[B');
     terminal.write('\r');
     await runtime.waitForScreenText(/Atlas launch checkpoint/i, terminal);
-    await runtime.waitForScreenText(/Source · 26 items · 1 outgoing · 0 incoming/i, terminal);
-    await runtime.waitForScreenText(/Load more items/i, terminal);
+    await runtime.waitForScreenText(/Source · 26 records · 1 outgoing · 0 incoming/i, terminal);
+    await runtime.waitForScreenText(/Load more knowledge/i, terminal);
     await runtime.waitForScreenText(/Outgoing links \(partial\)/i, terminal);
     terminal.write('\r');
     await runtime.waitForScreenText(/→ Beta service/i, terminal);
     await runtime.waitForScreenTextAbsent(/Outgoing links \(partial\)/i, terminal);
-    await runtime.waitForScreenText(/Load more incoming items/i, terminal);
-    terminal.write('\r');
-    await runtime.waitForScreenTextAbsent(/Load more incoming items/i, terminal);
     terminal.write('\r');
     await runtime.waitForScreenText(/Beta service health checks are green/i, terminal);
     await runtime.waitForScreenText(/Referenced by/i, terminal);
