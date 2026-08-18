@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Improved Factory session-start robustness. Checkpoint-build failures are logged instead of swallowed, dispatcher interval options must be positive, lazy sandboxes expose the Workspace fields the rest of the stack reads, and a failing project-link callback no longer changes the HTTP response.
+Factory sessions can start before their sandbox is ready. Checkpoint-build failures now show up in logs instead of disappearing, invalid dispatcher intervals fail at startup, retrying a project-repository link no longer wipes an existing base checkpoint, and a project-link callback error no longer changes the HTTP response.

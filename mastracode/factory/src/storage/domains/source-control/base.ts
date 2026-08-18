@@ -1123,10 +1123,8 @@ export class SourceControlStorage extends FactoryStorageDomain {
             throw new Error('Repository does not belong to the connection installation.');
           }
           const now = new Date();
-          const row = await db().upsertOne<ProjectRepositoryDbRow>(
-            PROJECT_REPOSITORIES,
-            ['connection_id', 'repository_id'],
-            {
+          try {
+            const row = await db().insertOne<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {
               connection_id: input.connectionId,
               repository_id: input.repositoryId,
               created_by_user_id: input.createdByUserId,
@@ -1134,16 +1132,23 @@ export class SourceControlStorage extends FactoryStorageDomain {
               sandbox_provider: input.sandboxProvider,
               sandbox_workdir: input.sandboxWorkdir,
               setup_command: input.setupCommand ?? null,
-              base_checkpoint_name: null,
-              base_checkpoint_sha: null,
-              base_checkpoint_built_at: null,
-              base_checkpoint_setup_hash: null,
               teardown_command: input.teardownCommand ?? null,
               created_at: now,
               updated_at: now,
-            },
-          );
-          return toProjectRepository(row);
+            });
+            return toProjectRepository(row);
+          } catch (error) {
+            // Retrying link() after setBaseCheckpoint() must not wipe the
+            // existing checkpoint. Match the in-memory handle: return the
+            // existing row unchanged on a unique-constraint race.
+            if (!(error instanceof UniqueViolationError)) throw error;
+            const row = await db().findOne<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {
+              connection_id: input.connectionId,
+              repository_id: input.repositoryId,
+            });
+            if (!row) throw error;
+            return toProjectRepository(row);
+          }
         },
         update: async ({ orgId, id, input }) => {
           const existing = await getProjectRepository({ orgId, id });

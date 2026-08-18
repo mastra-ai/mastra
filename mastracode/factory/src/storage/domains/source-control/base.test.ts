@@ -257,6 +257,53 @@ describe('SourceControlStorage', () => {
     expect(fresh?.baseCheckpoint).toBeNull();
   });
 
+  it('preserves base-checkpoint metadata when link() is retried for the same connection', async () => {
+    const project = await createProject();
+    const installation = await createInstallation(github);
+    const repository = await github.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, ...repositoryInput },
+    });
+    const connection = await github.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    const firstLink = await github.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection.id,
+      repositoryId: repository.id,
+      ...projectRepositoryInput,
+    });
+    await github.projectRepositories.setBaseCheckpoint({
+      id: firstLink.id,
+      checkpoint: { name: `repo-${firstLink.id}`, sha: 'abc123', builtAt: new Date(), setupCommandHash: 'hash-1' },
+    });
+
+    const retried = await github.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection.id,
+      repositoryId: repository.id,
+      ...projectRepositoryInput,
+      branch: 'retry-should-not-overwrite',
+    });
+    const fresh = await github.projectRepositories.get({ orgId: 'org-1', id: firstLink.id });
+
+    expect(retried.id).toBe(firstLink.id);
+    expect(retried.branch).toBeNull();
+    expect(retried.baseCheckpoint).toMatchObject({
+      name: `repo-${firstLink.id}`,
+      sha: 'abc123',
+      setupCommandHash: 'hash-1',
+    });
+    expect(fresh?.baseCheckpoint).toMatchObject({
+      name: `repo-${firstLink.id}`,
+      sha: 'abc123',
+      setupCommandHash: 'hash-1',
+    });
+  });
+
   it('round-trips a null setupCommandHash so no-setup-command checkpoints stay fresh', async () => {
     const project = await createProject();
     const link = await linkRepository({ factoryProjectId: project.id });

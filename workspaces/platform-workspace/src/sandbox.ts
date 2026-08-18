@@ -619,17 +619,19 @@ export class PlatformSandbox extends MastraSandbox {
    * HTTP round-trip.
    *
    * `null`/absent `instanceUrl` (proxy discovery failed, or an older proxy
-   * that predates the field) leaves the registry untouched — executes fall
-   * through to the lease path with no branch here.
+   * that predates the field) evicts any stale registry address and leaves
+   * executes on the lease path.
    */
   private _populateAddressFromResponse(json: CreateSandboxResponse): void {
     if (!this._addressRegistry) return;
     if (!json.instanceUrl) {
       // A later start() without an address must not keep probing the previous
-      // sidecar. Invalidate any in-flight probe and drop the remembered target.
+      // sidecar or reuse a leftover registry URL. Invalidate any in-flight
+      // probe, drop the remembered target, and evict the stale entry.
       this._probeGeneration++;
       this._probeTarget = null;
       this._transportReadyPromise = null;
+      this._addressRegistry.delete(json.id);
       return;
     }
     // Clear any stale entry before probing. On reattach, the registry may have
