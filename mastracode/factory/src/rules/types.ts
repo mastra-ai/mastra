@@ -22,9 +22,7 @@ export const FACTORY_GITHUB_EVENTS = [
   'issueCommentDeleted',
   'pullRequestOpened',
   'pullRequestUpdated',
-  'pullRequestCommentCreated',
   'pullRequestReviewRequested',
-  'pullRequestReviewSubmitted',
   'pullRequestMerged',
   'pullRequestClosed',
 ] as const;
@@ -49,8 +47,6 @@ export interface FactoryRuleItemContext {
   title: string;
   url: string | null;
   stages: readonly string[];
-  /** Intake-stamped facts about the source — repository id, reporter login, labels. */
-  metadata: Record<string, unknown> | null;
 }
 
 export type FactoryRuleActor =
@@ -148,8 +144,6 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
   };
   /** Present on `pullRequestReviewRequested`: who review was (re-)requested from. */
   reviewRequest?: { reviewer: string; factoryReviewer: boolean };
-  /** Present on `pullRequestReviewSubmitted`: the review that was just posted. */
-  review?: { id: number; state: string; url: string };
 }
 
 export interface FactoryLinearRuleContext extends FactoryRuleContextBase {
@@ -246,14 +240,6 @@ export interface FactoryTransitionDecision extends FactoryCommitDecisionBase {
    * informational messages never fail the transition.
    */
   message?: { text: string; role?: string };
-  /**
-   * Runs the stage's entry rules even when the item is already in that stage.
-   * A transition to the current stage is normally inert, because most callers
-   * are correcting a board into a state it already holds. Re-entry is for the
-   * opposite case: the stage's work is in flight and has been invalidated, so
-   * it has to start over.
-   */
-  reenter?: boolean;
 }
 
 export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisionBase {
@@ -267,23 +253,14 @@ export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisi
   metadata?: Record<string, FactoryRuleJsonValue>;
 }
 
-interface FactoryInvokeSkillDecisionBase extends FactoryCommitDecisionBase {
+export interface FactoryInvokeSkillDecision extends FactoryCommitDecisionBase {
   type: 'invokeSkill';
   role: string;
+  skillName: string;
   arguments?: string;
   precedingMessage?: string;
   cancelInFlight?: boolean;
 }
-
-/**
- * Starting an agent run. Most runs activate a skill, because the skill carries
- * the handoff contract later rules match on. A run whose completion is already
- * signalled some other way — Building finishes by opening a pull request, which
- * arrives as its own event — needs no contract, so it can carry a plain prompt
- * instead of an otherwise empty skill.
- */
-export type FactoryInvokeSkillDecision = FactoryInvokeSkillDecisionBase &
-  ({ skillName: string; prompt?: never } | { prompt: string; skillName?: never });
 
 export interface FactorySendMessageDecision extends FactoryCommitDecisionBase {
   type: 'sendMessage';

@@ -430,30 +430,6 @@ class PgFactoryStorageOps implements FactoryStorageOps {
  * Supports serializable app-table transactions for cross-replica invariant
  * enforcement and `authDatabase()` exposing the shared pool.
  */
-/**
- * A pool-level `error` listener only covers *idle* clients: pg hands ownership
- * of a client to the borrower for the duration of a checkout and takes its own
- * listener off. So a backend restart or network blip that lands on a client
- * mid-transaction reaches an emitter with no listener, and Node escalates that
- * to an uncaughtException that kills the process — the pool handler logs the
- * idle siblings and the borrowed one still brings everything down.
- *
- * Attach a listener once per physical connection instead. `connect` fires when
- * the pool establishes a client, before any checkout, so the client is covered
- * in both states for its whole life and there is nothing to remove on release.
- * The pool still discards the failed connection; this only keeps the failure
- * reportable instead of fatal.
- */
-export function guardCheckedOutClientErrors(pool: Pool, warn = console.warn): void {
-  pool.on('connect', client => {
-    client.on('error', err => {
-      warn(
-        `PgFactoryStorage: client error while checked out (the pool discards this connection): ${err instanceof Error ? err.message : String(err)}`,
-      );
-    });
-  });
-}
-
 export class PgFactoryStorage extends FactoryStorage {
   readonly ops: FactoryStorageOps;
 
@@ -483,7 +459,6 @@ export class PgFactoryStorage extends FactoryStorage {
           `PgFactoryStorage: idle pool client error (pool discards the client and reconnects on next checkout): ${err instanceof Error ? err.message : String(err)}`,
         );
       });
-      guardCheckedOutClientErrors(this.#pool);
     }
     this.ops = new PgFactoryStorageOps(this.#pool, this.#schemas);
   }

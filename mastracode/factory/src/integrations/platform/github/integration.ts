@@ -45,7 +45,6 @@ import type {
   SourceControlStorageHandle,
 } from '../../../storage/domains/source-control/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
-import { GithubAppIdentity } from '../../github/app-identity.js';
 import type { GithubIntegration, GithubRepositoryPermission, RepoSummary } from '../../github/integration.js';
 import { attachGithubIssueReconciler } from '../../github/issue-reconciler.js';
 import { reconcileInterval, reconciliationEnabled } from '../../github/reconciliation-config.js';
@@ -148,13 +147,6 @@ type GithubReviewComment = GithubComment & {
 const PAGE_SIZE = 30;
 const API_PREFIX = '/v1/server';
 /**
- * Slug of the GitHub App this integration posts as. Platform credentials do not
- * carry their own identity, so Factory cannot otherwise recognise its own
- * writes — and failing to recognise them makes Factory wake itself. Override
- * with `MASTRA_PLATFORM_GITHUB_APP_SLUG` when pointing at a non-production App.
- */
-const PLATFORM_GITHUB_APP_SLUG = 'mastra-platform';
-/**
  * How long an installation's repository listing may be reused. The repos
  * route and token minting both call it — often several times within one UI
  * interaction — and each call is a full Platform round trip.
@@ -202,12 +194,6 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   readonly #client: PlatformApiClient;
   readonly #endpointHost: string;
   readonly #slug: string | undefined;
-  /**
-   * Factory's own GitHub identity. Platform credentials do not carry the login
-   * they post as, so this starts from the configured slug (usually absent on a
-   * Platform deployment) and is corrected the first time Factory writes.
-   */
-  readonly identity: GithubAppIdentity;
   /**
    * Extra reviewer bot logins this deployment trusts for author-gated
    * notifications, merged over the built-in defaults.
@@ -480,15 +466,6 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     this.#client = new PlatformApiClient(config);
     this.#endpointHost = new URL(config.baseUrl).host;
     this.#slug = options.slug;
-    // Identity is deliberately NOT taken from `options.slug`. That slug names
-    // the deployment's own self-hosted GitHub App, which is a different App
-    // than the one this integration posts as — and on a Platform deployment it
-    // is legitimately unset. Borrowing it is what left every self-loop guard
-    // comparing against `undefined[bot]`. This integration *is* the Platform
-    // App, so it names itself, with an override for non-production Apps.
-    this.identity = new GithubAppIdentity(
-      process.env.MASTRA_PLATFORM_GITHUB_APP_SLUG?.trim() || PLATFORM_GITHUB_APP_SLUG,
-    );
     this.authorizedBots = parseAuthorizedBotsEnv(process.env.MASTRACODE_GITHUB_AUTHORIZED_BOTS) ?? [];
     this.#pollingEnabled = process.env.MASTRA_PLATFORM_GITHUB_POLLING_ENABLED?.trim().toLowerCase() !== 'false';
     this.#pollingIntervalMs = optionalPositiveIntegerEnv('MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS');
@@ -1076,16 +1053,6 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     }
   }
 
-  /**
-   * Learn Factory's own login from a write it just made. Skipped when the write
-   * was made on behalf of a user — that comment is authored by the human, and
-   * recording it would teach Factory to mistake a person for itself.
-   */
-  #observeSelfAuthor(comment: GithubComment, actingUserId: string | undefined): void {
-    if (actingUserId) return;
-    this.identity.observeSelfAuthor(comment.user?.login);
-  }
-
   async #createIssueComment(input: CreateIntakeCommentInput) {
     requireGithubConnection(input.connection);
     const repository = requireSource(input.sourceId, 'GitHub Intake requires a repository source.');
@@ -1097,7 +1064,6 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         { body: input.body },
         { actingUserId: input.actingUserId },
       );
-      this.#observeSelfAuthor(comment, input.actingUserId);
       return { id: String(comment.id), url: comment.htmlUrl };
     } catch (error) {
       if (isNotFound(error)) return null;
@@ -1196,7 +1162,6 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       { body: input.body },
       { actingUserId: input.actingUserId },
     );
-    this.#observeSelfAuthor(comment, input.actingUserId);
     return parseComment(comment);
   }
 

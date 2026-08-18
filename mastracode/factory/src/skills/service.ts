@@ -47,16 +47,6 @@ function escapeSkillBoundary(value: string): string {
   return value.replaceAll('</skill>', '&lt;/skill&gt;');
 }
 
-/** Kicks a run off from a plain prompt, for runs that activate no skill. */
-export async function resolvePromptInvocation(
-  controller: Pick<AgentController<MastraCodeState>, 'getSessionByResource'>,
-  input: { resourceId: string; scope?: SkillInvocationInput['scope']; prompt: string },
-): Promise<{ session: SkillSession; message: string }> {
-  const session = (await controller.getSessionByResource(input.resourceId, input.scope)) as SkillSession | undefined;
-  if (!session) throw new SkillInvocationError('session_not_found', 'Agent controller session not found.');
-  return { session, message: input.prompt };
-}
-
 export async function resolveSkillInvocation(
   controller: Pick<AgentController<MastraCodeState>, 'getSessionByResource'>,
   input: SkillInvocationInput,

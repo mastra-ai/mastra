@@ -26,10 +26,9 @@ export function resolveFactoryStageRules(
     fromStage: FactoryRuleStage;
     toStage: FactoryRuleStage;
     initialEntry?: boolean;
-    reenter?: boolean;
   },
 ): ResolvedFactoryStageRule[] {
-  if (input.fromStage === input.toStage && !input.initialEntry && !input.reenter) return [];
+  if (input.fromStage === input.toStage && !input.initialEntry) return [];
   const boardRules = rules[input.board];
   const resolved: ResolvedFactoryStageRule[] = [];
   const onExit = input.initialEntry ? undefined : boardRules[input.fromStage]?.[input.source]?.onExit;

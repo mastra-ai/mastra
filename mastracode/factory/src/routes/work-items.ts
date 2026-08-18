@@ -508,15 +508,8 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         const decisionId = context.req.param('decisionId');
         if (!decisionId || !UUID_RE.test(decisionId)) return c.json({ error: 'invalid_decision_id' }, 422);
         await workItems.ensureReady();
-        const now = new Date();
-        const decision = await settle(resolved.orgId, resolved.factoryProjectId, decisionId, now);
+        const decision = await settle(resolved.orgId, resolved.factoryProjectId, decisionId, new Date());
         if (!decision) return c.json({ error: 'decision_not_proposed' }, 409);
-        // Releasing a proposal is a person taking the item on. What follows —
-        // the review of the branch this run pushes, the fix a review asks for —
-        // is the same request continuing, so it no longer waits to be approved.
-        if (verb === 'approve' && decision.workItemId) {
-          await workItems.armAutonomy({ orgId: resolved.orgId, id: decision.workItemId, now });
-        }
         await audit.emit({
           context,
           input: {
@@ -808,10 +801,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             }
             throw error;
           }
-          // This route is only reached by a person pressing a run action, so
-          // reaching it is the commitment the approval gate is asking for. The
-          // runs that carry this item on to review are that request continuing.
-          await workItems.armAutonomy({ orgId: resolved.orgId, id: prepared.workItemId, now: new Date() });
           await audit.emit({
             context: loose(c),
             input: {

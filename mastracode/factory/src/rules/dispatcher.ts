@@ -4,7 +4,7 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController, AgentControllerEventListener } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 
-import { resolvePromptInvocation, resolveSkillInvocation } from '../skills/service.js';
+import { resolveSkillInvocation } from '../skills/service.js';
 import type { SkillSession } from '../skills/service.js';
 import type {
   FactoryDeferredDecisionRecord,
@@ -329,7 +329,6 @@ export class FactoryDecisionDispatcher {
         if (!proposed) throw new Error('Factory decision lease was lost before approval could be requested.');
         return;
       }
-      await this.#supersedeProposals(record, decision);
       await this.#withLease(
         async leaseExpiresAt =>
           this.#storage.renewDeferredDecisionLease(leaseIdentity(record, this.#ownerId), leaseExpiresAt),
@@ -349,38 +348,10 @@ export class FactoryDecisionDispatcher {
     }
   }
 
-  /**
-   * A proposal is a question: "should this run start?" Once that run is
-   * starting anyway — because a person approved a later copy, or armed the item
-   * — the question has been answered and the card must stop asking it. Left
-   * alone the badge outlives the work it describes, and the one affordance that
-   * means "the loop is stopped, answer this" cries wolf.
-   */
-  async #supersedeProposals(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<void> {
-    if (decision.type !== 'invokeSkill' || !record.workItemId) return;
-    try {
-      await this.#storage.dismissProposalsForWorkItem({
-        orgId: record.orgId,
-        factoryProjectId: record.factoryProjectId,
-        workItemId: record.workItemId,
-        role: decision.role,
-        dismissedAt: new Date(),
-      });
-    } catch (error) {
-      // Best-effort: a stale badge is not worth failing the run it describes.
-      console.error('Factory proposal supersede failed', sanitizeDispatchError(error));
-    }
-  }
-
   /** Starting an agent run spends the project's compute and executes its code — the one effect a human owns. */
   async #needsApproval(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<boolean> {
     if (decision.type !== 'invokeSkill' || record.approvedAt !== null) return false;
-    if (await this.#isAutoRunEnabled({ orgId: record.orgId, factoryProjectId: record.factoryProjectId })) return false;
-    // Withholding auto-run decides what the Factory may pick up on its own, not
-    // whether it may finish work a person already handed it. Once someone starts
-    // an item, the runs that carry it to review are that same request continuing.
-    const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
-    return item?.autonomyArmedAt == null;
+    return !(await this.#isAutoRunEnabled({ orgId: record.orgId, factoryProjectId: record.factoryProjectId }));
   }
 
   async #executeDecision(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<void> {
@@ -404,7 +375,6 @@ export class FactoryDecisionDispatcher {
           ingress: { type: 'rule', identity: `decision:${record.idempotencyKey}` },
           cause: 'rule_decision',
           causalChain: nextChain,
-          ...(decision.reenter ? { reenter: true } : {}),
         });
         if (result.status === 'rejected') throw new Error(`${result.code}: ${result.reason}`);
         if (!decision.message) return;
@@ -453,17 +423,11 @@ export class FactoryDecisionDispatcher {
         await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
         const requestContext = new RequestContext();
         requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
-        const resolved =
-          decision.skillName === undefined
-            ? await resolvePromptInvocation(this.#controller, {
-                resourceId: binding.resourceId,
-                prompt: decision.prompt,
-              })
-            : await resolveSkillInvocation(this.#controller, {
-                resourceId: binding.resourceId,
-                name: decision.skillName,
-                arguments: decision.arguments,
-              });
+        const resolved = await resolveSkillInvocation(this.#controller, {
+          resourceId: binding.resourceId,
+          name: decision.skillName,
+          arguments: decision.arguments,
+        });
         const session = resolved.session as DispatcherSession;
         await this.#switchThread(session, binding);
         const delivered = await session.thread.listActiveMessages();
@@ -490,29 +454,16 @@ export class FactoryDecisionDispatcher {
           );
         }
         let resolveAgentEnd!: () => void;
-        let agentEnd!: Promise<void>;
-        // The run's own verdict, not the delivery's. A signal can reach the
-        // agent perfectly and the run still die on a provider error or be
-        // cancelled mid-flight; without this the decision reports success and
-        // the break is invisible on the card.
-        let endReason: 'complete' | 'aborted' | 'error' | 'suspended' | undefined;
-        // Re-armed before a redelivery so the second send waits on its own run's
-        // ending rather than seeing the one that already resolved.
-        const armAgentEnd = () => {
-          endReason = undefined;
-          agentEnd = new Promise<void>(resolve => {
-            resolveAgentEnd = resolve;
-          });
-        };
-        armAgentEnd();
+        const agentEnd = new Promise<void>(resolve => {
+          resolveAgentEnd = resolve;
+        });
         const unsubscribe = session.subscribe(event => {
           if (event.type === 'agent_end') {
-            endReason = event.reason;
             resolveAgentEnd();
           }
         });
 
-        const sendKickoff = async () => {
+        try {
           const result = session.sendSignal(
             {
               id: record.id,
@@ -533,37 +484,6 @@ export class FactoryDecisionDispatcher {
             // a success.
             throw new Error(`Factory skill invocation signal did not reach the agent (${String(settled.action)}).`);
           }
-          return settled;
-        };
-
-        try {
-          let settled = await sendKickoff();
-          if (settled.action === 'deliver') {
-            // `deliver` means the signal was queued onto a run that was already
-            // in flight. If that run ends before draining its queue the prompt
-            // is dropped silently: no turn starts, no error surfaces, and the
-            // decision reports success while the card sits in its new stage with
-            // nobody working. Signals persist under their own id (the same
-            // identity the replay guard above reads), so confirm the message
-            // actually landed in the thread rather than trusting the ack.
-            const landed = await session.thread.listActiveMessages();
-            if (!landed.some(message => message.id === record.id)) {
-              // The condition that resolves this is the in-flight run ending, so
-              // wait for exactly that and redeliver into the idle session. A
-              // backoff cannot work here: retries are sized in seconds and a turn
-              // takes minutes, so every attempt lands on the same busy run and
-              // the card burns its whole budget without the session ever having
-              // had a chance to be free.
-              if (!(await waitForAgentEndOrTimeout(agentEnd))) {
-                throw new Error('Factory skill invocation is waiting on a run that has not ended.');
-              }
-              armAgentEnd();
-              settled = await sendKickoff();
-              if (settled.action !== 'wake') {
-                throw new Error('Factory skill invocation was queued onto an ending run and never reached the agent.');
-              }
-            }
-          }
           if (settled.action === 'wake') {
             const observed = await waitForAgentEndOrTimeout(agentEnd);
             if (!observed) {
@@ -571,17 +491,6 @@ export class FactoryDecisionDispatcher {
                 decisionId: record.id,
                 runId: settled.runId,
               });
-            } else if (endReason === 'error') {
-              throw new Error('Factory skill run ended in error.');
-            } else if (endReason === 'aborted') {
-              // Retryable, though an abort reads as deliberate. The stream does
-              // not say who aborted, and in practice the dominant cause is the
-              // process going away underneath the run — an operator restarting
-              // the server — not anyone deciding this work should stop. Treating
-              // that as terminal dead-ends the card at attempt 1 with nothing on
-              // the board to press. A spurious retry is bounded by MAX_ATTEMPTS;
-              // a dead card costs a human a manual nudge.
-              throw new Error('Factory skill run was aborted before it finished.');
             }
           }
         } finally {

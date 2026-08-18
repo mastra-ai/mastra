@@ -68,52 +68,11 @@ describe('boardCardStatus', () => {
     });
   });
 
-  it('does not call a replayed linked-card effect a failure', () => {
-    // A linked-card decision that already succeeded is reset to `retry` when its
-    // card is rematerialized, so the card gets re-filed. Nothing failed: no
-    // attempt was spent and no error was left. Calling that an error is how the
-    // board ends up showing failures nobody caused.
-    expect(
-      boardCardStatus({
-        idle: IDLE,
-        decision: decision({ type: 'upsertLinkedWorkItem', status: 'retry', attempts: 0, lastError: null }),
-      }),
-    ).toEqual({ kind: 'busy', label: 'Filing a linked card…' });
-  });
-
-  it('still reports an effect that has actually been tried and failed', () => {
-    expect(
-      boardCardStatus({
-        idle: IDLE,
-        decision: decision({ type: 'upsertLinkedWorkItem', status: 'retry', attempts: 2, lastError: null }),
-      }),
-    ).toEqual({ kind: 'error', label: 'Linked card could not be filed — retrying…', detail: undefined });
-  });
-
   it('describes a queued rule effect in terms of what it does, not the queue', () => {
     expect(boardCardStatus({ idle: IDLE, decision: decision({ type: 'transition', status: 'pending' }) })).toEqual({
       kind: 'busy',
       label: 'Moving this card automatically…',
     });
-  });
-
-  it('asks for the parked run once nothing is moving on its own', () => {
-    expect(
-      boardCardStatus({
-        idle: { label: 'Open session', affordance: 'open' },
-        proposal: { label: 'Re-review', decisionId: 'decision-9' },
-      }),
-    ).toEqual({ kind: 'waiting', label: 'Re-review', decisionId: 'decision-9' });
-  });
-
-  it('lets an effect the server is already working through outrank the parked run', () => {
-    expect(
-      boardCardStatus({
-        idle: IDLE,
-        proposal: { label: 'Re-review', decisionId: 'decision-9' },
-        decision: decision({ type: 'transition', status: 'pending' }),
-      }),
-    ).toEqual({ kind: 'busy', label: 'Moving this card automatically…' });
   });
 
   it('falls back to the click affordance when nothing is in flight', () => {

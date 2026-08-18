@@ -10,9 +10,6 @@ import { PlatformGithubIntegration } from './integration.js';
 
 const harness = vi.hoisted(() => {
   let mastra: Mastra | undefined;
-  // The resource that owns the subscribed thread. A scoped session is registered
-  // under its Factory project, so tests point this at the project under test.
-  let threadResourceId = 'resource-1';
   const sendNotificationSignal = vi.fn(async () => ({
     record: { id: 'notification-1' },
     decision: { action: 'deliver' as const },
@@ -28,9 +25,6 @@ const harness = vi.hoisted(() => {
       mastra = instance;
     }),
     getMastra: vi.fn(() => mastra),
-    // Delivery reads the subscribed thread first to confirm this deployment
-    // holds it and to learn which resource owns it.
-    queryThreadById: vi.fn(async ({ threadId }: { threadId: string }) => ({ id: threadId, resourceId: threadResourceId })),
     getSessionByResource: vi.fn<() => Promise<typeof session | undefined>>(async () => session),
     createSession: vi.fn(async (_input: { requestContext: { get(key: string): unknown } }) => session),
     onSessionCreated: vi.fn(),
@@ -41,12 +35,8 @@ const harness = vi.hoisted(() => {
   return {
     controller,
     sendNotificationSignal,
-    ownThreadWith(resourceId: string) {
-      threadResourceId = resourceId;
-    },
     reset() {
       mastra = undefined;
-      threadResourceId = 'resource-1';
       vi.clearAllMocks();
     },
   };
@@ -194,9 +184,6 @@ describe('Platform GitHub event worker factory lifecycle', () => {
         github.integrationStorage,
       );
 
-      // This subscription is scoped to a worktree, so its thread is owned by the
-      // Factory project resource that the session is created under below.
-      harness.ownThreadWith(factoryProject.id);
       harness.controller.getSessionByResource.mockResolvedValueOnce(undefined);
       const mastra = new Mastra(args);
       await factory.finalize();

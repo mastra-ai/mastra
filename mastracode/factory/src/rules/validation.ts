@@ -220,14 +220,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
       };
     }
     case 'transition': {
-      assertExactKeys(
-        value,
-        ['type', 'idempotencyKey', 'board', 'stage', 'message', 'reenter'],
-        'Factory transition decision',
-      );
-      if (value.reenter !== undefined && typeof value.reenter !== 'boolean') {
-        throw new FactoryRuleValidationError('Factory transition reenter must be a boolean.');
-      }
+      assertExactKeys(value, ['type', 'idempotencyKey', 'board', 'stage', 'message'], 'Factory transition decision');
       let message: { text: string; role?: string } | undefined;
       if (value.message !== undefined) {
         if (!isPlainObject(value.message)) {
@@ -249,7 +242,6 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         board: enumValue(value.board, FACTORY_RULE_BOARDS, 'Factory transition board'),
         stage: enumValue(value.stage, FACTORY_RULE_STAGES, 'Factory transition stage'),
         ...(message ? { message } : {}),
-        ...(value.reenter === true ? { reenter: true } : {}),
       };
     }
     case 'upsertLinkedWorkItem': {
@@ -278,15 +270,9 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
     case 'invokeSkill': {
       assertExactKeys(
         value,
-        ['type', 'idempotencyKey', 'role', 'skillName', 'prompt', 'arguments', 'precedingMessage', 'cancelInFlight'],
+        ['type', 'idempotencyKey', 'role', 'skillName', 'arguments', 'precedingMessage', 'cancelInFlight'],
         'Factory invoke skill decision',
       );
-      // A run activates a skill or carries a prompt, never both: they are two
-      // ways to author the same kickoff message, so accepting both would leave
-      // the dispatcher picking a winner.
-      if ((value.skillName === undefined) === (value.prompt === undefined)) {
-        throw new FactoryRuleValidationError('Factory skill invocation needs exactly one of skillName or prompt.');
-      }
       const args = optionalBoundedString(value.arguments, 'Factory skill arguments', MAX_ARGUMENTS_LENGTH);
       const precedingMessage = optionalBoundedString(
         value.precedingMessage,
@@ -300,9 +286,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         type,
         ...commonCommitFields(value),
         role: boundedString(value.role, 'Factory skill role', MAX_ROLE_LENGTH, IDENTIFIER_RE),
-        ...(value.skillName === undefined
-          ? { prompt: boundedString(value.prompt, 'Factory skill prompt', MAX_MESSAGE_LENGTH) }
-          : { skillName: boundedString(value.skillName, 'Factory skill name', MAX_SKILL_NAME_LENGTH, SKILL_NAME_RE) }),
+        skillName: boundedString(value.skillName, 'Factory skill name', MAX_SKILL_NAME_LENGTH, SKILL_NAME_RE),
         ...(args ? { arguments: args } : {}),
         ...(precedingMessage ? { precedingMessage } : {}),
         ...(value.cancelInFlight === true ? { cancelInFlight: true } : {}),
