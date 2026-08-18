@@ -273,9 +273,9 @@ describe('Subconscious LibSQL integration', () => {
     const scope = ['org:acme', `resource:${resourceId}`, `thread:${threadId}`];
     const knowledge = (await storage.getStore('knowledge'))!;
     const atlas = await knowledge.createNode({ name: 'Project Atlas', kind: 'project', scope: scope.slice(0, 2) });
-    await knowledge.appendItem({
+    await knowledge.appendKnowledge({
       id: 'item-atlas-launch',
-      parentNodeId: atlas.id,
+      node: atlas.id,
       text: '[[Project Atlas]] launches January 15.',
       scope: scope.slice(0, 2),
       sourceThreadId: 'source-thread',
@@ -365,9 +365,9 @@ describe('Subconscious LibSQL integration', () => {
       kind: 'project',
       scope: ['org:acme', `resource:${resourceId}`],
     });
-    await knowledge.appendItem({
+    await knowledge.appendKnowledge({
       id: 'item-atlas-resource-launch',
-      parentNodeId: node.id,
+      node: node.id,
       text: '[[Project Atlas]] launches January 15.',
       scope: ['org:acme', `resource:${resourceId}`],
       sourceThreadId: 'source-thread',
