@@ -3,4 +3,4 @@
 '@mastra/libsql': patch
 ---
 
-Added a knowledge storage contract for scoped, content-capable nodes, knowledge items, and durable curation state.
+Added experimental scoped knowledge nodes, records, and durable curation state to `@mastra/core`, with LibSQL support in `@mastra/libsql`. Use `storage.stores.knowledge.listKnowledgeRelatedTo({ node, scope })` to read visible related records.
