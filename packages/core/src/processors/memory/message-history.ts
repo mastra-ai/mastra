@@ -279,44 +279,13 @@ export class MessageHistory implements Processor {
     // `lastMessages` recall window): identical echoes are skipped, and only
     // supported client-authored transitions (e.g. a client-side tool result
     // advancing a stored `call` to `result`) are merged into the stored version.
-    if (newInput.length > 0 && typeof this.storage.listMessagesById === 'function') {
-      const inputIds = newInput.map(m => m.id).filter((id): id is string => Boolean(id));
-      if (inputIds.length > 0) {
-        const lookupSpan = this.createMemorySpan(
-          'recall',
-          observabilityContext,
-          { messageIds: inputIds },
-          {
-            messageCount: inputIds.length,
-          },
-        );
-        let storedInput: MastraDBMessage[] | undefined;
-        try {
-          ({ messages: storedInput } = await this.storage.listMessagesById({ messageIds: inputIds }));
-          lookupSpan?.end({ output: { success: true } });
-        } catch (error) {
-          lookupSpan?.error({ error: error as Error, endSpan: true });
-          // Reconciliation is best effort. If the optional lookup fails, preserve
-          // the pre-existing persistence behavior and save the original input and
-          // output instead of aborting the whole turn.
-        }
-
-        if (storedInput) {
-          // Only records that actually belong to this thread (and resource) may act
-          // as the canonical version of an echoed ID. An ID that resolves to a
-          // foreign thread — or to another resource's thread — is treated as having
-          // no stored record, so the echo can neither suppress this thread's write
-          // nor drag a foreign threadId/resourceId into it.
-          const storedById = new Map(
-            storedInput
-              .filter(m => m.threadId === threadId && (!resourceId || m.resourceId === resourceId))
-              .map(m => [m.id, m]),
-          );
-          const reconciledInput = reconcileClientEchoes(newInput, storedById);
-          messagesToSave = [...reconciledInput, ...newOutput];
-        }
-      }
-    }
+    const reconciledInput = await this.reconcileClientInputMessages({
+      messages: newInput,
+      threadId,
+      resourceId,
+      observabilityContext,
+    });
+    messagesToSave = [...reconciledInput, ...newOutput];
 
     const span = this.createMemorySpan('save', observabilityContext, undefined, {
       messageCount: messagesToSave.length,
@@ -335,6 +304,45 @@ export class MessageHistory implements Processor {
     } catch (error) {
       span?.error({ error: error as Error, endSpan: true });
       throw error;
+    }
+  }
+
+  /**
+   * Reconcile only messages classified as client input before persistence.
+   * Server-authored output and marker updates must bypass this lookup.
+   */
+  async reconcileClientInputMessages(args: {
+    messages: MastraDBMessage[];
+    threadId: string;
+    resourceId?: string;
+    observabilityContext?: Partial<ObservabilityContext>;
+  }): Promise<MastraDBMessage[]> {
+    const { messages, threadId, resourceId, observabilityContext } = args;
+    if (messages.length === 0 || typeof this.storage.listMessagesById !== 'function') return messages;
+
+    const messageIds = messages.map(message => message.id).filter((id): id is string => Boolean(id));
+    if (messageIds.length === 0) return messages;
+
+    const lookupSpan = this.createMemorySpan(
+      'recall',
+      observabilityContext,
+      { messageIds },
+      {
+        messageCount: messageIds.length,
+      },
+    );
+    try {
+      const { messages: storedInput } = await this.storage.listMessagesById({ messageIds });
+      lookupSpan?.end({ output: { success: true } });
+      const storedById = new Map(
+        storedInput
+          .filter(message => message.threadId === threadId && (!resourceId || message.resourceId === resourceId))
+          .map(message => [message.id, message]),
+      );
+      return reconcileClientEchoes(messages, storedById);
+    } catch (error) {
+      lookupSpan?.error({ error: error as Error, endSpan: true });
+      return messages;
     }
   }
 

@@ -1857,6 +1857,37 @@ describe('MessageHistory', () => {
       saveSpy.mockRestore();
     });
 
+    it('should not let a client change the role of a stored user message', async () => {
+      const stored = {
+        id: 'msg-1',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Canonical question' }] },
+        threadId: 'thread-1',
+        createdAt: new Date(baseTime - 1000),
+      } as MastraDBMessage;
+      mockStorage.setMessages([stored]);
+
+      processor = new MessageHistory({ storage: mockStorage });
+      const saveSpy = vi.spyOn(mockStorage, 'saveMessages');
+      const roleChangedEcho = {
+        ...stored,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Client replacement' }] },
+      } as MastraDBMessage;
+
+      await processor.processOutputResult({
+        messageList: new MessageList().add([roleChangedEcho], 'input'),
+        messages: [],
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      const savedMessages = (saveSpy.mock.calls[0]![0] as any).messages as MastraDBMessage[];
+      expect(savedMessages).toEqual([stored]);
+
+      saveSpy.mockRestore();
+    });
+
     it('should treat an echoed ID from another thread as a fresh message', async () => {
       const foreign = assistantMessage({
         content: {
