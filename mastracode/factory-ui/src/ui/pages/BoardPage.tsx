@@ -320,6 +320,7 @@ function BoardContent({
                     allItems={items.all}
                     activityPage={activityPage}
                     liveWorktreePaths={runs.liveWorktreePaths}
+                    sessionLivenessResolved={runs.sessionLivenessResolved}
                     runDisabled={runs.disabled}
                     preparing={runs.preparingFor(item.id)}
                     evaluatingStage={items.evaluatingStages.get(item.id)}
@@ -346,6 +347,7 @@ function BoardContent({
                       key={candidate.sourceKey}
                       candidate={candidate}
                       pendingRunRoles={runs.pendingRolesForSource(candidate.sourceKey)}
+                      preparing={runs.preparingForSource(candidate.sourceKey)}
                       disabled={!runs.enabled}
                       onRun={(action, prompt) => runs.startCandidateRun(candidate, action, prompt)}
                       onFile={() => items.handleDrop({ kind: 'candidate', candidate }, candidate.column)}

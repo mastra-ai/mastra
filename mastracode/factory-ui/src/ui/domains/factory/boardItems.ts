@@ -32,6 +32,13 @@ export function githubNumberForItem(item: Pick<WorkItem, 'source' | 'metadata'>)
 
 export type PullRequestStatus = 'draft' | 'open' | 'closed' | 'merged';
 
+export const PULL_REQUEST_STATUS_LABELS: Record<PullRequestStatus, string> = {
+  draft: 'Draft pull request',
+  open: 'Open pull request',
+  closed: 'Closed pull request',
+  merged: 'Merged pull request',
+};
+
 export function pullRequestStatusForItem(item: Pick<WorkItem, 'metadata' | 'stages'>): PullRequestStatus {
   if (item.metadata.merged === true) return 'merged';
   if (item.metadata.state === 'closed') return 'closed';
@@ -59,7 +66,7 @@ export function externalLinkLabel(source: WorkItemSource): string {
 
 export function workItemMeta(item: WorkItem): string {
   const author = typeof item.metadata.author === 'string' ? item.metadata.author : undefined;
-  const age = `added ${relativeTime(item.createdAt)}`;
+  const age = relativeTime(item.createdAt);
   const githubNumber = githubNumberForItem(item);
   if (githubNumber !== undefined) return `#${githubNumber}${author ? ` · ${author}` : ''} · ${age}`;
   if (item.source === 'linear-issue' && typeof item.metadata.identifier === 'string') {

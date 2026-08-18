@@ -1058,7 +1058,7 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
     });
   });
 
-  it('should return authored content text in toModelOutput when structuredContent is a scalar', async () => {
+  it('should use scalar structuredContent as JSON model output', async () => {
     const sdkClient = (client as any).client as Client;
 
     vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
@@ -1089,12 +1089,12 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
 
     expect(result).toBe(0);
     expect(tool.toModelOutput?.(result)).toEqual({
-      type: 'text',
-      value: 'count is zero',
+      type: 'json',
+      value: 0,
     });
   });
 
-  it('should return authored content text in toModelOutput when structuredContent is null', async () => {
+  it('should use null structuredContent as JSON model output', async () => {
     const sdkClient = (client as any).client as Client;
 
     vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
@@ -1125,12 +1125,12 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
 
     expect(result).toBeNull();
     expect(tool.toModelOutput?.(result)).toEqual({
-      type: 'text',
-      value: 'no data available',
+      type: 'json',
+      value: null,
     });
   });
 
-  it('should map authored content to the matching scalar invocation when the same value is returned twice', async () => {
+  it('should not retain authored content from an earlier equal scalar result', async () => {
     const sdkClient = (client as any).client as Client;
 
     vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
@@ -1169,11 +1169,11 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
 
     expect(first).toBe(0);
     expect(second).toBe(0);
-    expect(tool.toModelOutput?.(first)).toEqual({ type: 'text', value: 'first zero' });
-    expect(tool.toModelOutput?.(second)).toEqual({ type: 'text', value: 'second zero' });
+    expect(tool.toModelOutput?.(second)).toEqual({ type: 'json', value: 0 });
+    expect(tool.toModelOutput?.(first)).toEqual({ type: 'json', value: 0 });
   });
 
-  it('should preserve invocation order when concurrent scalar calls resolve out of order', async () => {
+  it('should keep concurrent equal scalar results as JSON when calls resolve out of order', async () => {
     const sdkClient = (client as any).client as Client;
 
     vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
@@ -1213,8 +1213,8 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
       tool.execute?.({ query: 'second' }),
     ]);
 
-    expect(tool.toModelOutput?.(first)).toEqual({ type: 'text', value: 'first zero' });
-    expect(tool.toModelOutput?.(second)).toEqual({ type: 'text', value: 'second zero' });
+    expect(tool.toModelOutput?.(second)).toEqual({ type: 'json', value: 0 });
+    expect(tool.toModelOutput?.(first)).toEqual({ type: 'json', value: 0 });
   });
 });
 

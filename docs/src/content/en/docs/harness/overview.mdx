@@ -19,11 +19,12 @@ Choose a starting point based on what the agent needs. You may use one capabilit
 
 | If you want to | Start here | Why |
 | - | - | - |
-| Keep a run available through client disconnects or server restarts | [Durable Agents](/docs/long-running-agents/durable-agents) | Persist run state and let clients reconnect to its stream. |
-| Run slow tools, workflows, or subagents without blocking | [Background Tasks](/docs/long-running-agents/background-tasks) | Finish work asynchronously and return its result to the agent. |
-| Keep an agent working until it reaches an objective | [Goals](/docs/long-running-agents/goals) | Evaluate a thread-scoped objective until it's complete or reaches its run budget. |
-| Start work automatically at recurring times | [Schedules](/docs/long-running-agents/schedules) | Start isolated runs or send prompts into an existing thread on a cron schedule. |
-| Add context, redirect active work, or wake an idle thread | [Signals](/docs/long-running-agents/signals) | Deliver input now or hold it for the next turn. |
-| React to changes in GitHub, Slack, continuous integration, or another external system | [Signal Providers](/docs/long-running-agents/signal-providers) | Track subscriptions and forward matching events to agent threads. |
+| Keep a run available through client disconnects or server restarts | [Durable Agents](/docs/harness/durable-agents) | Persist run state and let clients reconnect to its stream. |
+| Run slow tools, workflows, or subagents without blocking | [Background Tasks](/docs/harness/background-tasks) | Finish work asynchronously and return its result to the agent. |
+| Keep an agent working until it reaches an objective | [Goals](/docs/harness/goals) | Evaluate a thread-scoped objective until it's complete or reaches its run budget. |
+| Start work automatically at recurring times | [Schedules](/docs/harness/schedules) | Start isolated runs or send prompts into an existing thread on a cron schedule. |
+| Add context, redirect active work, or wake an idle thread | [Signals](/docs/harness/signals) | Deliver input now or hold it for the next turn. |
+| React to changes in GitHub, Slack, continuous integration, or another external system | [Signal Providers](/docs/harness/signal-providers) | Track subscriptions and forward matching events to agent threads. |
 | Build an interactive product with sessions, modes, state, approvals, and events | [AgentController](/docs/harness/agent-controller) | Host isolated sessions around a shared agent runtime. |
 | Let users steer, queue follow-up work, or stop an interactive run | [AgentController](/docs/harness/agent-controller) | Expose run controls through each session. |
+| Give an agent files, a shell, and the defaults a coding agent needs | [`createCodingAgent()`](/reference/coding-agent/create-coding-agent) | Build a standard agent with a workspace, task tracking, and retries already configured. |

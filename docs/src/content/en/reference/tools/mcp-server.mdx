@@ -186,8 +186,47 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
     description:
       'A map of `ui://` URIs to app resource configurations. Each entry defines an interactive HTML UI served via the MCP Apps extension (SEP-1865). See the MCP Apps section for details.',
   },
+  {
+    name: 'protocolVersion',
+    type: "'2025-11-25' | '2026-07-28'",
+    isOptional: true,
+    description:
+      "Opt-in MCP protocol revision. Omitted (or '2025-11-25') keeps the legacy behavior exactly. Set to '2026-07-28' to serve the stateless MCP revision. See the Protocol versions section for details.",
+  },
+  {
+    name: 'cacheHints',
+    type: 'MCPServerCacheHints',
+    isOptional: true,
+    description:
+      "Cache hints (`ttlMs` / `cacheScope`) advertised on cacheable results of the '2026-07-28' protocol revision, keyed by operation (e.g. 'tools/list'). Only applied when `protocolVersion: '2026-07-28'` is set.",
+  },
 ]}
 />
+
+## Protocol versions
+
+By default, `MCPServer` speaks the legacy (2025-era) MCP protocol: sessionful streamable HTTP with an `initialize` handshake. Set `protocolVersion: '2026-07-28'` to serve the stateless MCP revision instead:
+
+- HTTP and serverless requests go through a dual-era handler: clients that speak `2026-07-28` are served natively (stateless, per-request envelope), and legacy clients are served through a built-in stateless fallback on the same endpoint.
+- `startStdio()` serves both eras: the opening exchange selects the era for the connection.
+- Tool list, prompt list, resource list, and resource update notifications also reach `2026-07-28` clients through `subscriptions/listen`.
+- Tool log messages honor the caller's per-request `logLevel` opt-in instead of the session-level `logging/setLevel`.
+- Configured `cacheHints` are advertised on cacheable results such as `tools/list`.
+- Tool elicitation (`options.mcp.elicitation.sendRequest()`) works on both eras. On `2026-07-28` requests, it uses the protocol's multi round-trip mechanism. The tool call first returns an `input_required` result. After the client answers, the call retries with the answer attached. The `sendRequest()` promise API is unchanged, but the tool function re-executes from the top on each retry, so keep side effects idempotent (or place them after the last elicitation) and keep the order of `sendRequest()` calls deterministic for a given input.
+
+```typescript
+const server = new MCPServer({
+  name: 'My Server',
+  version: '1.0.0',
+  tools: { weatherTool },
+  protocolVersion: '2026-07-28',
+  cacheHints: {
+    'tools/list': { ttlMs: 60_000, cacheScope: 'private' },
+  },
+})
+```
+
+Omitting `protocolVersion` keeps the current behavior unchanged.
 
 ## Exposing agents as tools
 
@@ -265,6 +304,51 @@ const fetchUserData = createTool({
 })
 ```
 
+#### Where `authInfo` comes from
+
+When an MCP server is served by a Mastra server, `extra.authInfo` is populated from the principal resolved by `server.auth`. Nothing extra is required:
+
+```typescript
+export const mastra = new Mastra({
+  mcpServers: { myServer },
+  server: {
+    auth: new MastraJwtAuth({ secret: process.env.JWT_SECRET! }),
+  },
+})
+```
+
+The authenticated user is mapped to `authInfo` as:
+
+| `authInfo` field | Value |
+| - | - |
+| `token` | The bearer token or session cookie value used for the request |
+| `clientId` | The first present of `user.id`, `user.sub`, `user.userId`, `user.email` |
+| `scopes` | `user.scopes`, `user.scope`, or `user.permissions`, normalized to an array |
+| `extra.user` | The full user object returned by the auth provider |
+
+If your own middleware performs the verification, set `server.mcpOptions.setRequestAuth` to build `authInfo` yourself. The hook replaces the default mapping and applies to both the streamable HTTP and SSE transports:
+
+```typescript
+export const mastra = new Mastra({
+  mcpServers: { myServer },
+  server: {
+    middleware: [verifyBearerToken], // stores the payload on the request context
+    mcpOptions: {
+      setRequestAuth: (req, requestContext) => {
+        const payload = requestContext.get('bearerPayload')
+        req.auth = {
+          token: payload.token,
+          clientId: payload.sub,
+          scopes: payload.scope.split(' '),
+        }
+      },
+    },
+  },
+})
+```
+
+Leaving `req.auth` unset inside the hook opts the request out of auth info entirely.
+
 ## Methods
 
 These are the functions you can call on an `MCPServer` instance to control its behavior and get information.
@@ -290,6 +374,10 @@ await server.startStdio()
 ```
 
 ### `startSSE()`
+
+:::warning
+The HTTP+SSE transport is deprecated in the MCP specification. Use `startHTTP()` (streamable HTTP) instead.
+:::
 
 This method helps you integrate the MCP server with an existing web server to use Server-Sent Events (SSE) for communication. You'll call this from your web server's code when it receives a request for the SSE or message paths.
 
@@ -362,6 +450,10 @@ Here are the details for the values needed by the `startSSE` method:
 />
 
 ### `startHonoSSE()`
+
+:::warning
+The HTTP+SSE transport is deprecated in the MCP specification. Use `startHTTP()` (streamable HTTP) instead.
+:::
 
 This method helps you integrate the MCP server with an existing web server to use Server-Sent Events (SSE) for communication. You'll call this from your web server's code when it receives a request for the SSE or message paths.
 
@@ -453,6 +545,21 @@ async startHTTP({
 }): Promise<void>
 ```
 
+#### Options with `protocolVersion: '2026-07-28'`
+
+The `2026-07-28` protocol uses one shared stateless handler instead of a transport configured for each request. `startHTTP()` handles legacy transport options as follows:
+
+| Options | Behavior |
+| - | - |
+| `serverless: true`, `serverlessStreaming: true`, `sessionIdGenerator: undefined` | Accepted because the modern handler already provides stateless requests and automatic request-scoped streaming. |
+| `allowedHosts`, `allowedOrigins`, `enableDnsRebindingProtection` | Enforced before the request reaches the modern handler. Host and origin lists are active when `enableDnsRebindingProtection` is `true`. |
+| `sessionIdGenerator` with a function, session callbacks, or `eventStore` | Rejected because the modern protocol doesn't create HTTP sessions. |
+| `enableJsonResponse`, `retryInterval`, `keepAliveMs`, or `supportedProtocolVersions` | Rejected because these values configure a shared handler and can't vary between requests. |
+| `serverless: false` or `serverlessStreaming: false` | Rejected because these values request behavior that differs from the modern handler. |
+| Unknown options | Rejected instead of being ignored. |
+
+Omit `options` when you don't need request guards or compatibility declarations.
+
 Here's an example of how you might use `startHTTP` within an HTTP server request handler. In this example an MCP client could connect to your MCP server at `http://localhost:1234/http`:
 
 ```typescript
@@ -475,7 +582,7 @@ httpServer.listen(PORT, () => {
 })
 ```
 
-For **serverless environments** (Supabase Edge Functions, Cloudflare Workers, Vercel Edge, etc.), use `serverless: true` to enable stateless operation:
+For **serverless environments** (Supabase Edge Functions, Cloudflare Workers, Vercel Edge, etc.), use `serverless: true` to enable stateless operation on the legacy protocol path. Servers configured with `protocolVersion: '2026-07-28'` are already stateless and may omit this option.
 
 ```typescript
 // Supabase Edge Function example
@@ -551,7 +658,7 @@ await server.startHTTP({
 
 This is still stateless: no `mcp-session-id` is required or persisted. It only enables notifications scoped to the current request (such as progress). The session-dependent features below remain unavailable.
 
-The following MCP features require session state or persistent connections and **won't work** in serverless mode (including with `serverlessStreaming: true`):
+On the legacy protocol path, the following MCP features require session state or persistent connections and **won't work** in serverless mode (including with `serverlessStreaming: true`):
 
 - **Elicitation** - Interactive user input requests during tool execution require session management to route responses back to the correct client
 - **Resource subscriptions** - `resources/subscribe` and `resources/unsubscribe` need persistent connections to maintain subscription state
@@ -1140,7 +1247,7 @@ Notification methods (`resources.notifyListChanged()`, `prompts.notifyListChange
 
 ## Examples
 
-For a practical example of packaging a stdio server, see [Publish a stdio server package](/docs/mcp/overview#publish-a-stdio-server-package).
+For a practical example of packaging a stdio server, see [Publish a stdio server package](/docs/connections/mcp#publish-a-stdio-server-package).
 
 The example at the beginning of this page also demonstrates how to instantiate `MCPServer` with both tools and agents.
 
@@ -1891,6 +1998,9 @@ const calculatorTool = createTool({
     num2: z.number(),
     operation: z.enum(['add', 'subtract']),
   }),
+  mcp: {
+    _meta: { ui: { resourceUri: 'ui://calculator/main' } },
+  },
   execute: async ({ num1, num2, operation }) => {
     const result = operation === 'add' ? num1 + num2 : num1 - num2
     return {
@@ -1914,7 +2024,7 @@ const server = new MCPServer({
 })
 ```
 
-Link a tool to its app resource by setting `_meta.ui.resourceUri` on the tool to the matching `ui://` URI. The server auto-normalizes this metadata when registering tools. Visit [MCP Apps](/docs/mcp/overview) for the full app bridge API and usage patterns.
+Link a tool to its app resource by setting `mcp._meta.ui.resourceUri` in `createTool()` to the matching `ui://` URI. The server normalizes this metadata for older hosts when listing tools. Visit [MCP Apps](/docs/connections/mcp) for the full app bridge API and usage patterns.
 
 ## Related information
 

@@ -118,6 +118,88 @@ describe('pruneAgentLoopSnapshot stepResult.request strip', () => {
     expect(countRequestEchoes(pruneAgentLoopSnapshot({ snapshot: build() }))).toBe(0);
   });
 
+  it('prunes array-shaped foreach entries while preserving the array and live resume state', () => {
+    const original = snapshotWith({
+      'durable-tool-call': {
+        status: 'suspended',
+        suspendPayload: {
+          __workflow_meta: {
+            foreachOutput: [
+              {
+                status: 'success',
+                payload: { stepResult: stepResult(), messages: { all: ['old conversation'] } },
+                output: { stepResult: stepResult(), messages: { all: ['old conversation'] } },
+                suspendPayload: { __streamState: { messageList: 'stale' } },
+              },
+              {
+                status: 'suspended',
+                payload: { stepResult: stepResult(), messages: { all: ['current conversation'] } },
+                suspendPayload: {
+                  __streamState: { messageList: 'live' },
+                  approval: { toolCallId: 'tool-1' },
+                },
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    const pruned = pruneAgentLoopSnapshot({ snapshot: original });
+    const foreachOutput = (pruned.context as Record<string, any>)['durable-tool-call'].suspendPayload.__workflow_meta
+      .foreachOutput;
+
+    expect(Array.isArray(foreachOutput)).toBe(true);
+    expect(foreachOutput).toHaveLength(2);
+    expect(foreachOutput[0]).not.toHaveProperty('suspendPayload');
+    expect(foreachOutput[0].payload).not.toHaveProperty('messages');
+    expect(foreachOutput[0].output).not.toHaveProperty('messages');
+    expect(countRequestEchoes(foreachOutput[0])).toBe(0);
+    expect(foreachOutput[1].payload).not.toHaveProperty('messages');
+    expect(foreachOutput[1].suspendPayload).toEqual({
+      __streamState: { messageList: 'live' },
+      approval: { toolCallId: 'tool-1' },
+    });
+
+    const originalForeachOutput = (original.context as Record<string, any>)['durable-tool-call'].suspendPayload
+      .__workflow_meta.foreachOutput;
+    expect(originalForeachOutput[0].suspendPayload.__streamState.messageList).toBe('stale');
+    expect(countRequestEchoes(originalForeachOutput)).toBe(3);
+  });
+
+  it('strips stream-state mirrors from array-shaped foreach output in snapshot.result', () => {
+    const snapshot = {
+      context: { input: { some: 'input' } },
+      result: {
+        status: 'suspended',
+        suspendPayload: {
+          __streamState: { messageList: 'outer mirror' },
+          __workflow_meta: {
+            foreachOutput: [
+              { status: 'success', suspendPayload: { __streamState: { messageList: 'stale' } } },
+              {
+                status: 'suspended',
+                suspendPayload: {
+                  __streamState: { messageList: 'live mirror' },
+                  approval: { toolCallId: 'tool-1' },
+                },
+              },
+            ],
+          },
+        },
+      },
+    } as unknown as WorkflowRunState;
+
+    const pruned = pruneAgentLoopSnapshot({ snapshot });
+    const resultPayload = (pruned.result as any).suspendPayload;
+    const foreachOutput = resultPayload.__workflow_meta.foreachOutput;
+
+    expect(resultPayload).not.toHaveProperty('__streamState');
+    expect(Array.isArray(foreachOutput)).toBe(true);
+    expect(foreachOutput[0]).not.toHaveProperty('suspendPayload');
+    expect(foreachOutput[1].suspendPayload).toEqual({ approval: { toolCallId: 'tool-1' } });
+  });
+
   it('is copy-on-write and does not mutate the caller snapshot', () => {
     const original = snapshotWith({
       step: { status: 'success', output: { stepResult: stepResult() } },

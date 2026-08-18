@@ -4,6 +4,8 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronUpIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+import { useChatRunning } from '@/lib/ai-ui/chat/chat-context';
+
 export interface BadgeWrapperProps {
   children?: React.ReactNode;
   title?: React.ReactNode;
@@ -24,13 +26,19 @@ export const BadgeWrapper = ({
   'data-testid': dataTestId,
 }: BadgeWrapperProps) => {
   const [isCollapsed, setIsCollapsed] = useState(initialCollapsed);
+  const { isRunning } = useChatRunning();
+  // A badge already on screen when the thread loaded was not just called.
+  const [arrivedLive] = useState(() => isRunning);
 
   useEffect(() => {
     setIsCollapsed(initialCollapsed);
   }, [initialCollapsed]);
 
   return (
-    <div className="mb-4" data-testid={dataTestId}>
+    <div
+      className={cn('mb-4', arrivedLive && 'motion-safe:animate-in fade-in-0 slide-in-from-bottom-1')}
+      data-testid={dataTestId}
+    >
       <div className="flex flex-row items-center justify-between gap-2">
         <button
           onClick={collapsible ? () => setIsCollapsed(s => !s) : undefined}

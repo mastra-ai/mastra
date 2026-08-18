@@ -82,6 +82,37 @@ describe('resolveModelConfig', () => {
     await expect(resolveModelConfig(null as any)).rejects.toThrow('Invalid model configuration provided');
   });
 
+  describe('routing field validation', () => {
+    it('should reject a config whose id is not a string', async () => {
+      const config = { id: 123 } as any;
+      expect(isOpenAICompatibleObjectConfig(config)).toBe(false);
+      await expect(resolveModelConfig(config)).rejects.toThrow('Invalid model configuration provided');
+    });
+
+    it('should reject a config whose providerId is not a string', async () => {
+      const config = { providerId: 123, modelId: 'model' } as any;
+      expect(isOpenAICompatibleObjectConfig(config)).toBe(false);
+      await expect(resolveModelConfig(config)).rejects.toThrow('Invalid model configuration provided');
+    });
+
+    it('should reject a config whose modelId is not a string', async () => {
+      const config = { providerId: 'provider', modelId: 123 } as any;
+      expect(isOpenAICompatibleObjectConfig(config)).toBe(false);
+      await expect(resolveModelConfig(config)).rejects.toThrow('Invalid model configuration provided');
+    });
+
+    it('should reject a malformed providerId/modelId pair even when a valid id is present', async () => {
+      const config = { id: 'openai/gpt-4o', providerId: 123, modelId: 'model' } as any;
+      expect(isOpenAICompatibleObjectConfig(config)).toBe(false);
+      await expect(resolveModelConfig(config)).rejects.toThrow('Invalid model configuration provided');
+    });
+
+    it('should still accept valid string routing fields', () => {
+      expect(isOpenAICompatibleObjectConfig({ id: 'openai/gpt-4o' } as any)).toBe(true);
+      expect(isOpenAICompatibleObjectConfig({ providerId: 'openai', modelId: 'gpt-4o' } as any)).toBe(true);
+    });
+  });
+
   describe('v4 (LanguageModelV4 / AI SDK v7) handling', () => {
     it('should wrap a v4 model in AISDKV7LanguageModel', async () => {
       const model = {

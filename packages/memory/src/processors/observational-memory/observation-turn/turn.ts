@@ -167,6 +167,19 @@ export class ObservationTurn {
     return this._context;
   }
 
+  /** Replace the cached turn record with a specific instance. */
+  setRecord(record: ObservationalMemoryRecord): void {
+    this._record = record;
+    if (this._context) {
+      this._context.record = record;
+    }
+  }
+
+  /** Patch the cached turn record with merged fields. */
+  patchRecord(patch: Partial<ObservationalMemoryRecord>): void {
+    this.setRecord({ ...this.record, ...patch });
+  }
+
   /**
    * Create a step handle. If a previous step exists, it is finalized
    * (its output messages will be saved at the start of the new step's prepare()).
@@ -209,23 +222,25 @@ export class ObservationTurn {
       const record = this._record!;
       const unobservedMessages = this.om.getUnobservedMessages(allMessages, record);
       if (unobservedMessages.length > 0) {
-        void this.om
-          .buffer({
-            threadId: this.threadId,
-            resourceId: this.resourceId,
-            messages: unobservedMessages,
-            record,
-            writer: this.writer,
-            agent: this.agent,
-            sendSignal: this.sendSignal,
-            requestContext: this.requestContext,
-            currentModel: this.actorModelContext,
-            observabilityContext: this.observabilityContext,
-            skipMinimumTokenCheck: true,
-          })
-          .catch((err: Error) => {
-            omDebug(`[OM:turn.end] idle buffer failed: ${err?.message}`);
-          });
+        void this.om.trackBackgroundWork(
+          this.om
+            .buffer({
+              threadId: this.threadId,
+              resourceId: this.resourceId,
+              messages: unobservedMessages,
+              record,
+              writer: this.writer,
+              agent: this.agent,
+              sendSignal: this.sendSignal,
+              requestContext: this.requestContext,
+              currentModel: this.actorModelContext,
+              observabilityContext: this.observabilityContext,
+              skipMinimumTokenCheck: true,
+            })
+            .catch((err: Error) => {
+              omDebug(`[OM:turn.end] idle buffer failed: ${err?.message}`);
+            }),
+        );
       }
     }
 
@@ -237,7 +252,7 @@ export class ObservationTurn {
    * @internal
    */
   async refreshRecord(): Promise<void> {
-    this._record = await this.om.getOrCreateRecord(this.threadId, this.resourceId);
+    this.setRecord(await this.om.getOrCreateRecord(this.threadId, this.resourceId));
   }
 
   /**

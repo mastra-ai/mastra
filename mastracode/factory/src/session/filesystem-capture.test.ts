@@ -5,6 +5,7 @@ import {
   captureSessionFilesystem,
   observeSessionFilesystem,
   parseFilesystemCaptureFiles,
+  waitForPendingFilesystemCapture,
   type FilesystemCaptureDependencies,
   type FilesystemCaptureSession,
 } from './filesystem-capture.js';
@@ -20,11 +21,11 @@ function commandResult(overrides: Partial<{ exitCode: number; stdout: string; st
   };
 }
 
-function createSession(results = [commandResult(), commandResult()]) {
+function createSession(results = [commandResult(), commandResult()], resourceId = 'resource-1') {
   const executeCommand = vi.fn(async () => results.shift() ?? commandResult());
   const listeners: SessionBeforeAgentEndListener[] = [];
   const session: FilesystemCaptureSession = {
-    identity: { getResourceId: () => 'resource-1' },
+    identity: { getResourceId: () => resourceId },
     thread: { requireId: () => 'thread-1' },
     getWorkspace: () => ({
       sandbox: {
@@ -160,14 +161,63 @@ describe('observeSessionFilesystem', () => {
       const dependencies = createDependencies();
       observeSessionFilesystem(session, dependencies);
 
-      await listeners[0]!({ type: 'agent_end', reason });
+      // The listener no longer returns the capture chain; the capture still
+      // runs and persists in the background.
+      listeners[0]!({ type: 'agent_end', reason });
 
-      expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(1));
     },
   );
 
+  it('does not gate the agent-end listener on slow capture execs', async () => {
+    // The sandbox exec never resolves: the listener must still settle
+    // immediately, because agent_end must not wait on the capture I/O.
+    // Unique resource id: this chain never settles and must not leak into
+    // other tests through the shared resource-level chain map.
+    const { session, listeners } = createSession(undefined, 'resource-never-settles');
+    const gatedExec = new Promise<never>(() => {});
+    session.getWorkspace = () => ({
+      sandbox: { executeCommand: vi.fn(() => gatedExec) } as any,
+    });
+    const dependencies = createDependencies();
+    observeSessionFilesystem(session, dependencies);
+
+    const listenerResult = listeners[0]!({ type: 'agent_end', reason: 'complete' });
+
+    // Resolves without waiting on the never-resolving exec.
+    await expect(Promise.resolve(listenerResult)).resolves.toBeUndefined();
+    expect(dependencies.filesystem.replaceFiles).not.toHaveBeenCalled();
+  });
+
+  it('still persists the capture after the listener returns', async () => {
+    // Gate the exec, release it after the listener has already settled, and
+    // verify the capture completes in the background.
+    const { session, listeners } = createSession(undefined, 'resource-background-persist');
+    let releaseExec: ((value: ReturnType<typeof commandResult>) => void) | undefined;
+    const gate = new Promise<ReturnType<typeof commandResult>>(resolve => {
+      releaseExec = resolve;
+    });
+    const executeCommand = vi
+      .fn()
+      .mockImplementationOnce(() => gate)
+      .mockImplementation(async () => commandResult());
+    session.getWorkspace = () => ({ sandbox: { executeCommand } as any });
+    const dependencies = createDependencies();
+    observeSessionFilesystem(session, dependencies);
+
+    listeners[0]!({ type: 'agent_end', reason: 'complete' });
+    await vi.waitFor(() => expect(executeCommand).toHaveBeenCalledTimes(1));
+    expect(dependencies.filesystem.replaceFiles).not.toHaveBeenCalled();
+
+    releaseExec?.(commandResult());
+    await vi.waitFor(() => expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(1));
+  });
+
   it('serializes captures when terminal events arrive before the prior capture finishes', async () => {
-    const { session, listeners } = createSession([commandResult(), commandResult(), commandResult(), commandResult()]);
+    const { session, listeners } = createSession(
+      [commandResult(), commandResult(), commandResult(), commandResult()],
+      'resource-serialize',
+    );
     let completeFirstCapture: (() => void) | undefined;
     const dependencies = createDependencies();
     dependencies.filesystem.replaceFiles = vi.fn(
@@ -178,17 +228,126 @@ describe('observeSessionFilesystem', () => {
     );
     observeSessionFilesystem(session, dependencies);
 
-    const first = listeners[0]!({ type: 'agent_end', reason: 'complete' });
+    listeners[0]!({ type: 'agent_end', reason: 'complete' });
     await vi.waitFor(() => expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(1));
 
-    const second = listeners[0]!({ type: 'agent_end', reason: 'complete' });
+    listeners[0]!({ type: 'agent_end', reason: 'complete' });
     await Promise.resolve();
     expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(1);
 
     completeFirstCapture?.();
-    await first;
     await vi.waitFor(() => expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(2));
     completeFirstCapture?.();
-    await second;
+  });
+
+  it('serializes captures across sessions observing the same resource', async () => {
+    // Sessions are deduplicated by (resourceId, scope), so two scoped
+    // sessions can observe the same resource; their captures must extend one
+    // shared chain instead of interleaving through independent ones.
+    const first = createSession(undefined, 'resource-shared');
+    const second = createSession(undefined, 'resource-shared');
+    let releaseExec: ((value: ReturnType<typeof commandResult>) => void) | undefined;
+    const gate = new Promise<ReturnType<typeof commandResult>>(resolve => {
+      releaseExec = resolve;
+    });
+    const firstExec = vi
+      .fn()
+      .mockImplementationOnce(() => gate)
+      .mockImplementation(async () => commandResult());
+    first.session.getWorkspace = () => ({ sandbox: { executeCommand: firstExec } as any });
+    const dependencies = createDependencies();
+    observeSessionFilesystem(first.session, dependencies);
+    observeSessionFilesystem(second.session, dependencies);
+
+    first.listeners[0]!({ type: 'agent_end', reason: 'complete' });
+    second.listeners[0]!({ type: 'agent_end', reason: 'complete' });
+    await vi.waitFor(() => expect(firstExec).toHaveBeenCalledTimes(1));
+
+    // The second session's capture waits on the first session's gated exec.
+    expect(second.executeCommand).not.toHaveBeenCalled();
+    expect(dependencies.filesystem.replaceFiles).not.toHaveBeenCalled();
+
+    releaseExec?.(commandResult());
+    await vi.waitFor(() => expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(2));
+    expect(second.executeCommand).toHaveBeenCalled();
+  });
+
+  it('disposing the listener does not cancel an in-flight capture', async () => {
+    // A final-turn capture may still be running when the session tears the
+    // listener down; the chain must run to completion and persist.
+    const { session, listeners } = createSession(undefined, 'resource-dispose');
+    let releaseExec: ((value: ReturnType<typeof commandResult>) => void) | undefined;
+    const gate = new Promise<ReturnType<typeof commandResult>>(resolve => {
+      releaseExec = resolve;
+    });
+    const executeCommand = vi
+      .fn()
+      .mockImplementationOnce(() => gate)
+      .mockImplementation(async () => commandResult());
+    session.getWorkspace = () => ({ sandbox: { executeCommand } as any });
+    const dependencies = createDependencies();
+    const dispose = observeSessionFilesystem(session, dependencies);
+
+    listeners[0]!({ type: 'agent_end', reason: 'complete' });
+    await vi.waitFor(() => expect(executeCommand).toHaveBeenCalledTimes(1));
+
+    dispose();
+    expect(listeners).toHaveLength(0);
+
+    releaseExec?.(commandResult());
+    await vi.waitFor(() => expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe('waitForPendingFilesystemCapture', () => {
+  it('resolves immediately when the session has no capture in flight', async () => {
+    await expect(waitForPendingFilesystemCapture('no-such-resource')).resolves.toBeUndefined();
+  });
+
+  it('a reader awaiting the pending capture observes the persisted listing (agent_end contract)', async () => {
+    // The contract this module alters: agent_end no longer waits on the
+    // capture, so a reader refetching at agent_end must await the pending
+    // capture to see this turn's listing rather than the previous one.
+    const { session, listeners } = createSession(undefined, 'resource-wait-fresh');
+    let releaseExec: ((value: ReturnType<typeof commandResult>) => void) | undefined;
+    const gate = new Promise<ReturnType<typeof commandResult>>(resolve => {
+      releaseExec = resolve;
+    });
+    const executeCommand = vi
+      .fn()
+      .mockImplementationOnce(() => gate)
+      .mockImplementation(async () => commandResult());
+    session.getWorkspace = () => ({ sandbox: { executeCommand } as any });
+    const dependencies = createDependencies();
+    observeSessionFilesystem(session, dependencies);
+
+    listeners[0]!({ type: 'agent_end', reason: 'complete' });
+    await vi.waitFor(() => expect(executeCommand).toHaveBeenCalledTimes(1));
+
+    let waitSettled = false;
+    const wait = waitForPendingFilesystemCapture('resource-wait-fresh').then(() => {
+      waitSettled = true;
+    });
+    await Promise.resolve();
+    expect(waitSettled).toBe(false);
+    expect(dependencies.filesystem.replaceFiles).not.toHaveBeenCalled();
+
+    releaseExec?.(commandResult());
+    await wait;
+    // The persist happened before the reader's wait resolved.
+    expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(1);
+  });
+
+  it('bounds the wait so a stuck capture cannot block readers', async () => {
+    const { session, listeners } = createSession(undefined, 'resource-wait-stuck');
+    session.getWorkspace = () => ({
+      sandbox: { executeCommand: vi.fn(() => new Promise<never>(() => {})) } as any,
+    });
+    const dependencies = createDependencies();
+    observeSessionFilesystem(session, dependencies);
+
+    listeners[0]!({ type: 'agent_end', reason: 'complete' });
+
+    await expect(waitForPendingFilesystemCapture('resource-wait-stuck', 20)).resolves.toBeUndefined();
   });
 });
