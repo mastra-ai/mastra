@@ -1802,46 +1802,49 @@ describe('PlatformSandbox', () => {
         // return early — otherwise it clobbers the newer probe's state and
         // emits a timeout log describing an old attempt.
         vi.useFakeTimers();
-        vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
-        const fetchMock = vi.fn().mockResolvedValueOnce(
-          json({
-            id: 'sbx_superseded',
-            createdAt: '2026-06-26T00:00:00.000Z',
-            instanceUrl: 'http://[fd12::1]:47000',
-          }),
-        );
-        const privateNetFetch = vi.fn().mockRejectedValue(new Error('ECONNREFUSED'));
-        const { registry } = fakeAddressRegistry();
+        try {
+          vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+          const fetchMock = vi.fn().mockResolvedValueOnce(
+            json({
+              id: 'sbx_superseded',
+              createdAt: '2026-06-26T00:00:00.000Z',
+              instanceUrl: 'http://[fd12::1]:47000',
+            }),
+          );
+          const privateNetFetch = vi.fn().mockRejectedValue(new Error('ECONNREFUSED'));
+          const { registry } = fakeAddressRegistry();
 
-        const sandbox = new PlatformSandbox({
-          accessToken: 'sk_test',
-          projectId: 'proj_123',
-          environmentId: 'env_123',
-          sessionId: 'sess_42',
-          fetch: fetchMock,
-          privateNetFetch,
-          addressRegistry: registry,
-        });
-        const loggerWarnSpy = vi.spyOn((sandbox as any).logger, 'warn');
-        await sandbox._start();
+          const sandbox = new PlatformSandbox({
+            accessToken: 'sk_test',
+            projectId: 'proj_123',
+            environmentId: 'env_123',
+            sessionId: 'sess_42',
+            fetch: fetchMock,
+            privateNetFetch,
+            addressRegistry: registry,
+          });
+          const loggerWarnSpy = vi.spyOn((sandbox as any).logger, 'warn');
+          await sandbox._start();
 
-        // Bump the generation *inside the final sleep before the deadline* —
-        // after the loop's per-iteration guard has already been checked, but
-        // while the loop's `Date.now() < deadline` check hasn't yet failed.
-        // This is the only window where the loop exits into the terminal
-        // warn without re-checking generation, which is exactly the code
-        // path the fix addresses.
-        setTimeout(() => {
-          (sandbox as any)._probeGeneration += 1;
-        }, 29_900);
+          // Bump the generation *inside the final sleep before the deadline* —
+          // after the loop's per-iteration guard has already been checked, but
+          // while the loop's `Date.now() < deadline` check hasn't yet failed.
+          // This is the only window where the loop exits into the terminal
+          // warn without re-checking generation, which is exactly the code
+          // path the fix addresses.
+          setTimeout(() => {
+            (sandbox as any)._probeGeneration += 1;
+          }, 29_900);
 
-        // Advance past the probe timeout so the first probe's loop exits.
-        await vi.advanceTimersByTimeAsync(35_000);
+          // Advance past the probe timeout so the first probe's loop exits.
+          await vi.advanceTimersByTimeAsync(35_000);
 
-        expect(loggerWarnSpy).not.toHaveBeenCalledWith('platform-workspace probe timed out', expect.anything());
-        // And the superseded probe didn't clobber the new generation's state.
-        expect((sandbox as any)._probeState).not.toBe('timed-out');
-        vi.useRealTimers();
+          expect(loggerWarnSpy).not.toHaveBeenCalledWith('platform-workspace probe timed out', expect.anything());
+          // And the superseded probe didn't clobber the new generation's state.
+          expect((sandbox as any)._probeState).not.toBe('timed-out');
+        } finally {
+          vi.useRealTimers();
+        }
       });
 
       it('does not block start() while the probe is running', async () => {
