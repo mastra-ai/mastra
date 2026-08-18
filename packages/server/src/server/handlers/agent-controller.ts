@@ -467,7 +467,7 @@ function toWireEvent(event: AgentControllerEvent): unknown {
     return { ...event, error: { name: event.error.name, message: event.error.message } };
   }
   if (event.type === 'display_state_changed') {
-    const wireDisplayState = structuredClone(event.displayState) as Record<string, unknown>;
+    const wireDisplayState: Record<string, unknown> = { ...structuredClone(event.displayState) };
     for (const [key, value] of Object.entries(wireDisplayState)) {
       if (value instanceof Map) wireDisplayState[key] = Object.fromEntries(value);
     }
