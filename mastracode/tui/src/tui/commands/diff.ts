@@ -39,8 +39,8 @@ export async function handleDiffCommand(ctx: SlashCommandContext, filePath?: str
 
   // No path specified — show summary of all tracked modified files
   // Read from AgentController display state (canonical source for file modifications)
-  const modifiedFiles = Object.entries(state.session.displayState.get().modifiedFiles);
-  if (modifiedFiles.length === 0) {
+  const modifiedFiles = state.session.displayState.get().modifiedFiles;
+  if (modifiedFiles.size === 0) {
     try {
       const { execa } = await import('execa');
       const result = await execa('git', ['diff', '--stat'], {
@@ -66,7 +66,7 @@ export async function handleDiffCommand(ctx: SlashCommandContext, filePath?: str
     return;
   }
 
-  const lines: string[] = [`Modified files (${modifiedFiles.length}):`];
+  const lines: string[] = [`Modified files (${modifiedFiles.size}):`];
   for (const [fp, info] of modifiedFiles) {
     const opCounts = new Map<string, number>();
     for (const op of info.operations) {

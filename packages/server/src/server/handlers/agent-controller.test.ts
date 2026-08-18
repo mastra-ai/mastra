@@ -1,6 +1,5 @@
 import { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
-import { getErrorFromUnknown } from '@mastra/core/error';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -461,7 +460,7 @@ describe('agent-controller routes', () => {
       expect(received.type).toBe('agent_start');
     });
 
-    it('keeps an error event readable after JSON serialization', async () => {
+    it('flattens Error instances on error events so the message survives JSON serialization', async () => {
       const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
         mastra,
         controllerId: 'code',
@@ -474,11 +473,7 @@ describe('agent-controller routes', () => {
       const controller = mastra.getAgentController('code')!;
       await controller.init();
       const session = await controller.createSession({ resourceId: 'user-err', id: 'user-err', ownerId: 'code' });
-      session.emit({
-        type: 'error',
-        error: getErrorFromUnknown(new Error('model quota exhausted')),
-        errorType: 'provider',
-      } as any);
+      session.emit({ type: 'error', error: new Error('model quota exhausted'), errorType: 'provider' } as any);
 
       let received: any;
       for (let i = 0; i < 10 && received === undefined; i++) {
@@ -488,13 +483,14 @@ describe('agent-controller routes', () => {
       await reader.cancel();
 
       expect(received).toBeDefined();
-      // A plain Error serializes to `{}`; controller errors carry `toJSON`.
-      const wiredError = JSON.parse(JSON.stringify(received)).error;
-      expect(wiredError).toMatchObject({ name: 'Error', message: 'model quota exhausted' });
+      // Error's message/name are non-enumerable; the wire event must carry them
+      // as plain properties so JSON.stringify doesn't send `"error": {}`.
+      expect(received.error).toEqual({ name: 'Error', message: 'model quota exhausted' });
+      expect(JSON.parse(JSON.stringify(received)).error.message).toBe('model quota exhausted');
       expect(received.errorType).toBe('provider');
     });
 
-    it('keeps a workspace failure readable on every event that carries one', async () => {
+    it('flattens Error instances on every event that carries one, not just on `error`', async () => {
       const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
         mastra,
         controllerId: 'code',
@@ -507,15 +503,8 @@ describe('agent-controller routes', () => {
       const controller = mastra.getAgentController('code')!;
       await controller.init();
       const session = await controller.createSession({ resourceId: 'user-ws-err', id: 'user-ws-err', ownerId: 'code' });
-      session.emit({
-        type: 'workspace_error',
-        error: getErrorFromUnknown(new Error('clone failed: permission denied')),
-      });
-      session.emit({
-        type: 'workspace_status_changed',
-        status: 'error',
-        error: getErrorFromUnknown(new Error('sandbox unreachable')),
-      });
+      session.emit({ type: 'workspace_error', error: new Error('clone failed: permission denied') });
+      session.emit({ type: 'workspace_status_changed', status: 'error', error: new Error('sandbox unreachable') });
 
       // The workspace emits its own status changes on the same stream, so match
       // on the error-carrying ones rather than on the first of each type.
@@ -529,11 +518,11 @@ describe('agent-controller routes', () => {
       await reader.cancel();
 
       const wired = (type: string) => JSON.parse(JSON.stringify(received.get(type))).error;
-      expect(wired('workspace_error')).toMatchObject({ name: 'Error', message: 'clone failed: permission denied' });
-      expect(wired('workspace_status_changed')).toMatchObject({ name: 'Error', message: 'sandbox unreachable' });
+      expect(wired('workspace_error')).toEqual({ name: 'Error', message: 'clone failed: permission denied' });
+      expect(wired('workspace_status_changed')).toEqual({ name: 'Error', message: 'sandbox unreachable' });
     });
 
-    it('keeps display-state tool tracking readable after JSON serialization', async () => {
+    it('converts display-state Maps to plain objects so tool state survives JSON serialization', async () => {
       const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
         mastra,
         controllerId: 'code',

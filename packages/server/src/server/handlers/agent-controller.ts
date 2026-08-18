@@ -1,6 +1,11 @@
 import type { Agent } from '@mastra/core/agent';
-import type { AgentController, ReservedThreadMetadataKey, Session, TokenUsage } from '@mastra/core/agent-controller';
-import { getErrorFromUnknown } from '@mastra/core/error';
+import type {
+  AgentController,
+  AgentControllerEvent,
+  ReservedThreadMetadataKey,
+  Session,
+  TokenUsage,
+} from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 // Type-only import: erased at runtime, so this cannot crash against an older
 // @mastra/core that lacks the `./agent-controller` subpath export. Controller
@@ -111,7 +116,7 @@ function ackBackgroundSessionWork({
   operation: string;
 }): void {
   void work.catch((error: unknown) => {
-    const failure = getErrorFromUnknown(error);
+    const failure = error instanceof Error ? error : new Error(String(error));
     mastra.getLogger?.()?.error?.(`AgentController ${operation} failed after the request was acknowledged`, {
       operation,
       error: failure,
@@ -443,6 +448,29 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   },
 });
 
+/**
+ * An `Error`'s `message`/`name` are non-enumerable, so JSON serialization in the
+ * SSE adapter would send `"error": {}` and clients could only render a generic
+ * "Error". Flatten it so the actual failure reaches the client, on every event
+ * that carries one (`error`, `workspace_error`, `workspace_status_changed`).
+ *
+ * `display_state_changed` Maps JSON-serialize to `{}`; convert them to plain
+ * records so wire clients get the tool state the in-process TUI sees.
+ */
+function toWireEvent(event: AgentControllerEvent): unknown {
+  if ('error' in event && event.error instanceof Error) {
+    return { ...event, error: { name: event.error.name, message: event.error.message } };
+  }
+  if (event.type === 'display_state_changed') {
+    const wireDisplayState: Record<string, unknown> = { ...event.displayState };
+    for (const [key, value] of Object.entries(wireDisplayState)) {
+      if (value instanceof Map) wireDisplayState[key] = Object.fromEntries(value);
+    }
+    return { ...event, displayState: wireDisplayState };
+  }
+  return event;
+}
+
 export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   method: 'GET',
   path: '/agent-controller/:controllerId/sessions/:resourceId/stream',
@@ -509,7 +537,7 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
               // Enqueue the raw event object. The server adapter is responsible
               // for SSE framing (`data: <json>\n\n`); enqueuing a pre-framed
               // string here would double-encode it.
-              controller.enqueue(event);
+              controller.enqueue(toWireEvent(event));
               scheduleHeartbeat();
             } catch {
               cleanup();

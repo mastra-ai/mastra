@@ -54,5 +54,4 @@ export type {
   BuiltinToolId,
   TokenUsage,
 } from './types';
-export type { AgentControllerWireEvent } from './wire';
 export type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart } from '../agent/message-list/state/types';
