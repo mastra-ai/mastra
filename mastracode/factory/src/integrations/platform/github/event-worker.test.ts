@@ -585,6 +585,29 @@ describe('PlatformGithubEventWorker', () => {
 
       await worker.stop();
     });
+
+    it('skips configured keys with non-positive or non-numeric external IDs', async () => {
+      const settings = createSettingsStorage();
+      const fetchImpl = eventsOnlyFetch();
+      const worker = createWorker({
+        fetchImpl,
+        storage: settings.storage,
+        configured: [
+          { installationId: 0, repositoryId: 101, slug: 'acme/zero-inst' },
+          { installationId: 7, repositoryId: -5, slug: 'acme/negative-repo' },
+          { installationId: Number.NaN, repositoryId: 102, slug: 'acme/nan-inst' },
+          { installationId: 7, repositoryId: 103, slug: 'acme/valid' },
+        ],
+      });
+
+      await worker.init(createDeps());
+      await worker.start();
+      await vi.advanceTimersByTimeAsync(0);
+      await worker.stop();
+
+      const eventPaths = pathsFrom(fetchImpl).filter(path => path.endsWith('/events'));
+      expect(eventPaths).toEqual(['/v1/server/github-app/repositories/103/events']);
+    });
   });
 
   it('stops polling after lease renewal reports ownership loss', async () => {

@@ -378,7 +378,14 @@ export class PlatformGithubEventWorker extends MastraWorker {
     for (const key of keys) {
       const installationId = Number(key.installationExternalId);
       const repositoryId = Number(key.repositoryExternalId);
-      if (!Number.isSafeInteger(installationId) || !Number.isSafeInteger(repositoryId)) continue;
+      if (
+        !Number.isSafeInteger(installationId) ||
+        installationId <= 0 ||
+        !Number.isSafeInteger(repositoryId) ||
+        repositoryId <= 0
+      ) {
+        continue;
+      }
       if (repositories.has(repositoryId)) continue;
       // A configured key exists per project link, so `listByExternalRepository`
       // always yields at least one row; the first row's orgId is enough to
