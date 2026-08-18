@@ -629,6 +629,12 @@ function mapComposioStatus(status: string, isDisabled: boolean): ExistingConnect
 // reverse dependency from `editor` onto `server`.
 const MASTRA_USER_KEY = 'mastra__user';
 
+function readAuthenticatedUserId(requestContext?: RequestContext): string | undefined {
+  const user = requestContext?.getRaw(MASTRA_USER_KEY);
+  if (!user || typeof user !== 'object' || !('id' in user)) return undefined;
+  return typeof user.id === 'string' && user.id.length > 0 ? user.id : undefined;
+}
+
 /**
  * Read the internal user id (Composio `userId`) from per-request context.
  *
@@ -642,15 +648,7 @@ function resolveInternalUserId(requestContext?: RequestContext): string {
     return resourceId;
   }
 
-  const user = requestContext?.getRaw(MASTRA_USER_KEY);
-  if (user && typeof user === 'object' && 'id' in user) {
-    const id = (user as { id: unknown }).id;
-    if (typeof id === 'string' && id.length > 0) {
-      return id;
-    }
-  }
-
-  return DEFAULT_INTERNAL_USER_ID;
+  return readAuthenticatedUserId(requestContext) ?? DEFAULT_INTERNAL_USER_ID;
 }
 
 /**
@@ -659,14 +657,8 @@ function resolveInternalUserId(requestContext?: RequestContext): string {
  * because a project or thread is not an authenticated connector principal.
  */
 function resolveInvokerUserId(requestContext?: RequestContext): string {
-  const user = requestContext?.getRaw(MASTRA_USER_KEY);
-  if (user && typeof user === 'object' && 'id' in user) {
-    const id = (user as { id: unknown }).id;
-    if (typeof id === 'string' && id.length > 0) {
-      return id;
-    }
-  }
-
+  const userId = readAuthenticatedUserId(requestContext);
+  if (userId) return userId;
   throw new Error('[composio] kind "invoker" requires an authenticated user or a userIdResolver result');
 }
 
