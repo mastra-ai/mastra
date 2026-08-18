@@ -510,6 +510,23 @@ describe('defaultFactoryRules', () => {
     expect(prompt).toContain('gh api users/octocat --jq .id');
   });
 
+  it('credits the login that intake actually stamped when the issue was opened', async () => {
+    // The unit tests above hand `buildWorkItem` its metadata, so they pass even if
+    // intake writes the reporter under a different key than the builder reads.
+    // Join the two halves: take the metadata `issueOpened` really produces and
+    // feed that to the build rule, so a rename on either side fails here.
+    const opened = await defaultFactoryRules({ version: 'deployment-7' }).github.issueOpened?.onEvent?.({
+      ...githubContext('issueOpened'),
+      actor: { type: 'github', login: 'reporter-login', trusted: true, factoryAuthored: false },
+    });
+    const stamped = (opened as { metadata?: Record<string, unknown> } | undefined)?.metadata ?? null;
+
+    expect(stamped).toMatchObject({ author: 'reporter-login' });
+    expect(await buildPrompt('issue', stamped)).toContain(
+      'Co-Authored-By: reporter-login <ID+reporter-login@users.noreply.github.com>',
+    );
+  });
+
   it('credits nobody when the reporter is the Factory itself', async () => {
     expect(await buildPrompt('issue', { author: 'mastra-platform[bot]' })).not.toContain('Co-Authored-By');
   });
