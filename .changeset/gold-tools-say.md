@@ -10,4 +10,4 @@ import type { ReservedThreadMetadataKey } from '@mastra/core/agent-controller';
 const RESERVED = { currentModelId: true /* … */ } satisfies Record<ReservedThreadMetadataKey, true>;
 ```
 
-A stale copy of that list is what let session preferences surface as thread tags over HTTP.
+The list itself is unchanged — only its keys are now nameable, so a package that mirrors it fails to compile the moment the two fall out of step.

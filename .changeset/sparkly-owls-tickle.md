@@ -1,5 +1,5 @@
 ---
-'@mastra/client-js': patch
+'@mastra/client-js': minor
 ---
 
 Fixed the agent controller event types, which described payloads the server never sends.
