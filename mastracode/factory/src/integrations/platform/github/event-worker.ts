@@ -11,7 +11,7 @@ import type { GithubRepositoryPermission } from '../../github/integration.js';
 import type { GithubIssueReconciler } from '../../github/issue-reconciler.js';
 import type { GithubPullRequestReconciler, ReconcileRepository } from '../../github/rules.js';
 import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from '../../github/subscriptions.js';
-import { dispatchGithubWebhook, resolveAuthorizedBots } from '../../github/webhook.js';
+import { dispatchGithubWebhook, isFactoryAppSender, resolveAuthorizedBots } from '../../github/webhook.js';
 import type {
   GithubWebhookDispatchIntegration,
   GithubWebhookNotification,
@@ -438,6 +438,15 @@ export class PlatformGithubEventWorker extends MastraWorker {
             retirePullRequestSubscription(id, status, this.#github.integrationStorage),
           github: this.#github,
           isAuthorizedSender: notification => this.#isAuthorizedSender(notification),
+          onTargetSkipped: subscription => {
+            // Routine when a subscription's thread belongs to another
+            // deployment, so this stays at debug rather than warning on a loop.
+            this.deps?.logger.debug('Platform GitHub event skipped: thread is not held here', {
+              deliveryId: event.deliveryId,
+              subscriptionId: subscription.id,
+              threadId: subscription.threadId,
+            });
+          },
           onSenderRejected: notification => {
             this.deps?.logger.debug('Platform GitHub event dropped: sender not authorized', {
               deliveryId: event.deliveryId,
@@ -477,6 +486,13 @@ export class PlatformGithubEventWorker extends MastraWorker {
     const sender = notification.metadata.sender;
     const repository = notification.metadata.repository;
     if (!sender || !repository) return false;
+    // Factory's own app has to clear the gate before the bot rules below, which
+    // fail closed for every bot that is not explicitly allowlisted. GitHub
+    // forbids an app from reviewing its own pull request, so `factory-review`
+    // posts its verdict as a comment under this login and that comment is the
+    // handoff the authoring agent wakes on.
+    if (this.#github.identity?.matches(sender)) return true;
+    if (isFactoryAppSender(sender, this.#github.slug)) return true;
     const normalizedSender = sender.toLowerCase();
     const authorizedBots = resolveAuthorizedBots(this.#github.authorizedBots);
     if (authorizedBots.has(normalizedSender)) return true;
@@ -528,18 +544,25 @@ function normalizeSettings(value: PlatformGithubEventWorkerSettings | null): Pla
 
 // Events the polling worker forwards to the factory rules engine. Closures
 // let the reconciler finalize cards; `synchronize` and `review_requested` on a
-// pull request are the two triggers the review board's re-review path listens
-// for. Direct-webhook consumers ingest every parsed event; the platform path
-// gates because most other events (comments, reviews, edits) only interest the
-// subscription dispatcher, not the factory rules.
+// pull request are the triggers the review board's re-review path listens for;
+// submitted reviews and pull request comments are how review feedback reaches
+// the agent that authored the branch. Direct-webhook consumers ingest every
+// parsed event; the platform path gates because the remaining events (issue
+// edits, comment edits and deletions) only interest the subscription
+// dispatcher, not the factory rules.
 function isFactoryIngestedEvent(event: ParsedGithubWebhook): boolean {
   if ((event.event === 'issues' || event.event === 'pull_request') && event.payload.action === 'closed') {
     return true;
   }
   if (event.event === 'pull_request') {
     const action = event.payload.action;
-    if (action === 'synchronize' || action === 'review_requested') return true;
+    // `opened` is what mints the Review card for a pull request. Without it a
+    // factory-authored PR never gets reviewed on the polling path, which is the
+    // only path a local deployment has.
+    if (action === 'opened' || action === 'synchronize' || action === 'review_requested') return true;
   }
+  if (event.event === 'pull_request_review' && event.payload.action === 'submitted') return true;
+  if (event.event === 'issue_comment' && event.payload.action === 'created') return true;
   return false;
 }
 
