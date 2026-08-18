@@ -8,6 +8,7 @@ import { createBackgroundTask } from '../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../background-tasks/resolve-config';
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
 import type { MastraDBMessage } from '../../../memory';
+import { emitPulseFact } from '../../../pulse/emitter';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../../schema';
 import { safeEnqueue } from '../../../stream/base';
 import { ChunkFrom } from '../../../stream/types';
@@ -633,6 +634,21 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             // Remove approval metadata since we're resuming (either approved or declined)
             await removeToolMetadata({ toolCallId: inputData.toolCallId, toolName: inputData.toolName }, 'approval');
 
+            // The decision is APPLIED here — the fact spans can never state:
+            // a declined tool provably never ran; an approved one proceeds.
+            emitPulseFact({
+              runId: runId ?? '',
+              traceId: runId ?? '',
+              surface: 'tool_approval',
+              action: 'decided',
+              type: 'decision',
+              attributes: {
+                toolCallId: inputData.toolCallId,
+                toolName: inputData.toolName,
+                approved: resumeData.approved === true,
+                ...(resumeData.approved !== true ? { reason: resolveDeclineReason(resumeData) } : {}),
+              },
+            });
             if (!resumeData.approved) {
               // Return the approval decision (not a `result` string) so it persists as
               // `state: 'output-denied'` with `approval`. The denial reason carries the

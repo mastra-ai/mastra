@@ -1495,6 +1495,7 @@ export class ProcessorRunner {
           activeTools: inputData.activeTools,
         }),
       });
+      emitSpanFact(processorSpan as any, 'started');
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
@@ -1624,6 +1625,7 @@ export class ProcessorRunner {
           }),
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
+        emitSpanFact(processorSpan as any, 'ended');
       } catch (error) {
         // Stop recording on error
         messageList.stopRecording();
@@ -1640,10 +1642,12 @@ export class ProcessorRunner {
               },
             },
           });
+          emitSpanFact(processorSpan as any, 'ended');
           await invokeOnViolation(processor, error);
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
+        emitSpanFact(processorSpan as any, 'ended');
         throw error;
       }
     }
@@ -1941,6 +1945,7 @@ export class ProcessorRunner {
           ...(text !== undefined ? { text } : {}),
         },
       });
+      emitSpanFact(processorSpan as any, 'started');
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
@@ -2019,6 +2024,7 @@ export class ProcessorRunner {
           },
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
+        emitSpanFact(processorSpan as any, 'ended');
       } catch (error) {
         // Stop recording on error
         messageList.stopRecording();
@@ -2035,10 +2041,12 @@ export class ProcessorRunner {
               },
             },
           });
+          emitSpanFact(processorSpan as any, 'ended');
           await invokeOnViolation(processor, error);
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
+        emitSpanFact(processorSpan as any, 'ended');
         throw error;
       }
     }
@@ -2157,6 +2165,7 @@ export class ProcessorRunner {
           ...(providerExecuted !== undefined ? { providerExecuted } : {}),
         },
       });
+      emitSpanFact(processorSpan as any, 'started');
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
@@ -2221,6 +2230,7 @@ export class ProcessorRunner {
           },
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
+        emitSpanFact(processorSpan as any, 'ended');
       } catch (error) {
         // Stop recording on error
         messageList.stopRecording();
@@ -2237,9 +2247,11 @@ export class ProcessorRunner {
               },
             },
           });
+          emitSpanFact(processorSpan as any, 'ended');
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
+        emitSpanFact(processorSpan as any, 'ended');
         throw error;
       }
     }
@@ -2319,6 +2331,7 @@ export class ProcessorRunner {
           retryCount,
         },
       });
+      emitSpanFact(processorSpan as any, 'started');
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
@@ -2378,6 +2391,7 @@ export class ProcessorRunner {
           output,
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
+        emitSpanFact(processorSpan as any, 'ended');
 
         if (result?.retry) {
           return { retry: true };
@@ -2398,6 +2412,7 @@ export class ProcessorRunner {
               },
             },
           });
+          emitSpanFact(processorSpan as any, 'ended');
           await invokeOnViolation(processor, processorError);
           throw processorError;
         }

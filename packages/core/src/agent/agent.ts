@@ -7038,6 +7038,11 @@ export class Agent<
       threadId: threadFromArgs?.id,
       resourceId,
       name: `agent run: '${this.id}'`,
+      definitionIds: [
+        this.toRawConfig()?.resolvedVersionId
+          ? `agent:${this.id}@${this.toRawConfig()!.resolvedVersionId}`
+          : `agent:${this.id}`,
+      ],
     });
 
     const memory = await this.getMemory({ requestContext });

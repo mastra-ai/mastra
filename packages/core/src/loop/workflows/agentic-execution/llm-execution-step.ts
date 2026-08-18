@@ -35,7 +35,7 @@ import { PrepareStepProcessor } from '../../../processors/processors/prepare-ste
 import { ProcessorRunner } from '../../../processors/runner';
 import type { ProcessorState } from '../../../processors/runner';
 import { emitPulseFact } from '../../../pulse/emitter';
-import { emitSpanFact } from '../../../pulse/lifecycle';
+import { emitSpanFact, usageTokenData } from '../../../pulse/lifecycle';
 import { RequestContext } from '../../../request-context';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
@@ -144,10 +144,13 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   tools?: ToolSet;
   runId: string;
   messageId: string;
-  /** EXPERIMENT (Gate 1): fired once when the provider's response actually
-   * begins (`response-metadata`). The abort/error fallback stream never
-   * produces it, so this is the execution discriminator for pulse facts. */
+  /** Fired once when the provider's response actually begins
+   * (`response-metadata`). The abort/error fallback stream never produces
+   * it, so this is the execution discriminator for pulse facts. */
   onModelResponseBegan?: () => void;
+  /** Fired at the step boundary (the 'finish' chunk) with the step's
+   * outcome — the pulse step-end fact source. */
+  onStepBoundary?: (info: { usage?: unknown; reason?: string }) => void;
   includeRawChunks?: boolean;
   messageList: MessageList;
   outputStream: MastraModelOutput<OUTPUT>;
@@ -498,6 +501,7 @@ async function processOutputStream<OUTPUT = undefined>({
   tools,
   messageId,
   onModelResponseBegan,
+  onStepBoundary,
   messageList,
   outputStream,
   runState,
@@ -839,6 +843,10 @@ async function processOutputStream<OUTPUT = undefined>({
       }
 
       case 'finish': {
+        onStepBoundary?.({
+          usage: (chunk.payload as any).output?.usage ?? chunk.payload.totalUsage,
+          reason: String((chunk.payload as any).stepResult?.reason ?? chunk.payload.reason ?? ''),
+        });
         runState.setState({
           providerOptions: chunk.payload.metadata?.providerMetadata ?? chunk.payload.providerMetadata,
           stepResult: {
@@ -1797,6 +1805,19 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 });
               };
             })(),
+            onStepBoundary: info => {
+              const stepIndex = inputData.output?.steps?.length ?? 0;
+              emitSpanFact(modelSpanTracker?.getTracingContext?.()?.currentSpan as any, 'ended', {
+                runId,
+                surface: 'model',
+                base: 'step',
+                occurrence: stepIndex,
+                parent: { surface: 'model', base: 'generate' },
+                output: true,
+                error: info.reason === 'error',
+                usage: usageTokenData(info.usage),
+              });
+            },
             messageList,
             runState,
             options,

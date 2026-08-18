@@ -56,7 +56,8 @@ export interface PulseFactInput {
       | 'parent_of'
       | 'resume_of'
       | 'uses_model_settings'
-      | 'uses_tool_definition';
+      | 'uses_tool_definition'
+      | 'uses_definition';
     from?: { kind: 'pulse' | 'flow'; id: string };
     to: { kind: 'content' | 'model_input' | 'pulse' | 'flow' | 'definition'; id: string };
     attributes?: Record<string, string | number>;

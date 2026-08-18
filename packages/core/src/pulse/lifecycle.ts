@@ -52,6 +52,8 @@ export interface LifecycleSiteContext {
   usage?: Record<string, number | undefined>;
   /** Small identity attributes (e.g. model/provider for price resolution). */
   attributes?: Record<string, string | number | boolean | undefined>;
+  /** Definition identities this fact used (uses_definition edges). */
+  definitionIds?: string[];
 }
 
 /** Map a raw usage object to the canonical fold-key token data. */
@@ -146,6 +148,9 @@ export function emitSpanFact(
   const edges: NonNullable<PulseFactInput['edges']> = [];
   if (!isEnd || isEventSpan) {
     if (span.isRootSpan && traceId) edges.push({ type: 'origin_of', to: { kind: 'flow', id: traceId } });
+    for (const def of ctx?.definitionIds ?? []) {
+      edges.push({ type: 'uses_definition' as any, to: { kind: 'definition', id: def } });
+    }
     if (span.parentSpanId) {
       edges.push({
         type: 'parent_of',
@@ -243,6 +248,9 @@ function emitMintedFact(phase: 'started' | 'ended', ctx: LifecycleSiteContext & 
         },
         to: { kind: 'pulse', id: pulseId },
       });
+    }
+    for (const def of ctx.definitionIds ?? []) {
+      edges.push({ type: 'uses_definition' as any, to: { kind: 'definition', id: def } });
     }
   }
 

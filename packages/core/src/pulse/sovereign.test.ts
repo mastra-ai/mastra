@@ -98,6 +98,10 @@ describe('sovereignty: observability OFF, pulse alone', () => {
 
       const step0 = c.facts.find(f => f.id === factIds.step(runId, 0));
       expect(step0).toMatchObject({ surface: 'model', action: 'step_started', traceId: runId });
+      // Step END at the finish-chunk boundary — with the step's own usage.
+      const step0End = c.facts.find(f => f.id === factIds.step(runId, 0, 'ended'));
+      expect(step0End).toMatchObject({ surface: 'model', action: 'step_completed', traceId: runId });
+      expect(step0End.data).toMatchObject({ total_input_tokens: 30, total_output_tokens: 12 });
 
       // ── Computed parentage: run → generation → step ──
       expect(
@@ -111,6 +115,8 @@ describe('sovereignty: observability OFF, pulse alone', () => {
         ),
       ).toBe(true);
       expect(c.edges.some(e => e.type === 'origin_of' && e.to.id === runId)).toBe(true);
+      // Definition identity: which agent produced this flow.
+      expect(c.edges.some(e => e.type === 'uses_definition' && e.to.id === 'agent:sov-agent')).toBe(true);
 
       // ── The readers derive the flow from these facts alone ──
       const store = new InMemoryPulseStorage();
@@ -119,6 +125,22 @@ describe('sovereignty: observability OFF, pulse alone', () => {
       expect(flows).toHaveLength(1);
       expect(flows[0]).toMatchObject({ flowId: runId, runId, status: 'completed', threadId: 'sov-t' });
       expect(flows[0]!.durationMs).not.toBeNull();
+    } finally {
+      c.done();
+    }
+  });
+
+  it('content leaving context is a first-hand fact', async () => {
+    const c = collector();
+    try {
+      const { MessageList } = await import('../agent/message-list');
+      const list = new MessageList({ threadId: 'ct-t', resourceId: 'ct-u' });
+      list.add({ role: 'user', content: 'to be removed' } as any, 'user');
+      const [msg] = list.get.all.db();
+      list.removeByIds([msg!.id]);
+      await settle();
+      const removed = c.facts.find(f => f.surface === 'content' && f.action === 'removed');
+      expect(removed).toMatchObject({ attributes: { messageId: msg!.id }, threadId: 'ct-t', source: 'native' });
     } finally {
       c.done();
     }

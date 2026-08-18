@@ -542,6 +542,19 @@ export class MessageList {
         count: removed.length,
       });
     }
+    // Content leaving context is a fact spans never state — one fact per
+    // removed message, first-hand at the mutation itself.
+    for (const m of removed) {
+      emitPulseFact({
+        runId: '',
+        surface: 'content',
+        action: 'removed',
+        type: 'state',
+        attributes: { messageId: m.id },
+        threadId: this.memoryInfo?.threadId,
+        resourceId: this.memoryInfo?.resourceId,
+      });
+    }
     return removed;
   }
 
