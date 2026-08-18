@@ -2,8 +2,8 @@
 '@mastra/core': patch
 ---
 
-Reduced the size of persisted agent loop snapshots by dropping the copy of the agent's system prompt that was stored in every step's exported span data.
+Reduced how much durable agents write when persisting a run.
 
-Durable agents persist a run snapshot at every step boundary. Each step result carried `agentSpanData.attributes.instructions`, the agent's full system prompt, on both its input and its output side, so a long turn rewrote that prompt dozens of times. Nothing read those copies back: a resumed run rebuilds its agent span from the snapshot's initial input, which is left untouched, so traces are unaffected.
+A durable run saves its state at every step, and each of those saves re-serialized a copy of the agent's system prompt, so a long turn spent time writing the same prompt over and over. That copy is now left out. Snapshots are smaller, each step writes less, and resume and tracing behave exactly as before.
 
-Measured over 300 production snapshots, this removed 27.7 MB of 518.1 MB persisted, about 5% of all snapshot bytes written.
+Measured over 300 production snapshots, this removed about 5% of all persisted snapshot bytes.
