@@ -1,7 +1,6 @@
 import type {
-  AgentControllerDisplayState,
-  AgentControllerEvent as ControllerEvent,
   AgentControllerThread,
+  AgentControllerWireEvent,
   MastraDBMessage,
   MastraMessagePart,
 } from '@mastra/core/agent-controller';
@@ -43,46 +42,20 @@ import { BaseResource } from './base';
  *   POST /agent-controller/:id/sessions/:resourceId/tool-approval   session().approveTool()
  */
 
-/** A `MastraDBMessage` before {@link hydrateMessage} turns its `createdAt` back into a `Date`. */
-type SerializedMastraDBMessage = Omit<MastraDBMessage, 'createdAt'> & { createdAt: Date | string };
-
-/** An `AgentControllerThread` before {@link hydrateThread} turns its timestamps back into `Date`s. */
-type SerializedThread = Omit<AgentControllerThread, 'createdAt' | 'updatedAt'> & {
-  createdAt: Date | string;
-  updatedAt: Date | string;
-};
-
-/** One arm of the controller's event union, selected by its `type`. */
-type ControllerEventOf<T extends ControllerEvent['type']> = Extract<ControllerEvent, { type: T }>;
-
-/** `Object.fromEntries` stringifies keys, so the record is keyed by string whatever the Map was. */
-type MapToRecord<T> = T extends Map<unknown, infer V> ? Record<string, V> : T;
+/** One arm of the wire union, selected by its `type`. */
+type WireEventOf<T extends AgentControllerWireEvent['type']> = Extract<AgentControllerWireEvent, { type: T }>;
 
 /** An `Error` as the stream handler flattens it — JSON drops a real `Error` to `{}`. */
-export interface WireError {
-  name: string;
-  message: string;
-}
+export type WireError = WireEventOf<'workspace_error'>['error'];
 
-/**
- * The display-state snapshot as it arrives: the server converts its Maps to
- * plain records, and servers predating that conversion send `{}` for those
- * fields — so every field is optional.
- */
-type WireDisplayState = Partial<
-  Omit<
-    { [K in keyof AgentControllerDisplayState]: MapToRecord<AgentControllerDisplayState[K]> },
-    'modifiedFiles' | 'currentMessage'
-  > & {
-    /** `firstModified` is an ISO string on the wire. */
-    modifiedFiles: Record<string, { operations: string[]; firstModified: string }>;
-    /** Unlike the `message_*` events, this snapshot is not hydrated: `createdAt` stays a string. */
-    currentMessage: SerializedMastraDBMessage | null;
-  }
->;
+/** A `MastraDBMessage` before {@link hydrateMessage} turns its `createdAt` back into a `Date`. */
+type SerializedMastraDBMessage = WireEventOf<'message_start'>['message'];
 
-/** Events whose payload JSON cannot carry as-is, and that the server rewrites on the way out. */
-type RewrittenEventType = 'error' | 'workspace_error' | 'workspace_status_changed' | 'display_state_changed';
+/** An `AgentControllerThread` before {@link hydrateThread} turns its timestamps back into `Date`s. */
+type SerializedThread = WireEventOf<'thread_created'>['thread'];
+
+/** Servers predating the Map conversion send `{}` for these fields, so none of them is guaranteed. */
+type WireDisplayState = Partial<WireEventOf<'display_state_changed'>['displayState']>;
 
 /**
  * Notifications reach a session as agent signals carried on messages, not as
@@ -109,17 +82,25 @@ type NotificationEvent =
       notificationIds: string[];
     };
 
+/** The timestamps the SDK gives back as `Date`s; mirrors {@link hydrateEventTimestamps}. */
+type Hydrated<T> = T extends { type: 'thread_created' }
+  ? Omit<T, 'thread'> & { thread: AgentControllerThread }
+  : T extends { type: 'message_start' | 'message_update' | 'message_end' }
+    ? Omit<T, 'message'> & { message: MastraDBMessage }
+    : T;
+
+/** Events the SDK types more loosely than the wire, to stay readable against older servers. */
+type LenientEventType = 'error' | 'display_state_changed';
+
 /**
- * AgentController events the SDK types explicitly: the controller's own union,
- * with the four events the wire reshapes overridden. This is a discriminated
- * union, so narrowing on `event.type` gives you the right payload fields.
+ * AgentController events the SDK types explicitly: the wire union `@mastra/core`
+ * derives from the controller's own events, with timestamps hydrated. This is a
+ * discriminated union, so narrowing on `event.type` gives the right payload.
  */
 export type KnownAgentControllerEvent =
-  | Exclude<ControllerEvent, { type: RewrittenEventType }>
-  | (Omit<ControllerEventOf<'error'>, 'error'> & { error: WireError | string })
-  | (Omit<ControllerEventOf<'workspace_error'>, 'error'> & { error: WireError })
-  | (Omit<ControllerEventOf<'workspace_status_changed'>, 'error'> & { error?: WireError })
-  | (Omit<ControllerEventOf<'display_state_changed'>, 'displayState'> & { displayState: WireDisplayState })
+  | Hydrated<Exclude<AgentControllerWireEvent, { type: LenientEventType }>>
+  | (Omit<WireEventOf<'error'>, 'error'> & { error: WireError | string })
+  | (Omit<WireEventOf<'display_state_changed'>, 'displayState'> & { displayState: WireDisplayState })
   | NotificationEvent;
 
 /** Any other agent controller event the SDK doesn't model explicitly. */
