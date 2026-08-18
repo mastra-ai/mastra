@@ -483,6 +483,44 @@ describe('Supervisor Pattern Integration Tests', () => {
         expect(hookErrors(requestContext)).toEqual([expect.objectContaining({ hook: 'onDelegationComplete' })]);
       });
 
+      it('should fail the delegation when messageFilter throws and hookErrorStrategy is throw', async () => {
+        const subAgentGenerate = vi.fn();
+        const subAgent = makeSubAgent('research-agent', 'Dolphins are marine mammals.');
+        subAgent.generate = subAgentGenerate;
+        const requestContext = new RequestContext();
+        const onDelegationComplete = vi.fn();
+
+        const supervisorAgent = new Agent({
+          id: 'supervisor',
+          name: 'supervisor',
+          instructions: 'You orchestrate sub-agents.',
+          model: makeSupervisorModel('researchAgent', 'research dolphins'),
+          agents: { researchAgent: subAgent },
+          memory: new MockMemory(),
+        });
+
+        await supervisorAgent.generate('Research dolphins', {
+          maxSteps: 3,
+          requestContext,
+          delegation: {
+            hookErrorStrategy: 'throw',
+            onDelegationComplete,
+            messageFilter: () => {
+              throw new Error('filter boom');
+            },
+          },
+        });
+
+        // The filter throw fails the delegation before the sub-agent runs, and
+        // the failure is routed through onDelegationComplete once.
+        expect(subAgentGenerate).not.toHaveBeenCalled();
+        expect(onDelegationComplete).toHaveBeenCalledTimes(1);
+        expect(onDelegationComplete.mock.calls[0]![0]).toMatchObject({ success: false });
+        expect(hookErrors(requestContext)).toEqual([
+          expect.objectContaining({ hook: 'messageFilter', message: 'filter boom' }),
+        ]);
+      });
+
       it('should record a throwing messageFilter and fall back to the unfiltered context by default', async () => {
         const subAgent = makeSubAgent('research-agent', 'Dolphins are marine mammals.');
         const requestContext = new RequestContext();
