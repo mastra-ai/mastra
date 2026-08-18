@@ -216,6 +216,87 @@ describe('OtelBridge', () => {
       bridge.shutdown();
     });
 
+    // Regression tests for https://github.com/mastra-ai/mastra/issues/20771
+    //
+    // A workflow resumed after suspend restores traceId + parentSpanId from the
+    // persisted snapshot, but the parent OTEL span ended when the run suspended
+    // (possibly in another process) so it is not in the bridge's span map. The
+    // bridge must parent the span under a remote span context built from the
+    // persisted IDs instead of dropping them and starting a new trace.
+    describe('when restoring a persisted trace context', () => {
+      it('continues the persisted trace when the parent span is no longer live', () => {
+        const bridge = new OtelBridge();
+
+        const persistedTraceId = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
+        const persistedParentSpanId = '1a2b3c4d5e6f7081';
+
+        const result = bridge.createSpan({
+          type: SpanType.WORKFLOW_RUN,
+          name: 'workflow run (resumed)',
+          attributes: {},
+          traceId: persistedTraceId,
+          parentSpanId: persistedParentSpanId,
+        });
+
+        expect(result?.traceId).toBe(persistedTraceId);
+        expect(result?.parentSpanId).toBe(persistedParentSpanId);
+        expect(result?.spanId).toMatch(/^[0-9a-f]{16}$/);
+        expect(result?.spanId).not.toBe(persistedParentSpanId);
+
+        bridge.shutdown();
+      });
+
+      it('prefers a live parent span over the persisted IDs', () => {
+        const bridge = new OtelBridge();
+
+        const parentIds = bridge.createSpan({
+          type: SpanType.WORKFLOW_RUN,
+          name: 'live parent',
+          attributes: {},
+        });
+        expect(parentIds).toBeDefined();
+
+        const liveParent = {
+          id: parentIds!.spanId,
+          traceId: parentIds!.traceId,
+          isInternal: false,
+        };
+
+        const result = bridge.createSpan({
+          type: SpanType.WORKFLOW_STEP,
+          name: 'child of live parent',
+          attributes: {},
+          parent: liveParent as any,
+          traceId: 'a1b2c3d4e5f60718293a4b5c6d7e8f90',
+          parentSpanId: '1a2b3c4d5e6f7081',
+        });
+
+        expect(result?.traceId).toBe(parentIds!.traceId);
+        expect(result?.parentSpanId).toBe(parentIds!.spanId);
+
+        bridge.shutdown();
+      });
+
+      it('ignores malformed persisted IDs and falls back to the active context', () => {
+        const bridge = new OtelBridge();
+
+        const result = bridge.createSpan({
+          type: SpanType.WORKFLOW_RUN,
+          name: 'workflow run (resumed)',
+          attributes: {},
+          traceId: 'not-a-valid-trace-id',
+          parentSpanId: 'nope',
+        });
+
+        // Falls back to a fresh trace rather than emitting garbage trace links
+        expect(result?.traceId).toMatch(/^[0-9a-f]{32}$/);
+        expect(result?.traceId).not.toBe('not-a-valid-trace-id');
+        expect(result?.parentSpanId).toBeUndefined();
+
+        bridge.shutdown();
+      });
+    });
+
     // Regression tests for https://github.com/mastra-ai/mastra/issues/15589
     //
     // When no OTEL SDK / tracer provider is registered, `trace.getTracer(...)`

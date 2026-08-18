@@ -853,6 +853,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           },
           workflowStatus: 'canceled',
           requestContext: currentRequestContext,
+          phase: 'canceled',
         });
 
         workflowSpan?.end({
@@ -976,6 +977,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           error: result.error,
           requestContext: currentRequestContext,
           tracingContext: persistTracingContext,
+          phase: 'terminal',
         });
 
         if (result.error) {
@@ -1056,6 +1058,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           executionContext: lastExecutionContext,
           workflowStatus: 'paused',
           requestContext: currentRequestContext,
+          phase: 'per-step',
         });
 
         await params.pubsub.publish(`workflow.events.v2.${runId}`, {
@@ -1100,6 +1103,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       result: result.result,
       error: result.error,
       requestContext: currentRequestContext,
+      phase: 'workflow-end',
     });
 
     workflowSpan?.end({

@@ -148,9 +148,14 @@ export interface PersistStepUpdateParams {
     parentSpanId?: string;
   };
   /**
-   * Optional phase suffix appended to the durable operation ID to prevent
-   * duplicate step IDs when persistStepUpdate is called multiple times for
-   * the same execution path (e.g. 'start' before execution, 'end' after).
+   * Phase suffix appended to the durable operation ID to prevent duplicate
+   * step IDs when persistStepUpdate is called multiple times for the same
+   * execution path (e.g. 'start' before execution, 'entry-end' after).
+   *
+   * Every call site must pass a phase that is unique among the persists that
+   * can run for one execution path in a single execution; otherwise replay
+   * engines (Inngest) see duplicate step IDs. Optional only for backward
+   * compatibility with external callers.
    */
   phase?: string;
 }
@@ -609,6 +614,7 @@ export async function executeEntry(
       executionContext,
       workflowStatus: 'waiting',
       requestContext,
+      phase: 'sleep-waiting',
     });
 
     await engine.executeSleep({
@@ -642,6 +648,7 @@ export async function executeEntry(
         executionContext,
         workflowStatus: 'running',
         requestContext,
+        phase: 'sleep-end',
       });
 
       const endedAt = Date.now();
@@ -718,6 +725,7 @@ export async function executeEntry(
       executionContext,
       workflowStatus: 'waiting',
       requestContext,
+      phase: 'sleep-until-waiting',
     });
 
     await engine.executeSleepUntil({
@@ -751,6 +759,7 @@ export async function executeEntry(
         executionContext,
         workflowStatus: 'running',
         requestContext,
+        phase: 'sleep-until-end',
       });
 
       const endedAt = Date.now();
@@ -813,6 +822,7 @@ export async function executeEntry(
     executionContext,
     workflowStatus: execResults.status === 'success' ? 'running' : execResults.status,
     requestContext,
+    phase: 'entry-end',
   });
 
   if (execResults.status === 'canceled') {

@@ -190,6 +190,17 @@ describe('AgentController Resource', () => {
     expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1');
   });
 
+  it('requests session state for a specific thread', async () => {
+    mockJson({ controllerId: 'code', resourceId: 'user-1', threadId: 't/1', modeId: 'build', modelId: 'm' });
+
+    await client.getAgentController('code').session('user-1', '/repo').state({ threadId: 't/1' });
+
+    const [url] = lastCall();
+    expect(url).toBe(
+      'http://localhost:4111/api/agent-controller/code/sessions/user-1?threadId=t%2F1&sessionScope=%2Frepo',
+    );
+  });
+
   it('switches mode and model', async () => {
     mockJson({ ok: true });
     await client.getAgentController('code').session('user-1').switchMode('plan');

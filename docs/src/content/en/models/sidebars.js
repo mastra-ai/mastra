@@ -191,6 +191,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/arcee',
+          label: 'Arcee',
+        },
+        {
+          type: 'doc',
           id: 'providers/atomic-chat',
           label: 'Atomic Chat',
         },
@@ -451,6 +456,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/jalapeno',
+          label: 'Jalapeno Cloud',
+        },
+        {
+          type: 'doc',
           id: 'providers/jiekou',
           label: 'Jiekou.AI',
         },
@@ -468,6 +478,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/kimi-for-coding',
           label: 'Kimi For Coding',
+        },
+        {
+          type: 'doc',
+          id: 'providers/kosmik',
+          label: 'Kosmik Compute',
         },
         {
           type: 'doc',

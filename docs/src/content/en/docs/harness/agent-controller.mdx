@@ -17,6 +17,8 @@ Breaking changes may occur without a major version bump until the API is stable.
 
 [Mastra Code](https://code.mastra.ai) and [Mastra Factory](https://factory.mastra.ai) are the flagship AgentController implementations. They're coding agents with multi-model support, persistent conversations, and plan-then-execute workflows. Read [Building a coding agent](https://mastra.ai/blog/building-a-coding-agent) for a step-by-step TUI guide.
 
+When the agent you host works in a codebase, build it with [`createCodingAgent()`](/reference/coding-agent/create-coding-agent) instead of `new Agent()`. It returns a standard `Agent` that already has a workspace, task tracking, and retries for transient model errors, which are the defaults Mastra Code runs on.
+
 ## When to use the Agent Controller
 
 Use the Agent Controller when your application needs:
