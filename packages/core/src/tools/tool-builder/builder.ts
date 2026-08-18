@@ -22,6 +22,7 @@ import type { Mastra } from '../../mastra';
 import { SpanType, wrapMastra, EntityType, getOrCreateSpan, createObservabilityContext } from '../../observability';
 import type { AnySpan } from '../../observability';
 import { executeWithContext } from '../../observability/utils';
+import { emitSpanFact } from '../../pulse/lifecycle';
 import { RequestContext } from '../../request-context';
 import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { StandardSchemaWithJSON } from '../../schema';
@@ -735,6 +736,7 @@ export class CoreToolBuilder extends MastraBase {
             if (resumeValidation.error) {
               logger?.warn(resumeValidation.error.message);
               toolSpan?.end({ output: resumeValidation.error, attributes: { success: false } });
+              emitSpanFact(toolSpan as any, 'ended');
               return resumeValidation.error as any;
             }
           }
@@ -756,6 +758,7 @@ export class CoreToolBuilder extends MastraBase {
           if (suspendValidation.error) {
             logger?.warn(suspendValidation.error.message);
             toolSpan?.end({ output: suspendValidation.error, attributes: { success: false } });
+            emitSpanFact(toolSpan as any, 'ended');
             return suspendValidation.error as any;
           }
         }
@@ -764,6 +767,7 @@ export class CoreToolBuilder extends MastraBase {
         const shouldSkipValidation = typeof result === 'undefined' && !!suspendData;
         if (shouldSkipValidation) {
           toolSpan?.end({ output: result, attributes: { success: true } });
+          emitSpanFact(toolSpan as any, 'ended');
           return result;
         }
 
@@ -776,6 +780,7 @@ export class CoreToolBuilder extends MastraBase {
           if (outputValidation.error) {
             logger?.warn(outputValidation.error.message);
             toolSpan?.end({ output: outputValidation.error, attributes: { success: false } });
+            emitSpanFact(toolSpan as any, 'ended');
             return outputValidation.error;
           }
           result = outputValidation.data;
@@ -783,9 +788,11 @@ export class CoreToolBuilder extends MastraBase {
 
         // Return result (validated for Vercel tools, already validated for Mastra tools)
         toolSpan?.end({ output: result, attributes: { success: true } });
+        emitSpanFact(toolSpan as any, 'ended');
         return result;
       } catch (error) {
         toolSpan?.error({ error: error as Error, attributes: { success: false } });
+        emitSpanFact(toolSpan as any, 'ended');
         throw error;
       }
     };
@@ -822,6 +829,7 @@ export class CoreToolBuilder extends MastraBase {
         requestContext: toolRequestContext,
         mastra: options.mastra && 'observability' in options.mastra ? (options.mastra as Mastra) : undefined,
       });
+      emitSpanFact(toolSpan as any, 'started');
 
       const fgaProvider = (options.mastra as any)?.getServer?.()?.fga;
       const user = toolRequestContext?.get('user');
@@ -877,6 +885,7 @@ export class CoreToolBuilder extends MastraBase {
           if (error && !suspendedToolRunIdErrToIgnore) {
             logger.warn('Tool input validation failed', { ...logData, validationError: error.message });
             toolSpan?.end({ output: error, attributes: { success: false } });
+            emitSpanFact(toolSpan as any, 'ended');
             return error;
           }
           if (data !== undefined) {
@@ -910,6 +919,7 @@ export class CoreToolBuilder extends MastraBase {
           err,
         );
         toolSpan?.error({ error: mastraError, attributes: { success: false } });
+        emitSpanFact(toolSpan as any, 'ended');
         logger.trackException(mastraError, { ...logData, ...rest, model: logModelObject, args });
         throw mastraError;
       }

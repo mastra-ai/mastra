@@ -5,6 +5,7 @@ import { parseMemoryRequestContext } from '../../memory';
 import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
 import { SpanType, EntityType } from '../../observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '../../observability';
+import { emitSpanFact } from '../../pulse/lifecycle';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
 
@@ -108,6 +109,7 @@ export class MessageHistory implements Processor {
         lastMessages: this.lastMessages,
       },
     );
+    emitSpanFact(span as any, 'started');
 
     try {
       // 1. Fetch historical messages from storage (as DB format)
@@ -138,6 +140,7 @@ export class MessageHistory implements Processor {
           output: { success: true },
           attributes: { messageCount: 0 },
         });
+        emitSpanFact(span as any, 'ended');
         return messageList;
       }
 
@@ -154,10 +157,12 @@ export class MessageHistory implements Processor {
         output: { success: true },
         attributes: { messageCount: chronologicalMessages.length },
       });
+      emitSpanFact(span as any, 'ended');
 
       return messageList;
     } catch (error) {
       span?.error({ error: error as Error, endSpan: true });
+      emitSpanFact(span as any, 'ended');
       throw error;
     }
   }
@@ -267,6 +272,7 @@ export class MessageHistory implements Processor {
     const span = this.createMemorySpan('save', observabilityContext, undefined, {
       messageCount: messagesToSave.length,
     });
+    emitSpanFact(span as any, 'started');
 
     try {
       await this.persistMessages({ messages: messagesToSave, threadId, resourceId });
@@ -276,10 +282,12 @@ export class MessageHistory implements Processor {
       span?.end({
         output: { success: true },
       });
+      emitSpanFact(span as any, 'ended');
 
       return messageList;
     } catch (error) {
       span?.error({ error: error as Error, endSpan: true });
+      emitSpanFact(span as any, 'ended');
       throw error;
     }
   }

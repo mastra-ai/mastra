@@ -94,6 +94,7 @@ import { SkillsProcessor } from '../processors/processors/skills';
 import { WorkspaceInstructionsProcessor } from '../processors/processors/workspace-instructions';
 import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
+import { emitSpanFact } from '../pulse/lifecycle';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, MASTRA_VERSIONS_KEY } from '../request-context';
 import type { DeclaredAgentSchedule } from '../schedules/define';
 import type { InferStandardSchemaOutput } from '../schema';
@@ -7030,6 +7031,7 @@ export class Agent<
       mastra: this.#mastra,
       resumedFromSpanId,
     });
+    emitSpanFact(agentSpan as any, 'started');
 
     const memory = await this.getMemory({ requestContext });
     // Reuse early workspace (resolved earlier for browser context) to avoid
@@ -7362,6 +7364,7 @@ export class Agent<
           }
         : {}),
     });
+    emitSpanFact(agentSpan as any, 'ended');
   }
 
   /**

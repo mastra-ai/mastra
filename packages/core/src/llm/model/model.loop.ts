@@ -8,6 +8,7 @@ import type { LoopOptions } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import { SpanType, resolveObservabilityContext } from '../../observability';
 import { executeWithContextSync } from '../../observability/utils';
+import { emitSpanFact } from '../../pulse/lifecycle';
 import { getToolDefinitionsForTracing } from '../../stream/aisdk/v5/compat/prepare-tools';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { ModelManagerModelConfig } from '../../stream/types';
@@ -189,6 +190,7 @@ export class MastraLLMVNext extends MastraBase {
       tracingPolicy: this.#options?.tracingPolicy,
       requestContext,
     });
+    emitSpanFact(modelSpan as any, 'started');
 
     if (modelSpan) {
       executeWithContextSync({
@@ -275,6 +277,7 @@ export class MastraLLMVNext extends MastraBase {
                 e,
               );
               modelSpanTracker?.reportGenerationError({ error: mastraError });
+              emitSpanFact(modelSpan as any, 'ended');
               this.logger.trackException(mastraError);
               throw mastraError;
             }
@@ -327,6 +330,7 @@ export class MastraLLMVNext extends MastraBase {
               providerMetadata: props?.providerMetadata,
               stepProviderMetadata: props?.steps.map(step => step.providerMetadata),
             });
+            emitSpanFact(modelSpan as any, 'ended');
 
             try {
               await options?.onFinish?.({ ...props, runId: runId! });
@@ -351,6 +355,7 @@ export class MastraLLMVNext extends MastraBase {
                 e,
               );
               modelSpanTracker?.reportGenerationError({ error: mastraError });
+              emitSpanFact(modelSpan as any, 'ended');
               this.logger.trackException(mastraError);
               throw mastraError;
             }
@@ -388,6 +393,7 @@ export class MastraLLMVNext extends MastraBase {
         e,
       );
       modelSpanTracker?.reportGenerationError({ error: mastraError });
+      emitSpanFact(modelSpan as any, 'ended');
       throw mastraError;
     }
   }

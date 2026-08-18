@@ -27,17 +27,36 @@ export interface PulseFactInput {
   runId: string;
   /** Flow identity when known at the seam ('' when genuinely unknown). */
   traceId?: string;
+  /** Deterministic pulse id (span lifecycle facts reuse spanPulseId so the
+   * native and bridge lanes collapse under idempotent reads); random when
+   * omitted. */
+  id?: string;
+  spanId?: string;
+  parentSpanId?: string;
+  text?: string;
+  level?: 'error';
+  metadata?: Record<string, string>;
   surface: string;
   action: string;
   type: 'input' | 'output' | 'decision' | 'state' | 'error' | 'progress' | 'system';
-  attributes?: Record<string, string | number | boolean>;
+  attributes?: Record<string, unknown>;
   data?: Record<string, number>;
   threadId?: string;
   resourceId?: string;
-  /** Optional edges anchored on this fact's pulse id. */
+  /** Optional edges anchored on this fact's pulse id (or `from` override). */
   edges?: Array<{
-    type: 'queued_signal' | 'drained_signal' | 'introduced_content' | 'included_in_model_input';
-    to: { kind: 'content' | 'model_input' | 'pulse'; id: string };
+    type:
+      | 'queued_signal'
+      | 'drained_signal'
+      | 'introduced_content'
+      | 'included_in_model_input'
+      | 'origin_of'
+      | 'parent_of'
+      | 'resume_of'
+      | 'uses_model_settings'
+      | 'uses_tool_definition';
+    from?: { kind: 'pulse' | 'flow'; id: string };
+    to: { kind: 'content' | 'model_input' | 'pulse' | 'flow' | 'definition'; id: string };
     attributes?: Record<string, string | number>;
   }>;
 }
@@ -119,7 +138,7 @@ function drain(): void {
   }
   while (queue.length) {
     const { fact, at } = queue.shift()!;
-    const pulseId = randomUUID();
+    const pulseId = fact.id ?? randomUUID();
     bus.emit({
       type: 'pulse',
       record: {
@@ -129,9 +148,14 @@ function drain(): void {
         type: fact.type,
         surface: fact.surface,
         action: fact.action,
+        level: fact.level,
+        text: fact.text,
         attributes: fact.attributes,
         data: fact.data,
+        metadata: fact.metadata,
         traceId: fact.traceId ?? '',
+        spanId: fact.spanId,
+        parentSpanId: fact.parentSpanId,
         runId: fact.runId || undefined,
         threadId: fact.threadId,
         resourceId: fact.resourceId,
@@ -146,7 +170,7 @@ function drain(): void {
           timestamp: at,
           seq: nextPulseSeq(),
           type: edge.type,
-          from: { kind: 'pulse', id: pulseId },
+          from: edge.from ?? { kind: 'pulse', id: pulseId },
           to: edge.to,
           ...(edge.attributes ? { attributes: edge.attributes } : {}),
           traceId: fact.traceId ?? '',

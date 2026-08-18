@@ -144,7 +144,12 @@ export function spanPulseId(traceId: string, spanId: string, phase: 'started' | 
 }
 
 /** Collect numeric leaves (dotted keys, depth-limited) — `data` is strictly numeric. */
-function numericLeaves(obj: unknown, prefix = '', depth = 0, out: Record<string, number> = {}): Record<string, number> {
+export function numericLeaves(
+  obj: unknown,
+  prefix = '',
+  depth = 0,
+  out: Record<string, number> = {},
+): Record<string, number> {
   if (obj == null || depth > 3 || typeof obj !== 'object') return out;
   for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
     const key = prefix ? `${prefix}.${k}` : k;
@@ -159,7 +164,7 @@ function metaStr(span: any, key: string): string {
   return v == null ? '' : String(v);
 }
 
-function surfaceAction(spanType: string): { surface: string; base: string } {
+export function surfaceAction(spanType: string): { surface: string; base: string } {
   switch (spanType) {
     case 'agent_run':
       return { surface: 'agent', base: 'run' };

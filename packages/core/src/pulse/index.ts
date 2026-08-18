@@ -5,3 +5,4 @@ export * from './storage-exporter';
 export * from './session-forwarder';
 export * from './seq';
 export * from './emitter';
+export * from './lifecycle';

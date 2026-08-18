@@ -16,6 +16,7 @@ import { parseMemoryRequestContext } from '../memory/types';
 import { EntityType, SpanType, createObservabilityContext, resolveObservabilityContext } from '../observability';
 import type { ObservabilityContext, Span } from '../observability';
 import type { TracingContext } from '../observability/types';
+import { emitSpanFact } from '../pulse/lifecycle';
 import type { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
@@ -669,6 +670,7 @@ export class ProcessorRunner {
           retryCount,
         },
       });
+      emitSpanFact(processorSpan as any, 'started');
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
@@ -734,6 +736,7 @@ export class ProcessorRunner {
           },
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
+        emitSpanFact(processorSpan as any, 'ended');
       } catch (error) {
         // Stop recording on error
         messageList.stopRecording();
@@ -750,10 +753,12 @@ export class ProcessorRunner {
               },
             },
           });
+          emitSpanFact(processorSpan as any, 'ended');
           await invokeOnViolation(processor, error);
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
+        emitSpanFact(processorSpan as any, 'ended');
         throw error;
       }
     }
@@ -1171,6 +1176,7 @@ export class ProcessorRunner {
           systemMessages: currentSystemMessages,
         },
       });
+      emitSpanFact(processorSpan as any, 'started');
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
@@ -1304,6 +1310,7 @@ export class ProcessorRunner {
           },
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
+        emitSpanFact(processorSpan as any, 'ended');
       } catch (error) {
         // Stop recording on error
         messageList.stopRecording();
@@ -1320,10 +1327,12 @@ export class ProcessorRunner {
               },
             },
           });
+          emitSpanFact(processorSpan as any, 'ended');
           await invokeOnViolation(processor, error);
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
+        emitSpanFact(processorSpan as any, 'ended');
         throw error;
       }
     }

@@ -1,6 +1,7 @@
 import type { IMastraLogger } from '../../../logger';
 import { EntityType, SpanType } from '../../../observability';
 import type { AnySpan } from '../../../observability';
+import { emitSpanFact } from '../../../pulse/lifecycle';
 
 /**
  * Provider tool calls are stashed at call time and their PROVIDER_TOOL_CALL span is
@@ -57,6 +58,8 @@ export function endPendingProviderToolSpan({
   }
   try {
     span?.end(result ? { output: result.output, attributes: { success: !result.isError } } : undefined);
+    emitSpanFact(span as any, 'started');
+    emitSpanFact(span as any, 'ended');
   } catch (err) {
     logger?.warn?.('[ProviderToolObservability] failed to end PROVIDER_TOOL_CALL span', {
       error: err instanceof Error ? err.message : String(err),

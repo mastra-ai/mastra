@@ -35,6 +35,7 @@ import { PrepareStepProcessor } from '../../../processors/processors/prepare-ste
 import { ProcessorRunner } from '../../../processors/runner';
 import type { ProcessorState } from '../../../processors/runner';
 import { emitPulseFact } from '../../../pulse/emitter';
+import { emitSpanFact } from '../../../pulse/lifecycle';
 import { RequestContext } from '../../../request-context';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
@@ -562,6 +563,7 @@ async function processOutputStream<OUTPUT = undefined>({
     }
 
     entry.span.end(args !== undefined ? { metadata: { args } } : undefined);
+    emitSpanFact(entry.span as any, 'ended');
     entry.ended = true;
     clientToolArgsTextByToolCallId.delete(toolCallId);
   };
@@ -639,6 +641,7 @@ async function processOutputStream<OUTPUT = undefined>({
         },
         ...(args !== undefined ? { input: args } : {}),
       });
+      emitSpanFact(clientToolSpan as any, 'started');
       if (clientToolSpan) {
         const carrier = proxy.inject(clientToolSpan);
         const entry = { carrier, span: clientToolSpan, ended: false };
@@ -1057,6 +1060,7 @@ async function processOutputStream<OUTPUT = undefined>({
     if (!entry.ended) {
       const parsedArgs = parseClientToolArgsFromDeltas(toolCallId);
       entry.span.end(parsedArgs !== undefined ? { metadata: { args: parsedArgs } } : undefined);
+      emitSpanFact(entry.span as any, 'ended');
       entry.ended = true;
     }
   }
@@ -1187,6 +1191,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         : inputData.messageId || messageIdPassed;
       // Start the MODEL_STEP span at the beginning of LLM execution
       modelSpanTracker?.startStep();
+      emitSpanFact(modelSpanTracker?.getTracingContext?.()?.currentSpan as any, 'started');
 
       let modelResult: ReturnType<typeof execute> | undefined;
       // EXPERIMENT (Gate 1): set only when a live request is frozen for a
@@ -1618,6 +1623,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             responseFormat: currentStep.structuredOutput ? 'json_schema' : undefined,
           });
           modelSpanTracker?.startInference?.();
+          emitSpanFact(modelSpanTracker?.getTracingContext?.()?.currentSpan as any, 'started');
 
           // EXPERIMENT (Gate 1): the request is FROZEN here — nothing below
           // mutates the prompt. Record the exact ordered membership of

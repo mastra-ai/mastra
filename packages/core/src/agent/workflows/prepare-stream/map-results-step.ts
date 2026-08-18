@@ -7,6 +7,7 @@ import type { MemoryConfigInternal } from '../../../memory/types';
 import { createObservabilityContext } from '../../../observability';
 import type { Span, SpanType } from '../../../observability';
 import { StructuredOutputProcessor } from '../../../processors';
+import { emitSpanFact } from '../../../pulse/lifecycle';
 import type { RequestContext } from '../../../request-context';
 import type { Step } from '../../../workflows/step';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
@@ -65,6 +66,17 @@ export function createMapResultsStep<OUTPUT = undefined>({
 >['execute'] {
   return async ({ inputData, bail, ..._observabilityContext }) => {
     const memoryData = inputData['prepare-memory-step'];
+
+    // Every terminal below ends the AGENT_RUN span (all error calls carry
+    // endSpan: true); the native run terminal fact rides the same moment.
+    const endAgentSpan: NonNullable<typeof agentSpan>['end'] = opts => {
+      agentSpan?.end(opts as any);
+      emitSpanFact(agentSpan as any, 'ended');
+    };
+    const errorAgentSpan: NonNullable<typeof agentSpan>['error'] = opts => {
+      agentSpan?.error(opts as any);
+      emitSpanFact(agentSpan as any, 'ended');
+    };
 
     // Class instances written to runScope by upstream steps. These never travel
     // through inputData because the evented engine JSON-serializes step outputs.
@@ -137,7 +149,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
         });
 
         // End agent span with tripwire information after fallback completes
-        agentSpan?.end({
+        endAgentSpan({
           output: { tripwire: memoryData.tripwire },
           attributes: {
             tripwireAbort: {
@@ -152,7 +164,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
         return bail(modelOutput);
       } catch (error) {
         // End agent span with error and tripwire context so failures aren't masked
-        agentSpan?.error({
+        errorAgentSpan({
           error: error as Error,
           endSpan: true,
           attributes: {
@@ -290,12 +302,12 @@ export function createMapResultsStep<OUTPUT = undefined>({
             // End the AGENT_RUN span so the trace is exported.
             // Without this, the span is orphaned and exporters that wait
             // for the root span to end (e.g. Datadog) never emit the trace.
-            agentSpan?.error({ error, endSpan: true });
+            errorAgentSpan({ error, endSpan: true });
             return;
           }
 
           if (payload.finishReason === 'suspended') {
-            agentSpan?.end({
+            endAgentSpan({
               output: {
                 status: 'suspended',
                 reason: payload.suspendReason,
@@ -307,7 +319,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
           }
 
           if (payload.finishReason === 'aborted') {
-            agentSpan?.end({
+            endAgentSpan({
               output: {
                 status: 'aborted',
                 reason: 'abort',
@@ -365,10 +377,10 @@ export function createMapResultsStep<OUTPUT = undefined>({
                       e,
                     );
 
-              agentSpan?.error({ error: spanError, endSpan: true });
+              errorAgentSpan({ error: spanError, endSpan: true });
             }
           } else {
-            agentSpan?.end();
+            endAgentSpan();
           }
 
           await options?.onFinish?.({
