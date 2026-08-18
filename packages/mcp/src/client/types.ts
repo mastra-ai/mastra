@@ -513,3 +513,51 @@ export type InternalMastraMCPClientOptions = {
   /** Optional timeout in milliseconds */
   timeout?: number;
 };
+
+/**
+ * A fully serializable description of a single tool advertised by an MCP server.
+ *
+ * This is the data returned by the MCP `tools/list` response, plus the server metadata needed
+ * to reconstruct the tool faithfully. It contains no functions, class instances or references
+ * to a live client, so it survives `JSON.stringify` and can be cached in Redis, a database, or
+ * a build artifact and reused by other processes.
+ *
+ * Obtain these via {@link MCPClient.listToolDefinitions} and turn them back into executable
+ * tools with {@link MCPClient.toolFromDefinition}.
+ */
+export type SerializableMCPToolDefinition = {
+  /** Tool name as advertised by the server, without any server namespace prefix. */
+  name: string;
+  /** Human readable description from the server, if it supplied one. */
+  description?: string;
+  /** Raw JSON Schema for the tool's arguments, exactly as sent by the server. */
+  inputSchema: unknown;
+  /** Raw JSON Schema for the tool's structured output, if the server declared one. */
+  outputSchema?: unknown;
+  /** Server-advertised annotations (title, readOnlyHint, destructiveHint, ...). */
+  annotations?: ToolAnnotations;
+  /** Server-supplied `_meta`, including `ui.resourceUri` for MCP Apps. */
+  _meta?: Record<string, unknown>;
+  /**
+   * Metadata about the server that advertised this tool.
+   *
+   * Captured at discovery time because it is otherwise only available from a live connection.
+   * Without it, hydrating a tool would silently drop the server version and instructions that
+   * a normally discovered tool carries.
+   */
+  server: {
+    /** The name this server is configured under. */
+    name: string;
+    /** Server version reported during the MCP handshake, if any. */
+    version?: string;
+    /** Instructions the server returned during initialization, if any. */
+    instructions?: string;
+  };
+};
+
+/**
+ * A serializable catalog of MCP tool definitions, keyed by server name and then tool name.
+ *
+ * This is the shape returned by {@link MCPClient.listToolDefinitions}.
+ */
+export type SerializableMCPToolCatalog = Record<string, Record<string, SerializableMCPToolDefinition>>;

@@ -1,5 +1,5 @@
 ---
-title: "Workflows overview"
+title: "Workflows"
 description: "Workflows in Mastra help you orchestrate complex sequences of tasks with features like branching, parallel execution, resource suspension, and more."
 packages:
   - "@mastra/core"
@@ -8,7 +8,7 @@ packages:
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
-# Workflows overview
+# Workflows
 
 Workflows let you define complex sequences of tasks using clear, structured steps rather than relying on the reasoning of a single agent. They give you full control over how tasks are broken down and how data moves between them, plus what gets executed when. Workflows run using the built-in execution engine by default, or can be deployed to [workflow runners](/docs/deployment/workflow-runners) like Inngest for managed infrastructure.
 
@@ -117,7 +117,7 @@ Visit [`Step`](/reference/workflows/step) for a full list of configuration optio
 
 ### Using agents and tools
 
-Workflow steps can also call registered agents or import and execute tools directly, visit the [Using Tools](/docs/agents/using-tools) page for more information.
+Workflow steps can also call registered agents or import and execute tools directly, visit the [Using Tools](/docs/agents/tools) page for more information.
 
 ## Creating a workflow
 
@@ -301,7 +301,7 @@ You can run workflows from agents, tools, the Mastra Client, or the command line
 const testWorkflow = mastra.getWorkflow('testWorkflow')
 ```
 
-:::info
+:::note
 `mastra.getWorkflow()` is preferred over a direct import for two reasons:
 
 1. It provides access to the Mastra instance configuration (logger, telemetry, storage, registered agents, and vector stores)
@@ -425,7 +425,7 @@ Here's an example of a successful workflow result, showing the `input`, `steps`,
 
 ## Streaming
 
-For generic `writer` API usage, see [Streaming](/guides/concepts/streaming#writer-api).
+For generic `writer` API usage, see [Streaming](/docs/guides/streaming#writer-api).
 
 ### Inspecting workflow stream payloads
 
@@ -565,7 +565,7 @@ For type-safe request context schema validation, see [Schema Validation](/docs/s
 
 ## Related
 
-For a closer look at workflows, see our [Workflow Guide](/guides/guide/ai-recruiter), which walks through the core concepts with a practical example.
+For a closer look at workflows, see our [Workflow Guide](https://mastra.ai/blog/building-an-ai-recruiter), which walks through the core concepts with a practical example.
 
 - [Workflow State](/docs/workflows/workflow-state)
 - [Control Flow](/docs/workflows/control-flow)

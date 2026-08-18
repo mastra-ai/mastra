@@ -1,0 +1,114 @@
+---
+title: "Reference: QuickJsCodeModeTransport | Tools and MCP"
+description: "API reference for QuickJsCodeModeTransport, which runs Code Mode programs in an in-process QuickJS WebAssembly runtime."
+packages:
+  - "@mastra/quickjs"
+---
+
+# QuickJsCodeModeTransport
+
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
+The `QuickJsCodeModeTransport` class runs [Code mode](/docs/agents/code-mode) programs in an in-process [QuickJS](https://bellard.org/quickjs/) runtime compiled to WebAssembly. The runtime is the execution boundary, so no workspace sandbox is required: the program has no filesystem, network, process, or module access. Its only capabilities are the `external_*` functions, which call back into the real tools on the host.
+
+Unlike [`IsolatedVmCodeModeTransport`](/reference/tools/isolated-vm-transport), this transport installs no native binaries and needs no Node.js flags, so it runs on serverless platforms that disallow both. The tradeoff is speed: see [Choosing a transport](#choosing-a-transport).
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/quickjs
+```
+
+The package contains the WebAssembly module, so installing it copies files and runs nothing else.
+
+## Usage
+
+Pass the transport as the second argument to `createCodeMode()`. No `sandbox` is needed:
+
+```typescript
+import { createCodeMode } from '@mastra/core/tools'
+import { QuickJsCodeModeTransport } from '@mastra/quickjs'
+
+const { tool, instructions } = createCodeMode(
+  { tools: { getTopProducts, getProductRatings } },
+  new QuickJsCodeModeTransport({ memoryLimitMb: 128 }),
+)
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'QuickJsCodeModeTransportOptions',
+    description: 'Configuration for the QuickJS runtime.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'QuickJsCodeModeTransportOptions',
+        parameters: [
+          {
+            name: 'memoryLimitMb',
+            type: 'number',
+            description:
+              'Runtime heap limit in MiB. A program that exceeds the limit is terminated and the tool returns an error result.',
+            isOptional: true,
+            defaultValue: '128',
+          },
+          {
+            name: 'maxStackSizeBytes',
+            type: 'number',
+            description:
+              'Runtime stack limit in bytes. A program that exceeds the limit, usually through runaway recursion, is terminated and the tool returns an error result.',
+            isOptional: true,
+            defaultValue: '1048576',
+          },
+          {
+            name: 'module',
+            type: 'QuickJSWASMModule',
+            description:
+              'A preloaded QuickJS WebAssembly module. Supply one to control when the module is loaded, or to share a single module across transports. Loaded on first run when omitted.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Choosing a transport
+
+All three transports enforce the same allow-list, tool validation, and tracing on the host. They differ in what the program itself can reach and what the host has to provide.
+
+| | `StdioCodeModeTransport` | `IsolatedVmCodeModeTransport` | `QuickJsCodeModeTransport` |
+| - | - | - | - |
+| Isolation boundary | Workspace sandbox | V8 isolate | QuickJS WebAssembly runtime |
+| Requires a sandbox | Yes | No | No |
+| Native binary | Node.js runtime in the sandbox | Yes | No |
+| Node.js flags | None | `--no-node-snapshot` on Node.js 20 and later | None |
+| Runs in the browser | No | No | Yes |
+| Execution speed | Fastest | Fast | Slowest |
+
+Choose `QuickJsCodeModeTransport` when the host can't install native addons or set Node.js flags, which is common on serverless platforms. Choose `IsolatedVmCodeModeTransport` when the host allows both and programs do heavy computation.
+
+The speed difference is in the program body, not the tool calls. QuickJS interprets rather than JIT-compiles, so a compute-heavy loop can run tens of times slower than in a V8 isolate, while a program that mostly awaits `external_*` calls performs about the same because the time goes to the tools. Code Mode programs are usually the second kind.
+
+## How it works
+
+Each run creates a fresh QuickJS runtime with its own heap. TypeScript is stripped on the host with [ts-blank-space](https://github.com/bloomberg/ts-blank-space), which erases type annotations without a native compiler, then the program is evaluated inside the runtime. Every `external_*` call crosses the boundary as JSON strings in both directions, so no host object references leak into model-authored code.
+
+An `external_*` call returns a pending promise to the program and hands control straight back to the host, so many calls can be in flight at once and `Promise.all` behaves as expected.
+
+The `timeout` configured on `createCodeMode()` applies to both asynchronous hangs and synchronous infinite loops, and the runtime is disposed after every run.
+
+## Related
+
+- [Code mode](/docs/agents/code-mode)
+- [createCodeMode() reference](/reference/tools/create-code-mode)
+- [IsolatedVmCodeModeTransport reference](/reference/tools/isolated-vm-transport)

@@ -138,7 +138,7 @@ type ScoredTurn = {
 };
 type ItemTurnResults = ScoredTurn[];
 
-type RunEvalsResult = {
+export type RunEvalsResult = {
   scores: Record<string, any>;
   summary: {
     totalItems: number;
@@ -202,8 +202,10 @@ export function runEvals<TAgent extends Agent>(config: {
 // Workflow with scorers array
 export function runEvals<TWorkflow extends AnyWorkflow>(config: {
   data: RunEvalsDataItem<TWorkflow>[];
-  scorers: MastraScorer<any, any, any, any>[];
+  scorers: ScorerEntry[];
   target: TWorkflow;
+  /** Gates: scorers that must score 1.0 for the run to pass. */
+  gates?: MastraScorer<any, any, any, any>[];
   targetOptions?: WorkflowRunOptions;
   onItemComplete?: (params: {
     item: RunEvalsDataItem<TWorkflow>;
@@ -218,6 +220,8 @@ export function runEvals<TWorkflow extends AnyWorkflow>(config: {
   data: RunEvalsDataItem<TWorkflow>[];
   scorers: WorkflowScorerConfig;
   target: TWorkflow;
+  /** Gates: scorers that must score 1.0 for the run to pass. */
+  gates?: MastraScorer<any, any, any, any>[];
   targetOptions?: WorkflowRunOptions;
   onItemComplete?: (params: {
     item: RunEvalsDataItem<TWorkflow>;
@@ -236,6 +240,8 @@ export function runEvals<TAgent extends Agent>(config: {
   data: RunEvalsDataItem<TAgent>[];
   scorers: AgentScorerConfig;
   target: TAgent;
+  /** Gates: scorers that must score 1.0 for the run to pass. */
+  gates?: MastraScorer<any, any, any, any>[];
   targetOptions?: RunEvalsAgentOptions;
   onItemComplete?: (params: {
     item: RunEvalsDataItem<TAgent>;

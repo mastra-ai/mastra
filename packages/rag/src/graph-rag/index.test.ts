@@ -374,4 +374,116 @@ describe('GraphRAG', () => {
       expect(rerankedResults.length).toBe(2);
     });
   });
+
+  describe('serialize / deserialize', () => {
+    const buildGraph = () => {
+      const graph = new GraphRAG(3, 0.5);
+      const chunks: GraphChunk[] = [
+        { text: 'Chunk 1', metadata: { source: 'a' } },
+        { text: 'Chunk 2', metadata: { source: 'b' } },
+        { text: 'Chunk 3', metadata: { source: 'c' } },
+      ];
+      const embeddings: GraphEmbedding[] = [{ vector: [1, 2, 3] }, { vector: [1, 2, 4] }, { vector: [10, 1, 1] }];
+      graph.createGraph(chunks, embeddings);
+      return graph;
+    };
+
+    it('should capture nodes, edges, dimension and threshold', () => {
+      const graph = buildGraph();
+      const snapshot = graph.serialize();
+
+      expect(snapshot.version).toBe(1);
+      expect(snapshot.dimension).toBe(3);
+      expect(snapshot.threshold).toBe(0.5);
+      expect(snapshot.nodes).toEqual(graph.getNodes());
+      expect(snapshot.edges).toEqual(graph.getEdges());
+    });
+
+    it('should produce a snapshot that is JSON safe', () => {
+      const graph = buildGraph();
+      expect(() => JSON.stringify(graph.serialize())).not.toThrow();
+    });
+
+    it('should deep copy so mutating the snapshot does not affect the graph', () => {
+      const graph = buildGraph();
+      const snapshot = graph.serialize();
+
+      snapshot.nodes[0]!.embedding![0] = 999;
+      snapshot.nodes[0]!.content = 'mutated';
+      snapshot.nodes[0]!.metadata!.source = 'mutated';
+      snapshot.edges[0]!.weight = 999;
+
+      expect(graph.getNodes()[0]!.embedding![0]).toBe(1);
+      expect(graph.getNodes()[0]!.content).toBe('Chunk 1');
+      expect(graph.getNodes()[0]!.metadata!.source).toBe('a');
+      expect(graph.getEdges()[0]!.weight).not.toBe(999);
+    });
+
+    it('should deep copy nested node metadata', () => {
+      const graph = new GraphRAG(3, 0.5);
+      graph.createGraph([{ text: 'Chunk 1', metadata: { nested: { tags: ['a'] } } }], [{ vector: [1, 2, 3] }]);
+
+      const snapshot = graph.serialize();
+      snapshot.nodes[0]!.metadata!.nested.tags.push('mutated');
+
+      expect(graph.getNodes()[0]!.metadata!.nested.tags).toEqual(['a']);
+    });
+
+    it('should round trip through JSON without changing graph state', () => {
+      const graph = buildGraph();
+      const restored = GraphRAG.deserialize(JSON.parse(JSON.stringify(graph.serialize())));
+
+      expect(restored.getNodes()).toEqual(graph.getNodes());
+      expect(restored.getEdges()).toEqual(graph.getEdges());
+      expect(restored.getEdges().length).toBe(graph.getEdges().length);
+      expect(restored.serialize()).toEqual(graph.serialize());
+    });
+
+    it('should return the same query results as the original graph', () => {
+      const graph = buildGraph();
+      const restored = GraphRAG.deserialize(JSON.parse(JSON.stringify(graph.serialize())));
+
+      const queryArgs = { query: [1, 2, 3], topK: 3, randomWalkSteps: 5, restartProb: 0.1 };
+
+      vi.spyOn(Math, 'random').mockReturnValue(0.42);
+      const original = graph.query(queryArgs);
+      const reloaded = restored.query(queryArgs);
+      vi.mocked(Math.random).mockRestore();
+
+      expect(reloaded.map(node => node.id)).toEqual(original.map(node => node.id));
+      expect(reloaded.map(node => node.score)).toEqual(original.map(node => node.score));
+    });
+
+    it('should reject an unsupported snapshot version', () => {
+      const snapshot = { ...buildGraph().serialize(), version: 2 as unknown as 1 };
+      expect(() => GraphRAG.deserialize(snapshot)).toThrowError('Unsupported GraphRAG snapshot version: 2');
+    });
+
+    it('should reject a snapshot whose embeddings do not match its dimension', () => {
+      const snapshot = { ...buildGraph().serialize(), dimension: 4 };
+      expect(() => GraphRAG.deserialize(snapshot)).toThrowError('Embedding dimension must be 4');
+    });
+
+    it('should reject a snapshot with a node missing an embedding', () => {
+      const snapshot = buildGraph().serialize();
+      delete snapshot.nodes[0]!.embedding;
+      expect(() => GraphRAG.deserialize(snapshot)).toThrowError('Node must have an embedding');
+    });
+
+    it('should reject an edge referencing an unknown node', () => {
+      const snapshot = buildGraph().serialize();
+      snapshot.edges.push({ source: '0', target: 'missing', weight: 1, type: 'semantic' });
+      expect(() => GraphRAG.deserialize(snapshot)).toThrowError('Edge references unknown node: missing');
+    });
+
+    it('should restore a graph with no edges', () => {
+      const graph = new GraphRAG(3, 0.99);
+      graph.addNode({ id: '1', content: 'Node 1', embedding: [1, 2, 3] });
+
+      const restored = GraphRAG.deserialize(graph.serialize());
+
+      expect(restored.getNodes()).toEqual(graph.getNodes());
+      expect(restored.getEdges()).toEqual([]);
+    });
+  });
 });

@@ -1,11 +1,11 @@
 ---
-title: "Deploy a Mastra server | Deployment"
+title: "Mastra server | Deploy"
 description: "Learn how to build and deploy a Mastra server."
 packages:
   - "@mastra/deployer"
 ---
 
-# Deploy a Mastra server
+# Mastra server
 
 Mastra compiles your application into a standalone Node.js server that can run on any platform supporting Node.js, Bun, or Deno.
 
@@ -111,7 +111,7 @@ If a `public` folder exists in your Mastra directory (`src/mastra/public`), its 
 
 ### Mastra configuration
 
-The build process respects configuration in your Mastra instance. For server behavior like CORS, timeouts, and middleware, see [server overview](/docs/server/mastra-server). For all available options, see the [configuration reference](/reference/configuration).
+The build process respects configuration in your Mastra instance. For server behavior like CORS, timeouts, and middleware, see [server overview](/docs/server/overview). For all available options, see the [configuration reference](/reference/configuration).
 
 ## Build process
 
@@ -160,7 +160,7 @@ NODE_OPTIONS="--max-old-space-size=4096" mastra build
 
 ## Related
 
-- [Server Overview](/docs/server/mastra-server): Configure server behavior, middleware, and authentication
+- [Server Overview](/docs/server/overview): Configure server behavior, middleware, and authentication
 - [Server Adapters](/docs/server/server-adapters): Use Express or Hono instead of `mastra build`
 - [Custom API Routes](/docs/server/custom-api-routes): Add custom HTTP endpoints
 - [Configuration Reference](/reference/configuration): Full configuration options

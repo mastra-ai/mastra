@@ -11,22 +11,21 @@ const getRepositoryCollaboratorPermission = vi.fn<
   ) => Promise<'admin' | 'maintain' | 'write' | 'triage' | 'read' | 'none' | undefined>
 >(async () => 'write');
 
-function githubWithSessionRow(row: FactorySessionOwner | null): GithubWebhookDispatchIntegration {
+function githubWithSessionRow(
+  row: FactorySessionOwner | null,
+  getBySessionId: (sessionId: string) => Promise<FactorySessionOwner | null> = async () => row,
+): GithubWebhookDispatchIntegration {
   return {
     // Every dispatch test overrides listSubscriptions/retireSubscription.
     integrationStorage: {} as never,
     getRepositoryCollaboratorPermission,
-    sourceControlStorage: { sessions: { getBySessionId: async () => row } },
+    sourceControlStorage: { sessions: { getBySessionId } },
   };
 }
 
 const githubStub = githubWithSessionRow(null);
 import { classifyGithubWebhook, dispatchGithubWebhook } from './webhook.js';
-import type {
-  FactorySessionOwner,
-  GithubWebhookDispatchIntegration,
-  ParsedGithubWebhook,
-} from './webhook.js';
+import type { FactorySessionOwner, GithubWebhookDispatchIntegration, ParsedGithubWebhook } from './webhook.js';
 
 function parsed(event: string, action: string, extra: Record<string, unknown> = {}): ParsedGithubWebhook {
   return {
@@ -188,6 +187,47 @@ describe('dispatchGithubWebhook', () => {
     expect(getRepositoryCollaboratorPermission).not.toHaveBeenCalled();
   });
 
+  it('authorizes deployment-configured bots on top of the defaults, case-insensitively', async () => {
+    const listSubscriptions = vi.fn(async () => []);
+    const github: GithubWebhookDispatchIntegration = { ...githubWithSessionRow(null), authorizedBots: ['OpenSWEBot'] };
+    const notification = parsed('pull_request_review', 'submitted', {
+      review: { state: 'commented' },
+      sender: { login: 'openswebot', type: 'Bot' },
+    });
+
+    await expect(
+      dispatchGithubWebhook(notification, { controller: {} as never, github, listSubscriptions }),
+    ).resolves.toEqual({ delivered: 0, failed: 0, ignored: false });
+    // The configured list extends the defaults rather than replacing them.
+    await expect(
+      dispatchGithubWebhook(
+        parsed('pull_request_review', 'submitted', {
+          review: { state: 'commented' },
+          sender: { login: 'coderabbitai[bot]', type: 'Bot' },
+        }),
+        { controller: {} as never, github, listSubscriptions },
+      ),
+    ).resolves.toEqual({ delivered: 0, failed: 0, ignored: false });
+    expect(getRepositoryCollaboratorPermission).not.toHaveBeenCalled();
+  });
+
+  it('reports rejected senders through onSenderRejected', async () => {
+    const onSenderRejected = vi.fn();
+    const listSubscriptions = vi.fn(async () => []);
+
+    await dispatchGithubWebhook(
+      parsed('pull_request_review_comment', 'created', { sender: { login: 'openswebot', type: 'Bot' } }),
+      { controller: {} as never, github: githubStub, listSubscriptions, onSenderRejected },
+    );
+    await dispatchGithubWebhook(
+      parsed('pull_request_review_comment', 'created', { sender: { login: 'coderabbitai[bot]', type: 'Bot' } }),
+      { controller: {} as never, github: githubStub, listSubscriptions, onSenderRejected },
+    );
+
+    expect(onSenderRejected).toHaveBeenCalledOnce();
+    expect(onSenderRejected.mock.calls[0]![0].metadata.sender).toBe('openswebot');
+  });
+
   it('delivers with per-target dedupe, exact scope/thread resume, and no delivery overrides', async () => {
     const sendA = vi.fn(async () => ({ record: { id: 'n-a' }, decision: { action: 'deliver' } }));
     const sendB = vi.fn(async () => ({ record: { id: 'n-b' }, decision: { action: 'deliver' } }));
@@ -198,6 +238,7 @@ describe('dispatchGithubWebhook', () => {
       scope === '/worktrees/a' ? liveA : undefined,
     );
     const createSession = vi.fn(async (_input: { requestContext: RequestContext }) => resumedB);
+    const getBySessionId = vi.fn(async () => ({ userId: 'user-1', orgId: 'org-1' }));
     const rows = [subscription('a', '/worktrees/a'), subscription('b', '/worktrees/b')];
 
     const result = await dispatchGithubWebhook(
@@ -208,7 +249,7 @@ describe('dispatchGithubWebhook', () => {
       }),
       {
         controller: { getSessionByResource, createSession } as never,
-        github: githubWithSessionRow({ userId: 'user-1', orgId: 'org-1' }),
+        github: githubWithSessionRow({ userId: 'user-1', orgId: 'org-1' }, getBySessionId),
         listSubscriptions: async () => rows,
         isAuthorizedSender: async () => true,
       },
@@ -216,6 +257,8 @@ describe('dispatchGithubWebhook', () => {
 
     expect(result).toEqual({ delivered: 2, failed: 0, ignored: false });
     expect(getSessionByResource).toHaveBeenCalledWith('resource-1', '/worktrees/a');
+    expect(getBySessionId).toHaveBeenCalledOnce();
+    expect(getBySessionId).toHaveBeenCalledWith('session-b');
     // Owner and identity both come from the Factory session row, not from the
     // subscription's `ownerId` ('owner-1'), which matches no user.
     expect(createSession).toHaveBeenCalledWith({

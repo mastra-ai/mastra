@@ -510,6 +510,31 @@ describe('createToolCallStep tool approval workflow', () => {
     await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
   });
 
+  it.each([{}, { approved: 'true' }])('re-suspends malformed workflow approval data: %j', async resumeData => {
+    suspend.mockResolvedValueOnce('suspended');
+
+    const result = await toolCallStep.execute(makeExecuteParams({ resumeData }));
+
+    expect(result).toBe('suspended');
+    expect(suspend).toHaveBeenCalledTimes(1);
+    expectNoToolExecution();
+  });
+
+  it('does not accept model-authored approval data', async () => {
+    suspend.mockResolvedValueOnce('suspended');
+    const inputData = makeInputData();
+
+    const result = await toolCallStep.execute(
+      makeExecuteParams({
+        inputData: { ...inputData, args: { ...inputData.args, resumeData: { approved: true } } },
+      }),
+    );
+
+    expect(result).toBe('suspended');
+    expect(suspend).toHaveBeenCalledTimes(1);
+    expectNoToolExecution();
+  });
+
   it('should not flush messages before suspending when memory is read-only', async () => {
     const flushMessages = vi.fn().mockResolvedValue(undefined);
     const readOnlyStep = createToolCallStep({
@@ -553,6 +578,47 @@ describe('createToolCallStep tool approval workflow', () => {
       ...inputData,
     });
     expectNoToolExecution();
+  });
+
+  it('carries a caller-supplied decline reason onto the approval decision (#20495)', async () => {
+    const inputData = makeInputData();
+    const resumeData = { approved: false, reason: 'The user is not authorized to read this file' };
+
+    const result = await toolCallStep.execute(makeExecuteParams({ inputData, resumeData }));
+
+    expect(result).toEqual({
+      approval: {
+        id: inputData.toolCallId,
+        approved: false,
+        reason: 'The user is not authorized to read this file',
+      },
+      ...inputData,
+    });
+    expectNoToolExecution();
+  });
+
+  it('falls back to the default decline reason when the supplied reason is blank (#20495)', async () => {
+    const inputData = makeInputData();
+
+    const result = await toolCallStep.execute(
+      makeExecuteParams({ inputData, resumeData: { approved: false, reason: '   ' } }),
+    );
+
+    expect((result as any).approval.reason).toBe('Tool call was not approved by the user');
+    expectNoToolExecution();
+  });
+
+  it('advertises an optional reason on the approval resume schema (#20495)', async () => {
+    suspend.mockResolvedValueOnce('suspended');
+    await toolCallStep.execute(makeExecuteParams());
+
+    const approvalChunk = controller.enqueue.mock.calls
+      .map(([chunk]: [any]) => chunk)
+      .find((chunk: any) => chunk?.type === 'tool-call-approval');
+    expect(approvalChunk).toBeDefined();
+    const resumeSchema = JSON.parse(approvalChunk.payload.resumeSchema);
+    expect(resumeSchema.properties.reason).toBeDefined();
+    expect(resumeSchema.required).toEqual(['approved']);
   });
 
   it('declines without a live requireToolApproval policy when suspendData marks approval (#20470)', async () => {
@@ -915,6 +981,32 @@ describe('createToolCallStep delegated agent tool metadata', () => {
     await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
   });
 
+  it('advertises an optional reason on the delegated approval resume schema (#20495)', async () => {
+    const assistantMessage = createAssistantMessage('assistant-target', 'parent-tool-call-id', 'agent-subAgent', {
+      prompt: 'do thing',
+    });
+    const messageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [assistantMessage] },
+        all: { db: () => [assistantMessage], aiV5: { model: () => [] } },
+      },
+    } as unknown as MessageList;
+
+    const executePromise = startDelegatedTool({ messageList, requireApproval: true });
+    await settleToolSuspension();
+
+    const approvalChunk = controller.enqueue.mock.calls
+      .map(([chunk]: [any]) => chunk)
+      .find((chunk: any) => chunk?.type === 'tool-call-approval');
+    expect(approvalChunk).toBeDefined();
+    const resumeSchema = JSON.parse(approvalChunk.payload.resumeSchema);
+    expect(resumeSchema.properties.reason).toBeDefined();
+    expect(resumeSchema.required).toEqual(['approved']);
+
+    await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
+  });
+
   it('preserves explicitly transformed null payloads in approval and suspension metadata', async () => {
     const toolPayloadTransform = {
       targets: ['transcript'],
@@ -1095,6 +1187,237 @@ describe('createToolCallStep delegated agent tool metadata', () => {
     );
 
     await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
+  });
+});
+
+describe('createToolCallStep suspension metadata cleanup on resume', () => {
+  let controller: { enqueue: Mock };
+  let streamState: { serialize: Mock };
+
+  const createSuspendedAssistantMessage = (toolCallId: string, toolName: string) => ({
+    id: 'assistant-suspended',
+    role: 'assistant' as const,
+    createdAt: new Date(0),
+    content: {
+      format: 2 as const,
+      metadata: {
+        suspendedTools: {
+          [toolCallId]: { toolCallId, toolName, runId: 'parent-run-id' },
+        },
+      } as Record<string, unknown>,
+      parts: [
+        {
+          type: 'tool-invocation' as const,
+          toolInvocation: { state: 'call' as const, toolCallId, toolName, args: {} },
+        },
+      ],
+    },
+  });
+
+  const runResumedTool = async ({
+    resumeData,
+    args,
+    message,
+    flushMessages,
+    suspendData,
+    toolCallId = 'hitl-call-id',
+  }: {
+    resumeData?: unknown;
+    args: Record<string, unknown>;
+    message: ReturnType<typeof createSuspendedAssistantMessage>;
+    flushMessages: Mock;
+    suspendData?: unknown;
+    toolCallId?: string;
+  }) => {
+    const messageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [message] },
+        all: { db: () => [message], aiV5: { model: () => [] } },
+      },
+    } as unknown as MessageList;
+
+    const tools = {
+      'hitl-tool': {
+        execute: vi.fn(async () => ({ confirmed: true })),
+      },
+    } as ToolSet;
+
+    const inputData = { toolCallId, toolName: 'hitl-tool', args };
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'parent-run-id',
+      streamState,
+      _internal: {
+        saveQueueManager: { flushMessages },
+        threadId: 'thread-1',
+      },
+    } as any);
+
+    return toolCallStep.execute({
+      ...makeBaseExecuteParams(vi.fn(), { resumeData, suspendData }),
+      writer: new ToolStream({
+        prefix: 'tool',
+        callId: inputData.toolCallId,
+        name: inputData.toolName,
+        runId: 'parent-run-id',
+      }),
+      inputData,
+    });
+  };
+
+  beforeEach(() => {
+    controller = { enqueue: vi.fn() };
+    streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  it('clears suspendedTools when resumed via workflow resumeData (agent.resumeStream)', async () => {
+    // `agent.resumeStream(resumeData, { runId, toolCallId })` delivers the payload as the step's
+    // workflow resumeData, NOT embedded in the LLM's args. The suspension entry must still be
+    // cleared, or a reloading client reads the resolved tool as still resumable.
+    const message = createSuspendedAssistantMessage('hitl-call-id', 'hitl-tool');
+    const flushMessages = vi.fn();
+
+    await runResumedTool({
+      resumeData: { confirmed: true },
+      args: { prompt: 'do thing' },
+      message,
+      flushMessages,
+    });
+
+    expect(message.content.metadata.suspendedTools).toBeUndefined();
+    expect(flushMessages).toHaveBeenCalled();
+  });
+
+  it('clears suspendedTools when resumed via resumeData embedded in args', async () => {
+    const message = createSuspendedAssistantMessage('hitl-call-id', 'hitl-tool');
+    const flushMessages = vi.fn();
+
+    await runResumedTool({
+      args: { prompt: 'do thing', resumeData: { confirmed: true } },
+      message,
+      flushMessages,
+    });
+
+    expect(message.content.metadata.suspendedTools).toBeUndefined();
+    expect(flushMessages).toHaveBeenCalled();
+  });
+
+  it.each([
+    ['false', false],
+    ['zero', 0],
+    ['an empty string', ''],
+  ])('clears suspendedTools when the resume payload is %s', async (_label, resumeData) => {
+    // A tool with a primitive resumeSchema can legitimately be resumed with a falsy value —
+    // `false` is how a boolean HITL tool declines. A truthiness gate would skip cleanup here.
+    const message = createSuspendedAssistantMessage('hitl-call-id', 'hitl-tool');
+    const flushMessages = vi.fn();
+
+    await runResumedTool({ resumeData, args: { prompt: 'do thing' }, message, flushMessages });
+
+    expect(message.content.metadata.suspendedTools).toBeUndefined();
+    expect(flushMessages).toHaveBeenCalled();
+  });
+
+  it('leaves a same-name sibling suspended when an approval resume arrives after policy loss', async () => {
+    // Approve-after-policy-loss (#20470): the live `requireToolApproval` policy is gone, but the
+    // suspension was an approval one, so `approvalGated` is still true and the approval branch
+    // clears its own metadata. The generic suspension cleanup must not also run here —
+    // `removeToolMetadata` falls back from toolCallId to toolName, so it would delete the entry
+    // belonging to a different, still-suspended call of the same tool.
+    const message = createSuspendedAssistantMessage('sibling-call-id', 'hitl-tool');
+    const flushMessages = vi.fn();
+
+    await runResumedTool({
+      toolCallId: 'approved-call-id',
+      resumeData: { approved: true },
+      suspendData: { requireToolApproval: true },
+      args: { prompt: 'do thing' },
+      message,
+      flushMessages,
+    });
+
+    expect(message.content.metadata.suspendedTools).toHaveProperty('sibling-call-id');
+  });
+
+  it('still recovers the delegated runId when a workflow tool is resumed with a falsy payload', async () => {
+    // The suspension entry carries the sub-run id a delegated tool must resume into. The lookup
+    // that reads it has to run for falsy resume payloads too, because the cleanup below then
+    // removes the entry: skipping it would silently start a fresh sub-run instead.
+    const message = {
+      id: 'assistant-suspended',
+      role: 'assistant' as const,
+      createdAt: new Date(0),
+      content: {
+        format: 2 as const,
+        metadata: {
+          suspendedTools: {
+            'wf-call-id': {
+              toolCallId: 'wf-call-id',
+              toolName: 'workflow-sub',
+              runId: 'parent-run-id',
+              delegatedRunId: 'sub-run-id',
+            },
+          },
+        } as Record<string, unknown>,
+        parts: [
+          {
+            type: 'tool-invocation' as const,
+            toolInvocation: {
+              state: 'call' as const,
+              toolCallId: 'wf-call-id',
+              toolName: 'workflow-sub',
+              args: {},
+            },
+          },
+        ],
+      },
+    };
+    const messageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [message] },
+        all: { db: () => [message], aiV5: { model: () => [] } },
+      },
+    } as unknown as MessageList;
+    const execute = vi.fn(async () => ({ done: true }));
+
+    const toolCallStep = createToolCallStep({
+      tools: { 'workflow-sub': { execute } } as ToolSet,
+      messageList,
+      controller,
+      runId: 'parent-run-id',
+      streamState,
+      _internal: { saveQueueManager: { flushMessages: vi.fn() }, threadId: 'thread-1' },
+    } as any);
+
+    await toolCallStep.execute({
+      ...makeBaseExecuteParams(vi.fn()),
+      writer: new ToolStream({ prefix: 'tool', callId: 'wf-call-id', name: 'workflow-sub', runId: 'parent-run-id' }),
+      inputData: { toolCallId: 'wf-call-id', toolName: 'workflow-sub', args: { resumeData: false } },
+    });
+
+    expect(execute).toHaveBeenCalledWith(
+      expect.objectContaining({ suspendedToolRunId: 'sub-run-id' }),
+      expect.objectContaining({ resumeData: false }),
+    );
+  });
+
+  it('leaves suspendedTools intact for a plain (non-resume) tool call', async () => {
+    const message = createSuspendedAssistantMessage('other-call-id', 'other-tool');
+    const flushMessages = vi.fn();
+
+    await runResumedTool({ args: { prompt: 'do thing' }, message, flushMessages });
+
+    expect(message.content.metadata.suspendedTools).toHaveProperty('other-call-id');
   });
 });
 

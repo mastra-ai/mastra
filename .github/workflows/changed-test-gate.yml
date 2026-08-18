@@ -25,10 +25,13 @@ jobs:
     steps:
       - name: Checkout base
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           persist-credentials: false
           ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
+          # Partial clone: name-only diffs need trees, not blob contents.
+          filter: blob:none
 
       - name: Restore changed test files from PR head
         id: changed_tests
@@ -38,8 +41,41 @@ jobs:
 
           git fetch "${HEAD_REPO}" "${HEAD_SHA}" --depth=1
           git diff --name-only --diff-filter=ACMRT "${BASE_SHA}" FETCH_HEAD \
-            | grep -E '(^|/)(test|tests|__tests__)/|\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$|\.test-d\.ts$' \
-            | sort > /tmp/changed-test-files || true
+            | sort > /tmp/changed-files
+          git diff --no-renames --name-only --diff-filter=ACMRTD "${BASE_SHA}" FETCH_HEAD \
+            | sort > /tmp/changed-coverage-files
+
+          # Deployer changes must include monorepo E2E coverage. This rule runs
+          # before the no-test exemptions below so it applies to all contributors.
+          # Keep this list separate from /tmp/changed-files so deleted tests are
+          # not restored from FETCH_HEAD. The package instructions and the
+          # generated changelog are exempt, and the automated Changesets release
+          # PR is skipped entirely: it only bumps versions and changelogs, so it
+          # can never add the E2E coverage this rule asks for. The branch name
+          # alone is not a trusted signal, since a fork can pick any name, so the
+          # skip also requires the head to live in this repository.
+          if [ "$HEAD_REPO_FULL_NAME" = "$BASE_REPOSITORY" ] \
+            && [ "${HEAD_REF#changeset-release/}" != "$HEAD_REF" ]; then
+            echo "Skipping deployer E2E coverage rule for the Changesets release PR."
+          elif grep -q '^packages/deployer/' /tmp/changed-coverage-files \
+            && ! grep -q '^e2e-tests/monorepo/' /tmp/changed-coverage-files \
+            && awk '$0 ~ /^packages\/deployer\// && $0 != "packages/deployer/AGENTS.md" && $0 != "packages/deployer/CHANGELOG.md" { found=1; exit } END { exit(found ? 0 : 1) }' \
+              /tmp/changed-coverage-files; then
+            first_deployer_file="$(
+              awk '$0 ~ /^packages\/deployer\// && $0 != "packages/deployer/AGENTS.md" && $0 != "packages/deployer/CHANGELOG.md" { print; exit }' \
+                /tmp/changed-coverage-files
+            )"
+            escaped_deployer_file="${first_deployer_file//%/%25}"
+            escaped_deployer_file="${escaped_deployer_file//$'\r'/%0D}"
+            escaped_deployer_file="${escaped_deployer_file//$'\n'/%0A}"
+            escaped_deployer_file="${escaped_deployer_file//:/%3A}"
+            escaped_deployer_file="${escaped_deployer_file//,/%2C}"
+            echo "::error file=${escaped_deployer_file},title=Monorepo E2E coverage required::This PR changes packages/deployer/ but has no corresponding changes under e2e-tests/monorepo/. Deployer unit tests alone do not validate generated monorepo applications — add or update a monorepo E2E test. See packages/deployer/AGENTS.md for commands."
+            exit 1
+          fi
+
+          grep -E '(^|/)(test|tests|__tests__)/|\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$|\.test-d\.ts$' \
+            /tmp/changed-files | sort > /tmp/changed-test-files || true
 
           if [ ! -s /tmp/changed-test-files ]; then
             echo "has_tests=false" >> "$GITHUB_OUTPUT"
@@ -72,6 +108,7 @@ jobs:
           AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
           BASE_REPOSITORY: ${{ github.repository }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
           HEAD_REPO: ${{ github.event.pull_request.head.repo.clone_url }}
           HEAD_REPO_FULL_NAME: ${{ github.event.pull_request.head.repo.full_name }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}

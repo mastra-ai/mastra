@@ -1,12 +1,17 @@
 import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { APICallError } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import {
+  convertArrayToReadableStream as convertArrayToReadableStreamV3,
+  MockLanguageModelV3,
+} from '@internal/ai-v6/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MastraError } from '../../error';
 import type { IMastraLogger } from '../../logger';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
+import type { ChunkType } from '../../stream/types';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import type { MastraDBMessage } from '../message-list';
@@ -1377,7 +1382,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         expect(abortEvent).toBeDefined();
       });
 
-      it('should not persist full response to memory when stream is aborted mid-generation', async () => {
+      it('should persist only partial response when opted in and stream is aborted mid-generation', async () => {
         if (version === 'v1') return; // Only test for v2 (VNext) path
 
         const abortController = new AbortController();
@@ -1425,8 +1430,9 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
               rawCall: { rawPrompt: null, rawSettings: {} },
               warnings: [],
               stream: new ReadableStream({
-                pull(controller) {
+                async pull(controller) {
                   if (index < allChunks.length) {
+                    await new Promise(resolve => setTimeout(resolve, 5));
                     const chunk = allChunks[index++]!;
 
                     // Fire abort after a few text-delta chunks, but keep streaming
@@ -1464,6 +1470,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
 
         const stream = await agent.stream('Write a very long essay', {
           abortSignal: abortController.signal,
+          persistPartialOnAbort: true,
           memory: {
             thread: 'abort-test-thread',
             resource: 'abort-test-resource',
@@ -1516,6 +1523,8 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
 
         const allPersistedText = savedText + recalledText;
 
+        expect(allPersistedText).toContain('chunk-1 ');
+
         // The persisted text should NOT contain the later chunks that were generated
         // after the abort signal fired. The model produced all 20 chunks, but chunks
         // after the abort point (chunk 5) should not be in memory.
@@ -1523,6 +1532,129 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         for (let i = 10; i <= totalChunks; i++) {
           expect(allPersistedText).not.toContain(`chunk-${i} `);
         }
+      });
+
+      it('should not persist any assistant text on abort by default', async () => {
+        if (version === 'v1') return; // Only test for v2 (VNext) path
+
+        const abortController = new AbortController();
+        const totalChunks = 20;
+        const abortAfterChunks = 5;
+
+        // Same provider behavior as the opted-in test: it ignores cancellation and
+        // keeps streaming after the abort signal fires.
+        const slowStreamModel = new MockLanguageModelV2({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 200, totalTokens: 210 },
+            content: [{ type: 'text', text: 'Full long response' }],
+            warnings: [],
+          }),
+          doStream: async () => {
+            const allChunks = [
+              { type: 'stream-start' as const, warnings: [] },
+              {
+                type: 'response-metadata' as const,
+                id: 'id-0',
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              },
+              { type: 'text-start' as const, id: 'text-1' },
+              ...Array.from({ length: totalChunks }, (_, i) => ({
+                type: 'text-delta' as const,
+                id: 'text-1',
+                delta: `chunk-${i + 1} `,
+              })),
+              { type: 'text-end' as const, id: 'text-1' },
+              {
+                type: 'finish' as const,
+                finishReason: 'stop' as const,
+                usage: { inputTokens: 10, outputTokens: 200, totalTokens: 210 },
+              },
+            ];
+
+            let index = 0;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: new ReadableStream({
+                async pull(controller) {
+                  if (index < allChunks.length) {
+                    await new Promise(resolve => setTimeout(resolve, 5));
+                    const chunk = allChunks[index++]!;
+
+                    const textDeltaCount = index - 3;
+                    if (chunk.type === 'text-delta' && textDeltaCount === abortAfterChunks) {
+                      abortController.abort();
+                    }
+
+                    controller.enqueue(chunk);
+                  } else {
+                    controller.close();
+                  }
+                },
+              }),
+            };
+          },
+        });
+
+        const mockMemory = new MockMemory();
+        const savedMessages: MastraDBMessage[] = [];
+        const origSaveMessages = mockMemory.saveMessages.bind(mockMemory);
+        mockMemory.saveMessages = async function (args) {
+          savedMessages.push(...args.messages);
+          return origSaveMessages(args);
+        };
+
+        const agent = new Agent({
+          id: 'test-abort-default-off',
+          name: 'Test Abort Default Off',
+          model: slowStreamModel,
+          instructions: 'You are a helpful assistant.',
+          memory: mockMemory,
+        });
+
+        const stream = await agent.stream('Write a very long essay', {
+          abortSignal: abortController.signal,
+          memory: {
+            thread: 'abort-default-thread',
+            resource: 'abort-test-resource',
+          },
+        });
+
+        try {
+          await stream.consumeStream();
+        } catch {
+          // Expected - abort error
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        const recalled = await mockMemory.recall({
+          threadId: 'abort-default-thread',
+          count: 100,
+        });
+
+        const collectText = (messages: MastraDBMessage[]) =>
+          messages
+            .filter(m => m.role === 'assistant')
+            .map(m => {
+              if (typeof m.content === 'string') return m.content;
+              if (m.content.parts) {
+                return m.content.parts
+                  .filter((p: any) => p.type === 'text')
+                  .map((p: any) => p.text)
+                  .join('');
+              }
+              return '';
+            })
+            .join('');
+
+        const allPersistedText = collectText(savedMessages) + collectText(recalled.messages);
+
+        // Default behavior is unchanged: an aborted stream persists no assistant output.
+        expect(allPersistedText).toBe('');
       });
     });
   }
@@ -1800,6 +1932,31 @@ describe('savePerStep should persist messages during step execution (issue #1398
  * Datadog) that wait for the root span to end never emitted the trace.
  */
 describe('AGENT_RUN span must be ended on LLM errors', () => {
+  const v3Usage = {
+    inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+    outputTokens: { total: 302, text: 302, reasoning: undefined },
+  };
+
+  // A provider that ends the stream with finishReason 'error' and never enqueues an
+  // error part — the shape Google produces for MALFORMED_FUNCTION_CALL.
+  function finishReasonErrorModelV3(finishReason: { unified: 'error'; raw?: string }) {
+    return new MockLanguageModelV3({
+      doGenerate: async () => ({
+        content: [],
+        finishReason,
+        usage: v3Usage,
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStreamV3([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'finish', finishReason, usage: v3Usage },
+        ]),
+      }),
+    });
+  }
+
   function createMockModelSpanTracker() {
     return {
       getTracingContext: vi.fn(() => ({})),
@@ -1982,6 +2139,105 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  it('should emit an error chunk to the client when the stream finishes with finishReason error but no error payload', async () => {
+    const onErrorCalls: { error: Error }[] = [];
+
+    const agent = new Agent({
+      id: 'test-client-visible-finish-error',
+      name: 'Test Client Visible Finish Error',
+      model: finishReasonErrorModelV3({ unified: 'error', raw: 'MALFORMED_FUNCTION_CALL' }),
+      instructions: 'You are a helpful assistant.',
+    });
+
+    const output = await agent.stream('Hello', {
+      modelSettings: { maxRetries: 0 },
+      onError: (payload: { error: Error }) => onErrorCalls.push(payload),
+    });
+
+    const chunks: ChunkType[] = [];
+    for await (const chunk of output.fullStream) {
+      chunks.push(chunk);
+    }
+
+    const errorChunks = chunks.filter(chunk => chunk.type === 'error');
+    expect(errorChunks).toHaveLength(1);
+
+    const emitted = (errorChunks[0] as { payload: { error: MastraError } }).payload.error;
+    expect(emitted).toBeInstanceOf(MastraError);
+    expect(emitted.message).toBe(
+      'Agent stream finished with finishReason "error" (provider reported "MALFORMED_FUNCTION_CALL") but no error payload was provided',
+    );
+    expect(emitted.details).toMatchObject({ rawFinishReason: 'MALFORMED_FUNCTION_CALL' });
+
+    // The error must reach onError, not just the server log
+    expect(onErrorCalls).toHaveLength(1);
+    expect(onErrorCalls[0].error.message).toBe(emitted.message);
+
+    // The finish chunk still reports the terminal reason
+    const finishChunk = chunks.find(chunk => chunk.type === 'finish') as
+      | { payload: { stepResult: { reason: string } } }
+      | undefined;
+    expect(finishChunk?.payload.stepResult.reason).toBe('error');
+  });
+
+  it('should preserve the provider raw finish reason on the finish chunk', async () => {
+    const agent = new Agent({
+      id: 'test-raw-finish-reason',
+      name: 'Test Raw Finish Reason',
+      model: finishReasonErrorModelV3({ unified: 'error', raw: 'MALFORMED_FUNCTION_CALL' }),
+      instructions: 'You are a helpful assistant.',
+    });
+
+    const output = await agent.stream('Hello', { modelSettings: { maxRetries: 0 } });
+
+    const chunks: ChunkType[] = [];
+    for await (const chunk of output.fullStream) {
+      chunks.push(chunk);
+    }
+
+    const stepFinish = chunks.find(chunk => chunk.type === 'step-finish') as
+      | { payload: { stepResult: { reason: string; rawReason?: string } } }
+      | undefined;
+    expect(stepFinish?.payload.stepResult.reason).toBe('error');
+    expect(stepFinish?.payload.stepResult.rawReason).toBe('MALFORMED_FUNCTION_CALL');
+  });
+
+  it('should not emit an error chunk when the stream finishes normally', async () => {
+    const agent = new Agent({
+      id: 'test-no-spurious-error-chunk',
+      name: 'Test No Spurious Error Chunk',
+      model: new MockLanguageModelV3({
+        doGenerate: async () => ({
+          content: [{ type: 'text', text: 'Hello there' }],
+          finishReason: { unified: 'stop', raw: 'STOP' },
+          usage: v3Usage,
+          warnings: [],
+        }),
+        doStream: async () => ({
+          stream: convertArrayToReadableStreamV3([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello there' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: { unified: 'stop', raw: 'STOP' }, usage: v3Usage },
+          ]),
+        }),
+      }),
+      instructions: 'You are a helpful assistant.',
+    });
+
+    const output = await agent.stream('Hello', { modelSettings: { maxRetries: 0 } });
+
+    const chunks: ChunkType[] = [];
+    for await (const chunk of output.fullStream) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks.filter(chunk => chunk.type === 'error')).toHaveLength(0);
+    expect(await output.text).toBe('Hello there');
   });
 
   it('should end the AGENT_RUN span when the model stream emits an error chunk mid-stream', async () => {

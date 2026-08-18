@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { builtInFactoryRules } from '../rules/defaults.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
+import type { FactoryRuleActor } from '../rules/types.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 
 let auditRecorded: Array<Record<string, any>> = [];
@@ -44,6 +45,7 @@ function buildApp(
   user: { workosId: string; organizationId?: string } | null,
   startCoordinator?: { prepare: (input: any) => Promise<any> },
   requestContext?: RequestContext,
+  running: ReadonlySet<string> = new Set(),
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -61,6 +63,7 @@ function buildApp(
       queueHealth: seed.queueHealth,
       transitionService: new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems }),
       startCoordinator,
+      liveSessions: { isRunning: sessionId => running.has(sessionId) },
     }).routes(),
   );
   return app;
@@ -87,6 +90,9 @@ function json(method: string, path: string, body?: unknown, user: typeof orgUser
   });
 }
 
+/** Session of a started run — what makes a card the Factory's own work. */
+const run = { execute: { sessionId: 'session-1', branch: 'factory/1', threadId: 'thread-1' } };
+
 const createBody = (overrides: Record<string, unknown> = {}) => ({
   externalSource: {
     integrationId: 'github',
@@ -111,6 +117,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   vi.clearAllMocks();
+  vi.useRealTimers();
 });
 
 // ── Auth / scoping ───────────────────────────────────────────────────────
@@ -616,20 +623,23 @@ describe('GET /web/factory/projects/:id/metrics', () => {
       (await (await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics${query}`)).json()).metrics;
 
     // No params → default 30-day window.
-    expect((await bodyFor('')).windowDays).toBe(30);
+    expect((await bodyFor('')).daysCovered).toBe(30);
 
     // Explicit inclusive 7-calendar-day window.
     const to = new Date().toISOString().slice(0, 10);
     const from = new Date(Date.parse(`${to}T00:00:00.000Z`) - 6 * 86_400_000).toISOString().slice(0, 10);
-    expect((await bodyFor(`?from=${from}&to=${to}`)).windowDays).toBe(7);
+    expect((await bodyFor(`?from=${from}&to=${to}`)).daysCovered).toBe(7);
 
     // Malformed params fall back to the default.
-    expect((await bodyFor('?from=evil&to=evil')).windowDays).toBe(30);
+    expect((await bodyFor('?from=evil&to=evil')).daysCovered).toBe(30);
   });
 
-  it('aggregates the project board: throughput, WIP, transitions, and source mix', async () => {
+  it('aggregates the cards the Factory ran: throughput, WIP, and source mix', async () => {
+    // Freeze the clock so the cards and the one-day window below share a date
+    // even when the run straddles UTC midnight.
+    vi.useFakeTimers({ now: new Date('2026-06-15T12:00:00.000Z'), toFake: ['Date'] });
     // One card completed today (intake → done), one still in intake.
-    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody({ sessions: run }));
     const { workItem } = await created.json();
     await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items/${workItem.id}/transition`, {
       board: 'work',
@@ -641,50 +651,54 @@ describe('GET /web/factory/projects/:id/metrics', () => {
     await json(
       'POST',
       `/web/factory/projects/${PROJECT_ID}/work-items`,
-      createBody({ externalSource: null, title: 'Manual card' }),
+      createBody({ externalSource: null, title: 'Manual card', sessions: run }),
+    );
+    // Synced from the repo, never run: not the Factory's work.
+    await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({ externalSource: { integrationId: 'github', type: 'issue', externalId: '43' }, title: 'Upstream' }),
     );
 
-    const to = new Date().toISOString().slice(0, 10);
-    const from = new Date(Date.parse(`${to}T00:00:00.000Z`) - 6 * 86_400_000).toISOString().slice(0, 10);
-    const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics?from=${from}&to=${to}`);
+    // One-day window matching when the cards were filed; multi-day series and
+    // board-lifetime clipping are covered by the range test above and the unit tests.
+    const today = new Date().toISOString().slice(0, 10);
+    const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics?from=${today}&to=${today}`);
     expect(res.status).toBe(200);
     const { metrics } = await res.json();
 
-    expect(metrics.windowDays).toBe(7);
-    expect(metrics.throughput).toHaveLength(7);
+    expect(metrics.daysCovered).toBe(1);
+    expect(metrics.throughput).toHaveLength(1);
     expect(metrics.throughput.reduce((sum: number, p: any) => sum + p.count, 0)).toBe(1);
-    expect(metrics.cycleTime.samples).toBe(1);
-    expect(Object.fromEntries(metrics.wip.map((w: any) => [w.stage, w.count]))).toEqual({ done: 1, intake: 1 });
-    expect(metrics.wipTotal).toBe(1);
-    expect(metrics.agingWip).toHaveLength(1);
-    expect(metrics.agingWip[0]).toMatchObject({ title: 'Manual card', stage: 'intake' });
-    // intake entered (x2) + done entered = 3 stage moves, all by the test user.
-    expect(metrics.transitions).toEqual({ human: 3, total: 3 });
+    expect(metrics.leadTime.samples).toBe(1);
+    // The manual card sits in intake — queued, not in flight — and the synced
+    // card is out of the population entirely.
+    expect(metrics.wipTotal).toBe(0);
     expect(metrics.sourceMix).toEqual(
       expect.arrayContaining([
         { source: 'github:issue', count: 1 },
         { source: 'manual', count: 1 },
       ]),
     );
+    expect(metrics.sourceMix).toHaveLength(2);
   });
 
   it('returns zeroed metrics for an empty board', async () => {
     const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics`);
     const { metrics } = await res.json();
     expect(metrics.throughput).toHaveLength(30);
-    expect(metrics.cycleTime).toEqual({ medianMs: null, p90Ms: null, samples: 0 });
-    expect(metrics.wip).toEqual([]);
-    expect(metrics.agingWip).toEqual([]);
-    expect(metrics.stageAutomation).toEqual([]);
+    expect(metrics.leadTime).toEqual({ medianMs: null, p90Ms: null, samples: 0 });
+    expect(metrics.wipTotal).toBe(0);
+    expect(metrics.agentCoverage).toEqual([]);
   });
 
-  it('serves per-stage automation: automated triage pass vs human-approved planning', async () => {
-    // Human files the card, the rules engine runs triage (intake → triage →
-    // planning) through the governed path, then a human approves planning into done.
-    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+  it('serves per-stage coverage: agent-finished triage vs human-approved planning', async () => {
+    // The rules engine queues triage (intake → triage), the bound agent run
+    // finishes it (triage → planning), then a human approves planning into done.
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody({ sessions: run }));
     const { workItem } = await created.json();
     const service = new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems });
-    const autoMove = (stage: 'triage' | 'planning', expectedRevision: number, identity: string) =>
+    const move = (stage: 'triage' | 'planning', expectedRevision: number, identity: string, actor: FactoryRuleActor) =>
       service.transition({
         orgId: 'org1',
         factoryProjectId: PROJECT_ID,
@@ -692,13 +706,20 @@ describe('GET /web/factory/projects/:id/metrics', () => {
         board: 'work',
         stage,
         expectedRevision,
-        actor: { type: 'system', id: 'factory-rule-dispatcher' },
+        actor,
         ingress: { type: 'rule', identity },
         cause: 'auto_triage',
       });
-    const triaged = await autoMove('triage', workItem.revision, 'auto-1');
+    const triaged = await move('triage', workItem.revision, 'auto-1', {
+      type: 'system',
+      id: 'factory-rule-dispatcher',
+    });
     expect(triaged.status).toBe('accepted');
-    const planned = await autoMove('planning', (triaged as { revision: number }).revision, 'auto-2');
+    const planned = await move('planning', (triaged as { revision: number }).revision, 'auto-2', {
+      type: 'agent',
+      bindingId: 'binding-1',
+      role: 'triage',
+    });
     expect(planned.status).toBe('accepted');
     const approved = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items/${workItem.id}/transition`, {
       board: 'work',
@@ -713,16 +734,53 @@ describe('GET /web/factory/projects/:id/metrics', () => {
     expect(res.status).toBe(200);
     const { metrics } = await res.json();
 
-    expect(metrics.stageAutomation).toEqual([
-      // Human-entered (creation), automation-exited → not automated.
-      { stage: 'intake', exits: 1, automated: 0, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 } },
-      // Automation-entered and -exited, first visit → clean automated pass, item is done.
-      { stage: 'triage', exits: 1, automated: 1, outcomes: { done: 1, canceled: 0, reworked: 0, inFlight: 0 } },
-      // Automation-entered, human-exited → not automated.
-      { stage: 'planning', exits: 1, automated: 0, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 } },
+    expect(metrics.agentCoverage).toEqual([
+      // Intake is the inbox — filing a card is not a pass through the pipeline.
+      // Exited by the agent run, first visit → the agent's pass, item is done.
+      { stage: 'triage', passes: 1, byAgent: 1, outcomes: { done: 1, canceled: 0, reworked: 0, inFlight: 0 } },
+      // Agent-entered, human-exited → the human finished this one.
+      { stage: 'planning', passes: 1, byAgent: 0, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 } },
     ]);
-    // Global split matches: 4 entered stages, 2 by automation.
-    expect(metrics.transitions).toEqual({ human: 2, total: 4 });
+  });
+});
+
+describe('run activity on the work-item listing', () => {
+  async function startRun(sessionId: string) {
+    await seed.workItems.prepareRunStart({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: PROJECT_ID,
+      workItem: { input: { title: `Work for ${sessionId}`, stages: ['execute'] } },
+      role: 'execute',
+      session: { sessionId, branch: `factory/${sessionId}`, threadId: `thread-${sessionId}` },
+      resourceId: sessionId,
+      kickoffKey: `kickoff-${sessionId}`,
+      kickoffMessage: null,
+    });
+  }
+
+  it('reports the listed cards whose session has a run in flight', async () => {
+    await startRun('session-running');
+    await startRun('session-idle');
+
+    const res = await buildApp(orgUser, undefined, undefined, new Set(['session-running'])).request(
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.workItems).toHaveLength(2);
+    expect(body.runningSessionIds).toEqual(['session-running']);
+  });
+
+  it('reports no activity for a session that belongs to no card in the project', async () => {
+    await startRun('session-idle');
+
+    const res = await buildApp(orgUser, undefined, undefined, new Set(['session-elsewhere'])).request(
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+    );
+
+    expect((await res.json()).runningSessionIds).toEqual([]);
   });
 });
 

@@ -67,6 +67,17 @@
     "qwen35-122b-a10b"
   ],
   "structuredOutput": [
+    "claude-fable-5",
+    "claude-haiku-4-5",
+    "claude-opus-4-1",
+    "claude-opus-4-5",
+    "claude-opus-4-6",
+    "claude-opus-4-7",
+    "claude-opus-4-8",
+    "claude-opus-5",
+    "claude-sonnet-4-5",
+    "claude-sonnet-4-6",
+    "claude-sonnet-5",
     "gemini-3-1-flash-lite",
     "gemini-3-1-pro",
     "gemini-3-5-flash",
@@ -92,7 +103,10 @@
     "gpt-oss-120b",
     "gpt-oss-20b",
     "kimi-k3",
+    "llama-4-maverick",
     "meta-llama-3-1-8b-instruct",
+    "meta-llama-3-3-70b-instruct",
+    "qwen3-next-80b-a3b-instruct",
     "qwen35-122b-a10b"
   ]
 }

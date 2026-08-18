@@ -11,7 +11,7 @@ packages:
 
 Abstract base class for managing background processes in sandboxes. Provides methods to spawn processes, list them, get handles by PID, and kill them.
 
-[`BlaxelSandbox`](/reference/workspace/blaxel-sandbox), [`DaytonaSandbox`](/reference/workspace/daytona-sandbox), [`E2BSandbox`](/reference/workspace/e2b-sandbox), [`ModalSandbox`](/reference/workspace/modal-sandbox), and [`LocalSandbox`](/reference/workspace/local-sandbox) all include built-in process managers. You don't need to instantiate this class directly unless you're building a custom sandbox provider.
+[`BlaxelSandbox`](/integrations/sandboxes/blaxel), [`DaytonaSandbox`](/integrations/sandboxes/daytona), [`E2BSandbox`](/integrations/sandboxes/e2b), [`ModalSandbox`](/integrations/sandboxes/modal), and [`LocalSandbox`](/reference/workspace/local-sandbox) all include built-in process managers. You don't need to instantiate this class directly unless you're building a custom sandbox provider.
 
 ## Usage example
 
@@ -188,7 +188,7 @@ Information about a tracked process, returned by `list()`.
 
 ## `ProcessHandle`
 
-Handle to a spawned background process. Provides methods to read output, send stdin, wait for completion, and kill the process.
+Handle to a spawned background process. Provides methods to read output, send or close stdin, wait for completion, and kill the process.
 
 You don't create `ProcessHandle` instances directly. They're returned by `spawn()` and `get()`.
 
@@ -208,8 +208,9 @@ console.log(handle.exitCode) // undefined while running
 // Wait for completion
 const result = await handle.wait()
 
-// Send stdin
+// Send stdin and signal EOF
 await handle.sendStdin('input data\n')
+await handle.closeStdin()
 
 // Kill the process
 await handle.kill()
@@ -252,7 +253,8 @@ await handle.kill()
   {
     name: 'writer',
     type: 'Writable',
-    description: 'Writable stream to stdin. Useful for protocols like LSP or JSON-RPC that communicate over stdio.',
+    description:
+      'Writable stream to stdin. Ending the stream calls closeStdin(). Useful for protocols like LSP or JSON-RPC that communicate over stdio.',
   },
 ]}
 />
@@ -373,6 +375,21 @@ await handle.sendStdin('console.log("hello")\n')
 
 **Returns:** `Promise<void>`
 
+#### `closeStdin()`
+
+Close the process's stdin to signal end-of-file (EOF). Use this after sending all input to commands that read until stdin closes. An exited process or an unavailable stdin causes a throw. Providers without a stdin close primitive throw `UnsupportedStdinCloseError`.
+
+```typescript
+const handle = await sandbox.processes.spawn('cat')
+await handle.sendStdin('input data\n')
+await handle.closeStdin()
+const result = await handle.wait()
+```
+
+Calling `handle.writer.end()` also closes stdin. On providers without stdin close support, `writer.end()` finishes the stream without an error.
+
+**Returns:** `Promise<void>`
+
 ## Stream interop
 
 `ProcessHandle` exposes `reader` and `writer` properties for integration with Node.js stream-based protocols like LSP or JSON-RPC:
@@ -436,8 +453,8 @@ When a process manager is provided, `MastraSandbox` automatically creates a defa
 
 ## Related
 
-- [Sandbox](/docs/workspace/sandbox)
+- [Sandbox](/docs/sandbox/overview)
 - [WorkspaceSandbox interface](/reference/workspace/sandbox)
 - [LocalSandbox reference](/reference/workspace/local-sandbox)
-- [E2BSandbox reference](/reference/workspace/e2b-sandbox)
-- [DaytonaSandbox reference](/reference/workspace/daytona-sandbox)
+- [E2BSandbox reference](/integrations/sandboxes/e2b)
+- [DaytonaSandbox reference](/integrations/sandboxes/daytona)

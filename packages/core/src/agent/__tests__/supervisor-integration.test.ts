@@ -10,7 +10,12 @@ import { RequestContext, MASTRA_THREAD_ID_KEY, MASTRA_RESOURCE_ID_KEY } from '..
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
-import type { MessageFilterContext, DelegationCompleteContext, IterationCompleteContext } from '../agent.types';
+import type {
+  MessageFilterContext,
+  DelegationCompleteContext,
+  DelegationHookError,
+  IterationCompleteContext,
+} from '../agent.types';
 import type { MastraDBMessage } from '../message-list/state/types';
 
 // Helper: create a sub-agent with a fixed text response
@@ -298,6 +303,213 @@ describe('Supervisor Pattern Integration Tests', () => {
           result: expect.objectContaining({ text: 'Here is the final report.' }),
         }),
       );
+    });
+
+    it('should let onDelegationComplete replace the tool result the parent sees in the same run', async () => {
+      // Sub-agent stops without producing text, which reads to the parent as an empty success.
+      const subAgent = makeSubAgent('silent-agent', '');
+      const promptsSeenByParent: string[] = [];
+
+      const supervisorModel = new MockLanguageModelV2({
+        doGenerate: async ({ prompt }) => {
+          promptsSeenByParent.push(JSON.stringify(prompt));
+          if (promptsSeenByParent.length === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: '',
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'agent-silentAgent',
+                  input: JSON.stringify({ prompt: 'do the thing' }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            text: 'Done',
+            content: [{ type: 'text' as const, text: 'Done' }],
+            warnings: [],
+          };
+        },
+      });
+
+      const supervisorAgent = new Agent({
+        id: 'supervisor',
+        name: 'supervisor',
+        instructions: 'You orchestrate sub-agents.',
+        model: supervisorModel,
+        agents: { silentAgent: subAgent },
+        memory: new MockMemory(),
+      });
+
+      await supervisorAgent.generate('Do the thing', {
+        maxSteps: 3,
+        delegation: {
+          onDelegationComplete: ({ result }) =>
+            result.text ? undefined : { resultText: 'The sub-agent failed to produce a result.' },
+        },
+      });
+
+      // The second model call carries the tool result, and it must show the replacement.
+      expect(promptsSeenByParent).toHaveLength(2);
+      expect(promptsSeenByParent[1]).toContain('The sub-agent failed to produce a result.');
+    });
+
+    describe('throwing hooks', () => {
+      const hookErrors = (requestContext: RequestContext) =>
+        (requestContext.get('__mastra_delegationHookErrors') as DelegationHookError[] | undefined) ?? [];
+
+      it('should record a throwing onDelegationStart and still delegate by default', async () => {
+        const subAgent = makeSubAgent('research-agent', 'Dolphins are marine mammals.');
+        const requestContext = new RequestContext();
+
+        const supervisorAgent = new Agent({
+          id: 'supervisor',
+          name: 'supervisor',
+          instructions: 'You orchestrate sub-agents.',
+          model: makeSupervisorModel('researchAgent', 'research dolphins'),
+          agents: { researchAgent: subAgent },
+          memory: new MockMemory(),
+        });
+
+        const result = await supervisorAgent.generate('Research dolphins', {
+          maxSteps: 3,
+          requestContext,
+          delegation: {
+            onDelegationStart: () => {
+              throw new Error('start hook boom');
+            },
+          },
+        });
+
+        // Default strategy is fail-open, so the delegation still ran...
+        expect(result.text).toBeDefined();
+        // ...but the failure is now observable instead of log-only.
+        expect(hookErrors(requestContext)).toEqual([
+          expect.objectContaining({ hook: 'onDelegationStart', message: 'start hook boom' }),
+        ]);
+      });
+
+      it('should block delegation when onDelegationStart throws and hookErrorStrategy is throw', async () => {
+        const subAgentGenerate = vi.fn();
+        const subAgent = makeSubAgent('blocked-agent', 'Should not be called');
+        subAgent.generate = subAgentGenerate;
+        const requestContext = new RequestContext();
+
+        const supervisorAgent = new Agent({
+          id: 'supervisor',
+          name: 'supervisor',
+          instructions: 'You orchestrate sub-agents.',
+          model: makeSupervisorModel('blockedAgent', 'do something'),
+          agents: { blockedAgent: subAgent },
+          memory: new MockMemory(),
+        });
+
+        await supervisorAgent.generate('Do something', {
+          maxSteps: 3,
+          requestContext,
+          delegation: {
+            hookErrorStrategy: 'throw',
+            onDelegationStart: () => {
+              throw new Error('start hook boom');
+            },
+          },
+        });
+
+        expect(subAgentGenerate).not.toHaveBeenCalled();
+        expect(hookErrors(requestContext)).toEqual([expect.objectContaining({ hook: 'onDelegationStart' })]);
+      });
+
+      it('should record a throwing onDelegationComplete and keep the original result by default', async () => {
+        const subAgent = makeSubAgent('writer-agent', 'Here is the final report.');
+        const requestContext = new RequestContext();
+
+        const supervisorAgent = new Agent({
+          id: 'supervisor',
+          name: 'supervisor',
+          instructions: 'You orchestrate sub-agents.',
+          model: makeSupervisorModel('writerAgent', 'write a report'),
+          agents: { writerAgent: subAgent },
+          memory: new MockMemory(),
+        });
+
+        await supervisorAgent.generate('Write a report', {
+          maxSteps: 3,
+          requestContext,
+          delegation: {
+            onDelegationComplete: () => {
+              throw new Error('complete hook boom');
+            },
+          },
+        });
+
+        expect(hookErrors(requestContext)).toEqual([
+          expect.objectContaining({ hook: 'onDelegationComplete', message: 'complete hook boom' }),
+        ]);
+      });
+
+      it('should invoke onDelegationComplete exactly once when it throws under hookErrorStrategy: throw', async () => {
+        const subAgent = makeSubAgent('writer-agent', 'Here is the final report.');
+        const requestContext = new RequestContext();
+        // The success-path failure must not re-enter the hook with success: false.
+        const onDelegationComplete = vi.fn(() => {
+          throw new Error('complete hook boom');
+        });
+
+        const supervisorAgent = new Agent({
+          id: 'supervisor',
+          name: 'supervisor',
+          instructions: 'You orchestrate sub-agents.',
+          model: makeSupervisorModel('writerAgent', 'write a report'),
+          agents: { writerAgent: subAgent },
+          memory: new MockMemory(),
+        });
+
+        await supervisorAgent.generate('Write a report', {
+          maxSteps: 3,
+          requestContext,
+          delegation: { hookErrorStrategy: 'throw', onDelegationComplete },
+        });
+
+        expect(onDelegationComplete).toHaveBeenCalledTimes(1);
+        expect(hookErrors(requestContext)).toEqual([expect.objectContaining({ hook: 'onDelegationComplete' })]);
+      });
+
+      it('should record a throwing messageFilter and fall back to the unfiltered context by default', async () => {
+        const subAgent = makeSubAgent('research-agent', 'Dolphins are marine mammals.');
+        const requestContext = new RequestContext();
+
+        const supervisorAgent = new Agent({
+          id: 'supervisor',
+          name: 'supervisor',
+          instructions: 'You orchestrate sub-agents.',
+          model: makeSupervisorModel('researchAgent', 'research dolphins'),
+          agents: { researchAgent: subAgent },
+          memory: new MockMemory(),
+        });
+
+        await supervisorAgent.generate('Research dolphins', {
+          maxSteps: 3,
+          requestContext,
+          delegation: {
+            messageFilter: () => {
+              throw new Error('filter boom');
+            },
+          },
+        });
+
+        expect(hookErrors(requestContext)).toEqual([
+          expect.objectContaining({ hook: 'messageFilter', message: 'filter boom' }),
+        ]);
+      });
     });
 
     it('should skip sub-agent when onDelegationStart returns proceed: false', async () => {

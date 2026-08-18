@@ -1,8 +1,8 @@
 ---
-title: "Reference: PubSub | PubSub"
+title: 'Reference: PubSub | PubSub'
 description: API reference for the PubSub abstract base class that defines the pub/sub contract in Mastra.
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # PubSub
@@ -84,10 +84,16 @@ Registers a callback to receive events published to a topic. When `options.group
 
 Pass `options.batch` to opt in to batched delivery. The callback signature is unchanged: a batch of N events is delivered as N consecutive `cb(event, ack, nack)` calls in publish order. Batching is honored only when the backend's [`supportsNativeBatching`](#properties) is `true`. Other backends ignore the option and deliver events one at a time.
 
+Set `options.startFrom` to `"latest"` to receive only events published after a new consumer group is created. The default, `"earliest"`, includes retained events. Existing consumer groups keep their current checkpoint.
+
 ```typescript
-await pubsub.subscribe('my-topic', (event, ack, nack) => {
-  console.log(event)
-})
+await pubsub.subscribe(
+  'my-topic',
+  (event, ack, nack) => {
+    console.log(event)
+  },
+  { startFrom: 'latest' },
+)
 ```
 
 #### `unsubscribe(topic, cb)`
@@ -165,6 +171,12 @@ await pubsub.subscribeFromOffset('my-topic', 42, event => {
     description:
       'Whether the implementation honors `options.batch` on `subscribe()`. Defaults to `false`. Backends that integrate batching internally override this and return `true`.',
   },
+  {
+    name: 'supportsOffsets',
+    type: 'boolean',
+    description:
+      'Whether `subscribeFromOffset()` honors numeric offsets. Defaults to `false`. A non-zero offset on an unsupported implementation falls back to replay subscription and emits a diagnostic warning when a logger is configured.',
+  },
 ]}
 />
 
@@ -232,6 +244,14 @@ await pubsub.subscribeFromOffset('my-topic', 42, event => {
     description:
       'Opt in to batched delivery for this subscription. When omitted, events are delivered one at a time. Honored only by backends where `supportsNativeBatching` is `true`.',
     isOptional: true,
+  },
+  {
+    name: 'startFrom',
+    type: '"earliest" | "latest"',
+    description:
+      'Starting position used when a backend creates a new consumer group. `"earliest"` includes retained events. `"latest"` receives only events published after group creation. Existing groups keep their checkpoint.',
+    isOptional: true,
+    defaultValue: '"earliest"',
   },
 ]}
 />

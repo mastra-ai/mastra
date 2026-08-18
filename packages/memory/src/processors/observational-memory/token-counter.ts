@@ -2,9 +2,9 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { MastraToolInvocation } from '@mastra/core/agent/message-list';
-import imageSize from 'image-size';
 import { estimateTokenCount } from 'tokenx';
 
+import { measureImageBuffer } from './measure-image-buffer';
 import { resolveToolResultValue, serializeToolResultForTokenCounting } from './tool-result-helpers';
 
 type TokenEstimateCacheEntry = {
@@ -562,25 +562,25 @@ function resolveImageDimensions(part: CacheablePart): { width?: number; height?:
     return { width, height };
   }
 
-  try {
-    const measured = imageSize(buffer);
-    const measuredWidth = getFiniteNumber(measured.width);
-    const measuredHeight = getFiniteNumber(measured.height);
-
-    if (!measuredWidth || !measuredHeight) {
-      return { width, height };
-    }
-
-    const resolved = {
-      width: width ?? measuredWidth,
-      height: height ?? measuredHeight,
-    };
-
-    persistImageDimensions(part, resolved as { width: number; height: number });
-    return resolved;
-  } catch {
+  const measured = measureImageBuffer(buffer);
+  if (!measured) {
     return { width, height };
   }
+
+  const measuredWidth = getFiniteNumber(measured.width);
+  const measuredHeight = getFiniteNumber(measured.height);
+
+  if (!measuredWidth || !measuredHeight) {
+    return { width, height };
+  }
+
+  const resolved = {
+    width: width ?? measuredWidth,
+    height: height ?? measuredHeight,
+  };
+
+  persistImageDimensions(part, resolved as { width: number; height: number });
+  return resolved;
 }
 
 function getBase64Size(base64: string): number {
@@ -1221,6 +1221,7 @@ export class TokenCounter {
   private readonly defaultModelContext?: TokenCounterModelContext;
   private readonly modelContextStorage = new AsyncLocalStorage<TokenCounterModelContext | undefined>();
   private readonly inFlightAttachmentCounts = new Map<string, Promise<number | undefined>>();
+  private readonly multimodalToolResultCounts = new WeakMap<object, { resultKey: string; tokens: number }>();
 
   // Per-message overhead: accounts for role tokens, message framing, and separators.
   // 3.8 remains a practical average across providers for OM thresholding.
@@ -1312,6 +1313,12 @@ export class TokenCounter {
   private countMultimodalToolResultContent(part: CacheablePart, toolResult: unknown): number | undefined {
     if (!toolResult || typeof toolResult !== 'object') {
       return undefined;
+    }
+
+    const resultKey = buildEstimateKey('tool-result-multimodal-content-source', JSON.stringify(toolResult));
+    const cached = this.multimodalToolResultCounts.get(part);
+    if (cached?.resultKey === resultKey) {
+      return cached.tokens;
     }
 
     const output = toolResult as Record<string, unknown>;
@@ -1431,12 +1438,14 @@ export class TokenCounter {
       return undefined;
     }
 
-    return this.readOrPersistFixedPartEstimate(
+    const estimate = this.readOrPersistFixedPartEstimate(
       part,
       'tool-result-multimodal-content',
       JSON.stringify({ type: 'content', value: cacheParts }),
       tokens,
     );
+    this.multimodalToolResultCounts.set(part, { resultKey, tokens: estimate });
+    return estimate;
   }
 
   private estimateImageAssetTokens(part: CacheablePart, asset: unknown, kind: 'image' | 'file'): ImageTokenEstimate {

@@ -161,6 +161,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
       // resume never reads before persisting.
       pruneSnapshot: pruneAgentLoopSnapshot,
       validateInputs: false,
+      emitStepEvents: false,
       sharePubsub: true,
       // Internal durable-agent execution plumbing — hide workflow spans;
       // the agent/tool/model spans within still surface for users.
@@ -184,6 +185,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
           options: state.options,
           state: state.state,
           messageId: state.messageId,
+          requestContextEntries: state.requestContextEntries,
           stepIndex: state.iterationCount,
           agentSpanData: state.agentSpanData,
           modelSpanData: state.modelSpanData,
@@ -301,6 +303,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
         // resume never reads before persisting.
         pruneSnapshot: pruneAgentLoopSnapshot,
         validateInputs: false,
+        emitStepEvents: false,
         // Internal durable-agent execution plumbing — see singleIterationWorkflow.
         tracingPolicy: {
           internal: InternalSpans.WORKFLOW,

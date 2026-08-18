@@ -379,8 +379,23 @@ describe('Mock OM Agent Integration', () => {
     // OM processor MUST emit progress, start, and end markers
     expect(omParts.length).toBeGreaterThan(0);
 
-    const hasProgress = omParts.some(p => p.type === 'data-om-status');
-    expect(hasProgress).toBe(true);
+    const statusParts = omParts.filter(p => p.type === 'data-om-status');
+    expect(statusParts.length).toBeGreaterThan(0);
+    expect(statusParts.every(p => p.transient === true)).toBe(true);
+
+    const statusMemoryStore = await store.getStore('memory');
+    const { messages } = await statusMemoryStore!.listMessages({
+      threadId: 'test-thread-parts',
+      perPage: false,
+    });
+    const persistedStatusOnlyMessages = messages.filter(message => {
+      if (message.role !== 'assistant' || typeof message.content !== 'object' || !('parts' in message.content)) {
+        return false;
+      }
+      const parts = message.content.parts ?? [];
+      return parts.length > 0 && parts.every((part: any) => part.type === 'data-om-status');
+    });
+    expect(persistedStatusOnlyMessages).toHaveLength(0);
 
     // Observation MUST be triggered (threshold is 50 tokens, response is ~100 tokens)
     const hasStart = omParts.some(p => p.type === 'data-om-observation-start');

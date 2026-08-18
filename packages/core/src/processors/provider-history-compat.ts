@@ -221,6 +221,33 @@ export function isMaybeAnthropic(
   return matchesProviderPrefix(model, 'anthropic');
 }
 
+export function isMaybeAzure(
+  model:
+    | string
+    | { provider?: string; modelId?: string }
+    | ((...args: any[]) => any)
+    | { model: any; enabled?: boolean }[]
+    | unknown,
+): boolean {
+  if (Array.isArray(model)) {
+    return model.some(entry => isMaybeAzure((entry as { model?: unknown }).model ?? entry));
+  }
+
+  if (model && typeof model === 'object') {
+    const { provider, modelId } = model as { provider?: unknown; modelId?: unknown };
+    if (typeof provider === 'string' && /^(?:azure|azure-openai)(?:\.[a-z0-9_-]+)?$/i.test(provider)) {
+      return true;
+    }
+
+    return (
+      typeof modelId === 'string' &&
+      (matchesProviderPrefix(modelId, 'azure') || matchesProviderPrefix(modelId, 'azure-openai'))
+    );
+  }
+
+  return matchesProviderPrefix(model, 'azure') || matchesProviderPrefix(model, 'azure-openai');
+}
+
 /**
  * Returns a copy of the prompt with selected `reasoning` parts stripped from
  * assistant messages. Returns `undefined` if no changes were necessary.
@@ -255,6 +282,28 @@ function isAnthropicReasoningPart(part: { providerOptions?: unknown; providerMet
   if (providerMetadata && typeof providerMetadata === 'object' && 'anthropic' in providerMetadata) return true;
 
   return false;
+}
+
+function getProviderMetadataForProvider(metadata: unknown, provider: string): Record<string, unknown> | undefined {
+  if (!metadata || typeof metadata !== 'object') return undefined;
+  const value = (metadata as Record<string, unknown>)[provider];
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
+}
+
+function hasAnthropicSignatureWithoutText(part: {
+  text?: unknown;
+  providerOptions?: unknown;
+  providerMetadata?: unknown;
+}): boolean {
+  const anthropic =
+    getProviderMetadataForProvider(part.providerOptions, 'anthropic') ??
+    getProviderMetadataForProvider(part.providerMetadata, 'anthropic');
+
+  return (
+    typeof anthropic?.signature === 'string' &&
+    anthropic.signature.length > 0 &&
+    (typeof part.text !== 'string' || part.text.length === 0)
+  );
 }
 
 /**
@@ -292,6 +341,20 @@ export const cerebrasStripReasoningContent: CompatRule = {
 };
 
 /**
+ * Legacy records could contain Anthropic signed thinking metadata with an
+ * empty reasoning text. Anthropic signs the exact thinking text, so forwarding
+ * that mismatched pair is worse than dropping the invalid block at the provider
+ * boundary.
+ */
+export const anthropicStripEmptySignedReasoningContent: CompatRule = {
+  name: 'anthropic-strip-empty-signed-reasoning-content',
+  applyToPrompt({ prompt, model }) {
+    if (!isMaybeAnthropic(model)) return undefined;
+    return stripReasoningFromPrompt(prompt, hasAnthropicSignatureWithoutText);
+  },
+};
+
+/**
  * Anthropic accepts its own thinking/reasoning history, but rejects reasoning
  * parts emitted by other providers. Strip only foreign reasoning parts at the
  * Anthropic provider boundary so persisted history remains intact and native
@@ -302,6 +365,53 @@ export const anthropicStripForeignReasoningContent: CompatRule = {
   applyToPrompt({ prompt, model }) {
     if (!isMaybeAnthropic(model)) return undefined;
     return stripReasoningFromPrompt(prompt, part => !isAnthropicReasoningPart(part));
+  },
+};
+
+const SYSTEM_REMINDER_OPEN_TAG = /<system-reminder(?=\s|\/?>)([^>]*)>/g;
+const SYSTEM_REMINDER_CLOSE_TAG = /<\/system-reminder>/g;
+
+function rewriteSystemReminderTags(text: string): string {
+  return text
+    .replace(SYSTEM_REMINDER_OPEN_TAG, '<memory-context$1>')
+    .replace(SYSTEM_REMINDER_CLOSE_TAG, '</memory-context>');
+}
+
+/**
+ * Azure OpenAI's content moderation can classify `<system-reminder>` wrappers
+ * in user messages as prompt injection. Rename the wrapper at the provider
+ * boundary while leaving persisted history and other providers unchanged.
+ */
+export const azureSystemReminderTransform: CompatRule = {
+  name: 'azure-system-reminder-transform',
+  applyToPrompt({ prompt, model }) {
+    if (!isMaybeAzure(model)) return undefined;
+
+    let mutated = false;
+    const next: LanguageModelV2Prompt = prompt.map(message => {
+      if (message.role === 'system') {
+        const content = rewriteSystemReminderTags(message.content);
+        if (content === message.content) return message;
+        mutated = true;
+        return { ...message, content };
+      }
+
+      if (message.role !== 'user') return message;
+
+      let messageMutated = false;
+      const content = message.content.map(part => {
+        if (part.type !== 'text') return part;
+        const text = rewriteSystemReminderTags(part.text);
+        if (text === part.text) return part;
+        mutated = true;
+        messageMutated = true;
+        return { ...part, text };
+      });
+
+      return messageMutated ? { ...message, content } : message;
+    });
+
+    return mutated ? next : undefined;
   },
 };
 
@@ -316,7 +426,9 @@ export const anthropicStripForeignReasoningContent: CompatRule = {
 export const DEFAULT_COMPAT_RULES: CompatRule[] = [
   anthropicToolIdFormat,
   cerebrasStripReasoningContent,
+  anthropicStripEmptySignedReasoningContent,
   anthropicStripForeignReasoningContent,
+  azureSystemReminderTransform,
 ];
 
 // ---------------------------------------------------------------------------
@@ -340,6 +452,10 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  *   that serializes them as `reasoning_content` (a field Cerebras's API
  *   rejects). Preemptive; runs in `processLLMRequest` so the persisted
  *   message list keeps the reasoning trace.
+ * - **anthropic-strip-empty-signed-reasoning-content** — strips legacy
+ *   Anthropic signed reasoning blocks whose text was already lost before
+ *   replay, preventing an empty thinking block with a non-empty signature from
+ *   reaching Anthropic.
  * - **anthropic-strip-foreign-reasoning-content** — strips non-Anthropic
  *   `reasoning` parts from assistant messages in the outbound prompt when the
  *   resolved model is Anthropic. Anthropic-native reasoning parts are kept.

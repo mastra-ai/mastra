@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
 import { createDurableAgent } from '../agent/durable/create-durable-agent';
+import { getActiveDurableAgentWorkflowExecutions } from '../agent/durable/run-registry';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
 import { isDurableAgentLike } from '../agent/types';
@@ -19,6 +20,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { MastraScorer } from '../evals';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
+import { isRunLocalTopic } from '../events/topics';
 import type { Event, EventCallback } from '../events/types';
 import type { Harness } from '../harness';
 import { AvailableHooks, deregisterHook, registerHook } from '../hooks';
@@ -74,6 +76,7 @@ import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker } from '../w
 import type { MastraWorker, WorkerDeps } from '../worker';
 import type { AnyWorkflow, Workflow } from '../workflows';
 import { normalizeWorkflowBuilderDefinition } from '../workflows/builder';
+import type { WorkflowBuilderDefinitionInput } from '../workflows/builder';
 import type { DynamicWorkflowGraph, WorkflowRegistryIndex, WorkflowRegistrySchemas } from '../workflows/dynamic';
 import {
   assertValidDynamicWorkflow,
@@ -445,10 +448,9 @@ export interface Config<
    * Maps event topics to handler functions for event-driven architectures.
    */
   events?: {
-    [topic: string]: (
-      event: Event,
-      cb?: () => Promise<void>,
-    ) => Promise<void> | ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
+    // Listeners receive only the event. Acknowledgement is handled for them:
+    // the delivery is acked once the listener resolves and nacked if it throws.
+    [topic: string]: ((event: Event) => Promise<void> | void) | ((event: Event) => Promise<void> | void)[];
   };
 
   /**
@@ -794,17 +796,20 @@ export class Mastra<
   // must not double-subscribe the same listener.
   #userEventSubscriptions: Array<{
     topic: string;
-    cb: (event: Event, ack?: () => Promise<void>) => Promise<void>;
+    cb: EventCallback;
   }> = [];
 
   #events: {
-    [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
+    [topic: string]: ((event: Event) => Promise<void> | void)[];
   } = {};
   #internalMastraWorkflows: Record<string, AnyWorkflow> = {};
-  // Tracks registration timestamps for run-scoped internal workflows so a lazy
+  // Tracks last-activity timestamps for run-scoped internal workflows so a lazy
   // TTL sweep can evict entries from abandoned suspended runs that were never
-  // resumed. Unscoped (singleton) entries are not tracked — they live forever.
-  #runScopedWorkflowTimestamps: Map<string, { registeredAt: number; runId: string }> = new Map();
+  // resumed. The timestamp is refreshed every time the run resolves its own
+  // registration, so the TTL bounds *idle* time rather than total run duration —
+  // a run that legitimately executes for hours is never swept out from under
+  // itself. Unscoped (singleton) entries are not tracked — they live forever.
+  #runScopedWorkflowTimestamps: Map<string, { lastActivityAt: number; runId: string }> = new Map();
   // Per-run bag of non-serializable runtime state (SaveQueueManager,
   // BackgroundTaskManager, MessageList, abort controllers, dynamic tool sets…)
   // shared across step factories within a single run. Never persisted, never
@@ -814,8 +819,8 @@ export class Mastra<
   // last unregisters. See `./run-scope.ts`.
   #runScopes: Map<string, RunScope> = new Map();
   #runScopeRefcounts: Map<string, number> = new Map();
-  // Run-scoped internal workflows older than this TTL (ms) are evicted during the
-  // lazy sweep that runs on each new registration. Reads the shared
+  // Run-scoped internal workflows idle for longer than this TTL (ms) are evicted
+  // during the lazy sweep that runs on each new registration. Reads the shared
   // `MASTRA_SUSPENDED_RUN_TTL_MS` so this registry and the agent thread-stream
   // runtime expire a suspended run's state on one bound; production keeps the 30
   // minute default.
@@ -895,7 +900,7 @@ export class Mastra<
                 if (isOwnedHere) {
                   return target.publish(topic, event, { localOnly: true });
                 }
-              } else if (topic.startsWith('workflow.events.v2.')) {
+              } else if (isRunLocalTopic(topic)) {
                 // Per-run watch stream events. Only the publishing process
                 // consumes these (execution-engine subscribes per-run). No
                 // cross-instance fan-out needed.
@@ -2236,10 +2241,17 @@ export class Mastra<
       throw error;
     }
 
-    return editor.agent.applyStoredOverrides(
+    const resolved = (await editor.agent.applyStoredOverrides(
       agent,
       'versionId' in version ? version : { status: version.status ?? 'published' },
-    ) as Promise<TAgent>;
+    )) as TAgent;
+
+    // Mark forks so Agent#execute doesn't try to re-resolve the version and recurse
+    if (resolved !== agent) {
+      resolved.__markStoredVersionApplied();
+    }
+
+    return resolved;
   }
 
   /**
@@ -3370,6 +3382,7 @@ export class Mastra<
    *   *different* run's instance via an id scan.
    */
   __registerInternalWorkflow(workflow: AnyWorkflow, runId?: string) {
+    workflow.__markInternal();
     workflow.__registerMastra(this);
     workflow.__registerPrimitives({
       logger: this.getLogger(),
@@ -3378,7 +3391,7 @@ export class Mastra<
       const key = `${workflow.id}:${runId}`;
       const isNewRegistration = !this.#internalMastraWorkflows[key];
       this.#internalMastraWorkflows[key] = workflow;
-      this.#runScopedWorkflowTimestamps.set(key, { registeredAt: Date.now(), runId });
+      this.#runScopedWorkflowTimestamps.set(key, { lastActivityAt: Date.now(), runId });
       // Pair the registration with a runScope. Multiple workflows can share a
       // runId (parent + nested); we refcount so the scope outlives the first
       // unregister and dies with the last.
@@ -3463,9 +3476,27 @@ export class Mastra<
     if (runId) {
       // Only the exact run-scoped entry or the genuinely-unscoped slot — never
       // another run's `${id}:${otherRunId}` registration.
-      return !!this.#internalMastraWorkflows[`${id}:${runId}`] || !!this.#internalMastraWorkflows[id];
+      if (this.#internalMastraWorkflows[`${id}:${runId}`]) {
+        this.#touchRunScopedWorkflow(id, runId);
+        return true;
+      }
+      return !!this.#internalMastraWorkflows[id];
     }
     return !!this.#internalMastraWorkflows[id];
+  }
+
+  /**
+   * Mark a run-scoped registration as active so the lazy TTL sweep measures
+   * idle time rather than total run duration. Only refreshes an entry that
+   * already exists at the exact `${id}:${runId}` key — resolving the bare
+   * unscoped `${id}` slot says nothing about a run's liveness, and this must
+   * never create an entry.
+   */
+  #touchRunScopedWorkflow(id: string, runId: string) {
+    const entry = this.#runScopedWorkflowTimestamps.get(`${id}:${runId}`);
+    if (entry) {
+      entry.lastActivityAt = Date.now();
+    }
   }
 
   /**
@@ -3506,9 +3537,17 @@ export class Mastra<
   }
 
   __getInternalWorkflow(id: string, runId?: string): AnyWorkflow {
-    const workflow = runId
-      ? (this.#internalMastraWorkflows[`${id}:${runId}`] ?? this.#internalMastraWorkflows[id])
-      : this.#internalMastraWorkflows[id];
+    let workflow: AnyWorkflow | undefined;
+    if (runId) {
+      workflow = this.#internalMastraWorkflows[`${id}:${runId}`];
+      if (workflow) {
+        this.#touchRunScopedWorkflow(id, runId);
+      } else {
+        workflow = this.#internalMastraWorkflows[id];
+      }
+    } else {
+      workflow = this.#internalMastraWorkflows[id];
+    }
     if (!workflow) {
       throw new MastraError({
         id: 'MASTRA_GET_INTERNAL_WORKFLOW_BY_ID_NOT_FOUND',
@@ -3546,15 +3585,23 @@ export class Mastra<
   }
 
   /**
-   * Lazily evict run-scoped internal workflow entries that have exceeded
-   * {@link Mastra.INTERNAL_WORKFLOW_TTL_MS}. Called on every new run-scoped
-   * registration so cleanup is proportional to activity — zero overhead when
-   * the system is idle.
+   * Lazily evict run-scoped internal workflow entries that have been *idle*
+   * longer than {@link Mastra.INTERNAL_WORKFLOW_TTL_MS}. Called on every new
+   * run-scoped registration so cleanup is proportional to activity — zero
+   * overhead when the system is idle.
+   *
+   * Idleness, not age: every lookup a run makes against its own registration
+   * refreshes `lastActivityAt` (see `#touchRunScopedWorkflow`), so a run that
+   * executes for longer than the TTL is never evicted mid-flight. Only a run
+   * that has stopped touching its registration — suspended and never resumed,
+   * or abandoned — ages out. This matches how the agent thread-stream runtime
+   * treats the shared `MASTRA_SUSPENDED_RUN_TTL_MS` bound, which only expires
+   * records that are actually parked.
    */
   #sweepStaleRunScopedWorkflows() {
     const now = Date.now();
     for (const [key, entry] of this.#runScopedWorkflowTimestamps) {
-      if (now - entry.registeredAt > Mastra.INTERNAL_WORKFLOW_TTL_MS) {
+      if (now - entry.lastActivityAt > Mastra.INTERNAL_WORKFLOW_TTL_MS) {
         delete this.#internalMastraWorkflows[key];
         this.#runScopedWorkflowTimestamps.delete(key);
         // Release the matching scope using the runId we stored at registration
@@ -3564,10 +3611,10 @@ export class Mastra<
         // Surface the eviction so operators can investigate long-suspended
         // runs that never resumed. The refcounted lifecycle in
         // `__createRunScope`/`__releaseRunScope` covers the happy path; this
-        // branch only fires when a registration was abandoned past the TTL.
+        // branch only fires when a registration went idle past the TTL.
         this.#logger.warn('Evicted stale run-scoped workflow after TTL expired', {
           runId: entry.runId,
-          ageMs: now - entry.registeredAt,
+          idleMs: now - entry.lastActivityAt,
           ttlMs: Mastra.INTERNAL_WORKFLOW_TTL_MS,
         });
       }
@@ -4796,7 +4843,7 @@ export class Mastra<
    * await run.start({ inputData: { location: 'Helsinki' } });
    * ```
    */
-  public async addDynamicWorkflow(def: DynamicWorkflowGraph): Promise<void> {
+  public async addDynamicWorkflow(def: DynamicWorkflowGraph | WorkflowBuilderDefinitionInput): Promise<void> {
     await this.addDynamicWorkflows([def]);
   }
 
@@ -4830,7 +4877,9 @@ export class Mastra<
    * ]);
    * ```
    */
-  public async addDynamicWorkflows(defs: readonly DynamicWorkflowGraph[]): Promise<void> {
+  public async addDynamicWorkflows(
+    defs: readonly (DynamicWorkflowGraph | WorkflowBuilderDefinitionInput)[],
+  ): Promise<void> {
     if (defs.length === 0) return;
 
     const seen = new Set<string>();
@@ -4847,10 +4896,10 @@ export class Mastra<
     // Normalization coerces the wire shape; one validation call per member
     // covers structure, JSON-Schema keywords, references, and schema-flow.
     const members = defs.map(def => ({
-      def,
       normalized: normalizeWorkflowBuilderDefinition({
         id: def.id,
         description: def.description,
+        metadata: def.metadata,
         inputSchema: def.inputSchema,
         outputSchema: def.outputSchema,
         stateSchema: def.stateSchema,
@@ -4862,7 +4911,7 @@ export class Mastra<
     // Members may nest each other, so the index every member validates against
     // is the live registries plus the bundle itself — not the registry alone.
     const index = this.#buildWorkflowRegistryIndex();
-    const bundleIds = new Set(members.map(member => member.def.id));
+    const bundleIds = new Set(members.map(member => member.normalized.id));
     for (const { normalized } of members) {
       (index.workflows ??= {})[normalized.id] = {
         inputSchema: normalized.inputSchema,
@@ -4876,13 +4925,13 @@ export class Mastra<
     // Hydration resolves nested workflows through the live registry, so a
     // member cannot be hydrated before the bundle members it nests.
     const ordered: typeof members = [];
-    const remaining = new Map(members.map(member => [member.def.id, member] as const));
+    const remaining = new Map(members.map(member => [member.normalized.id, member] as const));
     const hydrated = new Set<string>();
     let progress = true;
     while (remaining.size > 0 && progress) {
       progress = false;
       for (const [id, member] of Array.from(remaining)) {
-        const pending = Array.from(collectNestedWorkflowIds(member.def.graph)).filter(
+        const pending = Array.from(collectNestedWorkflowIds(member.normalized.graph)).filter(
           dependency => dependency !== id && bundleIds.has(dependency) && !hydrated.has(dependency),
         );
         if (pending.length > 0) continue;
@@ -4905,9 +4954,9 @@ export class Mastra<
     const registry = this.#workflows as Record<string, AnyWorkflow>;
     const priorWorkflows = new Map<string, AnyWorkflow | undefined>();
     const priorHiddenKeys = new Set<string>();
-    for (const { def } of ordered) {
-      priorWorkflows.set(def.id, registry[def.id]);
-      if (this.#hiddenWorkflowKeys.has(def.id)) priorHiddenKeys.add(def.id);
+    for (const { normalized } of ordered) {
+      priorWorkflows.set(normalized.id, registry[normalized.id]);
+      if (this.#hiddenWorkflowKeys.has(normalized.id)) priorHiddenKeys.add(normalized.id);
     }
     const restoreRegistry = () => {
       for (const [id, prior] of priorWorkflows) {
@@ -4918,23 +4967,23 @@ export class Mastra<
     };
 
     try {
-      for (const { def } of ordered) {
-        const { workflow } = await rehydrateWorkflow(def, this);
-        this.#replaceDynamicWorkflow(workflow as AnyWorkflow, def.id);
+      for (const { normalized } of ordered) {
+        const { workflow } = await rehydrateWorkflow(normalized, this);
+        this.#replaceDynamicWorkflow(workflow as AnyWorkflow, normalized.id);
       }
 
       const store = await this.#storage?.getStore('workflowDefinitions');
       if (store) {
-        for (const { def } of ordered) {
+        for (const { normalized } of ordered) {
           await store.upsert({
-            id: def.id,
-            description: def.description,
-            metadata: def.metadata,
-            inputSchema: def.inputSchema,
-            outputSchema: def.outputSchema,
-            stateSchema: def.stateSchema,
-            requestContextSchema: def.requestContextSchema,
-            graph: def.graph,
+            id: normalized.id,
+            description: normalized.description,
+            metadata: normalized.metadata,
+            inputSchema: normalized.inputSchema,
+            outputSchema: normalized.outputSchema,
+            stateSchema: normalized.stateSchema,
+            requestContextSchema: normalized.requestContextSchema,
+            graph: normalized.graph,
           });
         }
       }
@@ -5801,12 +5850,45 @@ export class Mastra<
     }
   }
 
+  /**
+   * Wrap a user-provided topic listener so the delivery is acknowledged once
+   * the listener resolves. User listeners take only the event, so nothing
+   * would ever call `ack` for them — and on a durable transport (Redis
+   * consumer groups) an unacknowledged delivery stays pending for the life of
+   * the subscription. A throwing listener nacks instead so the transport can
+   * redeliver rather than assume success.
+   *
+   * The wrapper is memoized per listener so `removeTopicListener` can
+   * unsubscribe the exact callback `addTopicListener` registered.
+   */
+  #ackingTopicListeners = new WeakMap<(event: any) => Promise<void> | void, EventCallback>();
+
+  #ackingTopicListener(listener: (event: any) => Promise<void> | void): EventCallback {
+    const existing = this.#ackingTopicListeners.get(listener);
+    if (existing) return existing;
+    const wrapped: EventCallback = async (event, ack, nack) => {
+      try {
+        await listener(event);
+      } catch (err) {
+        this.#logger?.error?.('Error in topic listener; nacking event', {
+          eventType: event.type,
+          err: err instanceof Error ? err.message : err,
+        });
+        await nack?.();
+        return;
+      }
+      await ack?.();
+    };
+    this.#ackingTopicListeners.set(listener, wrapped);
+    return wrapped;
+  }
+
   public async addTopicListener(topic: string, listener: (event: any) => Promise<void>) {
-    await this.#pubsub.subscribe(topic, listener);
+    await this.#pubsub.subscribe(topic, this.#ackingTopicListener(listener));
   }
 
   public async removeTopicListener(topic: string, listener: (event: any) => Promise<void>) {
-    await this.#pubsub.unsubscribe(topic, listener);
+    await this.#pubsub.unsubscribe(topic, this.#ackingTopicListener(listener));
   }
 
   /**
@@ -5849,10 +5931,12 @@ export class Mastra<
     // must run after storage.init() above.
     //
     // Skip the read when the flag cannot change the outcome: it is already
-    // set, or the app opted out of the scheduler and nothing may start it.
-    // Reading the store anyway is a useless boot-time query, and storage
-    // adapters that need request/tenant context warn on it (see #20550).
-    if (!name && !this.#schedulerRequested && !this.#schedulerDisabled()) {
+    // set, the app opted out of the scheduler and nothing may start it, or an
+    // explicit worker filter already forces injection (see below). Reading the
+    // store anyway is a useless boot-time query, and storage adapters that
+    // need request/tenant context warn on it (see #20550).
+    const schedulerExplicitlyRequested = (this.#workerFilter?.has('scheduler') ?? false) && !this.#schedulerDisabled();
+    if (!name && !this.#schedulerRequested && !schedulerExplicitlyRequested && !this.#schedulerDisabled()) {
       await this.#detectPersistedSchedulerWork();
     }
 
@@ -5861,7 +5945,14 @@ export class Mastra<
     // This runs after all workflows have been registered (unlike the
     // constructor's default-workers block), so #hasScheduledWorkflow is
     // accurate.
-    if (!name && this.#shouldEnableScheduler() && this.#storage) {
+    //
+    // An explicit worker filter naming the scheduler role (e.g.
+    // `MASTRA_WORKERS=scheduler` on a dedicated scheduler deployment) always
+    // injects it: a standalone scheduler process polls storage for rows
+    // created by *other* processes, so boot-time heuristics like
+    // #hasScheduledWorkflow or persisted-row probes can't see the work it
+    // exists to serve. Only `#schedulerDisabled()` overrides the request.
+    if (!name && (this.#shouldEnableScheduler() || schedulerExplicitlyRequested) && this.#storage) {
       if (!this.#findSchedulerWorker()) {
         const sw = new SchedulerWorker(this.#schedulerConfig);
         sw.__registerMastra(this);
@@ -5943,12 +6034,11 @@ export class Mastra<
 
         const listeners = Array.isArray(this.#events[topic]) ? this.#events[topic] : [this.#events[topic]];
         for (const listener of listeners) {
-          const alreadySubscribed = this.#userEventSubscriptions.some(
-            sub => sub.topic === topic && sub.cb === listener,
-          );
+          const cb = this.#ackingTopicListener(listener);
+          const alreadySubscribed = this.#userEventSubscriptions.some(sub => sub.topic === topic && sub.cb === cb);
           if (alreadySubscribed) continue;
-          await this.#pubsub.subscribe(topic, listener);
-          this.#userEventSubscriptions.push({ topic, cb: listener });
+          await this.#pubsub.subscribe(topic, cb);
+          this.#userEventSubscriptions.push({ topic, cb });
         }
       }
     }
@@ -6455,6 +6545,17 @@ export class Mastra<
 
     // SchedulerWorker is stopped as part of stopWorkers().
     await this.stopWorkers();
+
+    // Durable workflows may still be persisting their next terminal or suspended
+    // snapshot. Keep storage and other shared resources alive until they settle.
+    const durableExecutionResults = await Promise.allSettled(getActiveDurableAgentWorkflowExecutions(this));
+    durableExecutionResults.forEach(result => {
+      if (result.status === 'rejected') {
+        this.#logger?.error('Durable agent execution failed during shutdown', {
+          error: result.reason,
+        });
+      }
+    });
 
     const workspaceIds = Object.keys(this.#workspaces);
     const teardownResults = await Promise.allSettled(

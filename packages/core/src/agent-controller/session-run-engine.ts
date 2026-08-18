@@ -96,7 +96,8 @@ type StreamChunk =
   | StreamDataChunk<'data-om-thread-update'>
   | StreamDataChunk<'data-mastracode-tool-progress'>
   | StreamDataChunk<'data-sandbox-stdout'>
-  | StreamDataChunk<'data-sandbox-stderr'>;
+  | StreamDataChunk<'data-sandbox-stderr'>
+  | StreamDataChunk<'data-sandbox-exit'>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -225,6 +226,8 @@ type StreamState = {
   textContentById: Map<string, { index: number; text: string }>;
   thinkingContentById: Map<string, { index: number; text: string }>;
   toolPartById: Map<string, number>;
+  /** Response ids offered by `step-start` — an id binds to at most one display message. */
+  offeredResponseIds: Set<string>;
   /**
    * Set when a stream ends on a non-success finish reason (e.g. `content-filter`,
    * `error`, `length`). Carries the user-facing message so the run finalizes
@@ -249,15 +252,10 @@ type StreamState = {
 export class SessionRunEngine {
   readonly #session: Session;
   readonly #machinery: SessionMachinery;
-  #requestContext?: RequestContext;
 
   constructor(session: Session, machinery: SessionMachinery) {
     this.#session = session;
     this.#machinery = machinery;
-  }
-
-  setRequestContext(requestContext?: RequestContext): void {
-    if (requestContext) this.#requestContext = requestContext;
   }
 
   private createEmptyAssistantMessage(): MastraDBMessage {
@@ -303,8 +301,14 @@ export class SessionRunEngine {
    * (text/reasoning deltas, tool-invocation upgrades) and `setStopReason` /
    * `setErrorMessage` mutate `content.metadata`, so emitted snapshots must
    * deep-clone the content or later mutations rewrite earlier snapshots.
+   *
+   * With no subscribers there is no earlier snapshot to protect, and the only
+   * remaining consumer is the display state, which already aliases the live
+   * message on `message_end`. Skipping the clone there drops a full
+   * `structuredClone` of the message per streamed delta.
    */
   private cloneMessage(message: MastraDBMessage): MastraDBMessage {
+    if (!this.#session.hasListeners()) return message;
     return { ...message, content: structuredClone(message.content) };
   }
 
@@ -341,6 +345,7 @@ export class SessionRunEngine {
       textContentById: new Map<string, { index: number; text: string }>(),
       thinkingContentById: new Map<string, { index: number; text: string }>(),
       toolPartById: new Map<string, number>(),
+      offeredResponseIds: new Set<string>(),
     };
   }
 
@@ -406,7 +411,8 @@ export class SessionRunEngine {
   }
 
   /**
-   * Process a stream response (shared between sendMessage and tool approval).
+   * Process a stream response. Production runs stream through
+   * `processSubscribedThreadStream`; only tests call this entry directly.
    */
   async processStream(
     response: { fullStream: AsyncIterable<StreamChunk> },
@@ -493,6 +499,21 @@ export class SessionRunEngine {
     }
 
     switch (chunk.type) {
+      case 'step-start': {
+        // Adopt the loop's response message id so the streamed turn and its
+        // persisted copy share one identity (clients dedupe by id). An id is
+        // consumed on first offer and binds only while the message is still
+        // empty — an emitted id must never change, and a re-offered id must
+        // never attach to a later message.
+        const messageId = getString(getPayload(chunk).messageId);
+        if (!messageId || state.offeredResponseIds.has(messageId)) break;
+        state.offeredResponseIds.add(messageId);
+        if (!this.hasCurrentMessageContent(state)) {
+          state.currentMessage.id = messageId;
+        }
+        break;
+      }
+
       case 'text-start': {
         const textIndex = state.currentMessage.content.parts.length;
         state.currentMessage.content.parts.push({ type: 'text', text: '' });
@@ -785,6 +806,16 @@ export class SessionRunEngine {
             stepUsage,
             'cacheCreationInputTokens',
             getUsageNumber(usageRecord, 'cacheCreationInputTokens'),
+          );
+          addOptionalUsageField(
+            stepUsage,
+            'cacheCreationInputTokens5m',
+            getUsageNumber(usageRecord, 'cacheCreationInputTokens5m'),
+          );
+          addOptionalUsageField(
+            stepUsage,
+            'cacheCreationInputTokens1h',
+            getUsageNumber(usageRecord, 'cacheCreationInputTokens1h'),
           );
           if (usageRecord.raw !== undefined) {
             stepUsage.raw = usageRecord.raw;
@@ -1111,6 +1142,20 @@ export class SessionRunEngine {
         }
         break;
       }
+      case 'data-sandbox-exit': {
+        const d = getDataRecord(chunk);
+        const toolCallId = getString(d?.toolCallId);
+        const exitCode = getOptionalNumber(d?.exitCode);
+        if (toolCallId && exitCode !== undefined) {
+          this.#session.emit({
+            type: 'command_exit',
+            toolCallId,
+            exitCode,
+            success: getBoolean(d?.success, exitCode === 0),
+          });
+        }
+        break;
+      }
 
       default:
         break;
@@ -1191,6 +1236,7 @@ export class SessionRunEngine {
 
   async processSubscribedThreadStream(subscription: AgentThreadSubscription<StreamChunk>): Promise<void> {
     let currentRun: StreamState | undefined;
+    let requestContext!: RequestContext;
     let bailed = false;
 
     const consume = async (): Promise<void> => {
@@ -1202,11 +1248,13 @@ export class SessionRunEngine {
         }
 
         if (!currentRun) {
+          const runId = ('runId' in chunk ? chunk.runId : undefined) ?? subscription.activeRunId();
           currentRun = this.createStreamState();
           this.#session.run.nextOperation();
           this.#session.run.ensureAbortController();
-          this.#session.run.setRunId({ runId: subscription.activeRunId() ?? ('runId' in chunk ? chunk.runId : null) });
+          this.#session.run.setRunId({ runId });
           this.#session.run.setTraceId({ traceId: null });
+          requestContext = await this.#machinery.buildRequestContext(subscription.__getCurrentRunRequestContext?.());
           this.#session.emit({ type: 'agent_start' });
         }
 
@@ -1215,7 +1263,6 @@ export class SessionRunEngine {
         }
 
         try {
-          const requestContext = await this.#machinery.buildRequestContext(this.#requestContext);
           const streamResult = await this.processStreamChunk(currentRun, chunk, requestContext);
           if (
             streamResult ||

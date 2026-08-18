@@ -50,6 +50,18 @@ export const MASTRA_VERSIONS_KEY = 'mastra__versions';
  */
 export const MASTRA_AUTH_TOKEN_KEY = 'mastra__authToken';
 
+/**
+ * Reserved key carrying a delegating agent's `MastraMemory` into a delegated
+ * run, so a sub-agent without its own memory can persist that run's transcript
+ * without the shared sub-agent instance being modified. The value is
+ * `{ agentId, memory }` and only the named agent reads it.
+ *
+ * Holds a live class instance, so it is deliberately run-scoped: it is excluded
+ * from the durable request-context snapshot and is not copied into further
+ * nested delegated runs. Internal to delegation — do not set it yourself.
+ */
+export const MASTRA_INHERITED_MEMORY_KEY = 'mastra__inheritedMemory';
+
 export type VersionSelector = { versionId: string } | { status: 'draft' | 'published' };
 
 export type VersionOverrides = {
@@ -207,6 +219,9 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
 
   /**
    * set a value with strict typing if `Values` is a Record and the key exists in it.
+   *
+   * Declared schema keys stay strictly typed. For runtime-only keys that are not part of
+   * `Values` (for example reserved middleware keys), use {@link setRaw}.
    */
   public set<K extends (Values extends Record<string, any> ? keyof Values : string)>(
     key: K,
@@ -217,7 +232,22 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
   }
 
   /**
+   * Set a runtime-only key that is not part of the declared `Values` schema.
+   *
+   * The runtime store is an open map: schema validation checks declared keys and
+   * passes undeclared keys through. Use this when writing infrastructure keys
+   * (for example `mastra__resourceId`) or other values that intentionally omit
+   * from `requestContextSchema`.
+   */
+  public setRaw(key: string, value: unknown): void {
+    this.registry.set(key, value);
+  }
+
+  /**
    * Get a value with its type
+   *
+   * Declared schema keys stay strictly typed. For runtime-only keys that are not part of
+   * `Values` (for example reserved middleware keys), use {@link getRaw}.
    */
   public get<
     K extends (Values extends Record<string, any> ? keyof Values : string),
@@ -227,16 +257,44 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
   }
 
   /**
+   * Get a runtime-only key that is not part of the declared `Values` schema.
+   *
+   * Returns `unknown` because the schema does not describe these keys — narrow
+   * the result at the call site.
+   */
+  public getRaw(key: string): unknown {
+    return this.registry.get(key);
+  }
+
+  /**
    * Check if a key exists in the container
+   *
+   * Declared schema keys stay strictly typed. For runtime-only keys, use {@link hasRaw}.
    */
   public has<K extends (Values extends Record<string, any> ? keyof Values : string)>(key: K): boolean {
     return this.registry.has(key);
   }
 
   /**
+   * Check whether a runtime-only key exists in the open map.
+   */
+  public hasRaw(key: string): boolean {
+    return this.registry.has(key);
+  }
+
+  /**
    * Delete a value by key
+   *
+   * Declared schema keys stay strictly typed. For runtime-only keys, use {@link deleteRaw}.
    */
   public delete<K extends (Values extends Record<string, any> ? keyof Values : string)>(key: K): boolean {
+    return this.registry.delete(key);
+  }
+
+  /**
+   * Delete a runtime-only key from the open map.
+   */
+  public deleteRaw(key: string): boolean {
     return this.registry.delete(key);
   }
 

@@ -22,7 +22,7 @@ This page covers the unified deploy flow. The earlier split commands, [`mastra s
 
 ## Before you begin
 
-You'll need a [Mastra application](/guides/getting-started/quickstart) and a [Mastra platform](https://projects.mastra.ai) account. If you're not authenticated, the CLI prompts you to log in on first use.
+You'll need a [Mastra application](/docs) and a [Mastra platform](https://projects.mastra.ai) account. If you're not authenticated, the CLI prompts you to log in on first use.
 
 A local `.env` file is optional. Environment variables stored on the platform are used as-is at deploy time, and managed resources like [hosted databases](/docs/mastra-platform/database) inject their own variables. Pass `--env-file` only when you want to layer local values on top.
 
@@ -83,7 +83,7 @@ A local `.env` file is optional. Environment variables stored on the platform ar
     Verify your deployment at the URL printed by the CLI. Append `/api/agents` to confirm it returns a JSON list of your agents.
 
     :::warning
-    Set up [authentication](/docs/server/auth) before exposing your endpoints publicly.
+    Set up [authentication](/docs/auth/overview) before exposing your endpoints publicly.
     :::
   </StepItem>
 </Steps>
@@ -116,7 +116,7 @@ The region is fixed when the environment is created. Databases attached to an en
 
 Preflight validates the built output before anything includes, and only flags issues in your own code:
 
-- **Local storage paths**: A hard block. File-backed storage (for example `file:./mastra.db`) is lost on every deploy. Preflight passes when the path is guarded by an environment variable that's set locally, stored on the platform, or provided by a managed database:
+- **Local storage paths**: A hard block. File-backed storage (for example `file:./mastra.db`) is lost on every deploy. Preflight passes when the path is guarded by an environment variable that's set locally or stored on the platform, including values provided by a managed database:
 
   ```ts title="src/mastra/storage.ts"
   import { LibSQLStore } from '@mastra/libsql'
@@ -154,6 +154,41 @@ mastra deploy --env staging --env-file .env.staging
 ```
 
 To change variables on a running service without a redeploy, update them in the dashboard and run [`mastra env restart`](/reference/cli/mastra#mastra-env-restart).
+
+## Private npm packages
+
+Projects that depend on packages from a private registry install them during the deploy using the standard `NPM_TOKEN` contract.
+
+<Steps>
+  <StepItem>
+    Store a read-only registry token as `NPM_TOKEN` on the project or environment through the dashboard.
+  </StepItem>
+
+  <StepItem>
+    Commit a token-free `.npmrc` that points your scope at the registry and reads the token from the environment:
+
+    ```ini title=".npmrc"
+    @your-org:registry=https://npm.pkg.github.com
+    //npm.pkg.github.com/:_authToken=${NPM_TOKEN}
+    ```
+
+    Keep the `${NPM_TOKEN}` reference literal. The package manager resolves it at install time, so the token itself never lands in your repository.
+  </StepItem>
+
+  <StepItem>
+    Deploy as usual:
+
+    ```bash
+    mastra deploy
+    ```
+  </StepItem>
+</Steps>
+
+In a monorepo, a `.npmrc` in your project directory takes precedence over one at the repository root.
+
+`NPM_TOKEN` is available during dependency installation. Mastra redacts its value from the Mastra source-build logs that it streams. The generated Dockerfile receives it as a build argument, so the runtime image stays free of the token. `NPM_TOKEN` is also injected into the running service as a regular environment variable, so treat it as a secret your application can read.
+
+Projects without a private-registry `.npmrc` need no changes. When your `.npmrc` references `${NPM_TOKEN}`, set the variable or the dependency install fails.
 
 ## Project resolution
 

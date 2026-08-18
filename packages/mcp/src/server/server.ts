@@ -124,6 +124,8 @@ export class MCPServer extends MCPServerBase {
   private stdioTransport?: StdioServerTransport;
   private sseTransport?: SSEServerTransport;
   private sseHonoTransports: Map<string, SSETransport>;
+  /** Auth info for the in-flight Hono SSE message POST, keyed by session id. */
+  private sseHonoAuthInfo: Map<string, unknown> = new Map();
   private streamableHTTPTransports: Map<string, NodeStreamableHTTPServerTransport> = new Map();
   // Track server instances for each HTTP session
   private httpServerInstances: Map<string, Server> = new Map();
@@ -1690,7 +1692,7 @@ export class MCPServer extends MCPServerBase {
    * export default app;
    * ```
    */
-  public async startHonoSSE({ url, ssePath, messagePath, context }: MCPServerHonoSSEOptions) {
+  public async startHonoSSE({ url, ssePath, messagePath, context, authInfo }: MCPServerHonoSSEOptions) {
     const honoContext = context as unknown as Context;
 
     try {
@@ -1710,6 +1712,11 @@ export class MCPServer extends MCPServerBase {
         }
         if (!this.sseHonoTransports.has(sessionId)) {
           return honoContext.text(`No transport found for sessionId ${sessionId}`, 400);
+        }
+        if (authInfo) {
+          this.sseHonoAuthInfo.set(sessionId, authInfo);
+        } else {
+          this.sseHonoAuthInfo.delete(sessionId);
         }
         const message = await this.sseHonoTransports.get(sessionId)?.handlePostMessage(honoContext);
         if (!message) {
@@ -2193,12 +2200,30 @@ export class MCPServer extends MCPServerBase {
     stream.onAbort(() => {
       this.logger.debug('SSE Transport aborted with sessionId:', { sessionId });
       this.sseHonoTransports.delete(sessionId);
+      this.sseHonoAuthInfo.delete(sessionId);
     });
     try {
       await this.server.connect(sseTransport);
+
+      // The Hono SSE transport has no Node request to carry `req.auth`, so the
+      // SDK never receives auth info for these messages. Inject whatever the
+      // adapter resolved for the current POST so tools still see
+      // `extra.authInfo`, matching the streamable HTTP transport.
+      const onmessage = sseTransport.onmessage?.bind(sseTransport);
+      if (onmessage) {
+        sseTransport.onmessage = (message: Parameters<typeof onmessage>[0], extra?: unknown) => {
+          const authInfo = this.sseHonoAuthInfo.get(sessionId);
+          (onmessage as (message: unknown, extra?: unknown) => void)(
+            message,
+            authInfo ? { ...(extra as Record<string, unknown> | undefined), authInfo } : extra,
+          );
+        };
+      }
+
       this.server.onclose = async () => {
         this.logger.debug('SSE Transport closed with sessionId:', { sessionId });
         this.sseHonoTransports.delete(sessionId);
+        this.sseHonoAuthInfo.delete(sessionId);
         await this.server.close();
       };
 

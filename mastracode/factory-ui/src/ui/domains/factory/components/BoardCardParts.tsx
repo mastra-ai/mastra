@@ -1,7 +1,11 @@
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { MessageSquare, Play, TriangleAlert } from 'lucide-react';
 import type { ReactElement } from 'react';
 
+import type { BoardCardStatus } from '../boardCardStatus';
 import { HIDDEN_CARD_LABELS, SOURCE_LABELS } from '../boardItems';
 import type { WorkItemSource } from '../services/workItems';
 
@@ -14,13 +18,6 @@ export function SourceTitle({ source, title }: { source: WorkItemSource; title: 
   );
 }
 
-/**
- * Card titles are clipped to one line, so the full text is only reachable on
- * hover. The tooltip anchors to the whole card rather than the title span: in
- * `WorkItemCard` the click target is an `absolute inset-0 z-10` overlay that
- * paints over the title, so a trigger on the title itself would never see a
- * pointer event.
- */
 export function CardTitleTooltip({ title, children }: { title: string; children: ReactElement }) {
   return (
     // The app-wide provider uses a 0ms delay, which is fine for icon buttons but
@@ -33,6 +30,105 @@ export function CardTitleTooltip({ title, children }: { title: string; children:
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
+  );
+}
+
+/**
+ * Card chrome a hover can reveal: the click affordance and the actions menu.
+ * Gated on `pointer-fine` because a touch screen has no hover to reveal it
+ * with, and stays up while its menu is open.
+ */
+export const REVEAL_ON_CARD_HOVER =
+  'transition-opacity duration-200 ease-out motion-reduce:transition-none pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-within:opacity-100 pointer-fine:aria-expanded:opacity-100';
+
+type IdleBoardCardStatus = Extract<BoardCardStatus, { kind: 'idle' }>;
+
+function IdleCardStatus({ status, className }: { status: IdleBoardCardStatus; className?: string }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        'text-ui-xs text-icon4 ml-auto flex shrink-0 items-center gap-1.5',
+        className,
+        REVEAL_ON_CARD_HOVER,
+      )}
+    >
+      {status.affordance === 'open' ? <MessageSquare size={11} aria-hidden /> : <Play size={11} aria-hidden />}
+      {status.label}
+    </span>
+  );
+}
+
+export function CardIdleOverlay({ status }: { status: IdleBoardCardStatus }) {
+  return (
+    <IdleCardStatus
+      status={status}
+      className="pointer-events-none pointer-fine:absolute pointer-fine:right-3 pointer-fine:bottom-3 pointer-fine:z-20 pointer-fine:ml-0"
+    />
+  );
+}
+
+/** The card's one status row: a hover hint when idle, a live region once something is happening. */
+export function CardStatus({
+  status,
+  onRetry,
+  retrying,
+}: {
+  status: BoardCardStatus;
+  /** Re-queues the failed rule effect; omitted when nothing is retryable. */
+  onRetry?: () => void;
+  retrying?: boolean;
+}) {
+  if (status.kind === 'idle') return <IdleCardStatus status={status} />;
+
+  if (status.kind === 'busy') {
+    return (
+      <span
+        role="status"
+        aria-live="polite"
+        className="text-ui-xs text-icon4 ml-auto flex shrink-0 items-center gap-1.5"
+      >
+        <Spinner size="sm" aria-hidden className="size-3" />
+        {status.label}
+      </span>
+    );
+  }
+
+  const message = (
+    <span
+      role="alert"
+      tabIndex={status.detail === undefined ? undefined : 0}
+      className={cn(
+        'text-ui-xs text-error flex min-w-0 items-start gap-1.5',
+        status.detail !== undefined &&
+          'focus-visible:outline-accent1 relative cursor-help underline decoration-dotted underline-offset-2 outline-none focus-visible:outline-2',
+      )}
+    >
+      <TriangleAlert size={11} aria-hidden className="mt-0.5 shrink-0" />
+      <span className="min-w-0 wrap-anywhere">{status.label}</span>
+    </span>
+  );
+
+  return (
+    // Failure text plus its Retry never share a line with anything else.
+    <div className="flex w-full items-start justify-between gap-2">
+      {status.detail === undefined ? (
+        message
+      ) : (
+        // Raw failure text stays one hover away instead of costing a row.
+        <Tooltip>
+          <TooltipTrigger render={message} />
+          <TooltipContent side="top" className="max-w-80">
+            <span className="wrap-anywhere whitespace-pre-wrap">{status.detail}</span>
+          </TooltipContent>
+        </Tooltip>
+      )}
+      {onRetry && (
+        <Button type="button" variant="outline" size="sm" className="relative" disabled={retrying} onClick={onRetry}>
+          {retrying ? 'Retrying…' : 'Retry'}
+        </Button>
+      )}
+    </div>
   );
 }
 
@@ -56,15 +152,15 @@ export function CardLabels({ labels }: { labels: readonly string[] }) {
       {visibleLabels.map(label => (
         <span
           key={label}
-          className="border-border1 text-ui-xs text-icon4 inline-flex h-6 max-w-full items-center gap-1 rounded-full border px-2"
+          className="border-border1 text-ui-xs text-icon4 inline-flex h-5 max-w-full items-center gap-1 rounded-full border px-1.5"
           title={label}
         >
-          <span className={cn('size-1.5 shrink-0 rounded-full', labelDotClass(label))} aria-hidden />
+          <span className={cn('size-1 shrink-0 rounded-full', labelDotClass(label))} aria-hidden />
           <span className="truncate">{label}</span>
         </span>
       ))}
       {hiddenCount > 0 && (
-        <span className="border-border1 text-ui-xs text-icon3 inline-flex h-6 items-center rounded-full border px-2">
+        <span className="border-border1 text-ui-xs text-icon3 inline-flex h-5 items-center rounded-full border px-1.5">
           +{hiddenCount}
         </span>
       )}

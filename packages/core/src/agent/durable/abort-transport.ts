@@ -44,10 +44,14 @@ export async function subscribeToAbortRequests(
   onAbortRequested: () => void,
 ): Promise<() => Promise<void>> {
   const topic = AGENT_CONTROL_TOPIC(runId);
-  const handler = (event: { type?: string }) => {
+  // Every delivery is acknowledged, including control events this listener
+  // ignores. An ignored delivery is still a delivery, and a durable transport
+  // keeps unacknowledged entries pending for the life of the subscription.
+  const handler = async (event: { type?: string }, ack?: () => Promise<void>) => {
     if (event?.type === AgentControlEventTypes.ABORT_REQUEST) {
       onAbortRequested();
     }
+    await ack?.();
   };
 
   await pubsub.subscribe(topic, handler as Parameters<PubSub['subscribe']>[1]);

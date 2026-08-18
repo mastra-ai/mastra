@@ -8,6 +8,7 @@ import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-ada
 import {
   MASTRA_FRAMEWORK_PUBLIC_KEY,
   MastraServer as MastraServerBase,
+  applyMcpRequestAuth,
   checkRouteFGA,
   isZodError,
   normalizeQueryParams,
@@ -18,6 +19,7 @@ import { toReqRes, toFetchResponse } from 'fetch-to-node';
 import type { Context, ExecutionContext, HonoRequest, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { stream } from 'hono/streaming';
+import { propagateClientDisconnect } from './mcp-disconnect';
 export { createAuthMiddleware } from './auth-middleware';
 export type { HonoAuthMiddlewareOptions } from './auth-middleware';
 // Browser stream setup (Hono-specific WebSocket implementation)
@@ -368,7 +370,13 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       const { req, res } = toReqRes(response.req.raw);
 
       // Merge class-level mcpOptions with route-specific options (route takes precedence)
-      const options = { ...this.mcpOptions, ...routeMcpOptions };
+      const { setRequestAuth, ...options } = { ...this.mcpOptions, ...routeMcpOptions };
+
+      // `toReqRes` builds a fresh IncomingMessage, so the principal resolved by
+      // auth middleware never reaches the MCP transport unless we bridge it here.
+      // This runs before startHTTP so every branch (stateless, existing session,
+      // new session) sees the same `req.auth`.
+      await applyMcpRequestAuth({ req, requestContext: response.get('requestContext'), setRequestAuth });
 
       // Do NOT await startHTTP — let it run in the background so SSE
       // notifications stream to the client as they are written.
@@ -401,17 +409,28 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           }
         });
 
-      return await toFetchResponse(res);
+      return propagateClientDisconnect(await toFetchResponse(res), res);
     } else if (route.responseType === 'mcp-sse') {
       // MCP SSE transport
       const { server, ssePath, messagePath } = result as MCPSseTransportResult;
 
       try {
+        // SSE has no Node request to hang `req.auth` on, so resolve the auth info
+        // here and pass it explicitly. Reuse the same bridge as streamable HTTP so
+        // a `setRequestAuth` hook sees a real request object.
+        const { req } = toReqRes(response.req.raw);
+        await applyMcpRequestAuth({
+          req,
+          requestContext: response.get('requestContext'),
+          setRequestAuth: this.mcpOptions?.setRequestAuth,
+        });
+
         return await server.startHonoSSE({
           url: new URL(response.req.url),
           ssePath: `${resolvedPrefix}${ssePath}`,
           messagePath: `${resolvedPrefix}${messagePath}`,
           context: response,
+          authInfo: (req as typeof req & { auth?: unknown }).auth,
         });
       } catch {
         return response.json({ error: 'Error handling MCP SSE request' }, 500);
@@ -663,9 +682,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
   }
 
   async registerCustomApiRoutes(): Promise<void> {
-    if (!(await this.buildCustomRouteHandler())) return;
-
-    const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes ?? [];
+    const routes = await this.registerSchemaApiRoutes();
+    if (!(await this.buildCustomRouteHandler(routes))) return;
 
     for (const route of routes) {
       const serverRoute: ServerRoute = {

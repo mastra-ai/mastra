@@ -9,6 +9,7 @@ export { fastModePrompt } from './fast.js';
 import { buildBasePrompt } from '@mastra/core/coding-agent';
 import type { PromptContext as BasePromptContext } from '@mastra/core/coding-agent';
 import { hasTavilyKey } from '../../tools/index.js';
+import { getLocalPlansRelativeDir } from '../../utils/plans.js';
 import { loadAgentInstructions, formatAgentInstructions, createGitRefInstructionReader } from './agent-instructions.js';
 import { buildModePromptFn } from './build.js';
 import { fastModePrompt } from './fast.js';
@@ -49,7 +50,12 @@ export function buildFullPrompt(ctx: PromptContext): string {
   }
 
   // Build mode-aware tool guidance
-  const toolGuidance = buildToolGuidance(ctx.modeId, { hasWebSearch, deniedTools });
+  const factoryProjectId = typeof ctx.state?.factoryProjectId === 'string' ? ctx.state.factoryProjectId : undefined;
+  const toolGuidance = buildToolGuidance(ctx.modeId, {
+    hasWebSearch,
+    deniedTools,
+    plansDir: getLocalPlansRelativeDir({ factoryProjectId }),
+  });
 
   // Map new context to base context
   const baseCtx: BasePromptContext = {

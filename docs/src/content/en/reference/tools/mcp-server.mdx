@@ -8,7 +8,7 @@ packages:
 
 # MCPServer
 
-The `MCPServer` class provides the functionality to expose your existing Mastra tools and Agents as a Model Context Protocol (MCP) server. This allows any MCP client (like Cursor, Windsurf, or Claude Desktop) to connect to these capabilities and make them available to an agent.
+The `MCPServer` class provides the functionality to expose your existing Mastra tools and Agents as a Model Context Protocol (MCP) server. Any MCP client, such as Cursor, Windsurf, or Claude Desktop, can connect to these capabilities and make them available to an agent.
 
 Note that if you only need to use your tools or agents directly within your Mastra application, you don't necessarily need to create an MCP server. This API is specifically for exposing your Mastra tools and agents to _external_ MCP clients.
 
@@ -193,7 +193,7 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
 
 A powerful feature of `MCPServer` is its ability to automatically expose your Mastra Agents as callable tools. When you provide agents in the `agents` property of the configuration:
 
-- **Tool Naming**: Each agent is converted into a tool named `ask_<agentKey>`, where `<agentKey>` is the key you used for that agent in the `agents` object. For instance, if you configure `agents: { myAgentKey: myAgentInstance }`, a tool named `ask_myAgentKey` will be created.
+- **Tool Naming**: Each agent is converted into a tool with the name `ask_<agentKey>`, where `<agentKey>` is the key you used for that agent in the `agents` object. For instance, if you configure `agents: { myAgentKey: myAgentInstance }`, a tool with the name `ask_myAgentKey` will be created.
 
 - **Tool Functionality**:
   - **Description**: The generated tool's description will be in the format: "Ask agent `<AgentName>` a question. Original agent instructions: `<agent description>`".
@@ -201,7 +201,7 @@ A powerful feature of `MCPServer` is its ability to automatically expose your Ma
   - **Execution**: When this tool is called, it invokes the corresponding agent's `generate()` method with the provided `query`.
   - **Output**: The direct result from the agent's `generate()` method is returned as the output of the tool.
 
-- **Name collisions.** If an explicit tool defined in the `tools` configuration has the same name as an agent-derived tool (e.g., a tool named `ask_myAgentKey` alongside an agent keyed as `myAgentKey`), the _explicitly defined tool will take precedence_. The agent won't be converted into a tool in this conflicting case, and a warning will be logged.
+- **Name collisions.** If an explicit tool defined in the `tools` configuration has the same name as an agent-derived tool (e.g., a tool with the name `ask_myAgentKey` alongside an agent keyed as `myAgentKey`), the _explicitly defined tool will take precedence_. The agent won't be converted into a tool in this conflicting case, and a warning will be logged.
 
 This makes it straightforward to allow MCP clients to interact with your agents using natural language queries, like any other tool.
 
@@ -213,7 +213,7 @@ The description for this generated tool will be: "Ask agent `<agent.name>` a que
 
 For an agent to be converted into a tool, it **must** have a non-empty `description` string property set in its configuration when it was instantiated (e.g., `new Agent({ id: 'my-agent', name: 'myAgent', description: 'This agent does X.', ... })`). If an agent is passed to `MCPServer` with a missing or empty `description`, an error will be thrown when the `MCPServer` is instantiated, and server setup will fail.
 
-This allows you to quickly expose the generative capabilities of your agents through the MCP, enabling clients to "ask" your agents questions directly.
+Clients can use MCP to access your agents' generative capabilities and ask them questions directly.
 
 ### Accessing MCP Context in Tools
 
@@ -264,6 +264,51 @@ const fetchUserData = createTool({
   },
 })
 ```
+
+#### Where `authInfo` comes from
+
+When an MCP server is served by a Mastra server, `extra.authInfo` is populated from the principal resolved by `server.auth`. Nothing extra is required:
+
+```typescript
+export const mastra = new Mastra({
+  mcpServers: { myServer },
+  server: {
+    auth: new MastraJwtAuth({ secret: process.env.JWT_SECRET! }),
+  },
+})
+```
+
+The authenticated user is mapped to `authInfo` as:
+
+| `authInfo` field | Value |
+| - | - |
+| `token` | The bearer token or session cookie value used for the request |
+| `clientId` | The first present of `user.id`, `user.sub`, `user.userId`, `user.email` |
+| `scopes` | `user.scopes`, `user.scope`, or `user.permissions`, normalized to an array |
+| `extra.user` | The full user object returned by the auth provider |
+
+If your own middleware performs the verification, set `server.mcpOptions.setRequestAuth` to build `authInfo` yourself. The hook replaces the default mapping and applies to both the streamable HTTP and SSE transports:
+
+```typescript
+export const mastra = new Mastra({
+  mcpServers: { myServer },
+  server: {
+    middleware: [verifyBearerToken], // stores the payload on the request context
+    mcpOptions: {
+      setRequestAuth: (req, requestContext) => {
+        const payload = requestContext.get('bearerPayload')
+        req.auth = {
+          token: payload.token,
+          clientId: payload.sub,
+          scopes: payload.scope.split(' '),
+        }
+      },
+    },
+  },
+})
+```
+
+Leaving `req.auth` unset inside the hook opts the request out of auth info entirely.
 
 ## Methods
 
@@ -515,7 +560,7 @@ serve(async req => {
 })
 ```
 
-:::info[When to use serverless: true]
+:::note[When to use serverless: true]
 
 Use `serverless: true` when deploying to environments where each request runs in a fresh, stateless execution context:
 
@@ -1140,7 +1185,7 @@ Notification methods (`resources.notifyListChanged()`, `prompts.notifyListChange
 
 ## Examples
 
-For practical examples of setting up and deploying an MCPServer, see the [Publishing an MCP Server guide](/guides/guide/publishing-mcp-server).
+For a practical example of packaging a stdio server, see [Publish a stdio server package](/docs/connections/mcp#publish-a-stdio-server-package).
 
 The example at the beginning of this page also demonstrates how to instantiate `MCPServer` with both tools and agents.
 
@@ -1481,7 +1526,7 @@ const customMiddleware = createOAuthMiddleware({
 
 ## Authentication context
 
-Tools can access request metadata via `context.mcp.extra` when using HTTP-based transports. This allows you to pass authentication info, user context, or any custom data from your HTTP middleware to your MCP tools.
+Tools can access request metadata via `context.mcp.extra` when using HTTP-based transports. You can pass authentication info and user context, as well as custom data from your HTTP middleware to your MCP tools.
 
 ### How it works
 
@@ -1891,6 +1936,9 @@ const calculatorTool = createTool({
     num2: z.number(),
     operation: z.enum(['add', 'subtract']),
   }),
+  mcp: {
+    _meta: { ui: { resourceUri: 'ui://calculator/main' } },
+  },
   execute: async ({ num1, num2, operation }) => {
     const result = operation === 'add' ? num1 + num2 : num1 - num2
     return {
@@ -1914,7 +1962,7 @@ const server = new MCPServer({
 })
 ```
 
-Link a tool to its app resource by setting `_meta.ui.resourceUri` on the tool to the matching `ui://` URI. The server auto-normalizes this metadata when registering tools. Visit [MCP Apps](/docs/mcp/overview) for the full app bridge API and usage patterns.
+Link a tool to its app resource by setting `mcp._meta.ui.resourceUri` in `createTool()` to the matching `ui://` URI. The server normalizes this metadata for older hosts when listing tools. Visit [MCP Apps](/docs/connections/mcp) for the full app bridge API and usage patterns.
 
 ## Related information
 

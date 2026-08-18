@@ -65,7 +65,7 @@ async function resolveKickoffMessage(
   if (!invocation) return null;
   if (invocation.type === 'prompt') return invocation.prompt;
 
-  const skills = session.getWorkspace().skills;
+  const skills = session.getWorkspace()?.skills;
   await skills?.maybeRefresh();
   const skill = await skills?.get(invocation.skillName);
   if (!skill || skill['user-invocable'] === false) {
@@ -139,7 +139,8 @@ export class FactoryStartCoordinator {
     // or reminders — those files are attacker-writable in a PR branch.
     const untrustedCheckout =
       request.workItem.input.externalSource?.type === 'pull-request' ||
-      (request.invocation?.type === 'skill' && request.invocation.skillName === 'factory-review');
+      (request.invocation?.type === 'skill' &&
+        (request.invocation.skillName === 'factory-review' || request.invocation.skillName === 'factory-rereview'));
     // The trusted ref the SDK may serve project instruction files from on an
     // untrusted checkout (the PR's base branch). Prefer the session record's
     // base branch; fall back to the intake metadata captured from the PR.

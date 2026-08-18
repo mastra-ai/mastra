@@ -12,8 +12,10 @@ import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRules } from '../rules/types.js';
+import { isFactoryRuleStage } from '../rules/types.js';
 import type { SandboxFleet } from '../sandbox/fleet.js';
 import { ensureFactorySourceSession, resolveFactoryDefaultModelId } from '../session/factory-session.js';
+import { LiveSessions } from '../session/live-sessions.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
@@ -79,6 +81,7 @@ export interface FactoryApiRoutesDeps {
   /** Resolved Factory rule set, threaded from the host (no service locator). */
   rules: FactoryRules;
   factoryTransitionService?: FactoryTransitionService;
+  sessionRetirement?: import('../sandbox/session-retirement.js').SessionRetirementCoordinator;
   onFactoryRuntime?: (runtime: {
     transitionService: FactoryTransitionService;
     prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
@@ -180,7 +183,8 @@ export async function prepareFactoryRuleBinding(
     branch,
   });
   const destinationStage = input.item.stages.length === 1 ? input.item.stages[0] : undefined;
-  if (!destinationStage) throw new Error('Factory skill invocation requires one exclusive board stage.');
+  if (!isFactoryRuleStage(destinationStage))
+    throw new Error('Factory skill invocation requires one exclusive board stage.');
 
   await coordinator.prepare({
     orgId: input.record.orgId,
@@ -190,7 +194,7 @@ export async function prepareFactoryRuleBinding(
     defaultModelId: await resolveFactoryDefaultModelId(projects, input.record.factoryProjectId),
     threadTitle: `${input.role === 'review' ? 'PR' : 'Issue'}: ${input.item.title}`,
     kickoffKey: input.record.id,
-    destinationStage: destinationStage as 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done',
+    destinationStage,
     workItem: {
       id: input.item.id,
       role: input.role,
@@ -436,6 +440,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           auth: deps.auth,
           audit: deps.audit,
           intake: deps.domains.intake,
+          projects: deps.domains.projects,
           integrations: (deps.integrations ?? []).flatMap(({ integration }) =>
             integration.intake ? [{ id: integration.id, intake: integration.intake }] : [],
           ),
@@ -450,6 +455,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           queueHealth: deps.domains.queueHealth,
           transitionService,
           startCoordinator,
+          liveSessions: new LiveSessions(deps.controller),
         }).routes()
       : []),
   ];

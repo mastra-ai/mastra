@@ -1,6 +1,6 @@
 import { createClient } from '@clickhouse/client';
 import { TABLE_SCHEMAS, TABLE_SPANS } from '@mastra/core/storage';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   addOnClusterToDDL,
   applyReplicationToDDL,
@@ -170,38 +170,54 @@ ORDER BY id`;
 
   it('checks existing tables before emitting replicated CREATE TABLE DDL', async () => {
     const queries: string[] = [];
+    const commands: string[] = [];
     const client = {
       query: async ({ query }: { query: string }) => {
         queries.push(query);
         return { json: async () => [] };
+      },
+      command: async ({ query }: { query: string }) => {
+        commands.push(query);
       },
     };
     const db = new ClickhouseDB({ client: client as any, ttl: undefined, replication: { cluster: 'cluster-a' } });
 
     await db.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
 
+    expect(queries).toHaveLength(1);
     expect(queries[0]).toContain('FROM system.tables');
-    expect(queries[1]).toContain(`CREATE TABLE IF NOT EXISTS ${TABLE_SPANS} ON CLUSTER 'cluster-a'`);
-    expect(queries[1]).toContain(
+    expect(commands).toHaveLength(1);
+    expect(commands[0]).toContain(`CREATE TABLE IF NOT EXISTS ${TABLE_SPANS} ON CLUSTER 'cluster-a'`);
+    expect(commands[0]).toContain(
       "ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/{database}/{table}', '{replica}', updatedAt)",
     );
   });
 
-  it('throws on existing local tables before emitting CREATE TABLE DDL', async () => {
+  it('warns on existing local tables and still emits CREATE TABLE DDL', async () => {
     const queries: string[] = [];
+    const commands: string[] = [];
     const client = {
       query: async ({ query }: { query: string }) => {
         queries.push(query);
         return { json: async () => [{ name: TABLE_SPANS, engine: 'ReplacingMergeTree' }] };
       },
+      command: async ({ query }: { query: string }) => {
+        commands.push(query);
+      },
     };
     const db = new ClickhouseDB({ client: client as any, ttl: undefined, replication: { cluster: 'cluster-a' } });
+    const warn = vi.fn();
+    db.__setLogger({ warn } as any);
 
-    await expect(db.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] })).rejects.toThrow(
-      'existing Mastra tables use non-replicated local engines',
-    );
+    await db.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
+
     expect(queries).toHaveLength(1);
     expect(queries[0]).toContain('FROM system.tables');
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining(TABLE_SPANS));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('ReplacingMergeTree'));
+    expect(commands).toHaveLength(1);
+    expect(commands[0]).toContain(`CREATE TABLE IF NOT EXISTS ${TABLE_SPANS} ON CLUSTER 'cluster-a'`);
   });
 
   it('emits ON CLUSTER syntax accepted by ClickHouse', async () => {

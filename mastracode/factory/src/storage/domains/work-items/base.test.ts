@@ -6,7 +6,7 @@
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, vi } from 'vitest';
 
-import { applyStageTransition, isAutomationActor, WorkItemRelationError, WorkItemsStorage } from './base.js';
+import { applyStageTransition, isAgentActor, WorkItemRelationError, WorkItemsStorage } from './base.js';
 import type { WorkItemStageEntry } from './base.js';
 
 const input = {
@@ -60,6 +60,41 @@ describe('WorkItemsStorage', () => {
     expect(reused.created).toBe(false);
     expect(reused.item.id).toBe(first.item.id);
     expect(reused.item.title).toBe('Updated title');
+  });
+
+  it('purges replay state when a linked work item is deleted', async () => {
+    const storage = await makeStorage();
+    const scope = { orgId: 'org1', factoryProjectId: 'p1' };
+    const created = await storage.upsert({ ...scope, userId: 'u', input });
+    const commit = () =>
+      storage.commitRuleEvaluation({
+        ...scope,
+        workItemId: null,
+        ingress: { identity: 'linear:issue:ENG-1:1', triggerType: 'issue.observed' },
+        ruleSetVersion: 'v1',
+        expectedRevision: null,
+        actor: { type: 'system', id: 'rules' },
+        outcome: { status: 'accepted' },
+        decisions: [
+          {
+            type: 'upsertLinkedWorkItem',
+            sourceKey: 'github:issue:42',
+            idempotencyKey: 'decision-1',
+            board: 'work',
+            stage: 'triage',
+          } as never,
+        ],
+        causalChain: [],
+        now: new Date(),
+      });
+
+    expect((await commit()).status).toBe('committed');
+    expect((await commit()).status).toBe('replayed');
+
+    await storage.delete({ orgId: 'org1', id: created.item.id });
+
+    // Stale ingress no longer short-circuits, so nothing resurrects the deleted card.
+    expect((await commit()).status).toBe('committed');
   });
 
   it('lists newest-first within the org/project scope and updates atomically', async () => {
@@ -315,19 +350,19 @@ describe('applyStageTransition', () => {
   });
 });
 
-describe('isAutomationActor', () => {
+describe('isAgentActor', () => {
   it.each([
-    ['factory', true],
-    ['system', true],
-    ['automation', true],
-    ['factory-rule-dispatcher', true],
-    ['factory-tool-result-rule', true],
     ['agent:binding-1', true],
-    ['github:someone', true],
+    ['factory-tool-result-rule', true],
+    // The poller's actors: a machine moved the card, but no agent worked it.
+    ['factory-rule-dispatcher', false],
+    ['github:someone', false],
+    ['factory', false],
+    ['system', false],
     ['user_wos_123', false],
     ['', false],
     [undefined, false],
-  ] as const)('isAutomationActor(%j) → %s', (actor, expected) => {
-    expect(isAutomationActor(actor)).toBe(expected);
+  ] as const)('isAgentActor(%j) → %s', (actor, expected) => {
+    expect(isAgentActor(actor)).toBe(expected);
   });
 });

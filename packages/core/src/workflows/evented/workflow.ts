@@ -9,6 +9,8 @@ import { isAgentCompatible } from '../../agent/subagent';
 import type { SubAgent } from '../../agent/subagent';
 import { TripWire } from '../../agent/trip-wire';
 import { isSupportedLanguageModel } from '../../agent/utils';
+import { MastraFGAPermissions, getWorkflowFGAResourceId, requireFGA } from '../../auth/ee';
+import type { ActorSignal } from '../../auth/ee';
 import type { MastraBase } from '../../base';
 import { RequestContext } from '../../di';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
@@ -47,7 +49,8 @@ import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, Standa
 import { WorkflowRunOutput } from '../../stream/RunOutput';
 import type { ChunkType, LanguageModelUsage, ProviderMetadata } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
-import { Tool } from '../../tools/tool';
+import type { Tool } from '../../tools/tool';
+import { isMastraTool } from '../../tools/toolchecks';
 import type { ToolExecutionContext } from '../../tools/types';
 import type { DynamicArgument } from '../../types';
 import type { ExecutionEngine, ExecutionGraph } from '../../workflows/execution-engine';
@@ -140,7 +143,10 @@ export function cloneStep<TStepId extends string>(
 // ============================================
 
 function isToolStep(input: unknown): input is ToolStep<any, any, any, any, any> {
-  return input instanceof Tool;
+  // `isMastraTool` also recognizes tools by their shared marker symbol, which
+  // survives module duplication (Vite SSR) and spread copies — e.g. tools
+  // renamed by `resolveStoredToolProviders` — where `instanceof` fails.
+  return isMastraTool(input);
 }
 
 /**
@@ -160,7 +166,7 @@ function isStepParams(input: unknown): input is StepParams<any, any, any, any, a
     'id' in input &&
     'execute' in input &&
     !isAgent(input) &&
-    !(input instanceof Tool)
+    !isMastraTool(input)
   );
 }
 
@@ -175,7 +181,7 @@ function isProcessor(obj: unknown): obj is Processor {
     'id' in obj &&
     typeof (obj as any).id === 'string' &&
     !isAgent(obj) &&
-    !(obj instanceof Tool) &&
+    !isMastraTool(obj) &&
     (typeof (obj as any).processInput === 'function' ||
       typeof (obj as any).processInputStep === 'function' ||
       typeof (obj as any).processOutputStream === 'function' ||
@@ -1651,6 +1657,7 @@ export function createWorkflow<
       shouldPersistSnapshot: params.options?.shouldPersistSnapshot ?? (() => true),
       pruneSnapshot: params.options?.pruneSnapshot,
       tracingPolicy: params.options?.tracingPolicy,
+      onStart: params.options?.onStart,
       onFinish: params.options?.onFinish,
       onError: params.options?.onError,
     },
@@ -1745,6 +1752,7 @@ export class EventedWorkflow<
         workflowId: this.id,
         runId: runIdToUse,
         resourceId: options?.resourceId,
+        isInternalWorkflow: this.isInternal,
         executionEngine: this.executionEngine,
         executionGraph: this.executionGraph,
         serializedStepGraph: this.serializedStepGraph,
@@ -1823,6 +1831,7 @@ export class EventedRun<
     workflowId: string;
     runId: string;
     resourceId?: string;
+    isInternalWorkflow?: boolean;
     executionEngine: ExecutionEngine;
     executionGraph: ExecutionGraph;
     serializedStepGraph: SerializedStepFlowEntry[];
@@ -1897,6 +1906,17 @@ export class EventedRun<
 
     const inputDataToUse = await this._validateInput(inputData ?? ({} as TInput));
     const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
+
+    // Pre-flight gate: runs ahead of the initial run-record write below, and rejects the caller
+    // if it throws. createRun() has already persisted a pending record, which stays pending.
+    await this.executionEngine.invokeStartCallback({
+      runId: this.runId,
+      workflowId: this.workflowId,
+      resourceId: this.resourceId,
+      getInitData: () => inputDataToUse,
+      requestContext,
+      state: initialStateToUse as Record<string, any>,
+    });
 
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
     // Always persist the initial run record regardless of shouldPersistSnapshot.
@@ -2019,6 +2039,17 @@ export class EventedRun<
 
     const inputDataToUse = await this._validateInput(inputData ?? ({} as TInput));
     const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
+
+    // Pre-flight gate: runs ahead of the initial run-record write below, and rejects the caller
+    // if it throws. createRun() has already persisted a pending record, which stays pending.
+    await this.executionEngine.invokeStartCallback({
+      runId: this.runId,
+      workflowId: this.workflowId,
+      resourceId: this.resourceId,
+      getInitData: () => inputDataToUse,
+      requestContext,
+      state: initialStateToUse as Record<string, any>,
+    });
 
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
     // Always persist the initial run record regardless of shouldPersistSnapshot.
@@ -2167,6 +2198,7 @@ export class EventedRun<
     requestContext,
     perStep,
     outputOptions,
+    actor,
   }: {
     resumeData?: TResume;
     step?:
@@ -2178,6 +2210,7 @@ export class EventedRun<
       | string
       | string[];
     requestContext?: RequestContext;
+    actor?: ActorSignal;
     perStep?: boolean;
     outputOptions?: {
       includeState?: boolean;
@@ -2220,6 +2253,7 @@ export class EventedRun<
             requestContext,
             perStep,
             outputOptions,
+            actor,
           });
 
           if (self.streamOutput) {
@@ -2259,12 +2293,33 @@ export class EventedRun<
     label?: string;
     forEachIndex?: number;
     requestContext?: RequestContext;
+    actor?: ActorSignal;
     perStep?: boolean;
     outputOptions?: {
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    const fgaProvider = this.mastra?.getServer()?.fga;
+    if (fgaProvider && !this.isInternalWorkflow) {
+      await requireFGA({
+        fgaProvider,
+        user: params.requestContext?.get('user' as any),
+        resource: { type: 'workflow', id: getWorkflowFGAResourceId(this.workflowId) },
+        permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
+        requestContext: params.requestContext,
+        actor: params.actor,
+        context: {
+          resourceId: this.resourceId,
+        },
+        metadata: {
+          workflowId: this.workflowId,
+          runId: this.runId,
+          resourceId: this.resourceId,
+        },
+      });
+    }
+
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
     if (!workflowsStore) {
       throw new Error('Cannot resume workflow: workflows store is required');
@@ -2418,13 +2473,13 @@ export class EventedRun<
     return executionResultPromise;
   }
 
-  watch(cb: (event: WorkflowStreamEvent) => void): () => void {
+  watch(cb: (event: WorkflowStreamEvent) => void | Promise<void>): () => void {
     const watchCb = async (event: Event, ack?: () => Promise<void>) => {
       if (event.runId !== this.runId) {
         return;
       }
 
-      cb(event.data);
+      await cb(event.data);
       await ack?.();
     };
 
@@ -2435,13 +2490,13 @@ export class EventedRun<
     };
   }
 
-  async watchAsync(cb: (event: WorkflowStreamEvent) => void): Promise<() => void> {
+  async watchAsync(cb: (event: WorkflowStreamEvent) => void | Promise<void>): Promise<() => void> {
     const watchCb = async (event: Event, ack?: () => Promise<void>) => {
       if (event.runId !== this.runId) {
         return;
       }
 
-      cb(event.data);
+      await cb(event.data);
       await ack?.();
     };
 

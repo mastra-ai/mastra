@@ -408,6 +408,28 @@ export interface WorkflowRunState {
 }
 
 /**
+ * Info object passed to the onStart callback before a workflow run begins.
+ */
+export interface WorkflowStartCallbackInfo {
+  /** The unique workflow run ID */
+  runId: string;
+  /** The workflow identifier */
+  workflowId: string;
+  /** Resource/user identifier for multi-tenant scenarios (optional) */
+  resourceId?: string;
+  /** Function to get the initial workflow input data */
+  getInitData: () => any;
+  /** The Mastra instance (if registered) */
+  mastra?: Mastra;
+  /** The request context */
+  requestContext: RequestContext;
+  /** The Mastra logger for structured logging */
+  logger: IMastraLogger;
+  /** The initial workflow state */
+  state: Record<string, any>;
+}
+
+/**
  * Result object passed to the onFinish callback when a workflow completes.
  */
 export interface WorkflowFinishCallbackResult {
@@ -475,6 +497,11 @@ export interface WorkflowOptions {
   tracingPolicy?: TracingPolicy;
   validateInputs?: boolean;
   /**
+   * Whether workflow step lifecycle events are emitted. Defaults to true.
+   * Internal workflows may disable these events when no consumer observes them.
+   */
+  emitStepEvents?: boolean;
+  /**
    * When true, nested runs created by execute() share the parent's pubsub
    * instance instead of creating an isolated one. Used by durable agent
    * workflows so inner step events reach the outer subscriber.
@@ -495,6 +522,20 @@ export interface WorkflowOptions {
    * read on resume (stale suspend payloads, duplicated message arrays).
    */
   pruneSnapshot?: (params: { snapshot: WorkflowRunState; workflowStatus: WorkflowRunStatus }) => WorkflowRunState;
+
+  /**
+   * Called before a workflow run starts executing, and awaited.
+   * This callback is invoked server-side without requiring client-side .watch().
+   *
+   * Unlike `onFinish`/`onError`, errors thrown here are NOT swallowed: they reject
+   * the `start()`/`stream()` call and the run never executes, so the hook can act as
+   * a pre-flight gate (quota checks, entitlement checks). This mirrors how input
+   * schema validation failures behave: no step executes. The pending run record that
+   * `createRun()` already wrote is left as-is, so a gated run stays at `pending`.
+   *
+   * Fires only when a run first starts, not on resume, restart, or time travel.
+   */
+  onStart?: (info: WorkflowStartCallbackInfo) => Promise<void> | void;
 
   /**
    * Called when workflow execution completes (success, failed, suspended, or tripwire).

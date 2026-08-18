@@ -52,14 +52,14 @@ const workspace = new Workspace({
     name: 'filesystem',
     type: 'WorkspaceFilesystem | WorkspaceFilesystemResolver',
     description:
-      'Filesystem provider instance, or a resolver function that receives `requestContext` and returns a filesystem per request. See [dynamic filesystem](/docs/workspace/filesystem#dynamic-filesystem).',
+      'Filesystem provider instance, or a resolver function that receives `requestContext` and returns a filesystem per request. See [multi-tenant filesystems](/docs/sandbox/filesystem#multi-tenant-filesystems).',
     isOptional: true,
   },
   {
     name: 'sandbox',
     type: 'WorkspaceSandbox | WorkspaceSandboxResolver',
     description:
-      'Sandbox provider instance, or a resolver function that receives `requestContext` and returns a sandbox per request. See [dynamic sandbox](/docs/workspace/sandbox#dynamic-sandbox).',
+      'Sandbox provider instance, or a resolver function that receives `requestContext` and returns a sandbox per request. See [multi-tenant sandboxes](/docs/sandbox/overview#multi-tenant-sandboxes).',
     isOptional: true,
   },
   {
@@ -94,7 +94,7 @@ const workspace = new Workspace({
     name: 'embedder',
     type: 'Embedder',
     description:
-      'Function that turns text into vectors. Required when `vectorStore` is set. Accepts either a single-text function `(text: string) => Promise<number[]>` or a batch-capable function `(texts: string[]) => Promise<number[][]>` that has a `batch: true` property and an optional `maxBatchSize`. See [Batch embedding](/docs/workspace/search#batch-embedding).',
+      'Function that turns text into vectors. Required when `vectorStore` is set. Accepts either a single-text function `(text: string) => Promise<number[]>` or a batch-capable function `(texts: string[]) => Promise<number[][]>` that has a `batch: true` property and an optional `maxBatchSize`. See [Batch embedding](/docs/sandbox/search#batch-embedding).',
     isOptional: true,
   },
   {
@@ -143,38 +143,17 @@ const workspace = new Workspace({
         parameters: [
           {
             name: 'enabled',
-            type: 'boolean',
-            description: 'Whether the tool is available to agents',
+            type: 'boolean | ((context: ToolConfigContext) => boolean | Promise<boolean>)',
+            description: 'Default availability for all workspace tools. Per-tool settings take precedence.',
             isOptional: true,
             defaultValue: 'true',
           },
           {
             name: 'requireApproval',
-            type: 'boolean',
-            description: 'Whether the tool requires user approval before execution',
+            type: 'boolean | ((context: ToolConfigWithArgsContext) => boolean | Promise<boolean>)',
+            description: 'Default approval policy for all workspace tools. Per-tool settings take precedence.',
             isOptional: true,
             defaultValue: 'false',
-          },
-          {
-            name: 'name',
-            type: 'string',
-            description:
-              'Custom name to expose this tool as. Replaces the default `mastra_workspace_*` name. The config key must still use the original `WORKSPACE_TOOLS` constant.',
-            isOptional: true,
-          },
-          {
-            name: 'requireReadBeforeWrite',
-            type: 'boolean',
-            description: 'For write tools: require reading the file first to prevent overwrites',
-            isOptional: true,
-            defaultValue: 'false',
-          },
-          {
-            name: 'maxOutputTokens',
-            type: 'number',
-            description: 'Maximum tokens for tool output. Output exceeding this limit is truncated using tiktoken.',
-            isOptional: true,
-            defaultValue: '2000',
           },
           {
             name: 'writeLockTimeoutMs',
@@ -203,6 +182,17 @@ const workspace = new Workspace({
 ]}
 />
 
+For a resolver-backed sandbox, the default `'placeholder'` mode avoids provisioning a sandbox while workspace instructions are built. Set `instructions.dynamicSandbox` to `'resolve'` when the instructions must come from the resolved sandbox:
+
+```typescript
+const workspace = new Workspace({
+  sandbox: ({ requestContext }) => resolveSandbox(requestContext),
+  instructions: { dynamicSandbox: 'resolve' },
+})
+```
+
+This calls the resolver while building instructions. To describe a request-specific environment without provisioning it, pass a function that returns instruction text from `requestContext` instead.
+
 ## Tool configuration
 
 The `tools` option accepts a `WorkspaceToolsConfig` object that controls which workspace tools are enabled and their safety settings.
@@ -227,12 +217,72 @@ const workspace = new Workspace({
 })
 ```
 
-The config object has two parts:
+The config object has two types of settings:
 
-- **Global defaults** (`enabled`, `requireApproval`): Apply to all tools unless overridden
-- **Per-tool overrides** - Use `WORKSPACE_TOOLS` constants as keys to configure individual tools
+- **Global settings**: `enabled` and `requireApproval` apply to all workspace tools unless overridden. `hooks` and `writeLockTimeoutMs` are global-only and can't be configured per tool.
+- **Per-tool overrides**: Use `WORKSPACE_TOOLS` constants as keys to configure individual tools
 
-See [workspace overview](/docs/workspace/overview#tool-configuration) for more examples.
+Per-tool overrides accept the following options:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'enabled',
+    type: 'boolean | ((context: ToolConfigContext) => boolean | Promise<boolean>)',
+    description: 'Whether the tool is available. Functions are evaluated when Mastra lists tools.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'requireApproval',
+    type: 'boolean | ((context: ToolConfigWithArgsContext) => boolean | Promise<boolean>)',
+    description: 'Whether the tool requires approval. Functions are evaluated when the tool executes.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Name exposed to the model instead of the default `mastra_workspace_*` name.',
+    isOptional: true,
+  },
+  {
+    name: 'requireReadBeforeWrite',
+    type: 'boolean | ((context: ToolConfigWithArgsContext) => boolean | Promise<boolean>)',
+    description: 'For write tools, require the agent to read an existing file before changing it.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'maxOutputTokens',
+    type: 'number',
+    description: 'Maximum output tokens for tools that support token-based truncation.',
+    isOptional: true,
+  },
+]}
+/>
+
+`ToolConfigContext` contains `{ requestContext, workspace }`. Execution-time policies use `ToolConfigWithArgsContext`, which also contains the tool's `args`.
+
+```typescript {5-13}
+import { Workspace, WORKSPACE_TOOLS } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  id: 'my-workspace',
+  tools: {
+    enabled: ({ requestContext }) => requestContext.get('workspace-tools') === true,
+    [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
+      requireApproval: ({ args }) => (args.path as string).startsWith('/protected'),
+      requireReadBeforeWrite: true,
+    },
+    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+      maxOutputTokens: 5000,
+    },
+  },
+})
+```
+
+See [Filesystem tools](/docs/sandbox/filesystem#using-mounts), [Sandbox tools](/docs/sandbox/overview#using-the-sandbox), [LSP inspection](/docs/sandbox/lsp#tool-name-remapping), and [Search tools](/docs/sandbox/search#agent-tools) for capability-specific configuration.
 
 ### Tool name remapping
 
@@ -486,7 +536,7 @@ const instructions = workspace.getInstructions({ requestContext })
 
 #### `getInstructionsAsync(opts?)`
 
-Returns combined workspace instructions. Use this when the workspace uses resolver-backed providers. A runtime-defined filesystem is resolved per request; a runtime-defined sandbox contributes stable placeholder text unless `instructions.dynamicSandbox` is set to `'resolve'`.
+Returns combined workspace instructions. Use this when the workspace uses resolver-backed providers. A runtime-defined filesystem is resolved per request. A runtime-defined sandbox contributes stable placeholder text unless `instructions.dynamicSandbox` is set to `'resolve'`.
 
 ```typescript
 const instructions = await workspace.getInstructionsAsync({ requestContext })
@@ -675,7 +725,7 @@ Added when a filesystem is configured:
 | `mastra_workspace_mkdir` | Create a directory. Creates parent directories automatically if they don't exist. |
 | `mastra_workspace_grep` | Search file contents using regex patterns. Supports glob filtering, context lines, and case-insensitive search. |
 
-With a static filesystem, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are excluded when the filesystem is in read-only mode. With a [runtime-defined filesystem](/docs/workspace/filesystem#dynamic-filesystem), write tools are always included and read-only is enforced at runtime.
+With a static filesystem, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are excluded when the filesystem is in read-only mode. With a [runtime-defined filesystem](/docs/sandbox/filesystem#multi-tenant-filesystems), write tools are always included and read-only is enforced at runtime.
 
 The `read_file` tool accepts `mediaTypes` and `maxMediaBytes` options to control which mime types are surfaced to the model as native media parts and how large those files can be:
 
@@ -724,7 +774,7 @@ Added when a sandbox is configured:
 | `mastra_workspace_get_process_output` | Get stdout, stderr, and status of a background process by PID. Accepts `tail` to limit output lines and `wait: true` to block until exit. Only available when the sandbox has a process manager. |
 | `mastra_workspace_kill_process` | Kill a background process by PID. Returns the last 50 lines of output. Only available when the sandbox has a process manager. |
 
-With a static sandbox, capability checks (`executeCommand`, `processes`) decide which tool variants are exposed. With a [runtime-defined sandbox](/docs/workspace/sandbox#dynamic-sandbox), all sandbox tools are registered and the runtime throws a clear error if the resolved sandbox doesn't implement a requested capability.
+With a static sandbox, capability checks (`executeCommand`, `processes`) decide which tool variants are exposed. With a [runtime-defined sandbox](/docs/sandbox/overview#multi-tenant-sandboxes), all sandbox tools are registered and the runtime throws a clear error if the resolved sandbox doesn't implement a requested capability.
 
 The `execute_command` tool accepts a `backgroundProcesses` option for lifecycle callbacks on background processes:
 
@@ -772,7 +822,7 @@ The `execute_command` tool accepts a `backgroundProcesses` option for lifecycle 
 ]}
 />
 
-See [Background process callbacks](/docs/workspace/sandbox#background-process-callbacks) for usage examples.
+See [Background processes](/docs/sandbox/overview#background-processes) for callback examples.
 
 ### Search tools
 
@@ -795,4 +845,4 @@ Added when skills are configured:
 | `skill_search` | Search across skill content. Accepts an optional list of skill names to filter and a `topK` parameter. |
 | `skill_read` | Read a specific file (reference, script, or asset) from a skill directory. |
 
-When multiple skills share the same name, `list()` returns all of them. `get()` with a name applies tie-breaking (local > managed > external). If two skills share the same name and source type, `get()` throws an error. Pass a skill's full path to `get()` to bypass tie-breaking. See [Skills with the same name](/docs/workspace/skills#same-named-skills) for details.
+When multiple skills share the same name, `list()` returns all of them. `get()` with a name applies tie-breaking (local > managed > external). If two skills share the same name and source type, `get()` throws an error. Pass a skill's full path to `get()` to bypass tie-breaking. See [Skills with the same name](/docs/sandbox/skills#same-named-skills) for details.
