@@ -54,6 +54,7 @@ import {
 import { builtInFactoryRules } from './rules/defaults.js';
 import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
 import { FactoryPhaseStateProcessor } from './rules/processor.js';
+import { createTerminalStageCleanup } from './rules/terminal-cleanup.js';
 import { createFactoryTransitionTools } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
 import type { FactoryRules } from './rules/types.js';
@@ -539,11 +540,29 @@ export class MastraFactory {
               workItemId,
             })
         : undefined;
+    // Terminal-stage cleanup: ingest any trailing tool results from the item's
+    // bound threads, then revoke the bindings so completed items leave the
+    // reconcile walk (the active-binding set otherwise grows forever), and
+    // finally release the item's sandboxes. Each step is best-effort — a
+    // committed transition never fails on cleanup.
+    const onTerminalStage = workItemsReady
+      ? createTerminalStageCleanup({
+          workItems: workItemsStorage,
+          // `factoryProcessor` is assigned below in this scope; the cleanup
+          // only runs on transitions long after bootstrap completes.
+          reconcileBinding: async (binding): Promise<void> => {
+            await factoryProcessor?.reconcileBinding(binding);
+          },
+          // Session retirement supersedes the older direct sandbox release: it
+          // invalidates the session and hands its sandbox back to the pool.
+          ...(retireTerminalSessions ? { releaseSandboxes: retireTerminalSessions } : {}),
+        })
+      : retireTerminalSessions;
     const transitionService = workItemsReady
       ? new FactoryTransitionService({
           rules,
           storage: workItemsStorage,
-          ...(retireTerminalSessions ? { onTerminalStage: retireTerminalSessions } : {}),
+          ...(onTerminalStage ? { onTerminalStage } : {}),
         })
       : undefined;
     const projectRoutes = new ProjectRoutes({
