@@ -49,6 +49,8 @@ export interface FactoryRuleItemContext {
   title: string;
   url: string | null;
   stages: readonly string[];
+  /** Intake-stamped facts about the source — repository id, reporter login, labels. */
+  metadata: Record<string, unknown> | null;
 }
 
 export type FactoryRuleActor =

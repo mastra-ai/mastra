@@ -335,6 +335,7 @@ export class GithubRules {
               title: relatedItem.title,
               url: relatedItem.externalSource?.url ?? null,
               stages: relatedItem.stages,
+              metadata: relatedItem.metadata,
             },
             board: relatedItem.externalSource?.type === 'pull-request' ? ('review' as const) : ('work' as const),
             itemRevision: relatedItem.revision,

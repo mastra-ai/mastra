@@ -101,13 +101,41 @@ function planWorkItem(context: FactoryStageRuleContext) {
  * handoff a skill would define is unnecessary here: Building ends by opening a
  * pull request, which arrives as its own event and raises the Review card.
  */
+/**
+ * The reporter earns a `Co-Authored-By` trailer on the work their report caused.
+ * Only a GitHub issue qualifies: Linear stamps a display name and a manual card
+ * stamps nothing, and neither resolves to the GitHub identity a trailer needs.
+ * Factory's own reports are skipped — crediting ourselves is noise.
+ */
+// A GitHub login is alphanumeric with interior hyphens — no underscores, no
+// spaces. Checking the grammar rejects the placeholder the issue poller stamps
+// when the reporter's account is gone (`__unknown__`), which would otherwise
+// become a trailer crediting an account that does not exist.
+const GITHUB_LOGIN = /^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/;
+
+function reporterCoAuthor(context: FactoryStageRuleContext) {
+  if (context.source !== 'issue') return undefined;
+  const author = context.item.metadata?.author;
+  if (typeof author !== 'string' || !author) return undefined;
+  if (author.endsWith('[bot]') || !GITHUB_LOGIN.test(author)) return undefined;
+  return author;
+}
+
 function buildWorkItem(context: FactoryStageRuleContext) {
   const subject = context.item.url ? `the approved plan for ${context.item.url}` : 'the approved plan';
+  const reporter = reporterCoAuthor(context);
+  // The trailer needs the reporter's numeric id, which intake does not stamp, so
+  // the agent resolves it from the same issue it is already reading.
+  const credit = reporter
+    ? ` The work was reported by @${reporter}: credit them on every commit with a ` +
+      `\`Co-Authored-By: ${reporter} <ID+${reporter}@users.noreply.github.com>\` trailer, ` +
+      `resolving ID with \`gh api users/${reporter} --jq .id\`.`
+    : '';
   return {
     type: 'invokeSkill',
     idempotencyKey: `${context.ingress.id}:build`,
     role: 'work',
-    prompt: `Implement ${subject}. Open a pull request when the work is ready for review.`,
+    prompt: `Implement ${subject}. Open a pull request when the work is ready for review.${credit}`,
   } as const;
 }
 

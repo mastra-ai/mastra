@@ -4,7 +4,7 @@ import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { defaultFactoryRules } from './defaults.js';
 import { FactoryTransitionService } from './transition-service.js';
-import type { FactoryRuleBoard, FactoryRuleStage } from './types.js';
+import type { FactoryRuleBoard, FactoryRuleStage, FactoryStageRuleContext } from './types.js';
 import { MAX_FACTORY_RULE_CAUSAL_DEPTH } from './validation.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
@@ -16,6 +16,7 @@ async function createItem(
     source: 'github-issue' | 'github-pr' | 'slack-thread';
     sourceKey: string;
     stages: string[];
+    metadata: Record<string, unknown>;
   }> = {},
 ) {
   const orgId = overrides.orgId ?? 'org-1';
@@ -34,7 +35,7 @@ async function createItem(
         title: 'Fix the bug',
         stages: overrides.stages ?? ['intake'],
         sessions: {},
-        metadata: {},
+        metadata: overrides.metadata ?? {},
       },
     })
   ).item;
@@ -98,6 +99,30 @@ describe('FactoryTransitionService', () => {
     expect(result).toMatchObject({ status: 'accepted' });
     expect(issueRule).not.toHaveBeenCalled();
     expect(manualRule).toHaveBeenCalledTimes(1);
+  });
+
+  it('hands the intake-stamped facts to the rule that runs on the stage', async () => {
+    // Rules that read intake facts — who reported the issue, which repository it
+    // came from — are unreachable unless the stamped metadata survives into the
+    // context, and a rule reading `undefined` fails silently rather than loudly.
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { metadata: { author: 'octocat' } });
+    const rule = vi.fn((_context: FactoryStageRuleContext) => ({
+      type: 'notify' as const,
+      idempotencyKey: 'effect-1',
+      title: 'Ran',
+    }));
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({
+        version: 'rules-v1',
+        overrides: { work: { execute: { issue: { onEnter: rule } } } },
+      }),
+      storage,
+    });
+
+    await service.transition(request(item, { stage: 'execute' }));
+
+    expect(rule.mock.calls[0]?.[0]).toMatchObject({ item: { metadata: { author: 'octocat' } } });
   });
 
   it('invokes onTerminalStage only after a transition commits into a terminal stage', async () => {
