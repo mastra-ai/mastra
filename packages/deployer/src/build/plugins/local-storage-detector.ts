@@ -41,6 +41,11 @@ export interface PreflightMetadata {
   version: 1;
   localPaths: LocalStorageDetection[];
   userEnvRefs: string[];
+  /**
+   * Best-effort static detection of a top-level Mastra
+   * `backgroundTasks: { enabled: true }` config in rendered user modules.
+   */
+  backgroundTasksEnabled?: boolean;
 }
 
 /**
@@ -101,6 +106,41 @@ function walkAst(node: AstNode, visit: (node: AstNode) => void): void {
       walkAst(value, visit);
     }
   }
+}
+
+function propertyName(node: AstNode): string | undefined {
+  const key = node.key as AstNode | undefined;
+  if (key?.type === 'Identifier' && !node.computed) return key.name as string;
+  if (key?.type === 'Literal' && typeof key.value === 'string') return key.value;
+  return undefined;
+}
+
+function objectProperty(node: AstNode, name: string): AstNode | undefined {
+  if (node.type !== 'ObjectExpression') return undefined;
+  const properties = (node.properties as AstNode[] | undefined) ?? [];
+  const property = properties.find(item => item.type === 'Property' && propertyName(item) === name);
+  return property?.value as AstNode | undefined;
+}
+
+/**
+ * Best-effort static detection of `new Mastra({ backgroundTasks: { enabled:
+ * true } })` in a user module. Dynamic values, spreads, imported config
+ * objects, and aliased Mastra imports intentionally fall through; preflight
+ * only acts on configurations it can prove are enabled.
+ */
+function findBackgroundTasksEnabled(ast: AstNode): boolean {
+  let enabled = false;
+  walkAst(ast, node => {
+    if (enabled || node.type !== 'NewExpression') return;
+    const callee = node.callee as AstNode | undefined;
+    if (callee?.type !== 'Identifier' || callee.name !== 'Mastra') return;
+    const config = (node.arguments as AstNode[] | undefined)?.[0];
+    if (!config) return;
+    const backgroundTasks = objectProperty(config, 'backgroundTasks');
+    const enabledValue = backgroundTasks ? objectProperty(backgroundTasks, 'enabled') : undefined;
+    if (enabledValue?.type === 'Literal' && enabledValue.value === true) enabled = true;
+  });
+  return enabled;
 }
 
 /** Find the first `process.env.X` / `process.env['X']` read inside an expression. */
@@ -197,6 +237,7 @@ function findGuardedValues(ast: AstNode, values: Set<string>): Map<string, strin
 export function localStorageDetector(rootDir?: string): Plugin {
   const userModuleMatches = new Map<string, ModuleMatch[]>();
   const userModuleEnvRefs = new Map<string, Set<string>>();
+  const backgroundTasksEnabledModules = new Set<string>();
   let normalizedRoot: string | undefined;
   if (rootDir) {
     let root = rootDir.replace(/\\/g, '/');
@@ -228,21 +269,27 @@ export function localStorageDetector(rootDir?: string): Plugin {
         }
       }
 
-      if (matches.length > 0) {
-        // Best-effort structural pass: a parse failure (or a non-Rollup test
-        // context without `this.parse`) simply means no `guardedBy`, which
-        // preserves the previous always-error behavior.
-        try {
-          const ast = this.parse(_code) as unknown as AstNode;
+      // Best-effort structural pass: a parse failure (or a non-Rollup test
+      // context without `this.parse`) leaves both optional detections absent.
+      // Existing local-path matches remain unguarded, preserving the safe
+      // fallback behavior.
+      try {
+        const ast = this.parse(_code) as unknown as AstNode;
+        if (findBackgroundTasksEnabled(ast)) {
+          backgroundTasksEnabledModules.add(id);
+        }
+        if (matches.length > 0) {
           const guarded = findGuardedValues(ast, new Set(matches.map(m => m.value)));
           for (const match of matches) {
             const guardedBy = guarded.get(match.value);
             if (guardedBy) match.guardedBy = guardedBy;
           }
-        } catch {
-          // ignore — fall back to unguarded detections
         }
+      } catch {
+        // ignore — optional static metadata is best-effort
+      }
 
+      if (matches.length > 0) {
         userModuleMatches.set(id, matches);
       }
 
@@ -253,6 +300,7 @@ export function localStorageDetector(rootDir?: string): Plugin {
       const detections: LocalStorageDetection[] = [];
       const seen = new Set<string>();
       const userEnvRefs = new Set<string>();
+      let backgroundTasksEnabled = false;
 
       for (const chunk of Object.values(bundle)) {
         if (chunk.type !== 'chunk') continue;
@@ -262,6 +310,9 @@ export function localStorageDetector(rootDir?: string): Plugin {
 
           for (const ref of userModuleEnvRefs.get(moduleId) ?? []) {
             userEnvRefs.add(ref);
+          }
+          if (backgroundTasksEnabledModules.has(moduleId)) {
+            backgroundTasksEnabled = true;
           }
 
           const matches = userModuleMatches.get(moduleId);
@@ -281,6 +332,7 @@ export function localStorageDetector(rootDir?: string): Plugin {
         version: 1,
         localPaths: detections,
         userEnvRefs: [...userEnvRefs].sort(),
+        ...(backgroundTasksEnabled ? { backgroundTasksEnabled: true } : {}),
       };
 
       this.emitFile({

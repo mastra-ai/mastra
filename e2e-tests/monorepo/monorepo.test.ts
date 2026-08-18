@@ -347,6 +347,31 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       );
     });
 
+    it(
+      'should emit preflight metadata when background tasks are statically enabled',
+      async () => {
+        const sourcePath = join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'index.ts');
+        const originalSource = await readFile(sourcePath, 'utf-8');
+        const enabledSource = originalSource.replace(
+          'export const mastra = new Mastra({',
+          'export const mastra = new Mastra({\n  backgroundTasks: { enabled: true },',
+        );
+
+        try {
+          await writeFile(sourcePath, enabledSource);
+          await runBuild(fixturePath);
+
+          const metadataPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'preflight-metadata.json');
+          const metadata = JSON.parse(await readFile(metadataPath, 'utf-8'));
+          expect(metadata.backgroundTasksEnabled).toBe(true);
+        } finally {
+          await writeFile(sourcePath, originalSource);
+          await runBuild(fixturePath);
+        }
+      },
+      timeout,
+    );
+
     afterAll(async () => {
       if (proc) {
         try {

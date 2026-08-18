@@ -25,6 +25,8 @@ export interface Environment {
    * Absent on platforms that predate the field.
    */
   managedEnvVarNames?: string[];
+  /** Absent on platforms that predate managed background workers. */
+  backgroundWorkersConfig?: { enabled: boolean };
   createdAt: string;
   updatedAt: string;
 }
@@ -135,6 +137,33 @@ export async function createEnvironment(
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
     throwApiError('Failed to create environment', resp.status, extractApiErrorDetail(err));
+  }
+
+  const data = (await resp.json()) as { environment: Environment };
+  return data.environment;
+}
+
+/** Enable dedicated background workers for an environment. */
+export async function enableBackgroundWorkers(
+  token: string,
+  orgId: string,
+  projectId: string,
+  envId: string,
+  redisSource: 'managed' | 'byo',
+): Promise<Environment> {
+  const resp = await fetch(`${getApiUrl()}/v1/projects/${projectId}/environments/${envId}/background-workers`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      'x-organization-id': orgId,
+    },
+    body: JSON.stringify({ config: { enabled: true }, redisSource }),
+  });
+
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throwApiError('Failed to enable background workers', resp.status, extractApiErrorDetail(err));
   }
 
   const data = (await resp.json()) as { environment: Environment };

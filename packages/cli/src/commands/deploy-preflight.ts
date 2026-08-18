@@ -11,18 +11,18 @@ import { DB_ENV_VAR_NAMES } from './db/platform-api.js';
 /*  Types                                                             */
 /* ------------------------------------------------------------------ */
 
-export type PreflightIssueCode = 'MISSING_ENV_VAR' | 'LOCAL_STORAGE_PATH';
+export type PreflightIssueCode = 'MISSING_ENV_VAR' | 'LOCAL_STORAGE_PATH' | 'BACKGROUND_WORKERS_DISABLED';
 
-/**
- * Structured hint describing how deploy can offer to auto-fix an issue
- * before it becomes a blocking error. Consumed by
- * `deploy/auto-provision-database.ts` when running in an interactive TTY.
- */
-export type PreflightAutofix = {
-  kind: 'create-managed-database';
-  provider: DatabaseKind;
-  envVarName: string;
-};
+/** Structured hints deploy can offer to fix before evaluating blockers. */
+export type PreflightAutofix =
+  | {
+      kind: 'create-managed-database';
+      provider: DatabaseKind;
+      envVarName: string;
+    }
+  | {
+      kind: 'enable-background-workers';
+    };
 
 export interface PreflightIssue {
   code: PreflightIssueCode;
@@ -114,6 +114,7 @@ interface PreflightMetadata {
   version: number;
   localPaths: LocalStorageDetection[];
   userEnvRefs: string[];
+  backgroundTasksEnabled?: boolean;
 }
 
 /** Legacy metadata file emitted by older deployers (and still emitted by newer ones). */
@@ -170,9 +171,15 @@ export async function preflightBuildOutput(
      * Omit for lint / studio contexts.
      */
     environmentName?: string;
+    /**
+     * Whether the target environment already has dedicated background workers
+     * enabled. Undefined means the connected platform predates worker status,
+     * so this check is skipped rather than producing a false blocker.
+     */
+    backgroundWorkersEnabled?: boolean;
   } = {},
 ): Promise<PreflightIssue[]> {
-  const { hasEnvFile = true, managedEnvVarNames, environmentName } = options;
+  const { hasEnvFile = true, managedEnvVarNames, environmentName, backgroundWorkersEnabled } = options;
   const outputDir = join(targetDir, '.mastra', 'output');
   const entryPath = join(outputDir, 'index.mjs');
 
@@ -207,6 +214,20 @@ export async function preflightBuildOutput(
   issues.push(
     ...(await checkLocalStoragePaths(outputDir, metadata, envVars, hasEnvFile, managedEnvVarNames, environmentName)),
   );
+
+  if (metadata?.backgroundTasksEnabled && backgroundWorkersEnabled === false) {
+    const environment = environmentName ? ` for the ${environmentName} environment` : '';
+    issues.push({
+      code: 'BACKGROUND_WORKERS_DISABLED',
+      severity: 'error',
+      message: `Background tasks are enabled in your Mastra config, but dedicated background workers are disabled${environment}.`,
+      fix: [
+        `Enable Background Workers${environment} in Mastra Cloud project settings.`,
+        'Starter and Team projects also require the Scalable Server add-on.',
+      ],
+      autofix: { kind: 'enable-background-workers' },
+    });
+  }
 
   return issues;
 }
@@ -463,7 +484,9 @@ export function dbCreateCommandFor(envVarName: string, environmentName?: string)
  * Returns undefined for env vars that don't map to a provider — those still
  * get a text-only fix.
  */
-export function dbAutofixFor(envVarName: string): PreflightAutofix | undefined {
+export function dbAutofixFor(
+  envVarName: string,
+): Extract<PreflightAutofix, { kind: 'create-managed-database' }> | undefined {
   for (const [kind, names] of Object.entries(DB_ENV_VAR_NAMES) as [DatabaseKind, string[]][]) {
     if (names.includes(envVarName)) {
       return { kind: 'create-managed-database', provider: kind, envVarName };

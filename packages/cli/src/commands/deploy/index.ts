@@ -34,7 +34,7 @@ import type { Environment } from '../env/platform-api.js';
 import { getDeployEnvFiles, loadDeployEnvFromDotenv, readEnvVars, getMastraVersion } from '../studio/deploy.js';
 import { createProject } from '../studio/platform-api.js';
 import { getProjectConfigToSave, loadProjectConfig, saveProjectConfig } from '../studio/project-config.js';
-import { maybeAutoProvisionDatabases } from './auto-provision-database.js';
+import { maybeApplyPreflightAutofixes } from './auto-provision-database.js';
 import { getOverwrittenEnvKeys } from './env-vars.js';
 import { assertDeployDir } from './validate-dir.js';
 
@@ -834,13 +834,13 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
       // but is jarring in a printed remediation command. The name is what
       // the user actually types.
       environmentName: environment.name,
+      backgroundWorkersEnabled: environment.backgroundWorkersConfig?.enabled,
     });
 
-    // If preflight flagged a blocking issue that a managed database would
-    // fix (e.g. TURSO_DATABASE_URL missing), offer to attach one inline
-    // rather than failing the deploy and asking the user to run
-    // `mastra env db create` themselves.
-    const autoProvisioned = await maybeAutoProvisionDatabases(issues, {
+    // Offer interactive fixes for supported preflight blockers. Databases are
+    // handled before workers so a newly-created managed Redis instance is
+    // ready when worker provisioning starts.
+    const autofixed = await maybeApplyPreflightAutofixes(issues, {
       token,
       orgId,
       projectId,
@@ -851,31 +851,29 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
         slug: environment.slug,
         name: environment.name,
         type: environment.type,
+        managedEnvVarNames: environment.managedEnvVarNames,
       },
+      envVars: preflightEnv,
       autoAccept,
     });
-    if (autoProvisioned.provisioned.length > 0) {
-      const attached = autoProvisioned.provisioned.map(d => `${d.name} (${d.kind})`).join(', ');
+    if (autofixed.provisioned.length > 0) {
+      const attached = autofixed.provisioned.map(d => `${d.name} (${d.kind})`).join(', ');
       p.log.success(`Attached managed database: ${attached}`);
 
-      // Re-run preflight with the newly-attached vars folded into the
-      // managed set. Without this, MISSING_ENV_VAR issues for the vars we
-      // just provisioned (TURSO_AUTH_TOKEN, TURSO_DATABASE_URL) still show
-      // as "not in the env file being deployed" — misleading right after
-      // we told the user the DB was attached. Merging is enough; no need
-      // to re-fetch the environment because attachDatabase's response is
-      // authoritative for the vars it just injected.
-      const mergedManagedNames = [
-        ...(environment.managedEnvVarNames ?? []),
-        ...autoProvisioned.newlyManagedEnvVarNames,
-      ];
+      // Re-run preflight with newly-created resource state folded in. This
+      // clears all issues resolved by database-provided env vars while keeping
+      // declined or failed worker setup as a blocker.
+      const mergedManagedNames = [...(environment.managedEnvVarNames ?? []), ...autofixed.newlyManagedEnvVarNames];
       issues = await preflightBuildOutput(targetDir, preflightEnv, {
         hasEnvFile: hasAmbientEnvFile,
         managedEnvVarNames: mergedManagedNames,
         environmentName: environment.name,
+        backgroundWorkersEnabled: autofixed.backgroundWorkersEnabled
+          ? true
+          : environment.backgroundWorkersConfig?.enabled,
       });
     } else {
-      issues = autoProvisioned.issues;
+      issues = autofixed.issues;
     }
 
     const outcome = await printPreflightIssues(issues, { autoAccept });
