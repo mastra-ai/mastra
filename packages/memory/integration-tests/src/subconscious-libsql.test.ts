@@ -231,7 +231,8 @@ describe('Subconscious LibSQL integration', () => {
     await storage.init();
 
     let streamCall = 0;
-    const reminder = 'Project Atlas launches January 15. Source KnowledgeItem: item-atlas-launch.';
+    let generateCall = 0;
+    const reminder = 'Project Atlas launches January 15.';
     const model = new MockLanguageModelV2({
       doStream: async () => {
         streamCall += 1;
@@ -250,13 +251,33 @@ describe('Subconscious LibSQL integration', () => {
           warnings: [],
         };
       },
-      doGenerate: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop' as const,
-        usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
-        warnings: [],
-        content: [{ type: 'text' as const, text: reminder }],
-      }),
+      // The remind lane: a reminder leaves through one send_reminder tool call, then a closing turn.
+      doGenerate: async () => {
+        generateCall += 1;
+        if (generateCall === 1) {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'tool-calls' as const,
+            usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+            warnings: [],
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: 'send-reminder-1',
+                toolName: 'send_reminder',
+                input: JSON.stringify({ reminder, sourceIds: ['item-atlas-launch'] }),
+              },
+            ],
+          };
+        }
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+          warnings: [],
+          content: [{ type: 'text' as const, text: 'Sent.' }],
+        };
+      },
     });
     const memory = new Memory({
       storage,
@@ -308,6 +329,9 @@ describe('Subconscious LibSQL integration', () => {
     expect(sendSignal).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'reactive', tagName: 'remembered', contents: expect.stringContaining(reminder) }),
     );
+    expect(sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ contents: expect.stringContaining('item-atlas-launch') }),
+    );
   });
 
   it('targets a resource-scoped reminder to its observed thread', async () => {
@@ -335,18 +359,38 @@ describe('Subconscious LibSQL integration', () => {
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],
       }),
-      doGenerate: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop' as const,
-        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-        warnings: [],
-        content: [
-          {
-            type: 'text' as const,
-            text: 'Project Atlas launches January 15. Source KnowledgeItem: item-atlas-resource-launch.',
-          },
-        ],
-      }),
+      doGenerate: (() => {
+        let generateCall = 0;
+        return async () => {
+          generateCall += 1;
+          if (generateCall === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              warnings: [],
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'send-reminder-1',
+                  toolName: 'send_reminder',
+                  input: JSON.stringify({
+                    reminder: 'Project Atlas launches January 15.',
+                    sourceIds: ['item-atlas-resource-launch'],
+                  }),
+                },
+              ],
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            warnings: [],
+            content: [{ type: 'text' as const, text: 'Sent.' }],
+          };
+        };
+      })(),
     });
     const memory = new Memory({
       storage,
