@@ -35,6 +35,7 @@ import type { ChunkType } from '../stream/types';
 import type { CoreTool, ToolHooks } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import type { OutputWriter } from '../workflows';
+import { assertThreadOwnedByResource } from './memory-thread-ownership';
 import { MessageList } from './message-list';
 import type { MastraDBMessage, MessageListInput, UIMessageWithMetadata } from './message-list/index';
 import type {
@@ -409,6 +410,12 @@ export class AgentLegacyHandler {
         let threadObject: StorageThreadType | undefined = undefined;
         const existingThread = await memory.getThreadById({ threadId });
         if (existingThread) {
+          assertThreadOwnedByResource({
+            thread: existingThread,
+            resourceId,
+            agentName: this.capabilities.name,
+          });
+
           if (
             (!existingThread.metadata && thread.metadata) ||
             (thread.metadata && !deepEqual(existingThread.metadata, thread.metadata))

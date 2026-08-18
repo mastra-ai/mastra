@@ -4,7 +4,6 @@ import type {
   ReasoningUIPart,
   TextUIPart,
   ToolInvocation,
-  ToolInvocationUIPart,
   UIMessage,
   UseChatOptions,
 } from '@ai-sdk/ui-utils';
@@ -53,6 +52,9 @@ import type {
   CompareVersionsResponse,
   DeleteAgentVersionResponse,
   RestoreAgentVersionResponse,
+  PartProviderMetadata,
+  MaybeProviderMetadata,
+  ToolInvocationUIPartWithMeta,
 } from '../types';
 
 import { parseClientRequestContext, requestContextQueryString, toQueryParams } from '../utils';
@@ -1305,18 +1307,35 @@ export class Agent extends BaseResource {
     let currentReasoningPart: ReasoningUIPart | undefined = undefined;
     let currentReasoningTextDetail: { type: 'text'; text: string; signature?: string } | undefined = undefined;
 
-    function updateToolInvocationPart(toolCallId: string, invocation: ToolInvocation) {
+    // `providerMetadata` has to land on the part itself, not inside `toolInvocation`: the
+    // server's MessageList adapters read `part.providerMetadata` when rebuilding the prompt,
+    // so metadata nested in the invocation (e.g. Gemini's `vertex.thoughtSignature`) is lost
+    // on the next turn of a client-tool continuation.
+    function updateToolInvocationPart(
+      toolCallId: string,
+      invocation: ToolInvocation,
+      partProviderMetadata?: PartProviderMetadata,
+    ) {
       const part = message.parts.find(
         part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === toolCallId,
-      ) as ToolInvocationUIPart | undefined;
+      ) as ToolInvocationUIPartWithMeta | undefined;
 
       if (part != null) {
         part.toolInvocation = invocation;
+        if (partProviderMetadata !== undefined) {
+          // Merge per namespace so a later chunk adding `mastra.*` doesn't drop `vertex.*`
+          // set by the original tool call.
+          part.providerMetadata = { ...(part.providerMetadata ?? {}), ...partProviderMetadata };
+        }
       } else {
-        message.parts.push({
+        const newPart: ToolInvocationUIPartWithMeta = {
           type: 'tool-invocation',
           toolInvocation: invocation,
-        });
+        };
+        if (partProviderMetadata !== undefined) {
+          newPart.providerMetadata = partProviderMetadata;
+        }
+        message.parts.push(newPart);
       }
     }
 
@@ -1525,7 +1544,7 @@ export class Agent extends BaseResource {
           message.toolInvocations.push(invocation);
         }
 
-        updateToolInvocationPart(value.toolCallId, invocation);
+        updateToolInvocationPart(value.toolCallId, invocation, (value as MaybeProviderMetadata).providerMetadata);
 
         execUpdate();
 
@@ -1545,7 +1564,7 @@ export class Agent extends BaseResource {
             // store the result in the tool invocation
             message.toolInvocations![message.toolInvocations!.length - 1] = invocation;
 
-            updateToolInvocationPart(value.toolCallId, invocation);
+            updateToolInvocationPart(value.toolCallId, invocation, (value as MaybeProviderMetadata).providerMetadata);
 
             execUpdate();
           }
@@ -1574,7 +1593,11 @@ export class Agent extends BaseResource {
 
         toolInvocations[toolInvocationIndex] = invocation as ToolInvocation;
 
-        updateToolInvocationPart(value.toolCallId, invocation as ToolInvocation);
+        updateToolInvocationPart(
+          value.toolCallId,
+          invocation as ToolInvocation,
+          (value as MaybeProviderMetadata).providerMetadata,
+        );
 
         execUpdate();
       },
@@ -1711,18 +1734,35 @@ export class Agent extends BaseResource {
     let currentReasoningPart: ReasoningUIPart | undefined = undefined;
     let currentReasoningTextDetail: { type: 'text'; text: string; signature?: string } | undefined = undefined;
 
-    function updateToolInvocationPart(toolCallId: string, invocation: ToolInvocation) {
+    // `providerMetadata` has to land on the part itself, not inside `toolInvocation`: the
+    // server's MessageList adapters read `part.providerMetadata` when rebuilding the prompt,
+    // so metadata nested in the invocation (e.g. Gemini's `vertex.thoughtSignature`) is lost
+    // on the next turn of a client-tool continuation.
+    function updateToolInvocationPart(
+      toolCallId: string,
+      invocation: ToolInvocation,
+      partProviderMetadata?: PartProviderMetadata,
+    ) {
       const part = message.parts.find(
         part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === toolCallId,
-      ) as ToolInvocationUIPart | undefined;
+      ) as ToolInvocationUIPartWithMeta | undefined;
 
       if (part != null) {
         part.toolInvocation = invocation;
+        if (partProviderMetadata !== undefined) {
+          // Merge per namespace so a later chunk adding `mastra.*` doesn't drop `vertex.*`
+          // set by the original tool call.
+          part.providerMetadata = { ...(part.providerMetadata ?? {}), ...partProviderMetadata };
+        }
       } else {
-        message.parts.push({
+        const newPart: ToolInvocationUIPartWithMeta = {
           type: 'tool-invocation',
           toolInvocation: invocation,
-        });
+        };
+        if (partProviderMetadata !== undefined) {
+          newPart.providerMetadata = partProviderMetadata;
+        }
+        message.parts.push(newPart);
       }
     }
 
@@ -1890,7 +1930,11 @@ export class Agent extends BaseResource {
               message.toolInvocations.push(invocation as ToolInvocation);
             }
 
-            updateToolInvocationPart(chunk.payload.toolCallId, invocation as ToolInvocation);
+            updateToolInvocationPart(
+              chunk.payload.toolCallId,
+              invocation as ToolInvocation,
+              (chunk.payload as MaybeProviderMetadata).providerMetadata,
+            );
 
             execUpdate();
 
@@ -1910,7 +1954,11 @@ export class Agent extends BaseResource {
                 // store the result in the tool invocation
                 message.toolInvocations![message.toolInvocations!.length - 1] = invocation as ToolInvocation;
 
-                updateToolInvocationPart(chunk.payload.toolCallId, invocation as ToolInvocation);
+                updateToolInvocationPart(
+                  chunk.payload.toolCallId,
+                  invocation as ToolInvocation,
+                  (chunk.payload as MaybeProviderMetadata).providerMetadata,
+                );
 
                 execUpdate();
               }
@@ -1999,7 +2047,11 @@ export class Agent extends BaseResource {
 
             toolInvocations[toolInvocationIndex] = invocation as ToolInvocation;
 
-            updateToolInvocationPart(chunk.payload.toolCallId, invocation as ToolInvocation);
+            updateToolInvocationPart(
+              chunk.payload.toolCallId,
+              invocation as ToolInvocation,
+              (chunk.payload as MaybeProviderMetadata).providerMetadata,
+            );
 
             execUpdate();
             break;

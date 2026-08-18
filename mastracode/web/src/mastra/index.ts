@@ -32,6 +32,7 @@ import { MastraFactory } from '@mastra/factory';
 import { defaultFactoryRules } from '@mastra/factory/rules/defaults';
 import type { FactoryStageRuleContext } from '@mastra/factory/rules/types';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
+import { parseAuthorizedBotsEnv } from '@mastra/factory/integrations/github/webhook';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import { SlackIntegration } from '@mastra/factory/integrations/slack/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
@@ -132,6 +133,9 @@ const github =
         clientSecret: githubClientSecret,
         slug: githubAppSlug,
         webhookSecret: process.env.GITHUB_APP_WEBHOOK_SECRET?.trim() || undefined,
+        // Extra reviewer bot logins this deployment trusts to trigger
+        // review/comment notifications, on top of the built-in defaults.
+        authorizedBots: parseAuthorizedBotsEnv(process.env.MASTRACODE_GITHUB_AUTHORIZED_BOTS),
       })
     : undefined;
 
