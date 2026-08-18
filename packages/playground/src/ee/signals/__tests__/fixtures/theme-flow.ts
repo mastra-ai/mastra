@@ -21,7 +21,7 @@ export const customSignalCatalog: SignalCatalogEntry[] = [
   },
   {
     name: 'tool_usage',
-    label: 'Tool Usage',
+    label: 'Tool Operations',
     description: 'How the agent uses tools.',
     order: 1,
     builtIn: false,

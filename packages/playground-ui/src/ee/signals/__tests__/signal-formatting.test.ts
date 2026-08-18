@@ -196,13 +196,16 @@ describe('signal catalog formatting', () => {
 
 describe('getSignalHue', () => {
   describe('when a custom signal name is supplied', () => {
-    it('returns a stable non-red hue separated from built-in hues', () => {
-      const firstHue = getSignalHue('tool_usage');
-      expect(getSignalHue('tool_usage')).toBe(firstHue);
-      expect(firstHue).not.toBe(0);
-      for (const builtInHue of [145, 35, 225, 300]) {
-        const distance = Math.abs(firstHue - builtInHue);
-        expect(Math.min(distance, 360 - distance)).toBeGreaterThanOrEqual(30);
+    it('returns stable hues separated from red and built-in hues', () => {
+      const names = Array.from({ length: 100 }, (_, index) => `custom_signal_${index}`);
+      const assignments = names.map(name => ({ name, hue: getSignalHue(name) }));
+      expect(new Set(assignments.map(({ hue }) => hue)).size).toBeGreaterThanOrEqual(50);
+      for (const { name, hue } of assignments) {
+        expect(getSignalHue(name)).toBe(hue);
+        for (const reservedHue of [0, 145, 35, 225, 300]) {
+          const distance = Math.abs(hue - reservedHue);
+          expect(Math.min(distance, 360 - distance)).toBeGreaterThanOrEqual(30);
+        }
       }
     });
   });

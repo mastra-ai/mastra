@@ -260,7 +260,7 @@ describe('Trace Intelligence page', () => {
       renderSignalsPage();
 
       const headers = await screen.findAllByTestId('signal-column-header');
-      expect(headers.map(header => header.textContent)).toEqual(['GOAL', 'TOOL USAGE', 'OUTCOME']);
+      expect(headers.map(header => header.textContent)).toEqual(['GOAL', 'TOOL OPERATIONS', 'OUTCOME']);
     });
 
     it('keeps collecting and processing custom signals visible with real counts', async () => {
