@@ -25,6 +25,7 @@ const item = {
   title: 'Issue 42',
   url: 'https://github.test/acme/repo/issues/42',
   stages: ['intake'],
+  metadata: null as Record<string, unknown> | null,
 };
 
 function reject() {
@@ -484,6 +485,42 @@ describe('defaultFactoryRules', () => {
         'Implement the approved plan for https://github.test/acme/repo/issues/42. Open a pull request when the work is ready for review.',
     });
     expect(decision).not.toHaveProperty('skillName');
+  });
+
+  function buildPrompt(source: 'issue' | 'linearIssue' | 'manual', metadata: Record<string, unknown> | null) {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.execute?.[source]?.onEnter;
+    const context = {
+      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
+      item: { ...item, metadata },
+      source,
+      stage: 'execute',
+      fromStage: 'planning',
+      toStage: 'execute',
+    } as FactoryStageRuleContext;
+    return Promise.resolve(rule?.(context)).then(decision => (decision as { prompt?: string } | undefined)?.prompt);
+  }
+
+  it('asks the builder to credit the reporter whose issue caused the work', async () => {
+    const prompt = await buildPrompt('issue', { author: 'octocat' });
+
+    expect(prompt).toContain('reported by @octocat');
+    expect(prompt).toContain('Co-Authored-By: octocat <ID+octocat@users.noreply.github.com>');
+    // Intake stamps a login but never the numeric id the trailer needs, so the
+    // builder is told where to get it rather than left to invent one.
+    expect(prompt).toContain('gh api users/octocat --jq .id');
+  });
+
+  it('credits nobody when the reporter is the Factory itself', async () => {
+    expect(await buildPrompt('issue', { author: 'mastra-platform[bot]' })).not.toContain('Co-Authored-By');
+  });
+
+  it.each([
+    ['linearIssue', 'a Linear display name'],
+    ['manual', 'nothing at all'],
+  ] as const)('credits nobody on a %s card, whose reporter is %s', async (source, _reporterKind) => {
+    // Only a GitHub login resolves to the identity a trailer needs; anything
+    // else would produce a trailer that credits no real account.
+    expect(await buildPrompt(source, { author: 'Ada Lovelace' })).not.toContain('Co-Authored-By');
   });
 
   it('keys the planning skill invocation once per ingress', async () => {

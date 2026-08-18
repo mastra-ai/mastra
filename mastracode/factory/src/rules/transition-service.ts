@@ -217,6 +217,7 @@ export class FactoryTransitionService {
         title: item.title,
         url: item.externalSource?.url ?? null,
         stages: [...item.stages],
+        metadata: item.metadata,
       },
       board: request.board,
       itemRevision: item.revision,
