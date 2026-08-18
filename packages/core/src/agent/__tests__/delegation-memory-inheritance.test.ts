@@ -163,6 +163,32 @@ describe('delegation memory inheritance (issue #21625)', () => {
     await expect(sub.getMemory()).resolves.toBe(ownMemory);
   });
 
+  it('does not pass inherited memory further down to a grandchild sub-agent', async () => {
+    const grandchild = makeSubAgent('grandchild');
+    const grandchildMemorySpy = vi.spyOn(grandchild, 'getMemory');
+
+    // The middle agent has no memory of its own, so it only ever sees the
+    // supervisor's memory for the duration of the delegated run.
+    const middle = new Agent({
+      id: 'sub-agent',
+      name: 'sub-agent',
+      instructions: 'You delegate too.',
+      model: makeSupervisorModel('grandchild', 'do the sub-thing'),
+      agents: { grandchild },
+    });
+    const supervisor = makeSupervisor(middle, new MockMemory());
+
+    await supervisor.generate('Delegate please', {
+      maxSteps: 3,
+      memory: { thread: 'thread-1', resource: 'resource-1' },
+    });
+
+    expect(grandchildMemorySpy).toHaveBeenCalled();
+    const resolved = await Promise.all(grandchildMemorySpy.mock.results.map(result => result.value));
+    expect(resolved.every(memory => memory === undefined)).toBe(true);
+    expect(grandchild.hasOwnMemory()).toBe(false);
+  });
+
   it('falls back to in-place injection for custom sub-agent implementations', async () => {
     let injectedMemory: unknown;
     const customSubAgent = {

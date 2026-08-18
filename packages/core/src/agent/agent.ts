@@ -94,7 +94,13 @@ import { SkillsProcessor } from '../processors/processors/skills';
 import { WorkspaceInstructionsProcessor } from '../processors/processors/workspace-instructions';
 import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
-import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, MASTRA_VERSIONS_KEY } from '../request-context';
+import {
+  RequestContext,
+  MASTRA_INHERITED_MEMORY_KEY,
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_THREAD_ID_KEY,
+  MASTRA_VERSIONS_KEY,
+} from '../request-context';
 import { getRequestContextInputValues } from '../request-context/input-source';
 import type { DeclaredAgentSchedule } from '../schedules/define';
 import type { InferStandardSchemaOutput } from '../schema';
@@ -240,13 +246,6 @@ interface StandaloneDurableWrapper {
   observe: (...args: any[]) => any;
   prepare: (...args: any[]) => any;
 }
-
-/**
- * RequestContext key carrying a supervisor's memory into a delegated run so a
- * memory-less sub-agent can persist its transcript without the shared sub-agent
- * instance being mutated. Internal to delegation. See issue #21625.
- */
-const MASTRA_INHERITED_MEMORY_KEY = '__mastraInheritedMemory';
 
 const createSubAgentInputSchema = () =>
   z.object({
@@ -2138,7 +2137,21 @@ export class Agent<
    * inherited from a delegating supervisor via the run's RequestContext.
    */
   #hasEffectiveMemory(requestContext?: RequestContext): boolean {
-    return Boolean(this.#memory ?? requestContext?.get(MASTRA_INHERITED_MEMORY_KEY));
+    return Boolean(this.#memory ?? this.#inheritedMemory(requestContext));
+  }
+
+  /**
+   * Memory a delegating agent handed to this agent for the current run, if any.
+   * Addressed to a single agent id so a memory-less sub-agent that delegates
+   * further does not hand it on to its own sub-agents.
+   */
+  #inheritedMemory(requestContext?: RequestContext): DynamicArgument<MastraMemory, TRequestContext> | undefined {
+    const inherited = requestContext?.getRaw(MASTRA_INHERITED_MEMORY_KEY) as
+      | { agentId: string; memory: DynamicArgument<MastraMemory, any> }
+      | undefined;
+    return inherited?.agentId === this.id
+      ? (inherited.memory as DynamicArgument<MastraMemory, TRequestContext>)
+      : undefined;
   }
 
   public hasOwnMemory(): boolean {
@@ -2164,9 +2177,7 @@ export class Agent<
     // memory through the delegated run's RequestContext, so the inheritance
     // lasts for exactly that invocation instead of being grafted onto the
     // shared sub-agent instance. See issue #21625.
-    const memoryConfig =
-      this.#memory ??
-      (requestContext.get(MASTRA_INHERITED_MEMORY_KEY) as DynamicArgument<MastraMemory, TRequestContext> | undefined);
+    const memoryConfig = this.#memory ?? this.#inheritedMemory(requestContext);
 
     if (!memoryConfig) {
       return undefined;
@@ -4861,7 +4872,14 @@ export class Agent<
             // durable engine's snapshot/rehydrate behavior.
             const subAgentRequestContext: RequestContext = new RequestContext<unknown>(
               [...requestContext.entries()].filter(
-                ([key]) => key !== 'MastraMemory' && key !== MASTRA_THREAD_ID_KEY && key !== MASTRA_RESOURCE_ID_KEY,
+                ([key]) =>
+                  key !== 'MastraMemory' &&
+                  key !== MASTRA_THREAD_ID_KEY &&
+                  key !== MASTRA_RESOURCE_ID_KEY &&
+                  // Inherited memory is scoped to the run that received it: a
+                  // memory-less sub-agent does not pass this agent's memory further
+                  // down to its own sub-agents.
+                  key !== MASTRA_INHERITED_MEMORY_KEY,
               ),
             );
 
@@ -4969,7 +4987,10 @@ export class Agent<
                   // graft the first supervisor's memory onto an instance that is commonly
                   // a shared singleton reached by other supervisors and by direct
                   // invocations. See issue #21625.
-                  subAgentRequestContext.set(MASTRA_INHERITED_MEMORY_KEY, this.#memory);
+                  subAgentRequestContext.setRaw(MASTRA_INHERITED_MEMORY_KEY, {
+                    agentId: resolvedAgent.id,
+                    memory: this.#memory,
+                  });
                 } else {
                   // Custom SubAgent implementations only expose __setMemory, so the
                   // in-place graft is the sole option available for them.
