@@ -15,12 +15,12 @@ Mastra supports two mutually exclusive ways to add a filesystem to a workspace:
 
 | Configuration | Agent access | Sandbox access |
 | - | - | - |
-| `mounts` | File tools | Files appear as local directories through FUSE |
-| `filesystem` | File tools | No access |
+| `mounts` | File tools | The backend materializes files for commands when it supports the provider |
+| `filesystem` | File tools | No automatic mapping into the sandbox |
 
 Use `mounts` when a sandbox needs to run commands against the files. The agent can use file tools, while code inside the sandbox can use shell commands and libraries against the same storage.
 
-Use `filesystem` when the agent only needs direct file tools or the sandbox backend doesn't support mounts. The agent acts as the driver: it can read a file and pass its contents to another tool, but the file doesn't exist inside the sandbox. A command such as `cat`, `grep`, or `python script.py` can't access it unless your application passes the content as input.
+Use `filesystem` when the agent only needs direct file tools or the sandbox backend doesn't support mounts. The agent acts as the driver: it can read a file and pass its contents to another tool, but Mastra doesn't copy or mount the file into the sandbox. A command such as `cat`, `grep`, or `python script.py` can't access remote provider content unless your application passes it as input. A `LocalFilesystem` and `LocalSandbox` can access the same host directory when you explicitly configure both with that directory.
 
 You can't configure both `filesystem` and `mounts` on the same workspace.
 
@@ -68,7 +68,18 @@ Use another filesystem when files need to persist outside the application host o
 ]}
 />
 
-Workspace-only file tools work with the full provider list. FUSE mount support depends on both the filesystem and sandbox backend, so check both references before choosing a combination.
+Workspace-only file tools work with the full provider list. Backend materialization support depends on both the filesystem and sandbox backend, so check both references before choosing a combination.
+
+## Path namespaces
+
+Filesystem providers and sandbox commands don't share one universal root path.
+
+- A provider interprets paths according to its own rules. For example, `LocalFilesystem` resolves relative paths under its physical `basePath` on the Mastra host.
+- The keys in `mounts` create a logical file-tool namespace. A provider mounted at `/workspace` receives file operations routed through that prefix.
+- Remote sandbox backends generally attempt to materialize each mount at the same absolute path for commands. Only a successful mount makes `/workspace` inside that backend refer to the provider.
+- `LocalSandbox` uses a symlink under its `workingDirectory` instead. A `/workspace` mount becomes `<workingDirectory>/workspace` on the host and is usually addressed as `workspace` by commands.
+
+Examples use `/workspace` as a mount convention. A standalone `filesystem` keeps its provider-specific path rules, and local files appear on a remote backend only after explicit mounting or synchronization.
 
 ## Mounts
 
@@ -112,9 +123,17 @@ The agent receives file tools for mounted storage:
 | `file_stat` | Returns file metadata. |
 | `mkdir` | Creates a directory. |
 | `delete` | Deletes files or directories. |
-| `grep` | Searches file contents with a regular expression. |
+| `grep` | Searches file contents with a JavaScript regular expression. |
 
 Mounted files are also available to commands inside the sandbox. In the Quickstart, `read_file('/workspace/report.md')` and `cat /workspace/report.md` read the same S3 object.
+
+The `grep` file tool is portable across filesystem providers. It walks the provider recursively and reads each text file before applying a JavaScript `RegExp` line by line. It doesn't run the system `grep` or `rg` binary in the sandbox. On a remote filesystem, one search may list and read many objects, which can be slower or more expensive than searching materialized files locally.
+
+Use the sandbox command API when you need native `rg` behavior and the files are mounted in the sandbox:
+
+```typescript
+const result = await sandbox.executeCommand('rg', ['pattern', '/workspace'])
+```
 
 Use `WORKSPACE_TOOLS.FILESYSTEM` to require approval, disable tools, enforce read-before-write, or change output limits. See the [Workspace filesystem tools reference](/reference/workspace/workspace-class#filesystem-tools) for configuration details.
 
@@ -126,7 +145,7 @@ File-tool policies only apply to file-tool calls. Restrictions such as `allowedP
 
 ### Multiple mounts
 
-The `mounts` option creates a `CompositeFilesystem` that routes paths to storage providers by mount prefix. Supported sandbox backends expose those providers as local directories through FUSE.
+The `mounts` option creates a `CompositeFilesystem` that routes paths to storage providers by mount prefix. Remote sandbox backends use provider-specific mount software, while `LocalSandbox` links a `LocalFilesystem` under its working directory.
 
 ```typescript
 import { Workspace } from '@mastra/core/workspace'
@@ -157,7 +176,36 @@ With this configuration:
 
 All file paths must start with a mount prefix. Listing `/` returns a virtual directory for each mount. Mount paths can't be nested, so a workspace can't mount both `/data` and `/data/archive`.
 
-Mount support varies by sandbox backend and filesystem provider. Check both references before choosing a combination.
+Built-in mount support currently includes these combinations:
+
+| Sandbox backend | Filesystem providers |
+| - | - |
+| `LocalSandbox` | `LocalFilesystem` |
+| E2B | Amazon S3, Google Cloud Storage, Azure Blob Storage |
+| Daytona | Amazon S3, Google Cloud Storage, Azure Blob Storage |
+| Blaxel | Amazon S3, Google Cloud Storage |
+
+Other combinations need an [`onMount`](/reference/workspace/workspace-class#constructor-parameters) hook or provider-specific setup. Check both provider references before choosing a combination.
+
+### Mount readiness and dependencies
+
+The composite filesystem routes file tools without requiring operating-system mount utilities. Making the same provider visible to sandbox commands can require FUSE support and provider-specific software such as `s3fs`, `gcsfuse`, or `blobfuse2` inside the sandbox.
+
+Some backends install missing packages while the sandbox starts. Installation can require network access, elevated permissions, package-manager support, and several extra minutes. For reliable startup, use an image or snapshot that already contains the required mount software when the provider supports custom images.
+
+A failed backend mount doesn't remove the provider from the composite filesystem, and it doesn't currently reject `workspace.init()`. File tools can therefore work while commands can't see the same path. Inspect each mount after initialization when command access is required:
+
+```typescript
+await workspace.init()
+
+for (const [path, mount] of workspace.sandbox?.mounts?.entries ?? []) {
+  if (mount.state !== 'mounted') {
+    console.error(`Mount ${path}: ${mount.state}`, mount.error)
+  }
+}
+```
+
+Test command visibility as part of startup rather than treating `workspace.status === 'ready'` as proof that every mount succeeded. For the remote Quickstart, run `ls /workspace`. With a `/workspace` mount on `LocalSandbox`, run `ls workspace` from its `workingDirectory`.
 
 ### Read-only mounts
 
@@ -182,7 +230,7 @@ Workspace-level `mounts` require a sandbox provider object and can't be combined
 
 ## Workspace-only filesystem
 
-Pass a provider to `filesystem` when only the agent needs file access. The agent receives file tools, but a sandbox configured on the same workspace can't see those files.
+Pass a provider to `filesystem` when only the agent needs file access. The agent receives file tools, but Mastra doesn't automatically expose those files to a sandbox configured on the same workspace.
 
 ### Quickstart
 
@@ -238,6 +286,34 @@ const workspace = new Workspace({
 ```
 
 Containment still matters even though the agent accesses files through tools. It limits what those tools can expose. Prefer `allowedPaths` for specific external directories instead of setting `contained: false`.
+
+### Local project workspaces
+
+Use `LocalFilesystem` as a narrow project boundary for coding, review, and documentation agents. Point `LocalSandbox` at the same physical directory only when the agent also needs commands:
+
+```typescript
+import { LocalFilesystem, LocalSandbox, Workspace } from '@mastra/core/workspace'
+
+const projectPath = process.env.PROJECT_PATH!
+const isolation = LocalSandbox.detectIsolation()
+
+if (!isolation.available) {
+  throw new Error(isolation.message)
+}
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: projectPath,
+    contained: true,
+  }),
+  sandbox: new LocalSandbox({
+    workingDirectory: projectPath,
+    isolation: isolation.backend,
+  }),
+})
+```
+
+Containment applies to provider operations, including file tools, `grep`, skill discovery, and auto-indexing. It doesn't contain shell commands. Without Seatbelt, Bubblewrap, or a remote sandbox, commands run with the host permissions of the Mastra process. Agents that don't need command execution can use `LocalFilesystem` by itself and receive no command tools.
 
 ### Read-only mode
 

@@ -16,10 +16,16 @@ Use LSP inspection when your agent needs semantic code understanding instead of 
 - Inspect symbols and their inferred types in any supported language
 - Find where a symbol is declared before editing related code
 - Explore implementations across a codebase without manually tracing every file
-- Combine semantic inspection with `view` and `search_content` for faster navigation
+- Combine semantic inspection with `read_file` and `grep` for faster navigation
 - Add LSP support for additional languages by [registering custom language servers](#custom-language-servers)
 
 ## Quickstart
+
+Install the protocol packages and a language server. This example uses the TypeScript language server:
+
+```bash npm2yarn
+npm install vscode-jsonrpc vscode-languageserver-protocol typescript typescript-language-server
+```
 
 Enable LSP on a workspace by setting `lsp: true`:
 
@@ -33,7 +39,7 @@ const workspace = new Workspace({
 })
 ```
 
-With this configuration, the workspace registers the default LSP inspection tool alongside the configured filesystem and sandbox tools.
+LSP requires a static sandbox whose process manager provides streamed output and writable input because each language server is a long-lived, bidirectional process. `LocalFilesystem` and `LocalSandbox` use the same physical directory in this example, so the language server and file tools inspect the same files.
 
 ## Agent tool
 
@@ -49,24 +55,25 @@ When LSP is enabled, the workspace exposes `mastra_workspace_lsp_inspect` by def
 
 The `match` field must include exactly one `<<<` cursor marker. The marker identifies the symbol position on the specified line.
 
-The tool returns up to three result groups:
+The tool returns up to four result groups:
 
 | Result | Description |
 | - | - |
 | `hover` | Type information or documentation for the symbol at the cursor |
 | `diagnostics` | Line-scoped LSP diagnostics for the inspected line, when present |
 | `definition` | Declaration locations with a one-line preview |
-| `implementation` | Implementation or usage locations |
+| `implementation` | Implementation locations returned by the language server |
 
 ## Tool name remapping
 
 Use `WORKSPACE_TOOLS.LSP.LSP_INSPECT` to configure the inspection tool. Set `enabled: false` to remove it from the agent's toolset, or set `name` if the agent expects a different name:
 
 ```typescript title="src/mastra/workspaces.ts"
-import { Workspace, LocalFilesystem, WORKSPACE_TOOLS } from '@mastra/core/workspace'
+import { Workspace, LocalFilesystem, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
   lsp: true,
   tools: {
     [WORKSPACE_TOOLS.LSP.LSP_INSPECT]: {
@@ -85,11 +92,15 @@ See [`WorkspaceToolsConfig`](/reference/workspace/workspace-class#tool-configura
 Set `lsp` to `true` for default behavior, or provide an object to customize server startup and diagnostics:
 
 ```typescript title="src/mastra/workspaces.ts"
-import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'
+
+const projectPath = process.env.PROJECT_PATH!
 
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  filesystem: new LocalFilesystem({ basePath: projectPath }),
+  sandbox: new LocalSandbox({ workingDirectory: projectPath }),
   lsp: {
+    root: projectPath,
     diagnosticTimeout: 4000,
     initTimeout: 8000,
     maxOpenClients: 4,
@@ -97,7 +108,7 @@ const workspace = new Workspace({
     binaryOverrides: {
       typescript: '/custom/path/to/typescript-language-server --stdio',
     },
-    searchPaths: ['/opt/homebrew/bin'],
+    searchPaths: ['/opt/mastra-tools'],
   },
 })
 ```
@@ -108,7 +119,7 @@ Use custom configuration when you need to:
 - Limit retained language server processes
 - Disable specific language servers
 - Point Mastra at custom language server binaries
-- Add extra binary search paths in constrained environments
+- Add package roots whose `node_modules` contain language-server binaries or modules
 
 ### Limit retained clients
 
@@ -208,10 +219,20 @@ const workspace = new Workspace({
 
 ## Requirements and limitations
 
-- LSP inspection only works for file types with a matching built-in or custom language server
-- The `path` you inspect must resolve inside the workspace filesystem or allowed paths
-- External package inspection may resolve to declaration files such as `.d.ts` instead of runtime source files
-- `lsp_inspect` complements `view` and `search_content`, but doesn't replace reading implementation code when you need full context
+- Configure a static sandbox whose process handles expose readable output and writable input streams. A filesystem alone can't run a language server, resolver-backed sandboxes aren't supported with LSP, and some remote process managers don't provide the required bidirectional streams.
+- Install `vscode-jsonrpc` and `vscode-languageserver-protocol` in the Mastra application. Mastra disables LSP during workspace construction when these host-side protocol packages aren't available.
+- Ensure the project files and language-server process use the same paths. `lsp.root` must be an absolute path available to the process manager.
+- Install the required language-server binary and runtime in the environment where the sandbox process runs. Built-in discovery checks the project, configured `searchPaths`, and the Mastra host environment before using `packageRunner`.
+- LSP inspection only works for file types with a matching built-in or custom language server.
+- `LocalFilesystem` containment and `allowedPaths` don't constrain LSP inspection. Restrict `lsp.root` to a trusted project and don't expose LSP tools where users can supply untrusted host paths.
+- External package inspection may resolve to declaration files such as `.d.ts` instead of runtime source files.
+- `lsp_inspect` complements `read_file` and `grep`, but doesn't replace reading implementation code when you need full context.
+
+### Remote sandboxes
+
+Remote LSP isn't backend-transparent in the current Workspace implementation. The language-server command runs through the remote sandbox process manager, but binary discovery and some source previews still use the Mastra host. A language-server binary installed only on the host can't run in the remote sandbox, while files available only in the remote sandbox can't provide every host-side preview.
+
+Use remote LSP only when the process manager supplies readable and writable streams, the project has matching absolute paths on both the Mastra host and remote sandbox, and `binaryOverrides` names a command installed in the remote image. A local filesystem and remote sandbox don't synchronize automatically. For remote-only projects, use `grep`, indexed search, and sandbox commands until backend-transparent LSP file access is supported.
 
 ## Related
 

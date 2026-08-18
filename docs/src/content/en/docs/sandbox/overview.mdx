@@ -56,6 +56,8 @@ await codingAgent.generate('List the files in the workspace directory')
 
 To use a different sandbox for each user, tenant, or thread, configure a [sandbox resolver](#multi-tenant-sandboxes) instead.
 
+The `LocalSandbox` above is one static instance. Every request and memory thread that uses `codingAgent` shares its files, processes, and lifecycle state. A memory thread doesn't create an isolated sandbox by itself.
+
 ## Using the sandbox
 
 Agents receive tools for the capabilities supported by the sandbox backend:
@@ -66,30 +68,27 @@ Agents receive tools for the capabilities supported by the sandbox backend:
 | `get_process_output` | Gets stdout, stderr, and status for a background process. Supports `tail` to limit output and `wait: true` to wait for the process to exit. This tool and `kill_process` are only added when the backend supports background processes. |
 | `kill_process` | Stops a background process and returns its recent output. |
 
-You can disable or rename each tool and require approval before it runs. You can also limit how much output it adds to the model's context. See the [workspace tool configuration reference](/reference/workspace/workspace-class#tool-configuration).
+Configured capabilities determine which tools are available. Tool configuration can then disable, rename, or add policies to those tools:
 
-Authored runtime functions, including tools and workflow steps, can get the live sandbox from their execution context. Start a server, watcher, notebook kernel, browser, or worker and interact with it across agent turns.
+```typescript
+import { LocalSandbox, Workspace, WORKSPACE_TOOLS } from '@mastra/core/workspace'
 
-```typescript title="src/mastra/tools/start-server.ts"
-import type { ProcessHandle } from '@mastra/core/sandbox'
-import { createTool } from '@mastra/core/tools'
-import { z } from 'zod'
-
-export const startServerTool = createTool({
-  id: 'start-server',
-  description: 'Starts a server in the sandbox',
-  inputSchema: z.object({
-    command: z.string(),
-  }),
-  execute: async ({ command }, ctx) => {
-    const sandbox = await ctx.getSandbox()
-    const server: ProcessHandle = await sandbox.spawn({ command })
-    return { pid: server.pid }
+const workspace = new Workspace({
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+  tools: {
+    requireApproval: true,
+    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+      enabled: false,
+    },
   },
 })
 ```
 
-The authored function itself runs in your application process. Only operations called through the sandbox handle run inside the sandbox.
+Omitting a tool entry keeps its capability-driven default. Set `{ enabled: false }` on one tool to remove it, or set the top-level `enabled: false` to disable workspace tools by default. A per-tool `{ enabled: true }` overrides that global setting. Tool entries don't accept a bare `false` shorthand. The top-level `requireApproval` policy applies to every workspace tool unless a per-tool entry overrides it.
+
+Authored application code can use the resolved provider API directly. Inside a tool or workflow step, pass its `requestContext` to `workspace.resolveSandbox({ requestContext })` so the code reaches the same cached sandbox as the workspace tools. Background processes start through `sandbox.processes.spawn()` when the resolved provider supports them.
+
+The application code itself still runs in the Mastra process. Only operations called through the sandbox provider run in the sandbox. See the [workspace tool configuration reference](/reference/workspace/workspace-class#tool-configuration) for per-tool approvals, read-before-write policies, output limits, and hooks.
 
 ## Supported backends
 
@@ -268,6 +267,10 @@ A static sandbox isn't automatically scoped to the current resource or memory th
 Static sandbox backends are instantiated with your application, but their execution environment usually starts lazily on the first command. Call `workspace.init()` when you want to provision it during application startup instead.
 
 Resolver-backed sandboxes aren't started by `workspace.init()` because no backend is selected until the resolver runs. Return a sandbox that's already started or can start itself on first use.
+
+The `Workspace` constructor validates structural configuration synchronously. It doesn't contact providers or provision an execution environment. `workspace.init()` first initializes a static filesystem. It then starts a static sandbox and processes its mounts before processing `autoIndexPaths`. Credentials, network access, and provider setup can therefore fail during `init()`. If you skip `init()`, providers can instead fail when their first lazy operation runs.
+
+Auto-indexing only runs during `workspace.init()`. A command can start a sandbox lazily without building the configured search index. Call `init()` during application startup when the workspace uses `autoIndexPaths` or when provider startup failures need to surface before requests are served. Mount and per-file indexing failures can be recorded or logged without rejecting `init()`, so applications that depend on complete mounts or indexes must verify them separately.
 
 ### Hooks
 
