@@ -1,3 +1,4 @@
+import type { SignalCatalogEntry } from '@mastra/client-js';
 import type { ReactNode } from 'react';
 
 import {
@@ -13,6 +14,7 @@ export interface TraceIntelligenceProviderProps {
   request?: TraceIntelligenceRequest;
   LinkComponent?: LinkComponent;
   getTraceHref?: (traceId: string) => string;
+  signalCatalog?: SignalCatalogEntry[];
 }
 
 export function TraceIntelligenceProvider({
@@ -21,9 +23,10 @@ export function TraceIntelligenceProvider({
   request = defaultTraceIntelligenceContextValue.request,
   LinkComponent = defaultTraceIntelligenceContextValue.LinkComponent,
   getTraceHref = defaultTraceIntelligenceContextValue.getTraceHref,
+  signalCatalog = defaultTraceIntelligenceContextValue.signalCatalog,
 }: TraceIntelligenceProviderProps) {
   return (
-    <TraceIntelligenceContext.Provider value={{ cacheScope, request, LinkComponent, getTraceHref }}>
+    <TraceIntelligenceContext.Provider value={{ cacheScope, request, LinkComponent, getTraceHref, signalCatalog }}>
       {children}
     </TraceIntelligenceContext.Provider>
   );

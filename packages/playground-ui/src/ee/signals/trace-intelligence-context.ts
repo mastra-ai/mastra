@@ -1,5 +1,7 @@
+import type { SignalCatalogEntry } from '@mastra/client-js';
 import { createContext } from 'react';
 
+import { BUILT_IN_SIGNAL_CATALOG } from './signal-formatting';
 import type { LinkComponent } from '@/ds/types/link-component';
 
 export type TraceIntelligenceRequest = <Response>(path: string) => Promise<Response>;
@@ -17,6 +19,7 @@ export interface TraceIntelligenceContextValue {
   request: TraceIntelligenceRequest;
   LinkComponent: LinkComponent;
   getTraceHref: (traceId: string) => string;
+  signalCatalog: SignalCatalogEntry[];
 }
 
 export const defaultTraceIntelligenceContextValue: TraceIntelligenceContextValue = {
@@ -24,6 +27,7 @@ export const defaultTraceIntelligenceContextValue: TraceIntelligenceContextValue
   request: defaultRequest,
   LinkComponent: 'a',
   getTraceHref: traceId => `/traces/${encodeURIComponent(traceId)}`,
+  signalCatalog: BUILT_IN_SIGNAL_CATALOG,
 };
 
 export const TraceIntelligenceContext = createContext(defaultTraceIntelligenceContextValue);

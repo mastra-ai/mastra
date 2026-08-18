@@ -1,4 +1,4 @@
-import type { TraceSignalName } from '@mastra/client-js';
+import type { EntityLearningProgressResponse, SignalCatalogEntry, TraceSignalName } from '@mastra/client-js';
 import { CpuIcon } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 
@@ -8,6 +8,7 @@ import { Card } from '../../../ds/components/Card';
 import { nodeColor } from '../../../ds/components/SankeyChart/sankeyColor';
 import type { LinkComponent } from '../../../ds/types/link-component';
 import { getSignalHue } from '../signal-colors';
+import { BUILT_IN_SIGNAL_CATALOG, orderedSignals, signalDescription, signalLabel } from '../signal-formatting';
 
 type SignalDefinition = {
   key: TraceSignalName;
@@ -45,12 +46,7 @@ const PipelineConnector = () => (
   </div>
 );
 
-export type TraceIntelligenceProgress = {
-  status: 'collecting' | 'processing' | 'ready';
-  traceCount: number;
-  signals: Record<TraceSignalName, { generated: number; embedded: number }>;
-  availableSignals: TraceSignalName[];
-};
+export type TraceIntelligenceProgress = EntityLearningProgressResponse;
 
 export type SignalsEmptyStateProps = {
   actionSlot?: ReactNode;
@@ -89,6 +85,9 @@ function statusCopy(progress?: TraceIntelligenceProgress, isRangeEmpty?: boolean
 }
 
 function ProgressSummary({ progress }: { progress: TraceIntelligenceProgress }) {
+  const catalog = progress.signalCatalog ?? BUILT_IN_SIGNAL_CATALOG;
+  const enabledSignalCount = catalog.filter(signal => signal.enabled).length;
+  const readySignalCount = catalog.filter(signal => signal.enabled && signal.status === 'ready').length;
   return (
     <dl className="mt-4 grid gap-2 sm:grid-cols-3">
       <div className="border-border1 bg-surface3 rounded-md border px-3 py-2">
@@ -97,7 +96,9 @@ function ProgressSummary({ progress }: { progress: TraceIntelligenceProgress }) 
       </div>
       <div className="border-border1 bg-surface3 rounded-md border px-3 py-2">
         <dt className="text-neutral3 text-xs">Trace signal types ready</dt>
-        <dd className="text-neutral6 mt-1 text-lg font-semibold">{progress.availableSignals.length} of 4</dd>
+        <dd className="text-neutral6 mt-1 text-lg font-semibold">
+          {progress.signalCatalog ? readySignalCount : progress.availableSignals.length} of {enabledSignalCount}
+        </dd>
       </div>
       <div className="border-border1 bg-surface3 rounded-md border px-3 py-2">
         <dt className="text-neutral3 text-xs">Status</dt>
@@ -110,16 +111,22 @@ function ProgressSummary({ progress }: { progress: TraceIntelligenceProgress }) 
 function SignalProgressList({ progress }: { progress?: TraceIntelligenceProgress }) {
   if (!progress) return null;
 
+  const catalog = progress.signalCatalog ?? BUILT_IN_SIGNAL_CATALOG;
   return (
     <ul aria-label="Trace signal processing progress" className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-      {signalDefinitions.map(signal => {
-        const value = progress.signals[signal.key];
-        const isReady = progress.availableSignals.includes(signal.key);
+      {orderedSignals(
+        catalog,
+        catalog.filter(signal => signal.enabled).map(signal => signal.name),
+      ).map(signalName => {
+        const value = progress.signals[signalName] ?? { generated: 0, embedded: 0 };
+        const catalogEntry = catalog.find(signal => signal.name === signalName);
+        const label = signalLabel(catalog, signalName);
+        const isReady = catalogEntry ? catalogEntry.status === 'ready' : progress.availableSignals.includes(signalName);
         return (
-          <li className="border-border1 bg-surface2 rounded-md border px-3 py-2" key={signal.label}>
+          <li className="border-border1 bg-surface2 rounded-md border px-3 py-2" key={signalName}>
             <div className="flex items-center justify-between gap-2">
-              <span className="text-sm font-semibold" style={signalStyle(signal.label)}>
-                {signal.label}
+              <span className="text-sm font-semibold" style={signalStyle(signalName)}>
+                {label}
               </span>
               <span className="text-neutral4 text-xs">{isReady ? 'Themes ready' : 'Processing'}</span>
             </div>
@@ -130,6 +137,50 @@ function SignalProgressList({ progress }: { progress?: TraceIntelligenceProgress
         );
       })}
     </ul>
+  );
+}
+
+export function PendingSignalProgress({
+  progress,
+  signalCatalog,
+}: {
+  progress?: TraceIntelligenceProgress;
+  signalCatalog: readonly SignalCatalogEntry[];
+}) {
+  const catalog = progress?.signalCatalog ?? signalCatalog;
+  const pendingSignals = catalog.filter(signal => signal.enabled && signal.status !== 'ready');
+  if (pendingSignals.length === 0) return null;
+
+  return (
+    <section className="border-border1 bg-surface2 rounded-lg border p-4" aria-labelledby="pending-signals-heading">
+      <h2 id="pending-signals-heading" className="text-neutral6 text-sm font-semibold">
+        Signals building themes
+      </h2>
+      <p className="text-neutral3 mt-1 text-xs">
+        Themes appear once enough new traces are analyzed, embedded, and clustered.
+      </p>
+      <ul aria-label="Pending trace signals" className="mt-3 grid gap-2 sm:grid-cols-2">
+        {pendingSignals.map(signal => {
+          const value = progress?.signals[signal.name] ?? { generated: 0, embedded: 0 };
+          return (
+            <li className="border-border1 bg-surface1 rounded-md border px-3 py-2" key={signal.name}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold" style={signalStyle(signal.name)}>
+                  {signalLabel(catalog, signal.name)}
+                </span>
+                <span className="text-neutral4 text-xs capitalize">{signal.status}</span>
+              </div>
+              {signalDescription(catalog, signal.name) ? (
+                <p className="text-neutral3 mt-1 text-xs">{signalDescription(catalog, signal.name)}</p>
+              ) : null}
+              <p className="text-neutral3 mt-1 text-xs">
+                {formatNumber(value.generated)} generated · {formatNumber(value.embedded)} embedded
+              </p>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 

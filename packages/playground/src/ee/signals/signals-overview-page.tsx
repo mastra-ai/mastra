@@ -3,8 +3,9 @@ import {
   SankeySignals,
   SignalsErrorState,
   SignalsLoadingSkeleton,
+  BUILT_IN_SIGNAL_CATALOG,
+  orderedSignals,
   SignalsOverviewPage as SignalsEmptyState,
-  SIGNAL_PROCESSING_ORDER,
   TraceIntelligenceProvider,
   useEntityLearningProgress,
 } from '@mastra/playground-ui/ee/signals';
@@ -26,9 +27,8 @@ function SignalsOverviewContent() {
   const { entitiesQuery, entity } = useSelectedThemeEntity();
   const url = useSignalsDateUrlState();
   const [selectedThemeId, setSelectedThemeId] = useState<string>();
-  const signalNames = entity
-    ? SIGNAL_PROCESSING_ORDER.filter(signalName => entity.availableSignals.includes(signalName))
-    : [];
+  const signalCatalog = entity?.signalCatalog ?? BUILT_IN_SIGNAL_CATALOG;
+  const signalNames = entity ? orderedSignals(signalCatalog, entity.availableSignals) : [];
   const progressQuery = useEntityLearningProgress(
     entity?.entityId,
     entity?.entityType ?? 'agent',
@@ -54,26 +54,28 @@ function SignalsOverviewContent() {
   }
 
   return (
-    <SankeySignals
-      key={`${entity.entityId}:${signalNames.join(',')}:${url.selectedDateFrom?.toISOString() ?? 'open'}:${url.selectedDateTo?.toISOString() ?? 'open'}`}
-      entityId={entity.entityId}
-      entityType="agent"
-      signalNames={signalNames}
-      dateFrom={url.selectedDateFrom}
-      dateTo={url.selectedDateTo}
-      selectedThemeId={selectedThemeId}
-      onSelectedThemeIdChange={setSelectedThemeId}
-      dateRangePicker={
-        <DateTimeRangePicker
-          preset={url.datePreset}
-          onPresetChange={url.handleDatePresetChange}
-          dateFrom={url.selectedDateFrom}
-          dateTo={url.selectedDateTo}
-          onDateChange={url.handleDateChange}
-          presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
-          size="sm"
-        />
-      }
-    />
+    <TraceIntelligenceProvider cacheScope="oss-studio" LinkComponent={Link} signalCatalog={signalCatalog}>
+      <SankeySignals
+        key={`${entity.entityId}:${signalNames.join(',')}:${url.selectedDateFrom?.toISOString() ?? 'open'}:${url.selectedDateTo?.toISOString() ?? 'open'}`}
+        entityId={entity.entityId}
+        entityType="agent"
+        signalNames={signalNames}
+        dateFrom={url.selectedDateFrom}
+        dateTo={url.selectedDateTo}
+        selectedThemeId={selectedThemeId}
+        onSelectedThemeIdChange={setSelectedThemeId}
+        dateRangePicker={
+          <DateTimeRangePicker
+            preset={url.datePreset}
+            onPresetChange={url.handleDatePresetChange}
+            dateFrom={url.selectedDateFrom}
+            dateTo={url.selectedDateTo}
+            onDateChange={url.handleDateChange}
+            presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
+            size="sm"
+          />
+        }
+      />
+    </TraceIntelligenceProvider>
   );
 }

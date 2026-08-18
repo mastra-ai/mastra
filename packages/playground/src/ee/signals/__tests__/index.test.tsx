@@ -19,6 +19,10 @@ import {
 } from './fixtures/theme-drilldown';
 import {
   billingThemeSnapshotsResponse,
+  customSignalProgressResponse,
+  customThemeEntitiesResponse,
+  customThemeFlowResponse,
+  customThemeSnapshotsResponse,
   emptyThemeEntitiesResponse,
   emptyThemeSnapshotsResponse,
   lowSignalFirstThemeEntitiesResponse,
@@ -233,6 +237,41 @@ describe('Trace Intelligence page', () => {
       expect(within(main).queryByRole('combobox')).toBeNull();
       expect(screen.queryByText('Snapshot date')).toBeNull();
       expect(within(main).getByRole('button', { name: 'Last 7 days' })).not.toBeNull();
+    });
+  });
+
+  describe('when an agent has custom and pending trace signals', () => {
+    beforeEach(() => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(customThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(customThemeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(customThemeFlowResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/progress`, () =>
+          HttpResponse.json(customSignalProgressResponse),
+        ),
+      );
+    });
+
+    it('renders the ready custom signal in catalog order', async () => {
+      renderSignalsPage();
+
+      const headers = await screen.findAllByTestId('signal-column-header');
+      expect(headers.map(header => header.textContent)).toEqual(['GOAL', 'TOOL USAGE', 'OUTCOME']);
+    });
+
+    it('keeps collecting and processing custom signals visible with real counts', async () => {
+      renderSignalsPage();
+
+      const pending = await screen.findByRole('list', { name: 'Pending trace signals' });
+      expect(within(pending).getByText('Handoff Quality')).not.toBeNull();
+      expect(within(pending).getByText('0 generated · 0 embedded')).not.toBeNull();
+      expect(within(pending).getByText('Resolution Detail')).not.toBeNull();
+      expect(within(pending).getByText('31 generated · 19 embedded')).not.toBeNull();
+      expect(within(pending).queryByText('Legacy Risk')).toBeNull();
     });
   });
 
