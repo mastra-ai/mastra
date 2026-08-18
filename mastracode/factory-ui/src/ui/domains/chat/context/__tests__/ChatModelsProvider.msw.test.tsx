@@ -3,7 +3,7 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { ChatModelsProvider } from '../ChatModelsProvider';
 import { ChatModesContext } from '../ChatModesContext';
 import { ChatSessionContext } from '../ChatSessionContext';
@@ -103,7 +103,7 @@ describe('ChatModelsProvider', () => {
       }),
     );
 
-    renderWithProviders(
+    const { client } = renderWithProviders(
       <ChatSessionContext.Provider value={draftSession}>
         <ChatModesContext.Provider
           value={{
@@ -124,7 +124,8 @@ describe('ChatModelsProvider', () => {
 
     expect(await screen.findByText('loading')).toBeVisible();
     resolvePacks();
-    expect(await screen.findByText('ready')).toBeVisible();
+    await waitForMutationsIdle(client);
+    expect(screen.getByText('ready')).toBeVisible();
   });
 
   it('falls back to the Factory model when personal pack loading fails', async () => {
