@@ -1,15 +1,20 @@
 import type { AgentControllerDisplayState, AgentControllerEvent } from './types';
 
+/** `Error` is structurally `{ name, message, stack? }`; the `stack` key tells an instance from a flattened {@link WireError}. */
+type IsErrorInstance<T> = T extends Error ? ('stack' extends keyof T ? true : false) : false;
+
 /** `T` as `JSON.stringify` writes it: `toJSON` followed, what JSON cannot carry turned to `never` (caught by `wire.test-d.ts`). */
 export type Jsonify<T> = T extends { toJSON(): infer R }
   ? Jsonify<R>
   : T extends Map<unknown, unknown> | Set<unknown> | bigint | ((...args: never[]) => unknown)
     ? never
-    : T extends readonly (infer U)[]
-      ? Jsonify<U>[]
-      : T extends object
-        ? { [K in keyof T]: Jsonify<T[K]> }
-        : T;
+    : IsErrorInstance<T> extends true
+      ? never
+      : T extends readonly (infer U)[]
+        ? Jsonify<U>[]
+        : T extends object
+          ? { [K in keyof T]: Jsonify<T[K]> }
+          : T;
 
 /** An `Error` as the server flattens it; JSON would drop a real `Error` to `{}`. */
 export interface WireError {

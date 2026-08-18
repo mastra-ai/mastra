@@ -42,7 +42,9 @@ describe('AgentControllerWireEvent', () => {
   it('would flag a field JSON drops or empties', () => {
     expectTypeOf<HasNeverLeaf<Jsonify<{ tools: Map<string, string> }>>>().toEqualTypeOf<true>();
     expectTypeOf<HasNeverLeaf<Jsonify<{ items: Set<string>[] }>>>().toEqualTypeOf<true>();
+    expectTypeOf<HasNeverLeaf<Jsonify<{ cause: Error }>>>().toEqualTypeOf<true>();
     expectTypeOf<HasNeverLeaf<Jsonify<{ tools: Record<string, { name: string }> }>>>().toEqualTypeOf<false>();
+    expectTypeOf<HasNeverLeaf<Jsonify<{ error: { name: string; message: string } }>>>().toEqualTypeOf<false>();
   });
 
   it('reshapes the display state Maps and the errors under `error`, nothing else', () => {
