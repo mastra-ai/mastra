@@ -406,18 +406,26 @@ async function authorizePackSession({
   sessions,
   packContext,
   resourceId,
+  scope,
 }: {
   c: Context;
   auth: RouteAuth;
   sessions?: Pick<SourceControlStorageHandle['sessions'], 'getBySessionId'>;
   packContext: PackContext;
   resourceId: string;
+  scope: string | undefined;
 }): Promise<Response | null> {
   if (!auth.enabled()) return null;
   if (!sessions) return c.json({ error: 'session_authorization_unavailable' }, 503);
 
   const sourceSession = await sessions.getBySessionId(resourceId);
-  if (!sourceSession || sourceSession.orgId !== packContext.orgId || sourceSession.userId !== packContext.userId) {
+  if (
+    !sourceSession ||
+    sourceSession.orgId !== packContext.orgId ||
+    sourceSession.userId !== packContext.userId ||
+    !scope ||
+    sourceSession.sandboxWorkdir !== scope
+  ) {
     return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
   }
   return null;
@@ -913,6 +921,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 sessions: options.sourceControlSessions,
                 packContext,
                 resourceId,
+                scope,
               });
               if (unauthorized) return unauthorized;
             }
@@ -1036,6 +1045,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 sessions: options.sourceControlSessions,
                 packContext,
                 resourceId,
+                scope,
               });
               if (unauthorized) return unauthorized;
             }

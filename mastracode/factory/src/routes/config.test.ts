@@ -475,8 +475,8 @@ describe('model pack routes with a tenant', () => {
       branch: `user/${sessionId}`,
       title: null,
       baseBranch: 'main',
-      sandboxId: null,
-      sandboxWorkdir: null,
+      sandboxId: 'sandbox-1',
+      sandboxWorkdir: `/tmp/${sessionId}`,
       materializedAt: null,
       firstMessageAt: null,
       firstMeaningfulExecAt: null,
@@ -659,7 +659,7 @@ describe('model pack routes with a tenant', () => {
       {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ target: 'session', resourceId: 'session-1' }),
+        body: JSON.stringify({ target: 'session', resourceId: 'session-1', scope: '/tmp/session-1' }),
       },
     );
 
@@ -668,7 +668,9 @@ describe('model pack routes with a tenant', () => {
     expect(setSetting).toHaveBeenCalledWith({ key: 'activeModelPackId', value: pack.id });
     expect(await seed.modelPacks.getActive({ orgId: 'org1', userId: 'user-a' })).toBeNull();
 
-    const listed = await buildApp(userA, sessionController).request('/web/config/model-packs?resourceId=session-1');
+    const listed = await buildApp(userA, sessionController).request(
+      '/web/config/model-packs?resourceId=session-1&scope=%2Ftmp%2Fsession-1',
+    );
     expect(await listed.json()).toMatchObject({ activePackId: null, sessionPackId: pack.id });
   });
 
@@ -679,15 +681,31 @@ describe('model pack routes with a tenant', () => {
     };
     const app = buildApp(userB, sessionController);
 
-    const listed = await app.request('/web/config/model-packs?resourceId=session-1');
+    const listed = await app.request('/web/config/model-packs?resourceId=session-1&scope=%2Ftmp%2Fsession-1');
     const activated = await app.request('/web/config/model-packs/anthropic/activate', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ target: 'session', resourceId: 'session-1' }),
+      body: JSON.stringify({ target: 'session', resourceId: 'session-1', scope: '/tmp/session-1' }),
     });
 
     expect(listed.status).toBe(404);
     expect(activated.status).toBe(404);
+    expect(sessionController.getSessionByResource).not.toHaveBeenCalled();
+  });
+
+  it('rejects a valid resource with a different session scope', async () => {
+    const sessionController = {
+      ...controller,
+      getSessionByResource: vi.fn().mockResolvedValue({}),
+    };
+
+    const response = await buildApp(userA, sessionController).request('/web/config/model-packs/anthropic/activate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ target: 'session', resourceId: 'session-1', scope: '/tmp/other-session' }),
+    });
+
+    expect(response.status).toBe(404);
     expect(sessionController.getSessionByResource).not.toHaveBeenCalled();
   });
 
@@ -702,7 +720,7 @@ describe('model pack routes with a tenant', () => {
       new ConfigRoutes({ auth: fakeRouteAuth(), controller, modelPacks: seed.modelPacks }).routes(),
     );
 
-    const response = await app.request('/web/config/model-packs?resourceId=session-1');
+    const response = await app.request('/web/config/model-packs?resourceId=session-1&scope=%2Ftmp%2Fsession-1');
 
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({ error: 'session_authorization_unavailable' });
