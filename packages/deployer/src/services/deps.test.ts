@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -39,7 +40,9 @@ describe('getPnpmIgnoredBuildPackages', () => {
 });
 
 describe('copyPnpmWorkspaceSettings', () => {
-  it('copies pnpm install policy without copying source workspace packages', () => {
+  // Source patch declarations are never copied verbatim: their paths are relative to the source
+  // workspace root. They are re-emitted from options once rewritten for the output directory.
+  it('copies pnpm install policy without copying source workspace packages or raw patch paths', () => {
     const output = copyPnpmWorkspaceSettings(
       `packages:\n  - packages/*\n\ncatalog:\n  react: ^19.0.0\n\nminimumReleaseAge: 1440\nminimumReleaseAgeExclude:\n  - '@mastra/*'\n\nallowBuilds:\n  onnxruntime-node: false\n  node-pty: true\n\npatchedDependencies:\n  foo@1.0.0: patches/foo.patch\n`,
     );
@@ -115,6 +118,93 @@ describe('copyPnpmWorkspaceSettings', () => {
     expect(copyPnpmWorkspaceSettings('', { pnpmNodeLinker: 'hoisted' })).toBe(
       `packages:\n  - '.'\n\nnodeLinker: hoisted\n`,
     );
+  });
+
+  it('writes output-relative patched dependencies and tolerates patches unused by the bundle', () => {
+    const output = copyPnpmWorkspaceSettings('', {
+      patchedDependencies: { '@ai-sdk/amazon-bedrock@2.0.0': 'pnpm-patches/bedrock.patch' },
+    });
+
+    expect(output).toBe(
+      `packages:\n  - '.'\n\npatchedDependencies:\n  \"@ai-sdk/amazon-bedrock@2.0.0\": \"pnpm-patches/bedrock.patch\"\n\nallowUnusedPatches: true\n`,
+    );
+  });
+
+  it('omits patch configuration when no patches were resolved', () => {
+    expect(copyPnpmWorkspaceSettings('', { patchedDependencies: {} })).toBe(`packages:\n  - '.'\n`);
+  });
+});
+
+describe('writePnpmConfig patch handling', () => {
+  let sourceRoot: string;
+  let outputDir: string;
+
+  beforeEach(async () => {
+    const base = await mkdtemp(join(tmpdir(), 'mastra-deps-'));
+    sourceRoot = join(base, 'source');
+    outputDir = join(base, 'output');
+    await mkdir(join(sourceRoot, 'patches'), { recursive: true });
+    await mkdir(outputDir, { recursive: true });
+    await writeFile(join(sourceRoot, 'pnpm-lock.yaml'), '');
+  });
+
+  async function writeWorkspace(contents: string) {
+    await writeFile(join(sourceRoot, 'pnpm-workspace.yaml'), contents);
+  }
+
+  async function run() {
+    const deps = new DepsService(sourceRoot);
+    await (deps as unknown as { writePnpmConfig(dir: string): Promise<void> }).writePnpmConfig(outputDir);
+    return readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf-8');
+  }
+
+  it('copies declared patch files into the output and rewrites their paths', async () => {
+    await writeFile(join(sourceRoot, 'patches', 'foo.patch'), 'PATCH CONTENTS');
+    await writeWorkspace(`packages:\n  - packages/*\n\npatchedDependencies:\n  foo@1.0.0: patches/foo.patch\n`);
+
+    const output = await run();
+
+    expect(output).toContain(`patchedDependencies:\n  "foo@1.0.0": "pnpm-patches/foo.patch"`);
+    expect(output).toContain('allowUnusedPatches: true');
+    expect(await readFile(join(outputDir, 'pnpm-patches', 'foo.patch'), 'utf-8')).toBe(
+      'PATCH CONTENTS',
+    );
+  });
+
+  it('keeps patches with colliding file names distinct', async () => {
+    await mkdir(join(sourceRoot, 'patches', 'nested'), { recursive: true });
+    await writeFile(join(sourceRoot, 'patches', 'foo.patch'), 'FIRST');
+    await writeFile(join(sourceRoot, 'patches', 'nested', 'foo.patch'), 'SECOND');
+    await writeWorkspace(
+      `patchedDependencies:\n  foo@1.0.0: patches/foo.patch\n  bar@2.0.0: patches/nested/foo.patch\n`,
+    );
+
+    const output = await run();
+
+    expect(output).toContain(`"foo@1.0.0": "pnpm-patches/foo.patch"`);
+    expect(output).toContain(`"bar@2.0.0": "pnpm-patches/bar_2.0.0-foo.patch"`);
+    expect(await readFile(join(outputDir, 'pnpm-patches', 'foo.patch'), 'utf-8')).toBe('FIRST');
+    expect(await readFile(join(outputDir, 'pnpm-patches', 'bar_2.0.0-foo.patch'), 'utf-8')).toBe(
+      'SECOND',
+    );
+  });
+
+  it('skips declarations whose patch file is missing instead of failing the build', async () => {
+    await writeWorkspace(`patchedDependencies:\n  foo@1.0.0: patches/missing.patch\n`);
+
+    const output = await run();
+
+    expect(output).not.toContain('patchedDependencies');
+    expect(fs.existsSync(join(outputDir, 'pnpm-patches'))).toBe(false);
+  });
+
+  it('leaves output untouched when the source declares no patches', async () => {
+    await writeWorkspace(`packages:\n  - packages/*\n\nminimumReleaseAge: 1440\n`);
+
+    const output = await run();
+
+    expect(output).toBe(`packages:\n  - '.'\n\nminimumReleaseAge: 1440\n`);
+    expect(fs.existsSync(join(outputDir, 'pnpm-patches'))).toBe(false);
   });
 });
 
