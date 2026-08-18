@@ -1,4 +1,8 @@
 {
+  "coverage": {
+    "auditedCases": 434,
+    "routesHit": 340
+  },
   "entries": [
     "A2AV1.sendMessage|drift",
     "Agent.browserSession|orphan",

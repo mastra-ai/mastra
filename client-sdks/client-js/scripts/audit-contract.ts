@@ -499,7 +499,7 @@ interface AuditCase {
   className: string;
   methodName: string;
   variant?: 'full' | 'min';
-  status: 'pass' | 'drift' | 'orphan' | 'walker-noise' | 'invocation-error' | 'factory-skipped';
+  status: 'pass' | 'drift' | 'orphan' | 'walker-noise' | 'invocation-error' | 'factory-skipped' | 'unresolved-export';
   url?: string;
   method?: string;
   routeKey?: string;
@@ -520,6 +520,15 @@ async function runAudit(): Promise<AuditCase[]> {
   // 'min' = only required ctor params filled, exposing "SDK ctor-optional but server-required" bugs.
   const variants: Array<'full' | 'min'> = ['full', 'min'];
   const instancesByVariant = new Map<'full' | 'min', Map<string, any>>();
+
+  // A resource class the walker found in source but that the SDK barrel does not export cannot be
+  // instantiated, so none of its methods can be audited. Record that explicitly rather than
+  // dropping it: a class silently leaving the audit is exactly the degradation this gate exists
+  // to catch, and it must not read as "nothing to report".
+  const unresolvedClasses = new Set(
+    [...new Set(methods.map(x => x.className))].filter(cls => cls !== 'MastraClient' && !allExports[cls]),
+  );
+
   for (const variant of variants) {
     const m = new Map<string, any>();
     m.set('MastraClient', new allExports.MastraClient(clientOptions));
@@ -537,6 +546,16 @@ async function runAudit(): Promise<AuditCase[]> {
   }
 
   for (const m of methods) {
+    if (unresolvedClasses.has(m.className)) {
+      cases.push({
+        className: m.className,
+        methodName: m.methodName,
+        status: 'unresolved-export',
+        errors: [`${m.className} is not exported from the SDK barrel; its methods cannot be audited`],
+      });
+      continue;
+    }
+
     if (m.isFactory) {
       cases.push({ className: m.className, methodName: m.methodName, status: 'factory-skipped' });
       continue;
@@ -664,6 +683,7 @@ interface Summary {
   orphan: number;
   noise: number;
   factory: number;
+  unresolved: number;
   surfaceCoverage: { hit: number; total: number; pct: number };
 }
 
@@ -677,6 +697,7 @@ function summarize(cases: AuditCase[]): Summary {
     orphan: cases.filter(c => c.status === 'orphan').length,
     noise: cases.filter(c => c.status === 'walker-noise').length,
     factory: cases.filter(c => c.status === 'factory-skipped').length,
+    unresolved: cases.filter(c => c.status === 'unresolved-export').length,
     surfaceCoverage: {
       hit: hitRoutes.size,
       total: SERVER_ROUTES.length,
@@ -706,6 +727,7 @@ function caseKey(c: AuditCase): string {
   console.log(`  orphan:          ${summary.orphan}`);
   console.log(`  walker-noise:    ${summary.noise}`);
   console.log(`  factory-skipped: ${summary.factory}`);
+  console.log(`  unresolved-export: ${summary.unresolved}`);
   console.log(
     `  surface coverage: ${summary.surfaceCoverage.hit}/${summary.surfaceCoverage.total} (${summary.surfaceCoverage.pct}%)`,
   );
@@ -716,14 +738,64 @@ function caseKey(c: AuditCase): string {
       .filter(c => c.status === 'drift' || c.status === 'orphan')
       .map(caseKey)
       .sort();
-    writeFileSync(SNAPSHOT_PATH, JSON.stringify({ entries: keys }, null, 2));
+    writeFileSync(
+      SNAPSHOT_PATH,
+      JSON.stringify(
+        {
+          // Floor for how much of the SDK the harness actually reached. Drift keys alone cannot
+          // detect a harness that stops auditing: auditing nothing produces no drift keys and
+          // would otherwise pass. See the coverage check below.
+          coverage: {
+            auditedCases: summary.total - summary.unresolved,
+            routesHit: summary.surfaceCoverage.hit,
+          },
+          entries: keys,
+        },
+        null,
+        2,
+      ),
+    );
     console.log(`Snapshot written: ${SNAPSHOT_PATH} (${keys.length} entries)`);
   } else if (MODE === 'check') {
     if (!existsSync(SNAPSHOT_PATH)) {
       console.error('No snapshot.json found; run audit:contract:snapshot first.');
       process.exit(2);
     }
-    const snap = JSON.parse(readFileSync(SNAPSHOT_PATH, 'utf8')) as { entries: string[] };
+    const snap = JSON.parse(readFileSync(SNAPSHOT_PATH, 'utf8')) as {
+      entries: string[];
+      coverage?: { auditedCases: number; routesHit: number };
+    };
+
+    // Coverage floor, checked before drift. A harness that silently stops covering the SDK
+    // reports zero drift, so drift keys alone would let it pass as good news. Real fixes keep
+    // coverage flat; only degradation moves it down. A deliberate removal of SDK surface is a
+    // re-snapshot, same as any other deliberate change.
+    if (!snap.coverage) {
+      console.error('\n❌ Snapshot predates coverage tracking; re-run audit:contract:snapshot.');
+      process.exit(1);
+    }
+    const auditedCases = summary.total - summary.unresolved;
+    const coverageErrors: string[] = [];
+    if (auditedCases < snap.coverage.auditedCases) {
+      coverageErrors.push(`audited cases fell from ${snap.coverage.auditedCases} to ${auditedCases}`);
+    }
+    if (summary.surfaceCoverage.hit < snap.coverage.routesHit) {
+      coverageErrors.push(`routes reached fell from ${snap.coverage.routesHit} to ${summary.surfaceCoverage.hit}`);
+    }
+    if (summary.unresolved) {
+      const classes = [...new Set(cases.filter(c => c.status === 'unresolved-export').map(c => c.className))];
+      coverageErrors.push(`resource class(es) not exported from the SDK barrel: ${classes.join(', ')}`);
+    }
+    if (coverageErrors.length) {
+      console.error('\n❌ Audit coverage regressed — the audit is now checking less of the SDK:');
+      for (const e of coverageErrors) console.error(`   - ${e}`);
+      console.error(
+        '\nThe gate cannot vouch for surface it no longer reaches. Restore coverage, or if the\n' +
+          'SDK surface shrank deliberately, re-snapshot: pnpm audit:contract:snapshot',
+      );
+      process.exit(1);
+    }
+
     const cur = new Set(cases.filter(c => c.status === 'drift' || c.status === 'orphan').map(caseKey));
     const newDrift = [...cur].filter(k => !snap.entries.includes(k));
     const removed = snap.entries.filter(k => !cur.has(k));
