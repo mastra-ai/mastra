@@ -1,5 +1,50 @@
 # @mastra/server
 
+## 1.60.0-alpha.11
+
+### Minor Changes
+
+- Added a `durable` option to stored agents so agents created through the Agents API can run with durable execution — no code deployment required. ([#21715](https://github.com/mastra-ai/mastra/pull/21715))
+
+  ```typescript
+  await mastraClient.createStoredAgent({
+    id: 'helper',
+    name: 'Helper',
+    instructions: 'You are a helpful assistant.',
+    model: { provider: 'openai', name: 'gpt-5' },
+    durable: true,
+  });
+  ```
+
+  Pass `true` for defaults, or `{ maxSteps, cleanupTimeoutMs }` to tune the durable loop. Cache and pubsub are inherited from the server's Mastra instance, so configure distributed backends there for durability across replicas. Automatic recovery is still configured in code via `recovery.durableAgents`.
+
+### Patch Changes
+
+- Fixed two things the agent controller's HTTP routes got wrong. ([#21739](https://github.com/mastra-ai/mastra/pull/21739))
+
+  Threads listed through `GET /agent-controller/:id/sessions/:resourceId/threads` leaked internal session bookkeeping as scoping tags: a session's persisted `thinkingLevel` and `notifications` preferences showed up next to real tags like `projectPath`, and could be passed to the `tags` filter. They are now filtered out like the other reserved keys.
+
+  Workspace failures streamed over SSE arrived empty. `workspace_error` and `workspace_status_changed` carry an `Error`, whose `name` and `message` are non-enumerable, so JSON serialization sent `"error": {}` and browser clients could not show why the workspace failed. Only the generic `error` event was being flattened; every event that carries an `Error` now is.
+
+  The session-state route also returns a typed `tokenUsage` object instead of an opaque record, so clients get the same shape the `display_state_changed` event carries.
+
+- Updated dependencies [[`6223446`](https://github.com/mastra-ai/mastra/commit/6223446ddce6166e96e0ba5e00d628b615dee8ca), [`583e235`](https://github.com/mastra-ai/mastra/commit/583e23519c13af16c1746f9c49722d011216611b), [`a77f8d4`](https://github.com/mastra-ai/mastra/commit/a77f8d4740d2178a74c41e4bf678b4fcd8fa0bb2), [`40d358e`](https://github.com/mastra-ai/mastra/commit/40d358e29d55543803e64b49241122f598ffabc7), [`e80cd7e`](https://github.com/mastra-ai/mastra/commit/e80cd7e7683e7d732e1cc6784bcac1d2640d2ce3), [`20504b2`](https://github.com/mastra-ai/mastra/commit/20504b2ecebd0e077acda3d457ab57480a98ed3e)]:
+  - @mastra/core@1.60.0-alpha.11
+
+## 1.60.0-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [[`b860493`](https://github.com/mastra-ai/mastra/commit/b86049391100e665d579f700c8a2034c036defc3)]:
+  - @mastra/core@1.60.0-alpha.10
+
+## 1.60.0-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`b0a2a07`](https://github.com/mastra-ai/mastra/commit/b0a2a07800d42bd9823292e7db832374ed084c9c), [`ccbbcd9`](https://github.com/mastra-ai/mastra/commit/ccbbcd974eedff4367a54ed0e24c9ee742ab2f61), [`3f5c6f7`](https://github.com/mastra-ai/mastra/commit/3f5c6f728ea35da344248de9aa070f12849f3aa0), [`77e6b1b`](https://github.com/mastra-ai/mastra/commit/77e6b1bc4c46ce94fe501023fb4393c812ec6be3), [`2e1d098`](https://github.com/mastra-ai/mastra/commit/2e1d0984e325fd319d32ea182f596b3170be3847)]:
+  - @mastra/core@1.60.0-alpha.9
+
 ## 1.60.0-alpha.8
 
 ### Minor Changes

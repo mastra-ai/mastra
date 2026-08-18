@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "50.0.0-alpha.8",
+  "version": "50.0.0-alpha.11",
   "description": "Mastra Playground components",
   "sideEffects": [
     "**/*.css"
@@ -106,7 +106,7 @@
   },
   "scripts": {
     "build": "vite build",
-    "dev": "vite build --watch",
+    "dev": "vite build && vite build --watch --mode development",
     "test": "vitest",
     "typecheck": "tsc",
     "lint": "oxlint . && eslint .",

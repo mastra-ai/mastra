@@ -324,9 +324,10 @@ const result = await agent.generate('message for agent')
           },
           {
             name: 'onAbort',
-            type: '(event: any) => Promise<void> | void',
+            type: '(event: { steps: any[]; text?: string }) => Promise<void> | void',
             isOptional: true,
-            description: 'Callback function called when the generation is aborted.',
+            description:
+              'Callback function called when the generation is aborted. `steps` contains the steps that completed before the abort, and `text` contains the assistant text generated so far for the step that was in flight.',
           },
           {
             name: 'activeTools',

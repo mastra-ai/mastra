@@ -105,6 +105,63 @@ describe('DurableAgent abort signal', () => {
     cleanup();
   });
 
+  it('onAbort receives the text streamed before the abort', async () => {
+    const mockModel = new MockLanguageModelV2({
+      doStream: async ({ abortSignal }: { abortSignal?: AbortSignal }) => ({
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'mock-model-id',
+              timestamp: new Date(0),
+            });
+            controller.enqueue({ type: 'text-start', id: 'text-1' });
+            controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'Hello' });
+            abortSignal?.addEventListener(
+              'abort',
+              () => {
+                const err = new Error('Aborted');
+                err.name = 'AbortError';
+                controller.error(err);
+              },
+              { once: true },
+            );
+          },
+        }),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      }),
+    });
+    const baseAgent = new Agent({
+      id: 'abort-partial-text-agent',
+      name: 'Abort Partial Text Agent',
+      instructions: 'Test',
+      model: mockModel as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    let abortPayload: { steps: unknown[]; text?: string } | undefined;
+    const { output, abort, cleanup } = await durableAgent.stream('Go', {
+      onAbort: data => {
+        abortPayload = data;
+      },
+    });
+
+    await new Promise(r => setTimeout(r, 10));
+    abort();
+
+    try {
+      await output.consumeStream();
+    } catch {
+      // The bridge errors the stream after firing onAbort; expected.
+    }
+
+    expect(abortPayload?.text).toBe('Hello');
+
+    cleanup();
+  });
+
   it('observe().abort() still completes when cleanup is called immediately', async () => {
     const mockModel = createAbortableModel();
     const baseAgent = new Agent({

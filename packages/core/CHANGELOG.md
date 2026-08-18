@@ -1,5 +1,65 @@
 # @mastra/core
 
+## 1.60.0-alpha.11
+
+### Minor Changes
+
+- Added a `durable` option to stored agents so agents created through the Agents API can run with durable execution — no code deployment required. ([#21715](https://github.com/mastra-ai/mastra/pull/21715))
+
+  ```typescript
+  await mastraClient.createStoredAgent({
+    id: 'helper',
+    name: 'Helper',
+    instructions: 'You are a helpful assistant.',
+    model: { provider: 'openai', name: 'gpt-5' },
+    durable: true,
+  });
+  ```
+
+  Pass `true` for defaults, or `{ maxSteps, cleanupTimeoutMs }` to tune the durable loop. Cache and pubsub are inherited from the server's Mastra instance, so configure distributed backends there for durability across replicas. Automatic recovery is still configured in code via `recovery.durableAgents`.
+
+### Patch Changes
+
+- Fixed model-backed processors (language detector, prompt injection detector, PII detector, system prompt scrubber, and moderation) dropping the request context. Their internal detection agents now receive the caller's RequestContext, so dynamic model resolvers and gateways can select models per request. ([#21709](https://github.com/mastra-ai/mastra/pull/21709))
+
+- Retry transient Windows file locks when atomically replacing provider registry cache files. ([#21425](https://github.com/mastra-ai/mastra/pull/21425))
+
+- Exported `ReservedThreadMetadataKey`, the list of thread-metadata keys an agent controller session owns for its own bookkeeping (selected model and mode, observer/reflector config, token usage, persisted preferences). Packages that cannot import the list as a value can now pin their copy of it to the real one: ([#21739](https://github.com/mastra-ai/mastra/pull/21739))
+
+  ```ts
+  import type { ReservedThreadMetadataKey } from '@mastra/core/agent-controller';
+
+  const RESERVED = { currentModelId: true /* … */ } satisfies Record<ReservedThreadMetadataKey, true>;
+  ```
+
+  The list itself is unchanged — only its keys are now nameable, so a package that mirrors it fails to compile the moment the two fall out of step.
+
+- Sub-agent delegation no longer attempts to resume when the model supplies `resumeData` without a suspended run. Previously the delegation step chose the resume path on `resumeData` alone and called `resumeGenerate`/`resumeStream` with an undefined run id, throwing `AGENT_RESUME_NO_SNAPSHOT_FOUND` before the sub-agent executed. It now starts a fresh delegation in that case. ([#21729](https://github.com/mastra-ai/mastra/pull/21729))
+
+- Estimate media token cost in TokenLimiterProcessor instead of serializing base64 payloads as text. File parts and media-shaped tool results (`{ data, mediaType }`) previously fell through to `JSON.stringify`, so a single image could add thousands of phantom tokens and truncate history unnecessarily (#21731). ([#21737](https://github.com/mastra-ai/mastra/pull/21737))
+
+## 1.60.0-alpha.10
+
+### Minor Changes
+
+- Added `modelSettings.timeout` so you can put a time limit on agent runs. Set `totalMs` to cap how long a whole run may take, including every reasoning step, tool call and retry, and `stepMs` to cap a single model call. Going over either limit fails with a `MastraTimeoutError`. A `totalMs` timeout ends the run outright, while a `stepMs` timeout moves on to the next model when you have configured fallback models, so a slow provider no longer stalls the run. Closes #15667 ([#21724](https://github.com/mastra-ai/mastra/pull/21724))
+
+## 1.60.0-alpha.9
+
+### Minor Changes
+
+- Added an opt-in `propagate` flag on the FGA actor signal. Set `actor: { actorKind: 'system', propagate: true }` when starting a workflow run and the actor is forwarded into the agent and tool calls made for declarative `.then(agent)` and `.then(tool)` steps, so system and scheduled runs no longer fail membership resolution. Propagation stays opt-in, skips custom step `execute` functions, and can be overridden per step. (#19064) ([#21713](https://github.com/mastra-ai/mastra/pull/21713))
+
+### Patch Changes
+
+- Added `settled()` to the base memory class. Memory implementations can do work in the background after an agent run returns, and this gives callers a way to wait for it before closing a storage connection they own. The default implementation does nothing; `@mastra/memory` overrides it. ([#21708](https://github.com/mastra-ai/mastra/pull/21708))
+
+- Fix per-step `reasoningText` and `reasoning` accumulating across steps for reasoning models. Each step in a multi-step run now reports only the reasoning produced during that step, matching the existing behavior of the per-step `text` field. Run-level `reasoningText` and `reasoning` remain the full concatenation across all steps. ([#21711](https://github.com/mastra-ai/mastra/pull/21711))
+
+- onAbort now receives the partial assistant text streamed before a mid-generation abort, alongside the completed steps ([#21718](https://github.com/mastra-ai/mastra/pull/21718))
+
+- Tightened `AgentConfig.tools` typing so each entry must be an actual tool object. Previously a plain function such as `tools: { myTool: () => realTool }` passed type checking and then threw `TOOL_INVALID_FORMAT` at runtime, because the provider-defined tool member of the union is all-optional with an index signature. Provider-defined tools now require an `id` when used as a tools-map entry, mirroring the existing runtime check. Setting `tools` itself to a resolver function is still supported. ([#21705](https://github.com/mastra-ai/mastra/pull/21705))
+
 ## 1.60.0-alpha.8
 
 ### Minor Changes

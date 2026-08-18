@@ -503,6 +503,8 @@ export interface AgentSuspendedEventData {
 export interface AgentAbortEventData {
   /** Steps accumulated up to the point of abort */
   steps: unknown[];
+  /** Assistant text streamed before the abort */
+  text?: string;
 }
 
 /**

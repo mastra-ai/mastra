@@ -30,6 +30,7 @@ import type {
   StreamTextOnStepFinishCallback,
   StreamObjectOnFinishCallback,
 } from '../llm/model/base.types';
+import type { ModelConfigModelSettings } from '../llm/model/model-settings';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import type { IMastraLogger } from '../logger';
 import type { ReasoningLevel } from '../loop/types';
@@ -102,12 +103,25 @@ export type { ScreencastOptions, ScreencastStream } from '../browser/browser';
 export type ZodSchema = ZodSchemaV3 | ZodTypev4;
 
 /**
+ * Provider-defined tools as accepted in a tools map.
+ *
+ * The exported `ProviderDefinedTool` is intentionally wide — its `ToolV5` branch has
+ * only optional properties plus an index signature so that provider tools resolved
+ * from a different `@ai-sdk/provider-utils` copy still match structurally. That width
+ * also makes it match any object-like value, including plain functions. Requiring
+ * `id` here mirrors the runtime guard in `isProviderDefinedTool` (tools/toolchecks.ts),
+ * which already demands a string `id`, and is what keeps non-tool values out of
+ * `ToolsInput` without narrowing the public type.
+ */
+type ProviderDefinedToolInput = ProviderDefinedTool & { id: string };
+
+/**
  * Accepts Mastra tools, Vercel AI SDK tools, and provider-defined tools
  * (e.g., google.tools.googleSearch()).
  */
 export type ToolsInput = Record<
   string,
-  ToolAction<any, any, any, any, any> | VercelTool | VercelToolV5 | ProviderDefinedTool | WebSearchToolPlaceholder
+  ToolAction<any, any, any, any, any> | VercelTool | VercelToolV5 | ProviderDefinedToolInput | WebSearchToolPlaceholder
 >;
 
 export type AgentInstructions = SystemMessage;
@@ -430,18 +444,7 @@ export interface AgentCreateOptions {
   tracingPolicy?: TracingPolicy;
 }
 
-export type ModelFallbackSettings = Omit<CallSettings, 'abortSignal' | 'maxRetries' | 'headers'> & {
-  /**
-   * Reasoning effort level for the model. Controls how much reasoning
-   * the model performs before generating a response.
-   *
-   * Only effective with LanguageModelV4 (AI SDK v7) model providers that support reasoning.
-   * When used with older model providers (V2/V3), this option is a no-op.
-   *
-   * @default undefined (provider default behavior)
-   */
-  reasoning?: ReasoningLevel;
-};
+export type ModelFallbackSettings = ModelConfigModelSettings;
 
 export type ModelWithRetries = {
   id?: string;

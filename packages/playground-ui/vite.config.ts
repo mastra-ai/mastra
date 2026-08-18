@@ -8,73 +8,61 @@ import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 import { libInjectCss } from 'vite-plugin-lib-inject-css';
 
-const componentsDir = resolve(__dirname, 'src/ds/components');
+const srcDir = resolve(__dirname, 'src');
 
-// Public hook subpath entries, exposed as
-// `@mastra/playground-ui/hooks/<hook-file>` via the `./hooks/*` package export.
-const hooksDir = resolve(__dirname, 'src/hooks');
-const hookEntries = Object.fromEntries(
-  readdirSync(hooksDir, { withFileTypes: true })
-    .filter(dirent => dirent.isFile())
-    .map(dirent => dirent.name)
-    .filter(
-      fileName => /\.(ts|tsx)$/.test(fileName) && !fileName.endsWith('.test.tsx') && !fileName.endsWith('.test.ts'),
-    )
-    .map(fileName => {
-      const entryName = fileName.replace(/\.(ts|tsx)$/, '');
-      return [`hooks/${entryName}`, resolve(hooksDir, fileName)] as const;
-    }),
-);
+const isEntrySource = (fileName: string) => /\.(ts|tsx)$/.test(fileName) && !/\.(test|stories)\.tsx?$/.test(fileName);
 
-// Public utility subpath entries, exposed as
-// `@mastra/playground-ui/utils/<utility-file>` via the `./utils/*` package export.
-const utilsDir = resolve(__dirname, 'src/utils');
-const utilityEntries = Object.fromEntries(
-  readdirSync(utilsDir, { withFileTypes: true })
-    .filter(dirent => dirent.isFile())
-    .map(dirent => dirent.name)
-    .filter(
-      fileName => /\.(ts|tsx)$/.test(fileName) && !fileName.endsWith('.test.tsx') && !fileName.endsWith('.test.ts'),
-    )
-    .map(fileName => {
-      const entryName = fileName.replace(/\.(ts|tsx)$/, '');
-      return [`utils/${entryName}`, resolve(utilsDir, fileName)] as const;
-    }),
-);
+const forEachSourceFile = (directory: string, visit: (file: string) => void) => {
+  readdirSync(directory, { withFileTypes: true }).forEach(dirent => {
+    if (dirent.name === '__tests__') return;
 
-const createPublicFileEntries = (sourceDir: string, entryPrefix: string) => {
-  const entries: Array<readonly [string, string]> = [];
+    const path = resolve(directory, dirent.name);
+    if (dirent.isDirectory()) forEachSourceFile(path, visit);
+    else if (dirent.isFile() && isEntrySource(dirent.name)) visit(path);
+  });
+};
+
+// One entry per source file, published as `@mastra/playground-ui/<prefix>/<path>`:
+// `src/hooks/use-is-mobile.ts` becomes `hooks/use-is-mobile`. A folder's index.ts
+// takes the folder's own name, and a root barrel would collide with the prefix,
+// so it is left out.
+const fileEntries = (directory: string, prefix: string) => {
+  const sourceDir = resolve(__dirname, directory);
+  const entries: Array<[string, string]> = [];
+
+  forEachSourceFile(sourceDir, file => {
+    const entryName = relative(sourceDir, file)
+      .replace(/\\/g, '/')
+      .replace(/\.(ts|tsx)$/, '')
+      .replace(/(?:^|\/)index$/, '');
+
+    if (entryName) entries.push([`${prefix}/${entryName}`, file]);
+  });
+
+  return Object.fromEntries(entries);
+};
+
+// One entry per design-system component folder holding an index.ts, published as
+// `components/<Name>` or a nested `components/ai/plan`. The walk stops at that
+// index.ts — deeper folders are the component's internals, already re-exported by
+// its barrel — and folders without one only group files.
+const componentEntries = (directory: string, prefix: string) => {
+  const sourceDir = resolve(__dirname, directory);
+  const entries: Array<[string, string]> = [];
 
   const walk = (currentDir: string) => {
     readdirSync(currentDir, { withFileTypes: true }).forEach(dirent => {
-      if (dirent.isDirectory()) {
-        if (dirent.name === '__tests__') return;
-        walk(resolve(currentDir, dirent.name));
+      if (!dirent.isDirectory() || dirent.name === '__tests__') return;
+
+      const folder = resolve(currentDir, dirent.name);
+      const indexFile = resolve(folder, 'index.ts');
+
+      if (!existsSync(indexFile)) {
+        walk(folder);
         return;
       }
 
-      if (!dirent.isFile()) return;
-
-      const fileName = dirent.name;
-      if (
-        !/\.(ts|tsx)$/.test(fileName) ||
-        fileName.endsWith('.test.ts') ||
-        fileName.endsWith('.test.tsx') ||
-        fileName.endsWith('.stories.ts') ||
-        fileName.endsWith('.stories.tsx')
-      ) {
-        return;
-      }
-
-      const file = resolve(currentDir, fileName);
-      const entryName = relative(sourceDir, file)
-        .replace(/\\/g, '/')
-        .replace(/\.(ts|tsx)$/, '')
-        .replace(/(?:^|\/)index$/, '');
-
-      if (!entryName) return;
-
-      entries.push([`${entryPrefix}/${entryName}`, file] as const);
+      entries.push([`${prefix}/${relative(sourceDir, folder).replace(/\\/g, '/')}`, indexFile]);
     });
   };
 
@@ -83,114 +71,55 @@ const createPublicFileEntries = (sourceDir: string, entryPrefix: string) => {
   return Object.fromEntries(entries);
 };
 
-const createComponentEntries = (sourceDir: string, entryPrefix: string) => {
-  const entries: Array<readonly [string, string]> = [];
-
-  const walk = (currentDir: string) => {
-    readdirSync(currentDir, { withFileTypes: true }).forEach(dirent => {
-      if (!dirent.isDirectory()) return;
-      if (dirent.name === '__tests__') return;
-
-      const directory = resolve(currentDir, dirent.name);
-      const indexFile = resolve(directory, 'index.ts');
-
-      if (existsSync(indexFile)) {
-        const entryName = relative(sourceDir, directory).replace(/\\/g, '/');
-        entries.push([`${entryPrefix}/${entryName}`, indexFile] as const);
-        return;
+// vite-plugin-dts only logs type errors. It is the package's single TypeScript pass
+// since `build` dropped its standalone tsc, so make diagnostics fail the build.
+const typeDeclarations = () =>
+  dts({
+    insertTypesEntry: true,
+    exclude: ['vite.config.ts', 'src/**/*.test.ts', 'src/**/*.test.tsx', 'src/**/__tests__/**'],
+    afterDiagnostic: diagnostics => {
+      if (diagnostics.length > 0) {
+        throw new Error(`vite-plugin-dts found ${diagnostics.length} type error(s); see log above.`);
       }
+    },
+  });
 
-      walk(directory);
-    });
-  };
-
-  walk(sourceDir);
-
-  return Object.fromEntries(entries);
-};
-
-// One library entry per design-system component folder with an index.ts, exposed
-// publicly as `@mastra/playground-ui/components/<Name>` or a nested subpath such
-// as `@mastra/playground-ui/components/ai/plan`. Namespace folders without an
-// index.ts are only organizational and are not published as broad barrels.
-const componentEntries = createComponentEntries(componentsDir, 'components');
-
-const domainEntries = createPublicFileEntries(resolve(__dirname, 'src/domains'), 'domains');
-const eeEntries = createPublicFileEntries(resolve(__dirname, 'src/ee'), 'ee');
-const primitiveEntries = createPublicFileEntries(resolve(__dirname, 'src/ds/primitives'), 'primitives');
-const resizeEntries = createPublicFileEntries(resolve(__dirname, 'src/lib/resize'), 'resize');
-const storeEntries = createPublicFileEntries(resolve(__dirname, 'src/store'), 'store');
-
-// Public icon subpath entries, exposed as
-// `@mastra/playground-ui/icons/<IconName>` via the `./icons/*` package export.
-const iconsDir = resolve(__dirname, 'src/ds/icons');
-const iconEntries = Object.fromEntries(
-  readdirSync(iconsDir, { withFileTypes: true })
-    .filter(dirent => dirent.isFile())
-    .map(dirent => dirent.name)
-    .filter(
-      fileName =>
-        /\.(ts|tsx)$/.test(fileName) &&
-        fileName !== 'index.ts' &&
-        !fileName.endsWith('.stories.tsx') &&
-        !fileName.endsWith('.test.tsx') &&
-        !fileName.endsWith('.test.ts'),
-    )
-    .map(fileName => {
-      const entryName = fileName.replace(/\.(ts|tsx)$/, '');
-      return [`icons/${entryName}`, resolve(iconsDir, fileName)] as const;
-    }),
-);
+const appPlugins = [react(), tailwindcss()];
 
 const baseConfig: UserConfig = {
-  plugins: [react(), tailwindcss()],
+  plugins: appPlugins,
   resolve: {
     alias: {
-      '@': resolve(__dirname, './src'),
+      '@': srcDir,
     },
   },
 };
 
-const libConfig: UserConfig = {
+// The `dev` watch layers fresh JS over a previous full build: declarations cost ~7s
+// per rebuild, so it skips them and leaves the ones on disk alone — consumers resolve
+// their types from there.
+const createLibConfig = (isProduction: boolean): UserConfig => ({
   ...baseConfig,
-  plugins: [
-    ...(baseConfig.plugins ?? []),
-    dts({
-      insertTypesEntry: true,
-      exclude: ['vite.config.ts', 'src/**/*.test.ts', 'src/**/*.test.tsx', 'src/**/__tests__/**'],
-      // vite-plugin-dts logs type errors but does not fail the build on its own.
-      // Since this is now the single TypeScript pass (the standalone `tsc` step
-      // was removed from `build`), fail the build when diagnostics are emitted so
-      // type errors still gate the bundle.
-      afterDiagnostic: diagnostics => {
-        if (diagnostics.length > 0) {
-          throw new Error(`vite-plugin-dts found ${diagnostics.length} type error(s); see log above.`);
-        }
-      },
-    }),
-    libInjectCss(),
-    nodeExternals() as PluginOption,
-  ],
+  plugins: [...appPlugins, isProduction && typeDeclarations(), libInjectCss(), nodeExternals() as PluginOption],
   build: {
+    emptyOutDir: isProduction,
     lib: {
       entry: {
-        style: resolve(__dirname, 'src/style.ts'),
-        tokens: resolve(__dirname, 'src/ds/tokens/index.ts'),
-        // Slashed keys make Rollup emit nested output: dist/components/<Name>.<format>.js
-        ...utilityEntries,
-        ...domainEntries,
-        ...eeEntries,
-        ...primitiveEntries,
-        ...resizeEntries,
-        ...storeEntries,
-        ...iconEntries,
-        ...componentEntries,
-        ...hookEntries,
+        style: resolve(srcDir, 'style.ts'),
+        tokens: resolve(srcDir, 'ds/tokens/index.ts'),
+        ...fileEntries('src/utils', 'utils'),
+        ...fileEntries('src/domains', 'domains'),
+        ...fileEntries('src/ee', 'ee'),
+        ...fileEntries('src/ds/primitives', 'primitives'),
+        ...fileEntries('src/lib/resize', 'resize'),
+        ...fileEntries('src/store', 'store'),
+        ...fileEntries('src/ds/icons', 'icons'),
+        ...fileEntries('src/hooks', 'hooks'),
+        ...componentEntries('src/ds/components', 'components'),
       },
       formats: ['es', 'cjs'],
-      fileName: (format, entryName) => {
-        return `${entryName}.${format}.js`;
-      },
+      // Slashed keys make Rollup emit nested output: dist/components/<Name>.<format>.js
+      fileName: (format, entryName) => `${entryName}.${format}.js`,
     },
     sourcemap: true,
     // Reduce bloat from legacy polyfills.
@@ -206,11 +135,11 @@ const libConfig: UserConfig = {
       },
     },
   },
-};
+});
 
 // Storybook sets STORYBOOK=true and bundles this package as an app.
 // Library-mode plugins (dts, libInjectCss, nodeExternals) would externalize
 // deps and break the static build, so we skip them when Storybook is running.
 const isStorybook = process.env.STORYBOOK === 'true';
 
-export default defineConfig(isStorybook ? baseConfig : libConfig);
+export default defineConfig(({ mode }) => (isStorybook ? baseConfig : createLibConfig(mode === 'production')));

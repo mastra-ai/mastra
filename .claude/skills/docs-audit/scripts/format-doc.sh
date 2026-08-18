@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Format audited docs using the docs package Prettier config.
+# Format audited docs using the docs package oxfmt-mdx formatter.
 #
 # Run from anywhere; resolves paths relative to this script's location and
-# executes Prettier from docs/ so docs/.prettierrc and docs/.prettierignore apply.
+# executes oxfmt-mdx from docs/.
 #
 # Usage:
 #   bash .claude/skills/docs-audit/scripts/format-doc.sh --docs docs/src/content/en/reference/core/getAgentById.mdx
@@ -100,5 +100,5 @@ for doc in "${DOCS[@]}"; do
 done
 
 (
-  cd "$DOCS_DIR" && pnpm exec prettier --write "${DOCS_REL[@]}"
+  cd "$DOCS_DIR" && pnpm exec oxfmt-mdx --write "${DOCS_REL[@]}"
 )
