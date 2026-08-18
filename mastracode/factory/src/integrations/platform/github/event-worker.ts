@@ -11,7 +11,7 @@ import type { GithubRepositoryPermission } from '../../github/integration.js';
 import type { GithubIssueReconciler } from '../../github/issue-reconciler.js';
 import type { GithubPullRequestReconciler, ReconcileRepository } from '../../github/rules.js';
 import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from '../../github/subscriptions.js';
-import { dispatchGithubWebhook } from '../../github/webhook.js';
+import { dispatchGithubWebhook, resolveAuthorizedBots } from '../../github/webhook.js';
 import type {
   GithubWebhookDispatchIntegration,
   GithubWebhookNotification,
@@ -40,7 +40,6 @@ const AUTHOR_GATED_KINDS = new Set([
   'pull-request-review',
   'pull-request-review-comment',
 ]);
-const AUTHORIZED_BOTS = new Set(['coderabbitai[bot]', 'devin-ai-integration[bot]']);
 const AUTHORIZED_PERMISSIONS = new Set<GithubRepositoryPermission>(['admin', 'maintain', 'write']);
 const PERMISSION_CHECK_TIMEOUT_MS = 5_000;
 
@@ -425,6 +424,14 @@ export class PlatformGithubEventWorker extends MastraWorker {
             retirePullRequestSubscription(id, status, this.#github.integrationStorage),
           github: this.#github,
           isAuthorizedSender: notification => this.#isAuthorizedSender(notification),
+          onSenderRejected: notification => {
+            this.deps?.logger.debug('Platform GitHub event dropped: sender not authorized', {
+              deliveryId: event.deliveryId,
+              repository: notification.metadata.repository,
+              sender: notification.metadata.sender,
+              kind: notification.kind,
+            });
+          },
           onTargetError: (subscription, error) => {
             this.deps?.logger.error('Platform GitHub event delivery failed for a subscription', {
               deliveryId: event.deliveryId,
@@ -456,7 +463,15 @@ export class PlatformGithubEventWorker extends MastraWorker {
     const sender = notification.metadata.sender;
     const repository = notification.metadata.repository;
     if (!sender || !repository) return false;
-    if (AUTHORIZED_BOTS.has(sender)) return true;
+    const normalizedSender = sender.toLowerCase();
+    const authorizedBots = resolveAuthorizedBots(this.#github.authorizedBots);
+    if (authorizedBots.has(normalizedSender)) return true;
+    // Any other bot is gated purely by the allowlist: a GitHub App never holds a
+    // collaborator permission under its sender login, so falling through to the
+    // permission lookup would only fail closed after a wasted API call.
+    if (notification.metadata.senderType?.toLowerCase() === 'bot' || normalizedSender.endsWith('[bot]')) {
+      return false;
+    }
 
     const abortController = new AbortController();
     const timeout = setTimeout(() => abortController.abort(), PERMISSION_CHECK_TIMEOUT_MS);

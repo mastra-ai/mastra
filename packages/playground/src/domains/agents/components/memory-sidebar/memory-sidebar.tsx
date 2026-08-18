@@ -4,6 +4,7 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useObservationalMemory } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronDown, ChevronUp, Eye, MessageSquare, NotebookPen, Search } from 'lucide-react';
@@ -11,6 +12,8 @@ import type { LucideIcon } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { AgentCapabilitiesFooter } from './agent-capabilities-footer';
 import { AgentMemory } from './agent-memory';
+import { getObservationWindowTokens } from './lib/observation-window';
+import type { OmAgentConfig } from './lib/observation-window';
 import { MemoryDetailView } from './memory-detail-view';
 import { useMemoryFeatureFlags } from './use-memory-feature-flags';
 import { useMemorySidebarTab } from './use-memory-sidebar-tab';
@@ -19,6 +22,7 @@ import { ChatThreads } from '@/domains/agents/components/chat-threads';
 import { SidebarPanel } from '@/domains/agents/components/sidebar-panel';
 import { useMemoryTimeline, useObservationalMemoryContext } from '@/domains/agents/context';
 
+import { useMemoryConfig, useThread } from '@/domains/memory/hooks';
 import { useMemory } from '@/domains/memory/hooks/use-memory';
 
 export interface MemorySidebarProps {
@@ -107,10 +111,28 @@ function MemorySidebarBody({ agentId, threadId, threads, onDelete }: MemorySideb
   // streamProgress is intentionally retained across thread switches (for reload
   // display), so only trust it for the thread this card belongs to — otherwise the
   // collapsed bar keeps the previous thread's percentage.
-  const messagesWindow = streamProgress?.threadId === threadId ? streamProgress.windows?.active?.messages : undefined;
+  const liveProgress = streamProgress?.threadId === threadId ? streamProgress : null;
+  // Status parts are streamed but not persisted, so on a fresh load there is no live
+  // progress yet. Fall back to the durable OM record the same way the expanded OM
+  // section and the timeline panel do, otherwise the bar stays empty after a reload.
+  const { data: thread } = useThread({ threadId, agentId });
+  const { data: memoryConfigData } = useMemoryConfig(agentId);
+  const { data: omData } = useObservationalMemory(
+    observationalOn ? agentId : undefined,
+    observationalOn ? threadId : undefined,
+    thread?.resourceId ?? agentId,
+  );
+  const omAgentConfig = (memoryConfigData?.config as { observationalMemory?: OmAgentConfig } | undefined)
+    ?.observationalMemory;
+  const { messageTokens, messageThreshold } = getObservationWindowTokens({
+    record: omData?.record,
+    liveProgress,
+    agentConfig: omAgentConfig,
+  });
+  const hasObservationWindow = Boolean(liveProgress) || Boolean(omData?.record);
   const observationPercent =
-    messagesWindow && messagesWindow.threshold > 0
-      ? Math.min(100, Math.round((messagesWindow.tokens / messagesWindow.threshold) * 100))
+    hasObservationWindow && messageThreshold > 0
+      ? Math.min(100, Math.round((messageTokens / messageThreshold) * 100))
       : undefined;
 
   useLayoutEffect(() => {
@@ -291,7 +313,11 @@ function MemorySidebarBody({ agentId, threadId, threads, onDelete }: MemorySideb
               ) : null}
 
               {observationPercent !== undefined ? (
-                <span className="bg-surface5 mt-2 block h-1 w-full overflow-hidden rounded-full">
+                <span
+                  data-testid="memory-card-observation-bar"
+                  data-percent={observationPercent}
+                  className="bg-surface5 mt-2 block h-1 w-full overflow-hidden rounded-full"
+                >
                   <span
                     className={cn(
                       'block h-full rounded-full transition-all duration-normal',

@@ -416,7 +416,10 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           // so the separate ABORT event never fires.
           if (onAbort && (data.stepResult?.reason as string) === 'abort') {
             try {
-              await onAbort({ steps: (data.output?.steps ?? []) as unknown[] });
+              await onAbort({
+                steps: (data.output?.steps ?? []) as unknown[],
+                text: (data.output?.text ?? '') as string,
+              });
             } catch (callbackError) {
               logError(`[DurableAgentStream] onAbort (from FINISH) callback error:`, callbackError);
             }

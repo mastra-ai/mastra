@@ -87,6 +87,7 @@ function buildApp(
       auth: fakeRouteAuth({ enabled: options.authEnabled ?? true }),
       stateSigner: options.signer === undefined ? stateSigner : (options.signer ?? undefined),
       intake: seed.intake,
+      projects: seed.projects,
       ingestFactoryIssues: options.ingestFactoryIssues,
     }),
   );
@@ -269,6 +270,91 @@ describe('issues route', () => {
       issues: expect.arrayContaining([
         expect.objectContaining({ id: 'issue-1', identifier: 'ENG-42', assignee: 'ada', creator: 'grace' }),
       ]),
+    });
+  });
+
+  describe('Factory project scoping', () => {
+    const projectA = '11111111-1111-4111-8111-111111111111';
+    const projectB = '22222222-2222-4222-8222-222222222222';
+
+    const seedProjects = async (count: number) => {
+      for (let i = 0; i < count; i += 1) {
+        await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: `project-${i}` } });
+      }
+    };
+
+    const bind = (sourceId: string, factoryProjectId: string) =>
+      seed.intake.setBinding({ orgId: 'org1', integrationId: 'linear', sourceId, factoryProjectId });
+
+    beforeEach(async () => {
+      await connect();
+      await seed.intake.saveConfig({
+        orgId: 'org1',
+        userId: 'u1',
+        config: { linear: { enabled: true, sourceIds: ['proj-1', 'proj-2'] } },
+      });
+    });
+
+    it('fetches and ingests only the sources bound to the requested project', async () => {
+      await seedProjects(2);
+      await bind('proj-1', projectA);
+      await bind('proj-2', projectB);
+      const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed' }));
+
+      const res = await buildApp(org1(), { ingestFactoryIssues }).request(
+        `/web/linear/issues?factoryProjectId=${projectA}`,
+      );
+
+      expect(res.status).toBe(200);
+      expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token', undefined, ['proj-1']);
+      expect(ingestFactoryIssues).toHaveBeenCalledWith(expect.objectContaining({ factoryProjectId: projectA }));
+    });
+
+    it('does not ingest another project sources when its board is viewed', async () => {
+      await seedProjects(2);
+      await bind('proj-1', projectA);
+      const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed' }));
+
+      const res = await buildApp(org1(), { ingestFactoryIssues }).request(
+        `/web/linear/issues?factoryProjectId=${projectB}`,
+      );
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ issues: [], nextCursor: null });
+      expect(listActiveLinearIssues).not.toHaveBeenCalled();
+      expect(ingestFactoryIssues).not.toHaveBeenCalled();
+    });
+
+    it('ingests nothing for unbound sources once the org has several projects', async () => {
+      await seedProjects(2);
+      const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed' }));
+
+      const res = await buildApp(org1(), { ingestFactoryIssues }).request(
+        `/web/linear/issues?factoryProjectId=${projectA}`,
+      );
+
+      expect(await res.json()).toEqual({ issues: [], nextCursor: null });
+      expect(listActiveLinearIssues).not.toHaveBeenCalled();
+      expect(ingestFactoryIssues).not.toHaveBeenCalled();
+    });
+
+    it('keeps ingesting unbound sources while the org has a single project', async () => {
+      await seedProjects(1);
+      const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed' }));
+
+      await buildApp(org1(), { ingestFactoryIssues }).request(`/web/linear/issues?factoryProjectId=${projectA}`);
+
+      expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token', undefined, ['proj-1', 'proj-2']);
+      expect(ingestFactoryIssues).toHaveBeenCalledOnce();
+    });
+
+    it('lists every selected source when no Factory project is in play', async () => {
+      await seedProjects(2);
+      await bind('proj-1', projectA);
+
+      await buildApp(org1()).request('/web/linear/issues');
+
+      expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token', undefined, ['proj-1', 'proj-2']);
     });
   });
 
