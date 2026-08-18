@@ -308,12 +308,24 @@ describe('SessionRunEngine — MastraDBMessage contract', () => {
    * events, and consecutive events intentionally share the same parts and tool
    * invocation identities. Each assertion below must fail under that contract.
    *
-   * The former deep clone copied all accumulated content, including completed
-   * multi-megabyte tool results, on every token. Nik Aiyer's PR #20314 significantly
-   * improved this with selective shallow snapshots, but it still creates a complete
-   * message/parts shell per delta and allows delayed listeners to retain every
-   * intermediate shape. Long-running dogfood profiles showed this work moving
-   * allocation and retained-heap pressure out of the stream producer.
+   * This is a large tradeoff, not a micro-optimization. The former deep clone copied
+   * all accumulated content, including completed multi-megabyte tool results, on every
+   * token. For D similarly sized deltas, copying a message that grows throughout the
+   * stream makes total copied content grow quadratically with D. Nik Aiyer's PR #20314
+   * significantly improved this with selective shallow snapshots, but it still creates
+   * a complete message/parts shell per delta and allows delayed listeners to retain
+   * every intermediate shape.
+   *
+   * In the dogfood profile that motivated this change, the
+   * `structuredClone -> cloneMessage -> processStreamChunk` path accounted for 583.9 MiB
+   * of sampled allocation, including 343.7 MiB directly in `structuredClone`; the
+   * process finished near 1.9 GiB heap and 1.7 GiB old space without meaningful major-GC
+   * recovery. That profile does not prove every retained byte belonged to cloning, but
+   * it establishes that snapshot production was a material allocation source. The
+   * retained-listener reproduction cited by #20314 was even starker: retaining roughly
+   * 2,000 deltas with multi-megabyte tool results exhausted the heap under deep cloning,
+   * while selective snapshots reduced growth to roughly 5 MiB. Live messages remove the
+   * remaining producer-owned per-delta shells as well as the deep copies.
    *
    * Point-in-time consumers must now copy or serialize at their own async/storage
    * boundary. Do not unskip these tests by restoring producer-side snapshots; replace
