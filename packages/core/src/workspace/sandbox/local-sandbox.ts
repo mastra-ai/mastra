@@ -135,6 +135,26 @@ export interface LocalSandboxOptions extends Omit<MastraSandboxOptions, 'process
    *   optional request context so you can extend or customise per-request.
    */
   instructions?: InstructionsOption;
+  /**
+   * Named checkpoint to seed the working directory from on `start()` and to
+   * persist to on `snapshot()`. When set and a matching checkpoint exists
+   * under `checkpointsDirectory`, an empty/missing working directory is seeded
+   * from it before start. A missing checkpoint falls back to a normal empty
+   * working directory.
+   */
+  checkpointName?: string;
+  /**
+   * Fallback checkpoint used to seed the working directory when
+   * `checkpointName` has no stored checkpoint yet (e.g. a repo-level warm base
+   * image for a brand-new session). Boot-only: `snapshot()` keeps writing to
+   * `checkpointName`.
+   */
+  seedCheckpointName?: string;
+  /**
+   * Directory where named checkpoints are stored.
+   * Defaults to `<parent of workingDirectory>/.checkpoints`.
+   */
+  checkpointsDirectory?: string;
 }
 
 /**
@@ -188,6 +208,14 @@ export class LocalSandbox extends MastraSandbox {
   private _mountIsolationRefCount = new Map<string, number>();
   /** Normalized mount path → canonical isolation path recorded for that mount. */
   private _mountPathToIsolationPath = new Map<string, string>();
+  /** Named checkpoint to seed from on start and persist to on snapshot. */
+  private readonly _checkpointName?: string;
+  /** Boot-only fallback checkpoint used when `_checkpointName` has no state. */
+  private readonly _seedCheckpointName?: string;
+  /** Directory where named checkpoints live. */
+  private readonly _checkpointsDirectory: string;
+  /** Chains snapshot() calls so concurrent captures never interleave. */
+  private _snapshotChain: Promise<void> = Promise.resolve();
 
   constructor(options: LocalSandboxOptions = {}) {
     // Validate isolation backend before super (fail fast)
@@ -215,6 +243,11 @@ export class LocalSandbox extends MastraSandbox {
     this._initialReadWritePaths = new Set(this._nativeSandboxConfig.readWritePaths ?? []);
     this.isolation = requestedIsolation;
     this._instructionsOverride = options.instructions;
+    this._checkpointName = options.checkpointName;
+    this._seedCheckpointName = options.seedCheckpointName;
+    this._checkpointsDirectory = options.checkpointsDirectory
+      ? expandTilde(options.checkpointsDirectory)
+      : path.join(path.dirname(this.workingDirectory), '.checkpoints');
   }
 
   // ---------------------------------------------------------------------------
@@ -243,6 +276,13 @@ export class LocalSandbox extends MastraSandbox {
         readOnlyPaths: [...(this._nativeSandboxConfig.readOnlyPaths ?? [])],
       },
       ...(this._instructionsOverride !== undefined && { instructions: this._instructionsOverride }),
+      ...((options.checkpointName ?? this._checkpointName) !== undefined && {
+        checkpointName: options.checkpointName ?? this._checkpointName,
+      }),
+      ...((options.seedCheckpointName ?? this._seedCheckpointName) !== undefined && {
+        seedCheckpointName: options.seedCheckpointName ?? this._seedCheckpointName,
+      }),
+      checkpointsDirectory: this._checkpointsDirectory,
     });
   }
 
@@ -262,6 +302,8 @@ export class LocalSandbox extends MastraSandbox {
     });
 
     await fs.mkdir(this.workingDirectory, { recursive: true });
+
+    await this._seedFromCheckpoint();
 
     // Set up seatbelt profile for macOS sandboxing
     if (this.isolation === 'seatbelt') {
@@ -319,6 +361,97 @@ export class LocalSandbox extends MastraSandbox {
     }
 
     this.logger.debug('Sandbox started', { workingDirectory: this.workingDirectory });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Checkpoints
+  // ---------------------------------------------------------------------------
+
+  /** LocalSandbox persists real filesystem-backed checkpoints. */
+  readonly supportsCheckpoints = true;
+
+  /** Resolve the on-disk directory for a named checkpoint, rejecting unsafe names. */
+  private _checkpointPath(name: string): string {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name) || name.includes('..')) {
+      throw new Error(`Invalid checkpoint name: ${name}`);
+    }
+    return path.join(this._checkpointsDirectory, name);
+  }
+
+  /**
+   * Seed an empty/missing working directory from the configured checkpoint.
+   * Missing checkpoint or already-populated workdir → no-op (normal start).
+   */
+  private async _seedFromCheckpoint(): Promise<void> {
+    if (!this._checkpointName && !this._seedCheckpointName) return;
+
+    // Only seed an empty working directory; a populated one wins.
+    const entries = await fs.readdir(this.workingDirectory).catch(() => []);
+    if (entries.length > 0) return;
+
+    // Prefer the primary checkpoint; fall back to the boot-only seed checkpoint.
+    const candidates = [this._checkpointName, this._seedCheckpointName].filter(
+      (name): name is string => name !== undefined,
+    );
+    for (const name of candidates) {
+      const checkpointDir = this._checkpointPath(name);
+      try {
+        const stat = await fs.stat(checkpointDir);
+        if (!stat.isDirectory()) continue;
+      } catch {
+        // Missing checkpoint → try the next candidate (same contract as provider 404).
+        continue;
+      }
+
+      this.logger.debug('Seeding working directory from checkpoint', {
+        checkpointName: name,
+        checkpointDir,
+      });
+      await fs.cp(checkpointDir, this.workingDirectory, { recursive: true });
+      return;
+    }
+  }
+
+  /**
+   * Persist the working directory as the configured named checkpoint.
+   * Copies to a temp sibling, then swaps it into place with rename so a
+   * concurrent boot always observes a complete checkpoint. No-op when no
+   * checkpoint name is set.
+   */
+  async snapshot(): Promise<void> {
+    if (!this._checkpointName) return;
+    const run = this._snapshotChain.then(() => this._captureCheckpoint(this._checkpointName!));
+    // Keep the chain alive even if this capture fails.
+    this._snapshotChain = run.catch(() => {});
+    return run;
+  }
+
+  private async _captureCheckpoint(name: string): Promise<void> {
+    const target = this._checkpointPath(name);
+    await fs.mkdir(this._checkpointsDirectory, { recursive: true });
+    const tmp = path.join(this._checkpointsDirectory, `.tmp-${name}-${crypto.randomBytes(6).toString('hex')}`);
+    const backup = path.join(this._checkpointsDirectory, `.bak-${name}-${crypto.randomBytes(6).toString('hex')}`);
+    let targetMoved = false;
+    try {
+      await fs.cp(this.workingDirectory, tmp, { recursive: true });
+      try {
+        await fs.rename(target, backup);
+        targetMoved = true;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+      await fs.rename(tmp, target);
+    } catch (error) {
+      await fs.rm(tmp, { recursive: true, force: true }).catch(() => {});
+      if (targetMoved) {
+        await fs.rename(backup, target).catch(() => {});
+      }
+      throw error;
+    }
+    if (targetMoved) {
+      await fs.rm(backup, { recursive: true, force: true }).catch(() => {});
+    }
+    this.logger.debug('Captured checkpoint', { checkpointName: name, target });
   }
 
   /**
