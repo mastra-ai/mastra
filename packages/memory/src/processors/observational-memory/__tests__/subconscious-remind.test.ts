@@ -92,7 +92,7 @@ describe('Subconscious remind', () => {
       scope: ['org:acme', 'resource:user-42'],
     });
     const record = await store.appendKnowledge({
-      node: node.id,
+      node,
       text: 'Project Atlas launches January 15.',
       scope: ['org:acme', 'resource:user-42'],
       sourceThreadId: 'beta',
@@ -143,7 +143,7 @@ describe('Subconscious remind', () => {
         scope: ['org:acme', 'resource:user-42'],
       });
       await store.appendKnowledge({
-        node: node.id,
+        node,
         text: 'Project Atlas launches January 15.',
         scope: ['org:acme', 'resource:user-42'],
         sourceThreadId: 'alpha',
