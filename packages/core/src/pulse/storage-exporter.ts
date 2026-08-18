@@ -61,8 +61,8 @@ interface FlowAccumulator {
   entityName?: string;
   pulseCount: number;
   costUsd?: number;
-  hasError: boolean;
   rootCompleted: boolean;
+  rootFailed: boolean;
   aborted: boolean;
   /** Run ids seen on this flow's span pulses — the abort's exact join key. */
   runIds: Set<string>;
@@ -160,8 +160,8 @@ export class PulseStorageExporter extends MastraBase implements PulseBusExporter
         startedAt: record.timestamp,
         lastTs: record.timestamp,
         pulseCount: 0,
-        hasError: false,
         rootCompleted: false,
+        rootFailed: false,
         aborted: false,
         runIds: new Set(),
         dirty: false,
@@ -177,12 +177,13 @@ export class PulseStorageExporter extends MastraBase implements PulseBusExporter
     if (record.runId) acc.runIds.add(record.runId);
     if (!acc.entityName && record.metadata?.entityName) acc.entityName = record.metadata.entityName;
     if (typeof record.data?.cost_usd === 'number') acc.costUsd = (acc.costUsd ?? 0) + record.data.cost_usd;
-    if (record.type === 'error') acc.hasError = true;
     if (!record.parentSpanId) {
       if (record.action.endsWith('_started') && !acc.rootStartAt) acc.rootStartAt = record.timestamp;
       if (record.action.endsWith('_completed') || record.action.endsWith('_failed')) {
         acc.rootEndAt = record.timestamp;
-        if (record.action.endsWith('_completed')) acc.rootCompleted = true;
+        // The LAST root terminal decides (mirrors the derived oracle).
+        acc.rootCompleted = record.action.endsWith('_completed');
+        acc.rootFailed = record.action.endsWith('_failed');
       }
     }
     acc.dirty = true;
@@ -191,7 +192,7 @@ export class PulseStorageExporter extends MastraBase implements PulseBusExporter
   /** Status precedence mirrors the derived rule (stale is read-side only). */
   #accStatus(acc: FlowAccumulator): FlowIndexRow['status'] {
     if (acc.aborted) return 'aborted';
-    if (acc.hasError) return 'failed';
+    if (acc.rootFailed) return 'failed';
     if (acc.rootCompleted) return 'completed';
     return 'running';
   }

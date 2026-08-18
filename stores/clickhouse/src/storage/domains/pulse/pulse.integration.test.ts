@@ -449,7 +449,29 @@ describe('status rule parity: ClickHouse must match the in-memory oracle', () =>
         type: 'output',
         timestamp: bt(2_000),
       }),
-      // (4) empty-thread abort row must match nothing.
+      // (4) child error + completed root → completed (root terminal law).
+      p({ traceId: 'flow-ch', threadId: 't-h', runId: 'run-h', spanId: 'h-root', timestamp: bt(0) }),
+      p({
+        traceId: 'flow-ch',
+        threadId: 't-h',
+        runId: 'run-h',
+        spanId: 'h-tool',
+        parentSpanId: 'h-root',
+        surface: 'tool',
+        action: 'call_failed',
+        type: 'error',
+        timestamp: bt(300),
+      }),
+      p({
+        traceId: 'flow-ch',
+        threadId: 't-h',
+        runId: 'run-h',
+        spanId: 'h-root',
+        action: 'run_completed',
+        type: 'output',
+        timestamp: bt(900),
+      }),
+      // (5) empty-thread abort row must match nothing.
       p({ traceId: 'flow-e', threadId: '', spanId: 'e1', timestamp: bt(0) }),
       p({
         traceId: '',
@@ -474,8 +496,9 @@ describe('status rule parity: ClickHouse must match the in-memory oracle', () =>
     expect(shape(memFlows)).toEqual({
       'flow-w1': 'aborted|dur=400',
       'flow-w2': 'aborted|dur=400',
-      'flow-cf': 'running|dur=null',
+      'flow-cf': 'failed|dur=500',
       'flow-x': 'completed|dur=1000',
+      'flow-ch': 'completed|dur=900',
       'flow-e': 'running|dur=null',
     });
   });
@@ -536,5 +559,71 @@ describe('graph proof (live): edges join to pulses by id in SQL', () => {
     const treeRows = (await tree.json()) as { parent: string; child: string }[];
     expect(treeRows.map(t => `${t.parent}->${t.child}`)).toEqual(['root->child']);
     await client.close();
+  });
+});
+
+describe('write idempotency by stable id (ack-lost retries, live)', () => {
+  it('duplicate delivery of the same batch changes no derived answer', async ctx => {
+    if (!available) return ctx.skip();
+    const store = makeStore();
+    await store.init();
+    await store.dangerouslyClearAll();
+
+    let n = 700;
+    const p = (o: Record<string, any>) => ({
+      id: `dup${++n}`,
+      timestamp: at(0),
+      seq: n,
+      type: 'state' as const,
+      surface: 'agent',
+      action: 'run_started',
+      traceId: 'flow-dup',
+      threadId: 't-d',
+      runId: 'run-d',
+      spanId: 'root',
+      source: 'span',
+      ...o,
+    });
+    const batchP = [
+      p({ timestamp: at(0) }),
+      p({
+        spanId: 'gen',
+        parentSpanId: 'root',
+        surface: 'model',
+        action: 'generate_completed',
+        type: 'output',
+        data: { cost_usd: 0.0005 },
+        timestamp: at(400),
+      }),
+      p({ action: 'run_completed', type: 'output', timestamp: at(1000) }),
+    ];
+    const batchR = [
+      {
+        id: 'r-dup-1',
+        timestamp: at(400),
+        seq: 990,
+        type: 'uses_model_settings',
+        from: { kind: 'pulse' as const, id: 'px' },
+        to: { kind: 'definition' as const, id: 'model:openai/gpt-4o-mini' },
+        traceId: 'flow-dup',
+      },
+    ];
+    await store.batchCreatePulses(batchP);
+    await store.batchCreatePulses(batchP); // retry after lost ack
+    await store.batchCreateRelationships(batchR);
+    await store.batchCreateRelationships(batchR);
+
+    const { flows } = await store.listFlows();
+    const f = flows.find(x => x.flowId === 'flow-dup')!;
+    expect(f.pulseCount).toBe(3);
+    expect(f.costUsd).toBeCloseTo(0.0005);
+    expect(f.durationMs).toBe(1000);
+
+    const detail = await store.getFlow('flow-dup');
+    expect(detail!.tree).toHaveLength(2);
+    expect(detail!.definitions).toEqual(['model:openai/gpt-4o-mini']);
+
+    const timeline = await store.getFlowTimeline('flow-dup');
+    expect(timeline).toHaveLength(3);
   });
 });

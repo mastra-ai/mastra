@@ -274,7 +274,7 @@ describe('PulseStorageExporter flow index', () => {
     expect(upserts[0]![0]!.status).toBe('completed');
   });
 
-  it('marks a flow failed as soon as an error pulse arrives', async () => {
+  it('marks a flow failed only on the ROOT terminal (child errors stay non-fatal)', async () => {
     const { storage, upserts } = fakeStorage();
     const exporter = new PulseStorageExporter({ storage, flowIndex: true });
     exporter.onPulseEvent(span('flow-1', { timestamp: at(0) }));
@@ -289,8 +289,12 @@ describe('PulseStorageExporter flow index', () => {
       }),
     );
     await exporter.flush();
-    // failed even without a root terminal — mirrors the derived precedence
-    expect(upserts[0]![0]).toMatchObject({ status: 'failed', durationMs: null });
+    // A child error alone leaves the flow running (mirrors the oracle).
+    expect(upserts[0]![0]).toMatchObject({ status: 'running', durationMs: null });
+
+    exporter.onPulseEvent(span('flow-1', { action: 'run_failed', type: 'error', timestamp: at(900) }));
+    await exporter.flush();
+    expect(upserts[1]![0]).toMatchObject({ status: 'failed' });
     await exporter.shutdown();
   });
 

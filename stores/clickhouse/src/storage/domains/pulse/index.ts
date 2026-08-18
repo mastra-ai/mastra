@@ -302,7 +302,7 @@ export class PulseStorageClickhouse extends PulseStorage {
           /* The abort names its run; the flow is aborted iff it contains
              that run. Exact join — no window guessing. */
           SELECT DISTINCT run_id
-          FROM pulses
+          FROM (SELECT * FROM pulses LIMIT 1 BY id)
           WHERE source = 'session' AND surface = 'run_control'
             AND action = 'abort_completed' AND run_id != ''
         ),
@@ -310,7 +310,8 @@ export class PulseStorageClickhouse extends PulseStorage {
           /* Single source: bridge-folded cost on the semantic model pulse. */
           SELECT trace_id,
                  sum(toFloat64OrZero(JSONExtractRaw(data, 'cost_usd'))) AS cost_usd
-          FROM pulses WHERE trace_id != '' AND source = 'span'
+          FROM (SELECT * FROM pulses LIMIT 1 BY id)
+          WHERE trace_id != '' AND source = 'span'
           GROUP BY trace_id
         )
         SELECT p.trace_id AS flow_id,
@@ -329,11 +330,11 @@ export class PulseStorageClickhouse extends PulseStorage {
                    groupUniqArrayIf(p.run_id, p.run_id != ''),
                    (SELECT groupUniqArray(run_id) FROM exact_aborts)
                  ), 'aborted',
-                 countIf(p.type = 'error') > 0, 'failed',
+                 endsWith(argMaxIf(p.action, (p.timestamp, p.seq), p.parent_span_id = '' AND (endsWith(p.action, '_completed') OR endsWith(p.action, '_failed'))), '_failed'), 'failed',
                  endsWith(argMaxIf(p.action, (p.timestamp, p.seq), p.parent_span_id = '' AND (endsWith(p.action, '_completed') OR endsWith(p.action, '_failed'))), '_completed'), 'completed',
                  dateDiff('second', max(p.timestamp), now64(3)) > ${STALE_THRESHOLD_S}, 'stale',
                  'running') AS status
-        FROM pulses p
+        FROM (SELECT * FROM pulses LIMIT 1 BY id) p
         LEFT JOIN costs c ON c.trace_id = p.trace_id
         WHERE p.source = 'span' AND p.trace_id != '' ${where}
         GROUP BY p.trace_id
@@ -386,7 +387,7 @@ export class PulseStorageClickhouse extends PulseStorage {
                maxIf(timestamp, endsWith(action, '_completed') OR endsWith(action, '_failed')) AS t1,
                countIf(endsWith(action, '_completed') OR endsWith(action, '_failed')) AS ended,
                countIf(type = 'error') AS errs
-        FROM pulses
+        FROM (SELECT * FROM pulses LIMIT 1 BY id)
         WHERE source = 'span' AND trace_id = {var_flow:String} AND span_id != ''
         GROUP BY span_id
         ORDER BY min(seq)`,
@@ -436,7 +437,7 @@ export class PulseStorageClickhouse extends PulseStorage {
       query: `
         WITH (SELECT anyIf(thread_id, thread_id != '') FROM pulses WHERE trace_id = {var_flow:String} AND source = 'span') AS flow_thread
         SELECT timestamp, seq, source, type, surface, action, run_id
-        FROM pulses
+        FROM (SELECT * FROM pulses LIMIT 1 BY id)
         WHERE trace_id = {var_flow:String}
            OR (flow_thread != '' AND thread_id = flow_thread AND source != 'span' AND trace_id = '')
         ORDER BY timestamp, seq

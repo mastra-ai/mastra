@@ -17,14 +17,18 @@ import { PulseStorage } from './base';
  * executable definition of the derivation rules every adapter must match:
  * - flow membership = group by traceId (span lane)
  * - duration = paired parentless *_started / terminal pulse subtraction
- * - status = aborted (session-layer override) > failed > completed >
- *   stale (quiet past threshold) > running
+ * - status = aborted (session-layer override) > root _failed > root
+ *   _completed > stale (quiet past threshold) > running — child errors
+ *   never flip the flow
  * - tree = parentSpanId chain with per-node derived durations
  * - cost = SUM of bridge-folded cost_usd on span pulses
  */
 export class InMemoryPulseStorage extends PulseStorage {
   #pulses: PulseRecord[] = [];
   #relationships: PulseRelationshipRecord[] = [];
+  /** Logical idempotency: a retried write (lost ack) must converge to one row. */
+  #pulseIds = new Set<string>();
+  #relationshipIds = new Set<string>();
   /** Materialized flow index (experimental) — highest version per flow wins. */
   #flowIndex = new Map<string, FlowIndexRow & { updatedAt: Date }>();
   #staleThresholdMs: number;
@@ -37,16 +41,26 @@ export class InMemoryPulseStorage extends PulseStorage {
   }
 
   async batchCreatePulses(records: PulseRecord[]): Promise<void> {
-    this.#pulses.push(...records);
+    for (const record of records) {
+      if (this.#pulseIds.has(record.id)) continue;
+      this.#pulseIds.add(record.id);
+      this.#pulses.push(record);
+    }
   }
 
   async batchCreateRelationships(records: PulseRelationshipRecord[]): Promise<void> {
-    this.#relationships.push(...records);
+    for (const record of records) {
+      if (this.#relationshipIds.has(record.id)) continue;
+      this.#relationshipIds.add(record.id);
+      this.#relationships.push(record);
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {
     this.#pulses = [];
     this.#relationships = [];
+    this.#pulseIds.clear();
+    this.#relationshipIds.clear();
     this.#flowIndex.clear();
   }
 
@@ -129,9 +143,12 @@ export class InMemoryPulseStorage extends PulseStorage {
         flowRunIds.has(p.runId),
     );
 
+    // Root lifecycle controls flow failure: a handled/retried child error
+    // stays visible on its node (hasError) but never flips the flow — only
+    // the ROOT terminal decides failed vs completed.
     let status: FlowStatus;
     if (aborted) status = 'aborted';
-    else if (sorted.some(p => p.type === 'error')) status = 'failed';
+    else if (rootEnd?.action.endsWith('_failed')) status = 'failed';
     else if (rootEnd?.action.endsWith('_completed')) status = 'completed';
     else if (this.#now() - last.timestamp.getTime() > this.#staleThresholdMs) status = 'stale';
     else status = 'running';

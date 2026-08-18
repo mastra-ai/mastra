@@ -1528,19 +1528,27 @@ export class Mastra<
     // writer and behave byte-identically to stock Mastra.
     if (config?.pulse) {
       this.#pulseBus = new PulseBus();
-      // `getStore('pulse')` is async (composite stores may init lazily), so
-      // the writer takes a provider it resolves memoized on first flush —
-      // the same deferred-init seam other storage consumers use (e.g. the
-      // schedules domain resolves `getStore('schedules')` at call time).
-      this.#pulseBus.registerExporter(
-        new PulseStorageExporter({
-          storage: config.pulse.storage ?? (async () => await this.#storage?.getStore('pulse')),
-          batchSize: config.pulse.batchSize,
-          flushIntervalMs: config.pulse.flushIntervalMs,
-          flowIndex: config.pulse.flowIndex,
-          onDrop: event => this.#pulseBus?.emitDropEvent(event),
-        }),
-      );
+      // The storage writer is registered only when the user actually provided
+      // a storage home for pulses — explicit `pulse.storage`, or an app
+      // storage of their own (whose composite may expose a pulse domain).
+      // A custom-exporter-only config (`pulse: { exporters: [...] }` with no
+      // storage anywhere) is legitimate and must not create a writer whose
+      // lazy resolve fails and reports every batch as a false drop.
+      if (config.pulse.storage != null || this.#storageExplicit) {
+        // `getStore('pulse')` is async (composite stores may init lazily), so
+        // the writer takes a provider it resolves memoized on first flush —
+        // the same deferred-init seam other storage consumers use (e.g. the
+        // schedules domain resolves `getStore('schedules')` at call time).
+        this.#pulseBus.registerExporter(
+          new PulseStorageExporter({
+            storage: config.pulse.storage ?? (async () => await this.#storage?.getStore('pulse')),
+            batchSize: config.pulse.batchSize,
+            flushIntervalMs: config.pulse.flushIntervalMs,
+            flowIndex: config.pulse.flowIndex,
+            onDrop: event => this.#pulseBus?.emitDropEvent(event),
+          }),
+        );
+      }
       for (const exporter of config.pulse.exporters ?? []) {
         this.#pulseBus.registerExporter(exporter);
       }

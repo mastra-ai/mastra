@@ -147,3 +147,35 @@ describe('Mastra shutdown ordering for pulse', () => {
     expect(order.indexOf('storage-close')).toBeGreaterThan(order.indexOf('pulse-write'));
   });
 });
+
+describe('custom-exporter-only configuration (no storage anywhere)', () => {
+  /**
+   * `new Mastra({ pulse: { exporters: [custom] } })` with NO pulse storage
+   * is a legitimate setup (ship facts to your own sink). It must not
+   * register a storage writer whose lazy resolve fails and reports every
+   * batch as "dropped: no pulse storage" — false alarms for a healthy
+   * config (external review finding).
+   */
+  it('delivers to the custom exporter with zero false drops', async () => {
+    const events: PulseBusEvent[] = [];
+    const drops: unknown[] = [];
+    const custom: PulseBusExporter = {
+      name: 'custom-sink',
+      onPulseEvent: e => {
+        events.push(e);
+      },
+      onDroppedEvent: d => {
+        drops.push(d);
+      },
+      flush: async () => {},
+      shutdown: async () => {},
+    };
+    const mastra = new Mastra({ pulse: { exporters: [custom] } });
+    mastra.pulseBus!.emit(pulseEvent('only-custom'));
+    await mastra.pulseBus!.flush();
+
+    expect(events.map(e => (e as any).record.id)).toEqual(['only-custom']);
+    expect(drops, 'no false "missing storage" drops').toHaveLength(0);
+    await mastra.shutdown();
+  });
+});

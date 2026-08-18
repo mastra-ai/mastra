@@ -64,10 +64,11 @@ describe('InMemoryPulseStorage (derivation rules)', () => {
     expect(flows[0]).toMatchObject({ flowId: 'flow-1', threadId: 't-1', status: 'completed', durationMs: 1000 });
   });
 
-  it('derives failed when any error pulse exists', async () => {
+  it('derives failed only from the ROOT terminal', async () => {
     const s = store();
     const rows = completedFlow('flow-1');
-    rows[2] = { ...rows[2]!, type: 'error', action: 'generate_failed' };
+    // Root run_completed → run_failed: the root's terminal decides.
+    rows[3] = { ...rows[3]!, type: 'error', action: 'run_failed' };
     await s.batchCreatePulses(rows);
     const { flows } = await s.listFlows();
     expect(flows[0]!.status).toBe('failed');
@@ -290,9 +291,9 @@ describe('InMemoryPulseStorage flow index', () => {
       p.action === 'generate_completed' ? { ...p, data: { total_output_tokens: 42, cost_usd: 0.0002 } } : p,
     );
     emit(done.map(p => ({ ...p, timestamp: at(2_000 + (p.timestamp.getTime() - T0.getTime())) })));
-    // failed flow: child model span errors
+    // failed flow: the ROOT terminal fails (child errors alone are non-fatal)
     const failed = completedFlow('flow-failed', 't-2').map(p =>
-      p.action === 'generate_completed' ? { ...p, type: 'error' as const, action: 'generate_failed' } : p,
+      p.action === 'run_completed' ? { ...p, type: 'error' as const, action: 'run_failed' } : p,
     );
     emit(failed.map(p => ({ ...p, timestamp: at(4_000 + (p.timestamp.getTime() - T0.getTime())) })));
     // aborted flow: span layer completes, session abort fact overrides
@@ -413,5 +414,117 @@ describe('exact abort attribution (runId join)', () => {
     ]);
     const { flows } = await s.listFlows();
     expect(flows[0]!.status).toBe('completed');
+  });
+});
+
+describe('root lifecycle controls flow failure (child errors are not fatal)', () => {
+  /**
+   * A tool that errored and was retried inside a run that COMPLETED fine
+   * must not mark the whole flow failed — the error stays visible on the
+   * node (hasError), the flow status follows the ROOT terminal (external
+   * review finding: handled child failures flipped flows to failed).
+   */
+  it('child error + root completed → completed', async () => {
+    const s = store();
+    await s.batchCreatePulses([
+      pulse({
+        traceId: 'flow-ce',
+        threadId: 't-1',
+        runId: 'run-ce',
+        spanId: 'root',
+        action: 'run_started',
+        timestamp: at(0),
+      }),
+      pulse({
+        traceId: 'flow-ce',
+        threadId: 't-1',
+        runId: 'run-ce',
+        spanId: 'tool1',
+        parentSpanId: 'root',
+        surface: 'tool',
+        action: 'call_failed',
+        type: 'error',
+        level: 'error',
+        timestamp: at(200),
+      }),
+      pulse({
+        traceId: 'flow-ce',
+        threadId: 't-1',
+        runId: 'run-ce',
+        spanId: 'root',
+        action: 'run_completed',
+        type: 'output',
+        timestamp: at(1000),
+      }),
+    ]);
+    const { flows } = await s.listFlows();
+    expect(flows[0]!.status).toBe('completed');
+
+    // …but the error stays visible on the tree node.
+    const detail = await s.getFlow('flow-ce');
+    expect(detail!.tree.find(n => n.spanId === 'tool1')!.hasError).toBe(true);
+  });
+
+  it('root run_failed → failed', async () => {
+    const s = store();
+    await s.batchCreatePulses([
+      pulse({ traceId: 'flow-rf', spanId: 'root', action: 'run_started', timestamp: at(0) }),
+      pulse({
+        traceId: 'flow-rf',
+        spanId: 'root',
+        action: 'run_failed',
+        type: 'error',
+        level: 'error',
+        timestamp: at(500),
+      }),
+    ]);
+    expect((await s.listFlows()).flows[0]!.status).toBe('failed');
+  });
+});
+
+describe('write idempotency by stable id (ack-lost retries)', () => {
+  /**
+   * A write can succeed while its acknowledgement is lost — the writer
+   * retries and the SAME records (same ids) arrive twice. Storage must
+   * converge to one logical row per id: counts, costs and durations must
+   * be identical to a single delivery (external review finding).
+   */
+  it('duplicate delivery of the same batch changes nothing', async () => {
+    const s = store();
+    const rows = completedFlow('flow-1', 't-1');
+    rows[2] = { ...rows[2]!, data: { total_output_tokens: 42, cost_usd: 0.0002 } };
+    await s.batchCreatePulses(rows);
+    await s.batchCreatePulses(rows); // ← the retry after a lost ack
+
+    const { flows } = await s.listFlows();
+    expect(flows).toHaveLength(1);
+    expect(flows[0]!.pulseCount).toBe(rows.length);
+    expect(flows[0]!.costUsd).toBeCloseTo(0.0002);
+
+    await s.batchCreateRelationships([
+      {
+        id: 'r-dup',
+        timestamp: at(0),
+        seq: 900,
+        type: 'origin_of',
+        from: { kind: 'pulse', id: 'p-x' },
+        to: { kind: 'flow', id: 'flow-1' },
+        traceId: 'flow-1',
+      },
+    ]);
+    await s.batchCreateRelationships([
+      {
+        id: 'r-dup',
+        timestamp: at(0),
+        seq: 900,
+        type: 'origin_of',
+        from: { kind: 'pulse', id: 'p-x' },
+        to: { kind: 'flow', id: 'flow-1' },
+        traceId: 'flow-1',
+      },
+    ]);
+    const detail = await s.getFlow('flow-1');
+    // definitions derive from relationships — no double effects anywhere.
+    expect(detail!.pulseCount).toBe(rows.length);
   });
 });
