@@ -109,6 +109,33 @@ describe('span lifecycle facts (native lane)', () => {
     expect(flows[0]!.pulseCount).toBe(2);
   });
 
+  it('a flow derives identically from the native lane alone (bridge off)', async () => {
+    const bridgeStore = new InMemoryPulseStorage();
+    const nativeStore = new InMemoryPulseStorage();
+    const bridgeBus = new PulseBus();
+    const b = collect(bridgeBus);
+    const bridge = new PulseBridge({ bus: bridgeBus });
+    const nativeBus = new PulseBus();
+    const n = collect(nativeBus);
+    registerPulseEmitter(nativeBus);
+    try {
+      const s1 = span();
+      const ended = span({ endTime: new Date('2026-08-18T10:00:01Z'), output: { text: 'done' } });
+      await bridge.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: s1 as any });
+      await bridge.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: ended as any });
+      emitSpanFact(s1 as any, 'started');
+      emitSpanFact(ended as any, 'ended');
+      await flush();
+    } finally {
+      unregisterPulseEmitter(nativeBus);
+    }
+    await bridgeStore.batchCreatePulses(b.pulses);
+    await nativeStore.batchCreatePulses(n.pulses);
+    const [fromBridge, fromNative] = [await bridgeStore.listFlows(), await nativeStore.listFlows()];
+    expect(fromNative.flows).toEqual(fromBridge.flows); // field-by-field
+    expect(fromNative.flows[0]).toMatchObject({ status: 'completed', pulseCount: 2, threadId: 't-lc' });
+  });
+
   it('error ends become *_failed error facts', async () => {
     const bus = new PulseBus();
     const n = collect(bus);

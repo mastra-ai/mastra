@@ -321,7 +321,7 @@ export class PulseStorageClickhouse extends PulseStorage {
           SELECT trace_id,
                  sum(toFloat64OrZero(JSONExtractRaw(data, 'cost_usd'))) AS cost_usd
           FROM (SELECT * FROM pulses LIMIT 1 BY id)
-          WHERE trace_id != '' AND source = 'span'
+          WHERE trace_id != '' AND source IN ('span','native')
           GROUP BY trace_id
         )
         SELECT p.trace_id AS flow_id,
@@ -347,7 +347,7 @@ export class PulseStorageClickhouse extends PulseStorage {
                  'running') AS status
         FROM (SELECT * FROM pulses LIMIT 1 BY id) p
         LEFT JOIN costs c ON c.trace_id = p.trace_id
-        WHERE p.source = 'span' AND p.trace_id != '' ${where}
+        WHERE p.source IN ('span','native') AND p.trace_id != '' ${where}
         GROUP BY p.trace_id`;
   }
 
@@ -436,7 +436,7 @@ export class PulseStorageClickhouse extends PulseStorage {
                countIf(endsWith(action, '_completed') OR endsWith(action, '_failed')) AS ended,
                countIf(type = 'error') AS errs
         FROM (SELECT * FROM pulses LIMIT 1 BY id)
-        WHERE source = 'span' AND trace_id = {var_flow:String} AND span_id != ''
+        WHERE source IN ('span','native') AND trace_id = {var_flow:String} AND span_id != ''
         GROUP BY span_id
         ORDER BY min(seq)`,
       query_params: { var_flow: flowId },
@@ -483,11 +483,11 @@ export class PulseStorageClickhouse extends PulseStorage {
   async getFlowTimeline(flowId: string): Promise<FlowTimelineEntry[]> {
     const result = await this.client.query({
       query: `
-        WITH (SELECT groupUniqArrayIf(run_id, run_id != '') FROM pulses WHERE trace_id = {var_flow:String} AND source = 'span') AS flow_runs
+        WITH (SELECT groupUniqArrayIf(run_id, run_id != '') FROM pulses WHERE trace_id = {var_flow:String} AND source IN ('span','native')) AS flow_runs
         SELECT timestamp, seq, source, type, surface, action, run_id
         FROM (SELECT * FROM pulses LIMIT 1 BY id)
         WHERE trace_id = {var_flow:String}
-           OR (source != 'span' AND trace_id = '' AND run_id != '' AND has(flow_runs, run_id))
+           OR (trace_id = '' AND run_id != '' AND has(flow_runs, run_id))
         ORDER BY timestamp, seq
         LIMIT 2000`,
       query_params: { var_flow: flowId },

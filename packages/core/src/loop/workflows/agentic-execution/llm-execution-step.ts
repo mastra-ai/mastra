@@ -1623,7 +1623,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             responseFormat: currentStep.structuredOutput ? 'json_schema' : undefined,
           });
           modelSpanTracker?.startInference?.();
-          emitSpanFact(modelSpanTracker?.getTracingContext?.()?.currentSpan as any, 'started');
 
           // EXPERIMENT (Gate 1): the request is FROZEN here — nothing below
           // mutates the prompt. Record the exact ordered membership of

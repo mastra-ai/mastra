@@ -13,6 +13,7 @@ import type {
 } from '../observability';
 import type { PulseEndpointKind, PulseRecord, PulseSemanticType } from '../storage/domains/pulse';
 import type { PulseBus } from './bus';
+import { drainLeftovers, recordTokenMetric, takeFold } from './metric-fold';
 import { nextPulseSeq } from './seq';
 
 /**
@@ -130,6 +131,13 @@ export interface PulseBridgeConfig {
   bus: PulseBus;
   /** Serialized payload cap for span input/output in bytes. Default 4096. */
   payloadCapBytes?: number;
+  /**
+   * Surfaces whose lifecycle facts arrive FIRST-HAND from the source call
+   * sites (pulse/lifecycle.ts). Span events mapping to these surfaces are
+   * not translated — the native lane owns them. Metric folding, logs and
+   * the other event families are unaffected.
+   */
+  nativeSurfaces?: Iterable<string>;
 }
 
 /**
@@ -232,15 +240,16 @@ export class PulseBridge extends MastraBase implements ObservabilityExporter {
   name = 'pulse-bridge';
   #bus: PulseBus;
   #payloadCap: number;
+  #nativeSurfaces: Set<string>;
   #unmappedSpanTypes = new Set<string>();
   #skippedUpdates = 0;
   /** Token/cost values cached per model spanId, folded at span_ended (see R2/R4). */
-  #metricCache = new Map<string, { traceId: string; data: Record<string, number> }>();
 
   constructor(config: PulseBridgeConfig) {
     super({ component: RegisteredLogger.OBSERVABILITY, name: 'PulseBridge' });
     this.#bus = config.bus;
     this.#payloadCap = config.payloadCapBytes && config.payloadCapBytes > 0 ? config.payloadCapBytes : 4096;
+    this.#nativeSurfaces = new Set(config.nativeSurfaces ?? []);
   }
 
   /**
@@ -325,6 +334,7 @@ export class PulseBridge extends MastraBase implements ObservabilityExporter {
     if (!span) return;
 
     const { surface, base } = surfaceAction(span.type);
+    if (this.#nativeSurfaces.has(surface)) return; // first-hand lane owns it
     const mapped = SURFACES.has(surface);
     if (!mapped) this.#unmappedSpanTypes.add(String(span.type));
     const traceId = span.traceId ?? '';
@@ -377,11 +387,8 @@ export class PulseBridge extends MastraBase implements ObservabilityExporter {
     // become data on its semantic end pulse (directive 3 — one pulse carries
     // the full token+cost JSON; the metric lane never stores token rows).
     if (isEnd && spanId && MODEL_SPAN_TYPES.has(String(span.type))) {
-      const cached = this.#metricCache.get(spanId);
-      if (cached) {
-        Object.assign(data, cached.data);
-        this.#metricCache.delete(spanId);
-      }
+      const cached = takeFold(spanId);
+      if (cached) Object.assign(data, cached);
     }
 
     // metadata carries only what has no column of its own — runId/threadId/
@@ -531,13 +538,15 @@ export class PulseBridge extends MastraBase implements ObservabilityExporter {
 
     const foldKey = TOKEN_METRIC_FOLD[name];
     if (foldKey && metric.spanId) {
-      let entry = this.#metricCache.get(metric.spanId);
-      if (!entry) {
-        entry = { traceId: metric.traceId ?? '', data: {} };
-        this.#metricCache.set(metric.spanId, entry);
-      }
-      if (value !== undefined) entry.data[foldKey] = value;
-      if (hasCost && COST_CARRIER_METRICS.has(name)) entry.data.cost_usd = (entry.data.cost_usd ?? 0) + cost;
+      // Shared store: the native lifecycle emitter folds the SAME data onto
+      // its model end fact, keeping the two lanes byte-identical.
+      recordTokenMetric({
+        spanId: metric.spanId,
+        traceId: metric.traceId ?? '',
+        foldKey,
+        value,
+        cost: hasCost && COST_CARRIER_METRICS.has(name) ? cost : undefined,
+      });
       return;
     }
 
@@ -643,17 +652,16 @@ export class PulseBridge extends MastraBase implements ObservabilityExporter {
    * `metric_recorded` pulses so token/cost data is never silently lost.
    */
   #drainMetricCache(): void {
-    for (const [spanId, entry] of this.#metricCache) {
+    for (const { spanId, traceId, data } of drainLeftovers()) {
       this.#emitPulse({
-        ...this.#baseRecord('metric', entry.traceId, spanId),
+        ...this.#baseRecord('metric', traceId, spanId),
         type: 'state',
         surface: 'model',
         action: 'metric_recorded',
-        data: { ...entry.data },
+        data: { ...data },
         attributes: { name: 'model_token_usage', reason: 'span_never_ended' },
       });
     }
-    this.#metricCache.clear();
   }
 
   async flush(): Promise<void> {

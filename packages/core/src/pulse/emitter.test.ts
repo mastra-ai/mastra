@@ -54,14 +54,14 @@ describe('native fact ingress (Gate 1 experiment)', () => {
     const { pulses } = collect(bus);
     registerPulseEmitter(bus);
 
-    for (let i = 0; i < 70; i++) {
+    for (let i = 0; i < 300; i++) {
       emitPulseFact({ runId: 'r3', surface: 'signal', action: 'delivery_decided', type: 'decision' });
     }
     await flushMicrotasks();
 
     const markers = pulses.filter(p => p.action === 'native_capture_incomplete');
     expect(markers).toHaveLength(1); // sticky: one marker, not 6
-    expect(pulses.filter(p => p.action === 'delivery_decided')).toHaveLength(64);
+    expect(pulses.filter(p => p.action === 'delivery_decided')).toHaveLength(256);
     expect(isRunIncomplete('r3')).toBe(true);
     unregisterPulseEmitter(bus);
   });

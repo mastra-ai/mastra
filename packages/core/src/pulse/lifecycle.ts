@@ -1,6 +1,7 @@
 import { numericLeaves, spanPulseId, surfaceAction } from './bridge';
 import { emitPulseFact } from './emitter';
 import type { PulseFactInput } from './emitter';
+import { takeFold } from './metric-fold';
 
 /**
  * First-hand span-lifecycle facts (the 'native' lane).
@@ -19,9 +20,19 @@ import type { PulseFactInput } from './emitter';
  * (high volume, low reconstruction value).
  */
 
+/**
+ * Surfaces covered first-hand by the call-site hooks in this module (plus
+ * the signal seams). Mastra passes this to the bridge as `nativeSurfaces`
+ * so the span lane stops translating them — the untangling switch.
+ */
+export const NATIVE_SURFACES = ['agent', 'model', 'tool', 'memory', 'processor'] as const;
+
 /** The structural subset of a span this module reads. */
 export interface SpanFactSource {
   id?: string;
+  entityId?: string;
+  entityName?: string;
+  entityType?: string;
   traceId?: string;
   parentSpanId?: string;
   isRootSpan?: boolean;
@@ -67,6 +78,12 @@ export function emitSpanFact(span: SpanFactSource | undefined | null, phase: 'st
 
   const pulseId = spanPulseId(traceId, span.id, isEnd && !isEventSpan ? 'ended' : 'started');
   const data = numericLeaves(span.attributes?.usage, 'usage');
+  // Token/cost fold — same shared store as the bridge, idempotent take, so
+  // both lanes' model end facts carry identical folded data.
+  if (isEnd && (span.type === 'model_generation' || span.type === 'model_step' || span.type === 'model_inference')) {
+    const folded = takeFold(span.id);
+    if (folded) Object.assign(data, folded);
+  }
 
   const edges: NonNullable<PulseFactInput['edges']> = [];
   if (!isEnd || isEventSpan) {
@@ -102,8 +119,22 @@ export function emitSpanFact(span: SpanFactSource | undefined | null, phase: 'st
     }
   }
 
+  // metadata mirrors the bridge: only what has no column of its own.
+  // Live spans carry entity identity as FIELDS; exported spans lift them
+  // into metadata — accept both so the lanes stay identical.
+  const metadata: Record<string, string> = {};
+  {
+    const v = metaStr(span, 'environment');
+    if (v) metadata.environment = v;
+  }
+  for (const key of ['entityId', 'entityName', 'entityType'] as const) {
+    const v = metaStr(span, key) ?? (typeof span[key] === 'string' && span[key] ? (span[key] as string) : undefined);
+    if (v) metadata[key] = v;
+  }
+
   emitPulseFact({
     id: pulseId,
+    timestamp: (isEnd && !isEventSpan ? span.endTime : span.startTime) ?? undefined,
     runId: metaStr(span, 'runId') ?? '',
     traceId,
     spanId: span.id,
@@ -116,6 +147,7 @@ export function emitSpanFact(span: SpanFactSource | undefined | null, phase: 'st
     data: Object.keys(data).length ? data : undefined,
     threadId: metaStr(span, 'threadId'),
     resourceId: metaStr(span, 'resourceId'),
+    metadata: Object.keys(metadata).length ? metadata : undefined,
     edges: edges.length ? edges : undefined,
   });
 }

@@ -23,6 +23,11 @@ import { PulseStorage } from './base';
  * - tree = parentSpanId chain with per-node derived durations
  * - cost = SUM of bridge-folded cost_usd on span pulses
  */
+/** Lifecycle facts arrive on two lanes during the transition: the bridge's
+ * span translation and the first-hand native emitter. Identical ids make
+ * them one logical record; both lanes are the flow-lifecycle lane. */
+const LIFECYCLE_LANES = new Set(['span', 'native']);
+
 export class InMemoryPulseStorage extends PulseStorage {
   #pulses: PulseRecord[] = [];
   #relationships: PulseRelationshipRecord[] = [];
@@ -110,7 +115,7 @@ export class InMemoryPulseStorage extends PulseStorage {
   #spanPulsesByFlow(): Map<string, PulseRecord[]> {
     const byFlow = new Map<string, PulseRecord[]>();
     for (const p of this.#pulses) {
-      if (p.source !== 'span' || !p.traceId) continue;
+      if (!LIFECYCLE_LANES.has(p.source) || !p.traceId) continue;
       const list = byFlow.get(p.traceId) ?? [];
       list.push(p);
       byFlow.set(p.traceId, list);
@@ -163,7 +168,7 @@ export class InMemoryPulseStorage extends PulseStorage {
     // model pulse's data (cost_usd) — live capture and backfill both.
     let costUsd: number | undefined;
     for (const p of this.#pulses) {
-      if (p.traceId !== flowId || p.source !== 'span') continue;
+      if (p.traceId !== flowId || !LIFECYCLE_LANES.has(p.source)) continue;
       const c = p.data?.cost_usd;
       if (typeof c === 'number') costUsd = (costUsd ?? 0) + c;
     }
@@ -249,9 +254,7 @@ export class InMemoryPulseStorage extends PulseStorage {
     const flowRunIds = new Set(spanPulses.map(p => p.runId).filter(Boolean));
 
     return this.#pulses
-      .filter(
-        p => p.traceId === flowId || (p.source !== 'span' && !p.traceId && p.runId != null && flowRunIds.has(p.runId)),
-      )
+      .filter(p => p.traceId === flowId || (!p.traceId && p.runId != null && flowRunIds.has(p.runId)))
       .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime() || a.seq - b.seq)
       .map(p => ({
         timestamp: p.timestamp,

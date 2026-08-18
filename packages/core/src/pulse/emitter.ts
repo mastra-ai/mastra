@@ -17,7 +17,7 @@ import { nextPulseSeq } from './seq';
  */
 
 /** Per-run capture limits (prototype defaults). */
-const MAX_RECORDS_PER_RUN = 64;
+const MAX_RECORDS_PER_RUN = 256;
 const MAX_BYTES_PER_RECORD = 2_048;
 const MAX_BYTES_PER_RUN = 131_072;
 const MAX_QUEUE = 256;
@@ -31,6 +31,8 @@ export interface PulseFactInput {
    * native and bridge lanes collapse under idempotent reads); random when
    * omitted. */
   id?: string;
+  /** Fact time (span start/end for lifecycle facts); emit time when omitted. */
+  timestamp?: Date;
   spanId?: string;
   parentSpanId?: string;
   text?: string;
@@ -187,31 +189,35 @@ function drain(): void {
 export function emitPulseFact(fact: PulseFactInput): void {
   if (!sink) return;
   const at = new Date();
-  const budget = budgetFor(fact.runId);
+  // Budget per run when known, else per flow: without the fallback every
+  // runId-less fact (e.g. tool spans) would share one '' budget and go
+  // permanently sticky-incomplete after the cap.
+  const budgetKey = fact.runId || fact.traceId || '';
+  const budget = budgetFor(budgetKey);
   if (budget.incomplete) return;
 
   let size: number;
   try {
     size = JSON.stringify(fact).length;
   } catch {
-    markIncomplete(fact.runId, 'unserializable fact', at);
+    markIncomplete(budgetKey, 'unserializable fact', at);
     return;
   }
   if (size > MAX_BYTES_PER_RECORD) {
-    markIncomplete(fact.runId, 'record over 2KiB', at);
+    markIncomplete(budgetKey, 'record over 2KiB', at);
     return;
   }
   if (budget.records + 1 > MAX_RECORDS_PER_RUN || budget.bytes + size > MAX_BYTES_PER_RUN) {
-    markIncomplete(fact.runId, 'per-run budget exceeded', at);
+    markIncomplete(budgetKey, 'per-run budget exceeded', at);
     return;
   }
   if (queue.length >= MAX_QUEUE) {
-    markIncomplete(fact.runId, 'ingress queue full', at);
+    markIncomplete(budgetKey, 'ingress queue full', at);
     return;
   }
   budget.records += 1;
   budget.bytes += size;
-  queue.push({ fact, at });
+  queue.push({ fact, at: fact.timestamp ?? at });
   if (!drainScheduled) {
     drainScheduled = true;
     queueMicrotask(drain);

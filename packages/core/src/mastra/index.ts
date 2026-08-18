@@ -48,7 +48,14 @@ import type {
 import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../observability';
 import { initContextStorage } from '../observability/context-storage';
 import type { Processor } from '../processors';
-import { PulseBridge, PulseBus, PulseStorageExporter, registerPulseEmitter, unregisterPulseEmitter } from '../pulse';
+import {
+  NATIVE_SURFACES,
+  PulseBridge,
+  PulseBus,
+  PulseStorageExporter,
+  registerPulseEmitter,
+  unregisterPulseEmitter,
+} from '../pulse';
 import type { PulseConfig } from '../pulse';
 import type { AgentScheduleHandler } from '../schedules/define';
 import { metadataEqual, targetsEqual } from '../schedules/row-diff';
@@ -1552,7 +1559,10 @@ export class Mastra<
       for (const exporter of config.pulse.exporters ?? []) {
         this.#pulseBus.registerExporter(exporter);
       }
-      this.#pulseBridge = new PulseBridge({ bus: this.#pulseBus });
+      // Agent-scope lifecycle facts arrive first-hand from the call sites;
+      // the bridge translates only what the native lane does not cover yet
+      // (workflow spans, logs, metrics, scores, drops).
+      this.#pulseBridge = new PulseBridge({ bus: this.#pulseBus, nativeSurfaces: NATIVE_SURFACES });
       this.#registerPulseBridge();
       // EXPERIMENT (Gate 1): native signal/content facts flow through a
       // process-level sink so truth-boundary seams stay one-line no-ops

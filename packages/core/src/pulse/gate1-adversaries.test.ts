@@ -459,7 +459,7 @@ describe('Gate 1 adversaries', () => {
         return sub.activeRunId()!;
       })();
       const sends = [];
-      for (let i = 0; i < 70; i++) {
+      for (let i = 0; i < 130; i++) {
         sends.push(
           agent.sendSignal(
             { type: 'user-message', contents: `flood ${i}` },

@@ -196,6 +196,38 @@ describe('PulseBridge span translation', () => {
   });
 });
 
+describe('PulseBridge nativeSurfaces switch', () => {
+  it('skips span translation for native-covered surfaces, keeps the rest', async () => {
+    const bus = new PulseBus();
+    const pulses: PulseRecord[] = [];
+    bus.subscribe((e: PulseBusEvent) => {
+      if (e.type === 'pulse') pulses.push(e.record);
+    });
+    const bridge = new PulseBridge({ bus, nativeSurfaces: ['agent', 'model'] });
+
+    await bridge.exportTracingEvent({
+      type: TracingEventType.SPAN_STARTED,
+      exportedSpan: makeSpan({ id: 's1', type: 'agent_run' }) as any,
+    });
+    await bridge.exportTracingEvent({
+      type: TracingEventType.SPAN_STARTED,
+      exportedSpan: makeSpan({ id: 's2', type: 'workflow_run' }) as any,
+    });
+    expect(pulses.map(p => p.surface)).toEqual(['workflow']);
+
+    // Metric fold still works: leftovers drain even when spans are skipped.
+    bridge.onMetricEvent(
+      tokenMetric('mastra_model_total_output_tokens', 9, {
+        spanId: 'skipped-model-span',
+        costContext: { estimatedCost: 0.002 },
+      }) as any,
+    );
+    await bridge.flush();
+    const leftover = pulses.find(p => p.action === 'metric_recorded');
+    expect(leftover?.data).toEqual({ total_output_tokens: 9, cost_usd: 0.002 });
+  });
+});
+
 describe('PulseBridge enrichment switch (directive 3)', () => {
   it('folds token/cost metrics into the model pulse data instead of emitting metric pulses', async () => {
     const { bridge, pulses } = harness();

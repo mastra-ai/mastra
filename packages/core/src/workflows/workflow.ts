@@ -42,6 +42,7 @@ import {
 } from '../processors/span-payload';
 import { ProcessorStepOutputSchema, ProcessorStepInputSchema } from '../processors/step-schema';
 import type { ProcessorStepInput, ProcessorStepOutput } from '../processors/step-schema';
+import { emitSpanFact } from '../pulse/lifecycle';
 import { standardSchemaToJSONSchema, toStandardSchema } from '../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { StorageListWorkflowRunsInput } from '../storage';
@@ -933,6 +934,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               },
             })
           : undefined;
+      emitSpanFact(processorSpan as any, 'started');
 
       // Create observability context with processor span so internal agent calls nest correctly
       const processorObservabilityContext: ObservabilityContext | undefined = createObservabilityContext(
@@ -1044,13 +1046,16 @@ function createStepFromProcessor<TProcessorId extends string>(
         try {
           const result = await executeWithContext({ span: processorSpan, fn });
           processorSpan?.end({ output: buildProcessorSpanOutput(result) });
+          emitSpanFact(processorSpan as any, 'ended');
           return result;
         } catch (error) {
           // TripWire errors should end span but bubble up to halt the workflow
           if (error instanceof TripWire) {
             processorSpan?.end({ output: { tripwire: error.message } });
+            emitSpanFact(processorSpan as any, 'ended');
           } else {
             processorSpan?.error({ error: error as Error, endSpan: true });
+            emitSpanFact(processorSpan as any, 'ended');
           }
           throw error;
         }
@@ -1262,8 +1267,10 @@ function createStepFromProcessor<TProcessorId extends string>(
                 // End span with error (keep reference to prevent re-creation)
                 if (error instanceof TripWire) {
                   processorSpan?.end({ output: { tripwire: error.message } });
+                  emitSpanFact(processorSpan as any, 'ended');
                 } else {
                   processorSpan?.error({ error: error as Error, endSpan: true });
+                  emitSpanFact(processorSpan as any, 'ended');
                 }
                 throw error;
               }
