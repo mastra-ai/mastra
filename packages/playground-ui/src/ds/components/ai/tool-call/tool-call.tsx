@@ -8,6 +8,7 @@ import { CodeBlock } from '../../CodeBlock';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../Collapsible';
 import { CopyButton } from '../../CopyButton';
 import { Shimmer } from '../../Shimmer';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../Tooltip';
 import { Txt } from '../../Txt';
 import { highlightCode, languageForPath } from './tool-call-highlight';
 import { presentTool } from './tool-presentation';
@@ -29,7 +30,9 @@ export interface ToolHeaderProps {
   className?: string;
 }
 
-export type ToolIconProps = HTMLAttributes<HTMLSpanElement>;
+export interface ToolIconProps extends HTMLAttributes<HTMLSpanElement> {
+  tooltip?: ReactNode;
+}
 export type ToolContentProps = HTMLAttributes<HTMLDivElement>;
 
 export interface ToolCallListItemProps extends HTMLAttributes<HTMLDivElement> {
@@ -107,7 +110,7 @@ export function ToolHeader({ actions, children, className }: ToolHeaderProps) {
   const { collapsible, expanded, failed, running } = useToolContext();
   const Line = running ? Shimmer : 'span';
   const row = (
-    <Line className={cn(ROW_LINE, 'text-icon3 text-sm')}>
+    <Line className={cn(ROW_LINE, 'text-sm text-neutral3')}>
       {children}
       <span aria-hidden className="min-w-2 flex-1" />
       {failed && <X size={13} role="img" aria-label="Failed" className="text-error shrink-0" />}
@@ -135,15 +138,25 @@ export function ToolHeader({ actions, children, className }: ToolHeaderProps) {
   );
 }
 
-export function ToolIcon({ className, ...props }: ToolIconProps) {
-  return (
+export function ToolIcon({ className, tooltip, ...props }: ToolIconProps) {
+  const icon = (
     <span
+      data-slot="tool-icon"
       className={cn(
         'flex size-4 shrink-0 items-center justify-center [&>svg]:size-4 [&>svg]:max-h-full [&>svg]:max-w-full',
         className,
       )}
       {...props}
     />
+  );
+
+  if (!tooltip) return icon;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger render={icon} />
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -491,14 +504,14 @@ export function ToolCall({
       {...props}
     >
       <ToolHeader actions={headerActions}>
-        <ToolIcon>
+        <ToolIcon tooltip="Tool">
           <Icon width={14} height={14} strokeWidth={1.75} aria-hidden className="text-accent6" />
         </ToolIcon>
-        <Txt as="span" variant="ui-sm" className="text-icon3 max-w-[55%] shrink-0 truncate">
+        <Txt as="span" variant="ui-sm" className="text-neutral3 max-w-[55%] shrink-0 truncate">
           {label}
         </Txt>
         {detail !== undefined && (
-          <Txt as="span" variant="ui-xs" font="mono" className="text-icon3 min-w-0 truncate">
+          <Txt as="span" variant="ui-xs" font="mono" className="text-neutral3 min-w-0 truncate">
             {detail}
           </Txt>
         )}

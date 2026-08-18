@@ -112,7 +112,7 @@ export const AgentBadge = ({
           ) : null
         }
       >
-        <ToolIcon>
+        <ToolIcon tooltip="Sub-agent">
           <AgentIcon className="text-accent1" />
         </ToolIcon>
         {agentId}

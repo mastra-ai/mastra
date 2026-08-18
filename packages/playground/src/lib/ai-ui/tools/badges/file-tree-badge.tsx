@@ -144,7 +144,7 @@ export const FileTreeBadge = ({
           ) : null
         }
       >
-        <ToolIcon>
+        <ToolIcon tooltip="Tool">
           <FolderTree className="text-accent6" size={16} />
         </ToolIcon>
         <span>List Files</span>

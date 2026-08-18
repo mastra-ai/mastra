@@ -9,7 +9,7 @@ import { ToolCoinIcon } from '../../../icons/ToolCoinIcon';
 import { TooltipProvider } from '../../Tooltip';
 import { Tool, ToolCall, ToolCallListItem, ToolContent, ToolHeader, ToolIcon } from './tool-call';
 
-const renderToolCall = (node: ReactNode) => render(<TooltipProvider>{node}</TooltipProvider>);
+const renderToolCall = (node: ReactNode) => render(<TooltipProvider delay={0}>{node}</TooltipProvider>);
 
 afterEach(() => cleanup());
 
@@ -61,6 +61,26 @@ describe('Tool', () => {
       const details = within(tool).getByRole('button', { name: 'Routing details' });
       expect(details.parentElement?.closest('button')).toBeNull();
       expect(within(tool).getByRole('button', { name: 'Approve' })).toBeTruthy();
+    });
+
+    it('describes the entity icon without nesting another button in the disclosure', async () => {
+      renderToolCall(
+        <Tool status="success" aria-label="Order fulfillment workflow">
+          <ToolHeader>
+            <ToolIcon tooltip="Workflow" data-testid="entity-icon">
+              <svg aria-hidden />
+            </ToolIcon>
+            Order fulfillment
+          </ToolHeader>
+        </Tool>,
+      );
+
+      const disclosure = screen.getByRole('button', { name: /Order fulfillment/ });
+      expect(disclosure.querySelector('button')).toBeNull();
+
+      fireEvent.mouseEnter(screen.getByTestId('entity-icon'));
+
+      expect(await screen.findByRole('tooltip', { name: 'Workflow' })).toBeTruthy();
     });
 
     it('keeps the entity icon color while showing a separate failure marker', () => {
@@ -209,6 +229,16 @@ describe('ToolCall', () => {
       const tool = screen.getByRole('group', { name: 'Tool: execute_command' });
       expect(within(tool).getByText('Run')).toBeTruthy();
       expect(tool.querySelector('svg')?.classList.contains('text-accent6')).toBe(true);
+    });
+
+    it('identifies its entity icon as a tool', async () => {
+      renderToolCall(<ToolCall toolName="weatherInfo" input={{ city: 'Paris' }} status="success" />);
+
+      const icon = screen.getByRole('group', { name: 'Tool: weatherInfo' }).querySelector('[data-slot="tool-icon"]');
+      if (!icon) throw new Error('Expected the generic tool icon to render');
+      fireEvent.mouseEnter(icon);
+
+      expect(await screen.findByRole('tooltip', { name: 'Tool' })).toBeTruthy();
     });
   });
 

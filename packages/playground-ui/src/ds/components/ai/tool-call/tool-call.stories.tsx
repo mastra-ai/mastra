@@ -118,7 +118,7 @@ export const CustomEntities: Story = {
     <div className="flex flex-col gap-3">
       <Tool status="success" defaultOpen aria-label="Order fulfillment workflow">
         <ToolHeader>
-          <ToolIcon>
+          <ToolIcon tooltip="Workflow">
             <WorkflowIcon className="text-accent3" />
           </ToolIcon>
           Order fulfillment
@@ -130,7 +130,7 @@ export const CustomEntities: Story = {
 
       <Tool status="success" defaultOpen aria-label="Research agent">
         <ToolHeader>
-          <ToolIcon>
+          <ToolIcon tooltip="Sub-agent">
             <AgentIcon className="text-accent1" />
           </ToolIcon>
           Research agent
@@ -142,7 +142,7 @@ export const CustomEntities: Story = {
 
       <Tool status="success" defaultOpen aria-label="Code mode">
         <ToolHeader>
-          <ToolIcon>
+          <ToolIcon tooltip="Code mode">
             <ToolCoinIcon className="text-accent6" />
           </ToolIcon>
           execute_typescript

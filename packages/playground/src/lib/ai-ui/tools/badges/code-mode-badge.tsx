@@ -100,7 +100,7 @@ export const CodeModeBadge = ({
   return (
     <Tool data-testid="code-mode-badge" status={status} aria-label={`Tool: ${toolName}`}>
       <ToolHeader>
-        <ToolIcon>
+        <ToolIcon tooltip="Code mode">
           <ToolCoinIcon className="text-accent6" />
         </ToolIcon>
         {toolName}

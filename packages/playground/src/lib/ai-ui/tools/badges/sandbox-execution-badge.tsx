@@ -291,7 +291,7 @@ export const SandboxExecutionBadge = ({
           </div>
         }
       >
-        <ToolIcon>
+        <ToolIcon tooltip="Tool">
           <TerminalSquare className="text-accent6" size={16} />
         </ToolIcon>
         {displayName}
