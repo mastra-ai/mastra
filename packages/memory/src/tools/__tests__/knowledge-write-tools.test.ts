@@ -29,7 +29,7 @@ describe('Subconscious knowledge write tools', () => {
   it('supports CAS node/content writes and merge tombstones', async () => {
     const { store, source, target, tools } = await fixture();
     const updated = (await tools.knowledge_update_node!.execute?.(
-      { nodeId: target.id, expectedVersion: target.version, name: 'Project Atlas Prime' },
+      { node: target.id, expectedVersion: target.version, name: 'Project Atlas Prime' },
       {} as any,
     )) as any;
     expect(updated).toMatchObject({ name: 'Project Atlas Prime', version: 2 });
@@ -75,16 +75,16 @@ describe('Subconscious knowledge write tools', () => {
     const { tools } = await fixture();
     await expect(
       tools.knowledge_write_node_content!.execute?.(
-        { name: ' Capture-Guidance ', content: 'x'.repeat(8_001), scope: 'resource' },
+        { name: ' Capture-Guidance ', content: 'x'.repeat(4_001), scope: 'resource' },
         {} as any,
       ),
     ).rejects.toThrow('limited');
     expect(Object.keys(tools)).toEqual([
-      'knowledge_add_item',
-      'knowledge_remove_item',
+      'knowledge_append',
+      'knowledge_remove',
       'knowledge_update_node',
       'knowledge_merge_nodes',
-      'knowledge_rescope_item',
+      'knowledge_rescope',
       'knowledge_write_node_content',
     ]);
   });
