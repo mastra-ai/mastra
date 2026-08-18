@@ -95,6 +95,7 @@ function recordFromDocument(row: Document): KnowledgeRecord {
     capturedAt: new Date(row.capturedAt),
     when: row.when ? new Date(row.when) : undefined,
     maxScope: row.maxScope ?? undefined,
+    metadata: row.metadata ?? undefined,
     deletedAt: row.deletedAt ? new Date(row.deletedAt) : undefined,
     deletedBy: row.deletedBy ?? undefined,
   };
@@ -374,6 +375,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
         capturedAt: new Date(),
         when: input.when,
         maxScope: input.maxScope,
+        metadata: input.metadata,
       };
       await (
         await this.#knowledge()

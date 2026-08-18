@@ -178,6 +178,7 @@ function parseKnowledge(row: Record<string, unknown>): KnowledgeRecord {
     capturedAt: toDate(row.capturedAt),
     when: optionalDate(row.when),
     maxScope: row.maxScope == null ? undefined : (String(row.maxScope) as KnowledgeRecord['maxScope']),
+    metadata: row.metadata == null ? undefined : parseJson<Record<string, unknown>>(row.metadata),
     deletedAt: optionalDate(row.deletedAt),
     deletedBy: row.deletedBy == null ? undefined : String(row.deletedBy),
   };
@@ -208,20 +209,20 @@ function knowledgeIndexes(schemaName?: string): Array<{ name: string; sql: strin
   };
   return [
     {
-      name: 'idx_knowledge_records_identity',
-      sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_records_identity ON ${table(TABLE_KNOWLEDGE_NODES)} ("type", "scopeKey", "canonicalName");`,
+      name: 'idx_knowledge_nodes_identity',
+      sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_nodes_identity ON ${table(TABLE_KNOWLEDGE_NODES)} ("type", "scopeKey", "canonicalName");`,
     },
     {
-      name: 'idx_knowledge_records_scope',
-      sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_records_scope ON ${table(TABLE_KNOWLEDGE_NODES)} ("scopeKey", "type");`,
+      name: 'idx_knowledge_nodes_scope',
+      sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_nodes_scope ON ${table(TABLE_KNOWLEDGE_NODES)} ("scopeKey", "type");`,
     },
     {
-      name: 'idx_knowledge_facts_parent_latest',
-      sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_facts_parent_latest ON ${table(TABLE_KNOWLEDGE_RECORDS)} ("node", "id" DESC);`,
+      name: 'idx_knowledge_records_node_latest',
+      sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_records_node_latest ON ${table(TABLE_KNOWLEDGE_RECORDS)} ("node", "id" DESC);`,
     },
     {
-      name: 'idx_knowledge_facts_thread_latest',
-      sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_facts_thread_latest ON ${table(TABLE_KNOWLEDGE_RECORDS)} ("sourceThreadId", "id" DESC);`,
+      name: 'idx_knowledge_records_thread_latest',
+      sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_records_thread_latest ON ${table(TABLE_KNOWLEDGE_RECORDS)} ("sourceThreadId", "id" DESC);`,
     },
     {
       name: 'idx_knowledge_mentions_record',
@@ -576,9 +577,10 @@ export class KnowledgePG extends KnowledgeStorage {
         capturedAt: new Date(),
         when: input.when ? new Date(input.when) : undefined,
         maxScope: input.maxScope,
+        metadata: input.metadata,
       };
       await tx.execute({
-        sql: `INSERT INTO "${TABLE_KNOWLEDGE_RECORDS}" (id,node,text,scope,scopeKey,sourceThreadId,capturedAt,"when",maxScope,deletedAt,deletedBy) VALUES (?,?,?,jsonb(?),?,?,?,?,?,NULL,NULL)`,
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_RECORDS}" (id,node,text,scope,scopeKey,sourceThreadId,capturedAt,"when",maxScope,metadata,deletedAt,deletedBy) VALUES (?,?,?,jsonb(?),?,?,?,?,?,jsonb(?),NULL,NULL)`,
         args: [
           record.id,
           record.node,
@@ -589,6 +591,7 @@ export class KnowledgePG extends KnowledgeStorage {
           record.capturedAt.toISOString(),
           record.when?.toISOString() ?? null,
           record.maxScope ?? null,
+          record.metadata ? JSON.stringify(record.metadata) : null,
         ],
       });
       await this.#replaceMentions(tx, 'record', record.id, record.text, resolutionScope, defaultScope);
@@ -688,6 +691,7 @@ export class KnowledgePG extends KnowledgeStorage {
     return this.#transaction(async tx => {
       const record = await this.#getKnowledge(tx, input.id, true);
       if (!record) throw new KnowledgeNotFoundError('record', input.id);
+      assertKnowledgeScopeWithinCeiling(record.scope, input.maxScope);
       await tx.execute({
         sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET maxScope=? WHERE id=?`,
         args: [input.maxScope ?? null, input.id],

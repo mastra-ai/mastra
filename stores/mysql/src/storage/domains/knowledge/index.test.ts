@@ -26,11 +26,11 @@ describe('MySQL knowledge concurrency and indexes', () => {
     await store.init();
     await store.init();
     const [rows] = await pool.query(
-      "SELECT DISTINCT INDEX_NAME AS indexName FROM information_schema.statistics WHERE table_schema=? AND table_name IN ('mastra_knowledge_records','mastra_knowledge_semantic_outbox')",
+      "SELECT DISTINCT INDEX_NAME AS indexName FROM information_schema.statistics WHERE table_schema=? AND table_name IN ('mastra_knowledge_nodes','mastra_knowledge_records','mastra_knowledge_semantic_outbox')",
       [database],
     );
     const indexes = (rows as Array<{ indexName: string }>).map(row => row.indexName);
-    expect(indexes).toContain('idx_knowledge_records_identity');
+    expect(indexes).toContain('idx_knowledge_nodes_identity');
     expect(indexes).toContain('idx_knowledge_outbox_idempotency');
     const ddl = KnowledgeMySQL.getExportDDL();
     expect(ddl).toHaveLength(14);
