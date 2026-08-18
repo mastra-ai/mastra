@@ -375,4 +375,3 @@ allowBuilds:
   oracledb: false
   isolated-vm: true
   '@types/koa-compose': false
-  '@types/koa-compose': set this to true or false
