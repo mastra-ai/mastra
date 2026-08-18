@@ -125,6 +125,18 @@ describe('hydrateSessionModelPack', () => {
     expect(session.thread.setSetting).not.toHaveBeenCalled();
   });
 
+  it('does not apply a user pack to Factory work sessions', async () => {
+    const session = createSession({ factoryProjectId: 'factory-1' });
+    const dependencies = createDependencies();
+
+    await hydrateSessionModelPack(session, dependencies);
+
+    expect(dependencies.sourceControl.sessions.getBySessionId).not.toHaveBeenCalled();
+    expect(dependencies.workItems.findActiveRunBindingByThread).not.toHaveBeenCalled();
+    expect(dependencies.modelPacks.getActive).not.toHaveBeenCalled();
+    expect(session.model.switch).not.toHaveBeenCalled();
+  });
+
   it('does not apply a user pack to Factory work sessions before their state is seeded', async () => {
     const session = createSession();
     const dependencies = createDependencies();
