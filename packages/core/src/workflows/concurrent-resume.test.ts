@@ -158,6 +158,39 @@ describe('concurrent resume', () => {
     expect(harness.getDownstreamExecutions()).toBe(1);
   });
 
+  it('still resumes on stores that cannot claim, without calling updateWorkflowState', async () => {
+    const harness = createApprovalWorkflow();
+
+    // Cloudflare D1/KV/DO, ClickHouse and LanceDB report no concurrent-update support and throw
+    // from `updateWorkflowState`. Claiming is best-effort, so those stores must keep resuming
+    // exactly as they did before rather than having every resume fail.
+    const storage = new MockStore();
+    const workflowsStore = storage.stores.workflows as any;
+    vi.spyOn(workflowsStore, 'supportsConcurrentUpdates').mockReturnValue(false);
+    const updateSpy = vi.spyOn(workflowsStore, 'updateWorkflowState').mockImplementation(() => {
+      throw new Error('updateWorkflowState is not implemented for Cloudflare D1 storage.');
+    });
+
+    const mastra = new Mastra({
+      storage,
+      workflows: { 'concurrent-resume-wf': harness.workflow },
+      logger: false,
+    });
+    void mastra;
+
+    const run = await harness.workflow.createRun();
+    const started = await run.start({ inputData: { item: 'widget' } });
+    expect(started.status).toBe('suspended');
+
+    const resumed = run.resume({ step: 'approval', resumeData: { approved: true } });
+    await harness.downstreamHasStarted;
+    harness.releaseDownstream();
+
+    expect((await resumed).status).toBe('success');
+    expect(harness.getDownstreamExecutions()).toBe(1);
+    expect(updateSpy).not.toHaveBeenCalled();
+  });
+
   it('releases the claim when the engine fails before executing anything', async () => {
     const harness = createApprovalWorkflow();
     const { run } = await suspendRun(harness.workflow);

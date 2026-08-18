@@ -4281,12 +4281,17 @@ export class Run<
       return;
     }
 
+    // Stores that report no concurrent-update support cannot honor the compare-and-set: some of
+    // them (Cloudflare D1/KV/DO, ClickHouse, LanceDB) do not implement `updateWorkflowState` at all
+    // and throw. Claiming is an optimization over the pre-existing behaviour, so a store that
+    // cannot claim keeps resuming exactly as it did before rather than failing the resume.
     if (!workflowsStore.supportsConcurrentUpdates()) {
       this.#mastra
         ?.getLogger()
         ?.warn(
           `[Workflow ${this.workflowId}] The configured workflow storage does not support concurrent updates, so concurrent resume() calls for run ${this.runId} cannot be de-duplicated atomically. Concurrent resumes may execute downstream steps more than once.`,
         );
+      return;
     }
 
     const claimed = await workflowsStore.updateWorkflowState({
