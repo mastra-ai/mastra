@@ -165,6 +165,29 @@ describe('TraceSignalSettingsButton', () => {
     expect((await screen.findByRole('alert')).textContent).toContain('Signal name is reserved');
   });
 
+  it('clears stale form errors between create and edit sessions', async () => {
+    const adapter = management({ create: vi.fn().mockRejectedValue(new Error('Create failed')) });
+    renderSettings(adapter);
+    await openSettings();
+    await screen.findByText('Handoff Quality');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create signal' }));
+    fireEvent.change(screen.getByLabelText('Signal name'), { target: { value: 'tool_usage' } });
+    fireEvent.change(screen.getByLabelText('Display label'), { target: { value: 'Tool Usage' } });
+    fireEvent.change(screen.getByLabelText('Task prompt'), { target: { value: 'Analyze tool usage.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create signal' }));
+    expect((await screen.findByRole('alert')).textContent).toContain('Create failed');
+
+    const closeButton = screen.getAllByRole('button', { name: 'Close' }).at(-1);
+    if (!closeButton) throw new Error('Expected the signal form close button');
+    fireEvent.click(closeButton);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Create trace signal' })).toBeNull());
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+
+    expect(await screen.findByDisplayValue('Handoff Quality')).toBeTruthy();
+    expect(screen.queryByText('Create failed')).toBeNull();
+  });
+
   it('toggles, archives, and restores only the selected definition', async () => {
     const adapter = management();
     renderSettings(adapter);

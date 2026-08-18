@@ -80,13 +80,24 @@ function TraceSignalSettingsContent() {
   const archived = query.data.definitions.filter(definition => definition.status === 'archived');
   const limit = query.data.limits.maxDefinitionsPerOrganization;
   const atLimit = active.length >= limit;
-  const mutationPending =
-    mutations.create.isPending ||
-    mutations.update.isPending ||
-    mutations.archive.isPending ||
-    mutations.restore.isPending ||
-    mutations.setProjectEnabled.isPending;
-  const formError = mutations.create.error?.message ?? mutations.update.error?.message;
+  const mutationPending = creating ? mutations.create.isPending : mutations.update.isPending;
+  const formError = creating ? mutations.create.error?.message : editing ? mutations.update.error?.message : undefined;
+  const openCreateForm = () => {
+    mutations.create.reset();
+    setCreating(true);
+  };
+  const setCreateFormOpen = (open: boolean) => {
+    if (!open) mutations.create.reset();
+    setCreating(open);
+  };
+  const openEditForm = (definition: TraceSignalDefinition) => {
+    mutations.update.reset();
+    setEditing(definition);
+  };
+  const closeEditForm = () => {
+    mutations.update.reset();
+    setEditing(undefined);
+  };
 
   const runAction = async (action: () => Promise<unknown>) => {
     setActionError(undefined);
@@ -146,7 +157,7 @@ function TraceSignalSettingsContent() {
               {active.length} of {limit} active organization definitions
             </p>
           </div>
-          <Button size="sm" variant="primary" disabled={!canManage || atLimit} onClick={() => setCreating(true)}>
+          <Button size="sm" variant="primary" disabled={!canManage || atLimit} onClick={openCreateForm}>
             Create signal
           </Button>
         </div>
@@ -168,7 +179,7 @@ function TraceSignalSettingsContent() {
                 <p className="text-ui-xs text-neutral3 truncate">{definition.description || definition.name}</p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <Button size="sm" variant="ghost" disabled={!canManage} onClick={() => setEditing(definition)}>
+                <Button size="sm" variant="ghost" disabled={!canManage} onClick={() => openEditForm(definition)}>
                   Edit
                 </Button>
                 <Button
@@ -235,7 +246,7 @@ function TraceSignalSettingsContent() {
       {creating ? (
         <SignalDefinitionFormDialog
           open
-          onOpenChange={setCreating}
+          onOpenChange={setCreateFormOpen}
           pending={mutationPending}
           error={formError}
           onCreate={async input => {
@@ -249,7 +260,7 @@ function TraceSignalSettingsContent() {
           open
           definition={editing}
           onOpenChange={open => {
-            if (!open) setEditing(undefined);
+            if (!open) closeEditForm();
           }}
           pending={mutationPending}
           error={formError}
