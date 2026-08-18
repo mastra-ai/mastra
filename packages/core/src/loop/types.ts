@@ -184,7 +184,11 @@ export type LoopConfig<OUTPUT = undefined> = {
   onError?: ({ error }: { error: Error | string }) => Promise<void> | void;
   onFinish?: MastraOnFinishCallback<OUTPUT>;
   onStepFinish?: MastraOnStepFinishCallback<OUTPUT>;
-  onAbort?: (event: any) => Promise<void> | void;
+  /**
+   * Called when the run is cancelled mid-stream. `steps` holds the steps that completed before the
+   * abort; `text` holds the assistant text streamed so far for the step that was in flight.
+   */
+  onAbort?: (event: { steps: any[]; text?: string }) => Promise<void> | void;
   abortSignal?: AbortSignal;
   returnScorerData?: boolean;
   prepareStep?: PrepareStepFunction;

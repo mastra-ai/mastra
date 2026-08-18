@@ -335,9 +335,10 @@ const stream = await agent.stream('message for agent')
           },
           {
             name: 'onAbort',
-            type: '(event: any) => Promise<void> | void',
+            type: '(event: { steps: any[]; text?: string }) => Promise<void> | void',
             isOptional: true,
-            description: 'Callback function called when the stream is aborted.',
+            description:
+              'Callback function called when the stream is aborted. `steps` contains the steps that completed before the abort, and `text` contains the assistant text streamed so far for the step that was in flight.',
           },
           {
             name: 'abortSignal',
@@ -1009,8 +1010,9 @@ const stream = await agent.stream('Tell me a story', {
   onError: ({ error }) => {
     console.error('Streaming error:', error)
   },
-  onAbort: event => {
-    console.log('Stream aborted:', event)
+  onAbort: ({ steps, text }) => {
+    console.log('Stream aborted after', steps.length, 'steps')
+    console.log('Partial text:', text)
   },
 })
 

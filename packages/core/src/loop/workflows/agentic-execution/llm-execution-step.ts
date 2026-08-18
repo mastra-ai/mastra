@@ -778,6 +778,13 @@ async function processOutputStream<OUTPUT = undefined>({
       metadata: chunk.metadata,
     });
 
+    // Track the assistant text emitted so far so an abort can hand the caller
+    // the partial response. This sits after the `abortSignal.aborted` break
+    // above, so chunks a provider keeps sending post-abort are never included.
+    if (chunk.type === 'text-delta') {
+      runState.setState({ partialText: runState.state.partialText + chunk.payload.text });
+    }
+
     switch (chunk.type) {
       case 'response-metadata':
         runState.setState({
@@ -1851,6 +1858,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             logger?.debug?.('LLM execution aborted', { runId });
             await options?.onAbort?.({
               steps: inputData?.output?.steps ?? [],
+              text: runState.state.partialText,
             });
 
             safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
@@ -1971,6 +1979,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           cleanupProviderToolSpans(true);
           await options?.onAbort?.({
             steps: inputData?.output?.steps ?? [],
+            text: runState.state.partialText,
           });
 
           safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
@@ -2098,6 +2107,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         cleanupProviderToolSpans(true);
         await options.onAbort?.({
           steps: inputData?.output?.steps ?? [],
+          text: runState.state.partialText,
         });
         safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
         return bailFromExecution();
