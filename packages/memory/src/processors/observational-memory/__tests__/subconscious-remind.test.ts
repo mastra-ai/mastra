@@ -37,6 +37,80 @@ function createModel(response: string) {
   });
 }
 
+/**
+ * A model that surfaces its reminder the only way the contract allows: one send_reminder tool
+ * call, then a plain closing turn. Text output never carries a reminder anymore.
+ */
+function createReminderCallModel(toolInput: { reminder: string; sourceIds: string[] }) {
+  let generateCalls = 0;
+  let streamCalls = 0;
+  return new MockLanguageModelV2({
+    doGenerate: async () => {
+      generateCalls++;
+      if (generateCalls === 1) {
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'tool-calls' as const,
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          warnings: [],
+          content: [
+            {
+              type: 'tool-call' as const,
+              toolCallId: 'send-reminder-1',
+              toolName: 'send_reminder',
+              input: JSON.stringify(toolInput),
+            },
+          ],
+        };
+      }
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        warnings: [],
+        content: [{ type: 'text' as const, text: 'Sent.' }],
+      };
+    },
+    doStream: async () => {
+      streamCalls++;
+      if (streamCalls === 1) {
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start' as const, warnings: [] },
+            { type: 'response-metadata' as const, id: 'remind-1', modelId: 'remind-model', timestamp: new Date() },
+            { type: 'tool-input-start' as const, id: 'send-reminder-1', toolName: 'send_reminder' },
+            { type: 'tool-input-delta' as const, id: 'send-reminder-1', delta: JSON.stringify(toolInput) },
+            { type: 'tool-input-end' as const, id: 'send-reminder-1' },
+            {
+              type: 'finish' as const,
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      }
+      return {
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start' as const, warnings: [] },
+          { type: 'response-metadata' as const, id: 'remind-2', modelId: 'remind-model', timestamp: new Date() },
+          { type: 'text-start' as const, id: 'text-1' },
+          { type: 'text-delta' as const, id: 'text-1', delta: 'Sent.' },
+          { type: 'text-end' as const, id: 'text-1' },
+          {
+            type: 'finish' as const,
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          },
+        ]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      };
+    },
+  });
+}
+
 function createContext(response: string) {
   const requestContext = new RequestContext();
   requestContext.set('organizationId', 'acme');
@@ -106,7 +180,7 @@ describe('Subconscious remind', () => {
       defaultScope: ['org:acme', 'resource:user-42'],
     });
     context.mainAgent.getModel = vi.fn(async () =>
-      createModel(`Project Atlas launches January 15. Source: ${item.id}`),
+      createReminderCallModel({ reminder: 'Project Atlas launches January 15.', sourceIds: [item.id] }),
     );
 
     const result = await applyExtractorHooks({
@@ -133,15 +207,155 @@ describe('Subconscious remind', () => {
     );
   });
 
-  it.each(['Project Atlas launches January 15.', 'Project Atlas launches January 15. Source: invented-item-id'])(
-    'suppresses an ungrounded reminder: %s',
-    async response => {
+  it('refuses a second send_reminder call in the same run', async () => {
+    const extractor = new SubconsciousRemindExtractor({ name: 'remind', maxSteps: 3, builtIn: true });
+    const context = createContext('unused');
+    const store = await context.memory.storage.getStore('knowledge');
+    const node = await store.createNode({
+      name: 'Project Atlas',
+      kind: 'project',
+      scope: ['org:acme', 'resource:user-42'],
+    });
+    const item = await store.appendItem({
+      parentNodeId: node.id,
+      text: 'Project Atlas launches January 15.',
+      scope: ['org:acme', 'resource:user-42'],
+      sourceThreadId: 'beta',
+      resolutionScope: ['org:acme', 'resource:user-42', 'thread:beta'],
+      defaultScope: ['org:acme', 'resource:user-42'],
+    });
+    // One turn, two grounded tool calls: the second must be refused by the once-per-run guard.
+    let generateCalls = 0;
+    const doubleCallModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        generateCalls++;
+        if (generateCalls === 1) {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'tool-calls' as const,
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            warnings: [],
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: 'send-reminder-1',
+                toolName: 'send_reminder',
+                input: JSON.stringify({ reminder: 'Atlas launches January 15.', sourceIds: [item.id] }),
+              },
+              {
+                type: 'tool-call' as const,
+                toolCallId: 'send-reminder-2',
+                toolName: 'send_reminder',
+                input: JSON.stringify({ reminder: 'Atlas launches January 15, again.', sourceIds: [item.id] }),
+              },
+            ],
+          };
+        }
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          warnings: [],
+          content: [{ type: 'text' as const, text: 'Sent.' }],
+        };
+      },
+    });
+    context.mainAgent.getModel = vi.fn(async () => doubleCallModel);
+
+    const result = await applyExtractorHooks({
+      source: 'observer',
+      extractors: [extractor],
+      rawObservations: 'The user is scheduling Project Atlas.',
+      ...context,
+    });
+
+    expect(result.failures).toBeUndefined();
+    expect(context.sendSignal).toHaveBeenCalledOnce();
+  });
+
+  it('lets the agent correct a rejected id and still deliver the reminder', async () => {
+    const extractor = new SubconsciousRemindExtractor({ name: 'remind', maxSteps: 3, builtIn: true });
+    const context = createContext('unused');
+    const store = await context.memory.storage.getStore('knowledge');
+    const node = await store.createNode({
+      name: 'Project Atlas',
+      kind: 'project',
+      scope: ['org:acme', 'resource:user-42'],
+    });
+    const item = await store.appendItem({
+      parentNodeId: node.id,
+      text: 'Project Atlas launches January 15.',
+      scope: ['org:acme', 'resource:user-42'],
+      sourceThreadId: 'beta',
+      resolutionScope: ['org:acme', 'resource:user-42', 'thread:beta'],
+      defaultScope: ['org:acme', 'resource:user-42'],
+    });
+    // Turn 1 cites an invented id (rejected), turn 2 corrects it with the real id.
+    let generateCalls = 0;
+    const correctingModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        generateCalls++;
+        if (generateCalls <= 2) {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'tool-calls' as const,
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            warnings: [],
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: `send-reminder-${generateCalls}`,
+                toolName: 'send_reminder',
+                input: JSON.stringify({
+                  reminder: 'Atlas launches January 15.',
+                  sourceIds: [generateCalls === 1 ? 'invented-item-id' : item.id],
+                }),
+              },
+            ],
+          };
+        }
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          warnings: [],
+          content: [{ type: 'text' as const, text: 'Sent.' }],
+        };
+      },
+    });
+    context.mainAgent.getModel = vi.fn(async () => correctingModel);
+
+    const result = await applyExtractorHooks({
+      source: 'observer',
+      extractors: [extractor],
+      rawObservations: 'The user is scheduling Project Atlas.',
+      ...context,
+    });
+
+    expect(result.failures).toBeUndefined();
+    expect(context.sendSignal).toHaveBeenCalledOnce();
+    expect(context.sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ contents: expect.stringContaining(item.id) }),
+    );
+  });
+
+  it.each(['prose without a tool call', 'a tool call citing an invented id'])(
+    'suppresses an ungrounded reminder delivered as %s',
+    async mode => {
       const extractor = new SubconsciousRemindExtractor({
         name: 'remind',
         maxSteps: 3,
         builtIn: true,
       });
-      const context = createContext(response);
+      const context = createContext('unused');
+      context.mainAgent.getModel = vi.fn(async () =>
+        mode === 'prose without a tool call'
+          ? createModel('Project Atlas launches January 15. Source: invented-item-id')
+          : createReminderCallModel({
+              reminder: 'Project Atlas launches January 15.',
+              sourceIds: ['invented-item-id'],
+            }),
+      );
       const store = await context.memory.storage.getStore('knowledge');
       const node = await store.createNode({
         name: 'Project Atlas',
@@ -175,7 +389,7 @@ describe('Subconscious remind', () => {
       maxSteps: 3,
       builtIn: true,
     });
-    const context = createContext('<no-reminder />');
+    const context = createContext('Nothing relevant here.');
 
     await applyExtractorHooks({
       source: 'observer',
@@ -191,7 +405,7 @@ describe('Subconscious remind', () => {
     const itemId = 'item-atlas-launch';
     const extractor = new SubconsciousRemindExtractor(
       { name: 'remind', maxSteps: 3, builtIn: true },
-      createModel(`Project Atlas launches January 15. Source KnowledgeItem: ${itemId}.`) as any,
+      createReminderCallModel({ reminder: 'Project Atlas launches January 15.', sourceIds: [itemId] }) as any,
     );
     const context = createContext('unused');
     delete (context as any).mainAgent;
@@ -294,7 +508,9 @@ describe('Subconscious remind', () => {
   });
 
   it("still reminds about the thread's own older items once they age past the fresh window", async () => {
-    vi.useFakeTimers();
+    // Fake only the clock: the multi-step tool loop schedules real timers internally, and
+    // freezing those deadlocks the run. The fresh-window guard reads Date alone.
+    vi.useFakeTimers({ toFake: ['Date'] });
     try {
       const extractor = new SubconsciousRemindExtractor({
         name: 'remind',
@@ -316,7 +532,9 @@ describe('Subconscious remind', () => {
         resolutionScope: ['org:acme', 'resource:user-42', 'thread:alpha'],
         defaultScope: ['org:acme', 'resource:user-42'],
       });
-      context.mainAgent.getModel = vi.fn(async () => createModel(`The launch happens January 15. Source: ${item.id}`));
+      context.mainAgent.getModel = vi.fn(async () =>
+        createReminderCallModel({ reminder: 'The launch happens January 15.', sourceIds: [item.id] }),
+      );
 
       vi.advanceTimersByTime(31 * 60 * 1000);
 
@@ -347,7 +565,7 @@ describe('Subconscious remind', () => {
         maxSteps: 3,
         builtIn: true,
       });
-      const context = createContext('<no-reminder />');
+      const context = createContext('Nothing relevant here.');
       const store = await context.memory.storage.getStore('knowledge');
       const node = await store.createNode({
         name: 'Moon weather',
@@ -423,7 +641,7 @@ describe('Subconscious remind', () => {
       const { Agent } = await import('@mastra/core/agent');
       const generateSpy = vi
         .spyOn(Agent.prototype, 'generate' as any)
-        .mockResolvedValue({ text: options.response ?? '<no-reminder />' } as any);
+        .mockResolvedValue({ text: options.response ?? 'Nothing relevant here.' } as any);
       try {
         const extractor = new SubconsciousRemindExtractor({ name: 'remind', maxSteps: 3, builtIn: true }, undefined, {
           createRemindMemory: options.createRemindMemory,
@@ -531,55 +749,107 @@ describe('Subconscious remind', () => {
       expect(context.sendSignal).not.toHaveBeenCalled();
     });
 
-    it('keeps the no-reminder contract when a remind memory is attached', async () => {
-      const { result, context } = await runWithGenerateSpy({ createRemindMemory: () => ({}) as any });
-
-      expect(result.failures).toBeUndefined();
-      expect(context.sendSignal).not.toHaveBeenCalled();
-    });
-
     it('persists the reminder exchange so a later run, even on a reconstructed Memory, sees it', async () => {
       const { Memory } = await import('../../../index');
       // One storage shared by both runs; each run gets its own Memory instance over it, the same
       // way a process restart reconstructs Memory around surviving storage.
       const sharedStorage = new InMemoryStore();
       const prompts: unknown[] = [];
-      const recordingModel = (response: string) =>
-        new MockLanguageModelV2({
-          doGenerate: async options => {
-            prompts.push(options.prompt);
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop' as const,
-              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-              warnings: [],
-              content: [{ type: 'text' as const, text: response }],
-            };
-          },
-          doStream: async options => {
-            prompts.push(options.prompt);
-            return {
-              stream: convertArrayToReadableStream([
-                { type: 'stream-start', warnings: [] },
-                { type: 'response-metadata', id: 'remind-1', modelId: 'remind-model', timestamp: new Date() },
-                { type: 'text-start', id: 'text-1' },
-                { type: 'text-delta', id: 'text-1', delta: response },
-                { type: 'text-end', id: 'text-1' },
-                { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
-              ]),
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-            };
-          },
-        });
+      const recordingModel = (makeToolInput?: (itemId: string) => { reminder: string; sourceIds: string[] }) => {
+        return (itemId: string) => {
+          let calls = 0;
+          return new MockLanguageModelV2({
+            doGenerate: async options => {
+              prompts.push(options.prompt);
+              calls++;
+              if (makeToolInput && calls === 1) {
+                return {
+                  rawCall: { rawPrompt: null, rawSettings: {} },
+                  finishReason: 'tool-calls' as const,
+                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                  warnings: [],
+                  content: [
+                    {
+                      type: 'tool-call' as const,
+                      toolCallId: 'send-reminder-1',
+                      toolName: 'send_reminder',
+                      input: JSON.stringify(makeToolInput(itemId)),
+                    },
+                  ],
+                };
+              }
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop' as const,
+                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                warnings: [],
+                content: [{ type: 'text' as const, text: 'Nothing new to surface.' }],
+              };
+            },
+            doStream: async options => {
+              prompts.push(options.prompt);
+              calls++;
+              if (makeToolInput && calls === 1) {
+                return {
+                  stream: convertArrayToReadableStream([
+                    { type: 'stream-start' as const, warnings: [] },
+                    {
+                      type: 'response-metadata' as const,
+                      id: 'remind-1',
+                      modelId: 'remind-model',
+                      timestamp: new Date(),
+                    },
+                    { type: 'tool-input-start' as const, id: 'send-reminder-1', toolName: 'send_reminder' },
+                    {
+                      type: 'tool-input-delta' as const,
+                      id: 'send-reminder-1',
+                      delta: JSON.stringify(makeToolInput(itemId)),
+                    },
+                    { type: 'tool-input-end' as const, id: 'send-reminder-1' },
+                    {
+                      type: 'finish' as const,
+                      finishReason: 'tool-calls' as const,
+                      usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                    },
+                  ]),
+                  rawCall: { rawPrompt: null, rawSettings: {} },
+                  warnings: [],
+                };
+              }
+              return {
+                stream: convertArrayToReadableStream([
+                  { type: 'stream-start' as const, warnings: [] },
+                  {
+                    type: 'response-metadata' as const,
+                    id: 'remind-2',
+                    modelId: 'remind-model',
+                    timestamp: new Date(),
+                  },
+                  { type: 'text-start' as const, id: 'text-1' },
+                  { type: 'text-delta' as const, id: 'text-1', delta: 'Nothing new to surface.' },
+                  { type: 'text-end' as const, id: 'text-1' },
+                  {
+                    type: 'finish' as const,
+                    finishReason: 'stop' as const,
+                    usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                  },
+                ]),
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                warnings: [],
+              };
+            },
+          });
+        };
+      };
 
-      const runOnce = async (response: string) => {
+      const runOnce = async (makeToolInput?: (itemId: string) => { reminder: string; sourceIds: string[] }) => {
         const extractor = new SubconsciousRemindExtractor({ name: 'remind', maxSteps: 3, builtIn: true }, undefined, {
           createRemindMemory: () => new Memory({ storage: sharedStorage }),
         });
         const context = createContext('unused');
         const item = await seedRelevantItem(context);
-        context.mainAgent.getModel = vi.fn(async () => recordingModel(response.replace('{itemId}', item.id))) as any;
+        const makeModel = recordingModel(makeToolInput);
+        context.mainAgent.getModel = vi.fn(async () => makeModel(item.id)) as any;
         const result = await applyExtractorHooks({
           source: 'observer',
           extractors: [extractor],
@@ -590,7 +860,10 @@ describe('Subconscious remind', () => {
       };
 
       // First run: a grounded reminder fires once and is written to the remind conversation.
-      const first = await runOnce('marker-first-reminder Project Atlas launches January 15. Source: {itemId}');
+      const first = await runOnce(itemId => ({
+        reminder: 'marker-first-reminder Project Atlas launches January 15.',
+        sourceIds: [itemId],
+      }));
       expect(first.result.failures).toBeUndefined();
       expect(first.context.sendSignal).toHaveBeenCalledOnce();
 
@@ -598,7 +871,7 @@ describe('Subconscious remind', () => {
       // the model's prompt (that history is what lets it decline to repeat itself), and its
       // no-reminder decision must stay silent.
       prompts.length = 0;
-      const second = await runOnce('<no-reminder />');
+      const second = await runOnce();
       expect(second.result.failures).toBeUndefined();
       expect(second.context.sendSignal).not.toHaveBeenCalled();
       expect(JSON.stringify(prompts)).toContain('marker-first-reminder');
@@ -1039,6 +1312,7 @@ describe('Subconscious remind ask lane', () => {
   it('leaves the passive reminder path unregressed while a question shares its thread', async () => {
     // Hold a question open across a full passive reminder run: the passive signal's shape and its
     // source ids must be untouched by an ask sharing the session, and the ask must still resolve.
+    const { Memory } = await import('../../../index');
     const extractor = new SubconsciousRemindExtractor({ name: 'remind', maxSteps: 3, builtIn: true });
     const context = createContext('Project Atlas launches January 15.');
     const store = await context.memory.storage.getStore('knowledge');
@@ -1056,55 +1330,76 @@ describe('Subconscious remind ask lane', () => {
       defaultScope: ['org:acme', 'resource:user-42'],
     });
 
-    let releaseAsk: (value: { text: string }) => void = () => {};
-    const pendingAsk = new Promise<{ text: string }>(resolve => (releaseAsk = resolve));
+    // The passive run surfaces its reminder through the send_reminder tool; the ask lane runs on
+    // its own model that stays pending until released, holding the question open across the run.
+    context.mainAgent.getModel = vi.fn(async () =>
+      createReminderCallModel({ reminder: 'Atlas ships mid January, worth checking.', sourceIds: [item.id] }),
+    );
+    let releaseAsk: () => void = () => {};
+    const askGate = new Promise<void>(resolve => (releaseAsk = resolve));
+    const pendingAskModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        await askGate;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          warnings: [],
+          content: [{ type: 'text' as const, text: 'January 15.' }],
+        };
+      },
+      doStream: async () => {
+        await askGate;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'ask-1', modelId: 'ask-model', timestamp: new Date() },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'January 15.' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
     const tools = createRemindAskTool({
       memory: context.memory,
       config: { name: 'remind', maxSteps: 3, builtIn: true },
-      omModel: createModel('unused'),
-      createRemindMemory: () => ({}) as any,
+      omModel: pendingAskModel,
+      createRemindMemory: () => new Memory({ storage: new InMemoryStore() }),
     });
-    const generateSpy = vi.spyOn(Agent.prototype, 'generate' as any);
-    // The passive reply cites the item id: the grounded-citation guard suppresses
-    // reminders that reference no candidate, and this test is about signal shape.
-    generateSpy.mockImplementation((async (prompt: string) =>
-      prompt.includes('Question:')
-        ? pendingAsk
-        : { text: `Atlas ships mid January, worth checking. (${item.id})` }) as any);
 
-    try {
-      const askInFlight = tools.ask_memory.execute!({ question: 'when?' } as any, askContext());
+    const askInFlight = tools.ask_memory.execute!({ question: 'when?' } as any, askContext());
 
-      const result = await applyExtractorHooks({
-        source: 'observer',
-        extractors: [extractor],
-        rawObservations: 'The user is scheduling Project Atlas.',
-        ...context,
-      });
+    const result = await applyExtractorHooks({
+      source: 'observer',
+      extractors: [extractor],
+      rawObservations: 'The user is scheduling Project Atlas.',
+      ...context,
+    });
 
-      expect(result.failures).toBeUndefined();
-      expect(context.sendSignal).toHaveBeenCalledOnce();
-      expect(context.sendSignal).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'reactive',
-          tagName: 'remembered',
-          // Both halves of the signal body: the reminder the agent wrote and the source ids
-          // appended after it. Asserting only the id passes even if the reminder text is dropped.
-          contents: expect.stringContaining('Atlas ships mid January, worth checking.'),
-          attributes: expect.objectContaining({
-            source: 'subconscious',
-            sourceIds: expect.stringContaining(item.id),
-            agent: 'remind',
-            threadId: 'alpha',
-          }),
+    expect(result.failures).toBeUndefined();
+    expect(context.sendSignal).toHaveBeenCalledOnce();
+    expect(context.sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'reactive',
+        tagName: 'remembered',
+        // Both halves of the signal body: the reminder the agent wrote and the source ids
+        // appended after it. Asserting only the id passes even if the reminder text is dropped.
+        contents: expect.stringContaining('Atlas ships mid January, worth checking.'),
+        attributes: expect.objectContaining({
+          source: 'subconscious',
+          sourceIds: expect.stringContaining(item.id),
+          agent: 'remind',
+          threadId: 'alpha',
         }),
-      );
+      }),
+    );
 
-      releaseAsk({ text: 'January 15.' });
-      expect(await askInFlight).toEqual(expect.objectContaining({ ok: true, answer: 'January 15.' }));
-    } finally {
-      generateSpy.mockRestore();
-    }
+    releaseAsk();
+    expect(await askInFlight).toEqual(expect.objectContaining({ ok: true, answer: 'January 15.' }));
   });
 
   it('returns an explicit unavailable result when no model can be resolved', async () => {
