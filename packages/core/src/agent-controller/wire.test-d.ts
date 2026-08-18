@@ -43,6 +43,7 @@ describe('AgentControllerWireEvent', () => {
     expectTypeOf<HasNeverLeaf<Jsonify<{ tools: Map<string, string> }>>>().toEqualTypeOf<true>();
     expectTypeOf<HasNeverLeaf<Jsonify<{ items: Set<string>[] }>>>().toEqualTypeOf<true>();
     expectTypeOf<HasNeverLeaf<Jsonify<{ cause: Error }>>>().toEqualTypeOf<true>();
+    expectTypeOf<HasNeverLeaf<Jsonify<{ value: symbol }>>>().toEqualTypeOf<true>();
     expectTypeOf<HasNeverLeaf<Jsonify<{ tools: Record<string, { name: string }> }>>>().toEqualTypeOf<false>();
     expectTypeOf<HasNeverLeaf<Jsonify<{ error: { name: string; message: string } }>>>().toEqualTypeOf<false>();
   });

@@ -6,7 +6,7 @@ type IsErrorInstance<T> = T extends Error ? ('stack' extends keyof T ? true : fa
 /** `T` as `JSON.stringify` writes it: `toJSON` followed, what JSON cannot carry turned to `never` (caught by `wire.test-d.ts`). */
 export type Jsonify<T> = T extends { toJSON(): infer R }
   ? Jsonify<R>
-  : T extends Map<unknown, unknown> | Set<unknown> | bigint | ((...args: never[]) => unknown)
+  : T extends Map<unknown, unknown> | Set<unknown> | bigint | symbol | ((...args: never[]) => unknown)
     ? never
     : IsErrorInstance<T> extends true
       ? never
