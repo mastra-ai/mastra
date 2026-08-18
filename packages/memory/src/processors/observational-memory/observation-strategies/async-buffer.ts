@@ -12,6 +12,7 @@ import { getBufferedChunks, combineObservationsForBuffering } from '../message-u
 
 import { wrapInObservationGroup } from '../observation-groups';
 import { buildMessageRange } from '../observational-memory';
+import { formatMessagesForObserver } from '../observer-agent';
 import { ObservationStrategy } from './base';
 import type { StrategyDeps } from './base';
 import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
@@ -73,6 +74,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       failures: result.extractionFailures,
       previousValues: this.priorExtractedValues,
       rawObservations: result.observations,
+      recentMessages: formatMessagesForObserver(messages, { maxPartLength: 500 }),
       threadId: this.opts.threadId,
       resourceId: this.opts.resourceId,
       mainAgent: this.opts.agent,

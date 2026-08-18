@@ -88,7 +88,7 @@ function actorId(actor: FactoryRuleActor): string {
   }
 }
 
-function currentStage(stages: readonly string[]): FactoryRuleStage | undefined {
+export function currentStage(stages: readonly string[]): FactoryRuleStage | undefined {
   if (stages.length !== 1) return undefined;
   const stage = stages[0];
   return isFactoryRuleStage(stage) ? stage : undefined;

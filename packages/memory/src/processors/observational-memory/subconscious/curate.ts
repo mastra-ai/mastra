@@ -3,11 +3,13 @@ import type { KnowledgeScope, KnowledgeStorage } from '@mastra/core/storage';
 import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
 
 import type { Memory } from '../../..';
-import type { ReflectionCommittedContext } from '../types';
+import type { ObservationalMemoryModel, ReflectionCommittedContext } from '../types';
 import { publishSubconsciousActivity, publishSubconsciousError } from './activity';
 import { createKnowledgeTools } from './knowledge-tools';
 import { createKnowledgeWriteTools } from './knowledge-write-tools';
+import { resolveSubconsciousAgentModel } from './model';
 import { createPinnedTools } from './pinned';
+import { resolveKnowledgeResourceId } from './scope';
 import type { ResolvedSubconsciousAgent, ResolvedSubconsciousConfig } from './types';
 
 const CURATION_AGENT = 'curate';
@@ -15,9 +17,9 @@ const DEFAULT_INSTRUCTIONS = `Maintain durable scoped knowledge from the committ
 
 Use the read tools to inspect existing nodes, knowledge records, mentions, backlinks, and long-form node content. Use the write tools to merge true duplicates, repair names and links, soft-delete superseded knowledge records, rescope knowledge records only when justified and permitted by their ceilings, and synthesize useful node content. Never restore deleted knowledge records. Never invent provenance, capture timestamps, scopes, ceilings, IDs, or versions; those are enforced by code. Resolve optimistic-concurrency conflicts by reading the latest record and retrying the intended mutation. Keep the reserved capture-guidance node concise and update it only with durable guidance that will improve future capture.
 
-Process the worklist in ID order. Your final response must end with <curation-complete through="RECORD_ID" /> using the ID of the last KnowledgeRecord you fully processed. If you cannot finish the batch, acknowledge only the last KnowledgeRecord you did finish. Do not emit a completion marker when no KnowledgeRecord was fully processed.`;
+Process the worklist in ID order. Every time you finish processing a KnowledgeRecord, include <curation-complete through="RECORD_ID" /> in your next text response with that record's ID. The latest marker is your acknowledged cursor, so progress survives if you run out of steps mid-batch. Your final response must end with the marker for the last KnowledgeRecord you fully processed. If you cannot finish the batch, acknowledge only the last KnowledgeRecord you did finish. Do not emit a completion marker when no KnowledgeRecord was fully processed.`;
 
-const PINNED_INSTRUCTIONS = `Maintain the pin set with knowledge_pin, knowledge_edit_pin, and knowledge_unpin. Pinned entries are delivered to the main agent on every turn, so they cost tokens permanently and must stay short. Pin only knowledge that should apply without being asked for, such as standing instructions, durable preferences, and hard constraints. Unpin an entry as soon as it stops being unconditionally true. Everything a reminder can surface on demand does not belong in the pin set.`;
+export const PINNED_INSTRUCTIONS = `Maintain the pin set with knowledge_pin, knowledge_edit_pin, and knowledge_unpin. Pinned entries are delivered to the main agent on every turn, so they cost tokens permanently and must stay short. Pin only knowledge that should apply without being asked for, such as standing instructions, durable preferences, and hard constraints. Pin only knowledge that is BOTH costly to rediscover AND not the kind of thing a future agent would think to search for; anything a reminder can surface on demand does not belong in the pin set. Unpin an entry as soon as it stops being unconditionally true.`;
 
 function resolveScope(context: ReflectionCommittedContext): KnowledgeScope {
   const organizationId = context.requestContext?.get('organizationId');
@@ -26,7 +28,7 @@ function resolveScope(context: ReflectionCommittedContext): KnowledgeScope {
   }
   return canonicalizeKnowledgeScope([
     `org:${organizationId}`,
-    `resource:${context.resourceId}`,
+    `resource:${resolveKnowledgeResourceId(context.requestContext, context.resourceId)}`,
     `thread:${context.parentThreadId}`,
   ]);
 }
@@ -52,9 +54,10 @@ export function createCuratorHandler(
   memory: Memory,
   subconscious: ResolvedSubconsciousConfig,
   curatorMemory = memory,
-): (context: ReflectionCommittedContext) => Promise<void> {
+  options?: { omModel?: ObservationalMemoryModel },
+): (context: ReflectionCommittedContext) => Promise<'ran' | 'no-op'> {
   const config = subconscious.reflection.find(agent => agent.name === CURATION_AGENT);
-  if (!config) return async () => {};
+  if (!config) return async () => 'no-op';
 
   return async context => {
     let store: KnowledgeStorage | undefined;
@@ -66,9 +69,17 @@ export function createCuratorHandler(
 
       const cursor = await store.getCurationCursor({ sourceThreadId: context.parentThreadId, agent: CURATION_AGENT });
       const worklist = await readWorklist(store, context.parentThreadId, scope, cursor?.lastKnowledgeId);
-      if (!worklist.records.length && !context.observations.trim()) return;
+      if (!worklist.records.length && !context.observations.trim()) return 'no-op';
 
-      const agent = await createCuratorAgent(memory, curatorMemory, context, scope, config, subconscious);
+      const agent = await createCuratorAgent(
+        memory,
+        curatorMemory,
+        context,
+        scope,
+        config,
+        subconscious,
+        options?.omModel,
+      );
       const result = await agent.generate(
         `Parent thread: ${context.parentThreadId}\nCurrent time: ${new Date().toISOString()}\nWorklist truncated: ${worklist.hasMore}\n\nCommitted pre-reflection observations:\n${context.observations}\n\nNew KnowledgeRecord worklist:\n${JSON.stringify(worklist.records)}`,
         {
@@ -83,7 +94,8 @@ export function createCuratorHandler(
       );
 
       if (worklist.records.length) {
-        const acknowledgedId = result.text.match(/<curation-complete\s+through=["']([^"']+)["']\s*\/>/i)?.[1];
+        const markers = [...result.text.matchAll(/<curation-complete\s+through=["']([^"']+)["']\s*\/>/gi)];
+        const acknowledgedId = markers.at(-1)?.[1];
         if (!acknowledgedId || !worklist.records.some(record => record.id === acknowledgedId)) {
           throw new Error('Curator did not acknowledge a valid processed KnowledgeRecord cursor.');
         }
@@ -93,6 +105,7 @@ export function createCuratorHandler(
           lastKnowledgeId: acknowledgedId,
         });
       }
+      return 'ran';
     } catch (error) {
       const message = `curate: ${error instanceof Error ? error.message : String(error)}`;
       await context.writer?.custom({ type: 'data-subconscious-error', data: { agent: 'curate', error: message } });
@@ -119,12 +132,15 @@ async function createCuratorAgent(
   scope: KnowledgeScope,
   config: ResolvedSubconsciousAgent,
   subconscious: ResolvedSubconsciousConfig,
+  omModel?: ObservationalMemoryModel,
 ): Promise<Agent> {
-  if (!context.mainAgent) throw new Error('Subconscious curate requires the main agent to resolve its model.');
-  const model = await context.mainAgent.getModel({
+  const model = await resolveSubconsciousAgentModel({
+    config,
+    omModel,
+    mainAgent: context.mainAgent,
     requestContext: context.requestContext,
-    ...(config.model ? { modelConfig: config.model } : {}),
   });
+  if (!model) throw new Error('Subconscious curate requires the main agent to resolve its model.');
   return new Agent({
     id: `subconscious-curate-${context.parentThreadId}`,
     name: 'Subconscious Curate',

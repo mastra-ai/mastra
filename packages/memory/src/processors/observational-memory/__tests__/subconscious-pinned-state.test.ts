@@ -175,7 +175,7 @@ describe('PinnedStateProcessor', () => {
     expect(result).toBeUndefined();
   });
 
-  it('folds the same fact id added in one delta and removed in a later one order-stably', () => {
+  it('folds the same KnowledgeRecord id added in one delta and removed in a later one order-stably', () => {
     const base: PinEntry[] = [];
     const afterAdd = applyPinOps(base, [{ op: 'add', pin: { id: 'f1', text: 'ephemeral' } }]);
     const afterRemove = applyPinOps(afterAdd, [{ op: 'remove', id: 'f1' }]);
