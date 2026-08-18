@@ -473,7 +473,7 @@ describe('MessageRow', () => {
     expect(container.querySelector('[data-testid="tool-badge"]')).toBeNull();
   });
 
-  it('reveals approval buttons after the collapsed tool is opened', () => {
+  it('reveals approval buttons without requiring the pending tool to be opened', () => {
     renderRow(
       baseMessage({
         role: 'assistant',
@@ -499,10 +499,7 @@ describe('MessageRow', () => {
         },
       }),
     );
-    expect(screen.queryByText('Approve')).toBeNull();
-
-    fireEvent.click(screen.getByRole('button', { name: 'DangerousTool' }));
-
+    expect(screen.getByRole('button', { name: 'DangerousTool' }).getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByText('Approve')).toBeTruthy();
     expect(screen.getByText('Decline')).toBeTruthy();
   });
