@@ -1,4 +1,5 @@
 import { Extractor } from '../extractor';
+import type { ObservationalMemoryModel } from '../types';
 import { SubconsciousCaptureExtractor } from './capture';
 import { DEFAULT_MAX_PINS, DEFAULT_PINNED_MAX_CHARACTERS, MAX_PINNED_MAX_CHARACTERS } from './pinned';
 import { SubconsciousRemindExtractor } from './remind';
@@ -103,6 +104,7 @@ export class Subconscious {
             maxPins: (config.pins === true ? undefined : config.pins.maxPins) ?? DEFAULT_MAX_PINS,
             maxCharacters:
               (config.pins === true ? undefined : config.pins.maxCharacters) ?? DEFAULT_PINNED_MAX_CHARACTERS,
+            capturePinning: (config.pins === true ? undefined : config.pins.capturePinning) ?? false,
           };
     if (pins !== false) {
       if (!Number.isInteger(pins.maxPins) || pins.maxPins < 1) {
@@ -119,6 +121,13 @@ export class Subconscious {
       }
     }
 
+    if (
+      config.curationCadence !== undefined &&
+      (!Number.isInteger(config.curationCadence) || config.curationCadence < 1)
+    ) {
+      throw new Error('Subconscious curationCadence must be a positive integer.');
+    }
+
     this.config = Object.freeze({ ...config, observation: [...observation], reflection: [...reflection] });
     this.resolved = Object.freeze({
       observation: observation.map(entry =>
@@ -133,10 +142,11 @@ export class Subconscious {
       tools: config.tools !== false,
       activity: recentUpdates === false ? false : { recentUpdates },
       pins,
+      curationCadence: config.curationCadence,
     });
   }
 
-  createObservationExtractors(): Extractor<any>[] {
+  createObservationExtractors(omModel?: ObservationalMemoryModel): Extractor<any>[] {
     const extractors: Extractor<any>[] = [];
     for (const entry of this.config.observation ?? []) {
       const name = entryName(entry);
@@ -148,11 +158,12 @@ export class Subconscious {
             maxScope: this.resolved.maxScope,
             learnedGuidance: this.resolved.learnedGuidance,
             activityRecentUpdates: this.resolved.activity === false ? undefined : this.resolved.activity.recentUpdates,
+            pins: this.resolved.pins,
           }),
         );
       } else if (name === 'remind') {
         const resolved = this.resolved.observation.find(agent => agent.name === name);
-        if (resolved) extractors.push(new SubconsciousRemindExtractor(resolved));
+        if (resolved) extractors.push(new SubconsciousRemindExtractor(resolved, omModel));
       } else if (!BUILT_IN_OBSERVATION.has(name)) {
         const custom = entry as SubconsciousCustomObservationConfig;
         extractors.push(

@@ -143,8 +143,29 @@ function parseJson<T>(value: unknown): T {
   return value as T;
 }
 
+/**
+ * Knowledge timestamps are written as UTC digits into timezone-naive columns
+ * ({@link postgresTimestamp} and the ISO strings passed to inserts), but the
+ * driver parses naive columns in the process-local timezone. Reinterpret the
+ * parsed components as UTC so reads return the digits that were stored.
+ */
 function toDate(value: unknown): Date {
-  return value instanceof Date ? new Date(value) : new Date(String(value));
+  if (value instanceof Date) {
+    return new Date(
+      Date.UTC(
+        value.getFullYear(),
+        value.getMonth(),
+        value.getDate(),
+        value.getHours(),
+        value.getMinutes(),
+        value.getSeconds(),
+        value.getMilliseconds(),
+      ),
+    );
+  }
+  const text = String(value);
+  if (/(Z|[+-]\d{2}(:?\d{2})?)$/.test(text)) return new Date(text);
+  return new Date(`${text.replace(' ', 'T')}Z`);
 }
 
 function optionalDate(value: unknown): Date | undefined {
@@ -153,7 +174,7 @@ function optionalDate(value: unknown): Date | undefined {
 
 function postgresTimestamp(value: Date): string {
   const pad = (part: number, width = 2) => String(part).padStart(width, '0');
-  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())} ${pad(value.getHours())}:${pad(value.getMinutes())}:${pad(value.getSeconds())}.${pad(value.getMilliseconds(), 3)}`;
+  return `${value.getUTCFullYear()}-${pad(value.getUTCMonth() + 1)}-${pad(value.getUTCDate())} ${pad(value.getUTCHours())}:${pad(value.getUTCMinutes())}:${pad(value.getUTCSeconds())}.${pad(value.getUTCMilliseconds(), 3)}`;
 }
 
 function canonicalName(name: string): string {

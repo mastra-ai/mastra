@@ -22,6 +22,8 @@ export interface ExtractorOnExtractedContext<T = unknown> extends ExtractorRunti
   previous?: T;
   current: T;
   rawObservations?: string;
+  /** Formatted recent conversation messages from the observed window — content already visible to the main agent. */
+  recentMessages?: string;
   sendSignal?: ProcessorContext['sendSignal'];
   sendStateSignal?: ProcessorContext['sendStateSignal'];
   writer?: ProcessorStreamWriter;

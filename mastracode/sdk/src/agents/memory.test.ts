@@ -184,8 +184,81 @@ describe('getDynamicMemory', () => {
     expect(config.options.observationalMemory.experimental_subconscious?.config).toEqual({
       defaultScope: 'resource',
       maxScope: 'resource',
+      pins: true,
     });
     expect(requestContext.get('organizationId')).toBe('mastracode-owner');
+    // Outside the factory there is no project id, so the knowledge scope is untouched.
+    expect(requestContext.get('knowledgeResourceId')).toBeUndefined();
+  });
+
+  it('prefers the factory org id from session state over the session owner for organizationId', async () => {
+    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
+    const { requestContext } = await createMemoryConfig(
+      {
+        projectPath: '/tmp/project',
+        factoryProjectId: 'project-1',
+        factoryOrgId: 'org-real',
+      },
+      'thread',
+      { vector: true },
+    );
+    expect(requestContext.set).toHaveBeenCalledWith('organizationId', 'org-real');
+    expect(requestContext.get('organizationId')).toBe('org-real');
+  });
+
+  it('falls back to the session owner for organizationId when no factory org id exists', async () => {
+    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
+    const { requestContext } = await createMemoryConfig({ projectPath: '/tmp/project' }, 'thread', { vector: true });
+    expect(requestContext.get('organizationId')).toBe('mastracode-owner');
+  });
+
+  it('anchors the knowledge scope on the factory project id when present', async () => {
+    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
+    const { requestContext } = await createMemoryConfig(
+      {
+        projectPath: '/tmp/project',
+        factoryProjectId: 'project-1',
+      },
+      'thread',
+      { vector: true },
+    );
+    expect(requestContext.set).toHaveBeenCalledWith('knowledgeResourceId', 'project-1');
+    expect(requestContext.get('knowledgeResourceId')).toBe('project-1');
+  });
+
+  it('enables capture-time pinning and the curation cadence only for opted-in factory sessions', async () => {
+    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
+    const vector = { vector: true };
+    const { config } = await createMemoryConfig(
+      { projectPath: '/tmp/project', factoryProjectId: 'project-1' },
+      'thread',
+      vector,
+    );
+    expect(config.options.observationalMemory.experimental_subconscious?.config).toEqual({
+      defaultScope: 'resource',
+      maxScope: 'resource',
+      pins: { capturePinning: true },
+      curationCadence: 3,
+      maxSteps: 25,
+    });
+  });
+
+  it('splits the memory cache between opted-in factory and non-factory sessions', async () => {
+    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
+    vi.resetModules();
+    memoryConstructorMock.mockClear();
+    getOmScopeMock.mockReturnValue('thread');
+    const { getDynamicMemory } = await import('./memory.js');
+    const factory = getDynamicMemory({ storage: true } as never, { vector: true } as never);
+    const nonFactoryMemory = factory({
+      requestContext: createRequestContext({ projectPath: '/tmp/project' }) as never,
+    });
+    const factoryMemory = factory({
+      requestContext: createRequestContext({ projectPath: '/tmp/project', factoryProjectId: 'project-1' }) as never,
+    });
+    // A factory-conditional config must not be cross-served from the cache.
+    expect(factoryMemory).not.toBe(nonFactoryMemory);
+    expect(memoryConstructorMock).toHaveBeenCalledTimes(2);
   });
 
   it('uses controller state overrides and disables async buffering for resource-scoped OM', async () => {

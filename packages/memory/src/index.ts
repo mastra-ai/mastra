@@ -387,7 +387,7 @@ export class Memory extends MastraMemory {
     const extract = observation.extract ?? [];
     const existingSlugs = new Set(extract.map(extractor => extractor.slug));
     const subconsciousExtractors = omConfig.experimental_subconscious
-      .createObservationExtractors()
+      .createObservationExtractors(observation.model ?? omConfig.model)
       .filter(extractor => !existingSlugs.has(extractor.slug));
 
     return {
@@ -400,6 +400,54 @@ export class Memory extends MastraMemory {
         },
       },
     } as MemoryConfigInternal;
+  }
+
+  /** Threads with a curation currently in flight in this process; guards same-process double-fire only. */
+  private _curationsInFlight = new Set<string>();
+
+  /**
+   * Run the subconscious curator directly over the pending fact worklist, without a reflection.
+   * Cross-process serialization is the curation cursor's job; a lost race wastes one advisory run.
+   *
+   * Outcomes: `ran` (curator executed), `no-op` (empty worklist and no prompt, or no curate agent
+   * configured), `skipped` (a curation for this thread is already in flight in this process), and
+   * `no-model` (no per-agent, observational memory, or main-agent model could be resolved).
+   */
+  async runCuration(options: {
+    threadId: string;
+    resourceId: string;
+    requestContext?: RequestContext;
+    prompt?: string;
+  }): Promise<{ outcome: 'ran' | 'no-op' | 'skipped' | 'no-model' }> {
+    const omConfig = normalizeObservationalMemoryConfig(this.threadConfig.observationalMemory);
+    const subconscious = omConfig?.experimental_subconscious;
+    if (!omConfig || !(subconscious instanceof Subconscious)) return { outcome: 'no-op' };
+    if (this._curationsInFlight.has(options.threadId)) return { outcome: 'skipped' };
+    this._curationsInFlight.add(options.threadId);
+    try {
+      const handler = createCuratorHandler(
+        this,
+        subconscious.resolved,
+        new Memory({ storage: this.storage, options: { observationalMemory: false } }),
+        { omModel: omConfig.observation?.model ?? omConfig.model },
+      );
+      const outcome = await handler({
+        parentThreadId: options.threadId,
+        resourceId: options.resourceId,
+        // The direct path has no reflection artifacts; the optional prompt (e.g. a phase-exit
+        // framing) rides the observations slot of the curator's own prompt structure.
+        observations: options.prompt ?? '',
+        requestContext: options.requestContext,
+      });
+      return { outcome: outcome === 'ran' ? 'ran' : 'no-op' };
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('requires the main agent to resolve its model')) {
+        return { outcome: 'no-model' };
+      }
+      throw error;
+    } finally {
+      this._curationsInFlight.delete(options.threadId);
+    }
   }
 
   private applyManagedWorkingMemoryDefaults(config: MemoryConfigInternal): MemoryConfigInternal {
@@ -1876,6 +1924,10 @@ ${workingMemory}`;
       activateOnProviderChange: omConfig.activateOnProviderChange,
       shareTokenBudget: omConfig.shareTokenBudget,
       model: omConfig.model,
+      curationCadence:
+        omConfig.experimental_subconscious instanceof Subconscious
+          ? omConfig.experimental_subconscious.resolved.curationCadence
+          : undefined,
       mastra: this._mastraInstance,
       onIndexObservations,
       hooks: omConfig.hooks,
@@ -1883,15 +1935,18 @@ ${workingMemory}`;
         omConfig.experimental_subconscious instanceof Subconscious
           ? (() => {
               const resolved = omConfig.experimental_subconscious.resolved;
+              const omModel = omConfig.observation?.model ?? omConfig.model;
               const curate = createCuratorHandler(
                 this,
                 resolved,
                 new Memory({ storage: this.storage, options: { observationalMemory: false } }),
+                { omModel },
               );
               const learn = createLearnerHandler(
                 this,
                 resolved,
                 new Memory({ storage: this.storage, options: { observationalMemory: false } }),
+                { omModel },
               );
               return composeReflectionAgentHandlers([curate, learn]);
             })()
