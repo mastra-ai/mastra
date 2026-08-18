@@ -18,6 +18,7 @@ import { useNavigationCommand } from '@/lib/command';
 import { useLinkComponent } from '@/lib/framework';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
 import { bottomNav, mainNav } from '@/lib/nav/nav-items';
+import { isNavItemEnabled, useEnabledDomains } from '@/portal/domains-context';
 import type { NavItem } from '@/lib/nav/nav-items';
 
 declare global {
@@ -63,8 +64,11 @@ export function AppSidebar() {
     setNavigationCommandOpen(true);
   };
 
+  const enabledDomains = useEnabledDomains();
+  const isPortalMode = Object.keys(enabledDomains).length > 0;
   const filterItem = (item: NavItem) => {
     if (item.hidden) return false;
+    if (!isNavItemEnabled(item.url, enabledDomains)) return false;
     if (cmsOnlyLinks.has(item.url) && !isCmsAvailable && !isCmsLoading) return false;
     if (isMastraPlatform && !item.isOnMastraPlatform) return false;
     // While the user's permissions are still loading, hide permission-gated
@@ -87,6 +91,46 @@ export function AppSidebar() {
   };
 
   const filteredBottom = bottomNav.filter(filterItem);
+
+  if (isPortalMode) {
+    return (
+      <MainSidebar>
+        <MainSidebar.Nav>
+          {mainNav.map(section => {
+            const filtered = section.items.filter(filterItem);
+            if (filtered.length === 0) return null;
+            const anySubActive = filtered.some(item => getIsLinkActive(item, pathname));
+            const isHeaderActive = !!(section.href && pathname === section.href && !anySubActive);
+            return (
+              <MainSidebar.NavSection key={section.key}>
+                {section.title ? (
+                  <MainSidebar.NavHeader
+                    LinkComponent={Link}
+                    state={state}
+                    href={section.href}
+                    isActive={isHeaderActive}
+                  >
+                    {section.title}
+                  </MainSidebar.NavHeader>
+                ) : null}
+                <MainSidebar.NavList>
+                  {filtered.map(item => (
+                    <MainSidebar.NavLink
+                      key={item.name}
+                      LinkComponent={Link}
+                      state={state}
+                      link={toSidebarLink(item)}
+                      isActive={getIsLinkActive(item, pathname)}
+                    />
+                  ))}
+                </MainSidebar.NavList>
+              </MainSidebar.NavSection>
+            );
+          })}
+        </MainSidebar.Nav>
+      </MainSidebar>
+    );
+  }
 
   return (
     <MainSidebar>
@@ -186,6 +230,7 @@ export function AppSidebar() {
       <MainSidebar.Nav>
         {mainNav.map(section => {
           const filtered = section.items.filter(filterItem);
+          if (filtered.length === 0) return null;
           const anySubActive = filtered.some(item => getIsLinkActive(item, pathname));
           const isHeaderActive = !!(section.href && pathname === section.href && !anySubActive);
 

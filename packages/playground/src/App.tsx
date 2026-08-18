@@ -137,7 +137,8 @@ declare global {
   }
 }
 
-const paths: LinkComponentProviderProps['paths'] = {
+// eslint-disable-next-line react-refresh/only-export-components
+export const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}/chat/new`,
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
   agentSkillLink: (agentId: string, skillName: string, skillPath?: string, workspaceId?: string) =>

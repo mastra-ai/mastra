@@ -1,0 +1,22 @@
+/*
+ * Portal stylesheet.
+ *
+ * Pulls in the same Tailwind v4 + @mastra/playground-ui design tokens the
+ * standalone Studio uses. A postcss step (see vite.portal.config.ts) wraps
+ * the compiled output in `@layer studio-portal` so Platform's own
+ * (unlayered) rules always win when they disagree — Platform can theme /
+ * override without !important gymnastics.
+ *
+ * Everything in the portal renders inside a `.studio-portal-scope` root, so
+ * a future spike can additionally clamp these rules with `@scope
+ * (.studio-portal-scope)` for hard isolation if needed.
+ */
+@import '../../../playground-ui/src/index.css';
+
+/* Scan playground-ui for utilities the portal ends up using. */
+@source '../../../../node_modules/@mastra/playground-ui';
+
+.studio-portal-scope {
+  color-scheme: dark;
+  color: var(--icon6, #e5e5e5);
+}

@@ -28,8 +28,9 @@
   },
   "scripts": {
     "dev": "MASTRA_AUTO_DETECT_URL=true vite",
-    "build": "vite build",
+    "build": "vite build && vite build --config vite.portal.config.ts",
     "build:lib": "vite build",
+    "build:portal": "vite build --config vite.portal.config.ts",
     "build:watch": "vite build --watch",
     "lint": "oxlint . && eslint --no-warn-ignored .",
     "lint:fix": "oxlint --fix . && eslint --fix --no-warn-ignored .",
