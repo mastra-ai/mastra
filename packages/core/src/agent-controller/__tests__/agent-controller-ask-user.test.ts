@@ -119,8 +119,8 @@ describe('AgentController: ask_user native suspension', () => {
     expect(suspendEvent.suspendPayload.selectionMode).toBe('single_select');
 
     // Display state should reflect the pending suspension.
-    expect(session.displayState.get().pendingSuspensions['call-1']?.toolCallId).toBe('call-1');
-    expect(session.displayState.get().pendingSuspensions['call-1']?.toolName).toBe('ask_user');
+    expect(session.displayState.get().pendingSuspensions.get('call-1')?.toolCallId).toBe('call-1');
+    expect(session.displayState.get().pendingSuspensions.get('call-1')?.toolName).toBe('ask_user');
   });
 
   it('resumes the suspended ask_user tool with the answer via respondToToolSuspension', async () => {
@@ -145,7 +145,7 @@ describe('AgentController: ask_user native suspension', () => {
     });
 
     expect(events.some(e => e.type === 'error')).toBe(false);
-    expect(Object.keys(session.displayState.get().pendingSuspensions).length).toBe(0);
+    expect(session.displayState.get().pendingSuspensions.size).toBe(0);
   });
 
   it('emits multi_select in the suspend payload when requested', async () => {
@@ -381,6 +381,6 @@ describe('AgentController: ask_user native suspension', () => {
       }
     }
 
-    expect(Object.keys(session.displayState.get().pendingSuspensions).length).toBe(0);
+    expect(session.displayState.get().pendingSuspensions.size).toBe(0);
   });
 });

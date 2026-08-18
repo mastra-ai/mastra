@@ -19,13 +19,13 @@ function createMockState() {
     session: {
       state: { set: vi.fn(async () => {}) },
       thread: { detachFromCurrent: vi.fn() },
-      displayState: { clearModifiedFiles: vi.fn() },
+      displayState: { get: vi.fn(() => ({ modifiedFiles: new Map([['f', true]]) })) },
     },
     controller: {
       abort: vi.fn(),
       session: {
         thread: { detachFromCurrent: vi.fn() },
-        displayState: { clearModifiedFiles: vi.fn() },
+        displayState: { get: vi.fn(() => ({ modifiedFiles: new Map([['f', true]]) })) },
       },
       setState: vi.fn(async () => {}),
     },

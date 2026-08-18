@@ -29,7 +29,7 @@ function createShellOutputContext() {
   const updateResult = vi.fn();
   const requestRender = vi.fn();
   const component = { appendStreamingOutput, updateResult };
-  const session = { displayState: { get: () => ({ toolInputBuffers: {} }) } };
+  const session = { displayState: { get: () => ({ toolInputBuffers: new Map() }) } };
   const ctx = {
     state: {
       controller: { session },
@@ -53,10 +53,10 @@ function createContext(bufferText: string | undefined, toolName = 'view') {
   const requestRender = vi.fn();
   const invalidate = vi.fn();
   const component = { updateArgs, refresh };
-  const toolInputBuffers: Record<string, { text: string; toolName: string }> = {};
+  const toolInputBuffers = new Map<string, { text: string; toolName: string }>();
 
   if (bufferText !== undefined) {
-    toolInputBuffers['call-1'] = { text: bufferText, toolName };
+    toolInputBuffers.set('call-1', { text: bufferText, toolName });
   }
 
   const session = { displayState: { get: () => ({ toolInputBuffers }) } };
@@ -210,7 +210,7 @@ describe('tool event handlers', () => {
     const component = { updateResult: vi.fn() };
     const requestRender = vi.fn();
     const invalidate = vi.fn();
-    const toolInputBuffers = { 'call-1': { text: '', toolName: 'mastra_expert' } };
+    const toolInputBuffers = new Map([['call-1', { text: '', toolName: 'mastra_expert' }]]);
     const ctx = {
       addChildBeforeFollowUps: vi.fn(child => ctx.state.chatContainer.children.push(child)),
       state: {

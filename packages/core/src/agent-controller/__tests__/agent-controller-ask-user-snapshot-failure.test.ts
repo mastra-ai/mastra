@@ -140,7 +140,7 @@ describe('AgentController: ask_user with suspended-snapshot persistence failure'
 
     // Both the resume bookkeeping and the UI-facing display state are cleared.
     expect(session.suspensions.hasPending()).toBe(false);
-    expect(Object.keys(session.displayState.get().pendingSuspensions).length).toBe(0);
+    expect(session.displayState.get().pendingSuspensions.size).toBe(0);
 
     events.length = 0;
 

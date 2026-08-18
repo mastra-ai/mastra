@@ -405,7 +405,7 @@ export class SessionRunEngine {
   private abortForOmFailure({ operationType, stage, error }: { operationType: string; stage: string; error: string }) {
     this.#session.emit({
       type: 'error',
-      error: getErrorFromUnknown(`Observational memory ${operationType} ${stage} failed: ${error}`),
+      error: new Error(`Observational memory ${operationType} ${stage} failed: ${error}`),
     });
     this.#session.abortRun();
   }
@@ -470,7 +470,7 @@ export class SessionRunEngine {
     // silently stops without a visible terminal state.
     if (state.terminalError && !error && !aborted && !this.#session.run.isAbortRequested() && !result.suspended) {
       error = true;
-      this.#session.emit({ type: 'error', error: getErrorFromUnknown(state.terminalError) });
+      this.#session.emit({ type: 'error', error: new Error(state.terminalError) });
     }
 
     await this.#session.finishAgentRun(
@@ -1288,7 +1288,7 @@ export class SessionRunEngine {
               !suspended
             ) {
               isError = true;
-              this.#session.emit({ type: 'error', error: getErrorFromUnknown(currentRun.terminalError) });
+              this.#session.emit({ type: 'error', error: new Error(currentRun.terminalError) });
             }
             await this.finishSubscribedStreamRun({
               suspended,

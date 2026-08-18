@@ -23,14 +23,18 @@ describe('defaultDisplayState', () => {
     expect(ds.currentMessage).toBeNull();
     expect(ds.queuedFollowUps).toBe(0);
     expect(ds.tokenUsage).toEqual(createEmptyTokenUsage());
-    expect(ds.activeTools).toEqual({});
-    expect(ds.toolInputBuffers).toEqual({});
+    expect(ds.activeTools).toBeInstanceOf(Map);
+    expect(ds.activeTools.size).toBe(0);
+    expect(ds.toolInputBuffers).toBeInstanceOf(Map);
+    expect(ds.toolInputBuffers.size).toBe(0);
     expect(ds.pendingApproval).toBeNull();
-    expect(ds.activeSubagents).toEqual({});
+    expect(ds.activeSubagents).toBeInstanceOf(Map);
+    expect(ds.activeSubagents.size).toBe(0);
     expect(ds.omProgress.status).toBe('idle');
     expect(ds.omProgress.pendingTokens).toBe(0);
     expect(ds.omProgress.threshold).toBe(30000);
-    expect(ds.modifiedFiles).toEqual({});
+    expect(ds.modifiedFiles).toBeInstanceOf(Map);
+    expect(ds.modifiedFiles.size).toBe(0);
     expect(ds.tasks).toEqual([]);
     expect(ds.previousTasks).toEqual([]);
     expect(ds.bufferingMessages).toBe(false);
@@ -58,10 +62,10 @@ describe('session.displayState.get()', () => {
     expect(ds.isRunning).toBe(false);
     expect(ds.currentMessage).toBeNull();
     expect(ds.tokenUsage).toEqual(createEmptyTokenUsage());
-    expect(Object.keys(ds.activeTools).length).toBe(0);
+    expect(ds.activeTools.size).toBe(0);
     expect(ds.pendingApproval).toBeNull();
-    expect(Object.keys(ds.activeSubagents).length).toBe(0);
-    expect(Object.keys(ds.modifiedFiles).length).toBe(0);
+    expect(ds.activeSubagents.size).toBe(0);
+    expect(ds.modifiedFiles.size).toBe(0);
     expect(ds.tasks).toEqual([]);
     expect(ds.previousTasks).toEqual([]);
   });
@@ -92,18 +96,18 @@ describe('agent lifecycle', () => {
 
   it('clears activeTools on agent_start', () => {
     emit(session, { type: 'tool_start', toolCallId: 't1', toolName: 'read_file', args: {} });
-    expect(Object.keys(session.displayState.get().activeTools).length).toBe(1);
+    expect(session.displayState.get().activeTools.size).toBe(1);
 
     emit(session, { type: 'agent_start' });
-    expect(Object.keys(session.displayState.get().activeTools).length).toBe(0);
+    expect(session.displayState.get().activeTools.size).toBe(0);
   });
 
   it('clears toolInputBuffers on agent_start', () => {
     emit(session, { type: 'tool_input_start', toolCallId: 't1', toolName: 'write_file' });
-    expect(Object.keys(session.displayState.get().toolInputBuffers).length).toBe(1);
+    expect(session.displayState.get().toolInputBuffers.size).toBe(1);
 
     emit(session, { type: 'agent_start' });
-    expect(Object.keys(session.displayState.get().toolInputBuffers).length).toBe(0);
+    expect(session.displayState.get().toolInputBuffers.size).toBe(0);
   });
 
   it('clears pendingApproval on agent_start', () => {
@@ -124,35 +128,35 @@ describe('agent lifecycle', () => {
 
   it('marks running tools as error on agent_end', () => {
     emit(session, { type: 'tool_start', toolCallId: 't1', toolName: 'read_file', args: { path: 'test.ts' } });
-    expect(session.displayState.get().activeTools['t1']?.status).toBe('running');
+    expect(session.displayState.get().activeTools.get('t1')?.status).toBe('running');
 
     emit(session, { type: 'agent_end', reason: 'aborted' });
-    expect(session.displayState.get().activeTools['t1']?.status).toBe('error');
+    expect(session.displayState.get().activeTools.get('t1')?.status).toBe('error');
   });
 
   it('marks streaming_input tools as error on agent_end', () => {
     emit(session, { type: 'tool_input_start', toolCallId: 't1', toolName: 'write_file' });
-    expect(session.displayState.get().activeTools['t1']?.status).toBe('streaming_input');
+    expect(session.displayState.get().activeTools.get('t1')?.status).toBe('streaming_input');
 
     emit(session, { type: 'agent_end', reason: 'aborted' });
-    expect(session.displayState.get().activeTools['t1']?.status).toBe('error');
+    expect(session.displayState.get().activeTools.get('t1')?.status).toBe('error');
   });
 
   it('does not change completed tools on agent_end', () => {
     emit(session, { type: 'tool_start', toolCallId: 't1', toolName: 'read_file', args: { path: 'test.ts' } });
     emit(session, { type: 'tool_end', toolCallId: 't1', result: 'ok', isError: false });
-    expect(session.displayState.get().activeTools['t1']?.status).toBe('completed');
+    expect(session.displayState.get().activeTools.get('t1')?.status).toBe('completed');
 
     emit(session, { type: 'agent_end', reason: 'complete' });
-    expect(session.displayState.get().activeTools['t1']?.status).toBe('completed');
+    expect(session.displayState.get().activeTools.get('t1')?.status).toBe('completed');
   });
 
   it('clears activeSubagents on agent_end', () => {
     emit(session, { type: 'subagent_start', toolCallId: 's1', agentType: 'explore', task: 'find', modelId: 'gpt-4o' });
-    expect(Object.keys(session.displayState.get().activeSubagents).length).toBe(1);
+    expect(session.displayState.get().activeSubagents.size).toBe(1);
 
     emit(session, { type: 'agent_end', reason: 'complete' });
-    expect(Object.keys(session.displayState.get().activeSubagents).length).toBe(0);
+    expect(session.displayState.get().activeSubagents.size).toBe(0);
   });
 });
 
@@ -213,7 +217,7 @@ describe('tool lifecycle', () => {
   describe('tool_start / tool_end', () => {
     it('creates tool entry on tool_start', () => {
       emit(session, { type: 'tool_start', toolCallId: 't1', toolName: 'read_file', args: { path: 'foo.ts' } });
-      const tool = session.displayState.get().activeTools['t1'];
+      const tool = session.displayState.get().activeTools.get('t1');
       expect(tool).toBeDefined();
       expect(tool!.name).toBe('read_file');
       expect(tool!.args).toEqual({ path: 'foo.ts' });
@@ -228,7 +232,7 @@ describe('tool lifecycle', () => {
         toolName: 'write_file',
         args: { path: 'x', content: 'y' },
       });
-      const tool = session.displayState.get().activeTools['t1'];
+      const tool = session.displayState.get().activeTools.get('t1');
       expect(tool!.status).toBe('running');
       expect(tool!.args).toEqual({ path: 'x', content: 'y' });
     });
@@ -236,7 +240,7 @@ describe('tool lifecycle', () => {
     it('marks tool as completed on successful tool_end', () => {
       emit(session, { type: 'tool_start', toolCallId: 't1', toolName: 'read_file', args: {} });
       emit(session, { type: 'tool_end', toolCallId: 't1', result: 'file contents', isError: false });
-      const tool = session.displayState.get().activeTools['t1'];
+      const tool = session.displayState.get().activeTools.get('t1');
       expect(tool!.status).toBe('completed');
       expect(tool!.result).toBe('file contents');
       expect(tool!.isError).toBe(false);
@@ -245,7 +249,7 @@ describe('tool lifecycle', () => {
     it('marks tool as error on failed tool_end', () => {
       emit(session, { type: 'tool_start', toolCallId: 't1', toolName: 'read_file', args: {} });
       emit(session, { type: 'tool_end', toolCallId: 't1', result: 'not found', isError: true });
-      const tool = session.displayState.get().activeTools['t1'];
+      const tool = session.displayState.get().activeTools.get('t1');
       expect(tool!.status).toBe('error');
       expect(tool!.isError).toBe(true);
     });
@@ -255,18 +259,18 @@ describe('tool lifecycle', () => {
     it('sets partialResult on existing tool', () => {
       emit(session, { type: 'tool_start', toolCallId: 't1', toolName: 'execute_command', args: {} });
       emit(session, { type: 'tool_update', toolCallId: 't1', partialResult: 'partial output' });
-      expect(session.displayState.get().activeTools['t1']!.partialResult).toBe('partial output');
+      expect(session.displayState.get().activeTools.get('t1')!.partialResult).toBe('partial output');
     });
 
     it('stringifies non-string partialResult', () => {
       emit(session, { type: 'tool_start', toolCallId: 't1', toolName: 'execute_command', args: {} });
       emit(session, { type: 'tool_update', toolCallId: 't1', partialResult: { key: 'value' } });
-      expect(session.displayState.get().activeTools['t1']!.partialResult).toBe('{"key":"value"}');
+      expect(session.displayState.get().activeTools.get('t1')!.partialResult).toBe('{"key":"value"}');
     });
 
     it('ignores update for unknown toolCallId', () => {
       emit(session, { type: 'tool_update', toolCallId: 'unknown', partialResult: 'x' });
-      expect('unknown' in session.displayState.get().activeTools).toBe(false);
+      expect(session.displayState.get().activeTools.has('unknown')).toBe(false);
     });
   });
 
@@ -275,14 +279,14 @@ describe('tool lifecycle', () => {
       emit(session, { type: 'tool_start', toolCallId: 't1', toolName: 'execute_command', args: {} });
       emit(session, { type: 'shell_output', toolCallId: 't1', output: 'line1\n', stream: 'stdout' });
       emit(session, { type: 'shell_output', toolCallId: 't1', output: 'line2\n', stream: 'stderr' });
-      expect(session.displayState.get().activeTools['t1']!.shellOutput).toBe('line1\nline2\n');
+      expect(session.displayState.get().activeTools.get('t1')!.shellOutput).toBe('line1\nline2\n');
     });
   });
 
   describe('tool_input_start / tool_input_delta / tool_input_end', () => {
     it('creates buffer on tool_input_start', () => {
       emit(session, { type: 'tool_input_start', toolCallId: 't1', toolName: 'write_file' });
-      const buf = session.displayState.get().toolInputBuffers['t1'];
+      const buf = session.displayState.get().toolInputBuffers.get('t1');
       expect(buf).toBeDefined();
       expect(buf!.text).toBe('');
       expect(buf!.toolName).toBe('write_file');
@@ -290,7 +294,7 @@ describe('tool lifecycle', () => {
 
     it('creates tool entry with streaming_input status on tool_input_start', () => {
       emit(session, { type: 'tool_input_start', toolCallId: 't1', toolName: 'write_file' });
-      const tool = session.displayState.get().activeTools['t1'];
+      const tool = session.displayState.get().activeTools.get('t1');
       expect(tool).toBeDefined();
       expect(tool!.status).toBe('streaming_input');
     });
@@ -299,19 +303,19 @@ describe('tool lifecycle', () => {
       emit(session, { type: 'tool_input_start', toolCallId: 't1', toolName: 'write_file' });
       emit(session, { type: 'tool_input_delta', toolCallId: 't1', argsTextDelta: '{"path":' });
       emit(session, { type: 'tool_input_delta', toolCallId: 't1', argsTextDelta: '"test.ts"}' });
-      expect(session.displayState.get().toolInputBuffers['t1']!.text).toBe('{"path":"test.ts"}');
+      expect(session.displayState.get().toolInputBuffers.get('t1')!.text).toBe('{"path":"test.ts"}');
     });
 
     it('removes buffer on tool_input_end', () => {
       emit(session, { type: 'tool_input_start', toolCallId: 't1', toolName: 'write_file' });
       emit(session, { type: 'tool_input_delta', toolCallId: 't1', argsTextDelta: '{}' });
       emit(session, { type: 'tool_input_end', toolCallId: 't1' });
-      expect('t1' in session.displayState.get().toolInputBuffers).toBe(false);
+      expect(session.displayState.get().toolInputBuffers.has('t1')).toBe(false);
     });
 
     it('ignores delta for unknown toolCallId', () => {
       emit(session, { type: 'tool_input_delta', toolCallId: 'unknown', argsTextDelta: 'x' });
-      expect('unknown' in session.displayState.get().toolInputBuffers).toBe(false);
+      expect(session.displayState.get().toolInputBuffers.has('unknown')).toBe(false);
     });
   });
 
@@ -359,7 +363,7 @@ describe('tool lifecycle', () => {
         partialResult: { status: 'thinking', detail: 'Agent is answering…' },
       }),
     );
-    expect(session.displayState.get().activeTools['call-1']!.partialResult).toBe(
+    expect(session.displayState.get().activeTools.get('call-1')!.partialResult).toBe(
       '{"status":"thinking","detail":"Agent is answering…"}',
     );
   });
@@ -580,7 +584,7 @@ describe('tool lifecycle', () => {
         suspendPayload: { reason: 'Needs confirmation' },
         resumeSchema: undefined,
       });
-      const suspension = session.displayState.get().pendingSuspensions['t1'];
+      const suspension = session.displayState.get().pendingSuspensions.get('t1');
       expect(suspension).toBeDefined();
       expect(suspension!.toolCallId).toBe('t1');
       expect(suspension!.toolName).toBe('confirmAction');
@@ -597,12 +601,12 @@ describe('tool lifecycle', () => {
         suspendPayload: {},
         resumeSchema: undefined,
       });
-      expect(Object.keys(session.displayState.get().pendingSuspensions).length).toBe(1);
+      expect(session.displayState.get().pendingSuspensions.size).toBe(1);
 
       // Resuming a parked tool restarts the run (a fresh agent_start); the other
       // parallel prompts must survive.
       emit(session, { type: 'agent_start' });
-      expect('t1' in session.displayState.get().pendingSuspensions).toBe(true);
+      expect(session.displayState.get().pendingSuspensions.has('t1')).toBe(true);
     });
 
     it('preserves pendingSuspensions on agent_end with reason suspended', () => {
@@ -614,10 +618,10 @@ describe('tool lifecycle', () => {
         suspendPayload: {},
         resumeSchema: undefined,
       });
-      expect(Object.keys(session.displayState.get().pendingSuspensions).length).toBe(1);
+      expect(session.displayState.get().pendingSuspensions.size).toBe(1);
 
       emit(session, { type: 'agent_end', reason: 'suspended' });
-      expect(Object.keys(session.displayState.get().pendingSuspensions).length).toBe(1);
+      expect(session.displayState.get().pendingSuspensions.size).toBe(1);
     });
 
     it('clears pendingSuspensions on agent_end with non-suspended reason', () => {
@@ -629,10 +633,10 @@ describe('tool lifecycle', () => {
         suspendPayload: {},
         resumeSchema: undefined,
       });
-      expect(Object.keys(session.displayState.get().pendingSuspensions).length).toBe(1);
+      expect(session.displayState.get().pendingSuspensions.size).toBe(1);
 
       emit(session, { type: 'agent_end', reason: 'complete' });
-      expect(Object.keys(session.displayState.get().pendingSuspensions).length).toBe(0);
+      expect(session.displayState.get().pendingSuspensions.size).toBe(0);
     });
 
     it('keeps other parked suspensions when one resumes while another is pending', () => {
@@ -652,12 +656,12 @@ describe('tool lifecycle', () => {
         suspendPayload: { question: 'second?' },
         resumeSchema: undefined,
       });
-      expect(Object.keys(session.displayState.get().pendingSuspensions).length).toBe(2);
+      expect(session.displayState.get().pendingSuspensions.size).toBe(2);
 
       // Simulate resuming only t1 (display-state side of handleToolResume).
-      delete session.displayState.get().pendingSuspensions['t1'];
-      expect('t1' in session.displayState.get().pendingSuspensions).toBe(false);
-      expect(session.displayState.get().pendingSuspensions['t2']?.suspendPayload).toEqual({
+      session.displayState.get().pendingSuspensions.delete('t1');
+      expect(session.displayState.get().pendingSuspensions.has('t1')).toBe(false);
+      expect(session.displayState.get().pendingSuspensions.get('t2')?.suspendPayload).toEqual({
         question: 'second?',
       });
     });
@@ -686,21 +690,22 @@ describe('modifiedFiles tracking', () => {
     emit(session, { type: 'tool_end', toolCallId: 't1', result: 'ok', isError: false });
 
     const files = session.displayState.get().modifiedFiles;
-    expect(files['src/app.ts']!.operations).toEqual(['string_replace_lsp']);
+    expect(files.has('src/app.ts')).toBe(true);
+    expect(files.get('src/app.ts')!.operations).toEqual(['string_replace_lsp']);
   });
 
   it('tracks write_file modifications', () => {
     emit(session, { type: 'tool_start', toolCallId: 't1', toolName: 'write_file', args: { path: 'new.ts' } });
     emit(session, { type: 'tool_end', toolCallId: 't1', result: 'ok', isError: false });
 
-    expect('new.ts' in session.displayState.get().modifiedFiles).toBe(true);
+    expect(session.displayState.get().modifiedFiles.has('new.ts')).toBe(true);
   });
 
   it('tracks ast_smart_edit modifications', () => {
     emit(session, { type: 'tool_start', toolCallId: 't1', toolName: 'ast_smart_edit', args: { path: 'src/index.ts' } });
     emit(session, { type: 'tool_end', toolCallId: 't1', result: 'ok', isError: false });
 
-    expect('src/index.ts' in session.displayState.get().modifiedFiles).toBe(true);
+    expect(session.displayState.get().modifiedFiles.has('src/index.ts')).toBe(true);
   });
 
   it('accumulates multiple operations on the same file', () => {
@@ -720,29 +725,22 @@ describe('modifiedFiles tracking', () => {
     });
     emit(session, { type: 'tool_end', toolCallId: 't2', result: 'ok', isError: false });
 
-    const entry = session.displayState.get().modifiedFiles['src/app.ts'];
+    const entry = session.displayState.get().modifiedFiles.get('src/app.ts');
     expect(entry!.operations).toEqual(['string_replace_lsp', 'string_replace_lsp']);
-  });
-
-  it('tracks a file whose path is an Object.prototype key', () => {
-    emit(session, { type: 'tool_start', toolCallId: 't1', toolName: 'write_file', args: { path: 'constructor' } });
-    emit(session, { type: 'tool_end', toolCallId: 't1', result: 'ok', isError: false });
-
-    expect(session.displayState.get().modifiedFiles['constructor']!.operations).toEqual(['write_file']);
   });
 
   it('does not track file modifications for errored tools', () => {
     emit(session, { type: 'tool_start', toolCallId: 't1', toolName: 'write_file', args: { path: 'fail.ts' } });
     emit(session, { type: 'tool_end', toolCallId: 't1', result: 'error', isError: true });
 
-    expect('fail.ts' in session.displayState.get().modifiedFiles).toBe(false);
+    expect(session.displayState.get().modifiedFiles.has('fail.ts')).toBe(false);
   });
 
   it('does not track non-file tools', () => {
     emit(session, { type: 'tool_start', toolCallId: 't1', toolName: 'execute_command', args: { command: 'ls' } });
     emit(session, { type: 'tool_end', toolCallId: 't1', result: 'ok', isError: false });
 
-    expect(Object.keys(session.displayState.get().modifiedFiles).length).toBe(0);
+    expect(session.displayState.get().modifiedFiles.size).toBe(0);
   });
 });
 
@@ -766,7 +764,7 @@ describe('interactive prompts', () => {
       args: {},
       suspendPayload: { question: 'Which option?' },
     });
-    const s = session.displayState.get().pendingSuspensions['call-1'];
+    const s = session.displayState.get().pendingSuspensions.get('call-1');
     expect(s).toBeDefined();
     expect(s!.toolCallId).toBe('call-1');
     expect(s!.toolName).toBe('ask_user');
@@ -781,7 +779,7 @@ describe('interactive prompts', () => {
       suspendPayload: { title: 'Refactor Plan', plan: '# Steps\n1. Do X' },
       resumeSchema: undefined,
     });
-    const s = session.displayState.get().pendingSuspensions['call-plan'];
+    const s = session.displayState.get().pendingSuspensions.get('call-plan');
     expect(s).toBeDefined();
     expect(s!.toolCallId).toBe('call-plan');
     expect(s!.toolName).toBe('submit_plan');
@@ -810,7 +808,7 @@ describe('subagent lifecycle', () => {
       modelId: 'gpt-4o',
       forked: true,
     });
-    const sub = session.displayState.get().activeSubagents['s1'];
+    const sub = session.displayState.get().activeSubagents.get('s1');
     expect(sub).toBeDefined();
     expect(sub!.agentType).toBe('explore');
     expect(sub!.task).toBe('Find usages of X');
@@ -835,7 +833,7 @@ describe('subagent lifecycle', () => {
 
     emit(session, { type: 'subagent_start', toolCallId: 's1', agentType: 'explore', task: 't', modelId: 'm' });
 
-    const sub = session.displayState.get().activeSubagents['s1'];
+    const sub = session.displayState.get().activeSubagents.get('s1');
     expect(sub!.agentType).toBe('explore');
     expect(sub!.displayName).toBe('Explore');
   });
@@ -856,7 +854,7 @@ describe('subagent lifecycle', () => {
 
     emit(session, { type: 'subagent_start', toolCallId: 's1', agentType: 'execute', task: 't', modelId: 'm' });
 
-    const sub = session.displayState.get().activeSubagents['s1'];
+    const sub = session.displayState.get().activeSubagents.get('s1');
     expect(sub!.agentType).toBe('execute');
     expect(sub!.displayName).toBeUndefined();
   });
@@ -865,7 +863,7 @@ describe('subagent lifecycle', () => {
     emit(session, { type: 'subagent_start', toolCallId: 's1', agentType: 'explore', task: 't', modelId: 'm' });
     emit(session, { type: 'subagent_text_delta', toolCallId: 's1', agentType: 'explore', textDelta: 'hello ' });
     emit(session, { type: 'subagent_text_delta', toolCallId: 's1', agentType: 'explore', textDelta: 'world' });
-    expect(session.displayState.get().activeSubagents['s1']!.textDelta).toBe('hello world');
+    expect(session.displayState.get().activeSubagents.get('s1')!.textDelta).toBe('hello world');
   });
 
   it('tracks subagent tool calls', () => {
@@ -877,7 +875,7 @@ describe('subagent lifecycle', () => {
       subToolName: 'read_file',
       subToolArgs: {},
     });
-    const sub = session.displayState.get().activeSubagents['s1']!;
+    const sub = session.displayState.get().activeSubagents.get('s1')!;
     expect(sub.toolCalls).toHaveLength(1);
     expect(sub.toolCalls[0]!.name).toBe('read_file');
   });
@@ -899,7 +897,7 @@ describe('subagent lifecycle', () => {
       subToolResult: 'err',
       isError: true,
     });
-    const sub = session.displayState.get().activeSubagents['s1']!;
+    const sub = session.displayState.get().activeSubagents.get('s1')!;
     expect(sub.toolCalls[0]!.isError).toBe(true);
   });
 
@@ -913,7 +911,7 @@ describe('subagent lifecycle', () => {
       isError: false,
       durationMs: 1234,
     });
-    const sub = session.displayState.get().activeSubagents['s1']!;
+    const sub = session.displayState.get().activeSubagents.get('s1')!;
     expect(sub.status).toBe('completed');
     expect(sub.durationMs).toBe(1234);
     expect(sub.result).toBe('done');
@@ -943,7 +941,7 @@ describe('subagent lifecycle', () => {
       durationMs: 1234,
     });
 
-    const terminalSubagent = session.displayState.get().activeSubagents['s1']!;
+    const terminalSubagent = session.displayState.get().activeSubagents.get('s1')!;
     const historyEntry: AgentControllerSubagentHistoryEntry = terminalSubagent;
 
     expect(terminalSubagent.status).toBe('completed');
@@ -962,7 +960,7 @@ describe('subagent lifecycle', () => {
       isError: true,
       durationMs: 500,
     });
-    expect(session.displayState.get().activeSubagents['s1']!.status).toBe('error');
+    expect(session.displayState.get().activeSubagents.get('s1')!.status).toBe('error');
   });
 });
 
@@ -1458,13 +1456,13 @@ describe('resetThreadDisplayState', () => {
     emit(session, { type: 'thread_created', thread: { id: 'new', title: 'New' } } as any);
 
     const ds = session.displayState.get();
-    expect(Object.keys(ds.activeTools).length).toBe(0);
-    expect(Object.keys(ds.toolInputBuffers).length).toBe(0);
+    expect(ds.activeTools.size).toBe(0);
+    expect(ds.toolInputBuffers.size).toBe(0);
     expect(ds.pendingApproval).toBeNull();
-    expect(Object.keys(ds.pendingSuspensions).length).toBe(0);
-    expect(Object.keys(ds.activeSubagents).length).toBe(0);
+    expect(ds.pendingSuspensions.size).toBe(0);
+    expect(ds.activeSubagents.size).toBe(0);
     expect(ds.currentMessage).toBeNull();
-    expect(Object.keys(ds.modifiedFiles).length).toBe(0);
+    expect(ds.modifiedFiles.size).toBe(0);
     expect(ds.tasks).toEqual([]);
     expect(ds.previousTasks).toEqual([]);
     expect(ds.omProgress.status).toBe('idle');
@@ -1600,7 +1598,7 @@ describe('display_state_changed emission', () => {
       expect(events.at(-1)?.type).toBe('display_state_changed');
     });
     const final = events.at(-1) as Extract<AgentControllerEvent, { type: 'display_state_changed' }>;
-    expect(final.displayState.toolInputBuffers['t1']?.text).toBe('01234');
+    expect(final.displayState.toolInputBuffers.get('t1')?.text).toBe('01234');
   });
 
   it('flushes a coalesced snapshot before the next non-coalescible event', () => {
@@ -1621,7 +1619,7 @@ describe('display_state_changed emission', () => {
 
     const beforeEnd = events[agentEndIndex - 1] as Extract<AgentControllerEvent, { type: 'display_state_changed' }>;
     expect(beforeEnd.type).toBe('display_state_changed');
-    expect(beforeEnd.displayState.toolInputBuffers['t1']?.text).toBe('01234');
+    expect(beforeEnd.displayState.toolInputBuffers.get('t1')?.text).toBe('01234');
   });
 
   it('display_state_changed reflects state at time of each event', () => {
@@ -1668,23 +1666,23 @@ describe('full lifecycle integration', () => {
 
     // Tool input streaming
     emit(session, { type: 'tool_input_start', toolCallId: 't1', toolName: 'string_replace_lsp' });
-    expect(ds.activeTools['t1']?.status).toBe('streaming_input');
-    expect('t1' in ds.toolInputBuffers).toBe(true);
+    expect(ds.activeTools.get('t1')?.status).toBe('streaming_input');
+    expect(ds.toolInputBuffers.has('t1')).toBe(true);
 
     emit(session, { type: 'tool_input_delta', toolCallId: 't1', argsTextDelta: '{"path":"foo.ts"' });
     emit(session, { type: 'tool_input_delta', toolCallId: 't1', argsTextDelta: '}' });
-    expect(ds.toolInputBuffers['t1']!.text).toBe('{"path":"foo.ts"}');
+    expect(ds.toolInputBuffers.get('t1')!.text).toBe('{"path":"foo.ts"}');
 
     emit(session, { type: 'tool_input_end', toolCallId: 't1' });
-    expect('t1' in ds.toolInputBuffers).toBe(false);
+    expect(ds.toolInputBuffers.has('t1')).toBe(false);
 
     // Tool runs
     emit(session, { type: 'tool_start', toolCallId: 't1', toolName: 'string_replace_lsp', args: { path: 'foo.ts' } });
-    expect(ds.activeTools['t1']?.status).toBe('running');
+    expect(ds.activeTools.get('t1')?.status).toBe('running');
 
     emit(session, { type: 'tool_end', toolCallId: 't1', result: 'ok', isError: false });
-    expect(ds.activeTools['t1']?.status).toBe('completed');
-    expect('foo.ts' in ds.modifiedFiles).toBe(true);
+    expect(ds.activeTools.get('t1')?.status).toBe('completed');
+    expect(ds.modifiedFiles.has('foo.ts')).toBe(true);
 
     // Task update
     emit(session, {
@@ -1703,7 +1701,7 @@ describe('full lifecycle integration', () => {
     expect(ds.isRunning).toBe(false);
 
     // Modified files and token usage persist after agent_end
-    expect('foo.ts' in ds.modifiedFiles).toBe(true);
+    expect(ds.modifiedFiles.has('foo.ts')).toBe(true);
     expect(ds.tokenUsage.totalTokens).toBe(1500);
   });
 });

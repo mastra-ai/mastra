@@ -103,10 +103,10 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
     case 'display_state_changed':
       return {
         ...state,
-        omProgress: event.displayState.omProgress,
-        usage: event.displayState.tokenUsage,
-        bufferingMessages: event.displayState.bufferingMessages,
-        bufferingObservations: event.displayState.bufferingObservations,
+        omProgress: event.displayState.omProgress ?? state.omProgress,
+        usage: event.displayState.tokenUsage ?? state.usage,
+        bufferingMessages: event.displayState.bufferingMessages ?? state.bufferingMessages,
+        bufferingObservations: event.displayState.bufferingObservations ?? state.bufferingObservations,
       };
     case 'goal_evaluation':
       return {
