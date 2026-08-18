@@ -145,6 +145,7 @@ export type ScenarioName =
   | 'storage-settings'
   | 'storage-startup-pg-fallback'
   | 'stream-error-retry'
+  | 'streaming-render-stability'
   | 'streaming-tool-args'
   | 'subagent-delegation'
   | 'subagent-plan-execute-tools'

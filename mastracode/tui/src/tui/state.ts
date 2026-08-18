@@ -360,7 +360,13 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     });
   }
   const ui = new TUI(terminal);
-  const renderScheduler = new RenderScheduler(() => ui.requestRender());
+  const assistantRenderRegistry = new AssistantRenderRegistry();
+  const renderScheduler = new RenderScheduler(
+    () => ui.requestRender(),
+    undefined,
+    undefined,
+    () => assistantRenderRegistry.applyPending(),
+  );
 
   // Perf profiling removed
 
@@ -392,7 +398,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
 
     // Agent / streaming
     isInitialized: false,
-    assistantRenderRegistry: new AssistantRenderRegistry(),
+    assistantRenderRegistry,
     pendingTools: new Map(),
     pendingTaskToolIds: new Set(),
     taskToolInsertIndex: -1,

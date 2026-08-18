@@ -10,6 +10,7 @@ export class RenderScheduler {
     private readonly render: () => void,
     private readonly intervalMs = DEFAULT_RENDER_COALESCE_MS,
     private readonly now = () => Date.now(),
+    private readonly beforeRender?: () => void,
   ) {}
 
   request(): void {
@@ -48,6 +49,7 @@ export class RenderScheduler {
     this.pending = false;
     if (this.disposed) return;
     this.lastRenderAt = this.now();
+    this.beforeRender?.();
     this.render();
   }
 }
@@ -55,6 +57,7 @@ export class RenderScheduler {
 export interface RenderableState {
   ui: { requestRender?: () => void };
   renderScheduler?: RenderScheduler;
+  assistantRenderRegistry?: { applyPending: () => unknown };
 }
 
 export function requestRender(state: RenderableState): void {
@@ -62,6 +65,7 @@ export function requestRender(state: RenderableState): void {
     state.renderScheduler.request();
     return;
   }
+  state.assistantRenderRegistry?.applyPending();
   state.ui.requestRender?.();
 }
 
@@ -70,5 +74,6 @@ export function flushRender(state: RenderableState): void {
     state.renderScheduler.flush();
     return;
   }
+  state.assistantRenderRegistry?.applyPending();
   state.ui.requestRender?.();
 }

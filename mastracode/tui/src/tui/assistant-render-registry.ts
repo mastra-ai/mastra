@@ -1,18 +1,67 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { AssistantMessageComponent } from './components/assistant-message.js';
+import type { AssistantSourcePart, AssistantTerminalStatus } from './components/assistant-message.js';
+import type { AssistantRenderPart } from './db-message-parts.js';
+import { getAssistantRenderParts } from './db-message-parts.js';
 import type { TUIState } from './state.js';
 import { getMarkdownTheme } from './theme.js';
+
+interface AssistantPartAccumulator {
+  kind: AssistantSourcePart['kind'];
+  base: string;
+  chunks: string[];
+  latestText: string;
+}
+
+interface AssistantSourceState {
+  parts: AssistantPartAccumulator[];
+  terminalStatus: AssistantTerminalStatus;
+}
 
 export interface AssistantRenderSegment {
   key: string;
   component: AssistantMessageComponent;
   finalized: boolean;
+  source?: AssistantSourceState;
+  pendingApply?: boolean;
+  afterApply?: () => void;
 }
 
 export interface AssistantRenderRecord {
   messageId: string;
   segments: Map<string, AssistantRenderSegment>;
   activeSegmentKey?: string;
+}
+
+export interface AssistantQueueResult {
+  mode: 'append' | 'replace' | 'unchanged';
+  appendedChunks: number;
+}
+
+export interface AppliedAssistantState {
+  messageId: string;
+  segmentKey: string;
+  component: AssistantMessageComponent;
+}
+
+function getSourceParts(message: MastraDBMessage): AssistantSourcePart[] {
+  return getAssistantRenderParts(message)
+    .filter(
+      (part): part is Extract<AssistantRenderPart, { kind: 'text' | 'thinking' }> =>
+        part.kind === 'text' || part.kind === 'thinking',
+    )
+    .map(part => ({ kind: part.kind, text: part.text }));
+}
+
+function getTerminalStatus(message: MastraDBMessage): AssistantTerminalStatus {
+  const content = message.content;
+  if (typeof content === 'string') return {};
+  const metadata = content.metadata as AssistantTerminalStatus | undefined;
+  return { stopReason: metadata?.stopReason, errorMessage: metadata?.errorMessage };
+}
+
+function replaceParts(parts: AssistantSourcePart[]): AssistantPartAccumulator[] {
+  return parts.map(part => ({ kind: part.kind, base: part.text, chunks: [], latestText: part.text }));
 }
 
 export function getAssistantSegmentKey(messageId: string, precedingToolCallId?: string): string {
@@ -66,14 +115,37 @@ export class AssistantRenderRegistry {
     createComponent: () => AssistantMessageComponent,
   ): { segment: AssistantRenderSegment; created: boolean } {
     const result = this.start(messageId, segmentKey, createComponent);
-    result.segment.component.updateContent(message);
+    this.queueSegment(result.segment, message);
+    this.applySegment(result.segment);
     return result;
   }
 
   reconcileActive(messageId: string, message: MastraDBMessage): AssistantRenderSegment | undefined {
     const segment = this.getActive(messageId);
-    segment?.component.updateContent(message);
+    if (!segment) return undefined;
+    this.queueSegment(segment, message);
+    this.applySegment(segment);
     return segment;
+  }
+
+  queueActive(messageId: string, message: MastraDBMessage, afterApply?: () => void): AssistantQueueResult | undefined {
+    const segment = this.getActive(messageId);
+    return segment ? this.queueSegment(segment, message, afterApply) : undefined;
+  }
+
+  applyPending(messageId?: string): AppliedAssistantState[] {
+    const applied: AppliedAssistantState[] = [];
+    const records = messageId
+      ? [this.records.get(messageId)].filter(record => record !== undefined)
+      : this.records.values();
+    for (const record of records) {
+      for (const segment of record.segments.values()) {
+        if (this.applySegment(segment)) {
+          applied.push({ messageId: record.messageId, segmentKey: segment.key, component: segment.component });
+        }
+      }
+    }
+    return applied;
   }
 
   finalizeActive(messageId: string): AssistantRenderSegment | undefined {
@@ -81,7 +153,11 @@ export class AssistantRenderRegistry {
     if (!record?.activeSegmentKey) return undefined;
     const segment = record.segments.get(record.activeSegmentKey);
     if (!segment) return undefined;
+    this.applySegment(segment);
     segment.finalized = true;
+    segment.source = undefined;
+    segment.pendingApply = false;
+    segment.afterApply = undefined;
     segment.component.finalizeRenderState();
     record.activeSegmentKey = undefined;
     return segment;
@@ -91,10 +167,14 @@ export class AssistantRenderRegistry {
     const record = this.records.get(messageId);
     if (!record) return;
     for (const segment of record.segments.values()) {
+      this.applySegment(segment);
       if (!segment.finalized) {
         segment.finalized = true;
         segment.component.finalizeRenderState();
       }
+      segment.source = undefined;
+      segment.pendingApply = false;
+      segment.afterApply = undefined;
     }
     record.activeSegmentKey = undefined;
   }
@@ -103,6 +183,9 @@ export class AssistantRenderRegistry {
     const record = this.records.get(messageId);
     if (!record) return;
     for (const segment of record.segments.values()) {
+      segment.source = undefined;
+      segment.pendingApply = false;
+      segment.afterApply = undefined;
       segment.component.disposeRenderState();
     }
     record.segments.clear();
@@ -114,6 +197,67 @@ export class AssistantRenderRegistry {
     for (const messageId of [...this.records.keys()]) {
       this.dispose(messageId);
     }
+  }
+
+  private queueSegment(
+    segment: AssistantRenderSegment,
+    message: MastraDBMessage,
+    afterApply?: () => void,
+  ): AssistantQueueResult {
+    const nextParts = getSourceParts(message);
+    const nextTerminalStatus = getTerminalStatus(message);
+    const current = segment.source?.parts;
+    const sameStructure =
+      current?.length === nextParts.length && current.every((part, index) => part.kind === nextParts[index]?.kind);
+    const appendOnly =
+      sameStructure && current.every((part, index) => nextParts[index]!.text.startsWith(part.latestText));
+
+    if (!appendOnly) {
+      segment.source = {
+        parts: replaceParts(nextParts),
+        terminalStatus: nextTerminalStatus,
+      };
+      segment.pendingApply = true;
+      segment.afterApply = afterApply ?? segment.afterApply;
+      return { mode: 'replace', appendedChunks: 0 };
+    }
+
+    let appendedChunks = 0;
+    for (let index = 0; index < current.length; index++) {
+      const part = current[index]!;
+      const nextText = nextParts[index]!.text;
+      const suffix = nextText.slice(part.latestText.length);
+      if (suffix) {
+        part.chunks.push(suffix);
+        appendedChunks += 1;
+      }
+      part.latestText = nextText;
+    }
+    const terminalStatusChanged =
+      segment.source!.terminalStatus.stopReason !== nextTerminalStatus.stopReason ||
+      segment.source!.terminalStatus.errorMessage !== nextTerminalStatus.errorMessage;
+    segment.source!.terminalStatus = nextTerminalStatus;
+    segment.pendingApply = segment.pendingApply || appendedChunks > 0 || terminalStatusChanged;
+    segment.afterApply = afterApply ?? segment.afterApply;
+    return { mode: appendedChunks > 0 ? 'append' : 'unchanged', appendedChunks };
+  }
+
+  private applySegment(segment: AssistantRenderSegment): boolean {
+    const source = segment.source;
+    if (!source || !segment.pendingApply) return false;
+    const sourceParts = source.parts.map(part => {
+      const text = part.chunks.length > 0 ? part.base + part.chunks.join('') : part.base;
+      part.base = text;
+      part.latestText = text;
+      part.chunks = [];
+      return { kind: part.kind, text };
+    });
+    const afterApply = segment.afterApply;
+    segment.pendingApply = false;
+    segment.afterApply = undefined;
+    segment.component.updateRenderParts(sourceParts, source.terminalStatus);
+    afterApply?.();
+    return true;
   }
 }
 

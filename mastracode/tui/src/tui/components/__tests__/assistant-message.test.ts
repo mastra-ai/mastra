@@ -162,6 +162,26 @@ describe('AssistantMessageComponent (DB-native)', () => {
     expect(component.render(80).join('\n')).toContain('second');
   });
 
+  it('preserves the active Markdown child as incomplete stream constructs become complete', () => {
+    const component = new AssistantMessageComponent(assistantMessage([{ type: 'text', text: '```ts\nconst value' }]));
+    const child = contentChildren(component)[0];
+
+    for (const text of [
+      '```ts\nconst value = true;\n```\n\n-',
+      '```ts\nconst value = true;\n```\n\n- first\n- second\n\n**bold',
+      '```ts\nconst value = true;\n```\n\n- first\n- second\n\n**bold**',
+    ]) {
+      component.updateContent(assistantMessage([{ type: 'text', text }]));
+      expect(contentChildren(component)[0]).toBe(child);
+    }
+
+    const rendered = component.render(80).join('\n');
+    expect(rendered).toContain('const value = true;');
+    expect(rendered).toContain('first');
+    expect(rendered).toContain('second');
+    expect(rendered).toContain('bold');
+  });
+
   it('replaces only children whose render-part structure changes', () => {
     const component = new AssistantMessageComponent(
       assistantMessage([

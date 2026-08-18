@@ -11,9 +11,14 @@ import { sanitizeAnsiForRendering } from '../sanitize-ansi.js';
 import { CHAT_INDENT, getMarkdownTheme, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 
-interface SourcePart {
+export interface AssistantSourcePart {
   kind: 'text' | 'thinking';
   text: string;
+}
+
+export interface AssistantTerminalStatus {
+  stopReason?: string;
+  errorMessage?: string;
 }
 
 interface RenderNode {
@@ -39,8 +44,8 @@ export class AssistantMessageComponent extends Container {
   private contentContainer: Container;
   private hideThinkingBlock: boolean;
   private markdownTheme: MarkdownTheme;
-  private sourceParts: SourcePart[] = [];
-  private terminalStatus?: { stopReason?: string; errorMessage?: string };
+  private sourceParts: AssistantSourcePart[] = [];
+  private terminalStatus?: AssistantTerminalStatus;
   private renderNodes = new Map<string, OwnedRenderNode>();
   private renderOrder: string[] = [];
 
@@ -71,13 +76,18 @@ export class AssistantMessageComponent extends Container {
   }
 
   updateContent(message: MastraDBMessage): void {
-    this.sourceParts = getAssistantRenderParts(message)
+    const sourceParts = getAssistantRenderParts(message)
       .filter(
         (part): part is Extract<AssistantRenderPart, { kind: 'text' | 'thinking' }> =>
           part.kind === 'text' || part.kind === 'thinking',
       )
       .map(part => ({ kind: part.kind, text: part.text }));
-    this.terminalStatus = getStopReason(message);
+    this.updateRenderParts(sourceParts, getStopReason(message));
+  }
+
+  updateRenderParts(sourceParts: AssistantSourcePart[], terminalStatus: AssistantTerminalStatus = {}): void {
+    this.sourceParts = sourceParts;
+    this.terminalStatus = terminalStatus;
     this.reconcileChildren();
   }
 

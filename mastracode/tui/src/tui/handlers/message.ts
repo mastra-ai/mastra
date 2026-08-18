@@ -133,11 +133,10 @@ export function handleMessageStart(ctx: EventHandlerContext, message: MastraDBMe
     state.lastSubmitPlanComponent = undefined;
     if (!state.streamingComponent) {
       state.streamingMessage = message;
-      const component = ensureAssistantRenderSegment(state, message.id, ctx.addChildBeforeFollowUps);
-      state.assistantRenderRegistry.reconcileActive(message.id, withParts(message, getTrailingParts(message)));
-      if (component.getChatSpacingKind() !== undefined) {
+      ensureAssistantRenderSegment(state, message.id, ctx.addChildBeforeFollowUps);
+      state.assistantRenderRegistry.queueActive(message.id, withParts(message, getTrailingParts(message)), () => {
         reconcileChatBoundarySpacers(state.chatContainer);
-      }
+      });
     }
     flushRender(state);
   }
@@ -161,20 +160,17 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: MastraDBM
   const trailingParts = getTrailingParts(message);
   const hasToolCalls = toolParts.length > 0;
 
-  let createdStreamingComponent = false;
   if (!state.streamingComponent) {
     if (trailingParts.length === 0 && !hasToolCalls) {
       return;
     }
-    const segmentKey = getAssistantSegmentKey(message.id);
-    const hadSegment = state.assistantRenderRegistry.get(message.id)?.segments.has(segmentKey) === true;
-    state.streamingComponent = ensureAssistantRenderSegment(state, message.id, ctx.addChildBeforeFollowUps);
-    createdStreamingComponent = !hadSegment;
+    ensureAssistantRenderSegment(state, message.id, ctx.addChildBeforeFollowUps);
+  } else if (!state.assistantRenderRegistry.getActive(message.id)) {
+    const component = state.streamingComponent;
+    state.assistantRenderRegistry.start(message.id, getAssistantSegmentKey(message.id), () => component);
   }
 
   state.streamingMessage = message;
-
-  let streamingComponent = state.streamingComponent;
 
   // Check for new tool calls
   for (const tool of toolParts) {
@@ -182,14 +178,12 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: MastraDBM
       state.seenToolCallIds.add(tool.toolCallId);
 
       const preParts = getPartsBeforeTool(message, tool.toolCallId, state.seenToolCallIds);
-      streamingComponent.updateContent(withParts(message, preParts));
+      state.assistantRenderRegistry.queueActive(message.id, withParts(message, preParts));
       state.assistantRenderRegistry.finalizeActive(message.id);
 
       const staticSubagent = createStaticSubagentComponent(ctx, tool.toolCallId, tool.toolName, tool.args);
       if (staticSubagent) {
         state.subagentToolCallIds.add(tool.toolCallId);
-        streamingComponent = state.streamingComponent!;
-        createdStreamingComponent = true;
         continue;
       }
 
@@ -197,13 +191,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: MastraDBM
       // assistant slice before the tool and continue text in a fresh component.
       if (tool.toolName === 'subagent' && !state.subagentToolCallIds.has(tool.toolCallId)) {
         state.subagentToolCallIds.add(tool.toolCallId);
-        streamingComponent = ensureAssistantRenderSegment(
-          state,
-          message.id,
-          ctx.addChildBeforeFollowUps,
-          tool.toolCallId,
-        );
-        createdStreamingComponent = true;
+        ensureAssistantRenderSegment(state, message.id, ctx.addChildBeforeFollowUps, tool.toolCallId);
         continue;
       }
 
@@ -224,13 +212,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: MastraDBM
       state.allToolComponents.push(component);
       reconcileChatBoundarySpacers(state.chatContainer);
 
-      streamingComponent = ensureAssistantRenderSegment(
-        state,
-        message.id,
-        ctx.addChildBeforeFollowUps,
-        tool.toolCallId,
-      );
-      createdStreamingComponent = true;
+      ensureAssistantRenderSegment(state, message.id, ctx.addChildBeforeFollowUps, tool.toolCallId);
     } else {
       const component = state.pendingTools.get(tool.toolCallId);
       if (component) {
@@ -243,14 +225,9 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: MastraDBM
   // Avoid replacing visible assistant text with an empty trailing segment
   // (commonly happens immediately after tool-result-only updates).
   if (trailingParts.length > 0) {
-    const wasSpacingParticipant = streamingComponent.getChatSpacingKind() !== undefined;
-    streamingComponent.updateContent(withParts(message, trailingParts));
-    if (
-      createdStreamingComponent ||
-      (!wasSpacingParticipant && streamingComponent.getChatSpacingKind() !== undefined)
-    ) {
+    state.assistantRenderRegistry.queueActive(message.id, withParts(message, trailingParts), () => {
       reconcileChatBoundarySpacers(state.chatContainer);
-    }
+    });
   }
 
   requestRender(state);
@@ -268,7 +245,9 @@ export function handleMessageEnd(ctx: EventHandlerContext, message: MastraDBMess
     // If the final assistant chunk has no trailing text/thinking after tools,
     // keep the last rendered content instead of blanking the component.
     if (trailingParts.length > 0 || stopReason === 'aborted' || stopReason === 'error') {
-      state.streamingComponent.updateContent(withParts(message, trailingParts));
+      state.assistantRenderRegistry.queueActive(message.id, withParts(message, trailingParts), () => {
+        reconcileChatBoundarySpacers(state.chatContainer);
+      });
     }
 
     if (stopReason === 'aborted' || stopReason === 'error') {
