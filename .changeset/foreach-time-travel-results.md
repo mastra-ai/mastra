@@ -2,4 +2,4 @@
 "@mastra/core": patch
 ---
 
-Preserve completed foreach iterations when time traveling after a failed run.
+Fixed `timeTravel()` for failed `foreach()` runs so completed iterations are preserved and only failed iterations are retried.
