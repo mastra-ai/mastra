@@ -3,11 +3,12 @@ import { useState } from 'react';
 import { EXAMPLES_PAGE_SIZE, ExamplesPager } from './examples-pager';
 import { useThemeDetail, useThemeExamples, useThemeHistory } from './hooks';
 import { getSignalHue } from './signal-colors';
-import { formatSnapshotDate, shareSentence, SIGNAL_DESCRIPTIONS } from './signal-formatting';
+import { formatSnapshotDate, shareSentence, signalDescription, signalLabel } from './signal-formatting';
 import type { SelectedTheme, ThemeSelection, ThemeSelectionStats } from './theme-drilldown-data';
 import { chronologicalHistoryPoints, themeTrendDirection } from './theme-trend';
 import { ThemeTrendChart } from './theme-trend-chart';
 import { TraceInsightView } from './trace-insight-view';
+import { useTraceIntelligence } from './use-trace-intelligence';
 import {
   Drawer,
   DrawerBody,
@@ -40,6 +41,7 @@ export function ThemeDetailPanel({
   filteredStats,
   onClose,
 }: ThemeDetailPanelProps) {
+  const { signalCatalog } = useTraceIntelligence();
   const filterKey = filters
     .map(filter => `${filter.signalName}:${filter.kind === 'theme' ? filter.themeId : 'noise'}`)
     .join(',');
@@ -97,8 +99,10 @@ export function ThemeDetailPanel({
               style={{ color: nodeColor(getSignalHue(signalName)) }}
             >
               <Tooltip>
-                <TooltipTrigger className="cursor-default uppercase">{signalName}</TooltipTrigger>
-                <TooltipContent>{SIGNAL_DESCRIPTIONS[signalName]}</TooltipContent>
+                <TooltipTrigger aria-label={signalName} className="cursor-default uppercase">
+                  {signalLabel(signalCatalog, signalName)}
+                </TooltipTrigger>
+                <TooltipContent>{signalDescription(signalCatalog, signalName)}</TooltipContent>
               </Tooltip>
             </span>
           )}

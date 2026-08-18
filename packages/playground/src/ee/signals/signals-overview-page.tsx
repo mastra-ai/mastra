@@ -1,10 +1,11 @@
 import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
 import {
+  BUILT_IN_SIGNAL_CATALOG,
   SankeySignals,
   SignalsErrorState,
   SignalsLoadingSkeleton,
   SignalsOverviewPage as SignalsEmptyState,
-  SIGNAL_PROCESSING_ORDER,
+  orderedSignals,
   TraceIntelligenceProvider,
   useEntityLearningProgress,
   useThemeSnapshots,
@@ -28,9 +29,8 @@ function SignalsOverviewContent() {
   const url = useSignalsDateUrlState();
   const [selectedThemeId, setSelectedThemeId] = useState<string>();
   const [selectedFrameId, setSelectedFrameId] = useState<string>();
-  const signalNames = entity
-    ? SIGNAL_PROCESSING_ORDER.filter(signalName => entity.availableSignals.includes(signalName))
-    : [];
+  const signalCatalog = entity?.signalCatalog ?? BUILT_IN_SIGNAL_CATALOG;
+  const signalNames = entity ? orderedSignals(signalCatalog, entity.availableSignals) : [];
   const progressQuery = useEntityLearningProgress(
     entity?.entityId,
     entity?.entityType ?? 'agent',
@@ -109,18 +109,20 @@ function SignalsOverviewContent() {
   }
 
   return (
-    <SankeySignals
-      key={`${entity.entityId}:${signalNames.join(',')}:${url.selectedDateFrom?.toISOString() ?? 'open'}:${url.selectedDateTo?.toISOString() ?? 'open'}`}
-      entityId={entity.entityId}
-      entityType="agent"
-      signalNames={signalNames}
-      dateFrom={url.selectedDateFrom}
-      dateTo={url.selectedDateTo}
-      selectedThemeId={selectedThemeId}
-      onSelectedThemeIdChange={setSelectedThemeId}
-      selectedFrameId={frameId}
-      onFrameIdChange={setSelectedFrameId}
-      dateRangePicker={dateRangePicker}
-    />
+    <TraceIntelligenceProvider cacheScope="oss-studio" LinkComponent={Link} signalCatalog={signalCatalog}>
+      <SankeySignals
+        key={`${entity.entityId}:${signalNames.join(',')}:${url.selectedDateFrom?.toISOString() ?? 'open'}:${url.selectedDateTo?.toISOString() ?? 'open'}`}
+        entityId={entity.entityId}
+        entityType="agent"
+        signalNames={signalNames}
+        dateFrom={url.selectedDateFrom}
+        dateTo={url.selectedDateTo}
+        selectedThemeId={selectedThemeId}
+        onSelectedThemeIdChange={setSelectedThemeId}
+        selectedFrameId={frameId}
+        onFrameIdChange={setSelectedFrameId}
+        dateRangePicker={dateRangePicker}
+      />
+    </TraceIntelligenceProvider>
   );
 }

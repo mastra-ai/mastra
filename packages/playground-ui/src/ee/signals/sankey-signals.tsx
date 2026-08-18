@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeftRight, ChartNoAxesGantt, Waypoints } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
+import { PendingSignalProgress } from './components/signals-empty-state';
 import { SignalsOverviewPage as SignalsEmptyState } from './components/signals-overview-page';
 import { fetchThemeFlow, fetchThemePaths, fetchThemeSnapshots, serializeThemeFilters } from './entity-learning-api';
 import { FlowCard } from './flow-card';
@@ -17,7 +18,7 @@ import {
   snapshotSummaryLabel,
   stabilizeThemeFlow,
 } from './sankey-signals-data';
-import { SIGNAL_PROCESSING_ORDER } from './signal-formatting';
+import { orderedSignals, signalLabel } from './signal-formatting';
 import { SignalsErrorState } from './signals-error-state';
 import { SignalsFrameLoadingSkeleton, SignalsLoadingSkeleton } from './signals-loading-skeleton';
 import { SnapshotTimeline } from './snapshot-timeline';
@@ -59,14 +60,17 @@ export interface SankeySignalsProps {
 }
 
 const DRILL_IN_TRACE_LIMIT = 2000;
-const FLOW_SIGNAL_LIST = `${SIGNAL_PROCESSING_ORDER.slice(0, -1).join(', ')}, and ${SIGNAL_PROCESSING_ORDER[SIGNAL_PROCESSING_ORDER.length - 1]}`;
 
 /** One-line answer to "what am I looking at?" for each view, shown under the tabs. */
-const VIEW_DESCRIPTIONS: Record<SignalsViewMode, string> = {
-  flow: `How this agent's traces distribute across ${FLOW_SIGNAL_LIST} themes at this point in time.`,
+const VIEW_DESCRIPTIONS: Omit<Record<SignalsViewMode, string>, 'flow'> = {
   compare: 'Which themes grew, shrank, appeared, or disappeared between two points in time.',
   lifelines: "Each theme's share of traces across the whole selected range.",
 };
+
+function formatSignalList(labels: string[]): string {
+  if (labels.length < 2) return labels[0] ?? 'trace signal';
+  return `${labels.slice(0, -1).join(', ')}, and ${labels.at(-1)}`;
+}
 
 export function SankeySignals({
   entityId,
@@ -82,10 +86,11 @@ export function SankeySignals({
   dateRangePicker,
 }: SankeySignalsProps) {
   const queryClient = useQueryClient();
-  const { cacheScope, request, LinkComponent } = useTraceIntelligence();
+  const { cacheScope, request, LinkComponent, signalCatalog } = useTraceIntelligence();
   const [signalNames, setSignalNames] = useState(() => initialSignalNames);
   const [pendingSignalNames, setPendingSignalNames] = useState<TraceSignalName[]>();
   const snapshotsQuery = useThemeSnapshots(entityId, entityType, signalNames, dateFrom, dateTo);
+  const effectiveSignalCatalog = snapshotsQuery.data?.signalCatalog ?? signalCatalog;
   const snapshots = [...(snapshotsQuery.data?.snapshots ?? [])].sort((left, right) => left.ordinal - right.ordinal);
   const [isPlaying, setIsPlaying] = useState(false);
   const [viewMode, setViewMode] = useState<SignalsViewMode>('flow');
@@ -158,10 +163,13 @@ export function SankeySignals({
   const detailSelection =
     stableUnfilteredFlow && selectedThemeId ? findThemeSelectionById(stableUnfilteredFlow, selectedThemeId) : undefined;
   const populatedStageCount = currentFlow?.stages.filter(stage => stage.nodes.length > 0).length ?? 0;
+  const hasPendingEnabledSignals = effectiveSignalCatalog.some(signal => signal.enabled && signal.status !== 'ready');
   const shouldLoadProgress =
     snapshotsQuery.isSuccess &&
     !snapshotsQuery.isError &&
-    (!snapshot || Boolean(currentFlow && (!flow || !graphSummary || populatedStageCount < 2)));
+    (hasPendingEnabledSignals ||
+      !snapshot ||
+      Boolean(currentFlow && (!flow || !graphSummary || populatedStageCount < 2)));
   const progressQuery = useEntityLearningProgress(entityId, entityType, shouldLoadProgress);
   const isPlaybackBlockedByDrillIn = drillStack.length > 0 && (pathsQuery.isFetching || pathsQuery.isError);
   const hasActivePathsError = drillStack.length > 0 && pathsQuery.isError;
@@ -332,6 +340,18 @@ export function SankeySignals({
     ? findSelectionStats(flow, drillStack, noiseSignalName ? { kind: 'noise', signalName: noiseSignalName } : undefined)
     : undefined;
   const filterKey = serializeThemeFilters(drillStack);
+  const catalogSignalNames = orderedSignals(
+    effectiveSignalCatalog,
+    effectiveSignalCatalog.filter(signal => signal.enabled).map(signal => signal.name),
+  );
+  const viewDescription =
+    viewMode === 'flow'
+      ? `How this agent's traces distribute across ${formatSignalList(catalogSignalNames.map(name => signalLabel(effectiveSignalCatalog, name).toLocaleLowerCase()))} themes at this point in time.`
+      : VIEW_DESCRIPTIONS[viewMode];
+  const labeledColumns = graphSummary.columns.map(column => ({
+    ...column,
+    label: signalLabel(effectiveSignalCatalog, column.id),
+  }));
 
   return (
     <main className="min-w-0 space-y-5 p-4 lg:p-6">
@@ -349,11 +369,12 @@ export function SankeySignals({
               <ViewModeTab value="lifelines" icon={<ChartNoAxesGantt />} label="Lifelines" />
             </TabList>
           </Tabs>
-          <TraceIntelligenceExplainer />
+          <TraceIntelligenceExplainer signalCatalog={effectiveSignalCatalog} />
         </div>
         {dateRangePicker}
       </div>
-      <p className="text-neutral3 text-xs">{VIEW_DESCRIPTIONS[viewMode]}</p>
+      <p className="text-neutral3 text-xs">{viewDescription}</p>
+      <PendingSignalProgress progress={progressQuery.data} signalCatalog={effectiveSignalCatalog} />
       {viewMode === 'compare' ? (
         <ThemeCompare
           entityId={entityId}
@@ -418,7 +439,7 @@ export function SankeySignals({
             </section>
           ) : (
             <FlowCard
-              columns={graphSummary.columns}
+              columns={labeledColumns}
               records={graphSummary.records}
               stages={stages}
               height={height}

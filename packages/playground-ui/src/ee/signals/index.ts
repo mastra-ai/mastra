@@ -2,7 +2,7 @@ export * from './components';
 export * from './hooks';
 export * from './sankey-signals';
 export * from './signal-colors';
-export { SIGNAL_PROCESSING_ORDER } from './signal-formatting';
+export * from './signal-formatting';
 export * from './signals-error-state';
 export * from './signals-loading-skeleton';
 export * from './trace-intelligence-context';
