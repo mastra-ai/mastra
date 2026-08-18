@@ -2,7 +2,7 @@
 
 exports[`Subconscious knowledge write tools > keeps snapshots of all six public input schemas 1`] = `
 {
-  "knowledge_add_item": JsonSchemaWrapper {
+  "knowledge_append": JsonSchemaWrapper {
     "~standard": {
       "jsonSchema": {
         "input": [Function],
@@ -24,7 +24,7 @@ exports[`Subconscious knowledge write tools > keeps snapshots of all six public 
       "version": 1,
     },
   },
-  "knowledge_remove_item": JsonSchemaWrapper {
+  "knowledge_remove": JsonSchemaWrapper {
     "~standard": {
       "jsonSchema": {
         "input": [Function],
@@ -35,7 +35,7 @@ exports[`Subconscious knowledge write tools > keeps snapshots of all six public 
       "version": 1,
     },
   },
-  "knowledge_rescope_item": JsonSchemaWrapper {
+  "knowledge_rescope": JsonSchemaWrapper {
     "~standard": {
       "jsonSchema": {
         "input": [Function],
