@@ -152,7 +152,7 @@ describe('InMemoryKnowledgeStorage', () => {
     expect((await store.listKnowledgeRelatedTo({ node: marco!, scope: sibling })).records).toHaveLength(0);
   });
 
-  it('does not expose knowledge through a scope that cannot see their parent node', async () => {
+  it('applies record visibility independently from node scope', async () => {
     const store = createStore();
     const node = await store.createNode({ name: 'Resource Secret', kind: 'task', scope: resource });
     await store.appendKnowledge({
@@ -164,9 +164,11 @@ describe('InMemoryKnowledgeStorage', () => {
       defaultScope: resource,
     });
 
-    expect((await store.listKnowledgeAbout({ node: node.id, scope: org })).records).toEqual([]);
-    expect(await store.search({ query: 'org-visible', scope: org })).toEqual([]);
-    expect((await store.listKnowledgeAbout({ node: node.id, scope: thread })).records).toHaveLength(1);
+    expect((await store.listKnowledgeAbout({ node, scope: org })).records).toHaveLength(1);
+    expect(await store.search({ query: 'org-visible', scope: org })).toEqual([
+      expect.objectContaining({ type: 'record', recordId: node.id, scope: org }),
+    ]);
+    expect((await store.listKnowledgeAbout({ node, scope: thread })).records).toHaveLength(1);
   });
 
   it('soft deletes and restores knowledge without losing mention relationships', async () => {
@@ -248,6 +250,18 @@ describe('InMemoryKnowledgeStorage', () => {
       expect.objectContaining({ operation: 'delete', scope: resource }),
       expect.objectContaining({ operation: 'upsert', scope: org }),
     ]);
+  });
+
+  it('serializes semantic work for successive versions of one document', async () => {
+    const store = createStore();
+    const node = await store.createNode({ name: 'Atlas', kind: 'task', scope: resource });
+    await store.updateNode({ id: node.id, version: node.version, kind: 'project' });
+
+    const first = await store.claimSemanticOutbox({ workerId: 'first', limit: 10 });
+    expect(first).toHaveLength(1);
+    expect(await store.claimSemanticOutbox({ workerId: 'second', limit: 10 })).toEqual([]);
+    await store.completeSemanticOutbox({ ids: [first[0]!.id], workerId: 'first' });
+    expect(await store.claimSemanticOutbox({ workerId: 'second', limit: 10 })).toHaveLength(1);
   });
 
   it('enforces ceilings and monotonic curation cursors', async () => {

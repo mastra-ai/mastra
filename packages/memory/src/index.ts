@@ -38,6 +38,8 @@ import type {
   ThreadCloneMetadata,
   ObservationalMemoryRecord,
   BufferedObservationChunk,
+  KnowledgeStorage,
+  KnowledgeScope,
 } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
@@ -48,6 +50,7 @@ import type { JSONSchema7 } from 'json-schema';
 import { LRUCache } from 'lru-cache';
 import xxhash from 'xxhash-wasm';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
+import { KnowledgeSemanticIndexCoordinator, Subconscious } from './processors/observational-memory/subconscious';
 import { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
 import type {
   SummarizeConversationOptions,
@@ -70,6 +73,27 @@ export {
   type ExtractorSource,
 } from './processors/observational-memory';
 export { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
+export {
+  KnowledgeSemanticIndexCoordinator,
+  StaleKnowledgeSemanticIndexError,
+  Subconscious,
+} from './processors/observational-memory/subconscious';
+export type {
+  KnowledgeSemanticIndexCoordinatorConfig,
+  ResolvedSubconsciousAgent,
+  ResolvedSubconsciousConfig,
+  SubconsciousBuiltInObservationAgent,
+  SubconsciousBuiltInObservationConfig,
+  SubconsciousBuiltInReflectionAgent,
+  SubconsciousBuiltInReflectionConfig,
+  SubconsciousCaptureHook,
+  SubconsciousCaptureOutput,
+  SubconsciousConfig,
+  SubconsciousCustomObservationConfig,
+  SubconsciousCustomReflectionConfig,
+  SubconsciousObservationEntry,
+  SubconsciousReflectionEntry,
+} from './processors/observational-memory/subconscious';
 export { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
 export type {
   SummarizeConversationOptions,
@@ -86,6 +110,8 @@ type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model'
   model?: ObservationalMemoryConfig['model'];
   observation?: ObservationalMemoryConfig['observation'];
   reflection?: ObservationalMemoryConfig['reflection'];
+  /** @experimental This API may change without notice. */
+  experimental_subconscious?: Subconscious;
   activateAfterIdle?: ObservationalMemoryConfig['activateAfterIdle'];
   activateOnProviderChange?: ObservationalMemoryConfig['activateOnProviderChange'];
   temporalMarkers?: boolean;
@@ -274,6 +300,7 @@ export class Memory extends MastraMemory {
   private _omEngine: Promise<ObservationalMemory | null> | undefined;
   private _omEngineInstance: ObservationalMemory | null | undefined;
   private _mastraInstance: Mastra | undefined;
+  private _knowledgeSemanticIndex?: Promise<KnowledgeSemanticIndexCoordinator>;
 
   /**
    * Every vector cleanup that deleteThread or deleteMessages started in the background.
@@ -337,7 +364,36 @@ export class Memory extends MastraMemory {
   }
 
   public override getMergedThreadConfig(config?: MemoryConfigInternal): MemoryConfigInternal {
-    return this.applyManagedWorkingMemoryDefaults(super.getMergedThreadConfig(config));
+    const merged = super.getMergedThreadConfig(config);
+    return this.applyManagedWorkingMemoryDefaults(this.applySubconsciousDefaults(merged));
+  }
+
+  private applySubconsciousDefaults(config: MemoryConfigInternal): MemoryConfigInternal {
+    const omConfig = normalizeObservationalMemoryConfig(
+      config.observationalMemory as boolean | MemoryObservationalMemoryOptions | undefined,
+    );
+    if (!omConfig?.experimental_subconscious) return config;
+    if (!(omConfig.experimental_subconscious instanceof Subconscious)) {
+      throw new Error('observationalMemory.experimental_subconscious must be a Subconscious instance.');
+    }
+
+    const observation = (omConfig.observation ?? {}) as NonNullable<ObservationalMemoryConfig['observation']>;
+    const extract = observation.extract ?? [];
+    const existingSlugs = new Set(extract.map(extractor => extractor.slug));
+    const subconsciousExtractors = omConfig.experimental_subconscious
+      .createObservationExtractors()
+      .filter(extractor => !existingSlugs.has(extractor.slug));
+
+    return {
+      ...config,
+      observationalMemory: {
+        ...omConfig,
+        observation: {
+          ...observation,
+          extract: [...extract, ...subconsciousExtractors],
+        },
+      },
+    } as MemoryConfigInternal;
   }
 
   private applyManagedWorkingMemoryDefaults(config: MemoryConfigInternal): MemoryConfigInternal {
@@ -400,6 +456,42 @@ export class Memory extends MastraMemory {
         );
       }
     }
+    if (omConfig?.experimental_subconscious) {
+      if (!this.vector) {
+        throw new Error('Subconscious semantic knowledge requires a vector store. Pass a `vector` option to Memory.');
+      }
+      if (!this.embedder) {
+        throw new Error('Subconscious semantic knowledge requires an embedder. Pass an `embedder` option to Memory.');
+      }
+    }
+  }
+
+  private async getKnowledgeStore(): Promise<KnowledgeStorage> {
+    const store = await this.storage.getStore('knowledge');
+    if (!store) {
+      throw new Error(`Knowledge storage domain is not available on ${this.storage.constructor.name}`);
+    }
+    return store;
+  }
+
+  public async getKnowledgeSemanticIndex(): Promise<KnowledgeSemanticIndexCoordinator> {
+    if (!this.vector || !this.embedder) {
+      throw new Error('Subconscious semantic knowledge requires both a vector store and an embedder.');
+    }
+    this._knowledgeSemanticIndex ??= this.getKnowledgeStore().then(
+      knowledge =>
+        new KnowledgeSemanticIndexCoordinator({
+          knowledge,
+          vector: this.vector!,
+          embedder: this.embedder!,
+          embedderOptions: this.embedderOptions,
+        }),
+    );
+    return this._knowledgeSemanticIndex;
+  }
+
+  public async drainKnowledgeSemanticIndex(scope?: KnowledgeScope): Promise<number> {
+    return (await this.getKnowledgeSemanticIndex()).drain(scope);
   }
 
   /**
@@ -1748,6 +1840,10 @@ ${workingMemory}`;
       throw new Error(
         'Observational memory requires @mastra/core support for request-response-id-rotation. Please bump @mastra/core to a newer version.',
       );
+    }
+
+    if (omConfig.experimental_subconscious) {
+      await this.getKnowledgeStore();
     }
 
     const { ObservationalMemory: OMClass } = await import('./processors/observational-memory');

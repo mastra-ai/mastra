@@ -415,7 +415,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         continue;
       }
       const parent = this.#resolveTerminalNode(record.node);
-      if (!parent || !isKnowledgeScopeVisible(parent.scope, queryScope)) continue;
+      if (!parent) continue;
       results.push({
         type: 'record',
         id: record.id,
@@ -489,6 +489,16 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       )
       .filter(entry => entry.availableAt <= now)
       .filter(entry => !queryScope || isKnowledgeScopeVisible(entry.scope, queryScope))
+      .filter(
+        entry =>
+          ![...this.#db.knowledgeSemanticOutbox.values()].some(
+            earlier =>
+              earlier.documentId === entry.documentId &&
+              earlier.status !== 'completed' &&
+              (earlier.createdAt < entry.createdAt ||
+                (earlier.createdAt.getTime() === entry.createdAt.getTime() && earlier.id < entry.id)),
+          ),
+      )
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
       .slice(0, input.limit ?? 100);
     for (const entry of claimed) {
@@ -598,7 +608,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   #queryKnowledge(input: QueryKnowledgeInput, relationship: 'about' | 'mentioning' | 'related'): QueryKnowledgeOutput {
     const queryScope = canonicalizeKnowledgeScope(input.scope);
     const terminal = this.#resolveTerminalNode(nodeReferenceId(input.node));
-    if (!terminal || !isKnowledgeScopeVisible(terminal.scope, queryScope)) return { records: [] };
+    if (!terminal) return { records: [] };
     return this.#paginateKnowledge(
       [...this.#db.knowledgeRecords.values()].filter(record => {
         const about = record.node === terminal.id;
