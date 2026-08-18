@@ -60,7 +60,8 @@ export const queryKeys = {
   availableModels: () => ['available-models'] as const,
   customProviders: () => ['custom-providers'] as const,
   modelPacksAll: () => ['model-packs'] as const,
-  modelPacks: (resourceId: string | undefined) => [...queryKeys.modelPacksAll(), resourceId ?? null] as const,
+  modelPacks: (resourceId: string | undefined, scope: string | undefined) =>
+    [...queryKeys.modelPacksAll(), resourceId ?? null, scope ?? null] as const,
   om: (resourceId: string | undefined) => ['om', resourceId ?? null] as const,
   thinkingConfig: () => ['thinking-config'] as const,
   factorySkills: () => ['factory', 'skills'] as const,

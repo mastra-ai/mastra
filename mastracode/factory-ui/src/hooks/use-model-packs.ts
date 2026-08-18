@@ -19,7 +19,7 @@ import type {
 export function useModelPacksQuery(resourceId?: string, scope?: string) {
   const { client } = useApiConfig();
   return useQuery<ModelPacksResponse>({
-    queryKey: queryKeys.modelPacks(resourceId),
+    queryKey: queryKeys.modelPacks(resourceId, scope),
     queryFn: () => {
       const params = new URLSearchParams();
       if (resourceId) params.set('resourceId', resourceId);
