@@ -562,6 +562,38 @@ export function convertMastraChunkToAISDKv6<OUTPUT = undefined>({
   });
 }
 
+/**
+ * Each level of agent-as-tool delegation wraps the sub-agent's chunks in another
+ * `tool-output` envelope (see ToolStream in @mastra/core), and those envelopes carry
+ * `from: 'USER'` rather than the originating primitive. Without unwrapping, chunks from
+ * agents nested two or more levels deep match none of the `from` branches below and are
+ * dropped, so the client only sees them once the outermost tool call resolves.
+ */
+const MAX_TOOL_OUTPUT_NESTING = 10;
+
+function unwrapNestedToolOutput(output: any): any | undefined {
+  let current = output;
+
+  for (let depth = 0; depth < MAX_TOOL_OUTPUT_NESTING; depth++) {
+    if (current === null || typeof current !== 'object') {
+      return undefined;
+    }
+
+    if (current.type !== 'tool-output') {
+      return current;
+    }
+
+    const nested = current.payload?.output ?? current.output;
+    if (nested === undefined) {
+      return undefined;
+    }
+
+    current = nested;
+  }
+
+  return undefined;
+}
+
 export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMessage>({
   part,
   messageMetadataValue,
@@ -751,31 +783,36 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     }
 
     case 'tool-output': {
-      if (part.output.from === 'AGENT') {
+      const output = unwrapNestedToolOutput(part.output);
+      if (output === undefined) {
+        return;
+      }
+
+      if (output.from === 'AGENT') {
         return {
           type: 'tool-agent',
           toolCallId: part.toolCallId,
-          payload: part.output,
+          payload: output,
         };
-      } else if (part.output.from === 'WORKFLOW') {
+      } else if (output.from === 'WORKFLOW') {
         return {
           type: 'tool-workflow',
           toolCallId: part.toolCallId,
-          payload: part.output,
+          payload: output,
         };
-      } else if (part.output.from === 'NETWORK') {
+      } else if (output.from === 'NETWORK') {
         return {
           type: 'tool-network',
           toolCallId: part.toolCallId,
-          payload: part.output,
+          payload: output,
         };
-      } else if (isDataChunkType(part.output)) {
-        if (!('data' in part.output)) {
+      } else if (isDataChunkType(output)) {
+        if (!('data' in output)) {
           throw new Error(
             `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(part)}`,
           );
         }
-        const { type, data, id } = part.output;
+        const { type, data, id } = output;
         return { type, data, ...(id !== undefined && { id }) } as InferUIMessageChunk<UI_MESSAGE>;
       }
       return;
