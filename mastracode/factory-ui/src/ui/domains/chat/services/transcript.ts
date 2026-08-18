@@ -1,8 +1,9 @@
-import type { AgentControllerEvent, AgentControllerTaskSnapshot, AgentControllerOMProgress } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
-import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
+import type { MastraDBMessage, MastraMessagePart, TokenUsage } from '@mastra/core/agent-controller';
 
 import { stripAnsi } from './ansi';
+import type { OMBudgets } from './runtime';
 
 /**
  * Transcript model + reducer.
@@ -116,15 +117,6 @@ export type TimelineEntry =
   | NotificationSummaryEntry
   | SubagentEntry;
 
-/** Token usage snapshot from usage_update events. */
-export interface UsageSnapshot {
-  promptTokens?: number;
-  completionTokens?: number;
-  totalTokens?: number;
-  reasoningTokens?: number;
-  [key: string]: unknown;
-}
-
 /** OM (observational memory) status. */
 export type OMPhase = 'idle' | 'observing' | 'reflecting' | 'buffering';
 
@@ -152,11 +144,11 @@ export interface TranscriptState {
   /** Current task list from task_updated events. */
   tasks: AgentControllerTaskSnapshot[];
   /** Accumulated token usage. */
-  usage?: UsageSnapshot;
+  usage?: TokenUsage;
   /** Number of queued follow-up messages. */
   followUpCount: number;
   /** OM progress for the status line (msg/mem budgets), from display_state_changed. */
-  omProgress?: AgentControllerOMProgress;
+  omProgress?: OMBudgets;
   /** Observational memory phase. */
   omPhase: OMPhase;
   /** Whether the workspace is ready. */
@@ -203,8 +195,8 @@ type Action =
   | {
       type: 'reset';
       threadId?: string;
-      omProgress?: AgentControllerOMProgress;
-      usage?: UsageSnapshot;
+      omProgress?: OMBudgets;
+      usage?: TokenUsage;
     };
 
 /**
@@ -283,7 +275,7 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent): Transc
 
     case 'message_start':
     case 'message_update': {
-      const message = event.message as MastraDBMessage;
+      const message = event.message;
       const next = upsertMessage(state, message, true);
       if (message.role !== 'assistant') return next;
       // Only streamed assistant content opens the decode window — empty or
@@ -443,14 +435,14 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent): Transc
 
     // Usage tracking.
     case 'usage_update': {
-      const usageSnap = event.usage as UsageSnapshot;
+      const usageSnap = event.usage;
       const now = Date.now();
       // usage_update fires at step-finish and carries the completion (and any
       // reasoning) tokens generated during this step. Measure tokens/sec over the
       // decode window only — from the step's first content delta (_decodeStartedAt)
       // to now — which excludes TTFT and inter-step tool/scheduling time. Smooth
       // with an exponential moving average (α=0.3) for a stable readout.
-      const stepTokens = (usageSnap.completionTokens ?? 0) + (usageSnap.reasoningTokens ?? 0);
+      const stepTokens = usageSnap.completionTokens + (usageSnap.reasoningTokens ?? 0);
       let tps = state.tokensPerSec;
       if (state._decodeStartedAt > 0 && stepTokens > 0) {
         const decodeSec = Math.max((now - state._decodeStartedAt) / 1000, 0.001);
@@ -477,7 +469,7 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent): Transc
       return {
         ...state,
         omProgress: ds.omProgress ?? state.omProgress,
-        usage: (ds.tokenUsage as UsageSnapshot | undefined) ?? state.usage,
+        usage: ds.tokenUsage ?? state.usage,
       };
     }
 
@@ -500,10 +492,8 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent): Transc
       return { ...state, omPhase: 'buffering' };
     case 'om_buffering_end':
     case 'om_buffering_failed':
-      return { ...state, omPhase: 'idle' };
     case 'om_activation':
-      if (!event.enabled) return { ...state, omPhase: 'idle' };
-      return state;
+      return { ...state, omPhase: 'idle' };
 
     // Workspace lifecycle.
     case 'workspace_ready':
@@ -552,8 +542,8 @@ export function createInitialTranscript({
 }: {
   messages?: MastraDBMessage[];
   threadId?: string;
-  omProgress?: AgentControllerOMProgress;
-  usage?: UsageSnapshot;
+  omProgress?: OMBudgets;
+  usage?: TokenUsage;
 } = {}): TranscriptState {
   return {
     ...initialTranscript,

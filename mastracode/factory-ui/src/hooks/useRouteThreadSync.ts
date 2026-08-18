@@ -54,8 +54,8 @@ export function useRouteThreadSync() {
 
     if (!threadsQuery.data?.some(thread => thread.id === targetThreadId)) {
       const latest = [...(threadsQuery.data ?? [])].sort((a, b) => {
-        const ta = a.updatedAt ?? a.createdAt ?? '';
-        const tb = b.updatedAt ?? b.createdAt ?? '';
+        const ta = a.updatedAt ?? '';
+        const tb = b.updatedAt ?? '';
         return tb.localeCompare(ta);
       })[0];
 
