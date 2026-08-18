@@ -928,7 +928,22 @@ export class AgentController<TState = {}> {
     return this.initPromise;
   }
 
-  private async runInit(): Promise<void> {
+  /**
+   * Initialize only what read-only queries need: the storage layer (either a
+   * fresh internal Mastra wrapping the configured storage, or the inherited
+   * parent Mastra's storage). Skips workspace/sandbox provisioning entirely.
+   *
+   * Idempotent and safe to call from every read query; the underlying
+   * MastraCompositeStore init dedupes.
+   */
+  async initStorage(): Promise<void> {
+    this.#storageInitPromise ??= this.runStorageInit();
+    return this.#storageInitPromise;
+  }
+
+  #storageInitPromise?: Promise<void>;
+
+  private async runStorageInit(): Promise<void> {
     // Create an internal Mastra instance so agents have access to storage
     // (required for tool approval snapshot persistence/resume).
     // We init storage through Mastra's proxied storage so augmentWithInit
@@ -957,6 +972,13 @@ export class AgentController<TState = {}> {
       // is safe even when the parent already initialized it.
       await this.#externalMastra.getStorage()?.init();
     }
+  }
+
+  private async runInit(): Promise<void> {
+    // Storage init is a prerequisite for both reads and writes; share the same
+    // promise so a concurrent read that already triggered storage init doesn't
+    // race with the workspace init we're about to do.
+    await this.initStorage();
 
     // Initialize workspace if configured (skip for dynamic factory — resolved per-request)
     if (this.config.workspace && !this.workspaceInitialized && typeof this.workspace !== 'function') {
@@ -1140,7 +1162,15 @@ export class AgentController<TState = {}> {
     }
   }
 
-  private async queryThreadById({ threadId }: { threadId: string }): Promise<AgentControllerThread | null> {
+  /**
+   * Read a single thread by id directly from storage, without constructing a
+   * {@link Session}. Read-only server endpoints use this so a GET request for a
+   * thread doesn't spin up a workspace/sandbox as a side effect of session
+   * creation. Returns `null` when the thread doesn't exist or no storage is
+   * configured.
+   */
+  async queryThreadById({ threadId }: { threadId: string }): Promise<AgentControllerThread | null> {
+    await this.initStorage();
     if (!this.#resolveStorage()) return null;
     const memoryStorage = await this.getMemoryStorage();
     const thread = await memoryStorage.getThreadById({ threadId });
@@ -1155,7 +1185,12 @@ export class AgentController<TState = {}> {
     };
   }
 
-  private async queryThreads({
+  /**
+   * List threads directly from storage, without constructing a {@link Session}.
+   * Read-only server endpoints use this so a GET on `/threads` doesn't spin up
+   * a workspace/sandbox as a side effect of session creation.
+   */
+  async queryThreads({
     resourceId,
     includeForkedSubagents,
     metadata,
@@ -1164,6 +1199,7 @@ export class AgentController<TState = {}> {
     includeForkedSubagents?: boolean;
     metadata?: Record<string, unknown>;
   }): Promise<AgentControllerThread[]> {
+    await this.initStorage();
     if (!this.#resolveStorage()) {
       return [];
     }
@@ -1196,13 +1232,14 @@ export class AgentController<TState = {}> {
     }));
   }
 
-  private async queryThreadMessages({
-    threadId,
-    limit,
-  }: {
-    threadId: string;
-    limit?: number;
-  }): Promise<MastraDBMessage[]> {
+  /**
+   * List messages for a thread directly from storage, without constructing a
+   * {@link Session}. Read-only server endpoints use this so a GET on a thread's
+   * messages doesn't spin up a workspace/sandbox as a side effect of session
+   * creation.
+   */
+  async queryThreadMessages({ threadId, limit }: { threadId: string; limit?: number }): Promise<MastraDBMessage[]> {
+    await this.initStorage();
     if (!this.#resolveStorage()) return [];
 
     const memoryStorage = await this.getMemoryStorage();
@@ -1629,8 +1666,7 @@ export class AgentController<TState = {}> {
 
   /**
    * Load observational memory progress for the current thread.
-   * Reads the OM record and recent messages to reconstruct status,
-   * then emits an `om_status` event for the UI.
+   * Reconstructs status from the durable OM record, then emits an `om_status` event for the UI.
    */
   async loadOMProgress(session: Session<TState>): Promise<void> {
     const threadId = session.thread.getId();
@@ -1644,8 +1680,12 @@ export class AgentController<TState = {}> {
 
       const config = record.config as
         | {
-            observationThreshold?: number | { min: number; max: number };
-            reflectionThreshold?: number | { min: number; max: number };
+            observation?: { messageTokens?: number | { min: number; max: number } };
+            reflection?: { observationTokens?: number | { min: number; max: number } };
+            _overrides?: {
+              observation?: { messageTokens?: number | { min: number; max: number } };
+              reflection?: { observationTokens?: number | { min: number; max: number } };
+            };
           }
         | undefined;
 
@@ -1655,75 +1695,62 @@ export class AgentController<TState = {}> {
         return val.max;
       };
 
-      let observationThreshold = getThreshold(config?.observationThreshold, 30_000);
-      let reflectionThreshold = getThreshold(config?.reflectionThreshold, 40_000);
-
-      let messageTokens = record.pendingMessageTokens ?? 0;
-      let observationTokens = record.observationTokenCount ?? 0;
-      let bufferedObs = {
-        status: 'idle' as 'idle' | 'running' | 'complete',
-        chunks: 0,
-        messageTokens: 0,
-        projectedMessageRemoval: 0,
-        observationTokens: 0,
-      };
-      let bufferedRef = {
-        status: 'idle' as 'idle' | 'running' | 'complete',
-        inputObservationTokens: 0,
-        observationTokens: 0,
-      };
-      let generationCount = 0;
-      let stepNumber = 0;
-
-      const messagesResult = await memoryStorage.listMessages({
-        threadId,
-        perPage: 70,
-        page: 0,
-        orderBy: { field: 'createdAt', direction: 'DESC' },
-      });
-      const messages = messagesResult.messages;
-      let foundStatus = false;
-      for (const msg of messages) {
-        if (msg.role !== 'assistant') continue;
-        const content = msg.content as { parts?: Array<{ type?: string; data?: Record<string, unknown> }> } | string;
-        if (typeof content === 'string' || !content?.parts) continue;
-
-        for (let i = content.parts.length - 1; i >= 0; i--) {
-          const part = content.parts[i] as { type?: string; data?: Record<string, unknown> };
-          if (part.type === 'data-om-status' && part.data?.windows) {
-            const w = part.data.windows as Record<string, Record<string, Record<string, unknown>>>;
-            messageTokens = (w.active?.messages?.tokens as number) ?? messageTokens;
-            observationTokens = (w.active?.observations?.tokens as number) ?? observationTokens;
-            const msgThresh = w.active?.messages?.threshold as number | undefined;
-            const obsThresh = w.active?.observations?.threshold as number | undefined;
-            if (msgThresh) observationThreshold = msgThresh;
-            if (obsThresh) reflectionThreshold = obsThresh;
-            const bo = w.buffered?.observations as Record<string, unknown> | undefined;
-            if (bo) {
-              bufferedObs = {
-                status: (bo.status as 'idle' | 'running' | 'complete') ?? 'idle',
-                chunks: (bo.chunks as number) ?? 0,
-                messageTokens: (bo.messageTokens as number) ?? 0,
-                projectedMessageRemoval: (bo.projectedMessageRemoval as number) ?? 0,
-                observationTokens: (bo.observationTokens as number) ?? 0,
-              };
-            }
-            const br = w.buffered?.reflection as Record<string, unknown> | undefined;
-            if (br) {
-              bufferedRef = {
-                status: (br.status as 'idle' | 'running' | 'complete') ?? 'idle',
-                inputObservationTokens: (br.inputObservationTokens as number) ?? 0,
-                observationTokens: (br.observationTokens as number) ?? 0,
-              };
-            }
-            generationCount = (part.data.generationCount as number) ?? 0;
-            stepNumber = (part.data.stepNumber as number) ?? 0;
-            foundStatus = true;
-            break;
-          }
+      const observationThreshold = getThreshold(
+        config?._overrides?.observation?.messageTokens ?? config?.observation?.messageTokens,
+        30_000,
+      );
+      const reflectionThreshold = getThreshold(
+        config?._overrides?.reflection?.observationTokens ?? config?.reflection?.observationTokens,
+        40_000,
+      );
+      const messageTokens = record.pendingMessageTokens ?? 0;
+      const observationTokens = record.observationTokenCount ?? 0;
+      // Some storage backends return the chunk list serialized, so parse defensively
+      // (mirrors the OM processor's own `getBufferedChunks` helper).
+      const rawChunks = record.bufferedObservationChunks;
+      let bufferedChunks: { messageTokens?: number; tokenCount?: number }[] = [];
+      if (Array.isArray(rawChunks)) {
+        bufferedChunks = rawChunks;
+      } else if (typeof rawChunks === 'string') {
+        try {
+          const parsed = JSON.parse(rawChunks);
+          if (Array.isArray(parsed)) bufferedChunks = parsed;
+        } catch {
+          bufferedChunks = [];
         }
-        if (foundStatus) break;
       }
+      const bufferedMessageTokens = Math.min(
+        bufferedChunks.reduce((sum, chunk) => sum + (chunk.messageTokens ?? 0), 0),
+        messageTokens,
+      );
+      const bufferedObservationTokens = bufferedChunks.reduce((sum, chunk) => sum + (chunk.tokenCount ?? 0), 0);
+      const bufferedObs = {
+        status: record.isBufferingObservation
+          ? ('running' as const)
+          : bufferedChunks.length
+            ? ('complete' as const)
+            : ('idle' as const),
+        chunks: bufferedChunks.length,
+        messageTokens: bufferedMessageTokens,
+        // The real projection depends on the OM processor's activation boundary math,
+        // which isn't reproducible from the record alone. Report 0 until the first live
+        // status arrives rather than an authoritative-looking approximation.
+        projectedMessageRemoval: 0,
+        observationTokens: bufferedObservationTokens,
+      };
+      const bufferedRef = {
+        status: record.isBufferingReflection
+          ? ('running' as const)
+          : record.bufferedReflection
+            ? ('complete' as const)
+            : ('idle' as const),
+        inputObservationTokens: record.bufferedReflectionInputTokens ?? 0,
+        observationTokens: record.bufferedReflectionTokens ?? 0,
+      };
+      const generationCount = record.generationCount ?? 0;
+      // Step index is per-run and intentionally not durable — a restored thread starts at 0
+      // and picks up the real step number from the next live status update.
+      const stepNumber = 0;
 
       session.emit({
         type: 'om_status',

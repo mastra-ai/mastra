@@ -98,4 +98,55 @@ describeForAllEngines('AIMock scenario: client tools', engine => {
     expect(clientToolDef).toBeDefined();
     expect(clientToolDef?.function.description).toBe('A client-side tool');
   });
+
+  it('should stream a completed server tool result when a client tool stays pending in the same step (#21637)', async () => {
+    // A server-side tool (has execute) and a client-side tool (no execute, resolved by the
+    // browser) are called in the same step. The turn ends so the client can resolve its own
+    // tool, but the server tool already finished — its result must still be streamed, or the
+    // client sits on an unresolved tool call forever and never sends the follow-up request.
+    const serverTool = createTool({
+      id: 'server-tool',
+      description: 'Runs on the server',
+      inputSchema: z.object({ id: z.string() }),
+      execute: async ({ id }) => ({ record: `record-${id}` }),
+    });
+
+    const browserTool = createTool({
+      id: 'browser-tool',
+      description: 'Runs in the browser',
+      inputSchema: z.object({ id: z.string() }),
+      // No execute: the client executes this one and sends the result back.
+    });
+
+    const { chunks } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Use both tools',
+      tools: { 'server-tool': serverTool },
+      clientTools: { 'browser-tool': browserTool },
+      stopWhen: stepCountIs(5),
+      collectChunks: true,
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            toolCalls: [
+              { id: 'call-server', name: 'server-tool', arguments: { id: '42' } },
+              { id: 'call-browser', name: 'browser-tool', arguments: { id: '42' } },
+            ],
+          },
+        );
+      },
+    });
+
+    const toolResults = (chunks ?? []).filter((c: any) => c.type === 'tool-result');
+
+    // The completed server-side tool is streamed as a terminal result...
+    const serverResult = toolResults.find((c: any) => c.payload?.toolCallId === 'call-server');
+    expect(serverResult).toBeDefined();
+    expect((serverResult as any)?.payload?.result).toEqual({ record: 'record-42' });
+
+    // ...while the client-side tool stays unresolved for the client to complete.
+    expect(toolResults.some((c: any) => c.payload?.toolCallId === 'call-browser')).toBe(false);
+  });
 });

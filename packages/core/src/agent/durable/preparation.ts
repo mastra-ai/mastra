@@ -7,7 +7,12 @@ import type { MemoryConfig, MemoryConfig as _MemoryConfig, StorageThreadType } f
 import { EntityType, SpanType, createObservabilityContext, getOrCreateSpan } from '../../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcessorOrWorkflow } from '../../processors';
 import type { ProcessorState } from '../../processors/runner';
-import { RequestContext, MASTRA_VERSIONS_KEY, mergeVersionOverrides } from '../../request-context';
+import {
+  RequestContext,
+  MASTRA_INHERITED_MEMORY_KEY,
+  MASTRA_VERSIONS_KEY,
+  mergeVersionOverrides,
+} from '../../request-context';
 import type { VersionOverrides } from '../../request-context';
 import { toStandardSchema } from '../../schema';
 import { normalizeToolPayloadTransformPolicy } from '../../tools/payload-transform';
@@ -16,6 +21,7 @@ import { boundedStringify, deepMerge } from '../../utils';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
 import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
+import { assertThreadOwnedByResource } from '../memory-thread-ownership';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
@@ -30,6 +36,7 @@ import type {
   ToolsetsInput,
   ToolsInput,
 } from '../types';
+import { fireClientToolOutputHooks } from '../workflows/prepare-stream/client-tool-output-hooks';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
 import { createWorkflowInput } from './utils/serialize-state';
 import { generateDurableThreadTitle } from './workflows/finalize-run';
@@ -47,6 +54,11 @@ function snapshotRequestContextEntries(
   const out: Record<string, unknown> = {};
   let any = false;
   for (const [key, value] of requestContext.entries()) {
+    // Holds a live MastraMemory instance, which stringifies into a large, method-less
+    // husk of the memory and its storage adapter. Persisting that would bloat the
+    // workflow input and hand the resumed run an object whose methods are gone; the
+    // resumed agent resolves memory from its own config instead.
+    if (key === MASTRA_INHERITED_MEMORY_KEY) continue;
     // Serialize each entry exactly once with a bounded pass: a shared-reference
     // graph would otherwise make JSON.stringify expand exponentially and wedge
     // the event loop on every durable step, and reading the value twice (probe
@@ -347,6 +359,9 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   const memoryConfig = execOptions?.memory?.options;
   if (memory && threadId && resourceId) {
     const existingThread = await memory.getThreadById({ threadId });
+    if (existingThread) {
+      assertThreadOwnedByResource({ thread: existingThread, resourceId, agentName: publicAgentName });
+    }
     threadObject =
       existingThread ??
       (await memory.createThread({
@@ -495,6 +510,17 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   const model = await typedAgent.getModel({ requestContext });
   if (!model) {
     throw new Error('Agent model not available');
+  }
+
+  // Client-executed results fire only after processors accept the request and
+  // the required runtime model has resolved.
+  if (!tripwireData) {
+    await fireClientToolOutputHooks({
+      messages,
+      tools,
+      abortSignal: execOptions?.abortSignal,
+      logger,
+    });
   }
 
   const modelList = await typedAgent.getModelList(requestContext);
@@ -646,6 +672,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // 14. Create registry entry for non-serializable state
   const registryEntry: RunRegistryEntry = {
+    mastra,
     tools,
     saveQueueManager,
     memory,
@@ -661,6 +688,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       : undefined,
     workspace,
     requestContext,
+    mcp: execOptions?.mcp,
     inputProcessors,
     llmRequestInputProcessors,
     outputProcessors,

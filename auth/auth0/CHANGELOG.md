@@ -1,5 +1,13 @@
 # @mastra/auth-auth0
 
+## 1.2.2-alpha.0
+
+### Patch Changes
+
+- Fixed reading request headers from Express-style plain header objects so cookie-based auth providers no longer throw and fail with a misleading 401. ([#21261](https://github.com/mastra-ai/mastra/pull/21261))
+
+  Related to https://github.com/mastra-ai/mastra/issues/21253
+
 ## 1.2.1
 
 ### Patch Changes

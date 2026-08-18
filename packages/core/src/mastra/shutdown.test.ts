@@ -1,5 +1,6 @@
 import EventEmitter from 'node:events';
 import { describe, expect, it, vi } from 'vitest';
+import { globalRunRegistry } from '../agent/durable/run-registry';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import { __hookHandlerCount, AvailableHooks } from '../hooks';
 import { MockStore } from '../storage';
@@ -92,6 +93,35 @@ describe('Mastra shutdown lifecycle', () => {
       await finished.promise;
       await manager.shutdown();
       mastra.__unregisterHooks();
+    }
+  });
+
+  it('waits for its durable agent executions before closing storage', async () => {
+    const execution = deferred();
+    const storage = new MockStore();
+    const close = vi.spyOn(storage, 'close');
+    const mastra = new Mastra({ logger: false, workers: false, storage });
+    const otherMastra = new Mastra({ logger: false, workers: false });
+    const otherExecution = deferred();
+
+    globalRunRegistry.set('owned-run', { mastra, workflowExecution: execution.promise } as any);
+    globalRunRegistry.set('other-run', { mastra: otherMastra, workflowExecution: otherExecution.promise } as any);
+
+    try {
+      const shutdown = mastra.shutdown();
+      await vi.waitFor(() => expect(close).not.toHaveBeenCalled());
+
+      execution.resolve();
+      await shutdown;
+
+      expect(close).toHaveBeenCalledOnce();
+    } finally {
+      execution.resolve();
+      otherExecution.resolve();
+      globalRunRegistry.delete('owned-run');
+      globalRunRegistry.delete('other-run');
+      mastra.__unregisterHooks();
+      otherMastra.__unregisterHooks();
     }
   });
 

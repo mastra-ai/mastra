@@ -36,6 +36,20 @@ export interface GraphEmbedding {
   vector: number[];
 }
 
+/**
+ * JSON-safe snapshot of a GraphRAG instance, produced by `serialize()` and
+ * restored with `GraphRAG.deserialize()`.
+ */
+export interface GraphRAGSnapshot {
+  version: 1;
+  dimension: number;
+  threshold: number;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+const GRAPH_RAG_SNAPSHOT_VERSION = 1;
+
 export class GraphRAG {
   private nodes: Map<string, GraphNode>;
   private edges: GraphEdge[];
@@ -87,6 +101,68 @@ export class GraphRAG {
 
   getEdgesByType(type: string): GraphEdge[] {
     return this.edges.filter(edge => edge.type === type);
+  }
+
+  /**
+   * Produce a JSON-safe snapshot of the graph so it can be persisted and
+   * restored later instead of rebuilt with `createGraph`.
+   *
+   * The snapshot is a deep copy, including nested node metadata, so mutating it
+   * does not affect this instance.
+   * Note that every node carries its full embedding, so snapshots of large
+   * graphs can be several megabytes of JSON.
+   */
+  serialize(): GraphRAGSnapshot {
+    return {
+      version: GRAPH_RAG_SNAPSHOT_VERSION,
+      dimension: this.dimension,
+      threshold: this.threshold,
+      nodes: Array.from(this.nodes.values()).map(node => ({
+        ...node,
+        ...(node.embedding ? { embedding: [...node.embedding] } : {}),
+        ...(node.metadata ? { metadata: structuredClone(node.metadata) } : {}),
+      })),
+      edges: this.edges.map(edge => ({ ...edge })),
+    };
+  }
+
+  /**
+   * Rebuild a GraphRAG instance from a snapshot produced by `serialize()`.
+   *
+   * @throws if the snapshot version is unsupported, a node embedding does not
+   * match the snapshot dimension, or an edge references an unknown node.
+   */
+  static deserialize(snapshot: GraphRAGSnapshot): GraphRAG {
+    if (snapshot?.version !== GRAPH_RAG_SNAPSHOT_VERSION) {
+      throw new Error(`Unsupported GraphRAG snapshot version: ${snapshot?.version}`);
+    }
+
+    const graph = new GraphRAG(snapshot.dimension, snapshot.threshold);
+
+    for (const node of snapshot.nodes ?? []) {
+      // Route through addNode so embedding presence and dimension are validated
+      // at load time rather than failing later inside query().
+      graph.addNode({
+        ...node,
+        ...(node.embedding ? { embedding: [...node.embedding] } : {}),
+        ...(node.metadata ? { metadata: structuredClone(node.metadata) } : {}),
+      });
+    }
+
+    for (const edge of snapshot.edges ?? []) {
+      if (!graph.nodes.has(edge.source)) {
+        throw new Error(`Edge references unknown node: ${edge.source}`);
+      }
+      if (!graph.nodes.has(edge.target)) {
+        throw new Error(`Edge references unknown node: ${edge.target}`);
+      }
+    }
+
+    // Assign directly rather than via addEdge: the serialized edge list already
+    // contains both directions, and addEdge would add the reverse edge again.
+    graph.edges = (snapshot.edges ?? []).map(edge => ({ ...edge }));
+
+    return graph;
   }
 
   clear(): void {

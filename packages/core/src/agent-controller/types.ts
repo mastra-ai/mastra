@@ -518,6 +518,8 @@ export interface TokenUsage {
   reasoningTokens?: number;
   cachedInputTokens?: number;
   cacheCreationInputTokens?: number;
+  cacheCreationInputTokens5m?: number;
+  cacheCreationInputTokens1h?: number;
   raw?: unknown;
 }
 

@@ -152,6 +152,7 @@ function ThreadShell({
     <ChatShell
       className={threadShellClass}
       scroller={{
+        autoScroll: true,
         defaultScrollPosition: 'last-anchor',
         preserveScrollOnPrepend: true,
         onReachStart: canLoadMore ? loadMore.load : undefined,

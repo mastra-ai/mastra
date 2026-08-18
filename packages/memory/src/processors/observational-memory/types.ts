@@ -1,6 +1,9 @@
 import type { AgentConfig } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { ObservationalMemoryModelSettings } from '@mastra/core/memory';
+import type { ObservabilityContext } from '@mastra/core/observability';
+import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage } from '@mastra/core/storage';
 import type { ProviderMetadata } from '@mastra/core/stream';
 import type { Memory } from '../..';
@@ -60,6 +63,24 @@ export type ResolvedActivationTTL = number | 'auto';
  * Configuration for the observation step (Observer agent).
  */
 export type ObservationalMemoryModel = Exclude<AgentConfig['model'], undefined> | ModelByInputTokens;
+
+/**
+ * Controls which continuation-hint sections OM asks the Observer and Reflector to emit.
+ *
+ * Pass `false` to disable both, or an object to disable them individually. Agents that
+ * drive their own control flow generally want `suggestedResponse: false` so memory does
+ * not compete with the agent for what to say next.
+ *
+ * @default true
+ */
+export type ContinuationHintsConfig =
+  | boolean
+  | {
+      /** Emit the `<current-task>` section. @default true */
+      currentTask?: boolean;
+      /** Emit the `<suggested-response>` section. @default true */
+      suggestedResponse?: boolean;
+    };
 
 export interface ObservationConfig {
   /**
@@ -199,6 +220,14 @@ export interface ObservationConfig {
   instruction?: string;
 
   /**
+   * Which continuation-hint sections the Observer should emit.
+   * Set `{ suggestedResponse: false }` when the agent owns its own control flow.
+   *
+   * @default true
+   */
+  continuationHints?: ContinuationHintsConfig;
+
+  /**
    * Manage working memory through Observational Memory extraction.
    * When enabled alongside `workingMemory.enabled`, Memory supplies defaults that
    * disable main-agent working memory management and add the WorkingMemoryExtractor.
@@ -335,6 +364,14 @@ export interface ReflectionConfig {
    * Use this to customize reflection behavior for specific use cases.
    */
   instruction?: string;
+
+  /**
+   * Which continuation-hint sections the Reflector should emit.
+   * Set `{ suggestedResponse: false }` when the agent owns its own control flow.
+   *
+   * @default true
+   */
+  continuationHints?: ContinuationHintsConfig;
 
   /**
    * Additional values to extract from reflector output. Built-in OM fields are registered automatically.
@@ -536,6 +573,8 @@ export interface DataOmObservationFailedPart {
  */
 export interface DataOmStatusPart {
   type: 'data-om-status';
+  /** Stream to clients without persisting as a standalone data-only message. */
+  transient?: boolean;
   data: {
     windows: {
       /** Active context windows — current token usage and thresholds */
@@ -885,6 +924,18 @@ export interface ObservationDebugEvent {
 /**
  * Configuration for ObservationalMemory
  */
+export interface ReflectionCommittedContext {
+  parentThreadId: string;
+  resourceId: string;
+  observations: string;
+  requestContext?: RequestContext;
+  mainAgent?: ProcessorContext['agent'];
+  sendStateSignal?: ProcessorContext['sendStateSignal'];
+  writer?: ProcessorStreamWriter;
+  abortSignal?: AbortSignal;
+  observabilityContext?: ObservabilityContext;
+}
+
 export interface ObservationalMemoryConfig {
   /**
    * Storage adapter for persisting observations.
@@ -894,6 +945,12 @@ export interface ObservationalMemoryConfig {
 
   /** Active Memory instance, when Observational Memory is created by Memory. */
   memory?: Memory;
+
+  /**
+   * Run the subconscious curator (via `memory.runCuration`) after every N committed
+   * observation runs on the synchronous observe path. Off by default. Requires `memory`.
+   */
+  curationCadence?: number;
 
   /**
    * Enable retrieval-mode observation group metadata.
@@ -1021,6 +1078,9 @@ export interface ObservationalMemoryConfig {
    * to opt reflections into provider-change activation.
    */
   activateOnProviderChange?: boolean;
+
+  /** @internal Runs Subconscious reflection work only after a reflection is durably committed. */
+  onReflectionCommitted?: (context: ReflectionCommittedContext) => Promise<void>;
 
   /** @internal Parent Mastra instance for custom gateway model resolution. */
   mastra?: Mastra;

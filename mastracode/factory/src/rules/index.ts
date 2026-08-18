@@ -13,6 +13,7 @@ export {
   FACTORY_RULE_SOURCES,
   FACTORY_RULE_STAGES,
   factoryRuleSourceForWorkItem,
+  isFactoryRuleStage,
 } from './types.js';
 export type {
   FactoryBoardRuleLeaf,

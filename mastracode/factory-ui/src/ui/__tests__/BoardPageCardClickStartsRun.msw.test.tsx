@@ -4,6 +4,7 @@
  * thread gets a kickoff message instead of an empty "What can I help you
  * build?" session. Only cards with no run spec fall back to a plain session.
  */
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -172,7 +173,7 @@ describe('Board card click starts the default run', () => {
     });
   });
 
-  it('starts the default run with its invocation when a candidate card title is clicked', async () => {
+  it('starts the default run with its invocation when a candidate card is clicked', async () => {
     const { startRequests } = stubBoardEndpoints({
       issues: [
         {
@@ -190,7 +191,9 @@ describe('Board card click starts the default run', () => {
     const user = userEvent.setup();
     renderWorkBoard();
 
-    await user.click(await screen.findByRole('button', { name: 'Issue: Crash on logout' }));
+    // Same click target and same wording as a filed card: the candidate names
+    // the run it starts, not the record it happens to create.
+    await user.click(await screen.findByRole('button', { name: 'Investigate Crash on logout' }));
 
     await waitFor(() => expect(startRequests).toHaveLength(1));
     expect(startRequests[0]).toMatchObject({
@@ -198,5 +201,36 @@ describe('Board card click starts the default run', () => {
       invocation: { type: 'skill', skillName: 'factory-triage' },
       workItem: { role: 'triage' },
     });
+  });
+
+  // Card clicks refetch worktrees before deciding what to do. When that
+  // refetch fails (e.g. the auth cookie expired overnight), the click used to
+  // die silently — no run, no toast, nothing. It must surface an error.
+  it('shows an error toast instead of failing silently when the pre-start refetch fails', async () => {
+    const { startRequests } = stubBoardEndpoints();
+    // First sessions read (board load) succeeds; later refetches 401 like an
+    // expired session would.
+    let sessionsCalls = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => {
+        sessionsCalls += 1;
+        if (sessionsCalls === 1) return HttpResponse.json({ sessions: [] });
+        return HttpResponse.json({ error: 'unauthorized' }, { status: 401 });
+      }),
+    );
+    const user = userEvent.setup();
+    // The Toaster normally mounts in main.tsx, above the router.
+    const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
+    renderWithProviders(
+      <>
+        <RouterProvider router={router} />
+        <Toaster position="bottom-right" />
+      </>,
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Investigate Fix login bug' }));
+
+    await waitFor(() => expect(screen.getByText(/failed to (list sessions|refresh)/i)).toBeInTheDocument());
+    expect(startRequests).toHaveLength(0);
   });
 });

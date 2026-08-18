@@ -99,6 +99,7 @@ Mastra agents don't add this processor automatically. Add it explicitly when you
 | `anthropic-tool-id-format` | Anthropic | Reactive API error recovery | Rewrites tool call IDs that contain characters outside `[a-zA-Z0-9_-]` and retries the request. |
 | `cerebras-strip-reasoning-content` | Cerebras | Preemptive prompt rewrite | Removes assistant `reasoning` parts from the outbound prompt so they're not serialized as unsupported `reasoning_content` fields. |
 | `anthropic-strip-foreign-reasoning-content` | Anthropic | Preemptive prompt rewrite | Removes non-Anthropic assistant `reasoning` parts from the outbound prompt. Anthropic-native thinking history is preserved. |
+| `azure-system-reminder-transform` | Azure OpenAI | Preemptive prompt rewrite | Renames `<system-reminder>` wrappers in user text and system instructions to `<memory-context>` for the outbound request. Stored history remains unchanged. |
 
 Preemptive rules run through `processLLMRequest` after Mastra converts messages to the model prompt format and before the prompt is sent to the provider. These rewrites affect only the current provider call.
 
