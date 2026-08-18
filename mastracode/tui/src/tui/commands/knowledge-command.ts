@@ -2,6 +2,7 @@ import { KnowledgeBrowserComponent } from '../components/knowledge-browser.js';
 import { showModalOverlay } from '../overlay.js';
 import type { SlashCommandContext } from './types.js';
 
+// TODO: Add public documentation before this experimental browser is announced.
 export async function handleKnowledgeCommand(ctx: SlashCommandContext): Promise<void> {
   if (!ctx.knowledgeInspector) {
     ctx.showError('Knowledge inspection is unavailable. Enable MastraCode memory with a knowledge-capable store.');
