@@ -88,7 +88,7 @@ function parseNode(row: Record<string, unknown>): KnowledgeNode {
     id: String(row.id),
     type: 'node',
     name: String(row.name),
-    kind: String(row.kind),
+    kind: row.kind == null ? '' : String(row.kind),
     content: row.content == null ? undefined : String(row.content),
     scope: parseJson(row.scopeJson ?? row.scope),
     version: Number(row.version),
@@ -562,6 +562,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     return this.#transaction(async tx => {
       const record = await this.#getKnowledge(tx, input.id, true);
       if (!record) throw new KnowledgeNotFoundError('record', input.id);
+      assertKnowledgeScopeWithinCeiling(record.scope, input.maxScope);
       await tx.execute({
         sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET maxScope=? WHERE id=?`,
         args: [input.maxScope ?? null, input.id],

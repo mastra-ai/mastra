@@ -369,7 +369,8 @@ function encodeCrockford(value: bigint, length: number): string {
 }
 
 export function createKnowledgeUlid(now = Date.now()): string {
-  if (now === lastUlidTime) {
+  if (now <= lastUlidTime) {
+    now = lastUlidTime;
     lastUlidRandom = (lastUlidRandom + 1n) & ((1n << 80n) - 1n);
   } else {
     lastUlidTime = now;
