@@ -1694,6 +1694,15 @@ export class DurableAgent<
         );
       }
     }
+    // An abort requested before this run started is recorded in the thread
+    // stream runtime's `abortedRunIds` (see `abortRun()`), because a run that
+    // has not registered yet has no controller to flip. The regular agent path
+    // consumes that intent in `prepareRunOptions()`, which the durable path
+    // never calls, so honor it here: otherwise a run cancelled while it was
+    // still queued starts anyway and executes to completion.
+    if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
+      abortController.abort(new Error('Run was aborted before it started'));
+    }
     registryEntry.abortController = abortController;
     registryEntry.abortSignal = abortController.signal;
 
@@ -1990,6 +1999,15 @@ export class DurableAgent<
           { once: true },
         );
       }
+    }
+    // An abort requested before this run started is recorded in the thread
+    // stream runtime's `abortedRunIds` (see `abortRun()`), because a run that
+    // has not registered yet has no controller to flip. The regular agent path
+    // consumes that intent in `prepareRunOptions()`, which the durable path
+    // never calls, so honor it here: otherwise a run cancelled while it was
+    // still queued starts anyway and executes to completion.
+    if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
+      abortController.abort(new Error('Run was aborted before it started'));
     }
     entry.abortController = abortController;
     entry.abortSignal = abortController.signal;
@@ -2597,6 +2615,15 @@ export class DurableAgent<
           { once: true },
         );
       }
+    }
+    // An abort requested before this run started is recorded in the thread
+    // stream runtime's `abortedRunIds` (see `abortRun()`), because a run that
+    // has not registered yet has no controller to flip. The regular agent path
+    // consumes that intent in `prepareRunOptions()`, which the durable path
+    // never calls, so honor it here: otherwise a run cancelled while it was
+    // still queued starts anyway and executes to completion.
+    if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
+      abortController.abort(new Error('Run was aborted before it started'));
     }
     registryEntry.abortController = abortController;
     registryEntry.abortSignal = abortController.signal;
