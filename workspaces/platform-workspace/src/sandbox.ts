@@ -10,7 +10,13 @@ import type {
   SandboxInfo,
   SpawnProcessOptions,
 } from '@mastra/core/workspace';
-import { MastraSandbox, ProcessHandle, SandboxNotReadyError, SandboxProcessManager } from '@mastra/core/workspace';
+import {
+  MastraSandbox,
+  ProcessHandle,
+  UnsupportedStdinCloseError,
+  SandboxNotReadyError,
+  SandboxProcessManager,
+} from '@mastra/core/workspace';
 import type { PlatformClientOptions } from './client.js';
 import { PlatformApiError, PlatformClient } from './client.js';
 import type { DirectExecWebSocketFactory, ExecLease } from './direct-exec.js';
@@ -292,6 +298,10 @@ class PlatformProcessHandle extends ProcessHandle {
   async sendStdin(): Promise<void> {
     throw new Error('Platform sandbox command execution does not support stdin');
   }
+
+  async closeStdin(): Promise<void> {
+    throw new UnsupportedStdinCloseError('Platform sandbox command execution does not support closing stdin');
+  }
 }
 
 class PlatformProcessManager extends SandboxProcessManager<PlatformSandbox> {
@@ -458,6 +468,7 @@ export class PlatformSandbox extends MastraSandbox {
       ...(id !== undefined && { id }),
       accessToken: this._client.accessToken,
       projectId: this._client.projectId,
+      actingUserId: options.actingUserId ?? this._client.actingUserId,
       ...(this._client.sessionId !== undefined && { sessionId: this._client.sessionId }),
       ...(this._client.threadId !== undefined && { threadId: this._client.threadId }),
       fetch: this._client.fetch,

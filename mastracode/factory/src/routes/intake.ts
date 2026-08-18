@@ -27,7 +27,29 @@ export interface IntakeRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
   /** Intake selection domain handle. */
   intake: IntakeStorage;
+  /** Factory project domain handle, used to validate binding targets. */
+  projects?: { get(input: { orgId: string; id: string }): Promise<unknown | null> };
   integrations?: IntakeIntegration[];
+}
+
+interface ParsedBinding {
+  integrationId: string;
+  sourceId: string;
+  factoryProjectId: string | null;
+}
+
+/** Validate a binding request body, rejecting unknown shapes. */
+export function parseIntakeBinding(body: unknown): ParsedBinding | null {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) return null;
+  const { integrationId, sourceId, factoryProjectId } = body as Record<string, unknown>;
+  const isId = (value: unknown) => typeof value === 'string' && value.length > 0 && value.length <= 256;
+  if (!isId(integrationId) || !isId(sourceId)) return null;
+  if (factoryProjectId !== null && !isId(factoryProjectId)) return null;
+  return {
+    integrationId: integrationId as string,
+    sourceId: sourceId as string,
+    factoryProjectId: factoryProjectId as string | null,
+  };
 }
 
 function loose(c: unknown): Context {
@@ -103,7 +125,7 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
   }
 
   routes(): ApiRoute[] {
-    const { audit, intake, integrations = [] } = this.deps;
+    const { audit, intake, projects, integrations = [] } = this.deps;
     const integrationIds = integrations.map(integration => integration.id);
 
     return [
@@ -163,6 +185,51 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
             },
           });
           return c.json({ config: registeredConfig });
+        },
+      }),
+      registerApiRoute('/web/intake/bindings', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => {
+          const tenant = await this.#resolveTenant(loose(c));
+          if ('response' in tenant) return tenant.response;
+          await intake.ensureReady();
+          return c.json({ bindings: await intake.listBindings({ orgId: tenant.orgId }) });
+        },
+      }),
+      registerApiRoute('/web/intake/bindings', {
+        method: 'PUT',
+        requiresAuth: false,
+        handler: async c => {
+          const tenant = await this.#resolveTenant(loose(c));
+          if ('response' in tenant) return tenant.response;
+
+          let body: unknown;
+          try {
+            body = await c.req.json();
+          } catch {
+            return c.json({ error: 'Invalid JSON body' }, 400);
+          }
+          const binding = parseIntakeBinding(body);
+          if (!binding || !integrationIds.includes(binding.integrationId)) {
+            return c.json({ error: 'invalid_binding' }, 400);
+          }
+          if (binding.factoryProjectId && projects) {
+            const project = await projects.get({ orgId: tenant.orgId, id: binding.factoryProjectId });
+            if (!project) return c.json({ error: 'factory_project_not_found' }, 404);
+          }
+
+          await intake.ensureReady();
+          await intake.setBinding({ orgId: tenant.orgId, userId: tenant.userId, ...binding });
+          await audit.emit({
+            context: loose(c),
+            input: {
+              action: 'factory.intake.binding_updated',
+              targets: [{ type: 'intake_source', id: `${binding.integrationId}:${binding.sourceId}` }],
+              metadata: { factoryProjectId: binding.factoryProjectId },
+            },
+          });
+          return c.json({ bindings: await intake.listBindings({ orgId: tenant.orgId }) });
         },
       }),
       registerApiRoute('/web/intake/sources', {

@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   checkoutSessionBranch: vi.fn(async () => {}),
   recycleClaimedWorkdir: vi.fn(async () => {}),
   runWorktreeSetup: vi.fn(async () => {}),
+  runWorktreeTeardown: vi.fn(async () => {}),
   /** Released sandboxes claimable by new sessions; claim() consumes matches. */
   pooledSandboxes: [] as Array<{
     projectRepositoryId: string;
@@ -51,18 +52,26 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('./integrations/github/sandbox', async importOriginal => ({
-  // Keep the real MaterializeError so `instanceof` checks in workspace.ts work.
+  // Keep the real lifecycle constants and MaterializeError so workspace.ts uses production behavior.
+  DEFAULT_COMMAND_TIMEOUT_MS: (await importOriginal<typeof import('./integrations/github/sandbox.js')>())
+    .DEFAULT_COMMAND_TIMEOUT_MS,
   MaterializeError: (await importOriginal<typeof import('./integrations/github/sandbox.js')>()).MaterializeError,
   materializeRepo: (...args: unknown[]) => (mocks.materializeRepo as any)(...args),
   checkoutSessionBranch: (...args: unknown[]) => (mocks.checkoutSessionBranch as any)(...args),
   recycleClaimedWorkdir: (...args: unknown[]) => (mocks.recycleClaimedWorkdir as any)(...args),
   runWorktreeSetup: (...args: unknown[]) => (mocks.runWorktreeSetup as any)(...args),
+  runWorktreeTeardown: (...args: unknown[]) => (mocks.runWorktreeTeardown as any)(...args),
 }));
 
 import { MaterializeError } from './integrations/github/sandbox.js';
 import { injectGithubToken } from './integrations/github/token-refresh.js';
 import { SandboxFleet } from './sandbox/fleet.js';
-import { checkpointNameForSession, createWorkspaceFactory, getFactoryWorkspace } from './workspace.js';
+import {
+  checkpointNameForSession,
+  createWorkspaceFactory,
+  FactoryWorkspaceRegistry,
+  getFactoryWorkspace,
+} from './workspace.js';
 
 const tempDirs: string[] = [];
 
@@ -76,6 +85,7 @@ afterEach(async () => {
   mocks.checkoutSessionBranch.mockClear();
   mocks.recycleClaimedWorkdir.mockClear();
   mocks.runWorktreeSetup.mockClear();
+  mocks.runWorktreeTeardown.mockClear();
   mocks.pooledSandboxes.splice(0);
   mocks.getRepositoryAccess.mockClear();
   mocks.mintInstallationToken.mockClear();
@@ -152,6 +162,7 @@ function addProject(overrides: Record<string, unknown> = {}) {
     sandboxProvider: 'local',
     sandboxWorkdir: '/workspace/octocat/hello',
     setupCommand: null,
+    teardownCommand: null,
     createdAt: new Date(),
     ...overrides,
   };
@@ -227,6 +238,7 @@ function fakeGithubIntegration() {
                 branch: project.defaultBranch,
                 sandboxWorkdir: project.sandboxWorkdir,
                 setupCommand: project.setupCommand,
+                teardownCommand: project.teardownCommand,
               }
             : null;
         }),
@@ -271,6 +283,7 @@ describe('getFactoryWorkspace', () => {
 
     expect(assetNames).toEqual([
       'configure-factory-rules',
+      'factory-complete-issue',
       'factory-plan',
       'factory-rereview',
       'factory-review',
@@ -524,7 +537,10 @@ describe('getFactoryWorkspace', () => {
 });
 
 describe('GitHub session workspace preparation', () => {
-  async function createLocalFactory(rootPrefix = 'mastracode-web-local-sessions-') {
+  async function createLocalFactory(
+    rootPrefix = 'mastracode-web-local-sessions-',
+    workspaceRegistry?: FactoryWorkspaceRegistry,
+  ) {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), rootPrefix));
     tempDirs.push(root);
     const machine = new LocalSandbox({ workingDirectory: root });
@@ -537,6 +553,7 @@ describe('GitHub session workspace preparation', () => {
         github: fakeGithubIntegration() as any,
         fleet,
         workItems: { findRunBindingBySession: mocks.findRunBindingBySession } as any,
+        ...(workspaceRegistry ? { workspaceRegistry } : {}),
       }),
     };
   }
@@ -561,6 +578,7 @@ describe('GitHub session workspace preparation', () => {
       undefined,
       {
         workingDirectory: workdirA,
+        actingUserId: 'user-1',
       },
     );
     expect(mocks.ensureSandbox).toHaveBeenNthCalledWith(
@@ -570,6 +588,7 @@ describe('GitHub session workspace preparation', () => {
       undefined,
       {
         workingDirectory: workdirB,
+        actingUserId: 'user-1',
       },
     );
     expect(mocks.materializeRepo).toHaveBeenNthCalledWith(
@@ -661,6 +680,46 @@ describe('GitHub session workspace preparation', () => {
     };
     expect(ctx.getState().projectPath).toBe(path.join(root, 'github-sessions', 'octocat', 'hello', 'session-a'));
     expect(ctx.getState().projectName).toBe('octocat/hello');
+  });
+
+  it('runs best-effort teardown after setup fails without masking the setup error', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject({ setupCommand: 'pnpm install', teardownCommand: 'pnpm local teardown' });
+    addSession({ id: 'session-a' });
+    const setupError = new Error('setup failed');
+    mocks.runWorktreeSetup.mockRejectedValueOnce(setupError);
+
+    await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toBe(
+      setupError,
+    );
+
+    expect(mocks.runWorktreeTeardown).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.stringContaining('session-a'),
+      'pnpm local teardown',
+      { timeoutMs: 15 * 60_000 },
+    );
+  });
+
+  it('preserves the setup error when best-effort teardown also fails', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject({ setupCommand: 'pnpm install', teardownCommand: 'pnpm local teardown' });
+    addSession({ id: 'session-a' });
+    const setupError = new Error('primary setup failure');
+    mocks.runWorktreeSetup.mockRejectedValueOnce(setupError);
+    mocks.runWorktreeTeardown.mockRejectedValueOnce(new Error('secondary teardown failure'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toBe(
+        setupError,
+      );
+      expect(warn).toHaveBeenCalledWith(
+        '[Mastra Factory] Worktree teardown after setup failure failed',
+        expect.objectContaining({ sessionId: 'session-a', error: 'secondary teardown failure' }),
+      );
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('tears down a git-less sandbox and retries once on a fresh one', async () => {
@@ -862,7 +921,7 @@ describe('GitHub session workspace preparation', () => {
       expect.any(Object),
       { GH_TOKEN: 'ghp_org_pat' },
       undefined,
-      expect.any(Object),
+      expect.objectContaining({ actingUserId: 'user-1' }),
     );
     // …but git materialization keeps the installation-scoped token.
     expect(mocks.materializeRepo).toHaveBeenCalledWith(expect.objectContaining({ token: 'repo-token-repository-1' }));
@@ -1306,7 +1365,8 @@ describe('GitHub session workspace preparation', () => {
         if (!workspace) throw new Error(`Workspace with id ${id} not found`);
         return workspace;
       });
-      return { addWorkspace, getWorkspaceById, workspaces };
+      const removeWorkspace = vi.fn(async (id: string) => workspaces.delete(id));
+      return { addWorkspace, getWorkspaceById, removeWorkspace, workspaces };
     }
 
     it('calls mastra.addWorkspace exactly once with the expected id shape and agent metadata', async () => {
@@ -1365,6 +1425,28 @@ describe('GitHub session workspace preparation', () => {
       expect(mocks.materializeRepo).toHaveBeenCalledTimes(1);
     });
 
+    it('rematerializes and reruns setup after retirement invalidates the session workspace', async () => {
+      const registry = new FactoryWorkspaceRegistry();
+      const { workspace } = await createLocalFactory('mastracode-web-local-retire-', registry);
+      addProject({ setupCommand: 'pnpm install' });
+      addSession({ id: 'session-a' });
+      const mastra = createMastraStub();
+
+      await workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        mastra: mastra as any,
+      });
+      await registry.invalidateSession('session-a');
+      await workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        mastra: mastra as any,
+      });
+
+      expect(mastra.removeWorkspace).toHaveBeenCalledWith('mfw-project-1-session-a-web-factory');
+      expect(mocks.ensureSandbox).toHaveBeenCalledTimes(2);
+      expect(mocks.runWorktreeSetup).toHaveBeenCalledTimes(2);
+    });
+
     it('registers exactly one workspace under inflight materialization coalescing', async () => {
       const { workspace } = await createLocalFactory();
       addProject();
@@ -1388,6 +1470,30 @@ describe('GitHub session workspace preparation', () => {
       expect(second).toBe(first);
       expect(mastra.addWorkspace).toHaveBeenCalledTimes(1);
       expect(mastra.workspaces.size).toBe(1);
+    });
+
+    it('does not register a workspace that finishes materializing after session retirement', async () => {
+      const registry = new FactoryWorkspaceRegistry();
+      const { workspace } = await createLocalFactory('mastracode-web-local-retire-race-', registry);
+      addProject();
+      addSession({ id: 'session-a' });
+      const mastra = createMastraStub();
+      let finishMaterialization!: () => void;
+      mocks.materializeRepo.mockImplementationOnce(
+        () => new Promise<void>(resolve => (finishMaterialization = resolve)),
+      );
+
+      const opening = workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        mastra: mastra as any,
+      });
+      await vi.waitFor(() => expect(mocks.materializeRepo).toHaveBeenCalledOnce());
+      await registry.invalidateSession('session-a');
+      finishMaterialization();
+
+      await expect(opening).rejects.toThrow('retired during workspace materialization');
+      expect(mastra.removeWorkspace).toHaveBeenCalledWith('mfw-project-1-session-a-web-factory');
+      expect(mastra.workspaces.size).toBe(0);
     });
   });
 });

@@ -58,6 +58,50 @@ describe('Memory', () => {
     });
   });
 
+  describe('settled', () => {
+    it('resolves without instantiating an observational-memory engine when none exists', async () => {
+      const memory = new Memory({ storage: new InMemoryStore() });
+
+      await expect(memory.settled()).resolves.toBeUndefined();
+      expect((memory as any)._omEngine).toBeUndefined();
+    });
+
+    it('waits for background vector cleanup started by deleteThread', async () => {
+      const memory = new Memory({ storage: new InMemoryStore() });
+      let released!: () => void;
+      const cleanup = new Promise<void>(resolve => {
+        released = resolve;
+      });
+
+      (memory as any).trackVectorCleanup(cleanup);
+
+      const settled = memory.settled();
+      const pendingMarker = Symbol('pending');
+      const raced = await Promise.race([
+        settled.then(() => 'settled'),
+        new Promise(resolve => setTimeout(resolve, 10, pendingMarker)),
+      ]);
+      expect(raced).toBe(pendingMarker);
+
+      released();
+      await expect(settled).resolves.toBeUndefined();
+    });
+
+    it('joins the observational-memory engine when one has been created', async () => {
+      const memory = new Memory({ storage: new InMemoryStore() });
+      let joined = false;
+      (memory as any)._omEngineInstance = {
+        settled: async () => {
+          joined = true;
+        },
+      };
+
+      await memory.settled();
+
+      expect(joined).toBe(true);
+    });
+  });
+
   describe('listTools', () => {
     it('omits working memory tools when agentManaged is false', () => {
       const memory = new Memory({

@@ -8,9 +8,10 @@
  *   - getResumeLabelsByStepId  – filters resume labels by step
  *   - createDeprecationProxy   – warns once when a deprecated property is accessed
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  abortableSleep,
   cleanStepResult,
   createDeprecationProxy,
   getResumeLabelsByStepId,
@@ -339,5 +340,48 @@ describe('createDeprecationProxy', () => {
     });
 
     expect(proxy.retryCount).toBe(5);
+  });
+});
+
+describe('abortableSleep', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('resolves after the requested duration', async () => {
+    const sleep = abortableSleep(100);
+    let resolved = false;
+    void sleep.then(() => {
+      resolved = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(99);
+    expect(resolved).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(sleep).resolves.toBeUndefined();
+  });
+
+  it('resolves immediately when the signal is already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(abortableSleep(60_000, controller.signal)).resolves.toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('clears the timer and resolves when aborted during the sleep', async () => {
+    const controller = new AbortController();
+    const sleep = abortableSleep(60_000, controller.signal);
+
+    expect(vi.getTimerCount()).toBe(1);
+    controller.abort();
+
+    await expect(sleep).resolves.toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

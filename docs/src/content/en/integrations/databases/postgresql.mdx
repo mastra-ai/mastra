@@ -468,8 +468,10 @@ PostgreSQL storage creates composite indexes during initialization for common qu
 - `mastra_ai_spans_name_startedat_idx`: (name, startedAt DESC)
 - `mastra_ai_spans_scope_startedat_idx`: (scope, startedAt DESC)
 - `mastra_scores_trace_id_span_id_created_at_idx`: (traceId, spanId, createdAt DESC)
+- `mastra_workflow_snapshot_name_createdat_idx`: (workflow\_name, createdAt DESC)
+- `mastra_workflow_snapshot_name_status_createdat_idx`: (workflow\_name, snapshot->>'status', createdAt DESC), created only when the `snapshot` column is `jsonb`
 
-These indexes improve performance for filtered queries with sorting, including `dateRange` filters on message queries.
+These indexes improve performance for filtered queries with sorting, including `dateRange` filters on message queries and Studio's workflow runs-list.
 
 ### Configuring Indexes
 

@@ -190,6 +190,17 @@ describe('AgentController Resource', () => {
     expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1');
   });
 
+  it('requests session state for a specific thread', async () => {
+    mockJson({ controllerId: 'code', resourceId: 'user-1', threadId: 't/1', modeId: 'build', modelId: 'm' });
+
+    await client.getAgentController('code').session('user-1', '/repo').state({ threadId: 't/1' });
+
+    const [url] = lastCall();
+    expect(url).toBe(
+      'http://localhost:4111/api/agent-controller/code/sessions/user-1?threadId=t%2F1&sessionScope=%2Frepo',
+    );
+  });
+
   it('switches mode and model', async () => {
     mockJson({ ok: true });
     await client.getAgentController('code').session('user-1').switchMode('plan');
@@ -239,6 +250,13 @@ describe('AgentController Resource', () => {
     const [url, init] = lastCall();
     expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/thread');
     expect(JSON.parse(init.body as string)).toEqual({ threadId: 't-1' });
+  });
+
+  it('lists active runs controller-wide', async () => {
+    mockJson({ runs: [{ runId: 'run-1', resourceId: 'user-1', threadId: 't-1' }] });
+    const runs = await client.getAgentController('code').listActiveRuns();
+    expect(runs).toEqual([{ runId: 'run-1', resourceId: 'user-1', threadId: 't-1' }]);
+    expect(lastCall()[0]).toBe('http://localhost:4111/api/agent-controller/code/active-runs');
   });
 
   it('hydrates message timestamps returned by listMessages without mutating the source payload', async () => {

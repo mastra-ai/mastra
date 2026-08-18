@@ -91,6 +91,7 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       sandbox_provider: { type: 'text' },
       sandbox_workdir: { type: 'text' },
       setup_command: { type: 'text', nullable: true },
+      teardown_command: { type: 'text', nullable: true },
       created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
     },
@@ -263,6 +264,7 @@ export interface ProjectRepository {
   sandboxProvider: string;
   sandboxWorkdir: string;
   setupCommand: string | null;
+  teardownCommand: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -288,6 +290,7 @@ export interface LinkProjectRepositoryInput {
   sandboxProvider: string;
   sandboxWorkdir: string;
   setupCommand?: string | null;
+  teardownCommand?: string | null;
 }
 
 export interface UpdateProjectRepositoryInput {
@@ -295,6 +298,7 @@ export interface UpdateProjectRepositoryInput {
   sandboxProvider?: string;
   sandboxWorkdir?: string;
   setupCommand?: string | null;
+  teardownCommand?: string | null;
 }
 
 export interface ProjectRepositorySandbox {
@@ -471,6 +475,7 @@ export interface SourceControlStorageHandle {
   };
   readonly sessions: {
     list(args: { projectRepositoryId: string; userId: string }): Promise<SourceControlSession[]>;
+    listByProjectRepository(args: { projectRepositoryId: string }): Promise<SourceControlSession[]>;
     getBySessionId(sessionId: string): Promise<SourceControlSession | null>;
     getForBranch(args: {
       projectRepositoryId: string;
@@ -479,6 +484,13 @@ export interface SourceControlStorageHandle {
     }): Promise<SourceControlSession | null>;
     create(input: CreateSourceControlSessionInput): Promise<SourceControlSession>;
     setSandbox(args: { id: string; sandboxId: string | null; sandboxWorkdir: string }): Promise<void>;
+    /**
+     * Record when the session's workspace was first materialized. Write-once:
+     * the guarded update only lands while the column is still NULL, so resumes
+     * (Railway idle-reap, checkpoint restore, sandbox recreate) do not overwrite
+     * the initial-materialize baseline that `materialize_s = materialized_at -
+     * created_at` depends on.
+     */
     markMaterialized(args: { id: string }): Promise<void>;
     /**
      * Record when the session's agent received its first user message.
@@ -540,6 +552,7 @@ interface ProjectRepositoryDbRow extends Record<string, unknown> {
   sandbox_provider: string;
   sandbox_workdir: string;
   setup_command: string | null;
+  teardown_command: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -640,6 +653,7 @@ function toProjectRepository(row: ProjectRepositoryDbRow): ProjectRepository {
     sandboxProvider: row.sandbox_provider,
     sandboxWorkdir: row.sandbox_workdir,
     setupCommand: row.setup_command,
+    teardownCommand: row.teardown_command,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -1060,6 +1074,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
               sandbox_provider: input.sandboxProvider,
               sandbox_workdir: input.sandboxWorkdir,
               setup_command: input.setupCommand ?? null,
+              teardown_command: input.teardownCommand ?? null,
               created_at: now,
               updated_at: now,
             },
@@ -1074,6 +1089,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
           if (input.sandboxProvider !== undefined) patch.sandbox_provider = input.sandboxProvider;
           if (input.sandboxWorkdir !== undefined) patch.sandbox_workdir = input.sandboxWorkdir;
           if (input.setupCommand !== undefined) patch.setup_command = input.setupCommand;
+          if (input.teardownCommand !== undefined) patch.teardown_command = input.teardownCommand;
           await db().updateMany(PROJECT_REPOSITORIES, { id }, patch);
           return getProjectRepository({ orgId, id });
         },
@@ -1218,6 +1234,14 @@ export class SourceControlStorage extends FactoryStorageDomain {
             })
           ).map(toSession);
         },
+        listByProjectRepository: async ({ projectRepositoryId }) => {
+          if (!(await getProjectRepositoryById(projectRepositoryId))) return [];
+          return (
+            await db().findMany<SessionDbRow>(SESSIONS, {
+              project_repository_id: projectRepositoryId,
+            })
+          ).map(toSession);
+        },
         getBySessionId: async sessionId => {
           const row = await db().findOne<SessionDbRow>(SESSIONS, { session_id: sessionId });
           return row && (await getProjectRepositoryById(row.project_repository_id)) ? toSession(row) : null;
@@ -1276,7 +1300,15 @@ export class SourceControlStorage extends FactoryStorageDomain {
           );
         },
         markMaterialized: async ({ id }) => {
-          await db().updateMany(SESSIONS, { id }, { materialized_at: new Date(), updated_at: new Date() });
+          // `materialized_at: null` in the filter compiles to `IS NULL`, making
+          // this a write-once update: session resumes (idle-reap, checkpoint
+          // restore, sandbox recreate) match zero rows and cannot overwrite the
+          // initial-materialize timestamp that `materialize_s` is derived from.
+          await db().updateMany(
+            SESSIONS,
+            { id, materialized_at: null },
+            { materialized_at: new Date(), updated_at: new Date() },
+          );
         },
         markFirstMessage: async ({ sessionId }) => {
           // `first_message_at: null` in the filter compiles to `IS NULL`, making

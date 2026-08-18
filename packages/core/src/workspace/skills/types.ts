@@ -227,6 +227,12 @@ export interface SkillSearchOptions extends BaseSearchOptions {
  * ```
  */
 export interface WorkspaceSkills {
+  /**
+   * Resolve a request-scoped skills view for dynamic path resolvers.
+   * The returned view remains pinned to the resolved path set for the request.
+   */
+  getScoped?(context?: SkillsContext): Promise<WorkspaceSkills>;
+
   // ===========================================================================
   // Discovery
   // ===========================================================================

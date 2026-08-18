@@ -219,12 +219,35 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         visibleColumns: traceColumns.preferences.visibleColumns.filter(column => !isTraceUsageColumn(column)),
       }
     : traceColumns.preferences;
+  const selectedBranchAnchor =
+    url.listMode === 'branches' && anchorSpanId ? lightSpans?.find(span => span.spanId === anchorSpanId) : undefined;
+  const canShowSelectedTraceUsage =
+    url.listMode === 'traces' || (selectedBranchAnchor !== undefined && selectedBranchAnchor.parentSpanId == null);
+  const listUsageEnabled =
+    !usageColumnsUnavailable && !observabilityCapabilities.isLoading && hasTraceUsageColumn(displayedColumnPreferences);
   const traceUsage = useTraceUsage({
     traceIds: traces.map(trace => trace.traceId),
+    enabled: listUsageEnabled,
+    autoRefetch: autoRefetchTraces,
+  });
+  const selectedTraceId = url.traceIdParam;
+  const selectedTraceCoveredByListUsage =
+    canShowSelectedTraceUsage &&
+    selectedTraceId !== undefined &&
+    listUsageEnabled &&
+    traces.some(trace => trace.traceId === selectedTraceId);
+  const selectedTraceUsageFromList = selectedTraceId ? traceUsage.data?.get(selectedTraceId) : undefined;
+  const selectedTraceNeedsOwnQuery =
+    canShowSelectedTraceUsage &&
+    selectedTraceId !== undefined &&
+    (!selectedTraceCoveredByListUsage ||
+      (!traceUsage.isFetching && traceUsage.data !== undefined && !traceUsage.data.has(selectedTraceId)));
+  // Fetch independently when the list query cannot supply the selected trace,
+  // such as when usage columns are hidden or a direct link is outside the loaded page.
+  const selectedTraceUsage = useTraceUsage({
+    traceIds: selectedTraceNeedsOwnQuery && selectedTraceId ? [selectedTraceId] : [],
     enabled:
-      !usageColumnsUnavailable &&
-      !observabilityCapabilities.isLoading &&
-      hasTraceUsageColumn(displayedColumnPreferences),
+      selectedTraceNeedsOwnQuery && !observabilityCapabilities.isLoading && observabilityCapabilities.supportsMetrics,
     autoRefetch: autoRefetchTraces,
   });
 
@@ -416,7 +439,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
   const contentFiltersApplied = !!url.selectedEntityOption || !!url.selectedStatus || url.filterTokens.length > 0;
 
-  if (traces.length === 0 && !isTracesLoading && !contentFiltersApplied) {
+  if (traces.length === 0 && !isTracesLoading && !contentFiltersApplied && !url.traceIdParam) {
     return (
       <PageLayout width="wide" height="full">
         {pageTopArea}
@@ -475,6 +498,11 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
             <TraceDataPanelView
               traceId={url.traceIdParam}
               spans={lightSpans}
+              usage={
+                canShowSelectedTraceUsage
+                  ? (selectedTraceUsageFromList ?? selectedTraceUsage.data?.get(url.traceIdParam))
+                  : undefined
+              }
               anchorSpanId={anchorSpanId}
               isLoading={isLoadingLightSpans}
               onClose={url.handleTraceClose}

@@ -55,7 +55,7 @@ const response = await agent.generate('List all files in the workspace')
     name: 'contained',
     type: 'boolean',
     description:
-      'When true, all file operations are restricted to stay within basePath. Prevents path traversal attacks and symlink escapes. See [containment](/docs/workspace/filesystem#containment).',
+      'When true, all file operations are restricted to stay within basePath. Prevents path traversal attacks and symlink escapes. See [containment](/docs/sandbox/filesystem#containment).',
     isOptional: true,
     defaultValue: 'true',
   },
@@ -639,4 +639,4 @@ Set `WORKSPACE_PATH` in your environment to an absolute path like `/home/user/my
 
 - [WorkspaceFilesystem interface](/reference/workspace/filesystem)
 - [Workspace class](/reference/workspace/workspace-class)
-- [Workspace overview](/docs/workspace/overview)
+- [Sandbox](/docs/sandbox/overview)

@@ -23,6 +23,7 @@ import {
   recycleClaimedWorkdir,
   resolveGitIdentity,
   runWorktreeSetup,
+  runWorktreeTeardown,
   safeBranchDir,
   shellQuote,
   withInstallToken,
@@ -176,10 +177,11 @@ describe('ensureProjectSandbox', () => {
     await ensureProjectSandbox(makeRow({ sandboxId: 'railway-vm-existing' }));
 
     expect(calls).toEqual([
-      expect.objectContaining({ env: { GH_TOKEN: 'install-token' } }),
+      expect.objectContaining({ env: { GH_TOKEN: 'install-token' }, actingUserId: 'user-1' }),
       expect.objectContaining({
         providerSandboxId: 'railway-vm-existing',
         env: { GH_TOKEN: 'install-token' },
+        actingUserId: 'user-1',
       }),
     ]);
   });
@@ -950,6 +952,24 @@ describe('withInstallToken', () => {
     expect(scrub).not.toContain('tok-secret');
   });
 
+  it('rethrows the error fn threw when the scrub also fails', async () => {
+    const sandbox = new FakeSandbox(script =>
+      script.includes('remote set-url origin') && !script.includes('x-access-token')
+        ? { exitCode: 255, stdout: '', stderr: 'error: could not lock config file .git/config' }
+        : OK,
+    );
+    const primary = new WorktreeError('git worktree add failed', 'worktree-failed');
+
+    const err = await withInstallToken(sandbox, '/workspace/hello', 'octocat/hello', 'tok-secret', async () => {
+      throw primary;
+    }).catch(e => e);
+
+    // Routes map WorktreeError and MaterializeError to different responses.
+    expect(err).toBe(primary);
+    expect(err.code).toBe('worktree-failed');
+    expect(err.message).toMatch(/git worktree add failed.*Failed to scrub installation token/s);
+  });
+
   it('rejects a malformed repo full name before touching the remote', async () => {
     const sandbox = new FakeSandbox();
     const err = await withInstallToken(sandbox, '/workspace/hello', 'evil; whoami', 'tok', async () => undefined).catch(
@@ -995,6 +1015,22 @@ describe('pushBranch', () => {
     const scrub = sandbox.calls.filter(c => c.includes('remote set-url origin')).at(-1);
     expect(scrub).toContain('https://github.com/octocat/hello.git');
     expect(scrub).not.toContain('tok-secret');
+  });
+
+  it('keeps the push failure and its classification when the scrub also fails', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('push -u origin')) {
+        return { exitCode: 128, stdout: '', stderr: 'fatal: unable to access: Could not resolve host: github.com' };
+      }
+      if (script.includes('remote set-url origin') && !script.includes('x-access-token')) {
+        return { exitCode: 255, stdout: '', stderr: 'error: could not lock config file .git/config' };
+      }
+      return OK;
+    });
+    const err = await pushBranch(sandbox, '/workspace/hello', 'feat/x', 'tok-secret', 'octocat/hello').catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(err.code).toBe('egress-blocked');
+    expect(err.message).toMatch(/could not reach github\.com.*Failed to scrub installation token/s);
   });
 
   it('classifies an egress failure during push', async () => {
@@ -1194,6 +1230,42 @@ describe('runWorktreeSetup', () => {
     await runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i');
 
     expect(spy).toHaveBeenCalledWith('sh', ['-c', expect.any(String)], { timeout: 15 * 60_000 });
+  });
+});
+
+describe('runWorktreeTeardown', () => {
+  it('uses the same quoted workdir shell and reports bounded command output', async () => {
+    const sandbox = new FakeSandbox(() => ({ exitCode: 9, stdout: '', stderr: `prefix-${'x'.repeat(3000)}` }));
+    const err = await runWorktreeTeardown(
+      sandbox,
+      "/workspace/worktrees/feature's-branch",
+      'pnpm local worktree teardown',
+    ).catch(e => e);
+
+    expect(sandbox.calls[0]).toContain("cd '/workspace/worktrees/feature'\\''s-branch'");
+    expect(err).toBeInstanceOf(WorktreeError);
+    expect(err.code).toBe('teardown-failed');
+    expect(err.message).toContain('exit 9');
+    expect(err.message.length).toBeLessThan(2100);
+  });
+
+  it('times out with the teardown phase while forwarding the same provider budget', async () => {
+    vi.useFakeTimers();
+    try {
+      const sandbox = new FakeSandbox();
+      const execute = vi.fn(() => new Promise<never>(() => {}));
+      sandbox.executeCommand = execute;
+      const outcome = runWorktreeTeardown(sandbox, '/workspace/worktrees/feat-x', 'pnpm local teardown', {
+        timeoutMs: 20,
+      }).catch(e => e);
+      await vi.advanceTimersByTimeAsync(21);
+
+      const err = await outcome;
+      expect(err.message).toContain('worktree teardown');
+      expect(execute).toHaveBeenCalledWith('sh', ['-c', expect.any(String)], { timeout: 20 });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

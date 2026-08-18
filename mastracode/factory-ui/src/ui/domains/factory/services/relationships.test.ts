@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { inferredParentWorkItemId, relatedWorkItems, relationshipLabel } from './relationships';
+import { inferredParentWorkItemId, relatedWorkItems, relationshipLabel, workItemReferenceLabel } from './relationships';
 import type { WorkItem } from './workItems';
 
 function workItem(overrides: Partial<WorkItem> & Pick<WorkItem, 'id' | 'source'>): WorkItem {
@@ -99,7 +99,7 @@ describe('Factory work item relationships', () => {
     expect(inferredParentWorkItemId(review.metadata, [review, issue])).toBeUndefined();
   });
 
-  it('uses source-specific GitHub numbers in relationship labels', () => {
+  it('uses source-specific relationship references', () => {
     const review = workItem({
       id: 'pr-202',
       source: 'github-pr',
@@ -110,8 +110,17 @@ describe('Factory work item relationships', () => {
       source: 'github-issue',
       metadata: { githubIssueNumber: 24, number: 99 },
     });
+    const linear = workItem({
+      id: 'linear-24',
+      source: 'linear-issue',
+      metadata: { identifier: 'ENG-24' },
+    });
 
     expect(relationshipLabel(review)).toBe('Review: PR #202');
     expect(relationshipLabel(issue)).toBe('Work item: Issue #24');
+    expect(workItemReferenceLabel(review)).toBe('PR #202');
+    expect(workItemReferenceLabel(issue)).toBe('Issue #24');
+    expect(relationshipLabel(linear)).toBe('Work item: ENG-24');
+    expect(workItemReferenceLabel(linear)).toBe('ENG-24');
   });
 });

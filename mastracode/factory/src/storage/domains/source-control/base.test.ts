@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FactoryProjectsStorage } from '../projects/base.js';
 import { SourceControlStorage } from './base.js';
 import type { ProjectRepository, SourceControlStorageHandle } from './base.js';
+import { SourceControlStorageInMemory } from './inmemory.js';
 
 const repositoryInput = {
   externalId: 'repository-34',
@@ -208,6 +209,7 @@ describe('SourceControlStorage', () => {
       ...projectRepositoryInput,
       branch: 'main',
       setupCommand: 'pnpm install',
+      teardownCommand: 'pnpm local worktree teardown',
     });
     const secondLink = await github.projectRepositories.link({
       orgId: 'org-1',
@@ -218,7 +220,20 @@ describe('SourceControlStorage', () => {
       sandboxProvider: 'railway',
     });
 
-    expect(firstLink).toMatchObject({ repositoryId: repository.id, branch: 'main', setupCommand: 'pnpm install' });
+    expect(firstLink).toMatchObject({
+      repositoryId: repository.id,
+      branch: 'main',
+      setupCommand: 'pnpm install',
+      teardownCommand: 'pnpm local worktree teardown',
+    });
+    await github.projectRepositories.update({
+      orgId: 'org-1',
+      id: firstLink.id,
+      input: { teardownCommand: 'docker compose down --remove-orphans' },
+    });
+    expect(await github.projectRepositories.get({ orgId: 'org-1', id: firstLink.id })).toMatchObject({
+      teardownCommand: 'docker compose down --remove-orphans',
+    });
     expect(secondLink).toMatchObject({ repositoryId: repository.id, branch: 'develop', sandboxProvider: 'railway' });
     expect(firstLink.id).not.toBe(secondLink.id);
   });
@@ -494,6 +509,33 @@ describe('SourceControlStorage', () => {
     await expect(github.sessions.markFirstMeaningfulExec({ sessionId: 'missing-session' })).resolves.toBeUndefined();
   });
 
+  it('records materialized_at write-once via sessions.markMaterialized', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const session = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000005',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-000000000005',
+      baseBranch: 'main',
+    });
+    expect(session.materializedAt).toBeNull();
+
+    await github.sessions.markMaterialized({ id: session.id });
+    const marked = await github.sessions.getBySessionId(session.sessionId);
+    expect(marked?.materializedAt).toBeInstanceOf(Date);
+
+    // A resume (second markMaterialized call) must not move the timestamp:
+    // the guarded update only matches rows where the column is still NULL.
+    // Without this, `materialize_s = materialized_at - created_at` counts the
+    // entire idle-and-resume duration as initial-materialize latency.
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await github.sessions.markMaterialized({ id: session.id });
+    const again = await github.sessions.getBySessionId(session.sessionId);
+    expect(again?.materializedAt?.getTime()).toBe(marked!.materializedAt!.getTime());
+  });
+
   it('clears every owned source-control collection', async () => {
     const project = await createProject();
     const link = await linkRepository({ factoryProjectId: project.id });
@@ -510,5 +552,29 @@ describe('SourceControlStorage', () => {
 
     expect(await github.installations.list({ orgId: 'org-1' })).toEqual([]);
     expect(await github.projectRepositories.get({ orgId: 'org-1', id: link.id })).toBeNull();
+  });
+});
+
+describe('SourceControlStorageInMemory sessions.markMaterialized', () => {
+  it('records materialized_at write-once', async () => {
+    const store = new SourceControlStorageInMemory();
+    const session = await store.sessions.create({
+      sessionId: '00000000-0000-4000-8000-00000000aaaa',
+      projectRepositoryId: 'proj-1',
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-00000000aaaa',
+      baseBranch: 'main',
+    });
+    expect(session.materializedAt).toBeNull();
+
+    await store.sessions.markMaterialized({ id: session.id });
+    const first = await store.sessions.getBySessionId(session.sessionId);
+    expect(first?.materializedAt).toBeInstanceOf(Date);
+
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await store.sessions.markMaterialized({ id: session.id });
+    const second = await store.sessions.getBySessionId(session.sessionId);
+    expect(second?.materializedAt?.getTime()).toBe(first!.materializedAt!.getTime());
   });
 });
