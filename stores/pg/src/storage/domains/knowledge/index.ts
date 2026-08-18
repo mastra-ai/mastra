@@ -980,6 +980,7 @@ export class KnowledgePG extends KnowledgeStorage {
               knowledgeScopeKey(defaultScope),
               1,
               now.toISOString(),
+              now.toISOString(),
             ],
           });
           await this.#activity(tx, 'node-created', 'node', node.id, defaultScope);

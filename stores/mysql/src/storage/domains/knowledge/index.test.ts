@@ -40,7 +40,7 @@ describe('MySQL knowledge concurrency and indexes', () => {
     const suffix = `export_${process.pid}_${Date.now().toString(36)}`;
     const tables = [
       'mastra_knowledge_mentions',
-      'mastra_knowledge_items',
+      'mastra_knowledge_nodes',
       'mastra_knowledge_records',
       'mastra_knowledge_cursors',
       'mastra_knowledge_activity',
