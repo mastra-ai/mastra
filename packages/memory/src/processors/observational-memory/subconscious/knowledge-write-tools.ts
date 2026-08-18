@@ -10,7 +10,7 @@ import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 
 const CURATOR_IDENTITY = 'subconscious:curate';
-const MAX_GUIDANCE_LENGTH = 8_000;
+const MAX_GUIDANCE_LENGTH = 4_000;
 const scopeLevelSchema: JSONSchema7 = { type: 'string', enum: ['org', 'resource', 'thread'] };
 
 type KnowledgeWriteToolsMemory = {
