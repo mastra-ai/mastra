@@ -95,8 +95,8 @@ describe('Subconscious remind', () => {
       node,
       text: 'Project Atlas launches January 15.',
       scope: ['org:acme', 'resource:user-42'],
-      sourceThreadId: 'alpha',
-      resolutionScope: ['org:acme', 'resource:user-42', 'thread:alpha'],
+      sourceThreadId: 'beta',
+      resolutionScope: ['org:acme', 'resource:user-42', 'thread:beta'],
       defaultScope: ['org:acme', 'resource:user-42'],
     });
     context.mainAgent.getModel = vi.fn(async () =>
@@ -181,6 +181,215 @@ describe('Subconscious remind', () => {
     expect(context.sendSignal).not.toHaveBeenCalled();
   });
 
+  it('runs on the observational memory model when no main agent is available', async () => {
+    const recordId = 'item-atlas-launch';
+    const extractor = new SubconsciousRemindExtractor(
+      { name: 'remind', maxSteps: 3, builtIn: true },
+      createModel(`Project Atlas launches January 15. Source KnowledgeRecord: ${recordId}.`) as any,
+    );
+    const context = createContext('unused');
+    delete (context as any).mainAgent;
+    const store = await context.memory.storage.getStore('knowledge');
+    const node = await store.createNode({
+      name: 'Project Atlas',
+      kind: 'project',
+      scope: ['org:acme', 'resource:user-42'],
+    });
+    const item = await store.appendKnowledge({
+      id: recordId,
+      node: node.id,
+      text: 'Project Atlas launches January 15.',
+      scope: ['org:acme', 'resource:user-42'],
+      sourceThreadId: 'beta',
+      resolutionScope: ['org:acme', 'resource:user-42', 'thread:beta'],
+      defaultScope: ['org:acme', 'resource:user-42'],
+    });
+
+    const result = await applyExtractorHooks({
+      source: 'observer',
+      extractors: [extractor],
+      rawObservations: 'The user is scheduling Project Atlas.',
+      ...context,
+    });
+
+    expect(result.failures).toBeUndefined();
+    expect(context.sendSignal).toHaveBeenCalledOnce();
+    expect(context.sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ tagName: 'remembered', contents: expect.stringContaining(item.id) }),
+    );
+  });
+
+  it("does not echo the thread's own freshly captured records back as reminders", async () => {
+    const extractor = new SubconsciousRemindExtractor({
+      name: 'remind',
+      maxSteps: 3,
+      builtIn: true,
+    });
+    const context = createContext('The launch happens January 15.');
+    const store = await context.memory.storage.getStore('knowledge');
+    const node = await store.createNode({
+      name: 'Zeta initiative',
+      kind: 'program',
+      scope: ['org:acme', 'resource:user-42'],
+    });
+    // Captured by THIS thread, moments ago: the reminder must not whisper it back.
+    await store.appendKnowledge({
+      node: node.id,
+      text: 'The launch happens January 15.',
+      scope: ['org:acme', 'resource:user-42'],
+      sourceThreadId: 'alpha',
+      resolutionScope: ['org:acme', 'resource:user-42', 'thread:alpha'],
+      defaultScope: ['org:acme', 'resource:user-42'],
+    });
+
+    const result = await applyExtractorHooks({
+      source: 'observer',
+      extractors: [extractor],
+      rawObservations: 'The user is scheduling the launch.',
+      ...context,
+    });
+
+    expect(result.failures).toBeUndefined();
+    expect(context.sendSignal).not.toHaveBeenCalled();
+  });
+
+  it("does not echo fresh items written by the thread's own subconscious sub-agents", async () => {
+    const extractor = new SubconsciousRemindExtractor({
+      name: 'remind',
+      maxSteps: 3,
+      builtIn: true,
+    });
+    const context = createContext('The launch happens January 15.');
+    const store = await context.memory.storage.getStore('knowledge');
+    const node = await store.createNode({
+      name: 'Zeta initiative',
+      kind: 'program',
+      scope: ['org:acme', 'resource:user-42'],
+    });
+    // Written moments ago by this thread's own curator sub-thread.
+    await store.appendKnowledge({
+      node: node.id,
+      text: 'The launch happens January 15.',
+      scope: ['org:acme', 'resource:user-42'],
+      sourceThreadId: 'subconscious:alpha:curate',
+      resolutionScope: ['org:acme', 'resource:user-42', 'thread:alpha'],
+      defaultScope: ['org:acme', 'resource:user-42'],
+    });
+
+    const result = await applyExtractorHooks({
+      source: 'observer',
+      extractors: [extractor],
+      rawObservations: 'The user is scheduling the launch.',
+      ...context,
+    });
+
+    expect(result.failures).toBeUndefined();
+    expect(context.sendSignal).not.toHaveBeenCalled();
+  });
+
+  it("still reminds about the thread's own older items once they age past the fresh window", async () => {
+    vi.useFakeTimers();
+    try {
+      const extractor = new SubconsciousRemindExtractor({
+        name: 'remind',
+        maxSteps: 3,
+        builtIn: true,
+      });
+      const context = createContext('The launch happens January 15.');
+      const store = await context.memory.storage.getStore('knowledge');
+      const node = await store.createNode({
+        name: 'Zeta initiative',
+        kind: 'program',
+        scope: ['org:acme', 'resource:user-42'],
+      });
+      const item = await store.appendKnowledge({
+        node: node.id,
+        text: 'The launch happens January 15.',
+        scope: ['org:acme', 'resource:user-42'],
+        sourceThreadId: 'alpha',
+        resolutionScope: ['org:acme', 'resource:user-42', 'thread:alpha'],
+        defaultScope: ['org:acme', 'resource:user-42'],
+      });
+      context.mainAgent.getModel = vi.fn(async () => createModel(`The launch happens January 15. Source: ${item.id}`));
+
+      vi.advanceTimersByTime(31 * 60 * 1000);
+
+      const result = await applyExtractorHooks({
+        source: 'observer',
+        extractors: [extractor],
+        rawObservations: 'The user is scheduling the launch.',
+        ...context,
+      });
+
+      expect(result.failures).toBeUndefined();
+      expect(context.sendSignal).toHaveBeenCalledOnce();
+      expect(context.sendSignal).toHaveBeenCalledWith(
+        expect.objectContaining({ tagName: 'remembered', contents: expect.stringContaining(item.id) }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows the reminder agent the recent messages so it can skip what is already visible', async () => {
+    const { Agent } = await import('@mastra/core/agent');
+    const generateSpy = vi.spyOn(Agent.prototype, 'generate' as any);
+    generateSpy.mockClear();
+    try {
+      const extractor = new SubconsciousRemindExtractor({
+        name: 'remind',
+        maxSteps: 3,
+        builtIn: true,
+      });
+      const context = createContext('<no-reminder />');
+      const store = await context.memory.storage.getStore('knowledge');
+      const node = await store.createNode({
+        name: 'Moon weather',
+        kind: 'topic',
+        scope: ['org:acme', 'resource:user-42'],
+      });
+      await store.appendKnowledge({
+        node: node.id,
+        text: 'The moon has no weather to speak of.',
+        scope: ['org:acme', 'resource:user-42'],
+        sourceThreadId: 'beta',
+        resolutionScope: ['org:acme', 'resource:user-42', 'thread:beta'],
+        defaultScope: ['org:acme', 'resource:user-42'],
+      });
+
+      await applyExtractorHooks({
+        source: 'observer',
+        extractors: [extractor],
+        rawObservations: 'The user asked about the weather on the moon.',
+        recentMessages: 'user: what is the weather like on the moon?',
+        ...context,
+      });
+
+      expect(generateSpy).toHaveBeenCalledOnce();
+      const prompt = generateSpy.mock.calls[0]?.[0] as string;
+      expect(prompt).toContain('user: what is the weather like on the moon?');
+      expect(prompt).toContain('already visible');
+    } finally {
+      generateSpy.mockRestore();
+    }
+  });
+
+  it('stays silent when no main agent and no observational memory model are available', async () => {
+    const extractor = new SubconsciousRemindExtractor({ name: 'remind', maxSteps: 3, builtIn: true });
+    const context = createContext('unused');
+    delete (context as any).mainAgent;
+
+    const result = await applyExtractorHooks({
+      source: 'observer',
+      extractors: [extractor],
+      rawObservations: 'The user is scheduling Project Atlas.',
+      ...context,
+    });
+
+    expect(result.failures).toBeUndefined();
+    expect(context.sendSignal).not.toHaveBeenCalled();
+  });
+
   it('isolates reminder failures from the observation lifecycle', async () => {
     const extractor = new SubconsciousRemindExtractor({
       name: 'remind',
@@ -190,6 +399,20 @@ describe('Subconscious remind', () => {
     const context = createContext('unused');
     context.mainAgent.getModel = vi.fn(async () => {
       throw new Error('reminder provider unavailable');
+    });
+    const store = await context.memory.storage.getStore('knowledge');
+    const node = await store.createNode({
+      name: 'Project Atlas',
+      kind: 'project',
+      scope: ['org:acme', 'resource:user-42'],
+    });
+    await store.appendKnowledge({
+      node: node.id,
+      text: 'Project Atlas launches January 15.',
+      scope: ['org:acme', 'resource:user-42'],
+      sourceThreadId: 'beta',
+      resolutionScope: ['org:acme', 'resource:user-42', 'thread:beta'],
+      defaultScope: ['org:acme', 'resource:user-42'],
     });
 
     const result = await applyExtractorHooks({

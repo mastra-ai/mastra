@@ -47,6 +47,8 @@ export interface KnowledgeRecord {
   capturedAt: Date;
   when?: Date;
   maxScope?: KnowledgeScopeLevel;
+  /** Free-form provenance, e.g. the capture agent's reasoning for keeping or pinning the item. */
+  metadata?: Record<string, unknown>;
   deletedAt?: Date;
   deletedBy?: string;
 }
@@ -124,6 +126,7 @@ export interface AppendKnowledgeInput {
   sourceThreadId: string;
   when?: Date;
   maxScope?: KnowledgeScopeLevel;
+  metadata?: Record<string, unknown>;
   resolutionScope: KnowledgeScope;
   defaultScope: KnowledgeScope;
 }

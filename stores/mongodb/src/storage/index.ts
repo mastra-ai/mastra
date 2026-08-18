@@ -8,6 +8,7 @@ import { BackgroundTasksStorageMongoDB } from './domains/background-tasks';
 import { MongoDBBlobStore } from './domains/blobs';
 import { MongoDBDatasetsStorage } from './domains/datasets';
 import { MongoDBExperimentsStorage } from './domains/experiments';
+import { KnowledgeMongoDB } from './domains/knowledge';
 import { MongoDBMCPClientsStorage } from './domains/mcp-clients';
 import { MongoDBMCPServersStorage } from './domains/mcp-servers';
 import { MemoryStorageMongoDB } from './domains/memory';
@@ -30,6 +31,7 @@ export {
   MongoDBBlobStore,
   MongoDBDatasetsStorage,
   MongoDBExperimentsStorage,
+  KnowledgeMongoDB,
   MongoDBMCPClientsStorage,
   MongoDBMCPServersStorage,
   MemoryStorageMongoDB,
@@ -82,6 +84,8 @@ export class MongoDBStore extends MastraCompositeStore {
 
     const memory = new MemoryStorageMongoDB(domainConfig);
 
+    const knowledge = new KnowledgeMongoDB(domainConfig);
+
     const notifications = new NotificationsMongoDB(domainConfig);
 
     const scores = new ScoresStorageMongoDB(domainConfig);
@@ -118,6 +122,7 @@ export class MongoDBStore extends MastraCompositeStore {
 
     this.stores = {
       memory,
+      knowledge,
       notifications,
       scores,
       workflows,
