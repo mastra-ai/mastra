@@ -74,7 +74,7 @@ export const mastra = new Mastra({
 
 ### Custom loggers
 
-Custom `IMastraLogger` implementations keep working: Mastra falls back to a dual-write wrapper that forwards log calls to observability. This fallback does not add `trace_id`/`span_id` to the logger's native output and is deprecated. To get trace-correlated output, implement the `__attachObservability()` adapter hook from `@mastra/core/logger`:
+Custom `IMastraLogger` implementations keep working: Mastra falls back to a dual-write wrapper that forwards log calls to observability. This fallback doesn't add `trace_id`/`span_id` to the logger's native output and is deprecated. To get trace-correlated output, implement the `__attachObservability()` adapter hook from `@mastra/core/logger`:
 
 ```typescript
 import type { LoggerAdapterContext } from '@mastra/core/logger'
