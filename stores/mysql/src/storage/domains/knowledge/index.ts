@@ -166,10 +166,10 @@ function parseOutbox(row: Record<string, unknown>): KnowledgeSemanticOutboxEntry
 }
 
 const KNOWLEDGE_INDEX_DDL = [
-  `CREATE UNIQUE INDEX idx_knowledge_records_identity ON "${TABLE_KNOWLEDGE_NODES}" (type(32), scopeKey(255), canonicalName(255))`,
-  `CREATE INDEX idx_knowledge_records_scope ON "${TABLE_KNOWLEDGE_NODES}" (scopeKey(255), type(32))`,
-  `CREATE INDEX idx_knowledge_facts_parent_latest ON "${TABLE_KNOWLEDGE_RECORDS}" (node(191), id(26) DESC)`,
-  `CREATE INDEX idx_knowledge_facts_thread_latest ON "${TABLE_KNOWLEDGE_RECORDS}" (sourceThreadId(191), id(26) DESC)`,
+  `CREATE UNIQUE INDEX idx_knowledge_nodes_identity ON "${TABLE_KNOWLEDGE_NODES}" (type(32), scopeKey(255), canonicalName(255))`,
+  `CREATE INDEX idx_knowledge_nodes_scope ON "${TABLE_KNOWLEDGE_NODES}" (scopeKey(255), type(32))`,
+  `CREATE INDEX idx_knowledge_records_node_latest ON "${TABLE_KNOWLEDGE_RECORDS}" (node(191), id(26) DESC)`,
+  `CREATE INDEX idx_knowledge_records_thread_latest ON "${TABLE_KNOWLEDGE_RECORDS}" (sourceThreadId(191), id(26) DESC)`,
   `CREATE INDEX idx_knowledge_mentions_record ON "${TABLE_KNOWLEDGE_MENTIONS}" (recordId(191), sourceType(32), sourceId(191))`,
   `CREATE INDEX idx_knowledge_activity_latest ON "${TABLE_KNOWLEDGE_ACTIVITY}" (id(26) DESC)`,
   `CREATE UNIQUE INDEX idx_knowledge_outbox_idempotency ON "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" (idempotencyKey(255))`,
@@ -586,6 +586,7 @@ export class KnowledgeMySQL extends KnowledgeStorage {
     return this.#transaction(async tx => {
       const record = await this.#getKnowledge(tx, input.id, true);
       if (!record) throw new KnowledgeNotFoundError('record', input.id);
+      assertKnowledgeScopeWithinCeiling(record.scope, input.maxScope);
       await tx.execute({
         sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET maxScope=? WHERE id=?`,
         args: [input.maxScope ?? null, input.id],
