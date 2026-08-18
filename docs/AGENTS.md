@@ -14,8 +14,10 @@ Relevant guidance:
 - @styleguides/GUIDE_INTEGRATION.md: All /integrations pages
 - @styleguides/REFERENCE.md: Reference pages
 - @styleguides/COMPONENTS.md
+- @styleguides/DIAGRAM.md: Mermaid diagram style and accessibility
 - @styleguides/AUTHORING_WORKFLOW.md
 - @CONTRIBUTING.md: Setup, frontmatter, and MDX syntax
+- .claude/skills/docs-diagrams: Existing image-to-Mermaid conversions
 
 Use model tokens from src/plugins/remark-model-tokens/models.ts for model names and IDs.
 

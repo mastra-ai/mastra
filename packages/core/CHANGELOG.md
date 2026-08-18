@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 1.60.0-alpha.12
+
+### Patch Changes
+
+- Skills discovery no longer blocks agent turns: the skills processors serve the cached catalog and revalidate in the background, and refresh swaps the catalog atomically. Mid-session skill changes now appear one turn later (plus a staleness cooldown of up to 30 seconds); pass blockingRefresh: true to SkillsProcessor or SkillSearchProcessor to restore same-turn freshness by awaiting the refresh before the first step. ([#21555](https://github.com/mastra-ai/mastra/pull/21555))
+
+- Normalize instruction-file paths (AGENTS.md/CLAUDE.md/CONTEXT.md) to forward slashes in dynamic `system-reminder` injection. On Windows, `node:path` produced backslash-separated paths that leaked into the prompt reminders and the metadata used to avoid re-injection; paths are now identical across platforms and match the paths tool calls report. Windows filesystem APIs accept forward slashes, so file reads are unaffected. ([#21071](https://github.com/mastra-ai/mastra/pull/21071))
+
 ## 1.60.0-alpha.11
 
 ### Minor Changes

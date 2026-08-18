@@ -1941,6 +1941,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-5-turbo',
     'z-ai/glm-5.1',
     'z-ai/glm-5.2',
+    'z-ai/glm-5.2:free',
     'z-ai/glm-5v-turbo',
     '~anthropic/claude-fable-latest',
     '~anthropic/claude-haiku-latest',
@@ -1984,7 +1985,6 @@ export type ProviderModelsMap = {
     'lucidquery-nexus-coder',
   ];
   readonly blueclaw: readonly ['Qwen/Qwen3.6-35B-A3B-FP8', 'Qwen3.6-27B'];
-  readonly scx: readonly ['MiniMax-M2.7', 'gpt-oss-120b'];
   readonly auriko: readonly [
     'claude-opus-4-6',
     'claude-opus-4-7',
@@ -3415,6 +3415,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.5-Air',
     'zai-org/GLM-4.5-FP8',
   ];
+  readonly 'scx-ai': readonly ['GLM-5.2', 'MiniMax-M2.7', 'Qwen3.8-Max', 'gpt-oss-120b'];
   readonly freemodel: readonly [
     'claude-fable-5',
     'claude-haiku-4-5-20251001',
@@ -5908,6 +5909,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-5-turbo',
     'z-ai/glm-5.1',
     'z-ai/glm-5.2',
+    'z-ai/glm-5.2:free',
     'z-ai/glm-5v-turbo',
     '~anthropic/claude-fable-latest',
     '~anthropic/claude-haiku-latest',

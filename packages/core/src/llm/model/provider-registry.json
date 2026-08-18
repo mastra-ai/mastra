@@ -2245,6 +2245,7 @@
         "z-ai/glm-5-turbo",
         "z-ai/glm-5.1",
         "z-ai/glm-5.2",
+        "z-ai/glm-5.2:free",
         "z-ai/glm-5v-turbo",
         "~anthropic/claude-fable-latest",
         "~anthropic/claude-haiku-latest",
@@ -2338,15 +2339,6 @@
       "name": "Blue Claw",
       "models": ["Qwen/Qwen3.6-35B-A3B-FP8", "Qwen3.6-27B"],
       "docUrl": "https://blueclaw.network",
-      "gateway": "models.dev"
-    },
-    "scx": {
-      "url": "https://api.scx.ai/v1",
-      "apiKeyEnvVar": "SCX_API_KEY",
-      "apiKeyHeader": "Authorization",
-      "name": "SCX.ai",
-      "models": ["MiniMax-M2.7", "gpt-oss-120b"],
-      "docUrl": "https://platform.scx.ai/docs",
       "gateway": "models.dev"
     },
     "auriko": {
@@ -4581,6 +4573,15 @@
         "zai-org/GLM-4.5-FP8"
       ],
       "docUrl": "https://submodel.gitbook.io",
+      "gateway": "models.dev"
+    },
+    "scx-ai": {
+      "url": "https://api.scx.ai/v1",
+      "apiKeyEnvVar": "SCX_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "SCX.ai",
+      "models": ["GLM-5.2", "MiniMax-M2.7", "Qwen3.8-Max", "gpt-oss-120b"],
+      "docUrl": "https://platform.scx.ai/docs",
       "gateway": "models.dev"
     },
     "freemodel": {
@@ -8029,6 +8030,7 @@
         "z-ai/glm-5-turbo",
         "z-ai/glm-5.1",
         "z-ai/glm-5.2",
+        "z-ai/glm-5.2:free",
         "z-ai/glm-5v-turbo",
         "~anthropic/claude-fable-latest",
         "~anthropic/claude-haiku-latest",
@@ -10426,6 +10428,7 @@
       "z-ai/glm-5-turbo",
       "z-ai/glm-5.1",
       "z-ai/glm-5.2",
+      "z-ai/glm-5.2:free",
       "z-ai/glm-5v-turbo",
       "~anthropic/claude-fable-latest",
       "~anthropic/claude-haiku-latest",
@@ -10469,7 +10472,6 @@
       "lucidquery-nexus-coder"
     ],
     "blueclaw": ["Qwen/Qwen3.6-35B-A3B-FP8", "Qwen3.6-27B"],
-    "scx": ["MiniMax-M2.7", "gpt-oss-120b"],
     "auriko": [
       "claude-opus-4-6",
       "claude-opus-4-7",
@@ -11900,6 +11902,7 @@
       "zai-org/GLM-4.5-Air",
       "zai-org/GLM-4.5-FP8"
     ],
+    "scx-ai": ["GLM-5.2", "MiniMax-M2.7", "Qwen3.8-Max", "gpt-oss-120b"],
     "freemodel": [
       "claude-fable-5",
       "claude-haiku-4-5-20251001",
@@ -14393,6 +14396,7 @@
       "z-ai/glm-5-turbo",
       "z-ai/glm-5.1",
       "z-ai/glm-5.2",
+      "z-ai/glm-5.2:free",
       "z-ai/glm-5v-turbo",
       "~anthropic/claude-fable-latest",
       "~anthropic/claude-haiku-latest",
