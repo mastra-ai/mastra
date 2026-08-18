@@ -3,7 +3,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import { fastembed } from '@mastra/fastembed';
-import { Memory } from '@mastra/memory';
+import { Memory, Subconscious } from '@mastra/memory';
 import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants.js';
 import type { MastraCodeState } from '../schema.js';
 import { getOmScope } from '../utils/project.js';
@@ -81,7 +81,14 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
   let cachedMemoryKey: string | null = null;
 
   return ({ requestContext }: { requestContext: RequestContext }) => {
-    const state = getAgentControllerState(requestContext);
+    const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
+    const state = controller?.getState() as MastraCodeState | undefined;
+    const subconsciousEnabled = Boolean(vector) && process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
+    if (subconsciousEnabled) {
+      const ownerId = controller?.session.ownerId;
+      if (ownerId) requestContext.set('organizationId', ownerId);
+    }
+
     const omScope = state?.omScope ?? getOmScope(state?.projectPath);
 
     const obsThreshold = state?.observationThreshold ?? DEFAULT_OBS_THRESHOLD;
@@ -90,7 +97,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
 
     const observerPreviousObservationTokens = 1000;
     const observeAttachments = state?.observeAttachments;
-    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}`;
+    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${subconsciousEnabled ? 1 : 0}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;
     }
@@ -112,6 +119,12 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
           enabled: true,
           temporalMarkers: true,
           retrieval: vector ? { vector: true } : true,
+          experimental_subconscious: subconsciousEnabled
+            ? new Subconscious({
+                defaultScope: 'resource',
+                maxScope: 'resource',
+              })
+            : undefined,
           scope: omScope,
           activateAfterIdle: 'auto',
           activateOnProviderChange: true,
