@@ -1,10 +1,15 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect } from 'vitest';
 import { buildHelpText } from '../help-overlay.js';
 
 describe('buildHelpText', () => {
   const baseOpts = { modes: 1, customSlashCommands: [] };
 
-  it('includes command entries', () => {
+  afterEach(() => {
+    delete process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS;
+  });
+
+  it('includes experimental knowledge help when Subconscious is enabled', () => {
+    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
     const text = buildHelpText(baseOpts);
     expect(text).toContain('/new');
     expect(text).toContain('/threads');
@@ -12,10 +17,15 @@ describe('buildHelpText', () => {
     expect(text).toContain('/models');
     expect(text).toContain('/skill/<name>');
     expect(text).toMatch(/\/memory\s+Configure Observational Memory \(\/om alias\)/);
+    expect(text).toMatch(/\/knowledge\s+Browse scoped Subconscious knowledge/);
     expect(text).not.toMatch(/^\s*\/om\s+/m);
     expect(text).not.toContain('/models:pack');
     expect(text).not.toContain('/memory-gateway');
     expect(text).toContain('/help');
+  });
+
+  it('hides experimental knowledge help by default', () => {
+    expect(buildHelpText(baseOpts)).not.toContain('/knowledge');
   });
 
   it('includes shell section', () => {

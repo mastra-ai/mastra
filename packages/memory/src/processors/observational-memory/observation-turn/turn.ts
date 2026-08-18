@@ -67,6 +67,9 @@ export class ObservationTurn {
     signal: Parameters<NonNullable<ProcessorContext['sendSignal']>>[0],
   ) => ReturnType<NonNullable<ProcessorContext['sendSignal']>>;
 
+  /** Optional state signal sender for processor-originated snapshots. */
+  sendStateSignal?: ProcessorContext['sendStateSignal'];
+
   /** Current actor model for this step. Updated by the processor before prepare(). */
   actorModelContext?: ObservationModelContext;
 
@@ -83,6 +86,7 @@ export class ObservationTurn {
     messageList: MessageList;
     agent?: ProcessorContext['agent'];
     sendSignal?: ProcessorContext['sendSignal'];
+    sendStateSignal?: ProcessorContext['sendStateSignal'];
     requestContext?: RequestContext;
     observabilityContext?: ObservabilityContext;
     hooks?: ObservationTurnHooks;
@@ -93,6 +97,7 @@ export class ObservationTurn {
     this.messageList = opts.messageList;
     this.agent = opts.agent;
     this.sendSignal = opts.sendSignal;
+    this.sendStateSignal = opts.sendStateSignal;
     this.requestContext = opts.requestContext;
     this.observabilityContext = opts.observabilityContext;
     this.hooks = opts.hooks ?? {};
@@ -222,23 +227,26 @@ export class ObservationTurn {
       const record = this._record!;
       const unobservedMessages = this.om.getUnobservedMessages(allMessages, record);
       if (unobservedMessages.length > 0) {
-        void this.om
-          .buffer({
-            threadId: this.threadId,
-            resourceId: this.resourceId,
-            messages: unobservedMessages,
-            record,
-            writer: this.writer,
-            agent: this.agent,
-            sendSignal: this.sendSignal,
-            requestContext: this.requestContext,
-            currentModel: this.actorModelContext,
-            observabilityContext: this.observabilityContext,
-            skipMinimumTokenCheck: true,
-          })
-          .catch((err: Error) => {
-            omDebug(`[OM:turn.end] idle buffer failed: ${err?.message}`);
-          });
+        void this.om.trackBackgroundWork(
+          this.om
+            .buffer({
+              threadId: this.threadId,
+              resourceId: this.resourceId,
+              messages: unobservedMessages,
+              record,
+              writer: this.writer,
+              agent: this.agent,
+              sendSignal: this.sendSignal,
+              sendStateSignal: this.sendStateSignal,
+              requestContext: this.requestContext,
+              currentModel: this.actorModelContext,
+              observabilityContext: this.observabilityContext,
+              skipMinimumTokenCheck: true,
+            })
+            .catch((err: Error) => {
+              omDebug(`[OM:turn.end] idle buffer failed: ${err?.message}`);
+            }),
+        );
       }
     }
 

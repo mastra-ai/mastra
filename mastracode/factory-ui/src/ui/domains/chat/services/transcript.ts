@@ -1,8 +1,9 @@
-import type { AgentControllerEvent, AgentControllerTaskSnapshot, AgentControllerOMProgress } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
-import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
+import type { MastraDBMessage, MastraMessagePart, TokenUsage } from '@mastra/core/agent-controller';
 
 import { stripAnsi } from './ansi';
+import type { OMBudgets } from './runtime';
 
 /**
  * Transcript model + reducer.
@@ -116,15 +117,6 @@ export type TimelineEntry =
   | NotificationSummaryEntry
   | SubagentEntry;
 
-/** Token usage snapshot from usage_update events. */
-export interface UsageSnapshot {
-  promptTokens?: number;
-  completionTokens?: number;
-  totalTokens?: number;
-  reasoningTokens?: number;
-  [key: string]: unknown;
-}
-
 /** OM (observational memory) status. */
 export type OMPhase = 'idle' | 'observing' | 'reflecting' | 'buffering';
 
@@ -152,15 +144,13 @@ export interface TranscriptState {
   /** Current task list from task_updated events. */
   tasks: AgentControllerTaskSnapshot[];
   /** Accumulated token usage. */
-  usage?: UsageSnapshot;
+  usage?: TokenUsage;
   /** Number of queued follow-up messages. */
   followUpCount: number;
   /** OM progress for the status line (msg/mem budgets), from display_state_changed. */
-  omProgress?: AgentControllerOMProgress;
+  omProgress?: OMBudgets;
   /** Observational memory phase. */
   omPhase: OMPhase;
-  /** Whether the workspace is ready. */
-  workspaceReady?: boolean;
   /** Latest goal evaluation. */
   goal?: GoalSnapshot;
   /** Current tokens/sec throughput (0 when idle). */
@@ -203,8 +193,8 @@ type Action =
   | {
       type: 'reset';
       threadId?: string;
-      omProgress?: AgentControllerOMProgress;
-      usage?: UsageSnapshot;
+      omProgress?: OMBudgets;
+      usage?: TokenUsage;
     };
 
 /**
@@ -283,7 +273,7 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent): Transc
 
     case 'message_start':
     case 'message_update': {
-      const message = event.message as MastraDBMessage;
+      const message = event.message;
       const next = upsertMessage(state, message, true);
       if (message.role !== 'assistant') return next;
       // Only streamed assistant content opens the decode window — empty or
@@ -443,14 +433,14 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent): Transc
 
     // Usage tracking.
     case 'usage_update': {
-      const usageSnap = event.usage as UsageSnapshot;
+      const usageSnap = event.usage;
       const now = Date.now();
       // usage_update fires at step-finish and carries the completion (and any
       // reasoning) tokens generated during this step. Measure tokens/sec over the
       // decode window only — from the step's first content delta (_decodeStartedAt)
       // to now — which excludes TTFT and inter-step tool/scheduling time. Smooth
       // with an exponential moving average (α=0.3) for a stable readout.
-      const stepTokens = (usageSnap.completionTokens ?? 0) + (usageSnap.reasoningTokens ?? 0);
+      const stepTokens = usageSnap.completionTokens + (usageSnap.reasoningTokens ?? 0);
       let tps = state.tokensPerSec;
       if (state._decodeStartedAt > 0 && stepTokens > 0) {
         const decodeSec = Math.max((now - state._decodeStartedAt) / 1000, 0.001);
@@ -477,7 +467,7 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent): Transc
       return {
         ...state,
         omProgress: ds.omProgress ?? state.omProgress,
-        usage: (ds.tokenUsage as UsageSnapshot | undefined) ?? state.usage,
+        usage: ds.tokenUsage ?? state.usage,
       };
     }
 
@@ -500,16 +490,15 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent): Transc
       return { ...state, omPhase: 'buffering' };
     case 'om_buffering_end':
     case 'om_buffering_failed':
-      return { ...state, omPhase: 'idle' };
     case 'om_activation':
-      if (!event.enabled) return { ...state, omPhase: 'idle' };
-      return state;
+      return { ...state, omPhase: 'idle' };
 
     // Workspace lifecycle.
-    case 'workspace_ready':
-      return { ...state, workspaceReady: true };
     case 'workspace_error':
-      return { ...state, workspaceReady: false };
+      return pushNotice(state, 'error', `Workspace: ${event.error.message}`);
+    case 'workspace_status_changed':
+      if (event.status !== 'error' || !event.error) return state;
+      return pushNotice(state, 'error', `Workspace: ${event.error.message}`);
 
     // Notices.
     case 'info':
@@ -552,8 +541,8 @@ export function createInitialTranscript({
 }: {
   messages?: MastraDBMessage[];
   threadId?: string;
-  omProgress?: AgentControllerOMProgress;
-  usage?: UsageSnapshot;
+  omProgress?: OMBudgets;
+  usage?: TokenUsage;
 } = {}): TranscriptState {
   return {
     ...initialTranscript,
@@ -612,47 +601,23 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
   if (messages.length === 0) return state;
 
   const reconciled = reconcileToolResults(adoptCoveringWindowCopies(state, messages), messages);
+  const onScreenIndex = claimOnScreenEntries(reconciled.entries, messages);
 
-  // Streamed turns adopt the loop's persisted message id (#21185), so window
-  // copies normally match by id; the shared-toolCallId fallback covers paths
-  // that can still diverge (retries, resume, older servers) — inserting such a
-  // window message would duplicate a turn reconcileToolResults heals in place.
-  const entryToolCallIds = reconciled.entries.map(entry =>
-    entry.kind === 'message' && entry.message.role === 'assistant'
-      ? new Set(toolCallIdsOf(entry.message.content.parts))
-      : undefined,
-  );
-  const matchesEntry = (entryIndex: number, message: MastraDBMessage): boolean => {
-    const entry = reconciled.entries[entryIndex];
-    if (entry.kind !== 'message') return false;
-    if (entry.id === message.id) return true;
-    if (message.role !== 'assistant') return false;
-    const toolCallIds = entryToolCallIds[entryIndex];
-    if (!toolCallIds || toolCallIds.size === 0) return false;
-    return toolCallIdsOf(message.content.parts).some(toolCallId => toolCallIds.has(toolCallId));
-  };
-  const onScreenIndexFor = (message: MastraDBMessage, from: number): number => {
-    for (let entryIndex = from; entryIndex < reconciled.entries.length; entryIndex++) {
-      if (matchesEntry(entryIndex, message)) return entryIndex;
-    }
-    return -1;
-  };
-
-  if (messages.every(message => onScreenIndexFor(message, 0) !== -1)) return reconciled;
+  if (messages.every(message => onScreenIndex.has(message))) return reconciled;
 
   const entries: TimelineEntry[] = [];
   let cursor = 0;
   let missing: MastraDBMessage[] = [];
 
   for (const message of messages) {
-    if (onScreenIndexFor(message, 0) === -1) {
+    const anchorIndex = onScreenIndex.get(message);
+    if (anchorIndex === undefined) {
       missing.push(message);
       continue;
     }
     // Out-of-order anchor (the window disagrees with the timeline): leave it
     // where the timeline put it rather than moving rendered content around.
-    const anchorIndex = onScreenIndexFor(message, cursor);
-    if (anchorIndex === -1) continue;
+    if (anchorIndex < cursor) continue;
     entries.push(...reconciled.entries.slice(cursor, anchorIndex), ...messagesToEntries(missing));
     missing = [];
     cursor = anchorIndex;
@@ -660,6 +625,77 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
   entries.push(...reconciled.entries.slice(cursor), ...messagesToEntries(missing));
 
   return { ...reconciled, entries };
+}
+
+/**
+ * Pair each window message with the entry that already draws it — one anchor per
+ * message, so whatever stays unpaired is exactly what the timeline is missing.
+ *
+ * Identity widens from the persisted id to a shared tool call to the drawn text,
+ * because ids alone cannot carry the two shapes the transcript actually sees:
+ * the stream sends one assistant message per run while the server persists one
+ * per step, and the composer's optimistic echo lives under a `local-…` id the
+ * server never confirms (`sendMessage`/`steer` answer nothing). A text pairing
+ * is consumed once per entry, so sending the same words twice still draws two
+ * bubbles.
+ */
+function claimOnScreenEntries(entries: TimelineEntry[], messages: MastraDBMessage[]): Map<MastraDBMessage, number> {
+  const onScreen = entries.map(indexMessageEntry);
+  const anchors = new Map<MastraDBMessage, number>();
+  const claimedEntries = new Set<number>();
+  const claimedTexts = new Set<string>();
+
+  for (const message of messages) {
+    const displayed = toMessageEntry(message).message;
+    const toolCallIds = toolCallIdsOf(displayed.content.parts);
+    const texts = drawableTexts(displayed);
+    const textClaim = (index: number) => `${index} ${texts.join('\n')}`;
+
+    for (const [index, candidate] of onScreen.entries()) {
+      if (!candidate) continue;
+      const sameMessage =
+        candidate.entry.id === message.id || toolCallIds.some(toolCallId => candidate.toolCallIds.has(toolCallId));
+      // Whole text parts have to match: a window copy that extends what an SSE
+      // gap left on screen still needs inserting for its tail to appear at all.
+      const alreadyDrawn =
+        toolCallIds.length === 0 &&
+        texts.length > 0 &&
+        candidate.entry.message.role === displayed.role &&
+        texts.every(text => candidate.texts.has(text));
+
+      const claimsIdentity = sameMessage && !claimedEntries.has(index);
+      const claimsText = alreadyDrawn && !claimedTexts.has(textClaim(index));
+      if (!claimsIdentity && !claimsText) continue;
+
+      anchors.set(message, index);
+      claimedEntries.add(index);
+      if (texts.length > 0) claimedTexts.add(textClaim(index));
+      break;
+    }
+  }
+
+  return anchors;
+}
+
+interface OnScreenMessage {
+  entry: MessageEntry;
+  toolCallIds: Set<string>;
+  texts: Set<string>;
+}
+
+function indexMessageEntry(entry: TimelineEntry): OnScreenMessage | undefined {
+  if (entry.kind !== 'message') return undefined;
+  return {
+    entry,
+    toolCallIds: new Set(toolCallIdsOf(entry.message.content.parts)),
+    texts: new Set(drawableTexts(entry.message)),
+  };
+}
+
+function drawableTexts(message: MastraDBMessage): string[] {
+  return message.content.parts.flatMap(part =>
+    part.type === 'text' && part.text.trim().length > 0 ? [part.text.trim()] : [],
+  );
 }
 
 function toolCallIdsOf(parts: MastraMessagePart[]): string[] {
@@ -951,6 +987,22 @@ function hasAssistantText(state: TranscriptState): boolean {
   );
 }
 
+/**
+ * The entry a tool event belongs to: the one already holding that call, else the
+ * latest assistant entry. A run rotates its assistant message on a steer or a
+ * goal boundary, so the latest entry alone would move mid-call and split the
+ * card in two — one holding the args streamed before the rotation, one after.
+ */
+function toolAnchorIndex(entries: TimelineEntry[], toolCallId: string): number {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const entry = entries[i];
+    if (entry.kind !== 'message') continue;
+    if (entry.runtimeTools?.[toolCallId]) return i;
+    if (entry.message.content.parts.some(part => toolCallIdForPart(part) === toolCallId)) return i;
+  }
+  return latestAssistantIndex(entries);
+}
+
 /** Find the latest assistant entry, creating one if none exists. */
 function latestAssistantIndex(entries: TimelineEntry[]): number {
   for (let i = entries.length - 1; i >= 0; i--) {
@@ -967,7 +1019,7 @@ function withTool(
   seed?: Partial<ToolCall>,
 ): TranscriptState {
   const entries = [...state.entries];
-  let idx = latestAssistantIndex(entries);
+  let idx = toolAnchorIndex(entries, toolCallId);
   if (idx === -1) {
     const message: MastraDBMessage = {
       id: `assistant-tools-${Date.now()}`,

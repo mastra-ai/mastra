@@ -40,6 +40,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'gateways/merge-gateway',
+          label: 'Merge Gateway',
+        },
+        {
+          type: 'doc',
           id: 'gateways/neon',
           label: 'Neon',
         },
@@ -181,8 +186,18 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/amd',
+          label: 'AMD',
+        },
+        {
+          type: 'doc',
           id: 'providers/anyapi',
           label: 'AnyAPI',
+        },
+        {
+          type: 'doc',
+          id: 'providers/arcee',
+          label: 'Arcee',
         },
         {
           type: 'doc',
@@ -446,6 +461,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/jalapeno',
+          label: 'Jalapeno Cloud',
+        },
+        {
+          type: 'doc',
           id: 'providers/jiekou',
           label: 'Jiekou.AI',
         },
@@ -463,6 +483,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/kimi-for-coding',
           label: 'Kimi For Coding',
+        },
+        {
+          type: 'doc',
+          id: 'providers/kosmik',
+          label: 'Kosmik Compute',
         },
         {
           type: 'doc',
@@ -513,11 +538,6 @@ const sidebars = {
           type: 'doc',
           id: 'providers/meganova',
           label: 'Meganova',
-        },
-        {
-          type: 'doc',
-          id: 'providers/merge-gateway',
-          label: 'Merge Gateway',
         },
         {
           type: 'doc',
@@ -721,6 +741,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/runinfra',
+          label: 'RunInfra',
+        },
+        {
+          type: 'doc',
           id: 'providers/sakana',
           label: 'Sakana AI',
         },
@@ -741,7 +766,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/scx',
+          id: 'providers/scx-ai',
           label: 'SCX.ai',
         },
         {

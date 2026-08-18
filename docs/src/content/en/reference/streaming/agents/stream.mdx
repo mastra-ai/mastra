@@ -335,9 +335,10 @@ const stream = await agent.stream('message for agent')
           },
           {
             name: 'onAbort',
-            type: '(event: any) => Promise<void> | void',
+            type: '(event: { steps: any[]; text?: string }) => Promise<void> | void',
             isOptional: true,
-            description: 'Callback function called when the stream is aborted.',
+            description:
+              'Callback function called when the stream is aborted. `steps` contains the steps that completed before the abort, and `text` contains the assistant text streamed so far for the step that was in flight.',
           },
           {
             name: 'abortSignal',
@@ -674,6 +675,13 @@ const stream = await agent.stream('message for agent')
             description: 'Save messages incrementally after each stream step completes (default: false).',
           },
           {
+            name: 'persistPartialOnAbort',
+            type: 'boolean',
+            isOptional: true,
+            description:
+              'Save the assistant text that was streamed before an abort to memory (default: false). Only text emitted before the abort is persisted; output a provider keeps producing after cancellation is discarded, and nothing is saved when no text was streamed.',
+          },
+          {
             name: 'requireToolApproval',
             type: 'boolean',
             isOptional: true,
@@ -843,7 +851,7 @@ const stream = await agent.stream('message for agent')
             type: 'VersionOverrides',
             isOptional: true,
             description:
-              'Per-invocation version overrides for sub-agent delegation. Merged on top of Mastra instance-level versions and propagated automatically through sub-agent calls via requestContext. Requires the editor package. See [Editor versioning](/docs/editor/overview#versioning).',
+              'Per-invocation version overrides for sub-agent delegation. Merged on top of Mastra instance-level versions and propagated automatically through sub-agent calls via requestContext. Requires the editor package. See [Editor versioning](/docs/studio/editor#versioning).',
             properties: [
               {
                 type: 'VersionOverrides',
@@ -963,6 +971,26 @@ for await (const chunk of stream.fullStream) {
 const fullText = await stream.text
 ```
 
+### Limiting execution time
+
+Use `modelSettings.timeout` to bound how long a run may take. `totalMs` limits the entire run, including every loop iteration, tool call and retry. `stepMs` limits a single model call, covering both establishing the stream and consuming it.
+
+```ts title="index.ts"
+const stream = await agent.stream('Tell me a story', {
+  modelSettings: {
+    timeout: {
+      totalMs: 30000, // fail the run if it takes longer than 30s
+      stepMs: 10000, // fail an individual model call after 10s
+    },
+  },
+})
+```
+
+Exceeding either budget fails with a `MastraTimeoutError`, which carries a `timeoutType` of `'total'` or `'step'`. Each budget behaves differently when the agent is configured with fallback [`models`](/reference/agents/agent):
+
+- A `totalMs` timeout ends the run immediately and doesn't try the next model, because it's a hard deadline for the run as a whole.
+- A `stepMs` timeout isn't retried against the same model, but does advance to the next model, which makes it a way to fail over from a slow provider.
+
 ### AI SDK v5+ Format
 
 To use the stream with AI SDK v5 (and later), you can convert it using our utility function `toAISdkStream`.
@@ -1002,8 +1030,9 @@ const stream = await agent.stream('Tell me a story', {
   onError: ({ error }) => {
     console.error('Streaming error:', error)
   },
-  onAbort: event => {
-    console.log('Stream aborted:', event)
+  onAbort: ({ steps, text }) => {
+    console.log('Stream aborted after', steps.length, 'steps')
+    console.log('Partial text:', text)
   },
 })
 
@@ -1100,4 +1129,4 @@ Responses WebSocket connections run one response at a time. Mastra rejects overl
 
 - [Generating responses](/docs/agents/overview#use-your-agent)
 - [Streaming responses](/docs/agents/overview#use-your-agent)
-- [Agent Approval](/docs/agents/agent-approval)
+- [Agent Approval](/docs/agents/human-in-the-loop)

@@ -9,6 +9,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import type { MaterializationSandbox, SandboxFleet } from '../sandbox/fleet.js';
+import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import type { RouteAuth } from './route.js';
@@ -457,6 +458,11 @@ export async function listSessionFilesystemFiles(
 ): Promise<WorkspaceFilesListing> {
   const safeThreadId = threadId.trim();
   if (!safeThreadId) throw new Error('Missing required query param: threadId');
+
+  // The turn-end capture no longer gates agent_end, so a reader refetching on
+  // run completion could otherwise race it and serve the previous turn's
+  // listing. Await the in-flight capture (bounded) before reading.
+  await waitForPendingFilesystemCapture(session.sessionId);
 
   return {
     workspacePath: session.sessionId,

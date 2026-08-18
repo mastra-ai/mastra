@@ -26,6 +26,28 @@ function makeAgentController(models: { provider: string; hasApiKey: boolean; api
   return { listAvailableModels: async () => models };
 }
 
+describe('GET /web/config/features', () => {
+  it.each([
+    { features: undefined, expected: false },
+    { features: { knowledge: true }, expected: true },
+  ])('reports the server-side knowledge gate as $expected', async ({ features, expected }) => {
+    const app = new Hono();
+    mountApiRoutes(
+      app as never,
+      new ConfigRoutes({
+        auth: fakeRouteAuth({ enabled: false }),
+        controller: makeAgentController([]),
+        features,
+      }).routes(),
+    );
+
+    const response = await app.request('/web/config/features');
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ knowledge: expected });
+  });
+});
+
 describe('listProviders', () => {
   const prevAnthropicKey = process.env.ANTHROPIC_API_KEY;
 

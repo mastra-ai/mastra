@@ -179,6 +179,7 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       branch: { type: 'text' },
       base_branch: { type: 'text' },
       title: { type: 'text', nullable: true },
+      visibility: { type: 'text', nullable: true },
       sandbox_id: { type: 'text', nullable: true },
       sandbox_workdir: { type: 'text', nullable: true },
       materialized_at: { type: 'timestamp', nullable: true },
@@ -356,6 +357,13 @@ export interface UpsertSourceControlWorktreeInput {
   worktreePath: string;
 }
 
+/**
+ * Who can open a session: 'org' sessions are visible to every member of the
+ * owning organization, 'private' sessions only to their owner. Stored at
+ * creation; rows created before the column existed read as 'org'.
+ */
+export type SourceControlSessionVisibility = 'org' | 'private';
+
 export interface SourceControlSession {
   id: string;
   sessionId: string;
@@ -364,6 +372,7 @@ export interface SourceControlSession {
   userId: string;
   branch: string;
   title: string | null;
+  visibility: SourceControlSessionVisibility;
   baseBranch: string;
   sandboxId: string | null;
   sandboxWorkdir: string | null;
@@ -383,6 +392,8 @@ export interface CreateSourceControlSessionInput {
   userId: string;
   branch: string;
   title?: string | null;
+  /** Defaults to 'org' when omitted, matching how NULL rows are read. */
+  visibility?: SourceControlSessionVisibility;
   baseBranch: string;
 }
 
@@ -474,7 +485,16 @@ export interface SourceControlStorageHandle {
     delete(args: { projectRepositoryId: string; userId: string; branch: string }): Promise<void>;
   };
   readonly sessions: {
-    list(args: { projectRepositoryId: string; userId: string }): Promise<SourceControlSession[]>;
+    /**
+     * Viewer-aware listing: every org-visible session for the repository
+     * (regardless of owner) plus the viewer's own private sessions.
+     */
+    list(args: { projectRepositoryId: string; viewerUserId: string }): Promise<SourceControlSession[]>;
+    /**
+     * System-level listing of every session for the repository regardless of
+     * visibility. For internal flows only (session retirement, repository
+     * teardown); never expose directly to a viewer.
+     */
     listByProjectRepository(args: { projectRepositoryId: string }): Promise<SourceControlSession[]>;
     getBySessionId(sessionId: string): Promise<SourceControlSession | null>;
     getForBranch(args: {
@@ -595,6 +615,7 @@ interface SessionDbRow extends Record<string, unknown> {
   user_id: string;
   branch: string;
   title: string | null;
+  visibility: string | null;
   base_branch: string;
   sandbox_id: string | null;
   sandbox_workdir: string | null;
@@ -704,6 +725,7 @@ function toSession(row: SessionDbRow): SourceControlSession {
     userId: row.user_id,
     branch: row.branch,
     title: row.title,
+    visibility: row.visibility === 'private' ? 'private' : 'org',
     baseBranch: row.base_branch,
     sandboxId: row.sandbox_id,
     sandboxWorkdir: row.sandbox_workdir,
@@ -1225,14 +1247,13 @@ export class SourceControlStorage extends FactoryStorageDomain {
         },
       },
       sessions: {
-        list: async ({ projectRepositoryId, userId }) => {
+        list: async ({ projectRepositoryId, viewerUserId }) => {
           if (!(await getProjectRepositoryById(projectRepositoryId))) return [];
-          return (
-            await db().findMany<SessionDbRow>(SESSIONS, {
-              project_repository_id: projectRepositoryId,
-              user_id: userId,
-            })
-          ).map(toSession);
+          const rows = await db().findMany<SessionDbRow>(SESSIONS, {
+            project_repository_id: projectRepositoryId,
+          });
+          // Org-visible sessions (NULL counts as org) plus the viewer's own.
+          return rows.filter(row => row.visibility !== 'private' || row.user_id === viewerUserId).map(toSession);
         },
         listByProjectRepository: async ({ projectRepositoryId }) => {
           if (!(await getProjectRepositoryById(projectRepositoryId))) return [];
@@ -1272,6 +1293,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
               user_id: input.userId,
               branch: input.branch,
               title: input.title ?? null,
+              visibility: input.visibility ?? 'org',
               base_branch: input.baseBranch,
               sandbox_id: null,
               sandbox_workdir: null,
