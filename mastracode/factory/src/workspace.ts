@@ -218,7 +218,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     if (!user?.organizationId || !userId) {
       throw new Error(`Factory session ${session.sessionId} was resolved without a caller identity`);
     }
-    if (user.organizationId !== session.orgId || userId !== session.userId) {
+    // Org-visible sessions open to any member of the owning organization;
+    // only private sessions stay owner-only. Cross-org access never passes.
+    if (user.organizationId !== session.orgId || (session.visibility === 'private' && userId !== session.userId)) {
       throw new Error(`Factory session ${session.sessionId} is not available to the current user`);
     }
     if (!sandboxConfig || !github || !fleet) {

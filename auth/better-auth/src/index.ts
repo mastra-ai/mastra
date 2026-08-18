@@ -35,7 +35,13 @@ function tryDecode(value: string): string {
  * Used internally for authentication token verification.
  */
 export interface BetterAuthUser {
-  session: Session;
+  /**
+   * The better-auth session. `activeOrganizationId` comes from the
+   * organization plugin (registered unconditionally by this provider); when
+   * the stored session never had one set, `authenticateToken` resolves a
+   * default from the user's existing memberships.
+   */
+  session: Session & { activeOrganizationId?: string | null };
   user: User;
 }
 
@@ -82,6 +88,13 @@ interface MastraAuthBetterAuthOptions extends MastraAuthProviderOptions<BetterAu
 }
 
 /** Loose row shapes read back from better-auth's internal DB adapter. */
+/**
+ * How long a resolved `userId → orgId` mapping stays cached. Bounded so an
+ * administrator revoking a membership takes effect on new sessions within a
+ * minute, rather than persisting until process restart.
+ */
+const ORG_CACHE_TTL_MS = 60_000;
+
 interface MemberRow {
   organizationId?: string;
   role?: string;
@@ -149,8 +162,44 @@ export class MastraAuthBetterAuth
   #ownsInstance = false;
   /** Once-per-process migration latch; reset on failure so a later call retries. */
   #migrated: Promise<void> | undefined;
-  /** In-process `userId → orgId` cache so hosts can call `ensureOrganization` per request. */
-  #orgCache = new Map<string, string>();
+  /**
+   * In-process `userId → orgId` cache, shared by `ensureOrganization` and the
+   * `authenticateToken` default-org resolution. Only successes are cached, so
+   * membership-less users re-run the lookup per request. Entries expire after
+   * `ORG_CACHE_TTL_MS` so a membership revoked by an administrator stops being
+   * injected into new sessions within the TTL window instead of persisting for
+   * the process lifetime.
+   */
+  #orgCache = new Map<string, { orgId: string; expiresAt: number }>();
+
+  #cachedOrgId(userId: string): string | undefined {
+    const entry = this.#orgCache.get(userId);
+    if (!entry) return undefined;
+    if (Date.now() >= entry.expiresAt) {
+      this.#orgCache.delete(userId);
+      return undefined;
+    }
+    return entry.orgId;
+  }
+
+  /**
+   * Cache a resolved `userId → orgId` mapping. Sweeps expired entries first so
+   * users who never authenticate again do not accumulate in the map for the
+   * process lifetime: every write bounds the cache to entries touched within
+   * the last TTL window.
+   */
+  #storeOrgId(userId: string, orgId: string): void {
+    const now = Date.now();
+    for (const [key, entry] of this.#orgCache) {
+      if (now >= entry.expiresAt) this.#orgCache.delete(key);
+    }
+    this.#orgCache.set(userId, { orgId, expiresAt: now + ORG_CACHE_TTL_MS });
+  }
+
+  /** @internal Test hook: current org-cache cardinality. */
+  get orgCacheSize(): number {
+    return this.#orgCache.size;
+  }
   /** Set from `init()`: cross-origin SPA deploys need SameSite=None; Secure cookies. */
   #crossSite = false;
   protected signUpEnabledConfig: boolean;
@@ -311,9 +360,47 @@ export class MastraAuthBetterAuth
   // ============================================
 
   /**
+   * Read-only half of org resolution: the user's oldest existing membership,
+   * cached in `#orgCache`. Never creates anything. Ordered by `createdAt` so
+   * the resolved default is stable across processes for multi-org users.
+   */
+  async #findMembershipOrgId(ctx: BetterAuthContext, userId: string): Promise<string | undefined> {
+    const memberships = (await ctx.adapter.findMany({
+      model: 'member',
+      where: [{ field: 'userId', value: userId }],
+      sortBy: { field: 'createdAt', direction: 'asc' },
+    })) as MemberRow[];
+    const orgId = memberships.find(m => m.organizationId)?.organizationId;
+    if (orgId) this.#storeOrgId(userId, orgId);
+    return orgId;
+  }
+
+  /**
+   * Resolve the organization a session should act under when better-auth's
+   * `activeOrganizationId` was never set (nothing in this provider or a
+   * default sign-in flow calls the organization plugin's `setActive`).
+   * Read-only and best-effort: an existing membership or nothing.
+   *
+   * Callers must run `#ensureDbReady` first (authenticateToken does); this
+   * method deliberately swallows failures, so an unmigrated DB would
+   * otherwise fail silently.
+   */
+  async #resolveActiveOrganizationId(userId: string): Promise<string | undefined> {
+    const cached = this.#cachedOrgId(userId);
+    if (cached) return cached;
+    try {
+      const ctx = await this.getAuthContext();
+      if (!ctx) return undefined;
+      return await this.#findMembershipOrgId(ctx, userId);
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
    * Ensure the user belongs to an organization, mirroring the WorkOS
    * personal-org bootstrap on better-auth's organization tables:
-   * ≥1 membership → first org id; 0 → create a personal org with an
+   * ≥1 membership → oldest org id; 0 → create a personal org with an
    * idempotent slug derived from the user id.
    *
    * Concurrent/retried first logins recover via the unique slug instead of
@@ -326,7 +413,7 @@ export class MastraAuthBetterAuth
    * Best-effort: any failure is swallowed and leaves the user no-org.
    */
   async ensureOrganization(userId: string): Promise<string | undefined> {
-    const cached = this.#orgCache.get(userId);
+    const cached = this.#cachedOrgId(userId);
     if (cached) return cached;
 
     try {
@@ -334,15 +421,8 @@ export class MastraAuthBetterAuth
       const ctx = await this.getAuthContext();
       if (!ctx) return undefined;
 
-      const memberships = (await ctx.adapter.findMany({
-        model: 'member',
-        where: [{ field: 'userId', value: userId }],
-      })) as MemberRow[];
-      const firstExisting = memberships.find(m => m.organizationId)?.organizationId;
-      if (firstExisting) {
-        this.#orgCache.set(userId, firstExisting);
-        return firstExisting;
-      }
+      const firstExisting = await this.#findMembershipOrgId(ctx, userId);
+      if (firstExisting) return firstExisting;
 
       // Build a predictable personal-org name from the user's profile.
       const userRecord = await ctx.internalAdapter.findUserById(userId).catch(() => null);
@@ -408,7 +488,7 @@ export class MastraAuthBetterAuth
         if (!member) throw error;
       }
 
-      this.#orgCache.set(userId, organizationId);
+      this.#storeOrgId(userId, organizationId);
       return organizationId;
     } catch (error) {
       console.warn(
@@ -611,8 +691,19 @@ export class MastraAuthBetterAuth
         return null;
       }
 
+      // Better-auth never populates `activeOrganizationId` unless the host app
+      // wires the organization plugin's `setActive` itself, which leaves every
+      // org-scoped consumer with a user that has no organization. Resolve a
+      // default from the user's existing memberships (read-only; the session
+      // row is not mutated). See mastra-ai/mastra#21481.
+      let session: BetterAuthUser['session'] = result.session;
+      if (!session.activeOrganizationId) {
+        const organizationId = await this.#resolveActiveOrganizationId(result.user.id);
+        if (organizationId) session = { ...session, activeOrganizationId: organizationId };
+      }
+
       return {
-        session: result.session,
+        session,
         user: result.user,
       };
     } catch {
