@@ -299,6 +299,12 @@ const sidebars = {
           },
         },
         {
+          type: 'link',
+          label: 'Mastra',
+          href: '/docs/mastra-platform/observability',
+          customProps: { icon: '/img/integrations/mastra.svg', customCSS: 'dark:invert' },
+        },
+        {
           type: 'doc',
           id: 'observability/opentelemetry',
           label: 'OpenTelemetry',
