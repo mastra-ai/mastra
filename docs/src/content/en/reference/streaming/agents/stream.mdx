@@ -985,10 +985,10 @@ const stream = await agent.stream('Tell me a story', {
 })
 ```
 
-Exceeding either budget fails with a `MastraTimeoutError`, which carries a `timeoutType` of `'total'` or `'step'`. The two budgets behave differently when the agent is configured with fallback [`models`](/reference/agents/agent):
+Exceeding either budget fails with a `MastraTimeoutError`, which carries a `timeoutType` of `'total'` or `'step'`. Each budget behaves differently when the agent is configured with fallback [`models`](/reference/agents/agent):
 
-- A `totalMs` timeout ends the run immediately and does not try the next model, because it is a hard deadline for the run as a whole.
-- A `stepMs` timeout is not retried against the same model, but does advance to the next model, which makes it a way to fail over from a slow provider.
+- A `totalMs` timeout ends the run immediately and doesn't try the next model, because it's a hard deadline for the run as a whole.
+- A `stepMs` timeout isn't retried against the same model, but does advance to the next model, which makes it a way to fail over from a slow provider.
 
 ### AI SDK v5+ Format
 
