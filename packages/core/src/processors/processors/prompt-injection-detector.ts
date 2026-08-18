@@ -7,6 +7,7 @@ import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import { InternalSpans, resolveObservabilityContext } from '../../observability';
 import type { ObservabilityContext } from '../../observability';
+import type { RequestContext } from '../../request-context';
 import type { PublicSchema } from '../../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { Processor } from '../index';
@@ -173,10 +174,11 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
     args: {
       messages: MastraDBMessage[];
       abort: (reason?: string) => never;
+      requestContext?: RequestContext;
     } & Partial<ObservabilityContext>,
   ): Promise<MastraDBMessage[]> {
     try {
-      const { messages, abort, ...rest } = args;
+      const { messages, abort, requestContext, ...rest } = args;
       const observabilityContext = resolveObservabilityContext(rest);
 
       if (messages.length === 0) {
@@ -201,7 +203,7 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
           continue;
         }
 
-        const detectionResult = await this.detectPromptInjection(textContent, observabilityContext);
+        const detectionResult = await this.detectPromptInjection(textContent, observabilityContext, requestContext);
         results.push(detectionResult);
         const flagged = this.isInjectionFlagged(detectionResult);
         await this.emitDetection(textContent, detectionResult, flagged);
@@ -256,10 +258,11 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
   private async detectPromptInjection(
     content: string,
     observabilityContext?: ObservabilityContext,
+    requestContext?: RequestContext,
   ): Promise<PromptInjectionResult> {
     const prompt = this.createDetectionPrompt(content);
     try {
-      const model = await this.detectionAgent.getModel();
+      const model = await this.detectionAgent.getModel({ requestContext });
 
       const baseSchema = z.object({
         categories: z
@@ -300,6 +303,7 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
             temperature: 0,
           },
           providerOptions: this.providerOptions,
+          requestContext,
           ...observabilityContext,
         });
 
@@ -313,6 +317,7 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
           output: standardSchemaToJSONSchema(standardSchema),
           temperature: 0,
           providerOptions: this.providerOptions as SharedV2ProviderOptions,
+          requestContext,
           ...observabilityContext,
         });
 

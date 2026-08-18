@@ -77,7 +77,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
         <div className="flex h-full min-h-0 flex-col">
           {shouldShowSidebar && <MobileNavbar />}
           {shouldShowSidebar && (
-            <div className="mx-1.5 mt-1 shrink-0 lg:mx-2 lg:mt-1.5">
+            <div className="mx-1.5 mt-1 shrink-0 lg:mx-2 lg:mt-0.5">
               <RouteHeader />
             </div>
           )}

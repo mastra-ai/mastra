@@ -320,6 +320,7 @@ function BoardContent({
                     allItems={items.all}
                     activityPage={activityPage}
                     liveWorktreePaths={runs.liveWorktreePaths}
+                    sessionLivenessResolved={runs.sessionLivenessResolved}
                     runDisabled={runs.disabled}
                     preparing={runs.preparingFor(item.id)}
                     evaluatingStage={items.evaluatingStages.get(item.id)}
@@ -341,21 +342,17 @@ function BoardContent({
                 ))}
                 {filteredCandidates
                   .filter(candidate => candidate.column === stage.id)
-                  .map(candidate => {
-                    const issue = candidate.issue;
-                    return (
-                      <CandidateCard
-                        key={candidate.sourceKey}
-                        candidate={candidate}
-                        pendingRunRoles={runs.pendingRolesForSource(candidate.sourceKey)}
-                        triageStarting={issue !== undefined && runs.triagingIssueNumbers.has(issue.number)}
-                        disabled={!runs.enabled}
-                        onRun={(action, prompt) => runs.startCandidateRun(candidate, action, prompt)}
-                        onFile={() => items.handleDrop({ kind: 'candidate', candidate }, candidate.column)}
-                        onTriage={issue ? () => runs.triageCandidate(issue) : undefined}
-                      />
-                    );
-                  })}
+                  .map(candidate => (
+                    <CandidateCard
+                      key={candidate.sourceKey}
+                      candidate={candidate}
+                      pendingRunRoles={runs.pendingRolesForSource(candidate.sourceKey)}
+                      preparing={runs.preparingForSource(candidate.sourceKey)}
+                      disabled={!runs.enabled}
+                      onRun={(action, prompt) => runs.startCandidateRun(candidate, action, prompt)}
+                      onFile={() => items.handleDrop({ kind: 'candidate', candidate }, candidate.column)}
+                    />
+                  ))}
                 {loading && (
                   <SkeletonRows label={`Loading ${stage.label} column`} rows={3} rowClassName="h-24 w-full" />
                 )}

@@ -1,3 +1,4 @@
+import type { IncomingMessage } from 'node:http';
 import type { MastraAuthConfig as InternalMastraAuthConfig } from '@internal/auth/types';
 import type { Handler, MiddlewareHandler, Context } from 'hono';
 import type { cors } from 'hono/cors';
@@ -329,6 +330,15 @@ export type ServerConfig = {
      * Custom session ID generator function
      */
     sessionIdGenerator?: () => string;
+    /**
+     * Sets `req.auth` on the request handed to the MCP transport, which is what
+     * surfaces as `extra.authInfo` inside tool and agent execution.
+     *
+     * When omitted, the principal resolved by `server.auth` is bridged
+     * automatically. Provide this hook when your own middleware performs the
+     * verification and you want full control over the resulting `AuthInfo`.
+     */
+    setRequestAuth?: (req: IncomingMessage, requestContext: RequestContext) => void | Promise<void>;
   };
 
   /**

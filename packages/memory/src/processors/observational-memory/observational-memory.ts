@@ -321,6 +321,7 @@ export class ObservationalMemory {
   private hasher = xxhash();
   private mastra?: Mastra;
   private memory?: Memory;
+  private curationCadence?: number;
 
   /**
    * Track message IDs observed during this instance's lifetime.
@@ -355,6 +356,47 @@ export class ObservationalMemory {
    * re-read storage and transient failures can be retried.
    */
   private recordInitializations = new Map<string, Promise<ObservationalMemoryRecord>>();
+
+  /**
+   * In-flight fire-and-forget background cycles (buffered observation, reflection).
+   * Tracked so callers can join them via `settled()` before closing a storage
+   * connection they own — otherwise a background cycle's tail statements race the close.
+   */
+  private pendingBackgroundWork = new Set<Promise<unknown>>();
+
+  /**
+   * Register fire-and-forget background work so `settled()` can join it.
+   * Returns the original promise so callers keep their own rejection handling.
+   */
+  trackBackgroundWork<T>(work: Promise<T>): Promise<T> {
+    const tracked: Promise<unknown> = work
+      .catch(() => {})
+      .finally(() => {
+        this.pendingBackgroundWork.delete(tracked);
+      });
+    this.pendingBackgroundWork.add(tracked);
+    return work;
+  }
+
+  /**
+   * Resolve once all background observational-memory work started so far has finished.
+   *
+   * Background cycles enqueue further background work (a buffered observation can
+   * trigger a reflection, which runs nested agent streams), so this drains repeatedly
+   * until nothing is left rather than joining a single snapshot.
+   */
+  async settled(): Promise<void> {
+    // Bounded so a pathologically self-retriggering cycle degrades to a warning
+    // instead of hanging the caller's teardown.
+    const maxDrainRounds = 100;
+    for (let round = 0; round < maxDrainRounds; round++) {
+      if (this.pendingBackgroundWork.size === 0) return;
+      await Promise.allSettled([...this.pendingBackgroundWork]);
+    }
+    // Work that finished on the final round has drained; only warn if any is genuinely left.
+    if (this.pendingBackgroundWork.size === 0) return;
+    omError(`[OM:settled] background work still pending after ${maxDrainRounds} drain rounds; giving up waiting`);
+  }
 
   /**
    * Acquire a lock for the given key, execute the callback, then release.
@@ -416,6 +458,7 @@ export class ObservationalMemory {
     this.hooks = config.hooks;
     this.mastra = config.mastra;
     this.memory = config.memory;
+    this.curationCadence = config.curationCadence;
 
     // Resolve "default" to the model default for the agent being configured.
     const resolveModel = (model: ObservationalMemoryModel | undefined, defaultModel: string) =>
@@ -543,6 +586,7 @@ export class ObservationalMemory {
       extractors: composeObservationExtractors({
         threadTitle: config.observation?.threadTitle ?? false,
         extract: config.observation?.extract,
+        continuationHints: config.observation?.continuationHints,
       }),
     };
 
@@ -575,7 +619,10 @@ export class ObservationalMemory {
             config.reflection?.observationTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.observationTokens,
           ),
       instruction: config.reflection?.instruction,
-      extractors: composeReflectionExtractors({ extract: config.reflection?.extract }),
+      extractors: composeReflectionExtractors({
+        extract: config.reflection?.extract,
+        continuationHints: config.reflection?.continuationHints,
+      }),
     };
 
     this.tokenCounter = new TokenCounter({
@@ -617,6 +664,7 @@ export class ObservationalMemory {
       resolveModel: inputTokens => this.resolveReflectionModel(inputTokens),
       mastra: config.mastra,
       memory: this.memory,
+      onReflectionCommitted: config.onReflectionCommitted,
     });
 
     // Validate buffer configuration
@@ -2256,14 +2304,16 @@ ${formattedMessages}
     );
 
     if (shouldTrigger) {
-      void this.startAsyncBufferedObservation(
-        opts.record,
-        opts.threadId,
-        opts.unobservedMessages,
-        lockKey,
-        opts.writer,
-        opts.unbufferedPendingTokens,
-        opts.requestContext,
+      void this.trackBackgroundWork(
+        this.startAsyncBufferedObservation(
+          opts.record,
+          opts.threadId,
+          opts.unobservedMessages,
+          lockKey,
+          opts.writer,
+          opts.unbufferedPendingTokens,
+          opts.requestContext,
+        ),
       );
     }
 
@@ -2593,11 +2643,18 @@ ${formattedMessages}
       return undefined;
     }
 
-    // Read thread metadata for continuation hints
+    // Read thread metadata for continuation hints. A persisted hint is only injected while a
+    // pipeline can still produce it — once observation and reflection both disable a section,
+    // a stale value stored by an earlier configuration must not keep steering the actor.
     const thread = await this.storage.getThreadById({ threadId });
     const omMetadata = getThreadOMMetadata(thread?.metadata);
-    const currentTask = omMetadata?.currentTask;
-    const suggestedResponse = omMetadata?.suggestedResponse;
+    const activeExtractors = [...this.observationConfig.extractors, ...this.reflectionConfig.extractors];
+    const currentTask = activeExtractors.some(extractor => extractor.slug === 'current-task')
+      ? omMetadata?.currentTask
+      : undefined;
+    const suggestedResponse = activeExtractors.some(extractor => extractor.slug === 'suggested-response')
+      ? omMetadata?.suggestedResponse
+      : undefined;
     const currentDate = opts.currentDate ?? new Date();
 
     return this.formatObservationsForContext(
@@ -2746,7 +2803,7 @@ ${formattedMessages}
       omDebug(
         `[OM:status] step=${stepNumber} msgs=${pendingTokens}/${threshold} obs=${currentObservationTokens}/${effectiveObservationTokensThreshold} gen=${record.generationCount}`,
       );
-      await writer.custom(statusPart).catch(() => {});
+      await writer.custom({ ...statusPart, transient: true }).catch(() => {});
     }
   }
 
@@ -2772,7 +2829,13 @@ ${formattedMessages}
    * }
    * ```
    */
-  async getStatus(opts: { threadId: string; resourceId?: string; messages?: MastraDBMessage[] }): Promise<{
+  async getStatus(opts: {
+    threadId: string;
+    resourceId?: string;
+    messages?: MastraDBMessage[];
+    /** Pre-loaded record to skip the initial storage read. */
+    record?: ObservationalMemoryRecord;
+  }): Promise<{
     record: ObservationalMemoryRecord;
     pendingTokens: number;
     threshold: number;
@@ -2788,14 +2851,14 @@ ${formattedMessages}
     asyncReflectionEnabled: boolean;
     scope: 'resource' | 'thread';
   }> {
-    const { threadId, resourceId } = opts;
-    const record = await this.getOrCreateRecord(threadId, resourceId);
+    const { threadId, resourceId, record: providedRecord, messages } = opts;
+    const record = providedRecord ?? (await this.getOrCreateRecord(threadId, resourceId));
     const currentObservationTokens = record.observationTokenCount ?? 0;
 
     // Use provided messages or load from storage
     let unobservedMessages: MastraDBMessage[];
-    if (opts.messages) {
-      unobservedMessages = this.getUnobservedMessages(opts.messages, record);
+    if (messages) {
+      unobservedMessages = this.getUnobservedMessages(messages, record);
     } else {
       const rawMessages = await this.loadMessagesFromStorage(
         threadId,
@@ -3004,11 +3067,12 @@ ${formattedMessages}
     pendingTokens?: number;
     /** Pre-loaded record to skip the initial getOrCreateRecord() fetch.
      *  When called fire-and-forget, passing the record avoids an async gap
-     *  before lastBufferedBoundary is set. */
+     *  before lastBufferedBoundary is set and exposes buffering state to same-step callers. */
     record?: ObservationalMemoryRecord;
     writer?: ProcessorStreamWriter;
     agent?: ProcessorContext['agent'];
     sendSignal?: ProcessorContext['sendSignal'];
+    sendStateSignal?: ProcessorContext['sendStateSignal'];
     requestContext?: RequestContext;
     currentModel?: ObservationModelContext;
     observabilityContext?: ObservabilityContext;
@@ -3024,6 +3088,7 @@ ${formattedMessages}
     const { threadId, resourceId, requestContext, observabilityContext } = opts;
 
     let record = opts.record ?? (await this.getOrCreateRecord(threadId, resourceId));
+    const inMemoryRecord = record;
 
     // Check if buffering is enabled
     if (!this.buffering.isAsyncObservationEnabled()) {
@@ -3064,6 +3129,8 @@ ${formattedMessages}
 
     // Set persistent flag and register op
     registerOp(record.id, 'bufferingObservation');
+    inMemoryRecord.isBufferingObservation = true;
+    inMemoryRecord.lastBufferedAtTokens = currentTokens;
     this.storage.setBufferingObservationFlag(record.id, true, currentTokens).catch(err => {
       omError('[OM] Failed to set buffering observation flag', err);
     });
@@ -3075,8 +3142,17 @@ ${formattedMessages}
     });
     BufferingCoordinator.asyncBufferingOps.set(bufferKey, opPromise);
 
-    // Re-fetch record after mutex wait to get the latest state
+    // Keep the caller's turn-scoped record current while using a fresh storage snapshot
+    // for the asynchronous write path.
     record = (await this.storage.getObservationalMemory(record.threadId, record.resourceId)) ?? record;
+    const setBufferingState = (isBufferingObservation: boolean, lastBufferedAtTokens?: number) => {
+      inMemoryRecord.isBufferingObservation = isBufferingObservation;
+      record.isBufferingObservation = isBufferingObservation;
+      if (lastBufferedAtTokens !== undefined) {
+        inMemoryRecord.lastBufferedAtTokens = lastBufferedAtTokens;
+        record.lastBufferedAtTokens = lastBufferedAtTokens;
+      }
+    };
 
     let flagCleared = false;
 
@@ -3119,6 +3195,7 @@ ${formattedMessages}
       const newTokens = await this.tokenCounter.countMessagesAsync(candidateMessages);
 
       if (candidateMessages.length === 0 || (!opts.skipMinimumTokenCheck && newTokens < minNewTokens)) {
+        setBufferingState(false);
         return { buffered: false, record };
       }
 
@@ -3168,6 +3245,7 @@ ${formattedMessages}
             writer,
             agent: opts.agent,
             sendSignal: opts.sendSignal,
+            sendStateSignal: opts.sendStateSignal,
             requestContext,
             currentModel: opts.currentModel,
             observabilityContext,
@@ -3195,6 +3273,7 @@ ${formattedMessages}
       // Update the boundary tokens in storage + in-memory cache for interval tracking
       await this.storage.setBufferingObservationFlag(record.id, false, newTokens).catch(() => {});
       flagCleared = true;
+      setBufferingState(false, newTokens);
       BufferingCoordinator.lastBufferedBoundary.set(bufferKey, newTokens);
 
       // Update lastBufferedAtTime in-memory cache so subsequent buffer() calls filter correctly
@@ -3202,7 +3281,7 @@ ${formattedMessages}
       const cursor = new Date(maxTimestamp.getTime() + 1);
       BufferingCoordinator.lastBufferedAtTime.set(bufferKey, cursor);
 
-      const updatedRecord = await this.getOrCreateRecord(threadId, resourceId);
+      const updatedRecord = (await this.storage.getObservationalMemory(record.threadId, record.resourceId)) ?? record;
       return { buffered: true, record: updatedRecord };
     } catch (error) {
       omError('[OM] buffer() failed', error);
@@ -3213,6 +3292,7 @@ ${formattedMessages}
       resolveOp!();
       // Only clear the flag if the success path didn't already clear it (with token count)
       if (!flagCleared) {
+        setBufferingState(false);
         await this.storage.setBufferingObservationFlag(record.id, false).catch(() => {});
       }
     }
@@ -3246,6 +3326,8 @@ ${formattedMessages}
     checkThreshold?: boolean;
     /** Messages to use for threshold check (in-memory). If omitted, loads from storage. */
     messages?: MastraDBMessage[];
+    /** Pre-loaded record to skip the initial storage read. */
+    record?: ObservationalMemoryRecord;
     /** Current actor model for provider-change activation checks. */
     currentModel?: ObservationModelContext;
     /** Stream writer for emitting activation markers to the UI. */
@@ -3259,7 +3341,7 @@ ${formattedMessages}
   }> {
     const { threadId, resourceId } = opts;
 
-    const record = await this.getOrCreateRecord(threadId, resourceId);
+    const record = opts.record ?? (await this.getOrCreateRecord(threadId, resourceId));
 
     // Reset stale lastBufferedBoundary at the start of a new turn.
     // If the stored boundary is far above the current context size, it's
@@ -3325,7 +3407,7 @@ ${formattedMessages}
         activationActivateAfterIdle = activateAfterIdle;
         activateAfterIdleExpiredMs = ttlExpiredMs;
       } else {
-        const status = await this.getStatus({ threadId, resourceId, messages: thresholdMessages });
+        const status = await this.getStatus({ threadId, resourceId, record, messages: thresholdMessages });
         if (status.pendingTokens < status.threshold) {
           return { activated: false, record };
         }
@@ -3571,6 +3653,8 @@ ${formattedMessages}
     /** Which pipeline path initiated this cycle; defaults to 'manual'. */
     trigger?: ObserveTrigger;
     agent?: ProcessorContext['agent'];
+    sendSignal?: ProcessorContext['sendSignal'];
+    sendStateSignal?: ProcessorContext['sendStateSignal'];
     requestContext?: RequestContext;
     writer?: ProcessorStreamWriter;
     observabilityContext?: ObservabilityContext;
@@ -3623,6 +3707,8 @@ ${formattedMessages}
           messageList: opts.messageList,
           reflectionHooks,
           agent: opts.agent,
+          sendSignal: opts.sendSignal,
+          sendStateSignal: opts.sendStateSignal,
           requestContext,
           writer: opts.writer,
           observabilityContext: opts.observabilityContext,
@@ -3645,7 +3731,50 @@ ${formattedMessages}
     // Fetch the latest record after lock release
     const record = await this.getOrCreateRecord(threadId, resourceId);
     const reflected = record.generationCount > generationBefore && generationBefore >= 0;
+
+    if (observed) {
+      // Fire-and-forget; a curation failure must never fail the observation.
+      void this.maybeTriggerCadenceCuration(threadId, resourceId, record, requestContext).catch(error => {
+        omDebug(`[OM:observe] cadence curation failed: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    }
+
     return { observed, reflected, record };
+  }
+
+  /**
+   * Count committed observation runs on the sync observe path and run the curator every
+   * `curationCadence` runs. The counter is persisted at `record.config.subconscious.observationRuns`
+   * (the OM record's config jsonb, deep-merged; threshold resolution only reads `_overrides`, so the
+   * sibling key is inert). Concurrent commits can miscount — the curator run is advisory, and the
+   * curation cursor is the real serializer. The async-buffer lane bypasses observe(); deployments
+   * that gate on this cadence (factory's resource scope) disable async buffering.
+   */
+  private async maybeTriggerCadenceCuration(
+    threadId: string,
+    resourceId: string | undefined,
+    record: ObservationalMemoryRecord,
+    requestContext?: RequestContext,
+  ): Promise<void> {
+    const cadence = this.curationCadence;
+    const memory = this.memory;
+    if (!cadence || cadence < 1 || !memory) return;
+
+    const config = (record.config ?? {}) as { subconscious?: { observationRuns?: number } };
+    const runs = (config.subconscious?.observationRuns ?? 0) + 1;
+    const fire = runs >= cadence;
+    await this.storage.updateObservationalMemoryConfig({
+      id: record.id,
+      config: { subconscious: { observationRuns: fire ? 0 : runs } },
+    });
+    if (!fire) return;
+
+    const result = await memory.runCuration({
+      threadId,
+      resourceId: resourceId ?? threadId,
+      requestContext,
+    });
+    omDebug(`[OM:observe] cadence curation outcome=${result.outcome} thread=${threadId}`);
   }
 
   /**
@@ -3674,6 +3803,18 @@ ${formattedMessages}
 
     if (!record.activeObservations) {
       return { reflected: false, record, usage: undefined };
+    }
+
+    // LOCKING: same guard as the turn-driven path (reflector-runner maybeReflect).
+    // An in-flight reflection in this process skips quietly; a flag left behind
+    // by a dead process is stale — clear it and proceed.
+    if (record.isReflecting) {
+      if (isOpActiveInProcess(record.id, 'reflecting')) {
+        omDebug(`[OM:reflect] isReflecting=true and active in this process, skipping`);
+        return { reflected: false, record, usage: undefined };
+      }
+      omDebug(`[OM:reflect] isReflecting=true but NOT active in this process — stale flag from dead process, clearing`);
+      await this.storage.setReflectingFlag(record.id, false);
     }
 
     await this.storage.setReflectingFlag(record.id, true);
@@ -3893,6 +4034,8 @@ ${formattedMessages}
     resourceId?: string;
     messageList: MessageList;
     agent?: ProcessorContext['agent'];
+    sendSignal?: ProcessorContext['sendSignal'];
+    sendStateSignal?: ProcessorContext['sendStateSignal'];
     observabilityContext?: ObservabilityContext;
     hooks?: ObservationTurnHooks;
   }): ObservationTurn {
@@ -3902,6 +4045,8 @@ ${formattedMessages}
       resourceId: opts.resourceId,
       messageList: opts.messageList,
       agent: opts.agent,
+      sendSignal: opts.sendSignal,
+      sendStateSignal: opts.sendStateSignal,
       observabilityContext: opts.observabilityContext,
       hooks: opts.hooks,
     });

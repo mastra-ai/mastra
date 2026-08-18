@@ -7,11 +7,11 @@ packages:
 
 # Task tools
 
-Four built-in, agent-agnostic tools that manage a structured task list for an agent run. The task list is persisted in the thread-scoped `threadState` storage domain and projected onto the agent [state-signal](/docs/long-running-agents/signals) lane so it survives [observational-memory](/docs/memory/observational-memory) truncation.
+Four built-in, agent-agnostic tools that manage a structured task list for an agent run. The task list is persisted in the thread-scoped `threadState` storage domain and projected onto the agent [state-signal](/docs/harness/signals) lane so it survives [observational-memory](/docs/memory/observational-memory) truncation.
 
 Task tracking requires a memory-backed thread (`threadId` + `resourceId`). Without memory the tools return an error explaining that task tracking requires agent memory.
 
-The recommended setup is [`TaskSignalProvider`](/reference/signals/task-signal-provider), which bundles all four tools and the `TaskStateProcessor` in a single registration. See [Built-in tools](/docs/agents/using-tools#task-tracking) for the conceptual guide.
+The recommended setup is [`TaskSignalProvider`](/reference/signals/task-signal-provider), which bundles all four tools and the `TaskStateProcessor` in a single registration. See [Built-in tools](/docs/agents/tools#task-tracking) for the conceptual guide.
 
 ## Usage example
 
@@ -30,7 +30,7 @@ const agent = new Agent({
 })
 ```
 
-Or import the tools directly:
+Or import the tools directly. `taskWriteTool`, `taskUpdateTool`, `taskCompleteTool`, and `taskCheckTool` are the export names; `task_write`, `task_update`, `task_complete`, and `task_check` are the tool IDs the model sees in tool calls and traces:
 
 ```typescript title="src/mastra/agents/index.ts"
 import { taskWriteTool, taskUpdateTool, taskCompleteTool, taskCheckTool } from '@mastra/core/tools'

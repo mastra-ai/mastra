@@ -11,6 +11,7 @@ import type {
 
 interface FactorySessionState {
   factoryProjectId?: string;
+  factoryOrgId?: string;
   projectRepositoryId?: string;
   untrustedCheckout?: boolean;
   baseRef?: string;
@@ -107,7 +108,9 @@ async function healRecoveredSessionState(options: {
   sessions?: FactorySessionSourceLookup;
 }): Promise<void> {
   const { binding } = options;
-  const updates: FactorySessionState = { factoryProjectId: binding.factoryProjectId };
+  // `factoryOrgId` mirrors the start coordinator's seed: the binding row holds
+  // the authoritative org id, so crash-recovered sessions heal it for free.
+  const updates: FactorySessionState = { factoryProjectId: binding.factoryProjectId, factoryOrgId: binding.orgId };
   // Security posture first, from the binding row alone (no I/O): review-bound
   // sessions run against attacker-writable checkouts, so `untrustedCheckout`
   // must survive even if the enrichment lookups below fail transiently.

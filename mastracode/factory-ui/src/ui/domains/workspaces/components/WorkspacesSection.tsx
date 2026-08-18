@@ -5,7 +5,11 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
-import { useWorkspaceActivity, useWorkspaceThreadTitles } from '../../../../hooks/useWorkspaceActivity';
+import { useQueryClient } from '@tanstack/react-query';
+
+import { queryKeys } from '../../../../api/keys';
+import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
+import { useWorkspaceActivity } from '../../../../hooks/useWorkspaceActivity';
 import { useWorkspaceAttention } from '../../../../hooks/useWorkspaceAttention';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { useWorkspacePullRequestMerges } from '../../../../hooks/useWorkspacePullRequestMerges';
@@ -18,11 +22,29 @@ import { usePinnedSessions } from '../hooks/usePinnedSessions';
 import type { FactoryUserSession } from '../services/github';
 import { getFactorySessionKind } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
+import type { SessionRowStatus } from './SessionNavRow';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
 
-function workspaceStatus(row: FactoryWorkspaceRow): 'running' | 'attention' | undefined {
-  if (row.running) return 'running';
-  if (row.attention) return 'attention';
+const COLLAPSED_ROW_COUNT = 5;
+
+const byPinnedThenRecent = (a: FactoryWorkspaceRow, b: FactoryWorkspaceRow) =>
+  Number(b.pinned) - Number(a.pinned) || b.updatedAt.localeCompare(a.updatedAt);
+
+const stillUnfolding = (row: FactoryWorkspaceRow) => row.active || row.initializing || row.running || row.attention;
+
+// Who keeps one of the collapsed slots. A pin is an explicit request, so it wins
+// over a session that merely happens to be busy.
+const bySlotPriority = (a: FactoryWorkspaceRow, b: FactoryWorkspaceRow) =>
+  Number(b.pinned) - Number(a.pinned) ||
+  Number(stillUnfolding(b)) - Number(stillUnfolding(a)) ||
+  b.updatedAt.localeCompare(a.updatedAt);
+
+function workspaceStatus(row: FactoryWorkspaceRow): SessionRowStatus | undefined {
+  // An active thread means work is happening even if the workspace record has
+  // not yet been stamped materialized — surface the more informative state.
+  if (row.running) return 'working';
+  if (row.initializing) return 'initializing';
+  if (row.attention) return 'ready';
   return undefined;
 }
 
@@ -36,20 +58,23 @@ export function WorkspacesSection() {
   const scope = { agentControllerId: AGENT_CONTROLLER_ID, resourceId };
   const deleteWorkspace = useDeleteWorkspaceMutation(factoryId, projectRepositoryId, scope);
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
+  const auth = useFactoryAuth();
+  const viewerUserId = auth.data?.user?.userId;
   const { pinnedSessions, setPinned } = usePinnedSessions();
   const workItems = useWorkItemsQuery(factoryId);
   const workspaceRows = workspaces.data?.workspaces ?? [];
-  const activityOptions = {
+  const workspaceIds = workspaceRows.map(workspace => workspace.sessionId);
+  const runningByPath = useWorkspaceActivity({
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: sessionId,
-    worktreePaths: workspaceRows.map(workspace => workspace.sessionId),
+    workspaceIds,
     baseUrl,
-    enabled: sessionEnabled && Boolean(sessionId),
-  };
-  const runningByPath = useWorkspaceActivity(activityOptions);
-  const titleByPath = useWorkspaceThreadTitles(activityOptions);
-  const { attentionByPath, clearAttention } = useWorkspaceAttention(runningByPath);
+  });
+  const queryClient = useQueryClient();
+  // The server re-derives session titles at the end of a run.
+  const { attentionByPath, clearAttention } = useWorkspaceAttention(
+    runningByPath,
+    () => void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(projectRepositoryId) }),
+  );
 
   const allWorkItems = workItems.data ?? [];
   const workItemByPath = new Map(
@@ -73,14 +98,16 @@ export function WorkspacesSection() {
     const pullRequestNumber = pullRequest ? githubNumberForItem(pullRequest) : undefined;
     const active = workspace.sessionId === sessionId;
     const running = runningByPath[workspace.sessionId] === true;
+    const initializing = !workspace.materializedAt;
     const factorySession = !workspace.branch.startsWith('user/');
     if (!item && !active && !running && (!factorySession || !workItems.isFetched)) return [];
     return [
       {
         workspace,
         url: `/factories/${factoryId}/workspaces/${workspace.sessionId}`,
-        label: titleByPath[workspace.sessionId],
+        label: workspace.title,
         active,
+        initializing,
         running,
         attention: attentionByPath[workspace.sessionId] === true,
         review: getFactorySessionKind(workspace, item) === 'review',
@@ -95,24 +122,10 @@ export function WorkspacesSection() {
     ];
   });
   const latestRows = (review: boolean) => {
-    const sorted = [...rows.filter(row => row.review === review)].sort(
-      (a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt.localeCompare(a.updatedAt),
-    );
-    const visible = sorted.slice(0, 5);
-    for (const pinned of sorted.slice(5).filter(row => row.active || row.running || row.attention)) {
-      let replaceIndex = visible.length - 1;
-      while (
-        replaceIndex >= 0 &&
-        (visible[replaceIndex]?.active || visible[replaceIndex]?.running || visible[replaceIndex]?.attention)
-      ) {
-        replaceIndex -= 1;
-      }
-      if (replaceIndex >= 0) visible[replaceIndex] = pinned;
-    }
-    return {
-      visible: visible.sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt.localeCompare(a.updatedAt)),
-      all: sorted,
-    };
+    const all = rows.filter(row => row.review === review).sort(byPinnedThenRecent);
+    // The cap holds either way — priority only decides which rows fill the slots.
+    const visible = [...all].sort(bySlotPriority).slice(0, COLLAPSED_ROW_COUNT).sort(byPinnedThenRecent);
+    return { visible, all };
   };
   const workRows = latestRows(false);
   const reviewRows = latestRows(true);
@@ -167,6 +180,7 @@ export function WorkspacesSection() {
           kind="Work session"
           pending={pending}
           mergedByPath={mergedByPath}
+          viewerUserId={viewerUserId}
           onSelect={openWorkspaceThread}
           onPinChange={setPinned}
           onDelete={setConfirmDelete}
@@ -181,6 +195,7 @@ export function WorkspacesSection() {
           kind="Review session"
           pending={pending}
           mergedByPath={mergedByPath}
+          viewerUserId={viewerUserId}
           onSelect={openWorkspaceThread}
           onPinChange={setPinned}
           onDelete={setConfirmDelete}
@@ -224,6 +239,7 @@ interface FactoryWorkspaceRow {
   url: string;
   label?: string;
   active: boolean;
+  initializing: boolean;
   running: boolean;
   attention: boolean;
   review: boolean;
@@ -243,6 +259,7 @@ function WorkspaceGroup({
   kind,
   pending,
   mergedByPath,
+  viewerUserId,
   onSelect,
   onPinChange,
   onDelete,
@@ -253,6 +270,7 @@ function WorkspaceGroup({
   kind: SessionPreviewDetails['kind'];
   pending: boolean;
   mergedByPath: Record<string, boolean>;
+  viewerUserId: string | undefined;
   onSelect: (workspace: FactoryUserSession) => void;
   onPinChange: (sessionId: string, pinned: boolean) => void;
   onDelete: (workspace: FactoryUserSession) => void;
@@ -292,7 +310,11 @@ function WorkspaceGroup({
             }}
             onSelect={() => onSelect(row.workspace)}
             onPinChange={pinned => onPinChange(row.workspace.sessionId, pinned)}
-            onDelete={() => onDelete(row.workspace)}
+            // The DELETE route is owner-only and 404s for non-owners, which the
+            // delete service treats as an idempotent success; offering delete
+            // on a known non-owned row would fake-succeed and the row would
+            // reappear. Unknown viewer (auth disabled) keeps it.
+            onDelete={viewerUserId && row.workspace.userId !== viewerUserId ? undefined : () => onDelete(row.workspace)}
           />
         ))}
       </MainSidebar.NavList>

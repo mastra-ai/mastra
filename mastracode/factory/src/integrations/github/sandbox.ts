@@ -63,7 +63,9 @@ export async function ensureProjectSandbox(options: {
   onProgress?: ProgressFn;
 }): Promise<MaterializationSandbox> {
   const { fleet, row, storage, token, onProgress } = options;
-  return fleet.ensureSandbox(bindingStore(row, storage), { GH_TOKEN: token }, onProgress);
+  return fleet.ensureSandbox(bindingStore(row, storage), { GH_TOKEN: token }, onProgress, {
+    actingUserId: row.userId,
+  });
 }
 
 /**
@@ -102,7 +104,7 @@ export function shellQuote(value: string): string {
  * so a wedged sandbox surfaces a failure instead of hanging the request that
  * triggered materialization forever.
  */
-const DEFAULT_COMMAND_TIMEOUT_MS = 15 * 60_000;
+export const DEFAULT_COMMAND_TIMEOUT_MS = 15 * 60_000;
 /** Branch checkout only fetches one ref — a much tighter budget applies. */
 export const CHECKOUT_COMMAND_TIMEOUT_MS = 5 * 60_000;
 
@@ -333,7 +335,7 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
   // trusting the row.
   const alreadyMaterialized = await hasExistingCheckout(sandbox, workdir, repo);
 
-  let succeeded = false;
+  let tokenInRemote = false;
   try {
     if (!alreadyMaterialized) {
       // 2a. First open: shallow-clone the default branch into the workdir. A
@@ -360,8 +362,13 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
         },
       );
       if (clone.exitCode !== 0) {
+        // git can fail after creating the checkout ("Clone succeeded, but
+        // checkout failed") with the tokenized origin persisted — probe the
+        // disk instead of assuming the failed clone left nothing behind.
+        tokenInRemote = await hasGitDir(sandbox, workdir);
         throw classifyGitFailure(clone, 'clone-failed');
       }
+      tokenInRemote = true;
     } else {
       // 2b. Re-open: refresh remote to the token URL and fast-forward pull.
       reportProgress(onProgress, { phase: 'pulling', message: `Updating ${repo} to the latest changes…` });
@@ -369,6 +376,7 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
       if (setUrl.exitCode !== 0) {
         throw new MaterializeError(`Failed to set git remote: ${setUrl.stderr}`, 'pull-failed');
       }
+      tokenInRemote = true;
       const pull = await gitTransfer(sandbox, `git -C ${shellQuote(workdir)} pull --ff-only`, {
         phase: 'repository pull',
         beforeRetry: async attempt =>
@@ -395,15 +403,17 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
         });
       }
     }
-    succeeded = true;
-  } finally {
-    // 3. Always scrub the token from the remote so it isn't left in the VM's
-    // git config, even when the clone/pull above failed partway through. This
-    // is best-effort on the failure path (the workdir may not even exist, and
-    // a scrub error must never mask the primary failure); on the success path
-    // the scrub must succeed or we surface it.
-    await scrubRemote(sandbox, workdir, repo, succeeded);
+  } catch (primary) {
+    // 3a. The clone/pull failed — still scrub the token from the VM's git
+    // config. The scrub must never hide the actionable failure, but once the
+    // token reached the remote its own failure can't stay silent either:
+    // report both, primary cause and classification first.
+    throw await scrubbedFailure(sandbox, workdir, repo, tokenInRemote, primary, 'pull-failed');
   }
+
+  // 3b. Success — the token is in the remote and the workdir has a `.git`, so
+  // a failed scrub means the token may still be persisted: surface it.
+  await scrubRemote(sandbox, workdir, repo, tokenInRemote);
 
   // 4. Mark materialized.
   reportProgress(onProgress, { phase: 'finalizing', message: 'Finalizing workspace…' });
@@ -539,28 +549,67 @@ async function hasExistingCheckout(
   return url.endsWith(`${suffix}.git`) || url.endsWith(suffix);
 }
 
+/** Probed without `git -C` so a missing workdir returns false instead of throwing. */
+async function hasGitDir(sandbox: MaterializationSandbox, workdir: string): Promise<boolean> {
+  const probe = await sh(sandbox, `test -d ${shellQuote(`${workdir}/.git`)}`).catch(() => null);
+  return probe?.exitCode === 0;
+}
+
 /**
- * Reset the git remote back to the tokenless URL. On a successful clone/pull the
- * workdir always has a `.git`, so a non-zero exit code here means the token may
- * still be persisted — surface it. On the failure path the workdir may not exist
- * (e.g. a failed clone), so a non-zero exit is tolerated — and never masks the
- * primary failure being thrown through the `finally`.
+ * Reset the git remote back to the tokenless URL. Strict when the token
+ * reached the remote: any failure — a non-zero exit or a provider throw —
+ * means the token may still be persisted, so it is thrown for the caller to
+ * surface. Best-effort when it never did: the workdir may not exist (e.g. a
+ * failed clone), which makes providers that spawn with `cwd` throw rather
+ * than return a non-zero exit code; both outcomes are tolerated so neither
+ * masks the primary failure.
  */
 async function scrubRemote(
   sandbox: MaterializationSandbox,
   workdir: string,
   repoFullName: string,
-  expectGitDir: boolean,
+  tokenInRemote: boolean,
 ): Promise<void> {
-  const result = await sh(
-    sandbox,
-    `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(cleanUrl(repoFullName))}`,
-  );
-  if (result.exitCode !== 0 && expectGitDir) {
-    throw new MaterializeError(
-      `Failed to scrub installation token from git remote: ${result.stderr.trim() || result.stdout.trim()}`,
-      'pull-failed',
-    );
+  const scrub = `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(cleanUrl(repoFullName))}`;
+  if (!tokenInRemote) {
+    await sh(sandbox, scrub).catch(() => undefined);
+    return;
+  }
+  let failure: string;
+  try {
+    const result = await sh(sandbox, scrub);
+    if (result.exitCode === 0) return;
+    failure = result.stderr.trim() || result.stdout.trim();
+  } catch (error) {
+    failure = error instanceof Error ? error.message : String(error);
+  }
+  throw new MaterializeError(`Failed to scrub installation token from git remote: ${failure}`, 'pull-failed');
+}
+
+/**
+ * Scrub after `primary` already failed and return the error to throw. A failed
+ * scrub is appended to `primary` rather than replacing it, so the caller gets
+ * the error it would have had without the scrub — same class, same `code` —
+ * carrying the leaked-token warning in its message.
+ */
+async function scrubbedFailure(
+  sandbox: MaterializationSandbox,
+  workdir: string,
+  repoFullName: string,
+  tokenInRemote: boolean,
+  primary: unknown,
+  fallback: MaterializeError['code'],
+): Promise<unknown> {
+  try {
+    await scrubRemote(sandbox, workdir, repoFullName, tokenInRemote);
+    return primary;
+  } catch (scrubError) {
+    const scrubMessage = scrubError instanceof Error ? scrubError.message : String(scrubError);
+    if (!(primary instanceof Error)) {
+      return new MaterializeError(`${String(primary)} — additionally: ${scrubMessage}`, fallback);
+    }
+    primary.message = `${primary.message} — additionally: ${scrubMessage}`;
+    return primary;
   }
 }
 
@@ -619,8 +668,8 @@ function classifyGitFailure(
 //
 // These helpers let the sandbox author and push commits safely. The install
 // token is short-lived, minted per-operation server-side, injected only into
-// the temporary remote URL inside the sandbox, and always scrubbed in a
-// `finally` so it never persists in `.git/config`.
+// the temporary remote URL inside the sandbox, and always scrubbed afterwards
+// so it never persists in `.git/config`.
 // ---------------------------------------------------------------------------
 
 /**
@@ -684,13 +733,15 @@ export async function configureGitIdentity(
 
 /**
  * Temporarily rewrite `origin` to a tokenized URL, run `fn` (e.g. a push), and
- * **always** scrub the remote back to the tokenless URL in a `finally`. The
- * token therefore only ever lives in the remote URL for the duration of the
+ * **always** scrub the remote back to the tokenless URL afterwards. The token
+ * therefore only ever lives in the remote URL for the duration of the
  * operation and is never left in the VM's git config.
  *
- * On the success path the scrub must succeed (a leaked token is a hard error);
- * if it fails we surface it. On the failure path the scrub is best-effort but
- * still attempted, and the original operation error is rethrown.
+ * Once the tokenized URL is installed a failed scrub may leave the token
+ * persisted, so it is always surfaced: on its own after a successful `fn`,
+ * appended to `fn`'s own error otherwise — `fn`'s error is never replaced.
+ * Only a failed set-url (the token never reached the remote) downgrades the
+ * scrub to best-effort.
  */
 export async function withInstallToken<T>(
   sandbox: MaterializationSandbox,
@@ -713,14 +764,16 @@ export async function withInstallToken<T>(
     throw new MaterializeError(`Failed to set git remote: ${setUrl.stderr.trim()}`, 'push-failed');
   }
 
+  let result: T;
   try {
-    return await fn();
-  } finally {
-    // Always restore the tokenless remote. The workdir has a `.git` (we just
-    // rewrote its remote) so a scrub failure means the token may still persist
-    // — surface it.
-    await scrubRemote(sandbox, workdir, repoFullName, true);
+    result = await fn();
+  } catch (primary) {
+    throw await scrubbedFailure(sandbox, workdir, repoFullName, true, primary, 'push-failed');
   }
+  // Restore the tokenless remote. The workdir has a `.git` (we just rewrote
+  // its remote) so a scrub failure means the token may still persist — surface it.
+  await scrubRemote(sandbox, workdir, repoFullName, true);
+  return result;
 }
 
 /**
@@ -804,7 +857,7 @@ export async function commitAll(
 export class WorktreeError extends Error {
   constructor(
     message: string,
-    readonly code: 'invalid-branch' | 'worktree-failed' | 'setup-failed',
+    readonly code: 'invalid-branch' | 'worktree-failed' | 'setup-failed' | 'teardown-failed',
   ) {
     super(message);
     this.name = 'WorktreeError';
@@ -944,16 +997,50 @@ export async function ensureWorktree(
  * @param worktreePath  the server-computed worktree path the command runs in
  * @param command       the org-configured setup shell command
  */
+async function runWorktreeLifecycleCommand(
+  sandbox: MaterializationSandbox,
+  worktreePath: string,
+  command: string,
+  options: { phase: 'setup' | 'teardown'; timeoutMs?: number },
+): Promise<void> {
+  const result = await sh(sandbox, `cd ${shellQuote(worktreePath)} && { ${command}\n}`, {
+    phase: `worktree ${options.phase}`,
+    ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+  });
+  if (result.exitCode !== 0) {
+    const detail = (result.stderr.trim() || result.stdout.trim()).slice(-1800);
+    const label = options.phase === 'setup' ? 'Setup' : 'Teardown';
+    throw new WorktreeError(
+      `${label} command failed (exit ${result.exitCode}): ${detail}`,
+      options.phase === 'setup' ? 'setup-failed' : 'teardown-failed',
+    );
+  }
+}
+
 export async function runWorktreeSetup(
   sandbox: MaterializationSandbox,
   worktreePath: string,
   command: string,
 ): Promise<void> {
-  const result = await sh(sandbox, `cd ${shellQuote(worktreePath)} && { ${command}\n}`, { phase: 'worktree setup' });
-  if (result.exitCode !== 0) {
-    const detail = (result.stderr.trim() || result.stdout.trim()).slice(-2000);
-    throw new WorktreeError(`Setup command failed (exit ${result.exitCode}): ${detail}`, 'setup-failed');
-  }
+  return runWorktreeLifecycleCommand(sandbox, worktreePath, command, { phase: 'setup' });
+}
+
+/**
+ * Run the repository's best-effort teardown command from the materialized
+ * session workdir. Callers own lifecycle policy: this helper reports failures
+ * so the retirement coordinator can log them while still continuing with
+ * scrub, pooling/destruction, cache invalidation, and row deletion.
+ */
+export async function runWorktreeTeardown(
+  sandbox: MaterializationSandbox,
+  worktreePath: string,
+  command: string,
+  options: { timeoutMs?: number } = {},
+): Promise<void> {
+  return runWorktreeLifecycleCommand(sandbox, worktreePath, command, {
+    phase: 'teardown',
+    ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+  });
 }
 
 /**

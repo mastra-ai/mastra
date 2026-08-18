@@ -1,14 +1,3 @@
-/**
- * Focused coverage of the `<SessionPrepareSteps>` loader: renders three
- * user-facing groups ("Preparing sandbox" → "Cloning repository" →
- * "Starting session") built on the DS `ProcessStepListItem` primitive,
- * marks each pending / running / success based on `sandboxProgress.phase`.
- *
- * SSE phase → group mapping:
- *   reattaching / provisioning / preparing-workspace  →  Preparing sandbox
- *   cloning / pulling                                 →  Cloning repository
- *   finalizing (+ post-ensure messages fetch)         →  Starting session
- */
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
@@ -48,9 +37,9 @@ describe('SessionPrepareSteps', () => {
   it('renders exactly three user-facing groups in the canonical order', () => {
     renderWithProgress(undefined);
     expect(screen.getByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
+    expect(screen.getAllByRole('status')).toHaveLength(1);
     const stepRoots = screen.getAllByTestId('session-prepare-step');
     expect(stepRoots).toHaveLength(3);
-    // Each ProcessStepListItem auto-formats the id: preparing-sandbox → "Preparing sandbox"
     expect(within(stepRoots[0]).getByRole('heading', { name: 'Preparing sandbox' })).toBeInTheDocument();
     expect(within(stepRoots[1]).getByRole('heading', { name: 'Cloning repository' })).toBeInTheDocument();
     expect(within(stepRoots[2]).getByRole('heading', { name: 'Starting session' })).toBeInTheDocument();
@@ -127,7 +116,6 @@ describe('SessionPrepareSteps', () => {
     expect(stepByTitle('Preparing sandbox')).toHaveAttribute('data-status', 'success');
     expect(stepByTitle('Cloning repository')).toHaveAttribute('data-status', 'running');
     expect(within(stepByTitle('Cloning repository')).getByText('Cloning…')).toBeInTheDocument();
-    // Raw server text never enters the fixed-width description slot.
     expect(screen.queryByText('Cloning octo/hello…')).not.toBeInTheDocument();
     expect(screen.queryByText('Provisioning a new sandbox…')).not.toBeInTheDocument();
   });

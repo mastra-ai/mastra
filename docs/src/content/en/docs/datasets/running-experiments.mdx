@@ -45,6 +45,8 @@ console.log(summary.failedCount) // number of items that failed
 
 You can also run experiments in [Studio](/docs/studio/overview). After you've added a dataset item, open it and select **Run Experiment** and configure the target, scorers, and options.
 
+To configure scorers for one item, edit the item and enable **Override dataset scorers**. Select one or more scorers, or leave the selection empty to run no scorers for that item.
+
 After running an experiment, the **Experiments** tab shows all runs for that dataset (with status, counts, and timestamps). Select an experiment to see per-item results, scores, and execution traces.
 
 In the **Experiments** tab, select **Compare** and choose two or more experiments to compare their scores and results side by side.
@@ -79,7 +81,7 @@ Because the threads belong to the caller's resource, resource-scoped memory feat
 - Resource-scoped working memory updates persist to the resource, and later items in the run see updates made by earlier items.
 - Resource-scoped semantic recall can surface the resource's prior conversations to the experiment, and experiment transcripts become recallable in that resource's later conversations.
 
-This is useful when you want to evaluate an agent against a real user's accumulated context. If you don't want experiment runs touching real user state, run the experiment with a dedicated evaluation resource id instead.
+Use this approach to evaluate an agent against a real user's accumulated context. To keep experiment runs from touching real user state, use a dedicated evaluation resource id instead.
 
 Thread injection is skipped in the following cases:
 
@@ -160,6 +162,50 @@ for (const item of summary.results) {
 ```
 
 Visit the [Scorers overview](/docs/evals/overview) for details on available and custom scorers.
+
+## Select scorers per item
+
+Add registered scorer IDs to a dataset item to override the scorers attached to its dataset:
+
+```typescript title="src/mastra/datasets/items.ts"
+await dataset.addItem({
+  input: 'Translate "hello" to French.',
+  scorerIds: ['accuracy', 'fluency'],
+})
+```
+
+An experiment uses exactly one scorer source for each item, in this order:
+
+1. The experiment's `scorers` option, when provided
+1. The item's `scorerIds` field, when provided
+1. The dataset's `scorerIds` field
+1. No scorers
+
+Mastra doesn't merge these sources. An explicit empty array at the run or item level selects no scorers and prevents fallback to the next source. An empty categorized run-level configuration has the same effect. Duplicate item or dataset IDs run once, in the order of their first occurrence.
+
+The following updates switch between an explicit empty override and dataset inheritance:
+
+```typescript title="src/mastra/datasets/items.ts"
+// Run no scorers for this item
+await dataset.updateItem({
+  itemId: 'translation-item-id',
+  scorerIds: [],
+})
+
+// Remove the item override and inherit the dataset's scorers
+await dataset.updateItem({
+  itemId: 'translation-item-id',
+  scorerIds: null,
+})
+```
+
+Omitting `scorerIds` from an update preserves its current value. Each item version stores its scorer ID list, including an empty list. Scorer definitions aren't copied into the item version and continue to use their existing registry or Editor behavior.
+
+Mastra resolves each item's scorer IDs before running its target. It checks registered scorers first, then asks the Editor to hydrate a stored scorer. A stale item-level ID produces the `EXPERIMENT_ITEM_SCORER_NOT_FOUND` code for that item. Mastra skips target execution without retrying that item, while the rest of the experiment continues.
+
+A missing ID in the selected run-level or dataset-level source fails experiment setup. Mastra doesn't resolve IDs from lower-priority sources that the precedence rules ignore.
+
+Workflow step scorers are available only through a run-level categorized `scorers` configuration. Item-level IDs apply to the flat agent, workflow, and trajectory scorer dispatch.
 
 ## Control persistence per run
 
@@ -365,7 +411,7 @@ In [Studio](/docs/studio/overview), edit a dataset item to author tool mocks as 
 ### Limitations
 
 - **No tool span for mocked calls.** A mocked call returns its output before the tool executes, so it doesn't create a tool span. Trajectory scorers backed by stored traces may therefore not see mocked tool calls. Trajectory extraction that falls back to the agent's message output still sees them, so trajectory scoring can differ depending on your observability configuration.
-- **Storage support.** Tool mocks and tool mock reports are persisted by the LibSQL, PostgreSQL, MongoDB, and Spanner adapters. The MySQL adapter doesn't support them and rejects writes that carry tool mocks or a tool mock report. All dataset storage adapters persist `unmockedToolPolicy`.
+- **Storage support.** The LibSQL, PostgreSQL, MongoDB, and Spanner adapters persist tool mocks and tool mock reports, while the MySQL adapter rejects writes that carry either one. All dataset storage adapters persist `unmockedToolPolicy`.
 
 ## Async experiments
 

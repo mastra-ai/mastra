@@ -15,6 +15,11 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 
 import type { Context } from 'hono';
+import {
+  applyStoredMemorySettings,
+  DEFAULT_OBSERVATION_THRESHOLD,
+  DEFAULT_REFLECTION_THRESHOLD,
+} from '../session/memory-settings-hydration.js';
 import type {
   CredentialRecord,
   LoginSessionKind,
@@ -488,10 +493,6 @@ async function applyPackToSession({
 // user in the Factory app database. Requests with an active session also apply
 // changes immediately to that session's state and thread settings.
 
-/** Default thresholds mirror the TUI `/om` fallbacks. */
-const DEFAULT_OBSERVATION_THRESHOLD = 30_000;
-const DEFAULT_REFLECTION_THRESHOLD = 40_000;
-
 /** Read the current OM config from a session. */
 export interface OMConfigInfo {
   observerModelId: string;
@@ -602,41 +603,10 @@ async function persistMemorySettings(
   await context.storage.patch({ orgId: context.orgId, userId: context.userId, patch, fillIfUnset });
 }
 
-/**
- * Apply the stored memory-settings row onto the session, so the DB — not
- * whatever happens to sit in persisted session state (e.g. a stale boot-time
- * seed from before memory settings moved to the DB) — is what the web surface
- * reads and what the session's OM actually runs with. The row is authoritative:
- * knobs without a stored value reset to the built-in defaults.
- */
-async function hydrateSessionMemorySettings(session: OMSession, record: MemorySettingsRecord | null): Promise<void> {
-  for (const role of ['observer', 'reflector'] as const) {
-    const stored = role === 'observer' ? record?.observerModelId : record?.reflectorModelId;
-    const target = stored ?? DEFAULT_OM_MODEL_ID;
-    if (session.om[role].modelId() !== target) {
-      await session.om[role].switchModel({ modelId: target });
-    }
-  }
-  const state = session.state.get() ?? {};
-  const updates: OMStateWrites = {};
-  const observationThreshold = record?.observationThreshold ?? DEFAULT_OBSERVATION_THRESHOLD;
-  if (state.observationThreshold !== observationThreshold) {
-    updates.observationThreshold = observationThreshold;
-  }
-  const reflectionThreshold = record?.reflectionThreshold ?? DEFAULT_REFLECTION_THRESHOLD;
-  if (state.reflectionThreshold !== reflectionThreshold) {
-    updates.reflectionThreshold = reflectionThreshold;
-  }
-  const observeAttachments = record?.observeAttachments ?? 'auto';
-  if ((state.observeAttachments ?? 'auto') !== observeAttachments) {
-    updates.observeAttachments = observeAttachments;
-  }
-  if (Object.keys(updates).length > 0) await session.state.set(updates);
-}
-
 /** Dependencies injected into {@link ConfigRoutes}. */
 export interface ConfigRoutesDeps extends RouteDependencies {
   controller: ModelCatalog;
+  features?: { knowledge: boolean };
   authStorage?: AuthStorage;
   /** Tenant credential domain handle; absent in local (no-DB) mode. */
   modelCredentials?: ModelCredentialsStorage;
@@ -659,6 +629,7 @@ export interface ConfigRoutesDeps extends RouteDependencies {
 
 /**
  * The web config routes as Mastra `apiRoutes`:
+ *   - `GET    /web/config/features`               — list server-enabled product features
  *   - `GET    /web/config/providers`              — list providers + key source
  *   - `PUT    /web/config/providers/:provider/key` — set/update a provider's API key
  *   - `DELETE /web/config/providers/:provider/key` — remove a stored API key
@@ -681,6 +652,12 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
     const onCustomProvidersChanged = options.onCustomProvidersChanged ?? (() => {});
 
     return [
+      registerApiRoute('/web/config/features', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => c.json({ knowledge: options.features?.knowledge ?? false }),
+      }),
+
       registerApiRoute('/web/config/providers', {
         method: 'GET',
         requiresAuth: false,
@@ -1240,7 +1217,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             // stored config instead of failing.
             const session = await controller.getSessionByResource?.(resourceId, scope);
             if (!session) return c.json({ config: readStoredOMConfig(record) });
-            await hydrateSessionMemorySettings(session, record);
+            await applyStoredMemorySettings(session, record);
             return c.json({ config: readOMConfig(session) });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);

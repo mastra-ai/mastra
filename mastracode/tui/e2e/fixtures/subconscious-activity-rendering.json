@@ -1,0 +1,29 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "Start state signal host run.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "chunkSize": 4,
+      "streamingProfile": {
+        "ttft": 500,
+        "tps": 4
+      },
+      "response": {
+        "content": "State signal host run completed."
+      }
+    },
+    {
+      "match": {
+        "userMessage": "Subconscious live activity for Atlas launch.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "Subconscious activity follow-up completed."
+      }
+    }
+  ]
+}
