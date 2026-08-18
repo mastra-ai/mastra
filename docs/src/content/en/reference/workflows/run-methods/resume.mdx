@@ -229,9 +229,9 @@ If `forEachIndex` is omitted, every suspended iteration of the step is resumed w
 
 ## Concurrent resume calls
 
-Only one `resume()` call can continue a given suspension. Before it runs anything, `resume()` atomically claims the run by moving its stored status from `suspended` to `running`. If another caller already claimed it, this call throws `WORKFLOW_RESUME_ALREADY_CLAIMED` and executes no steps, so downstream steps and their side effects run once per suspension.
+Only one `resume()` call can continue a suspension. Before it runs anything, `resume()` atomically claims the run by moving its stored status from `suspended` to `running`. If another caller already claimed it, this call throws `WORKFLOW_RESUME_ALREADY_CLAIMED` and executes no steps, so downstream steps and their side effects run once per suspension.
 
-This matters whenever a resume can be triggered more than once — a double-clicked approval button, a retried webhook, or several server instances reacting to the same event.
+This matters whenever a resume can be triggered more than once, such as an approval button pressed twice or a retried webhook. It also applies when several server instances react to the same event.
 
 ```typescript
 try {
@@ -248,7 +248,7 @@ Over HTTP, a losing resume returns `409 Conflict`.
 
 :::note
 
-The claim is enforced atomically by storage adapters that report `supportsConcurrentUpdates()`. Adapters without atomic read-modify-write support (such as ClickHouse, Cloudflare D1, Cloudflare KV, and LanceDB) cannot enforce it, and the claim is also skipped when `shouldPersistSnapshot` excludes the `running` status.
+The claim is enforced atomically by storage adapters that report `supportsConcurrentUpdates()`. Adapters without atomic read-modify-write support (such as ClickHouse, Cloudflare D1, Cloudflare KV, and LanceDB) can't enforce it, and the claim is also skipped when `shouldPersistSnapshot` excludes the `running` status.
 
 :::
 
