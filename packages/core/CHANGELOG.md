@@ -1,5 +1,27 @@
 # @mastra/core
 
+## 1.60.0-alpha.10
+
+### Minor Changes
+
+- Added `modelSettings.timeout` so you can put a time limit on agent runs. Set `totalMs` to cap how long a whole run may take, including every reasoning step, tool call and retry, and `stepMs` to cap a single model call. Going over either limit fails with a `MastraTimeoutError`. A `totalMs` timeout ends the run outright, while a `stepMs` timeout moves on to the next model when you have configured fallback models, so a slow provider no longer stalls the run. Closes #15667 ([#21724](https://github.com/mastra-ai/mastra/pull/21724))
+
+## 1.60.0-alpha.9
+
+### Minor Changes
+
+- Added an opt-in `propagate` flag on the FGA actor signal. Set `actor: { actorKind: 'system', propagate: true }` when starting a workflow run and the actor is forwarded into the agent and tool calls made for declarative `.then(agent)` and `.then(tool)` steps, so system and scheduled runs no longer fail membership resolution. Propagation stays opt-in, skips custom step `execute` functions, and can be overridden per step. (#19064) ([#21713](https://github.com/mastra-ai/mastra/pull/21713))
+
+### Patch Changes
+
+- Added `settled()` to the base memory class. Memory implementations can do work in the background after an agent run returns, and this gives callers a way to wait for it before closing a storage connection they own. The default implementation does nothing; `@mastra/memory` overrides it. ([#21708](https://github.com/mastra-ai/mastra/pull/21708))
+
+- Fix per-step `reasoningText` and `reasoning` accumulating across steps for reasoning models. Each step in a multi-step run now reports only the reasoning produced during that step, matching the existing behavior of the per-step `text` field. Run-level `reasoningText` and `reasoning` remain the full concatenation across all steps. ([#21711](https://github.com/mastra-ai/mastra/pull/21711))
+
+- onAbort now receives the partial assistant text streamed before a mid-generation abort, alongside the completed steps ([#21718](https://github.com/mastra-ai/mastra/pull/21718))
+
+- Tightened `AgentConfig.tools` typing so each entry must be an actual tool object. Previously a plain function such as `tools: { myTool: () => realTool }` passed type checking and then threw `TOOL_INVALID_FORMAT` at runtime, because the provider-defined tool member of the union is all-optional with an index signature. Provider-defined tools now require an `id` when used as a tools-map entry, mirroring the existing runtime check. Setting `tools` itself to a resolver function is still supported. ([#21705](https://github.com/mastra-ai/mastra/pull/21705))
+
 ## 1.60.0-alpha.8
 
 ### Minor Changes
