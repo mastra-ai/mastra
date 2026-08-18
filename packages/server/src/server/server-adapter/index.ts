@@ -24,12 +24,15 @@ import type { MastraAuthMode } from '../constants';
 import { formatZodError } from '../handlers/error';
 export { isZodError, type ZodErrorLike } from '../handlers/error';
 import { normalizeRoutePath } from '../utils';
+import type { SetMcpRequestAuth } from './mcp-auth';
 import { generateOpenAPIDocument, convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 import type { ServerRoute } from './routes';
 import { SERVER_ROUTES, getEffectivePermission } from './routes';
 import { getBuiltInRouteFGAConfig } from './routes/fga-manifest';
 
 export * from './routes';
+export { applyMcpRequestAuth, buildMcpAuthInfoFromRequestContext } from './mcp-auth';
+export type { McpAuthInfo, SetMcpRequestAuth } from './mcp-auth';
 export { redactStreamChunk } from './redact';
 export { serializeStreamChunk, type SerializedStreamChunk } from './serialize';
 export {
@@ -108,6 +111,15 @@ export interface MCPOptions {
    * Custom session ID generator function.
    */
   sessionIdGenerator?: () => string;
+  /**
+   * Sets `req.auth` before the MCP transport reads it, which is what surfaces as
+   * `extra.authInfo` inside tool and agent execution.
+   *
+   * When omitted, the principal resolved by `server.auth` is bridged
+   * automatically. Provide this hook when your own middleware performs the
+   * verification and you want full control over the resulting `AuthInfo`.
+   */
+  setRequestAuth?: SetMcpRequestAuth;
 }
 
 /**

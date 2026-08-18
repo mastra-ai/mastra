@@ -2090,6 +2090,24 @@ describe('Agent Client Methods', () => {
     );
   });
 
+  it('should read a submitted plan with the agent version and request context', async () => {
+    global.fetch = vi.fn();
+    const path = '.mastracode/plans/add-dark-mode.md';
+    const mockResponse = { path, content: '# Add dark mode' };
+    const requestContext = { tenantId: 'tenant-123' };
+    mockFetchResponse(mockResponse);
+
+    const versionedAgent = client.getAgent('test-agent', { versionId: 'version-123' });
+    const result = await versionedAgent.readPlan(path, requestContext);
+
+    expect(result).toEqual(mockResponse);
+    const requestedUrl = new URL((global.fetch as any).mock.calls[0][0]);
+    expect(requestedUrl.pathname).toBe('/api/agents/test-agent/plans/file');
+    expect(requestedUrl.searchParams.get('path')).toBe(path);
+    expect(requestedUrl.searchParams.get('versionId')).toBe('version-123');
+    expect(requestedUrl.searchParams.get('requestContext')).toBe(btoa(JSON.stringify(requestContext)));
+  });
+
   it('should list override versions for a code agent', async () => {
     const mockResponse = {
       versions: [{ id: 'version-1', agentId: 'test-agent', versionNumber: 1 }],

@@ -222,23 +222,25 @@ export class ObservationTurn {
       const record = this._record!;
       const unobservedMessages = this.om.getUnobservedMessages(allMessages, record);
       if (unobservedMessages.length > 0) {
-        void this.om
-          .buffer({
-            threadId: this.threadId,
-            resourceId: this.resourceId,
-            messages: unobservedMessages,
-            record,
-            writer: this.writer,
-            agent: this.agent,
-            sendSignal: this.sendSignal,
-            requestContext: this.requestContext,
-            currentModel: this.actorModelContext,
-            observabilityContext: this.observabilityContext,
-            skipMinimumTokenCheck: true,
-          })
-          .catch((err: Error) => {
-            omDebug(`[OM:turn.end] idle buffer failed: ${err?.message}`);
-          });
+        void this.om.trackBackgroundWork(
+          this.om
+            .buffer({
+              threadId: this.threadId,
+              resourceId: this.resourceId,
+              messages: unobservedMessages,
+              record,
+              writer: this.writer,
+              agent: this.agent,
+              sendSignal: this.sendSignal,
+              requestContext: this.requestContext,
+              currentModel: this.actorModelContext,
+              observabilityContext: this.observabilityContext,
+              skipMinimumTokenCheck: true,
+            })
+            .catch((err: Error) => {
+              omDebug(`[OM:turn.end] idle buffer failed: ${err?.message}`);
+            }),
+        );
       }
     }
 
