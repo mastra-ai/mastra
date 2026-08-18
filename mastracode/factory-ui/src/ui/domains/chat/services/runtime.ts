@@ -1,13 +1,23 @@
 import type { AgentControllerEvent, AgentControllerOMProgress } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
+import type { TokenUsage } from '@mastra/core/agent-controller';
 
-export interface UsageSnapshot {
-  promptTokens?: number;
-  completionTokens?: number;
-  totalTokens?: number;
-  reasoningTokens?: number;
-  [key: string]: unknown;
-}
+/**
+ * The memory budgets the status line reads. Two sources feed them and only
+ * agree on these fields: the session-state route (which also derives projected
+ * savings) and the `display_state_changed` snapshot (which also carries the
+ * buffering internals).
+ */
+export type OMBudgets = Pick<
+  AgentControllerOMProgress,
+  | 'status'
+  | 'pendingTokens'
+  | 'threshold'
+  | 'thresholdPercent'
+  | 'observationTokens'
+  | 'reflectionThreshold'
+  | 'reflectionThresholdPercent'
+>;
 
 export type OMPhase = 'idle' | 'observing' | 'reflecting';
 
@@ -24,9 +34,9 @@ export interface GoalSnapshot {
 }
 
 export interface ChatRuntimeState {
-  usage?: UsageSnapshot;
+  usage?: TokenUsage;
   followUpCount: number;
-  omProgress?: AgentControllerOMProgress;
+  omProgress?: OMBudgets;
   omPhase: OMPhase;
   bufferingMessages: boolean;
   bufferingObservations: boolean;
@@ -77,8 +87,8 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
       if (!hasAssistantText(event.message) || state._decodeStartedAt > 0) return state;
       return { ...state, _decodeStartedAt: Date.now() };
     case 'usage_update': {
-      const usage = event.usage as UsageSnapshot;
-      const stepTokens = (usage.completionTokens ?? 0) + (usage.reasoningTokens ?? 0);
+      const usage = event.usage;
+      const stepTokens = usage.completionTokens + (usage.reasoningTokens ?? 0);
       let tokensPerSec = state.tokensPerSec;
       if (state._decodeStartedAt > 0 && stepTokens > 0) {
         const decodeSeconds = Math.max((Date.now() - state._decodeStartedAt) / 1000, 0.001);
@@ -94,7 +104,7 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
       return {
         ...state,
         omProgress: event.displayState.omProgress ?? state.omProgress,
-        usage: (event.displayState.tokenUsage as UsageSnapshot | undefined) ?? state.usage,
+        usage: event.displayState.tokenUsage ?? state.usage,
         bufferingMessages: event.displayState.bufferingMessages ?? state.bufferingMessages,
         bufferingObservations: event.displayState.bufferingObservations ?? state.bufferingObservations,
       };
@@ -118,11 +128,10 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
     case 'om_observation_failed':
     case 'om_reflection_end':
     case 'om_reflection_failed':
+    case 'om_activation':
       return { ...state, omPhase: 'idle' };
     case 'om_reflection_start':
       return { ...state, omPhase: 'reflecting' };
-    case 'om_activation':
-      return event.enabled ? state : { ...state, omPhase: 'idle' };
     default:
       return state;
   }

@@ -185,6 +185,12 @@ const sidebars = {
         { type: 'doc', id: 'sandboxes/blaxel', label: 'Blaxel', customProps: { icon: '/img/integrations/blaxel.svg' } },
         {
           type: 'doc',
+          id: 'sandboxes/cloudflare-sandbox',
+          label: 'Cloudflare Sandbox',
+          customProps: { icon: 'https://cdn.simpleicons.org/cloudflare?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
           id: 'sandboxes/daytona',
           label: 'Daytona',
           customProps: { icon: '/img/integrations/daytona.svg', customCSS: 'dark:invert' },

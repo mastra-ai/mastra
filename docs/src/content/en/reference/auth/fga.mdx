@@ -194,6 +194,14 @@ Identifies a call made by a trusted non-user actor rather than an authenticated 
     isOptional: true,
     description: 'Name of the workflow that started the actor run, when applicable.',
   },
+  {
+    name: 'propagate',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      "Forwards this actor into the agent and tool calls the framework makes for the run's declarative .then(agent) and .then(tool) steps. Custom step execute functions aren't covered and must pass actor explicitly. Ignored by authorization itself.",
+  },
 ]}
 />
 

@@ -56,7 +56,13 @@ function buildApp(user: { workosId: string; organizationId?: string } | null, in
   });
   mountApiRoutes(
     app as any,
-    new IntakeRoutes({ auth: fakeRouteAuth(), audit, intake: seed.intake, integrations: intakeIntegrations }).routes(),
+    new IntakeRoutes({
+      auth: fakeRouteAuth(),
+      audit,
+      intake: seed.intake,
+      projects: seed.projects,
+      integrations: intakeIntegrations,
+    }).routes(),
   );
   return app;
 }
@@ -109,6 +115,58 @@ describe('intake configuration', () => {
         },
       },
     ]);
+  });
+
+  describe('source bindings', () => {
+    const put = (body: unknown, user: typeof orgUser | null = orgUser) =>
+      buildApp(user).request('/web/intake/bindings', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    it('requires an authenticated organization', async () => {
+      expect((await buildApp(null).request('/web/intake/bindings')).status).toBe(401);
+      expect((await buildApp({ workosId: 'u1' }).request('/web/intake/bindings')).status).toBe(403);
+    });
+
+    it('binds a source to a Factory project and reads it back', async () => {
+      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
+      const response = await put({ integrationId: 'linear', sourceId: 'team-1', factoryProjectId: project.id });
+
+      const bindings = [{ integrationId: 'linear', sourceId: 'team-1', factoryProjectId: project.id }];
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ bindings });
+      expect(await (await buildApp(orgUser).request('/web/intake/bindings')).json()).toEqual({ bindings });
+      expect(auditEvents).toEqual([
+        { action: 'factory.intake.binding_updated', metadata: { factoryProjectId: project.id } },
+      ]);
+    });
+
+    it('clears a binding when the project is null', async () => {
+      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
+      await put({ integrationId: 'linear', sourceId: 'team-1', factoryProjectId: project.id });
+
+      const response = await put({ integrationId: 'linear', sourceId: 'team-1', factoryProjectId: null });
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ bindings: [] });
+    });
+
+    it('rejects unknown integrations and malformed bodies', async () => {
+      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
+      expect((await put({ integrationId: 'jira', sourceId: 's', factoryProjectId: project.id })).status).toBe(400);
+      expect((await put({ integrationId: 'linear', factoryProjectId: project.id })).status).toBe(400);
+      expect((await put({ integrationId: 'linear', sourceId: 'team-1' })).status).toBe(400);
+    });
+
+    it('refuses to bind a source to another org project', async () => {
+      const foreign = await seed.projects.create({ orgId: 'org2', userId: 'u9', input: { name: 'other' } });
+      const response = await put({ integrationId: 'linear', sourceId: 'team-1', factoryProjectId: foreign.id });
+
+      expect(response.status).toBe(404);
+      expect(await seed.intake.listBindings({ orgId: 'org1' })).toEqual([]);
+    });
   });
 
   it('rejects unknown integrations and invalid JSON', async () => {
