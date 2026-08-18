@@ -1,5 +1,16 @@
 # @mastra/playground-ui
 
+## 50.0.0-alpha.12
+
+### Patch Changes
+
+- Improved trace details with readable times, precise hover values, responsive layouts, and clearer statuses. ([#21660](https://github.com/mastra-ai/mastra/pull/21660))
+
+- Updated dependencies [[`6db7a5d`](https://github.com/mastra-ai/mastra/commit/6db7a5dd3dd2b6f7ef75dcd804fcffef5fa83963), [`0cdc5dc`](https://github.com/mastra-ai/mastra/commit/0cdc5dc69024957815da4f51acc4119eb4f447d7)]:
+  - @mastra/core@1.60.0-alpha.12
+  - @mastra/client-js@1.41.0-alpha.12
+  - @mastra/react@1.4.4-alpha.12
+
 ## 50.0.0-alpha.11
 
 ### Patch Changes
