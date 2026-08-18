@@ -294,6 +294,22 @@ describe('getFactoryWorkspace', () => {
     );
   });
 
+  it('uses work-item-specific artifact paths for Factory handoffs', async () => {
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
+    const read = (name: string) => fs.readFile(path.join(assetRoot, name, 'SKILL.md'), 'utf8');
+    const [triage, plan, review, rereview] = await Promise.all(
+      ['factory-triage', 'factory-plan', 'factory-review', 'factory-rereview'].map(read),
+    );
+
+    expect(triage).toContain('.artifacts/factory-triage/issue-<number>.md');
+    expect(plan).toContain('.artifacts/plans/issue-<number>.md');
+    expect(plan).toContain('.artifacts/factory-plan/pr-description-issue-<number>.md');
+    expect(review).toContain('.artifacts/factory-review/pr-<number>.md');
+    expect(review).toContain('.artifacts/factory-review/follow-up-pr-<number>.md');
+    expect(rereview).toContain('.artifacts/factory-rereview/pr-<number>.md');
+    expect(rereview).toContain('.artifacts/factory-rereview/follow-up-pr-<number>.md');
+  });
+
   it('keeps the autonomous Factory skills on the terminal-handoff contract', async () => {
     const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
     const read = (skillName: string) => fs.readFile(path.join(assetRoot, skillName, 'SKILL.md'), 'utf8');
