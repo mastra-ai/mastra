@@ -1,5 +1,5 @@
 ---
-'@internal/factory-ui': patch
+'@mastra/factory': patch
 ---
 
 Make the board honest about runs it is waiting on, and about clicks that fail.

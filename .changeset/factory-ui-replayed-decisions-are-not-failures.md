@@ -1,5 +1,5 @@
 ---
-'@internal/factory-ui': patch
+'@mastra/factory': patch
 ---
 
 Stop showing "Linked card could not be filed" when nothing failed.
