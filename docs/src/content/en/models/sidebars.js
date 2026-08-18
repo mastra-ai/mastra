@@ -766,7 +766,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/scx',
+          id: 'providers/scx-ai',
           label: 'SCX.ai',
         },
         {
