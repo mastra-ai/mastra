@@ -92,11 +92,15 @@ Install AI SDK UI along with the Mastra adapter:
 npm install @mastra/ai-sdk@latest @ai-sdk/react ai
 ```
 
-Next, initialize AI Elements. When prompted, choose the default options:
+Next, initialize AI Elements. When prompted to select a component library, choose **Radix UI**, then accept the defaults for the remaining prompts:
 
 ```bash npm2yarn
 npx ai-elements@latest
 ```
+
+:::note
+The default selection is Base UI, but the Base UI components currently produce TypeScript errors. Select Radix UI instead.
+:::
 
 This downloads the entire AI Elements UI component library into a `@/components/ai-elements` folder.
 
