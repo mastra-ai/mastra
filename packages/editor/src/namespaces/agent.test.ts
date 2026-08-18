@@ -10,12 +10,12 @@ import { MastraEditor } from '../index';
 async function createEditorWithStore(agents?: Record<string, Agent>) {
   const storage = new InMemoryStore();
   const editor = new MastraEditor();
-  new Mastra({ storage, editor, agents });
+  const mastra = new Mastra({ storage, editor, agents });
   const agentsStore = await storage.getStore('agents');
   if (!agentsStore) throw new Error('Agents storage domain is not available');
   const workspaceStore = await storage.getStore('workspaces');
   if (!workspaceStore) throw new Error('Workspaces storage domain is not available');
-  return { editor, agentsStore, workspaceStore };
+  return { editor, mastra, agentsStore, workspaceStore };
 }
 
 describe('EditorAgentNamespace.update', () => {
@@ -182,6 +182,55 @@ describe('EditorAgentNamespace.update', () => {
     const versionTwo = versions.versions.find(version => version.versionNumber === 2);
     expect(versionTwo?.changedFields).toEqual(['skillsFormat']);
     expect(versionTwo?.skillsFormat).toBe('markdown');
+  });
+
+  it('persists durable on the version snapshot and hydrates a durable agent', async () => {
+    const { editor, mastra, agentsStore } = await createEditorWithStore();
+
+    const created = await editor.agent.create({
+      id: 'durable-agent',
+      name: 'Durable Agent',
+      instructions: 'ONE',
+      model: { provider: 'openai', name: 'gpt-4' },
+      durable: true,
+    });
+
+    expect(created.toRawConfig()?.durable).toBe(true);
+    // `Mastra.addAgent` wraps agents whose `durable` is truthy; the wrapper
+    // points at the underlying agent instead of itself.
+    const registered = mastra.getAgentById('durable-agent') as unknown as { agent?: unknown };
+    expect(registered).toBeDefined();
+    expect(registered.agent).not.toBe(registered);
+
+    const versionOne = (await agentsStore.listVersions({ agentId: 'durable-agent' })).versions.find(
+      version => version.versionNumber === 1,
+    );
+    expect(versionOne?.durable).toBe(true);
+  });
+
+  it('creates a version when SDK updates durable', async () => {
+    const { editor, agentsStore } = await createEditorWithStore();
+
+    await editor.agent.create({
+      id: 'durable-update-agent',
+      name: 'Durable Update Agent',
+      instructions: 'ONE',
+      model: { provider: 'openai', name: 'gpt-4' },
+      durable: true,
+    });
+
+    const updated = await editor.agent.update({
+      id: 'durable-update-agent',
+      durable: { maxSteps: 10 },
+    });
+
+    expect(updated.toRawConfig()?.durable).toEqual({ maxSteps: 10 });
+
+    const versions = await agentsStore.listVersions({ agentId: 'durable-update-agent' });
+    expect(versions.versions).toHaveLength(2);
+    const versionTwo = versions.versions.find(version => version.versionNumber === 2);
+    expect(versionTwo?.changedFields).toEqual(['durable']);
+    expect(versionTwo?.durable).toEqual({ maxSteps: 10 });
   });
 
   it('persists inline workspaces before creating a version from an SDK update', async () => {

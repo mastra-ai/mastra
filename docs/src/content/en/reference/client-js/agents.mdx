@@ -843,8 +843,28 @@ const agent = await mastraClient.createStoredAgent({
     version: '1.0',
     team: 'engineering',
   },
+  durable: true,
 })
 ```
+
+#### Durable stored agents
+
+Set `durable` to run the agent as a [durable agent](/docs/harness/durable-agents) once the server hydrates it. Pass `true` to accept the defaults, or an object to tune the durable loop:
+
+```typescript
+const agent = await mastraClient.createStoredAgent({
+  id: 'durable-agent',
+  name: 'Durable Agent',
+  instructions: 'You are a helpful assistant.',
+  model: {
+    provider: 'openai',
+    name: 'gpt-5.4',
+  },
+  durable: { maxSteps: 50, cleanupTimeoutMs: 0 },
+})
+```
+
+Only serializable options are accepted. The durable cache and pubsub are inherited from the server's `Mastra` instance — if it has no distributed cache or pubsub configured, durability is process-local. Automatic recovery is still configured in code through `recovery.durableAgents`.
 
 ### `getStoredAgent()`
 

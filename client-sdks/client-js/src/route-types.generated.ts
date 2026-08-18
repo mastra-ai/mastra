@@ -7,17 +7,17 @@
 
 export type Simplify<T> = { [K in keyof T]: T[K] } & {};
 
-type Shared_Auxiliary_294 =
+type Shared_Auxiliary_298 =
   | string
   | number
   | boolean
   | null
-  | Shared_Auxiliary_294[]
+  | Shared_Auxiliary_298[]
   | {
-      [key: string]: Shared_Auxiliary_294;
+      [key: string]: Shared_Auxiliary_298;
     };
 
-type Shared_Auxiliary_1085 =
+type Shared_Auxiliary_1095 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -62,19 +62,19 @@ type Shared_Auxiliary_1085 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_1085[];
+      args: Shared_Auxiliary_1095[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_1085;
+      arg: Shared_Auxiliary_1095;
     };
 
-type Shared_Auxiliary_1226 = {
+type Shared_Auxiliary_1236 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_1226[] | undefined;
+  children?: Shared_Auxiliary_1236[] | undefined;
 };
 
 type Shared_Type_0 = {
@@ -945,6 +945,16 @@ type Shared_Type_42 = {
         [key: string]: unknown;
       }
     | undefined;
+  /** Whether this agent is hydrated with durable execution enabled */
+  durable?:
+    | (
+        | boolean
+        | {
+            maxSteps?: number | undefined;
+            cleanupTimeoutMs?: number | undefined;
+          }
+      )
+    | undefined;
 };
 
 type Shared_Type_43 = {
@@ -1041,7 +1051,7 @@ type Shared_Type_49 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_294;
+          [key: string]: Shared_Auxiliary_298;
         };
       }
     | undefined;
@@ -1055,7 +1065,7 @@ type Shared_Type_50 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_294;
+          [key: string]: Shared_Auxiliary_298;
         };
       }
     | undefined;
@@ -1070,13 +1080,13 @@ type Shared_Type_51 = {
     | undefined;
   metadata?:
     | {
-        [key: string]: Shared_Auxiliary_294;
+        [key: string]: Shared_Auxiliary_298;
       }
     | undefined;
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_294;
+          [key: string]: Shared_Auxiliary_298;
         };
       }
     | undefined;
@@ -1164,7 +1174,7 @@ type Shared_Type_54 = {
   createdAt?: (string | Date) | undefined;
   metadata?:
     | {
-        [key: string]: Shared_Auxiliary_294;
+        [key: string]: Shared_Auxiliary_298;
       }
     | undefined;
   attributes?:
@@ -1177,7 +1187,7 @@ type Shared_Type_54 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_294;
+          [key: string]: Shared_Auxiliary_298;
         };
       }
     | undefined;
@@ -1190,7 +1200,7 @@ type Shared_Type_55 = {
   createdAt?: (string | Date) | undefined;
   metadata?:
     | {
-        [key: string]: Shared_Auxiliary_294;
+        [key: string]: Shared_Auxiliary_298;
       }
     | undefined;
   attributes?:
@@ -1203,7 +1213,7 @@ type Shared_Type_55 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_294;
+          [key: string]: Shared_Auxiliary_298;
         };
       }
     | undefined;
@@ -2466,13 +2476,13 @@ type Shared_Type_107 =
   | {
       type: 'conditional';
       steps: Shared_Type_105[];
-      predicates: Shared_Auxiliary_1085[];
+      predicates: Shared_Auxiliary_1095[];
     }
   | {
       type: 'loop';
       step: Shared_Type_105;
       loopType: 'dowhile' | 'dountil';
-      predicate: Shared_Auxiliary_1085;
+      predicate: Shared_Auxiliary_1095;
     };
 
 type Shared_Type_108 = {
@@ -2809,7 +2819,7 @@ type Shared_Type_120 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1226[] | undefined;
+  files?: Shared_Auxiliary_1236[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -12636,6 +12646,19 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** Opt this agent into durable execution when it is hydrated. Cache and pubsub are inherited from the Mastra instance; without distributed backends durability is process-local. Does not enable automatic recovery — that stays `recovery.durableAgents`. */
+  durable?:
+    | (
+        | (
+            | boolean
+            | {
+                maxSteps?: number | undefined;
+                cleanupTimeoutMs?: number | undefined;
+              }
+          )
+        | undefined
+      )
+    | undefined;
 };
 
 export type PostStoredAgentsStoredAgentIdExport_Response = {
@@ -12749,6 +12772,19 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
         | {
             [key: string]: unknown;
           }
+        | undefined
+      )
+    | undefined;
+  /** Opt this agent into durable execution when it is hydrated. Cache and pubsub are inherited from the Mastra instance; without distributed backends durability is process-local. Does not enable automatic recovery — that stays `recovery.durableAgents`. */
+  durable?:
+    | (
+        | (
+            | boolean
+            | {
+                maxSteps?: number | undefined;
+                cleanupTimeoutMs?: number | undefined;
+              }
+          )
         | undefined
       )
     | undefined;
@@ -13001,6 +13037,16 @@ export type PostStoredAgents_Body = {
         [key: string]: unknown;
       }
     | undefined;
+  /** Opt this agent into durable execution when it is hydrated. Cache and pubsub are inherited from the Mastra instance; without distributed backends durability is process-local. Does not enable automatic recovery — that stays `recovery.durableAgents`. */
+  durable?:
+    | (
+        | boolean
+        | {
+            maxSteps?: number | undefined;
+            cleanupTimeoutMs?: number | undefined;
+          }
+      )
+    | undefined;
 };
 
 export type PostStoredAgents_Response = PostAgentsAgentIdClone_Response;
@@ -13247,6 +13293,19 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | {
             [key: string]: unknown;
           }
+        | undefined
+      )
+    | undefined;
+  /** Opt this agent into durable execution when it is hydrated. Cache and pubsub are inherited from the Mastra instance; without distributed backends durability is process-local. Does not enable automatic recovery — that stays `recovery.durableAgents`. */
+  durable?:
+    | (
+        | (
+            | boolean
+            | {
+                maxSteps?: number | undefined;
+                cleanupTimeoutMs?: number | undefined;
+              }
+          )
         | undefined
       )
     | undefined;
@@ -16348,7 +16407,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1226[] | undefined;
+  files?: Shared_Auxiliary_1236[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -16406,7 +16465,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_1226[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_1236[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
