@@ -7031,7 +7031,14 @@ export class Agent<
       mastra: this.#mastra,
       resumedFromSpanId,
     });
-    emitSpanFact(agentSpan as any, 'started');
+    emitSpanFact(agentSpan as any, 'started', {
+      runId,
+      surface: 'agent',
+      base: 'run',
+      threadId: threadFromArgs?.id,
+      resourceId,
+      name: `agent run: '${this.id}'`,
+    });
 
     const memory = await this.getMemory({ requestContext });
     // Reuse early workspace (resolved earlier for browser context) to avoid
@@ -7364,7 +7371,14 @@ export class Agent<
           }
         : {}),
     });
-    emitSpanFact(agentSpan as any, 'ended');
+    emitSpanFact(agentSpan as any, 'ended', {
+      runId,
+      surface: 'agent',
+      base: 'run',
+      threadId,
+      resourceId,
+      output: true,
+    });
   }
 
   /**

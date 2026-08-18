@@ -167,6 +167,7 @@ interface FlowIndexReadRow {
 
 interface FlowAggRow {
   flow_id: string;
+  run: string;
   thread: string;
   resource: string;
   started_at: string;
@@ -325,6 +326,7 @@ export class PulseStorageClickhouse extends PulseStorage {
           GROUP BY trace_id
         )
         SELECT p.trace_id AS flow_id,
+               anyIf(p.run_id, p.run_id != '') AS run,
                anyIf(p.thread_id, p.thread_id != '') AS thread,
                anyIf(p.resource_id, p.resource_id != '') AS resource,
                min(p.timestamp) AS started_at,
@@ -355,6 +357,7 @@ export class PulseStorageClickhouse extends PulseStorage {
     const terminal = row.status === 'completed' || row.status === 'failed' || row.status === 'aborted';
     return {
       flowId: row.flow_id,
+      runId: row.run || undefined,
       threadId: row.thread || undefined,
       resourceId: row.resource || undefined,
       startedAt: parseTs(row.started_at),

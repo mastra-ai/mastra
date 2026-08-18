@@ -129,6 +129,7 @@ export class InMemoryPulseStorage extends PulseStorage {
     const last = sorted[sorted.length - 1]!;
     const threadId = sorted.find(p => p.threadId)?.threadId;
     const resourceId = sorted.find(p => p.resourceId)?.resourceId;
+    const runId = sorted.find(p => p.runId)?.runId;
 
     const rootStart = sorted.find(p => !p.parentSpanId && p.action.endsWith('_started'));
     const rootEnd = [...sorted]
@@ -175,6 +176,7 @@ export class InMemoryPulseStorage extends PulseStorage {
 
     return {
       flowId,
+      runId,
       threadId,
       resourceId,
       startedAt: first.timestamp,

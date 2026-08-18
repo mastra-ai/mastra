@@ -67,6 +67,8 @@ export type FlowStatus = 'running' | 'completed' | 'failed' | 'aborted' | 'stale
 /** Derived, per trace — never stored. */
 export interface FlowSummary {
   flowId: string;
+  /** The run that IS this flow (alias; equals flowId for span-less runs). */
+  runId?: string;
   threadId?: string;
   resourceId?: string;
   startedAt: Date;

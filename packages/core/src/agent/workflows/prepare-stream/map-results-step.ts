@@ -69,13 +69,14 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
     // Every terminal below ends the AGENT_RUN span (all error calls carry
     // endSpan: true); the native run terminal fact rides the same moment.
+    const runCtx = { runId, surface: 'agent', base: 'run' } as const;
     const endAgentSpan: NonNullable<typeof agentSpan>['end'] = opts => {
       agentSpan?.end(opts as any);
-      emitSpanFact(agentSpan as any, 'ended');
+      emitSpanFact(agentSpan as any, 'ended', { ...runCtx, output: true });
     };
     const errorAgentSpan: NonNullable<typeof agentSpan>['error'] = opts => {
       agentSpan?.error(opts as any);
-      emitSpanFact(agentSpan as any, 'ended');
+      emitSpanFact(agentSpan as any, 'ended', { ...runCtx, error: true });
     };
 
     // Class instances written to runScope by upstream steps. These never travel

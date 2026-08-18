@@ -1191,7 +1191,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         : inputData.messageId || messageIdPassed;
       // Start the MODEL_STEP span at the beginning of LLM execution
       modelSpanTracker?.startStep();
-      emitSpanFact(modelSpanTracker?.getTracingContext?.()?.currentSpan as any, 'started');
+      emitSpanFact(modelSpanTracker?.getTracingContext?.()?.currentSpan as any, 'started', {
+        runId,
+        surface: 'model',
+        base: 'step',
+        occurrence: inputData.output?.steps?.length ?? 0,
+        parent: { surface: 'model', base: 'generate' },
+      });
 
       let modelResult: ReturnType<typeof execute> | undefined;
       // EXPERIMENT (Gate 1): set only when a live request is frozen for a
