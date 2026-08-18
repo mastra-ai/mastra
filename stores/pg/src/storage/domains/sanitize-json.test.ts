@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sanitizeJsonForPg } from '../sanitize-json';
+import { sanitizeJsonForPg } from './sanitize-json';
 
 describe('sanitizeJsonForPg', () => {
   it('removes bare null character escapes', () => {
@@ -10,6 +10,17 @@ describe('sanitizeJsonForPg', () => {
     expect(sanitizeJsonForPg('"a\\uD800b"')).toBe('"ab"');
     expect(sanitizeJsonForPg('"a\\udfffb"')).toBe('"ab"');
     expect(sanitizeJsonForPg('"a\\uDABCb"')).toBe('"ab"');
+  });
+
+  it('preserves valid escaped surrogate pairs', () => {
+    const sanitized = sanitizeJsonForPg('"\\uD83D\\uDE00"');
+
+    expect(sanitized).toBe('"\\uD83D\\uDE00"');
+    expect(JSON.parse(sanitized)).toBe('😀');
+  });
+
+  it('preserves adjacent escaped-backslash surrogate pairs', () => {
+    expect(sanitizeJsonForPg('"\\\\uD83D\\\\uDE00"')).toBe('"\\\\uD83D\\\\uDE00"');
   });
 
   it('escapes invalid JSON escape sequences (\\v, \\k)', () => {
