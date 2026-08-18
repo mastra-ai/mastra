@@ -490,7 +490,7 @@ describe('agent-controller routes', () => {
       expect(received.errorType).toBe('provider');
     });
 
-    it('flattens Error instances on workspace events, not just on `error`', async () => {
+    it('flattens Error instances on every event that carries one, not just on `error`', async () => {
       const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
         mastra,
         controllerId: 'code',
@@ -504,16 +504,22 @@ describe('agent-controller routes', () => {
       await controller.init();
       const session = await controller.createSession({ resourceId: 'user-ws-err', id: 'user-ws-err', ownerId: 'code' });
       session.emit({ type: 'workspace_error', error: new Error('clone failed: permission denied') });
+      session.emit({ type: 'workspace_status_changed', status: 'error', error: new Error('sandbox unreachable') });
 
-      let received: any;
-      for (let i = 0; i < 10 && received === undefined; i++) {
+      // The workspace emits its own status changes on the same stream, so match
+      // on the error-carrying ones rather than on the first of each type.
+      const received = new Map<string, unknown>();
+      for (let i = 0; i < 20 && received.size < 2; i++) {
         const { value } = await reader.read();
-        if (value && typeof value === 'object' && (value as any).type === 'workspace_error') received = value;
+        if (!value || typeof value !== 'object' || !('type' in value) || !('error' in value) || !value.error) continue;
+        const { type } = value;
+        if (type === 'workspace_error' || type === 'workspace_status_changed') received.set(type, value);
       }
       await reader.cancel();
 
-      expect(received).toBeDefined();
-      expect(JSON.parse(JSON.stringify(received)).error.message).toBe('clone failed: permission denied');
+      const wired = (type: string) => JSON.parse(JSON.stringify(received.get(type))).error;
+      expect(wired('workspace_error')).toEqual({ name: 'Error', message: 'clone failed: permission denied' });
+      expect(wired('workspace_status_changed')).toEqual({ name: 'Error', message: 'sandbox unreachable' });
     });
 
     it('converts display-state Maps to plain objects so tool state survives JSON serialization', async () => {
@@ -863,11 +869,13 @@ describe('agent-controller routes', () => {
       await session.thread.create({ title: 'p1' });
       await session.state.set({ projectPath: '/repo', thinkingLevel: 'high', notifications: 'bell' } as any);
 
+      // The reserved keys are passed as filter tags with values the thread does
+      // not have: they must be dropped before matching, not narrow the result.
       const res = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
         mastra,
         controllerId: 'code',
         resourceId: 'user-prefs',
-        tags: { projectPath: '/repo' },
+        tags: { projectPath: '/repo', thinkingLevel: 'low', notifications: 'off' },
       } as any)) as { threads: { title?: string; tags?: Record<string, string> }[] };
 
       const thread = res.threads.find(t => t.title === 'p1');

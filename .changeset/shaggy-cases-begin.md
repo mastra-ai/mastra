@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-The web transcript now reads the agent controller's real event payloads. It was branching on an `om_activation.enabled` flag the controller never sends, and casting token usage and memory progress into hand-written shapes that no longer matched the stream. No visible change; the status line and memory rings behave as before.
+Fixed how the Factory chat transcript reads agent controller events. It branched on an `om_activation.enabled` flag the controller never sends, and cast token usage and memory progress into hand-written shapes that had drifted from the streamed payloads. Both now read the shapes the controller actually emits, so the status line and memory rings stay correct as those payloads evolve.
