@@ -141,6 +141,14 @@ describe('SubmitPlanTool', () => {
 
       expect(await screen.findByRole('heading', { name: 'Short plan' })).not.toBeNull();
       expect(screen.queryByRole('button', { name: 'Expand plan' })).toBeNull();
+
+      const approveButton = screen.getByRole('button', { name: 'Approve the plan and switch to build' });
+      const rejectButton = screen.getByRole('button', { name: 'Reject the plan' });
+      const actionGroup = approveButton.closest('[data-slot="plan-action-group"]');
+
+      expect(actionGroup).not.toBeNull();
+      expect(actionGroup?.contains(rejectButton)).toBe(true);
+      expect(document.querySelectorAll('[data-slot="plan-action-group"]')).toHaveLength(1);
     });
 
     it('shows a secondary expand action when the plan body exceeds 500 characters', async () => {
@@ -161,6 +169,7 @@ describe('SubmitPlanTool', () => {
       const primaryButtons = document.querySelectorAll('button[data-variant="primary"]');
       expect(primaryButtons).toHaveLength(1);
       expect(primaryButtons[0]?.getAttribute('aria-label')).toBe('Approve the plan and switch to build');
+      expect(document.querySelectorAll('[data-slot="plan-action-group"]')).toHaveLength(2);
     });
 
     it('resumes the tool with the displayed plan when approved', async () => {

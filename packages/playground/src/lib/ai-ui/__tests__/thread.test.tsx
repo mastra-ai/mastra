@@ -64,6 +64,7 @@ const baseHandlers = () => [
   http.get(`${BASE_URL}/api/memory/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
   http.get(`${BASE_URL}/api/memory/observational-memory`, () => HttpResponse.json({ record: null })),
   http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json({ providers: [] })),
+  http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })),
   http.get(`${BASE_URL}/api/agents/:agentId/voice/speakers`, () => HttpResponse.json([])),
   http.get(`${BASE_URL}/api/agents/:agentId`, () => HttpResponse.json(v2Agent)),
   http.get(`${BASE_URL}/api/editor/builder/settings`, () =>
@@ -169,6 +170,25 @@ const assistantMessage = (text: string, metadata?: MastraDBMessage['content']['m
   content: { format: 2, parts: [{ type: 'text', text }], metadata },
 });
 
+const assistantToolMessage = (): MastraDBMessage => ({
+  id: 'a-tool-call',
+  role: 'assistant',
+  createdAt: new Date(),
+  content: {
+    format: 2,
+    parts: [
+      {
+        type: 'tool-genericTool',
+        toolName: 'genericTool',
+        toolCallId: 'call-1',
+        state: 'output-available',
+        input: { query: 'tool overflow' },
+        output: { ok: true },
+      } as never,
+    ],
+  },
+});
+
 afterEach(() => {
   delete window.MASTRA_AGENT_SIGNALS;
   cleanup();
@@ -202,6 +222,37 @@ describe('Thread', () => {
 
     expect(screen.getByText('previous question', { selector: 'p' })).toBeTruthy();
     expect(screen.queryByText('How can I help you today?')).toBeFalsy();
+  });
+
+  describe('when a message contains a tool call', () => {
+    it('allows the tool hover surface to paint outside the virtualized message item', async () => {
+      server.use(...baseHandlers());
+
+      await act(async () => {
+        renderThread([assistantToolMessage()]);
+      });
+
+      const tool = screen.getByTestId('tool-badge');
+      const messageItem = tool.closest<HTMLElement>('[data-slot="message-scroller-item"]');
+
+      expect(messageItem).not.toBeNull();
+      expect(messageItem?.style.contentVisibility).toBe('visible');
+    });
+
+    it('keeps off-screen rendering optimization on text-only messages', async () => {
+      server.use(...baseHandlers());
+
+      await act(async () => {
+        renderThread([assistantMessage('plain response')]);
+      });
+
+      const messageItem = screen
+        .getByText('plain response')
+        .closest<HTMLElement>('[data-slot="message-scroller-item"]');
+
+      expect(messageItem).not.toBeNull();
+      expect(messageItem?.style.contentVisibility).toBe('');
+    });
   });
 
   describe('when suggested prompts are provided for an empty thread', () => {

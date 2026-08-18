@@ -2,6 +2,8 @@ import { ChevronRight, X } from 'lucide-react';
 import type { HTMLAttributes, ReactNode } from 'react';
 import { createContext, useContext, useEffect, useState } from 'react';
 
+import { Card } from '../../Card';
+import { Code } from '../../Code';
 import { CodeBlock } from '../../CodeBlock';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../Collapsible';
 import { CopyButton } from '../../CopyButton';
@@ -164,7 +166,7 @@ export function ToolContent({ className, children, ...props }: ToolContentProps)
  */
 export function ToolCallListItem({ continued = false, className, children, ...props }: ToolCallListItemProps) {
   return (
-    <div className={cn('relative isolate min-w-0', continued && 'pb-1.5', className)} {...props}>
+    <div className={cn('relative isolate -mx-1.5 min-w-0', continued && 'pb-1.5', className)} {...props}>
       <div data-tool-call-list-item-content className="relative z-10 min-w-0">
         {children}
       </div>
@@ -172,7 +174,7 @@ export function ToolCallListItem({ continued = false, className, children, ...pr
         <span
           aria-hidden="true"
           data-tool-call-rail
-          className="bg-border1 pointer-events-none absolute top-7 bottom-0 left-[14px] z-0 w-px mask-b-from-[calc(100%-min(40%,80px))]"
+          className="bg-border1 pointer-events-none absolute top-6 bottom-0 left-[14px] z-0 w-px mask-b-from-[calc(100%-min(40%,80px))]"
         />
       ) : null}
     </div>
@@ -206,6 +208,33 @@ function stringify(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+interface DisplayPayload {
+  isJson: boolean;
+  text: string;
+}
+
+function displayPayload(value: unknown): DisplayPayload {
+  if (typeof value === 'string') {
+    const cleanValue = stripSerializedAnsi(value);
+    try {
+      const formatted = JSON.stringify(JSON.parse(cleanValue), null, 2);
+      if (formatted !== undefined) return { isJson: true, text: formatted };
+    } catch {
+      // A tool may return arbitrary text; it remains useful without JSON highlighting.
+    }
+    return { isJson: false, text: cleanValue };
+  }
+
+  try {
+    const formatted = JSON.stringify(value, null, 2);
+    if (formatted !== undefined) return { isJson: true, text: formatted };
+  } catch {
+    // Circular and otherwise non-serializable values fall back to readable text.
+  }
+
+  return { isJson: false, text: String(value) };
 }
 
 // CSI/OSC escape sequences emitted by terminal tools.
@@ -250,6 +279,37 @@ function MonoBlock({ copyText, className, children }: { copyText: string; classN
         className="absolute top-1 right-1 opacity-0 transition-opacity group-hover/block:opacity-100"
       />
     </div>
+  );
+}
+
+function ToolPayloadSection({ label, value }: { label: 'Input' | 'Output'; value: unknown }) {
+  const payload = displayPayload(value);
+
+  return (
+    <section role="group" aria-label={label} className="border-border1 min-w-0 border-b last:border-b-0">
+      <Txt as="div" variant="ui-xs" className="bg-surface2 text-neutral4 px-3 py-2 font-medium">
+        {label}
+      </Txt>
+      <div className="group/payload relative min-w-0 bg-black">
+        {payload.isJson ? (
+          <Code
+            code={payload.text}
+            lang="json"
+            className="text-neutral5 m-0 max-h-60 min-w-0 overflow-auto bg-black px-3 py-2 font-mono text-xs leading-normal whitespace-pre"
+          />
+        ) : (
+          <pre className="text-neutral5 m-0 max-h-60 min-w-0 overflow-auto bg-black px-3 py-2 font-mono text-xs leading-normal break-words whitespace-pre-wrap">
+            {payload.text}
+          </pre>
+        )}
+        <CopyButton
+          content={payload.text}
+          size="sm"
+          variant="ghost"
+          className="absolute top-1 right-1 opacity-0 transition-opacity group-hover/payload:opacity-100"
+        />
+      </div>
+    </section>
   );
 }
 
@@ -389,23 +449,16 @@ function ToolBody({
     );
   }
 
-  const inputText = input !== undefined ? stringify(input) : undefined;
+  const outputValue = output !== undefined ? output : status !== 'running' ? result : undefined;
+  const hasPayload = input !== undefined || outputValue !== undefined;
+
   return (
     <>
-      {inputText !== undefined && (
-        <MonoBlock copyText={inputText} className="text-icon5">
-          {inputText}
-        </MonoBlock>
-      )}
-      {output !== undefined && (
-        <MonoBlock copyText={output} className="text-icon3">
-          {output}
-        </MonoBlock>
-      )}
-      {resultText !== undefined && (
-        <MonoBlock copyText={resultText} className="text-icon3">
-          {truncate(resultText, 800)}
-        </MonoBlock>
+      {hasPayload && (
+        <Card role="group" aria-label="Tool input and output" className="min-w-0 overflow-hidden">
+          {input !== undefined && <ToolPayloadSection label="Input" value={input} />}
+          {outputValue !== undefined && <ToolPayloadSection label="Output" value={outputValue} />}
+        </Card>
       )}
       {children}
     </>

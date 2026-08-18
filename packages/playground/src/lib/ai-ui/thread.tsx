@@ -49,6 +49,7 @@ import { usePlaygroundStore } from '@/store/playground-store';
 
 const SKELETON_DELAY_MS = 300;
 const EMPTY_SUGGESTED_PROMPTS: string[] = [];
+const TOOL_MESSAGE_ITEM_STYLE = { contentVisibility: 'visible' } as const;
 
 /**
  * Returns true only after `flag` has stayed true for `delayMs` continuously, so
@@ -88,6 +89,13 @@ const hasStreamingPart = (message: MastraDBMessage | undefined) => {
     }
     return false;
   });
+};
+
+const hasToolCallPart = (message: MastraDBMessage) => {
+  const parts: MessageFactoryPart[] = message.content.parts;
+  return parts.some(
+    part => part.type === 'tool-invocation' || part.type === 'dynamic-tool' || part.type.startsWith('tool-'),
+  );
 };
 
 const ThreadRailLayer = ({ turns }: { turns: ThreadRailTurn[] }) => {
@@ -194,6 +202,7 @@ export const Thread = ({
                                 key={getClientMessageKey(message)}
                                 messageId={message.id}
                                 scrollAnchor={threadRailAnchorIds.has(message.id)}
+                                style={hasToolCallPart(message) ? TOOL_MESSAGE_ITEM_STYLE : undefined}
                               >
                                 <MessageRow
                                   message={message}

@@ -143,6 +143,31 @@ function PendingPlanCard({ agentId, agentVersionId, requestContext, toolCallId, 
     });
   };
 
+  const approveAction = (
+    <Button
+      type="button"
+      size="sm"
+      variant="primary"
+      aria-label="Approve the plan and switch to build"
+      className="shrink-0 whitespace-nowrap"
+      disabled={controlsDisabled}
+      onClick={() => resume('approved')}
+    >
+      Approve &amp; build
+    </Button>
+  );
+  const rejectAction = (
+    <Button
+      type="button"
+      size="sm"
+      aria-label="Reject the plan"
+      disabled={controlsDisabled}
+      onClick={() => resume('rejected')}
+    >
+      Reject
+    </Button>
+  );
+
   return (
     <Plan role="group" aria-label="Plan approval">
       <PlanHeader>
@@ -169,31 +194,18 @@ function PendingPlanCard({ agentId, agentVersionId, requestContext, toolCallId, 
           ) : null}
           {document ? <PlanContent>{document.body}</PlanContent> : null}
           <PlanControls>
-            <PlanActionGroup>
-              <Button
-                type="button"
-                size="sm"
-                variant="primary"
-                aria-label="Approve the plan and switch to build"
-                className="shrink-0 whitespace-nowrap"
-                disabled={controlsDisabled}
-                onClick={() => resume('approved')}
-              >
-                Approve &amp; build
-              </Button>
-            </PlanActionGroup>
-            {canExpand ? <PlanExpandButton /> : <span aria-hidden="true" />}
-            <PlanActionGroup>
-              <Button
-                type="button"
-                size="sm"
-                aria-label="Reject the plan"
-                disabled={controlsDisabled}
-                onClick={() => resume('rejected')}
-              >
-                Reject
-              </Button>
-            </PlanActionGroup>
+            {canExpand ? (
+              <>
+                <PlanActionGroup>{approveAction}</PlanActionGroup>
+                <PlanExpandButton />
+                <PlanActionGroup>{rejectAction}</PlanActionGroup>
+              </>
+            ) : (
+              <PlanActionGroup>
+                {approveAction}
+                {rejectAction}
+              </PlanActionGroup>
+            )}
           </PlanControls>
         </PlanMain>
       </PlanBody>

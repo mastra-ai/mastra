@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
 import type { ReactNode, SVGProps } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -176,9 +176,12 @@ describe('ToolCallListItem', () => {
 
       const rail = document.querySelector('[data-tool-call-rail]');
       const content = document.querySelector('[data-tool-call-list-item-content]');
+      const item = content?.parentElement;
 
       expect(rail).not.toBeNull();
       expect(content?.contains(screen.getByRole('group', { name: 'First tool' }))).toBe(true);
+      expect(item?.classList.contains('-mx-1.5')).toBe(true);
+      expect(rail?.classList.contains('top-6')).toBe(true);
     });
   });
 
@@ -239,6 +242,44 @@ describe('ToolCall', () => {
   });
 
   describe('when the disclosure opens', () => {
+    it('groups valid JSON input and output into labeled highlighted sections', async () => {
+      renderToolCall(
+        <ToolCall
+          toolName="weatherInfo"
+          input={'{"city":"Paris"}'}
+          result={'{"temperature":18}'}
+          status="success"
+          defaultOpen
+        />,
+      );
+
+      const tool = screen.getByRole('group', { name: 'Tool: weatherInfo' });
+      const dataCard = within(tool).getByRole('group', { name: 'Tool input and output' });
+      const input = within(dataCard).getByRole('group', { name: 'Input' });
+      const output = within(dataCard).getByRole('group', { name: 'Output' });
+
+      expect(input.textContent).toContain('"city": "Paris"');
+      expect(output.textContent).toContain('"temperature": 18');
+      await waitFor(() => {
+        expect(input.querySelector('.shiki-token')).not.toBeNull();
+        expect(output.querySelector('.shiki-token')).not.toBeNull();
+      });
+    });
+
+    it('falls back to labeled plain text when input and output are not JSON', () => {
+      renderToolCall(
+        <ToolCall toolName="weatherInfo" input="city=Paris" result="sunny" status="success" defaultOpen />,
+      );
+
+      const dataCard = screen.getByRole('group', { name: 'Tool input and output' });
+      const input = within(dataCard).getByRole('group', { name: 'Input' });
+      const output = within(dataCard).getByRole('group', { name: 'Output' });
+
+      expect(within(input).getByText('city=Paris')).toBeTruthy();
+      expect(within(output).getByText('sunny')).toBeTruthy();
+      expect(dataCard.querySelector('.shiki-token')).toBeNull();
+    });
+
     it('shows a terminal command and strips ANSI from its result', () => {
       renderToolCall(
         <ToolCall
