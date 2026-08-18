@@ -24,6 +24,7 @@ interface OMStateWrites {
   observationThreshold?: number;
   reflectionThreshold?: number;
   observeAttachments?: 'auto' | boolean;
+  factoryOrgId?: string;
 }
 
 /** The slice of a session needed to apply stored observational-memory settings. */
@@ -86,24 +87,42 @@ export interface MemorySettingsHydrationDependencies {
 }
 
 /**
- * Seed a freshly created controller session's observational-memory settings
- * from the owner's stored `memory-settings` row. Registered as a blocking
- * session-created listener so the seed lands before the caller can start a run.
+ * Seed a freshly created controller session's tenant org and its
+ * observational-memory settings from the owner's source-control row. Registered
+ * as a blocking session-created listener so the seed lands before the caller can
+ * start a run.
  *
- * Sessions tagged `factoryProjectId` (work/review runs, created with that tag)
- * hydrate through the start coordinator; sessions without a GitHub
- * source-control row (e.g. chat-only channel sessions) hydrate through
- * `hydrateFactorySession` with their own resolved tenant. Both are skipped
- * here. Best-effort: failures are logged, never thrown.
+ * The org seed matters beyond settings. Subconscious knowledge capture scopes
+ * every node and record on `factoryOrgId`; without it the capture side falls
+ * back to the session owner id, which for web chat sessions is the agent
+ * controller's own id rather than a tenant, so captured knowledge lands under an
+ * org rung no reader ever queries. Same rule as the start coordinator: the org
+ * comes from the row the session was created from, never improvised from an
+ * owner id.
+ *
+ * Memory settings for sessions tagged `factoryProjectId` (work/review runs) are
+ * owned by the start coordinator, and sessions without a GitHub source-control
+ * row (e.g. chat-only channel sessions) hydrate through `hydrateFactorySession`
+ * with their own resolved tenant; both are skipped here. The org seed is not
+ * skipped on the tag alone: a web chat session persists `factoryProjectId` from
+ * its browser seed, so on resume it carries the tag without ever having been
+ * through the coordinator. Best-effort: failures are logged, never thrown.
  */
 export async function hydrateSessionMemorySettings(
   session: MemorySettingsHydrationSession,
   { sourceControl, memorySettings }: MemorySettingsHydrationDependencies,
 ): Promise<void> {
-  if (session.state.get()?.factoryProjectId) return;
+  const state = session.state.get() ?? {};
+  const isFactoryRun = Boolean(state.factoryProjectId);
+  // A coordinator-hydrated run already carries both halves. Nothing to add.
+  if (isFactoryRun && state.factoryOrgId) return;
   try {
     const record = await sourceControl.sessions.getBySessionId(session.identity.getResourceId());
     if (!record) return;
+    if (state.factoryOrgId !== record.orgId) {
+      await session.state.set({ factoryOrgId: record.orgId });
+    }
+    if (isFactoryRun) return;
     const settings = await memorySettings.get({ orgId: record.orgId, userId: record.userId });
     await applyStoredMemorySettings(session, settings);
   } catch (error) {
