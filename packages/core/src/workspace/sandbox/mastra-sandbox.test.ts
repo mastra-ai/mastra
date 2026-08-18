@@ -119,6 +119,8 @@ class ExecuteCommandProcessHandle extends ProcessHandle {
   }
 
   async sendStdin(): Promise<void> {}
+
+  async closeStdin(): Promise<void> {}
 }
 
 class ExecuteCommandProcessManager extends SandboxProcessManager {

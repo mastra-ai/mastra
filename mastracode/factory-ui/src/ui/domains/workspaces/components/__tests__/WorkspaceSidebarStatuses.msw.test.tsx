@@ -27,7 +27,7 @@ const workSession: FactoryUserSession = {
   baseBranch: 'main',
   sandboxId: null,
   sandboxWorkdir: null,
-  materializedAt: null,
+  materializedAt: '2026-07-20T00:00:00.000Z',
   createdAt: '2026-07-20T00:00:00.000Z',
   updatedAt: '2026-07-20T00:00:00.000Z',
 };

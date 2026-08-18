@@ -9,7 +9,7 @@ packages:
 
 A built-in, agent-agnostic tool that asks the user a question and waits for their response. The tool supports free-text questions, single-select prompts, and multi-select prompts.
 
-The tool pauses through the native [tool suspension](/docs/agents/agent-approval#runtime-suspension-with-suspend) primitive: it calls `suspend()` with the question payload, which makes the agent emit a `tool-call-suspended` event and persist run state. Resume the run with `agent.resumeStream(answer, { runId })`.
+The tool pauses through the native [tool suspension](/docs/agents/human-in-the-loop#runtime-suspension-with-suspend) primitive: it calls `suspend()` with the question payload, which makes the agent emit a `tool-call-suspended` event and persist run state. Resume the run with `agent.resumeStream(answer, { runId })`.
 
 When executed outside an agent run (no `suspend` available), the tool returns a readable fallback string containing the question and choices.
 

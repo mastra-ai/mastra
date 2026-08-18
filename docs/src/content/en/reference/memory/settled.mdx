@@ -1,0 +1,76 @@
+---
+title: "Reference: Memory.settled() | Memory"
+description: "Documentation for the `Memory.settled()` method in Mastra, which waits for background memory work to finish before you close the storage connection."
+packages:
+  - "@mastra/memory"
+  - "@mastra/core"
+---
+
+# Memory.settled()
+
+The `.settled()` method resolves once all background work the `Memory` instance started has finished. Some memory work continues after an agent run returns:
+
+- Observational memory cycles (buffered observation and reflection, including the nested agent runs they spawn)
+- Vector cleanup started by `deleteThread()` and `deleteMessages()`
+
+Await this method before closing a storage connection you own. Without it, background statements can run against a closed connection.
+
+The method is declared on the base memory class, so it's also available on the `MastraMemory` instance returned by `agent.getMemory()`.
+
+## Usage example
+
+```typescript
+await agent.generate('Hello', {
+  memory: { thread: 'thread-123', resource: 'user-456' },
+})
+
+await memory.settled()
+await store.close()
+```
+
+## Parameters
+
+This method takes no parameters.
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'void',
+    type: 'Promise<void>',
+    description:
+      'A promise that resolves when all background memory work has finished. Background work that fails does not reject this promise.',
+  },
+]}
+/>
+
+## Extended usage example
+
+Test suites and short-lived processes are the most common places to need this, since they close the store immediately after a run finishes.
+
+```typescript title="src/test-memory.ts"
+import { Memory } from '@mastra/memory'
+import { PostgresStore } from '@mastra/pg'
+
+const store = new PostgresStore({ connectionString })
+const memory = new Memory({ storage: store })
+
+// ... run your agent ...
+
+// Wait for observational memory and vector cleanup to finish before closing.
+await memory.settled()
+await store.close()
+```
+
+<Callout>
+  `settled()` joins the work that had started by the time you called it, plus any
+  work that work enqueues. It does not prevent new work from starting afterwards,
+  so call it once the agent runs you care about have returned.
+</Callout>
+
+## Related
+
+- [Memory Class Reference](/reference/memory/memory-class)
+- [Observational Memory](/docs/memory/observational-memory)
+- [deleteMessages](/reference/memory/deleteMessages)

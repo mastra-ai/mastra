@@ -12,12 +12,30 @@ import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
+import { useUserSessionActivity } from '../../../../hooks/useUserSessionActivity';
+import { useWorkspaceAttention } from '../../../../hooks/useWorkspaceAttention';
 import { removeCachedSession, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
 import { deleteUserSession } from '../services/github';
 import type { FactoryUserSession } from '../services/github';
 import { getUserSessionLabel, getUserSessionTooltip } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
+import type { SessionRowStatus } from './SessionNavRow';
+
+function userSessionStatus({
+  session,
+  running,
+  attention,
+}: {
+  session: FactoryUserSession;
+  running: boolean;
+  attention: boolean;
+}): SessionRowStatus | undefined {
+  if (running) return 'working';
+  if (!session.materializedAt) return 'initializing';
+  if (attention) return 'ready';
+  return undefined;
+}
 
 /** WorkOS user ids are long and opaque; keep enough to tell owners apart. */
 function truncateOwnerId(userId: string): string {
@@ -47,6 +65,12 @@ export function UserSessionsSection() {
       Number(pinnedSessions.has(b.sessionId)) - Number(pinnedSessions.has(a.sessionId)) ||
       Number(isOwn(b)) - Number(isOwn(a)),
   );
+  const runningBySessionId = useUserSessionActivity({
+    baseUrl,
+    sessionIds: sessions.map(session => session.sessionId),
+    enabled: sessionsEnabled,
+  });
+  const { attentionByPath: attentionBySessionId, clearAttention } = useWorkspaceAttention(runningBySessionId);
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(repository?.projectRepositoryId) });
@@ -103,6 +127,11 @@ export function UserSessionsSection() {
             const url = `/factories/${factoryId}/user/threads/${session.sessionId}`;
             const active = location.pathname === url;
 
+            const status = userSessionStatus({
+              session,
+              running: runningBySessionId[session.sessionId] === true,
+              attention: attentionBySessionId[session.sessionId] === true,
+            });
             return (
               <SessionNavRow
                 key={session.sessionId}
@@ -114,8 +143,12 @@ export function UserSessionsSection() {
                 url={url}
                 active={active}
                 disabled={pending}
+                status={status}
                 pinned={pinnedSessions.has(session.sessionId)}
-                onSelect={() => void navigate(url)}
+                onSelect={() => {
+                  clearAttention(session.sessionId);
+                  void navigate(url);
+                }}
                 onPinChange={pinned => setPinned(session.sessionId, pinned)}
                 // The DELETE route is owner-only and 404s for non-owners, which
                 // deleteUserSession treats as an idempotent success; offering

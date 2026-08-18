@@ -44,6 +44,10 @@ function messageParts(entry: unknown): unknown[] {
   return isMessageEntry(entry) ? entry.message.content.parts : [];
 }
 
+function isToolInvocationPart(part: unknown): part is { toolInvocation: { toolCallId: string } } {
+  return typeof part === 'object' && part !== null && 'toolInvocation' in part;
+}
+
 function isMessageEntry(entry: unknown): entry is MessageEntryFixture {
   return (
     typeof entry === 'object' && entry !== null && 'kind' in entry && entry.kind === 'message' && 'message' in entry
@@ -438,6 +442,43 @@ describe('transcript reducer message entries', () => {
       },
     ]);
   });
+
+  it('keeps a tool call in one card when a steer rotates the assistant message mid-stream', () => {
+    // A steer closes the running assistant message and opens the next one while
+    // the tool arguments are still streaming; the remaining deltas belong to the
+    // call that started, not to whatever message is latest.
+    let state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: {
+        type: 'message_start',
+        message: dbMessage('turn-1', 'assistant', [{ type: 'text', text: 'reviewing' }]),
+      },
+    });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'tool_input_start', toolCallId: 'tool-1', toolName: 'submit_review' },
+    });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'tool_input_delta', toolCallId: 'tool-1', argsTextDelta: 'the implementation reuses' },
+    });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'message_start', message: dbMessage('turn-2', 'assistant', [{ type: 'text', text: '' }]) },
+    });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'tool_input_delta', toolCallId: 'tool-1', argsTextDelta: ' the backing agent' },
+    });
+
+    const cards = state.entries.flatMap(entry =>
+      messageParts(entry).filter(part => isToolInvocationPart(part) && part.toolInvocation.toolCallId === 'tool-1'),
+    );
+    expect(cards).toHaveLength(1);
+    expect(state.entries[0]).toMatchObject({
+      runtimeTools: { 'tool-1': { argsText: 'the implementation reuses the backing agent' } },
+    });
+  });
 });
 
 describe('transcript reducer mergeWindow', () => {
@@ -805,6 +846,91 @@ describe('transcript reducer mergeWindow', () => {
       { toolInvocation: { state: 'result', result: 'ok' } },
     ]);
   });
+
+  it('does not redraw the text of a turn the server persisted as its own step', () => {
+    // The stream carries one assistant message per run; the server persists one
+    // per step, so the trailing text comes back under an id the timeline never
+    // saw — and used to land on screen a second time on every revalidation.
+    let state = createInitialTranscript({ messages: [] });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('streamed-turn', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'result', toolCallId: 'tool-1', toolName: 'view', args: {}, result: 'ok' },
+          },
+          { type: 'text', text: 'Almost, but not approvable yet.' },
+        ]),
+      },
+    });
+
+    const next = transcriptReducer(state, {
+      type: 'mergeWindow',
+      messages: [
+        dbMessage('step-1', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'result', toolCallId: 'tool-1', toolName: 'view', args: {}, result: 'ok' },
+          },
+        ]),
+        dbMessage('step-2', 'assistant', [{ type: 'text', text: 'Almost, but not approvable yet.' }]),
+      ],
+    });
+
+    expect(next.entries).toHaveLength(1);
+  });
+
+  it('still inserts a window copy that extends what the gap left on screen', () => {
+    let state = createInitialTranscript({ messages: [] });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('streamed-turn', 'assistant', [{ type: 'text', text: 'Almost' }]),
+      },
+    });
+
+    const next = transcriptReducer(state, {
+      type: 'mergeWindow',
+      messages: [dbMessage('step-2', 'assistant', [{ type: 'text', text: 'Almost, but not approvable yet.' }])],
+    });
+
+    expect(next.entries).toHaveLength(2);
+  });
+
+  it('lets the persisted copy claim the local echo of a steer', () => {
+    // A steer sent while the tab is hidden loses its live signal event to the
+    // SSE gap: the reconnect refetch is the first time the timeline sees it, and
+    // the echo it belongs to carries a client-minted `local-…` id.
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    state = transcriptReducer(state, { type: 'localUser', text: 'stop and read the file', steer: true });
+
+    const next = transcriptReducer(state, {
+      type: 'mergeWindow',
+      messages: [signalMessage({ id: 'sig-1', type: 'user', tagName: 'user', text: 'stop and read the file' })],
+    });
+
+    expect(next.entries).toHaveLength(1);
+    expect(next.entries[0]).toMatchObject({ steer: true });
+  });
+
+  it('draws both when the same text is sent twice', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    state = transcriptReducer(state, { type: 'localUser', text: 'again' });
+    state = transcriptReducer(state, { type: 'localUser', text: 'again' });
+
+    const next = transcriptReducer(state, {
+      type: 'mergeWindow',
+      messages: [
+        signalMessage({ id: 'sig-1', type: 'user', tagName: 'user', text: 'again' }),
+        signalMessage({ id: 'sig-2', type: 'user', tagName: 'user', text: 'again' }),
+      ],
+    });
+
+    expect(next.entries).toHaveLength(2);
+  });
 });
 
 describe('transcript reducer error notices', () => {
@@ -831,6 +957,34 @@ describe('transcript reducer error notices', () => {
 
   it('falls back to a generic hint when the payload is empty', () => {
     expect(errorNoticeText({ error: {} })).toBe('Run failed with an unknown error. Check the server logs for details.');
+  });
+});
+
+describe('transcript reducer workspace errors', () => {
+  function noticeTexts(event: Record<string, unknown> & { type: string }): string[] {
+    const state = transcriptReducer(initialTranscript, { type: 'event', event });
+    return state.entries.flatMap(entry => (entry.kind === 'notice' ? [entry.text] : []));
+  }
+
+  it('surfaces the message of a workspace_error', () => {
+    expect(noticeTexts({ type: 'workspace_error', error: { name: 'Error', message: 'clone failed' } })).toEqual([
+      'Workspace: clone failed',
+    ]);
+  });
+
+  it('surfaces the message of a failed workspace_status_changed', () => {
+    expect(
+      noticeTexts({
+        type: 'workspace_status_changed',
+        status: 'error',
+        error: { name: 'Error', message: 'no disk space left' },
+      }),
+    ).toEqual(['Workspace: no disk space left']);
+  });
+
+  it('stays quiet while the workspace is healthy', () => {
+    expect(noticeTexts({ type: 'workspace_status_changed', status: 'ready' })).toEqual([]);
+    expect(noticeTexts({ type: 'workspace_ready', workspaceId: 'w1', workspaceName: 'repo' })).toEqual([]);
   });
 });
 

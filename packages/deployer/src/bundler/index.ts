@@ -785,7 +785,10 @@ export const tools = [${toolsExports.join(', ')}]`,
         );
       }
     } catch (error) {
-      if (error instanceof MastraError && error.id === 'DEPLOYER_BUNDLER_FACTORY_UI_MISSING') {
+      if (
+        error instanceof MastraError &&
+        (error.id === 'DEPLOYER_BUNDLER_FACTORY_UI_MISSING' || error.id === 'DEPLOYER_PNPM_IGNORED_BUILDS')
+      ) {
         throw error;
       }
 

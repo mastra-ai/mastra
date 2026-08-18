@@ -50,7 +50,7 @@ export function SessionNavRow({
   loading?: boolean;
   /** Merged pull request for this session's branch — shown only when the row is otherwise idle. */
   merged?: boolean;
-  status?: 'running' | 'attention';
+  status?: SessionRowStatus;
   preview?: SessionPreviewDetails;
   pinned?: boolean;
   onSelect: () => void;
@@ -124,7 +124,14 @@ const trailingSlot = 'size-form-sm shrink-0 place-items-center *:col-start-1 *:r
 const revealedSlot =
   'hidden group-focus-within/session:grid group-hover/session:grid group-has-[[data-popup-open]]/session:grid';
 
-type IndicatorKind = 'loading' | 'running' | 'attention' | 'merged';
+/**
+ * Session lifecycle states surfaced by the row's status dot. The color scheme
+ * mirrors `SessionFavicon` so the sidebar and the tab-favicon read the same
+ * way at a glance.
+ */
+export type SessionRowStatus = 'initializing' | 'working' | 'ready';
+
+type IndicatorKind = 'loading' | SessionRowStatus | 'merged';
 
 function indicatorKind({
   loading,
@@ -132,7 +139,7 @@ function indicatorKind({
   merged,
 }: {
   loading?: boolean;
-  status?: 'running' | 'attention';
+  status?: SessionRowStatus;
   merged?: boolean;
 }): IndicatorKind | undefined {
   if (loading) return 'loading';
@@ -194,23 +201,33 @@ const yieldsToActions =
 function SessionRowIndicator({ kind, name }: { kind: IndicatorKind; name: string }) {
   if (kind === 'loading') return <Spinner size="sm" aria-label={`Opening ${name}`} className="text-icon3" />;
 
-  if (kind === 'running')
+  if (kind === 'initializing')
+    return (
+      <span
+        role="status"
+        aria-label={`Initializing ${name}`}
+        title="Initializing"
+        className={cn('bg-warning1 size-2 animate-pulse rounded-full', yieldsToActions)}
+      />
+    );
+
+  if (kind === 'working')
     return (
       <span
         role="status"
         aria-label={`Agent working in ${name}`}
-        title="Agent working"
-        className={cn('bg-accent1 size-2 animate-pulse rounded-full', yieldsToActions)}
+        title="Working"
+        className={cn('bg-positive1 size-2 animate-pulse rounded-full', yieldsToActions)}
       />
     );
 
-  if (kind === 'attention')
+  if (kind === 'ready')
     return (
       <span
         role="status"
-        aria-label={`Agent finished in ${name}`}
-        title="Agent finished — open to dismiss"
-        className={cn('bg-accent1 size-2 rounded-full', yieldsToActions)}
+        aria-label={`${name} ready — open to dismiss`}
+        title="Ready"
+        className={cn('bg-accent3 size-2 rounded-full', yieldsToActions)}
       />
     );
 

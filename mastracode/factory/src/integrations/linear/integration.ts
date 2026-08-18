@@ -126,7 +126,8 @@ export interface LinearIssueComment {
 }
 
 /** Full issue payload for agent context: everything in {@link LinearIssue} plus description and discussion. */
-export interface LinearIssueDetail extends LinearIssue {
+export interface LinearIssueDetail extends Omit<LinearIssue, 'projectId'> {
+  projectId: string | null;
   /** Markdown body of the issue, or `null` when empty. */
   description: string | null;
   /** Discussion comments, oldest first. */
@@ -210,7 +211,7 @@ interface IssueDetailQueryData {
     createdAt: string;
     updatedAt: string;
     state: { name: string; type: string };
-    project: { id: string };
+    project: { id: string } | null;
     assignee: { name: string } | null;
     creator: { name: string } | null;
     team: { key: string } | null;
@@ -911,7 +912,7 @@ export class LinearIntegration implements FactoryIntegration {
     const comments = allComments.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     return {
       id: issue.id,
-      projectId: issue.project.id,
+      projectId: issue.project?.id ?? null,
       identifier: issue.identifier,
       title: issue.title,
       description: issue.description?.trim() ? issue.description : null,
@@ -998,6 +999,7 @@ export class LinearIntegration implements FactoryIntegration {
       stateSigner: ctx.stateSigner,
       baseUrl: ctx.baseUrl,
       intake: ctx.storage.intake,
+      projects: ctx.storage.projects,
       ingestFactoryIssues: attachLinearRules(ctx),
     });
   }
@@ -1025,7 +1027,7 @@ function getLinearAccessToken(connection: IntegrationConnection): string {
   return connection.accessToken;
 }
 
-function linearIssueToIntakeIssue(issue: LinearIssue): IntakeIssue {
+function linearIssueToIntakeIssue(issue: Omit<LinearIssue, 'projectId'>): IntakeIssue {
   return {
     id: issue.id,
     identifier: issue.identifier,

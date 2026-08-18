@@ -2,7 +2,7 @@
 
 This app is the Vercel target for PR previews of Mastra Studio. It deploys Studio and a minimal Mastra API together, so reviewers can open the preview URL and test a working agent page.
 
-It lives inside `packages/playground` because previewing Studio is its whole point, but it is internal preview infrastructure, not part of the published package: it keeps its own lockfile and installs with `--ignore-workspace`, and its monorepo-only patterns (`link:` overrides, a root turbo build) must not be copied into user-facing examples. Edits here count as playground changes for turbo and the changeset-bot; that is accepted noise since the app rarely changes, and no changeset is needed for preview-only edits.
+It lives inside `packages/playground` because previewing Studio is its whole point, but it is internal preview infrastructure, not part of the published package: its own `pnpm-workspace.yaml` makes this directory its own workspace root, so it keeps its own lockfile without ever being installed as part of the monorepo, and its monorepo-only patterns (`link:` dependencies, a root turbo build) must not be copied into user-facing examples. Edits here count as playground changes for turbo and the changeset-bot; that is accepted noise since the app rarely changes, and no changeset is needed for preview-only edits.
 
 The app is intentionally serverless-friendly:
 
@@ -28,8 +28,8 @@ The data is deterministic and free to produce (no model calls, no provider key n
 From the repository root:
 
 ```bash
-corepack pnpm@10.29.3 --dir packages/playground/vercel-preview install --frozen-lockfile --ignore-workspace
-corepack pnpm@10.29.3 --dir packages/playground/vercel-preview build
+pnpm --dir packages/playground/vercel-preview install --frozen-lockfile
+pnpm --dir packages/playground/vercel-preview build
 ```
 
 For local Studio development:
@@ -45,7 +45,7 @@ Create one Vercel project for the repository and point it at this app. If the pr
 
 - Root Directory: `packages/playground/vercel-preview`
 - Build Command: `pnpm build`
-- Install Command: `pnpm install --frozen-lockfile --ignore-workspace`
+- Install Command: `pnpm install --frozen-lockfile`
 - Output Directory: leave empty
 - Node.js Version: 22.x
 - Root Directory setting: enable source files outside the root directory

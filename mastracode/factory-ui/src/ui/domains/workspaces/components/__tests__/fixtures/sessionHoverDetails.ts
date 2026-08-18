@@ -31,7 +31,7 @@ function createWorkspace({
     baseBranch: 'main',
     sandboxId: null,
     sandboxWorkdir: null,
-    materializedAt: null,
+    materializedAt: updatedAt,
     createdAt: updatedAt,
     updatedAt,
   };

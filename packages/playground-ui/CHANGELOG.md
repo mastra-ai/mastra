@@ -1,5 +1,319 @@
 # @mastra/playground-ui
 
+## 50.0.0-alpha.11
+
+### Patch Changes
+
+- Speed up the local dev watch for the design system: `pnpm dev:ui` now rebuilds `@mastra/playground-ui` on save, so design-system edits show up in the Factory UI without a manual rebuild. `pnpm dev:playground` picks up the same watch. The watch starts from a full build and then skips type declaration emit on every rebuild, which brings each save from ~9s down to ~1.5s. ([#21646](https://github.com/mastra-ai/mastra/pull/21646))
+
+  Declarations stay frozen at that starting build for the length of a dev session — run `pnpm --filter @mastra/playground-ui build` after changing a component's props. The published build is unchanged and still emits declarations.
+
+- Updated dependencies [[`6223446`](https://github.com/mastra-ai/mastra/commit/6223446ddce6166e96e0ba5e00d628b615dee8ca), [`583e235`](https://github.com/mastra-ai/mastra/commit/583e23519c13af16c1746f9c49722d011216611b), [`a77f8d4`](https://github.com/mastra-ai/mastra/commit/a77f8d4740d2178a74c41e4bf678b4fcd8fa0bb2), [`40d358e`](https://github.com/mastra-ai/mastra/commit/40d358e29d55543803e64b49241122f598ffabc7), [`e80cd7e`](https://github.com/mastra-ai/mastra/commit/e80cd7e7683e7d732e1cc6784bcac1d2640d2ce3), [`20504b2`](https://github.com/mastra-ai/mastra/commit/20504b2ecebd0e077acda3d457ab57480a98ed3e), [`a77f8d4`](https://github.com/mastra-ai/mastra/commit/a77f8d4740d2178a74c41e4bf678b4fcd8fa0bb2)]:
+  - @mastra/core@1.60.0-alpha.11
+  - @mastra/client-js@1.41.0-alpha.11
+  - @mastra/react@1.4.4-alpha.11
+
+## 50.0.0-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [[`b860493`](https://github.com/mastra-ai/mastra/commit/b86049391100e665d579f700c8a2034c036defc3)]:
+  - @mastra/core@1.60.0-alpha.10
+  - @mastra/client-js@1.41.0-alpha.10
+  - @mastra/react@1.4.4-alpha.10
+
+## 50.0.0-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`b0a2a07`](https://github.com/mastra-ai/mastra/commit/b0a2a07800d42bd9823292e7db832374ed084c9c), [`b0a2a07`](https://github.com/mastra-ai/mastra/commit/b0a2a07800d42bd9823292e7db832374ed084c9c), [`ccbbcd9`](https://github.com/mastra-ai/mastra/commit/ccbbcd974eedff4367a54ed0e24c9ee742ab2f61), [`3f5c6f7`](https://github.com/mastra-ai/mastra/commit/3f5c6f728ea35da344248de9aa070f12849f3aa0), [`507a9d4`](https://github.com/mastra-ai/mastra/commit/507a9d45fef9757dfbfc142ae73c0bbce602a214), [`77e6b1b`](https://github.com/mastra-ai/mastra/commit/77e6b1bc4c46ce94fe501023fb4393c812ec6be3), [`2e1d098`](https://github.com/mastra-ai/mastra/commit/2e1d0984e325fd319d32ea182f596b3170be3847)]:
+  - @mastra/memory@1.27.0-alpha.2
+  - @mastra/core@1.60.0-alpha.9
+  - @mastra/client-js@1.41.0-alpha.9
+  - @mastra/react@1.4.4-alpha.9
+
+## 50.0.0-alpha.8
+
+### Patch Changes
+
+- Restored the Studio memory bar token counts after a reload by reading them from the stored observational memory record. ([#21604](https://github.com/mastra-ai/mastra/pull/21604))
+
+- Improved plan action hierarchy, kept expand and collapse labels on one line, and hid expansion for short plans. ([#21658](https://github.com/mastra-ai/mastra/pull/21658))
+
+- Updated dependencies [[`4e7a421`](https://github.com/mastra-ai/mastra/commit/4e7a421dce8a48742f785d1e93ad2f43a572b282), [`242e324`](https://github.com/mastra-ai/mastra/commit/242e3241e73cbd5c9bb86a31ebb49ca0256488d4), [`217e967`](https://github.com/mastra-ai/mastra/commit/217e9672d8b3160eb729d8e9f0044949e88da239), [`d774e89`](https://github.com/mastra-ai/mastra/commit/d774e8930c781df8c9effe3763e6b501c099b6cc), [`9c27a53`](https://github.com/mastra-ai/mastra/commit/9c27a53cd9d3de4f3f025bc387d94ce371c33f95), [`b432242`](https://github.com/mastra-ai/mastra/commit/b432242c1d8f9a8de009a3d3e54c17962eebc002), [`dff25a1`](https://github.com/mastra-ai/mastra/commit/dff25a1103fa72ee082a9b6f805ebeb5ce400753), [`23e0be2`](https://github.com/mastra-ai/mastra/commit/23e0be261381e49534b4ff3101c60ee64a946cbf), [`217e967`](https://github.com/mastra-ai/mastra/commit/217e9672d8b3160eb729d8e9f0044949e88da239), [`7f78585`](https://github.com/mastra-ai/mastra/commit/7f785857e401570e2ffb316911f126ed363aa537), [`f2a4afd`](https://github.com/mastra-ai/mastra/commit/f2a4afd7e37e809669001ed17724b341a5c1f45e), [`f2a4afd`](https://github.com/mastra-ai/mastra/commit/f2a4afd7e37e809669001ed17724b341a5c1f45e), [`d438148`](https://github.com/mastra-ai/mastra/commit/d438148e222c1e2fb3c652725ce75680962ebec4), [`ba05fe0`](https://github.com/mastra-ai/mastra/commit/ba05fe0738f70cb686777546e968237d09269142), [`d26a8d4`](https://github.com/mastra-ai/mastra/commit/d26a8d4281f28414715b333c85bedaf70d0b2890), [`677cdc6`](https://github.com/mastra-ai/mastra/commit/677cdc6af564dec29a13464d12b7ab2a4efc22e9), [`a318490`](https://github.com/mastra-ai/mastra/commit/a318490e17da32f338d50929c770d901a9b3dd72), [`763e0c6`](https://github.com/mastra-ai/mastra/commit/763e0c61e04d76ad9a9efd301aa57525ca0cbea9), [`23e0be2`](https://github.com/mastra-ai/mastra/commit/23e0be261381e49534b4ff3101c60ee64a946cbf), [`217e967`](https://github.com/mastra-ai/mastra/commit/217e9672d8b3160eb729d8e9f0044949e88da239), [`7fc8806`](https://github.com/mastra-ai/mastra/commit/7fc880627d3cbf995d31ea0e8b807bf15417e651), [`0e02eac`](https://github.com/mastra-ai/mastra/commit/0e02eacdb2e30e1697a41910b41163742a181dc1), [`4df174c`](https://github.com/mastra-ai/mastra/commit/4df174c32bddf093a82f273070b8380aef7c9e90), [`f7c25b5`](https://github.com/mastra-ai/mastra/commit/f7c25b5106ddfb48e591f98df7a51e0f2dd01dba), [`dc09cc1`](https://github.com/mastra-ai/mastra/commit/dc09cc1083d861cde192c1cd235324dc75b8c731), [`7f78585`](https://github.com/mastra-ai/mastra/commit/7f785857e401570e2ffb316911f126ed363aa537), [`36b4649`](https://github.com/mastra-ai/mastra/commit/36b4649045a3a380cbab8ceca866db4086223aff), [`23e0be2`](https://github.com/mastra-ai/mastra/commit/23e0be261381e49534b4ff3101c60ee64a946cbf), [`377eb81`](https://github.com/mastra-ai/mastra/commit/377eb81ce43b964e3a6b541df172da74a8ff3716)]:
+  - @mastra/core@1.60.0-alpha.8
+  - @mastra/client-js@1.41.0-alpha.8
+  - @mastra/memory@1.27.0-alpha.1
+  - @mastra/react@1.4.4-alpha.8
+
+## 49.1.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`940bf5c`](https://github.com/mastra-ai/mastra/commit/940bf5ccf04f2c9ebd8a1390431733222a03b1cd)]:
+  - @mastra/core@1.60.0-alpha.7
+  - @mastra/client-js@1.40.1-alpha.7
+  - @mastra/react@1.4.4-alpha.7
+
+## 49.1.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`0b4f108`](https://github.com/mastra-ai/mastra/commit/0b4f1089aa8d92e67c2a8e99726822c5ee410784), [`88ddc7c`](https://github.com/mastra-ai/mastra/commit/88ddc7ce01d40175f13a3228b789a906779680bd), [`a7dd322`](https://github.com/mastra-ai/mastra/commit/a7dd32247d95afc539f483ca37f4594af0387f59)]:
+  - @mastra/core@1.60.0-alpha.6
+  - @mastra/client-js@1.40.1-alpha.6
+  - @mastra/react@1.4.4-alpha.6
+
+## 49.1.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`74e5bd3`](https://github.com/mastra-ai/mastra/commit/74e5bd315b8b3a1e04cb6cf480bb0f5fc4951dc8)]:
+  - @mastra/core@1.60.0-alpha.5
+  - @mastra/client-js@1.40.1-alpha.5
+  - @mastra/react@1.4.4-alpha.5
+
+## 49.1.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`d7e6745`](https://github.com/mastra-ai/mastra/commit/d7e67456954863c55440ea9c49bc6ceb9949972d), [`9acb50f`](https://github.com/mastra-ai/mastra/commit/9acb50f71cec9c362f06820033f90ae6b1f8282f), [`46e9e3f`](https://github.com/mastra-ai/mastra/commit/46e9e3f73babe1bc70080a596cf2ac0b9da48519), [`3f9a190`](https://github.com/mastra-ai/mastra/commit/3f9a19057c027155867b9317294ee4ca7bd0581a), [`e8808e3`](https://github.com/mastra-ai/mastra/commit/e8808e3d8eb585a2565be53e56a7e0e1477352a4), [`eede4de`](https://github.com/mastra-ai/mastra/commit/eede4de104f59b391d28aa249659388e9a1cf558), [`eede4de`](https://github.com/mastra-ai/mastra/commit/eede4de104f59b391d28aa249659388e9a1cf558), [`d4be8c1`](https://github.com/mastra-ai/mastra/commit/d4be8c1739d22d621e3f78790e1dd5eb5ecc3589), [`a5d2eb1`](https://github.com/mastra-ai/mastra/commit/a5d2eb10347eade1ae2816d88f466c25186c54a5), [`a97044b`](https://github.com/mastra-ai/mastra/commit/a97044b00cc79e189b07509701b2694c728dfeac), [`e81744c`](https://github.com/mastra-ai/mastra/commit/e81744cd13c46619c142dc521dc0baac47607a84)]:
+  - @mastra/core@1.60.0-alpha.4
+  - @mastra/memory@1.27.0-alpha.0
+  - @mastra/client-js@1.40.1-alpha.4
+  - @mastra/react@1.4.4-alpha.4
+
+## 49.1.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`d8308a2`](https://github.com/mastra-ai/mastra/commit/d8308a2be3c07e777393d1017a381dcae3890d30), [`7aad631`](https://github.com/mastra-ai/mastra/commit/7aad631b43bc10db77d5b8c66b200d7a49d18bf2), [`1794a79`](https://github.com/mastra-ai/mastra/commit/1794a79178c418004a7261b1ad9114066f7ef01d)]:
+  - @mastra/core@1.60.0-alpha.3
+  - @mastra/client-js@1.40.1-alpha.3
+  - @mastra/react@1.4.4-alpha.3
+
+## 49.1.0-alpha.2
+
+### Minor Changes
+
+- Improved `MessageScroller` so chat transcripts follow the stream. With `autoScroll` on, the reader is carried with the newest output while they sit at the end, and a new user turn brings them back to it. Only scrolling away stops the following — content growing under the reader, or landing above them, no longer moves them or flashes the jump-to-end button. ([#21523](https://github.com/mastra-ai/mastra/pull/21523))
+
+  A turn opening animates the scroll only for a reader who had scrolled away. Someone already at the end is carried by whatever the turn grows under itself, so a surface can reserve room under a live turn and let its own transition set the pace:
+
+  ```tsx
+  <MessageScrollerProvider autoScroll>
+    <MessageScrollerViewport>
+      <MessageScrollerContent>
+        {/* the viewport is a size container, so a live turn can reserve a share of it */}
+        <div className="min-h-[70cqh]">{liveTurn}</div>
+      </MessageScrollerContent>
+    </MessageScrollerViewport>
+  </MessageScrollerProvider>
+  ```
+
+- Added token and estimated cost totals to full trace details in Studio. Opening a trace now shows input tokens, output tokens, and estimated cost in both the trace side panel and the dedicated trace page, including when the trace is opened from a direct link outside the loaded list. Subtrace panels omit these values because they represent totals for the full trace. ([#21541](https://github.com/mastra-ai/mastra/pull/21541))
+
+### Patch Changes
+
+- Updated dependencies [[`7e096f0`](https://github.com/mastra-ai/mastra/commit/7e096f02f0dddbf09b85d306458351245ed2f886), [`8f0a332`](https://github.com/mastra-ai/mastra/commit/8f0a3321bf180368d76fe7b36aa1a8f60f00b6de), [`b098de9`](https://github.com/mastra-ai/mastra/commit/b098de9d7cb9f672e0883a5c716465a3a689693d), [`ef6e295`](https://github.com/mastra-ai/mastra/commit/ef6e295b59bc25a5b61b633a89c97bcfce9fb465), [`208e1b3`](https://github.com/mastra-ai/mastra/commit/208e1b39f30f4b386e494394e9d71d96f0f90241), [`c938d34`](https://github.com/mastra-ai/mastra/commit/c938d34739936c8ecbabd67ad6a4a4396f41c4c6), [`fc76b73`](https://github.com/mastra-ai/mastra/commit/fc76b73b114322ba613c60f138f014b2c0adb414), [`1d9a0ea`](https://github.com/mastra-ai/mastra/commit/1d9a0ea4a9901baee6cd56737243bd6d1f631ac0), [`3667679`](https://github.com/mastra-ai/mastra/commit/3667679db057edfb086846d13369fdda4902ad65), [`49696e8`](https://github.com/mastra-ai/mastra/commit/49696e8e42f870674a0a58f5abcd22cc54dd2864), [`512100a`](https://github.com/mastra-ai/mastra/commit/512100a7d8b7e9c920f2590c6b3612f5de0d3cff), [`9ef432b`](https://github.com/mastra-ai/mastra/commit/9ef432b6faa534b57b0d182a610e13dd9a7123ff), [`b9cf308`](https://github.com/mastra-ai/mastra/commit/b9cf30846f97f99ac1906ee8a68f4f2d117b0378)]:
+  - @mastra/core@1.60.0-alpha.2
+  - @mastra/client-js@1.40.1-alpha.2
+  - @mastra/react@1.4.4-alpha.2
+
+## 49.1.0-alpha.1
+
+### Minor Changes
+
+- Streamed replies now arrive one word at a time instead of in bursts. ([#21499](https://github.com/mastra-ai/mastra/pull/21499))
+
+  Chunks reach the browser unevenly — a proxy flushes, a tool call ends, the model changes pace — so a reply used to lurch: ten words at once, then nothing for a fifth of a second. `MarkdownRenderer` now paces a reply marked `streaming` itself, revealing it one word at a time at the speed the reply is actually arriving. Bursts and gaps stop reaching the page, and a change of pace reads as one rather than as a jolt.
+
+  ```tsx
+  <MarkdownRenderer streaming={part.state === 'streaming'}>{part.text}</MarkdownRenderer>
+  ```
+
+  Each word fades in as it lands, and code fades in whole — a fence or a piece of inline code appears with its background rather than a token at a time. A word fades in once and only once, so a paragraph never flickers as the rest of the reply arrives behind it.
+
+  A thread opened from history renders whole. A reply opened part-written joins it rather than retyping it, and what was already on screen when you opened it stays put: only the words landing from then on animate. Readers who ask for reduced motion get the text at once, unanimated.
+
+- Added an "lg" size variant to sidebar navigation items for taller (36px) rows. ([#21509](https://github.com/mastra-ai/mastra/pull/21509))
+
+- Replaced the task list's progress bar and "2/4 completed" label with a compact status strip in the header. One bar per task, colored by state (green completed, orange in progress, grey pending), with the exact count on hover. Frees the vertical space the progress bar used to take. ([#21507](https://github.com/mastra-ai/mastra/pull/21507))
+
+  `<TaskList>` is unchanged. The strip now derives everything from the tasks, so `TaskListCount` and `TaskListCountProps` are removed, and `TaskListProgress` takes the tasks instead of a completed/total pair. Both were reachable from `@mastra/playground-ui/components/ai/task-list`.
+
+  There is no replacement for `TaskListCount` — the count lives in the strip's tooltip. Callers of `TaskListProgress` pass the tasks they already render:
+
+  ```tsx
+  const tasks = [
+    { id: '1', content: 'Inspect code', activeForm: 'Inspecting code', status: 'completed' },
+    { id: '2', content: 'Add tests', activeForm: 'Adding tests', status: 'in_progress' },
+    { id: '3', content: 'Build package', activeForm: 'Building package', status: 'pending' },
+  ];
+
+  // Before
+  <TaskListCount completed={1} total={3} />
+  <TaskListProgress completed={1} total={3} />
+
+  // After
+  <TaskListProgress tasks={tasks} />
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`15101bb`](https://github.com/mastra-ai/mastra/commit/15101bb53c0d934f31af6b8813b88191e382a5e5), [`c2c3deb`](https://github.com/mastra-ai/mastra/commit/c2c3debcf670c7082d0a5e553aa99818a864698c), [`33374ba`](https://github.com/mastra-ai/mastra/commit/33374ba359e4fb13eaa918ae925fe167a3c55414), [`c5f964d`](https://github.com/mastra-ai/mastra/commit/c5f964d3f77064e978f8066ec506eed77ba5c63c), [`f8f653f`](https://github.com/mastra-ai/mastra/commit/f8f653f10980d01a73706cc3c8689ca5e40ce808)]:
+  - @mastra/core@1.60.0-alpha.1
+  - @mastra/client-js@1.40.1-alpha.1
+  - @mastra/react@1.4.4-alpha.1
+
+## 49.0.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`587f6ef`](https://github.com/mastra-ai/mastra/commit/587f6efcfc25880b93760a8607d1cd381ec612fe)]:
+  - @mastra/core@1.59.1-alpha.0
+  - @mastra/client-js@1.40.1-alpha.0
+  - @mastra/react@1.4.4-alpha.0
+
+## 49.0.0
+
+### Minor Changes
+
+- Added animated Sankey layout transitions for column changes. Pass a changing perspective key to opt in: ([#20768](https://github.com/mastra-ai/mastra/pull/20768))
+
+  ```tsx
+  <SankeyChart geometryTransitionKey={columns.map(column => column.id).join(':')} />
+  ```
+
+- Made the task list collapsible and moved its scrolling to the design system scroll area. ([#21337](https://github.com/mastra-ai/mastra/pull/21337))
+
+  Clicking the task list header now collapses it. The collapsed row keeps the completion count and shows the task currently in progress — or the next pending one — with its status icon and color, so the panel can be minimized without losing track of where the agent is. Long lists scroll inside `ScrollArea` (overlay scrollbar, edge fades) instead of a raw `overflow-y` container.
+
+  Use `defaultOpen` to render it collapsed:
+
+  ```tsx
+  <TaskList tasks={tasks} defaultOpen={false} />
+  ```
+
+- Streamed markdown now renders block by block. A growing reply re-parses only the block still being written instead of the whole message on every chunk, so a long reply no longer costs more per chunk as it gets longer, and a reply that finishes streaming keeps every element it already put on screen instead of remounting. ([#21473](https://github.com/mastra-ai/mastra/pull/21473))
+
+  Half-written markdown also renders as what it is about to become: `**bold` reads as bold while its closing marker is still in flight, and a link shows its text until the URL lands, instead of flashing raw syntax on screen.
+
+  One caveat: splitting a text into blocks is deliberately conservative rather than a second full parse. Anything it cannot decide — an unclosed fence, an indented continuation, a link reference or footnote definition — is kept whole, so those replies render exactly as before and simply do not get the speedup.
+
+- `CopyButton` takes a `showToast` option, so a button whose icon already flips to a checkmark on success can skip the toast on top of it. ([#21350](https://github.com/mastra-ai/mastra/pull/21350))
+
+  ```tsx
+  <CopyButton content={message} showToast={false} />
+  ```
+
+- Added two status-strip pieces so any app showing a chat runtime — Studio, Factory — reads the same way. `TokenBudget` draws a token budget as a ring with its reading beside it, and `TokenBudgetDetail` is that budget in full for a popover or panel: ([#21366](https://github.com/mastra-ai/mastra/pull/21366))
+
+  ```tsx
+  import { TokenBudget, TokenBudgetDetail } from '@mastra/playground-ui/components/TokenBudget';
+
+  <div className="flex items-center gap-1.5">
+    <TokenBudget label="Message window" tokens={14_900} threshold={30_000} working={isObserving} />
+    <TokenBudget label="Observations" tokens={5_200} threshold={8_000} tone="memory" />
+  </div>;
+
+  <TokenBudgetDetail
+    description="Read into memory once full"
+    icon={<MessageSquare />}
+    label="Messages"
+    projected={6_000}
+    tokens={14_900}
+    threshold={30_000}
+  />;
+  ```
+
+  The two are separate so the app decides how a budget opens — one trigger per budget, or one control for a whole group. `TokenBudgetDetail` hatches the slice a pending pass will free (`projected`) at the end of its bar, so the number and where it goes read together, and takes an `icon` it tints with the budget's own color so a detail row is recognizable as the ring it came from.
+
+  `working` runs a highlight around the ring, so a pass happening in the background is visible without a word for it. `tone` picks the budget's identity color (`messages`, `memory`, `warning`), which the memory panel's own progress bars now share instead of repeating the palette classes.
+
+  Fixed those same memory panel bars drawing a budget as completely full when its threshold was zero.
+
+- Improved process step indicators with theme-aware status colors and a plain embedded style. ([#21382](https://github.com/mastra-ai/mastra/pull/21382))
+
+  **Step labels now come from `title`.** `ProcessStepListItem` used to build its heading from the step id and ignore the `title` you passed, so display copy had to live in kebab-case ids. Give the step the label you want on screen:
+
+  ```tsx
+  const step = { id: 'clone-repo', title: 'Cloning repository', status: 'running', description: '', isActive: true };
+
+  <ProcessStepListItem step={step} isActive position={1} />;
+  // before: "Clone repo"
+  // after:  "Cloning repository"
+  ```
+
+  The `stepId` prop is now optional and ignored; drop it from your call sites.
+
+  **Added a `plain` variant to `ProcessStepListItem`** — for step lists that already sit inside a panel, where the boxed active card is one frame too many:
+
+  ```tsx
+  <ProcessStepListItem step={step} isActive={step.status === 'running'} position={1} variant="plain" />
+  ```
+
+- Added a `streaming` prop to `MarkdownRenderer`. A reply marked as still being written fades each word in as it arrives, instead of snapping whole chunks of text into place. ([#21417](https://github.com/mastra-ai/mastra/pull/21417))
+
+  ```tsx
+  <MarkdownRenderer streaming={part.state === 'streaming'}>{part.text}</MarkdownRenderer>
+  ```
+
+  The fade is CSS on words as they land, so the text already on screen stays put while the reply grows. A word fades in once it is whole rather than one character at a time — the word still being typed is held back until its boundary arrives, so the visible text trails the stream by at most one word. One caveat: when a growing block changes shape, a paragraph turning into a list item as the next character lands, that block fades again.
+
+  Leave the prop off — the default — for text that is already settled: it renders as plain prose, with no extra markup. The animation is disabled under `prefers-reduced-motion`.
+
+  Markdown no longer sets `text-wrap: pretty`. It re-broke the last lines of a block to avoid orphans, which reran on every chunk of a streaming reply and jumped words that were already on screen onto another line.
+
+### Patch Changes
+
+- Fixed code blocks flickering between colored and plain text while an agent streams a fenced snippet. The part already highlighted now keeps its colors, and only the characters that just landed show uncolored until highlighting catches up. ([#21415](https://github.com/mastra-ai/mastra/pull/21415))
+
+- Improved chat responsiveness on long conversations. `MarkdownRenderer` is memoized, so a streaming reply no longer re-parses the markdown of every message already on screen on each chunk it receives — only the message actually being written is re-parsed. ([#21416](https://github.com/mastra-ai/mastra/pull/21416))
+
+- Flattened the step markers in the `plain` variant of `ProcessStepListItem`. A completed step now shows a green check on its own instead of a filled green disc with a glow behind it, and the pending, running and completed markers finally share the same diameter — the dashed pending circle used to be 28px next to an 11px spinner. ([#21414](https://github.com/mastra-ai/mastra/pull/21414))
+
+- Reworked the markdown renderer's typography. Headings, lists, blockquotes, tables and horizontal rules now follow one consistent rhythm, list markers and task-list checkboxes render as expected, and long tables scroll instead of stretching their container. ([#21355](https://github.com/mastra-ai/mastra/pull/21355))
+
+  Fenced code blocks now get syntax highlighting, a copy button and a frame of their own, and yaml, diff, css, html, xml and sql joined the highlighted languages, so fences in those languages are no longer plain text.
+
+- Fixed the composer edge glow so it follows the cursor only when the cursor is actually there. Focusing the composer used to light the moving arc as well, which meant the coloured segment kept sliding around the border while you typed or moved the mouse anywhere on the page. Focus now just brightens the border, and the arc lights on hover. ([#21320](https://github.com/mastra-ai/mastra/pull/21320))
+
+- Updated dependencies [[`088e41e`](https://github.com/mastra-ai/mastra/commit/088e41e434ed05f2c674b254f1034ec46a57a7be), [`be31796`](https://github.com/mastra-ai/mastra/commit/be3179624ad5f77cff5fa342cd08046bf7605283), [`aa3e7be`](https://github.com/mastra-ai/mastra/commit/aa3e7be30f8addb0278ea74429f4df054517a287), [`d118873`](https://github.com/mastra-ai/mastra/commit/d118873cfd5074b1f814a1c169a97ca7a3a29174), [`b2f0013`](https://github.com/mastra-ai/mastra/commit/b2f0013375588d40c03c13e843b99c0ff8872ca5), [`3cc1876`](https://github.com/mastra-ai/mastra/commit/3cc18767fb47ce9830ac4623a2304e2b09591605), [`3b541ae`](https://github.com/mastra-ai/mastra/commit/3b541ae5d410c52b80a7e381d84d021cddb9a449), [`79dd7c2`](https://github.com/mastra-ai/mastra/commit/79dd7c261ee6be1fafedd4651959394db21d2cba), [`3cc1876`](https://github.com/mastra-ai/mastra/commit/3cc18767fb47ce9830ac4623a2304e2b09591605), [`90822db`](https://github.com/mastra-ai/mastra/commit/90822dba08fb2169c518e4a6d7f127c098eb46b8), [`898bba4`](https://github.com/mastra-ai/mastra/commit/898bba46d4806dd255a44e5dc3a3d5827eaefdfe), [`b9a28ec`](https://github.com/mastra-ai/mastra/commit/b9a28ecf7acdc0cb7a543d5b660f9fbee301df9a), [`4539d73`](https://github.com/mastra-ai/mastra/commit/4539d737bea0e885dfc1e376def99bb7c35a9fbc), [`f9aab1c`](https://github.com/mastra-ai/mastra/commit/f9aab1cfc3fda03238a7fd7bd8b794e07497878c), [`3700208`](https://github.com/mastra-ai/mastra/commit/37002080c7838267803a7e579a7d58b908d62f36), [`e31421b`](https://github.com/mastra-ai/mastra/commit/e31421bc9c11c03c6e74f447ecb5820000e2b9d7), [`8b7131e`](https://github.com/mastra-ai/mastra/commit/8b7131eb0407f58f5205e68fb27b81f026488f28), [`161258b`](https://github.com/mastra-ai/mastra/commit/161258b3473a6d0fce00a43cab59d119a49a232f), [`f9aab1c`](https://github.com/mastra-ai/mastra/commit/f9aab1cfc3fda03238a7fd7bd8b794e07497878c), [`aece0e7`](https://github.com/mastra-ai/mastra/commit/aece0e7cb124ae1eb1230689b887f5554b9a0bf0), [`f82f22f`](https://github.com/mastra-ai/mastra/commit/f82f22f56c58ab90e8a7501aaa5039a4e13cfe8b), [`ae79e34`](https://github.com/mastra-ai/mastra/commit/ae79e34c0bd8674fc24c7524217bfc4a051c6136), [`59d8898`](https://github.com/mastra-ai/mastra/commit/59d8898c8cb48b342fe5bcb5eee803cc8cc95060), [`a6c4399`](https://github.com/mastra-ai/mastra/commit/a6c4399763590b3dae21a2c81826e89a3b1deee4), [`a40f915`](https://github.com/mastra-ai/mastra/commit/a40f9157690d89ef13ce825cc88e30be581de5d4), [`8ea8038`](https://github.com/mastra-ai/mastra/commit/8ea80386fde53d26e2c0b2060c53bc9bd9be10f3), [`be31796`](https://github.com/mastra-ai/mastra/commit/be3179624ad5f77cff5fa342cd08046bf7605283), [`79c4f82`](https://github.com/mastra-ai/mastra/commit/79c4f8295f568752eeadf8a9b50010a7d9ec06ae), [`7dafa4f`](https://github.com/mastra-ai/mastra/commit/7dafa4f670fb16ec8ff07349645a00ca12bc5794)]:
+  - @mastra/core@1.59.0
+  - @mastra/client-js@1.40.0
+  - @mastra/react@1.4.3
+  - @mastra/memory@1.26.2
+
+## 49.0.0-alpha.5
+
+### Minor Changes
+
+- Streamed markdown now renders block by block. A growing reply re-parses only the block still being written instead of the whole message on every chunk, so a long reply no longer costs more per chunk as it gets longer, and a reply that finishes streaming keeps every element it already put on screen instead of remounting. ([#21473](https://github.com/mastra-ai/mastra/pull/21473))
+
+  Half-written markdown also renders as what it is about to become: `**bold` reads as bold while its closing marker is still in flight, and a link shows its text until the URL lands, instead of flashing raw syntax on screen.
+
+  One caveat: splitting a text into blocks is deliberately conservative rather than a second full parse. Anything it cannot decide — an unclosed fence, an indented continuation, a link reference or footnote definition — is kept whole, so those replies render exactly as before and simply do not get the speedup.
+
+- Added a `streaming` prop to `MarkdownRenderer`. A reply marked as still being written fades each word in as it arrives, instead of snapping whole chunks of text into place. ([#21417](https://github.com/mastra-ai/mastra/pull/21417))
+
+  ```tsx
+  <MarkdownRenderer streaming={part.state === 'streaming'}>{part.text}</MarkdownRenderer>
+  ```
+
+  The fade is CSS on words as they land, so the text already on screen stays put while the reply grows. A word fades in once it is whole rather than one character at a time — the word still being typed is held back until its boundary arrives, so the visible text trails the stream by at most one word. One caveat: when a growing block changes shape, a paragraph turning into a list item as the next character lands, that block fades again.
+
+  Leave the prop off — the default — for text that is already settled: it renders as plain prose, with no extra markup. The animation is disabled under `prefers-reduced-motion`.
+
+  Markdown no longer sets `text-wrap: pretty`. It re-broke the last lines of a block to avoid orphans, which reran on every chunk of a streaming reply and jumped words that were already on screen onto another line.
+
+### Patch Changes
+
+- Updated dependencies [[`59d8898`](https://github.com/mastra-ai/mastra/commit/59d8898c8cb48b342fe5bcb5eee803cc8cc95060), [`a40f915`](https://github.com/mastra-ai/mastra/commit/a40f9157690d89ef13ce825cc88e30be581de5d4)]:
+  - @mastra/core@1.59.0-alpha.5
+  - @mastra/client-js@1.40.0-alpha.5
+  - @mastra/react@1.4.3-alpha.5
+
 ## 49.0.0-alpha.4
 
 ### Patch Changes

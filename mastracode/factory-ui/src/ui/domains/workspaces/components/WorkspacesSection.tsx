@@ -22,11 +22,29 @@ import { usePinnedSessions } from '../hooks/usePinnedSessions';
 import type { FactoryUserSession } from '../services/github';
 import { getFactorySessionKind } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
+import type { SessionRowStatus } from './SessionNavRow';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
 
-function workspaceStatus(row: FactoryWorkspaceRow): 'running' | 'attention' | undefined {
-  if (row.running) return 'running';
-  if (row.attention) return 'attention';
+const COLLAPSED_ROW_COUNT = 5;
+
+const byPinnedThenRecent = (a: FactoryWorkspaceRow, b: FactoryWorkspaceRow) =>
+  Number(b.pinned) - Number(a.pinned) || b.updatedAt.localeCompare(a.updatedAt);
+
+const stillUnfolding = (row: FactoryWorkspaceRow) => row.active || row.initializing || row.running || row.attention;
+
+// Who keeps one of the collapsed slots. A pin is an explicit request, so it wins
+// over a session that merely happens to be busy.
+const bySlotPriority = (a: FactoryWorkspaceRow, b: FactoryWorkspaceRow) =>
+  Number(b.pinned) - Number(a.pinned) ||
+  Number(stillUnfolding(b)) - Number(stillUnfolding(a)) ||
+  b.updatedAt.localeCompare(a.updatedAt);
+
+function workspaceStatus(row: FactoryWorkspaceRow): SessionRowStatus | undefined {
+  // An active thread means work is happening even if the workspace record has
+  // not yet been stamped materialized — surface the more informative state.
+  if (row.running) return 'working';
+  if (row.initializing) return 'initializing';
+  if (row.attention) return 'ready';
   return undefined;
 }
 
@@ -80,6 +98,7 @@ export function WorkspacesSection() {
     const pullRequestNumber = pullRequest ? githubNumberForItem(pullRequest) : undefined;
     const active = workspace.sessionId === sessionId;
     const running = runningByPath[workspace.sessionId] === true;
+    const initializing = !workspace.materializedAt;
     const factorySession = !workspace.branch.startsWith('user/');
     if (!item && !active && !running && (!factorySession || !workItems.isFetched)) return [];
     return [
@@ -88,6 +107,7 @@ export function WorkspacesSection() {
         url: `/factories/${factoryId}/workspaces/${workspace.sessionId}`,
         label: workspace.title,
         active,
+        initializing,
         running,
         attention: attentionByPath[workspace.sessionId] === true,
         review: getFactorySessionKind(workspace, item) === 'review',
@@ -102,24 +122,10 @@ export function WorkspacesSection() {
     ];
   });
   const latestRows = (review: boolean) => {
-    const sorted = [...rows.filter(row => row.review === review)].sort(
-      (a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt.localeCompare(a.updatedAt),
-    );
-    const visible = sorted.slice(0, 5);
-    for (const pinned of sorted.slice(5).filter(row => row.active || row.running || row.attention)) {
-      let replaceIndex = visible.length - 1;
-      while (
-        replaceIndex >= 0 &&
-        (visible[replaceIndex]?.active || visible[replaceIndex]?.running || visible[replaceIndex]?.attention)
-      ) {
-        replaceIndex -= 1;
-      }
-      if (replaceIndex >= 0) visible[replaceIndex] = pinned;
-    }
-    return {
-      visible: visible.sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt.localeCompare(a.updatedAt)),
-      all: sorted,
-    };
+    const all = rows.filter(row => row.review === review).sort(byPinnedThenRecent);
+    // The cap holds either way — priority only decides which rows fill the slots.
+    const visible = [...all].sort(bySlotPriority).slice(0, COLLAPSED_ROW_COUNT).sort(byPinnedThenRecent);
+    return { visible, all };
   };
   const workRows = latestRows(false);
   const reviewRows = latestRows(true);
@@ -233,6 +239,7 @@ interface FactoryWorkspaceRow {
   url: string;
   label?: string;
   active: boolean;
+  initializing: boolean;
   running: boolean;
   attention: boolean;
   review: boolean;

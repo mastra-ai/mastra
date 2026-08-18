@@ -301,6 +301,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         sandboxProvider: input.sandboxProvider,
         sandboxWorkdir: input.sandboxWorkdir,
         setupCommand: input.setupCommand ?? null,
+        teardownCommand: input.teardownCommand ?? null,
         createdAt: now,
         updatedAt: now,
       };
@@ -469,6 +470,8 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
           row.projectRepositoryId === projectRepositoryId &&
           (row.visibility !== 'private' || row.userId === viewerUserId),
       ),
+    listByProjectRepository: async ({ projectRepositoryId }: { projectRepositoryId: string }) =>
+      this.sessionsRows.filter(row => row.projectRepositoryId === projectRepositoryId),
     getBySessionId: async (sessionId: string): Promise<SourceControlSession | null> =>
       this.sessionsRows.find(row => row.sessionId === sessionId) ?? null,
     getForBranch: async ({
@@ -520,7 +523,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
     },
     markMaterialized: async ({ id }: { id: string }) => {
       const row = this.sessionsRows.find(candidate => candidate.id === id);
-      if (row) Object.assign(row, { materializedAt: new Date(), updatedAt: new Date() });
+      if (row && row.materializedAt === null) Object.assign(row, { materializedAt: new Date(), updatedAt: new Date() });
     },
     markFirstMessage: async ({ sessionId }: { sessionId: string }) => {
       const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);

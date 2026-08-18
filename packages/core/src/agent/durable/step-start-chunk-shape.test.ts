@@ -131,7 +131,7 @@ describe('durable step-start chunk shape', () => {
       expect((chunk as any).request).toBeUndefined();
       expect((chunk as any).warnings).toBeUndefined();
 
-      expect(chunk.payload.request).toBeDefined();
+      expect(chunk.payload.request).toEqual({});
       expect(Array.isArray(chunk.payload.warnings)).toBe(true);
       expect(chunk.payload.messageId).toEqual(expect.any(String));
 

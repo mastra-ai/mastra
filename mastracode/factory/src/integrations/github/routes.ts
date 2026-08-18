@@ -129,6 +129,7 @@ export interface MountGithubRoutesOptions {
   emitAudit?: AuditEmitter['emit'];
   /** Factory projects domain — resolves a project's default triage model. */
   projects?: FactoryProjectsStorage;
+  sessionRetirement?: import('../../sandbox/session-retirement.js').SessionRetirementCoordinator;
   /** Authoritative Factory rule ingress for normalized, signature-verified GitHub deliveries. */
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
 }
@@ -357,7 +358,7 @@ async function ingestPolledEvents(
  */
 export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[] {
   const routes: ApiRoute[] = [];
-  const { auth, fleet, storage, github, stateSigner, controller, emitAudit } = options;
+  const { auth, fleet, storage, github, stateSigner, controller, emitAudit, sessionRetirement } = options;
   const diagnostics = () =>
     getGithubFeatureDiagnostics({ github, auth, appDbConfigured: storage !== undefined, stateSigner, fleet });
 
@@ -833,7 +834,10 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
       handler: async c => {
         const loaded = await loadOrgProject({ github, auth, c: loose(c) });
         if ('response' in loaded) return loaded.response;
-        return c.json({ setupCommand: loaded.project.setupCommand });
+        return c.json({
+          setupCommand: loaded.project.setupCommand,
+          teardownCommand: loaded.project.teardownCommand,
+        });
       },
     }),
   );
@@ -847,36 +851,50 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         const loaded = await loadOrgProject({ github, auth, c: loose(c) });
         if ('response' in loaded) return loaded.response;
 
-        let body: { setupCommand?: unknown };
+        let body: { setupCommand?: unknown; teardownCommand?: unknown };
         try {
           body = await c.req.json();
         } catch {
           return c.json({ error: 'Invalid JSON body' }, 400);
         }
-        if (body.setupCommand !== null && typeof body.setupCommand !== 'string') {
-          return c.json({ error: 'Invalid setupCommand' }, 400);
+
+        const commands = ['setupCommand', 'teardownCommand'] as const;
+        for (const command of commands) {
+          const value = body[command];
+          if (value === undefined) continue;
+          if (value !== null && typeof value !== 'string') {
+            return c.json({ error: `Invalid ${command}` }, 400);
+          }
+          if (typeof value === 'string' && value.length > 2000) {
+            return c.json({ error: `${command} too long (max 2000 characters)` }, 400);
+          }
+          // Reject control characters (except newline/tab). Commands are shell
+          // scripts by design, but escape sequences and NULs can spoof logs or
+          // confuse the sandbox shell.
+          if (typeof value === 'string' && /[\0-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value)) {
+            return c.json({ error: `${command} contains control characters` }, 400);
+          }
         }
-        if (typeof body.setupCommand === 'string' && body.setupCommand.length > 2000) {
-          return c.json({ error: 'setupCommand too long (max 2000 characters)' }, 400);
-        }
-        // Reject control characters (except newline/tab). The command is a
-        // shell script by design, but escape sequences and NULs have no
-        // legitimate use and can spoof logs or confuse the sandbox shell.
-        if (typeof body.setupCommand === 'string' && /[\0-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(body.setupCommand)) {
-          return c.json({ error: 'setupCommand contains control characters' }, 400);
-        }
-        // An empty/whitespace command means "no setup step".
-        const setupCommand =
-          typeof body.setupCommand === 'string' && body.setupCommand.trim().length > 0
-            ? body.setupCommand.trim()
-            : null;
+
+        const normalizeCommand = (value: unknown): string | null | undefined => {
+          if (value === undefined) return undefined;
+          return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+        };
+        const setupCommand = normalizeCommand(body.setupCommand);
+        const teardownCommand = normalizeCommand(body.teardownCommand);
 
         await github.sourceControlStorage.projectRepositories.update({
           orgId: loaded.project.installation.orgId,
           id: loaded.project.id,
-          input: { setupCommand },
+          input: {
+            ...(setupCommand !== undefined ? { setupCommand } : {}),
+            ...(teardownCommand !== undefined ? { teardownCommand } : {}),
+          },
         });
-        return c.json({ setupCommand });
+        return c.json({
+          setupCommand: setupCommand === undefined ? loaded.project.setupCommand : setupCommand,
+          teardownCommand: teardownCommand === undefined ? loaded.project.teardownCommand : teardownCommand,
+        });
       },
     }),
   );
@@ -942,7 +960,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   );
 
   // ── Sessions / commit / push / PR ────────────────────────────────────────
-  routes.push(...buildProjectGitRoutes({ github, auth, fleet, controller, emitAudit }));
+  routes.push(...buildProjectGitRoutes({ github, auth, fleet, controller, emitAudit, sessionRetirement }));
 
   return routes;
 }
@@ -1171,12 +1189,14 @@ function buildProjectGitRoutes({
   fleet,
   controller,
   emitAudit,
+  sessionRetirement,
 }: {
   github: GithubIntegration;
   auth: RouteAuth;
   fleet: SandboxFleet;
   controller?: MountedMastraCode['controller'];
   emitAudit?: AuditEmitter['emit'];
+  sessionRetirement?: MountGithubRoutesOptions['sessionRetirement'];
 }): ApiRoute[] {
   return [
     // ── Create / list Factory sessions ──────────────────────────────────────
@@ -1324,11 +1344,6 @@ function buildProjectGitRoutes({
         if (!session || session.orgId !== resolved.tenant.orgId || session.userId !== resolved.tenant.userId) {
           return c.json({ error: 'Session not found' }, 404);
         }
-        // Answer as soon as the workspace is actually gone. Reclaiming its
-        // sandbox wakes the VM and scrubs the checkout, which takes minutes on
-        // a large repository — the caller must not sit through that for a
-        // workspace that has already been removed.
-        await github.sourceControlStorage.sessions.delete(session.id);
         try {
           await controller?.deleteSession({ resourceId: session.sessionId });
         } catch (error) {
@@ -1337,17 +1352,27 @@ function buildProjectGitRoutes({
             error,
           });
         }
-        void reclaimDeletedSessionSandbox({
-          fleet,
-          sourceControl: github.sourceControlStorage,
-          session,
-        }).catch((error: unknown) => {
-          console.error('[GitHub Sessions] Failed to reclaim sandbox for deleted session', {
+        if (sessionRetirement) {
+          await sessionRetirement.retireSession({
+            sourceControl: github.sourceControlStorage,
+            orgId: session.orgId,
             sessionId: session.sessionId,
-            sandboxId: session.sandboxId,
-            error,
+            deleteSession: true,
           });
-        });
+        } else {
+          await github.sourceControlStorage.sessions.delete(session.id);
+          void reclaimDeletedSessionSandbox({
+            fleet,
+            sourceControl: github.sourceControlStorage,
+            session,
+          }).catch((error: unknown) => {
+            console.error('[GitHub Sessions] Failed to reclaim sandbox for deleted session', {
+              sessionId: session.sessionId,
+              sandboxId: session.sandboxId,
+              error,
+            });
+          });
+        }
         return c.json({ removed: true });
       },
     }),
