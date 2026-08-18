@@ -197,12 +197,14 @@ export function ToolCard({ tool }: { tool: ToolCall }) {
   const [expanded, setExpanded] = useState(false);
   const { icon: Icon, label, detail, command } = presentTool(tool.toolName, tool.args);
   const failed = tool.status === 'error';
+  // A card already on screen when the transcript loaded was not just called.
+  const [arrivedLive] = useState(() => tool.status === 'running');
 
   return (
     <Collapsible
       open={expanded}
       onOpenChange={setExpanded}
-      className="max-w-full min-w-0"
+      className={cn('max-w-full min-w-0', arrivedLive && 'motion-safe:animate-in fade-in-0 slide-in-from-bottom-1')}
       role="group"
       aria-label={`Tool: ${tool.toolName}`}
       aria-busy={tool.status === 'running'}

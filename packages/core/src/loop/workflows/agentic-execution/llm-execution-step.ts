@@ -81,6 +81,7 @@ import { buildLlmPromptArgs } from '../../shared/build-llm-prompt-args';
 import { composeStepInput } from '../../shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../shared/inject-background-task-prompt';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../shared/merge-llm-call-headers';
+import { isMastraTimeoutError } from '../../timeout';
 import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
@@ -778,6 +779,13 @@ async function processOutputStream<OUTPUT = undefined>({
       metadata: chunk.metadata,
     });
 
+    // Track the assistant text emitted so far so an abort can hand the caller
+    // the partial response. This sits after the `abortSignal.aborted` break
+    // above, so chunks a provider keeps sending post-abort are never included.
+    if (chunk.type === 'text-delta') {
+      runState.setState({ partialText: runState.state.partialText + chunk.payload.text });
+    }
+
     switch (chunk.type) {
       case 'response-metadata':
         runState.setState({
@@ -1088,16 +1096,22 @@ function executeStreamWithFallbackModels<T>(
           throw err;
         }
 
+        // A total-run timeout is a hard deadline for the whole run, so it must not be
+        // laundered into an attempt against the next fallback model. A step timeout is
+        // a per-model failure and does fall through to the next model.
+        if (isMastraTimeoutError(err) && err.timeoutType === 'total') {
+          throw err;
+        }
+
         lastError = err;
 
         logger?.error(`Error executing model ${modelConfig.model.modelId}`, err);
       }
     }
     if (typeof finalResult === 'undefined') {
-      const lastErrMsg = lastError instanceof Error ? lastError.message : String(lastError);
-      const errorMessage = `Exhausted all fallback models. Last error: ${lastErrMsg}`;
-      logger?.error(errorMessage);
-      throw new Error(errorMessage, { cause: lastError });
+      const fatalError = lastError ?? new Error('Exhausted all fallback models without receiving a result.');
+      logger?.error('Exhausted all fallback models.', fatalError);
+      throw fatalError;
     }
     return finalResult;
   };
@@ -1852,6 +1866,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             logger?.debug?.('LLM execution aborted', { runId });
             await options?.onAbort?.({
               steps: inputData?.output?.steps ?? [],
+              text: runState.state.partialText,
             });
 
             safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
@@ -1972,6 +1987,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           cleanupProviderToolSpans(true);
           await options?.onAbort?.({
             steps: inputData?.output?.steps ?? [],
+            text: runState.state.partialText,
           });
 
           safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
@@ -2099,6 +2115,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         cleanupProviderToolSpans(true);
         await options.onAbort?.({
           steps: inputData?.output?.steps ?? [],
+          text: runState.state.partialText,
         });
         safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
         return bailFromExecution();

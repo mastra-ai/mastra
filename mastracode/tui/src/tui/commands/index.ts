@@ -24,6 +24,7 @@ export { handleModelsPackCommand } from './models-pack.js';
 export { handleCustomProvidersCommand } from './custom-providers.js';
 export { handleSubagentsCommand } from './subagents.js';
 export { handleOMCommand } from './om.js';
+export { handleKnowledgeCommand } from './knowledge-command.js';
 export { handleSettingsCommand } from './settings.js';
 export { handleBrowserCommand } from './browser.js';
 export { handleLoginCommand } from './login.js';

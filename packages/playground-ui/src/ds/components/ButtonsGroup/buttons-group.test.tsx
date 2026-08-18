@@ -109,11 +109,14 @@ describe('ButtonsGroup', () => {
     // ...and are EXCLUDED from the transparent-left-border rule, so a filled segment keeps
     // its own 1px border as the single seam (its opaque bg hides the neighbour's border).
     // The previous inset-shadow approach was 1px off the covered border → a 2px double line.
-    expect(cls).toContain(':not([data-variant=default]):not([data-variant=primary])');
+    expect(cls).toContain(':not([data-variant=default]):not([data-variant=primary]):not([data-variant=destructive])');
     expect(cls).not.toContain('[data-variant=default]:not([aria-hidden=true]):not(:first-child)]:shadow-[inset');
-    // `primary` is borderless-filled, so it (only) gets an inset-shadow divider.
+    // Borderless filled variants get an inset-shadow divider.
     expect(cls).toContain(
       '[&>[data-variant=primary]:not([aria-hidden=true]):not(:first-child)]:shadow-[inset_1px_0_0_0_var(--color-border1)]',
+    );
+    expect(cls).toContain(
+      '[&>[data-variant=destructive]:not([aria-hidden=true]):not(:first-child)]:shadow-[inset_1px_0_0_0_var(--color-border1)]',
     );
     // Anti-flicker: grouped segments only transition colour/background (border + ring snap).
     expect(cls).toContain(':transition-[color,background-color]');

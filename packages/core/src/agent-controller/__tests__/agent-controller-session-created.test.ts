@@ -106,6 +106,129 @@ describe('AgentController.onSessionCreated', () => {
     error.mockRestore();
   });
 
+  it('awaits blocking listeners before createSession resolves, without blocking on fire-and-forget ones', async () => {
+    const { controller } = createController(new InMemoryStore());
+    await controller.init();
+    let releaseBlocking: (() => void) | undefined;
+    let blockingSettled = false;
+    controller.onSessionCreated(
+      () =>
+        new Promise<void>(resolve => {
+          releaseBlocking = () => {
+            blockingSettled = true;
+            resolve();
+          };
+        }),
+      { blocking: true },
+    );
+    // A never-resolving fire-and-forget listener must not delay creation.
+    controller.onSessionCreated(() => new Promise<void>(() => {}));
+
+    let created = false;
+    const creation = controller.createSession({ resourceId: 'resource-1' }).then(session => {
+      created = true;
+      return session;
+    });
+    await vi.waitFor(() => expect(releaseBlocking).toBeDefined());
+    expect(created).toBe(false);
+
+    releaseBlocking?.();
+    await creation;
+    expect(blockingSettled).toBe(true);
+    expect(created).toBe(true);
+  });
+
+  it('runs blocking listeners sequentially in registration order before fire-and-forget ones', async () => {
+    const { controller } = createController(new InMemoryStore());
+    await controller.init();
+    const order: string[] = [];
+    controller.onSessionCreated(() => {
+      order.push('plain');
+    });
+    controller.onSessionCreated(
+      async () => {
+        order.push('blocking-1:start');
+        await Promise.resolve();
+        order.push('blocking-1:end');
+      },
+      { blocking: true },
+    );
+    controller.onSessionCreated(
+      async () => {
+        order.push('blocking-2');
+      },
+      { blocking: true },
+    );
+
+    await controller.createSession({ resourceId: 'resource-1' });
+
+    expect(order).toEqual(['blocking-1:start', 'blocking-1:end', 'blocking-2', 'plain']);
+  });
+
+  it('makes concurrent get-or-create callers await the same blocking initialization', async () => {
+    const { controller } = createController(new InMemoryStore());
+    await controller.init();
+    let release: (() => void) | undefined;
+    controller.onSessionCreated(
+      () =>
+        new Promise<void>(resolve => {
+          release = resolve;
+        }),
+      { blocking: true },
+    );
+
+    let settledCount = 0;
+    const creations = [
+      controller.createSession({ resourceId: 'resource-1' }),
+      controller.createSession({ resourceId: 'resource-1' }),
+      controller.createSession({ resourceId: 'resource-1' }),
+    ].map(promise =>
+      promise.then(session => {
+        settledCount += 1;
+        return session;
+      }),
+    );
+    await vi.waitFor(() => expect(release).toBeDefined());
+    expect(settledCount).toBe(0);
+
+    release?.();
+    const [first, second, third] = await Promise.all(creations);
+    expect(first).toBe(second);
+    expect(second).toBe(third);
+    expect(settledCount).toBe(3);
+  });
+
+  it('removes only one registration when the same listener is registered twice', async () => {
+    const { controller } = createController(new InMemoryStore());
+    await controller.init();
+    const listener = vi.fn();
+    controller.onSessionCreated(listener);
+    const unsubscribeSecond = controller.onSessionCreated(listener);
+    unsubscribeSecond();
+
+    await controller.createSession({ resourceId: 'resource-1' });
+
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('isolates blocking listener failures instead of failing createSession', async () => {
+    const { controller } = createController(new InMemoryStore());
+    await controller.init();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    controller.onSessionCreated(
+      async () => {
+        throw new Error('blocking failure');
+      },
+      { blocking: true },
+    );
+
+    const session = await controller.createSession({ resourceId: 'resource-1' });
+
+    expect(session).toBeDefined();
+    expect(error).toHaveBeenCalledWith('Error in session-created listener:', expect.any(Error));
+    error.mockRestore();
+  });
+
   it('awaits before-agent-end listeners before exposing the terminal event', async () => {
     const { controller } = createController(new InMemoryStore());
     await controller.init();

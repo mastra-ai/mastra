@@ -18,6 +18,19 @@ export interface CachingPubSubOptions {
    * Falls back to console.error if not provided.
    */
   logger?: IMastraLogger;
+  /**
+   * Optional per-topic caching policy. Defaults to caching every topic.
+   *
+   * Returning `false` takes the same path as a `localOnly` publish: no list
+   * entry, no index, no counter allocation — the event is handed straight to
+   * the inner PubSub and still delivered live.
+   *
+   * This exists because `localOnly` is not always visible here. When a caller
+   * wraps a PubSub that itself decides `localOnly` (e.g. the `mastra.pubsub`
+   * proxy), the cache runs *above* that decision and never sees the flag, so
+   * the policy has to be supplied at construction time instead.
+   */
+  shouldCache?: (topic: string) => boolean;
 }
 
 /**
@@ -56,6 +69,7 @@ export interface CachingPubSubOptions {
 export class CachingPubSub extends PubSub {
   private readonly keyPrefix: string;
   private readonly logger?: IMastraLogger;
+  private readonly shouldCache?: (topic: string) => boolean;
   /** Maps original callbacks to their wrapped versions for proper unsubscribe */
   private callbackMap = new Map<EventCallback, EventCallback>();
 
@@ -67,10 +81,15 @@ export class CachingPubSub extends PubSub {
     super();
     this.keyPrefix = options.keyPrefix ?? 'pubsub:';
     this.logger = options.logger;
+    this.shouldCache = options.shouldCache;
   }
 
   get supportsNativeBatching(): boolean {
     return this.inner.supportsNativeBatching;
+  }
+
+  get supportsOffsets(): boolean {
+    return true;
   }
 
   /**
@@ -130,13 +149,16 @@ export class CachingPubSub extends PubSub {
    * results, are multiple megabytes each). Consumers of `localOnly` topics
    * subscribe live and never replay, and every downstream `index` check is
    * guarded for absence, so dropping the index is safe.
+   *
+   * Topics rejected by the `shouldCache` option take the exact same path, for
+   * callers whose `localOnly` decision is made below this layer.
    */
   async publish(
     topic: string,
     event: Omit<Event, 'id' | 'createdAt' | 'index'>,
     options?: { localOnly?: boolean },
   ): Promise<void> {
-    if (options?.localOnly) {
+    if (options?.localOnly || this.shouldCache?.(topic) === false) {
       const fullEvent: Event = {
         ...event,
         id: crypto.randomUUID(),

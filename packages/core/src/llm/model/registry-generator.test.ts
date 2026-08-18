@@ -1,8 +1,8 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
-import { generateTypesContent, writeRegistryFiles } from './registry-generator.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { atomicWriteFile, generateTypesContent, writeRegistryFiles } from './registry-generator.js';
 
 const tempDirs: string[] = [];
 
@@ -47,6 +47,62 @@ describe('registry-generator', () => {
 
       expect(content).toContain("readonly '302ai':");
       expect(content).not.toMatch(/readonly\s+\d/);
+    });
+  });
+
+  describe('atomicWriteFile', () => {
+    it('retries a transient Windows replacement lock', async () => {
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-atomic-write-'));
+      tempDirs.push(dir);
+      const target = path.join(dir, 'provider-registry.json');
+      const originalPlatform = process.platform;
+      const originalRename = fs.rename;
+      let attempts = 0;
+
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+      vi.spyOn(fs, 'rename').mockImplementation(async (source, destination) => {
+        attempts += 1;
+        if (attempts < 3) {
+          const error = new Error('destination temporarily locked') as NodeJS.ErrnoException;
+          error.code = 'EPERM';
+          throw error;
+        }
+        return originalRename(source, destination);
+      });
+
+      try {
+        await atomicWriteFile(target, '{"ok":true}');
+
+        expect(attempts).toBe(3);
+        await expect(fs.readFile(target, 'utf8')).resolves.toBe('{"ok":true}');
+      } finally {
+        Object.defineProperty(process, 'platform', { value: originalPlatform });
+        vi.restoreAllMocks();
+      }
+    });
+
+    it('does not retry non-Windows replacement locks', async () => {
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-atomic-write-'));
+      tempDirs.push(dir);
+      const target = path.join(dir, 'provider-registry.json');
+      const originalPlatform = process.platform;
+      let attempts = 0;
+
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+      vi.spyOn(fs, 'rename').mockImplementation(async () => {
+        attempts += 1;
+        const error = new Error('destination temporarily locked') as NodeJS.ErrnoException;
+        error.code = 'EPERM';
+        throw error;
+      });
+
+      try {
+        await expect(atomicWriteFile(target, '{"ok":true}')).rejects.toMatchObject({ code: 'EPERM' });
+        expect(attempts).toBe(1);
+      } finally {
+        Object.defineProperty(process, 'platform', { value: originalPlatform });
+        vi.restoreAllMocks();
+      }
     });
   });
 

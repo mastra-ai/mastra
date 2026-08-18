@@ -87,7 +87,7 @@ export async function executeStep(
     abortController,
     requestContext,
     actor,
-    skipEmits = false,
+    skipEmits: skipEmitsParam = false,
     outputWriter,
     disableScorers,
     serializedStepGraph,
@@ -95,6 +95,7 @@ export async function executeStep(
     perStep,
     ...rest
   } = params;
+  const skipEmits = skipEmitsParam || engine.options.emitStepEvents === false;
   const observabilityContext = resolveObservabilityContext(rest);
 
   const stepCallId = randomUUID();
@@ -158,7 +159,9 @@ export async function executeStep(
   const resumeTime = resumeDataToUse ? Date.now() : undefined;
 
   const stepInfo = {
-    ...stepResults[step.id],
+    // Drop prior completion/suspend fields so they cannot linger across re-entry
+    // (e.g. suspendPayload/suspendedAt after resume, or startedAt > suspendedAt on loops).
+    ...omitPriorCompletionFields((stepResults[step.id] ?? {}) as Record<string, unknown>),
     ...(resumeDataToUse ? { resumePayload: resumeDataToUse } : { payload: inputData }),
     ...(startTime ? { startedAt: startTime } : {}),
     ...(resumeTime ? { resumedAt: resumeTime } : {}),
@@ -263,7 +266,10 @@ export async function executeStep(
         }
       }
 
-      const stepResult = { ...stepInfo, ...workflowResult } as StepResult<any, any, any, any>;
+      const stepResult = {
+        ...omitPriorCompletionFields(stepInfo),
+        ...workflowResult,
+      } as StepResult<any, any, any, any>;
       return {
         result: stepResult,
         stepResults: { [step.id]: stepResult },
@@ -517,9 +523,8 @@ export async function executeStep(
       await emitStepResultEvents({
         stepId: step.id,
         stepCallId,
-        // The persisted step result keeps the full prior-result spread (see
-        // `stepResult` below); the emitted event must not re-publish the
-        // previous completion's state blobs alongside the fresh execResults.
+        // Emit uses the same omit+merge as the persisted stepResult below so
+        // watch events and snapshots agree on cleared prior completion fields.
         execResults: { ...omitPriorCompletionFields(stepInfo), ...execResults } as StepResult<any, any, any, any>,
         pubsub,
         runId,
@@ -540,7 +545,10 @@ export async function executeStep(
     });
   }
 
-  const stepResult = { ...stepInfo, ...execResults } as StepResult<any, any, any, any>;
+  const stepResult = {
+    ...omitPriorCompletionFields(stepInfo),
+    ...execResults,
+  } as StepResult<any, any, any, any>;
 
   return {
     result: stepResult,

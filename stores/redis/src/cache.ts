@@ -163,7 +163,13 @@ export class RedisServerCache extends MastraServerCache {
 
   async increment(key: string): Promise<number> {
     const fullKey = this.getKey(key);
-    return this.client.incr(fullKey);
+    const value = await this.client.incr(fullKey);
+
+    if (this.ttlSeconds > 0) {
+      await this.client.expire(fullKey, this.ttlSeconds);
+    }
+
+    return value;
   }
 }
 

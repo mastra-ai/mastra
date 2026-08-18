@@ -8,6 +8,7 @@ describe('MCPClient tool discovery retries', () => {
   const clients: MCPClient[] = [];
 
   afterEach(async () => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     await Promise.all(clients.map(client => client.disconnect().catch(() => {})));
     clients.length = 0;
@@ -90,6 +91,68 @@ describe('MCPClient tool discovery retries', () => {
     });
     expect(weatherClient.tools).toHaveBeenCalledTimes(1);
     expect(stockClient.tools).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns healthy tools and timing diagnostics when another server exceeds its discovery budget', async () => {
+    vi.useFakeTimers();
+    const client = createMultiServerClient();
+    const weatherTools = { getWeather: {} as any };
+    const weatherClient = {
+      tools: vi.fn().mockResolvedValue(weatherTools),
+    } as any;
+    const stockClient = {
+      tools: vi.fn().mockImplementation(() => new Promise(() => {})),
+    } as any;
+
+    vi.spyOn(client as any, 'getConnectedClientForServer').mockImplementation(async (serverName: string) => {
+      return serverName === 'weather' ? weatherClient : stockClient;
+    });
+
+    const pending = client.listToolsWithErrors({ perServerTimeoutMs: 50 });
+    await vi.advanceTimersByTimeAsync(50);
+    const result = await pending;
+
+    expect(result).toEqual({
+      tools: {
+        weather_getWeather: weatherTools.getWeather,
+      },
+      errors: {
+        stock: 'Discovery timed out after 50ms',
+      },
+      durations: {
+        weather: 0,
+        stock: 50,
+      },
+    });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('returns durations from toolset and tool definition discovery when options are supplied', async () => {
+    vi.useFakeTimers();
+    const client = createClient();
+    const toolset = { getWeather: {} as any };
+    const definitions = { getWeather: { name: 'getWeather' } } as any;
+    const internalClient = {
+      tools: vi.fn().mockResolvedValue(toolset),
+      toolDefinitions: vi.fn().mockResolvedValue(definitions),
+    } as any;
+
+    vi.spyOn(client as any, 'getConnectedClientForServer').mockResolvedValue(internalClient);
+
+    const toolsetsResult = await client.listToolsetsWithErrors({ perServerTimeoutMs: 50 });
+    const definitionsResult = await client.listToolDefinitionsWithErrors({ perServerTimeoutMs: 50 });
+
+    expect(toolsetsResult).toEqual({
+      toolsets: { weather: toolset },
+      errors: {},
+      durations: { weather: 0 },
+    });
+    expect(definitionsResult).toEqual({
+      definitions: { weather: definitions },
+      errors: {},
+      durations: { weather: 0 },
+    });
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('retries listToolsWithErrors once after a reconnectable discovery failure', async () => {

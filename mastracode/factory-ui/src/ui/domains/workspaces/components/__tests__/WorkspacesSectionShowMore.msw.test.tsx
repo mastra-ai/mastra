@@ -25,6 +25,7 @@ function reviewSession(index: number): FactoryUserSession {
     projectRepositoryId,
     orgId: 'org-1',
     userId: 'user-1',
+    visibility: 'org' as const,
     branch: `factory/pr-${20000 + index}`,
     baseBranch: 'main',
     sandboxId: null,

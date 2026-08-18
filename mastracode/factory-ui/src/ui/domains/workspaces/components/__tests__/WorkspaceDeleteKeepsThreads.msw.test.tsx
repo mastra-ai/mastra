@@ -27,6 +27,7 @@ const workspace: FactoryUserSession = {
   projectRepositoryId,
   orgId: 'org-1',
   userId: 'user-1',
+  visibility: 'org' as const,
   branch: 'factory/pr-20474',
   baseBranch: 'main',
   sandboxId: 'sbx-1',

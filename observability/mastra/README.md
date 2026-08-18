@@ -56,8 +56,10 @@ Metrics are automatically extracted from span lifecycle events by `AutoExtracted
 - `mastra_workflow_duration_ms`
 - `mastra_model_duration_ms`
 - `mastra_model_total_input_tokens` / `mastra_model_total_output_tokens`
-- `mastra_model_input_text_tokens` / `mastra_model_input_cache_read_tokens` / `mastra_model_input_cache_write_tokens` / `mastra_model_input_audio_tokens` / `mastra_model_input_image_tokens`
+- `mastra_model_input_text_tokens` / `mastra_model_input_cache_read_tokens` / `mastra_model_input_cache_write_tokens` / `mastra_model_input_cache_write_5m_tokens` / `mastra_model_input_cache_write_1h_tokens` / `mastra_model_input_audio_tokens` / `mastra_model_input_image_tokens`
 - `mastra_model_output_text_tokens` / `mastra_model_output_reasoning_tokens` / `mastra_model_output_audio_tokens` / `mastra_model_output_image_tokens`
+
+For Anthropic models, the aggregate cache-write metric remains available while the 5-minute and 1-hour metrics preserve the provider's TTL-specific token counts and pricing.
 
 Auto-extracted metrics carry labels: `entity_type`, `entity_name`, `status`, plus `model` and `provider` on model generation spans.
 

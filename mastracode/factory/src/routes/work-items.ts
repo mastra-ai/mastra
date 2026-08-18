@@ -18,8 +18,8 @@ import type {
 } from '../rules/start-coordinator.js';
 import { FactoryStartTransitionError } from '../rules/start-coordinator.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
-import type { FactoryRuleBoard, FactoryRuleStage } from '../rules/types.js';
-import { FACTORY_RULE_BOARDS, FACTORY_RULE_STAGES } from '../rules/types.js';
+import type { FactoryRuleBoard } from '../rules/types.js';
+import { FACTORY_RULE_BOARDS, isFactoryRuleStage } from '../rules/types.js';
 import type { LiveSessions } from '../session/live-sessions.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
@@ -219,9 +219,7 @@ function parseTransitionBody(
   const board = FACTORY_RULE_BOARDS.includes(body.board as FactoryRuleBoard)
     ? (body.board as FactoryRuleBoard)
     : undefined;
-  const stage = FACTORY_RULE_STAGES.includes(body.stage as FactoryRuleStage)
-    ? (body.stage as FactoryRuleStage)
-    : undefined;
+  const stage = isFactoryRuleStage(body.stage) ? body.stage : undefined;
   const requestId = boundedText(body.requestId, 256);
   const cause = boundedText(body.cause, 256);
   if (
@@ -270,9 +268,7 @@ function parseStartBody(
   const threadTitle = boundedText(body.threadTitle, 512);
   const kickoffKey = boundedText(body.kickoffKey, 256);
   const invocation = parseInvocation(body.invocation);
-  const destinationStage = FACTORY_RULE_STAGES.includes(body.destinationStage as FactoryRuleStage)
-    ? (body.destinationStage as FactoryRuleStage)
-    : undefined;
+  const destinationStage = isFactoryRuleStage(body.destinationStage) ? body.destinationStage : undefined;
   const role = boundedText(body.workItem.role, 32);
   const id = body.workItem.id === undefined ? undefined : boundedText(body.workItem.id, 64);
   if (body.workItem.id !== undefined && (!id || !UUID_RE.test(id))) return null;
@@ -512,8 +508,12 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         const decisionId = context.req.param('decisionId');
         if (!decisionId || !UUID_RE.test(decisionId)) return c.json({ error: 'invalid_decision_id' }, 422);
         await workItems.ensureReady();
-        const decision = await settle(resolved.orgId, resolved.factoryProjectId, decisionId, new Date());
+        const now = new Date();
+        const decision = await settle(resolved.orgId, resolved.factoryProjectId, decisionId, now);
         if (!decision) return c.json({ error: 'decision_not_proposed' }, 409);
+        // Releasing a proposal is a person taking the item on. Approval arms the
+        // item's autonomy inside the same storage transaction (see
+        // approveDeferredDecision), so follow-up runs no longer wait for approval.
         await audit.emit({
           context,
           input: {
@@ -785,6 +785,11 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if (!input) return c.json({ error: 'invalid_factory_start' }, 400);
           input.requestContext = loose(c).get('requestContext');
           input.defaultModelId = resolved.defaultModelId ?? undefined;
+          // This route is only reached by a person pressing a run action, so
+          // reaching it is the commitment the approval gate is asking for.
+          // Arming rides inside prepareRunStart's transaction so a crash can't
+          // start the run while leaving its follow-up work waiting on approval.
+          input.armAutonomy = true;
           if (
             !input.workItem.id &&
             ((input.workItem.input.stages ?? ['intake']).length !== 1 ||

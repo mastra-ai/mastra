@@ -70,6 +70,7 @@ function setPlatform(platform: NodeJS.Platform) {
 
 afterEach(() => {
   Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
+  delete process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS;
   vi.mocked(execFileSync).mockReset();
   vi.restoreAllMocks();
 });
@@ -195,6 +196,7 @@ describe('setupKeyHandlers', () => {
 
 describe('setupKeyboardShortcuts', () => {
   it('defaults slash-command autocomplete to the first visible built-in command before custom commands', () => {
+    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
     autocompleteProviders.length = 0;
     const { state, editor } = createState(false);
     state.customSlashCommands = [
@@ -252,6 +254,7 @@ describe('setupKeyboardShortcuts', () => {
     expect(commandNames).toContain('skill/');
     expect(commandNames).toContain('memory');
     expect(commandNames).toContain('om');
+    expect(commandNames).toContain('knowledge');
     expect(commandNames.indexOf('memory')).toBeLessThan(commandNames.indexOf('om'));
     expect(autocompleteProviders[0]?.commands.find(command => command.name === 'memory')?.description).toBe(
       'Configure Observational Memory',
@@ -259,12 +262,24 @@ describe('setupKeyboardShortcuts', () => {
     expect(autocompleteProviders[0]?.commands.find(command => command.name === 'om')?.description).toBe(
       'Alias for /memory',
     );
+    expect(autocompleteProviders[0]?.commands.find(command => command.name === 'knowledge')?.description).toBe(
+      'Browse scoped Subconscious knowledge',
+    );
     expect(commandNames).not.toContain('memory-gateway');
     expect(commandNames.indexOf('/deploy')).toBeGreaterThan(commandNames.indexOf('help'));
     expect(commandNames).toContain('skill/lint-fix');
     expect(commandNames).toContain('goal/deploy');
     expect(commandNames).toContain('goal/review');
     expect(commandNames.slice(-5)).toEqual(['/deploy', 'goal/deploy', '/ship', 'skill/lint-fix', 'goal/review']);
+  });
+
+  it('hides experimental knowledge autocomplete unless Subconscious is enabled', () => {
+    autocompleteProviders.length = 0;
+    const { state } = createState(false);
+
+    setupAutocomplete(state);
+
+    expect(autocompleteProviders[0]?.commands.map(command => command.name)).not.toContain('knowledge');
   });
 
   it('passes detected fd path and cwd into the autocomplete provider', () => {

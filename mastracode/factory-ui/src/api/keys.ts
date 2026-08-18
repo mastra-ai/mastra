@@ -16,6 +16,7 @@
 export const INITIAL_THREAD_MESSAGE_LIMIT = 100;
 
 export const queryKeys = {
+  serverFeatures: () => ['server-features'] as const,
   factoryAuth: () => ['factory-auth'] as const,
   factories: () => ['factories'] as const,
   persistedFactories: () => ['factories', 'persisted'] as const,
@@ -35,8 +36,13 @@ export const queryKeys = {
   linearIssues: (githubProjectId: string | undefined) =>
     [...queryKeys.linearIssuesAll(), githubProjectId ?? null] as const,
   intakeConfig: () => ['intake', 'config'] as const,
+  intakeBindings: () => ['intake', 'bindings'] as const,
   channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
+  knowledgeGraph: (factoryProjectId: string | undefined, threadId?: string) =>
+    ['factory', 'knowledge-graph', factoryProjectId ?? null, threadId ?? null] as const,
+  knowledgeNode: (factoryProjectId: string | undefined, nodeId: string | undefined, threadId?: string) =>
+    ['factory', 'knowledge-node', factoryProjectId ?? null, nodeId ?? null, threadId ?? null] as const,
   factoryMetrics: (githubProjectId: string | undefined, from: string, to: string) =>
     ['factory', 'metrics', githubProjectId ?? null, from, to] as const,
   factoryHealthThresholds: (githubProjectId: string | undefined) =>
@@ -104,12 +110,20 @@ export const queryKeys = {
     agentControllerId: string | undefined,
     resourceId: string | undefined,
     projectPath: string | undefined,
-  ) => [...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath), 'state'] as const,
-  // Kept outside agentControllerSession for the same reason as connection:
-  // this is a lightweight activity poll, not session state to invalidate. One
-  // entry covers every worktree sharing the resource (single thread listing).
-  agentControllerActivity: (agentControllerId: string | undefined, resourceId: string | undefined) =>
-    ['agent-controller', agentControllerId ?? null, 'activity', resourceId ?? null] as const,
+    threadId?: string,
+  ) =>
+    [
+      ...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath),
+      'state',
+      ...(threadId ? [threadId] : []),
+    ] as const,
+  // Session state must stay out of the key: it would reset the query on navigation, and a reset reads as every run going idle.
+  agentControllerActivity: (agentControllerId: string | undefined) =>
+    ['agent-controller', agentControllerId ?? null, 'activity'] as const,
+  // The polled session's own id, not the page's — user sessions each carry their own resourceId, so one
+  // shared entry would collapse every poll into one.
+  agentControllerSessionActivity: (agentControllerId: string | undefined, resourceId: string | undefined) =>
+    [...queryKeys.agentControllerActivity(agentControllerId), resourceId ?? null] as const,
   agentControllerSettings: (
     agentControllerId: string | undefined,
     resourceId: string | undefined,
