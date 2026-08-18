@@ -947,6 +947,12 @@ export interface ObservationalMemoryConfig {
   memory?: Memory;
 
   /**
+   * Run the subconscious curator (via `memory.runCuration`) after every N committed
+   * observation runs on the synchronous observe path. Off by default. Requires `memory`.
+   */
+  curationCadence?: number;
+
+  /**
    * Enable retrieval-mode observation group metadata.
    * When true, observation groups are treated as durable pointers to raw
    * message history and a `recall` tool is registered so the actor can

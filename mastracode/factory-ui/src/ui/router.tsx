@@ -17,6 +17,7 @@ import type { RouteObject } from 'react-router';
 import Chat from './domains/chat/Chat';
 import { RootGuards } from './domains/auth/components/RootGuards';
 import { AuditPage } from './pages/AuditPage';
+import { KnowledgePage } from './pages/KnowledgePage';
 import { ReviewBoardPage, WorkBoardPage } from './pages/BoardPage';
 import { CreateFactoryPage } from './pages/CreateFactoryPage';
 import { NewPage } from './pages/NewPage';
@@ -29,6 +30,7 @@ import { SignInPage } from './pages/SignInPage';
 import { ThreadPage } from './pages/ThreadPage';
 
 import { useFactoriesQuery } from '../hooks/useFactories';
+import { useServerFeatures } from '../hooks/useServerFeatures';
 import { FactoryLayout } from './domains/workspaces/components/FactoryLayout';
 import { hasPendingCreateFlow } from './domains/workspaces/hooks/useCreateFactoryFlow';
 import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onboardingFlow';
@@ -110,6 +112,15 @@ function ConnectionsRedirect() {
   return <Navigate to={`/factories/${firstFactory.id}/settings/connections`} replace />;
 }
 
+function KnowledgeRoute() {
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const features = useServerFeatures();
+
+  if (features.isPending || !factoryId) return null;
+  if (!features.data?.knowledge) return <Navigate to={`/factories/${factoryId}/overview`} replace />;
+  return <KnowledgePage />;
+}
+
 export function createAppRoutes(): RouteObject[] {
   // NOTE: route paths must not (case-insensitively) match a file at the Vite
   // root (src/ui), or dev deep-links serve the module source instead of
@@ -160,6 +171,7 @@ export function createAppRoutes(): RouteObject[] {
                 { path: 'metrics', element: <MetricsRedirect /> },
                 { path: 'rules', element: <RulesPage /> },
                 { path: 'audit', element: <AuditPage /> },
+                { path: 'knowledge', element: <KnowledgeRoute /> },
                 {
                   path: 'settings',
                   children: [

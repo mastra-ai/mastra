@@ -8,10 +8,12 @@ import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 
 import type { Memory } from '../../..';
-import type { ReflectionCommittedContext } from '../types';
+import type { ObservationalMemoryModel, ReflectionCommittedContext } from '../types';
 import { publishSubconsciousActivity, publishSubconsciousError } from './activity';
 import { createKnowledgeTools } from './knowledge-tools';
 import { createKnowledgeWriteTools } from './knowledge-write-tools';
+import { resolveSubconsciousAgentModel } from './model';
+import { resolveKnowledgeResourceId } from './scope';
 import type { ResolvedSubconsciousAgent, ResolvedSubconsciousConfig } from './types';
 
 const LEARN_AGENT = 'learn';
@@ -33,7 +35,7 @@ function resolveScope(context: ReflectionCommittedContext): KnowledgeScope {
   }
   return canonicalizeKnowledgeScope([
     `org:${organizationId}`,
-    `resource:${context.resourceId}`,
+    `resource:${resolveKnowledgeResourceId(context.requestContext, context.resourceId)}`,
     `thread:${context.parentThreadId}`,
   ]);
 }
@@ -132,7 +134,7 @@ export function createLearnerRecordSkillTool(input: {
 }
 
 export function composeReflectionAgentHandlers(
-  handlers: Array<(context: ReflectionCommittedContext) => Promise<void>>,
+  handlers: Array<(context: ReflectionCommittedContext) => Promise<unknown>>,
 ): (context: ReflectionCommittedContext) => Promise<void> {
   return async context => {
     for (const handler of handlers) {
@@ -150,6 +152,7 @@ export function createLearnerHandler(
   memory: Memory,
   subconscious: ResolvedSubconsciousConfig,
   learnerMemory = memory,
+  options?: { omModel?: ObservationalMemoryModel },
 ): (context: ReflectionCommittedContext) => Promise<void> {
   const config = subconscious.reflection.find(agent => agent.name === LEARN_AGENT);
   if (!config) return async () => {};
@@ -171,6 +174,7 @@ export function createLearnerHandler(
         worklist.records,
         config,
         subconscious,
+        options?.omModel,
       );
       const result = await agent.generate(
         `Parent thread: ${context.parentThreadId}\nCurrent time: ${new Date().toISOString()}\nWorklist truncated: ${worklist.hasMore}\n\nFull pre-reflection observations:\n${context.observations}\n\nPending knowledge records:\n${JSON.stringify(worklist.records)}`,
@@ -217,12 +221,15 @@ async function createLearnerAgent(
   pendingRecords: KnowledgeRecord[],
   config: ResolvedSubconsciousAgent,
   subconscious: ResolvedSubconsciousConfig,
+  omModel?: ObservationalMemoryModel,
 ): Promise<Agent> {
-  if (!context.mainAgent) throw new Error('Subconscious learn requires the main agent to resolve its model.');
-  const model = await context.mainAgent.getModel({
+  const model = await resolveSubconsciousAgentModel({
+    config,
+    omModel,
+    mainAgent: context.mainAgent,
     requestContext: context.requestContext,
-    ...(config.model ? { modelConfig: config.model } : {}),
   });
+  if (!model) throw new Error('Subconscious learn requires the main agent to resolve its model.');
   const store = await memory.storage.getStore('knowledge');
   if (!store) throw new Error('Subconscious learn requires a configured knowledge storage domain.');
   const state: LearnerState = {};

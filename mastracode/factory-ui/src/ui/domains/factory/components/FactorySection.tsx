@@ -1,9 +1,10 @@
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Gauge, GitPullRequest, ListChecks, ScrollText, SquareKanban } from 'lucide-react';
+import { Brain, Gauge, GitPullRequest, ListChecks, ScrollText, SquareKanban } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
 import { NavLink, useLocation, useParams } from 'react-router';
 
+import { useServerFeatures } from '../../../../hooks/useServerFeatures';
 import { useOverlays } from '../../../lib/overlays';
 
 /**
@@ -15,6 +16,7 @@ import { useOverlays } from '../../../lib/overlays';
  */
 export function FactorySection({ children }: { children?: ReactNode }) {
   const { factoryId } = useParams<{ factoryId: string }>();
+  const features = useServerFeatures();
 
   if (!factoryId) return null;
 
@@ -31,6 +33,9 @@ export function FactorySection({ children }: { children?: ReactNode }) {
         <FactoryLink to={`/factories/${factoryId}/review`} icon={GitPullRequest} label="Review" />
         <FactoryLink to={`/factories/${factoryId}/rules`} icon={ListChecks} label="Rules" />
         <FactoryLink to={`/factories/${factoryId}/audit`} icon={ScrollText} label="Audit log" />
+        {features.data?.knowledge ? (
+          <FactoryLink to={`/factories/${factoryId}/knowledge`} icon={Brain} label="Knowledge" />
+        ) : null}
       </MainSidebar.NavList>
       {children}
     </nav>

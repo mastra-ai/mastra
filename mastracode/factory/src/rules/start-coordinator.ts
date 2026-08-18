@@ -169,6 +169,10 @@ export class FactoryStartCoordinator {
     // boolean so it rides only on state (tags are string-valued).
     await session.state.set({
       ...sessionTags,
+      // The authoritative org id for every downstream identity read (the
+      // memory seam's organizationId): the session owner is a USER id, not an
+      // org, so it must never be improvised from ownerId.
+      factoryOrgId: request.orgId,
       ...(untrustedCheckout ? { untrustedCheckout: true, ...(baseRef ? { baseRef } : {}) } : {}),
     });
     await hydrateFactorySession(session, {

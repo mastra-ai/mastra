@@ -40,6 +40,35 @@ describe('InMemoryKnowledgeStorage', () => {
     expect(await store.listNodes({ scope: thread, hasContent: false })).toEqual([]);
   });
 
+  it('persists optional knowledge record metadata and returns it on reads', async () => {
+    const store = createStore();
+    const jane = await store.createNode({ name: 'Jane', kind: 'person', scope: resource });
+    const withMetadata = await store.appendKnowledge({
+      node: jane,
+      text: 'Prefers tabs.',
+      scope: thread,
+      sourceThreadId: 't1',
+      metadata: { reason: 'Durable style preference stated explicitly.' },
+      resolutionScope: thread,
+      defaultScope: resource,
+    });
+    const withoutMetadata = await store.appendKnowledge({
+      node: jane,
+      text: 'Likes coffee.',
+      scope: thread,
+      sourceThreadId: 't1',
+      resolutionScope: thread,
+      defaultScope: resource,
+    });
+
+    expect(withMetadata.metadata).toEqual({ reason: 'Durable style preference stated explicitly.' });
+    expect(withoutMetadata.metadata).toBeUndefined();
+    expect((await store.getKnowledge({ id: withMetadata.id }))?.metadata).toEqual({
+      reason: 'Durable style preference stated explicitly.',
+    });
+    expect((await store.getKnowledge({ id: withoutMetadata.id }))?.metadata).toBeUndefined();
+  });
+
   it('rolls back node and record mutations when mention resolution fails', async () => {
     const store = createStore();
     const parent = await store.createNode({ name: 'Parent', kind: 'topic', scope: resource });
