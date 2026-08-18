@@ -31,7 +31,7 @@ import type { ProviderStatus } from '../lifecycle';
 import { SandboxNotReadyError } from './errors';
 import { MountManager } from './mount-manager';
 import type { SandboxProcessManager } from './process-manager';
-import type { SandboxFileInput, SandboxNetworking, WorkspaceSandbox } from './sandbox';
+import type { SandboxComputer, SandboxFileInput, SandboxNetworking, WorkspaceSandbox } from './sandbox';
 import type { CommandResult, ExecuteCommandOptions, SandboxInfo } from './types';
 import { shellQuote } from './utils';
 
@@ -138,6 +138,9 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
 
   /** Optional networking capability - implement to expose public port URLs */
   readonly networking?: SandboxNetworking;
+
+  /** Optional computer-use (desktop) capability - implement to enable workspace computer tools */
+  readonly computer?: SandboxComputer;
 
   /**
    * Optional bulk file upload into the sandbox's own filesystem.
