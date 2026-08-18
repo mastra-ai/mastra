@@ -59,30 +59,28 @@ describe('getCodeModeCall', () => {
 });
 
 describe('CodeModeBadge', () => {
-  it('keeps a pending approval collapsed until requested', () => {
-    renderWithProvider(
-      <CodeModeBadge
-        toolName="execute_typescript"
-        code="return await external_getOrders();"
-        result={undefined}
-        toolCallId="call-approval"
-        toolApprovalMetadata={{
-          toolCallId: 'call-approval',
-          toolName: 'execute_typescript',
-          args: { code: 'return await external_getOrders();' },
-        }}
-        isNetwork={false}
-      />,
-    );
+  describe('when approval is pending', () => {
+    it('exposes the program and approval controls without another user action', () => {
+      renderWithProvider(
+        <CodeModeBadge
+          toolName="execute_typescript"
+          code="return await external_getOrders();"
+          result={undefined}
+          toolCallId="call-approval"
+          toolApprovalMetadata={{
+            toolCallId: 'call-approval',
+            toolName: 'execute_typescript',
+            args: { code: 'return await external_getOrders();' },
+          }}
+          isNetwork={false}
+        />,
+      );
 
-    const trigger = screen.getByRole('button', { name: 'execute_typescript' });
-    expect(trigger.getAttribute('aria-expanded')).toBe('false');
-    expect(screen.queryByRole('group', { name: 'Code mode details' })).toBeNull();
-
-    fireEvent.click(trigger);
-
-    expect(screen.getByRole('group', { name: 'Code mode details' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
+      const trigger = screen.getByRole('button', { name: 'execute_typescript' });
+      expect(trigger.getAttribute('aria-expanded')).toBe('true');
+      expect(screen.getByRole('group', { name: 'Code mode details' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
+    });
   });
 
   it('renders the program, result, and logs when expanded', () => {

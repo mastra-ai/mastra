@@ -228,30 +228,27 @@ describe('ToolCard dispatch', () => {
     expect(badge.querySelector('.text-accent6')).toBeTruthy();
   });
 
-  it('keeps list_files approval UI collapsed until requested', () => {
-    const toolName = WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES;
-    renderToolCard(
-      baseProps({
-        toolName,
-        input: { path: '.' },
-        output: undefined,
-        state: 'input-available',
-        metadata: {
-          mode: 'stream',
-          requireApprovalMetadata: {
-            [toolName]: { toolCallId: 'call-1', toolName, args: { path: '.' } },
+  describe('when list_files approval is pending', () => {
+    it('exposes the approval controls without another user action', () => {
+      const toolName = WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES;
+      renderToolCard(
+        baseProps({
+          toolName,
+          input: { path: '.' },
+          output: undefined,
+          state: 'input-available',
+          metadata: {
+            mode: 'stream',
+            requireApprovalMetadata: {
+              [toolName]: { toolCallId: 'call-1', toolName, args: { path: '.' } },
+            },
           },
-        },
-      }),
-    );
+        }),
+      );
 
-    const trigger = screen.getByRole('button', { name: /List Files/ });
-    expect(trigger.getAttribute('aria-expanded')).toBe('false');
-    expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
-
-    fireEvent.click(trigger);
-
-    expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: /List Files/ }).getAttribute('aria-expanded')).toBe('true');
+      expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
+    });
   });
 
   it('routes sandbox execute_command to a disclosure collapsed by default', () => {
@@ -291,6 +288,29 @@ describe('ToolCard dispatch', () => {
     expect(screen.queryByText('$')).toBeNull();
   });
 
+  describe('when sandbox execution approval is pending', () => {
+    it('exposes the approval controls without another user action', () => {
+      const toolName = WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND;
+      renderToolCard(
+        baseProps({
+          toolName,
+          input: { command: 'ls' },
+          output: undefined,
+          state: 'input-available',
+          metadata: {
+            mode: 'stream',
+            requireApprovalMetadata: {
+              [toolName]: { toolCallId: 'call-1', toolName, args: { command: 'ls' } },
+            },
+          },
+        }),
+      );
+
+      expect(screen.getByRole('button', { name: 'Execute Command' }).getAttribute('aria-expanded')).toBe('true');
+      expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
+    });
+  });
+
   it('routes code-mode calls to the code mode badge', () => {
     renderToolCard(
       baseProps({
@@ -319,26 +339,27 @@ describe('ToolCard dispatch', () => {
     expect(screen.getByText('Start job')).toBeTruthy();
   });
 
-  it('surfaces the agent suspend payload when suspendedTools is keyed by toolCallId', () => {
-    renderToolCard(
-      baseProps({
-        toolName: 'agent-billingAgent',
-        toolCallId: 'call-abc',
-        output: { text: 'pending approval' },
-        metadata: {
-          mode: 'stream',
-          // New core format: suspendedTools keyed by toolCallId.
-          suspendedTools: {
-            'call-abc': { suspendPayload: 'approve refund ord_2001?' },
+  describe('when an agent suspend payload is keyed by toolCallId', () => {
+    it('exposes the payload without another user action', () => {
+      renderToolCard(
+        baseProps({
+          toolName: 'agent-billingAgent',
+          toolCallId: 'call-abc',
+          output: { text: 'pending approval' },
+          metadata: {
+            mode: 'stream',
+            // New core format: suspendedTools keyed by toolCallId.
+            suspendedTools: {
+              'call-abc': { suspendPayload: 'approve refund ord_2001?' },
+            },
           },
-        },
-      }),
-    );
+        }),
+      );
 
-    // Agent badge starts collapsed; expand it to reveal the suspend payload.
-    fireEvent.click(screen.getByText('billingAgent'));
-    expect(screen.getByText('Agent suspend payload')).toBeTruthy();
-    expect(screen.getByText('approve refund ord_2001?')).toBeTruthy();
+      expect(screen.getByRole('button', { name: /billingAgent/ }).getAttribute('aria-expanded')).toBe('true');
+      expect(screen.getByText('Agent suspend payload')).toBeTruthy();
+      expect(screen.getByText('approve refund ord_2001?')).toBeTruthy();
+    });
   });
 
   it('surfaces the agent suspend payload when suspendedTools is keyed by toolName (back-compat)', () => {
@@ -357,7 +378,7 @@ describe('ToolCard dispatch', () => {
       }),
     );
 
-    fireEvent.click(screen.getByText('billingAgent'));
+    expect(screen.getByRole('button', { name: /billingAgent/ }).getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByText('Agent suspend payload')).toBeTruthy();
     expect(screen.getByText('approve refund ord_2001?')).toBeTruthy();
   });
@@ -381,7 +402,6 @@ describe('ToolCard dispatch', () => {
         metadata: sharedMetadata,
       }),
     );
-    fireEvent.click(screen.getByText('billingAgent'));
     expect(screen.getByText('approve refund ord_2001?')).toBeTruthy();
     expect(screen.queryByText('approve refund ord_2003?')).toBeNull();
     unmount();
@@ -394,7 +414,6 @@ describe('ToolCard dispatch', () => {
         metadata: sharedMetadata,
       }),
     );
-    fireEvent.click(screen.getByText('billingAgent'));
     expect(screen.getByText('approve refund ord_2003?')).toBeTruthy();
     expect(screen.queryByText('approve refund ord_2001?')).toBeNull();
   });

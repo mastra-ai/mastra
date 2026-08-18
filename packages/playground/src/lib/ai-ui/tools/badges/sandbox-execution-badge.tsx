@@ -5,6 +5,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { CheckIcon, CopyIcon, TerminalSquare } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DataMessagePart } from '../tool-card';
+import { isToolApprovalPending } from './tool-action-state';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
 import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
@@ -157,7 +158,6 @@ export const SandboxExecutionBadge = ({
     return (dataPartsProp ?? []).filter(part => part.type === 'data');
   }, [dataPartsProp]);
 
-  const [isCollapsed, setIsCollapsed] = useState(true);
   const { isCopied, copyToClipboard } = useCopyToClipboard({ copiedDuration: 1500, showToast: false });
   const { Link } = useLinkComponent();
 
@@ -207,6 +207,12 @@ export const SandboxExecutionBadge = ({
   const hasStarted = !!workspaceMetaPart; // metadata is emitted at tool start
   const isRunning = hasStarted && !isStreamingComplete;
   const toolCalled = toolCalledProp ?? (isStreamingComplete || hasStarted);
+  const approvalPending = isToolApprovalPending(toolApprovalMetadata, toolCalled);
+  const [isCollapsed, setIsCollapsed] = useState(!approvalPending);
+
+  useEffect(() => {
+    setIsCollapsed(!approvalPending);
+  }, [approvalPending]);
 
   // Get exit info from data chunks
   const exitCode = exitChunk?.data?.exitCode;

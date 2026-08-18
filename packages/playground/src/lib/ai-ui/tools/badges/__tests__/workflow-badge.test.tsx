@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
@@ -82,5 +82,58 @@ describe('WorkflowBadge', () => {
     fireEvent.click(screen.getByRole('button', { name: new RegExp(badgeWorkflow.name) }));
     await waitFor(() => expect(screen.getByTestId('workflow-graph-viewport')).toBeTruthy());
     expect(screen.queryByRole('link', { name: 'See run' })).toBeNull();
+  });
+
+  describe('when workflow approval is pending', () => {
+    it('exposes the approval controls without another user action', async () => {
+      server.use(http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}`, () => HttpResponse.json(badgeWorkflow)));
+
+      render(
+        <WorkflowBadge
+          workflowId={WORKFLOW_ID}
+          toolName={`workflow-${WORKFLOW_ID}`}
+          toolCallId="call-approval"
+          toolApprovalMetadata={{
+            toolCallId: 'call-approval',
+            toolName: `workflow-${WORKFLOW_ID}`,
+            args: {},
+          }}
+          isNetwork={false}
+          result={undefined}
+        />,
+        { wrapper: Providers },
+      );
+
+      const badge = await screen.findByTestId('workflow-badge');
+      expect(
+        within(badge)
+          .getByRole('button', { name: new RegExp(badgeWorkflow.name) })
+          .getAttribute('aria-expanded'),
+      ).toBe('true');
+      expect(within(badge).getByRole('button', { name: 'Approve' })).toBeTruthy();
+    });
+  });
+
+  describe('when the workflow is suspended', () => {
+    it('exposes the suspension payload without another user action', async () => {
+      server.use(http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}`, () => HttpResponse.json(badgeWorkflow)));
+
+      render(
+        <WorkflowBadge
+          workflowId={WORKFLOW_ID}
+          toolName={`workflow-${WORKFLOW_ID}`}
+          toolCallId="call-suspended"
+          toolApprovalMetadata={undefined}
+          isNetwork={false}
+          result={undefined}
+          suspendPayload="Confirm workflow execution"
+        />,
+        { wrapper: Providers },
+      );
+
+      const badge = await screen.findByTestId('workflow-badge');
+      expect(within(badge).getByText('Workflow suspend payload')).toBeTruthy();
+      expect(within(badge).getByText('Confirm workflow execution')).toBeTruthy();
+    });
   });
 });

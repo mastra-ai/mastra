@@ -99,28 +99,48 @@ describe('ToolBadge', () => {
     expect(screen.getByRole('img', { name: 'Failed' })).toBeTruthy();
   });
 
-  it('keeps pending approvals collapsed until requested', () => {
-    renderWithProviders(
-      <ToolBadge
-        toolName="charge_card"
-        args={{ amount: 42 }}
-        result={undefined}
-        toolOutput={[]}
-        toolCallId="call-1"
-        toolApprovalMetadata={{ toolCallId: 'call-1', toolName: 'charge_card', args: { amount: 42 } }}
-        isNetwork={false}
-        state="input-available"
-      />,
-    );
+  describe('when approval is pending', () => {
+    it('exposes the approval controls without another user action', () => {
+      renderWithProviders(
+        <ToolBadge
+          toolName="charge_card"
+          args={{ amount: 42 }}
+          result={undefined}
+          toolOutput={[]}
+          toolCallId="call-1"
+          toolApprovalMetadata={{ toolCallId: 'call-1', toolName: 'charge_card', args: { amount: 42 } }}
+          isNetwork={false}
+          state="input-available"
+        />,
+      );
 
-    const tool = screen.getByRole('group', { name: 'Tool: charge_card' });
-    const trigger = screen.getByRole('button', { name: /Charge card/ });
-    expect(trigger.getAttribute('aria-expanded')).toBe('false');
-    expect(tool.textContent).not.toContain('Approval is required to continue.');
+      const tool = screen.getByRole('group', { name: 'Tool: charge_card' });
+      const trigger = screen.getByRole('button', { name: /Charge card/ });
+      expect(trigger.getAttribute('aria-expanded')).toBe('true');
+      expect(tool.textContent).toContain('Approval is required to continue.');
+      expect(screen.getByRole('button', { name: /Approve/ })).toBeTruthy();
+    });
+  });
 
-    fireEvent.click(trigger);
+  describe('when a tool is suspended without approval metadata', () => {
+    it('exposes its suspension payload without another user action', () => {
+      renderWithProviders(
+        <ToolBadge
+          toolName="confirm_order"
+          args={{ orderId: 'order-1' }}
+          result={undefined}
+          toolOutput={[]}
+          toolCallId="call-2"
+          toolApprovalMetadata={undefined}
+          suspendPayload={{ reason: 'Confirm the order total' }}
+          isNetwork={false}
+          state="input-available"
+        />,
+      );
 
-    expect(tool.textContent).toContain('Approval is required to continue.');
-    expect(screen.getByRole('button', { name: /Approve/ })).toBeTruthy();
+      expect(screen.getByRole('button', { name: /Confirm order/ }).getAttribute('aria-expanded')).toBe('true');
+      expect(screen.getByText('Tool suspend payload')).toBeTruthy();
+      expect(screen.getByTestId('tool-suspend-payload').textContent).toContain('Confirm the order total');
+    });
   });
 });

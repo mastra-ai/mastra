@@ -8,6 +8,7 @@ import { useContext, useEffect } from 'react';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import { LoadingBadge } from './loading-badge';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
+import { isToolApprovalPending } from './tool-action-state';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
 import {
@@ -86,9 +87,15 @@ export const WorkflowBadge = ({
       <BackgroundTaskMetadataDialogTrigger backgroundTask={bgEntry} />
     ) : null;
   const workflowHref = runId ? `/workflows/${workflowId}/graph/${runId}` : `/workflows/${workflowId}/graph`;
+  const hasToolBeenCalled = toolCalled ?? Boolean(status);
 
   return (
-    <Tool data-testid="workflow-badge" status={toolCallStatus} aria-label={`Tool: ${toolName}`}>
+    <Tool
+      data-testid="workflow-badge"
+      status={toolCallStatus}
+      defaultOpen={isToolApprovalPending(toolApprovalMetadata, hasToolBeenCalled) || Boolean(suspendPayload)}
+      aria-label={`Tool: ${toolName}`}
+    >
       <ToolHeader
         actions={
           <div className="flex items-center gap-1">
@@ -122,7 +129,7 @@ export const WorkflowBadge = ({
         )}
 
         <ToolApprovalButtons
-          toolCalled={toolCalled ?? !!status}
+          toolCalled={hasToolBeenCalled}
           toolCallId={toolCallId}
           toolApprovalMetadata={toolApprovalMetadata}
           toolName={toolName}

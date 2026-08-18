@@ -152,4 +152,46 @@ describe('AgentBadge', () => {
       expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
     });
   });
+
+  describe('when the sub-agent requires approval', () => {
+    it('exposes the approval controls without another user action', () => {
+      renderWithProviders(
+        <AgentBadge
+          agentId="billing-agent"
+          messages={[]}
+          toolCallId="call-agent-approval"
+          toolName="agent-billing-agent"
+          toolApprovalMetadata={{
+            toolCallId: 'call-agent-approval',
+            toolName: 'agent-billing-agent',
+            args: {},
+          }}
+          isNetwork={false}
+        />,
+      );
+
+      expect(screen.getByRole('button', { name: /billing-agent/ }).getAttribute('aria-expanded')).toBe('true');
+      expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
+    });
+  });
+
+  describe('when the sub-agent is suspended', () => {
+    it('exposes the suspension payload without another user action', () => {
+      renderWithProviders(
+        <AgentBadge
+          agentId="billing-agent"
+          messages={[]}
+          toolCallId="call-agent-suspended"
+          toolName="agent-billing-agent"
+          toolApprovalMetadata={undefined}
+          isNetwork={false}
+          suspendPayload="Confirm refund order-1"
+        />,
+      );
+
+      expect(screen.getByRole('button', { name: /billing-agent/ }).getAttribute('aria-expanded')).toBe('true');
+      expect(screen.getByText('Agent suspend payload')).toBeTruthy();
+      expect(screen.getByText('Confirm refund order-1')).toBeTruthy();
+    });
+  });
 });

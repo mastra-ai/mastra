@@ -3,6 +3,7 @@ import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-ca
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
+import { isToolApprovalPending } from './tool-action-state';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
 import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
@@ -83,6 +84,7 @@ export const ToolBadge = ({
     metadata?.mode === 'network' ? (routingDecision?.selectionReason ?? metadata.selectionReason) : undefined;
   const agentNetworkInput = metadata?.mode === 'network' ? (routingDecision ?? metadata.agentInput) : undefined;
   const toolCalled = toolCalledProp ?? Boolean(result || toolOutput.length > 0);
+  const actionPending = isToolApprovalPending(toolApprovalMetadata, toolCalled) || Boolean(suspendPayload);
 
   const bgEntry =
     (metadata?.mode === 'stream' || metadata?.mode === 'generate') && metadata.backgroundTasks
@@ -106,6 +108,7 @@ export const ToolBadge = ({
       input={withoutArgs ? undefined : parseArgs(args)}
       result={result}
       status={toolStatus(state, result)}
+      defaultOpen={actionPending}
       headerActions={headerActions}
     >
       {Boolean(suspendPayload) && (
