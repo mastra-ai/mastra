@@ -94,6 +94,32 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       ]);
     });
 
+    it('persists optional KnowledgeRecord metadata and returns it on reads', async () => {
+      const node = await store.createNode({ name: 'Jane meta', kind: 'person', scope: resource });
+      const withMetadata = await store.appendKnowledge({
+        node: node.id,
+        text: 'Prefers tabs.',
+        scope: resource,
+        sourceThreadId: 't1',
+        metadata: { reason: 'Durable style preference stated explicitly.' },
+        resolutionScope: thread,
+        defaultScope: resource,
+      });
+      const withoutMetadata = await store.appendKnowledge({
+        node: node.id,
+        text: 'Likes coffee.',
+        scope: resource,
+        sourceThreadId: 't1',
+        resolutionScope: thread,
+        defaultScope: resource,
+      });
+      expect(withMetadata.metadata).toEqual({ reason: 'Durable style preference stated explicitly.' });
+      expect((await store.getKnowledge({ id: withMetadata.id }))?.metadata).toEqual({
+        reason: 'Durable style preference stated explicitly.',
+      });
+      expect((await store.getKnowledge({ id: withoutMetadata.id }))?.metadata).toBeUndefined();
+    });
+
     it('maintains mentions and soft deletes without losing them', async () => {
       const jane = await store.createNode({ name: 'Jane', kind: 'person', scope: resource });
       const marco = await store.createNode({ name: 'Marco', kind: 'person', scope: resource });
