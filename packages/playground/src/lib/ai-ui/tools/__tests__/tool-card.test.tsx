@@ -249,6 +249,39 @@ describe('ToolCard dispatch', () => {
       expect(screen.getByRole('button', { name: /List Files/ }).getAttribute('aria-expanded')).toBe('true');
       expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
     });
+
+    it('opens when approval arrives and closes after an empty terminal result', () => {
+      const toolName = WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES;
+      const approvalMetadata = {
+        mode: 'stream' as const,
+        requireApprovalMetadata: {
+          [toolName]: { toolCallId: 'call-1', toolName, args: { path: '.' } },
+        },
+      };
+      const props = baseProps({
+        toolName,
+        input: { path: '.' },
+        output: undefined,
+        state: 'input-available',
+        metadata: { mode: 'stream' },
+      });
+      const { rerender } = renderToolCard(props);
+      const trigger = screen.getByRole('button', { name: /List Files/ });
+
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
+
+      rerender(<ToolCard {...props} metadata={approvalMetadata} />);
+
+      expect(trigger.getAttribute('aria-expanded')).toBe('true');
+      expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
+
+      rerender(<ToolCard {...props} output="" state="output-available" metadata={approvalMetadata} />);
+
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
+      fireEvent.click(trigger);
+      expect(screen.getByText('No files found.')).toBeTruthy();
+    });
   });
 
   it('routes sandbox execute_command to a disclosure collapsed by default', () => {
@@ -308,6 +341,37 @@ describe('ToolCard dispatch', () => {
 
       expect(screen.getByRole('button', { name: 'Execute Command' }).getAttribute('aria-expanded')).toBe('true');
       expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
+    });
+
+    it('opens when approval arrives and closes after an empty terminal result', () => {
+      const toolName = WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND;
+      const approvalMetadata = {
+        mode: 'stream' as const,
+        requireApprovalMetadata: {
+          [toolName]: { toolCallId: 'call-1', toolName, args: { command: 'ls' } },
+        },
+      };
+      const props = baseProps({
+        toolName,
+        input: { command: 'ls' },
+        output: undefined,
+        state: 'input-available',
+        metadata: { mode: 'stream' },
+      });
+      const { rerender } = renderToolCard(props);
+      const trigger = screen.getByRole('button', { name: 'Execute Command' });
+
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
+
+      rerender(<ToolCard {...props} metadata={approvalMetadata} />);
+
+      expect(trigger.getAttribute('aria-expanded')).toBe('true');
+      expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
+
+      rerender(<ToolCard {...props} output="" state="output-available" metadata={approvalMetadata} />);
+
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
     });
   });
 

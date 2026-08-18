@@ -62,17 +62,18 @@ const omPart = (name: string, data: Record<string, unknown>) => ({
   data,
 });
 
-const completedToolPart = (toolName: string, toolCallId: string) =>
-  ({
-    type: 'tool-invocation',
-    toolInvocation: {
-      toolName,
-      toolCallId,
-      state: 'result',
-      args: {},
-      result: { ok: true },
-    },
-  }) as never;
+type MessagePart = MastraDBMessage['content']['parts'][number];
+
+const completedToolPart = (toolName: string, toolCallId: string): MessagePart => ({
+  type: 'tool-invocation',
+  toolInvocation: {
+    toolName,
+    toolCallId,
+    state: 'result',
+    args: {},
+    result: { ok: true },
+  },
+});
 
 const baseMessage = (over: Partial<MastraDBMessage>): MastraDBMessage =>
   ({

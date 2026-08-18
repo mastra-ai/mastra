@@ -99,6 +99,24 @@ describe('ToolBadge', () => {
     expect(screen.getByRole('img', { name: 'Failed' })).toBeTruthy();
   });
 
+  it.each([false, 0, '', null])('treats the falsy result %j as terminal', result => {
+    renderWithProviders(
+      <ToolBadge
+        toolName="check_value"
+        args={{}}
+        result={result}
+        toolOutput={[]}
+        toolCallId="call-1"
+        toolApprovalMetadata={{ toolCallId: 'call-1', toolName: 'check_value', args: {} }}
+        isNetwork={false}
+        state="output-available"
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: /Check value/ }).getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('button', { name: /Approve/ })).toBeNull();
+  });
+
   describe('when approval is pending', () => {
     it('exposes the approval controls without another user action', () => {
       renderWithProviders(

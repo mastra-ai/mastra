@@ -83,7 +83,8 @@ export const ToolBadge = ({
   const selectionReason =
     metadata?.mode === 'network' ? (routingDecision?.selectionReason ?? metadata.selectionReason) : undefined;
   const agentNetworkInput = metadata?.mode === 'network' ? (routingDecision ?? metadata.agentInput) : undefined;
-  const toolCalled = toolCalledProp ?? Boolean(result || toolOutput.length > 0);
+  const status = toolStatus(state, result);
+  const toolCalled = toolCalledProp ?? (status !== 'running' || toolOutput.length > 0);
   const actionPending = isToolApprovalPending(toolApprovalMetadata, toolCalled) || Boolean(suspendPayload);
 
   const bgEntry =
@@ -107,7 +108,7 @@ export const ToolBadge = ({
       toolName={toolName}
       input={withoutArgs ? undefined : parseArgs(args)}
       result={result}
-      status={toolStatus(state, result)}
+      status={status}
       defaultOpen={actionPending}
       headerActions={headerActions}
     >

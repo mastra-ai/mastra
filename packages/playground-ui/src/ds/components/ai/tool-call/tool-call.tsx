@@ -343,21 +343,32 @@ function boundedLines(value: string): { lines: string[]; hidden: number } {
 function DiffSide({ lines, side, lang }: { lines: string[]; side: keyof typeof DIFF_SIDES; lang: string | undefined }) {
   const { sign, row, gutter } = DIFF_SIDES[side];
   const highlighted = useHighlightedCode(lines.join('\n'), lang);
+  const highlightedLines = highlighted?.code.split('\n');
 
   return (
     <>
-      {lines.map((line, index) => (
-        <div key={index} className={cn('flex whitespace-pre', row)}>
-          <span className={cn('w-5 shrink-0 text-center opacity-70 select-none', gutter)}>{sign}</span>
-          <span className="text-icon6 flex-1 pr-2.5">
-            {highlighted?.tokens[index] ? (
-              <HighlightedTokenLine tokens={highlighted.tokens[index]} />
-            ) : (
-              line || '\u00a0'
-            )}
-          </span>
-        </div>
-      ))}
+      {lines.map((line, index) => {
+        const tokenLine = highlighted?.tokens[index];
+        const highlightedLine = highlightedLines?.[index];
+        const canReuseHighlight =
+          tokenLine !== undefined && highlightedLine !== undefined && line.startsWith(highlightedLine);
+
+        return (
+          <div key={index} className={cn('flex whitespace-pre', row)}>
+            <span className={cn('w-5 shrink-0 text-center opacity-70 select-none', gutter)}>{sign}</span>
+            <span className="text-icon6 flex-1 pr-2.5">
+              {canReuseHighlight ? (
+                <>
+                  <HighlightedTokenLine tokens={tokenLine} />
+                  {line.slice(highlightedLine.length)}
+                </>
+              ) : (
+                line || '\u00a0'
+              )}
+            </span>
+          </div>
+        );
+      })}
     </>
   );
 }

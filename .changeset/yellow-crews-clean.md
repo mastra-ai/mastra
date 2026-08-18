@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Improved tool call details by connecting only adjacent calls, opening pending actions automatically, and deferring syntax highlighting.
+Deferred syntax highlighting in tool call payloads and file diffs so large responses render immediately with safe React text output.

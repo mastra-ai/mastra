@@ -105,7 +105,7 @@ export const FileTreeBadge = ({
   }
 
   const hasResult = !!treeOutput;
-  const toolCalled = toolCalledProp ?? hasResult;
+  const toolCalled = toolCalledProp ?? result !== undefined;
   const approvalPending = isToolApprovalPending(toolApprovalMetadata, toolCalled);
   const [isCollapsed, setIsCollapsed] = useState(!approvalPending);
 
@@ -213,7 +213,7 @@ export const FileTreeBadge = ({
         {/* Loading state */}
         {toolCalled && !hasResult && (
           <div className="border-border1 bg-surface2 rounded-md border px-3 py-2">
-            <span className="text-neutral6 text-xs">Loading...</span>
+            <span className="text-neutral6 text-xs">No files found.</span>
           </div>
         )}
       </ToolContent>
