@@ -691,6 +691,23 @@ describe('model pack routes with a tenant', () => {
     expect(sessionController.getSessionByResource).not.toHaveBeenCalled();
   });
 
+  it('fails closed when session authorization storage is unavailable', async () => {
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser' as never, userA as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as any,
+      new ConfigRoutes({ auth: fakeRouteAuth(), controller, modelPacks: seed.modelPacks }).routes(),
+    );
+
+    const response = await app.request('/web/config/model-packs?resourceId=session-1');
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: 'session_authorization_unavailable' });
+  });
+
   it('keeps packs invisible across organizations', async () => {
     await postPack(buildApp(userA), packBody);
 
