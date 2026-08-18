@@ -10,7 +10,7 @@
  */
 
 import type { SandboxInstance } from '@blaxel/core';
-import { ProcessHandle, SandboxProcessManager } from '@mastra/core/workspace';
+import { ProcessHandle, UnsupportedStdinCloseError, SandboxProcessManager } from '@mastra/core/workspace';
 import type { CommandResult, ProcessInfo, SpawnProcessOptions } from '@mastra/core/workspace';
 import type { BlaxelSandbox } from './index';
 
@@ -121,6 +121,10 @@ class BlaxelProcessHandle extends ProcessHandle {
 
   async sendStdin(_data: string): Promise<void> {
     throw new Error('Blaxel sandboxes do not support stdin');
+  }
+
+  async closeStdin(): Promise<void> {
+    throw new UnsupportedStdinCloseError('Blaxel sandboxes do not support closing stdin');
   }
 }
 

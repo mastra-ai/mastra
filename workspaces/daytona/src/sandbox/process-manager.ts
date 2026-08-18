@@ -13,7 +13,7 @@
  */
 
 import type { Sandbox } from '@daytonaio/sdk';
-import { ProcessHandle, SandboxProcessManager } from '@mastra/core/workspace';
+import { ProcessHandle, UnsupportedStdinCloseError, SandboxProcessManager } from '@mastra/core/workspace';
 import type { CommandResult, ProcessInfo, SpawnProcessOptions } from '@mastra/core/workspace';
 import { shellQuote } from '../utils/shell-quote';
 import type { DaytonaSandbox } from './index';
@@ -159,6 +159,10 @@ class DaytonaProcessHandle extends ProcessHandle {
       throw new Error(`Process ${this.pid} has already exited with code ${this._exitCode}`);
     }
     await this._sandbox.process.sendSessionCommandInput(this.pid, this._cmdId, data);
+  }
+
+  async closeStdin(): Promise<void> {
+    throw new UnsupportedStdinCloseError('Daytona SDK does not expose a way to close stdin for a running process');
   }
 }
 
