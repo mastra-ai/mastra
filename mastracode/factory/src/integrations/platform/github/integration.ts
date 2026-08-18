@@ -734,6 +734,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         intervalMs: this.#pollingIntervalMs,
         pullRequestReconcileIntervalMs: this.#pullRequestReconcileIntervalMs,
         issueReconcileIntervalMs: this.#issueReconcileIntervalMs,
+        sourceControl: this.storage,
       }),
     ];
   }

@@ -464,8 +464,12 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
   };
 
   readonly sessions = {
-    list: async ({ projectRepositoryId, userId }: { projectRepositoryId: string; userId: string }) =>
-      this.sessionsRows.filter(row => row.projectRepositoryId === projectRepositoryId && row.userId === userId),
+    list: async ({ projectRepositoryId, viewerUserId }: { projectRepositoryId: string; viewerUserId: string }) =>
+      this.sessionsRows.filter(
+        row =>
+          row.projectRepositoryId === projectRepositoryId &&
+          (row.visibility !== 'private' || row.userId === viewerUserId),
+      ),
     listByProjectRepository: async ({ projectRepositoryId }: { projectRepositoryId: string }) =>
       this.sessionsRows.filter(row => row.projectRepositoryId === projectRepositoryId),
     getBySessionId: async (sessionId: string): Promise<SourceControlSession | null> =>
@@ -493,6 +497,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         id: randomUUID(),
         ...input,
         title: input.title ?? null,
+        visibility: input.visibility ?? 'org',
         sandboxId: null,
         sandboxWorkdir: null,
         materializedAt: null,

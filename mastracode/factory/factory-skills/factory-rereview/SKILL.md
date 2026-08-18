@@ -129,7 +129,7 @@ First, compose the **re-review handoff** — don't send it to the conversation y
 - **Assumptions** — every recorded judgment call from this run.
 - **Open questions** — any decision that genuinely needs a human.
 
-Next, publish the re-review on the PR itself — this is part of every pass, not something to wait to be asked for. Write the handoff body to a temp file (avoids shell-quoting breakage) and submit a PR review matching the verdict:
+Next, publish the re-review on the PR itself — this is part of every pass, not something to wait to be asked for. Write the handoff body to `.artifacts/factory-rereview/pr-<number>.md` and submit a PR review matching the verdict:
 
 - approve → `gh pr review <number> --approve --body-file <file>`
 - request changes → `gh pr review <number> --request-changes --body-file <file>`
@@ -141,7 +141,7 @@ If GitHub rejects the review submission (e.g. the token authored the PR and cann
 1. Branch from the reviewed PR's current head: `git fetch origin pull/<number>/head && git checkout -b factory/rereview-followups-pr-<number> FETCH_HEAD`.
 2. Apply the fixes, run the narrowest tests covering them, and commit.
 3. Push the branch and open a follow-up PR with `gh pr create`: target the reviewed PR's head branch when it lives in this repository, so the author can merge the follow-ups into their PR with one click; when the reviewed PR comes from a fork, target its base branch instead and state in the body that it lands after PR <number>.
-4. The follow-up PR body links the re-review and lists each finding it addresses; the handoff links the follow-up PR.
+4. Write the follow-up body to `.artifacts/factory-rereview/follow-up-pr-<number>.md`; it links the re-review and lists each finding it addresses, and the handoff links the follow-up PR.
 
 Keep it strictly non-blocking and low-risk. A fix that demands design judgment, changes behavior, or grows beyond the mechanical stays a recorded finding — don't ship your own guess. **Never mix blocking findings into a follow-up PR**: those are requested changes on the reviewed PR, and implementing them yourself would review your own code. If tests fail on a follow-up fix, drop that fix and keep it a finding. If there are no such findings, skip this step entirely.
 
