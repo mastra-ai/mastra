@@ -248,7 +248,7 @@ Over HTTP, a losing resume returns `409 Conflict`.
 
 :::note
 
-The claim is enforced atomically by storage adapters that report `supportsConcurrentUpdates()`. Adapters without atomic read-modify-write support (such as ClickHouse, Cloudflare D1, Cloudflare KV, and LanceDB) can't enforce it, and the claim is also skipped when `shouldPersistSnapshot` excludes the `running` status.
+The claim is enforced atomically by storage adapters that report `supportsConcurrentUpdates()`. Adapters without atomic read-modify-write support (such as ClickHouse, Cloudflare D1, Cloudflare KV, Cloudflare Durable Objects, LanceDB, and Redis) can't enforce it, and the claim is also skipped when `shouldPersistSnapshot` excludes the `running` status.
 
 :::
 
