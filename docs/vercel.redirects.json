@@ -141,6 +141,11 @@
       "permanent": true
     },
     {
+      "source": "/models/providers/merge-gateway",
+      "destination": "/models/gateways/merge-gateway",
+      "permanent": true
+    },
+    {
       "source": "/guides/v1/:path*",
       "destination": "/guides/:path*",
       "permanent": true
