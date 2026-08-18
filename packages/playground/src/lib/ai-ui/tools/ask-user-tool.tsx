@@ -51,7 +51,7 @@ export const AskUserTool = ({ toolName, toolCallId, output, metadata }: AskUserT
   return (
     <Tool status={result ? 'success' : 'running'} defaultOpen aria-label={`Tool: ${toolName}`}>
       <ToolHeader>
-        <ToolIcon>
+        <ToolIcon tooltip="Tool">
           <ToolsIcon className="text-accent6" />
         </ToolIcon>
         Ask user

@@ -52,7 +52,7 @@ export const MessageText = ({ text, metadata, externalLinkTarget, streaming }: M
         aria-label="Completion check"
       >
         <ToolHeader>
-          <ToolIcon>
+          <ToolIcon tooltip="Completion check">
             <CheckCircleIcon className="text-accent3" />
           </ToolIcon>
           {collapsedCompletionCheck ? 'Show' : 'Hide'} completion check

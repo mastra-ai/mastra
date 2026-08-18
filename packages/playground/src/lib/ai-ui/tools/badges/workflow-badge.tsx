@@ -99,7 +99,7 @@ export const WorkflowBadge = ({
           </div>
         }
       >
-        <ToolIcon>
+        <ToolIcon tooltip="Workflow">
           <WorkflowIcon className="text-accent3" />
         </ToolIcon>
         {workflow.name}
