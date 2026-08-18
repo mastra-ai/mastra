@@ -527,6 +527,13 @@ describe('defaultFactoryRules', () => {
     );
   });
 
+  it('credits nobody when the reporter account is gone', async () => {
+    // The issue poller stamps `__unknown__` when GitHub returns no author, which
+    // is a string and not a bot, so only the login grammar stops it from becoming
+    // a trailer crediting an account nobody owns.
+    expect(await buildPrompt('issue', { author: '__unknown__' })).not.toContain('Co-Authored-By');
+  });
+
   it('credits nobody when the reporter is the Factory itself', async () => {
     expect(await buildPrompt('issue', { author: 'mastra-platform[bot]' })).not.toContain('Co-Authored-By');
   });

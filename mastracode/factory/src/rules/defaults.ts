@@ -107,11 +107,18 @@ function planWorkItem(context: FactoryStageRuleContext) {
  * stamps nothing, and neither resolves to the GitHub identity a trailer needs.
  * Factory's own reports are skipped — crediting ourselves is noise.
  */
+// A GitHub login is alphanumeric with interior hyphens — no underscores, no
+// spaces. Checking the grammar rejects the placeholder the issue poller stamps
+// when the reporter's account is gone (`__unknown__`), which would otherwise
+// become a trailer crediting an account that does not exist.
+const GITHUB_LOGIN = /^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/;
+
 function reporterCoAuthor(context: FactoryStageRuleContext) {
   if (context.source !== 'issue') return undefined;
   const author = context.item.metadata?.author;
   if (typeof author !== 'string' || !author) return undefined;
-  return author.endsWith('[bot]') ? undefined : author;
+  if (author.endsWith('[bot]') || !GITHUB_LOGIN.test(author)) return undefined;
+  return author;
 }
 
 function buildWorkItem(context: FactoryStageRuleContext) {
