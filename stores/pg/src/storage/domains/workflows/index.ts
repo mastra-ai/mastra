@@ -23,6 +23,7 @@ import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { buildConstraintName } from '../../db/constraint-utils';
 import { runPrune, resolveTargets } from '../../retention';
 
 function getSchemaName(schema?: string) {
@@ -32,6 +33,30 @@ function getSchemaName(schema?: string) {
 function getTableName({ indexName, schemaName }: { indexName: string; schemaName?: string }) {
   const quotedIndexName = `"${indexName}"`;
   return schemaName ? `${schemaName}.${quotedIndexName}` : quotedIndexName;
+}
+
+/** Base name (before any schema prefix) of the expression index backing the status filter. */
+const WORKFLOW_SNAPSHOT_STATUS_INDEX = 'mastra_workflow_snapshot_name_status_createdat_idx';
+
+/**
+ * Schema-prefixed name of the status index, lowercased and truncated the same way Postgres
+ * stores it, so the init snapshot's index set answers "does it exist?" without a probe or a
+ * no-op `CREATE INDEX` (schema-prefixed names routinely exceed the 63-byte limit).
+ */
+function workflowSnapshotStatusIndexName(schemaName?: string): string {
+  return buildConstraintName({
+    baseName: WORKFLOW_SNAPSHOT_STATUS_INDEX,
+    schemaName: schemaName && schemaName !== 'public' ? schemaName : undefined,
+  });
+}
+
+/**
+ * Expression index on `(workflow_name, snapshot->>'status', "createdAt" DESC)` so
+ * listWorkflowRuns() status filters can use an index instead of scanning every snapshot.
+ */
+function workflowSnapshotStatusIndexSQL(indexName: string, schemaName?: string): string {
+  const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(schemaName) });
+  return `CREATE INDEX IF NOT EXISTS "${indexName}" ON ${tableName} (workflow_name, (snapshot ->> 'status'), "createdAt" DESC)`;
 }
 
 /**
@@ -142,6 +167,8 @@ export class WorkflowsPG extends WorkflowsStorage {
       statements.push(generateIndexSQL(idx, schemaName));
     }
 
+    statements.push(`${workflowSnapshotStatusIndexSQL(workflowSnapshotStatusIndexName(parsedSchema), schemaName)};`);
+
     return statements;
   }
 
@@ -164,6 +191,19 @@ export class WorkflowsPG extends WorkflowsStorage {
       } catch (error) {
         this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
       }
+    }
+
+    // Expression index backing the status filter in listWorkflowRuns(). Only valid on jsonb
+    // columns — legacy json/text snapshot columns still go through the sanitizing regexp,
+    // which cannot use an index anyway.
+    const snapshotType = await this.#db.getColumnType(TABLE_WORKFLOW_SNAPSHOT, 'snapshot');
+    if (snapshotType !== 'jsonb') return;
+
+    const indexName = workflowSnapshotStatusIndexName(this.#schema);
+    try {
+      await this.#db.createIndexFromStatement(indexName, workflowSnapshotStatusIndexSQL(indexName, this.#schema));
+    } catch (error) {
+      this.logger?.warn?.(`Failed to create index ${indexName}:`, error);
     }
   }
 
@@ -558,15 +598,20 @@ export class WorkflowsPG extends WorkflowsStorage {
       }
 
       if (status) {
-        // Use regexp_replace to strip problematic Unicode escape sequences before casting to jsonb.
-        // PostgreSQL's jsonb cast fails on:
-        // - \u0000 (null character) with error 22P05 "unsupported Unicode escape sequence"
-        // - \uD800-\uDFFF (unpaired surrogates) with "Unicode low surrogate must follow a high surrogate"
-        // The regex pattern matches \u0000 and all surrogate code points (D800-DFFF).
+        // On jsonb columns PostgreSQL already rejects problematic Unicode escape sequences at
+        // insert time, so the sanitizing regexp is a no-op there — and it prevents the planner
+        // from using any index on the status field, forcing a sequential scan.
+        // Legacy tables whose snapshot column is still json/text can contain those sequences,
+        // so they keep the regexp_replace path:
+        // - \u0000 (null character) fails the jsonb cast with 22P05 "unsupported Unicode escape sequence"
+        // - \uD800-\uDFFF (unpaired surrogates) fail with "Unicode low surrogate must follow a high surrogate"
         // See: https://github.com/mastra-ai/mastra/issues/11563
-        conditions.push(
-          `regexp_replace(snapshot::text, '\\\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})', '', 'g')::jsonb ->> 'status' = $${paramIndex}`,
-        );
+        const snapshotType = await this.#db.getColumnType(TABLE_WORKFLOW_SNAPSHOT, 'snapshot');
+        const statusExpr =
+          snapshotType === 'jsonb'
+            ? `snapshot ->> 'status'`
+            : `regexp_replace(snapshot::text, '\\\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})', '', 'g')::jsonb ->> 'status'`;
+        conditions.push(`${statusExpr} = $${paramIndex}`);
         values.push(status);
         paramIndex++;
       }

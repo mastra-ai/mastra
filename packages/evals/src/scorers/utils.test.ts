@@ -64,6 +64,45 @@ describe('Scorer Utils', () => {
       expect(result).toBe('Assistant response');
     });
 
+    it('should extract the final assistant response from multi-step output', () => {
+      const output: ScorerRunOutputForAgent = [
+        createTestMessage({ content: 'Intermediate assistant response', role: 'assistant' }),
+        createTestMessage({ content: 'Final assistant response', role: 'assistant' }),
+      ];
+
+      expect(getAssistantMessageFromRunOutput(output)).toBe('Final assistant response');
+    });
+
+    it('should extract the final assistant response from multi-step model messages', () => {
+      const output = [
+        { role: 'user', content: 'Question' },
+        { role: 'assistant', content: [{ type: 'text', text: 'Intermediate response' }] },
+        { role: 'assistant', content: [{ type: 'text', text: 'Final response' }] },
+      ];
+
+      expect(getAssistantMessageFromRunOutput(output)).toBe('Final response');
+    });
+
+    it('should fall back to the last text-bearing assistant message', () => {
+      const output: ScorerRunOutputForAgent = [
+        createTestMessage({ content: 'Assistant response', role: 'assistant' }),
+        {
+          id: 'assistant-no-text',
+          role: 'assistant',
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'step-start' }] },
+        } as MastraDBMessage,
+      ];
+
+      expect(getAssistantMessageFromRunOutput(output)).toBe('Assistant response');
+    });
+
+    it('should return undefined when no assistant message is present', () => {
+      const output: ScorerRunOutputForAgent = [createTestMessage({ content: 'User message', role: 'user' })];
+
+      expect(getAssistantMessageFromRunOutput(output)).toBeUndefined();
+    });
+
     it('should extract assistant text from workflow-style output', () => {
       expect(getAssistantMessageFromRunOutput({ text: 'Workflow response' })).toBe('Workflow response');
       expect(getAssistantMessageFromRunOutput({ content: 'Task response' })).toBe('Task response');
