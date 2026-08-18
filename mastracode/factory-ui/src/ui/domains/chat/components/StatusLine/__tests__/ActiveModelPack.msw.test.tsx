@@ -55,7 +55,7 @@ describe('ActiveModelPack', () => {
       http.post(`${TEST_BASE_URL}/web/config/model-packs/mine/activate`, async ({ request }) => {
         activateBody = await request.json();
         sessionPackId = 'mine';
-        return HttpResponse.json({ ok: true, activePackId: 'mine' });
+        return HttpResponse.json({ ok: true, target: 'session', sessionPackId: 'mine' });
       }),
     );
 

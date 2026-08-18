@@ -174,9 +174,13 @@ export type OAuthPollResponse =
   | { status: 'complete' }
   | { status: 'failed'; error: string };
 
-export interface ActivateModelPackResponse {
+export type ActivateModelPackResponse =
+  | { ok: true; target: 'default'; activePackId: string }
+  | { ok: true; target: 'session'; sessionPackId: string };
+
+export interface ClearDefaultModelPackResponse {
   ok: true;
-  activePackId: string | null;
+  activePackId: null;
 }
 
 export interface UpdateOMResponse {

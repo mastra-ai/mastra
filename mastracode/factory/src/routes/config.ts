@@ -1076,10 +1076,12 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 packId: pack.id,
                 models: pack.models,
               });
-            } else if (session) {
+              return c.json({ ok: true, target, activePackId: pack.id });
+            }
+            if (session) {
               await applyActiveModelPack(session, { packId: pack.id, models: pack.models });
             }
-            return c.json({ ok: true, activePackId: pack.id });
+            return c.json({ ok: true, target, sessionPackId: pack.id });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }

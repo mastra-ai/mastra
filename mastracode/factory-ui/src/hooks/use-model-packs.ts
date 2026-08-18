@@ -6,6 +6,7 @@ import { AGENT_CONTROLLER_ID } from '../ui/domains/chat/services/constants';
 import type {
   ActivateModelPackBody,
   ActivateModelPackResponse,
+  ClearDefaultModelPackResponse,
   ModelPacksResponse,
   OkResponse,
   SaveModelPackBody,
@@ -59,7 +60,7 @@ export function useClearDefaultModelPack() {
   const { client } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => client.del<ActivateModelPackResponse>('/web/config/model-packs/active'),
+    mutationFn: () => client.del<ClearDefaultModelPackResponse>('/web/config/model-packs/active'),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.modelPacksAll() }),
   });
 }

@@ -598,6 +598,7 @@ describe('model pack routes with a tenant', () => {
     });
 
     expect(activated.status).toBe(200);
+    expect(await activated.json()).toEqual({ ok: true, target: 'default', activePackId: pack.id });
     expect(await seed.modelPacks.getActive({ orgId: 'org1', userId: 'user-a' })).toMatchObject({
       packId: pack.id,
       models: packBody.models,
@@ -664,6 +665,7 @@ describe('model pack routes with a tenant', () => {
     );
 
     expect(activated.status).toBe(200);
+    expect(await activated.json()).toEqual({ ok: true, target: 'session', sessionPackId: pack.id });
     expect(modelSwitch).toHaveBeenCalledExactlyOnceWith({ modelId: packBody.models.build });
     expect(setSetting).toHaveBeenCalledWith({ key: 'activeModelPackId', value: pack.id });
     expect(await seed.modelPacks.getActive({ orgId: 'org1', userId: 'user-a' })).toBeNull();

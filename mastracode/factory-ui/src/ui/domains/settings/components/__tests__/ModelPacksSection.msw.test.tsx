@@ -89,7 +89,7 @@ describe('ModelPacksSection', () => {
         http.get(PACKS_URL, () => packsResponse([builtinPack])),
         http.post(activateUrl('builtin'), async ({ request }) => {
           activateBody = await request.json();
-          return HttpResponse.json({ ok: true, activePackId: 'builtin' });
+          return HttpResponse.json({ ok: true, target: 'default', activePackId: 'builtin' });
         }),
       );
 
@@ -112,7 +112,7 @@ describe('ModelPacksSection', () => {
         http.post(activateUrl('builtin'), async ({ request }) => {
           activateBody = await request.json();
           packs[0] = { ...builtinPack, active: true };
-          return HttpResponse.json({ ok: true, activePackId: 'builtin' });
+          return HttpResponse.json({ ok: true, target: 'default', activePackId: 'builtin' });
         }),
       );
 

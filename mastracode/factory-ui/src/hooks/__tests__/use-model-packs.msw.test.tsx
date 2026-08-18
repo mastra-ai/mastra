@@ -44,7 +44,7 @@ describe('useActivateModelPack', () => {
         http.post(`${URL}/${encodeURIComponent('builtin:balanced')}/activate`, async ({ request }) => {
           activateBody = await request.json();
           activeId = 'builtin:balanced';
-          return HttpResponse.json({ ok: true, activePackId: 'builtin:balanced' });
+          return HttpResponse.json({ ok: true, target: 'default', activePackId: 'builtin:balanced' });
         }),
       );
 
@@ -70,7 +70,7 @@ describe('useActivateModelPack', () => {
       server.use(
         http.post(`${URL}/${encodeURIComponent('mine')}/activate`, async () => {
           modelId = 'p/build-2';
-          return HttpResponse.json({ ok: true, activePackId: 'mine' });
+          return HttpResponse.json({ ok: true, target: 'session', sessionPackId: 'mine' });
         }),
       );
 
