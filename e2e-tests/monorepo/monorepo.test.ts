@@ -666,7 +666,8 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
             workspacePath,
             `${workspace}\npatchedDependencies:\n  unicorn-magic@0.4.0: patches/unicorn-magic.patch\n`,
           );
-          await execa(pkgManager, ['install', '--config.minimum-release-age=0'], {
+          // The new patch entry changes the lockfile config, which CI's default frozen install rejects.
+          await execa(pkgManager, ['install', '--no-frozen-lockfile', '--config.minimum-release-age=0'], {
             cwd: isolatedFixturePath,
             env: process.env,
           });
