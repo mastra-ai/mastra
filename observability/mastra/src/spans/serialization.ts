@@ -77,7 +77,13 @@ export function truncateString(s: string, maxChars: number): string {
     return s;
   }
 
-  return s.slice(0, maxChars) + '…[truncated]';
+  let end = maxChars;
+  const lastCodeUnit = s.charCodeAt(end - 1);
+  if (lastCodeUnit >= 0xd800 && lastCodeUnit <= 0xdbff) {
+    end -= 1;
+  }
+
+  return s.slice(0, end) + '…[truncated]';
 }
 
 export type SerializedMapEntry = [keyType: string, key: any, value: any];

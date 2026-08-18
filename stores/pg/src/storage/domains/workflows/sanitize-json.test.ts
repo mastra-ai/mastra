@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sanitizeJsonForPg } from './index';
+import { sanitizeJsonForPg } from '../sanitize-json';
 
 describe('sanitizeJsonForPg', () => {
   it('removes bare null character escapes', () => {
