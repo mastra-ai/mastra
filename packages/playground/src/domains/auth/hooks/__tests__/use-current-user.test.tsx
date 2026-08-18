@@ -31,11 +31,7 @@ const makeWrapper = () => {
 describe('useCurrentUser', () => {
   describe('when the server responds 200 with a user', () => {
     it('returns the user', async () => {
-      server.use(
-        http.get('*/api/auth/me', () =>
-          HttpResponse.json({ id: 'u_1', email: 'a@b.c', name: 'A' }),
-        ),
-      );
+      server.use(http.get('*/api/auth/me', () => HttpResponse.json({ id: 'u_1', email: 'a@b.c', name: 'A' })));
 
       const { result } = renderHook(() => useCurrentUser(), { wrapper: makeWrapper() });
 
@@ -46,9 +42,7 @@ describe('useCurrentUser', () => {
 
   describe('when the server responds 401', () => {
     it('surfaces isError immediately (terminal)', async () => {
-      server.use(
-        http.get('*/api/auth/me', () => new HttpResponse(null, { status: 401 })),
-      );
+      server.use(http.get('*/api/auth/me', () => new HttpResponse(null, { status: 401 })));
 
       const { result } = renderHook(() => useCurrentUser(), { wrapper: makeWrapper() });
 

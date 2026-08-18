@@ -37,15 +37,13 @@ describe('fetchWithRefresh', () => {
       // Server middleware already handled refresh. Client MUST NOT hit
       // /auth/refresh — that would just amplify a transient failure
       // (PLTFRM-1270).
-      const urls = fetchSpy.mock.calls.map(([input]) =>
-        input instanceof Request ? input.url : String(input),
-      );
-      expect(urls.some((u) => u.includes('/auth/refresh'))).toBe(false);
+      const urls = fetchSpy.mock.calls.map(([input]) => (input instanceof Request ? input.url : String(input)));
+      expect(urls.some(u => u.includes('/auth/refresh'))).toBe(false);
     });
   });
 
   describe('when the server returns 503', () => {
-    it('propagates the 503 (retry is the caller\'s / React Query\'s job)', async () => {
+    it("propagates the 503 (retry is the caller's / React Query's job)", async () => {
       const transient = jsonResponse({ error: 'Auth provider unavailable' }, 503);
       vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(transient);
 

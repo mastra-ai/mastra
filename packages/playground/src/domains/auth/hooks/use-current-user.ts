@@ -76,6 +76,6 @@ export function useCurrentUser() {
       if (error.status !== 503) return false;
       return failureCount < AUTH_TRANSIENT_MAX_RETRIES;
     },
-    retryDelay: (attemptIndex) => Math.min(AUTH_TRANSIENT_MAX_BACKOFF_MS, 500 * 2 ** attemptIndex),
+    retryDelay: attemptIndex => Math.min(AUTH_TRANSIENT_MAX_BACKOFF_MS, 500 * 2 ** attemptIndex),
   });
 }
