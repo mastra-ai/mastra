@@ -1,5 +1,5 @@
 ---
-'@mastra/playground': patch
+'@internal/playground': patch
 ---
 
 Studio now respects the `editor` config on code-defined agents when locking editable fields.
