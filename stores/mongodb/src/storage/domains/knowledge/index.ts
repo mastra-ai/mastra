@@ -95,6 +95,7 @@ function recordFromDocument(row: Document): KnowledgeRecord {
     capturedAt: new Date(row.capturedAt),
     when: row.when ? new Date(row.when) : undefined,
     maxScope: row.maxScope ?? undefined,
+    metadata: row.metadata ?? undefined,
     deletedAt: row.deletedAt ? new Date(row.deletedAt) : undefined,
     deletedBy: row.deletedBy ?? undefined,
   };
@@ -374,6 +375,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
         capturedAt: new Date(),
         when: input.when,
         maxScope: input.maxScope,
+        metadata: input.metadata,
       };
       await (
         await this.#knowledge()
@@ -586,7 +588,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     const rows = await (
       await this.#activityCollection()
     )
-      .find({ scopeKey: { $in: visibleScopeKeys(scope) }, ...(input.after ? { id: { $gt: input.after } } : {}) })
+      .find({ scopeKey: { $in: visibleScopeKeys(scope) }, ...(input.after ? { id: { $lt: input.after } } : {}) })
       .sort({ id: -1 })
       .limit(input.limit ?? 100)
       .toArray();

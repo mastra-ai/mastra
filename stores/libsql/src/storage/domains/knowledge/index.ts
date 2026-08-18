@@ -108,6 +108,10 @@ function parseKnowledge(row: Record<string, unknown>): KnowledgeRecord {
     capturedAt: toDate(row.capturedAt),
     when: optionalDate(row.when),
     maxScope: row.maxScope == null ? undefined : (String(row.maxScope) as KnowledgeRecord['maxScope']),
+    metadata:
+      (row.metadataJson ?? row.metadata) == null
+        ? undefined
+        : parseJson<Record<string, unknown>>(row.metadataJson ?? row.metadata),
     deletedAt: optionalDate(row.deletedAt),
     deletedBy: row.deletedBy == null ? undefined : String(row.deletedBy),
   };
@@ -443,9 +447,10 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         capturedAt: new Date(),
         when: input.when ? new Date(input.when) : undefined,
         maxScope: input.maxScope,
+        metadata: input.metadata,
       };
       await tx.execute({
-        sql: `INSERT INTO "${TABLE_KNOWLEDGE_RECORDS}" (id,node,text,scope,scopeKey,sourceThreadId,capturedAt,"when",maxScope,deletedAt,deletedBy) VALUES (?,?,?,jsonb(?),?,?,?,?,?,NULL,NULL)`,
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_RECORDS}" (id,node,text,scope,scopeKey,sourceThreadId,capturedAt,"when",maxScope,metadata,deletedAt,deletedBy) VALUES (?,?,?,jsonb(?),?,?,?,?,?,jsonb(?),NULL,NULL)`,
         args: [
           record.id,
           record.node,
@@ -456,6 +461,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
           record.capturedAt.toISOString(),
           record.when?.toISOString() ?? null,
           record.maxScope ?? null,
+          record.metadata ? JSON.stringify(record.metadata) : null,
         ],
       });
       await this.#replaceMentions(tx, 'record', record.id, record.text, resolutionScope, defaultScope);
@@ -467,7 +473,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
 
   async getKnowledge(input: { id: string; includeDeleted?: boolean }): Promise<KnowledgeRecord | null> {
     const result = await this.#client.execute({
-      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE id=?${input.includeDeleted ? '' : ' AND deletedAt IS NULL'}`,
+      sql: `SELECT *,json(scope) AS scopeJson,json(metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE id=?${input.includeDeleted ? '' : ' AND deletedAt IS NULL'}`,
       args: [input.id],
     });
     return result.rows[0] ? parseKnowledge(result.rows[0]) : null;
@@ -493,7 +499,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     const limit = input.limit ?? 100;
     args.push(limit + 1);
     const result = await this.#client.execute({
-      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE sourceThreadId=? AND ${visibleSql}${input.includeDeleted ? '' : ' AND deletedAt IS NULL'}${input.after ? ' AND id > ?' : ''} ORDER BY id ASC LIMIT ?`,
+      sql: `SELECT *,json(scope) AS scopeJson,json(metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE sourceThreadId=? AND ${visibleSql}${input.includeDeleted ? '' : ' AND deletedAt IS NULL'}${input.after ? ' AND id > ?' : ''} ORDER BY id ASC LIMIT ?`,
       args,
     });
     const records = result.rows.map(parseKnowledge);
@@ -586,8 +592,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     }));
     if (results.length < (input.limit ?? 20)) {
       const knowledge = await this.#client.execute({
-        sql: `SELECT k.*,json(k.scope) AS scopeJson,n.name FROM "${TABLE_KNOWLEDGE_RECORDS}" k JOIN "${TABLE_KNOWLEDGE_NODES}" n ON n.id=k.node AND n.type='node' AND n.mergedInto IS NULL WHERE k.deletedAt IS NULL AND ${visibleSql.replaceAll('scopeKey', 'k.scopeKey')} AND lower(k.text) LIKE ? ESCAPE '=' ORDER BY k.id DESC LIMIT ?`,
-
+        sql: `SELECT k.*,json(k.scope) AS scopeJson,json(k.metadata) AS metadataJson,n.name FROM "${TABLE_KNOWLEDGE_RECORDS}" k JOIN "${TABLE_KNOWLEDGE_NODES}" n ON n.id=k.node AND n.type='node' AND n.mergedInto IS NULL WHERE k.deletedAt IS NULL AND ${visibleSql.replaceAll('scopeKey', 'k.scopeKey')} AND lower(k.text) LIKE ? ESCAPE '=' ORDER BY k.id DESC LIMIT ?`,
         args: [key, key, query, (input.limit ?? 20) - results.length],
       });
       results.push(
@@ -794,7 +799,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
   async #getKnowledge(executor: Executor, id: string, includeDeleted: boolean): Promise<KnowledgeRecord | null> {
     const result = await executor.execute({
-      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE id=?${includeDeleted ? '' : ' AND deletedAt IS NULL'}`,
+      sql: `SELECT *,json(scope) AS scopeJson,json(metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE id=?${includeDeleted ? '' : ' AND deletedAt IS NULL'}`,
       args: [id],
     });
     return result.rows[0] ? parseKnowledge(result.rows[0]) : null;
@@ -819,7 +824,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     if (input.after) args.push(input.after);
     args.push((input.limit ?? 100) + 1);
     const result = await this.#client.execute({
-      sql: `SELECT DISTINCT k.*,json(k.scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" k${includesMentions ? ` LEFT JOIN "${TABLE_KNOWLEDGE_MENTIONS}" m ON m.sourceType='record' AND m.sourceId=k.id` : ''} WHERE ${relationSql} AND ${visibleSql.replaceAll('scopeKey', 'k.scopeKey')}${input.includeDeleted ? '' : ' AND k.deletedAt IS NULL'}${input.after ? ' AND k.id < ?' : ''} ORDER BY k.id DESC LIMIT ?`,
+      sql: `SELECT DISTINCT k.*,json(k.scope) AS scopeJson,json(k.metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_RECORDS}" k${includesMentions ? ` LEFT JOIN "${TABLE_KNOWLEDGE_MENTIONS}" m ON m.sourceType='record' AND m.sourceId=k.id` : ''} WHERE ${relationSql} AND ${visibleSql.replaceAll('scopeKey', 'k.scopeKey')}${input.includeDeleted ? '' : ' AND k.deletedAt IS NULL'}${input.after ? ' AND k.id < ?' : ''} ORDER BY k.id DESC LIMIT ?`,
       args,
     });
     const limit = input.limit ?? 100;

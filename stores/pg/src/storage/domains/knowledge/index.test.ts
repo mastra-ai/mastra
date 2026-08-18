@@ -17,9 +17,9 @@ describe('PostgreSQL knowledge concurrency and indexes', () => {
     await store.init();
     await store.init();
     const result = await pool.query(
-      "SELECT indexname FROM pg_indexes WHERE tablename IN ('mastra_knowledge_records','mastra_knowledge_semantic_outbox')",
+      "SELECT indexname FROM pg_indexes WHERE tablename IN ('mastra_knowledge_nodes','mastra_knowledge_records','mastra_knowledge_semantic_outbox')",
     );
-    expect(result.rows.map(row => row.indexname)).toContain('idx_knowledge_records_identity');
+    expect(result.rows.map(row => row.indexname)).toContain('idx_knowledge_nodes_identity');
     expect(result.rows.map(row => row.indexname)).toContain('idx_knowledge_outbox_idempotency');
     const ddl = KnowledgePG.getExportDDL();
     expect(ddl).toHaveLength(14);
@@ -51,7 +51,7 @@ describe('PostgreSQL knowledge concurrency and indexes', () => {
       expect(await store.claimSemanticOutbox({ workerId: 'worker', limit: 10 })).toHaveLength(1);
       const indexes = await pool.query('SELECT indexname FROM pg_indexes WHERE schemaname=$1', [schemaName]);
       expect(indexes.rows.map(row => row.indexname)).toEqual(
-        expect.arrayContaining(['idx_knowledge_records_identity', 'idx_knowledge_outbox_idempotency']),
+        expect.arrayContaining(['idx_knowledge_nodes_identity', 'idx_knowledge_outbox_idempotency']),
       );
     } finally {
       await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
