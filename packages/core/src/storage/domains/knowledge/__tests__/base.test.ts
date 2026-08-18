@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { InMemoryDB } from '../../inmemory-db';
-import { KnowledgeConflictError } from '../base';
+import { createKnowledgeUlid, KnowledgeConflictError } from '../base';
 import { InMemoryKnowledgeStorage } from '../inmemory';
 
 const org = ['org:acme'];
@@ -14,6 +14,13 @@ function createStore() {
 }
 
 describe('InMemoryKnowledgeStorage', () => {
+  it('keeps knowledge ULIDs monotonic when the clock moves backwards', () => {
+    const first = createKnowledgeUlid(2);
+    const second = createKnowledgeUlid(1);
+
+    expect(second > first).toBe(true);
+  });
+
   it('stores identity and optional content on one node type', async () => {
     const store = createStore();
     const node = await store.createNode({
@@ -113,9 +120,11 @@ describe('InMemoryKnowledgeStorage', () => {
 
     await store.restoreKnowledge({ id: record.id });
     expect((await store.listKnowledgeRelatedTo({ node: marco.id, scope: thread })).records[0]?.id).toBe(record.id);
-    expect((await store.listActivity({ scope: thread })).map(event => event.action)).toEqual(
-      expect.arrayContaining(['record-deleted', 'record-restored']),
-    );
+    const activity = await store.listActivity({ scope: thread, limit: 2 });
+    expect(activity.map(event => event.action)).toEqual(expect.arrayContaining(['record-deleted', 'record-restored']));
+    const olderActivity = await store.listActivity({ scope: thread, after: activity.at(-1)?.id, limit: 2 });
+    expect(olderActivity).not.toHaveLength(0);
+    expect(olderActivity.every(event => event.id < activity.at(-1)!.id)).toBe(true);
   });
 
   it('enforces CAS, merge tombstones, and path-compressed reads', async () => {
@@ -129,6 +138,9 @@ describe('InMemoryKnowledgeStorage', () => {
 
     const third = await store.createNode({ name: 'J. Doe', kind: 'person', scope: resource });
     await store.mergeNodes({ sourceId: duplicate.id, targetId: jane.id, sourceVersion: duplicate.version });
+    await expect(
+      store.mergeNodes({ sourceId: jane.id, targetId: duplicate.id, sourceVersion: updated.version }),
+    ).rejects.toThrow('cycle');
     await store.mergeNodes({ sourceId: third.id, targetId: duplicate.id, sourceVersion: third.version });
     expect(await store.getNode(duplicate.id)).toEqual(expect.objectContaining({ mergedInto: jane.id }));
     expect(await store.getNode(third.id)).toEqual(expect.objectContaining({ mergedInto: jane.id }));
@@ -196,6 +208,7 @@ describe('InMemoryKnowledgeStorage', () => {
     await expect(store.rescopeKnowledge({ id: record.id, scope: org })).resolves.toEqual(
       expect.objectContaining({ scope: org }),
     );
+    await expect(store.raiseKnowledgeCeiling({ id: record.id, maxScope: 'resource' })).rejects.toThrow('ceiling');
 
     await store.advanceCurationCursor({ sourceThreadId: 't1', agent: 'curate', lastKnowledgeId: record.id });
     await expect(
@@ -243,9 +256,9 @@ describe('InMemoryKnowledgeStorage', () => {
       (await store.knowledgeBySource({ sourceThreadId: 't1', scope: thread, after: sourcePage.nextCursor })).records,
     ).toEqual([expect.objectContaining({ id: second.id })]);
 
-    const claimed = await store.claimSemanticOutbox({ workerId: 'one', limit: 1, now: new Date('2026-07-01') });
-    expect(claimed).toHaveLength(0);
     const pending = await store.listSemanticOutbox({ status: 'pending' });
+    const tooEarly = new Date(Math.min(...pending.map(entry => entry.availableAt.getTime())) - 1);
+    expect(await store.claimSemanticOutbox({ workerId: 'one', limit: 1, now: tooEarly })).toHaveLength(0);
     const claimTime = new Date(Math.max(...pending.map(entry => entry.availableAt.getTime())) + 1);
     const claimedLater = await store.claimSemanticOutbox({ workerId: 'one', limit: 1, now: claimTime });
     expect(claimedLater[0]).toEqual(expect.objectContaining({ status: 'processing', attempts: 1 }));
