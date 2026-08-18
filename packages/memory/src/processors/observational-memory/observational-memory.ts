@@ -321,6 +321,7 @@ export class ObservationalMemory {
   private hasher = xxhash();
   private mastra?: Mastra;
   private memory?: Memory;
+  private curationCadence?: number;
 
   /**
    * Track message IDs observed during this instance's lifetime.
@@ -457,6 +458,7 @@ export class ObservationalMemory {
     this.hooks = config.hooks;
     this.mastra = config.mastra;
     this.memory = config.memory;
+    this.curationCadence = config.curationCadence;
 
     // Resolve "default" to the model default for the agent being configured.
     const resolveModel = (model: ObservationalMemoryModel | undefined, defaultModel: string) =>
@@ -662,6 +664,7 @@ export class ObservationalMemory {
       resolveModel: inputTokens => this.resolveReflectionModel(inputTokens),
       mastra: config.mastra,
       memory: this.memory,
+      onReflectionCommitted: config.onReflectionCommitted,
     });
 
     // Validate buffer configuration
@@ -3728,7 +3731,50 @@ ${formattedMessages}
     // Fetch the latest record after lock release
     const record = await this.getOrCreateRecord(threadId, resourceId);
     const reflected = record.generationCount > generationBefore && generationBefore >= 0;
+
+    if (observed) {
+      // Fire-and-forget; a curation failure must never fail the observation.
+      void this.maybeTriggerCadenceCuration(threadId, resourceId, record, requestContext).catch(error => {
+        omDebug(`[OM:observe] cadence curation failed: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    }
+
     return { observed, reflected, record };
+  }
+
+  /**
+   * Count committed observation runs on the sync observe path and run the curator every
+   * `curationCadence` runs. The counter is persisted at `record.config.subconscious.observationRuns`
+   * (the OM record's config jsonb, deep-merged; threshold resolution only reads `_overrides`, so the
+   * sibling key is inert). Concurrent commits can miscount — the curator run is advisory, and the
+   * curation cursor is the real serializer. The async-buffer lane bypasses observe(); deployments
+   * that gate on this cadence (factory's resource scope) disable async buffering.
+   */
+  private async maybeTriggerCadenceCuration(
+    threadId: string,
+    resourceId: string | undefined,
+    record: ObservationalMemoryRecord,
+    requestContext?: RequestContext,
+  ): Promise<void> {
+    const cadence = this.curationCadence;
+    const memory = this.memory;
+    if (!cadence || cadence < 1 || !memory) return;
+
+    const config = (record.config ?? {}) as { subconscious?: { observationRuns?: number } };
+    const runs = (config.subconscious?.observationRuns ?? 0) + 1;
+    const fire = runs >= cadence;
+    await this.storage.updateObservationalMemoryConfig({
+      id: record.id,
+      config: { subconscious: { observationRuns: fire ? 0 : runs } },
+    });
+    if (!fire) return;
+
+    const result = await memory.runCuration({
+      threadId,
+      resourceId: resourceId ?? threadId,
+      requestContext,
+    });
+    omDebug(`[OM:observe] cadence curation outcome=${result.outcome} thread=${threadId}`);
   }
 
   /**
@@ -3757,6 +3803,18 @@ ${formattedMessages}
 
     if (!record.activeObservations) {
       return { reflected: false, record, usage: undefined };
+    }
+
+    // LOCKING: same guard as the turn-driven path (reflector-runner maybeReflect).
+    // An in-flight reflection in this process skips quietly; a flag left behind
+    // by a dead process is stale — clear it and proceed.
+    if (record.isReflecting) {
+      if (isOpActiveInProcess(record.id, 'reflecting')) {
+        omDebug(`[OM:reflect] isReflecting=true and active in this process, skipping`);
+        return { reflected: false, record, usage: undefined };
+      }
+      omDebug(`[OM:reflect] isReflecting=true but NOT active in this process — stale flag from dead process, clearing`);
+      await this.storage.setReflectingFlag(record.id, false);
     }
 
     await this.storage.setReflectingFlag(record.id, true);
