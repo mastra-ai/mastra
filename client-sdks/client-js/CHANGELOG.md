@@ -1,5 +1,46 @@
 # @mastra/client-js
 
+## 1.41.0-alpha.11
+
+### Minor Changes
+
+- Added a `durable` option to stored agents so agents created through the Agents API can run with durable execution — no code deployment required. ([#21715](https://github.com/mastra-ai/mastra/pull/21715))
+
+  ```typescript
+  await mastraClient.createStoredAgent({
+    id: 'helper',
+    name: 'Helper',
+    instructions: 'You are a helpful assistant.',
+    model: { provider: 'openai', name: 'gpt-5' },
+    durable: true,
+  });
+  ```
+
+  Pass `true` for defaults, or `{ maxSteps, cleanupTimeoutMs }` to tune the durable loop. Cache and pubsub are inherited from the server's Mastra instance, so configure distributed backends there for durability across replicas. Automatic recovery is still configured in code via `recovery.durableAgents`.
+
+- Fixed the agent controller event types, which described payloads the server never sends. ([#21739](https://github.com/mastra-ai/mastra/pull/21739))
+
+  `KnownAgentControllerEvent` was written by hand and had drifted from the controller. Narrowing on `om_activation` gave you an `enabled` boolean that does not exist, `om_status` a `status` string instead of the token windows, `om_thread_title_updated` a `title` instead of `newTitle`, and `subagent_end` only a `toolCallId` — its `agentType`, `result`, `isError` and `durationMs` were missing. `usage_update` typed its payload as `unknown`, so every consumer cast it. Seven events the controller emits (`state_changed`, `command_exit`, `tool_suspension_cancelled`, and the four remaining `subagent_*` events) were not typed at all and fell through `isKnownAgentControllerEvent`.
+
+  `isKnownAgentControllerEvent` now returns `true` for those seven events as well. If you route unrecognised events to a fallback branch, they no longer reach it — give them a case in your `switch` or they are silently dropped.
+
+  `thread_created` now delivers `thread.createdAt` and `thread.updatedAt` as `Date`s, the way the `message_*` events already did — the stream carries them as ISO strings.
+
+  Payload drift is now a compile error instead of a wrong field at runtime, so handlers reading the old fields need updating.
+
+  ```ts
+  // Before: compiled, but `enabled` is always undefined
+  if (event.type === 'om_activation' && event.enabled) { ... }
+
+  // After: tsc rejects it; the event carries cycleId, tokensActivated, generationCount, …
+  if (event.type === 'om_activation') { console.log(event.tokensActivated) }
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`6223446`](https://github.com/mastra-ai/mastra/commit/6223446ddce6166e96e0ba5e00d628b615dee8ca), [`583e235`](https://github.com/mastra-ai/mastra/commit/583e23519c13af16c1746f9c49722d011216611b), [`a77f8d4`](https://github.com/mastra-ai/mastra/commit/a77f8d4740d2178a74c41e4bf678b4fcd8fa0bb2), [`40d358e`](https://github.com/mastra-ai/mastra/commit/40d358e29d55543803e64b49241122f598ffabc7), [`e80cd7e`](https://github.com/mastra-ai/mastra/commit/e80cd7e7683e7d732e1cc6784bcac1d2640d2ce3), [`20504b2`](https://github.com/mastra-ai/mastra/commit/20504b2ecebd0e077acda3d457ab57480a98ed3e)]:
+  - @mastra/core@1.60.0-alpha.11
+
 ## 1.41.0-alpha.10
 
 ### Patch Changes
