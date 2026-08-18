@@ -522,6 +522,7 @@ export type ProviderModelsMap = {
     'qwen3.6-27b',
     'qwen3.6-35b-a3b',
     'qwen3.8-2.4t-a95b',
+    'qwen3.8-27b',
     'qwen3guard-gen-0.6b',
     'qwen3guard-gen-8b',
     'voxtral-small-2507',
@@ -1141,6 +1142,25 @@ export type ProviderModelsMap = {
     'hf:openai/gpt-oss-120b',
     'hf:zai-org/GLM-4.7-Flash',
     'hf:zai-org/GLM-5.2',
+  ];
+  readonly jalapeno: readonly [
+    'DeepSeek-V4-Flash',
+    'DeepSeek-V4-Pro',
+    'GLM-5.1',
+    'GLM-5.2',
+    'Hy3',
+    'Kimi-K2.5',
+    'Kimi-K2.7-Code',
+    'Kimi-K3',
+    'MiniMax-M3',
+    'Qwen3-Next-80B-A3B-Instruct',
+    'Qwen3-Next-80B-A3B-Thinking',
+    'Qwen3-VL-235B-A22B-Instruct',
+    'Qwen3-VL-235B-A22B-Thinking',
+    'Qwen3.5-122B-A10B',
+    'Qwen3.5-27B',
+    'Qwen3.5-35B-A3B',
+    'Qwen3.5-397B-A17B',
   ];
   readonly 'abliteration-ai': readonly ['abliterated-model', 'abliterated-model-large'];
   readonly deepseek: readonly ['deepseek-chat', 'deepseek-reasoner', 'deepseek-v4-flash', 'deepseek-v4-pro'];
@@ -2480,6 +2500,7 @@ export type ProviderModelsMap = {
     'gemini-3.1-flash-lite-preview',
     'gemini-3.1-pro-preview',
     'glm-5.2',
+    'glm-5.3',
     'gpt-5-mini',
     'gpt-5.1-codex',
     'gpt-5.1-codex-max',
@@ -2772,6 +2793,8 @@ export type ProviderModelsMap = {
     'qwen/qwen3-max',
     'qwen/qwen3-next-80b-a3b-instruct',
     'qwen/qwen3-next-80b-a3b-thinking',
+    'qwen/qwen3-vl-235b-a22b-instruct',
+    'qwen/qwen3-vl-235b-a22b-thinking',
     'qwen/qwen3-vl-plus',
     'qwen/qwen3.5-122b-a10b',
     'qwen/qwen3.5-27b',
@@ -4488,7 +4511,7 @@ export type ProviderModelsMap = {
     'perplexity/sonar-reasoning-pro',
     'xai/grok-4.3',
   ];
-  readonly cerebras: readonly ['gemma-4-31b', 'gpt-oss-120b', 'zai-glm-4.7'];
+  readonly cerebras: readonly ['gemma-4-31b', 'gpt-oss-120b'];
   readonly amd: readonly ['DeepSeek-V4-Flash'];
   readonly bailing: readonly ['Ling-1T', 'Ring-1T'];
   readonly vercel: readonly [
