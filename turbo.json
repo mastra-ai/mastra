@@ -32,7 +32,7 @@
       "cache": false,
       "persistent": true
     },
-    // The watch layers JS over the declarations `build` leaves in dist, so it cannot race it.
+    // The watch rebuilds dist from scratch, so it cannot run while `build` writes the same directory.
     "@mastra/playground-ui#dev": {
       "dependsOn": ["^build", "@mastra/playground-ui#build"],
       "cache": false,

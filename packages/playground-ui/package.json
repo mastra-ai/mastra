@@ -106,7 +106,7 @@
   },
   "scripts": {
     "build": "vite build",
-    "dev": "node scripts/clean-bundles.mjs && vite build --watch --mode development",
+    "dev": "vite build && vite build --watch --mode development",
     "test": "vitest",
     "typecheck": "tsc",
     "lint": "oxlint . && eslint .",
