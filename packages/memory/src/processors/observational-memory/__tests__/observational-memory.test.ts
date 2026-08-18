@@ -1,5 +1,5 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
+import { MessageList, type MastraDBMessage, type MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import { MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
@@ -360,6 +360,123 @@ describe('ObservationalMemoryProcessor read-only mode', () => {
     expect(messageList.get.all.db().map(m => m.id)).not.toContain('om-continuation');
     expect(messageList.getSystemMessages('observational-memory')).toEqual([]);
     expect(memoryProvider.persistMessages).not.toHaveBeenCalled();
+  });
+});
+
+describe('ObservationalMemoryProcessor client echo reconciliation', () => {
+  it('reconciles client input on a resumed output without a live turn', async () => {
+    const storage = createInMemoryStorage();
+    const threadId = 'resume-echo-thread';
+    const resourceId = 'resume-echo-resource';
+    const stored = {
+      id: 'assistant-echo',
+      role: 'assistant',
+      content: {
+        format: 2,
+        content: 'Server transformed text',
+        parts: [
+          { type: 'text', text: 'Server transformed text' },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'call',
+              toolCallId: 'call-1',
+              toolName: 'search',
+              args: { query: 'canonical' },
+            },
+          },
+        ],
+        metadata: { serverOwned: true },
+      },
+      threadId,
+      resourceId,
+      createdAt: new Date('2025-01-01T09:00:00Z'),
+    } as MastraDBMessage;
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Resume echo',
+        metadata: {},
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+      },
+    });
+    await storage.saveMessages({ messages: [stored] });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        content: [{ type: 'text' as const, text: 'ok' }],
+        warnings: [],
+      }),
+    });
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: { messageTokens: 100000 },
+      reflection: { observationTokens: 200000 },
+    });
+    const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+    const lookupSpy = vi.spyOn(storage, 'listMessagesById');
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
+    const echoWithResult = {
+      ...stored,
+      content: {
+        format: 2,
+        content: 'Lossy client text',
+        parts: [
+          { type: 'text', text: 'Lossy client text' },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'call-1',
+              toolName: 'client-name',
+              args: { query: 'changed', injected: true },
+              result: 'client result',
+            },
+          },
+        ],
+        metadata: { clientOwned: true },
+      },
+    } as MastraDBMessage;
+    const messageList = new MessageList({ threadId, resourceId }).add([echoWithResult], 'input');
+
+    await processor.processOutputResult({
+      messageList,
+      messages: [],
+      requestContext,
+      state: {},
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+      result: {} as any,
+      retryCount: 0,
+    });
+
+    const { messages } = await storage.listMessages({ threadId, resourceId, perPage: false });
+    const saved = messages.find(message => message.id === stored.id)!;
+    expect(lookupSpy).toHaveBeenCalledTimes(1);
+    expect(saved.content.content).toBe('Server transformed text');
+    expect(saved.content.metadata).toEqual({ serverOwned: true });
+    expect(saved.content.parts).toEqual([
+      { type: 'text', text: 'Server transformed text' },
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'call-1',
+          toolName: 'search',
+          args: { query: 'canonical' },
+          result: 'client result',
+        },
+      },
+    ]);
   });
 });
 

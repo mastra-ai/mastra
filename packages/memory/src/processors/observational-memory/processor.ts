@@ -391,9 +391,8 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           // from the resumed turn is not lost.
           const newOutput = messageList.get.response.db();
           const newInput = messageList.get.input.db();
-          const messagesToSave = [...newInput, ...newOutput];
-          if (messagesToSave.length > 0 && context.threadId) {
-            await this.engine.persistMessages(messagesToSave, context.threadId, context.resourceId);
+          if ((newInput.length > 0 || newOutput.length > 0) && context.threadId) {
+            await this.engine.persistClientInputMessages(newInput, newOutput, context.threadId, context.resourceId);
           }
         }
 
