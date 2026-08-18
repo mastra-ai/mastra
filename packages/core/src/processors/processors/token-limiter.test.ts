@@ -875,6 +875,32 @@ describe('TokenLimiterProcessor', () => {
         expect(total).toBeLessThan(stringifiedCost / 5);
       });
 
+      it('should count a v5 image file part the same as the equivalent v4 part', async () => {
+        const processor = new TokenLimiterProcessor({ limit: 100_000 });
+
+        const v4List = new MessageList();
+        addFileMessage(v4List, BASE64_IMAGE, 'image/png');
+
+        const v5List = new MessageList();
+        v5List.add(
+          {
+            id: 'user-image',
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [
+                { type: 'text', text: 'what is in this image?' },
+                { type: 'file', url: BASE64_IMAGE, mediaType: 'image/png' },
+              ],
+            },
+            createdAt: new Date('2023-01-01T00:00:00Z'),
+          } as any,
+          'input',
+        );
+
+        expect(await countTokens(processor, v5List)).toBe(await countTokens(processor, v4List));
+      });
+
       it('should count a data URI image the same as the equivalent raw base64', async () => {
         const processor = new TokenLimiterProcessor({ limit: 100_000 });
 

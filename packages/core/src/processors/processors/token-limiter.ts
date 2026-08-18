@@ -1,7 +1,7 @@
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import { estimateTokenCount, sliceByTokens } from 'tokenx';
 import type { MastraDBMessage } from '../../agent/message-list';
-import { parseDataUri } from '../../agent/message-list/prompt/image-utils';
+import { parseDataUri, resolveFilePartMediaTypeAndData } from '../../agent/message-list/prompt/image-utils';
 import { TripWire } from '../../agent/trip-wire';
 import type { ChunkType } from '../../stream';
 import type { ProcessInputStepArgs, ProcessOutputStreamArgs, Processor } from '../index';
@@ -310,7 +310,8 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
               }
             }
           } else if (part.type === 'file') {
-            mediaTokens += estimateMediaTokens(part.data, part.mimeType);
+            const { data, mediaType } = resolveFilePartMediaTypeAndData(part);
+            mediaTokens += estimateMediaTokens(data, mediaType);
           } else {
             tokenString += JSON.stringify(part);
           }
