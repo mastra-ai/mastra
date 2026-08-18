@@ -83,21 +83,26 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
   return ({ requestContext }: { requestContext: RequestContext }) => {
     const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
     const state = controller?.getState() as MastraCodeState | undefined;
-    // Factory seeds the authoritative org id into session state; prefer it.
-    // The session owner is a USER id — mapping it into organizationId is only
-    // the legacy fallback for clients (TUI/studio) that never set factoryOrgId.
-    const factoryOrgId = state?.factoryOrgId;
-    const ownerId = controller?.session.ownerId;
-    if (typeof factoryOrgId === 'string' && factoryOrgId.trim()) {
-      requestContext.set('organizationId', factoryOrgId);
-    } else if (ownerId) {
-      requestContext.set('organizationId', ownerId);
-    }
-    // Factory runs share one knowledge graph per project: anchor the
-    // subconscious knowledge scope's resource rung on the project id.
+    const subconsciousEnabled = Boolean(vector) && process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
     const factoryProjectId = state?.factoryProjectId;
-    if (typeof factoryProjectId === 'string' && factoryProjectId.trim()) {
-      requestContext.set('knowledgeResourceId', factoryProjectId);
+    const isFactory = typeof factoryProjectId === 'string' && factoryProjectId.trim().length > 0;
+
+    if (subconsciousEnabled) {
+      // Factory seeds the authoritative org id into session state; prefer it.
+      // The session owner is a USER id — mapping it into organizationId is only
+      // the legacy fallback for clients (TUI/studio) that never set factoryOrgId.
+      const factoryOrgId = state?.factoryOrgId;
+      const ownerId = controller?.session.ownerId;
+      if (typeof factoryOrgId === 'string' && factoryOrgId.trim()) {
+        requestContext.set('organizationId', factoryOrgId);
+      } else if (ownerId) {
+        requestContext.set('organizationId', ownerId);
+      }
+      // Factory runs share one knowledge graph per project: anchor the
+      // subconscious knowledge scope's resource rung on the project id.
+      if (isFactory) {
+        requestContext.set('knowledgeResourceId', factoryProjectId);
+      }
     }
 
     const omScope = state?.omScope ?? getOmScope(state?.projectPath);
@@ -108,10 +113,8 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
 
     const observerPreviousObservationTokens = 1000;
     const observeAttachments = state?.observeAttachments;
-    const subconsciousEnabled = Boolean(vector) && process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
     // Factory sessions get a factory-only Subconscious config, so the cache key
     // carries a factory presence bit to keep the two configs from cross-serving.
-    const isFactory = typeof factoryProjectId === 'string' && factoryProjectId.trim().length > 0;
     const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}:${subconsciousEnabled ? 1 : 0}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;

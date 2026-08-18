@@ -165,10 +165,13 @@ describe('getDynamicMemory', () => {
     });
   });
 
-  it('keeps Subconscious memory disabled unless explicitly opted in', async () => {
-    const { config } = await createMemoryConfig({ projectPath: '/tmp/project' }, 'thread', { vector: true });
+  it('keeps Subconscious memory inert unless explicitly opted in', async () => {
+    const { config, requestContext } = await createMemoryConfig({ projectPath: '/tmp/project' }, 'thread', {
+      vector: true,
+    });
 
     expect(config.options.observationalMemory.experimental_subconscious).toBeUndefined();
+    expect(requestContext.get('organizationId')).toBeUndefined();
   });
 
   it('enables project-scoped Subconscious memory when explicitly opted in with vector storage', async () => {
@@ -189,25 +192,36 @@ describe('getDynamicMemory', () => {
   });
 
   it('prefers the factory org id from session state over the session owner for organizationId', async () => {
-    const { requestContext } = await createMemoryConfig({
-      projectPath: '/tmp/project',
-      factoryProjectId: 'project-1',
-      factoryOrgId: 'org-real',
-    });
+    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
+    const { requestContext } = await createMemoryConfig(
+      {
+        projectPath: '/tmp/project',
+        factoryProjectId: 'project-1',
+        factoryOrgId: 'org-real',
+      },
+      'thread',
+      { vector: true },
+    );
     expect(requestContext.set).toHaveBeenCalledWith('organizationId', 'org-real');
     expect(requestContext.get('organizationId')).toBe('org-real');
   });
 
   it('falls back to the session owner for organizationId when no factory org id exists', async () => {
-    const { requestContext } = await createMemoryConfig({ projectPath: '/tmp/project' });
+    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
+    const { requestContext } = await createMemoryConfig({ projectPath: '/tmp/project' }, 'thread', { vector: true });
     expect(requestContext.get('organizationId')).toBe('mastracode-owner');
   });
 
   it('anchors the knowledge scope on the factory project id when present', async () => {
-    const { requestContext } = await createMemoryConfig({
-      projectPath: '/tmp/project',
-      factoryProjectId: 'project-1',
-    });
+    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
+    const { requestContext } = await createMemoryConfig(
+      {
+        projectPath: '/tmp/project',
+        factoryProjectId: 'project-1',
+      },
+      'thread',
+      { vector: true },
+    );
     expect(requestContext.set).toHaveBeenCalledWith('knowledgeResourceId', 'project-1');
     expect(requestContext.get('knowledgeResourceId')).toBe('project-1');
   });
@@ -229,12 +243,13 @@ describe('getDynamicMemory', () => {
     });
   });
 
-  it('splits the memory cache between factory and non-factory sessions', async () => {
+  it('splits the memory cache between opted-in factory and non-factory sessions', async () => {
+    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
     vi.resetModules();
     memoryConstructorMock.mockClear();
     getOmScopeMock.mockReturnValue('thread');
     const { getDynamicMemory } = await import('./memory.js');
-    const factory = getDynamicMemory({ storage: true } as never, undefined as never);
+    const factory = getDynamicMemory({ storage: true } as never, { vector: true } as never);
     const nonFactoryMemory = factory({
       requestContext: createRequestContext({ projectPath: '/tmp/project' }) as never,
     });
