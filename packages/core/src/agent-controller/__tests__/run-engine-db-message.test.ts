@@ -279,7 +279,47 @@ describe('SessionRunEngine — MastraDBMessage contract', () => {
     expect(messageEnds[1].message.createdAt.toISOString()).toBe('2026-01-02T03:04:05.000Z');
   });
 
-  it('Given an emitted snapshot, When later chunks mutate the message in place, Then the snapshot is unchanged', async () => {
+  it('Given streamed message events, When later deltas arrive, Then the same live message reflects the latest state', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't1' } }), ctx);
+    const started = lastMessageEvent(events);
+
+    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't1', text: 'Hello' } }), ctx);
+    const firstUpdate = lastMessageEvent(events);
+    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't1', text: ' world' } }), ctx);
+    const secondUpdate = lastMessageEvent(events);
+
+    expect(firstUpdate).toBe(started);
+    expect(secondUpdate).toBe(started);
+    expect(started.content.parts).toEqual([{ type: 'text', text: 'Hello world' }]);
+  });
+
+  /**
+   * These three tests preserve the superseded point-in-time snapshot contract as
+   * executable documentation. They are intentionally skipped—not deleted—so a
+   * future change cannot quietly reintroduce per-delta copying without confronting
+   * the allocation and ownership tradeoff.
+   *
+   * `SessionRunEngine` now emits one live accumulated message for a streamed turn.
+   * Later text/reasoning/tool updates therefore mutate objects observed by earlier
+   * events, and consecutive events intentionally share the same parts and tool
+   * invocation identities. Each assertion below must fail under that contract.
+   *
+   * The former deep clone copied all accumulated content, including completed
+   * multi-megabyte tool results, on every token. Nik Aiyer's PR #20314 significantly
+   * improved this with selective shallow snapshots, but it still creates a complete
+   * message/parts shell per delta and allows delayed listeners to retain every
+   * intermediate shape. Long-running dogfood profiles showed this work moving
+   * allocation and retained-heap pressure out of the stream producer.
+   *
+   * Point-in-time consumers must now copy or serialize at their own async/storage
+   * boundary. Do not unskip these tests by restoring producer-side snapshots; replace
+   * them only if the event contract changes again with equivalent long-session proof.
+   */
+  it.skip('Given an emitted snapshot, When later chunks mutate the message in place, Then the snapshot is unchanged', async () => {
     const { engine, events } = createHarness();
     const state = engine.createStreamState();
     const ctx = requestContext();
@@ -310,7 +350,7 @@ describe('SessionRunEngine — MastraDBMessage contract', () => {
     expect(callPart.toolInvocation).not.toHaveProperty('result');
   });
 
-  it('Given an emitted snapshot, When later chunks mutate reasoning and metadata in place, Then the snapshot is unchanged', async () => {
+  it.skip('Given an emitted snapshot, When later chunks mutate reasoning and metadata in place, Then the snapshot is unchanged', async () => {
     const { engine, events } = createHarness();
     const state = engine.createStreamState();
     const ctx = requestContext();
@@ -336,7 +376,7 @@ describe('SessionRunEngine — MastraDBMessage contract', () => {
     expect(snapshot.content.metadata?.stopReason).toBeUndefined();
   });
 
-  it('Given consecutive snapshots, When emitted, Then they share unmutated payloads instead of deep-cloning them', async () => {
+  it.skip('Given the former shallow-snapshot contract, When emitted, Then mutable part shells are isolated', async () => {
     const { engine, events } = createHarness();
     const state = engine.createStreamState();
     const ctx = requestContext();

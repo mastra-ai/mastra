@@ -609,8 +609,8 @@ export type AgentControllerSubagentHistoryEntry = Omit<ActiveSubagentState, 'sta
  * Canonical display state maintained by the AgentController.
  *
  * This is the single source of truth for *what to display*.
- * Any UI (TUI, web, desktop) can subscribe to snapshots of this state
- * instead of interpreting 35+ raw event types.
+ * Any UI (TUI, web, desktop) can subscribe to updates of this state instead
+ * of interpreting 35+ raw event types.
  *
  * The AgentController updates this state alongside every event emission,
  * then emits a `display_state_changed` event so UIs can react.
@@ -621,7 +621,10 @@ export interface AgentControllerDisplayState {
   isRunning: boolean;
 
   // ── Current streaming message ────────────────────────────────────────
-  /** The message currently being streamed (null when idle) */
+  /**
+   * The live message currently being streamed (null when idle). Its content
+   * mutates as deltas arrive; copy it before retaining a point-in-time value.
+   */
   currentMessage: MastraDBMessage | null;
 
   // ── Follow-up queue ──────────────────────────────────────────────────
@@ -752,6 +755,12 @@ export function defaultOMProgressState(): OMProgressState {
 
 /**
  * Events emitted by the controller that UIs can subscribe to.
+ *
+ * Streamed `message_start`, `message_update`, and `message_end` events for one
+ * assistant turn intentionally share a live `MastraDBMessage`. Its content is
+ * updated in place as later deltas arrive. `display_state_changed.currentMessage`
+ * refers to that same live message. Consumers that retain an event across an
+ * asynchronous or storage boundary must copy or serialize the value there.
  */
 export type AgentControllerEvent =
   | { type: 'mode_changed'; modeId: string; previousModeId: string }

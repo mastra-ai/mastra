@@ -425,12 +425,20 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
  * `"error": {}` and clients could only render a generic "Error". Flatten the
  * Error into a plain object so the actual failure reaches the client.
  *
- * `display_state_changed` Maps JSON-serialize to `{}`; convert them to plain
- * records so wire clients get the tool state the in-process TUI sees.
+ * Streamed message events carry the controller's live accumulated message.
+ * Snapshot them at this asynchronous wire boundary so queued SSE events retain
+ * the value they had when emitted.
+ *
+ * `display_state_changed` Maps JSON-serialize to `{}`; snapshot the display state
+ * and convert its Maps to plain records so wire clients get stable tool and
+ * message state.
  */
 function toWireEvent(event: unknown): unknown {
   if (typeof event !== 'object' || event === null) return event;
   const { type } = event as { type?: unknown };
+  if (type === 'message_start' || type === 'message_update' || type === 'message_end') {
+    return structuredClone(event);
+  }
   if (type === 'error' && (event as { error?: unknown }).error instanceof Error) {
     const error = (event as { error: Error }).error;
     return { ...event, error: { name: error.name, message: error.message } };
@@ -438,7 +446,7 @@ function toWireEvent(event: unknown): unknown {
   if (type === 'display_state_changed') {
     const { displayState } = event as { displayState?: unknown };
     if (typeof displayState !== 'object' || displayState === null) return event;
-    const wireDisplayState: Record<string, unknown> = { ...displayState };
+    const wireDisplayState = structuredClone(displayState) as Record<string, unknown>;
     for (const [key, value] of Object.entries(wireDisplayState)) {
       if (value instanceof Map) wireDisplayState[key] = Object.fromEntries(value);
     }
