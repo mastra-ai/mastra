@@ -449,26 +449,27 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
 });
 
 /**
- * An `Error`'s `message`/`name` are non-enumerable, so JSON serialization in the
- * SSE adapter would send `"error": {}` and clients could only render a generic
- * "Error". Flatten it so the actual failure reaches the client, on every event
- * that carries one (`error`, `workspace_error`, `workspace_status_changed`).
+ * `JSON.stringify` drops both an `Error` (its `name`/`message` are
+ * non-enumerable) and a `Map` to `{}`, so clients would otherwise read
+ * `"error": {}` and empty tool state. `Date` needs no help — JSON already
+ * writes it as an ISO string.
  *
- * `display_state_changed` Maps JSON-serialize to `{}`; convert them to plain
- * records so wire clients get the tool state the in-process TUI sees.
+ * The result is what `AgentControllerWireEvent` in `@mastra/core` describes;
+ * `toWireEvent` and that type must stay in step, which the SSE tests pin.
  */
 function toWireEvent(event: AgentControllerEvent): unknown {
-  if ('error' in event && event.error instanceof Error) {
-    return { ...event, error: { name: event.error.name, message: event.error.message } };
-  }
+  const wire: Record<string, unknown> = { ...event };
+  const { error } = wire;
+  if (error instanceof Error) wire.error = { name: error.name, message: error.message };
   if (event.type === 'display_state_changed') {
-    const wireDisplayState: Record<string, unknown> = { ...event.displayState };
-    for (const [key, value] of Object.entries(wireDisplayState)) {
-      if (value instanceof Map) wireDisplayState[key] = Object.fromEntries(value);
-    }
-    return { ...event, displayState: wireDisplayState };
+    wire.displayState = Object.fromEntries(
+      Object.entries(event.displayState).map(([key, value]) => [
+        key,
+        value instanceof Map ? Object.fromEntries(value) : value,
+      ]),
+    );
   }
-  return event;
+  return wire;
 }
 
 export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
