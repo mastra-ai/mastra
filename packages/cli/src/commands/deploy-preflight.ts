@@ -215,12 +215,15 @@ export async function preflightBuildOutput(
     ...(await checkLocalStoragePaths(outputDir, metadata, envVars, hasEnvFile, managedEnvVarNames, environmentName)),
   );
 
+  // Warning, not error: background tasks still run in-process on the API
+  // server without dedicated workers, so the deploy is functional — just
+  // not running tasks on isolated worker infrastructure.
   if (metadata?.backgroundTasksEnabled && backgroundWorkersEnabled === false) {
     const environment = environmentName ? ` for the ${environmentName} environment` : '';
     issues.push({
       code: 'BACKGROUND_WORKERS_DISABLED',
-      severity: 'error',
-      message: `Background tasks are enabled in your Mastra config, but dedicated background workers are disabled${environment}.`,
+      severity: 'warning',
+      message: `Background tasks are enabled in your Mastra config, but dedicated background workers are disabled${environment}. Tasks will run in-process on the API server.`,
       fix: [
         `Enable Background Workers${environment} in Mastra Cloud project settings.`,
         'Starter and Team projects also require the Scalable Server add-on.',

@@ -31,7 +31,7 @@ export interface AutoProvisionContext {
   projectName: string;
   /** Project slug, used to derive a default database name. */
   projectSlug: string | null;
-  environment: Pick<Environment, 'id' | 'slug' | 'name' | 'type' | 'managedEnvVarNames'>;
+  environment: Pick<Environment, 'id' | 'slug' | 'name' | 'type' | 'managedEnvVarNames' | 'envVars'>;
   /** Merged local and platform-stored env vars used to identify BYO Redis. */
   envVars: Record<string, string>;
   /**
@@ -169,11 +169,23 @@ async function handleDatabaseAutofix(
 async function handleWorkerAutofix(ctx: AutoProvisionContext, state: AutofixState): Promise<boolean> {
   const managedNames = [...(ctx.environment.managedEnvVarNames ?? []), ...state.newlyManagedEnvVarNames];
   const hasManagedRedis = managedNames.includes('REDIS_URL');
-  const hasByoRedis = Boolean(ctx.envVars.REDIS_URL) && !hasManagedRedis;
+  // BYO Redis must come from the vars *stored* on the environment — the
+  // platform resolves the worker's Redis URL from stored vars, and local
+  // `.env` vars are only uploaded with the deploy itself (after this runs).
+  const hasByoRedis = Boolean(ctx.environment.envVars?.REDIS_URL) && !hasManagedRedis;
+  const hasLocalOnlyRedis = !hasManagedRedis && !hasByoRedis && Boolean(ctx.envVars.REDIS_URL);
+  if (hasLocalOnlyRedis) {
+    p.log.info(
+      `REDIS_URL is set in your local env but not yet stored on the ${ctx.environment.name} environment. ` +
+        `It will be uploaded with this deploy — re-run \`mastra deploy\` afterwards to enable background workers.`,
+    );
+    return false;
+  }
+
   const confirm = await p.confirm({
     message:
       `Background tasks are enabled in your Mastra config. ` +
-      `Enable dedicated background workers for the ${ctx.environment.slug} environment?` +
+      `Enable dedicated background workers for the ${ctx.environment.name} environment?` +
       (!hasManagedRedis && !hasByoRedis ? ' A managed Redis database will also be created and attached.' : ''),
     initialValue: true,
   });
@@ -196,11 +208,11 @@ async function handleWorkerAutofix(ctx: AutoProvisionContext, state: AutofixStat
   }
 
   const spinner = p.spinner();
-  spinner.start(`Enabling background workers for ${ctx.environment.slug}...`);
+  spinner.start(`Enabling background workers for ${ctx.environment.name}...`);
 
   try {
     await enableBackgroundWorkers(ctx.token, ctx.orgId, ctx.projectId, ctx.environment.id, redisSource);
-    spinner.stop(`Background workers are enabled for ${ctx.environment.slug}.`);
+    spinner.stop(`Background workers are enabled for ${ctx.environment.name}.`);
     state.backgroundWorkersEnabled = true;
     return true;
   } catch (error) {

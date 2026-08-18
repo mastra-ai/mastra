@@ -80,9 +80,9 @@ A local `.env` file is optional. Environment variables stored on the platform ar
     Background tasks are enabled in your Mastra config. Enable dedicated background workers for the production environment? (Y/n)
     ```
 
-    Accept the prompt to enable **Background Workers**. If the environment doesn't have a managed or user-provided `REDIS_URL`, the CLI creates and attaches a managed Redis database first. Starter and Team projects require the **Scalable Server** add-on. Background workers are included with Enterprise projects.
+    Accept the prompt to enable **Background Workers**. If the environment doesn't have a managed or platform-stored `REDIS_URL`, the CLI creates and attaches a managed Redis database first. Starter and Team projects require the **Scalable Server** add-on. Background workers are included with Enterprise projects.
 
-    Non-interactive deploys and deploys that use `--yes` don't create this infrastructure. Enable **Background Workers** in the environment settings before rerunning the deploy.
+    Declining the prompt doesn't block the deploy — background tasks run in-process on the API server until dedicated workers are enabled. Non-interactive deploys and deploys that use `--yes` never create this infrastructure; they warn and continue. Enable **Background Workers** in the environment settings to move tasks onto dedicated workers.
   </StepItem>
 
   <StepItem>
@@ -126,7 +126,7 @@ The region is fixed when the environment is created. Databases attached to an en
 
 Preflight validates the built output before anything ships and only flags issues in your own code:
 
-- **Background workers disabled**: A hard block when the build statically enables `backgroundTasks` but the target environment doesn't have dedicated workers enabled. Interactive deploys offer to enable workers and provision managed Redis when needed.
+- **Background workers disabled**: A warning when the build statically enables `backgroundTasks` but the target environment doesn't have dedicated workers enabled. Interactive deploys offer to enable workers and provision managed Redis when needed; otherwise tasks run in-process on the API server.
 
 - **Local storage paths**: A hard block. File-backed storage (for example `file:./mastra.db`) is lost on every deploy. Preflight passes when the path is guarded by an environment variable that's set locally or stored on the platform, including values provided by a managed database:
 
