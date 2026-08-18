@@ -7,6 +7,7 @@ import type { ReflectionCommittedContext } from '../types';
 import { publishSubconsciousActivity, publishSubconsciousError } from './activity';
 import { createKnowledgeTools } from './knowledge-tools';
 import { createKnowledgeWriteTools } from './knowledge-write-tools';
+import { createPinnedTools } from './pinned';
 import type { ResolvedSubconsciousAgent, ResolvedSubconsciousConfig } from './types';
 
 const CURATION_AGENT = 'curate';
@@ -15,6 +16,8 @@ const DEFAULT_INSTRUCTIONS = `Maintain durable scoped knowledge from the committ
 Use the read tools to inspect existing nodes, knowledge records, mentions, backlinks, and long-form node content. Use the write tools to merge true duplicates, repair names and links, soft-delete superseded knowledge records, rescope knowledge records only when justified and permitted by their ceilings, and synthesize useful node content. Never restore deleted knowledge records. Never invent provenance, capture timestamps, scopes, ceilings, IDs, or versions; those are enforced by code. Resolve optimistic-concurrency conflicts by reading the latest record and retrying the intended mutation. Keep the reserved capture-guidance node concise and update it only with durable guidance that will improve future capture.
 
 Process the worklist in ID order. Your final response must end with <curation-complete through="RECORD_ID" /> using the ID of the last KnowledgeRecord you fully processed. If you cannot finish the batch, acknowledge only the last KnowledgeRecord you did finish. Do not emit a completion marker when no KnowledgeRecord was fully processed.`;
+
+const PINNED_INSTRUCTIONS = `Maintain the pin set with knowledge_pin, knowledge_edit_pin, and knowledge_unpin. Pinned entries are delivered to the main agent on every turn, so they cost tokens permanently and must stay short. Pin only knowledge that should apply without being asked for, such as standing instructions, durable preferences, and hard constraints. Unpin an entry as soon as it stops being unconditionally true. Everything a reminder can surface on demand does not belong in the pin set.`;
 
 function resolveScope(context: ReflectionCommittedContext): KnowledgeScope {
   const organizationId = context.requestContext?.get('organizationId');
@@ -125,7 +128,13 @@ async function createCuratorAgent(
   return new Agent({
     id: `subconscious-curate-${context.parentThreadId}`,
     name: 'Subconscious Curate',
-    instructions: [DEFAULT_INSTRUCTIONS, config.instructions?.trim()].filter(Boolean).join('\n\n'),
+    instructions: [
+      DEFAULT_INSTRUCTIONS,
+      subconscious.pins ? PINNED_INSTRUCTIONS : undefined,
+      config.instructions?.trim(),
+    ]
+      .filter(Boolean)
+      .join('\n\n'),
     model,
     memory: curatorMemory,
     tools: {
@@ -136,6 +145,16 @@ async function createCuratorAgent(
         defaultScope: subconscious.defaultScope,
         maxScope: subconscious.maxScope,
       }),
+      ...(subconscious.pins
+        ? createPinnedTools(memory, {
+            scope,
+            sourceThreadId: context.parentThreadId,
+            defaultScope: subconscious.defaultScope,
+            maxScope: subconscious.maxScope,
+            maxPins: subconscious.pins.maxPins,
+            maxCharacters: subconscious.pins.maxCharacters,
+          })
+        : {}),
     },
   });
 }

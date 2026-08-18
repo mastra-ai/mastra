@@ -1,5 +1,6 @@
 import { Extractor } from '../extractor';
 import { SubconsciousCaptureExtractor } from './capture';
+import { DEFAULT_MAX_PINS, DEFAULT_PINNED_MAX_CHARACTERS, MAX_PINNED_MAX_CHARACTERS } from './pinned';
 import { SubconsciousRemindExtractor } from './remind';
 import type {
   ResolvedSubconsciousAgent,
@@ -95,6 +96,29 @@ export class Subconscious {
       throw new Error(`Subconscious activity.recentUpdates must be an integer between 1 and ${MAX_RECENT_UPDATES}.`);
     }
 
+    const pins =
+      config.pins === undefined || config.pins === false
+        ? false
+        : {
+            maxPins: (config.pins === true ? undefined : config.pins.maxPins) ?? DEFAULT_MAX_PINS,
+            maxCharacters:
+              (config.pins === true ? undefined : config.pins.maxCharacters) ?? DEFAULT_PINNED_MAX_CHARACTERS,
+          };
+    if (pins !== false) {
+      if (!Number.isInteger(pins.maxPins) || pins.maxPins < 1) {
+        throw new Error('Subconscious pins.maxPins must be a positive integer.');
+      }
+      if (
+        !Number.isInteger(pins.maxCharacters) ||
+        pins.maxCharacters < 1 ||
+        pins.maxCharacters > MAX_PINNED_MAX_CHARACTERS
+      ) {
+        throw new Error(
+          `Subconscious pins.maxCharacters must be an integer between 1 and ${MAX_PINNED_MAX_CHARACTERS}.`,
+        );
+      }
+    }
+
     this.config = Object.freeze({ ...config, observation: [...observation], reflection: [...reflection] });
     this.resolved = Object.freeze({
       observation: observation.map(entry =>
@@ -108,6 +132,7 @@ export class Subconscious {
       learnedGuidance: config.learnedGuidance !== false,
       tools: config.tools !== false,
       activity: recentUpdates === false ? false : { recentUpdates },
+      pins,
     });
   }
 
@@ -201,6 +226,28 @@ export {
 export type { SubconsciousActivitySnapshot, SubconsciousActivityUpdate } from './activity';
 export { SubconsciousCaptureExtractor, subconsciousCaptureSchema } from './capture';
 export { SubconsciousRemindExtractor } from './remind';
+export {
+  createPinnedTools,
+  listPinnedKnowledge,
+  DEFAULT_MAX_PINS,
+  DEFAULT_PINNED_MAX_CHARACTERS,
+  MAX_PINNED_MAX_CHARACTERS,
+  PINNED_NODE_NAME,
+  PINNED_NODE_KIND,
+  PINNED_NODE_SCOPE_LEVEL,
+  PINNED_SNAPSHOT_TAG,
+  PINNED_DELTA_TAG,
+  SUBCONSCIOUS_PINS_STATE_ID,
+} from './pinned';
+export type { PinnedKnowledgeSet, PinnedToolsOptions } from './pinned';
+export {
+  PinnedStateProcessor,
+  applyPinOps,
+  diffPins,
+  effectivePriorPins,
+  stablePinsCacheKey,
+} from './pinned-state-processor';
+export type { PinDeltaOp, PinEntry, PinnedStateProcessorDeps } from './pinned-state-processor';
 export { createKnowledgeWriteTools } from './knowledge-write-tools';
 export type { KnowledgeWriteToolsOptions } from './knowledge-write-tools';
 export { KnowledgeSemanticIndexCoordinator, StaleKnowledgeSemanticIndexError } from './semantic-index';

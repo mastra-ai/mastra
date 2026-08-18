@@ -89,6 +89,11 @@ export interface SubconsciousConfig {
   learnedGuidance?: boolean;
   tools?: boolean;
   activity?: false | { recentUpdates?: number };
+  /**
+   * Opt in to a curator-maintained pinned knowledge page that is delivered on every turn.
+   * Off by default: the cost of a pin is per turn and permanent.
+   */
+  pins?: boolean | { maxPins?: number; maxCharacters?: number };
   maxSteps?: number;
 }
 
@@ -109,4 +114,5 @@ export interface ResolvedSubconsciousConfig {
   learnedGuidance: boolean;
   tools: boolean;
   activity: false | { recentUpdates: number };
+  pins: false | { maxPins: number; maxCharacters: number };
 }

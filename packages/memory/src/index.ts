@@ -3283,6 +3283,11 @@ Notes:
       processors.push(wm);
     }
 
+    const pins = await this.createPinnedStateProcessor(configuredProcessors, context);
+    if (pins) {
+      processors.push(pins);
+    }
+
     return processors;
   }
 
@@ -3375,6 +3380,31 @@ Notes:
     if (alreadyConfigured) return null;
 
     return new WorkingMemoryStateProcessor(this, runtimeMemory?.memoryConfig);
+  }
+
+  /**
+   * Creates a PinnedStateProcessor when Subconscious pins are enabled on the
+   * merged thread config. The gate is the validated `resolved.pins` on the
+   * Subconscious instance, never the raw user object. Returns null when pins
+   * are off or the processor is already present in the user's configured
+   * processors.
+   */
+  private async createPinnedStateProcessor(
+    configuredProcessors: InputProcessorOrWorkflow[] = [],
+    context?: RequestContext,
+  ): Promise<InputProcessor | null> {
+    const runtimeMemory = context?.get('MastraMemory') as { memoryConfig?: MemoryConfigInternal } | undefined;
+    const mergedConfig = this.getMergedThreadConfig(runtimeMemory?.memoryConfig);
+    const omConfig = normalizeObservationalMemoryConfig(mergedConfig.observationalMemory);
+    const subconscious = omConfig?.experimental_subconscious;
+    if (!(subconscious instanceof Subconscious) || subconscious.resolved.pins === false) return null;
+
+    const { PinnedStateProcessor, SUBCONSCIOUS_PINS_STATE_ID } =
+      await import('./processors/observational-memory/subconscious');
+    const alreadyConfigured = configuredProcessors.some(p => !('workflow' in p) && p.id === SUBCONSCIOUS_PINS_STATE_ID);
+    if (alreadyConfigured) return null;
+
+    return new PinnedStateProcessor({ getKnowledgeStore: () => this.storage.getStore('knowledge') });
   }
 }
 
