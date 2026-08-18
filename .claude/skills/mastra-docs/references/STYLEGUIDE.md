@@ -4,12 +4,10 @@ Use this file as the default writing guide for Mastra's documentation.
 
 ## Core rules
 
-- Write clearly and directly.
-- Prefer short sentences, short paragraphs, simple words, and low jargon.
-- Break up dense text with headings and bullet lists.
-- Write docs for readers who may be tired, rushed, reading in a non-native language, or new to the ecosystem.
-- You can check prose in [Hemingway App](https://hemingwayapp.com/).
-- Also see Google's guides for [inclusive documentation](https://developers.google.com/style/inclusive-documentation) and [accessible documentation](https://developers.google.com/style/accessibility).
+- Write clearly and directly
+- Prefer short sentences, short paragraphs, simple words, and low jargon
+- Break up dense text with headings and bullet lists
+- Write docs for readers who may be tired, rushed, reading in a non-native language, or new to the ecosystem
 
 ## Keep docs current
 
@@ -22,9 +20,9 @@ Use this file as the default writing guide for Mastra's documentation.
 
 ## Scope
 
-- Document how to use technologies with Mastra.
-- Do not explain third-party technologies in depth unless the Mastra-specific integration requires it.
-- Link to external docs when non-Mastra background is helpful.
+- Document how to use technologies with Mastra
+- Do not explain third-party technologies in depth unless the Mastra-specific integration requires it
+- Link to external docs when non-Mastra background is helpful
 
 ## Writing style
 

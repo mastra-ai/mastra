@@ -51,7 +51,7 @@ ask_user({ question: 'Which doc page should I audit? Paste a path, URL, or topic
 
 DON'T pass `options` or `selectionMode` for free text. If a free-text prompt errors with `selectionMode requires options`, you passed `selectionMode` without `options` — drop both keys and retry; do not fall back to plain chat.
 
-Resolve to docs files under `docs/src/content/en/docs/`, `docs/src/content/en/guides/`, or `docs/src/content/en/reference/`. If ambiguous, present plausible matches. Prefer one page unless the user asks for a category. Treat more than five pages as too broad unless the user approves a narrowed scope or representative sample.
+Resolve to docs files under `docs/src/content/en/docs/`, `docs/src/content/en/integrations/`, or `docs/src/content/en/reference/`. If ambiguous, present plausible matches. Prefer one page unless the user asks for a category. Treat more than five pages as too broad unless the user approves a narrowed scope or representative sample.
 
 After reading scoped pages, derive 2–4 concrete jobs-to-be-done from each doc's title, intro, headings, examples, page type, and promise. Do not ask the user to invent jobs. Ask the user to select jobs with multi-select and explicit options:
 

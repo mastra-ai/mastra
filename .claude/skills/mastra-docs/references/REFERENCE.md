@@ -1,12 +1,10 @@
 # Reference page styleguide
 
-Read STYLEGUIDE.md first.
-
 Use this file for reference/API pages.
 
 Goal:
 
-- document one class or function completely
+- document one primitive, class or function completely
 - optimize for lookup, not concept teaching
 - link to doc pages when a concept needs explanation
 

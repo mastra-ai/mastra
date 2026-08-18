@@ -31,7 +31,7 @@ Clarify scope. Say what this guide covers and what it does not. Link to alternat
 
 ## Before you begin
 
-You'll need a [Mastra application](/guides/getting-started/quickstart) and a [$PLATFORM](https://platform.com/) account.
+You'll need a [Mastra application](/docs) and a [$PLATFORM](https://platform.com/) account.
 
 Call out platform constraints that affect config, such as ephemeral filesystems, cold starts, or storage requirements.
 

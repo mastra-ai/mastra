@@ -1,12 +1,15 @@
 # DOC styleguide
 
-Read STYLEGUIDE.md first.
+Use this file for general docs pages. Prefer editing/amending existing docs pages instead of creating new pages under docs/src/content/en/docs.
 
-Use this file for general docs pages. There are two page types.
+There are two page types: Overview pages and standard pages.
 
 ## Overview pages
 
-Use for category landing pages like agents/overview.mdx or memory/overview.mdx.
+Use for category landing pages like:
+- agents/overview.mdx
+- memory/overview.mdx
+- harness/overview.mdx
 
 What to do:
 
@@ -40,9 +43,9 @@ Optional image or diagram.
 
 Short paragraph or short list of use cases.
 
-## Get started
+## Quickstart
 
-Point to the best starting page.
+Short example on how to use $CATEGORY
 
 ## Optional sections
 
@@ -118,9 +121,7 @@ Use one or more H2 sections. Each section should have:
 // Code showing this concept
 ```
 
-:::note
 Visit [ClassName reference](/reference/$CATEGORY/<class>) for the full config.
-:::
 
 ## Related
 
@@ -139,7 +140,6 @@ Rules:
 - use npm2yarn on bash install blocks
 - use Tabs only for mutually exclusive choices
 - use Steps and StepItem when order matters
-- use note for API reference links
 - use tip and warning sparingly
 - end with Related
 - keep one concept per page; split the page if it grows past three H2 subsections
