@@ -16,6 +16,7 @@ packages:
   - "@mastra/s3vectors"
   - "@mastra/upstash"
   - "@mastra/vectorize"
+  - "@mastra/voyageai"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -291,6 +292,23 @@ Vector store prompts define query patterns and filtering capabilities for each v
 When implementing filtering, these prompts are required in the agent's instructions to specify valid operators and syntax for each vector store implementation.
 
 <Tabs>
+  <TabItem value="mongodb" label="MongoDB">
+    ```ts title="vector-store.ts"
+    import { MONGODB_PROMPT } from '@mastra/mongodb'
+
+    export const ragAgent = new Agent({
+      id: 'rag-agent',
+      name: 'RAG Agent',
+      model: '__GATEWAY_OPENAI_MODEL__',
+      instructions: `
+      Process queries using the provided context. Structure responses to be concise and relevant.
+      ${MONGODB_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    })
+    ```
+  </TabItem>
+
   <TabItem value="pgvector" label="pgVector">
     ```ts
     import { PGVECTOR_PROMPT } from '@mastra/pg'
@@ -427,23 +445,6 @@ When implementing filtering, these prompts are required in the agent's instructi
     ```
   </TabItem>
 
-  <TabItem value="mongodb" label="MongoDB">
-    ```ts title="vector-store.ts"
-    import { MONGODB_PROMPT } from '@mastra/mongodb'
-
-    export const ragAgent = new Agent({
-      id: 'rag-agent',
-      name: 'RAG Agent',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      instructions: `
-      Process queries using the provided context. Structure responses to be concise and relevant.
-      ${MONGODB_PROMPT}
-      `,
-      tools: { vectorQueryTool },
-    })
-    ```
-  </TabItem>
-
   <TabItem value="opensearch" label="OpenSearch">
     ```ts title="vector-store.ts"
     import { OPENSEARCH_PROMPT } from '@mastra/opensearch'
@@ -548,7 +549,11 @@ The weights control how different factors influence the final ranking:
 For semantic scoring to work properly during re-ranking, each result must include the text content in its `metadata.text` field.
 :::
 
-You can also use other relevance score providers like Cohere or ZeroEntropy:
+You can also use other relevance score providers like Voyage AI, Cohere, or ZeroEntropy:
+
+```ts
+const relevanceProvider = new VoyageRelevanceScorer({ model: 'rerank-2.5' })
+```
 
 ```ts
 const relevanceProvider = new CohereRelevanceScorer('rerank-v3.5')
@@ -557,6 +562,8 @@ const relevanceProvider = new CohereRelevanceScorer('rerank-v3.5')
 ```ts
 const relevanceProvider = new ZeroEntropyRelevanceScorer('zerank-1')
 ```
+
+Voyage AI provides dedicated reranking models: `rerank-2.5` and `rerank-2.5-lite` both support a 32,000-token context. `VoyageRelevanceScorer` reads `VOYAGE_API_KEY` from the environment, or accepts an `apiKey` in its config.
 
 The re-ranked results combine vector similarity with semantic understanding to improve retrieval quality.
 
