@@ -228,6 +228,25 @@ describe('ToolCard dispatch', () => {
     expect(badge.querySelector('.text-accent6')).toBeTruthy();
   });
 
+  it('keeps the loading label when a network call has started without a result', () => {
+    renderToolCard(
+      baseProps({
+        toolName: WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES,
+        input: { path: '.' },
+        output: undefined,
+        state: 'input-available',
+        metadata: { mode: 'network', hasMoreMessages: true },
+      }),
+    );
+
+    const tool = screen.getByRole('group', { name: `Tool: ${WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES}` });
+    expect(tool.getAttribute('aria-busy')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: /List Files/ }));
+
+    expect(screen.getByText('Loading...')).toBeTruthy();
+    expect(screen.queryByText('No files found.')).toBeNull();
+  });
+
   describe('when list_files approval is pending', () => {
     it('exposes the approval controls without another user action', () => {
       const toolName = WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES;

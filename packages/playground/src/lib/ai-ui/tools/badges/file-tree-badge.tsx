@@ -213,7 +213,7 @@ export const FileTreeBadge = ({
         {/* Loading state */}
         {toolCalled && !hasResult && (
           <div className="border-border1 bg-surface2 rounded-md border px-3 py-2">
-            <span className="text-neutral6 text-xs">No files found.</span>
+            <span className="text-neutral6 text-xs">{result === undefined ? 'Loading...' : 'No files found.'}</span>
           </div>
         )}
       </ToolContent>
