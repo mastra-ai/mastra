@@ -405,9 +405,7 @@ export class SessionRunEngine {
   private abortForOmFailure({ operationType, stage, error }: { operationType: string; stage: string; error: string }) {
     this.#session.emit({
       type: 'error',
-      error: getErrorFromUnknown(`Observational memory ${operationType} ${stage} failed: ${error}`, {
-        serializeStack: false,
-      }),
+      error: getErrorFromUnknown(`Observational memory ${operationType} ${stage} failed: ${error}`),
     });
     this.#session.abortRun();
   }
@@ -472,7 +470,7 @@ export class SessionRunEngine {
     // silently stops without a visible terminal state.
     if (state.terminalError && !error && !aborted && !this.#session.run.isAbortRequested() && !result.suspended) {
       error = true;
-      this.#session.emit({ type: 'error', error: getErrorFromUnknown(state.terminalError, { serializeStack: false }) });
+      this.#session.emit({ type: 'error', error: getErrorFromUnknown(state.terminalError) });
     }
 
     await this.#session.finishAgentRun(
@@ -766,7 +764,7 @@ export class SessionRunEngine {
       }
 
       case 'error': {
-        const streamError = getErrorFromUnknown(getPayload(chunk).error, { serializeStack: false });
+        const streamError = getErrorFromUnknown(getPayload(chunk).error);
         this.#session.emit({ type: 'error', error: streamError });
 
         // A run that dies after emitting `tool_suspended` (e.g. persisting the
@@ -1228,7 +1226,7 @@ export class SessionRunEngine {
     if (error instanceof Error && error.name === 'AbortError') {
       await this.#session.finishAgentRun('aborted');
     } else {
-      this.#session.emit({ type: 'error', error: getErrorFromUnknown(error, { serializeStack: false }) });
+      this.#session.emit({ type: 'error', error: getErrorFromUnknown(error) });
       await this.#session.finishAgentRun('error');
     }
     this.#session.stream.detach();
@@ -1290,10 +1288,7 @@ export class SessionRunEngine {
               !suspended
             ) {
               isError = true;
-              this.#session.emit({
-                type: 'error',
-                error: getErrorFromUnknown(currentRun.terminalError, { serializeStack: false }),
-              });
+              this.#session.emit({ type: 'error', error: getErrorFromUnknown(currentRun.terminalError) });
             }
             await this.finishSubscribedStreamRun({
               suspended,

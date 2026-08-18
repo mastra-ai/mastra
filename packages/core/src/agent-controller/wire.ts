@@ -1,12 +1,11 @@
 import type { AgentControllerEvent } from './types';
 
 /**
- * A value as `JSON.stringify` writes it. Anything carrying `toJSON` is replaced
- * by what that returns, which covers both a `Date` and a `SerializableError`.
- * What JSON cannot carry becomes `never`, so an event that grows such a field
- * breaks its consumers here rather than reaching them as `{}` at runtime.
+ * A value as `JSON.stringify` writes it: anything carrying `toJSON` becomes
+ * what that returns (a `Date`, a `SerializableError`), and what JSON cannot
+ * carry becomes `never`. `wire.test-d.ts` fails if a controller event holds one.
  */
-type Jsonify<T> = T extends { toJSON(): infer R }
+export type Jsonify<T> = T extends { toJSON(): infer R }
   ? Jsonify<R>
   : T extends Map<unknown, unknown> | Set<unknown> | bigint | ((...args: never[]) => unknown)
     ? never

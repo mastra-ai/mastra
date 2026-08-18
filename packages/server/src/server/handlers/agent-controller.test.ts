@@ -476,7 +476,7 @@ describe('agent-controller routes', () => {
       const session = await controller.createSession({ resourceId: 'user-err', id: 'user-err', ownerId: 'code' });
       session.emit({
         type: 'error',
-        error: getErrorFromUnknown(new Error('model quota exhausted'), { serializeStack: false }),
+        error: getErrorFromUnknown(new Error('model quota exhausted')),
         errorType: 'provider',
       } as any);
 
@@ -488,11 +488,9 @@ describe('agent-controller routes', () => {
       await reader.cancel();
 
       expect(received).toBeDefined();
-      // An Error's name/message are non-enumerable, so a plain one reaches the
-      // client as `{}`; controller errors carry `toJSON` to survive the trip.
+      // A plain Error serializes to `{}`; controller errors carry `toJSON`.
       const wiredError = JSON.parse(JSON.stringify(received)).error;
       expect(wiredError).toMatchObject({ name: 'Error', message: 'model quota exhausted' });
-      expect(wiredError.stack).toBeUndefined();
       expect(received.errorType).toBe('provider');
     });
 
@@ -511,12 +509,12 @@ describe('agent-controller routes', () => {
       const session = await controller.createSession({ resourceId: 'user-ws-err', id: 'user-ws-err', ownerId: 'code' });
       session.emit({
         type: 'workspace_error',
-        error: getErrorFromUnknown(new Error('clone failed: permission denied'), { serializeStack: false }),
+        error: getErrorFromUnknown(new Error('clone failed: permission denied')),
       });
       session.emit({
         type: 'workspace_status_changed',
         status: 'error',
-        error: getErrorFromUnknown(new Error('sandbox unreachable'), { serializeStack: false }),
+        error: getErrorFromUnknown(new Error('sandbox unreachable')),
       });
 
       // The workspace emits its own status changes on the same stream, so match

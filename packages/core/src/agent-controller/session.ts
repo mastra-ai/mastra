@@ -3659,7 +3659,7 @@ export class Session<TState = unknown> {
         requestContext,
       });
     } catch (error) {
-      const err = getErrorFromUnknown(error, { serializeStack: false });
+      const err = getErrorFromUnknown(error);
       this.emit({ type: 'error', error: err });
       await this.finishAgentRun('error');
     }
