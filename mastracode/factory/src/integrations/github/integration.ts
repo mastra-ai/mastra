@@ -145,6 +145,13 @@ export interface GithubIntegrationConfig {
    * replica-stable OAuth/install `state` secret (see `./config.ts`).
    */
   webhookSecret?: string;
+  /**
+   * Extra bot logins authorized to trigger author-gated PR notifications
+   * (reviews and comments). Merged over the built-in defaults, matched
+   * case-insensitively. Deployments running their own reviewer bots opt them
+   * in here; every other bot stays gated.
+   */
+  authorizedBots?: string[];
 }
 
 /** Human-readable names of the required config fields, for construction errors. */
@@ -318,6 +325,7 @@ export class GithubIntegration implements FactoryIntegration {
   readonly #clientSecret: string;
   readonly #slug: string;
   readonly #webhookSecret: string | undefined;
+  readonly #authorizedBots: readonly string[];
   #storage: IntegrationContext['storage'] | undefined;
   #sourceControlStorage: IntegrationContext['storage']['sourceControl'] | undefined;
 
@@ -336,11 +344,17 @@ export class GithubIntegration implements FactoryIntegration {
     this.#clientSecret = config.clientSecret;
     this.#slug = config.slug;
     this.#webhookSecret = config.webhookSecret || undefined;
+    this.#authorizedBots = (config.authorizedBots ?? []).map(bot => bot.trim()).filter(Boolean);
   }
 
   /** App slug — the URL name used to build the install URL. */
   get slug(): string {
     return this.#slug;
+  }
+
+  /** Extra bot logins authorized to trigger author-gated PR notifications. */
+  get authorizedBots(): readonly string[] {
+    return this.#authorizedBots;
   }
 
   get genericStorage(): IntegrationContext['storage']['generic'] {

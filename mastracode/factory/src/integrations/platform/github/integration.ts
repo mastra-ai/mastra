@@ -58,6 +58,7 @@ import {
   subscribeCurrentSessionToPullRequest,
 } from '../../github/session-subscriptions.js';
 import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
+import { parseAuthorizedBotsEnv } from '../../github/webhook.js';
 import {
   logPlatformInfo,
   logPlatformWarn,
@@ -207,6 +208,11 @@ export class PlatformGithubIntegration implements FactoryIntegration {
    * Platform deployment) and is corrected the first time Factory writes.
    */
   readonly identity: GithubAppIdentity;
+  /**
+   * Extra reviewer bot logins this deployment trusts for author-gated
+   * notifications, merged over the built-in defaults.
+   */
+  readonly authorizedBots: readonly string[];
   readonly #pollingEnabled: boolean;
   readonly #pollingIntervalMs: number | undefined;
   readonly #pullRequestReconcileEnabled: boolean;
@@ -483,6 +489,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     this.identity = new GithubAppIdentity(
       process.env.MASTRA_PLATFORM_GITHUB_APP_SLUG?.trim() || PLATFORM_GITHUB_APP_SLUG,
     );
+    this.authorizedBots = parseAuthorizedBotsEnv(process.env.MASTRACODE_GITHUB_AUTHORIZED_BOTS) ?? [];
     this.#pollingEnabled = process.env.MASTRA_PLATFORM_GITHUB_POLLING_ENABLED?.trim().toLowerCase() !== 'false';
     this.#pollingIntervalMs = optionalPositiveIntegerEnv('MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS');
     const legacyReconcileEnabled = process.env.MASTRA_PLATFORM_GITHUB_RECONCILE_ENABLED;

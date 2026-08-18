@@ -74,11 +74,12 @@ function createWorker(input: {
   pullRequestReconcileIntervalMs?: number;
   issueReconcileIntervalMs?: number;
   pollEventsEnabled?: boolean;
+  github?: PlatformGithubEventDispatchIntegration;
 }) {
   return new PlatformGithubEventWorker({
     client: new PlatformApiClient({ baseUrl, accessToken, fetchImpl: input.fetchImpl }),
     controller: {} as never,
-    github: createGithub(),
+    github: input.github ?? createGithub(),
     storage: input.storage,
     ingestFactoryEvent: input.ingestFactoryEvent,
     reconcileFactoryState: input.reconcileFactoryState,
@@ -812,5 +813,114 @@ describe('PlatformGithubEventWorker', () => {
     );
 
     await worker.stop();
+  });
+
+  describe('sender gate', () => {
+    function notification(sender: string, senderType = 'Bot') {
+      return {
+        kind: 'pull-request-review',
+        metadata: {
+          sender,
+          senderType,
+          repository: 'acme/repo',
+          repositoryId: 101,
+          installationId: 7,
+          pullRequestNumber: 17,
+        },
+      } as never;
+    }
+
+    async function captureGate(github?: PlatformGithubEventDispatchIntegration) {
+      const dispatch = vi.fn<typeof dispatchGithubWebhook>().mockResolvedValue({
+        delivered: 1,
+        failed: 0,
+        ignored: false,
+      });
+      const fetchImpl = vi.fn<typeof fetch>(async input => {
+        const url = new URL(String(input));
+        if (url.pathname.endsWith('/installations')) {
+          return json({ installations: [{ installationId: 7, usable: true, suspendedAt: null }] });
+        }
+        if (url.pathname.endsWith('/installations/7/repositories')) {
+          return json({ repositories: [{ id: 101 }] });
+        }
+        if (url.pathname.endsWith('/repositories/101/events')) {
+          if (url.searchParams.has('afterTimestamp')) {
+            return json({
+              events: [
+                { id: '1000-0', deliveryId: 'delivery-1', event: 'issues', payload: { action: 'opened' } },
+              ],
+              nextCursor: '1000-0',
+            });
+          }
+          return json({ events: [], nextCursor: null });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      });
+      const worker = createWorker({
+        fetchImpl,
+        storage: createSettingsStorage().storage,
+        now: () => 1_000,
+        dispatch,
+        github,
+      });
+      const deps = createDeps();
+      await worker.init(deps);
+      await worker.start();
+      await vi.advanceTimersByTimeAsync(0);
+      await worker.stop();
+
+      const dependencies = dispatch.mock.calls[0]?.[1];
+      if (!dependencies?.isAuthorizedSender) throw new Error('dispatch was not called with a sender gate');
+      return { deps, dependencies };
+    }
+
+    it('authorizes default bots regardless of login casing', async () => {
+      const { dependencies } = await captureGate();
+
+      await expect(dependencies.isAuthorizedSender?.(notification('CodeRabbitAI[bot]'))).resolves.toBe(true);
+      await expect(dependencies.isAuthorizedSender?.(notification('devin-ai-integration[bot]'))).resolves.toBe(true);
+    });
+
+    it('authorizes bots the deployment opted in and rejects the rest', async () => {
+      const { dependencies } = await captureGate({ ...createGithub(), authorizedBots: ['OpenSWEBot'] });
+
+      await expect(dependencies.isAuthorizedSender?.(notification('openswebot'))).resolves.toBe(true);
+      // Opting in extends the defaults instead of replacing them.
+      await expect(dependencies.isAuthorizedSender?.(notification('coderabbitai[bot]'))).resolves.toBe(true);
+      await expect(dependencies.isAuthorizedSender?.(notification('other-reviewer[bot]'))).resolves.toBe(false);
+    });
+
+    it('rejects unconfigured bots without consulting collaborator permissions', async () => {
+      const github = createGithub();
+      const { dependencies } = await captureGate(github);
+
+      await expect(dependencies.isAuthorizedSender?.(notification('openswebot'))).resolves.toBe(false);
+      expect(github.getRepositoryCollaboratorPermission).not.toHaveBeenCalled();
+    });
+
+    it('still permission-checks human senders', async () => {
+      const github = createGithub();
+      const { dependencies } = await captureGate(github);
+
+      await expect(dependencies.isAuthorizedSender?.(notification('octocat', 'User'))).resolves.toBe(true);
+      expect(github.getRepositoryCollaboratorPermission).toHaveBeenCalledWith(
+        7,
+        'acme/repo',
+        'octocat',
+        expect.anything(),
+      );
+    });
+
+    it('logs dropped events so an unauthorized sender is not silent', async () => {
+      const { deps, dependencies } = await captureGate();
+
+      dependencies.onSenderRejected?.(notification('openswebot'));
+
+      expect(deps.logger.debug).toHaveBeenCalledWith(
+        'Platform GitHub event dropped: sender not authorized',
+        expect.objectContaining({ sender: 'openswebot', repository: 'acme/repo', kind: 'pull-request-review' }),
+      );
+    });
   });
 });

@@ -1,5 +1,105 @@
 # @mastra/mcp
 
+## 1.17.0-alpha.2
+
+### Minor Changes
+
+- Added elicitation support on the `2026-07-28` protocol revision using the spec's multi round-trip mechanism, completing the opt-in `protocolVersion` support. ([#20931](https://github.com/mastra-ai/mastra/pull/20931))
+
+  **Server** — tools keep the same promise-shaped API on both eras:
+
+  ```typescript
+  execute: async (inputData, options) => {
+    const answer = await options.mcp.elicitation.sendRequest({
+      message: 'What is your favorite color?',
+      requestedSchema: { type: 'object', properties: { color: { type: 'string' } } },
+    });
+    // ...
+  };
+  ```
+
+  On a `2026-07-28` request, the tool call first returns an `input_required` result. After the client answers, the call retries with the answer attached. The tool function re-executes from the top on each retry, so keep side effects idempotent (or place them after the last elicitation) and keep the order of `sendRequest()` calls deterministic. Legacy connections keep the existing push-based `elicitation/create` flow unchanged.
+
+  **Client** — a handler registered with `elicitation.onRequest()` now fires on both eras: on `2026-07-28` connections, embedded elicitation requests are dispatched through the same handler and the originating tool call retries automatically. The warning that elicitation only works on legacy connections is removed.
+
+- Added opt-in support for the stateless MCP protocol revision `2026-07-28` behind a `protocolVersion` flag on both `MCPServer` and the MCP client. Omitting the flag keeps today's behavior unchanged. ([#20929](https://github.com/mastra-ai/mastra/pull/20929))
+
+  **Server**
+
+  ```typescript
+  const server = new MCPServer({
+    name: 'My Server',
+    version: '1.0.0',
+    tools: { weatherTool },
+    protocolVersion: '2026-07-28',
+    cacheHints: {
+      'tools/list': { ttlMs: 60_000, cacheScope: 'private' },
+    },
+  });
+  ```
+
+  With the flag set:
+
+  - One HTTP endpoint serves both protocol eras: `2026-07-28` clients are served natively (stateless), and legacy clients are served through an automatic stateless fallback.
+  - `startStdio()` serves both eras, selecting the era from the connection's opening exchange.
+  - Tool, prompt, and resource change notifications also reach `2026-07-28` clients through `subscriptions/listen`.
+  - Tool log messages honor the caller's per-request `logLevel` opt-in.
+  - Optional `cacheHints` advertise `ttlMs` / `cacheScope` on cacheable results such as `tools/list`.
+  - `startHTTP()` continues to enforce configured host and origin guards. Session and handler-lifetime transport options fail with a clear error instead of being ignored.
+
+  **Client**
+
+  ```typescript
+  const mcp = new MCPClient({
+    servers: {
+      weather: {
+        url: new URL('https://example.com/mcp'),
+        protocolVersion: 'auto', // probe, fall back to legacy
+        // or '2026-07-28' to pin the revision and fail loudly when unavailable
+      },
+    },
+  });
+  ```
+
+  Elicitation handlers currently only fire on legacy connections; support for the `2026-07-28` input-required mechanism ships separately.
+
+### Patch Changes
+
+- Updated dependencies [[`6223446`](https://github.com/mastra-ai/mastra/commit/6223446ddce6166e96e0ba5e00d628b615dee8ca), [`583e235`](https://github.com/mastra-ai/mastra/commit/583e23519c13af16c1746f9c49722d011216611b), [`a77f8d4`](https://github.com/mastra-ai/mastra/commit/a77f8d4740d2178a74c41e4bf678b4fcd8fa0bb2), [`40d358e`](https://github.com/mastra-ai/mastra/commit/40d358e29d55543803e64b49241122f598ffabc7), [`e80cd7e`](https://github.com/mastra-ai/mastra/commit/e80cd7e7683e7d732e1cc6784bcac1d2640d2ce3), [`20504b2`](https://github.com/mastra-ai/mastra/commit/20504b2ecebd0e077acda3d457ab57480a98ed3e)]:
+  - @mastra/core@1.60.0-alpha.11
+
+## 1.17.0-alpha.1
+
+### Minor Changes
+
+- MCP tools served over HTTP now see the authenticated caller. When an MCP server runs behind a Mastra server with `server.auth` configured, the resolved user is bridged into `extra.authInfo` automatically, on both the streamable HTTP and SSE transports. Previously `extra.authInfo` was always undefined because the request handed to the MCP transport was rebuilt without the auth data. ([#21689](https://github.com/mastra-ai/mastra/pull/21689))
+
+  **Custom verification**
+
+  If your own middleware verifies the caller, build the auth info yourself with the new `server.mcpOptions.setRequestAuth` hook:
+
+  ```ts
+  export const mastra = new Mastra({
+    mcpServers: { myServer },
+    server: {
+      middleware: [verifyBearerToken],
+      mcpOptions: {
+        setRequestAuth: (req, requestContext) => {
+          const payload = requestContext.get('bearerPayload');
+          req.auth = { token: payload.token, clientId: payload.sub, scopes: payload.scope.split(' ') };
+        },
+      },
+    },
+  });
+  ```
+
+  Fixes #17291
+
+### Patch Changes
+
+- Updated dependencies [[`4e7a421`](https://github.com/mastra-ai/mastra/commit/4e7a421dce8a48742f785d1e93ad2f43a572b282), [`242e324`](https://github.com/mastra-ai/mastra/commit/242e3241e73cbd5c9bb86a31ebb49ca0256488d4), [`217e967`](https://github.com/mastra-ai/mastra/commit/217e9672d8b3160eb729d8e9f0044949e88da239), [`d774e89`](https://github.com/mastra-ai/mastra/commit/d774e8930c781df8c9effe3763e6b501c099b6cc), [`9c27a53`](https://github.com/mastra-ai/mastra/commit/9c27a53cd9d3de4f3f025bc387d94ce371c33f95), [`dff25a1`](https://github.com/mastra-ai/mastra/commit/dff25a1103fa72ee082a9b6f805ebeb5ce400753), [`217e967`](https://github.com/mastra-ai/mastra/commit/217e9672d8b3160eb729d8e9f0044949e88da239), [`7f78585`](https://github.com/mastra-ai/mastra/commit/7f785857e401570e2ffb316911f126ed363aa537), [`f2a4afd`](https://github.com/mastra-ai/mastra/commit/f2a4afd7e37e809669001ed17724b341a5c1f45e), [`d438148`](https://github.com/mastra-ai/mastra/commit/d438148e222c1e2fb3c652725ce75680962ebec4), [`ba05fe0`](https://github.com/mastra-ai/mastra/commit/ba05fe0738f70cb686777546e968237d09269142), [`d26a8d4`](https://github.com/mastra-ai/mastra/commit/d26a8d4281f28414715b333c85bedaf70d0b2890), [`677cdc6`](https://github.com/mastra-ai/mastra/commit/677cdc6af564dec29a13464d12b7ab2a4efc22e9), [`a318490`](https://github.com/mastra-ai/mastra/commit/a318490e17da32f338d50929c770d901a9b3dd72), [`763e0c6`](https://github.com/mastra-ai/mastra/commit/763e0c61e04d76ad9a9efd301aa57525ca0cbea9), [`23e0be2`](https://github.com/mastra-ai/mastra/commit/23e0be261381e49534b4ff3101c60ee64a946cbf), [`7fc8806`](https://github.com/mastra-ai/mastra/commit/7fc880627d3cbf995d31ea0e8b807bf15417e651), [`0e02eac`](https://github.com/mastra-ai/mastra/commit/0e02eacdb2e30e1697a41910b41163742a181dc1), [`4df174c`](https://github.com/mastra-ai/mastra/commit/4df174c32bddf093a82f273070b8380aef7c9e90), [`f7c25b5`](https://github.com/mastra-ai/mastra/commit/f7c25b5106ddfb48e591f98df7a51e0f2dd01dba), [`dc09cc1`](https://github.com/mastra-ai/mastra/commit/dc09cc1083d861cde192c1cd235324dc75b8c731), [`36b4649`](https://github.com/mastra-ai/mastra/commit/36b4649045a3a380cbab8ceca866db4086223aff), [`377eb81`](https://github.com/mastra-ai/mastra/commit/377eb81ce43b964e3a6b541df172da74a8ff3716)]:
+  - @mastra/core@1.60.0-alpha.8
+
 ## 1.17.0-alpha.0
 
 ### Minor Changes

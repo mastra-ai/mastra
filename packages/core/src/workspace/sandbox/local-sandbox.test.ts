@@ -2038,6 +2038,7 @@ createSandboxTestSuite({
     supportsTimeout: true,
     defaultCommandTimeout: 10000,
     supportsStreaming: true,
+    supportsCloseStdin: true,
   },
   testDomains: {
     commandExecution: true,

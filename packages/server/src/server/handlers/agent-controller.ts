@@ -1,5 +1,11 @@
 import type { Agent } from '@mastra/core/agent';
-import type { AgentController, Session } from '@mastra/core/agent-controller';
+import type {
+  AgentController,
+  AgentControllerEvent,
+  ReservedThreadMetadataKey,
+  Session,
+  TokenUsage,
+} from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 // Type-only import: erased at runtime, so this cannot crash against an older
 // @mastra/core that lacks the `./agent-controller` subpath export. Controller
@@ -29,20 +35,23 @@ import { handleError } from './error';
  * usage). They share the flat thread `metadata` bag with user-provided session
  * scoping tags, so they must never be treated as tags here.
  *
- * Mirrors core's `isReservedThreadMetadataKey`; kept local because importing the
- * value from `@mastra/core` would exceed this package's peer-dependency floor.
+ * Importing core's list as a value would exceed this package's peer-dependency
+ * floor, so it is mirrored under `satisfies`: tsc rejects a missing or extra key.
  */
+const RESERVED_THREAD_METADATA_KEYS = {
+  currentModelId: true,
+  currentModeId: true,
+  observerModelId: true,
+  reflectorModelId: true,
+  observationThreshold: true,
+  reflectionThreshold: true,
+  tokenUsage: true,
+  thinkingLevel: true,
+  notifications: true,
+} satisfies Record<ReservedThreadMetadataKey, true>;
+
 function isReservedThreadMetadataKey(key: string): boolean {
-  return (
-    key === 'currentModelId' ||
-    key === 'currentModeId' ||
-    key === 'observerModelId' ||
-    key === 'reflectorModelId' ||
-    key === 'observationThreshold' ||
-    key === 'reflectionThreshold' ||
-    key === 'tokenUsage' ||
-    key.startsWith('modeModelId_')
-  );
+  return Object.hasOwn(RESERVED_THREAD_METADATA_KEYS, key) || key.startsWith('modeModelId_');
 }
 
 /**
@@ -134,6 +143,7 @@ const sessionPathParams = z.object({ controllerId: z.string(), resourceId: z.str
  * on session routes; named to avoid colliding with the model-switch `scope`.
  */
 const sessionScopeQuerySchema = z.object({ sessionScope: z.string().optional() });
+const sessionStateQuerySchema = sessionScopeQuerySchema.extend({ threadId: z.string().optional() });
 
 const createSessionBodySchema = z.object({
   resourceId: z.string(),
@@ -263,6 +273,17 @@ const omProgressSummarySchema = z.object({
   /** Tokens the next reflection is projected to save. */
   projectedReflectionSavings: z.number(),
 });
+const tokenUsageSchema = z.object({
+  promptTokens: z.number(),
+  completionTokens: z.number(),
+  totalTokens: z.number(),
+  reasoningTokens: z.number().optional(),
+  cachedInputTokens: z.number().optional(),
+  cacheCreationInputTokens: z.number().optional(),
+  cacheCreationInputTokens5m: z.number().optional(),
+  cacheCreationInputTokens1h: z.number().optional(),
+  raw: z.unknown().optional(),
+}) satisfies z.ZodType<TokenUsage>;
 const sessionSettingsSchema = z.object({
   yolo: z.boolean(),
   /** Session override only — absent when the session inherits a configured default. */
@@ -270,6 +291,13 @@ const sessionSettingsSchema = z.object({
   notifications: z.enum(['off', 'bell', 'system', 'both']),
   smartEditing: z.boolean(),
 });
+const taskSnapshotSchema = z.object({
+  id: z.string(),
+  content: z.string(),
+  status: z.enum(['pending', 'in_progress', 'completed']),
+  activeForm: z.string(),
+});
+type SessionTaskSnapshot = z.infer<typeof taskSnapshotSchema>;
 const sessionStateResponseSchema = z.object({
   controllerId: z.string(),
   resourceId: z.string(),
@@ -278,8 +306,9 @@ const sessionStateResponseSchema = z.object({
   modelId: z.string(),
   /** Whether the agent is currently executing a run (for initial UI hydration). */
   running: z.boolean().optional(),
+  tasks: z.array(taskSnapshotSchema).optional(),
   omProgress: omProgressSummarySchema.optional(),
-  tokenUsage: z.record(z.string(), z.unknown()).optional(),
+  tokenUsage: tokenUsageSchema.optional(),
   settings: sessionSettingsSchema.optional(),
 });
 const listModesResponseSchema = z.object({
@@ -420,25 +449,20 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
 });
 
 /**
- * Session `error` events carry an `Error` instance whose `message`/`name` are
- * non-enumerable, so JSON serialization in the SSE adapter would send
- * `"error": {}` and clients could only render a generic "Error". Flatten the
- * Error into a plain object so the actual failure reaches the client.
+ * An `Error`'s `message`/`name` are non-enumerable, so JSON serialization in the
+ * SSE adapter would send `"error": {}` and clients could only render a generic
+ * "Error". Flatten it so the actual failure reaches the client, on every event
+ * that carries one (`error`, `workspace_error`, `workspace_status_changed`).
  *
  * `display_state_changed` Maps JSON-serialize to `{}`; convert them to plain
  * records so wire clients get the tool state the in-process TUI sees.
  */
-function toWireEvent(event: unknown): unknown {
-  if (typeof event !== 'object' || event === null) return event;
-  const { type } = event as { type?: unknown };
-  if (type === 'error' && (event as { error?: unknown }).error instanceof Error) {
-    const error = (event as { error: Error }).error;
-    return { ...event, error: { name: error.name, message: error.message } };
+function toWireEvent(event: AgentControllerEvent): unknown {
+  if ('error' in event && event.error instanceof Error) {
+    return { ...event, error: { name: event.error.name, message: event.error.message } };
   }
-  if (type === 'display_state_changed') {
-    const { displayState } = event as { displayState?: unknown };
-    if (typeof displayState !== 'object' || displayState === null) return event;
-    const wireDisplayState: Record<string, unknown> = { ...displayState };
+  if (event.type === 'display_state_changed') {
+    const wireDisplayState: Record<string, unknown> = { ...event.displayState };
     for (const [key, value] of Object.entries(wireDisplayState)) {
       if (value instanceof Map) wireDisplayState[key] = Object.fromEntries(value);
     }
@@ -759,18 +783,29 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
   path: '/agent-controller/:controllerId/sessions/:resourceId',
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
-  queryParamSchema: sessionScopeQuerySchema,
+  queryParamSchema: sessionStateQuerySchema,
   responseSchema: sessionStateResponseSchema,
   summary: 'Get session state',
-  description: 'Returns the current mode, model, and thread for the session (for initial UI hydration).',
+  description: 'Returns the current mode, model, thread, and durable tasks for initial UI hydration.',
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, requestContext }) => {
+  handler: async ({ mastra, controllerId, resourceId, sessionScope, threadId: requestedThreadId, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
       const ds = session.displayState.get();
+      const threadId = requestedThreadId ?? session.thread.getId() ?? undefined;
+      const storage = mastra.getStorage();
+      if (requestedThreadId) {
+        const memory = await storage?.getStore('memory');
+        const thread = await memory?.getThreadById({ threadId: requestedThreadId, resourceId });
+        if (!thread) throw new HTTPException(404, { message: `thread "${requestedThreadId}" not found` });
+      }
+      const threadState = threadId ? await storage?.getStore('threadState') : undefined;
+      const storedTasks = threadId ? await threadState?.getState<unknown>({ threadId, type: 'task' }) : undefined;
+      const parsedTasks = taskSnapshotSchema.array().safeParse(storedTasks);
+      const tasks: SessionTaskSnapshot[] = parsedTasks.success ? parsedTasks.data : [];
       const om = ds.omProgress;
       const reflectionSavings =
         om.buffered.reflection.inputObservationTokens - om.buffered.reflection.observationTokens;
@@ -782,10 +817,11 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
       return {
         controllerId,
         resourceId,
-        threadId: session.thread.getId() ?? undefined,
+        threadId,
         modeId: session.mode.get(),
         modelId: session.model.get(),
         running: ds.isRunning === true,
+        tasks,
         omProgress: {
           status: om.status,
           pendingTokens: om.pendingTokens,
@@ -797,7 +833,7 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
           projectedMessageRemoval: om.buffered.observations.projectedMessageRemoval,
           projectedReflectionSavings: reflectionSavings > 0 ? reflectionSavings : 0,
         },
-        tokenUsage: ds.tokenUsage as unknown as Record<string, unknown>,
+        tokenUsage: ds.tokenUsage,
         settings: {
           yolo: st.yolo === true,
           // No session override → omit, so clients don't mistake an inherited

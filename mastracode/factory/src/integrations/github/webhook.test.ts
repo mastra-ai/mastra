@@ -222,6 +222,47 @@ describe('dispatchGithubWebhook', () => {
     expect(getRepositoryCollaboratorPermission).not.toHaveBeenCalled();
   });
 
+  it('authorizes deployment-configured bots on top of the defaults, case-insensitively', async () => {
+    const listSubscriptions = vi.fn(async () => []);
+    const github: GithubWebhookDispatchIntegration = { ...githubWithSessionRow(null), authorizedBots: ['OpenSWEBot'] };
+    const notification = parsed('pull_request_review', 'submitted', {
+      review: { state: 'commented' },
+      sender: { login: 'openswebot', type: 'Bot' },
+    });
+
+    await expect(
+      dispatchGithubWebhook(notification, { controller: {} as never, github, listSubscriptions }),
+    ).resolves.toEqual({ delivered: 0, failed: 0, skipped: 0, ignored: false });
+    // The configured list extends the defaults rather than replacing them.
+    await expect(
+      dispatchGithubWebhook(
+        parsed('pull_request_review', 'submitted', {
+          review: { state: 'commented' },
+          sender: { login: 'coderabbitai[bot]', type: 'Bot' },
+        }),
+        { controller: {} as never, github, listSubscriptions },
+      ),
+    ).resolves.toEqual({ delivered: 0, failed: 0, skipped: 0, ignored: false });
+    expect(getRepositoryCollaboratorPermission).not.toHaveBeenCalled();
+  });
+
+  it('reports rejected senders through onSenderRejected', async () => {
+    const onSenderRejected = vi.fn();
+    const listSubscriptions = vi.fn(async () => []);
+
+    await dispatchGithubWebhook(
+      parsed('pull_request_review_comment', 'created', { sender: { login: 'openswebot', type: 'Bot' } }),
+      { controller: {} as never, github: githubStub, listSubscriptions, onSenderRejected },
+    );
+    await dispatchGithubWebhook(
+      parsed('pull_request_review_comment', 'created', { sender: { login: 'coderabbitai[bot]', type: 'Bot' } }),
+      { controller: {} as never, github: githubStub, listSubscriptions, onSenderRejected },
+    );
+
+    expect(onSenderRejected).toHaveBeenCalledOnce();
+    expect(onSenderRejected.mock.calls[0]![0].metadata.sender).toBe('openswebot');
+  });
+
   it('delivers with per-target dedupe, exact scope/thread resume, and no delivery overrides', async () => {
     const sendA = vi.fn(async () => ({ record: { id: 'n-a' }, decision: { action: 'deliver' } }));
     const sendB = vi.fn(async () => ({ record: { id: 'n-b' }, decision: { action: 'deliver' } }));

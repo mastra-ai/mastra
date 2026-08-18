@@ -1,6 +1,7 @@
 import type {
-  ActiveSubagentState,
-  ActiveToolState,
+  AgentControllerDisplayState,
+  AgentControllerEvent as ControllerEvent,
+  AgentControllerThread,
   MastraDBMessage,
   MastraMessagePart,
 } from '@mastra/core/agent-controller';
@@ -12,9 +13,7 @@ import type {
   AgentControllerAvailableModel,
   AgentControllerGoalRecord,
   AgentControllerModeInfo,
-  AgentControllerOMProgress,
   AgentControllerSessionState,
-  AgentControllerTaskSnapshot,
   AgentControllerThreadInfo,
   AgentControllerWorkspaceStatus,
   ClientOptions,
@@ -44,41 +43,52 @@ import { BaseResource } from './base';
  *   POST /agent-controller/:id/sessions/:resourceId/tool-approval   session().approveTool()
  */
 
+/** A `MastraDBMessage` before {@link hydrateMessage} turns its `createdAt` back into a `Date`. */
+type SerializedMastraDBMessage = Omit<MastraDBMessage, 'createdAt'> & { createdAt: Date | string };
+
+/** An `AgentControllerThread` before {@link hydrateThread} turns its timestamps back into `Date`s. */
+type SerializedThread = Omit<AgentControllerThread, 'createdAt' | 'updatedAt'> & {
+  createdAt: Date | string;
+  updatedAt: Date | string;
+};
+
+/** One arm of the controller's event union, selected by its `type`. */
+type ControllerEventOf<T extends ControllerEvent['type']> = Extract<ControllerEvent, { type: T }>;
+
+/** `Object.fromEntries` stringifies keys, so the record is keyed by string whatever the Map was. */
+type MapToRecord<T> = T extends Map<unknown, infer V> ? Record<string, V> : T;
+
+/** An `Error` as the stream handler flattens it — JSON drops a real `Error` to `{}`. */
+export interface WireError {
+  name: string;
+  message: string;
+}
+
 /**
- * AgentController events the SDK types explicitly. This is a discriminated union, so
- * narrowing on `event.type` gives you the right payload fields. This mirrors the
- * subset of the agent controller event stream a web client typically renders.
+ * The display-state snapshot as it arrives: the server converts its Maps to
+ * plain records, and servers predating that conversion send `{}` for those
+ * fields — so every field is optional.
  */
-export type KnownAgentControllerEvent =
-  | { type: 'agent_start' }
-  | { type: 'agent_end'; reason?: 'complete' | 'aborted' | 'error' | 'suspended' }
-  // Assistant message streaming.
-  | { type: 'message_start'; message: MastraDBMessage }
-  | { type: 'message_update'; message: MastraDBMessage }
-  | { type: 'message_end'; message: MastraDBMessage }
-  // Tool lifecycle.
-  | { type: 'tool_input_start'; toolCallId: string; toolName: string }
-  | { type: 'tool_input_delta'; toolCallId: string; argsTextDelta: string; toolName?: string }
-  | { type: 'tool_input_end'; toolCallId: string }
-  | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown }
-  | { type: 'tool_update'; toolCallId: string; partialResult: unknown }
-  | { type: 'shell_output'; toolCallId: string; output: string; stream: 'stdout' | 'stderr' }
-  | { type: 'tool_end'; toolCallId: string; result?: unknown; isError?: boolean }
-  // Interactive prompts.
-  | { type: 'tool_approval_required'; toolCallId: string; toolName: string; args: unknown }
-  | { type: 'tool_suspended'; toolCallId: string; toolName: string; args: unknown; suspendPayload: unknown }
-  // Session state changes.
-  | { type: 'mode_changed'; modeId: string; previousModeId: string }
-  | { type: 'model_changed'; modelId: string; scope?: 'global' | 'thread' | 'mode'; modeId?: string }
-  | { type: 'thread_changed'; threadId: string; previousThreadId: string | null }
-  | { type: 'thread_created'; thread: { id: string; title?: string } }
-  | { type: 'thread_deleted'; threadId: string }
-  // Subagents.
-  | { type: 'subagent_start'; toolCallId: string; agentType: string; task: string; modelId: string }
-  | { type: 'subagent_end'; toolCallId: string }
-  // Task tools.
-  | { type: 'task_updated'; tasks: AgentControllerTaskSnapshot[] }
-  // Notifications.
+type WireDisplayState = Partial<
+  Omit<
+    { [K in keyof AgentControllerDisplayState]: MapToRecord<AgentControllerDisplayState[K]> },
+    'modifiedFiles' | 'currentMessage'
+  > & {
+    /** `firstModified` is an ISO string on the wire. */
+    modifiedFiles: Record<string, { operations: string[]; firstModified: string }>;
+    /** Unlike the `message_*` events, this snapshot is not hydrated: `createdAt` stays a string. */
+    currentMessage: SerializedMastraDBMessage | null;
+  }
+>;
+
+/** Events whose payload JSON cannot carry as-is, and that the server rewrites on the way out. */
+type RewrittenEventType = 'error' | 'workspace_error' | 'workspace_status_changed' | 'display_state_changed';
+
+/**
+ * Notifications reach a session as agent signals carried on messages, not as
+ * controller events. These two arms predate that and no controller emits them.
+ */
+type NotificationEvent =
   | {
       type: 'notification';
       notificationId?: string;
@@ -97,70 +107,20 @@ export type KnownAgentControllerEvent =
       bySource: Record<string, number>;
       byPriority: Record<string, number>;
       notificationIds: string[];
-    }
-  // Usage tracking.
-  | { type: 'usage_update'; usage: unknown }
-  // Canonical display-state snapshot, emitted after every other event. The
-  // server converts the display state's Maps to plain records for the wire;
-  // servers predating that conversion send `{}` for those fields.
-  | {
-      type: 'display_state_changed';
-      displayState: {
-        isRunning?: boolean;
-        omProgress?: AgentControllerOMProgress;
-        /** A buffered observation is running: the message window is being observed in the background. */
-        bufferingMessages?: boolean;
-        /** A buffered reflection is running: observations are being consolidated in the background. */
-        bufferingObservations?: boolean;
-        tokenUsage?: Record<string, unknown>;
-        /** Active tool executions keyed by toolCallId. */
-        activeTools?: Record<string, ActiveToolState>;
-        toolInputBuffers?: Record<string, { text: string; toolName: string }>;
-        pendingSuspensions?: Record<
-          string,
-          { toolCallId: string; toolName: string; args: unknown; suspendPayload: unknown; resumeSchema?: string }
-        >;
-        activeSubagents?: Record<string, ActiveSubagentState>;
-        /** `firstModified` is an ISO string on the wire. */
-        modifiedFiles?: Record<string, { operations: string[]; firstModified: string }>;
-        [key: string]: unknown;
-      };
-    }
-  // Goals.
-  | {
-      type: 'goal_evaluation';
-      payload: {
-        objective: string;
-        iteration: number;
-        maxRuns: number;
-        passed: boolean;
-        status: 'active' | 'paused' | 'done';
-        reason?: string;
-      };
-    }
-  // Follow-up queue.
-  | { type: 'follow_up_queued'; count: number }
-  // Observational memory lifecycle.
-  | { type: 'om_observation_start' }
-  | { type: 'om_observation_end' }
-  | { type: 'om_observation_failed'; error?: string }
-  | { type: 'om_reflection_start' }
-  | { type: 'om_reflection_end' }
-  | { type: 'om_reflection_failed'; error?: string }
-  | { type: 'om_buffering_start' }
-  | { type: 'om_buffering_end' }
-  | { type: 'om_buffering_failed'; error?: string }
-  | { type: 'om_model_changed'; role: string; modelId: string }
-  | { type: 'om_activation'; enabled: boolean }
-  | { type: 'om_status'; status: string }
-  | { type: 'om_thread_title_updated'; title: string }
-  // Workspace lifecycle.
-  | { type: 'workspace_ready' }
-  | { type: 'workspace_error'; error?: string }
-  | { type: 'workspace_status_changed'; status: string }
-  // Notices.
-  | { type: 'info'; message: string }
-  | { type: 'error'; error: { message?: string } | string; errorType?: string };
+    };
+
+/**
+ * AgentController events the SDK types explicitly: the controller's own union,
+ * with the four events the wire reshapes overridden. This is a discriminated
+ * union, so narrowing on `event.type` gives you the right payload fields.
+ */
+export type KnownAgentControllerEvent =
+  | Exclude<ControllerEvent, { type: RewrittenEventType }>
+  | (Omit<ControllerEventOf<'error'>, 'error'> & { error: WireError | string })
+  | (Omit<ControllerEventOf<'workspace_error'>, 'error'> & { error: WireError })
+  | (Omit<ControllerEventOf<'workspace_status_changed'>, 'error'> & { error?: WireError })
+  | (Omit<ControllerEventOf<'display_state_changed'>, 'displayState'> & { displayState: WireDisplayState })
+  | NotificationEvent;
 
 /** Any other agent controller event the SDK doesn't model explicitly. */
 export interface OtherAgentControllerEvent {
@@ -185,22 +145,29 @@ const KNOWN_AGENT_CONTROLLER_EVENT_TYPES = new Set<string>(
     message_start: true,
     message_update: true,
     message_end: true,
+    state_changed: true,
     tool_input_start: true,
     tool_input_delta: true,
     tool_input_end: true,
     tool_start: true,
     tool_update: true,
     shell_output: true,
+    command_exit: true,
     tool_end: true,
     tool_approval_required: true,
     tool_suspended: true,
+    tool_suspension_cancelled: true,
     mode_changed: true,
     model_changed: true,
     thread_changed: true,
     thread_created: true,
     thread_deleted: true,
     subagent_start: true,
+    subagent_text_delta: true,
+    subagent_tool_start: true,
+    subagent_tool_end: true,
     subagent_end: true,
+    subagent_model_changed: true,
     task_updated: true,
     notification: true,
     notification_summary: true,
@@ -234,22 +201,29 @@ export function isKnownAgentControllerEvent(event: AgentControllerEvent): event 
   return KNOWN_AGENT_CONTROLLER_EVENT_TYPES.has(event.type);
 }
 
-type SerializedMastraDBMessage = Omit<MastraDBMessage, 'createdAt'> & { createdAt: Date | string };
+const toDate = (value: Date | string): Date => (value instanceof Date ? value : new Date(value));
 
 function hydrateMessage(message: SerializedMastraDBMessage): MastraDBMessage {
-  return {
-    ...message,
-    createdAt: message.createdAt instanceof Date ? message.createdAt : new Date(message.createdAt),
-  };
+  return { ...message, createdAt: toDate(message.createdAt) };
 }
 
-function hydrateEventMessage(event: AgentControllerEvent): AgentControllerEvent {
-  if (event.type !== 'message_start' && event.type !== 'message_update' && event.type !== 'message_end') return event;
+function hydrateThread(thread: SerializedThread): AgentControllerThread {
+  return { ...thread, createdAt: toDate(thread.createdAt), updatedAt: toDate(thread.updatedAt) };
+}
 
-  return {
-    ...event,
-    message: hydrateMessage(event.message as SerializedMastraDBMessage),
-  } as AgentControllerEvent;
+/** The stream carries every timestamp as an ISO string; give consumers back the `Date`s the type promises. */
+function hydrateEventTimestamps(event: AgentControllerEvent): AgentControllerEvent {
+  if (!isKnownAgentControllerEvent(event)) return event;
+  switch (event.type) {
+    case 'message_start':
+    case 'message_update':
+    case 'message_end':
+      return { ...event, message: hydrateMessage(event.message) };
+    case 'thread_created':
+      return { ...event, thread: hydrateThread(event.thread) };
+    default:
+      return event;
+  }
 }
 
 /** Resume payload for the built-in `submit_plan` suspension. */
@@ -462,7 +436,7 @@ export class AgentControllerSession extends BaseResource {
               if (!data) continue;
               let event: AgentControllerEvent;
               try {
-                event = hydrateEventMessage(JSON.parse(data) as AgentControllerEvent);
+                event = hydrateEventTimestamps(JSON.parse(data) as AgentControllerEvent);
               } catch {
                 continue;
               }
@@ -639,8 +613,9 @@ export class AgentControllerSession extends BaseResource {
   }
 
   /** Get the current mode, model, and thread (for initial UI hydration). */
-  state(): Promise<AgentControllerSessionState> {
-    return this.request(this.url(this.base()));
+  state(options?: { threadId?: string }): Promise<AgentControllerSessionState> {
+    const path = options?.threadId ? `${this.base()}?threadId=${encodeURIComponent(options.threadId)}` : this.base();
+    return this.request(this.url(path));
   }
 
   /** Merge key-value pairs into the session state. Existing keys not in the payload are preserved. */
