@@ -90,6 +90,36 @@ export async function captureSessionFilesystem(
   }
 }
 
+/**
+ * In-flight capture chains keyed by session resource id, so readers of the
+ * persisted file listing (the /web/workspace routes) can await the capture
+ * for the turn that just ended instead of racing it. In-process only: the
+ * factory server that runs the session controller also serves those routes.
+ */
+const pendingCaptures = new Map<string, Promise<void>>();
+
+/**
+ * Resolve once the session's in-flight filesystem capture (if any) has
+ * persisted, or after `timeoutMs` so a reader that arrives mid-capture is
+ * never blocked by the execs' worst-case 30s timeouts. Never rejects: the
+ * capture body is fully try/catch contained.
+ */
+export async function waitForPendingFilesystemCapture(resourceId: string, timeoutMs = 10_000): Promise<void> {
+  const pending = pendingCaptures.get(resourceId);
+  if (!pending) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      pending,
+      new Promise<void>(resolve => {
+        timer = setTimeout(resolve, timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export function observeSessionFilesystem(
   session: FilesystemCaptureSession,
   dependencies: FilesystemCaptureDependencies,
@@ -99,10 +129,27 @@ export function observeSessionFilesystem(
     // Chain so captures stay sequential (last write wins), but do NOT return
     // the chain: finishAgentRun awaits every listener before emitting
     // agent_end, and the capture's sandbox execs (git status + artifacts
-    // find, 30s timeouts each) must not gate turn completion - parity with
-    // the checkpoint listener in checkpoint-capture.ts. The un-returned
-    // chain cannot leak an unhandled rejection: captureSessionFilesystem's
-    // entire body runs inside its own try/catch.
+    // find, 30s timeouts each) must not gate turn completion. Readers that
+    // need the fresh listing await the pending capture through
+    // waitForPendingFilesystemCapture instead. The un-returned chain cannot
+    // leak an unhandled rejection: captureSessionFilesystem's entire body
+    // runs inside its own try/catch, and disposal of this listener does not
+    // cancel an in-flight chain, so a final turn's capture still persists.
     capture = capture.then(() => captureSessionFilesystem(session, dependencies));
+
+    let resourceId: string | undefined;
+    try {
+      resourceId = session.identity.getResourceId();
+    } catch {
+      // No resource id means no route can address this session's listing.
+      return;
+    }
+    const chain = capture;
+    pendingCaptures.set(resourceId, chain);
+    void chain.finally(() => {
+      if (pendingCaptures.get(resourceId) === chain) {
+        pendingCaptures.delete(resourceId);
+      }
+    });
   });
 }

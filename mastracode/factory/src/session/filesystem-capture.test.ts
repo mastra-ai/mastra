@@ -5,6 +5,7 @@ import {
   captureSessionFilesystem,
   observeSessionFilesystem,
   parseFilesystemCaptureFiles,
+  waitForPendingFilesystemCapture,
   type FilesystemCaptureDependencies,
   type FilesystemCaptureSession,
 } from './filesystem-capture.js';
@@ -20,11 +21,11 @@ function commandResult(overrides: Partial<{ exitCode: number; stdout: string; st
   };
 }
 
-function createSession(results = [commandResult(), commandResult()]) {
+function createSession(results = [commandResult(), commandResult()], resourceId = 'resource-1') {
   const executeCommand = vi.fn(async () => results.shift() ?? commandResult());
   const listeners: SessionBeforeAgentEndListener[] = [];
   const session: FilesystemCaptureSession = {
-    identity: { getResourceId: () => 'resource-1' },
+    identity: { getResourceId: () => resourceId },
     thread: { requireId: () => 'thread-1' },
     getWorkspace: () => ({
       sandbox: {
@@ -232,5 +233,84 @@ describe('observeSessionFilesystem', () => {
     completeFirstCapture?.();
     await vi.waitFor(() => expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(2));
     completeFirstCapture?.();
+  });
+
+  it('disposing the listener does not cancel an in-flight capture', async () => {
+    // A final-turn capture may still be running when the session tears the
+    // listener down; the chain must run to completion and persist.
+    const { session, listeners } = createSession();
+    let releaseExec: ((value: ReturnType<typeof commandResult>) => void) | undefined;
+    const gate = new Promise<ReturnType<typeof commandResult>>(resolve => {
+      releaseExec = resolve;
+    });
+    const executeCommand = vi
+      .fn()
+      .mockImplementationOnce(() => gate)
+      .mockImplementation(async () => commandResult());
+    session.getWorkspace = () => ({ sandbox: { executeCommand } as any });
+    const dependencies = createDependencies();
+    const dispose = observeSessionFilesystem(session, dependencies);
+
+    listeners[0]!({ type: 'agent_end', reason: 'complete' });
+    await vi.waitFor(() => expect(executeCommand).toHaveBeenCalledTimes(1));
+
+    dispose();
+    expect(listeners).toHaveLength(0);
+
+    releaseExec?.(commandResult());
+    await vi.waitFor(() => expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe('waitForPendingFilesystemCapture', () => {
+  it('resolves immediately when the session has no capture in flight', async () => {
+    await expect(waitForPendingFilesystemCapture('no-such-resource')).resolves.toBeUndefined();
+  });
+
+  it('a reader awaiting the pending capture observes the persisted listing (agent_end contract)', async () => {
+    // The contract this module alters: agent_end no longer waits on the
+    // capture, so a reader refetching at agent_end must await the pending
+    // capture to see this turn's listing rather than the previous one.
+    const { session, listeners } = createSession(undefined, 'resource-wait-fresh');
+    let releaseExec: ((value: ReturnType<typeof commandResult>) => void) | undefined;
+    const gate = new Promise<ReturnType<typeof commandResult>>(resolve => {
+      releaseExec = resolve;
+    });
+    const executeCommand = vi
+      .fn()
+      .mockImplementationOnce(() => gate)
+      .mockImplementation(async () => commandResult());
+    session.getWorkspace = () => ({ sandbox: { executeCommand } as any });
+    const dependencies = createDependencies();
+    observeSessionFilesystem(session, dependencies);
+
+    listeners[0]!({ type: 'agent_end', reason: 'complete' });
+    await vi.waitFor(() => expect(executeCommand).toHaveBeenCalledTimes(1));
+
+    let waitSettled = false;
+    const wait = waitForPendingFilesystemCapture('resource-wait-fresh').then(() => {
+      waitSettled = true;
+    });
+    await Promise.resolve();
+    expect(waitSettled).toBe(false);
+    expect(dependencies.filesystem.replaceFiles).not.toHaveBeenCalled();
+
+    releaseExec?.(commandResult());
+    await wait;
+    // The persist happened before the reader's wait resolved.
+    expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(1);
+  });
+
+  it('bounds the wait so a stuck capture cannot block readers', async () => {
+    const { session, listeners } = createSession(undefined, 'resource-wait-stuck');
+    session.getWorkspace = () => ({
+      sandbox: { executeCommand: vi.fn(() => new Promise<never>(() => {})) } as any,
+    });
+    const dependencies = createDependencies();
+    observeSessionFilesystem(session, dependencies);
+
+    listeners[0]!({ type: 'agent_end', reason: 'complete' });
+
+    await expect(waitForPendingFilesystemCapture('resource-wait-stuck', 20)).resolves.toBeUndefined();
   });
 });
