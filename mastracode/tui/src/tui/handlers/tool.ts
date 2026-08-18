@@ -690,7 +690,7 @@ function flushLatestParsedToolArgs(ctx: EventHandlerContext, toolCallId: string)
   const parser = toolInputParsers.get(toolCallId);
   if (!parser || parser.closed || !parser.latestArgs) return;
 
-  const buffer = ctx.state.session.displayState.get().toolInputBuffers.get(toolCallId);
+  const buffer = ctx.state.session.displayState.get().toolInputBuffers[toolCallId];
   if (!buffer) return;
   applyParsedToolArgs(ctx, toolCallId, buffer.toolName, parser.latestArgs);
 }
@@ -728,7 +728,7 @@ async function processToolInputParser(
  * Feeds only the incoming JSON fragment to the stateful parser.
  */
 export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: string, argsTextDelta: string): void {
-  const buffer = ctx.state.session.displayState.get().toolInputBuffers.get(toolCallId);
+  const buffer = ctx.state.session.displayState.get().toolInputBuffers[toolCallId];
   if (buffer === undefined) return;
 
   let parser = toolInputParsers.get(toolCallId);

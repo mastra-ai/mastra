@@ -1,11 +1,6 @@
 import type { Agent } from '@mastra/core/agent';
-import type {
-  AgentController,
-  AgentControllerEvent,
-  ReservedThreadMetadataKey,
-  Session,
-  TokenUsage,
-} from '@mastra/core/agent-controller';
+import type { AgentController, ReservedThreadMetadataKey, Session, TokenUsage } from '@mastra/core/agent-controller';
+import { getErrorFromUnknown } from '@mastra/core/error';
 import type { RequestContext } from '@mastra/core/request-context';
 // Type-only import: erased at runtime, so this cannot crash against an older
 // @mastra/core that lacks the `./agent-controller` subpath export. Controller
@@ -116,7 +111,7 @@ function ackBackgroundSessionWork({
   operation: string;
 }): void {
   void work.catch((error: unknown) => {
-    const failure = error instanceof Error ? error : new Error(String(error));
+    const failure = getErrorFromUnknown(error, { serializeStack: false });
     mastra.getLogger?.()?.error?.(`AgentController ${operation} failed after the request was acknowledged`, {
       operation,
       error: failure,
@@ -448,30 +443,6 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   },
 });
 
-/**
- * `JSON.stringify` drops both an `Error` (its `name`/`message` are
- * non-enumerable) and a `Map` to `{}`, so clients would otherwise read
- * `"error": {}` and empty tool state. `Date` needs no help — JSON already
- * writes it as an ISO string.
- *
- * The result is what `AgentControllerWireEvent` in `@mastra/core` describes;
- * `toWireEvent` and that type must stay in step, which the SSE tests pin.
- */
-function toWireEvent(event: AgentControllerEvent): unknown {
-  const wire: Record<string, unknown> = { ...event };
-  const { error } = wire;
-  if (error instanceof Error) wire.error = { name: error.name, message: error.message };
-  if (event.type === 'display_state_changed') {
-    wire.displayState = Object.fromEntries(
-      Object.entries(event.displayState).map(([key, value]) => [
-        key,
-        value instanceof Map ? Object.fromEntries(value) : value,
-      ]),
-    );
-  }
-  return wire;
-}
-
 export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   method: 'GET',
   path: '/agent-controller/:controllerId/sessions/:resourceId/stream',
@@ -538,7 +509,7 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
               // Enqueue the raw event object. The server adapter is responsible
               // for SSE framing (`data: <json>\n\n`); enqueuing a pre-framed
               // string here would double-encode it.
-              controller.enqueue(toWireEvent(event));
+              controller.enqueue(event);
               scheduleHeartbeat();
             } catch {
               cleanup();

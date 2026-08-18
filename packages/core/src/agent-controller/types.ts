@@ -3,6 +3,7 @@ import type { MastraDBMessage } from '../agent/message-list/state/types';
 import type { AgentInstructions, ToolsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import type { AgentControllerChannelsConfig } from '../channels/agent-controller-channels';
+import type { SerializableError } from '../error';
 import type { PubSub } from '../events/pubsub';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import type { LoopOptions } from '../loop/types';
@@ -648,11 +649,11 @@ export interface AgentControllerDisplayState {
 
   // ── Tool execution tracking ──────────────────────────────────────────
   /** Active tool executions keyed by toolCallId */
-  activeTools: Map<string, ActiveToolState>;
+  activeTools: Record<string, ActiveToolState>;
 
   // ── Streaming tool input ─────────────────────────────────────────────
   /** Partial JSON buffers for tools whose arguments are being streamed */
-  toolInputBuffers: Map<string, { text: string; toolName: string }>;
+  toolInputBuffers: Record<string, { text: string; toolName: string }>;
 
   // ── Tool approval ────────────────────────────────────────────────────
   /** A tool awaiting user approval (null when no approval pending) */
@@ -668,7 +669,7 @@ export interface AgentControllerDisplayState {
    * Multiple tools can be parked at once (e.g. parallel `ask_user` prompts), so
    * resuming one leaves the others intact for the UI to keep rendering.
    */
-  pendingSuspensions: Map<
+  pendingSuspensions: Record<
     string,
     {
       toolCallId: string;
@@ -681,7 +682,7 @@ export interface AgentControllerDisplayState {
 
   // ── Subagent tracking ────────────────────────────────────────────────
   /** Active subagent executions keyed by parent toolCallId */
-  activeSubagents: Map<string, ActiveSubagentState>;
+  activeSubagents: Record<string, ActiveSubagentState>;
 
   // ── Observational Memory ─────────────────────────────────────────────
   /** Full OM progress state (status, tokens, thresholds, buffered) */
@@ -695,7 +696,7 @@ export interface AgentControllerDisplayState {
 
   // ── File modifications ───────────────────────────────────────────────
   /** Files modified by tool executions (for /diff and similar features) */
-  modifiedFiles: Map<string, { operations: string[]; firstModified: Date }>;
+  modifiedFiles: Record<string, { operations: string[]; firstModified: Date }>;
 
   // ── Tasks ────────────────────────────────────────────────────────────
   /** Current task list (from task tools) */
@@ -714,15 +715,15 @@ export function defaultDisplayState(): AgentControllerDisplayState {
     currentMessage: null,
     queuedFollowUps: 0,
     tokenUsage: createEmptyTokenUsage(),
-    activeTools: new Map(),
-    toolInputBuffers: new Map(),
+    activeTools: {},
+    toolInputBuffers: {},
     pendingApproval: null,
-    pendingSuspensions: new Map(),
-    activeSubagents: new Map(),
+    pendingSuspensions: {},
+    activeSubagents: {},
     omProgress: defaultOMProgressState(),
     bufferingMessages: false,
     bufferingObservations: false,
-    modifiedFiles: new Map(),
+    modifiedFiles: {},
     tasks: [],
     previousTasks: [],
   };
@@ -807,7 +808,7 @@ export type AgentControllerEvent =
   | { type: 'info'; message: string }
   | {
       type: 'error';
-      error: Error;
+      error: SerializableError;
       errorType?: string;
       retryable?: boolean;
       retryDelay?: number;
@@ -815,9 +816,9 @@ export type AgentControllerEvent =
       maxRetries?: number;
     }
   | { type: 'follow_up_queued'; count: number; runId?: string }
-  | { type: 'workspace_status_changed'; status: WorkspaceStatus; error?: Error }
+  | { type: 'workspace_status_changed'; status: WorkspaceStatus; error?: SerializableError }
   | { type: 'workspace_ready'; workspaceId: string; workspaceName: string }
-  | { type: 'workspace_error'; error: Error }
+  | { type: 'workspace_error'; error: SerializableError }
   | {
       type: 'om_status';
       windows: {

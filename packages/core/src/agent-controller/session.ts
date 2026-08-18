@@ -2184,7 +2184,7 @@ export class SessionDisplayState {
    * `display_state_changed`.
    */
   clearPendingSuspensions(): void {
-    this.#state.pendingSuspensions.clear();
+    this.#state.pendingSuspensions = {};
   }
 
   /**
@@ -2193,7 +2193,7 @@ export class SessionDisplayState {
    * while the surrounding UI reset handles tasks/tools explicitly.
    */
   clearModifiedFiles(): void {
-    this.#state.modifiedFiles.clear();
+    this.#state.modifiedFiles = {};
   }
 
   /**
@@ -2202,7 +2202,7 @@ export class SessionDisplayState {
    * parked suspensions stay visible.
    */
   deletePendingSuspension(toolCallId: string): void {
-    this.#state.pendingSuspensions.delete(toolCallId);
+    delete this.#state.pendingSuspensions[toolCallId];
   }
 
   /**
@@ -2221,15 +2221,15 @@ export class SessionDisplayState {
    */
   resetThread(): void {
     const ds = this.#state;
-    ds.activeTools = new Map();
-    ds.toolInputBuffers = new Map();
+    ds.activeTools = {};
+    ds.toolInputBuffers = {};
     ds.pendingApproval = null;
-    ds.pendingSuspensions = new Map();
-    ds.activeSubagents = new Map();
+    ds.pendingSuspensions = {};
+    ds.activeSubagents = {};
     ds.currentMessage = null;
     this.deps.clearFollowUps();
     ds.queuedFollowUps = 0;
-    ds.modifiedFiles = new Map();
+    ds.modifiedFiles = {};
     ds.tasks = [];
     ds.previousTasks = [];
     ds.omProgress = defaultOMProgressState();
@@ -2249,8 +2249,8 @@ export class SessionDisplayState {
       // ── Agent lifecycle ────────────────────────────────────────────────
       case 'agent_start':
         ds.isRunning = true;
-        ds.activeTools = new Map();
-        ds.toolInputBuffers = new Map();
+        ds.activeTools = {};
+        ds.toolInputBuffers = {};
         ds.currentMessage = null;
         ds.pendingApproval = null;
         // Parked tool suspensions are intentionally NOT cleared here: resuming
@@ -2266,15 +2266,15 @@ export class SessionDisplayState {
         // tool-suspension primitive). When the run ends for any other reason the
         // parked suspensions are abandoned, so clear them all.
         if (event.reason !== 'suspended') {
-          ds.pendingSuspensions.clear();
+          ds.pendingSuspensions = {};
         }
         // Mark any still-running tools as errored (handles abort mid-run)
-        for (const [, tool] of ds.activeTools) {
+        for (const tool of Object.values(ds.activeTools)) {
           if (tool.status === 'running' || tool.status === 'streaming_input') {
             tool.status = 'error';
           }
         }
-        ds.activeSubagents = new Map();
+        ds.activeSubagents = {};
         break;
 
       // ── Message streaming ──────────────────────────────────────────────
@@ -2292,22 +2292,22 @@ export class SessionDisplayState {
 
       // ── Tool lifecycle ─────────────────────────────────────────────────
       case 'tool_input_start': {
-        ds.toolInputBuffers.set(event.toolCallId, { text: '', toolName: event.toolName });
-        const existing = ds.activeTools.get(event.toolCallId);
+        ds.toolInputBuffers[event.toolCallId] = { text: '', toolName: event.toolName };
+        const existing = ds.activeTools[event.toolCallId];
         if (existing) {
           existing.status = 'streaming_input';
         } else {
-          ds.activeTools.set(event.toolCallId, {
+          ds.activeTools[event.toolCallId] = {
             name: event.toolName,
             args: {},
             status: 'streaming_input',
-          });
+          };
         }
         break;
       }
 
       case 'tool_input_delta': {
-        const buf = ds.toolInputBuffers.get(event.toolCallId);
+        const buf = ds.toolInputBuffers[event.toolCallId];
         if (buf && typeof event.argsTextDelta === 'string') {
           buf.text += event.argsTextDelta;
         }
@@ -2315,27 +2315,27 @@ export class SessionDisplayState {
       }
 
       case 'tool_input_end':
-        ds.toolInputBuffers.delete(event.toolCallId);
+        delete ds.toolInputBuffers[event.toolCallId];
         break;
 
       case 'tool_start': {
-        const existingTool = ds.activeTools.get(event.toolCallId);
+        const existingTool = ds.activeTools[event.toolCallId];
         if (existingTool) {
           existingTool.name = event.toolName;
           existingTool.args = event.args;
           existingTool.status = 'running';
         } else {
-          ds.activeTools.set(event.toolCallId, {
+          ds.activeTools[event.toolCallId] = {
             name: event.toolName,
             args: event.args,
             status: 'running',
-          });
+          };
         }
         break;
       }
 
       case 'tool_update': {
-        const tool = ds.activeTools.get(event.toolCallId);
+        const tool = ds.activeTools[event.toolCallId];
         if (tool) {
           tool.partialResult =
             typeof event.partialResult === 'string' ? event.partialResult : safeStringify(event.partialResult);
@@ -2344,7 +2344,7 @@ export class SessionDisplayState {
       }
 
       case 'tool_end': {
-        const endedTool = ds.activeTools.get(event.toolCallId);
+        const endedTool = ds.activeTools[event.toolCallId];
         if (endedTool) {
           endedTool.status = event.isError ? 'error' : 'completed';
           endedTool.result = event.result;
@@ -2353,19 +2353,19 @@ export class SessionDisplayState {
         // Track file modifications
         if (!event.isError) {
           const FILE_TOOLS = ['string_replace_lsp', 'write_file', 'ast_smart_edit'];
-          const toolState = ds.activeTools.get(event.toolCallId);
+          const toolState = ds.activeTools[event.toolCallId];
           if (toolState && FILE_TOOLS.includes(toolState.name)) {
             const toolArgs = toolState.args as Record<string, unknown>;
             const filePath = toolArgs?.path as string;
             if (filePath) {
-              const existing = ds.modifiedFiles.get(filePath);
+              const existing = ds.modifiedFiles[filePath];
               if (existing) {
                 existing.operations.push(toolState.name);
               } else {
-                ds.modifiedFiles.set(filePath, {
+                ds.modifiedFiles[filePath] = {
                   operations: [toolState.name],
                   firstModified: new Date(),
-                });
+                };
               }
             }
           }
@@ -2374,7 +2374,7 @@ export class SessionDisplayState {
       }
 
       case 'shell_output': {
-        const shellTool = ds.activeTools.get(event.toolCallId);
+        const shellTool = ds.activeTools[event.toolCallId];
         if (shellTool) {
           shellTool.shellOutput = (shellTool.shellOutput ?? '') + event.output;
         }
@@ -2390,23 +2390,23 @@ export class SessionDisplayState {
         break;
 
       case 'tool_suspended':
-        ds.pendingSuspensions.set(event.toolCallId, {
+        ds.pendingSuspensions[event.toolCallId] = {
           toolCallId: event.toolCallId,
           toolName: event.toolName,
           args: event.args,
           suspendPayload: event.suspendPayload,
           resumeSchema: event.resumeSchema,
-        });
+        };
         break;
 
       case 'tool_suspension_cancelled':
-        ds.pendingSuspensions.delete(event.toolCallId);
+        delete ds.pendingSuspensions[event.toolCallId];
         break;
 
       // ── Subagent tracking ──────────────────────────────────────────────
       case 'subagent_start': {
         const displayName = this.deps.getSubagentDisplayName(event.agentType);
-        ds.activeSubagents.set(event.toolCallId, {
+        ds.activeSubagents[event.toolCallId] = {
           agentType: event.agentType,
           ...(displayName !== undefined ? { displayName } : {}),
           task: event.task,
@@ -2415,12 +2415,12 @@ export class SessionDisplayState {
           toolCalls: [],
           textDelta: '',
           status: 'running',
-        });
+        };
         break;
       }
 
       case 'subagent_text_delta': {
-        const sub = ds.activeSubagents.get(event.toolCallId);
+        const sub = ds.activeSubagents[event.toolCallId];
         if (sub) {
           sub.textDelta += event.textDelta;
         }
@@ -2428,7 +2428,7 @@ export class SessionDisplayState {
       }
 
       case 'subagent_tool_start': {
-        const subAgent = ds.activeSubagents.get(event.toolCallId);
+        const subAgent = ds.activeSubagents[event.toolCallId];
         if (subAgent) {
           subAgent.toolCalls.push({ name: event.subToolName, isError: false });
         }
@@ -2436,7 +2436,7 @@ export class SessionDisplayState {
       }
 
       case 'subagent_tool_end': {
-        const subTool = ds.activeSubagents.get(event.toolCallId);
+        const subTool = ds.activeSubagents[event.toolCallId];
         if (subTool) {
           const tc = subTool.toolCalls.find(t => t.name === event.subToolName && !t.isError);
           if (tc) {
@@ -2447,7 +2447,7 @@ export class SessionDisplayState {
       }
 
       case 'subagent_end': {
-        const endedSub = ds.activeSubagents.get(event.toolCallId);
+        const endedSub = ds.activeSubagents[event.toolCallId];
         if (endedSub) {
           endedSub.status = event.isError ? 'error' : 'completed';
           endedSub.durationMs = event.durationMs;
@@ -3113,7 +3113,7 @@ export class Session<TState = unknown> {
    * notifies subscribers so stale suspension UI doesn't linger.
    */
   abort(): void {
-    const hadPendingSuspensions = this.displayState.get().pendingSuspensions.size > 0;
+    const hadPendingSuspensions = Object.keys(this.displayState.get().pendingSuspensions).length > 0;
     this.displayState.clearPendingSuspensions();
     this.abortRun();
     // Clearing the suspension mirror is a direct mutation, so it doesn't flow
@@ -3659,7 +3659,7 @@ export class Session<TState = unknown> {
         requestContext,
       });
     } catch (error) {
-      const err = getErrorFromUnknown(error);
+      const err = getErrorFromUnknown(error, { serializeStack: false });
       this.emit({ type: 'error', error: err });
       await this.finishAgentRun('error');
     }

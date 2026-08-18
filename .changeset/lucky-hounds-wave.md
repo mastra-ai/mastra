@@ -2,4 +2,6 @@
 '@mastra/server': patch
 ---
 
-Improved how the agent controller's SSE stream prepares events: the `Error` flattening and the display-state `Map` conversion now both apply to an event that needs both, instead of whichever matched first winning and skipping the other.
+Removed the reshaping step the agent controller's SSE stream ran on every event. Controller events now serialize to JSON on their own, so the stream forwards them untouched and there is no second description of the payload to keep in step with `@mastra/core`.
+
+Clients see the same fields as before. Error payloads may now carry a `cause`; stack traces are still left out.
