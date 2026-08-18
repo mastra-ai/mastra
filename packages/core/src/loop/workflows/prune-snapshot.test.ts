@@ -377,3 +377,129 @@ describe('pruneAgentLoopSnapshot terminal payload iteration state', () => {
     });
   });
 });
+
+/**
+ * Unit coverage for the `agentSpanData.attributes.instructions` strip. The
+ * exported agent span the loop carries forward holds the agent's entire system
+ * prompt, stored on both sides of every step result and rewritten at every
+ * step boundary. Resume rebuilds the span from `context.input`, which the
+ * pruner leaves whole, so the step-level copies are dead weight.
+ */
+function spanData() {
+  return {
+    id: 'span-1',
+    traceId: 'trace-1',
+    name: 'agent run',
+    attributes: {
+      agentId: 'weather',
+      instructions: 's'.repeat(4000),
+      maxSteps: 5,
+    },
+  };
+}
+
+/** Deep-scans a structure for surviving span instruction copies. */
+function countInstructionEchoes(value: unknown): number {
+  if (Array.isArray(value)) return value.reduce<number>((n, v) => n + countInstructionEchoes(v), 0);
+  if (value === null || typeof value !== 'object') return 0;
+  const record = value as Record<string, unknown>;
+  let n = 0;
+  const span = record.agentSpanData as Record<string, any> | undefined;
+  if (span && typeof span === 'object' && span.attributes && 'instructions' in span.attributes) n += 1;
+  for (const v of Object.values(record)) n += countInstructionEchoes(v);
+  return n;
+}
+
+describe('pruneAgentLoopSnapshot span instructions strip', () => {
+  it('strips the instructions echo from both sides of a terminal step', () => {
+    const pruned = pruneAgentLoopSnapshot({
+      snapshot: snapshotWith({
+        'durable-llm-execution': {
+          status: 'success',
+          payload: { agentSpanData: spanData() },
+          output: { agentSpanData: spanData() },
+        },
+      }),
+    });
+
+    const step = (pruned.context as Record<string, any>)['durable-llm-execution'];
+    expect(step.payload.agentSpanData.attributes).not.toHaveProperty('instructions');
+    expect(step.output.agentSpanData.attributes).not.toHaveProperty('instructions');
+  });
+
+  it('strips non-terminal steps too, since the snapshot persists at every step boundary', () => {
+    const pruned = pruneAgentLoopSnapshot({
+      snapshot: snapshotWith({
+        'durable-tool-call': {
+          status: 'running',
+          payload: { agentSpanData: spanData() },
+          output: { agentSpanData: spanData() },
+        },
+      }),
+    });
+
+    expect(countInstructionEchoes((pruned.context as Record<string, any>)['durable-tool-call'])).toBe(0);
+  });
+
+  it('keeps the span itself and every other attribute', () => {
+    const pruned = pruneAgentLoopSnapshot({
+      snapshot: snapshotWith({
+        step: { status: 'success', output: { agentSpanData: spanData() } },
+      }),
+    });
+
+    const span = (pruned.context as Record<string, any>).step.output.agentSpanData;
+    expect(span.id).toBe('span-1');
+    expect(span.traceId).toBe('trace-1');
+    expect(span.name).toBe('agent run');
+    expect(span.attributes).toEqual({ agentId: 'weather', maxSteps: 5 });
+  });
+
+  it('leaves the `context.input` copy intact, since resume rebuilds the span from it', () => {
+    const pruned = pruneAgentLoopSnapshot({
+      snapshot: {
+        context: {
+          input: { agentSpanData: spanData() },
+          step: { status: 'success', output: { agentSpanData: spanData() } },
+        },
+      } as unknown as WorkflowRunState,
+    });
+
+    const input = (pruned.context as Record<string, any>).input;
+    expect(input.agentSpanData.attributes.instructions).toBe('s'.repeat(4000));
+    expect(countInstructionEchoes((pruned.context as Record<string, any>).step)).toBe(0);
+  });
+
+  it('passes step results without span data through unchanged', () => {
+    const pruned = pruneAgentLoopSnapshot({
+      snapshot: snapshotWith({
+        'collect-tool-results': { status: 'success', output: { toolResults: [{ result: 'ok' }] } },
+      }),
+    });
+
+    expect((pruned.context as Record<string, any>)['collect-tool-results']).toMatchObject({
+      output: { toolResults: [{ result: 'ok' }] },
+    });
+  });
+
+  it('passes a span without an instructions attribute through unchanged', () => {
+    const span = { id: 'span-1', attributes: { agentId: 'weather' } };
+    const pruned = pruneAgentLoopSnapshot({
+      snapshot: snapshotWith({
+        step: { status: 'success', output: { agentSpanData: span } },
+      }),
+    });
+
+    expect((pruned.context as Record<string, any>).step.output.agentSpanData).toEqual(span);
+  });
+
+  it('is copy-on-write and does not mutate the caller snapshot', () => {
+    const snapshot = snapshotWith({
+      step: { status: 'success', payload: { agentSpanData: spanData() }, output: { agentSpanData: spanData() } },
+    });
+
+    pruneAgentLoopSnapshot({ snapshot });
+
+    expect(countInstructionEchoes(snapshot.context)).toBe(2);
+  });
+});

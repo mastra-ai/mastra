@@ -191,6 +191,28 @@ function stripTerminalPayloadState<T>(value: T): T {
   return pruned as T;
 }
 
+/**
+ * Drops `agentSpanData.attributes.instructions`: the agent's entire system
+ * prompt, exported into the span payload the loop carries forward and stored
+ * on BOTH sides of every step result, rewritten at every step boundary. The
+ * copies are never read back. The two `rebuildSpan` call sites that resume a
+ * run's agent span (`create-durable-agentic-workflow.ts`, `tool-call.ts`)
+ * both read `initData.agentSpanData`, i.e. `context.input`, which the pruner
+ * leaves whole, so a resumed run still rebuilds its span from a complete
+ * copy and the trace loses nothing. The live span was already exported with
+ * its attributes while the run was streaming. Measured over 300 real
+ * production snapshots it was 27.7 MB of 518.1 MB persisted, about 5% of
+ * everything written, and 2250 step-level copies went to 0 with the
+ * `context.input` copy retained.
+ */
+function stripSpanInstructions<T>(value: T): T {
+  if (!isPlainObject(value) || !isPlainObject(value.agentSpanData)) return value;
+  const span = value.agentSpanData;
+  if (!isPlainObject(span.attributes) || !('instructions' in span.attributes)) return value;
+  const { instructions: _instructions, ...attributes } = span.attributes;
+  return { ...value, agentSpanData: { ...span, attributes } } as T;
+}
+
 /** Applies the pruning rules to a single serialized step result. */
 function pruneStepResult(
   result: Record<string, any>,
@@ -201,6 +223,8 @@ function pruneStepResult(
   const pruned: Record<string, any> = { ...result };
   pruned.payload = stripStepResultRequest(pruned.payload);
   if ('output' in pruned) pruned.output = stripStepResultRequest(pruned.output);
+  pruned.payload = stripSpanInstructions(pruned.payload);
+  if ('output' in pruned) pruned.output = stripSpanInstructions(pruned.output);
   pruned.payload = stripHeavyIterationFields(pruned.payload);
   if ('prevOutput' in pruned) pruned.prevOutput = stripHeavyIterationFields(pruned.prevOutput);
 
