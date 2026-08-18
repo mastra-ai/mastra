@@ -9,6 +9,7 @@ import type { ProcessorState } from '../../../processors/runner';
 import type { RequestContext } from '../../../request-context';
 import { createStep } from '../../../workflows/workflow';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
+import { assertThreadOwnedByResource } from '../../memory-thread-ownership';
 import { MessageList } from '../../message-list';
 import { mastraDBMessageToSignal } from '../../signals';
 import type { AgentMethodType } from '../../types';
@@ -161,6 +162,12 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
       const existingThread = await memory.getThreadById({ threadId: thread?.id });
 
       if (existingThread) {
+        assertThreadOwnedByResource({
+          thread: existingThread,
+          resourceId,
+          agentName: capabilities.agentName,
+        });
+
         if (
           (!existingThread.metadata && thread.metadata) ||
           (thread.metadata && !deepEqual(existingThread.metadata, thread.metadata))
