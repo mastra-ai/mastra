@@ -460,7 +460,7 @@ describe('agent-controller routes', () => {
       expect(received.type).toBe('agent_start');
     });
 
-    it('snapshots live streamed messages before enqueueing them across the SSE boundary', async () => {
+    it('preserves live streamed messages across the SSE boundary without cloning', async () => {
       const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
         mastra,
         controllerId: 'code',
@@ -493,7 +493,8 @@ describe('agent-controller routes', () => {
       }
       await reader.cancel();
 
-      expect(received.message.content.parts[0].text).toBe('first');
+      expect(received.message).toBe(message);
+      expect(received.message.content.parts[0].text).toBe('later');
       expect(received.message.createdAt).toEqual(new Date('2026-01-02T03:04:05.000Z'));
     });
 

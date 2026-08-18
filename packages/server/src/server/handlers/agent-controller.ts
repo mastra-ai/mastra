@@ -454,18 +454,15 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
  * "Error". Flatten it so the actual failure reaches the client, on every event
  * that carries one (`error`, `workspace_error`, `workspace_status_changed`).
  *
- * Streamed message events carry the controller's live accumulated message.
- * Snapshot them at this asynchronous wire boundary so queued SSE events retain
- * the value they had when emitted.
+ * Streamed message events intentionally retain the controller's live accumulated
+ * message. Do not snapshot them here: wire consumers that require temporal
+ * isolation must copy or serialize at their own ownership boundary.
  *
  * `display_state_changed` Maps JSON-serialize to `{}`; snapshot the display state
  * and convert its Maps to plain records so wire clients get stable tool and
  * message state.
  */
 function toWireEvent(event: AgentControllerEvent): unknown {
-  if (event.type === 'message_start' || event.type === 'message_update' || event.type === 'message_end') {
-    return structuredClone(event);
-  }
   if ('error' in event && event.error instanceof Error) {
     return { ...event, error: { name: event.error.name, message: event.error.message } };
   }
