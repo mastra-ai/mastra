@@ -601,8 +601,8 @@ describe('ComposioToolProvider — invoker identity', () => {
     ).rejects.toThrow('requires an authenticated user or a userIdResolver');
   });
 
-  it('lets the userIdResolver supply the userId while the stored pin routes the account', async () => {
-    const userIdResolver = vi.fn(async () => 'bob');
+  it('normalizes the userIdResolver result while the stored pin routes the account', async () => {
+    const userIdResolver = vi.fn(async () => '  bob  ');
     const integration = new ComposioToolProvider({ apiKey: 'k', userIdResolver });
 
     await integration

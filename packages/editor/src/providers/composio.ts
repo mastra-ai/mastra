@@ -292,10 +292,14 @@ export class ComposioToolProvider extends BaseToolProvider {
     if (!this.userIdResolver) return undefined;
     const resolved = await this.userIdResolver(input);
     if (resolved === undefined) return undefined;
-    if (typeof resolved !== 'string' || resolved.trim().length === 0) {
+    if (typeof resolved !== 'string') {
       throw new Error('[composio] userIdResolver must return a non-empty string or undefined');
     }
-    return resolved;
+    const normalized = resolved.trim();
+    if (normalized.length === 0) {
+      throw new Error('[composio] userIdResolver must return a non-empty string or undefined');
+    }
+    return normalized;
   }
 
   /**
