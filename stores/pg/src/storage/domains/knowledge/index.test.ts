@@ -3,9 +3,22 @@ import { Pool } from 'pg';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import { connectionString } from '../../test-utils';
-import { KnowledgePG } from '.';
+import { KnowledgePG, postgresSql } from '.';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
+
+describe('PostgreSQL knowledge SQL normalization', () => {
+  it('quotes identifiers without rewriting string literals', () => {
+    expect(
+      postgresSql(
+        `SELECT node,sourceThreadId FROM "mastra_knowledge_nodes" WHERE type='node' AND sourceThreadId='sourceThreadId' AND scope=jsonb(?) AND id=?`,
+        'knowledge',
+      ),
+    ).toBe(
+      `SELECT "node","sourceThreadId" FROM "knowledge"."mastra_knowledge_nodes" WHERE type='node' AND "sourceThreadId"='sourceThreadId' AND scope=$1::jsonb AND id=$2`,
+    );
+  });
+});
 
 const pool = new Pool({ connectionString });
 const createStore = () => new KnowledgePG({ pool });

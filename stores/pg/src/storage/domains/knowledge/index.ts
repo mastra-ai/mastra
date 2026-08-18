@@ -87,26 +87,40 @@ const camelCaseColumns = [
   'completedAt',
 ] as const;
 
-function postgresSql(sql: string, schemaName?: string): string {
-  let normalized = sql.replace(/jsonb\(\?\)/g, '?::jsonb');
-  for (const column of camelCaseColumns) {
-    normalized = normalized.replace(new RegExp(`(?<!")\\b${column}\\b(?!")`, 'g'), `"${column}"`);
-  }
+function transformSqlCode(sql: string, transform: (code: string) => string): string {
+  return sql
+    .split(/('(?:''|[^'])*')/g)
+    .map((part, index) => (index % 2 === 0 ? transform(part) : part))
+    .join('');
+}
+
+export function postgresSql(sql: string, schemaName?: string): string {
+  let normalized = transformSqlCode(sql, code => {
+    let transformed = code.replace(/jsonb\(\?\)/g, '?::jsonb');
+    for (const column of camelCaseColumns) {
+      transformed = transformed.replace(new RegExp(`(?<!")\\b${column}\\b(?!")`, 'g'), `"${column}"`);
+    }
+    return transformed;
+  });
   if (schemaName) {
     const quotedSchema = `"${parseSqlIdentifier(schemaName, 'schema name')}"`;
-    for (const table of [
-      TABLE_KNOWLEDGE_NODES,
-      TABLE_KNOWLEDGE_RECORDS,
-      TABLE_KNOWLEDGE_MENTIONS,
-      TABLE_KNOWLEDGE_CURSORS,
-      TABLE_KNOWLEDGE_ACTIVITY,
-      TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
-    ]) {
-      normalized = normalized.replaceAll(`"${table}"`, `${quotedSchema}."${table}"`);
-    }
+    normalized = transformSqlCode(normalized, code => {
+      let transformed = code;
+      for (const table of [
+        TABLE_KNOWLEDGE_NODES,
+        TABLE_KNOWLEDGE_RECORDS,
+        TABLE_KNOWLEDGE_MENTIONS,
+        TABLE_KNOWLEDGE_CURSORS,
+        TABLE_KNOWLEDGE_ACTIVITY,
+        TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
+      ]) {
+        transformed = transformed.replaceAll(`"${table}"`, `${quotedSchema}."${table}"`);
+      }
+      return transformed;
+    });
   }
   let index = 0;
-  return normalized.replace(/\?/g, () => `$${++index}`);
+  return transformSqlCode(normalized, code => code.replace(/\?/g, () => `$${++index}`));
 }
 
 function createExecutor(client: Pick<DbClient, 'query'> | TxClient, schemaName?: string): Executor {
