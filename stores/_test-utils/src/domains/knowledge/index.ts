@@ -137,8 +137,13 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       });
       const beforeMerge = (await store.listSemanticOutbox()).length;
       await store.mergeNodes({ sourceId: duplicate.id, targetId: target.id, sourceVersion: duplicate.version });
-      expect((await store.listSemanticOutbox()).slice(beforeMerge).map(entry => entry.documentType)).toEqual(
-        expect.arrayContaining(['node', 'record', 'node']),
+      const mergeEntries = (await store.listSemanticOutbox()).slice(beforeMerge);
+      expect(mergeEntries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ documentId: `knowledge:node:${duplicate.id}`, operation: 'delete' }),
+          expect.objectContaining({ documentId: `knowledge:node:${target.id}`, operation: 'upsert' }),
+          expect.objectContaining({ documentType: 'record' }),
+        ]),
       );
       const postMergeKnowledge = await store.appendKnowledge({
         node: project.id,
@@ -232,6 +237,9 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         defaultScope: resource,
       });
       await expect(store.rescopeKnowledge({ id: record.id, scope: ['org:acme'] })).rejects.toThrow('ceiling');
+      await store.raiseKnowledgeCeiling({ id: record.id, maxScope: 'org' });
+      await store.rescopeKnowledge({ id: record.id, scope: ['org:acme'] });
+      await expect(store.raiseKnowledgeCeiling({ id: record.id, maxScope: 'resource' })).rejects.toThrow('ceiling');
     });
 
     it('serializes semantic work for successive versions of the same document', async () => {
@@ -251,7 +259,7 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
 
     it('dangerously clears every knowledge table', async () => {
       const node = await store.createNode({ name: 'Temporary', kind: 'task', scope: resource });
-      await store.appendKnowledge({
+      const record = await store.appendKnowledge({
         node: node.id,
         text: 'temporary record',
         scope: resource,
@@ -268,6 +276,7 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       await store.dangerouslyClearAll();
 
       expect(await store.getNode(node.id)).toBeNull();
+      expect(await store.getKnowledge({ id: record.id, includeDeleted: true })).toBeNull();
       expect(await store.listActivity({ scope: thread })).toEqual([]);
       expect(await store.getCurationCursor({ sourceThreadId: 't1', agent: 'curate' })).toBeNull();
       expect(await store.listSemanticOutbox()).toEqual([]);
