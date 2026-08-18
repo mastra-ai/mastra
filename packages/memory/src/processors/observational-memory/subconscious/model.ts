@@ -18,7 +18,7 @@ export function usableObservationalMemoryModel(
   if (typeof model === 'function') {
     return (async (ctx: unknown) => {
       const result = await (model as (ctx: unknown) => Promise<unknown> | unknown)(ctx);
-      return Array.isArray(result) ? (result[0]?.model ?? 'unknown') : result;
+      return Array.isArray(result) ? (result[0]?.model ?? result) : result;
     }) as SubconsciousModel;
   }
   return model as SubconsciousModel;
