@@ -41,7 +41,10 @@
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "dev": "pnpm generate:route-types && pnpm build:lib --watch",
     "test": "vitest",
-    "test:unit": "vitest run"
+    "test:unit": "vitest run",
+    "audit:contract": "tsx scripts/audit-contract.ts",
+    "audit:contract:snapshot": "tsx scripts/audit-contract.ts --snapshot",
+    "audit:contract:check": "tsx scripts/audit-contract.ts --check"
   },
   "dependencies": {
     "@ai-sdk/ui-utils": "^1.2.11",
@@ -60,11 +63,13 @@
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@mastra/server": "workspace:*",
     "@types/json-schema": "^7.0.15",
     "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^10.7.0",
+    "ts-morph": "^27.0.2",
     "tsdown": "0.22.9",
     "tsx": "catalog:",
     "typescript": "catalog:",

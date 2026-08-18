@@ -1,0 +1,30 @@
+{
+  "entries": [
+    "A2AV1.sendMessage|drift",
+    "Agent.browserSession|orphan",
+    "Agent.closeBrowser|orphan",
+    "Agent.processStreamResponse|drift",
+    "Agent.sendToolApproval|drift",
+    "AgentBuilder.runById|drift",
+    "AgentControllerSession.create|drift",
+    "AgentVoice.listen|drift",
+    "MastraClient.addDatasetItem|drift",
+    "MastraClient.batchInsertDatasetItems|drift",
+    "MastraClient.listBranches|drift",
+    "MastraClient.listFeedback|drift",
+    "MastraClient.listLogsVNext|drift",
+    "MastraClient.listScores|drift",
+    "MastraClient.listTracesLight|drift",
+    "MastraClient.listTraces|drift",
+    "MastraClient.updateDatasetItem|drift",
+    "Observability.listBranches|drift",
+    "Observability.listFeedback|drift",
+    "Observability.listLogs|drift",
+    "Observability.listScores|drift",
+    "Observability.listTracesLight|drift",
+    "Observability.listTraces|drift",
+    "Responses.create|drift",
+    "Responses.stream|drift",
+    "Workflow.runById|drift"
+  ]
+}

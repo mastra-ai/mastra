@@ -8,3 +8,4 @@ dist-deno
 /*.tgz
 .idea/
 
+.audit/contract-report.json

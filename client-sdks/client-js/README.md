@@ -123,3 +123,33 @@ The client uses the native `fetch` API internally for making HTTP requests. All 
 - Retry logic with exponential backoff
 - Custom header management
 - Error handling
+
+## Contract Audit
+
+This package ships an audit that checks every public SDK method against the schemas the
+server actually validates with. It walks each `MastraClient` / `BaseResource` method,
+synthesizes arguments from the method's TypeScript parameter types, invokes the method
+against a mocked `fetch`, and validates the captured path/query/body with the matching
+`SERVER_ROUTES` Zod schemas.
+
+```bash
+pnpm --filter @mastra/client-js audit:contract           # report only
+pnpm --filter @mastra/client-js audit:contract:check     # fail on NEW drift
+pnpm --filter @mastra/client-js audit:contract:snapshot  # re-record known drift
+```
+
+`.audit/snapshot.json` records the drift and orphan cases that are known today, and
+`src/contract-audit.test.ts` runs the check in CI. The gate is a ratchet: the recorded set
+may shrink freely, but a request shape that drifts and is not already recorded fails the
+build.
+
+**When the gate fails**, fix the SDK method (or the server schema) so the request
+validates. Re-snapshotting is only for recording a deliberate, reviewed contract change —
+never to silence a failure.
+
+Some recorded entries are limitations of type-driven synthesis rather than SDK bugs: for
+example, endpoints whose query params are mutually exclusive (the synthesizer fills every
+optional field), methods that take a `Response`/`Blob`/`FormData`, and params typed
+`unknown` because the server schema uses `z.coerce`/`z.preprocess`. Routes registered
+outside `SERVER_ROUTES` (such as the browser-stream routes in the Hono adapter) are
+recorded as orphans.
