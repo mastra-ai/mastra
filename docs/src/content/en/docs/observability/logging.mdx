@@ -36,13 +36,13 @@ Visit [PinoLogger](/reference/logging/pino-logger) for all available configurati
 
 ## Logging to observability storage
 
-When [observability](/docs/observability/overview) is configured, all logger calls are automatically forwarded to your observability storage. Every `debug`, `info`, `warn`, `error`, and `trackException` call from your application and from Mastra's internal components is stored alongside your traces.
+When [observability](/docs/observability/overview) is configured, by default all logger calls are automatically forwarded to your observability storage. Every `debug`, `info`, `warn`, `error`, and `trackException` call from your application and from Mastra's internal components is stored alongside your traces.
 
 No code changes are required. Loggers with adapter support (`PinoLogger` and `ConsoleLogger`) write each record to their own destinations and derive the exported log from that same record. Custom loggers without adapter support are wrapped so they write to both the original logger and the observability system simultaneously.
 
 ### Trace-correlated log output
 
-When a log call happens inside a traced operation (an agent run, workflow step, or tool call), Mastra injects `trace_id` and `span_id` into the logger's native output. The fields use W3C trace context format and match the trace shown in Studio, so you can correlate a stdout log line with its trace directly.
+When a log call happens inside a traced operation (an agent run, workflow step, or tool call), Mastra injects `trace_id` and `span_id` into the logger's native output. The fields use W3C trace context format and match the trace shown in Studio, so you can correlate a stdout log line with its trace directly. With `PinoLogger`, the record looks like this:
 
 ```json
 {
@@ -55,7 +55,7 @@ When a log call happens inside a traced operation (an agent run, workflow step, 
 }
 ```
 
-Outside a traced operation, the fields are omitted. With `PinoLogger`, the fields reach every destination: stdout, files, and custom transports. If you supply your own pino `mixin`, its fields are preserved, but `trace_id` and `span_id` win on conflicts.
+Outside a traced operation, the fields are omitted. `ConsoleLogger` appends the same fields as an object argument to its console output instead. With `PinoLogger`, the fields reach every destination: stdout, files, and custom transports. If you supply your own pino `mixin`, its fields are preserved, but `trace_id` and `span_id` win on conflicts.
 
 Correlation and export can be controlled independently with the `loggerOptions` configuration:
 
@@ -77,6 +77,7 @@ export const mastra = new Mastra({
 Custom `IMastraLogger` implementations keep working: Mastra falls back to a dual-write wrapper that forwards log calls to observability. This fallback doesn't add `trace_id`/`span_id` to the logger's native output and is deprecated. To get trace-correlated output, implement the `__attachObservability()` adapter hook from `@mastra/core/logger`:
 
 ```typescript
+import { MastraLogger, buildLogRecordData } from '@mastra/core/logger'
 import type { LoggerAdapterContext } from '@mastra/core/logger'
 
 class MyLogger extends MastraLogger {
@@ -86,9 +87,35 @@ class MyLogger extends MastraLogger {
     this.#adapterContext = ctx
   }
 
+  #log(level: 'debug' | 'info' | 'warn' | 'error', message: string, args: unknown[]): void {
+    const ctx = this.#adapterContext
+    // Inject trace fields into your native record when correlation is enabled
+    const traceFields = ctx?.options.correlation ? ctx.resolveTraceFields() : undefined
+    console[level === 'debug' ? 'info' : level](
+      message,
+      ...args,
+      ...(traceFields ? [traceFields] : []),
+    )
+    // Export the same record to observability when export is enabled
+    if (ctx?.options.export) {
+      ctx.getLogSink()?.[level](message, buildLogRecordData(args))
+    }
+  }
+
+  debug(message: string, ...args: unknown[]): void {
+    this.#log('debug', message, args)
+  }
+
   info(message: string, ...args: unknown[]): void {
-    // Inject ctx.resolveTraceFields() into your native record,
-    // then export the same record via ctx.getLogSink()
+    this.#log('info', message, args)
+  }
+
+  warn(message: string, ...args: unknown[]): void {
+    this.#log('warn', message, args)
+  }
+
+  error(message: string, ...args: unknown[]): void {
+    this.#log('error', message, args)
   }
 }
 ```

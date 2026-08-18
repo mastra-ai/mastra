@@ -76,6 +76,37 @@ export function isAdaptableLogger(logger: IMastraLogger): logger is AdaptableLog
  * serializes an Error arg, and collects remaining primitives under `args`
  * so the derived record preserves all context from the native call.
  */
+/**
+ * Export a tracked exception through the adapter sink, mirroring the
+ * DualLogger dual-write shape (`errorId`/`domain`/`category`/`details`/`cause`
+ * when present on a MastraError-like value). Never throws into the caller.
+ */
+export function exportTrackedException(
+  ctx: LoggerAdapterContext | undefined,
+  error: Error,
+  metadata?: Record<string, unknown>,
+): void {
+  if (!ctx?.options.export) return;
+  try {
+    const mastraError = error as Error & {
+      id?: string;
+      domain?: string;
+      category?: string;
+      details?: Record<string, unknown>;
+    };
+    ctx.getLogSink()?.error(error.message, {
+      ...(mastraError.id !== undefined ? { errorId: mastraError.id } : {}),
+      ...(mastraError.domain !== undefined ? { domain: mastraError.domain } : {}),
+      ...(mastraError.category !== undefined ? { category: mastraError.category } : {}),
+      ...(mastraError.details !== undefined ? { details: mastraError.details } : {}),
+      ...(error.cause instanceof Error ? { cause: error.cause.message } : {}),
+      ...metadata,
+    });
+  } catch {
+    // Never let observability export break the primary logger
+  }
+}
+
 export function buildLogRecordData(args: unknown[]): Record<string, unknown> | undefined {
   const objectData = args.find(
     (arg): arg is Record<string, unknown> =>

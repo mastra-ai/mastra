@@ -352,6 +352,32 @@ describe('ConsoleLogger', () => {
       infoSpy.mockRestore();
     });
 
+    it('routes trackException through the sink with MastraError fields', () => {
+      const logger = new ConsoleLogger({ level: LogLevel.INFO });
+      const { ctx, sink } = makeCtx();
+      logger.__attachObservability(ctx);
+
+      const err = Object.assign(new Error('tracked boom'), { id: 'ERR_1', domain: 'AGENT', category: 'USER' });
+      logger.trackException(err, { runId: 'r1' });
+
+      expect(sink.error).toHaveBeenCalledWith('tracked boom', {
+        errorId: 'ERR_1',
+        domain: 'AGENT',
+        category: 'USER',
+        runId: 'r1',
+      });
+    });
+
+    it('does not export tracked exceptions when export is disabled', () => {
+      const logger = new ConsoleLogger({ level: LogLevel.INFO });
+      const { ctx, sink } = makeCtx({ options: { correlation: true, export: false } });
+      logger.__attachObservability(ctx);
+
+      logger.trackException(new Error('silent'));
+
+      expect(sink.error).not.toHaveBeenCalled();
+    });
+
     it('propagates the adapter context to child loggers', () => {
       const logger = new ConsoleLogger({ level: LogLevel.INFO });
       const { ctx, sink } = makeCtx();

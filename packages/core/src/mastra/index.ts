@@ -5309,7 +5309,10 @@ export class Mastra<
           // global one so non-span logs are still exported (uncorrelated).
           const span = resolveCurrentSpan();
           const correlated = span?.observabilityInstance?.getLoggerContext?.(span);
-          return correlated ?? this.loggerVNext;
+          // Resolve the real logger context directly (not `loggerVNext`,
+          // which falls back to a truthy no-op) so adapters skip record
+          // derivation entirely when observability is not configured.
+          return correlated ?? this.#observability.getDefaultInstance()?.getLoggerContext?.();
         },
         options: this.#loggerAdapterOptions,
       });
@@ -5321,10 +5324,14 @@ export class Mastra<
 
     // Deprecated fallback: dual-write wrapper. Native records (stdout) do
     // not receive trace correlation on this path.
-    inner.debug?.(
-      'Configured logger does not support observability adapters; falling back to DualLogger (deprecated). ' +
-        'Implement __attachObservability() on your logger to get trace-correlated stdout.',
-    );
+    try {
+      inner.debug?.(
+        'Configured logger does not support observability adapters; falling back to DualLogger (deprecated). ' +
+          'Implement __attachObservability() on your logger to get trace-correlated stdout.',
+      );
+    } catch {
+      // A throwing logger must not break Mastra construction.
+    }
     return new DualLogger(
       inner,
       this.#loggerAdapterOptions.export ? () => this.loggerVNext : undefined,

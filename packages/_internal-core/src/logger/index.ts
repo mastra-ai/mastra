@@ -1,7 +1,7 @@
 import { Transform } from 'node:stream';
 
 import type { LoggerAdapterContext } from './adapter';
-import { buildLogRecordData } from './adapter';
+import { buildLogRecordData, exportTrackedException } from './adapter';
 
 export * from './adapter';
 
@@ -362,6 +362,10 @@ export class ConsoleLogger extends MastraLogger {
       console.error(`${this.prefix()}${message}`, ...this.#correlate(args));
     }
     this.#export('error', message, args);
+  }
+
+  override trackException(error: Error, metadata?: Record<string, unknown>): void {
+    exportTrackedException(this.#adapterContext, error, metadata);
   }
 
   async listLogs(

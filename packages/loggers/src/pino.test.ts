@@ -1,5 +1,5 @@
 import { LogLevel, LoggerTransport, MultiLogger } from '@mastra/core/logger';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { PinoLogger } from './pino';
 
@@ -31,6 +31,13 @@ class MemoryStream extends LoggerTransport {
   }
 }
 
+// Deterministic wait for the pino transport to flush (no fixed sleeps).
+async function waitForLogs(stream: MemoryStream, count = 1) {
+  await vi.waitFor(async () => {
+    expect((await stream.listLogs()).length).toBeGreaterThanOrEqual(count);
+  });
+}
+
 describe('Logger', () => {
   let memoryStream: MemoryStream;
 
@@ -53,7 +60,7 @@ describe('Logger', () => {
       logger.info('test info message');
 
       // Wait for async logging
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await waitForLogs(memoryStream);
 
       const logs = await memoryStream.listLogs();
 
@@ -84,7 +91,8 @@ describe('MultiLogger', () => {
 
     multiLogger.info(testMessage);
 
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForLogs(memoryStream1);
+    await waitForLogs(memoryStream2);
 
     const logs1 = await memoryStream1.listLogs();
     const logs2 = await memoryStream2.listLogs();
@@ -123,8 +131,7 @@ describe('createLogger', () => {
 
     logger.debug('test message');
 
-    // Increase wait time to ensure logs are processed
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await waitForLogs(customStream);
 
     const logs = await customStream.listLogs();
 
@@ -155,7 +162,7 @@ describe('PinoLogger mixin option', () => {
 
     logger.info('hello', { userId: 'u1' });
 
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForLogs(memoryStream);
 
     const logs = await memoryStream.listLogs();
 
@@ -180,7 +187,7 @@ describe('PinoLogger mixin option', () => {
     const child = logger.child({ requestId: 'req-9' });
     child.info('handled');
 
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForLogs(memoryStream);
 
     const logs = await memoryStream.listLogs();
 
@@ -226,7 +233,7 @@ describe('PinoLogger observability adapter (__attachObservability)', () => {
     logger.__attachObservability(ctx);
 
     logger.info('traced', { userId: 'u1' });
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForLogs(memoryStream);
 
     expect((await memoryStream.listLogs())[0]).toMatchObject({
       msg: 'traced',
@@ -241,7 +248,7 @@ describe('PinoLogger observability adapter (__attachObservability)', () => {
     logger.__attachObservability(ctx);
 
     logger.info('untraced');
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForLogs(memoryStream);
 
     const record = (await memoryStream.listLogs())[0];
     expect(record.msg).toBe('untraced');
@@ -255,7 +262,7 @@ describe('PinoLogger observability adapter (__attachObservability)', () => {
     logger.__attachObservability(ctx);
 
     logger.info('uncorrelated');
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForLogs(memoryStream);
 
     expect((await memoryStream.listLogs())[0].trace_id).toBeUndefined();
   });
@@ -271,7 +278,7 @@ describe('PinoLogger observability adapter (__attachObservability)', () => {
     logger.__attachObservability(ctx);
 
     logger.info('mixed');
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForLogs(memoryStream);
 
     expect((await memoryStream.listLogs())[0]).toMatchObject({
       msg: 'mixed',
@@ -296,7 +303,7 @@ describe('PinoLogger observability adapter (__attachObservability)', () => {
     logger.__attachObservability(ctx);
 
     logger.info('stdout only');
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForLogs(memoryStream);
 
     expect(sink.calls).toEqual([]);
     expect((await memoryStream.listLogs())[0]).toMatchObject(TRACE_FIELDS);
@@ -319,8 +326,52 @@ describe('PinoLogger observability adapter (__attachObservability)', () => {
     });
 
     expect(() => logger.info('resilient')).not.toThrow();
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForLogs(memoryStream);
     expect((await memoryStream.listLogs())[0]).toMatchObject({ msg: 'resilient' });
+  });
+
+  it('exports an Error passed as the log payload', () => {
+    const logger = new PinoLogger({ transports: { memory: memoryStream } });
+    const { ctx, sink } = makeCtx();
+    logger.__attachObservability(ctx);
+
+    const err = new Error('boom');
+    logger.error('failed', err as any);
+
+    expect(sink.calls).toEqual([
+      {
+        level: 'error',
+        message: 'failed',
+        data: { error: { name: 'Error', message: 'boom', stack: err.stack } },
+      },
+    ]);
+  });
+
+  it('exports tracked exceptions through the sink', () => {
+    const logger = new PinoLogger({ transports: { memory: memoryStream } });
+    const { ctx, sink } = makeCtx();
+    logger.__attachObservability(ctx);
+
+    const err = Object.assign(new Error('tracked boom'), { id: 'ERR_1', domain: 'AGENT', category: 'USER' });
+    logger.trackException(err, { runId: 'r1' });
+
+    expect(sink.calls).toEqual([
+      {
+        level: 'error',
+        message: 'tracked boom',
+        data: { errorId: 'ERR_1', domain: 'AGENT', category: 'USER', runId: 'r1' },
+      },
+    ]);
+  });
+
+  it('does not export tracked exceptions when export is disabled', () => {
+    const logger = new PinoLogger({ transports: { memory: memoryStream } });
+    const { ctx, sink } = makeCtx({ options: { correlation: true, export: false } });
+    logger.__attachObservability(ctx);
+
+    logger.trackException(new Error('silent'));
+
+    expect(sink.calls).toEqual([]);
   });
 
   it('propagates correlation and export to child loggers', async () => {
@@ -330,7 +381,7 @@ describe('PinoLogger observability adapter (__attachObservability)', () => {
 
     const child = logger.child({ requestId: 'req-1' });
     child.info('from child');
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForLogs(memoryStream);
 
     expect((await memoryStream.listLogs())[0]).toMatchObject({
       msg: 'from child',
@@ -366,7 +417,7 @@ describe('PinoLogger customLevels option', () => {
 
     logger.audit('access granted', { resource: '/admin' });
 
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForLogs(memoryStream);
 
     const logs = await memoryStream.listLogs();
 
@@ -401,7 +452,7 @@ describe('PinoLogger redact option', () => {
       token: 'abc-xyz-123',
     });
 
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForLogs(memoryStream);
 
     const logs = await memoryStream.listLogs();
 
@@ -431,7 +482,7 @@ describe('PinoLogger redact option', () => {
       apiKey: 'sk-12345',
     });
 
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForLogs(memoryStream);
 
     const logs = await memoryStream.listLogs();
 
@@ -460,7 +511,7 @@ describe('PinoLogger redact option', () => {
       },
     });
 
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForLogs(memoryStream);
 
     const logs = await memoryStream.listLogs();
 
@@ -493,7 +544,7 @@ describe('PinoLogger.child()', () => {
     serviceLogger.info('User created', { userId: '123' });
 
     // Wait for async logging
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForLogs(memoryStream);
 
     const logs = await memoryStream.listLogs();
 
@@ -535,7 +586,7 @@ describe('PinoLogger.child()', () => {
     requestLogger.info('Processing request', { action: 'create' });
 
     // Wait for async logging
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForLogs(memoryStream);
 
     const logs = await memoryStream.listLogs();
 
@@ -565,7 +616,7 @@ describe('PinoLogger.child()', () => {
     childLogger.error('Error message');
 
     // Wait for async logging
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForLogs(memoryStream);
 
     const logs = await memoryStream.listLogs();
 

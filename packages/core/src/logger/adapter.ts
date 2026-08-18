@@ -4,6 +4,7 @@ import { resolveCurrentSpan } from '../observability/utils';
 export {
   isAdaptableLogger,
   buildLogRecordData,
+  exportTrackedException,
   type AdaptableLogger,
   type AdapterLogSink,
   type LoggerAdapterContext,

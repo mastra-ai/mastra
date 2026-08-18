@@ -1,5 +1,5 @@
 import type { LoggerTransport, LoggerAdapterContext } from '@mastra/core/logger';
-import { LogLevel, MastraLogger, buildLogRecordData } from '@mastra/core/logger';
+import { LogLevel, MastraLogger, buildLogRecordData, exportTrackedException } from '@mastra/core/logger';
 import pino from 'pino';
 import pretty from 'pino-pretty';
 
@@ -162,7 +162,10 @@ export class PinoLogger<CustomLevels extends string = never> extends MastraLogge
     const ctx = this.#adapterContext;
     if (!ctx?.options.export) return;
     try {
-      ctx.getLogSink()?.[level](message, buildLogRecordData(Object.keys(args).length > 0 ? [args] : []));
+      // An Error passed as the args value often has no enumerable keys but
+      // must still be exported (serialized by buildLogRecordData).
+      const hasPayload = args instanceof Error || Object.keys(args).length > 0;
+      ctx.getLogSink()?.[level](message, buildLogRecordData(hasPayload ? [args] : []));
     } catch {
       // Never let observability export break the primary logger
     }
@@ -186,5 +189,9 @@ export class PinoLogger<CustomLevels extends string = never> extends MastraLogge
   error(message: string, args: Record<string, any> = {}): void {
     this.logger.error(args, message);
     this.#export('error', message, args);
+  }
+
+  override trackException(error: Error, metadata?: Record<string, unknown>): void {
+    exportTrackedException(this.#adapterContext, error, metadata);
   }
 }

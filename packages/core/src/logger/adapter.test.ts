@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Mastra } from '../mastra';
+import { NoOpObservability } from '../observability';
 import { executeWithContext } from '../observability/utils';
 import {
   resolveTraceFields,
@@ -159,6 +160,51 @@ describe('Mastra logger wiring', () => {
     expect(ctx?.options).toEqual({ correlation: true, export: false });
     // Export disabled → no sink even though correlation stays on.
     expect(ctx?.getLogSink()).toBeUndefined();
+  });
+
+  it('getLogSink returns undefined when observability is not configured', () => {
+    const logger = new ConsoleLogger();
+    let ctx: LoggerAdapterContext | undefined;
+    vi.spyOn(logger, '__attachObservability').mockImplementation(c => {
+      ctx = c;
+    });
+
+    new Mastra({ logger });
+
+    // No real logger context exists → no sink, so adapters skip record
+    // derivation entirely instead of dispatching into a no-op.
+    expect(ctx?.getLogSink()).toBeUndefined();
+  });
+
+  it('getLogSink returns undefined while an export-suppressed log call is in flight (recursion guard)', () => {
+    const sink = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    class TestObservability extends NoOpObservability {
+      override getDefaultInstance() {
+        return { getLoggerContext: () => sink } as any;
+      }
+    }
+
+    const logger = new ConsoleLogger();
+    let ctx: LoggerAdapterContext | undefined;
+    vi.spyOn(logger, '__attachObservability').mockImplementation(c => {
+      ctx = c;
+    });
+
+    new Mastra({ logger, observability: new TestObservability() as any });
+
+    // Observability configured → the real sink is resolved.
+    expect(ctx?.getLogSink()).toBe(sink);
+
+    // But while a suppressed log call is in flight, the sink is withheld.
+    let sinkDuringSuppressedCall: unknown = sink;
+    const inner = makePlainLogger();
+    (inner.info as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      sinkDuringSuppressedCall = ctx?.getLogSink();
+    });
+    createExportSuppressedLogger(inner).info('observability internal log');
+
+    expect(sinkDuringSuppressedCall).toBeUndefined();
+    expect(ctx?.getLogSink()).toBe(sink);
   });
 
   it('end to end: a Mastra-wired logger emits trace fields on its native record inside a span', async () => {
