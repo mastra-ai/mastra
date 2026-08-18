@@ -10,7 +10,9 @@
     "./tools": "./src/tools.ts",
     "./workflow": "./src/workflow.ts",
     "./scorers": "./src/scorers/index.ts",
-    "./data": "./src/data/support-qa.ts"
+    "./data": "./src/data/support-qa.ts",
+    "./support-tools": "./src/support-tools.ts",
+    "./web-tools": "./src/web-tools.ts"
   },
   "dependencies": {
     "@mastra/core": "catalog:",

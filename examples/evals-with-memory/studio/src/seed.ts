@@ -26,6 +26,7 @@ import { SUPPORT_QA } from '@workshop/shared/data';
 import { JUDGE_MODEL } from '@workshop/shared/models';
 import { answerAccuracyScorer } from '@workshop/shared/scorers';
 import { editor, mastra, observability, supportAgent } from './mastra/index.ts';
+import { STORED_SKILLS } from './stored-skills.ts';
 
 /** Answers the way the shipped agent does. */
 async function baselineTask({ input }: { input: unknown }) {
@@ -117,6 +118,28 @@ async function main() {
   const v1 = versions.find((v: any) => v.versionNumber === 1);
   await agentsStore.update({ id: 'support-agent', status: 'published', activeVersionId: v1.id });
   console.log(`  agent "support-agent" — v1 snapshotted from code and published`);
+
+  // -------------------------------------------------------------------
+  // Stored skills, so the Agent Builder's skill picker has something in it.
+  //
+  // These are the database-backed kind, not the markdown-under-workspace
+  // kind — see src/stored-skills.ts for why both exist. The Builder reads
+  // exactly this list when it decides whether to call `set-agent-skills`,
+  // so with none seeded that step silently never happens and the demo looks
+  // like the feature is missing.
+  //
+  // Idempotent: re-running the seed over an existing skill is a no-op rather
+  // than an error, so this is safe to run repeatedly against a live DB.
+  // -------------------------------------------------------------------
+  for (const skill of STORED_SKILLS) {
+    const existing = await editor.skill.getById(skill.id).catch(() => null);
+    if (existing) {
+      console.log(`  skill "${skill.name.padEnd(20)}" — already present, left alone`);
+      continue;
+    }
+    await editor.skill.create(skill as any);
+    console.log(`  skill "${skill.name.padEnd(20)}" — created`);
+  }
 
   // Flush the trace spans this seed just produced. Spans export in batches and
   // this script is about to exit, so without the flush the Observability →
