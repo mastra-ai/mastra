@@ -267,6 +267,8 @@ describe('materializeRepo', () => {
     expect(sandbox.calls[0]).toBe('git --version');
     expect(joined).toContain('git clone --depth=1 --single-branch --branch');
     expect(joined).toContain('https://x-access-token:tok-123@github.com/octocat/hello.git');
+    expect(joined).toContain("find '/workspace/hello' -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +");
+    expect(sandbox.calls).not.toContain("rm -rf '/workspace/hello'");
     // token scrubbed afterwards
     expect(joined).toContain('remote set-url origin');
     expect(joined).toContain('https://github.com/octocat/hello.git');
@@ -1424,7 +1426,9 @@ describe('git transfer retry', () => {
       const cloneCalls = sandbox.calls.filter(call => call.includes('git clone'));
       // Skip the pre-clone wipe that clears a dirty destination up front.
       const firstClone = sandbox.calls.indexOf(cloneCalls[0]!);
-      const wipe = sandbox.calls.findIndex((call, i) => i > firstClone && call.startsWith('rm -rf'));
+      const wipe = sandbox.calls.findIndex(
+        (call, i) => i > firstClone && call.includes('-mindepth 1 -maxdepth 1 -exec rm -rf -- {} +'),
+      );
       expect(cloneCalls).toHaveLength(2);
       expect(wipe).toBeGreaterThan(firstClone);
       expect(wipe).toBeLessThan(sandbox.calls.lastIndexOf(cloneCalls[1]!));

@@ -352,9 +352,6 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
   // exists. Disk is the source of truth: detect the checkout instead of
   // trusting the row.
   const alreadyMaterialized = await hasExistingCheckout(sandbox, workdir, repo);
-  process.stderr.write(
-    `[factory:timing] workspace.materialize.path ${!alreadyMaterialized ? 'clone' : skipPullOnExistingCheckout ? 'seeded-skip' : 'pull'}\n`,
-  );
 
   let tokenInRemote = false;
   try {
@@ -371,9 +368,13 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
       // OOM-killed server) leaves a partial tree behind, and `git clone`
       // refuses a non-empty destination with a non-retryable fatal. Nothing
       // here is recoverable — `hasExistingCheckout` already ruled out a
-      // checkout of this repo — so clear it before cloning, exactly as the
-      // retry path does.
-      await sh(sandbox, `rm -rf ${shellQuote(workdir)}`);
+      // checkout of this repo — so clear its contents before cloning, exactly
+      // as the retry path does. Keep the workdir itself because LocalSandbox
+      // runs commands with this directory as the child process cwd.
+      await sh(
+        sandbox,
+        `mkdir -p ${shellQuote(workdir)} && find ${shellQuote(workdir)} -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +`,
+      );
       const clone = await gitTransfer(
         sandbox,
         `git clone --depth=1 --single-branch --branch ${shellQuote(repoInfo.defaultBranch)} ${shellQuote(authUrl)} ${shellQuote(workdir)}`,
@@ -385,8 +386,12 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
               message: `Lost the connection to github.com — retrying the clone (attempt ${attempt + 1})…`,
             });
             // A clone that died partway leaves the destination non-empty, which
-            // git refuses to clone into. Clear it so the retry starts clean.
-            await sh(sandbox, `rm -rf ${shellQuote(workdir)}`);
+            // git refuses to clone into. Clear its contents so the retry starts
+            // clean without removing LocalSandbox's process cwd.
+            await sh(
+              sandbox,
+              `mkdir -p ${shellQuote(workdir)} && find ${shellQuote(workdir)} -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +`,
+            );
           },
         },
       );
