@@ -29,7 +29,6 @@ import {
   isNewerVersion,
   performUpdate,
 } from '@mastra/code-sdk/utils/update-check';
-import type { AgentSignalAttributes } from '@mastra/core/agent';
 import type { AgentControllerEvent, MastraDBMessage } from '@mastra/core/agent-controller';
 import type { Workspace } from '@mastra/core/workspace';
 import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
@@ -92,21 +91,8 @@ export type { MastraTUIOptions } from './state.js';
 // MastraTUI Class
 // =============================================================================
 
-/**
- * Delivery option attributes applied to user-message signals. When the signal is delivered to an
- * active run it is tagged as while-active; when it starts a new run it is a message.
- * The LLM sees these as XML attributes on the `<user-message>` element.
- */
 type GithubPollingChangedHandler = (event: { threadId: string; resourceId: string; running: boolean }) => void;
 type GithubSignalsWithPollingEvents = { onPollingChanged?: (handler: GithubPollingChangedHandler) => void };
-
-const USER_SIGNAL_DELIVERY_OPTIONS: {
-  ifActive: { attributes: AgentSignalAttributes };
-  ifIdle: { attributes: AgentSignalAttributes };
-} = {
-  ifActive: { attributes: { delivery: 'while-active' } },
-  ifIdle: { attributes: { delivery: 'message' } },
-};
 
 const USER_MESSAGE_APPROVAL_INTERRUPT = {
   reason: 'interrupted_by_user_message',
@@ -461,7 +447,6 @@ export class MastraTUI {
 
       const signal = this.state.session.sendSignal({
         content: this.createUserSignalContent(content, images),
-        ...USER_SIGNAL_DELIVERY_OPTIONS,
       });
       this.remapOptimisticUserMessage(optimisticMessageId, signal.id);
       signal.accepted.catch((error: unknown) => {
@@ -493,7 +478,6 @@ export class MastraTUI {
 
       const signal = this.state.session.sendSignal({
         content: this.createUserSignalContent(content, images),
-        ...USER_SIGNAL_DELIVERY_OPTIONS,
       });
 
       if (hasActiveRun) {
