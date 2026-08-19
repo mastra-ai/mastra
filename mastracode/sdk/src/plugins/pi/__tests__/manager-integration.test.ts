@@ -35,8 +35,9 @@ function createFixture() {
   const homeDir = path.join(root, 'home');
   const nativeRoot = path.join(root, 'native');
   const piRoot = path.join(root, 'pi');
-  fs.mkdirSync(nativeRoot, { recursive: true });
+  fs.mkdirSync(path.join(nativeRoot, 'commands'), { recursive: true });
   fs.mkdirSync(piRoot, { recursive: true });
+  fs.writeFileSync(path.join(nativeRoot, 'commands', 'pi-command.md'), '# Native command');
   fs.writeFileSync(
     path.join(nativeRoot, 'index.ts'),
     `export default { id: 'fixture.native', tools: { native_tool: { tool: { id: 'native_tool', description: 'native' } } } };`,
@@ -101,6 +102,10 @@ describe('PluginManager Pi generation integration', () => {
     expect(pi).toMatchObject({ status: 'active', compatibility: 'pi', toolNames: ['pi_fixture_tool'] });
     expect(pi?.piGeneration?.bound).toBe(true);
     expect(pi?.piGeneration?.registrations.commands.has('pi-command')).toBe(true);
+    expect(fixture.manager.getPiCommands().map(command => command.name)).toEqual(['pi-command:1']);
+    await expect(fixture.manager.dispatchPiCommand('pi-command:1', '', {})).resolves.toBeUndefined();
+    fixture.manager.setPiCommandReservedNames(['pi-command']);
+    expect(fixture.manager.getPiCommands().map(command => command.name)).toEqual(['pi-command:1']);
     const piTool = fixture.manager.getPluginTools().pi_fixture_tool;
     expect(piTool && typeof piTool.execute === 'function').toBe(true);
     await expect(executeTool(piTool, { value: 'manager' })).resolves.toMatchObject({

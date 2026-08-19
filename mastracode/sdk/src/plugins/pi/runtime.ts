@@ -46,6 +46,8 @@ export class MastraPiExtensionGeneration implements PiExtensionGeneration {
   private readonly diagnostics: PiCompatibilityDiagnostic[] = [];
   private readonly cleanups = new Set<PiRuntimeCleanup>();
   private readonly eventEmitter = new EventEmitter();
+  private readonly pendingActions = new Set<Promise<unknown>>();
+  private readonly staleController = new AbortController();
   private runtimeActions: PiRuntimeActions | undefined;
   private staleMessage: string | undefined;
 
@@ -54,6 +56,10 @@ export class MastraPiExtensionGeneration implements PiExtensionGeneration {
     readonly extensionId: string,
     readonly entryPath: string,
   ) {}
+
+  get staleSignal(): AbortSignal {
+    return this.staleController.signal;
+  }
 
   get active(): boolean {
     return this.staleMessage === undefined;
@@ -78,7 +84,12 @@ export class MastraPiExtensionGeneration implements PiExtensionGeneration {
         this.addDiagnostic('error', message, name);
         throw new Error(message);
       }
-      return action(...args);
+      const result = action(...args);
+      if (!result || typeof (result as PromiseLike<unknown>).then !== 'function') return result;
+      const pending = Promise.resolve(result);
+      this.pendingActions.add(pending);
+      void pending.finally(() => this.pendingActions.delete(pending)).catch(() => undefined);
+      return pending;
     };
 
     const api: PiExtensionApi = {
@@ -94,7 +105,17 @@ export class MastraPiExtensionGeneration implements PiExtensionGeneration {
         this.recordCapability('getFlag');
         const flag = this.registrations.flags.get(name);
         if (!flag) return undefined;
-        return flagValues[name] ?? flag.default;
+        const configured = flagValues[name];
+        if (configured === undefined) return flag.default;
+        if (typeof configured !== flag.type) {
+          this.addDiagnostic(
+            'warning',
+            `Pi flag "${name}" has a legacy ${typeof configured} value; expected ${flag.type}. The registered default is used.`,
+            'getFlag:migration',
+          );
+          return flag.default;
+        }
+        return configured;
       },
       registerMessageRenderer: (customType, renderer) =>
         this.registerNamed('registerMessageRenderer', customType, renderer, this.registrations.messageRenderers),
@@ -119,16 +140,25 @@ export class MastraPiExtensionGeneration implements PiExtensionGeneration {
       getActiveTools: (...args) => callAction('getActiveTools', args),
       getAllTools: (...args) => callAction('getAllTools', args),
       setActiveTools: (...args) => callAction('setActiveTools', args),
+      refreshTools: (...args) => callAction('refreshTools', args),
       getCommands: (...args) => callAction('getCommands', args),
       setModel: (...args) => callAction('setModel', args),
+      getModel: (...args) => callAction('getModel', args),
+      getScopedModels: (...args) => callAction('getScopedModels', args),
       getThinkingLevel: (...args) => callAction('getThinkingLevel', args),
       setThinkingLevel: (...args) => callAction('setThinkingLevel', args),
+      newSession: (...args) => callAction('newSession', args),
+      switchSession: (...args) => callAction('switchSession', args),
+      fork: (...args) => callAction('fork', args),
+      navigateTree: (...args) => callAction('navigateTree', args),
+      isIdle: (...args) => callAction('isIdle', args),
+      waitForIdle: (...args) => callAction('waitForIdle', args),
+      getPendingMessages: (...args) => callAction('getPendingMessages', args),
+      abort: (...args) => callAction('abort', args),
+      getContextUsage: (...args) => callAction('getContextUsage', args),
+      getSystemPrompt: (...args) => callAction('getSystemPrompt', args),
       registerProvider: (providerOrName: unknown, config?: unknown) => this.registerProvider(providerOrName, config),
-      unregisterProvider: name => {
-        this.assertActive();
-        this.recordCapability('unregisterProvider');
-        this.registrations.providers.delete(name);
-      },
+      unregisterProvider: name => this.unregisterProvider(name),
       events: {
         emit: (channel, data) => {
           this.assertActive();
@@ -152,10 +182,17 @@ export class MastraPiExtensionGeneration implements PiExtensionGeneration {
     });
   }
 
-  bind(actions: PiRuntimeActions = {}): void {
+  bind(actions: PiRuntimeActions = {}): Promise<void> {
     this.assertActive();
     if (this.runtimeActions) throw new Error(`Pi extension generation "${this.extensionId}" is already bound`);
     this.runtimeActions = actions;
+    return (async () => {
+      const registerProvider = actions.registerProvider;
+      if (!registerProvider) return;
+      for (const registration of this.registrations.providers.values()) {
+        await registerProvider(registration.name, registration.config);
+      }
+    })();
   }
 
   addCleanup(cleanup: PiRuntimeCleanup): () => void {
@@ -169,7 +206,9 @@ export class MastraPiExtensionGeneration implements PiExtensionGeneration {
   ): Promise<void> {
     if (this.staleMessage) return;
     this.staleMessage = message;
+    this.staleController.abort(new Error(message));
     this.eventEmitter.removeAllListeners();
+    await Promise.allSettled([...this.pendingActions]);
     const cleanups = [...this.cleanups];
     this.cleanups.clear();
     const results = await Promise.allSettled(cleanups.map(cleanup => Promise.resolve().then(cleanup)));
@@ -255,21 +294,54 @@ export class MastraPiExtensionGeneration implements PiExtensionGeneration {
     this.registerNamedValue('registerFlag', name, flag, this.registrations.flags);
   }
 
+  private trackAction(action: Promise<unknown>, capability: string, failureMessage: string): void {
+    this.pendingActions.add(action);
+    void action
+      .catch(error => {
+        this.addDiagnostic(
+          'warning',
+          `${failureMessage}: ${error instanceof Error ? error.message : String(error)}`,
+          capability,
+        );
+      })
+      .finally(() => this.pendingActions.delete(action));
+  }
+
   private registerProvider(providerOrName: unknown, config?: unknown): void {
     this.assertActive();
     if (typeof providerOrName === 'string') {
       this.recordCapability('registerProvider');
       if (config === undefined) throw new Error('Provider config is required when registering by name');
+      const existed = this.registrations.providers.has(providerOrName);
       this.registerNamedValue(
         'registerProvider',
         providerOrName,
         { name: providerOrName, config },
         this.registrations.providers,
       );
+      if (!existed && this.runtimeActions?.registerProvider) {
+        this.trackAction(
+          Promise.resolve(this.runtimeActions.registerProvider(providerOrName, config)),
+          'registerProvider',
+          `Pi provider "${providerOrName}" registration failed`,
+        );
+      }
       return;
     }
     this.recordCapability('registerNativeProvider');
-    this.registrations.nativeProviders.push(providerOrName);
+  }
+
+  private unregisterProvider(name: string): void {
+    this.assertActive();
+    this.recordCapability('unregisterProvider');
+    if (!this.registrations.providers.delete(name)) return;
+    if (this.runtimeActions?.unregisterProvider) {
+      this.trackAction(
+        Promise.resolve(this.runtimeActions.unregisterProvider(name)),
+        'unregisterProvider',
+        `Pi provider "${name}" unregister failed`,
+      );
+    }
   }
 
   private registerNamed<TValue>(

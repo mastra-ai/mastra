@@ -76,4 +76,37 @@ describe('gateway consumption', () => {
     const providers = await gateway.fetchProviders();
     expect(Object.values(providers).some(config => config.name === 'FromSource')).toBe(false);
   });
+
+  it('owns runtime provider contributions per gateway instance and removes them with the disposer', async () => {
+    const gateway = new MastraCodeGateway({
+      mastraGatewayBaseUrl: 'https://gateway.example.com',
+      routeThroughMastraGateway: false,
+      customProviders: [],
+    });
+    const otherGateway = new MastraCodeGateway({
+      mastraGatewayBaseUrl: 'https://gateway.example.com',
+      routeThroughMastraGateway: false,
+      customProviders: [],
+    });
+    const dispose = gateway.registerCustomProvider('pi:extension', {
+      name: 'Pi Provider',
+      url: 'https://pi.example.com',
+      models: ['pi-model'],
+    });
+
+    expect(Object.values(await gateway.fetchProviders()).some(config => config.name === 'Pi Provider')).toBe(true);
+    expect(Object.values(await otherGateway.fetchProviders()).some(config => config.name === 'Pi Provider')).toBe(
+      false,
+    );
+    expect(() =>
+      gateway.registerCustomProvider('other', {
+        name: 'Pi Provider',
+        url: 'https://other.example.com',
+        models: ['other'],
+      }),
+    ).toThrow('already exists');
+
+    dispose();
+    expect(Object.values(await gateway.fetchProviders()).some(config => config.name === 'Pi Provider')).toBe(false);
+  });
 });

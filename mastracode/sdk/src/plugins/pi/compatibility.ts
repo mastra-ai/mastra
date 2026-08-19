@@ -59,10 +59,23 @@ const PI_CAPABILITY_SUPPORT: Readonly<Record<string, PiCapabilitySupport>> = {
   getActiveTools: 'adapted',
   getAllTools: 'adapted',
   setActiveTools: 'adapted',
+  refreshTools: 'adapted',
   getCommands: 'direct',
+  getModel: 'adapted',
   setModel: 'adapted',
+  getScopedModels: 'adapted',
   getThinkingLevel: 'adapted',
   setThinkingLevel: 'adapted',
+  newSession: 'adapted',
+  switchSession: 'adapted',
+  fork: 'adapted',
+  navigateTree: 'unsupported',
+  isIdle: 'direct',
+  waitForIdle: 'direct',
+  getPendingMessages: 'adapted',
+  abort: 'adapted',
+  getContextUsage: 'adapted',
+  getSystemPrompt: 'adapted',
 };
 
 const PI_EVENT_SUPPORT: Readonly<Record<string, PiCapabilitySupport>> = {

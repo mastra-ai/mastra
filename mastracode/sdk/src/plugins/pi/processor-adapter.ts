@@ -9,6 +9,7 @@ import type {
   ProcessLLMResponseArgs,
 } from '@mastra/core/processors';
 
+import { getPiActiveToolRequest } from './actions-adapter.js';
 import { runPiToolResultHooks } from './hook-adapter.js';
 import type { PiExtensionGeneration } from './types.js';
 
@@ -92,12 +93,61 @@ function replaceMessageContent(
   return { ...message, content: { ...message.content, parts } };
 }
 
+function cloneMessagesForPiBoundary(
+  generation: PiExtensionGeneration,
+  messages: readonly MastraDBMessage[],
+): MastraDBMessage[] {
+  let omitted = false;
+  try {
+    const seen = new WeakSet<object>();
+    const serialized = JSON.stringify(messages, (_key, value: unknown) => {
+      if (typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint') {
+        omitted = true;
+        return undefined;
+      }
+      if (typeof value === 'object' && value !== null) {
+        if (seen.has(value)) {
+          omitted = true;
+          return undefined;
+        }
+        seen.add(value);
+      }
+      return value;
+    });
+    if (!serialized) return [];
+    const cloned = JSON.parse(serialized) as Array<MastraDBMessage & { createdAt?: string | Date }>;
+    if (omitted) {
+      generation.addDiagnostic(
+        'warning',
+        `Pi extension "${generation.extensionId}" received messages with non-JSON metadata; Mastra Code omitted those fields.`,
+        'event:context:non-serializable',
+      );
+    }
+    return cloned.map(message => ({
+      ...message,
+      createdAt: typeof message.createdAt === 'string' ? new Date(message.createdAt) : message.createdAt,
+    })) as MastraDBMessage[];
+  } catch {
+    generation.addDiagnostic(
+      'warning',
+      `Pi extension "${generation.extensionId}" received messages that could not be cloned; Mastra Code provided text-only messages.`,
+      'event:context:non-serializable',
+    );
+    return messages.map(message => ({
+      id: message.id,
+      role: message.role,
+      content: { format: 2, parts: [{ type: 'text', text: messageText(message) }] },
+      createdAt: message.createdAt,
+    }));
+  }
+}
+
 async function processInitialInput(
   generation: PiExtensionGeneration,
   cwd: string,
   args: ProcessInputArgs,
 ): Promise<ProcessInputResult> {
-  let messages = structuredClone(args.messages);
+  let messages = cloneMessagesForPiBoundary(generation, args.messages);
   const context = extensionContext(cwd, args.abortSignal);
 
   const userIndex = messages.findLastIndex(message => message.role === 'user');
@@ -175,6 +225,20 @@ async function processInitialInput(
   return { messages, systemMessages };
 }
 
+function isProviderPrompt(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      message =>
+        isRecord(message) &&
+        typeof message.role === 'string' &&
+        (typeof message.content === 'string' ||
+          (Array.isArray(message.content) &&
+            message.content.every(part => isRecord(part) && typeof part.type === 'string'))),
+    )
+  );
+}
+
 async function processProviderRequest(
   generation: PiExtensionGeneration,
   cwd: string,
@@ -187,7 +251,7 @@ async function processProviderRequest(
     { type: 'before_provider_request', payload: prompt },
     extensionContext(cwd, args.abortSignal),
   )) {
-    if (Array.isArray(result)) {
+    if (isProviderPrompt(result)) {
       prompt = result as typeof prompt;
     } else if (result !== undefined) {
       generation.addDiagnostic(
@@ -372,6 +436,15 @@ export function createPiProcessorAdapters(generation: PiExtensionGeneration, cwd
     id: `pi:${generation.extensionId}:input`,
     name: `${generation.extensionId} Pi input events`,
     processInput: args => processInitialInput(generation, cwd, args),
+    processInputStep: args => {
+      const requested = getPiActiveToolRequest(generation);
+      if (!requested) return {};
+      const hostAllowed = args.activeTools ? new Set(args.activeTools) : undefined;
+      const available = new Set(Object.keys(args.tools ?? {}));
+      return {
+        activeTools: requested.filter(tool => available.has(tool) && (!hostAllowed || hostAllowed.has(tool))),
+      };
+    },
     processLLMRequest: args => processProviderRequest(generation, cwd, args),
   };
   const output: OutputProcessor = {

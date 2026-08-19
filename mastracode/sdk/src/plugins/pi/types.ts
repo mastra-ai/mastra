@@ -17,10 +17,25 @@ export type PiActionName =
   | 'getActiveTools'
   | 'getAllTools'
   | 'setActiveTools'
+  | 'refreshTools'
   | 'getCommands'
   | 'setModel'
+  | 'getModel'
+  | 'getScopedModels'
   | 'getThinkingLevel'
-  | 'setThinkingLevel';
+  | 'setThinkingLevel'
+  | 'registerProvider'
+  | 'unregisterProvider'
+  | 'newSession'
+  | 'switchSession'
+  | 'fork'
+  | 'navigateTree'
+  | 'isIdle'
+  | 'waitForIdle'
+  | 'getPendingMessages'
+  | 'abort'
+  | 'getContextUsage'
+  | 'getSystemPrompt';
 
 export interface PiRegisteredTool {
   name: string;
@@ -92,10 +107,23 @@ export interface PiExtensionApi {
   getActiveTools(...args: unknown[]): unknown;
   getAllTools(...args: unknown[]): unknown;
   setActiveTools(...args: unknown[]): unknown;
+  refreshTools(...args: unknown[]): unknown;
   getCommands(...args: unknown[]): unknown;
   setModel(...args: unknown[]): unknown;
+  getModel(...args: unknown[]): unknown;
+  getScopedModels(...args: unknown[]): unknown;
   getThinkingLevel(...args: unknown[]): unknown;
   setThinkingLevel(...args: unknown[]): unknown;
+  newSession(...args: unknown[]): unknown;
+  switchSession(...args: unknown[]): unknown;
+  fork(...args: unknown[]): unknown;
+  navigateTree(...args: unknown[]): unknown;
+  isIdle(...args: unknown[]): unknown;
+  waitForIdle(...args: unknown[]): unknown;
+  getPendingMessages(...args: unknown[]): unknown;
+  abort(...args: unknown[]): unknown;
+  getContextUsage(...args: unknown[]): unknown;
+  getSystemPrompt(...args: unknown[]): unknown;
   registerProvider(provider: unknown): void;
   registerProvider(name: string, config: unknown): void;
   unregisterProvider(name: string): void;
@@ -114,6 +142,7 @@ export interface PiExtensionGeneration {
   readonly entryPath: string;
   readonly registrations: PiExtensionRegistrations;
   readonly compatibility: PiPackageCompatibility;
+  readonly staleSignal: AbortSignal;
   readonly active: boolean;
   readonly bound: boolean;
   assertActive(): void;
@@ -122,7 +151,7 @@ export interface PiExtensionGeneration {
   emit(event: string, payload: unknown, context?: unknown): Promise<unknown[]>;
   addDiagnostic(severity: PiCompatibilityDiagnostic['severity'], message: string, capability: string): void;
   createApi(flagValues?: Readonly<Record<string, string | boolean>>): PiExtensionApi;
-  bind(actions?: PiRuntimeActions): void;
+  bind(actions?: PiRuntimeActions): Promise<void>;
   addCleanup(cleanup: PiRuntimeCleanup): () => void;
   invalidate(message?: string): Promise<void>;
 }

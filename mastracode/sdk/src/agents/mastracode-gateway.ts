@@ -53,7 +53,13 @@ const CODEX_OPENAI_MODEL_REMAPS: Record<string, string> = {
 
 type ModelRequestHeaders = Record<string, string>;
 
-export type MastraCodeCustomProvider = { name: string; url: string; apiKey?: string; models?: string[] };
+export type MastraCodeCustomProvider = {
+  name: string;
+  url: string;
+  apiKey?: string;
+  apiKeyEnvVar?: string;
+  models?: string[];
+};
 
 export type MastraCodeGatewayOptions = {
   mastraGatewayBaseUrl: string;
@@ -263,6 +269,7 @@ export class MastraCodeGateway extends MastraModelGateway {
   readonly #routeThroughMastraGateway: boolean;
   readonly #thinkingLevel?: ThinkingLevel;
   readonly #customProviders?: MastraCodeCustomProvider[];
+  readonly #contributedProviders = new Map<string, MastraCodeCustomProvider>();
   readonly #settingsPath?: string;
   readonly #credentials: CredentialStore;
 
@@ -308,7 +315,8 @@ export class MastraCodeGateway extends MastraModelGateway {
     const customProvider = this.#getCustomProviders().find(
       provider => parsed.providerId === getCustomProviderId(provider.name),
     );
-    if (customProvider?.apiKey) return true;
+    if (customProvider?.apiKey || (customProvider?.apiKeyEnvVar && process.env[customProvider.apiKeyEnvVar]))
+      return true;
     return hasResolvedAuth(
       MastraCodeGateway.resolveProviderAuth(
         {
@@ -376,11 +384,28 @@ export class MastraCodeGateway extends MastraModelGateway {
     return MastraCodeGateway.createModelCatalogProvider(this);
   }
 
+  registerCustomProvider(ownerId: string, provider: MastraCodeCustomProvider): () => void {
+    const providers = [...this.#baseCustomProviders(), ...this.#contributedProviders.values()];
+    if (providers.some(existing => existing.name === provider.name)) {
+      throw new Error(`Custom provider already exists: ${provider.name}`);
+    }
+    const key = `${ownerId}:${provider.name}`;
+    this.#contributedProviders.set(key, provider);
+    return () => {
+      if (this.#contributedProviders.get(key) === provider) this.#contributedProviders.delete(key);
+    };
+  }
+
+  #baseCustomProviders(): MastraCodeCustomProvider[] {
+    return this.#customProviders ?? resolveCustomProviders() ?? loadSettings(this.#settingsPath).customProviders;
+  }
+
   #getCustomProviders(): MastraCodeCustomProvider[] {
     // Explicit constructor list wins; then a registered source (deployed web,
     // DB-backed — authoritative, so settings.json is never consulted); then
-    // the local file-backed settings.
-    return this.#customProviders ?? resolveCustomProviders() ?? loadSettings(this.#settingsPath).customProviders;
+    // the local file-backed settings. Runtime contributions are instance-owned
+    // and never mutate the process-wide or tenant-scoped source.
+    return [...this.#baseCustomProviders(), ...this.#contributedProviders.values()];
   }
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
@@ -432,8 +457,10 @@ export class MastraCodeGateway extends MastraModelGateway {
     const customProvider = this.#getCustomProviders().find(
       provider => request.providerId === getCustomProviderId(provider.name),
     );
-    if (customProvider?.apiKey) {
-      return { apiKey: customProvider.apiKey, source: 'gateway' };
+    const customProviderApiKey =
+      customProvider?.apiKey ?? (customProvider?.apiKeyEnvVar ? process.env[customProvider.apiKeyEnvVar] : undefined);
+    if (customProviderApiKey) {
+      return { apiKey: customProviderApiKey, source: 'gateway' };
     }
 
     return MastraCodeGateway.resolveProviderAuth(request, undefined, this.#credentials);

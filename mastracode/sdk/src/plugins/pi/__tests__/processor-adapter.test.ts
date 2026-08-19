@@ -44,6 +44,24 @@ function inputArgs(message = userMessage()): ProcessInputArgs {
 }
 
 describe('Pi processor adapter', () => {
+  it('omits non-JSON host message metadata instead of failing the input boundary', async () => {
+    const seen: unknown[] = [];
+    const generation = createGeneration(api => {
+      api.on('context', event => {
+        seen.push(event);
+      });
+    });
+    const message = userMessage();
+    message.content.metadata = { callback: () => 'unsafe', count: 1 } as never;
+    const { input } = createPiProcessorAdapters(generation, '/workspace');
+
+    await expect(input[0]!.processInput?.(inputArgs(message))).resolves.toBeDefined();
+    expect(JSON.stringify(seen)).not.toContain('callback');
+    expect(generation.compatibility.diagnostics).toContainEqual(
+      expect.objectContaining({ capability: 'event:context:non-serializable' }),
+    );
+  });
+
   it('maps input metadata and images, transforms text, chains system/context replacements, and preserves ordering', async () => {
     const seen: unknown[] = [];
     const generation = createGeneration(api => {

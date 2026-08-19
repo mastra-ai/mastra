@@ -12,6 +12,8 @@ import { collectActivePluginTools, isInsideDirectory, loadPlugins, resolvePlugin
 import { ensureMastraCodePackageLink } from './package-link.js';
 import { getPluginScopePaths } from './paths.js';
 import type { PluginPathOptions } from './paths.js';
+import { PiCommandAdapter } from './pi/command-adapter.js';
+import type { PiCommandDispatchOptions, PiOwnedCommand } from './pi/command-adapter.js';
 import type { PiExtensionGeneration, PiRuntimeActions } from './pi/types.js';
 import { loadPluginRegistry, removePluginRecord, savePluginRegistry, setPluginRecord } from './registry.js';
 import type { LoadedPlugin, PluginContribution, PluginProcessorEntries, PluginScope } from './types.js';
@@ -25,6 +27,19 @@ function gitExecOptions(cwd: string) {
 function getEntryVersion(entryPath: string): string {
   const stat = fs.statSync(entryPath, { bigint: true });
   return `${stat.mtimeNs}:${stat.size}`;
+}
+
+function getCommandNames(commandPaths: readonly string[]): string[] {
+  return commandPaths.flatMap(commandPath => {
+    try {
+      return fs
+        .readdirSync(commandPath, { withFileTypes: true })
+        .filter(entry => entry.isFile())
+        .map(entry => path.basename(entry.name, path.extname(entry.name)));
+    } catch {
+      return [];
+    }
+  });
 }
 
 type PluginManagerOptions = PluginPathOptions & {
@@ -42,6 +57,8 @@ export class PluginManager {
   private readonly pluginTools: ReturnType<typeof collectActivePluginTools> = {};
   private readonly rawPluginTools: ReturnType<typeof collectActivePluginTools> = {};
   private readonly toolRenderConfigs = new Map<string, NonNullable<LoadedPlugin['renderConfigs']>[string]>();
+  private readonly piCommands = new PiCommandAdapter();
+  private piCommandReservedNames: string[] = [];
   private readonly watchedLocalEntries = new Set<string>();
   private readonly localEntryVersions = new Map<string, string>();
   /** Last known git HEAD per GitHub checkout, kept current by the poller. */
@@ -110,12 +127,12 @@ export class PluginManager {
         for (const generation of newGenerations) {
           actionsByGeneration.set(generation, this.piRuntimeActions?.(generation));
         }
+        for (const generation of newGenerations) await generation.bind(actionsByGeneration.get(generation));
       } catch (error) {
         const candidateGenerations = candidates.flatMap(plugin => (plugin.piGeneration ? [plugin.piGeneration] : []));
         await Promise.all(candidateGenerations.map(generation => generation.invalidate()));
         throw error;
       }
-      for (const generation of newGenerations) generation.bind(actionsByGeneration.get(generation));
       const previousGenerations = this.getPiGenerations();
       try {
         await this.notifyPiGenerationListeners(
@@ -126,6 +143,13 @@ export class PluginManager {
         await this.notifyPiGenerationListeners(previousGenerations).catch(() => undefined);
         throw error;
       }
+      const nativeCommandNames = getCommandNames(
+        plugins.filter(plugin => !plugin.piGeneration).flatMap(plugin => plugin.commandPaths ?? []),
+      );
+      this.piCommands.setGenerations(
+        plugins.flatMap(plugin => (plugin.piGeneration ? [plugin.piGeneration] : [])),
+        [...this.piCommandReservedNames, ...nativeCommandNames],
+      );
       await Promise.all(retiredGenerations.map(generation => generation.invalidate()));
       this.loadedPlugins = plugins;
       this.loadedRuntimeGeneration = this.runtimeGeneration;
@@ -153,6 +177,22 @@ export class PluginManager {
     return this.loadedPlugins;
   }
 
+  getPiCommands(): PiOwnedCommand[] {
+    return this.piCommands.list();
+  }
+
+  setPiCommandReservedNames(names: readonly string[]): void {
+    this.piCommandReservedNames = [...new Set(names)];
+    const nativeCommandNames = getCommandNames(
+      this.loadedPlugins.filter(plugin => !plugin.piGeneration).flatMap(plugin => plugin.commandPaths ?? []),
+    );
+    this.piCommands.setGenerations(this.getPiGenerations(), [...this.piCommandReservedNames, ...nativeCommandNames]);
+  }
+
+  async dispatchPiCommand(name: string, args = '', options: PiCommandDispatchOptions = {}): Promise<unknown> {
+    return this.piCommands.dispatch(name, args, options);
+  }
+
   async stopPiExtensions(message?: string): Promise<void> {
     const generations = this.loadedPlugins.flatMap(plugin => (plugin.piGeneration ? [plugin.piGeneration] : []));
     await Promise.all(generations.map(generation => generation.invalidate(message)));
@@ -166,6 +206,7 @@ export class PluginManager {
     this.githubPollTimer = undefined;
     await this.stopPiExtensions();
     this.loadedPlugins = [];
+    this.piCommands.setGenerations([]);
     this.updatePluginRenderConfigs([]);
     this.updatePluginTools({});
   }

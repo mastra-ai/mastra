@@ -86,7 +86,9 @@ import {
 } from './onboarding/settings.js';
 import { getToolCategory } from './permissions.js';
 import { PluginManager } from './plugins/manager.js';
+import { createPiRuntimeActions } from './plugins/pi/actions-adapter.js';
 import { PiEventAdapter } from './plugins/pi/event-adapter.js';
+import { PiProviderAdapter } from './plugins/pi/provider-adapter.js';
 import { PluginSignalLane } from './plugins/signal-lane.js';
 import type { PluginProcessorEntries } from './plugins/types.js';
 import { PlanRejectionAbortProcessor } from './processors/plan-rejection-abort.js';
@@ -117,6 +119,10 @@ import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 import { registerWorkflowBuilderPrimitives } from './workflows/register-primitives.js';
 
 const CODE_AGENT_ID = 'code-agent';
+
+function isMastraCodeThinkingLevel(value: string): value is NonNullable<MastraCodeState['thinkingLevel']> {
+  return ['off', 'low', 'medium', 'high', 'xhigh', 'max'].includes(value);
+}
 
 // Global retry policy for transient provider failures (e.g. dropped sockets and server errors).
 // Applied centrally to every model call via StreamErrorRetryProcessor, independent of model-pack
@@ -407,6 +413,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // below. Config callbacks defined before then (e.g. notification stream
   // options) read it lazily through this holder.
   let activeSession: Session<MastraCodeState> | undefined;
+  let piSessionFacadeController = new AbortController();
   // Same trick for the controller, which plugins reach through a lazy accessor.
   // Plugins load well before the controller is constructed, and a closure over
   // the `controller` binding itself would throw on early access rather than
@@ -668,10 +675,291 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     getController: () => pluginRuntimeController,
     getActiveSession: () => activeSession,
   });
+  const piProviderAdapter = new PiProviderAdapter({
+    register: async provider =>
+      mastraCodeGateway.registerCustomProvider(`${provider.pluginId}:${provider.extensionId}`, {
+        name: provider.name,
+        url: provider.url,
+        apiKeyEnvVar: provider.apiKeyEnvVar,
+        models: provider.models,
+      }),
+    refresh: async () => {
+      if (pluginRuntimeController) await syncGateways(true);
+    },
+  });
+  pluginManager?.setPiRuntimeActions(generation =>
+    createPiRuntimeActions({
+      generation,
+      commands: { list: () => pluginManager?.getPiCommands() ?? [] },
+      providers: piProviderAdapter,
+      host: {
+        getMessageSession: () => {
+          const session = activeSession;
+          const sessionSignal = piSessionFacadeController.signal;
+          if (!session) return undefined;
+          const assertCurrentSession = () => {
+            if (sessionSignal.aborted || activeSession !== session) throw new Error('Pi action session was replaced');
+          };
+          return {
+            sendMessage: input => {
+              assertCurrentSession();
+              return session.sendMessage(input);
+            },
+            steer: input => {
+              assertCurrentSession();
+              return session.steer(input);
+            },
+            followUp: input => {
+              assertCurrentSession();
+              return session.followUp(input);
+            },
+            sendNotificationSignal: input => {
+              assertCurrentSession();
+              return session.sendNotificationSignal({
+                source: `pi:${generation.pluginId}:${generation.extensionId}`,
+                kind: 'pi-extension-message',
+                summary: input.message,
+                payload: { title: input.title },
+                metadata: input.metadata,
+              });
+            },
+          };
+        },
+        getThreadHost: () => {
+          const session = activeSession;
+          const sessionSignal = piSessionFacadeController.signal;
+          if (!session) return undefined;
+          const assertCurrentSession = () => {
+            if (sessionSignal.aborted || activeSession !== session) throw new Error('Pi action session was replaced');
+          };
+          return {
+            getId: () => {
+              assertCurrentSession();
+              return session.thread.getId();
+            },
+            create: async options => {
+              assertCurrentSession();
+              const thread = await session.thread.create(options);
+              assertCurrentSession();
+              return thread;
+            },
+            switch: async options => {
+              assertCurrentSession();
+              await session.thread.switch(options);
+              assertCurrentSession();
+            },
+            clone: async options => {
+              assertCurrentSession();
+              const thread = await session.thread.clone(options);
+              assertCurrentSession();
+              return thread;
+            },
+            rename: async options => {
+              assertCurrentSession();
+              await session.thread.rename(options);
+              assertCurrentSession();
+            },
+            getById: async options => {
+              assertCurrentSession();
+              const thread = await session.thread.getById(options);
+              assertCurrentSession();
+              return thread;
+            },
+          };
+        },
+        getStateBackend: () => {
+          const session = activeSession;
+          const sessionSignal = piSessionFacadeController.signal;
+          if (!session) return undefined;
+          const assertCurrentSession = () => {
+            if (sessionSignal.aborted || activeSession !== session) throw new Error('Pi action session was replaced');
+          };
+          return {
+            get: async key => {
+              assertCurrentSession();
+              if (!session.thread.getId()) await session.thread.create();
+              assertCurrentSession();
+              const value = await session.thread.getSetting({ key });
+              assertCurrentSession();
+              return value;
+            },
+            set: async (key, value) => {
+              assertCurrentSession();
+              if (!session.thread.getId()) await session.thread.create();
+              assertCurrentSession();
+              await session.thread.setSetting({ key, value });
+              assertCurrentSession();
+            },
+          };
+        },
+        getModelHost: () => {
+          const session = activeSession;
+          const runtimeController = pluginRuntimeController;
+          const sessionSignal = piSessionFacadeController.signal;
+          if (!session || !runtimeController) return undefined;
+          const assertCurrentSession = () => {
+            if (sessionSignal.aborted || activeSession !== session) throw new Error('Pi action session was replaced');
+          };
+          return {
+            getCurrentModelId: () => {
+              assertCurrentSession();
+              return session.model.get();
+            },
+            listAvailableModels: async () => {
+              assertCurrentSession();
+              const models = await runtimeController.listAvailableModels();
+              assertCurrentSession();
+              return models;
+            },
+            switchModel: async modelId => {
+              assertCurrentSession();
+              await session.model.switch({ modelId });
+              assertCurrentSession();
+            },
+            getThinkingLevel: () => {
+              assertCurrentSession();
+              return session.state.get().thinkingLevel;
+            },
+            setThinkingLevel: async level => {
+              if (!isMastraCodeThinkingLevel(level)) throw new Error(`Unsupported thinking level: ${level}`);
+              assertCurrentSession();
+              await session.state.set({ thinkingLevel: level });
+              assertCurrentSession();
+            },
+          };
+        },
+        listTools: async () => Object.keys(await codeAgent.listTools()),
+        getActiveTools: async () => {
+          const session = activeSession;
+          const sessionSignal = piSessionFacadeController.signal;
+          const allTools = Object.keys(await codeAgent.listTools());
+          if (sessionSignal.aborted || activeSession !== session) throw new Error('Pi action session was replaced');
+          const requested = session
+            ? await session.thread.getSetting({
+                key: `mastracode.pi.${generation.pluginId}.${generation.extensionId}.activeTools`,
+              })
+            : undefined;
+          if (sessionSignal.aborted || activeSession !== session) throw new Error('Pi action session was replaced');
+          return Array.isArray(requested)
+            ? requested.filter(tool => typeof tool === 'string' && allTools.includes(tool))
+            : allTools;
+        },
+        setActiveTools: async tools => {
+          const session = activeSession;
+          const sessionSignal = piSessionFacadeController.signal;
+          if (!session?.thread.getId()) throw new Error('Pi setActiveTools requires an active thread');
+          if (sessionSignal.aborted) throw new Error('Pi action session was replaced');
+          await session.thread.setSetting({
+            key: `mastracode.pi.${generation.pluginId}.${generation.extensionId}.activeTools`,
+            value: tools,
+          });
+          if (sessionSignal.aborted || activeSession !== session) throw new Error('Pi action session was replaced');
+        },
+        refreshTools: async () => {
+          await pluginManager?.reload();
+        },
+        exec: async (command, args, options) => {
+          const session = activeSession;
+          const sessionSignal = piSessionFacadeController.signal;
+          const sandbox = session?.getWorkspace()?.sandbox;
+          if (!session || !sandbox?.executeCommand) {
+            throw new Error('Pi exec requires an active Mastra Code workspace command runner');
+          }
+          if (session.approval.isArmed()) throw new Error('Another tool approval is already pending');
+          const cwd = path.resolve(options?.cwd ?? project.rootPath);
+          const relative = path.relative(project.rootPath, cwd);
+          if (relative.startsWith('..') || path.isAbsolute(relative)) {
+            throw new Error(`Pi exec cwd must remain inside the project root: ${cwd}`);
+          }
+          const toolCallId = `pi-exec-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+          const approval = session.approval.arm({ toolName: 'execute_command', toolCallId });
+          session.emit({
+            type: 'tool_approval_required',
+            toolCallId,
+            toolName: 'execute_command',
+            args: { command, args, cwd },
+          });
+          const runSignal = session.run.getAbortSignal();
+          const executionSignal = AbortSignal.any(
+            [generation.staleSignal, sessionSignal, runSignal].filter(
+              (signal): signal is AbortSignal => signal !== undefined,
+            ),
+          );
+          let rejectForAbort: (() => void) | undefined;
+          const aborted = new Promise<never>((_resolve, reject) => {
+            rejectForAbort = () => {
+              session.approval.cancel();
+              reject(
+                executionSignal.reason instanceof Error ? executionSignal.reason : new Error('Pi exec was cancelled'),
+              );
+            };
+            if (executionSignal.aborted) rejectForAbort();
+            else executionSignal.addEventListener('abort', rejectForAbort, { once: true });
+          });
+          let decision: Awaited<typeof approval>;
+          try {
+            decision = await Promise.race([approval, aborted]);
+          } finally {
+            if (rejectForAbort) executionSignal.removeEventListener('abort', rejectForAbort);
+          }
+          generation.assertActive();
+          if (sessionSignal.aborted || activeSession !== session) {
+            throw new Error('Pi exec session changed while approval was pending');
+          }
+          if (decision.decision !== 'approve') throw new Error('Pi exec was declined');
+          const result = await sandbox.executeCommand(command, args, {
+            cwd,
+            timeout: 120_000,
+            abortSignal: executionSignal,
+            maxRetainedBytes: 1_048_576,
+          });
+          return { stdout: result.stdout, stderr: result.stderr, code: result.exitCode };
+        },
+        isIdle: () => !activeSession?.run.isRunning(),
+        waitForIdle: async signal => {
+          const session = activeSession;
+          const sessionSignal = piSessionFacadeController.signal;
+          if (!session?.run.isRunning()) return;
+          await new Promise<void>((resolve, reject) => {
+            const cleanup = () => {
+              signal.removeEventListener('abort', onAbort);
+              sessionSignal.removeEventListener('abort', onSessionReplacement);
+              unsubscribe();
+            };
+            const rejectFor = (reason: unknown) => {
+              cleanup();
+              reject(reason instanceof Error ? reason : new Error('Pi waitForIdle was cancelled'));
+            };
+            const onAbort = () => rejectFor(signal.reason);
+            const onSessionReplacement = () => rejectFor(sessionSignal.reason);
+            const unsubscribe = session.subscribe(event => {
+              if (event.type !== 'agent_end') return;
+              cleanup();
+              resolve();
+            });
+            if (signal.aborted) onAbort();
+            else if (sessionSignal.aborted) onSessionReplacement();
+            else {
+              signal.addEventListener('abort', onAbort, { once: true });
+              sessionSignal.addEventListener('abort', onSessionReplacement, { once: true });
+            }
+          });
+        },
+        getPendingMessages: () => ({ followUps: activeSession?.followUps.count() ?? 0 }),
+        abort: () => activeSession?.abort(),
+        getContextUsage: () => activeSession?.getTokenUsage(),
+        getSystemPrompt: async () => {
+          const instructions = await codeAgent.getInstructions();
+          return typeof instructions === 'string' ? instructions : JSON.stringify(instructions);
+        },
+      },
+    }),
+  );
   const loadedPlugins = pluginManager ? await pluginManager.reload() : [];
   const pluginTools = pluginManager?.getPluginTools() ?? {};
   const piEventAdapter = new PiEventAdapter({ cwd: project.rootPath });
-  await piEventAdapter.setGenerations(pluginManager?.getPiGenerations?.() ?? []);
+  const piGenerations = pluginManager?.getPiGenerations?.() ?? [];
+  await piEventAdapter.setGenerations(piGenerations);
 
   // Scorers (live evaluation with sampling)
   const outcomeScorer = createOutcomeScorer();
@@ -1225,6 +1513,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // Lets the composition layer publish the created session back into the
     // config closures (e.g. notification stream options read it lazily).
     setActiveSession: async (session: Session<MastraCodeState>) => {
+      if (activeSession !== session) {
+        piSessionFacadeController.abort(new Error('Pi action session was replaced'));
+        piSessionFacadeController = new AbortController();
+      }
       activeSession = session;
       await piEventAdapter.attach(session);
     },
