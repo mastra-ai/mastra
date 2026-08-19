@@ -407,12 +407,7 @@ export class ProcessorRunner {
     };
 
     const stateId = processor.stateId ?? processor.id;
-    const beforeAddStateSignal = rotateResponseMessageId
-      ? () => {
-          messageList.markResponseMessageBoundary();
-          rotateResponseMessageId();
-        }
-      : undefined;
+    const beforeAddStateSignal = rotateResponseMessageId;
     const trackingById = getStateSignalsMetadata(thread.metadata);
     const tracking = trackingById[stateId];
     const { activeStateSignals, contextWindow, lastSnapshot, deltasSinceSnapshot } = await resolveStateSignalHistory({
@@ -1576,12 +1571,7 @@ export class ProcessorRunner {
               memoryConfig: memoryContext?.memoryConfig,
               messageList,
               defaultId: processor.stateId ?? processor.id,
-              beforeAddSignal: rotateResponseMessageId
-                ? () => {
-                    messageList.markResponseMessageBoundary();
-                    rotateResponseMessageId();
-                  }
-                : undefined,
+              beforeAddSignal: rotateResponseMessageId,
               writeSignal: signal => writer?.custom(signal.toDataPart()),
             });
             return result.skipped ? result : result.signal;
