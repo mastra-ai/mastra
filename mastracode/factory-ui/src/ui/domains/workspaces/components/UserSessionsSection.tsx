@@ -38,11 +38,6 @@ function userSessionStatus({
   return undefined;
 }
 
-/** WorkOS user ids are long and opaque; keep enough to tell owners apart. */
-function truncateOwnerId(userId: string): string {
-  return userId.length > 13 ? `${userId.slice(0, 13)}…` : userId;
-}
-
 export function UserSessionsSection() {
   const { baseUrl } = useApiConfig();
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -137,9 +132,7 @@ export function UserSessionsSection() {
                 key={session.sessionId}
                 name={name}
                 title={getUserSessionTooltip(session)}
-                // No org-member display-name lookup exists in factory-ui yet, so
-                // non-owned sessions show a truncated owner id.
-                owner={viewerUserId && !isOwn(session) ? truncateOwnerId(session.userId) : undefined}
+                owner={viewerUserId && !isOwn(session) ? session.owner?.name : undefined}
                 url={url}
                 active={active}
                 disabled={pending}

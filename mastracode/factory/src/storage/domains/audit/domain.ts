@@ -1,10 +1,12 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { ApiRoute, IUserProvider } from '@mastra/core/server';
+import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import type { RouteAuth } from '../../../routes/route.js';
+import { resolveUserProfiles } from '../../../users.js';
+import type { UserDirectory, UserProfile } from '../../../users.js';
 import type { FactoryProjectsStorage } from '../projects/base.js';
 import type {
   AuditContext,
@@ -49,11 +51,7 @@ interface FactorySessionState {
   projectRepositoryId?: string;
 }
 
-export interface AuditActorProfile {
-  id: string;
-  name: string;
-  avatarUrl?: string;
-}
+export type AuditActorProfile = UserProfile;
 
 /**
  * Reserved metadata key on `AuditEventRow.metadata` that carries the acting
@@ -108,7 +106,7 @@ export interface AuditDomainOptions {
   /** Projects domain handle, used to scope the audit trail route. */
   projects: FactoryProjectsStorage;
   /** Resolve persisted human actor ids to display names and profile images. */
-  users?: Pick<IUserProvider, 'getUser' | 'getUsers'>;
+  users?: UserDirectory;
   /** Best-effort fan-out destinations notified after each recorded event. */
   sinks?: AuditSink[];
   /** Resolve the acting tenant for agent-emitted events from the request context. */
@@ -334,24 +332,8 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
     const unresolved = humanActorIds.filter(actorId => !profiles[actorId]);
     if (unresolved.length === 0 || !this.#users) return profiles;
 
-    try {
-      const users = this.#users.getUsers
-        ? await this.#users.getUsers(unresolved)
-        : await Promise.all(unresolved.map(actorId => this.#users?.getUser(actorId) ?? null));
-      for (const [index, user] of users.entries()) {
-        if (!user) continue;
-        const name = user.name?.trim() || user.email?.trim() || user.id;
-        const actorId = unresolved[index] ?? user.id;
-        profiles[actorId] = {
-          id: user.id,
-          name,
-          ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
-        };
-      }
-    } catch (err) {
-      console.warn('[Audit] Failed to resolve audit actor profiles', {
-        error: err instanceof Error ? err.message : String(err),
-      });
+    for (const [actorId, profile] of await resolveUserProfiles(this.#users, unresolved)) {
+      profiles[actorId] = profile;
     }
     return profiles;
   }

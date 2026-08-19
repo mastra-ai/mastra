@@ -482,6 +482,16 @@ async function gateDispatch(
   return {};
 }
 
+const TITLE_MAX = 80;
+/** Slack ids the adapter could not put a name to (`<@U0B…>`, `@U0B…`) — noise in a human-facing card. */
+const UNNAMED_MENTION = /<@[UWB][A-Z0-9]{5,}>|(?<![\w@])@[UWB][A-Z0-9]{5,}\b/g;
+
+/** The first line of what was said, as a Work-board card reads it. */
+export function workItemTitle(text: string): string {
+  const said = text.replace(UNNAMED_MENTION, ' ').replace(/\s+/g, ' ').trim();
+  return said.length > TITLE_MAX ? `${said.slice(0, TITLE_MAX - 1)}…` : said;
+}
+
 /**
  * Upsert the Work-board card for a dispatched Slack-thread run. Keyed on the
  * thread via `externalSource` — the work-items domain's unique
@@ -519,7 +529,7 @@ export async function upsertThreadWorkItem({
   url?: string;
 }): Promise<void> {
   try {
-    const title = message.text.length > 80 ? `${message.text.slice(0, 79)}…` : message.text;
+    const title = workItemTitle(message.text);
 
     await workItems.upsert({
       orgId: link.orgId ?? '',

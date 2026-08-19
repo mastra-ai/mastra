@@ -425,6 +425,42 @@ describe('AgentChannels', () => {
       );
     });
 
+    it('stamps the bot identity so a reader can name the id the message mentions', async () => {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      const mockMastra = {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+      await agentChannels.initialize(mockMastra);
+      (agentChannels.adapters.discord as any).botUserId = 'U0BMHEJ7RLY';
+
+      const chatThread = {
+        id: 'channel-1:thread-1',
+        channelId: 'channel-1',
+        isDM: false,
+        adapter: agentChannels.adapters.discord,
+        isSubscribed: vi.fn().mockResolvedValue(true),
+        subscribe: vi.fn().mockResolvedValue(undefined),
+        mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+        messages: (async function* () {})(),
+      } as any;
+      const message = {
+        id: 'message-1',
+        text: '<@U0BMHEJ7RLY> your turn',
+        author: { userId: 'user-1', userName: 'tyler', fullName: 'Tyler Barnes' },
+        attachments: [],
+      } as any;
+
+      await (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
+
+      const [signal] = mockAgent.sendMessage.mock.calls[0];
+      expect(signal.providerOptions.mastra.channels.discord.bot).toEqual({
+        userId: 'U0BMHEJ7RLY',
+        userName: 'TestBot',
+      });
+    });
+
     it('skips messages with no text and no attachments', async () => {
       const db = new InMemoryDB();
       const memoryStore = new InMemoryMemory({ db });

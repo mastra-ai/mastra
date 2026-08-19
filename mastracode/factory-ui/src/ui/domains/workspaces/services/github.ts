@@ -629,12 +629,21 @@ async function postRepositoryGitOp<T>(
   return (await res.json()) as T;
 }
 
+/** The person who started a session, as the auth provider names them. */
+export interface SessionOwner {
+  id: string;
+  name: string;
+  avatarUrl?: string;
+}
+
 export interface FactoryUserSession {
   id: string;
   sessionId: string;
   projectRepositoryId: string;
   orgId: string;
   userId: string;
+  /** Absent when the auth provider cannot resolve users by id. */
+  owner?: SessionOwner;
   visibility: 'org' | 'private';
   title?: string;
   branch: string;

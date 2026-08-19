@@ -348,6 +348,7 @@ export class MastraFactory {
     // One RouteAuth seam per boot, closed over the resolved provider. Every
     // factory route module receives this handle — no service locator.
     const routeAuth = createFactoryRouteAuth(auth);
+    const users = auth && isUserProvider(auth) ? auth : undefined;
 
     // Explicit integrations win. Platform credentials fill only missing GitHub
     // and Linear slots so callers can override either provider independently.
@@ -413,7 +414,7 @@ export class MastraFactory {
       auth: routeAuth,
       audit: auditStorage,
       projects: factoryProjectsStorage,
-      users: auth && isUserProvider(auth) ? auth : undefined,
+      users,
       sinks: integrations,
       agentTenant: requestContext => {
         const user = getFactoryAuthUserFromContext(requestContext);
@@ -770,6 +771,7 @@ export class MastraFactory {
             controllerId: CONTROLLER_ID,
             controller,
             auth: routeAuth,
+            users,
             authStorage,
             audit: auditDomain,
             publicOrigin,

@@ -609,6 +609,7 @@ function buildApp(
     controller?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['controller'];
     stateSigner?: typeof stateSigner | null;
     sessionRetirement?: SessionRetirementCoordinator;
+    users?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['users'];
   } = {},
 ) {
   const app = new Hono();
@@ -1478,6 +1479,26 @@ describe('ensure (materialize)', () => {
 });
 
 // ── Phase 4: worktree / commit / push / pr git routes ─────────────────────
+function orgSessionRow() {
+  const now = new Date().toISOString();
+  return {
+    id: 'r1',
+    projectRepositoryId: 'p1',
+    orgId: 'org1',
+    sessionId: 's-org-other',
+    userId: 'u1',
+    visibility: 'org',
+    branch: 'user/session-s-org-other',
+    title: null,
+    baseBranch: 'main',
+    sandboxId: null,
+    sandboxWorkdir: null,
+    materializedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
 function seedMaterializedProject(
   opts: { orgId?: string; userId?: string; setupCommand?: string | null; teardownCommand?: string | null } = {},
 ) {
@@ -1911,6 +1932,34 @@ describe('Factory session routes', () => {
     expect(res.status).toBe(200);
     const listed = (await res.json()).sessions.map((s: { sessionId: string }) => s.sessionId).sort();
     expect(listed).toEqual(['s-legacy-null', 's-org-other', 's-private-mine']);
+  });
+
+  it('names the org member who owns each listed session', async () => {
+    seedMaterializedProject();
+    tables.sessions.push(orgSessionRow());
+
+    const users = {
+      getUser: async (userId: string) =>
+        userId === 'u1' ? { id: 'u1', name: 'Ada Lovelace', avatarUrl: 'https://img/ada.png' } : null,
+    };
+    const res = await buildApp({ workosId: 'u2' }, { users }).request('/web/github/projects/p1/sessions');
+
+    expect((await res.json()).sessions[0].owner).toEqual({
+      id: 'u1',
+      name: 'Ada Lovelace',
+      avatarUrl: 'https://img/ada.png',
+    });
+  });
+
+  it('lists sessions unnamed when the auth provider cannot resolve users', async () => {
+    seedMaterializedProject();
+    tables.sessions.push(orgSessionRow());
+
+    const res = await buildApp({ workosId: 'u2' }).request('/web/github/projects/p1/sessions');
+    const [session] = (await res.json()).sessions;
+
+    expect(session.sessionId).toBe('s-org-other');
+    expect(session.owner).toBeUndefined();
   });
 
   it('derives a branch from a server-generated UUID when no session ID is supplied', async () => {

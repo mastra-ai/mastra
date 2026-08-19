@@ -8,6 +8,7 @@ import {
   createHandlers,
   resolveLinkedSender,
   resolveFactoryForLink,
+  workItemTitle,
 } from './slack.js';
 
 /**
@@ -783,6 +784,26 @@ describe('Slack thread work-item creation', () => {
 
     expect(thread.post).toHaveBeenCalledTimes(1);
     expect(warn).toHaveBeenCalled();
+  });
+
+  it('the card is titled with what was said, not with the ids the message addressed', async () => {
+    const deps = makeWorkItemDeps();
+    const handlers = createHandlers(deps as any);
+    const message = { ...makeMessage('T-1'), text: '<@U0BMHEJ7RLY> your turn to work\non the tasks' };
+
+    await handlers.onDirectMessage!(makeWorkItemThread(), message, vi.fn(), handlerCtx(deps.mastra));
+
+    expect(deps.upsert.mock.calls[0][0].input.title).toBe('your turn to work on the tasks');
+  });
+});
+
+describe('workItemTitle', () => {
+  it('keeps people the platform named and drops the ones it did not', () => {
+    expect(workItemTitle('ping @Ada about <@U0BQQQ1ZZZ>')).toBe('ping @Ada about');
+  });
+
+  it('caps a long message so the card stays one line', () => {
+    expect(workItemTitle('x'.repeat(120))).toBe(`${'x'.repeat(79)}\u2026`);
   });
 });
 

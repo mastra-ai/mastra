@@ -12,7 +12,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageFactory } from '@mastra/react/ui';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
-import { Bell, CircleDot, ExternalLink, Info, Layers, Slack } from 'lucide-react';
+import { Bell, CircleDot, ExternalLink, Info, Layers } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
@@ -25,6 +25,7 @@ import {
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { isTerminalInvocationState } from '../services/transcript';
+import { ChannelOriginBadge, ChannelThreadContext, channelMessageView, channelOrigin } from './ChannelMessage';
 import { MESSAGE_HOVER, MessageMeta } from './MessageMeta';
 import { ToolCard } from './tool/ToolCard';
 import { ToolGroup, TOOL_GROUP_MIN } from './tool/ToolGroup';
@@ -646,46 +647,6 @@ export function TranscriptEntries({
   );
 }
 
-const CHANNEL_PLATFORM_LABEL: Record<string, string> = {
-  slack: 'Slack',
-};
-
-/**
- * Channel provenance for a message that arrived via a channel adapter.
- * `agent-channels` stamps `content.providerMetadata.mastra.channels.<platform>`
- * with author facts on inbound messages exactly so UIs can show origin
- * without unpacking the signal envelope.
- */
-export function channelOrigin(entry: MessageEntry): { platform: string; authorName?: string } | undefined {
-  const mastra = entry.message.content.providerMetadata?.mastra;
-  const channels = isRecord(mastra) ? mastra.channels : undefined;
-  if (!isRecord(channels)) return undefined;
-  const platform = Object.keys(channels)[0];
-  if (!platform) return undefined;
-  const info = channels[platform];
-  const author = isRecord(info) && isRecord(info.author) ? info.author : undefined;
-  const authorName =
-    typeof author?.fullName === 'string'
-      ? author.fullName
-      : typeof author?.userName === 'string'
-        ? author.userName
-        : undefined;
-  return { platform, authorName };
-}
-
-export function ChannelOriginBadge({ origin }: { origin: { platform: string; authorName?: string } }) {
-  const label = CHANNEL_PLATFORM_LABEL[origin.platform] ?? origin.platform;
-  return (
-    <div className="text-ui-xs text-icon3 mt-1 flex items-center gap-1" aria-label={`Sent from ${label}`}>
-      {origin.platform === 'slack' && <Slack className="size-3" aria-hidden="true" />}
-      <span>
-        via {label}
-        {origin.authorName ? ` · ${origin.authorName}` : ''}
-      </span>
-    </div>
-  );
-}
-
 function MessageBubble({
   entry,
   suspensions,
@@ -698,19 +659,25 @@ function MessageBubble({
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {
   const messageParts = entry.message.content.parts ?? [];
-  const parts = messageParts.filter(part => isRenderablePart(part, suspensions, entry.runtimeTools));
+  const renderableParts = messageParts.filter(part => isRenderablePart(part, suspensions, entry.runtimeTools));
+  const origin = channelOrigin(entry);
+  // The thread history rides inside the message text; read it out so the bubble keeps only what was said.
+  const channel = origin ? channelMessageView(renderableParts, origin) : undefined;
+  const parts = channel?.parts ?? renderableParts;
   const message =
-    parts.length === messageParts.length
+    !channel && parts.length === messageParts.length
       ? entry.message
       : { ...entry.message, content: { ...entry.message.content, parts } };
   const hasRenderablePart = parts.length > 0;
 
   const toolGroups = collectToolGroups(parts, suspensions, entry.runtimeTools);
-  const origin = channelOrigin(entry);
   const prose = messageText(parts);
   const roles: MessageRoleRenderers = {
     User: ({ children }) => (
       <div className={cn(MESSAGE_HOVER, 'my-3 ml-auto flex w-fit max-w-[70%] flex-col items-end')}>
+        {channel && channel.context.length > 0 && (
+          <ChannelThreadContext platform={channel.platform} messages={channel.context} />
+        )}
         <div
           className={cn(
             'text-text1 rounded-xl px-4 py-2 break-words',
