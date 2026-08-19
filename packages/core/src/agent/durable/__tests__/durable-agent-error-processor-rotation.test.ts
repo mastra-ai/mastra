@@ -6,12 +6,12 @@ import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 
-function makeFailThenAnswerModel() {
+function makeFailThenAnswerModel(failures = 1) {
   let calls = 0;
   return new MockLanguageModelV2({
     doStream: async () => {
       calls++;
-      if (calls === 1) {
+      if (calls <= failures) {
         throw new APICallError({
           message: 'upstream failed',
           url: 'https://model.example.com/v1/messages',
@@ -75,5 +75,33 @@ describe('durable agent API-error retry', () => {
     expect(rotations[0]!.before).toBeTruthy();
     expect(rotations[0]!.after).toBeTruthy();
     expect(rotations[0]!.after).not.toBe(rotations[0]!.before);
+  });
+  it('carries a rotated id into the next retry instead of falling back', async () => {
+    const rotations: Array<{ before: string | undefined; after: string | undefined }> = [];
+    const agent = new Agent({
+      id: 'durable-api-error-rotation-chain',
+      name: 'durable-api-error-rotation-chain',
+      instructions: 'You are helpful.',
+      model: [{ model: makeFailThenAnswerModel(2) as LanguageModelV2, maxRetries: 0 }],
+      maxProcessorRetries: 2,
+      errorProcessors: [
+        {
+          id: 'rotate-on-api-error',
+          processAPIError: async ({ messageId, rotateResponseMessageId }) => {
+            rotations.push({ before: messageId, after: rotateResponseMessageId?.() });
+            return { retry: true };
+          },
+        },
+      ],
+    });
+
+    const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+    const { fullStream, cleanup } = await durableAgent.stream('hello');
+    for await (const _chunk of fullStream) {
+    }
+    await cleanup?.();
+
+    expect(rotations).toHaveLength(2);
+    expect(rotations[1]!.before).toBe(rotations[0]!.after);
   });
 });
