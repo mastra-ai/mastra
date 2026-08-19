@@ -160,11 +160,11 @@ Use a remote or container backend when commands need a stronger boundary from th
 
 If Mastra doesn't support your execution backend, implement the [sandbox provider interface](/reference/workspace/sandbox) to add it.
 
-## Persistent storage
+## Filesystem
 
-Files stored only inside a sandbox follow that backend's lifecycle. Configure a filesystem when inputs or outputs must remain available outside the sandbox environment.
+Each sandbox has a native filesystem that commands can use. Treat it as ephemeral because its contents follow the sandbox's lifecycle.
 
-Use [`mounts`](/docs/sandbox/filesystem#mounts) when file tools and sandbox commands should access the same persistent files. File tools access each provider directly. Commands can use a mount path only when the sandbox backend mounts that provider successfully. See [Mount availability](/docs/sandbox/filesystem#mount-availability) for supported combinations and failure behavior.
+To seed a sandbox with files or keep files between runs, give the agent a [filesystem](/docs/sandbox/filesystem). Use mounts when sandbox commands need access to the same files.
 
 ## Multi-tenant sandboxes
 
