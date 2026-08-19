@@ -12,6 +12,7 @@ import { collectActivePluginTools, isInsideDirectory, loadPlugins, resolvePlugin
 import { ensureMastraCodePackageLink } from './package-link.js';
 import { getPluginScopePaths } from './paths.js';
 import type { PluginPathOptions } from './paths.js';
+import type { PiExtensionGeneration, PiRuntimeActions } from './pi/types.js';
 import { loadPluginRegistry, removePluginRecord, savePluginRegistry, setPluginRecord } from './registry.js';
 import type { LoadedPlugin, PluginContribution, PluginProcessorEntries, PluginScope } from './types.js';
 
@@ -33,6 +34,7 @@ type PluginManagerOptions = PluginPathOptions & {
    * every load and reload.
    */
   runtime?: MastraCodePluginRuntime;
+  piRuntimeActions?: (generation: PiExtensionGeneration) => PiRuntimeActions;
 };
 
 export class PluginManager {
@@ -50,9 +52,13 @@ export class PluginManager {
   private readonly reloadListeners = new Set<(plugins: LoadedPlugin[]) => void | Promise<void>>();
   private readonly githubUpdateListeners = new Set<(pluginNames: string[]) => void | Promise<void>>();
   private runtime: MastraCodePluginRuntime | undefined;
+  private piRuntimeActions: ((generation: PiExtensionGeneration) => PiRuntimeActions) | undefined;
+  private runtimeGeneration = 0;
+  private loadedRuntimeGeneration = 0;
 
   constructor(private readonly options: PluginManagerOptions) {
     this.runtime = options.runtime;
+    this.piRuntimeActions = options.piRuntimeActions;
   }
 
   /**
@@ -63,7 +69,13 @@ export class PluginManager {
    * A manager shared across controllers sees the most recent controller's accessors.
    */
   setRuntime(runtime: MastraCodePluginRuntime): void {
+    if (this.runtime !== runtime) this.runtimeGeneration += 1;
     this.runtime = runtime;
+  }
+
+  setPiRuntimeActions(actions: (generation: PiExtensionGeneration) => PiRuntimeActions): void {
+    this.piRuntimeActions = actions;
+    this.runtimeGeneration += 1;
   }
 
   onReload(listener: (plugins: LoadedPlugin[]) => void | Promise<void>): () => void {
@@ -81,14 +93,32 @@ export class PluginManager {
     if (this.reloadInFlight) return this.reloadInFlight;
 
     this.reloadInFlight = (async () => {
-      this.loadedPlugins = await loadPlugins({ ...this.options, runtime: this.runtime });
-      await this.stampLoadedPlugins(this.loadedPlugins);
-      this.updateLocalEntryWatchers(this.loadedPlugins);
-      this.updateGithubPoller(this.loadedPlugins);
-      this.updatePluginRenderConfigs(this.loadedPlugins);
-      this.updatePluginTools(collectActivePluginTools(this.loadedPlugins));
-      await this.notifyReloadListeners(this.loadedPlugins);
-      return this.loadedPlugins;
+      const candidates = await loadPlugins({ ...this.options, runtime: this.runtime });
+      await this.stampLoadedPlugins(candidates);
+      const { plugins, retiredGenerations, newGenerations } = this.reconcilePiGenerations(
+        candidates,
+        this.runtimeGeneration === this.loadedRuntimeGeneration,
+      );
+      const actionsByGeneration = new Map<PiExtensionGeneration, PiRuntimeActions | undefined>();
+      try {
+        for (const generation of newGenerations) {
+          actionsByGeneration.set(generation, this.piRuntimeActions?.(generation));
+        }
+      } catch (error) {
+        const candidateGenerations = candidates.flatMap(plugin => (plugin.piGeneration ? [plugin.piGeneration] : []));
+        await Promise.all(candidateGenerations.map(generation => generation.invalidate()));
+        throw error;
+      }
+      await Promise.all(retiredGenerations.map(generation => generation.invalidate()));
+      for (const generation of newGenerations) generation.bind(actionsByGeneration.get(generation));
+      this.loadedPlugins = plugins;
+      this.loadedRuntimeGeneration = this.runtimeGeneration;
+      this.updateLocalEntryWatchers(plugins);
+      this.updateGithubPoller(plugins);
+      this.updatePluginRenderConfigs(plugins);
+      this.updatePluginTools(collectActivePluginTools(plugins));
+      await this.notifyReloadListeners(plugins);
+      return plugins;
     })().finally(() => {
       this.reloadInFlight = undefined;
     });
@@ -105,6 +135,23 @@ export class PluginManager {
 
   getLoadedPlugins(): LoadedPlugin[] {
     return this.loadedPlugins;
+  }
+
+  async stopPiExtensions(message?: string): Promise<void> {
+    const generations = this.loadedPlugins.flatMap(plugin => (plugin.piGeneration ? [plugin.piGeneration] : []));
+    await Promise.all(generations.map(generation => generation.invalidate(message)));
+  }
+
+  async dispose(): Promise<void> {
+    for (const entryPath of this.watchedLocalEntries) fs.unwatchFile(entryPath);
+    this.watchedLocalEntries.clear();
+    this.localEntryVersions.clear();
+    if (this.githubPollTimer) clearInterval(this.githubPollTimer);
+    this.githubPollTimer = undefined;
+    await this.stopPiExtensions();
+    this.loadedPlugins = [];
+    this.updatePluginRenderConfigs([]);
+    this.updatePluginTools({});
   }
 
   getPluginTools() {
@@ -146,6 +193,53 @@ export class PluginManager {
     return this.collectActive(plugin => plugin.signalProviders ?? []);
   }
 
+  private reconcilePiGenerations(
+    candidates: LoadedPlugin[],
+    reuseUnchanged: boolean,
+  ): {
+    plugins: LoadedPlugin[];
+    retiredGenerations: PiExtensionGeneration[];
+    newGenerations: PiExtensionGeneration[];
+  } {
+    const previousById = new Map(this.loadedPlugins.map(plugin => [plugin.id, plugin]));
+    const nextGenerationIds = new Set<string>();
+    const retiredGenerations = new Set<PiExtensionGeneration>();
+    const newGenerations: PiExtensionGeneration[] = [];
+    const plugins = candidates.map(candidate => {
+      const previous = previousById.get(candidate.id);
+      if (
+        reuseUnchanged &&
+        candidate.compatibility === 'pi' &&
+        candidate.status === 'load failed' &&
+        previous?.status === 'active' &&
+        previous.piGeneration?.active
+      ) {
+        nextGenerationIds.add(previous.piGeneration.id);
+        return { ...previous, candidateError: candidate.error };
+      }
+      if (candidate.status === 'active' && candidate.piGeneration) {
+        if (
+          reuseUnchanged &&
+          previous?.status === 'active' &&
+          previous.piGeneration?.active &&
+          previous.versionStamp === candidate.versionStamp
+        ) {
+          nextGenerationIds.add(previous.piGeneration.id);
+          retiredGenerations.add(candidate.piGeneration);
+          return previous;
+        }
+        newGenerations.push(candidate.piGeneration);
+        nextGenerationIds.add(candidate.piGeneration.id);
+      }
+      return candidate;
+    });
+    for (const plugin of this.loadedPlugins) {
+      const generation = plugin.piGeneration;
+      if (generation && !nextGenerationIds.has(generation.id)) retiredGenerations.add(generation);
+    }
+    return { plugins, retiredGenerations: [...retiredGenerations], newGenerations };
+  }
+
   private collectActive<TValue>(select: (plugin: LoadedPlugin) => TValue[]): PluginContribution<TValue>[] {
     return this.loadedPlugins.flatMap(plugin =>
       plugin.status === 'active'
@@ -168,6 +262,7 @@ export class PluginManager {
     for (const plugin of plugins) {
       plugin.versionStamp = [
         plugin.status,
+        plugin.compatibility ?? 'native',
         await this.readSourceStamp(plugin),
         JSON.stringify(plugin.configValues ?? {}),
       ].join('|');

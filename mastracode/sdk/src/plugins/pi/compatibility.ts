@@ -30,6 +30,79 @@ export interface PiPackageCompatibility {
   diagnostics: PiCompatibilityDiagnostic[];
 }
 
+const PI_CAPABILITY_SUPPORT: Readonly<Record<string, PiCapabilitySupport>> = {
+  registerTool: 'adapted',
+  registerCommand: 'adapted',
+  registerShortcut: 'version-gated',
+  registerFlag: 'adapted',
+  getFlag: 'adapted',
+  registerMessageRenderer: 'adapted',
+  registerMarkdownTransformer: 'unsupported',
+  registerEntryRenderer: 'unsupported',
+  registerProvider: 'adapted',
+  registerNativeProvider: 'unsupported',
+  unregisterProvider: 'adapted',
+  events: 'direct',
+  sendMessage: 'adapted',
+  sendUserMessage: 'adapted',
+  appendEntry: 'adapted',
+  setSessionName: 'adapted',
+  getSessionName: 'adapted',
+  setLabel: 'adapted',
+  exec: 'adapted',
+  getActiveTools: 'adapted',
+  getAllTools: 'adapted',
+  setActiveTools: 'adapted',
+  getCommands: 'direct',
+  setModel: 'adapted',
+  getThinkingLevel: 'adapted',
+  setThinkingLevel: 'adapted',
+};
+
+const PI_EVENT_SUPPORT: Readonly<Record<string, PiCapabilitySupport>> = {
+  project_trust: 'adapted',
+  resources_discover: 'adapted',
+  session_start: 'adapted',
+  session_info_changed: 'adapted',
+  session_before_switch: 'adapted',
+  session_before_fork: 'adapted',
+  session_before_compact: 'adapted',
+  session_compact: 'adapted',
+  session_compact_failed: 'adapted',
+  session_shutdown: 'adapted',
+  session_before_tree: 'unsupported',
+  session_tree: 'unsupported',
+  context: 'adapted',
+  before_provider_request: 'adapted',
+  before_provider_headers: 'unsupported',
+  after_provider_response: 'adapted',
+  before_agent_start: 'adapted',
+  agent_start: 'adapted',
+  agent_end: 'adapted',
+  agent_settled: 'adapted',
+  turn_start: 'adapted',
+  turn_end: 'adapted',
+  message_start: 'adapted',
+  message_update: 'adapted',
+  message_end: 'adapted',
+  tool_execution_start: 'direct',
+  tool_execution_update: 'direct',
+  tool_execution_end: 'direct',
+  model_select: 'adapted',
+  thinking_level_select: 'adapted',
+  tool_call: 'adapted',
+  tool_result: 'adapted',
+  user_bash: 'adapted',
+  input: 'adapted',
+};
+
+export function getPiCapabilitySupport(capability: string): PiCapabilitySupport {
+  if (capability.startsWith('event:')) {
+    return PI_EVENT_SUPPORT[capability.slice('event:'.length)] ?? 'unsupported';
+  }
+  return PI_CAPABILITY_SUPPORT[capability] ?? 'unsupported';
+}
+
 export function getPiPackageCompatibilityStatus(
   capabilities: readonly PiCapabilityCompatibility[],
 ): PiPackageCompatibilityStatus {

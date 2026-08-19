@@ -19,6 +19,7 @@ import type {
 } from '../plugin.js';
 import { getPluginRoot } from './paths.js';
 import type { PluginPathOptions } from './paths.js';
+import { loadPiExtensionGeneration } from './pi/loader.js';
 import { loadPluginRegistry, mergePluginRegistries } from './registry.js';
 import type { LoadedPlugin, LoadedPluginProcessors, PluginRegistry, ScopedInstalledPluginRecord } from './types.js';
 
@@ -62,6 +63,30 @@ export async function loadPluginRecord(
 ): Promise<LoadedPlugin> {
   try {
     const entryPath = resolvePluginEntryPath(record, options);
+    if (record.compatibility === 'pi') {
+      const config = Object.fromEntries(
+        Object.entries(record.config ?? {}).filter(
+          (entry): entry is [string, string | boolean] => typeof entry[1] === 'string' || typeof entry[1] === 'boolean',
+        ),
+      );
+      const piGeneration = await loadPiExtensionGeneration({
+        pluginId: record.id,
+        entryPath,
+        pluginRoot: resolvePluginRoot(record, options),
+        config,
+      });
+      return {
+        ...record,
+        name: record.id,
+        status: 'active',
+        tools: {},
+        toolNames: [],
+        configValues: config,
+        piCompatibility: piGeneration.compatibility,
+        piGeneration,
+      };
+    }
+
     const plugin = await importPluginModule(entryPath);
     if (plugin.id !== record.id) {
       throw new Error(`Plugin id mismatch: registry has "${record.id}" but module exports "${plugin.id}"`);

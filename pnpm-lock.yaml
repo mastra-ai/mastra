@@ -2510,6 +2510,9 @@ importers:
       '@earendil-works/pi-ai':
         specifier: 0.84.2
         version: 0.84.2(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(bufferutil@4.1.0)(supports-color@10.2.2)(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3)
+      '@earendil-works/pi-tui':
+        specifier: 0.84.2
+        version: 0.84.2(patch_hash=e9230224cf590c772c657d6c8d28e3545575ab4395f5d2e8f1119aa05edeae82)
       '@mastra/agent-browser':
         specifier: workspace:*
         version: link:../../browser/agent-browser

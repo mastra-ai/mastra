@@ -91,6 +91,7 @@ function validatePluginRegistry(raw: unknown): PluginRegistry {
     validated.plugins[id] = {
       enabled: record.enabled,
       source: record.source,
+      ...(record.compatibility === 'pi' ? { compatibility: record.compatibility } : {}),
       specifier: record.specifier,
       path: record.path,
       entry: record.entry,

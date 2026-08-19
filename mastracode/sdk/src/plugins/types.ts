@@ -7,6 +7,8 @@ import type {
   MastraCodePluginTools,
   MastraCodeToolRenderConfig,
 } from '../plugin.js';
+import type { PiPackageCompatibility } from './pi/compatibility.js';
+import type { PiExtensionGeneration } from './pi/types.js';
 
 /** Processors a plugin contributed, normalized into the lane they belong to. */
 export type LoadedPluginProcessors = {
@@ -34,11 +36,13 @@ export type PluginProcessorEntries = {
 
 export type PluginScope = 'global' | 'project';
 export type PluginSource = 'local' | 'github';
+export type PluginCompatibility = 'pi';
 export type PluginStatus = 'active' | 'inactive' | 'blocked' | 'load failed' | 'conflicted';
 
 export type InstalledPluginRecord = {
   enabled: boolean;
   source: PluginSource;
+  compatibility?: PluginCompatibility;
   specifier: string;
   path: string;
   entry: string;
@@ -74,6 +78,10 @@ export type LoadedPlugin = ScopedInstalledPluginRecord & {
   configSchema?: MastraCodePluginConfigSchema;
   configValues?: Record<string, MastraCodePluginConfigValue>;
   conflicts?: string[];
+  piCompatibility?: PiPackageCompatibility;
+  piGeneration?: PiExtensionGeneration;
+  /** Candidate-load failure retained while the previous Pi generation remains active. */
+  candidateError?: string;
   /**
    * Changes when this plugin's contributions should be rebuilt: source content
    * (git HEAD for GitHub checkouts, entry file version for local plugins) plus

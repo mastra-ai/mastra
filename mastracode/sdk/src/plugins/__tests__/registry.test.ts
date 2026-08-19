@@ -57,6 +57,14 @@ describe('plugin registry', () => {
             entry: 'src/index.ts',
             ref: 12,
           },
+          pi: {
+            enabled: true,
+            source: 'local',
+            compatibility: 'pi',
+            specifier: '../pi-package',
+            path: '../pi-package',
+            entry: 'extension.ts',
+          },
           invalid: { enabled: true, source: 'npm' },
         },
       }),
@@ -67,6 +75,14 @@ describe('plugin registry', () => {
     expect(loaded).toEqual({
       disabledPlugins: ['valid'],
       plugins: {
+        pi: {
+          enabled: true,
+          source: 'local',
+          compatibility: 'pi',
+          specifier: '../pi-package',
+          path: '../pi-package',
+          entry: 'extension.ts',
+        },
         valid: {
           enabled: true,
           source: 'local',
