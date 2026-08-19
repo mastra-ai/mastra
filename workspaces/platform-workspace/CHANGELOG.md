@@ -1,5 +1,41 @@
 # @mastra/platform
 
+## 1.3.0-alpha.2
+
+### Patch Changes
+
+- Added fallback checkpoint forwarding for Platform sandboxes so the workspace proxy can seed fresh sessions without changing their primary recovery key. ([#21803](https://github.com/mastra-ai/mastra/pull/21803))
+
+  ```typescript
+  const sandbox = new PlatformSandbox({
+    id: 'session-42',
+    seedCheckpointName: 'repo-base',
+  });
+  ```
+
+- Updated dependencies [[`58c43d3`](https://github.com/mastra-ai/mastra/commit/58c43d3f7cb2eeaeb8ac733ae71dde822348e588)]:
+  - @mastra/core@1.60.0-alpha.14
+
+## 1.3.0-alpha.1
+
+### Patch Changes
+
+- PlatformSandbox restarts use the current sandbox connection after the previous sandbox is deleted or the platform does not return an instance URL, so later commands do not hit a stale sidecar. ([#21798](https://github.com/mastra-ai/mastra/pull/21798))
+
+- PlatformSandbox now restarts a timed-out sidecar health probe on the next command instead of falling back to the slower lease-based exec path for the sandbox's lifetime. If the in-sandbox sidecar was just slow to boot, later commands recover the fast private-network transport automatically. ([#21798](https://github.com/mastra-ai/mastra/pull/21798))
+
+- Declared checkpoint support (`supportsCheckpoints`) so checkpoint-based features like warm base checkpoints and boot-from-checkpoint know snapshots are real. ([#21798](https://github.com/mastra-ai/mastra/pull/21798))
+
+  ```ts
+  // Gate checkpoint-dependent work on the provider's capability flag.
+  if (sandbox.supportsCheckpoints) {
+    await sandbox.snapshot(); // persists a checkpoint that can seed a later boot
+  }
+  ```
+
+- Updated dependencies [[`c549e2f`](https://github.com/mastra-ai/mastra/commit/c549e2f40edc1cac5d9e74e82f90da22b48df084), [`c549e2f`](https://github.com/mastra-ai/mastra/commit/c549e2f40edc1cac5d9e74e82f90da22b48df084), [`2ef2f23`](https://github.com/mastra-ai/mastra/commit/2ef2f230a7aed342e7dc3b2000cd42e4c43e08a7), [`5740ec6`](https://github.com/mastra-ai/mastra/commit/5740ec60c760ffdfbfaa59d603d03b847c864e05)]:
+  - @mastra/core@1.60.0-alpha.13
+
 ## 1.3.0-alpha.0
 
 ### Minor Changes

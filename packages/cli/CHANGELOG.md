@@ -1,5 +1,27 @@
 # mastra
 
+## 1.25.1-alpha.15
+
+### Patch Changes
+
+- Updated dependencies [[`58c43d3`](https://github.com/mastra-ai/mastra/commit/58c43d3f7cb2eeaeb8ac733ae71dde822348e588)]:
+  - @mastra/core@1.60.0-alpha.14
+  - @mastra/deployer@1.60.0-alpha.14
+
+## 1.25.1-alpha.14
+
+### Patch Changes
+
+- Improved Factory model-pack controls so settings can choose or clear the default for new chats, while each chat can select its own pack from the composer status line. ([#21762](https://github.com/mastra-ai/mastra/pull/21762))
+
+## 1.25.1-alpha.13
+
+### Patch Changes
+
+- Updated dependencies [[`c549e2f`](https://github.com/mastra-ai/mastra/commit/c549e2f40edc1cac5d9e74e82f90da22b48df084), [`c549e2f`](https://github.com/mastra-ai/mastra/commit/c549e2f40edc1cac5d9e74e82f90da22b48df084), [`2ef2f23`](https://github.com/mastra-ai/mastra/commit/2ef2f230a7aed342e7dc3b2000cd42e4c43e08a7), [`87f9d1e`](https://github.com/mastra-ai/mastra/commit/87f9d1ec74fa69f89734055aa07f6230f72138be), [`5740ec6`](https://github.com/mastra-ai/mastra/commit/5740ec60c760ffdfbfaa59d603d03b847c864e05)]:
+  - @mastra/core@1.60.0-alpha.13
+  - @mastra/deployer@1.60.0-alpha.13
+
 ## 1.25.1-alpha.12
 
 ### Patch Changes

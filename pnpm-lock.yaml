@@ -1136,6 +1136,9 @@ importers:
       '@internal/ai-v6':
         specifier: workspace:*
         version: link:../../packages/_vendored/ai_v6
+      '@internal/ai-v7':
+        specifier: workspace:*
+        version: link:../../packages/_vendored/ai_v7
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config

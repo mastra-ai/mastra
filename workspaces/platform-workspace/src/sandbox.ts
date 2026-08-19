@@ -54,6 +54,8 @@ export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'proc
   id?: string;
   environmentId?: string;
   sandboxId?: string;
+  /** Boot-only fallback checkpoint for a fresh sandbox whose primary recovery key has no state. */
+  seedCheckpointName?: string;
   idleTimeoutMinutes?: number;
   networkIsolation?: PlatformSandboxNetworkIsolation;
   env?: Record<string, string>;
@@ -342,6 +344,7 @@ export class PlatformSandbox extends MastraSandbox {
   private readonly _client: PlatformClient;
   private readonly _environmentId: string;
   private _sandboxId?: string;
+  private readonly _seedCheckpointName?: string;
   private readonly _idleTimeoutMinutes?: number;
   private readonly _networkIsolation?: PlatformSandboxNetworkIsolation;
   private readonly _env: Record<string, string>;
@@ -436,6 +439,7 @@ export class PlatformSandbox extends MastraSandbox {
     this._environmentId = options.environmentId ?? process.env.MASTRA_ENVIRONMENT_ID ?? '';
     if (!this._environmentId && !options.sandboxId) throw new Error('environmentId is required');
     this._sandboxId = options.sandboxId;
+    this._seedCheckpointName = options.seedCheckpointName;
     this._idleTimeoutMinutes = options.idleTimeoutMinutes;
     this._networkIsolation = options.networkIsolation;
     this._env = options.env ?? {};
@@ -480,6 +484,9 @@ export class PlatformSandbox extends MastraSandbox {
       fetch: this._client.fetch,
       environmentId: this._environmentId,
       ...(options.sandboxId !== undefined && { sandboxId: options.sandboxId }),
+      ...((options.seedCheckpointName ?? this._seedCheckpointName) !== undefined && {
+        seedCheckpointName: options.seedCheckpointName ?? this._seedCheckpointName,
+      }),
       idleTimeoutMinutes: options.idleTimeoutMinutes ?? this._idleTimeoutMinutes,
       ...(this._networkIsolation !== undefined && { networkIsolation: this._networkIsolation }),
       env: options.env ?? this._env,
@@ -551,6 +558,7 @@ export class PlatformSandbox extends MastraSandbox {
       // platform treats it as an advisory key: unknown values fall through
       // to a fresh sandbox, matching pre-existing behavior.
       id: this.id,
+      seedCheckpointName: this._seedCheckpointName,
       environmentId: this._environmentId,
       idleTimeoutMinutes: this._idleTimeoutMinutes,
       networkIsolation: this._networkIsolation,

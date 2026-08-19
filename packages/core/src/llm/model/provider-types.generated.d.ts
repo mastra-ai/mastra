@@ -1705,6 +1705,7 @@ export type ProviderModelsMap = {
     'kwaipilot/kat-coder-air-v2.5',
     'kwaipilot/kat-coder-pro-v2',
     'kwaipilot/kat-coder-pro-v2.5',
+    'liquid/lfm-2.5-2.6b:free',
     'mancer/weaver',
     'meituan/longcat-2.0',
     'meta-llama/llama-3.1-70b-instruct',
@@ -1942,6 +1943,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-5.1',
     'z-ai/glm-5.2',
     'z-ai/glm-5.2:free',
+    'z-ai/glm-5.3',
     'z-ai/glm-5v-turbo',
     '~anthropic/claude-fable-latest',
     '~anthropic/claude-haiku-latest',
@@ -1956,7 +1958,7 @@ export type ProviderModelsMap = {
     '~x-ai/grok-latest',
   ];
   readonly poolside: readonly ['poolside/laguna-m.1', 'poolside/laguna-s-2.1', 'poolside/laguna-xs-2.1'];
-  readonly hetzner: readonly ['DeepSeek-V4-Flash-0731', 'GLM-5.2-NVFP4', 'Kimi-K2.7-Code', 'Qwen/Qwen3.6-35B-A3B-FP8'];
+  readonly hetzner: readonly ['Qwen/Qwen3.6-35B-A3B-FP8', 'Qwen3.8-27B'];
   readonly 'regolo-ai': readonly [
     'apertus-70b',
     'brick-complexity-pro',
@@ -2814,6 +2816,7 @@ export type ProviderModelsMap = {
     'qwen/qwen3.6-plus',
     'qwen/qwen3.7-max',
     'qwen/qwen3.7-plus',
+    'qwen/qwen3.8-2.4t-a95b',
     'qwen/qwen3.8-max',
     'sakana/fugu-ultra',
     'sakana/sakana-namazu',
@@ -2837,6 +2840,7 @@ export type ProviderModelsMap = {
     'zai/glm-5-turbo',
     'zai/glm-5.1',
     'zai/glm-5.2',
+    'zai/glm-5.3',
   ];
   readonly inceptron: readonly [
     'MiniMaxAI/MiniMax-M2.5',
@@ -4876,6 +4880,7 @@ export type ProviderModelsMap = {
     'zai/glm-5.1',
     'zai/glm-5.2',
     'zai/glm-5.2-fast',
+    'zai/glm-5.3',
     'zai/glm-5v-turbo',
   ];
   readonly edenai: readonly [
@@ -5670,6 +5675,7 @@ export type ProviderModelsMap = {
     'kwaipilot/kat-coder-air-v2.5',
     'kwaipilot/kat-coder-pro-v2',
     'kwaipilot/kat-coder-pro-v2.5',
+    'liquid/lfm-2.5-2.6b:free',
     'mancer/weaver',
     'meituan/longcat-2.0',
     'meta-llama/llama-3.1-70b-instruct',
@@ -5909,7 +5915,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-5-turbo',
     'z-ai/glm-5.1',
     'z-ai/glm-5.2',
-    'z-ai/glm-5.2:free',
+    'z-ai/glm-5.3',
     'z-ai/glm-5v-turbo',
     '~anthropic/claude-fable-latest',
     '~anthropic/claude-haiku-latest',
@@ -6074,6 +6080,7 @@ export type ProviderModelsMap = {
     'Qwen/Qwen3.5-35B-A3B',
     'Qwen/Qwen3.6-27B',
     'Qwen/Qwen3.6-35B-A3B',
+    'Qwen/Qwen3.8-27B',
     'deepseek-ai/DeepSeek-V3.1',
     'deepseek-ai/DeepSeek-V4-Flash',
     'deepseek-ai/DeepSeek-V4-Flash-0731',

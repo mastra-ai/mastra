@@ -1,5 +1,73 @@
 # @mastra/core
 
+## 1.60.0-alpha.14
+
+### Minor Changes
+
+- Added `AgentControllerWireEvent`, `JsonReadyAgentControllerEvent`, `ErrorCarryingAgentControllerEvent` and `WireDisplayState` to `@mastra/core/agent-controller`. They describe an agent controller event as it crosses an HTTP boundary — display-state Maps as records, errors as `{ name, message }`, dates as ISO strings — and are derived from `AgentControllerEvent` itself, so a client can type what it receives without redeclaring the controller's events by hand. ([#21761](https://github.com/mastra-ai/mastra/pull/21761))
+
+  ```ts
+  import type { AgentControllerWireEvent } from '@mastra/core/agent-controller';
+
+  function onEvent(event: AgentControllerWireEvent) {
+    if (event.type === 'display_state_changed') {
+      // a record after JSON, where the controller holds a Map
+      Object.values(event.displayState.activeTools);
+    }
+    if (event.type === 'error') {
+      event.error.message;
+    }
+  }
+  ```
+
+## 1.60.0-alpha.13
+
+### Minor Changes
+
+- Added checkpoint support to LocalSandbox and a checkpoint capability signal to sandboxes. Sandboxes now expose `supportsCheckpoints` so features can detect whether `snapshot()` persists real state. LocalSandbox gained filesystem-backed checkpoints: pass `checkpointName` to seed the working directory on `start()` and persist it on `snapshot()`, and `seedCheckpointName` as a boot-only fallback (for example a shared warm base image) that never gets overwritten by later snapshots. ([#21798](https://github.com/mastra-ai/mastra/pull/21798))
+
+  ```ts
+  import { LocalSandbox } from '@mastra/core/workspace';
+
+  const sandbox = new LocalSandbox({
+    workingDirectory: './workspace',
+    checkpointName: 'session-123',
+    seedCheckpointName: 'repo-base',
+  });
+
+  await sandbox.start();
+  await sandbox.snapshot();
+  ```
+
+- Added foundational support for an upcoming experimental memory capability across storage, runtime, and developer tooling. ([#19538](https://github.com/mastra-ai/mastra/pull/19538))
+
+- Added invoker-bound tool provider connections. Providers now receive the connection kind, toolkit, and live RequestContext so they can execute as the authenticated user without coupling provider identity to the Memory resource. The stored connection ID continues to select the exact provider account. ([#21783](https://github.com/mastra-ai/mastra/pull/21783))
+
+  ```typescript
+  import type { ToolProviders } from '@mastra/core/tool-provider';
+
+  const toolProviders: ToolProviders = {
+    crm: {
+      tools: {
+        CREATE_LEAD: { toolkit: 'salesforce' },
+      },
+      connections: {
+        salesforce: [
+          {
+            kind: 'invoker',
+            toolkit: 'salesforce',
+            connectionId: 'connected-account-id',
+          },
+        ],
+      },
+    },
+  };
+  ```
+
+### Patch Changes
+
+- LocalSandbox now replaces an existing checkpoint atomically. A concurrent boot never observes a missing or half-written checkpoint while a snapshot is being saved. ([#21798](https://github.com/mastra-ai/mastra/pull/21798))
+
 ## 1.60.0-alpha.12
 
 ### Patch Changes

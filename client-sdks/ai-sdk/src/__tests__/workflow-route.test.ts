@@ -94,4 +94,21 @@ describe('handleWorkflowStream', () => {
     expect(mockRun.resumeStream).toHaveBeenCalledTimes(1);
     expect(mockRun.stream).not.toHaveBeenCalled();
   });
+
+  it('should return a UI message stream when version is v7', async () => {
+    const stream = await handleWorkflowStream({
+      mastra: mockMastra as any,
+      workflowId: 'test-workflow',
+      params: { runId: 'test-run', inputData: { foo: 'bar' } },
+      version: 'v7',
+    });
+
+    const chunks: any[] = [];
+    for await (const chunk of stream as ReadableStream<any>) {
+      chunks.push(chunk);
+    }
+
+    expect(mockRun.stream).toHaveBeenCalledTimes(1);
+    expect(Array.isArray(chunks)).toBe(true);
+  });
 });

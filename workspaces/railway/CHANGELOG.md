@@ -1,5 +1,37 @@
 # @mastra/railway
 
+## 0.6.0-alpha.2
+
+### Patch Changes
+
+- Added support for booting new Railway sandboxes from a fallback checkpoint while keeping future snapshots isolated to the sandbox's own checkpoint. ([#21803](https://github.com/mastra-ai/mastra/pull/21803))
+
+  ```typescript
+  const sandbox = new RailwaySandbox({
+    checkpointName: 'session-42',
+    seedCheckpointName: 'repo-base',
+  });
+  ```
+
+- Updated dependencies [[`58c43d3`](https://github.com/mastra-ai/mastra/commit/58c43d3f7cb2eeaeb8ac733ae71dde822348e588)]:
+  - @mastra/core@1.60.0-alpha.14
+
+## 0.6.0-alpha.1
+
+### Patch Changes
+
+- Declared checkpoint support (`supportsCheckpoints`) so checkpoint-based features like warm base checkpoints and boot-from-checkpoint know snapshots are real. ([#21798](https://github.com/mastra-ai/mastra/pull/21798))
+
+  ```ts
+  // Gate checkpoint-dependent work on the provider's capability flag.
+  if (sandbox.supportsCheckpoints) {
+    await sandbox.snapshot(); // persists a checkpoint that can seed a later boot
+  }
+  ```
+
+- Updated dependencies [[`c549e2f`](https://github.com/mastra-ai/mastra/commit/c549e2f40edc1cac5d9e74e82f90da22b48df084), [`c549e2f`](https://github.com/mastra-ai/mastra/commit/c549e2f40edc1cac5d9e74e82f90da22b48df084), [`2ef2f23`](https://github.com/mastra-ai/mastra/commit/2ef2f230a7aed342e7dc3b2000cd42e4c43e08a7), [`5740ec6`](https://github.com/mastra-ai/mastra/commit/5740ec60c760ffdfbfaa59d603d03b847c864e05)]:
+  - @mastra/core@1.60.0-alpha.13
+
 ## 0.6.0-alpha.0
 
 ### Minor Changes

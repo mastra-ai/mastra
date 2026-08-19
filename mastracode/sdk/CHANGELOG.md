@@ -1,5 +1,28 @@
 # @mastra/code-sdk
 
+## 1.3.0-alpha.14
+
+### Patch Changes
+
+- Updated dependencies [[`58c43d3`](https://github.com/mastra-ai/mastra/commit/58c43d3f7cb2eeaeb8ac733ae71dde822348e588)]:
+  - @mastra/core@1.60.0-alpha.14
+
+## 1.3.0-alpha.13
+
+### Minor Changes
+
+- Added foundational support for an upcoming experimental memory capability across storage, runtime, and developer tooling. ([#19538](https://github.com/mastra-ai/mastra/pull/19538))
+
+### Patch Changes
+
+- Stop an unread hook stdin from crashing the host process. A hook command that exits without reading its stdin closes the pipe mid-write, and the resulting EPIPE arrived as an unhandled socket error rather than a throw, so the surrounding `try/catch` never saw it and Node tore the process down. The socket error is now absorbed; the hook's real outcome still comes from its exit code. ([#21796](https://github.com/mastra-ai/mastra/pull/21796))
+
+- Updated dependencies [[`c549e2f`](https://github.com/mastra-ai/mastra/commit/c549e2f40edc1cac5d9e74e82f90da22b48df084), [`c549e2f`](https://github.com/mastra-ai/mastra/commit/c549e2f40edc1cac5d9e74e82f90da22b48df084), [`2ef2f23`](https://github.com/mastra-ai/mastra/commit/2ef2f230a7aed342e7dc3b2000cd42e4c43e08a7), [`5740ec6`](https://github.com/mastra-ai/mastra/commit/5740ec60c760ffdfbfaa59d603d03b847c864e05)]:
+  - @mastra/core@1.60.0-alpha.13
+  - @mastra/memory@1.27.0-alpha.3
+  - @mastra/libsql@1.21.0-alpha.1
+  - @mastra/pg@1.21.0-alpha.4
+
 ## 1.3.0-alpha.12
 
 ### Patch Changes

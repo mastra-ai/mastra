@@ -1,5 +1,43 @@
 # @internal/playground
 
+## 1.25.1-alpha.15
+
+### Patch Changes
+
+- Updated dependencies [[`58c43d3`](https://github.com/mastra-ai/mastra/commit/58c43d3f7cb2eeaeb8ac733ae71dde822348e588), [`58c43d3`](https://github.com/mastra-ai/mastra/commit/58c43d3f7cb2eeaeb8ac733ae71dde822348e588)]:
+  - @mastra/client-js@1.41.0-alpha.14
+  - @mastra/core@1.60.0-alpha.14
+  - @mastra/react@1.4.4-alpha.14
+  - @mastra/playground-ui@50.0.0-alpha.14
+
+## 1.25.1-alpha.14
+
+### Patch Changes
+
+- Updated dependencies [[`22b972d`](https://github.com/mastra-ai/mastra/commit/22b972da2d1e3ee5de6d5050cce93f62f9592ac4)]:
+  - @mastra/ai-sdk@1.9.0-alpha.0
+
+## 1.25.1-alpha.13
+
+### Patch Changes
+
+- fix(playground): retry /api/auth/me on transient 503 from auth middleware ([#21799](https://github.com/mastra-ai/mastra/pull/21799))
+
+  The Mastra server middleware distinguishes transient auth-provider failures
+  (503) from terminal auth failures (401). Playground's `useCurrentUser` had
+  `retry: false`, so a single 503 flipped the query to `isError` and triggered
+  the login flow — which amplified WorkOS 429 lockouts (PLTFRM-1270).
+
+  Now retries on 503 up to 3 times with exponential backoff (500ms → 8s cap).
+  401 (terminal) still fails fast. Mirrors the parity fix on the platform
+  dashboard's `useAuth` hook.
+
+- Updated dependencies [[`8616bc4`](https://github.com/mastra-ai/mastra/commit/8616bc49e9322a2afd6315a27f0d3d77330940b9), [`951a126`](https://github.com/mastra-ai/mastra/commit/951a126e43ed45155fed534ddabf0a1a94f2d7bb), [`c549e2f`](https://github.com/mastra-ai/mastra/commit/c549e2f40edc1cac5d9e74e82f90da22b48df084), [`c549e2f`](https://github.com/mastra-ai/mastra/commit/c549e2f40edc1cac5d9e74e82f90da22b48df084), [`2ef2f23`](https://github.com/mastra-ai/mastra/commit/2ef2f230a7aed342e7dc3b2000cd42e4c43e08a7), [`5740ec6`](https://github.com/mastra-ai/mastra/commit/5740ec60c760ffdfbfaa59d603d03b847c864e05)]:
+  - @mastra/playground-ui@50.0.0-alpha.13
+  - @mastra/client-js@1.41.0-alpha.13
+  - @mastra/core@1.60.0-alpha.13
+  - @mastra/react@1.4.4-alpha.13
+
 ## 1.25.1-alpha.12
 
 ### Patch Changes

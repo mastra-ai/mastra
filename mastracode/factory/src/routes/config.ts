@@ -8,7 +8,6 @@ import {
   loadSettings,
   saveSettings,
   THINKING_LEVEL_VALUES,
-  THREAD_ACTIVE_MODEL_PACK_ID_KEY,
 } from '@mastra/code-sdk/onboarding/settings';
 import type { CustomProviderSetting, ThinkingLevelSetting } from '@mastra/code-sdk/onboarding/settings';
 import type { ApiRoute } from '@mastra/core/server';
@@ -20,6 +19,7 @@ import {
   DEFAULT_OBSERVATION_THRESHOLD,
   DEFAULT_REFLECTION_THRESHOLD,
 } from '../session/memory-settings-hydration.js';
+import { applyActiveModelPack } from '../session/model-pack-hydration.js';
 import type {
   CredentialRecord,
   LoginSessionKind,
@@ -33,6 +33,7 @@ import type {
   MemorySettingsStorage,
 } from '../storage/domains/memory-settings/base.js';
 import type { ModelPackRecord, ModelPacksStorage } from '../storage/domains/model-packs/base.js';
+import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import {
   getAuthProviderId,
   listTenantCredentialsForRequest,
@@ -97,8 +98,8 @@ interface PackSession {
   subagents: { model: { set: (args: { modelId: string; agentType: string }) => Promise<void> } };
   thread: {
     getId: () => string | null;
+    getSetting: (args: { key: string }) => Promise<unknown>;
     setSetting: (args: { key: string; value: unknown }) => Promise<void>;
-    list: () => Promise<Array<{ id: string; metadata?: Record<string, unknown> }>>;
   };
 }
 
@@ -399,6 +400,37 @@ async function resolvePackContext({
   };
 }
 
+async function authorizePackSession({
+  c,
+  auth,
+  sessions,
+  packContext,
+  resourceId,
+  scope,
+}: {
+  c: Context;
+  auth: RouteAuth;
+  sessions?: Pick<SourceControlStorageHandle['sessions'], 'getBySessionId'>;
+  packContext: PackContext;
+  resourceId: string;
+  scope: string | undefined;
+}): Promise<Response | null> {
+  if (!auth.enabled()) return null;
+  if (!sessions) return c.json({ error: 'session_authorization_unavailable' }, 503);
+
+  const sourceSession = await sessions.getBySessionId(resourceId);
+  if (
+    !sourceSession ||
+    sourceSession.orgId !== packContext.orgId ||
+    sourceSession.userId !== packContext.userId ||
+    !scope ||
+    sourceSession.sandboxWorkdir !== scope
+  ) {
+    return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
+  }
+  return null;
+}
+
 /** DB row → the `ModePack` shape the packs list and activation flow consume. */
 function recordToModePack(record: ModelPackRecord): ModePack {
   return { id: `custom:${record.id}`, name: record.name, description: 'Saved custom pack', models: record.models };
@@ -407,8 +439,8 @@ function recordToModePack(record: ModelPackRecord): ModePack {
 /**
  * List available model packs (built-in, gated by provider access, plus saved
  * custom packs from the request's pack context). Drops the synthetic
- * "New Custom" placeholder — the web client has its own create flow. `active`
- * is set from the given session's thread when a resourceId is supplied.
+ * "New Custom" placeholder because the web client has its own create flow.
+ * `active` marks the user's default pack for new interactive chats.
  */
 export async function listModelPacks({
   controller,
@@ -437,55 +469,10 @@ export async function listModelPacks({
     }));
 }
 
-/** Resolve the active pack id for a session by reading its current thread. */
-async function resolveActivePackId(session: PackSession | undefined): Promise<string | null> {
-  if (!session) return null;
-  const threadId = session.thread.getId();
-  if (!threadId) return null;
-  const thread = (await session.thread.list()).find(t => t.id === threadId);
-  const value = thread?.metadata?.[THREAD_ACTIVE_MODEL_PACK_ID_KEY];
+async function resolveSessionModelPackId(session: PackSession | undefined): Promise<string | null> {
+  if (!session?.thread.getId()) return null;
+  const value = await session.thread.getSetting({ key: 'activeModelPackId' });
   return typeof value === 'string' ? value : null;
-}
-
-/**
- * Apply a pack to a session: seed each mode's default model, switch the current
- * mode's model, set per-subagent models, and tag the thread with the active
- * pack id. Mirrors the TUI `applyPack` orchestration.
- */
-async function applyPackToSession({
-  controller,
-  session,
-  pack,
-}: {
-  controller: ModelCatalog;
-  session: PackSession;
-  pack: ModePack;
-}): Promise<void> {
-  const modes = controller.listModes?.() ?? [];
-  const packModels = pack.models as Record<string, string>;
-
-  for (const mode of modes) {
-    const modelId = packModels[mode.id];
-    if (modelId) {
-      mode.defaultModelId = modelId;
-      await session.thread.setSetting({ key: `modeModelId_${mode.id}`, value: modelId });
-    }
-  }
-
-  const currentModeModel = packModels[session.mode.get()];
-  if (currentModeModel) {
-    await session.model.switch({ modelId: currentModeModel });
-  }
-
-  const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
-  for (const [agentType, modeId] of Object.entries(subagentModeMap)) {
-    const saModelId = packModels[modeId];
-    if (saModelId) {
-      await session.subagents.model.set({ modelId: saModelId, agentType });
-    }
-  }
-
-  await session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: pack.id });
 }
 
 // ── Observational memory ────────────────────────────────────────────────────
@@ -612,6 +599,8 @@ export interface ConfigRoutesDeps extends RouteDependencies {
   modelCredentials?: ModelCredentialsStorage;
   /** Tenant model-packs domain handle; absent in local (no-DB) mode. */
   modelPacks?: ModelPacksStorage;
+  /** Source-control sessions used to authorize session-scoped model-pack access. */
+  sourceControlSessions?: Pick<SourceControlStorageHandle['sessions'], 'getBySessionId'>;
   /** Tenant memory-settings domain handle; absent in local (no-DB) mode. */
   memorySettings?: MemorySettingsStorage;
   /** Custom-providers domain handle; absent when the app database is missing. */
@@ -915,10 +904,9 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
       }),
 
       // ── Model packs ─────────────────────────────────────────────────────────
-      // Mirrors the TUI's /models-pack command. Custom-pack CRUD lives in the
-      // model-packs storage domain (org-scoped, sentinel `local` org in no-auth
-      // mode — never settings.json); activation is session-scoped and resolves
-      // the session from the controller registry by resourceId.
+      // Custom pack definitions are organization-scoped. Each user can choose a
+      // default for new interactive chats, while a thread-specific activation
+      // takes precedence. Factory work sessions use the project default model.
 
       registerApiRoute('/web/config/model-packs', {
         method: 'GET',
@@ -929,8 +917,24 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           const resourceId = c.req.query('resourceId');
           const scope = c.req.query('scope') || undefined;
           try {
+            const activePack = await packContext.storage.getActive({
+              orgId: packContext.orgId,
+              userId: packContext.userId,
+            });
+            const activePackId = activePack?.packId ?? null;
+            if (resourceId) {
+              const unauthorized = await authorizePackSession({
+                c: loose(c),
+                auth,
+                sessions: options.sourceControlSessions,
+                packContext,
+                resourceId,
+                scope,
+              });
+              if (unauthorized) return unauthorized;
+            }
             const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
-            const activePackId = await resolveActivePackId(session);
+            const sessionPackId = await resolveSessionModelPackId(session);
             const tenantCredentials = await listTenantCredentialsForRequest({
               c: loose(c),
               auth,
@@ -945,6 +949,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 activePackId,
               }),
               activePackId,
+              sessionPackId,
             });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
@@ -986,6 +991,21 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         },
       }),
 
+      registerApiRoute('/web/config/model-packs/active', {
+        method: 'DELETE',
+        requiresAuth: false,
+        handler: async c => {
+          const packContext = await resolvePackContext({ c: loose(c), auth, modelPacks: options.modelPacks });
+          if ('response' in packContext) return packContext.response;
+          try {
+            await packContext.storage.clearActive({ orgId: packContext.orgId, userId: packContext.userId });
+            return c.json({ ok: true, activePackId: null });
+          } catch (error) {
+            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+          }
+        },
+      }),
+
       registerApiRoute('/web/config/model-packs/:id', {
         method: 'DELETE',
         requiresAuth: false,
@@ -1010,18 +1030,40 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           const packContext = await resolvePackContext({ c: loose(c), auth, modelPacks: options.modelPacks });
           if ('response' in packContext) return packContext.response;
           const id = decodeURIComponent(c.req.param('id'));
-          let body: { resourceId?: unknown; scope?: unknown };
+          let body: { resourceId?: unknown; scope?: unknown; target?: unknown };
           try {
             body = await c.req.json();
           } catch {
             return c.json({ error: 'Invalid JSON body' }, 400);
           }
-          const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
+          const target = body.target ?? 'default';
+          if (target !== 'default' && target !== 'session') {
+            return c.json({ error: 'target must be "default" or "session"' }, 400);
+          }
+          const resourceId = typeof body.resourceId === 'string' && body.resourceId ? body.resourceId : undefined;
           const scope = typeof body.scope === 'string' && body.scope ? body.scope : undefined;
-          if (!resourceId) return c.json({ error: 'Missing required field: resourceId' }, 400);
+          if (target === 'session' && !resourceId) {
+            return c.json({ error: 'Missing required field for session activation: resourceId' }, 400);
+          }
           try {
-            const session = await controller.getSessionByResource?.(resourceId, scope);
-            if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
+            if (target === 'session' && resourceId) {
+              const unauthorized = await authorizePackSession({
+                c: loose(c),
+                auth,
+                sessions: options.sourceControlSessions,
+                packContext,
+                resourceId,
+                scope,
+              });
+              if (unauthorized) return unauthorized;
+            }
+            const session =
+              target === 'session' && resourceId
+                ? await controller.getSessionByResource?.(resourceId, scope)
+                : undefined;
+            if (target === 'session' && !session) {
+              return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
+            }
             const tenantCredentials = await listTenantCredentialsForRequest({
               c: loose(c),
               auth,
@@ -1035,8 +1077,19 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             });
             const pack = packs.find(p => p.id === id);
             if (!pack) return c.json({ error: `Unknown pack "${id}"` }, 404);
-            await applyPackToSession({ controller, session, pack });
-            return c.json({ ok: true, activePackId: pack.id });
+            if (target === 'default') {
+              await packContext.storage.setActive({
+                orgId: packContext.orgId,
+                userId: packContext.userId,
+                packId: pack.id,
+                models: pack.models,
+              });
+              return c.json({ ok: true, target, activePackId: pack.id });
+            }
+            if (session) {
+              await applyActiveModelPack(session, { packId: pack.id, models: pack.models });
+            }
+            return c.json({ ok: true, target, sessionPackId: pack.id });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
