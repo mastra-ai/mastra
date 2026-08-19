@@ -2,14 +2,14 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../../../../api/keys';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
-import { useWorkspaceActivity } from '../../../../hooks/useWorkspaceActivity';
+import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
 import { useWorkspaceAttention } from '../../../../hooks/useWorkspaceAttention';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { useWorkspacePullRequestMerges } from '../../../../hooks/useWorkspacePullRequestMerges';
@@ -17,7 +17,7 @@ import { useDeleteWorkspaceMutation, useWorkspacesQuery } from '../../../../hook
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { githubNumberForItem } from '../../factory/boardItems';
-import { relatedWorkItems, relationshipLabel } from '../../factory/services/relationships';
+import { pullRequestCandidateIndex, relatedWorkItems, relationshipLabel } from '../../factory/services/relationships';
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
 import type { FactoryUserSession } from '../services/github';
 import { getFactorySessionKind } from '../services/sessionPresentation';
@@ -64,9 +64,9 @@ export function WorkspacesSection() {
   const workItems = useWorkItemsQuery(factoryId);
   const workspaceRows = workspaces.data?.workspaces ?? [];
   const workspaceIds = workspaceRows.map(workspace => workspace.sessionId);
-  const runningByPath = useWorkspaceActivity({
+  const runningByPath = useActiveRunResources({
     agentControllerId: AGENT_CONTROLLER_ID,
-    workspaceIds,
+    resourceIds: workspaceIds,
     baseUrl,
   });
   const queryClient = useQueryClient();
@@ -76,14 +76,20 @@ export function WorkspacesSection() {
     () => void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(projectRepositoryId) }),
   );
 
-  const allWorkItems = workItems.data ?? [];
-  const workItemByPath = new Map(
-    allWorkItems.flatMap(item =>
-      Object.values(item.sessions ?? {}).map(
-        sessionRef => [sessionRef.sessionId, { item, threadId: sessionRef.threadId }] as const,
+  // Rebuilt only when the polled board changes; the sidebar re-renders far more often.
+  const board = workItems.data;
+  const workItemByPath = useMemo(
+    () =>
+      new Map(
+        (board ?? []).flatMap(item =>
+          Object.values(item.sessions ?? {}).map(
+            sessionRef => [sessionRef.sessionId, { item, threadId: sessionRef.threadId }] as const,
+          ),
+        ),
       ),
-    ),
+    [board],
   );
+  const pullRequestCandidates = useMemo(() => pullRequestCandidateIndex(board ?? []), [board]);
   const rows = workspaceRows.flatMap(workspace => {
     const workItemSession = workItemByPath.get(workspace.sessionId);
     const item = workItemSession?.item;
@@ -91,8 +97,8 @@ export function WorkspacesSection() {
       item?.source === 'github-pr'
         ? item
         : item
-          ? [...relatedWorkItems(item, allWorkItems).filter(candidate => candidate.source === 'github-pr')].sort(
-              (a, b) => b.updatedAt.localeCompare(a.updatedAt),
+          ? [...relatedWorkItems(item, pullRequestCandidates(item))].sort((a, b) =>
+              b.updatedAt.localeCompare(a.updatedAt),
             )[0]
           : undefined;
     const pullRequestNumber = pullRequest ? githubNumberForItem(pullRequest) : undefined;

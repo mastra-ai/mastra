@@ -8,6 +8,7 @@ import { builtInFactoryRules } from '../rules/defaults.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRuleActor } from '../rules/types.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
+import { FACTORY_RULE_MATERIALIZATION_KEY } from '../storage/domains/work-items/base.js';
 
 let auditRecorded: Array<Record<string, any>> = [];
 let auditFailure: Error | undefined;
@@ -213,6 +214,21 @@ describe('POST /web/factory/projects/:id/work-items', () => {
       createBody({ externalSource: { integrationId: 'jira' } }),
     );
     expect(bad.status).toBe(400);
+  });
+});
+
+// ── Read wire ────────────────────────────────────────────────────────────
+describe('work item read wire', () => {
+  it('keeps the dispatcher idempotency token out of every read', async () => {
+    const created = await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({ metadata: { number: 42, [FACTORY_RULE_MATERIALIZATION_KEY]: 'rule-7:issue-42' } }),
+    );
+    expect((await created.json()).workItem.metadata).toEqual({ number: 42 });
+
+    const listed = await json('GET', `/web/factory/projects/${PROJECT_ID}/work-items`);
+    expect((await listed.json()).workItems[0].metadata).toEqual({ number: 42 });
   });
 });
 

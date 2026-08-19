@@ -120,10 +120,6 @@ export const queryKeys = {
   // Session state must stay out of the key: it would reset the query on navigation, and a reset reads as every run going idle.
   agentControllerActivity: (agentControllerId: string | undefined) =>
     ['agent-controller', agentControllerId ?? null, 'activity'] as const,
-  // The polled session's own id, not the page's — user sessions each carry their own resourceId, so one
-  // shared entry would collapse every poll into one.
-  agentControllerSessionActivity: (agentControllerId: string | undefined, resourceId: string | undefined) =>
-    [...queryKeys.agentControllerActivity(agentControllerId), resourceId ?? null] as const,
   agentControllerSettings: (
     agentControllerId: string | undefined,
     resourceId: string | undefined,

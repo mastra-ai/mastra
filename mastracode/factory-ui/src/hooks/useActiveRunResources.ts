@@ -3,31 +3,32 @@ import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '../api/keys';
 import { createAgentControllerClient, requireAgentController } from '../ui/domains/chat/services/agentControllerClient';
 
-/** How often workspace activity is re-checked while the tab is focused. */
-export const WORKSPACE_ACTIVITY_POLL_MS = 5000;
-
-interface WorkspaceActivityOptions {
+interface ActiveRunResourcesOptions {
   agentControllerId: string;
-  workspaceIds: string[];
+  resourceIds: string[];
   baseUrl?: string;
 }
 
-/** Which workspaces have a run in flight. Factory binds one resource per session, so the row key is the run's resourceId. */
-export function useWorkspaceActivity({
+/**
+ * Which of the given resources have a run in flight. `/active-runs` returns the
+ * controller's whole registry, so every caller shares one poll — workspaces and
+ * user sessions alike, both keyed by their own sessionId as resourceId.
+ */
+export function useActiveRunResources({
   agentControllerId,
-  workspaceIds,
+  resourceIds,
   baseUrl,
-}: WorkspaceActivityOptions): Record<string, boolean> {
+}: ActiveRunResourcesOptions): Record<string, boolean> {
   const query = useQuery({
     queryKey: queryKeys.agentControllerActivity(agentControllerId),
     queryFn: async () => {
       const { controller } = createAgentControllerClient({ agentControllerId, baseUrl });
       return requireAgentController(controller).listActiveRuns();
     },
-    enabled: workspaceIds.length > 0,
-    refetchInterval: WORKSPACE_ACTIVITY_POLL_MS,
+    enabled: resourceIds.length > 0,
+    refetchInterval: 5_000,
     retry: false,
   });
   const runs = query.data ?? [];
-  return Object.fromEntries(workspaceIds.map(id => [id, runs.some(run => run.resourceId === id)]));
+  return Object.fromEntries(resourceIds.map(id => [id, runs.some(run => run.resourceId === id)]));
 }

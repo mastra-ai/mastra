@@ -34,6 +34,43 @@ export function relatedWorkItems(item: WorkItem, allItems: WorkItem[]): WorkItem
   });
 }
 
+/**
+ * Buckets the board's PR cards by what can link them to a card, so resolving a PR
+ * for many cards stops rescanning the board each time. `relatedWorkItems` still
+ * decides; board order is kept so the caller's tie break is unchanged.
+ */
+export function pullRequestCandidateIndex(allItems: WorkItem[]): (item: WorkItem) => WorkItem[] {
+  const byId = new Map(allItems.map(item => [item.id, item]));
+  const byParentId = new Map<string, WorkItem[]>();
+  const byHeadBranch = new Map<string, WorkItem[]>();
+  const push = (index: Map<string, WorkItem[]>, key: string, item: WorkItem) => {
+    const bucket = index.get(key);
+    if (bucket) bucket.push(item);
+    else index.set(key, [item]);
+  };
+
+  for (const candidate of allItems) {
+    if (candidate.source !== 'github-pr') continue;
+    if (candidate.parentWorkItemId !== null) {
+      push(byParentId, candidate.parentWorkItemId, candidate);
+      continue;
+    }
+    const headBranch = candidate.metadata.headBranch;
+    if (typeof headBranch === 'string') push(byHeadBranch, headBranch, candidate);
+  }
+
+  return item => {
+    const parent = item.parentWorkItemId ? byId.get(item.parentWorkItemId) : undefined;
+    const candidates = [
+      ...(byParentId.get(item.id) ?? []),
+      ...(parent?.source === 'github-pr' ? [parent] : []),
+      ...[...sessionBranches(item)].flatMap(branch => byHeadBranch.get(branch) ?? []),
+    ];
+    const seen = new Set<string>();
+    return candidates.filter(candidate => !seen.has(candidate.id) && seen.add(candidate.id));
+  };
+}
+
 export function inferredParentWorkItemId(
   metadata: Record<string, unknown>,
   allItems: readonly WorkItem[],

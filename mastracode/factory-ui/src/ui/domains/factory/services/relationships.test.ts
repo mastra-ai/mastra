@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { inferredParentWorkItemId, relatedWorkItems, relationshipLabel, workItemReferenceLabel } from './relationships';
+import {
+  inferredParentWorkItemId,
+  pullRequestCandidateIndex,
+  relatedWorkItems,
+  relationshipLabel,
+  workItemReferenceLabel,
+} from './relationships';
 import type { WorkItem } from './workItems';
 
 function workItem(overrides: Partial<WorkItem> & Pick<WorkItem, 'id' | 'source'>): WorkItem {
@@ -122,5 +128,31 @@ describe('Factory work item relationships', () => {
     expect(workItemReferenceLabel(issue)).toBe('Issue #24');
     expect(relationshipLabel(linear)).toBe('Work item: ENG-24');
     expect(workItemReferenceLabel(linear)).toBe('ENG-24');
+  });
+});
+
+describe('pull request candidate index', () => {
+  it('given every way a card links to a PR, when narrowing candidates, then it agrees with a full board scan', () => {
+    const orphanBranch = workItem({
+      id: 'issue-90',
+      source: 'github-issue',
+      sessions: {
+        work: { sessionId: '/w/90', branch: 'factory/issue-90', threadId: 't-90', startedBy: 'u' },
+      },
+    });
+    const byBranch = workItem({ id: 'pr-91', source: 'github-pr', metadata: { headBranch: 'factory/issue-90' } });
+    const byChild = workItem({ id: 'issue-92', source: 'github-issue' });
+    const childPr = workItem({ id: 'pr-93', source: 'github-pr', parentWorkItemId: 'issue-92' });
+    const parentPr = workItem({ id: 'pr-94', source: 'github-pr' });
+    const byParent = workItem({ id: 'issue-95', source: 'github-issue', parentWorkItemId: 'pr-94' });
+    const unrelated = workItem({ id: 'pr-96', source: 'github-pr', metadata: { headBranch: 'other/branch' } });
+    const board = [orphanBranch, byBranch, byChild, childPr, parentPr, byParent, unrelated];
+    const candidatesFor = pullRequestCandidateIndex(board);
+
+    for (const item of board.filter(candidate => candidate.source !== 'github-pr')) {
+      expect(relatedWorkItems(item, candidatesFor(item))).toEqual(
+        relatedWorkItems(item, board).filter(related => related.source === 'github-pr'),
+      );
+    }
   });
 });
