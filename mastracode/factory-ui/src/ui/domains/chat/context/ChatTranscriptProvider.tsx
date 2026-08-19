@@ -90,20 +90,30 @@ function faviconStateFor({
   hasThread,
   sessionError,
   initializing,
+  warming,
+  hasActivity,
   threadError,
   busy,
 }: {
   hasThread: boolean;
   sessionError: boolean;
   initializing: boolean;
+  warming: boolean;
+  hasActivity: boolean;
   threadError: boolean;
   busy: boolean;
 }): SessionFaviconState | undefined {
   if (sessionError) return 'error';
   if (initializing) return 'initializing';
-  if (!hasThread) return undefined;
+  if (!hasThread) return warming ? 'initializing' : undefined;
   if (threadError) return 'error';
-  return busy ? 'working' : 'awaiting';
+  if (busy) return 'working';
+  // The background warm-up only masks a *fresh* idle session (matching the
+  // prepare stepper). Once a run has produced transcript content, `awaiting`
+  // must win — it is the one state telling the user to come back, and a run
+  // can finish while `/ensure` is still warming.
+  if (warming && !hasActivity) return 'initializing';
+  return 'awaiting';
 }
 
 function ChatTranscriptValueProvider({
@@ -146,10 +156,13 @@ function ChatTranscriptValueProvider({
   const faviconState = faviconStateFor({
     hasThread: Boolean(effectiveThreadId),
     sessionError: Boolean(sessionError),
+    initializing: sandboxPreparing || messagesInitializing,
     // Messages load in parallel with the sandbox warm-up, so the favicon stays
     // on `initializing` while the warm-up is still provisioning/cloning even
-    // after the chat surface renders — same ground truth as the prepare stepper.
-    initializing: sandboxPreparing || sandboxWarming === true || messagesInitializing,
+    // after the chat surface renders — but only until the session has real
+    // agent state to report (working/awaiting), which takes precedence.
+    warming: sandboxWarming === true,
+    hasActivity: effectiveTranscript.entries.length > 0,
     threadError: messagesError || connection.status === 'error',
     busy,
   });
