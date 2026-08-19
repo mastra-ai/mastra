@@ -2253,6 +2253,27 @@ describe('E2BSandbox Internal Methods', () => {
       expect((sandbox as any)._sandbox).toBeNull();
       expect(sandbox.status).toBe('stopped');
     });
+
+    it('resets failed mounts to pending when replacing a dead sandbox', () => {
+      const sandbox = new E2BSandbox();
+      const filesystem = {
+        id: 'test-s3',
+        name: 'S3Filesystem',
+        provider: 's3',
+        status: 'ready',
+        getMountConfig: () => ({ type: 's3', bucket: 'test-bucket', region: 'us-east-1' }),
+      } as any;
+      sandbox.mounts.add({ '/data': filesystem });
+      sandbox.mounts.set('/data', { state: 'error', error: 'transient mount failure' });
+
+      (sandbox as any).handleSandboxTimeout();
+
+      expect(sandbox.mounts.get('/data')).toMatchObject({
+        filesystem,
+        state: 'pending',
+      });
+      expect(sandbox.mounts.get('/data')?.error).toBeUndefined();
+    });
   });
 
   describe('executeCommand retry on dead sandbox', () => {

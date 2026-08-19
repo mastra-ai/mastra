@@ -1030,10 +1030,12 @@ export class E2BSandbox extends MastraSandbox {
   private handleSandboxTimeout(): void {
     this._sandbox = null;
 
-    // Reset mounted entries to pending so they get re-mounted on restart
+    // Reset retryable entries to pending so they get re-mounted on restart.
+    // A mount error belongs to the dead physical sandbox and must not prevent
+    // the configured filesystem from being attempted in its replacement.
     for (const [path, entry] of this.mounts.entries) {
-      if (entry.state === 'mounted' || entry.state === 'mounting') {
-        this.mounts.set(path, { state: 'pending' });
+      if (entry.state === 'mounted' || entry.state === 'mounting' || entry.state === 'error') {
+        this.mounts.set(path, { state: 'pending', error: undefined });
       }
     }
 
