@@ -30,6 +30,7 @@ function formatProviderName(name: string): string {
     'github-models': 'GitHub Models',
     deepinfra: 'Deep Infra',
     fastrouter: 'FastRouter',
+    'merge-gateway': 'Merge Gateway',
     baseten: 'Baseten',
     lmstudio: 'LMStudio',
     modelscope: 'ModelScope',
@@ -114,7 +115,7 @@ const __dirname = path.dirname(__filename);
 const POPULAR_PROVIDERS = ['openai', 'anthropic', 'google', 'deepseek', 'groq', 'mistral', 'xai'];
 
 // Providers that are actually gateways (aggregate multiple model providers)
-const GATEWAY_PROVIDERS = ['netlify', 'neon', 'openrouter', 'vercel', 'azure-openai'];
+const GATEWAY_PROVIDERS = ['netlify', 'neon', 'openrouter', 'vercel', 'azure-openai', 'merge-gateway'];
 
 const MANUALLY_DOCUMENTED_PROVIDERS = ['azure-openai'];
 const MANUALLY_DOCUMENTED_GATEWAYS = ['azure-openai', 'mastra'];

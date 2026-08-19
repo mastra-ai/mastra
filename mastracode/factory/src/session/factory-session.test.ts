@@ -79,6 +79,8 @@ describe('ensureFactorySourceSession', () => {
         userId: 'user-1',
         branch: 'factory/issue-49',
         baseBranch: 'main',
+        // Autonomous runs are org-visible by default.
+        visibility: 'org',
       }),
     );
   });

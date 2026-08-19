@@ -1,10 +1,10 @@
 /**
  * Stable, scoped React Query keys for the settings API.
  *
- * Resource-scoped lists (model packs, OM) include the `resourceId` so switching
+ * Resource-scoped lists such as OM include the `resourceId` so switching
  * factories yields a distinct cache entry instead of leaking another factory's
- * data. Keeping every key in one place makes invalidation in the mutation hooks
- * unambiguous.
+ * data. Personal settings such as model packs use one user-scoped key. Keeping
+ * every key in one place makes mutation invalidation unambiguous.
  */
 /**
  * Initial (and grow-step) size of the bounded transcript window. Opening a long
@@ -16,6 +16,7 @@
 export const INITIAL_THREAD_MESSAGE_LIMIT = 100;
 
 export const queryKeys = {
+  serverFeatures: () => ['server-features'] as const,
   factoryAuth: () => ['factory-auth'] as const,
   factories: () => ['factories'] as const,
   persistedFactories: () => ['factories', 'persisted'] as const,
@@ -38,6 +39,10 @@ export const queryKeys = {
   intakeBindings: () => ['intake', 'bindings'] as const,
   channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
+  knowledgeGraph: (factoryProjectId: string | undefined, threadId?: string) =>
+    ['factory', 'knowledge-graph', factoryProjectId ?? null, threadId ?? null] as const,
+  knowledgeNode: (factoryProjectId: string | undefined, nodeId: string | undefined, threadId?: string) =>
+    ['factory', 'knowledge-node', factoryProjectId ?? null, nodeId ?? null, threadId ?? null] as const,
   factoryMetrics: (githubProjectId: string | undefined, from: string, to: string) =>
     ['factory', 'metrics', githubProjectId ?? null, from, to] as const,
   factoryHealthThresholds: (githubProjectId: string | undefined) =>
@@ -59,9 +64,9 @@ export const queryKeys = {
   providers: () => ['providers'] as const,
   availableModels: () => ['available-models'] as const,
   customProviders: () => ['custom-providers'] as const,
-  modelPacks: (resourceId: string | undefined) => ['model-packs', resourceId ?? null] as const,
-  /** Prefix that matches every `modelPacks(*)` entry — pack CRUD is global, so it invalidates all of them. */
   modelPacksAll: () => ['model-packs'] as const,
+  modelPacks: (resourceId: string | undefined, scope: string | undefined) =>
+    [...queryKeys.modelPacksAll(), resourceId ?? null, scope ?? null] as const,
   om: (resourceId: string | undefined) => ['om', resourceId ?? null] as const,
   thinkingConfig: () => ['thinking-config'] as const,
   factorySkills: () => ['factory', 'skills'] as const,
