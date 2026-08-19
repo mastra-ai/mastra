@@ -1,5 +1,18 @@
 # @mastra/server
 
+## 1.60.0-alpha.13
+
+### Patch Changes
+
+- Fixed trace detail responses to report derived span statuses consistently with trace lists. ([#21450](https://github.com/mastra-ai/mastra/pull/21450))
+
+- Resolve the public origin from `X-Mastra-Public-Host` when present, ahead of `X-Forwarded-Host`. ([#21787](https://github.com/mastra-ai/mastra/pull/21787))
+
+  Gateways that overwrite `X-Forwarded-Host` with their own internal domain (Railway's does) left `getPublicOrigin()` resolving an internal hostname, so deployed apps built OAuth callback URIs like `https://my-project-qa-qa.up.railway.app/api/auth/sso/callback` and sign-in failed against providers that validate the redirect URI. The same mis-resolved origin also failed the same-origin check on `redirect_uri`, silently collapsing the post-login landing page to `/`.
+
+- Updated dependencies [[`c549e2f`](https://github.com/mastra-ai/mastra/commit/c549e2f40edc1cac5d9e74e82f90da22b48df084), [`c549e2f`](https://github.com/mastra-ai/mastra/commit/c549e2f40edc1cac5d9e74e82f90da22b48df084), [`2ef2f23`](https://github.com/mastra-ai/mastra/commit/2ef2f230a7aed342e7dc3b2000cd42e4c43e08a7), [`5740ec6`](https://github.com/mastra-ai/mastra/commit/5740ec60c760ffdfbfaa59d603d03b847c864e05)]:
+  - @mastra/core@1.60.0-alpha.13
+
 ## 1.60.0-alpha.12
 
 ### Patch Changes

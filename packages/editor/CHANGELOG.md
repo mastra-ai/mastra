@@ -1,5 +1,35 @@
 # @mastra/editor
 
+## 0.14.0-alpha.6
+
+### Minor Changes
+
+- Added authenticated-user execution and deterministic connected-account routing to ComposioToolProvider. Invoker-bound connections execute as the authenticated Composio user against the exact stored connected account, including accounts shared through Composio ACLs. ([#21783](https://github.com/mastra-ai/mastra/pull/21783))
+
+  Use userIdResolver when application user IDs need mapping to Composio user IDs:
+
+  ```typescript
+  import { MASTRA_USER_KEY } from '@mastra/server/auth';
+  import { ComposioToolProvider } from '@mastra/editor/composio';
+
+  const composio = new ComposioToolProvider({
+    apiKey: process.env.COMPOSIO_API_KEY!,
+    userIdResolver: ({ requestContext }) => {
+      const user = requestContext?.getRaw(MASTRA_USER_KEY);
+      if (!user || typeof user !== 'object' || !('id' in user) || typeof user.id !== 'string') return undefined;
+      return user.id;
+    },
+  });
+  ```
+
+  Pinned caller-supplied connections now route to their exact account instead of allowing Composio to auto-select one.
+
+### Patch Changes
+
+- Updated dependencies [[`c549e2f`](https://github.com/mastra-ai/mastra/commit/c549e2f40edc1cac5d9e74e82f90da22b48df084), [`c549e2f`](https://github.com/mastra-ai/mastra/commit/c549e2f40edc1cac5d9e74e82f90da22b48df084), [`2ef2f23`](https://github.com/mastra-ai/mastra/commit/2ef2f230a7aed342e7dc3b2000cd42e4c43e08a7), [`5740ec6`](https://github.com/mastra-ai/mastra/commit/5740ec60c760ffdfbfaa59d603d03b847c864e05)]:
+  - @mastra/core@1.60.0-alpha.13
+  - @mastra/memory@1.27.0-alpha.3
+
 ## 0.14.0-alpha.5
 
 ### Minor Changes

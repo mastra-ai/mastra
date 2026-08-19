@@ -1,5 +1,220 @@
 # @mastra/factory
 
+## 0.8.0-alpha.15
+
+### Patch Changes
+
+- Fixed model packs so each user can set a default for new interactive Factory chats while preserving thread-specific pack and model choices, refreshing edited packs, and leaving Factory work runs unaffected. ([#21762](https://github.com/mastra-ai/mastra/pull/21762))
+
+## 0.8.0-alpha.14
+
+### Minor Changes
+
+- Added foundational support for an upcoming experimental memory capability across storage, runtime, and developer tooling. ([#19538](https://github.com/mastra-ai/mastra/pull/19538))
+
+### Patch Changes
+
+- Resume a skill run that was aborted out from under it. ([#21802](https://github.com/mastra-ai/mastra/pull/21802))
+
+  An aborted run was recorded as a terminal failure on the assumption that an
+  abort is deliberate. In practice the dominant cause is the process going away
+  underneath the run — an operator restarting the server — and the run stream does
+  not say which happened. Cards were dead-ending at attempt 1 with nothing on the
+  board to press, needing a human to nudge each one by hand after every restart.
+
+  Aborted runs are now retried like any other interrupted work, still bounded by
+  the existing attempt cap.
+
+- Stop Factory from waking itself on its own GitHub comments. ([#21800](https://github.com/mastra-ai/mastra/pull/21800))
+
+  Factory recognised its own writes by comparing the event sender against
+  `GITHUB_APP_SLUG`. That variable names the deployment's own self-hosted GitHub
+  App, which is a different App than the one a Platform deployment posts as — and
+  on such a deployment it is legitimately unset, so the check compared against
+  `undefined[bot]` and never matched. Every self-loop guard silently failed open.
+
+  The visible result: triage published its handoff comment, that comment came back
+  through ingress, re-invoked triage, and cancelled the run that had written it —
+  leaving the public verdict stuck at "Pending" while both runs reported success.
+
+  The Platform integration now names the App it actually posts as, overridable
+  with `MASTRA_PLATFORM_GITHUB_APP_SLUG`, and identity resolution is centralised so
+  an unresolved identity is reported as _unknown_ rather than collapsing into
+  "not Factory".
+
+- Let a Factory run finish its stage when the previous role handed off in the same ([#21802](https://github.com/mastra-ai/mastra/pull/21802))
+  session.
+
+  `factory_transition_work_item` re-checked its authority at execution time by
+  comparing the live run binding against the binding row that existed when the
+  tool was built, requiring the same row id. But handing the next role its turn in
+  an existing session legitimately rotates that row: the previous role's binding is
+  revoked and a new one is issued for the same session and the same work item.
+  Tools built for the earlier role stay live across that rotation, so they were
+  keyed to a row that the handoff itself had just replaced.
+
+  The visible result: planning produced a complete plan, called its terminal
+  transition to `execute`, and was refused with "Factory agent binding is
+  unavailable, revoked, or no longer matches this session." The item stopped in
+  Planning with the plan written but never advanced, and the decision that carried
+  it reported success. Every leg that continues an item in an existing session —
+  planning after triage, and the review-feedback wakes — failed the same way.
+
+  Authority is now the work item the session is bound to rather than the
+  individual binding row, so a rotation no longer strands the run it exists to
+  start. Re-pointing a session at a _different_ work item is still refused.
+
+- Start the implementation run when a work item enters Building. ([#21802](https://github.com/mastra-ai/mastra/pull/21802))
+
+  Building was the one stage on the Work board with no entry rule, so an item
+  arriving there stopped: the plan was approved and nothing picked it up until
+  somebody pressed Build by hand. Every other stage advances itself, which made
+  Building the single manual step in an otherwise continuous path from intake to
+  review.
+
+  The run it starts carries a prompt rather than activating a skill. Skills exist
+  here to define a handoff — a terminal message later rules match on to decide
+  what happens next — and Building already has one: it ends by opening a pull
+  request, which arrives as its own event and raises the Review card. Rules could
+  previously only express "invoke this skill", so the decision vocabulary now
+  accepts a prompt as the alternative to a skill name.
+
+- Credit the reporter as a co-author on work their issue caused ([#21802](https://github.com/mastra-ai/mastra/pull/21802))
+
+  When Factory builds a fix for a GitHub issue, the build prompt now asks for a
+  `Co-Authored-By` trailer naming the person who reported it, so the reporter shows
+  up as a contributor on the pull request rather than only in the issue thread.
+
+  Only GitHub issues qualify. A Linear card stamps a display name and a manual card
+  stamps nothing, and neither resolves to the GitHub account a trailer needs, so
+  those are left uncredited rather than credited to nobody. Issues Factory filed
+  itself are skipped.
+
+  Intake already stamped the reporter's login but the stage rules could not see it;
+  the intake-stamped metadata now reaches rules that run on a stage.
+
+- Stop reporting a skill kickoff as successful when it was queued onto a run that was already ending. ([#21802](https://github.com/mastra-ai/mastra/pull/21802))
+
+  Signals sent into an active session settle as `deliver`, which acknowledges routing but promises nothing about execution. If the in-flight run finished before draining its queue, the prompt was dropped: no turn started, no error surfaced, and the decision was marked succeeded while the work item sat in its new stage with nobody working on it. The dispatcher now confirms the signal actually landed in the thread and retries the decision when it did not, so the next attempt finds the session idle and takes the instrumented wake path.
+
+- Dismiss runs still parked on a work item when it reaches a terminal stage. A merged or closed pull request cannot answer a suggested run, so the card no longer keeps asking. ([#21802](https://github.com/mastra-ai/mastra/pull/21802))
+
+- Check who sent a GitHub comment or review before letting it wake an agent, and ingest default-branch `push` events. ([#21800](https://github.com/mastra-ai/mastra/pull/21800))
+
+  The sender gate listed event kinds under names the webhook classifier never produces, so the identity check that keeps untrusted commenters from waking Factory agents was skipped for every comment and review event. The gate now names the kinds the classifier actually emits. Separately, `push` events were dropped by the event filter before ingestion; they are now ingested and forwarded to Factory's event pipeline so downstream consumers (such as the upcoming warm base-checkpoint refresh) can observe default-branch pushes.
+
+- Ingest `pull_request.opened` from the Platform event poller so a newly opened pull request mints its Review card. The poller forwards an allow-list of events to the rules engine, and `opened` was missing from it — so on deployments without a direct webhook (the only path a local deployment has), a pull request the factory authored itself was never reviewed. ([#21802](https://github.com/mastra-ai/mastra/pull/21802))
+
+- Keep kickoff skill resolution off the sandbox so clicking Review on a board card no longer blocks on full sandbox provisioning. Project skill roots (`.claude/skills`, `.agents/skills`, `<configDir>/skills`) are guarded while the session sandbox is unmaterialized — discovery reports them empty instead of forcing materialization — and a skills rescan fires automatically once materialization completes so repo-local skills become visible. Bundled Factory skills (e.g. factory-review) resolve from local disk in milliseconds. ([#21802](https://github.com/mastra-ai/mastra/pull/21802))
+
+- Stop the GitHub event worker from crashing when it is constructed before source-control storage is initialized. ([#21801](https://github.com/mastra-ai/mastra/pull/21801))
+
+  `workers()` dereferenced the integration's source-control storage eagerly while building the reconcile worker, but that storage is only attached later by `versionControl.initialize`. A deployment that constructs workers first crashed with "source-control storage has not been initialized". The worker now receives a lazy handle that resolves the storage slices at call time, once the worker is actually running.
+
+- Deliver GitHub review feedback to the factory rules on the polling path. Submitted reviews and new pull request comments were dropped before the rules engine ran, so the agent that authored a branch was never woken when a reviewer asked for changes. ([#21802](https://github.com/mastra-ai/mastra/pull/21802))
+
+- Route pull request comments to the agent that authored the pull request, and stop provenance from branding commenters as Factory. ([#21802](https://github.com/mastra-ai/mastra/pull/21802))
+
+  Comments on a PR arrive as `issue_comment` with `issue.pull_request` set, and the ingress explicitly dropped them. That closed the most common feedback path of all: on a Factory-authored PR, GitHub refuses a formal `--approve`/`--request-changes` verdict from the account that opened it, so the review skill falls back to `gh pr comment` — which was discarded. External review bots leaving plain comments were dropped for the same reason.
+
+  A new `pullRequestCommentCreated` rule event now carries those comments, reading the pull request from the `issue` payload so provenance binds the comment to the authoring Work item rather than mistaking the number for an issue's. The default rule sends a high-priority `sendMessage` to the `work` role, which wakes an idle session. Factory's own comments are ignored, because `factoryAuthored` cannot distinguish the Work role from the Review role and reacting to them would let an agent wake itself in a loop.
+
+  Separately, `factoryAuthored` was derived from PR provenance for every event, which proves the _pull request_ came from Factory, not the sender of the event. Any human or review bot commenting on a Factory-authored PR was therefore marked as Factory. Provenance-based attribution is now skipped for events whose sender is responding to the PR — comments, submitted reviews, and re-requested reviews — where only the app login identifies Factory.
+
+- Wait for the run that swallowed a kickoff, instead of racing it. ([#21802](https://github.com/mastra-ai/mastra/pull/21802))
+
+  A signal queued onto an already-running turn can be dropped when that turn ends
+  before draining its queue. That case was detected correctly and then handed to
+  the generic exponential backoff, which spends all five attempts inside about
+  thirty seconds — while the run it is waiting on takes minutes. Every attempt
+  landed on the same busy session and the card gave up roughly ten times too early.
+
+  The dispatcher now waits for the in-flight run to end and redelivers into the
+  freed session, which is the event that actually resolves the condition. The
+  decision settles within its original lease without spending the retry budget, and
+  a redelivery that is dropped again still goes back on the queue.
+
+- Only credit reporters who are real GitHub accounts ([#21802](https://github.com/mastra-ai/mastra/pull/21802))
+
+  The issue poller stamps a placeholder login when GitHub returns no author, which
+  would have become a `Co-Authored-By` trailer crediting an account nobody owns.
+  Reporter credit now requires a login that matches GitHub's grammar.
+
+- Re-review a pull request when a push lands while its card is still in Reviewing. ([#21802](https://github.com/mastra-ai/mastra/pull/21802))
+
+  A push to a card already sitting in Reviewing was dropped rather than deferred:
+  the rule returned nothing, and once the in-flight pass finished it transitioned
+  to Done having reviewed code that was no longer current, with no record that
+  newer commits had arrived. That is the exact ordering the review loop produces —
+  a review asks for changes, the authoring agent pushes a fix, and the fix lands
+  before the card finishes leaving Reviewing.
+
+  Only Intake now suppresses the re-review. A push during Reviewing re-enters the
+  stage, which supersedes the stale pass: the stage rule already cancels the run
+  in flight and selects the right skill for the entry it sees.
+
+  Transition decisions carry a `reenter` flag for this, since a transition to the
+  stage an item already holds is otherwise inert — the common case is a board
+  being corrected into a state it already has, not work that needs restarting.
+
+- Credit the author on review follow-up pull requests ([#21802](https://github.com/mastra-ai/mastra/pull/21802))
+
+  When a review pass ships mechanical fixes as a follow-up pull request, those
+  commits now carry a `Co-Authored-By` trailer for the human whose work they build
+  on — the reviewed pull request's author, or, when that author is a bot, the
+  reporter of the issue the pull request closes.
+
+- Carry pull request review feedback back to the agent that wrote the code. ([#21802](https://github.com/mastra-ai/mastra/pull/21802))
+
+  A `changes_requested` review is meant to wake the authoring work session, but
+  when the pull request carried no provenance the event resolved to the pull
+  request's own Review card. `addressReviewFeedback` deliberately refuses to act
+  on the review board — a Review card reacting to its own posted review would loop
+  the reviewer against itself — so the wake was dropped and the author never heard
+  about the feedback.
+
+  Review and pull request comment events now follow the linked card's
+  `parentWorkItemId` back to the item that authored the pull request, so the
+  existing guard becomes true for the right item instead of never. A pull request
+  card with no authoring item still emits nothing.
+
+- Close the work/review loop: a review that requests changes now wakes the agent that authored the pull request. ([#21802](https://github.com/mastra-ai/mastra/pull/21802))
+
+  `pull_request_review` webhooks were accepted and classified urgent, but no matching rule event existed, so the delivery was dropped after classification and the authoring agent was never told. PR subscriptions did not cover this — they sync PR activity into a thread's notification inbox for the agent to read on its _next_ turn, but nothing starts that turn.
+
+  A new `pullRequestReviewSubmitted` rule event maps `pull_request_review`/`submitted`, and the default rule sends a high-priority `sendMessage` to the `work` role, which wakes an idle session. Only `changes_requested` fires; `approved` and `commented` stay quiet, and the Review card that posted the review never reacts to its own output.
+
+- Send Factory's own pull requests straight to Review. ([#21802](https://github.com/mastra-ai/mastra/pull/21802))
+
+  A pull request entered Review only when its author passed a repository-collaborator
+  permission check. A GitHub App bot is never a collaborator, so every pull request
+  Factory opened itself scored as untrusted and parked in Intake, waiting on a human
+  click — the exact opposite of the intent, since those are the pull requests whose
+  provenance Factory knows best.
+
+  Factory authorship is now its own trust signal for pull requests: the branch came
+  from a Work run this Factory dispatched. Issues are deliberately unchanged, because
+  auto-triaging an issue Factory opened is a self-loop with no upside.
+
+- Report what actually happened to a Factory run. A human dragging a card on the board now arms the item, so the run it asks for starts instead of parking for approval, and a run that dies mid-flight — a provider error, or a cancellation by the next decision — is recorded as failed on the decision instead of reported as a success. ([#21802](https://github.com/mastra-ai/mastra/pull/21802))
+
+- Retire a parked proposal when the run it asked for starts anyway. Approving a ([#21802](https://github.com/mastra-ai/mastra/pull/21802))
+  proposal mints a fresh decision rather than dispatching the parked one, so the
+  original stayed `proposed` forever and the card kept asking to start a run that
+  had already finished. The dispatcher now dismisses proposals for the same work
+  item and role as any `invokeSkill` it dispatches, so the waiting badge only ever
+  marks a loop that is genuinely stopped.
+
+- Deliver GitHub pull request signals to the session that actually owns the subscribed thread, and skip subscriptions whose thread this deployment does not hold. ([#21800](https://github.com/mastra-ai/mastra/pull/21800))
+
+  A subscription records the Factory project as its resource, but an unscoped session registers under its own id, so delivery looked for the thread under a resource that did not own it and failed with "Thread not found" on every matching event. Delivery now reads the thread from storage to find its owning resource. A subscription naming a thread that is absent is skipped rather than failed, so a pull request's events reaching a deployment that never owned the thread no longer fabricate a session or retry in a loop.
+
+- Fixed restarting a review after deleting its thread. It no longer fails with "git clone failed: a branch named ... already exists". Reused Platform sandboxes now delete the previous session's local branches when they are recycled. A new session for the same branch starts fresh from the base branch. Branch checkout also recovers from leftover or broken branch refs instead of failing the workspace. ([#21268](https://github.com/mastra-ai/mastra/pull/21268))
+
+- Updated dependencies [[`566e080`](https://github.com/mastra-ai/mastra/commit/566e080ac4296ef2ba84a99c496a1c19706fa2df), [`c549e2f`](https://github.com/mastra-ai/mastra/commit/c549e2f40edc1cac5d9e74e82f90da22b48df084), [`c549e2f`](https://github.com/mastra-ai/mastra/commit/c549e2f40edc1cac5d9e74e82f90da22b48df084), [`2ef2f23`](https://github.com/mastra-ai/mastra/commit/2ef2f230a7aed342e7dc3b2000cd42e4c43e08a7), [`5740ec6`](https://github.com/mastra-ai/mastra/commit/5740ec60c760ffdfbfaa59d603d03b847c864e05)]:
+  - @mastra/code-sdk@1.3.0-alpha.13
+  - @mastra/core@1.60.0-alpha.13
+
 ## 0.8.0-alpha.13
 
 ### Minor Changes

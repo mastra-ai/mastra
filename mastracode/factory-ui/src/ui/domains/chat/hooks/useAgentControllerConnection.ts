@@ -96,10 +96,7 @@ export function useAgentControllerConnection({
 
   const handleEvent = (event: AgentControllerEvent) => {
     const displayStateRunning =
-      event.type === 'display_state_changed' &&
-      typeof event.displayState === 'object' &&
-      event.displayState !== null &&
-      'isRunning' in event.displayState
+      isKnownAgentControllerEvent(event) && event.type === 'display_state_changed'
         ? event.displayState.isRunning
         : undefined;
     const running = event.type === 'agent_start' ? true : event.type === 'agent_end' ? false : displayStateRunning;

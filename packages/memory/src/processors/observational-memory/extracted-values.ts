@@ -1,4 +1,4 @@
-import type { ProcessorContext } from '@mastra/core/processors';
+import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import type { Memory } from '../..';
@@ -237,23 +237,30 @@ export async function applyExtractorHooks(opts: {
   values?: Record<string, unknown>;
   failures?: ExtractionFailure[];
   previousValues?: Record<string, unknown>;
+  rawObservations?: string;
+  recentMessages?: string;
   threadId: string;
   resourceId?: string;
   mainAgent?: ProcessorContext['agent'];
   memory?: Memory;
   sendSignal?: ProcessorContext['sendSignal'];
+  sendStateSignal?: ProcessorContext['sendStateSignal'];
+  writer?: ProcessorStreamWriter;
+  abortSignal?: AbortSignal;
   requestContext?: RequestContext;
 }): Promise<{ values?: Record<string, unknown>; failures?: ExtractionFailure[] }> {
   const values = normalizeExtractedValues(opts.values) ?? {};
   const failures: ExtractionFailure[] = [...(opts.failures ?? [])];
 
   for (const extractor of opts.extractors) {
-    if (!Object.prototype.hasOwnProperty.call(values, extractor.slug)) {
+    const isHook = extractor.mode === 'hook';
+    const hasValue = Object.prototype.hasOwnProperty.call(values, extractor.slug);
+    if (!isHook && !hasValue) {
       continue;
     }
 
-    const current = values[extractor.slug];
-    if (!isPresentExtractedValue(current)) {
+    const current = isHook ? opts.rawObservations : values[extractor.slug];
+    if (!isHook && !isPresentExtractedValue(current)) {
       delete values[extractor.slug];
       continue;
     }
@@ -268,15 +275,19 @@ export async function applyExtractorHooks(opts: {
         extractor,
         threadId: opts.threadId,
         resourceId: opts.resourceId,
-        previous: opts.previousValues?.[extractor.slug],
+        previous: isHook ? undefined : opts.previousValues?.[extractor.slug],
         current,
+        rawObservations: opts.rawObservations,
+        recentMessages: opts.recentMessages,
         mainAgent: opts.mainAgent,
         memory: opts.memory,
         sendSignal: opts.sendSignal,
+        sendStateSignal: opts.sendStateSignal,
+        writer: opts.writer,
+        abortSignal: opts.abortSignal,
         requestContext: opts.requestContext,
       });
-      if (hookValue === undefined) {
-        // Undefined means the hook did not replace the extracted value.
+      if (isHook || hookValue === undefined) {
         continue;
       }
       const parsed = extractor.schema.safeParse(hookValue);
@@ -287,7 +298,10 @@ export async function applyExtractorHooks(opts: {
         failures.push({ slug: extractor.slug, error: parsed.error.message });
       }
     } catch (error) {
-      delete values[extractor.slug];
+      if (opts.abortSignal?.aborted) throw error;
+      if (!isHook) {
+        delete values[extractor.slug];
+      }
       failures.push({ slug: extractor.slug, error: error instanceof Error ? error.message : String(error) });
     }
   }

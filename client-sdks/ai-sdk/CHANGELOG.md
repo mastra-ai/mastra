@@ -1,5 +1,11 @@
 # @mastra/ai-sdk
 
+## 1.9.0-alpha.0
+
+### Minor Changes
+
+- Add `version: 'v7'` support to the AI SDK UI helpers. `toAISdkMessages()`, `toAISdkStream()`, `handleChatStream()`/`chatRoute()`, `handleNetworkStream()`/`networkRoute()`, and `handleWorkflowStream()`/`workflowRoute()` now accept `'v7'` and return streams and messages typed against AI SDK v7, so apps on AI SDK v7 no longer need casts at the route boundary. ([#21720](https://github.com/mastra-ai/mastra/pull/21720))
+
 ## 1.8.0
 
 ### Minor Changes

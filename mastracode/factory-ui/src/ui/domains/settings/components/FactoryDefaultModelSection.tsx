@@ -10,9 +10,9 @@ import { SettingsRow } from './SettingsCard';
 import { SharedCredentialNotice } from './SharedCredentialNotice';
 
 /**
- * Factory default model. Persisted on the Factory project itself; factory
- * runs (issue triage, board work items) and new chats start on it. The
- * setting is mandatory — it can be changed but not cleared.
+ * Factory default model. Persisted on the Factory project itself; Factory
+ * runs use it, and new chats fall back to it when the user has no default
+ * model pack. The setting is mandatory and can be changed but not cleared.
  */
 export function FactoryDefaultModelSection({ models }: { models: AvailableModelOption[] }) {
   const { factoryId } = useParams<{ factoryId: string }>();

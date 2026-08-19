@@ -2009,6 +2009,7 @@
         "kwaipilot/kat-coder-air-v2.5",
         "kwaipilot/kat-coder-pro-v2",
         "kwaipilot/kat-coder-pro-v2.5",
+        "liquid/lfm-2.5-2.6b:free",
         "mancer/weaver",
         "meituan/longcat-2.0",
         "meta-llama/llama-3.1-70b-instruct",
@@ -2245,6 +2246,8 @@
         "z-ai/glm-5-turbo",
         "z-ai/glm-5.1",
         "z-ai/glm-5.2",
+        "z-ai/glm-5.2:free",
+        "z-ai/glm-5.3",
         "z-ai/glm-5v-turbo",
         "~anthropic/claude-fable-latest",
         "~anthropic/claude-haiku-latest",
@@ -2276,7 +2279,7 @@
       "apiKeyEnvVar": "HETZNER_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Hetzner",
-      "models": ["DeepSeek-V4-Flash-0731", "GLM-5.2-NVFP4", "Kimi-K2.7-Code", "Qwen/Qwen3.6-35B-A3B-FP8"],
+      "models": ["Qwen/Qwen3.6-35B-A3B-FP8", "Qwen3.8-27B"],
       "docUrl": "https://experiments.hetzner.com/docs/inference",
       "gateway": "models.dev"
     },
@@ -2338,15 +2341,6 @@
       "name": "Blue Claw",
       "models": ["Qwen/Qwen3.6-35B-A3B-FP8", "Qwen3.6-27B"],
       "docUrl": "https://blueclaw.network",
-      "gateway": "models.dev"
-    },
-    "scx": {
-      "url": "https://api.scx.ai/v1",
-      "apiKeyEnvVar": "SCX_API_KEY",
-      "apiKeyHeader": "Authorization",
-      "name": "SCX.ai",
-      "models": ["MiniMax-M2.7", "gpt-oss-120b"],
-      "docUrl": "https://platform.scx.ai/docs",
       "gateway": "models.dev"
     },
     "auriko": {
@@ -3521,6 +3515,7 @@
         "qwen/qwen3.6-plus",
         "qwen/qwen3.7-max",
         "qwen/qwen3.7-plus",
+        "qwen/qwen3.8-2.4t-a95b",
         "qwen/qwen3.8-max",
         "sakana/fugu-ultra",
         "sakana/sakana-namazu",
@@ -3543,7 +3538,8 @@
         "zai/glm-5",
         "zai/glm-5-turbo",
         "zai/glm-5.1",
-        "zai/glm-5.2"
+        "zai/glm-5.2",
+        "zai/glm-5.3"
       ],
       "docUrl": "https://docs.merge.dev/merge-gateway",
       "gateway": "models.dev",
@@ -4581,6 +4577,15 @@
         "zai-org/GLM-4.5-FP8"
       ],
       "docUrl": "https://submodel.gitbook.io",
+      "gateway": "models.dev"
+    },
+    "scx-ai": {
+      "url": "https://api.scx.ai/v1",
+      "apiKeyEnvVar": "SCX_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "SCX.ai",
+      "models": ["GLM-5.2", "MiniMax-M2.7", "Qwen3.8-Max", "gpt-oss-120b"],
+      "docUrl": "https://platform.scx.ai/docs",
       "gateway": "models.dev"
     },
     "freemodel": {
@@ -6799,6 +6804,7 @@
         "zai/glm-5.1",
         "zai/glm-5.2",
         "zai/glm-5.2-fast",
+        "zai/glm-5.3",
         "zai/glm-5v-turbo"
       ],
       "docUrl": "https://github.com/vercel/ai/tree/5eb85cc45a259553501f535b8ac79a77d0e79223/packages/gateway",
@@ -7790,6 +7796,7 @@
         "kwaipilot/kat-coder-air-v2.5",
         "kwaipilot/kat-coder-pro-v2",
         "kwaipilot/kat-coder-pro-v2.5",
+        "liquid/lfm-2.5-2.6b:free",
         "mancer/weaver",
         "meituan/longcat-2.0",
         "meta-llama/llama-3.1-70b-instruct",
@@ -8029,6 +8036,7 @@
         "z-ai/glm-5-turbo",
         "z-ai/glm-5.1",
         "z-ai/glm-5.2",
+        "z-ai/glm-5.3",
         "z-ai/glm-5v-turbo",
         "~anthropic/claude-fable-latest",
         "~anthropic/claude-haiku-latest",
@@ -8226,6 +8234,7 @@
         "Qwen/Qwen3.5-35B-A3B",
         "Qwen/Qwen3.6-27B",
         "Qwen/Qwen3.6-35B-A3B",
+        "Qwen/Qwen3.8-27B",
         "deepseek-ai/DeepSeek-V3.1",
         "deepseek-ai/DeepSeek-V4-Flash",
         "deepseek-ai/DeepSeek-V4-Flash-0731",
@@ -10190,6 +10199,7 @@
       "kwaipilot/kat-coder-air-v2.5",
       "kwaipilot/kat-coder-pro-v2",
       "kwaipilot/kat-coder-pro-v2.5",
+      "liquid/lfm-2.5-2.6b:free",
       "mancer/weaver",
       "meituan/longcat-2.0",
       "meta-llama/llama-3.1-70b-instruct",
@@ -10426,6 +10436,8 @@
       "z-ai/glm-5-turbo",
       "z-ai/glm-5.1",
       "z-ai/glm-5.2",
+      "z-ai/glm-5.2:free",
+      "z-ai/glm-5.3",
       "z-ai/glm-5v-turbo",
       "~anthropic/claude-fable-latest",
       "~anthropic/claude-haiku-latest",
@@ -10440,7 +10452,7 @@
       "~x-ai/grok-latest"
     ],
     "poolside": ["poolside/laguna-m.1", "poolside/laguna-s-2.1", "poolside/laguna-xs-2.1"],
-    "hetzner": ["DeepSeek-V4-Flash-0731", "GLM-5.2-NVFP4", "Kimi-K2.7-Code", "Qwen/Qwen3.6-35B-A3B-FP8"],
+    "hetzner": ["Qwen/Qwen3.6-35B-A3B-FP8", "Qwen3.8-27B"],
     "regolo-ai": [
       "apertus-70b",
       "brick-complexity-pro",
@@ -10469,7 +10481,6 @@
       "lucidquery-nexus-coder"
     ],
     "blueclaw": ["Qwen/Qwen3.6-35B-A3B-FP8", "Qwen3.6-27B"],
-    "scx": ["MiniMax-M2.7", "gpt-oss-120b"],
     "auriko": [
       "claude-opus-4-6",
       "claude-opus-4-7",
@@ -11299,6 +11310,7 @@
       "qwen/qwen3.6-plus",
       "qwen/qwen3.7-max",
       "qwen/qwen3.7-plus",
+      "qwen/qwen3.8-2.4t-a95b",
       "qwen/qwen3.8-max",
       "sakana/fugu-ultra",
       "sakana/sakana-namazu",
@@ -11321,7 +11333,8 @@
       "zai/glm-5",
       "zai/glm-5-turbo",
       "zai/glm-5.1",
-      "zai/glm-5.2"
+      "zai/glm-5.2",
+      "zai/glm-5.3"
     ],
     "inceptron": [
       "MiniMaxAI/MiniMax-M2.5",
@@ -11900,6 +11913,7 @@
       "zai-org/GLM-4.5-Air",
       "zai-org/GLM-4.5-FP8"
     ],
+    "scx-ai": ["GLM-5.2", "MiniMax-M2.7", "Qwen3.8-Max", "gpt-oss-120b"],
     "freemodel": [
       "claude-fable-5",
       "claude-haiku-4-5-20251001",
@@ -13360,6 +13374,7 @@
       "zai/glm-5.1",
       "zai/glm-5.2",
       "zai/glm-5.2-fast",
+      "zai/glm-5.3",
       "zai/glm-5v-turbo"
     ],
     "edenai": [
@@ -14154,6 +14169,7 @@
       "kwaipilot/kat-coder-air-v2.5",
       "kwaipilot/kat-coder-pro-v2",
       "kwaipilot/kat-coder-pro-v2.5",
+      "liquid/lfm-2.5-2.6b:free",
       "mancer/weaver",
       "meituan/longcat-2.0",
       "meta-llama/llama-3.1-70b-instruct",
@@ -14393,6 +14409,7 @@
       "z-ai/glm-5-turbo",
       "z-ai/glm-5.1",
       "z-ai/glm-5.2",
+      "z-ai/glm-5.3",
       "z-ai/glm-5v-turbo",
       "~anthropic/claude-fable-latest",
       "~anthropic/claude-haiku-latest",
@@ -14557,6 +14574,7 @@
       "Qwen/Qwen3.5-35B-A3B",
       "Qwen/Qwen3.6-27B",
       "Qwen/Qwen3.6-35B-A3B",
+      "Qwen/Qwen3.8-27B",
       "deepseek-ai/DeepSeek-V3.1",
       "deepseek-ai/DeepSeek-V4-Flash",
       "deepseek-ai/DeepSeek-V4-Flash-0731",
