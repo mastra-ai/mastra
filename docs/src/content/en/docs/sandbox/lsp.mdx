@@ -1,13 +1,13 @@
 ---
-title: "LSP inspection | Workspace"
-description: Configure Language Server Protocol support for semantic code inspection in workspace files.
+title: "LSP inspection"
+description: Configure Language Server Protocol support for semantic inspection of project files.
 packages:
   - "@mastra/core"
 ---
 
 # LSP inspection
 
-LSP inspection gives workspace-backed agents semantic code intelligence. When you enable LSP on a workspace, agents can inspect symbols in supported files to retrieve hover information and jump to definitions. They can also find implementations.
+Language Server Protocol (LSP) inspection runs a long-lived language-server process inside a sandbox. It gives agents type information and links between symbols, definitions, and implementations.
 
 ## When to use LSP inspection
 
@@ -27,7 +27,7 @@ Install the protocol packages and a language server. This example uses the TypeS
 npm install vscode-jsonrpc vscode-languageserver-protocol typescript typescript-language-server
 ```
 
-Enable LSP on a workspace by setting `lsp: true`:
+Enable LSP by setting `lsp: true` alongside a static sandbox. Add a filesystem when the agent also needs file tools for the same project:
 
 ```typescript title="src/mastra/workspaces.ts"
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'
@@ -43,7 +43,7 @@ LSP requires a static sandbox whose process manager provides streamed output and
 
 ## Agent tool
 
-When LSP is enabled, the workspace exposes `mastra_workspace_lsp_inspect` by default.
+When LSP is enabled, Mastra exposes `mastra_workspace_lsp_inspect` by default.
 
 ```json
 {
@@ -85,7 +85,7 @@ const workspace = new Workspace({
 
 This changes the exposed tool name only. The configuration key stays `WORKSPACE_TOOLS.LSP.LSP_INSPECT`.
 
-See [`WorkspaceToolsConfig`](/reference/workspace/workspace-class#tool-configuration) for approval settings, dynamic policies, output limits, and hooks shared by workspace tools.
+See the [tool configuration reference](/reference/workspace/workspace-class#tool-configuration) for approval settings, dynamic policies, output limits, and hooks shared by generated agent tools.
 
 ## LSP configuration
 
@@ -128,9 +128,9 @@ Use custom configuration when you need to:
 
 ### Limit retained clients
 
-Set `maxOpenClients` to a positive integer to limit the language server clients retained by a workspace. When the limit is reached, the workspace closes the least recently used client that has no active query lease. If every retained client is active, the next acquisition waits up to five seconds for a lease to be released. If no lease becomes available, `prepareQuery()` and `getDiagnostics()` return `null`, while `getDiagnosticsMulti()` omits the unavailable server.
+Set `maxOpenClients` to a positive integer to limit retained language-server clients. When the limit is reached, Mastra closes the least recently used client that has no active query lease. If every retained client is active, the next acquisition waits up to five seconds for a lease to be released. If no lease becomes available, `prepareQuery()` and `getDiagnostics()` return `null`, while `getDiagnosticsMulti()` omits the unavailable server.
 
-Workspaces retain an unlimited number of clients when `maxOpenClients` is omitted. Mastra Code sets `maxOpenClients` to `4` by default.
+Mastra retains an unlimited number of clients when `maxOpenClients` is omitted. Mastra Code sets `maxOpenClients` to `4` by default.
 
 ### Release prepared queries
 
@@ -149,7 +149,7 @@ if (query) {
 }
 ```
 
-During workspace teardown, Mastra waits up to five seconds for active leases to be released before it forces language server shutdown.
+During teardown, Mastra waits up to five seconds for active leases to be released before it forces language server shutdown.
 
 ## Custom language servers
 
@@ -225,7 +225,7 @@ const workspace = new Workspace({
 ## Requirements and limitations
 
 - Configure a static sandbox whose process handles expose readable output and writable input streams. A filesystem alone can't run a language server, resolver-backed sandboxes aren't supported with LSP, and some remote process managers don't provide the required bidirectional streams.
-- Install `vscode-jsonrpc` and `vscode-languageserver-protocol` in the Mastra application. Mastra disables LSP during workspace construction when these host-side protocol packages aren't available.
+- Install `vscode-jsonrpc` and `vscode-languageserver-protocol` in the Mastra application. Mastra disables LSP while validating the configuration when these host-side protocol packages aren't available.
 - Ensure the project files and language-server process use the same paths. `lsp.root` must be an absolute path available to the process manager.
 - Install the required language-server binary and runtime in the environment where the sandbox process runs. Built-in discovery checks the project, configured `searchPaths`, and the Mastra host environment before using `packageRunner`.
 - LSP inspection only works for file types with a matching built-in or custom language server.
@@ -235,13 +235,13 @@ const workspace = new Workspace({
 
 ### Remote sandboxes
 
-Remote LSP isn't backend-transparent in the current Workspace implementation. The language-server command runs through the remote sandbox process manager, but binary discovery and some source previews still use the Mastra host. A language-server binary installed only on the host can't run in the remote sandbox, while files available only in the remote sandbox can't provide every host-side preview.
+Remote LSP isn't backend-transparent in the current implementation. The language-server command runs through the remote sandbox process manager, but binary discovery and some source previews still use the Mastra host. A language-server binary installed only on the host can't run in the remote sandbox, while files available only in the remote sandbox can't provide every host-side preview.
 
 Use remote LSP only when the process manager supplies readable and writable streams, the project has matching absolute paths on both the Mastra host and remote sandbox, and `binaryOverrides` names a command installed in the remote image. A local filesystem and remote sandbox don't synchronize automatically. For remote-only projects, use `grep`, indexed search, and sandbox commands until backend-transparent LSP file access is supported.
 
 ## Related
 
 - [Filesystem](/docs/sandbox/filesystem)
-- [Sandbox](/docs/sandbox/overview)
+- [Sandboxes and Filesystems](/docs/sandbox/overview)
 - [Search and indexing](/docs/sandbox/search)
-- [Workspace class reference](/reference/workspace/workspace-class)
+- [LSP configuration reference](/reference/workspace/workspace-class)

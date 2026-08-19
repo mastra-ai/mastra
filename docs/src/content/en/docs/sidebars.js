@@ -262,7 +262,7 @@ const sidebars = {
         },
         {
           type: 'category',
-          label: 'Sandbox',
+          label: 'Sandboxes and Filesystems',
           link: {
             type: 'doc',
             id: 'sandbox/overview',

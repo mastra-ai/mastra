@@ -1,6 +1,6 @@
 ---
-title: "Filesystem | Workspace"
-description: Give agents persistent files through sandbox mounts or workspace file tools.
+title: "Filesystem"
+description: Give agents persistent files through sandbox mounts or standalone file tools.
 packages:
   - "@mastra/core"
 ---
@@ -11,7 +11,7 @@ import { IntegrationGrid } from '@site/src/components/integrations/grid';
 
 Filesystems give agents persistent storage for source code, documents, datasets, and generated artifacts.
 
-Mastra supports two mutually exclusive ways to add a filesystem to a workspace:
+Mastra supports two mutually exclusive filesystem arrangements:
 
 | Configuration | Agent access | Sandbox access |
 | - | - | - |
@@ -22,7 +22,7 @@ Use `mounts` when a sandbox needs to run commands against the files. The agent c
 
 Use `filesystem` when the agent only needs direct file tools or the sandbox backend doesn't support mounts. The agent acts as the driver: it can read a file and pass its contents to another tool, but Mastra doesn't copy or mount the file into the sandbox. A command such as `cat`, `grep`, or `python script.py` can't access remote provider content unless your application passes it as input. A `LocalFilesystem` and `LocalSandbox` can access the same host directory when you explicitly configure both with that directory.
 
-You can't configure both `filesystem` and `mounts` on the same workspace.
+You can't configure both `filesystem` and `mounts` together.
 
 ## When to use filesystems
 
@@ -33,7 +33,7 @@ Mount a filesystem when you want to:
 - Let commands and agent file tools work against the same storage.
 - Share a storage location across multiple sandbox runs.
 
-Use a workspace-only filesystem when you want to:
+Use a standalone filesystem when you want to:
 
 - Give an agent access to a managed knowledge base without command execution.
 - Read documents uploaded by non-technical teammates to services such as S3 or Google Drive.
@@ -68,7 +68,7 @@ Use another filesystem when files need to persist outside the application host o
 ]}
 />
 
-Workspace-only file tools work with the full provider list. Backend materialization support depends on both the filesystem and sandbox backend, so check both references before choosing a combination.
+Standalone file tools work with the full provider list. Backend materialization support depends on both the filesystem and sandbox backend, so check both references before choosing a combination.
 
 ## Path namespaces
 
@@ -108,7 +108,7 @@ const workspace = new Workspace({
 export const mastra = new Mastra({ workspace })
 ```
 
-Existing objects in the bucket seed the sandbox at `/workspace`. Files created there persist in S3 after the sandbox stops. All agents registered with this `Mastra` instance inherit the workspace.
+Existing objects in the bucket seed the sandbox at `/workspace`. Files created there persist in S3 after the sandbox stops. All agents registered with this `Mastra` instance receive the configured file and command tools.
 
 ### Using mounts
 
@@ -135,7 +135,7 @@ Use the sandbox command API when you need native `rg` behavior and the files are
 const result = await sandbox.executeCommand('rg', ['pattern', '/workspace'])
 ```
 
-Use `WORKSPACE_TOOLS.FILESYSTEM` to require approval, disable tools, enforce read-before-write, or change output limits. See the [Workspace filesystem tools reference](/reference/workspace/workspace-class#filesystem-tools) for configuration details.
+Use `WORKSPACE_TOOLS.FILESYSTEM` to require approval, disable tools, enforce read-before-write, or change output limits. See the [filesystem tool configuration reference](/reference/workspace/workspace-class#filesystem-tools) for details.
 
 :::warning
 
@@ -174,7 +174,7 @@ With this configuration:
 - Commands inside the sandbox access the same paths.
 - New and updated files persist in the underlying buckets.
 
-All file paths must start with a mount prefix. Listing `/` returns a virtual directory for each mount. Mount paths can't be nested, so a workspace can't mount both `/data` and `/data/archive`.
+All file paths must start with a mount prefix. Listing `/` returns a virtual directory for each mount. Mount paths can't be nested, so the same configuration can't mount both `/data` and `/data/archive`.
 
 Built-in mount support currently includes these combinations:
 
@@ -193,7 +193,7 @@ The composite filesystem routes file tools without requiring operating-system mo
 
 Some backends install missing packages while the sandbox starts. Installation can require network access, elevated permissions, package-manager support, and several extra minutes. For reliable startup, use an image or snapshot that already contains the required mount software when the provider supports custom images.
 
-A failed backend mount doesn't remove the provider from the composite filesystem, and it doesn't currently reject `workspace.init()`. File tools can therefore work while commands can't see the same path. Inspect each mount after initialization when command access is required:
+A failed backend mount doesn't remove the provider from the composite filesystem, and it doesn't currently reject initialization. File tools can therefore work while commands can't see the same path. Inspect each mount after initialization when command access is required:
 
 ```typescript
 await workspace.init()
@@ -205,7 +205,7 @@ for (const [path, mount] of workspace.sandbox?.mounts?.entries ?? []) {
 }
 ```
 
-Test command visibility as part of startup rather than treating `workspace.status === 'ready'` as proof that every mount succeeded. For the remote Quickstart, run `ls /workspace`. With a `/workspace` mount on `LocalSandbox`, run `ls workspace` from its `workingDirectory`.
+Test command visibility as part of startup rather than treating a `ready` status as proof that every mount succeeded. For the remote Quickstart, run `ls /workspace`. With a `/workspace` mount on `LocalSandbox`, run `ls workspace` from its `workingDirectory`.
 
 ### Read-only mounts
 
@@ -226,11 +226,11 @@ const workspace = new Workspace({
 
 ### Per-user or per-thread mounts
 
-Workspace-level `mounts` require a sandbox provider object and can't be combined with a sandbox resolver. For one sandbox and storage prefix per user or thread, create and mount the filesystem inside the sandbox resolver. See [Multi-tenant sandboxes](/docs/sandbox/overview#multi-tenant-sandboxes) for a complete example.
+Static `mounts` require a sandbox provider object and can't be combined with a sandbox resolver. For one sandbox and storage prefix per user or thread, create and mount the filesystem inside the sandbox resolver. See [Multi-tenant sandboxes](/docs/sandbox/overview#multi-tenant-sandboxes) for a complete example.
 
-## Workspace-only filesystem
+## Standalone filesystem
 
-Pass a provider to `filesystem` when only the agent needs file access. The agent receives file tools, but Mastra doesn't automatically expose those files to a sandbox configured on the same workspace.
+Pass a provider to `filesystem` when only the agent needs file access. The agent receives file tools, but Mastra doesn't automatically expose those files to an independently configured sandbox.
 
 ### Quickstart
 
@@ -259,7 +259,7 @@ The Google Drive files never appear inside the sandbox. Only the content passed 
 
 ### Seed a filesystem
 
-Files already in the folder seed the workspace. You can also seed any writable provider through its API before the agent uses it:
+Files already in the folder seed the filesystem. You can also seed any writable provider through its API before the agent uses it:
 
 ```typescript
 await workspace.filesystem?.writeFile(
@@ -287,7 +287,7 @@ const workspace = new Workspace({
 
 Containment still matters even though the agent accesses files through tools. It limits what those tools can expose. Prefer `allowedPaths` for specific external directories instead of setting `contained: false`.
 
-### Local project workspaces
+### Share a local directory
 
 Use `LocalFilesystem` as a narrow project boundary for coding, review, and documentation agents. Point `LocalSandbox` at the same physical directory only when the agent also needs commands:
 
@@ -347,10 +347,10 @@ const workspace = new Workspace({
 })
 ```
 
-Each tenant's prefix seeds its own workspace view. Workspace tools resolve the filesystem from the request context automatically.
+Each tenant's prefix seeds its own filesystem view. Agent file tools resolve the provider from the request context automatically.
 
 ## Related
 
-- [Sandbox](/docs/sandbox/overview)
-- [`WorkspaceFilesystem` reference](/reference/workspace/filesystem)
-- [`Workspace` reference](/reference/workspace/workspace-class)
+- [Sandboxes and Filesystems](/docs/sandbox/overview)
+- [Filesystem provider interface](/reference/workspace/filesystem)
+- [Configuration API reference](/reference/workspace/workspace-class)
