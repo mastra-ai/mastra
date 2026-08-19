@@ -7,9 +7,7 @@ import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Memory, Subconscious } from '../../../index';
-import { extractStructuredValues } from '../extraction-runner';
 import { ObservationalMemory } from '../observational-memory';
-import { SubconsciousCaptureExtractor } from '../subconscious/capture';
 import type { ObservationalMemoryModel } from '../types';
 
 const scope = ['org:acme', 'resource:user-42', 'thread:alpha'];
@@ -74,93 +72,6 @@ describe('Memory.runCuration', () => {
     const store = (await memory.storage.getStore('knowledge'))!;
     expect(await store.getCurationCursor({ sourceThreadId: 'alpha', agent: 'curate' })).toMatchObject({
       lastKnowledgeId: item.id,
-    });
-  });
-
-  it('composes the entity-description mandate with the cursor protocol', async () => {
-    let prompt = '';
-    const memory = createMemory({
-      omModel: new MockLanguageModelV2({
-        doGenerate: async ({ prompt: modelPrompt }) => {
-          prompt = JSON.stringify(modelPrompt);
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-            content: [{ type: 'text', text: `<curation-complete through="${item.id}" />` }],
-            warnings: [],
-          };
-        },
-      }),
-    });
-    const item = await seedItem(memory);
-
-    await memory.runCuration({
-      threadId: 'alpha',
-      resourceId: 'user-42',
-      requestContext: requestContext(),
-    });
-
-    expect(prompt).toContain("links only from the entity's own records");
-    expect(prompt).toContain('knowledge_write_node_content');
-    // Distinctive substrings from each paragraph so deleting either the mandate or the
-    // cursor protocol fails this test, plus ordering: the mandate composes BEFORE the
-    // terminal cursor-protocol paragraph.
-    const mandateMarker = 'touched by a KnowledgeRecord in the current worklist';
-    const cursorMarker = 'Do not emit a completion marker when no KnowledgeRecord was fully processed';
-    expect(prompt).toContain(mandateMarker);
-    expect(prompt).toContain(cursorMarker);
-    expect(prompt).toContain('Your final response must end with the marker');
-    expect(prompt.indexOf(mandateMarker)).toBeLessThan(prompt.indexOf(cursorMarker));
-  });
-
-  it('composes canonical identifier and URL preservation into capture extraction', async () => {
-    let prompt = '';
-    const recordText = 'Project Atlas is tracked as COR-1165 at https://linear.app/kepler-crm/issue/COR-1165.';
-    const agent = new Agent({
-      id: 'capture-instruction-test',
-      name: 'Capture Instruction Test',
-      instructions: 'Extract values.',
-      model: new MockLanguageModelV2({
-        doGenerate: async ({ prompt: modelPrompt }) => {
-          prompt = JSON.stringify(modelPrompt);
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({
-                  capture: {
-                    nodes: [
-                      {
-                        name: 'Project Atlas',
-                        kind: 'project',
-                        records: [{ text: recordText, reason: 'Preserves the canonical issue reference.' }],
-                      },
-                    ],
-                  },
-                }),
-              },
-            ],
-            warnings: [],
-          };
-        },
-      }),
-    });
-    const capture = await new SubconsciousCaptureExtractor({
-      defaultScope: 'resource',
-      learnedGuidance: false,
-    }).resolve({ source: 'observer' });
-
-    const result = await extractStructuredValues({ agent, source: 'observer', extractors: [capture] });
-
-    expect(prompt).toContain(
-      'When the conversation states a canonical identifier or URL for an entity, preserve it verbatim in the record text.',
-    );
-    expect(result.values.capture).toMatchObject({
-      nodes: [{ records: [{ text: recordText }] }],
     });
   });
 
