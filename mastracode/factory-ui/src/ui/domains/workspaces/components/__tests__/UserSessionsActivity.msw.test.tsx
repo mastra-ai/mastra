@@ -26,6 +26,7 @@ function makeSession(
     projectRepositoryId,
     orgId: 'org-1',
     userId: 'user-1',
+    visibility: 'org' as const,
     baseBranch: 'main',
     sandboxId: null,
     sandboxWorkdir: null,

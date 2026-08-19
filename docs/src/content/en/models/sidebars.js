@@ -346,6 +346,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/echo',
+          label: 'Echo',
+        },
+        {
+          type: 'doc',
           id: 'providers/edenai',
           label: 'Eden AI',
         },

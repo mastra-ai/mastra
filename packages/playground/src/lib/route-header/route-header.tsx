@@ -45,7 +45,7 @@ export function RouteHeader() {
                 className={isCurrent ? 'max-w-[28rem]' : 'max-w-[18rem]'}
               >
                 {IconComponent && (
-                  <Icon>
+                  <Icon className={isCurrent ? 'flex w-6 justify-center' : undefined}>
                     <IconComponent />
                   </Icon>
                 )}

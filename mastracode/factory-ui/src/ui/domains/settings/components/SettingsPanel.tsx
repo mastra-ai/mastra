@@ -116,11 +116,11 @@ export function SettingsPanel() {
               </SettingsCard>
             </SettingsSubsection>
             <SettingsSubsection
-              title="Model packs"
-              description="A pack sets a model for each mode (build / plan / fast)."
+              title="Chat model packs"
+              description="Set your personal Build, Plan and Fast defaults for interactive chats. Factory work runs are unaffected."
             >
               <SettingsCard className="p-4">
-                <ModelPacksSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
+                <ModelPacksSection models={models} />
               </SettingsCard>
             </SettingsSubsection>
             <SettingsSubsection
