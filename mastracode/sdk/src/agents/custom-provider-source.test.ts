@@ -91,10 +91,14 @@ describe('gateway consumption', () => {
     const dispose = gateway.registerCustomProvider('pi:extension', {
       name: 'Pi Provider',
       url: 'https://pi.example.com',
+      apiKeyEnvVar: 'PI_PROVIDER_API_KEY',
       models: ['pi-model'],
     });
 
-    expect(Object.values(await gateway.fetchProviders()).some(config => config.name === 'Pi Provider')).toBe(true);
+    const contributedProvider = Object.values(await gateway.fetchProviders()).find(
+      config => config.name === 'Pi Provider',
+    );
+    expect(contributedProvider).toMatchObject({ apiKeyEnvVar: 'PI_PROVIDER_API_KEY' });
     expect(Object.values(await otherGateway.fetchProviders()).some(config => config.name === 'Pi Provider')).toBe(
       false,
     );

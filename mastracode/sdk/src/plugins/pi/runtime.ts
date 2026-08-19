@@ -176,6 +176,7 @@ export class MastraPiExtensionGeneration implements PiExtensionGeneration {
           const capability = `api:${property}`;
           this.recordCapability(capability);
           const message = `Pi extension "${this.extensionId}" called unknown API ${property}.`;
+          this.addDiagnostic('error', message, capability);
           throw new Error(message);
         };
       },

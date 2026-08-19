@@ -66,6 +66,26 @@ describe('Pi provider adapter', () => {
     expect(teardown).toHaveBeenCalledOnce();
   });
 
+  it('retains provider ownership when teardown fails so unregister can retry', async () => {
+    const teardown = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(new Error('temporary teardown failure'))
+      .mockResolvedValue(undefined);
+    const host = { register: vi.fn().mockResolvedValue(teardown), refresh: vi.fn().mockResolvedValue(undefined) };
+    const adapter = new PiProviderAdapter(host);
+    const generation = new MastraPiExtensionGeneration('plugin', 'extension', '/tmp/entry.ts');
+
+    await adapter.register(generation, 'retryable', {
+      baseUrl: 'https://retry.example.com',
+      models: ['one'],
+    });
+    await expect(adapter.unregister(generation, 'retryable')).rejects.toThrow('temporary teardown failure');
+    await expect(adapter.unregister(generation, 'retryable')).resolves.toBeUndefined();
+
+    expect(teardown).toHaveBeenCalledTimes(2);
+    expect(host.refresh).toHaveBeenCalledTimes(2);
+  });
+
   it('keeps an existing Mastra Code provider on collision', async () => {
     const host = {
       register: vi.fn().mockRejectedValue(new Error('Custom provider already exists: proxy')),

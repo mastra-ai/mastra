@@ -293,7 +293,7 @@ describe('Pi event adapter', () => {
       { type: 'tool_execution_start', toolCallId: 'call-1', toolName: 'unsafe' },
       { type: 'tool_execution_update', toolCallId: 'call-1' },
       { type: 'tool_execution_end', toolCallId: 'call-1', isError: false },
-      { type: 'turn_end' },
+      { type: 'turn_end', turnIndex: 0 },
     ]);
     expect(current.value.compatibility.diagnostics).toEqual(
       expect.arrayContaining([

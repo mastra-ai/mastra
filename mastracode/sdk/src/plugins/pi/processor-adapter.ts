@@ -214,7 +214,7 @@ async function processInitialInput(
   for (const result of await emitIsolated(generation, 'context', { type: 'context', messages }, context)) {
     if (!isRecord(result) || !Array.isArray(result.messages)) continue;
     if (result.messages.every(isMessage)) {
-      messages = result.messages;
+      messages = cloneMessagesForPiBoundary(generation, result.messages);
     } else {
       generation.addDiagnostic(
         'warning',
@@ -226,18 +226,82 @@ async function processInitialInput(
   return { messages, systemMessages };
 }
 
-function isProviderPrompt(value: unknown): boolean {
-  return (
-    Array.isArray(value) &&
-    value.every(
-      message =>
-        isRecord(message) &&
-        typeof message.role === 'string' &&
-        (typeof message.content === 'string' ||
-          (Array.isArray(message.content) &&
-            message.content.every(part => isRecord(part) && typeof part.type === 'string'))),
-    )
-  );
+function jsonBoundaryValue(value: unknown): unknown | undefined {
+  try {
+    const json = JSON.stringify(value, (_key, nested) => {
+      if (
+        nested === undefined ||
+        typeof nested === 'function' ||
+        typeof nested === 'symbol' ||
+        typeof nested === 'bigint'
+      ) {
+        throw new Error('non-JSON value');
+      }
+      return nested;
+    });
+    return json === undefined ? undefined : (JSON.parse(json) as unknown);
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeProviderPart(value: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(value) || typeof value.type !== 'string') return undefined;
+  switch (value.type) {
+    case 'text':
+    case 'reasoning':
+      return typeof value.text === 'string' ? { type: value.type, text: value.text } : undefined;
+    case 'image':
+      return typeof value.image === 'string'
+        ? {
+            type: 'image',
+            image: value.image,
+            ...(typeof value.mediaType === 'string' ? { mediaType: value.mediaType } : {}),
+          }
+        : undefined;
+    case 'file':
+      return typeof value.data === 'string' && typeof value.mediaType === 'string'
+        ? {
+            type: 'file',
+            data: value.data,
+            mediaType: value.mediaType,
+            ...(typeof value.filename === 'string' ? { filename: value.filename } : {}),
+          }
+        : undefined;
+    case 'tool-call': {
+      const input = jsonBoundaryValue(value.input);
+      return typeof value.toolCallId === 'string' && typeof value.toolName === 'string' && input !== undefined
+        ? { type: 'tool-call', toolCallId: value.toolCallId, toolName: value.toolName, input }
+        : undefined;
+    }
+    case 'tool-result': {
+      const output = jsonBoundaryValue(value.output);
+      return typeof value.toolCallId === 'string' && typeof value.toolName === 'string' && output !== undefined
+        ? { type: 'tool-result', toolCallId: value.toolCallId, toolName: value.toolName, output }
+        : undefined;
+    }
+    default:
+      return undefined;
+  }
+}
+
+function normalizeProviderPrompt(value: unknown): ProcessLLMRequestArgs['prompt'] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const messages: Array<Record<string, unknown>> = [];
+  for (const valueMessage of value) {
+    if (!isRecord(valueMessage) || !['system', 'user', 'assistant', 'tool'].includes(String(valueMessage.role))) {
+      return undefined;
+    }
+    if (typeof valueMessage.content === 'string') {
+      messages.push({ role: valueMessage.role, content: valueMessage.content });
+      continue;
+    }
+    if (!Array.isArray(valueMessage.content)) return undefined;
+    const content = valueMessage.content.map(normalizeProviderPart);
+    if (content.some(part => part === undefined)) return undefined;
+    messages.push({ role: valueMessage.role, content });
+  }
+  return messages as ProcessLLMRequestArgs['prompt'];
 }
 
 async function processProviderRequest(
@@ -246,14 +310,24 @@ async function processProviderRequest(
   args: ProcessLLMRequestArgs,
 ): Promise<ProcessLLMRequestResult> {
   let prompt = args.prompt;
+  const boundaryPrompt = normalizeProviderPrompt(prompt);
+  if (!boundaryPrompt) {
+    generation.addDiagnostic(
+      'warning',
+      `Pi extension "${generation.extensionId}" could not receive the provider prompt because it contains unsupported host fields.`,
+      'event:before_provider_request',
+    );
+    return { prompt };
+  }
   for (const result of await emitIsolated(
     generation,
     'before_provider_request',
-    { type: 'before_provider_request', payload: prompt },
+    { type: 'before_provider_request', payload: boundaryPrompt },
     extensionContext(generation, cwd, args.abortSignal),
   )) {
-    if (isProviderPrompt(result)) {
-      prompt = result as typeof prompt;
+    const replacement = normalizeProviderPrompt(result);
+    if (replacement) {
+      prompt = replacement;
     } else if (result !== undefined) {
       generation.addDiagnostic(
         'warning',
@@ -271,7 +345,7 @@ async function processFinalMessages(
   messages: MastraDBMessage[],
   abortSignal?: AbortSignal,
 ): Promise<MastraDBMessage[]> {
-  const next = structuredClone(messages);
+  const next = cloneMessagesForPiBoundary(generation, messages);
   const finalIndex = next.findLastIndex(message => message.role === 'assistant');
   if (finalIndex < 0) return next;
   const original = next[finalIndex]!;
@@ -290,7 +364,9 @@ async function processFinalMessages(
       );
       continue;
     }
-    if (result.message.role !== original.role) {
+    const [replacement] = cloneMessagesForPiBoundary(generation, [result.message]);
+    if (!replacement) continue;
+    if (replacement.role !== original.role) {
       generation.addDiagnostic(
         'warning',
         `Pi extension "${generation.extensionId}" returned a message_end replacement with a different role.`,
@@ -298,7 +374,7 @@ async function processFinalMessages(
       );
       continue;
     }
-    next[finalIndex] = result.message as MastraDBMessage;
+    next[finalIndex] = replacement;
   }
   return next;
 }

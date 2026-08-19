@@ -120,7 +120,7 @@ describe('Pi processor adapter', () => {
         return {
           message: {
             ...message,
-            content: { ...message.content, parts: [{ type: 'text', text: 'replaced' }] },
+            content: { ...message.content, parts: [{ type: 'text', text: 'replaced', unsafe: 1n }] },
           },
         };
       });
@@ -129,22 +129,27 @@ describe('Pi processor adapter', () => {
     const assistant: MastraDBMessage = {
       id: 'assistant-1',
       role: 'assistant',
-      content: { format: 2, parts: [{ type: 'text', text: 'original' }] },
+      content: { format: 2, parts: [{ type: 'text', text: 'original' }], metadata: { unsafe: () => undefined } },
       createdAt: new Date(),
     };
 
-    await expect(
-      output.processOutputResult!({
-        ...inputArgs(),
-        messages: [assistant],
-        result: {
-          text: 'original',
-          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-          finishReason: 'stop',
-          steps: [],
-        },
-      }),
-    ).resolves.toMatchObject([{ role: 'assistant', content: { parts: [{ type: 'text', text: 'replaced' }] } }]);
+    const result = await output.processOutputResult!({
+      ...inputArgs(),
+      messages: [assistant],
+      result: {
+        text: 'original',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        finishReason: 'stop',
+        steps: [],
+      },
+    });
+    expect(result).toMatchObject([{ role: 'assistant', content: { parts: [{ type: 'text', text: 'replaced' }] } }]);
+    expect(
+      Array.isArray(result) ? (result[0]?.content.parts[0] as Record<string, unknown>).unsafe : 'not-array',
+    ).toBeUndefined();
+    expect(generation.compatibility.diagnostics).toContainEqual(
+      expect.objectContaining({ capability: 'event:context:non-serializable' }),
+    );
   });
 
   it('transforms successful non-owned tool results through the host post-tool hook and diagnoses host gaps', async () => {
@@ -332,16 +337,27 @@ describe('Pi processor adapter', () => {
 
   it('maps provider request replacement and response observation without exposing raw host objects', async () => {
     const response = vi.fn();
+    const request = vi.fn((event: unknown) => [
+      ...(event as { payload: unknown[] }).payload,
+      {
+        role: 'system',
+        ignored: 'extension-extra',
+        content: [{ type: 'text', text: 'replacement', ignored: 'part-extra' }],
+      },
+    ]);
     const generation = createGeneration(api => {
-      api.on('before_provider_request', event => [
-        ...(event as { payload: unknown[] }).payload,
-        { role: 'system', content: [{ type: 'text', text: 'replacement' }] },
-      ]);
+      api.on('before_provider_request', request);
       api.on('after_provider_response', response);
     });
     const adapters = createPiProcessorAdapters(generation, '/workspace');
     const requestArgs = {
-      prompt: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+      prompt: [
+        {
+          role: 'user',
+          ignored: 'host-extra',
+          content: [{ type: 'text', text: 'hello', ignored: 'part-extra' }],
+        },
+      ],
       model: 'openai/gpt-5',
       stepNumber: 0,
       steps: [],
@@ -353,8 +369,17 @@ describe('Pi processor adapter', () => {
     } as unknown as ProcessLLMRequestArgs;
 
     await expect(adapters.input[0]!.processLLMRequest!(requestArgs)).resolves.toEqual({
-      prompt: [requestArgs.prompt[0], { role: 'system', content: [{ type: 'text', text: 'replacement' }] }],
+      prompt: [
+        { role: 'user', content: [{ type: 'text', text: 'hello' }] },
+        { role: 'system', content: [{ type: 'text', text: 'replacement' }] },
+      ],
     });
+    expect(request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+      }),
+      expect.any(Object),
+    );
     const hostRequest = { secret: 'request-host-object' };
     const hostResponse = {
       status: 201,

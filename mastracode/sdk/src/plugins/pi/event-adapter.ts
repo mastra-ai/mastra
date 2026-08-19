@@ -99,31 +99,60 @@ function mapControllerEvent(event: AgentControllerEvent): Array<{ name: string; 
   }
 }
 
+function normalizeEventValue(value: unknown, seen: WeakSet<object>): unknown | undefined {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (value instanceof Error) return { name: value.name, message: value.message, stack: value.stack };
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value !== 'object' || seen.has(value)) return undefined;
+
+  seen.add(value);
+  if (Array.isArray(value)) {
+    const normalized = value.map(item => normalizeEventValue(item, seen));
+    seen.delete(value);
+    return normalized.some(item => item === undefined) ? undefined : normalized;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    seen.delete(value);
+    return undefined;
+  }
+  const normalized: Record<string, unknown> = {};
+  for (const [key, nested] of Object.entries(value)) {
+    const normalizedNested = normalizeEventValue(nested, seen);
+    if (normalizedNested === undefined) {
+      seen.delete(value);
+      return undefined;
+    }
+    normalized[key] = normalizedNested;
+  }
+  seen.delete(value);
+  return normalized;
+}
+
 function normalizeEventPayload(
   generation: PiExtensionGeneration,
   name: string,
   payload: Record<string, unknown>,
 ): Record<string, unknown> {
-  try {
-    structuredClone(payload);
-    return JSON.parse(
-      JSON.stringify(payload, (_key, value: unknown) => {
-        if (value instanceof Error) return { name: value.name, message: value.message, stack: value.stack };
-        return typeof value === 'bigint' ? value.toString() : value;
-      }),
-    ) as Record<string, unknown>;
-  } catch {
+  const normalized: Record<string, unknown> = {};
+  let omitted = false;
+  for (const [key, value] of Object.entries(payload)) {
+    const normalizedValue = normalizeEventValue(value, new WeakSet());
+    if (normalizedValue === undefined) {
+      omitted = true;
+    } else {
+      normalized[key] = normalizedValue;
+    }
+  }
+  if (omitted) {
     generation.addDiagnostic(
       'warning',
-      `Pi extension "${generation.extensionId}" received non-serializable ${name} data; Mastra Code omitted the host payload.`,
+      `Pi extension "${generation.extensionId}" received non-serializable ${name} data; Mastra Code omitted unsafe host fields.`,
       `event:${name}:non-serializable`,
     );
-    return Object.fromEntries(
-      ['type', 'toolCallId', 'toolName', 'isError']
-        .filter(key => ['string', 'boolean', 'number'].includes(typeof payload[key]))
-        .map(key => [key, payload[key]]),
-    );
   }
+  return normalized;
 }
 
 export class PiEventAdapter {

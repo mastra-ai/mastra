@@ -416,7 +416,7 @@ export class MastraCodeGateway extends MastraModelGateway {
       providers[getCustomProviderId(provider.name)] = {
         name: provider.name,
         url: provider.url,
-        apiKeyEnvVar: '',
+        apiKeyEnvVar: provider.apiKeyEnvVar ?? '',
         apiKeyHeader: 'Authorization',
         gateway: this.id,
         models,

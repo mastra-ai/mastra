@@ -68,10 +68,14 @@ export class PiProviderAdapter {
       return;
     }
     const existing = this.#owners.get(name);
-    if (existing && existing !== generation) {
+    if (existing && existing !== generation && !existing.active) {
+      await this.#unregisterOwned(existing, name);
+    }
+    const activeOwner = this.#owners.get(name);
+    if (activeOwner && activeOwner !== generation) {
       generation.addDiagnostic(
         'warning',
-        `Pi provider "${name}" conflicts with ${existing.extensionId}; the first registration wins.`,
+        `Pi provider "${name}" conflicts with ${activeOwner.extensionId}; the first registration wins.`,
         'registerProvider',
       );
       return;
@@ -134,10 +138,10 @@ export class PiProviderAdapter {
   async #unregisterOwned(generation: PiExtensionGeneration, name: string): Promise<void> {
     if (this.#owners.get(name) !== generation) return;
     const cleanup = this.#cleanups.get(name);
-    this.#owners.delete(name);
-    this.#cleanups.delete(name);
     await cleanup?.();
     await this.host.refresh();
+    this.#owners.delete(name);
+    this.#cleanups.delete(name);
   }
 
   async #serialize(name: string, operation: () => Promise<void>): Promise<void> {

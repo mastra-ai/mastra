@@ -48,6 +48,18 @@ describe('Pi thread adapter', () => {
     await expect(adapter.getSessionName()).resolves.toBe('Renamed');
   });
 
+  it('rejects results that complete after generation invalidation', async () => {
+    const { adapter, generation, host } = fixture();
+    let release!: (thread: PiThreadInfo) => void;
+    vi.mocked(host.create).mockImplementationOnce(() => new Promise(resolve => (release = resolve)));
+
+    const pending = adapter.newSession({ name: 'Late' });
+    await generation.invalidate();
+    release({ id: 'late', title: 'Late' });
+
+    await expect(pending).rejects.toThrow('stale');
+  });
+
   it('returns an explicit unsupported result for Pi transcript-tree navigation', () => {
     const { adapter, generation } = fixture();
     expect(adapter.navigateTree()).toMatchObject({ supported: false });

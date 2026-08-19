@@ -91,15 +91,15 @@ const PI_CAPABILITY_SUPPORT: Readonly<Record<string, PiCapabilitySupport>> = {
 };
 
 const PI_EVENT_SUPPORT: Readonly<Record<string, PiCapabilitySupport>> = {
-  project_trust: 'adapted',
-  resources_discover: 'adapted',
+  project_trust: 'unsupported',
+  resources_discover: 'unsupported',
   session_start: 'adapted',
   session_info_changed: 'adapted',
-  session_before_switch: 'adapted',
-  session_before_fork: 'adapted',
-  session_before_compact: 'adapted',
-  session_compact: 'adapted',
-  session_compact_failed: 'adapted',
+  session_before_switch: 'unsupported',
+  session_before_fork: 'unsupported',
+  session_before_compact: 'unsupported',
+  session_compact: 'unsupported',
+  session_compact_failed: 'unsupported',
   session_shutdown: 'adapted',
   session_before_tree: 'unsupported',
   session_tree: 'unsupported',
@@ -123,7 +123,7 @@ const PI_EVENT_SUPPORT: Readonly<Record<string, PiCapabilitySupport>> = {
   thinking_level_select: 'adapted',
   tool_call: 'adapted',
   tool_result: 'adapted',
-  user_bash: 'adapted',
+  user_bash: 'unsupported',
   input: 'adapted',
 };
 

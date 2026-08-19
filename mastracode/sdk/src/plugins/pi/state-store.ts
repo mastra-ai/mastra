@@ -36,6 +36,25 @@ function toJsonSafe(value: unknown): unknown {
   }
 }
 
+function normalizeStoredEntry(value: unknown): PiStateEntry | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const candidate = value as Partial<PiStateEntry>;
+  if (
+    candidate.version !== 1 ||
+    typeof candidate.type !== 'string' ||
+    !candidate.type.trim() ||
+    typeof candidate.createdAt !== 'string' ||
+    Number.isNaN(Date.parse(candidate.createdAt))
+  ) {
+    return undefined;
+  }
+  try {
+    return { version: 1, type: candidate.type, data: toJsonSafe(candidate.data), createdAt: candidate.createdAt };
+  } catch {
+    return undefined;
+  }
+}
+
 export class PiStateStore {
   readonly #key: string;
 
@@ -57,12 +76,10 @@ export class PiStateStore {
       .then(async () => {
         const stored = await this.backend.get(this.#key);
         const entries = Array.isArray(stored)
-          ? stored.filter(
-              (candidate): candidate is PiStateEntry =>
-                typeof candidate === 'object' &&
-                candidate !== null &&
-                (candidate as { version?: unknown }).version === 1,
-            )
+          ? stored.flatMap(candidate => {
+              const normalized = normalizeStoredEntry(candidate);
+              return normalized ? [normalized] : [];
+            })
           : [];
         this.generation.assertActive();
         await this.backend.set(this.#key, [...entries, entry]);
@@ -83,9 +100,9 @@ export class PiStateStore {
     this.generation.assertActive();
     const stored = await this.backend.get(this.#key);
     if (!Array.isArray(stored)) return [];
-    return stored.filter(
-      (entry): entry is PiStateEntry =>
-        typeof entry === 'object' && entry !== null && (entry as { version?: unknown }).version === 1,
-    );
+    return stored.flatMap(candidate => {
+      const normalized = normalizeStoredEntry(candidate);
+      return normalized ? [normalized] : [];
+    });
   }
 }

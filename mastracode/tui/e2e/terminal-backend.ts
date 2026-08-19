@@ -338,11 +338,16 @@ async function startMastraCodeApp(
   terminal: Terminal,
   options?: McE2eStartMastraCodeAppOptions,
 ): Promise<McE2eInProcessApp> {
-  const [{ createMastraCode }, { MastraTUI }, { createBrowserFromSettings, loadSettings }] = await Promise.all([
+  const tuiModulePath = new URL(
+    process.env.MC_E2E_USE_BUILT_TUI === '1' ? '../dist/tui.js' : '../src/tui/index.js',
+    import.meta.url,
+  ).href;
+  const [{ createMastraCode }, tuiModule, { createBrowserFromSettings, loadSettings }] = await Promise.all([
     import('@mastra/code-sdk'),
-    import('../src/tui/index.js'),
+    import(tuiModulePath) as Promise<typeof import('../src/tui/index.js')>,
     import('@mastra/code-sdk/onboarding/settings'),
   ]);
+  const { MastraTUI } = tuiModule;
   if (options?.setupDebugLogging) {
     const { setupDebugLogging } = await import('@mastra/code-sdk/utils/debug-log');
     setupDebugLogging();

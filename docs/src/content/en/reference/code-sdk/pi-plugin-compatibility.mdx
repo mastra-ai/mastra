@@ -9,9 +9,19 @@ packages:
 
 Mastra Code's Pi compatibility contract defines a bounded subset of the Pi Package extension API. The compatibility host adapts supported contributions into Mastra Code's existing plugin and AgentController runtime. It doesn't run Pi's coding-agent loop, `ExtensionRunner`, `SessionManager`, or transcript store.
 
-The matrices on this page define the end state for this compatibility release. A capability status doesn't mean that capability is available in the current build. The current implementation includes extension loading plus tool, schema, progress, abort, and text-render adaptation. Package installation and the runtime, command, model, session, and UI mappings listed below aren't available yet.
+The matrices on this page define the end state for this compatibility release. The current implementation includes extension loading, tools, mapped lifecycle and interception events, commands, messages, namespaced state, models, declarative providers, threads, and bounded UI. Package installation, trust, package resource discovery, compaction, and thread-operation interception aren't available yet. Registrations for those future mappings receive unsupported-capability diagnostics.
 
 This contract targets `@earendil-works/pi-coding-agent@0.84.2` and matching `@earendil-works/pi-*` packages. Other Pi API versions are unverified and don't become compatible automatically.
+
+## Current runtime boundaries
+
+- Candidate lifecycle handlers run before PluginManager publishes the replacement generation. Runtime actions during `session_start` observe the previously published manager state until reload commits.
+- Mastra Code reconstructs Pi turn, final-message, and provider events from the closest AgentController and processor boundaries. Unsafe or non-serializable payload fields are omitted instead of exposing raw host objects.
+- Built-in, native plugin, custom, and adapted Pi commands keep Mastra Code's existing precedence. Conflicting Pi commands receive deterministic names and diagnostics.
+- `appendEntry` writes versioned JSON-safe values to a package namespace. It doesn't add Pi transcript entries.
+- Pi shell execution uses Mastra Code workspace approval, working-directory, timeout, abort, environment, and output limits.
+- Declarative provider credentials must reference environment variables. Literal credentials are rejected. Native provider objects and provider OAuth UI aren't accepted.
+- The interactive UI bridge owns bounded notification, status, text-widget, dialog, editor-text, semantic-theme, and text-renderer surfaces. It clears generation-owned UI during reload and uses attributed diagnostics for unsupported components, shortcuts, theme replacement, and terminal access.
 
 ## Status vocabulary
 

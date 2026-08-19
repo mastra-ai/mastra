@@ -23,6 +23,7 @@ export class PiThreadAdapter {
   async newSession(options: { name?: string } = {}): Promise<{ cancelled: false; threadId: string }> {
     this.generation.assertActive();
     const thread = await this.#host().create({ title: options.name });
+    this.generation.assertActive();
     return { cancelled: false, threadId: thread.id };
   }
 
@@ -31,8 +32,10 @@ export class PiThreadAdapter {
     const host = this.#host();
     try {
       await host.switch({ threadId });
+      this.generation.assertActive();
       return { cancelled: false, threadId };
     } catch (error) {
+      this.generation.assertActive();
       if (error instanceof Error && error.message === `Thread not found: ${threadId}`) return { cancelled: true };
       throw error;
     }
@@ -43,6 +46,7 @@ export class PiThreadAdapter {
   ): Promise<{ cancelled: false; threadId: string }> {
     this.generation.assertActive();
     const thread = await this.#host().clone({ sourceThreadId: options.sourceThreadId, title: options.name });
+    this.generation.assertActive();
     return { cancelled: false, threadId: thread.id };
   }
 
@@ -57,13 +61,17 @@ export class PiThreadAdapter {
   async setSessionName(name: string): Promise<void> {
     this.generation.assertActive();
     await this.#host().rename({ title: name });
+    this.generation.assertActive();
   }
 
   async getSessionName(): Promise<string | undefined> {
     this.generation.assertActive();
     const host = this.#host();
     const threadId = host.getId();
-    return threadId ? ((await host.getById({ threadId }))?.title ?? undefined) : undefined;
+    if (!threadId) return undefined;
+    const thread = await host.getById({ threadId });
+    this.generation.assertActive();
+    return thread?.title ?? undefined;
   }
 
   #host(): PiThreadHost {

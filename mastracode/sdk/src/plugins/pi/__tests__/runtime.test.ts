@@ -23,6 +23,9 @@ describe('MastraPiExtensionGeneration', () => {
     api.registerProvider({ id: 'native-provider' });
     api.on('session_start', () => {});
     api.on('session_tree', () => {});
+    api.on('project_trust', () => {});
+    api.on('session_before_switch', () => {});
+    api.on('user_bash', () => {});
     api.on('future_event', () => {});
     const futureApi = api as PiExtensionApi & { futureRegistration(): void };
     expect(() => futureApi.futureRegistration()).toThrow('called unknown API futureRegistration');
@@ -41,12 +44,16 @@ describe('MastraPiExtensionGeneration', () => {
       registerNativeProvider: 'unsupported',
       'event:session_start': 'adapted',
       'event:session_tree': 'unsupported',
+      'event:project_trust': 'unsupported',
+      'event:session_before_switch': 'unsupported',
+      'event:user_bash': 'unsupported',
       'event:future_event': 'unsupported',
     });
     expect(generation.compatibility.diagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ extensionId: 'fixture.extension', capability: 'registerTool', severity: 'warning' }),
         expect.objectContaining({ capability: 'event:future_event', severity: 'error' }),
+        expect.objectContaining({ capability: 'api:futureRegistration', severity: 'error' }),
       ]),
     );
   });
