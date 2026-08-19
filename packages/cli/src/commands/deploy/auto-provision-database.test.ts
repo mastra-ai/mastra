@@ -10,17 +10,21 @@ const {
   cancelMock,
   logErrorMock,
   logSuccessMock,
+  logWarnMock,
   spinnerMock,
   attachDatabaseMock,
   pollDatabaseUntilReadyMock,
+  fetchDatabaseCatalogMock,
 } = vi.hoisted(() => ({
   confirmMock: vi.fn(),
   cancelMock: vi.fn(),
   logErrorMock: vi.fn(),
   logSuccessMock: vi.fn(),
+  logWarnMock: vi.fn(),
   spinnerMock: { start: vi.fn(), stop: vi.fn(), message: vi.fn() },
   attachDatabaseMock: vi.fn(),
   pollDatabaseUntilReadyMock: vi.fn(),
+  fetchDatabaseCatalogMock: vi.fn(),
 }));
 
 vi.mock('@clack/prompts', () => ({
@@ -28,7 +32,7 @@ vi.mock('@clack/prompts', () => ({
   cancel: (args: unknown) => cancelMock(args),
   isCancel: (v: unknown) => v === Symbol.for('clack.cancel'),
   spinner: () => spinnerMock,
-  log: { error: logErrorMock, success: logSuccessMock },
+  log: { error: logErrorMock, success: logSuccessMock, warn: logWarnMock },
 }));
 
 vi.mock('../db/platform-api.js', async () => {
@@ -37,8 +41,16 @@ vi.mock('../db/platform-api.js', async () => {
     ...actual,
     attachDatabase: (...args: unknown[]) => attachDatabaseMock(...args),
     pollDatabaseUntilReady: (...args: unknown[]) => pollDatabaseUntilReadyMock(...args),
+    fetchDatabaseCatalog: (...args: unknown[]) => fetchDatabaseCatalogMock(...args),
   };
 });
+
+const FULL_CATALOG = [
+  { kind: 'turso', name: 'Turso', status: 'available' },
+  { kind: 'neon', name: 'Postgres', status: 'available' },
+  { kind: 'redis', name: 'Redis', status: 'available' },
+  { kind: 'mongodb', name: 'MongoDB', status: 'coming_soon' },
+];
 
 function makeCtx(overrides: Partial<AutoProvisionContext> = {}): AutoProvisionContext {
   return {
@@ -108,8 +120,12 @@ describe('maybeAutoProvisionDatabases', () => {
     spinnerMock.start.mockReset();
     spinnerMock.stop.mockReset();
     spinnerMock.message.mockReset();
+    logWarnMock.mockReset();
     attachDatabaseMock.mockReset();
     pollDatabaseUntilReadyMock.mockReset();
+    fetchDatabaseCatalogMock.mockReset();
+    // Default: platform offers every provisionable kind.
+    fetchDatabaseCatalogMock.mockResolvedValue(FULL_CATALOG);
     // Default: interactive TTY.
     (process.stdin as unknown as { isTTY: boolean }).isTTY = true;
     (process.stdout as unknown as { isTTY: boolean }).isTTY = true;
@@ -271,6 +287,38 @@ describe('maybeAutoProvisionDatabases', () => {
       'proj-1',
       expect.objectContaining({ environmentId: 'env-stg' }),
     );
+  });
+
+  it('skips providers the platform catalog does not offer this org (feature-flag gate)', async () => {
+    // The platform hides `redis` from the catalog when the org's
+    // `managed-redis` flag is off — the CLI must mirror the dashboard and
+    // not offer it, while still handling ungated providers.
+    fetchDatabaseCatalogMock.mockResolvedValue(FULL_CATALOG.filter(entry => entry.kind !== 'redis'));
+    confirmMock.mockResolvedValue(true);
+    attachDatabaseMock.mockResolvedValue({ id: 'db-1', name: 'my-app-turso', kind: 'turso' });
+    pollDatabaseUntilReadyMock.mockResolvedValue({ id: 'db-1', name: 'my-app-turso', kind: 'turso' });
+
+    const issues = [redisIssue(), tursoIssue()];
+    const result = await maybeAutoProvisionDatabases(issues, makeCtx());
+
+    expect(confirmMock).toHaveBeenCalledTimes(1);
+    expect(attachDatabaseMock).toHaveBeenCalledTimes(1);
+    expect(attachDatabaseMock).toHaveBeenCalledWith('t', 'org-1', 'proj-1', expect.objectContaining({ kind: 'turso' }));
+    // The redis issue survives untouched for the normal issue printer.
+    expect(result.issues.map(i => i.autofix?.provider)).toEqual(['redis']);
+    expect(result.newlyManagedEnvVarNames).toEqual(['TURSO_DATABASE_URL', 'TURSO_AUTH_TOKEN']);
+  });
+
+  it('fails closed and skips all prompting when the catalog cannot be fetched', async () => {
+    fetchDatabaseCatalogMock.mockRejectedValue(new Error('boom'));
+
+    const issues = [tursoIssue()];
+    const result = await maybeAutoProvisionDatabases(issues, makeCtx());
+
+    expect(result.issues).toBe(issues);
+    expect(confirmMock).not.toHaveBeenCalled();
+    expect(attachDatabaseMock).not.toHaveBeenCalled();
+    expect(logWarnMock).toHaveBeenCalledWith(expect.stringContaining('boom'));
   });
 
   it('derives an env-suffixed default name for non-production environments', async () => {
