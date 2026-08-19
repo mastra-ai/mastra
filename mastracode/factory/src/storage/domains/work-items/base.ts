@@ -37,6 +37,9 @@ export interface ExternalWorkItemSource {
   url?: string;
 }
 
+/** Dispatcher upsert idempotency token — server bookkeeping, dropped from the read wire. */
+export const FACTORY_RULE_MATERIALIZATION_KEY = 'factoryRuleMaterializationKey';
+
 export interface WorkItemStageEntry {
   stage: WorkItemStage;
   enteredAt: string;
