@@ -126,6 +126,30 @@ describe('createExportSuppressedLogger', () => {
     expect(() => suppressed.error('bad')).toThrow('inner boom');
     expect(isObservabilityExportSuppressed()).toBe(false);
   });
+
+  it('preserves child() so __setLogger keeps component prefixing, and children stay suppressed', () => {
+    const inner = new ConsoleLogger({ level: LogLevel.INFO });
+    const suppressed = createExportSuppressedLogger(inner);
+
+    expect(typeof (suppressed as any).child).toBe('function');
+    const child = (suppressed as any).child('OBSERVABILITY') as IMastraLogger;
+
+    let flagDuringCall: boolean | undefined;
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {
+      flagDuringCall = isObservabilityExportSuppressed();
+    });
+    child.info('from obs');
+
+    expect(infoSpy).toHaveBeenCalledWith('[OBSERVABILITY] from obs');
+    expect(flagDuringCall).toBe(true);
+    expect(isObservabilityExportSuppressed()).toBe(false);
+    infoSpy.mockRestore();
+  });
+
+  it('does not expose child() when the inner logger lacks it', () => {
+    const suppressed = createExportSuppressedLogger(makePlainLogger());
+    expect('child' in suppressed).toBe(false);
+  });
 });
 
 describe('Mastra logger wiring', () => {
@@ -212,6 +236,46 @@ describe('Mastra logger wiring', () => {
 
     expect(sinkDuringSuppressedCall).toBeUndefined();
     expect(ctx?.getLogSink()).toBe(sink);
+  });
+
+  it('warns when the same logger instance is attached to a second Mastra instance', () => {
+    const logger = new ConsoleLogger({ level: LogLevel.INFO });
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+    new Mastra({ logger, __ephemeral: true });
+    expect(warnSpy).not.toHaveBeenCalled();
+
+    new Mastra({ logger, __ephemeral: true });
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0]![0]).toContain('already wired to another Mastra instance');
+  });
+
+  it('getLogSink prefers the span-correlated logger context over the global one', async () => {
+    const globalSink = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const spanSink = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    class TestObservability extends NoOpObservability {
+      override getDefaultInstance() {
+        return { getLoggerContext: () => globalSink } as any;
+      }
+    }
+
+    const logger = new ConsoleLogger();
+    let ctx: LoggerAdapterContext | undefined;
+    vi.spyOn(logger, '__attachObservability').mockImplementation(c => {
+      ctx = c;
+    });
+    new Mastra({ logger, observability: new TestObservability() as any, __ephemeral: true });
+
+    expect(ctx?.getLogSink()).toBe(globalSink);
+
+    let sinkInSpan: unknown;
+    await executeWithContext({
+      span: makeSpan({ observabilityInstance: { getLoggerContext: () => spanSink } }),
+      fn: async () => {
+        sinkInSpan = ctx?.getLogSink();
+      },
+    });
+    expect(sinkInSpan).toBe(spanSink);
   });
 
   it('end to end: a Mastra-wired logger emits trace fields on its native record inside a span', async () => {

@@ -267,6 +267,25 @@ describe('PinoLogger observability adapter (__attachObservability)', () => {
     expect((await memoryStream.listLogs())[0].trace_id).toBeUndefined();
   });
 
+  it('correlates natively when observability is attached to a pre-bound child logger', async () => {
+    // Common pattern: a module-level base logger, with a bound child handed
+    // to Mastra. The child's pino inherits the root's mixin, so attachment
+    // must flow through the shared context ref to correlate stdout.
+    const base = new PinoLogger({ transports: { memory: memoryStream } });
+    const child = base.child({ service: 'api' });
+    const { ctx } = makeCtx();
+    child.__attachObservability(ctx);
+
+    child.info('from child');
+    await waitForLogs(memoryStream);
+
+    expect((await memoryStream.listLogs())[0]).toMatchObject({
+      msg: 'from child',
+      service: 'api',
+      ...TRACE_FIELDS,
+    });
+  });
+
   it('preserves user mixin fields; trace fields win on conflict', async () => {
     const logger = new PinoLogger({
       transports: { memory: memoryStream },

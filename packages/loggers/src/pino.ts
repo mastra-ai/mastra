@@ -36,16 +36,23 @@ export interface PinoLoggerOptions<CustomLevels extends string = never> {
 interface PinoLoggerInternalOptions<CustomLevels extends string = never> extends PinoLoggerOptions<CustomLevels> {
   /** @internal Used internally for child loggers */
   _logger?: pino.Logger<CustomLevels>;
+  /** @internal Shared adapter-context ref so root and children correlate together */
+  _adapterContextRef?: { current?: LoggerAdapterContext };
 }
 
 export class PinoLogger<CustomLevels extends string = never> extends MastraLogger {
   protected logger: pino.Logger<CustomLevels>;
-  #adapterContext?: LoggerAdapterContext;
+  // Mutable ref shared with child loggers: the root's mixin (which children's
+  // pino instances inherit) reads through this ref, so attaching observability
+  // to a child (e.g. `new Mastra({ logger: base.child({...}) })`) correlates
+  // the records it actually logs through.
+  #adapterContextRef: { current?: LoggerAdapterContext };
 
   constructor(options: PinoLoggerOptions<CustomLevels> = {}) {
     super(options);
 
     const internalOptions = options as PinoLoggerInternalOptions<CustomLevels>;
+    this.#adapterContextRef = internalOptions._adapterContextRef ?? {};
 
     // If an existing pino logger is provided (for child loggers), use it directly
     if (internalOptions._logger) {
@@ -60,7 +67,7 @@ export class PinoLogger<CustomLevels extends string = never> extends MastraLogge
     const userMixin = options.mixin;
     const correlationMixin: pino.MixinFn<CustomLevels> = (mergeObject, level, logger) => {
       const userFields = userMixin ? userMixin(mergeObject, level, logger) : {};
-      const ctx = this.#adapterContext;
+      const ctx = this.#adapterContextRef.current;
       if (!ctx?.options.correlation) return userFields;
       try {
         return { ...userFields, ...(ctx.resolveTraceFields() ?? {}) };
@@ -138,10 +145,9 @@ export class PinoLogger<CustomLevels extends string = never> extends MastraLogge
       level: this.level,
       transports: Object.fromEntries(this.transports),
       _logger: childPino,
+      _adapterContextRef: this.#adapterContextRef,
     };
-    const child = new PinoLogger(childOptions);
-    if (this.#adapterContext) child.__attachObservability(this.#adapterContext);
-    return child;
+    return new PinoLogger(childOptions);
   }
 
   /**
@@ -151,7 +157,9 @@ export class PinoLogger<CustomLevels extends string = never> extends MastraLogge
    * the same record. Called by Mastra during setup.
    */
   __attachObservability(ctx: LoggerAdapterContext): void {
-    this.#adapterContext = ctx;
+    // Shared ref: attaching to a child also enables correlation on the root
+    // mixin the child's records flow through (and vice versa).
+    this.#adapterContextRef.current = ctx;
   }
 
   /**
@@ -159,7 +167,7 @@ export class PinoLogger<CustomLevels extends string = never> extends MastraLogge
    * Runs regardless of pino's level filter and never throws into the caller.
    */
   #export(level: 'debug' | 'info' | 'warn' | 'error', message: string, args: Record<string, any>): void {
-    const ctx = this.#adapterContext;
+    const ctx = this.#adapterContextRef.current;
     if (!ctx?.options.export) return;
     try {
       // An Error passed as the args value often has no enumerable keys but
@@ -192,6 +200,6 @@ export class PinoLogger<CustomLevels extends string = never> extends MastraLogge
   }
 
   override trackException(error: Error, metadata?: Record<string, unknown>): void {
-    exportTrackedException(this.#adapterContext, error, metadata);
+    exportTrackedException(this.#adapterContextRef.current, error, metadata);
   }
 }

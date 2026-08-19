@@ -1,3 +1,4 @@
+import { buildLogRecordData } from '@internal/core/logger';
 import type { MastraError } from '../error';
 import type { LoggerContext } from '../observability/types/logging';
 import { resolveCurrentSpan } from '../observability/utils';
@@ -137,35 +138,16 @@ export class DualLogger implements IMastraLogger {
   }
 
   /**
-   * Adapt IMastraLogger's variadic args to LoggerContext's structured data param.
-   * Extracts the first plain object as `data`, serializes Error args, and
-   * collects any remaining primitives so the dual write preserves all context.
+   * Adapt IMastraLogger's variadic args to LoggerContext's structured data
+   * param via the shared adapter helper. Historical DualLogger behavior of
+   * always passing `{}` (never undefined) is preserved for storage parity.
    */
   #forwardToVNext(level: 'debug' | 'info' | 'warn' | 'error', message: string, args: any[]): void {
     try {
       const loggerVNext = this.#resolveLoggerVNext();
       if (!loggerVNext) return;
 
-      const objectData = args.find(
-        (arg): arg is Record<string, unknown> =>
-          arg !== null && typeof arg === 'object' && !Array.isArray(arg) && !(arg instanceof Error),
-      );
-      const errorArg = args.find((arg): arg is Error => arg instanceof Error);
-      const extraArgs = args.filter(arg => arg !== objectData && arg !== errorArg);
-
-      loggerVNext[level](message, {
-        ...(objectData ?? {}),
-        ...(errorArg
-          ? {
-              error: {
-                name: errorArg.name,
-                message: errorArg.message,
-                stack: errorArg.stack,
-              },
-            }
-          : {}),
-        ...(extraArgs.length > 0 ? { args: extraArgs } : {}),
-      });
+      loggerVNext[level](message, buildLogRecordData(args) ?? {});
     } catch {
       // Never let loggerVNext errors break the primary logger
     }

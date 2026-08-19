@@ -32,10 +32,13 @@ export function resolveTraceFields(): TraceFields | undefined {
 // Mastra hands observability an export-suppressed view of the logger; the
 // adapter wiring checks the flag synchronously on every log call.
 //
-// Limitation: suppression only covers synchronous execution within the
-// guarded call. If an observability internal logs from an asynchronous
-// continuation (after an `await`, in a `.then()` callback, or from a timer),
-// the flag has already been restored and that record is exported normally.
+// Scope: the flag wraps each individual log call, and adapter export happens
+// synchronously inside that call — so observability internals logging from
+// async continuations (`.then()`, timers) are still guarded, because those
+// continuations invoke the suppressed wrapper's methods. The sync-only
+// limitation matters only if a logger implementation deferred its own export
+// asynchronously (none do). The module-level flag is safe across multiple
+// Mastra instances because log calls never interleave in synchronous JS.
 // ---------------------------------------------------------------------------
 
 let observabilityExportSuppressed = false;
@@ -61,7 +64,7 @@ export function createExportSuppressedLogger(inner: IMastraLogger): IMastraLogge
     }
   };
 
-  return {
+  const wrapper: IMastraLogger = {
     debug: (message, ...args) => suppressed(() => inner.debug(message, ...args)),
     info: (message, ...args) => suppressed(() => inner.info(message, ...args)),
     warn: (message, ...args) => suppressed(() => inner.warn(message, ...args)),
@@ -71,4 +74,14 @@ export function createExportSuppressedLogger(inner: IMastraLogger): IMastraLogge
     listLogs: (transportId, params) => inner.listLogs(transportId, params),
     listLogsByRunId: args => inner.listLogsByRunId(args),
   };
+
+  // Preserve child() so MastraBase.__setLogger keeps component prefixing /
+  // bindings for observability internals; children stay export-suppressed.
+  const innerChild = (inner as { child?: (...args: unknown[]) => IMastraLogger }).child;
+  if (typeof innerChild === 'function') {
+    (wrapper as IMastraLogger & { child: (...args: unknown[]) => IMastraLogger }).child = (...args) =>
+      createExportSuppressedLogger(innerChild.apply(inner, args));
+  }
+
+  return wrapper;
 }
