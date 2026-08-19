@@ -8,6 +8,11 @@ import {
   createUIMessageStreamResponse as createUIMessageStreamResponseV6,
 } from '@internal/ai-v6';
 import type { UIMessage as InternalUIMessageV6 } from '@internal/ai-v6';
+import {
+  createUIMessageStream as createUIMessageStreamV7,
+  createUIMessageStreamResponse as createUIMessageStreamResponseV7,
+} from '@internal/ai-v7';
+import type { UIMessage as InternalUIMessageV7 } from '@internal/ai-v7';
 import type { AgentExecutionOptions, NetworkOptions } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -21,6 +26,8 @@ import type {
   V5UIMessageStream,
   V6UIMessage,
   V6UIMessageStream,
+  V7UIMessage,
+  V7UIMessageStream,
 } from './public-types';
 
 export type NetworkStreamHandlerParams<
@@ -39,7 +46,7 @@ export type NetworkStreamHandlerOptions<
   agentVersion?: AgentVersionOptions;
   params: NetworkStreamHandlerParams<UI_MESSAGE, OUTPUT>;
   defaultOptions?: NetworkOptions<OUTPUT>;
-  version?: 'v5' | 'v6';
+  version?: 'v5' | 'v6' | 'v7';
 };
 
 type NetworkStreamHandlerOptionsV5<UI_MESSAGE extends V5UIMessage = V5UIMessage, OUTPUT = undefined> = Omit<
@@ -54,6 +61,13 @@ type NetworkStreamHandlerOptionsV6<UI_MESSAGE extends V6UIMessage = V6UIMessage,
   'version'
 > & {
   version: 'v6';
+};
+
+type NetworkStreamHandlerOptionsV7<UI_MESSAGE extends V7UIMessage = V7UIMessage, OUTPUT = undefined> = Omit<
+  NetworkStreamHandlerOptions<UI_MESSAGE, OUTPUT>,
+  'version'
+> & {
+  version: 'v7';
 };
 
 /**
@@ -84,6 +98,9 @@ export function handleNetworkStream<UI_MESSAGE extends V5UIMessage = V5UIMessage
 export function handleNetworkStream<UI_MESSAGE extends V6UIMessage = V6UIMessage, OUTPUT = undefined>(
   options: NetworkStreamHandlerOptionsV6<UI_MESSAGE, OUTPUT>,
 ): Promise<V6UIMessageStream<UI_MESSAGE>>;
+export function handleNetworkStream<UI_MESSAGE extends V7UIMessage = V7UIMessage, OUTPUT = undefined>(
+  options: NetworkStreamHandlerOptionsV7<UI_MESSAGE, OUTPUT>,
+): Promise<V7UIMessageStream<UI_MESSAGE>>;
 export async function handleNetworkStream<OUTPUT = undefined>({
   mastra,
   agentId,
@@ -98,6 +115,24 @@ export async function handleNetworkStream<OUTPUT = undefined>({
 
   if (!agentObj) {
     throw new Error(`Agent ${agentId} not found`);
+  }
+
+  if (version === 'v7') {
+    const result = await agentObj.network<any>(messages as any, {
+      ...defaultOptions,
+      ...rest,
+    });
+
+    const stream = createUIMessageStreamV7<InternalUIMessageV7>({
+      originalMessages: messages as InternalUIMessageV7[],
+      execute: async ({ writer }) => {
+        for await (const part of toAISdkStream(result, { from: 'network', version: 'v7' })) {
+          writer.write(part);
+        }
+      },
+    });
+
+    return stream as unknown as SupportedUIMessageStream;
   }
 
   if (version === 'v6') {
@@ -140,14 +175,14 @@ export type NetworkRouteOptions<OUTPUT = undefined> =
       path: `${string}:agentId${string}`;
       agent?: never;
       defaultOptions?: NetworkOptions<OUTPUT>;
-      version?: 'v5' | 'v6';
+      version?: 'v5' | 'v6' | 'v7';
       agentVersion?: AgentVersionOptions;
     }
   | {
       path: string;
       agent: string;
       defaultOptions?: NetworkOptions<OUTPUT>;
-      version?: 'v5' | 'v6';
+      version?: 'v5' | 'v6' | 'v7';
       agentVersion?: AgentVersionOptions;
     };
 
@@ -327,6 +362,15 @@ export function networkRoute<OUTPUT = undefined>({
         } as any,
         defaultOptions,
       };
+
+      if (version === 'v7') {
+        const uiMessageStream = await handleNetworkStream({
+          ...handlerOptions,
+          version: 'v7',
+        });
+
+        return createUIMessageStreamResponseV7({ stream: uiMessageStream });
+      }
 
       if (version === 'v6') {
         const uiMessageStream = await handleNetworkStream({

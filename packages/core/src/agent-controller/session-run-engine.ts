@@ -492,12 +492,14 @@ export class SessionRunEngine {
     switch (chunk.type) {
       case 'step-start': {
         // Adopt the loop's response message id so the streamed turn and its
-        // persisted copy share one identity (clients dedupe by id). An id is
-        // consumed on first offer and binds only while the message is still
-        // empty — an emitted id must never change, and a re-offered id must
-        // never attach to a later message.
+        // persisted copy share one identity (clients dedupe by id). The loop
+        // mints a new id only when it seals one persisted response and opens
+        // the next, so every id after the first marks that boundary — rotate
+        // with it, or the persisted tail comes back as a duplicate on reload.
+        // An emitted id never changes, and an id binds to one message only.
         const messageId = getString(getPayload(chunk).messageId);
         if (!messageId || state.offeredResponseIds.has(messageId)) break;
+        if (state.offeredResponseIds.size > 0) this.finishCurrentMessageAndRotate(state);
         state.offeredResponseIds.add(messageId);
         if (!this.hasCurrentMessageContent(state)) {
           state.currentMessage.id = messageId;

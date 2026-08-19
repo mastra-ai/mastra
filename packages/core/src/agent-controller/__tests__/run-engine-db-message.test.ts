@@ -71,6 +71,10 @@ function lastMessageEvent(events: AgentControllerEvent[]): MastraDBMessage {
   throw new Error('no message event emitted');
 }
 
+function textOf(message: MastraDBMessage): string {
+  return message.content.parts.flatMap(part => (part.type === 'text' ? [part.text] : [])).join('');
+}
+
 function requestContext(): RequestContext {
   return new RequestContext();
 }
@@ -458,6 +462,60 @@ describe('SessionRunEngine — MastraDBMessage contract', () => {
     const assistantEnds = events.filter(event => event.type === 'message_end' && event.message.role === 'assistant');
     expect(assistantEnds[0]?.message.id).toBe('response-1');
     expect(lastMessageEvent(events).id).toBe('response-2');
+  });
+
+  it('Given a rotated response id mid-turn, When the next step starts, Then the stream splits where the loop did', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+
+    await engine.processStreamChunk(state, chunk({ type: 'step-start', payload: { messageId: 'response-1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't1', text: 'first' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'step-start', payload: { messageId: 'response-2' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't2' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't2', text: 'second' } }), ctx);
+
+    const assistantEnds = events.filter(event => event.type === 'message_end' && event.message.role === 'assistant');
+    expect(assistantEnds.map(event => event.message.id)).toEqual(['response-1']);
+    expect(textOf(assistantEnds[0]!.message)).toBe('first');
+    expect(lastMessageEvent(events).id).toBe('response-2');
+    expect(textOf(lastMessageEvent(events))).toBe('second');
+  });
+
+  it('Given repeated step-starts for one response id, When the turn streams, Then it stays a single message', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+
+    await engine.processStreamChunk(state, chunk({ type: 'step-start', payload: { messageId: 'response-1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't1', text: 'first' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'step-start', payload: { messageId: 'response-1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't2' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't2', text: ' second' } }), ctx);
+
+    expect(events.filter(event => event.type === 'message_end')).toHaveLength(0);
+    expect(lastMessageEvent(events).id).toBe('response-1');
+    expect(textOf(lastMessageEvent(events))).toBe('first second');
+  });
+
+  it('Given a stream joined mid-message, When a later step-start rotates the id, Then the split still follows the loop', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't1', text: 'joined' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'step-start', payload: { messageId: 'response-1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'step-start', payload: { messageId: 'response-2' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't2' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't2', text: 'next' } }), ctx);
+
+    const assistantEnds = events.filter(event => event.type === 'message_end' && event.message.role === 'assistant');
+    expect(assistantEnds.map(event => textOf(event.message))).toEqual(['joined']);
+    expect(lastMessageEvent(events).id).toBe('response-2');
+    expect(textOf(lastMessageEvent(events))).toBe('next');
   });
 
   it('Given an id already emitted or content already streamed, When step-start arrives, Then the engine keeps its own id', async () => {

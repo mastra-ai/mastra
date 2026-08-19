@@ -4,6 +4,7 @@ import {
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
+  matchesExpectedWorkflowStatus,
   WorkflowsStorage,
   createStorageErrorId,
 } from '@mastra/core/storage';
@@ -391,8 +392,15 @@ export class WorkflowsPG extends WorkflowsStorage {
           throw new Error(`Snapshot not found for runId ${runId}`);
         }
 
+        // `expectedStatus` is a compare-and-set guard, not state. It is checked here, inside the
+        // row lock, and stripped so it can never be merged into the persisted snapshot.
+        const { expectedStatus, ...state } = opts;
+        if (!matchesExpectedWorkflowStatus(snapshot.status, expectedStatus)) {
+          return undefined;
+        }
+
         // Merge the new options with the existing snapshot
-        const updatedSnapshot = { ...snapshot, ...opts };
+        const updatedSnapshot = { ...snapshot, ...state };
 
         // Update the snapshot within the same transaction
         const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(updatedSnapshot));

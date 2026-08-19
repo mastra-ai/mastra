@@ -59,6 +59,9 @@ import { createFactoryTransitionTools } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
 import type { FactoryRules } from './rules/types.js';
 import { assertFactoryRules } from './rules/validation.js';
+import type { BaseCheckpointTriggers } from './sandbox/base-checkpoint-triggers.js';
+import { createBaseCheckpointTriggers } from './sandbox/base-checkpoint-triggers.js';
+import { BaseCheckpointBuilder } from './sandbox/base-checkpoint.js';
 import { SandboxFleet } from './sandbox/fleet.js';
 import { registerSandboxReattach } from './sandbox/reattach.js';
 import { SessionRetirementCoordinator } from './sandbox/session-retirement.js';
@@ -68,6 +71,7 @@ import { observeSessionFilesystem } from './session/filesystem-capture.js';
 import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
 import { hydrateSessionMemorySettings } from './session/memory-settings-hydration.js';
+import { hydrateSessionModelPack } from './session/model-pack-hydration.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
 import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
@@ -402,6 +406,9 @@ export class MastraFactory {
       workItems: workItemsStorage,
       channelIdentity: channelIdentityStorage,
     };
+    // Assigned once the fleet and integrations exist below; the routes only
+    // dereference it at request time, so the late assignment is safe.
+    let baseCheckpoints: BaseCheckpointTriggers | undefined;
     const auditDomain = new AuditDomain({
       auth: routeAuth,
       audit: auditStorage,
@@ -523,6 +530,24 @@ export class MastraFactory {
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
       | GithubIntegration
       | undefined;
+    // Base-checkpoint triggers: keep a warm per-repo checkpoint refreshed on
+    // repo connect, default-branch merges/pushes, and the reconcile sweep.
+    // Constructed only when a sandbox fleet and GitHub source control exist;
+    // otherwise sessions simply keep the cold clone+setup path.
+    if (githubIntegration && fleet.enabled && storage.isDomainReady('source-control')) {
+      const checkpointLogger = {
+        warn: (message: string) => console.warn(`[factory] ${message}`),
+      } as ConstructorParameters<typeof BaseCheckpointBuilder>[0]['logger'];
+      baseCheckpoints = createBaseCheckpointTriggers({
+        builder: new BaseCheckpointBuilder({ fleet, logger: checkpointLogger }),
+        fleet,
+        github: {
+          sourceControlStorage: sourceControlStorage.forIntegration('github'),
+          ...(githubIntegration.versionControl ? { versionControl: githubIntegration.versionControl } : {}),
+        },
+        logger: checkpointLogger,
+      });
+    }
     const workItemsReady = storage.isDomainReady('work-items');
     const sessionRetirement =
       machine && storage.isDomainReady('source-control')
@@ -574,6 +599,7 @@ export class MastraFactory {
         .filter(integration => integration.versionControl)
         .map(integration => integration.id),
       ...(sessionRetirement ? { sessionRetirement } : {}),
+      onProjectRepositoryLinked: args => baseCheckpoints?.onProjectRepositoryLinked(args),
     });
     const factoryProcessor = workItemsReady
       ? new FactoryPhaseStateProcessor({
@@ -749,6 +775,7 @@ export class MastraFactory {
             publicOrigin,
             stateSigner,
             fleet,
+            ...(baseCheckpoints ? { baseCheckpoints } : {}),
             sessionRetirement,
             factoryStorage: storage,
             integrationStorage,
@@ -861,6 +888,18 @@ export class MastraFactory {
       { blocking: true },
     );
 
+    // Personal model packs seed interactive user sessions only. Active Factory
+    // run bindings are excluded and continue to use the project default model.
+    prepared.base.controller.onSessionCreated(
+      session =>
+        hydrateSessionModelPack(session, {
+          sourceControl: sourceControlStorage.forIntegration('github'),
+          workItems: workItemsStorage,
+          modelPacks: modelPacksStorage,
+        }),
+      { blocking: true },
+    );
+
     this.#prepared = prepared;
     this.#factoryProcessor = factoryProcessor;
 
@@ -894,6 +933,7 @@ export class MastraFactory {
                 auth: routeAuth,
                 stateSigner,
                 fleet,
+                ...(baseCheckpoints ? { baseCheckpoints } : {}),
                 factoryStorage: storage,
                 integrationStorage,
                 sourceControlStorage,
@@ -926,6 +966,7 @@ export class MastraFactory {
               auth: routeAuth,
               stateSigner,
               fleet,
+              ...(baseCheckpoints ? { baseCheckpoints } : {}),
               factoryStorage: storage,
               integrationStorage,
               sourceControlStorage,

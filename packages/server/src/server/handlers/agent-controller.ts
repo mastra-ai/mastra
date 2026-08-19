@@ -1,10 +1,14 @@
 import type { Agent } from '@mastra/core/agent';
 import type {
   AgentController,
+  AgentControllerDisplayState,
   AgentControllerEvent,
+  ErrorCarryingAgentControllerEvent,
+  JsonReadyAgentControllerEvent,
   ReservedThreadMetadataKey,
   Session,
   TokenUsage,
+  WireDisplayState,
 } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 // Type-only import: erased at runtime, so this cannot crash against an older
@@ -449,29 +453,37 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
 });
 
 /**
- * An `Error`'s `message`/`name` are non-enumerable, so JSON serialization in the
- * SSE adapter would send `"error": {}` and clients could only render a generic
- * "Error". Flatten it so the actual failure reaches the client, on every event
- * that carries one (`error`, `workspace_error`, `workspace_status_changed`).
- *
- * Streamed message events intentionally retain the controller's live accumulated
- * message. Do not snapshot them here: wire consumers that require temporal
- * isolation must copy or serialize at their own ownership boundary.
- *
- * `display_state_changed` Maps JSON-serialize to `{}`; snapshot the display state
- * and convert its Maps to plain records so wire clients get stable tool and
- * message state.
+ * `display_state_changed` Maps JSON-serialize to `{}`. Snapshot the display state
+ * before converting its Maps so queued wire events retain point-in-time state.
  */
-function toWireEvent(event: AgentControllerEvent): unknown {
-  if ('error' in event && event.error instanceof Error) {
-    return { ...event, error: { name: event.error.name, message: event.error.message } };
+function toWireDisplayState(displayState: AgentControllerDisplayState): WireDisplayState {
+  const snapshot = structuredClone(displayState);
+  return {
+    ...snapshot,
+    activeTools: Object.fromEntries(snapshot.activeTools),
+    toolInputBuffers: Object.fromEntries(snapshot.toolInputBuffers),
+    pendingSuspensions: Object.fromEntries(snapshot.pendingSuspensions),
+    activeSubagents: Object.fromEntries(snapshot.activeSubagents),
+    modifiedFiles: Object.fromEntries(snapshot.modifiedFiles),
+  };
+}
+
+function carriesError(event: AgentControllerEvent): event is ErrorCarryingAgentControllerEvent & { error: Error } {
+  return 'error' in event && event.error instanceof Error;
+}
+
+/**
+ * An `Error`'s `message`/`name` are non-enumerable, so flatten it before JSON
+ * serialization. Streamed message events intentionally retain the controller's
+ * live accumulated message; consumers requiring temporal isolation must copy or
+ * serialize at their own ownership boundary.
+ */
+function toWireEvent(event: AgentControllerEvent): JsonReadyAgentControllerEvent {
+  if ('displayState' in event) {
+    return { ...event, displayState: toWireDisplayState(event.displayState) };
   }
-  if (event.type === 'display_state_changed') {
-    const wireDisplayState: Record<string, unknown> = { ...structuredClone(event.displayState) };
-    for (const [key, value] of Object.entries(wireDisplayState)) {
-      if (value instanceof Map) wireDisplayState[key] = Object.fromEntries(value);
-    }
-    return { ...event, displayState: wireDisplayState };
+  if (carriesError(event)) {
+    return { ...event, error: { name: event.error.name, message: event.error.message } };
   }
   return event;
 }

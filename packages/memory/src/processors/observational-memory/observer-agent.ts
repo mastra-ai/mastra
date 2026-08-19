@@ -1678,6 +1678,60 @@ export function detectDegenerateRepetition(text: string): boolean {
 }
 
 /**
+ * Build a single-line diagnostic description of output flagged by
+ * {@link detectDegenerateRepetition}. Used when logging or surfacing a
+ * degenerate-output failure so the discarded model output can be inspected —
+ * without it there is no way to tell a real repetition loop apart from a
+ * detector false-positive on legitimately repetitive content.
+ *
+ * Reuses the detector's sampling parameters (200-char windows, ~50 samples)
+ * so the reported duplicate ratio and most-repeated window match what
+ * triggered the detection. Snippets are JSON-escaped so the result stays on
+ * one line.
+ */
+export function describeDegenerateOutput(text: string, snippetChars = 400): string {
+  const windowSize = 200;
+  const step = Math.max(1, Math.floor(text.length / 50));
+  const seen = new Map<string, number>();
+  let duplicateWindows = 0;
+  let totalWindows = 0;
+  for (let i = 0; i + windowSize <= text.length; i += step) {
+    const window = text.slice(i, i + windowSize);
+    totalWindows++;
+    const count = (seen.get(window) ?? 0) + 1;
+    seen.set(window, count);
+    if (count > 1) duplicateWindows++;
+  }
+
+  let topWindow = '';
+  let topCount = 0;
+  for (const [window, count] of seen) {
+    if (count > topCount) {
+      topCount = count;
+      topWindow = window;
+    }
+  }
+
+  let longestLine = 0;
+  for (const line of text.split('\n')) {
+    if (line.length > longestLine) longestLine = line.length;
+  }
+
+  const duplicateRatio = totalWindows > 0 ? (duplicateWindows / totalWindows).toFixed(2) : 'n/a';
+  const parts = [
+    `length=${text.length}`,
+    `sampledWindows=${totalWindows}`,
+    `duplicateRatio=${duplicateRatio}`,
+    `longestLine=${longestLine}`,
+    `topWindowCount=${topCount}`,
+  ];
+  if (topCount > 1) parts.push(`topWindow=${JSON.stringify(topWindow)}`);
+  parts.push(`head=${JSON.stringify(text.slice(0, snippetChars))}`);
+  if (text.length > snippetChars * 2) parts.push(`tail=${JSON.stringify(text.slice(-snippetChars))}`);
+  return parts.join(' ');
+}
+
+/**
  * Check if observations contain a Current Task section.
  * Supports both XML format and legacy markdown format.
  */
