@@ -11,6 +11,7 @@
  * window always returns the same numbers.
  */
 
+import { FACTORY_RULE_STAGES } from '../../../rules/types.js';
 import { isAgentActor } from './base.js';
 import type { WorkItemRow } from './base.js';
 
@@ -45,6 +46,13 @@ function isPipelineStage(stage: string): boolean {
 }
 
 /**
+ * The funnel's axis: the pipeline in board order, capped by `done`. A card sits
+ * at the furthest gate it ever entered, so one that skipped a stage still
+ * counts as having got past it and the band can only ever narrow.
+ */
+const FUNNEL_GATES: string[] = [...FACTORY_RULE_STAGES.filter(isPipelineStage), DONE_STAGE];
+
+/**
  * Cards the Factory ran: starting a run records its session on the row. The
  * integrations sync every issue and PR of a connected repo into the board and
  * those outnumber the Factory's own work by an order of magnitude, so counting
@@ -57,7 +65,8 @@ function hasFactoryRun(item: WorkItemRow): boolean {
 /**
  * Flow metrics over the cards the Factory ran ({@link hasFactoryRun}) — synced
  * upstream issues and PRs nobody started a run on are not the Factory's work
- * and are excluded from every field below.
+ * and are excluded from every field below except {@link FactoryMetrics.intake},
+ * which exists to report them.
  */
 export interface FactoryMetrics {
   /**
@@ -74,6 +83,39 @@ export interface FactoryMetrics {
   wipTotal: number;
   /** Cards created in the window, by source. */
   sourceMix: { source: string; count: number }[];
+  /**
+   * Demand versus pickup, read over the whole board rather than the subset
+   * every other field is scoped to. {@link hasFactoryRun} hides the synced
+   * cards nobody started — and how many of those are piling up is what says
+   * whether the Factory is keeping up with what gets filed at it.
+   */
+  intake: {
+    /** Cards created in the window, whoever filed them. */
+    arrived: number;
+    /** Of those, the ones a run was started on. */
+    pickedUp: number;
+    /** Cards no run ever started on that are not terminal — the standing queue. */
+    waiting: number;
+  };
+  /**
+   * Cohort funnel over the cards first pulled into the pipeline during the
+   * window, each counted once at the furthest gate it reached. `reached`
+   * therefore only narrows, and each gate's drop is exactly the two counts
+   * under it.
+   */
+  funnel: {
+    gates: {
+      stage: string;
+      /** Cards that got at least this far. */
+      reached: number;
+      /** Of the ones that got no further: abandoned here. */
+      canceled: number;
+      /** Of the ones that got no further: still open here. */
+      stalled: number;
+    }[];
+    /** Cards the pipeline sent back to a stage they had already passed. */
+    sentBack: number;
+  };
   /** Per-stage agent coverage over first visits that ended in the window. */
   agentCoverage: {
     stage: string;
@@ -281,6 +323,70 @@ function agentCoverage(items: WorkItemRow[], { windowStart, windowEnd }: Window)
   return [...byStage.values()];
 }
 
+/** Furthest {@link FUNNEL_GATES} index the card ever entered; `-1` if none. */
+function furthestGate(item: WorkItemRow): number {
+  let furthest = -1;
+  for (const entry of item.stageHistory) furthest = Math.max(furthest, FUNNEL_GATES.indexOf(entry.stage));
+  return furthest;
+}
+
+/** Card moved back into a gate it had already passed. */
+function wasSentBack(item: WorkItemRow): boolean {
+  let deepest = -1;
+  for (const entry of item.stageHistory) {
+    const gate = FUNNEL_GATES.indexOf(entry.stage);
+    if (gate === -1) continue;
+    if (gate < deepest) return true;
+    deepest = gate;
+  }
+  return false;
+}
+
+/**
+ * Cards whose first pipeline pass started inside the window. Anchoring the
+ * cohort on that rather than on creation keeps a card that sat in intake for
+ * weeks out of the cohort of the week it finally moved.
+ */
+function pulledInDuringWindow(item: WorkItemRow, { windowStart, windowEnd }: Window): boolean {
+  const first = item.stageHistory.find(entry => isPipelineStage(entry.stage));
+  if (!first) return false;
+  const entered = parseTime(first.enteredAt);
+  return entered >= windowStart && entered < windowEnd;
+}
+
+/** Where the window's cohort got to, and how much of it came back. */
+function funnel(items: WorkItemRow[], window: Window): FactoryMetrics['funnel'] {
+  const cohort = items.filter(item => pulledInDuringWindow(item, window));
+  const gates = FUNNEL_GATES.map(stage => ({ stage, reached: 0, canceled: 0, stalled: 0 }));
+  const shipped = FUNNEL_GATES.length - 1;
+  for (const item of cohort) {
+    const furthest = furthestGate(item);
+    for (let gate = 0; gate <= furthest; gate++) gates[gate]!.reached += 1;
+    const stopped = furthest === shipped ? undefined : gates[furthest];
+    if (!stopped) continue;
+    if (item.stageHistory.some(entry => entry.stage === CANCELED_STAGE)) stopped.canceled += 1;
+    else stopped.stalled += 1;
+  }
+  return { gates, sentBack: cohort.filter(wasSentBack).length };
+}
+
+/** Demand versus pickup — see {@link FactoryMetrics.intake}. */
+function intakeFlow(boardItems: WorkItemRow[], { windowStart, windowEnd }: Window): FactoryMetrics['intake'] {
+  let arrived = 0;
+  let pickedUp = 0;
+  let waiting = 0;
+  for (const item of boardItems) {
+    const ran = hasFactoryRun(item);
+    const created = item.createdAt.getTime();
+    if (created >= windowStart && created < windowEnd) {
+      arrived += 1;
+      if (ran) pickedUp += 1;
+    }
+    if (!ran && !item.stages.some(stage => TERMINAL_STAGES.has(stage))) waiting += 1;
+  }
+  return { arrived, pickedUp, waiting };
+}
+
 export function computeFactoryMetrics(boardItems: WorkItemRow[], window: Window): FactoryMetrics {
   const items = boardItems.filter(hasFactoryRun);
   assertParsableHistory(items);
@@ -299,6 +405,8 @@ export function computeFactoryMetrics(boardItems: WorkItemRow[], window: Window)
     },
     wipTotal: countInFlight(items),
     sourceMix: demandMix(items, window),
+    intake: intakeFlow(boardItems, window),
+    funnel: funnel(items, window),
     agentCoverage: agentCoverage(items, window),
   };
 }

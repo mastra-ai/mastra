@@ -1,3 +1,5 @@
+import type { AuditAction, AuditNamespace } from '@mastra/factory/storage/domains/audit/base';
+import { AUDIT_ACTIONS } from '@mastra/factory/storage/domains/audit/base';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
@@ -13,36 +15,35 @@ import { SkeletonRows } from '../ui/SkeletonRows';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import type { AuditEvent } from '../domains/factory/services/audit';
 
-/** Action-group filters mapped to the concrete v1 action taxonomy. */
-const ACTION_GROUPS = [
-  { key: 'all', label: 'All', actions: undefined },
-  {
-    key: 'work-items',
-    label: 'Work items',
-    actions: [
-      'factory.work_item.created',
-      'factory.work_item.updated',
-      'factory.work_item.stage_moved',
-      'factory.work_item.deleted',
-      'factory.work_item.transition_rejected',
-    ],
-  },
-  {
-    key: 'runs',
-    label: 'Runs',
-    actions: ['factory.run.started', 'factory.run.approved', 'factory.run.dismissed'],
-  },
-  { key: 'worktrees', label: 'Worktrees', actions: ['factory.worktree.created', 'factory.worktree.deleted'] },
-  { key: 'git', label: 'Git', actions: ['factory.git.commit', 'factory.git.push', 'factory.git.pr_opened'] },
-  {
-    key: 'agent',
-    label: 'Agent',
-    actions: ['factory.agent.commit', 'factory.agent.push', 'factory.agent.pr_opened'],
-  },
-  { key: 'intake', label: 'Intake', actions: ['factory.intake.config_updated'] },
-] as const;
+type GroupKey = 'all' | AuditNamespace;
 
-type GroupKey = (typeof ACTION_GROUPS)[number]['key'];
+/** Labelling every namespace is what keeps a new action from shipping as an unnamed tab. */
+const NAMESPACE_LABELS: Record<AuditNamespace, string> = {
+  work_item: 'Work items',
+  run: 'Runs',
+  git: 'Git',
+  agent: 'Agent',
+  intake: 'Intake',
+};
+
+const isNamespace = (segment: string | undefined): segment is AuditNamespace =>
+  segment !== undefined && segment in NAMESPACE_LABELS;
+
+const namespaces = [...new Set(AUDIT_ACTIONS.map(action => action.split('.')[1]))].filter(isNamespace);
+
+/**
+ * One filter per namespace the Factory records, in taxonomy order. Derived from
+ * the taxonomy rather than restating it, so no tab can sit permanently empty and
+ * no recorded action can hide from every tab.
+ */
+const ACTION_GROUPS: { key: GroupKey; label: string; actions?: AuditAction[] }[] = [
+  { key: 'all', label: 'All' },
+  ...namespaces.map(namespace => ({
+    key: namespace,
+    label: NAMESPACE_LABELS[namespace],
+    actions: AUDIT_ACTIONS.filter(action => action.startsWith(`factory.${namespace}.`)),
+  })),
+];
 
 /** Short human label for a dot-namespaced action, e.g. 'Stage moved'. */
 function actionLabel(action: string): string {
@@ -53,9 +54,9 @@ function actionLabel(action: string): string {
 
 /**
  * The Factory audit log: an append-only, org-scoped record of who did what,
- * when — every work-item mutation, stage move, run start, worktree change, and
- * git action. Backed by the local `audit_events` table; the "Open in WorkOS"
- * button (shown when WorkOS is configured) opens the enterprise viewer.
+ * when — every action in {@link AUDIT_ACTIONS}, newest first. Backed by the
+ * local `audit_events` table; the "Open in WorkOS" button (shown when WorkOS is
+ * configured) opens the enterprise viewer.
  */
 export function AuditPage() {
   return <FactoryPageShell>{project => <AuditContent factoryProjectId={project.id} />}</FactoryPageShell>;
@@ -64,8 +65,7 @@ export function AuditPage() {
 function AuditContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
   const [group, setGroup] = useState<GroupKey>('all');
   const actionFilter = ACTION_GROUPS.find(entry => entry.key === group);
-  const actions = actionFilter?.actions;
-  const eventsQuery = useAuditEvents(factoryProjectId, group, actions ? [...actions] : undefined);
+  const eventsQuery = useAuditEvents(factoryProjectId, group, actionFilter?.actions);
   const portalQuery = useAuditPortalLink(true);
 
   if (eventsQuery.isError) {

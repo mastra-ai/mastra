@@ -7,6 +7,7 @@ import type { Context } from 'hono';
 import type { RouteAuth } from '../../../routes/route.js';
 import type { FactoryProjectsStorage } from '../projects/base.js';
 import type {
+  AuditAction,
   AuditContext,
   AuditEventPage,
   AuditEventRow,
@@ -17,7 +18,7 @@ import type {
 } from './base.js';
 
 export interface EmitAuditInput {
-  action: string;
+  action: AuditAction;
   factoryProjectId?: string;
   projectRepositoryId?: string;
   targets: AuditTarget[];
@@ -25,7 +26,7 @@ export interface EmitAuditInput {
 }
 
 export interface EmitAgentAuditInput {
-  action: string;
+  action: AuditAction;
   targets: AuditTarget[];
   metadata?: Record<string, unknown>;
 }

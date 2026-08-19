@@ -2,34 +2,14 @@
  * Factory audit events domain — the append-only "who did what, when" trail
  * behind the software factory.
  *
- * One `audit_events` row records a single audited mutation (work-item change,
- * stage move, run start, worktree create/delete, git action, intake config
- * change). Rows are append-only: there is no update/delete API, and the table
- * is the local source of truth even when the WorkOS Audit Logs mirror is
- * unavailable.
+ * One `audit_events` row records a single audited mutation — see
+ * {@link AUDIT_ACTIONS} for the taxonomy. Rows are append-only: there is no
+ * update/delete API, and the table is the local source of truth even when the
+ * WorkOS Audit Logs mirror is unavailable.
  *
  * Tenancy is **org-first**, like `work_items`: events are scoped by `org_id`
  * and (usually) `factory_project_id`; `actor_id` records who acted but never
  * scopes reads.
- *
- * v1 action taxonomy (register these in the WorkOS dashboard under
- * Audit Logs → Events for the export mirror to accept them):
- *   - factory.work_item.created
- *   - factory.work_item.updated
- *   - factory.work_item.stage_moved
- *   - factory.work_item.deleted
- *   - factory.run.started
- *   - factory.worktree.created
- *   - factory.worktree.deleted
- *   - factory.git.commit
- *   - factory.git.push
- *   - factory.git.pr_opened
- *   - factory.intake.config_updated
- *
- * v1.1 adds agent-level actions (also register these in WorkOS):
- *   - factory.agent.commit
- *   - factory.agent.push
- *   - factory.agent.pr_opened
  *
  * Agent events carry `actor_type = 'agent'` with `actor_id = 'agent:<threadId>'`
  * and `metadata.startedBy = <userId>` chaining accountability back to the human
@@ -52,6 +32,38 @@ export interface AuditTarget {
 /** Who performed the audited action. */
 export type AuditActorType = 'human' | 'agent';
 
+/**
+ * Every action the Factory records, `factory.<namespace>.<verb>`. Register each
+ * one in the WorkOS dashboard under Audit Logs → Events — the export mirror
+ * drops what it does not know. Recording is typed against this list and the
+ * audit UI derives its filters from it: an action missing here will not
+ * compile, and one listed but never emitted shows up as an empty filter.
+ */
+export const AUDIT_ACTIONS = [
+  'factory.work_item.created',
+  'factory.work_item.updated',
+  'factory.work_item.stage_moved',
+  'factory.work_item.deleted',
+  'factory.work_item.transition_rejected',
+  'factory.run.started',
+  'factory.run.approved',
+  'factory.run.dismissed',
+  'factory.git.commit',
+  'factory.git.push',
+  'factory.git.pr_opened',
+  'factory.agent.commit',
+  'factory.agent.push',
+  'factory.intake.config_updated',
+  'factory.intake.binding_updated',
+] as const;
+
+export type AuditAction = (typeof AUDIT_ACTIONS)[number];
+
+type NamespaceOf<Action extends string> = Action extends `factory.${infer Namespace}.${string}` ? Namespace : never;
+
+/** The middle segment of an action — what it acted on. */
+export type AuditNamespace = NamespaceOf<AuditAction>;
+
 /** Request context captured alongside the event. */
 export interface AuditContext {
   /** Client IP (first hop of `x-forwarded-for`) when available. */
@@ -69,7 +81,7 @@ export interface AuditEventRow {
   actorId: string;
   /** Whether a human or an agent (inside a run) performed the action. */
   actorType: AuditActorType;
-  /** Dot-namespaced action, e.g. 'factory.work_item.stage_moved'. */
+  /** Dot-namespaced action; a stored row may predate the current taxonomy. */
   action: string;
   /** What was acted on. */
   targets: AuditTarget[];
@@ -89,8 +101,7 @@ export interface RecordAuditEventInput {
   actorId: string;
   /** Who performed the action; defaults to 'human'. */
   actorType?: AuditActorType;
-  /** Dot-namespaced action, e.g. 'factory.work_item.stage_moved'. */
-  action: string;
+  action: AuditAction;
   targets: AuditTarget[];
   metadata?: Record<string, unknown>;
   factoryProjectId?: string;

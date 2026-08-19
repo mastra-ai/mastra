@@ -626,4 +626,103 @@ describe('computeFactoryMetrics', () => {
       expect(metrics.agentCoverage).toEqual([]);
     });
   });
+
+  describe('funnel', () => {
+    /** A card walked through `path`, an hour per stage, landing `endHoursAgo` ago. */
+    function walked(suffix: number, path: string[], endHoursAgo = 1): WorkItemRow {
+      const stageHistory: WorkItemStageEntry[] = path.map((stage, index) => ({
+        stage,
+        enteredAt: hoursAgo(endHoursAgo + path.length - index),
+        ...(index < path.length - 1 ? { exitedAt: hoursAgo(endHoursAgo + path.length - index - 1) } : {}),
+        by: 'user_1',
+      }));
+      return makeItem({
+        id: `00000000-0000-4000-8000-00000000000${suffix}`,
+        stages: [path.at(-1)!],
+        stageHistory,
+        createdAt: new Date(NOW.getTime() - (endHoursAgo + path.length) * HOUR),
+      });
+    }
+
+    const gatesOf = (metrics: ReturnType<typeof computeFactoryMetrics>) =>
+      Object.fromEntries(metrics.funnel.gates.map(gate => [gate.stage, gate]));
+
+    it('given cards that stopped at different gates, then each drop is what stopped there', () => {
+      const metrics = computeFactoryMetrics(
+        [
+          walked(1, ['triage', 'planning', 'execute', 'review', 'done']),
+          walked(2, ['triage', 'planning']),
+          walked(3, ['triage', 'canceled']),
+        ],
+        lastDays(7),
+      );
+
+      const gates = gatesOf(metrics);
+      expect(gates.triage).toEqual({ stage: 'triage', reached: 3, canceled: 1, stalled: 0 });
+      expect(gates.planning).toEqual({ stage: 'planning', reached: 2, canceled: 0, stalled: 1 });
+      expect(gates.done?.reached).toBe(1);
+    });
+
+    it('given a card that skipped a stage, then it still counts as having got past it', () => {
+      // Otherwise the band rises at the skipped gate and the figure reads as
+      // more work arriving than was let in.
+      const metrics = computeFactoryMetrics([walked(1, ['triage', 'execute', 'done'])], lastDays(7));
+
+      expect(metrics.funnel.gates.map(gate => gate.reached)).toEqual([1, 1, 1, 1, 1]);
+      expect(metrics.funnel.gates.every(gate => gate.canceled + gate.stalled === 0)).toBe(true);
+    });
+
+    it('given a card review sent back, then it counts as rework once however far back it went', () => {
+      const metrics = computeFactoryMetrics(
+        [
+          walked(1, ['triage', 'planning', 'execute', 'review', 'planning', 'execute', 'review', 'done']),
+          walked(2, ['triage', 'planning', 'execute', 'review', 'done']),
+        ],
+        lastDays(7),
+      );
+
+      expect(metrics.funnel.sentBack).toBe(1);
+    });
+
+    it('given a card that sat in intake for weeks, then its cohort is when it moved, not when it arrived', () => {
+      const parked = makeItem({
+        id: '00000000-0000-4000-8000-000000000001',
+        stages: ['triage'],
+        stageHistory: [
+          { stage: 'intake', enteredAt: hoursAgo(40 * 24), exitedAt: hoursAgo(3), by: 'github' },
+          { stage: 'triage', enteredAt: hoursAgo(3), by: 'user_1' },
+        ],
+        createdAt: new Date(NOW.getTime() - 40 * DAY),
+      });
+
+      const metrics = computeFactoryMetrics([parked, walked(2, ['triage', 'planning'], 20 * 24)], lastDays(7));
+
+      expect(gatesOf(metrics).triage?.reached).toBe(1);
+    });
+  });
+
+  describe('intake', () => {
+    const synced = (suffix: number, stage: string, createdHoursAgo: number) =>
+      makeItem({
+        id: `00000000-0000-4000-8000-00000000000${suffix}`,
+        sessions: {},
+        stages: [stage],
+        stageHistory: [{ stage, enteredAt: hoursAgo(createdHoursAgo), by: 'github' }],
+        createdAt: new Date(NOW.getTime() - createdHoursAgo * HOUR),
+      });
+
+    it('given a board the integrations fill faster than the Factory drains it, then the queue is reported', () => {
+      const metrics = computeFactoryMetrics(
+        [
+          doneItem('00000000-0000-4000-8000-000000000001', 3, 1),
+          synced(2, 'intake', 3),
+          synced(3, 'canceled', 3),
+          synced(4, 'intake', 40 * 24),
+        ],
+        lastDays(7),
+      );
+
+      expect(metrics.intake).toEqual({ arrived: 3, pickedUp: 1, waiting: 2 });
+    });
+  });
 });

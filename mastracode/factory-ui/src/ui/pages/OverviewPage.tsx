@@ -1,20 +1,19 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { MetricsLineChart } from '@mastra/playground-ui/components/MetricsLineChart';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Bot, Check, ChevronDown, CircleCheck, Clock3, Layers3 } from 'lucide-react';
-import { useId, useMemo, useState, type ReactNode } from 'react';
-import { flushSync } from 'react-dom';
+import { Bot, Check, ChevronDown, Clock3, Inbox, Layers3 } from 'lucide-react';
+import { useMemo, useState, type ReactNode } from 'react';
 
 import { useFactoryMetrics } from '../../hooks/useFactoryMetrics';
 import { useRunningSessions } from '../../hooks/useWorkItems';
 import { formatDuration } from '../../lib/date';
 import { DocumentFactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import { PipelineFunnel } from '../domains/factory/components/PipelineFunnel';
 import { QueueHealthPanel } from '../domains/factory/components/QueueHealthPanel';
 import { ShareBar } from '../domains/factory/components/ShareBar';
-import { Sparkline } from '../domains/factory/components/Sparkline';
+import { ThroughputCard } from '../domains/factory/components/ThroughputCard';
 import type { FactoryMetrics } from '../domains/factory/services/metrics';
 import { PIPELINE_STAGES, stageLabel, stageOrder } from '../domains/factory/stages';
 
@@ -34,10 +33,9 @@ const RANGE_PRESETS = [
 
 const DEFAULT_RANGE_DAYS = 30;
 
-const THROUGHPUT_SERIES = [{ dataKey: 'done', label: 'Completed work', color: 'var(--chart-2)' }];
-
 const SOURCE_COLORS = ['bg-chart-soft-1', 'bg-chart-soft-2', 'bg-chart-soft-3', 'bg-chart-soft-4', 'bg-chart-soft-5'];
 
+/** Sources of the picked-up cards, not of everything the integrations filed. */
 const SOURCE_LABELS: Record<string, string> = {
   'github:issue': 'GitHub issues',
   'github:pull-request': 'GitHub PRs',
@@ -79,7 +77,13 @@ function OverviewContent({ factoryProjectId }: { factoryProjectId: string | unde
       <section className="flex flex-col gap-8">
         <div className="flex flex-col gap-4">
           <h2 className={SECTION_TITLE}>Now</h2>
-          <dl className="m-0 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <dl className="m-0 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Readout
+              icon={<Inbox aria-hidden="true" />}
+              label="Waiting to start"
+              value={String(metrics.intake.waiting)}
+              detail={pickupDetail(metrics.intake)}
+            />
             <Readout
               icon={<Layers3 aria-hidden="true" />}
               label="In flight"
@@ -108,8 +112,11 @@ function OverviewContent({ factoryProjectId }: { factoryProjectId: string | unde
           </h2>
           <Flow metrics={metrics} />
         </div>
+        <Block title="Pipeline" note={funnelNote(metrics.funnel)}>
+          <PipelineFunnel funnel={metrics.funnel} />
+        </Block>
         <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">
-          <Block title="Work intake">
+          <Block title="Picked up by source">
             <SourceMix metrics={metrics} />
           </Block>
           <Block
@@ -122,6 +129,20 @@ function OverviewContent({ factoryProjectId }: { factoryProjectId: string | unde
       </section>
     </div>
   );
+}
+
+/** A backlog only reads as capacity next to the rate that fills it. */
+function pickupDetail({ arrived, pickedUp }: FactoryMetrics['intake']): string {
+  if (arrived === 0) return 'Synced cards no run has started';
+  return `${pickedUp} of ${arrived} filed this window picked up`;
+}
+
+function funnelNote(funnel: FactoryMetrics['funnel']): string | undefined {
+  const pulledIn = funnel.gates[0]?.reached ?? 0;
+  if (pulledIn === 0) return undefined;
+  const shipped = funnel.gates.at(-1)?.reached ?? 0;
+  const sentBack = funnel.sentBack === 0 ? '' : ` · ${funnel.sentBack} came back for another pass`;
+  return `${shipped} of the ${pulledIn} pulled in this window shipped${sentBack}.`;
 }
 
 function Block({ title, note, children }: { title: string; note?: string; children: ReactNode }) {
@@ -197,93 +218,6 @@ function Flow({ metrics }: { metrics: FactoryMetrics }) {
         }
       />
     </dl>
-  );
-}
-
-// flushSync required — the transition captures the DOM synchronously after the callback
-function morph(update: () => void) {
-  const view = document as Document & {
-    startViewTransition?: (callback: () => void) => { ready: Promise<void> };
-  };
-  if (typeof view.startViewTransition !== 'function') {
-    update();
-    return;
-  }
-  // hidden tab or overlapping transition rejects `ready` — DOM update still lands
-  view.startViewTransition(() => flushSync(update)).ready.catch(() => {});
-}
-
-function ThroughputCard({ metrics, completed }: { metrics: FactoryMetrics; completed: number }) {
-  const [expanded, setExpanded] = useState(false);
-  const chartId = useId();
-  const { daysCovered } = metrics;
-  const averagePerDay = daysCovered === 0 ? 0 : completed / daysCovered;
-  const perDay = `${averagePerDay.toLocaleString(undefined, { maximumFractionDigits: 1 })} per day`;
-
-  return (
-    <div
-      style={{ viewTransitionName: 'throughput-card' }}
-      className={`border-border1 bg-surface3 hover:border-border2 group flex min-w-0 flex-col rounded-xl border p-4 transition-colors ${
-        expanded ? 'col-span-full' : 'sm:col-span-2'
-      }`}
-    >
-      <dt className="text-ui-xs text-icon3 flex items-center gap-1.5 tracking-wider uppercase [&>svg]:size-3.5">
-        <CircleCheck aria-hidden="true" className="text-positive1" />
-        Completed
-      </dt>
-
-      <dd className="m-0 mt-3 flex min-w-0 flex-col">
-        <div className="relative flex items-center justify-between gap-4">
-          <span className="flex min-w-0 flex-col gap-0.5">
-            <span className="text-header-xl text-icon6 font-medium tabular-nums">{completed}</span>
-            <Txt as="span" variant="ui-xs" className="text-icon3">
-              {perDay}
-            </Txt>
-          </span>
-
-          <span className="flex shrink-0 items-center gap-3">
-            {expanded ? null : (
-              <Sparkline
-                values={metrics.throughput.map(point => point.count)}
-                color="var(--chart-2)"
-                className="h-12 w-24 opacity-80 transition-opacity duration-200 group-hover:opacity-100 sm:w-44"
-              />
-            )}
-            <ChevronDown
-              aria-hidden="true"
-              className={`text-icon3 size-4 transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`}
-            />
-          </span>
-
-          <button
-            type="button"
-            aria-expanded={expanded}
-            aria-controls={expanded ? chartId : undefined}
-            aria-label={`Completed: ${completed}, ${perDay}. ${expanded ? 'Hide' : 'Show'} the daily completions chart`}
-            onClick={() => morph(() => setExpanded(open => !open))}
-            className="focus-visible:outline-accent1 absolute inset-0 cursor-pointer rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2"
-          />
-        </div>
-
-        {expanded ? (
-          <div
-            id={chartId}
-            className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-2 mt-5 motion-safe:duration-300"
-          >
-            <Txt as="p" variant="ui-xs" className="text-icon3 m-0 mb-2">
-              Daily completions over {daysCovered} days
-            </Txt>
-            <MetricsLineChart
-              data={metrics.throughput.map(point => ({ time: point.date, done: point.count }))}
-              series={THROUGHPUT_SERIES}
-              height={260}
-              xAxisInterval="preserveStartEnd"
-              xAxisMinTickGap={40}
-            />
-          </div>
-        ) : null}
-      </dd>
-    </div>
   );
 }
 
