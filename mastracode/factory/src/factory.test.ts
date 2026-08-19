@@ -16,6 +16,8 @@ import type * as surfaceModule from './routes/surface.js';
 import type * as tenantCredentialsModule from './routes/tenant-credentials.js';
 import { defaultFactoryRules, DEFAULT_FACTORY_RULE_VERSION } from './rules/defaults.js';
 import type * as dispatcherModule from './rules/dispatcher.js';
+import type * as terminalCleanupModule from './rules/terminal-cleanup.js';
+import type * as transitionServiceModule from './rules/transition-service.js';
 import type { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { SourceControlStorage } from './storage/domains/source-control/base.js';
@@ -55,6 +57,37 @@ const prepareMock = vi.fn(async (config: Record<string, unknown>) => ({
 vi.mock('@mastra/code-sdk', () => ({
   prepareAgentControllerMount: (config: Record<string, unknown>) => prepareMock(config),
 }));
+
+// Track what the factory actually wires as the terminal-stage hook: the
+// cleanup must be constructed by production code (not just by its own unit
+// tests) and its result handed to the transition service. Without this,
+// `createTerminalStageCleanup` can silently become orphaned in a refactor.
+const terminalCleanups = vi.hoisted(() => [] as unknown[]);
+vi.mock('./rules/terminal-cleanup', async importOriginal => {
+  const actual = await importOriginal<typeof terminalCleanupModule>();
+  return {
+    ...actual,
+    createTerminalStageCleanup: (options: Parameters<typeof actual.createTerminalStageCleanup>[0]) => {
+      const cleanup = actual.createTerminalStageCleanup(options);
+      terminalCleanups.push(cleanup);
+      return cleanup;
+    },
+  };
+});
+
+const transitionServiceOptions = vi.hoisted(
+  () => [] as Array<ConstructorParameters<typeof transitionServiceModule.FactoryTransitionService>[0]>,
+);
+vi.mock('./rules/transition-service', async importOriginal => {
+  const actual = await importOriginal<typeof transitionServiceModule>();
+  class TrackedFactoryTransitionService extends actual.FactoryTransitionService {
+    constructor(options: ConstructorParameters<typeof actual.FactoryTransitionService>[0]) {
+      super(options);
+      transitionServiceOptions.push(options);
+    }
+  }
+  return { ...actual, FactoryTransitionService: TrackedFactoryTransitionService };
+});
 
 const dispatcherOptions = vi.hoisted(
   () => [] as Array<ConstructorParameters<typeof dispatcherModule.FactoryDecisionDispatcher>[0]>,
@@ -163,6 +196,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   studioInstances.length = 0;
   dispatcherOptions.length = 0;
+  terminalCleanups.length = 0;
+  transitionServiceOptions.length = 0;
 });
 
 describe('MastraFactory constructor', () => {
@@ -195,10 +230,11 @@ describe('MastraFactory.prepare', () => {
     const factory = new MastraFactory({ storage });
     await factory.prepare();
 
-    const blockingCall = controllerMock.onSessionCreated.mock.calls.find(
+    const blockingCalls = controllerMock.onSessionCreated.mock.calls.filter(
       call => (call[1] as { blocking?: boolean } | undefined)?.blocking === true,
     );
-    expect(blockingCall).toBeDefined();
+    expect(blockingCalls).toHaveLength(2);
+    const blockingCall = blockingCalls[0];
 
     // Seed the owner's web session row and stored memory settings through the
     // same storage domains the factory registered.
@@ -264,6 +300,17 @@ describe('MastraFactory.prepare', () => {
     const ctx = await prepareIntegrationContext({ storage: fakeStorage(), sandbox: { machine: sandbox } });
     expect(ctx.fleet.enabled).toBe(true);
     expect(ctx.fleet.provider).toBe('local');
+  });
+
+  it('hands the terminal-stage cleanup to the transition service', async () => {
+    const prepared = await prepareFactory({ storage: fakeStorage() });
+    (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
+    // The composition must construct the cleanup and wire its result as the
+    // transition service's terminal-stage hook — retiring sessions alone is
+    // not enough (bindings would stay active until the 24h sweep).
+    expect(terminalCleanups).toHaveLength(1);
+    expect(transitionServiceOptions).toHaveLength(1);
+    expect(transitionServiceOptions[0]!.onTerminalStage).toBe(terminalCleanups[0]);
   });
 
   it('threads conservative versioned Factory rules when the slot is omitted', async () => {

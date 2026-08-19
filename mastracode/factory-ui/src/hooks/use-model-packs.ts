@@ -2,44 +2,66 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import type { ActivateModelPackResponse, ModelPacksResponse, OkResponse, SaveModelPackBody } from '../api/types';
+import { AGENT_CONTROLLER_ID } from '../ui/domains/chat/services/constants';
+import type {
+  ActivateModelPackBody,
+  ActivateModelPackResponse,
+  ClearDefaultModelPackResponse,
+  ModelPacksResponse,
+  OkResponse,
+  SaveModelPackBody,
+} from '../api/types';
 
 /**
- * Model packs (mirrors the TUI `/models-pack` command). Listing + custom-pack
- * CRUD are global; activation is session-scoped and needs the active factory's
- * `resourceId`. The list is keyed by `resourceId` so switching factories yields a
- * distinct cache entry (active-pack state differs per session). The query stays
- * enabled without a `resourceId` — it just returns packs with no active flag,
- * matching the current component which loads the catalog either way.
+ * Model-pack definitions are organization-scoped. The active pack is the
+ * user's default for new interactive chats; a resourceId reads the pack
+ * selected specifically for that thread.
  */
-export function useModelPacksQuery(resourceId: string | undefined, scope?: string) {
+export function useModelPacksQuery(resourceId?: string, scope?: string) {
   const { client } = useApiConfig();
   return useQuery<ModelPacksResponse>({
-    queryKey: queryKeys.modelPacks(resourceId),
+    queryKey: queryKeys.modelPacks(resourceId, scope),
     queryFn: () => {
       const params = new URLSearchParams();
       if (resourceId) params.set('resourceId', resourceId);
       if (resourceId && scope) params.set('scope', scope);
-      const qs = params.size ? `?${params.toString()}` : '';
-      return client.get<ModelPacksResponse>(`/web/config/model-packs${qs}`);
+      const query = params.size ? `?${params.toString()}` : '';
+      return client.get<ModelPacksResponse>(`/web/config/model-packs${query}`);
     },
   });
 }
 
 export interface ActivateModelPackArgs {
   id: string;
+  target: ActivateModelPackBody['target'];
 }
 
 export function useActivateModelPack(resourceId: string | undefined, scope?: string) {
   const { client } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id }: ActivateModelPackArgs) =>
+    mutationFn: ({ id, target }: ActivateModelPackArgs) =>
       client.post<ActivateModelPackResponse>(`/web/config/model-packs/${encodeURIComponent(id)}/activate`, {
-        resourceId,
-        scope,
-      }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.modelPacks(resourceId) }),
+        target,
+        ...(target === 'session' ? { resourceId, scope } : {}),
+      } satisfies ActivateModelPackBody),
+    onSuccess: async (_, { target }) => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.modelPacksAll() });
+      if (target === 'session' && resourceId) {
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.agentControllerConnectionState(AGENT_CONTROLLER_ID, resourceId, scope),
+        });
+      }
+    },
+  });
+}
+
+export function useClearDefaultModelPack() {
+  const { client } = useApiConfig();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => client.del<ClearDefaultModelPackResponse>('/web/config/model-packs/active'),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.modelPacksAll() }),
   });
 }
 

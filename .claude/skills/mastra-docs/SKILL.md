@@ -14,6 +14,9 @@ Follow the most specific `AGENTS.md` and use these references:
    - `references/GUIDE_INTEGRATION.md`: Pages under `/integrations`.
    - `references/REFERENCE.md`: Pages under `/reference`.
 4. `references/COMPONENTS.md`: Shared MDX components and llms-txt markup.
-5. `references/AUTHORING_WORKFLOW.md`: Editing, moves, deletions, redirects, and verification.
+5. `references/DIAGRAM.md`: Mermaid diagram shapes, colors, layout, labels, and accessibility.
+6. `references/AUTHORING_WORKFLOW.md`: Editing, moves, deletions, redirects, and verification.
+
+To replace an existing diagram image with Mermaid, use the `docs-diagrams` skill.
 
 Treat page patterns as guidance rather than fixed templates. Match the reader's task and the conventions of the current section.
