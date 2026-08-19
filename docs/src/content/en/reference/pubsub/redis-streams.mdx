@@ -198,6 +198,6 @@ When you deploy a project that reads `REDIS_URL` from the environment, the Mastr
 
 If you accept, `mastra deploy` provisions the database and waits for it to reach the ready state before injecting `REDIS_URL` into the deploy so `new RedisStreamsPubSub({ url: process.env.REDIS_URL })` connects without extra setup.
 
-The prompt is shown only when three conditions hold: `REDIS_URL` is referenced by user code, the environment doesn't already have it set, and the terminal is interactive. The platform validates that your plan includes managed Redis during provisioning. Non-interactive runs (CI, `--yes`) fail preflight with a copy-pasteable `mastra env db create --kind redis` command instead of silently creating infrastructure.
+The prompt is shown only when three conditions hold: `REDIS_URL` is referenced by user code, the environment doesn't already have it set, and the terminal is interactive. Non-interactive runs (CI, `--yes`) fail preflight with a copy-pasteable `mastra env db create --kind redis` command instead of silently creating infrastructure.
 
 You can also provision a managed Redis up front with `mastra env db create --kind redis`. Once attached, the platform meters CPU seconds and memory GB-hours and shows them on the project's Database Usage page.
