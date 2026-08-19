@@ -103,10 +103,6 @@ async function runGoalStep(
       return signal;
     },
     markResponseMessageBoundary: vi.fn(),
-    rotateResponseMessageId: (generateId: () => string, sealMessageId?: string) => {
-      messageList.markResponseMessageBoundary(sealMessageId);
-      return generateId();
-    },
     get: { all: { db: () => opts?.dbMessages ?? [] } },
   };
 
@@ -156,6 +152,10 @@ async function runGoalStep(
           : {}),
     },
     messageList,
+    rotateResponseMessageId: (sealMessageId?: string) => {
+      messageList.markResponseMessageBoundary(sealMessageId);
+      return 'response-2';
+    },
     requestContext,
     mastra,
     controller: { enqueue: (c: any) => chunks.push(c) },
