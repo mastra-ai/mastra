@@ -1,5 +1,25 @@
 # @mastra/factory
 
+## 0.8.0-alpha.16
+
+### Minor Changes
+
+- Made Factory session workspace resolution lazy. Resolving a session now returns the workspace immediately with a lazy sandbox handle; sandbox provisioning, repository materialization, branch checkout, and setup run in the background at session start (or on the first filesystem/sandbox operation) instead of blocking agent start. Storage reads during resolution are parallelized, failed background materializations are retried on the next use, and metadata-only resolutions such as thread-list polling never trigger sandbox work. ([#21803](https://github.com/mastra-ai/mastra/pull/21803))
+
+- Sped up new Factory agent sessions with warm repo base checkpoints. When a repository is connected, Factory now builds a base sandbox checkpoint (clone plus setup command) in the background, rebuilds it when pull requests merge to the default branch or pushes land there, and keeps it fresh via the periodic reconcile sweep. New sessions boot from the base checkpoint and skip the full clone and setup, falling back to the previous cold path when no checkpoint is available. ([#21803](https://github.com/mastra-ai/mastra/pull/21803))
+
+### Patch Changes
+
+- Factory sessions can start before their sandbox is ready: resolving a session returns its workspace immediately, and background checkpoint-build failures now show up in logs instead of disappearing. ([#21803](https://github.com/mastra-ai/mastra/pull/21803))
+
+- Stop a running local Factory session from wedging when its checkout directory disappears. A tool spawned into a removed directory fails with `spawn /bin/sh ENOENT` — an error that names the shell rather than the sandbox — so it was never recognized as a dead sandbox, and every later filesystem or command tool (including GitHub token refresh) failed the same way for the rest of the run. A missing working directory is now treated as the local equivalent of a destroyed sandbox: if the session is still live, the revival ladder rebuilds the checkout and retries the command; if the session was retired (retirement deletes the checkout on purpose), the run fails fast with a clear retirement error instead of resurrecting the retired checkout — before provisioning anything, so a retired session never consumes a sandbox or fleet budget slot, and a sandbox already mid-build when retirement lands is torn down rather than left bound to a dead session. A missing _command_ reports the same ENOENT code, so the working directory is probed to tell the two apart and healthy sandboxes are never rebuilt for an unknown command. ([#21803](https://github.com/mastra-ai/mastra/pull/21803))
+
+- Factory sessions now revive a sandbox that dies mid-session instead of erroring the turn. When a command fails with a destroyed-sandbox error (for example after idle garbage collection), or with an exec-transport error whose connection never opened (so the command provably never started), the session drops the dead handle, re-runs the provisioning pipeline (reattach, checkpoint-seeded provision, or fresh clone), and retries the command once. Transport errors where the command may have already run are surfaced instead of replayed, so side effects like `git commit` cannot execute twice. Concurrent failures coalesce onto a single revival. ([#21803](https://github.com/mastra-ai/mastra/pull/21803))
+
+- Updated dependencies [[`58c43d3`](https://github.com/mastra-ai/mastra/commit/58c43d3f7cb2eeaeb8ac733ae71dde822348e588)]:
+  - @mastra/core@1.60.0-alpha.14
+  - @mastra/code-sdk@1.3.0-alpha.14
+
 ## 0.8.0-alpha.15
 
 ### Patch Changes

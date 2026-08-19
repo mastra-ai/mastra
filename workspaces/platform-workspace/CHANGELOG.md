@@ -1,5 +1,21 @@
 # @mastra/platform
 
+## 1.3.0-alpha.2
+
+### Patch Changes
+
+- Added fallback checkpoint forwarding for Platform sandboxes so the workspace proxy can seed fresh sessions without changing their primary recovery key. ([#21803](https://github.com/mastra-ai/mastra/pull/21803))
+
+  ```typescript
+  const sandbox = new PlatformSandbox({
+    id: 'session-42',
+    seedCheckpointName: 'repo-base',
+  });
+  ```
+
+- Updated dependencies [[`58c43d3`](https://github.com/mastra-ai/mastra/commit/58c43d3f7cb2eeaeb8ac733ae71dde822348e588)]:
+  - @mastra/core@1.60.0-alpha.14
+
 ## 1.3.0-alpha.1
 
 ### Patch Changes
