@@ -20,6 +20,7 @@ import type {
 import { getPluginRoot } from './paths.js';
 import type { PluginPathOptions } from './paths.js';
 import { loadPiExtensionGeneration } from './pi/loader.js';
+import { hashMaterializedPackageDirectory } from './pi/package-resolver.js';
 import { createPiProcessorAdapters } from './pi/processor-adapter.js';
 import { adaptPiTools } from './pi/tool-adapter.js';
 import { loadPluginRegistry, mergePluginRegistries } from './registry.js';
@@ -64,8 +65,10 @@ export async function loadPluginRecord(
   options: LoadPluginRecordOptions,
 ): Promise<LoadedPlugin> {
   try {
+    const pluginRoot = resolvePluginRoot(record, options);
     const entryPath = resolvePluginEntryPath(record, options);
     if (record.compatibility === 'pi') {
+      if (record.source === 'pi-package') assertTrustedPiPackage(record, pluginRoot);
       const config = Object.fromEntries(
         Object.entries(record.config ?? {}).filter(
           (entry): entry is [string, string | boolean] => typeof entry[1] === 'string' || typeof entry[1] === 'boolean',
@@ -106,7 +109,6 @@ export async function loadPluginRecord(
     const configSchema = validatePluginConfigSchema(plugin.config);
     const configValues = resolvePluginConfigValues(configSchema, record.config);
     const pluginDir = path.dirname(entryPath);
-    const pluginRoot = resolvePluginRoot(record, options);
     const context: MastraCodePluginContext = {
       cwd: options.projectRoot,
       scope: record.scope,
@@ -154,13 +156,56 @@ export async function loadPluginFromEntry(entryPath: string): Promise<MastraCode
   return validatePluginExport(await importPluginModule(entryPath));
 }
 
+function assertTrustedPiPackage(record: ScopedInstalledPluginRecord, pluginRoot: string): void {
+  if (record.piPackage?.trust.codeExecution !== 'trusted') {
+    throw new Error(`Pi Package "${record.id}" requires an explicit persisted code-execution trust decision`);
+  }
+  if (record.scope === 'project' && record.piPackage.trust.project !== 'trusted') {
+    throw new Error(`Project Pi Package "${record.id}" requires an explicit persisted project trust decision`);
+  }
+  if (path.normalize(record.path) !== path.normalize(record.piPackage.resolution.packageRoot)) {
+    throw new Error(`Pi Package "${record.id}" registry path does not match its characterized package root`);
+  }
+  const selectedEntries = record.entries ?? [record.entry];
+  if (
+    record.entry !== record.piPackage.resources.extensions[0] ||
+    selectedEntries.length !== record.piPackage.resources.extensions.length ||
+    selectedEntries.some((entry, index) => entry !== record.piPackage?.resources.extensions[index])
+  ) {
+    throw new Error(`Pi Package "${record.id}" extension entries do not match its characterized resources`);
+  }
+  const actualIntegrity = hashMaterializedPackageDirectory(pluginRoot);
+  if (actualIntegrity !== record.piPackage.resolution.materializedIntegrity) {
+    throw new Error(
+      `Pi Package "${record.id}" materialized integrity mismatch: expected ${record.piPackage.resolution.materializedIntegrity}, received ${actualIntegrity}`,
+    );
+  }
+}
+
 export function resolvePluginRoot(record: ScopedInstalledPluginRecord, options: PluginPathOptions): string {
   const scopeRoot = path.resolve(getPluginRoot(record.scope, options));
   const pluginRoot = path.resolve(path.isAbsolute(record.path) ? record.path : path.join(scopeRoot, record.path));
-  if (record.source === 'github' && !isInsideDirectory(pluginRoot, scopeRoot)) {
+  if ((record.source === 'github' || record.source === 'pi-package') && !isInsideDirectory(pluginRoot, scopeRoot)) {
     throw new Error(`Plugin path for "${record.id}" must be inside the ${record.scope} plugin directory`);
   }
+  if (record.source === 'pi-package') assertContainedPiPackageRoot(record.id, pluginRoot, scopeRoot);
   return pluginRoot;
+}
+
+function assertContainedPiPackageRoot(pluginId: string, pluginRoot: string, scopeRoot: string): void {
+  let current = scopeRoot;
+  const relative = path.relative(scopeRoot, pluginRoot);
+  for (const segment of relative.split(path.sep).filter(Boolean)) {
+    current = path.join(current, segment);
+    if (fs.lstatSync(current).isSymbolicLink()) {
+      throw new Error(`Pi Package "${pluginId}" path cannot contain symbolic links`);
+    }
+  }
+  const realScopeRoot = fs.realpathSync(scopeRoot);
+  const realPluginRoot = fs.realpathSync(pluginRoot);
+  if (!isInsideDirectory(realPluginRoot, realScopeRoot)) {
+    throw new Error(`Pi Package "${pluginId}" path must resolve inside the plugin directory`);
+  }
 }
 
 export function resolvePluginEntryPath(record: ScopedInstalledPluginRecord, options: PluginPathOptions): string {

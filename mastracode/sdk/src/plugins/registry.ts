@@ -1,7 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import type { InstalledPluginRecord, PluginRegistry, ScopedInstalledPluginRecord } from './types.js';
+import type {
+  InstalledPiPackageMetadata,
+  InstalledPluginRecord,
+  PiPackageResourceManifest,
+  PiPackageResolution,
+  PluginRegistry,
+  ScopedInstalledPluginRecord,
+} from './types.js';
 
 export const EMPTY_PLUGIN_REGISTRY: PluginRegistry = { plugins: {}, disabledPlugins: [] };
 
@@ -83,10 +90,12 @@ function validatePluginRegistry(raw: unknown): PluginRegistry {
     if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
     const record = value as Record<string, unknown>;
     if (typeof record.enabled !== 'boolean') continue;
-    if (record.source !== 'local' && record.source !== 'github') continue;
+    if (record.source !== 'local' && record.source !== 'github' && record.source !== 'pi-package') continue;
     if (typeof record.specifier !== 'string') continue;
     if (typeof record.path !== 'string') continue;
     if (typeof record.entry !== 'string') continue;
+    const piPackage = record.source === 'pi-package' ? validatePiPackageMetadata(record.piPackage) : undefined;
+    if (record.source === 'pi-package' && (record.compatibility !== 'pi' || !piPackage)) continue;
 
     validated.plugins[id] = {
       enabled: record.enabled,
@@ -95,15 +104,173 @@ function validatePluginRegistry(raw: unknown): PluginRegistry {
       specifier: record.specifier,
       path: record.path,
       entry: record.entry,
+      ...(Array.isArray(record.entries)
+        ? { entries: [...new Set(record.entries.filter((entry): entry is string => typeof entry === 'string'))].sort() }
+        : {}),
       ...(typeof record.ref === 'string' ? { ref: record.ref } : {}),
       ...(typeof record.version === 'string' ? { version: record.version } : {}),
       ...(record.config && typeof record.config === 'object' && !Array.isArray(record.config)
         ? { config: validatePluginConfigValues(record.config) }
         : {}),
+      ...(piPackage ? { piPackage } : {}),
     };
   }
 
   return validated;
+}
+
+function validatePiPackageMetadata(raw: unknown): InstalledPiPackageMetadata | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const record = raw as Record<string, unknown>;
+  const resolution = validatePiPackageResolution(record.resolution);
+  const resources = validatePiPackageResources(record.resources);
+  const compatibilityReport = validatePiCompatibilityReport(record.compatibilityReport);
+  const trust = record.trust;
+  if (
+    !resolution ||
+    !resources ||
+    !compatibilityReport ||
+    typeof record.targetApiVersion !== 'string' ||
+    !trust ||
+    typeof trust !== 'object' ||
+    Array.isArray(trust)
+  ) {
+    return undefined;
+  }
+  const trustRecord = trust as Record<string, unknown>;
+  if (
+    trustRecord.codeExecution !== 'trusted' ||
+    (trustRecord.project !== 'trusted' && trustRecord.project !== 'not-required') ||
+    (trustRecord.installScripts !== 'allow' && trustRecord.installScripts !== 'deny')
+  ) {
+    return undefined;
+  }
+  return {
+    resolution,
+    resources,
+    targetApiVersion: record.targetApiVersion,
+    ...(typeof record.observedApiVersion === 'string' ? { observedApiVersion: record.observedApiVersion } : {}),
+    compatibilityReport,
+    trust: {
+      codeExecution: 'trusted',
+      project: trustRecord.project,
+      installScripts: trustRecord.installScripts,
+    },
+  };
+}
+
+function validatePiPackageResolution(raw: unknown): PiPackageResolution | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const record = raw as Record<string, unknown>;
+  if (
+    (record.sourceType !== 'npm' && record.sourceType !== 'git' && record.sourceType !== 'local') ||
+    typeof record.resolvedSpecifier !== 'string' ||
+    typeof record.packageRoot !== 'string' ||
+    typeof record.integrity !== 'string' ||
+    !record.integrity.startsWith('sha512-') ||
+    typeof record.contentIntegrity !== 'string' ||
+    !record.contentIntegrity.startsWith('sha512-') ||
+    typeof record.materializedIntegrity !== 'string' ||
+    !record.materializedIntegrity.startsWith('sha512-')
+  ) {
+    return undefined;
+  }
+  return {
+    sourceType: record.sourceType,
+    resolvedSpecifier: record.resolvedSpecifier,
+    packageRoot: record.packageRoot,
+    integrity: record.integrity,
+    contentIntegrity: record.contentIntegrity,
+    materializedIntegrity: record.materializedIntegrity,
+    ...(typeof record.version === 'string' ? { version: record.version } : {}),
+    ...(typeof record.commit === 'string' ? { commit: record.commit } : {}),
+  };
+}
+
+function validatePiPackageResources(raw: unknown): PiPackageResourceManifest | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const record = raw as Record<string, unknown>;
+  const result = {} as PiPackageResourceManifest;
+  for (const resourceType of ['extensions', 'skills', 'prompts', 'themes'] as const) {
+    const entries = record[resourceType];
+    if (!Array.isArray(entries) || entries.some(entry => typeof entry !== 'string')) return undefined;
+    result[resourceType] = [...new Set(entries as string[])].sort();
+  }
+  return result;
+}
+
+function validatePiCompatibilityReport(raw: unknown): InstalledPiPackageMetadata['compatibilityReport'] | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const record = raw as Record<string, unknown>;
+  if (
+    typeof record.targetApiVersion !== 'string' ||
+    (record.status !== 'pi-compatible' && record.status !== 'pi-partial' && record.status !== 'pi-incompatible') ||
+    !Array.isArray(record.capabilities) ||
+    !Array.isArray(record.diagnostics)
+  ) {
+    return undefined;
+  }
+  const capabilities = record.capabilities.flatMap(capability => {
+    if (!capability || typeof capability !== 'object' || Array.isArray(capability)) return [];
+    const value = capability as Record<string, unknown>;
+    if (
+      typeof value.name !== 'string' ||
+      (value.support !== 'direct' &&
+        value.support !== 'adapted' &&
+        value.support !== 'version-gated' &&
+        value.support !== 'unsupported') ||
+      !Array.isArray(value.evidence) ||
+      !Array.isArray(value.diagnostics)
+    ) {
+      return [];
+    }
+    const evidence = value.evidence.flatMap(item => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
+      const evidenceRecord = item as Record<string, unknown>;
+      if (typeof evidenceRecord.source !== 'string') return [];
+      return [
+        {
+          source: evidenceRecord.source,
+          ...(typeof evidenceRecord.detail === 'string' ? { detail: evidenceRecord.detail } : {}),
+        },
+      ];
+    });
+    return [
+      {
+        name: value.name,
+        support: value.support as InstalledPiPackageMetadata['compatibilityReport']['capabilities'][number]['support'],
+        evidence,
+        diagnostics: validatePiDiagnostics(value.diagnostics),
+      },
+    ];
+  });
+  return {
+    targetApiVersion: record.targetApiVersion as InstalledPiPackageMetadata['compatibilityReport']['targetApiVersion'],
+    status: record.status,
+    capabilities,
+    diagnostics: validatePiDiagnostics(record.diagnostics),
+  };
+}
+
+function validatePiDiagnostics(raw: unknown[]): InstalledPiPackageMetadata['compatibilityReport']['diagnostics'] {
+  return raw.flatMap(item => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
+    const record = item as Record<string, unknown>;
+    if (
+      (record.severity !== 'info' && record.severity !== 'warning' && record.severity !== 'error') ||
+      typeof record.message !== 'string'
+    ) {
+      return [];
+    }
+    return [
+      {
+        severity: record.severity,
+        message: record.message,
+        ...(typeof record.capability === 'string' ? { capability: record.capability } : {}),
+        ...(typeof record.extensionId === 'string' ? { extensionId: record.extensionId } : {}),
+      },
+    ];
+  });
 }
 
 function validatePluginConfigValues(raw: object): Record<string, string | boolean> {

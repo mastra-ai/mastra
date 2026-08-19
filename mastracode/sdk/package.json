@@ -90,6 +90,7 @@
     "@libsql/client": "^0.17.4",
     "@types/node": "22.20.1",
     "eslint": "^10.7.0",
+    "pi-mcp-adapter": "2.26.1",
     "tsdown": "0.22.9",
     "tsx": "catalog:",
     "typescript": "catalog:",

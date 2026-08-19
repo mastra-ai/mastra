@@ -35,9 +35,45 @@ export type PluginProcessorEntries = {
 };
 
 export type PluginScope = 'global' | 'project';
-export type PluginSource = 'local' | 'github';
+export type PluginSource = 'local' | 'github' | 'pi-package';
 export type PluginCompatibility = 'pi';
 export type PluginStatus = 'active' | 'inactive' | 'blocked' | 'load failed' | 'conflicted';
+
+export type PiPackageSourceType = 'npm' | 'git' | 'local';
+export type PiPackageInstallScriptsPolicy = 'deny' | 'allow';
+
+export type PiPackageResolution = {
+  sourceType: PiPackageSourceType;
+  resolvedSpecifier: string;
+  packageRoot: string;
+  integrity: string;
+  contentIntegrity: string;
+  materializedIntegrity?: string;
+  version?: string;
+  commit?: string;
+};
+
+export type PiPackageResourceManifest = {
+  extensions: string[];
+  skills: string[];
+  prompts: string[];
+  themes: string[];
+};
+
+export type PiPackageTrustDecision = {
+  codeExecution: 'trusted';
+  project: 'trusted' | 'not-required';
+  installScripts: PiPackageInstallScriptsPolicy;
+};
+
+export type InstalledPiPackageMetadata = {
+  resolution: PiPackageResolution;
+  resources: PiPackageResourceManifest;
+  targetApiVersion: string;
+  observedApiVersion?: string;
+  compatibilityReport: PiPackageCompatibility;
+  trust: PiPackageTrustDecision;
+};
 
 export type InstalledPluginRecord = {
   enabled: boolean;
@@ -46,9 +82,11 @@ export type InstalledPluginRecord = {
   specifier: string;
   path: string;
   entry: string;
+  entries?: string[];
   ref?: string;
   version?: string;
   config?: Record<string, MastraCodePluginConfigValue>;
+  piPackage?: InstalledPiPackageMetadata;
 };
 
 export type PluginRegistry = {

@@ -108,6 +108,74 @@ describe('plugin registry', () => {
     expect(loadPluginRegistry(registryPath).plugins['github.plugin']?.ref).toBe('main');
   });
 
+  it('round-trips immutable Pi Package metadata without changing native records', () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugins-'));
+    const registryPath = path.join(tempDir, 'plugins.json');
+    const nativeRecord = {
+      enabled: true,
+      source: 'local' as const,
+      specifier: '../native',
+      path: '../native',
+      entry: 'index.ts',
+    };
+    const registry = setPluginRecord(setPluginRecord({ plugins: {} }, 'native', nativeRecord), 'pi-fixture', {
+      enabled: true,
+      source: 'pi-package',
+      compatibility: 'pi',
+      specifier: 'npm:pi-fixture@1.0.0',
+      path: 'sources/pi-packages/npm/pi-fixture/1.0.0-hash',
+      entry: 'index.ts',
+      entries: ['second.ts', 'index.ts'],
+      version: '1.0.0',
+      piPackage: {
+        resolution: {
+          sourceType: 'npm',
+          resolvedSpecifier: 'npm:pi-fixture@1.0.0',
+          packageRoot: 'sources/pi-packages/npm/pi-fixture/1.0.0-hash',
+          integrity: 'sha512-fixture',
+          contentIntegrity: 'sha512-content',
+          materializedIntegrity: 'sha512-materialized',
+          version: '1.0.0',
+        },
+        resources: { extensions: ['second.ts', 'index.ts'], skills: [], prompts: [], themes: [] },
+        targetApiVersion: '0.84.2',
+        observedApiVersion: '^0.84.0',
+        compatibilityReport: {
+          targetApiVersion: '0.84.2',
+          status: 'pi-compatible',
+          capabilities: [
+            {
+              name: 'registerTool',
+              support: 'adapted',
+              evidence: [{ source: 'index.ts' }],
+              diagnostics: [],
+            },
+          ],
+          diagnostics: [],
+        },
+        trust: { codeExecution: 'trusted', project: 'not-required', installScripts: 'deny' },
+      },
+    });
+
+    savePluginRegistry(registryPath, registry);
+    const loaded = loadPluginRegistry(registryPath);
+
+    expect(loaded.plugins.native).toEqual(nativeRecord);
+    expect(loaded.plugins['pi-fixture']).toMatchObject({
+      source: 'pi-package',
+      entries: ['index.ts', 'second.ts'],
+      piPackage: {
+        resolution: {
+          resolvedSpecifier: 'npm:pi-fixture@1.0.0',
+          integrity: 'sha512-fixture',
+          contentIntegrity: 'sha512-content',
+          materializedIntegrity: 'sha512-materialized',
+        },
+        compatibilityReport: { status: 'pi-compatible' },
+      },
+    });
+  });
+
   it('returns empty registries when files are missing or invalid', () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugins-'));
     const missingPath = path.join(tempDir, 'missing.json');

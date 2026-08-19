@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { PluginManager } from '../../manager.js';
 import { savePluginRegistry } from '../../registry.js';
+import { createTrustedPiPackageRecord } from './trusted-package.js';
 
 const fixtureRoot = fileURLToPath(new URL('./fixtures', import.meta.url));
 let tempDir: string | undefined;
@@ -22,20 +23,171 @@ afterEach(async () => {
 });
 
 describe('Pi tool adapter integration', () => {
+  it('rejects uncharacterized Pi Package entries before executing module code', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-pi-trust-integration-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const pluginRoot = path.join(projectRoot, '.mastracode/plugins');
+    const packageRoot = path.join(pluginRoot, 'sources/pi-packages/local/trust-fixture');
+    const markerPath = path.join(tempDir, 'executed');
+    fs.mkdirSync(packageRoot, { recursive: true });
+    fs.writeFileSync(path.join(packageRoot, 'index.ts'), 'export default function () {}');
+    fs.writeFileSync(
+      path.join(packageRoot, 'uncharacterized.ts'),
+      `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(markerPath)}, 'executed'); export default function () {}`,
+    );
+    const record = createTrustedPiPackageRecord(packageRoot, pluginRoot, 'project');
+    record.entry = 'uncharacterized.ts';
+    record.entries = ['uncharacterized.ts'];
+    savePluginRegistry(path.join(pluginRoot, 'plugins.json'), { plugins: { 'fixture.untrusted-entry': record } });
+    manager = new PluginManager({ projectRoot, homeDir: path.join(tempDir, 'home') });
+
+    const loaded = await manager.reload();
+
+    expect(loaded).toContainEqual(
+      expect.objectContaining({
+        id: 'fixture.untrusted-entry',
+        status: 'load failed',
+        error: expect.stringContaining('extension entries do not match'),
+      }),
+    );
+    expect(fs.existsSync(markerPath)).toBe(false);
+  });
+
+  it('rejects materialized package roots replaced by symlinks before executing module code', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-pi-symlink-integration-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const pluginRoot = path.join(projectRoot, '.mastracode/plugins');
+    const packageRoot = path.join(pluginRoot, 'sources/pi-packages/local/symlink-fixture');
+    const outsideRoot = path.join(tempDir, 'outside-package');
+    const markerPath = path.join(tempDir, 'executed');
+    fs.mkdirSync(packageRoot, { recursive: true });
+    fs.writeFileSync(
+      path.join(packageRoot, 'index.ts'),
+      `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(markerPath)}, 'executed'); export default function () {}`,
+    );
+    const record = createTrustedPiPackageRecord(packageRoot, pluginRoot, 'project');
+    fs.renameSync(packageRoot, outsideRoot);
+    fs.symlinkSync(outsideRoot, packageRoot);
+    savePluginRegistry(path.join(pluginRoot, 'plugins.json'), { plugins: { 'fixture.symlink': record } });
+    manager = new PluginManager({ projectRoot, homeDir: path.join(tempDir, 'home') });
+
+    const loaded = await manager.reload();
+
+    expect(loaded).toContainEqual(
+      expect.objectContaining({
+        id: 'fixture.symlink',
+        status: 'load failed',
+        error: expect.stringContaining('path cannot contain symbolic links'),
+      }),
+    );
+    expect(fs.existsSync(markerPath)).toBe(false);
+  });
+
+  it('rejects modified materialized package contents before executing module code', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-pi-integrity-integration-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const pluginRoot = path.join(projectRoot, '.mastracode/plugins');
+    const packageRoot = path.join(pluginRoot, 'sources/pi-packages/local/integrity-fixture');
+    const markerPath = path.join(tempDir, 'executed');
+    fs.mkdirSync(packageRoot, { recursive: true });
+    fs.writeFileSync(path.join(packageRoot, 'index.ts'), 'export default function () {}');
+    const record = createTrustedPiPackageRecord(packageRoot, pluginRoot, 'project');
+    fs.writeFileSync(
+      path.join(packageRoot, 'index.ts'),
+      `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(markerPath)}, 'executed'); export default function () {}`,
+    );
+    savePluginRegistry(path.join(pluginRoot, 'plugins.json'), { plugins: { 'fixture.modified': record } });
+    manager = new PluginManager({ projectRoot, homeDir: path.join(tempDir, 'home') });
+
+    const loaded = await manager.reload();
+
+    expect(loaded).toContainEqual(
+      expect.objectContaining({
+        id: 'fixture.modified',
+        status: 'load failed',
+        error: expect.stringContaining('materialized integrity mismatch'),
+      }),
+    );
+    expect(fs.existsSync(markerPath)).toBe(false);
+  });
+
+  it('rejects modified installed dependencies before executing module code', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-pi-dependency-integrity-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const pluginRoot = path.join(projectRoot, '.mastracode/plugins');
+    const packageRoot = path.join(pluginRoot, 'sources/pi-packages/local/dependency-fixture');
+    const dependencyRoot = path.join(packageRoot, 'node_modules/dependency');
+    const markerPath = path.join(tempDir, 'executed');
+    fs.mkdirSync(dependencyRoot, { recursive: true });
+    fs.writeFileSync(path.join(dependencyRoot, 'index.js'), 'export const value = 1;');
+    fs.writeFileSync(
+      path.join(packageRoot, 'index.ts'),
+      `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(markerPath)}, 'executed'); export default function () {}`,
+    );
+    const record = createTrustedPiPackageRecord(packageRoot, pluginRoot, 'project');
+    fs.writeFileSync(path.join(dependencyRoot, 'index.js'), 'export const value = 2;');
+    savePluginRegistry(path.join(pluginRoot, 'plugins.json'), { plugins: { 'fixture.dependency': record } });
+    manager = new PluginManager({ projectRoot, homeDir: path.join(tempDir, 'home') });
+
+    const loaded = await manager.reload();
+
+    expect(loaded).toContainEqual(
+      expect.objectContaining({
+        id: 'fixture.dependency',
+        status: 'load failed',
+        error: expect.stringContaining('materialized integrity mismatch'),
+      }),
+    );
+    expect(fs.existsSync(markerPath)).toBe(false);
+  });
+
+  it('rejects retargeted installed dependency symlinks before executing module code', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-pi-dependency-link-integrity-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const pluginRoot = path.join(projectRoot, '.mastracode/plugins');
+    const packageRoot = path.join(pluginRoot, 'sources/pi-packages/local/dependency-link-fixture');
+    const nodeModulesRoot = path.join(packageRoot, 'node_modules');
+    const firstTarget = path.join(nodeModulesRoot, '.store/dependency-a');
+    const secondTarget = path.join(nodeModulesRoot, '.store/dependency-b');
+    const dependencyLink = path.join(nodeModulesRoot, 'dependency');
+    const markerPath = path.join(tempDir, 'executed');
+    fs.mkdirSync(firstTarget, { recursive: true });
+    fs.mkdirSync(secondTarget, { recursive: true });
+    fs.writeFileSync(path.join(firstTarget, 'index.js'), 'export const value = 1;');
+    fs.writeFileSync(path.join(secondTarget, 'index.js'), 'export const value = 2;');
+    fs.symlinkSync(path.relative(nodeModulesRoot, firstTarget), dependencyLink);
+    fs.writeFileSync(
+      path.join(packageRoot, 'index.ts'),
+      `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(markerPath)}, 'executed'); export default function () {}`,
+    );
+    const record = createTrustedPiPackageRecord(packageRoot, pluginRoot, 'project');
+    fs.unlinkSync(dependencyLink);
+    fs.symlinkSync(path.relative(nodeModulesRoot, secondTarget), dependencyLink);
+    savePluginRegistry(path.join(pluginRoot, 'plugins.json'), { plugins: { 'fixture.dependency-link': record } });
+    manager = new PluginManager({ projectRoot, homeDir: path.join(tempDir, 'home') });
+
+    const loaded = await manager.reload();
+
+    expect(loaded).toContainEqual(
+      expect.objectContaining({
+        id: 'fixture.dependency-link',
+        status: 'load failed',
+        error: expect.stringContaining('materialized integrity mismatch'),
+      }),
+    );
+    expect(fs.existsSync(markerPath)).toBe(false);
+  });
+
   it('loads a Pi fixture as a runnable owned plugin tool with progress and renderer fallback', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-pi-tool-integration-'));
     const projectRoot = path.join(tempDir, 'project');
-    const registryPath = path.join(projectRoot, '.mastracode/plugins/plugins.json');
+    const pluginRoot = path.join(projectRoot, '.mastracode/plugins');
+    const packageRoot = path.join(pluginRoot, 'sources/pi-packages/local/tool-fixture');
+    fs.cpSync(fixtureRoot, packageRoot, { recursive: true });
+    const registryPath = path.join(pluginRoot, 'plugins.json');
     savePluginRegistry(registryPath, {
       plugins: {
-        'fixture.pi-tool': {
-          enabled: true,
-          source: 'local',
-          compatibility: 'pi',
-          specifier: fixtureRoot,
-          path: fixtureRoot,
-          entry: 'tool-extension.ts',
-        },
+        'fixture.pi-tool': createTrustedPiPackageRecord(packageRoot, pluginRoot, 'project', 'tool-extension.ts'),
       },
     });
     manager = new PluginManager({ projectRoot, homeDir: path.join(tempDir, 'home') });
