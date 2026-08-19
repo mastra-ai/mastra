@@ -198,9 +198,7 @@ const workspace = new Workspace({
 
 The first request from a user creates the sandbox. Later requests with the same user ID reuse it.
 
-For a sandbox with persistent storage, create the filesystem and mount it inside the resolver.
-
-This example creates one Daytona sandbox and one S3 storage prefix per memory thread, then mounts the storage at `/workspace`:
+For a sandbox with persistent storage, create the filesystem and mount it inside the resolver. This example creates one Daytona sandbox and one S3 storage prefix per memory thread, then mounts the storage at `/workspace`:
 
 ```typescript title="src/mastra/workspaces.ts"
 import { MASTRA_THREAD_ID_KEY, type RequestContext } from '@mastra/core/request-context'
