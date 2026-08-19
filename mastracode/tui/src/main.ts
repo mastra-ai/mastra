@@ -177,6 +177,9 @@ const asyncCleanup = (): Promise<void> => {
     } catch {
       // Best-effort — the process is exiting.
     }
+    const diagnosticsShutdown = processMemoryDiagnostics
+      ? stopProcessMemoryDiagnosticsWithTimeout(processMemoryDiagnostics, message => console.warn(message))
+      : undefined;
     const closeSignalsPubSub = (signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
     await Promise.allSettled([mcpManager?.disconnect(), controller?.stopIntervals(), closeSignalsPubSub?.()]);
     // Mastra owns the workspaces and must destroy them to stop retained language
@@ -192,9 +195,7 @@ const asyncCleanup = (): Promise<void> => {
         // Swallow — best-effort cleanup during shutdown. The process is exiting.
       });
     }
-    if (processMemoryDiagnostics) {
-      await stopProcessMemoryDiagnosticsWithTimeout(processMemoryDiagnostics, message => console.warn(message));
-    }
+    await diagnosticsShutdown;
   })();
   return cleanupPromise;
 };
@@ -237,11 +238,11 @@ process.on('exit', () => {
   releaseAllThreadLocks();
 });
 
-// For all termination signals: stop the TUI FIRST (synchronous, disables keyboard
-// protocol immediately) before doing any async cleanup. This ensures the terminal
-// escape sequences are written even if asyncCleanup hangs or the process is killed
-// during cleanup.
+// Start durable diagnostics shutdown before synchronous TUI teardown so a stalled
+// terminal cleanup cannot prevent the final profile capture. The exit handler still
+// provides a failsafe terminal reset if teardown throws.
 const handleTermSignal = () => {
+  void asyncCleanup();
   try {
     tui?.stop();
   } catch {
@@ -305,6 +306,7 @@ function handleFatalError(error: unknown): void {
         `\n\nTo switch back to LibSQL:` +
         `\n  Set MASTRA_STORAGE_BACKEND=libsql or change the backend in /settings\n`,
     );
+    void asyncCleanup();
     try {
       tui?.stop();
     } catch {}
@@ -322,6 +324,7 @@ function handleFatalError(error: unknown): void {
   if (error instanceof Error && error.stack) {
     write(error.stack);
   }
+  void asyncCleanup();
   try {
     tui?.stop();
   } catch {}

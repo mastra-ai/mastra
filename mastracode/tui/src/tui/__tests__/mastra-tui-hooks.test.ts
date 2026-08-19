@@ -231,6 +231,17 @@ describe('MastraTUI hook wiring', () => {
     expect(tui.caffeinateProcess).toBeNull();
   });
 
+  it('tears down only once when stop is called repeatedly', () => {
+    const runSessionEnd = vi.fn().mockResolvedValue(createHookResult());
+    const tui = createBareTui({ runSessionEnd });
+
+    tui.stop();
+    tui.stop();
+
+    expect(runSessionEnd).toHaveBeenCalledOnce();
+    expect((tui.state.ui as { stop: ReturnType<typeof vi.fn> }).stop).toHaveBeenCalledOnce();
+  });
+
   it('does nothing on non-darwin platforms', async () => {
     vi.stubGlobal('process', { platform: 'linux', env: {} });
     const tui = createBareTui();
