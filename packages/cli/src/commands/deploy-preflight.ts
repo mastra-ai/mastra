@@ -11,7 +11,7 @@ import { DB_ENV_VAR_NAMES } from './db/platform-api.js';
 /*  Types                                                             */
 /* ------------------------------------------------------------------ */
 
-export type PreflightIssueCode = 'MISSING_ENV_VAR' | 'LOCAL_STORAGE_PATH';
+export type PreflightIssueCode = 'MISSING_ENV_VAR' | 'LOCALHOST_ENV_VAR' | 'LOCAL_STORAGE_PATH';
 
 /**
  * Structured hint describing how deploy can offer to auto-fix an issue
@@ -351,6 +351,31 @@ function isPlatformProvidedEnvVar(name: string): boolean {
   return ENV_VAR_ALLOWLIST_EXACT.has(name) || ENV_VAR_ALLOWLIST_PREFIXES.some(prefix => name.startsWith(prefix));
 }
 
+/**
+ * True when a connection-string value points at the local machine
+ * (`localhost`, `127.0.0.1`, `::1`, `0.0.0.0`). Such values work in local dev
+ * but can never be reached from the deployed server, so preflight treats a
+ * provider-known env var carrying one as effectively unusable. Values that
+ * don't parse as URLs are left alone — we only flag what we can read.
+ */
+export function isLocalhostUrl(value: string): boolean {
+  let hostname: string;
+  try {
+    hostname = new URL(value).hostname;
+  } catch {
+    return false;
+  }
+  // URL wraps IPv6 hostnames in brackets ("[::1]").
+  const host = hostname.replace(/^\[|\]$/g, '');
+  return (
+    host === 'localhost' ||
+    host.endsWith('.localhost') ||
+    host === '::1' ||
+    host === '0.0.0.0' ||
+    host.startsWith('127.')
+  );
+}
+
 function checkEnvVarNames(
   referenced: Iterable<string>,
   envVars: Record<string, string>,
@@ -359,15 +384,34 @@ function checkEnvVarNames(
   const provided = new Set(Object.keys(envVars));
   const managed = new Set(managedEnvVarNames ?? []);
   const missing: string[] = [];
+  const issues: PreflightIssue[] = [];
 
   for (const name of new Set(referenced)) {
-    if (provided.has(name)) continue;
+    if (provided.has(name)) {
+      // Present but pointing at the local machine: the value works in dev
+      // but can't be reached from the deployed server. Only flagged for
+      // provider-known vars (where we can offer a managed replacement) and
+      // only when no managed database already injects the var at deploy
+      // time (managed values win the platform's env merge, so a localhost
+      // value in the env file is then harmless).
+      const autofix = dbAutofixFor(name);
+      if (autofix && !managed.has(name) && isLocalhostUrl(envVars[name]!)) {
+        issues.push({
+          code: 'LOCALHOST_ENV_VAR',
+          severity: 'warning',
+          message: `${name} in the env file being deployed points at localhost (${envVars[name]}) — the deployed server won't be able to reach it.`,
+          fix: `Point ${name} at a hosted ${autofix.provider} instance, or let \`mastra deploy\` provision a managed ${autofix.provider} for this environment.`,
+          autofix,
+        });
+      }
+      continue;
+    }
     if (managed.has(name)) continue;
     if (isPlatformProvidedEnvVar(name)) continue;
     missing.push(name);
   }
 
-  if (missing.length === 0) return [];
+  if (missing.length === 0) return issues;
 
   missing.sort();
 
@@ -375,7 +419,6 @@ function checkEnvVarNames(
   // can attach an autofix hint (`create-managed-database`) — the deploy command
   // then offers inline provisioning. Everything else stays in the single
   // aggregated text warning.
-  const issues: PreflightIssue[] = [];
   const unprovisioned: string[] = [];
   for (const name of missing) {
     const autofix = dbAutofixFor(name);
