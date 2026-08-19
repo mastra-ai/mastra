@@ -468,11 +468,14 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
 /**
  * Reset a pooled workdir that a new session just claimed: the previous
  * session's branch and dirty state must not leak into the new session, so
- * force-checkout the default branch and drop all local modifications. When
- * the claimed VM was reaped and re-provisioned there is no checkout yet and
- * this is a no-op (the clone path handles it). A wedged checkout falls back
- * to wiping the workdir so `materializeRepo` re-clones inside the same VM
- * instead of permanently failing the session.
+ * force-checkout the default branch, drop all local modifications, and delete
+ * every other local branch (a surviving branch would otherwise hand the next
+ * session for the same branch the previous session's stale tip instead of a
+ * fresh fork from the base branch). When the claimed VM was reaped and
+ * re-provisioned there is no checkout yet and this is a no-op (the clone path
+ * handles it). A wedged checkout falls back to wiping the workdir so
+ * `materializeRepo` re-clones inside the same VM instead of permanently
+ * failing the session.
  */
 export async function recycleClaimedWorkdir(
   sandbox: MaterializationSandbox,
@@ -492,10 +495,26 @@ export async function recycleClaimedWorkdir(
     `git -C ${w} checkout -f ${shellQuote(defaultBranch)} && git -C ${w} reset --hard && git -C ${w} clean -fdx`,
     { phase: 'claimed workdir recycle' },
   );
-  if (recycle.exitCode === 0) return;
+  let failure = recycle;
+  if (recycle.exitCode === 0) {
+    // Ref names cannot contain spaces or shell metacharacters (git rejects
+    // them), so word-splitting the for-each-ref output is safe. `update-ref -d`
+    // instead of `branch -D` so deletion never trips over "not fully merged"
+    // checks; `--no-deref` so a symbolic ref pointing at the default branch
+    // deletes the symref itself rather than following it and deleting the
+    // default branch. Broken loose refs are skipped by for-each-ref and
+    // handled by the collision fallback in `checkoutSessionBranch`.
+    const sweep = await sh(
+      sandbox,
+      `set -e; for ref in $(git -C ${w} for-each-ref --format='%(refname)' refs/heads); do [ "$ref" = ${shellQuote(`refs/heads/${defaultBranch}`)} ] || git -C ${w} update-ref --no-deref -d "$ref"; done`,
+      { phase: 'claimed workdir branch sweep' },
+    );
+    if (sweep.exitCode === 0) return;
+    failure = sweep;
+  }
   const wipe = await sh(sandbox, `rm -rf ${w}`);
   if (wipe.exitCode !== 0) {
-    throw new MaterializeError(`Failed to recycle claimed sandbox workdir: ${recycle.stderr}`, 'clone-failed');
+    throw new MaterializeError(`Failed to recycle claimed sandbox workdir: ${failure.stderr}`, 'clone-failed');
   }
 }
 
@@ -557,11 +576,47 @@ async function checkoutSessionBranchImpl(
       // Same rule as above: uncommitted work in the tree blocks the switch
       // to the new branch. Leave the checkout on its current branch.
       if (isBlockedByLocalWork(fetch)) return;
-      throw classifyGitFailure(fetch, 'clone-failed');
+      if (!isBranchCollision(fetch)) throw classifyGitFailure(fetch, 'clone-failed');
+      // The branch exists even though the show-ref probe missed it: either a
+      // concurrent materialization of this session created it between the
+      // probe and `checkout -b` (adopt it), or a reused sandbox carries a
+      // broken loose ref the probe cannot resolve (replace it and retry —
+      // "already exists" means the fetch half succeeded, so FETCH_HEAD is
+      // set).
+      const adopt = await sh(sandbox, `git -C ${shellQuote(workdir)} checkout ${shellQuote(branch)}`);
+      if (adopt.exitCode === 0 || isBlockedByLocalWork(adopt)) return;
+      const drop = await sh(
+        sandbox,
+        // `--no-deref` so a broken symref is deleted itself instead of git
+        // following it to some other branch. `update-ref -d` can still refuse
+        // a broken ref; fall back to removing the loose ref file (branch
+        // passed isValidGitRef, so the interpolation inside the double quotes
+        // is inert).
+        `git -C ${shellQuote(workdir)} update-ref --no-deref -d refs/heads/${shellQuote(branch)} || rm -f -- "$(git -C ${shellQuote(workdir)} rev-parse --absolute-git-dir)/refs/heads/${branch}"`,
+      );
+      if (drop.exitCode !== 0) throw classifyGitFailure(fetch, 'clone-failed');
+      const retry = await sh(sandbox, `git -C ${shellQuote(workdir)} checkout -b ${shellQuote(branch)} FETCH_HEAD`, {
+        timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+        phase: 'branch checkout retry',
+      });
+      if (retry.exitCode !== 0) {
+        if (isBlockedByLocalWork(retry)) return;
+        throw classifyGitFailure(retry, 'clone-failed');
+      }
     }
   } finally {
     await sh(sandbox, `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(cleanUrl(repoFullName))}`);
   }
+}
+
+/**
+ * True when `git checkout -b` failed only because the branch ref already
+ * exists — the collision Factory hits when a pooled sandbox carries a ref the
+ * show-ref probe could not see (broken loose ref) or a concurrent
+ * materialization created the branch after the probe ran.
+ */
+function isBranchCollision(result: SandboxCommandResult): boolean {
+  return /a branch named .* already exists/i.test(`${result.stderr || ''}\n${result.stdout || ''}`);
 }
 
 /**
