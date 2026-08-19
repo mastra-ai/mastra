@@ -500,7 +500,7 @@ interface ActiveThreadRun {
 
 #### `init()`
 
-Initialize shared storage, workspace services, and configured interval handlers. Repeated calls reuse the same initialization promise.
+Initialize shared storage and propagate runtime services to agents. Configured workspaces initialize lazily when used. Repeated calls reuse the same initialization promise.
 
 ```typescript
 await controller.init()
