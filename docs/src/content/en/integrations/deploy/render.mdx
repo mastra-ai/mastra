@@ -9,12 +9,13 @@ description: "Run distributed Mastra agent pipelines with Render Workflows"
 
 This guide is the distributed model: each stage is its own Render task. Reviews can run in parallel, use different compute, and retry without repeating the rest of the pipeline.
 
-Choose the model that matches the app:
+Choose the deployment path that fits your application:
 
-- **Mastra API:** deploy it as a Render web service.
-- **One Mastra workflow:** run that workflow inside a single Render task.
-- **Distributed pipeline (this guide):** split stages into Render tasks when they need independent compute, retries, parallel execution, or observability.
+- **Mastra API**: Deploy Mastra's [server](/docs/server/overview) as a web service with a public endpoint. The [Web Services guide](https://render.com/docs/web-services?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra) explains how to deploy custom code or a supported [server adapter](/docs/server/server-adapters).
+- **Mastra workflow**: Run an entire Mastra workflow within one task. Render controls the outer run, while Mastra manages its steps and state. See [Defining Workflow Tasks](https://render.com/docs/workflows-defining?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra) for configuration details.
+- **Distributed agent operations**: Give each operation its own compute plan, timeout, and retry policy. Render Workflows handles the execution queue and provides run observability.
 
+This guide builds an editorial pipeline that reviews a draft from three perspectives in parallel, then passes the feedback to an editor agent. Use the links above if you want to deploy a Mastra API or execute an entire Mastra workflow as one task.
 ## How Render Workflows works with Mastra
 
 Mastra supplies the agents. Render Workflows is the execution boundary around them.
