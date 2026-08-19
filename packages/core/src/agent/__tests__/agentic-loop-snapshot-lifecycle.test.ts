@@ -15,7 +15,7 @@ import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import type { WorkflowRunState } from '../../workflows';
 import { Agent } from '../agent';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
+import { convertArrayToReadableStream, getSingleDummyResponseModel, MockLanguageModelV2 } from './mock-model';
 
 const mockFindUser = vi.fn().mockImplementation(async (data: { name: string }) => {
   return { name: data.name, email: 'dero@mail.com' };
@@ -92,11 +92,14 @@ function summarizeRuns(runs: { workflowName: string; runId: string; snapshot: st
 
 describe('agentic-loop snapshot lifecycle', () => {
   it('pins a resolved root agent version in the snapshot and restores it on resume', async () => {
+    const storedVersionModel = createMockModel();
     const agent = new Agent({
       id: 'versioned-agent',
       name: 'Versioned Agent',
       instructions: 'You find users.',
-      model: createMockModel(),
+      // The code-defined model is intentionally legacy/unsupported. Public
+      // validation must run against the resolved stored version's model.
+      model: getSingleDummyResponseModel('v1'),
       tools: { findUserTool: createFindUserTool() },
     });
 
@@ -104,6 +107,7 @@ describe('agentic-loop snapshot lifecycle', () => {
     const applyStoredOverrides = vi.fn(async (source: Agent, selector: { versionId: string } | { status: string }) => {
       const versionId = 'versionId' in selector ? selector.versionId : publishedVersionId;
       const fork = source.__fork();
+      fork.__updateModel({ model: storedVersionModel });
       fork.__setRawConfig({ ...(source.toRawConfig() ?? {}), resolvedVersionId: versionId });
       return fork;
     });
