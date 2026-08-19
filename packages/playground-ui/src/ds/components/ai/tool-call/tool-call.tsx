@@ -4,13 +4,15 @@ import { createContext, useContext, useEffect, useState } from 'react';
 
 import { Card } from '../../Card';
 import { Code } from '../../Code';
+import { HighlightedTokenLine } from '../../Code/highlighted-code';
+import { useHighlightedCode } from '../../Code/use-highlighted-code';
 import { CodeBlock } from '../../CodeBlock';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../Collapsible';
 import { CopyButton } from '../../CopyButton';
 import { Shimmer } from '../../Shimmer';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../Tooltip';
 import { Txt } from '../../Txt';
-import { highlightCodeLines, languageForPath } from './tool-call-highlight';
+import { languageForPath } from './tool-call-language';
 import { presentTool } from './tool-presentation';
 import { cn } from '@/lib/utils';
 
@@ -312,15 +314,15 @@ function ToolPayloadSection({ label, value }: { label: 'Input' | 'Output'; value
       <Txt as="div" variant="ui-xs" className="bg-surface2 text-neutral4 px-3 py-2 font-medium">
         {label}
       </Txt>
-      <div className="group/payload bg-surface1 relative min-w-0">
+      <div className="group/payload bg-surface3 relative min-w-0 dark:bg-black">
         {payload.isJson ? (
           <Code
             code={payload.text}
             lang="json"
-            className="bg-surface1 text-neutral5 m-0 max-h-60 min-w-0 overflow-auto px-3 py-2 font-mono text-xs leading-normal whitespace-pre"
+            className="text-neutral5 m-0 max-h-60 min-w-0 overflow-auto px-3 py-2 font-mono text-xs leading-normal whitespace-pre"
           />
         ) : (
-          <pre className="bg-surface1 text-neutral5 m-0 max-h-60 min-w-0 overflow-auto px-3 py-2 font-mono text-xs leading-normal break-words whitespace-pre-wrap">
+          <pre className="text-neutral5 m-0 max-h-60 min-w-0 overflow-auto px-3 py-2 font-mono text-xs leading-normal break-words whitespace-pre-wrap">
             {payload.text}
           </pre>
         )}
@@ -349,17 +351,33 @@ function boundedLines(value: string): { lines: string[]; hidden: number } {
 
 function DiffSide({ lines, side }: { lines: string[]; side: keyof typeof DIFF_SIDES }) {
   const { sign, row, gutter } = DIFF_SIDES[side];
+  const highlighted = useHighlightedCode(lines.join('\n'), lang);
+  const highlightedLines = highlighted?.code.split('\n');
+
   return (
     <>
-      {lines.map((line, index) => (
-        <div key={index} className={cn('flex whitespace-pre', row)}>
-          <span className={cn('w-5 shrink-0 text-center opacity-70 select-none', gutter)}>{sign}</span>
-          <span
-            className="text-icon6 [&_span]:font-inherit [&_span]:leading-inherit flex-1 pr-2.5 [&_span]:text-inherit dark:[&_span]:![background-color:var(--shiki-dark-bg)] dark:[&_span]:![color:var(--shiki-dark)]"
-            dangerouslySetInnerHTML={{ __html: line || '&nbsp;' }}
-          />
-        </div>
-      ))}
+      {lines.map((line, index) => {
+        const tokenLine = highlighted?.tokens[index];
+        const highlightedLine = highlightedLines?.[index];
+        const canReuseHighlight =
+          tokenLine !== undefined && highlightedLine !== undefined && line.startsWith(highlightedLine);
+
+        return (
+          <div key={index} className={cn('flex whitespace-pre', row)}>
+            <span className={cn('w-5 shrink-0 text-center opacity-70 select-none', gutter)}>{sign}</span>
+            <span className="text-icon6 flex-1 pr-2.5">
+              {canReuseHighlight ? (
+                <>
+                  <HighlightedTokenLine tokens={tokenLine} />
+                  {line.slice(highlightedLine.length)}
+                </>
+              ) : (
+                line || '\u00a0'
+              )}
+            </span>
+          </div>
+        );
+      })}
     </>
   );
 }

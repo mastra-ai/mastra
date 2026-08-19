@@ -4,13 +4,12 @@ import { useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { ScrollArea } from '@/ds/components/ScrollArea';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { cn } from '@/lib/utils';
 
 export type TaskListItem = TaskItem;
 
 export const TaskListContainer = ({ className, ...props }: ComponentProps<'section'>) => (
-  <section className={cn('rounded-2xl border border-border2/40 bg-surface3 px-3 py-2.5', className)} {...props} />
+  <section className={cn('rounded-[22px] border border-border2/40 bg-surface3 px-3 py-2.5', className)} {...props} />
 );
 
 export const TaskListHeader = ({ className, ...props }: ComponentProps<typeof CollapsibleTrigger>) => (
@@ -20,12 +19,6 @@ export const TaskListHeader = ({ className, ...props }: ComponentProps<typeof Co
   />
 );
 
-const barColors: Record<TaskListItem['status'], string> = {
-  completed: 'bg-positive1',
-  in_progress: 'bg-warning1',
-  pending: 'bg-surface6',
-};
-
 export interface TaskListProgressProps extends Omit<ComponentProps<'span'>, 'children'> {
   tasks: TaskListItem[];
 }
@@ -33,33 +26,18 @@ export interface TaskListProgressProps extends Omit<ComponentProps<'span'>, 'chi
 export const TaskListProgress = ({ tasks, className, ...props }: TaskListProgressProps) => {
   const completed = tasks.filter(task => task.status === 'completed').length;
   return (
-    <TooltipProvider delayDuration={0}>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <span
-              role="progressbar"
-              aria-label="Task completion"
-              aria-valuemin={0}
-              aria-valuemax={tasks.length}
-              aria-valuenow={completed}
-              className={cn('ml-auto flex h-4 w-fit max-w-40 shrink-0 items-center gap-1 overflow-hidden', className)}
-              {...props}
-            >
-              {tasks.map(task => (
-                <span
-                  key={task.id}
-                  className={cn('h-full w-0.5 min-w-px shrink rounded-full', barColors[task.status])}
-                />
-              ))}
-            </span>
-          }
-        />
-        <TooltipContent>
-          {completed}/{tasks.length} completed
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <span
+      role="progressbar"
+      aria-label="Task completion"
+      aria-valuemin={0}
+      aria-valuemax={tasks.length}
+      aria-valuenow={completed}
+      aria-valuetext={`${completed} of ${tasks.length} tasks completed`}
+      className={cn('ml-auto shrink-0 text-ui-xs leading-ui-xs text-neutral4 tabular-nums', className)}
+      {...props}
+    >
+      {completed}/{tasks.length}
+    </span>
   );
 };
 
@@ -157,7 +135,7 @@ export const TaskList = ({
           <TaskListProgress tasks={tasks} />
         </TaskListHeader>
         <CollapsibleContent>
-          <ScrollArea maxHeight="8rem" viewPortClassName="pr-1" className="mt-1">
+          <ScrollArea maxHeight="16rem" viewPortClassName="pr-1" className="mt-1">
             <ul className="space-y-1">
               {tasks.map(task => (
                 <TaskListRow

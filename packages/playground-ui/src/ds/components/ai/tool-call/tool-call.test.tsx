@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
 import type { ReactNode, SVGProps } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ToolCoinIcon } from '../../../icons/ToolCoinIcon';
+import * as highlightModule from '../../CodeEditor/highlight';
 import { TooltipProvider } from '../../Tooltip';
 import { Tool, ToolCall, ToolCallListItem, ToolContent, ToolHeader, ToolIcon } from './tool-call';
 
@@ -329,7 +330,7 @@ describe('ToolCall', () => {
       expect(tool.textContent).not.toContain('\u001b');
     });
 
-    it('shows the current bounded edit diff', () => {
+    it('shows the bounded edit diff before loading syntax colors asynchronously', async () => {
       renderToolCall(
         <ToolCall
           toolName="string_replace"
@@ -343,6 +344,43 @@ describe('ToolCall', () => {
       const diff = screen.getByRole('group', { name: 'File change' });
       expect(diff.textContent).toContain('const a = 1;');
       expect(diff.textContent).toContain('const a = 2;');
+      expect(diff.querySelector('[style*="--shiki-dark"]')).toBeNull();
+
+      await waitFor(() => expect(diff.querySelector('.shiki-token')).not.toBeNull());
+    });
+
+    it('keeps the full streamed diff line visible while appended text is still highlighting', async () => {
+      const initialInput = { path: 'src/a.ts', old_string: 'before', new_string: 'const a' };
+      const { rerender } = renderToolCall(
+        <ToolCall toolName="string_replace" input={initialInput} status="success" defaultOpen />,
+      );
+
+      const diff = screen.getByRole('group', { name: 'File change' });
+      await waitFor(() => expect(diff.querySelector('.shiki-token')).not.toBeNull());
+
+      let resolveHighlight: ((tokens: Awaited<ReturnType<typeof highlightModule.highlight>>) => void) | undefined;
+      const highlightSpy = vi.spyOn(highlightModule, 'highlight').mockImplementationOnce(
+        () =>
+          new Promise(resolve => {
+            resolveHighlight = resolve;
+          }),
+      );
+
+      rerender(
+        <TooltipProvider delay={0}>
+          <ToolCall
+            toolName="string_replace"
+            input={{ ...initialInput, new_string: 'const a = 1' }}
+            status="success"
+            defaultOpen
+          />
+        </TooltipProvider>,
+      );
+
+      expect(diff.textContent).toContain('const a = 1');
+
+      await act(async () => resolveHighlight?.([[{ content: 'const a = 1' }]]));
+      highlightSpy.mockRestore();
     });
 
     it('shows an AST edit as a file diff', () => {
