@@ -100,117 +100,117 @@ Basic filtering examples:
 
 <Tabs>
   <TabItem value="mongodb" label="MongoDB">
-```ts
-// Simple equality filter
-const results = await mongoVector.query({
-  indexName: 'embeddings',
-  queryVector: embedding,
-  topK: 10,
-  filter: {
-    source: 'article1.txt',
-  },
-})
+    ```ts
+    // Simple equality filter
+    const results = await mongoVector.query({
+      indexName: 'embeddings',
+      queryVector: embedding,
+      topK: 10,
+      filter: {
+        source: 'article1.txt',
+      },
+    })
 
-// Numeric comparison
-const results = await mongoVector.query({
-  indexName: 'embeddings',
-  queryVector: embedding,
-  topK: 10,
-  filter: {
-    price: { $gt: 100 },
-  },
-})
+    // Numeric comparison
+    const results = await mongoVector.query({
+      indexName: 'embeddings',
+      queryVector: embedding,
+      topK: 10,
+      filter: {
+        price: { $gt: 100 },
+      },
+    })
 
-// Multiple conditions
-const results = await mongoVector.query({
-  indexName: 'embeddings',
-  queryVector: embedding,
-  topK: 10,
-  filter: {
-    category: 'electronics',
-    price: { $lt: 1000 },
-    inStock: true,
-  },
-})
+    // Multiple conditions
+    const results = await mongoVector.query({
+      indexName: 'embeddings',
+      queryVector: embedding,
+      topK: 10,
+      filter: {
+        category: 'electronics',
+        price: { $lt: 1000 },
+        inStock: true,
+      },
+    })
 
-// Array operations
-const results = await mongoVector.query({
-  indexName: 'embeddings',
-  queryVector: embedding,
-  topK: 10,
-  filter: {
-    tags: { $in: ['sale', 'new'] },
-  },
-})
+    // Array operations
+    const results = await mongoVector.query({
+      indexName: 'embeddings',
+      queryVector: embedding,
+      topK: 10,
+      filter: {
+        tags: { $in: ['sale', 'new'] },
+      },
+    })
 
-// Logical operators
-const results = await mongoVector.query({
-  indexName: 'embeddings',
-  queryVector: embedding,
-  topK: 10,
-  filter: {
-    $or: [{ category: 'electronics' }, { category: 'accessories' }],
-    $and: [{ price: { $gt: 50 } }, { price: { $lt: 200 } }],
-  },
-})
-```
+    // Logical operators
+    const results = await mongoVector.query({
+      indexName: 'embeddings',
+      queryVector: embedding,
+      topK: 10,
+      filter: {
+        $or: [{ category: 'electronics' }, { category: 'accessories' }],
+        $and: [{ price: { $gt: 50 } }, { price: { $lt: 200 } }],
+      },
+    })
+    ```
   </TabItem>
 
   <TabItem value="pgvector" label="pgVector">
-```ts
-// Simple equality filter
-const results = await pgVector.query({
-  indexName: 'embeddings',
-  queryVector: embedding,
-  topK: 10,
-  filter: {
-    source: 'article1.txt',
-  },
-})
+    ```ts
+    // Simple equality filter
+    const results = await pgVector.query({
+      indexName: 'embeddings',
+      queryVector: embedding,
+      topK: 10,
+      filter: {
+        source: 'article1.txt',
+      },
+    })
 
-// Numeric comparison
-const results = await pgVector.query({
-  indexName: 'embeddings',
-  queryVector: embedding,
-  topK: 10,
-  filter: {
-    price: { $gt: 100 },
-  },
-})
+    // Numeric comparison
+    const results = await pgVector.query({
+      indexName: 'embeddings',
+      queryVector: embedding,
+      topK: 10,
+      filter: {
+        price: { $gt: 100 },
+      },
+    })
 
-// Multiple conditions
-const results = await pgVector.query({
-  indexName: 'embeddings',
-  queryVector: embedding,
-  topK: 10,
-  filter: {
-    category: 'electronics',
-    price: { $lt: 1000 },
-    inStock: true,
-  },
-})
+    // Multiple conditions
+    const results = await pgVector.query({
+      indexName: 'embeddings',
+      queryVector: embedding,
+      topK: 10,
+      filter: {
+        category: 'electronics',
+        price: { $lt: 1000 },
+        inStock: true,
+      },
+    })
 
-// Array operations
-const results = await pgVector.query({
-  indexName: 'embeddings',
-  queryVector: embedding,
-  topK: 10,
-  filter: {
-    tags: { $in: ['sale', 'new'] },
-  },
-})
+    // Array operations
+    const results = await pgVector.query({
+      indexName: 'embeddings',
+      queryVector: embedding,
+      topK: 10,
+      filter: {
+        tags: { $in: ['sale', 'new'] },
+      },
+    })
 
-// Logical operators
-const results = await pgVector.query({
-  indexName: 'embeddings',
-  queryVector: embedding,
-  topK: 10,
-  filter: {
-    $or: [{ category: 'electronics' }, { category: 'accessories' }],
-    $and: [{ price: { $gt: 50 } }, { price: { $lt: 200 } }],
-  },
-})
-```
+    // Logical operators
+    const results = await pgVector.query({
+      indexName: 'embeddings',
+      queryVector: embedding,
+      topK: 10,
+      filter: {
+        $or: [{ category: 'electronics' }, { category: 'accessories' }],
+        $and: [{ price: { $gt: 50 } }, { price: { $lt: 200 } }],
+      },
+    })
+    ```
   </TabItem>
 </Tabs>
 
@@ -227,7 +227,7 @@ Common use cases for metadata filtering:
 
 Vector stores differ in _when_ they apply a metadata filter, which affects how filtered queries scale.
 
-MongoDB can evaluate the filter inside the vector index itself, so a filtered query stays about as fast as an unfiltered one. This requires declaring the fields you filter on in `filterFields` when you create the index:
+MongoDB can evaluate the filter inside the vector index itself. This keeps the query on a single round trip to `$vectorSearch`, so it avoids the pre-filter pass that collects matching document IDs and the 16 MB BSON limit that pass is subject to. Declaring the fields you filter on in `filterFields` when you create the index is what enables it:
 
 ```ts
 // Declare the metadata fields you want to filter on
@@ -259,7 +259,7 @@ const results = await pgVector.query({
 })
 ```
 
-Postgres vector indexes (HNSW and IVFFlat) can't restrict that search to rows matching a condition. So when a filter is present, pgVector computes distances across the matching rows, sorts them, and returns the top `topK`. Results are exact, but the work grows with the number of rows the filter matches. Indexing the metadata column speeds up row retrieval; the distance comparisons still happen per row.
+Postgres vector indexes (HNSW and IVFFlat) can't restrict that search to rows matching a condition. When a filter is present, pgVector instead compares the query vector against every matching row and returns the closest `topK`. Results are exact, but the work grows with the number of rows the filter matches. Indexing the metadata column speeds up row retrieval. The distance comparisons still happen per row.
 
 ### Vector Query Tool
 

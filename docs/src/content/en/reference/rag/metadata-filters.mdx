@@ -329,7 +329,7 @@ const results = await store.query({
 
 ### MongoDB
 
-- Requires MongoDB Atlas or a deployment with MongoDB Vector Search enabled; the store queries with the `$vectorSearch` aggregation stage.
+- Requires MongoDB Atlas or a deployment with MongoDB Vector Search enabled. The store queries with the `$vectorSearch` aggregation stage.
 - Uses MongoDB query syntax directly for metadata filters, including nested fields and arrays in metadata.
 - Supports the comparison, array, logical, and element operators in the tables above, plus `$regex` and `$size`. `$size` takes an integer, as in `{ tags: { $size: 3 } }`.
 - Use `filter` to match fields in the metadata object and `documentFilter` to match the original document text. You can combine them in a single query.
