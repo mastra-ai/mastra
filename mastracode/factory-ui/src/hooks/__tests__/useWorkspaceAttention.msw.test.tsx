@@ -16,7 +16,6 @@ function useActivityAttention({ workspaceIds }: { workspaceIds: string[] }) {
   const runningByPath = useActiveRunResources({
     agentControllerId: controllerId,
     resourceIds: workspaceIds,
-    baseUrl: TEST_BASE_URL,
   });
   return { runningByPath, ...useWorkspaceAttention(runningByPath) };
 }

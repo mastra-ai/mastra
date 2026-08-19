@@ -69,7 +69,6 @@ export function UserSessionsSection() {
   const runningBySessionId = useActiveRunResources({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceIds: sessions.map(session => session.sessionId),
-    baseUrl,
   });
   const { attentionByPath: attentionBySessionId, clearAttention } = useWorkspaceAttention(runningBySessionId);
 

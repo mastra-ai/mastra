@@ -68,7 +68,6 @@ export function WorkspacesSection() {
   const runningByPath = useActiveRunResources({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceIds: workspaceIds,
-    baseUrl,
   });
   const queryClient = useQueryClient();
   // The server re-derives session titles at the end of a run.

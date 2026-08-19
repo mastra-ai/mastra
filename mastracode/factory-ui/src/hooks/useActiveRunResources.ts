@@ -1,12 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 
+import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import { createAgentControllerClient, requireAgentController } from '../ui/domains/chat/services/agentControllerClient';
 
 interface ActiveRunResourcesOptions {
   agentControllerId: string;
   resourceIds: string[];
-  baseUrl?: string;
 }
 
 /**
@@ -17,8 +17,8 @@ interface ActiveRunResourcesOptions {
 export function useActiveRunResources({
   agentControllerId,
   resourceIds,
-  baseUrl,
 }: ActiveRunResourcesOptions): Record<string, boolean> {
+  const { baseUrl } = useApiConfig();
   const query = useQuery({
     queryKey: queryKeys.agentControllerActivity(agentControllerId),
     queryFn: async () => {
