@@ -192,20 +192,6 @@ Remote mounts may require `s3fs`, `gcsfuse`, or `blobfuse2` inside the sandbox. 
 
 If a sandbox mount is unavailable or fails, the workspace remains usable. File tools continue to access the provider through its SDK, but commands can't see that path. Mastra describes these providers to the agent as available through file tools only.
 
-When command access is required, initialize the workspace and inspect each mount:
-
-```typescript
-await workspace.init()
-
-for (const [path, mount] of workspace.sandbox?.mounts?.entries ?? []) {
-  if (mount.state !== 'mounted') {
-    console.error(`Mount ${path}: ${mount.state}`, mount.error)
-  }
-}
-```
-
-Also test the path from inside the sandbox. For a remote `/workspace` mount, run `ls /workspace`. With `LocalSandbox`, run `ls workspace` from its `workingDirectory`.
-
 ## Multi-tenant filesystems
 
 The `filesystem` option accepts a resolver when storage should vary by request, user, role, or tenant:
