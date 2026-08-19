@@ -1897,6 +1897,8 @@ describe('createGithubPullRequestReconciler', () => {
     await reconcile([repositoryTarget]);
 
     expect(fetchPullRequest).toHaveBeenCalledTimes(2);
+    await reconcile([repositoryTarget]);
+    expect(fetchPullRequest).toHaveBeenCalledTimes(2);
     await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
       metadata: { state: 'closed', merged: true },
     });
