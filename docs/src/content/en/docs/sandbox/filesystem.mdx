@@ -237,16 +237,6 @@ With a filesystem resolver, write tools remain registered because the provider i
 
 For `LocalFilesystem` entries in a composite, keep `contained: true`, which is the default. Set `contained: false` only when unrestricted host filesystem access is intentional.
 
-## Lifecycle
-
-Filesystem providers initialize on first use. Most applications can rely on this lazy behavior.
-
-Call `workspace.init()` during startup when provider credentials or connectivity failures need to surface before requests are served. Explicit initialization also prepares static sandbox mounts.
-
-`autoIndexPaths` only runs during explicit initialization. When it's configured, call `workspace.init()` once during application startup. See [auto-indexing](/docs/sandbox/search#auto-indexing).
-
-Mount and per-file indexing failures may be logged without causing initialization to fail. If every mount or indexed file is required, verify availability before accepting requests.
-
 ## Related
 
 - [Sandboxes](/docs/sandbox/overview)
