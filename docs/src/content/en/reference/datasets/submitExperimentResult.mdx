@@ -24,7 +24,7 @@ const result = await dataset.submitExperimentResult({
 })
 ```
 
-The item must be visible at the experiment's pinned dataset version. Submissions to a non-external experiment throw `EXPERIMENT_NOT_EXTERNAL`; submissions after finalization throw `EXPERIMENT_ALREADY_FINALIZED`.
+The item must be visible at the experiment's pinned dataset version. Submissions to a non-external experiment throw `EXPERIMENT_NOT_EXTERNAL`. Submissions after finalization throw `EXPERIMENT_ALREADY_FINALIZED`.
 
 ## Parameters
 
@@ -101,7 +101,7 @@ The item must be visible at the experiment's pinned dataset version. Submissions
 
 ## Returns
 
-Returns a `Promise<ExperimentResult>` — the persisted result row, including its `id`, `attempt`, and timestamps.
+Returns a `Promise<ExperimentResult>`, the persisted result row, including its `id`, `attempt`, and timestamps.
 
 ## Related
 

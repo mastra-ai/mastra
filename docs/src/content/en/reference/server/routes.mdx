@@ -396,7 +396,7 @@ On authenticated servers, the read routes require the `stored-workflows:read` pe
 
 ### External experiment routes
 
-Use these routes when an external system (for example a Temporal workflow) owns experiment execution and Mastra acts as the system of record. All three are safe to retry: create is idempotent on the caller-supplied `id`, result submission upserts on `(experimentId, itemId, attempt)`, and finalize returns the stored record if the experiment is already completed.
+Use these routes when an external system (for example a Temporal workflow) owns experiment execution and Mastra acts as the system of record. All three are safe to retry. Create is idempotent on the caller-supplied `id`. Result submission upserts on `(experimentId, itemId, attempt)`. Finalize returns the stored record if the experiment is already completed.
 
 #### Create external experiment request body
 
@@ -455,13 +455,13 @@ Returns the persisted experiment result row.
 
 #### Finalize experiment
 
-`POST /api/datasets/:datasetId/experiments/:experimentId/finalize` takes no body. The server computes per-item counts from the persisted result rows — `succeededCount` (at least one attempt without an error), `failedCount` (every attempt errored), `skippedCount` (never submitted) — and marks the experiment `completed`. Returns the updated experiment record.
+`POST /api/datasets/:datasetId/experiments/:experimentId/finalize` takes no body. The server computes per-item counts from the persisted result rows and marks the experiment `completed`: `succeededCount` (at least one attempt without an error), `failedCount` (every attempt errored), and `skippedCount` (never submitted). Returns the updated experiment record.
 
 #### External experiment error responses
 
 | Status | Condition |
 | - | - |
-| `400` | Experiment is not external (`EXPERIMENT_NOT_EXTERNAL`), or the dataset has no items at the pinned version (`EXPERIMENT_NO_ITEMS`) |
+| `400` | Experiment isn't external (`EXPERIMENT_NOT_EXTERNAL`), or the dataset has no items at the pinned version (`EXPERIMENT_NO_ITEMS`) |
 | `404` | Dataset, experiment, or dataset item not found |
 | `409` | Caller-supplied experiment `id` already exists for a different dataset or a non-external experiment (`EXPERIMENT_ID_CONFLICT`), or a result was submitted after finalization (`EXPERIMENT_ALREADY_FINALIZED`) |
 

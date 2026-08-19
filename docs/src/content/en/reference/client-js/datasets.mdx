@@ -7,7 +7,7 @@ packages:
 
 # Datasets API
 
-The Datasets API exposes Mastra's dataset and experiment routes from `MastraClient`. This page covers the external experiment methods, which let a runner you own (for example a Temporal workflow) use Mastra as the experiment system of record: create an experiment, submit per-item results over HTTP, and finalize when done.
+The Datasets API exposes Mastra's dataset and experiment routes from `MastraClient`. This page covers the external experiment methods, which let a runner you own (for example a Temporal workflow) use Mastra as the experiment system of record. Your runner creates an experiment and submits per-item results over HTTP, then calls finalize when the run is done.
 
 All three methods are safe to retry:
 
@@ -52,7 +52,7 @@ const experiment = await client.finalizeExperiment({
 
 ## createExternalExperiment()
 
-Creates an experiment with `targetType: 'external'`. No runner is spawned; the dataset version is pinned at creation time.
+Creates an experiment with `targetType: 'external'`. No runner is spawned, and the dataset version is pinned at creation time.
 
 <PropertiesTable
   content={[
@@ -190,13 +190,13 @@ Submits (or re-submits) one item result for an external experiment. Submitting t
 ]}
 />
 
-Returns `Promise<DatasetExperimentResult>` — the persisted result row.
+Returns `Promise<DatasetExperimentResult>`, the persisted result row.
 
-Submitting to a non-external experiment returns a `400`; submitting after finalization returns a `409`.
+Submitting to a non-external experiment returns a `400`. Submitting after finalization returns a `409`.
 
 ## finalizeExperiment()
 
-Marks an external experiment completed. The server computes per-item counts from the persisted result rows — `succeededCount` (at least one attempt without an error), `failedCount` (every attempt errored), `skippedCount` (never submitted) — so the caller keeps no bookkeeping. Idempotent: finalizing an already-completed experiment returns the stored record.
+Marks an external experiment completed. The server computes per-item counts from the persisted result rows, so the caller keeps no bookkeeping: `succeededCount` (at least one attempt without an error), `failedCount` (every attempt errored), and `skippedCount` (never submitted). Idempotent: finalizing an already-completed experiment returns the stored record.
 
 <PropertiesTable
   content={[
@@ -213,7 +213,7 @@ Marks an external experiment completed. The server computes per-item counts from
 ]}
 />
 
-Returns `Promise<DatasetExperiment>` — the updated experiment record.
+Returns `Promise<DatasetExperiment>`, the updated experiment record.
 
 ## Related
 
