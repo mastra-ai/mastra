@@ -1,5 +1,21 @@
 # @mastra/core
 
+## 1.60.1-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`88d14ca`](https://github.com/mastra-ai/mastra/commit/88d14cac008582a618fecc3d5c7fd3bdf4f6ddc3))
+
+- Fixed concurrent resume() calls on the same suspended workflow run executing downstream steps more than once. A resume now atomically claims the run before executing anything, so only one caller continues a given suspension. Losing callers throw WORKFLOW_RESUME_ALREADY_CLAIMED without running any steps. Fixes #20443 ([#21725](https://github.com/mastra-ai/mastra/pull/21725))
+
+- Workflow state updates now support an optional expectedStatus guard, so a status change is only applied when the stored run is in an expected state. This is what makes concurrent workflow resumes safe. ([#21725](https://github.com/mastra-ai/mastra/pull/21725))
+
+- Resume conflicts now return 409 Conflict. When a suspended workflow run has already been resumed by another caller, the resume endpoints respond with 409 instead of a generic error. ([#21725](https://github.com/mastra-ai/mastra/pull/21725))
+
+- Fixed streaming output processors reacting to errors that the agent recovered from. Previously, an error raised by a single model call (for example a transient rate limit delivered in the response stream) was passed to every output processor immediately, before error processor retries or fallback models had a chance to recover. Processors now only see an error once the run has actually failed on it, and they see it exactly once. ([#21738](https://github.com/mastra-ai/mastra/pull/21738))
+
+- Fixed the streamed reply splitting differently from the stored one. When the agent's turn was interrupted mid-run — a message sent while it was working, a resumed tool approval, a state signal — the live stream kept everything in one assistant message while storage had already sealed it and opened a new one. Coming back to the thread (tab switch, reload) replayed the second half as an extra copy. The stream now closes its message at the same boundary the run loop does. ([#21841](https://github.com/mastra-ai/mastra/pull/21841))
+
 ## 1.60.0
 
 ### Minor Changes
