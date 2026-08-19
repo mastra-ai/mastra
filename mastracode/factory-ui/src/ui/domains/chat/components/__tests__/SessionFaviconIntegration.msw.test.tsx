@@ -59,6 +59,24 @@ describe('Session favicon tracks the session lifecycle', () => {
     });
   });
 
+  describe('when the chat renders but the sandbox warm-up is still running', () => {
+    it('keeps the initializing indicator until the warm-up finishes', async () => {
+      const session = stubPreparingSession({ ensurePending: true });
+      const { client } = renderThread();
+
+      session.finishWorkspace();
+      await waitFor(() => expect(screen.getByTestId('thread-body')).toBeInTheDocument());
+
+      // Messages are loaded and the stepper is gone, but the sandbox is still
+      // provisioning — the favicon must not claim the session is ready.
+      expect(faviconHref()).toBe('/favicon-session-initializing.svg');
+
+      session.finishEnsure();
+      await waitForMutationsIdle(client);
+      await waitFor(() => expect(faviconHref()).toBe('/favicon-session-awaiting.svg'));
+    });
+  });
+
   describe('when the workspace is ready and the agent is idle', () => {
     it('flips to the blue awaiting-user indicator', async () => {
       const session = stubPreparingSession();

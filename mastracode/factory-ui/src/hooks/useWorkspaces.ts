@@ -94,6 +94,20 @@ function invalidateSessionQueries(
   }
 }
 
+const UNMATERIALIZED_POLL_MS = 15_000;
+
+/**
+ * Poll gently while any listed session has not been materialized yet. The
+ * sidebar status dots derive "initializing" from `materializedAt`, which the
+ * server stamps out-of-band (first agent exec, warm-up, another tab) — with no
+ * poll the cached `null` never resolved and dots wedged on "initializing".
+ */
+export function sessionsRefetchInterval(data: WorkspacesData | undefined): number | false {
+  if (!data) return false;
+  const unresolved = [...data.workspaces, ...data.userSessions].some(session => !session.materializedAt);
+  return unresolved ? UNMATERIALIZED_POLL_MS : false;
+}
+
 export function useWorkspacesQuery(projectRepositoryId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery({
@@ -101,6 +115,7 @@ export function useWorkspacesQuery(projectRepositoryId: string | undefined) {
     queryFn: projectRepositoryId
       ? ({ signal }): Promise<WorkspacesData> => loadWorkspaces(baseUrl, projectRepositoryId, signal)
       : skipToken,
+    refetchInterval: query => sessionsRefetchInterval(query.state.data),
   });
 }
 

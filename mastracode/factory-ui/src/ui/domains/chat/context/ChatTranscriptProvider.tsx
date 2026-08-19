@@ -118,7 +118,7 @@ function ChatTranscriptValueProvider({
   loadMore: LoadMoreHistory;
 }) {
   const connection = useChatConnection();
-  const { sessionError, sandboxPreparing } = useChatSessionContext();
+  const { sessionError, sandboxPreparing, sandboxWarming } = useChatSessionContext();
   const messagesInitializing = useChatMessagesInitializing();
   const messagesError = useChatMessagesError();
   const { transcript, reset, localUser, resolvePrompt, clearPending, pushNotice } = transcriptApi;
@@ -146,7 +146,10 @@ function ChatTranscriptValueProvider({
   const faviconState = faviconStateFor({
     hasThread: Boolean(effectiveThreadId),
     sessionError: Boolean(sessionError),
-    initializing: sandboxPreparing || messagesInitializing,
+    // Messages load in parallel with the sandbox warm-up, so the favicon stays
+    // on `initializing` while the warm-up is still provisioning/cloning even
+    // after the chat surface renders — same ground truth as the prepare stepper.
+    initializing: sandboxPreparing || sandboxWarming === true || messagesInitializing,
     threadError: messagesError || connection.status === 'error',
     busy,
   });

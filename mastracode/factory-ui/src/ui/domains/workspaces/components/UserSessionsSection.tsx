@@ -70,11 +70,16 @@ export function UserSessionsSection() {
     sessionIds: sessions.map(session => session.sessionId),
     enabled: sessionsEnabled,
   });
-  const { attentionByPath: attentionBySessionId, clearAttention } = useWorkspaceAttention(runningBySessionId);
-
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(repository?.projectRepositoryId) });
   };
+  // Refetch on run end (same as WorkspacesSection): the first run materializes
+  // the session's sandbox, and without this the cached `materializedAt: null`
+  // kept the row's status dot stuck on "initializing".
+  const { attentionByPath: attentionBySessionId, clearAttention } = useWorkspaceAttention(
+    runningBySessionId,
+    invalidate,
+  );
 
   const deleteSession = useMutation({
     mutationFn: async (session: FactoryUserSession) => {
