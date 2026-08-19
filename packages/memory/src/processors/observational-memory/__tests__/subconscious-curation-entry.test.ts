@@ -10,6 +10,7 @@ import { Memory, Subconscious } from '../../../index';
 import { extractStructuredValues } from '../extraction-runner';
 import { ObservationalMemory } from '../observational-memory';
 import { SubconsciousCaptureExtractor } from '../subconscious/capture';
+import type { ObservationalMemoryModel } from '../types';
 
 const scope = ['org:acme', 'resource:user-42', 'thread:alpha'];
 const semanticInfrastructure = {
@@ -17,7 +18,7 @@ const semanticInfrastructure = {
   embedder: {} as MastraEmbeddingModel<string>,
 };
 
-function createMemory(options?: { omModel?: any | false }) {
+function createMemory(options?: { omModel?: ObservationalMemoryModel | false }) {
   return new Memory({
     storage: new InMemoryStore(),
     ...semanticInfrastructure,
@@ -102,7 +103,15 @@ describe('Memory.runCuration', () => {
 
     expect(prompt).toContain("links only from the entity's own records");
     expect(prompt).toContain('knowledge_write_node_content');
+    // Distinctive substrings from each paragraph so deleting either the mandate or the
+    // cursor protocol fails this test, plus ordering: the mandate composes BEFORE the
+    // terminal cursor-protocol paragraph.
+    const mandateMarker = 'touched by a KnowledgeRecord in the current worklist';
+    const cursorMarker = 'Do not emit a completion marker when no KnowledgeRecord was fully processed';
+    expect(prompt).toContain(mandateMarker);
+    expect(prompt).toContain(cursorMarker);
     expect(prompt).toContain('Your final response must end with the marker');
+    expect(prompt.indexOf(mandateMarker)).toBeLessThan(prompt.indexOf(cursorMarker));
   });
 
   it('composes canonical identifier and URL preservation into capture extraction', async () => {
