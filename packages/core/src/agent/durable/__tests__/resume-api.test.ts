@@ -528,7 +528,7 @@ describe('Resume API', () => {
       );
 
       await emitAbortEvent(testPubsub, runId, { steps: [], text: 'partial' });
-      await vi.waitFor(() => expect(abortPayload).toBeDefined());
+      await vi.waitFor(() => expect(abortPayload).toEqual({ steps: [], text: 'partial' }));
 
       result.cleanup();
       await testPubsub.close();
