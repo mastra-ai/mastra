@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -8,6 +9,7 @@ import { VoiceCallButton } from '../components/voice-call-button';
 import { VoiceCallPanel } from '../components/voice-call-panel';
 import { useVoiceCall } from '../hooks/use-voice-call';
 import { connectionDetails } from './fixtures/connection-details';
+import { legacySystemPackages, liveKitUnavailableSystemPackages } from './fixtures/system-packages';
 import { StudioConfigContext } from '@/domains/configuration';
 import { server } from '@/test/msw-server';
 
@@ -81,12 +83,14 @@ const renderHarness = () => {
     <StudioConfigContext.Provider
       value={{ baseUrl: BASE_URL, headers: {}, apiPrefix: undefined, isLoading: false, setConfig: () => {} }}
     >
-      <QueryClientProvider client={queryClient}>
-        <VoiceHarness onCallStarted={onCallStarted} />
-      </QueryClientProvider>
+      <MastraReactProvider baseUrl={BASE_URL}>
+        <QueryClientProvider client={queryClient}>
+          <VoiceHarness onCallStarted={onCallStarted} />
+        </QueryClientProvider>
+      </MastraReactProvider>
     </StudioConfigContext.Provider>,
   );
-  return { ...view, invalidateSpy, onCallStarted };
+  return { ...view, invalidateSpy, onCallStarted, queryClient };
 };
 
 function textStreamReader(id: string, chunks: string[], attributes: Record<string, string> = {}) {
@@ -110,6 +114,57 @@ afterEach(() => {
 });
 
 describe('voice call', () => {
+  describe('when the default LiveKit connection route is unavailable', () => {
+    it('disables the start control', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(liveKitUnavailableSystemPackages)),
+      );
+
+      const { queryClient } = renderHarness();
+
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      const startButton = screen.getByRole<HTMLButtonElement>('button', { name: 'Start voice call' });
+      expect(startButton.disabled).toBe(false);
+      expect(startButton.getAttribute('aria-disabled')).toBe('true');
+    });
+
+    it('does not request connection details', async () => {
+      const onConnectionDetails = vi.fn();
+      server.use(
+        http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(liveKitUnavailableSystemPackages)),
+        http.post(`${BASE_URL}/voice/livekit/connection-details`, () => {
+          onConnectionDetails();
+          return HttpResponse.json(connectionDetails);
+        }),
+      );
+
+      const { queryClient } = renderHarness();
+      const startButton = screen.getByRole<HTMLButtonElement>('button', { name: 'Start voice call' });
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      fireEvent.click(startButton);
+
+      expect(onConnectionDetails).not.toHaveBeenCalled();
+      expect(fakeRooms).toHaveLength(0);
+    });
+  });
+
+  it('still starts a call against a server that does not report LiveKit availability', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(legacySystemPackages)),
+      http.post(`${BASE_URL}/voice/livekit/connection-details`, () => HttpResponse.json(connectionDetails)),
+    );
+
+    const { queryClient } = renderHarness();
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    const startButton = screen.getByRole<HTMLButtonElement>('button', { name: 'Start voice call' });
+
+    expect(startButton.getAttribute('aria-disabled')).toBeNull();
+    fireEvent.click(startButton);
+
+    await waitFor(() => expect(fakeRooms).toHaveLength(1));
+  });
+
   it('starts a call: fetches connection details, joins the room, and enables the mic', async () => {
     const onConnectionDetails = vi.fn<(body: unknown) => void>();
     server.use(
@@ -119,7 +174,8 @@ describe('voice call', () => {
       }),
     );
 
-    const { invalidateSpy, onCallStarted } = renderHarness();
+    const { invalidateSpy, onCallStarted, queryClient } = renderHarness();
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     fireEvent.click(screen.getByTestId('voice-call-button'));
 
     await waitFor(() => expect(fakeRooms).toHaveLength(1));
@@ -202,7 +258,8 @@ describe('voice call', () => {
       ),
     );
 
-    renderHarness();
+    const { queryClient } = renderHarness();
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     fireEvent.click(screen.getByTestId('voice-call-button'));
 
     await waitFor(() => expect(screen.queryByTestId('voice-call-panel')).toBeNull());
