@@ -4,12 +4,12 @@
 
 Fixed a cancelled durable agent run starting anyway.
 
-Aborting a run that had not started yet, for example a turn queued behind the thread's active run, recorded the intent but never applied it: durable agents do not go through the code path that consumes it, so the run began and executed to completion after the user cancelled it. `DurableAgent.stream()`, `resume()` and `generate()` now honor that intent when they install the run's abort controller, ending the run the same way an already-aborted `abortSignal` does.
+Cancelling a run that had not started yet, for example a turn still queued behind the thread's active run, had no effect: the run began when its turn came and streamed a full reply after the user had already stopped it. It now ends immediately instead, and `onAbort` fires. Resuming a run that was cancelled the same way behaves the same, and `onAbort` passed to `resume()` now reaches the caller.
 
 ```ts
 agent.abortRunStream(runId);
-// then, once the queue drains:
+// later, once the queue drains:
 const { output } = await agent.stream('...', { runId });
-// before: the run executed normally
-// after: the run aborts immediately and onAbort fires
+// before: the run streamed a full reply
+// after: the run ends right away and onAbort fires
 ```

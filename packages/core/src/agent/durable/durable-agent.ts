@@ -2067,6 +2067,13 @@ export class DurableAgent<
         scheduleAutoCleanup();
       },
       onSuspended: resolvedOptions.onSuspended,
+      onAbort: async data => {
+        try {
+          await (resolvedOptions.onAbort as ((event: any) => void | Promise<void>) | undefined)?.(data);
+        } finally {
+          scheduleAutoCleanup();
+        }
+      },
       closeOnSuspend: (resolvedOptions as any)[CLOSE_ON_SUSPEND] === true,
       structuredOutput: entry.structuredOutput as any,
       outputProcessors: entry.outputProcessors,
