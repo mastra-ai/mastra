@@ -1,6 +1,7 @@
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 
 import type { PiExtensionGeneration } from './types.js';
+import { createPiExtensionContext } from './ui-adapter.js';
 
 export interface PiSessionEventSource {
   subscribe(listener: (event: AgentControllerEvent) => void | Promise<void>): () => void;
@@ -15,8 +16,8 @@ export type PiEventAdapterOptions = {
   hasUI?: boolean;
 };
 
-function context(options: PiEventAdapterOptions) {
-  return { cwd: options.cwd, mode: options.mode ?? 'tui', hasUI: options.hasUI ?? true };
+function context(generation: PiExtensionGeneration, options: PiEventAdapterOptions) {
+  return createPiExtensionContext(generation, { cwd: options.cwd, mode: options.mode ?? 'tui' });
 }
 
 function mapControllerEvent(event: AgentControllerEvent): Array<{ name: string; payload: Record<string, unknown> }> {
@@ -235,7 +236,7 @@ export class PiEventAdapter {
         const results = await generation.emit(
           'agent_settled',
           { type: 'agent_settled', reason: event.reason },
-          context(this.#options),
+          context(generation, this.#options),
         );
         if (results.some(result => result !== undefined)) {
           generation.addDiagnostic(
@@ -306,7 +307,7 @@ export class PiEventAdapter {
     payload: Record<string, unknown>,
   ): Promise<void> {
     try {
-      await generation.emit(name, normalizeEventPayload(generation, name, payload), context(this.#options));
+      await generation.emit(name, normalizeEventPayload(generation, name, payload), context(generation, this.#options));
     } catch {
       // Generation.emit attributes the failure. Continue so sibling extensions still receive the event.
     }

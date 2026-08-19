@@ -12,6 +12,7 @@ import type {
 import { getPiActiveToolRequest } from './actions-adapter.js';
 import { runPiToolResultHooks } from './hook-adapter.js';
 import type { PiExtensionGeneration } from './types.js';
+import { createPiExtensionContext } from './ui-adapter.js';
 
 export type PiProcessorAdapters = {
   input: InputProcessor[];
@@ -32,8 +33,8 @@ function isMessage(value: unknown): value is MastraDBMessage {
   );
 }
 
-function extensionContext(cwd: string, abortSignal?: AbortSignal) {
-  return { cwd, mode: 'tui' as const, hasUI: true, signal: abortSignal };
+function extensionContext(generation: PiExtensionGeneration, cwd: string, abortSignal?: AbortSignal) {
+  return createPiExtensionContext(generation, { cwd, mode: 'tui', signal: abortSignal });
 }
 
 async function emitIsolated(
@@ -148,7 +149,7 @@ async function processInitialInput(
   args: ProcessInputArgs,
 ): Promise<ProcessInputResult> {
   let messages = cloneMessagesForPiBoundary(generation, args.messages);
-  const context = extensionContext(cwd, args.abortSignal);
+  const context = extensionContext(generation, cwd, args.abortSignal);
 
   const userIndex = messages.findLastIndex(message => message.role === 'user');
   if (userIndex >= 0) {
@@ -249,7 +250,7 @@ async function processProviderRequest(
     generation,
     'before_provider_request',
     { type: 'before_provider_request', payload: prompt },
-    extensionContext(cwd, args.abortSignal),
+    extensionContext(generation, cwd, args.abortSignal),
   )) {
     if (isProviderPrompt(result)) {
       prompt = result as typeof prompt;
@@ -278,7 +279,7 @@ async function processFinalMessages(
     generation,
     'message_end',
     { type: 'message_end', message: original },
-    extensionContext(cwd, abortSignal),
+    extensionContext(generation, cwd, abortSignal),
   )) {
     if (!isRecord(result) || result.message === undefined) continue;
     if (!isMessage(result.message)) {
@@ -345,7 +346,7 @@ async function processProviderResponse(
       chunks,
       fromCache: args.fromCache,
     },
-    extensionContext(cwd, args.abortSignal),
+    extensionContext(generation, cwd, args.abortSignal),
   );
 }
 
@@ -470,7 +471,7 @@ export function createPiProcessorAdapters(generation: PiExtensionGeneration, cwd
           ),
           isError: false,
         },
-        extensionContext(cwd, args.abortSignal),
+        extensionContext(generation, cwd, args.abortSignal),
       );
       if (hooked.isError) {
         generation.addDiagnostic(

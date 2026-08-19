@@ -15,6 +15,8 @@ import type { PluginPathOptions } from './paths.js';
 import { PiCommandAdapter } from './pi/command-adapter.js';
 import type { PiCommandDispatchOptions, PiOwnedCommand } from './pi/command-adapter.js';
 import type { PiExtensionGeneration, PiRuntimeActions } from './pi/types.js';
+import { bindPiUiHost } from './pi/ui-adapter.js';
+import type { PiUiHost } from './pi/ui-adapter.js';
 import { loadPluginRegistry, removePluginRecord, savePluginRegistry, setPluginRecord } from './registry.js';
 import type { LoadedPlugin, PluginContribution, PluginProcessorEntries, PluginScope } from './types.js';
 
@@ -59,6 +61,8 @@ export class PluginManager {
   private readonly toolRenderConfigs = new Map<string, NonNullable<LoadedPlugin['renderConfigs']>[string]>();
   private readonly piCommands = new PiCommandAdapter();
   private piCommandReservedNames: string[] = [];
+  private piUiHost: PiUiHost | undefined;
+  private readonly piUiCleanups = new Map<PiExtensionGeneration, () => Promise<void>>();
   private readonly watchedLocalEntries = new Set<string>();
   private readonly localEntryVersions = new Map<string, string>();
   /** Last known git HEAD per GitHub checkout, kept current by the poller. */
@@ -127,10 +131,14 @@ export class PluginManager {
         for (const generation of newGenerations) {
           actionsByGeneration.set(generation, this.piRuntimeActions?.(generation));
         }
-        for (const generation of newGenerations) await generation.bind(actionsByGeneration.get(generation));
+        for (const generation of newGenerations) {
+          await generation.bind(actionsByGeneration.get(generation));
+          this.bindPiGenerationUi(generation);
+        }
       } catch (error) {
         const candidateGenerations = candidates.flatMap(plugin => (plugin.piGeneration ? [plugin.piGeneration] : []));
         await Promise.all(candidateGenerations.map(generation => generation.invalidate()));
+        for (const generation of candidateGenerations) this.piUiCleanups.delete(generation);
         throw error;
       }
       const previousGenerations = this.getPiGenerations();
@@ -140,6 +148,7 @@ export class PluginManager {
         );
       } catch (error) {
         await Promise.all(newGenerations.map(generation => generation.invalidate()));
+        for (const generation of newGenerations) this.piUiCleanups.delete(generation);
         await this.notifyPiGenerationListeners(previousGenerations).catch(() => undefined);
         throw error;
       }
@@ -151,6 +160,7 @@ export class PluginManager {
         [...this.piCommandReservedNames, ...nativeCommandNames],
       );
       await Promise.all(retiredGenerations.map(generation => generation.invalidate()));
+      for (const generation of retiredGenerations) this.piUiCleanups.delete(generation);
       this.loadedPlugins = plugins;
       this.loadedRuntimeGeneration = this.runtimeGeneration;
       this.updateLocalEntryWatchers(plugins);
@@ -193,9 +203,20 @@ export class PluginManager {
     return this.piCommands.dispatch(name, args, options);
   }
 
+  async setPiUiHost(host: PiUiHost | undefined): Promise<void> {
+    if (this.reloadInFlight) await this.reloadInFlight;
+    const cleanups = [...this.piUiCleanups.values()];
+    this.piUiCleanups.clear();
+    this.piUiHost = host;
+    await Promise.allSettled(cleanups.map(cleanup => cleanup()));
+    if (!host) return;
+    for (const generation of this.getPiGenerations()) this.bindPiGenerationUi(generation);
+  }
+
   async stopPiExtensions(message?: string): Promise<void> {
     const generations = this.loadedPlugins.flatMap(plugin => (plugin.piGeneration ? [plugin.piGeneration] : []));
     await Promise.all(generations.map(generation => generation.invalidate(message)));
+    for (const generation of generations) this.piUiCleanups.delete(generation);
   }
 
   async dispose(): Promise<void> {
@@ -255,6 +276,11 @@ export class PluginManager {
     return this.loadedPlugins.flatMap(plugin =>
       plugin.status === 'active' && plugin.piGeneration?.active ? [plugin.piGeneration] : [],
     );
+  }
+
+  private bindPiGenerationUi(generation: PiExtensionGeneration): void {
+    if (!this.piUiHost || this.piUiCleanups.has(generation)) return;
+    this.piUiCleanups.set(generation, bindPiUiHost(generation, this.piUiHost));
   }
 
   private reconcilePiGenerations(

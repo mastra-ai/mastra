@@ -1,3 +1,4 @@
+import { renderPiMessage } from './render-adapter.js';
 import type { PiExtensionGeneration } from './types.js';
 
 export interface PiMessageSession {
@@ -12,6 +13,12 @@ export interface PiMessageSession {
 }
 
 export type PiMessageDelivery = 'steer' | 'followUp';
+
+function customMessageType(message: unknown): string | undefined {
+  if (typeof message !== 'object' || message === null) return undefined;
+  const value = message as { customType?: unknown };
+  return typeof value.customType === 'string' && value.customType.length > 0 ? value.customType : undefined;
+}
 
 function textFromMessage(message: unknown): string {
   if (typeof message === 'string') return message;
@@ -36,7 +43,12 @@ export class PiMessageAdapter {
   async sendMessage(message: unknown, options: { triggerTurn?: boolean } = {}): Promise<void> {
     this.generation.assertActive();
     const session = this.#session();
-    const text = textFromMessage(message);
+    const customType = customMessageType(message);
+    const renderer = customType ? this.generation.registrations.messageRenderers.get(customType) : undefined;
+    const text =
+      customType && renderer
+        ? (renderPiMessage(this.generation, customType, renderer, message) ?? textFromMessage(message))
+        : textFromMessage(message);
     if (options.triggerTurn) {
       this.generation.addDiagnostic(
         'warning',

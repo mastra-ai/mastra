@@ -3,7 +3,7 @@
  */
 import { execFileSync } from 'node:child_process';
 
-import { CombinedAutocompleteProvider, Spacer, Text } from '@earendil-works/pi-tui';
+import { CombinedAutocompleteProvider, Container, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SlashCommand } from '@earendil-works/pi-tui';
 import { getUserId } from '@mastra/code-sdk/utils/project';
 import { loadCustomCommands } from '@mastra/code-sdk/utils/slash-command-loader';
@@ -282,13 +282,17 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
   state.ui.addChild(state.editorContainer);
   state.idleCounter = new IdleCounterComponent();
   state.editorContainer.addChild(state.idleCounter);
+  state.piUiWidgets = new Container();
+  state.editorContainer.addChild(state.piUiWidgets);
   state.editorContainer.addChild(state.editor);
 
-  // Add footer with two-line status
+  // Add footer with host-owned status lines
   state.statusLine = new Text('', 0, 0);
   state.memoryStatusLine = new Text('', 0, 0);
+  state.piUiStatusLine = new Text('', 0, 0);
   state.footer.addChild(state.statusLine);
   state.footer.addChild(state.memoryStatusLine);
+  state.footer.addChild(state.piUiStatusLine);
   state.ui.addChild(state.footer);
   updateStatusLine(state);
   refreshModelAuthStatus();
@@ -475,6 +479,17 @@ export function setupAutocomplete(state: TUIState): void {
   const modes = state.controller.listModes();
   if (modes.length > 1) {
     slashCommands.push({ name: 'mode', description: 'Switch agent mode' });
+  }
+
+  state.pluginManager?.setPiCommandReservedNames([
+    ...slashCommands.map(command => command.name),
+    ...state.customSlashCommands.map(command => command.name),
+  ]);
+  for (const command of state.pluginManager?.getPiCommands() ?? []) {
+    slashCommands.push({
+      name: command.name,
+      description: command.description ?? `Pi extension command: ${command.originalName}`,
+    });
   }
 
   // Add custom slash commands to the list with // prefixes so they remain

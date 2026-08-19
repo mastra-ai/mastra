@@ -36,6 +36,34 @@ describe('Pi message adapter', () => {
     ).toBe(true);
   });
 
+  it('renders supported custom messages to bounded text and falls back with diagnostics', async () => {
+    const { adapter, generation, session } = fixture();
+    const supported = vi.fn(() => ({ render: () => ['\u001b[31mrendered status\u001b[0m'] }));
+    generation.registrations.messageRenderers.set('status', supported);
+
+    await adapter.sendMessage({ customType: 'status', text: 'fallback status' });
+    expect(session.sendNotificationSignal).toHaveBeenLastCalledWith(
+      expect.objectContaining({ message: 'rendered status' }),
+    );
+    expect(supported).toHaveBeenCalledWith(
+      expect.objectContaining({ customType: 'status' }),
+      { expanded: false },
+      expect.any(Object),
+    );
+
+    generation.registrations.messageRenderers.set(
+      'unsupported',
+      vi.fn(() => ({ node: 'rich' })),
+    );
+    await adapter.sendMessage({ customType: 'unsupported', text: 'safe fallback' });
+    expect(session.sendNotificationSignal).toHaveBeenLastCalledWith(
+      expect.objectContaining({ message: 'safe fallback' }),
+    );
+    expect(generation.compatibility.diagnostics).toEqual(
+      expect.arrayContaining([expect.objectContaining({ capability: 'registerMessageRenderer:text-fallback' })]),
+    );
+  });
+
   it('diagnoses unsupported no-turn delivery and stale actions', async () => {
     const { adapter, generation, session } = fixture();
     await adapter.sendUserMessage('do not persist', { triggerTurn: false });

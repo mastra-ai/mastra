@@ -296,6 +296,19 @@ export async function dispatchSlashCommand(
         );
         return true;
       }
+      const piCommand = state.pluginManager?.getPiCommands().find(candidate => candidate.name === command);
+      if (piCommand) {
+        try {
+          const result = await state.pluginManager!.dispatchPiCommand(command, rawArgsText, {
+            mode: 'tui',
+            cwd: state.projectInfo.rootPath,
+          });
+          if (typeof result === 'string' && result.trim()) showInfo(state, result);
+        } catch (error) {
+          showError(state, error instanceof Error ? error.message : String(error));
+        }
+        return true;
+      }
       showError(state, `Unknown command: ${command}`);
       return true;
     }

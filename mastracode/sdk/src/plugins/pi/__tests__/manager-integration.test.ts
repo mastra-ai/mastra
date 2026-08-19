@@ -8,6 +8,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PluginManager } from '../../manager.js';
 import { savePluginRegistry } from '../../registry.js';
 import type { PluginRegistry } from '../../types.js';
+import { createPiExtensionContext } from '../ui-adapter.js';
+import type { PiExtensionUiContext, PiUiHost } from '../ui-adapter.js';
 
 let tempDir: string | undefined;
 let manager: PluginManager | undefined;
@@ -117,6 +119,45 @@ describe('PluginManager Pi generation integration', () => {
     expect(fixture.manager.getLoadedPlugins().find(plugin => plugin.id === 'fixture.pi')?.piGeneration).toBe(
       pi?.piGeneration,
     );
+  });
+
+  it('binds the UI host before generation listeners and clears retired ownership', async () => {
+    const fixture = createFixture();
+    const first = await fixture.manager.reload();
+    const prior = first.find(plugin => plugin.id === 'fixture.pi')?.piGeneration;
+    expect(prior).toBeDefined();
+
+    const host: PiUiHost = {
+      notify: vi.fn(),
+      setStatus: vi.fn(),
+      setWidget: vi.fn(() => true),
+      select: vi.fn(),
+      confirm: vi.fn(),
+      input: vi.fn(),
+      editor: vi.fn(),
+      getTheme: vi.fn(() => ({})),
+      getEditorText: vi.fn(() => ''),
+      setEditorText: vi.fn(),
+      clearGeneration: vi.fn(),
+    };
+    await fixture.manager.setPiUiHost(host);
+    expect(prior && createPiExtensionContext(prior, { cwd: '/workspace', mode: 'tui' }).hasUI).toBe(true);
+
+    let candidateHadUi = false;
+    fixture.manager.onPiGenerationsReconcile(generations => {
+      const candidate = generations.find(generation => generation !== prior);
+      if (!candidate) return;
+      const context = createPiExtensionContext(candidate, { cwd: '/workspace', mode: 'tui' });
+      candidateHadUi = context.hasUI === true;
+      (context.ui as PiExtensionUiContext).notify('ready');
+    });
+    fs.appendFileSync(path.join(fixture.piRoot, 'index.ts'), '\n// ui replacement\n');
+    const replaced = await fixture.manager.reload();
+    const next = replaced.find(plugin => plugin.id === 'fixture.pi')?.piGeneration;
+
+    expect(candidateHadUi).toBe(true);
+    expect(host.notify).toHaveBeenCalledWith(next, 'ready', 'info');
+    expect(host.clearGeneration).toHaveBeenCalledWith(prior);
   });
 
   it('reconciles session lifecycle before retiring replaced generations', async () => {

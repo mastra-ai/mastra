@@ -79,4 +79,17 @@ describe('askModalQuestion', () => {
     await expect(result).resolves.toBeNull();
     expect(tui.hideOverlay).toHaveBeenCalledTimes(1);
   });
+
+  it('dismisses an active question when its owner is invalidated', async () => {
+    const tui = createTui();
+    const controller = new AbortController();
+    const result = askModalQuestion(tui, { question: 'Continue?', signal: controller.signal });
+
+    controller.abort();
+
+    await expect(result).resolves.toBeNull();
+    expect(tui.hideOverlay).toHaveBeenCalledTimes(1);
+    mocks.lastDialog?.options.onSubmit('late');
+    expect(tui.hideOverlay).toHaveBeenCalledTimes(1);
+  });
 });

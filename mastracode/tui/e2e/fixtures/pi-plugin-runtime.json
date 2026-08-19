@@ -1,0 +1,44 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "rendered custom message: version-one",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "Pi custom message acknowledged."
+      }
+    },
+    {
+      "match": {
+        "userMessage": "Use the Pi runtime probe tool.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_pi_runtime_probe",
+            "name": "pi_runtime_probe",
+            "arguments": {
+              "value": "proof"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "hasToolResult": true,
+        "toolCallId": "call_pi_runtime_probe",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "Pi runtime adapters completed."
+      }
+    }
+  ]
+}

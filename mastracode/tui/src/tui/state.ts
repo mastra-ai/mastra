@@ -269,6 +269,8 @@ export interface TUIState {
   projectInfo: ProjectInfo;
   statusLine?: Text;
   memoryStatusLine?: Text;
+  piUiStatusLine?: Text;
+  piUiWidgets?: Container;
   modelAuthStatus: { hasAuth: boolean; apiKeyEnvVar?: string };
   githubPrGradientAnimator?: GradientAnimator;
   githubPrPollingActive: boolean;

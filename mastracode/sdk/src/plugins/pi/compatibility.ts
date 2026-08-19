@@ -76,6 +76,18 @@ const PI_CAPABILITY_SUPPORT: Readonly<Record<string, PiCapabilitySupport>> = {
   abort: 'adapted',
   getContextUsage: 'adapted',
   getSystemPrompt: 'adapted',
+  'ui:notify': 'adapted',
+  'ui:setStatus': 'adapted',
+  'ui:setWorkingMessage': 'adapted',
+  'ui:setWidget': 'adapted',
+  'ui:select': 'adapted',
+  'ui:confirm': 'adapted',
+  'ui:input': 'adapted',
+  'ui:editor': 'adapted',
+  'ui:getTheme': 'version-gated',
+  'ui:setTheme': 'version-gated',
+  'ui:getEditorText': 'version-gated',
+  'ui:setEditorText': 'version-gated',
 };
 
 const PI_EVENT_SUPPORT: Readonly<Record<string, PiCapabilitySupport>> = {

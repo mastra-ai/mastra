@@ -62,6 +62,35 @@ function renderComponent(component: unknown): string | undefined {
     .trim();
 }
 
+export function renderPiMessage(
+  generation: PiExtensionGeneration,
+  customType: string,
+  renderer: (...args: unknown[]) => unknown,
+  message: unknown,
+): string | undefined {
+  generation.assertActive();
+  generation.recordCapability('registerMessageRenderer');
+  try {
+    const component = renderer(message, { expanded: false }, plainTheme);
+    const text = renderComponent(component);
+    if (text !== undefined) return text;
+    generation.addDiagnostic(
+      'warning',
+      `Pi extension "${generation.extensionId}" message renderer "${customType}" returned an unsupported node; Mastra Code used text fallback.`,
+      'registerMessageRenderer:text-fallback',
+    );
+  } catch (error) {
+    generation.addDiagnostic(
+      'warning',
+      `Pi extension "${generation.extensionId}" message renderer "${customType}" failed; Mastra Code used text fallback: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+      'registerMessageRenderer:text-fallback',
+    );
+  }
+  return undefined;
+}
+
 export function adaptPiToolRenderers(
   generation: PiExtensionGeneration,
   tool: PiRegisteredTool,

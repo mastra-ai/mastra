@@ -78,11 +78,19 @@ describe('Pi tool adapter', () => {
       usage: { input: 1, output: 2 },
       isError: false,
     });
-    expect(execute).toHaveBeenCalledWith('tool-call', { value: 'ok' }, abortController.signal, expect.any(Function), {
-      cwd: '/workspace',
-      mode: 'print',
-      hasUI: false,
-    });
+    expect(execute).toHaveBeenCalledWith(
+      'tool-call',
+      { value: 'ok' },
+      abortController.signal,
+      expect.any(Function),
+      expect.objectContaining({
+        cwd: '/workspace',
+        mode: 'print',
+        hasUI: false,
+        signal: abortController.signal,
+        ui: expect.any(Object),
+      }),
+    );
     expect(updates).toEqual([
       {
         type: 'data-mastracode-tool-progress',

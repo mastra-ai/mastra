@@ -21,6 +21,10 @@ const SIGNAL_PROVIDER_ID = 'e2e-signals';
 const SIGNAL_TOOL_NAME = 'e2e_signal_probe';
 
 let currentTui: unknown;
+let piRuntimePluginDir: string | undefined;
+let piRuntimeManager:
+  | { reload: () => Promise<unknown>; getLoadedPlugins: () => unknown[]; getPiCommands: () => unknown[] }
+  | undefined;
 let hotReloadPluginDir: string | undefined;
 let githubPollSourceDir: string | undefined;
 let githubPollManager: { pollGithubSourcesForUpdates: () => Promise<boolean> } | undefined;
@@ -35,6 +39,8 @@ let githubInstallCorepackHome: string | undefined;
 
 function resetPluginScenarioState(): void {
   currentTui = undefined;
+  piRuntimePluginDir = undefined;
+  piRuntimeManager = undefined;
   hotReloadPluginDir = undefined;
   githubPollSourceDir = undefined;
   githubPollManager = undefined;
@@ -149,6 +155,70 @@ export default defineMastraCodePlugin({
   );
 
   return pluginDir;
+}
+
+function writePiRuntimePlugin(projectDir: string, version: string): string {
+  const pluginDir = join(projectDir, 'fixtures', 'plugins', 'pi-runtime-plugin');
+  mkdirSync(pluginDir, { recursive: true });
+  writeFileSync(
+    join(pluginDir, 'index.ts'),
+    `import { Type } from 'typebox';
+
+export default function (pi) {
+  pi.registerShortcut('ctrl+x', { handler: async () => {} });
+  pi.registerMessageRenderer('runtime-status', message => ({
+    render: () => ['rendered custom message: ' + message.text],
+  }));
+  pi.registerCommand('pi-runtime', {
+    handler: async (_args, ctx) => {
+      ctx.ui.setStatus('runtime', '${version} command-ready');
+      ctx.ui.notify('${version} runtime notification', 'info');
+      const confirmed = await ctx.ui.confirm('Pi runtime dialog', 'Continue the runtime proof?');
+      ctx.ui.setWidget('runtime', ['${version} runtime widget', 'confirmed=' + confirmed]);
+      await ctx.sendMessage({ customType: 'runtime-status', text: '${version}' });
+    },
+  });
+  pi.registerTool({
+    name: 'pi_runtime_probe',
+    label: 'Pi runtime probe',
+    description: 'Exercise Pi runtime UI and progress adapters.',
+    parameters: Type.Object({ value: Type.String({ description: 'Proof value' }) }),
+    execute: async (_toolCallId, params, _signal, onUpdate, ctx) => {
+      ctx.ui.setWorkingMessage('${version} tool-working');
+      ctx.ui.notify('${version} tool notification', 'info');
+      onUpdate?.({ content: [{ type: 'text', text: '${version} progress:' + params.value }] });
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      return { content: [{ type: 'text', text: '${version} result:' + params.value }] };
+    },
+  });
+}
+`,
+  );
+  return pluginDir;
+}
+
+function writePiRuntimeRegistry(projectDir: string, pluginDir: string): void {
+  const registryDir = join(projectDir, '.mastracode', 'plugins');
+  mkdirSync(registryDir, { recursive: true });
+  writeFileSync(
+    join(registryDir, 'plugins.json'),
+    JSON.stringify(
+      {
+        plugins: {
+          'e2e.pi-runtime': {
+            enabled: true,
+            source: 'local',
+            compatibility: 'pi',
+            specifier: pluginDir,
+            path: pluginDir,
+            entry: 'index.ts',
+          },
+        },
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 function writeHotReloadPlugin({ projectDir }: Pick<McE2ePrepareContext, 'projectDir'>, result: string): string {
@@ -661,6 +731,93 @@ export const pluginsScaffoldInstallToolScenario: McE2eScenario = {
     const names = getToolNames(requests);
     if (!names.includes('example_tool')) {
       throw new Error(`Expected provider request to expose scaffolded example_tool. Names: ${names.join(', ')}`);
+    }
+  },
+};
+
+export const piPluginRuntimeScenario: McE2eScenario = {
+  name: 'pi-plugin-runtime',
+  description: 'Executes bounded Pi runtime tool, command, UI, renderer, diagnostic, and reload adapters.',
+  testName: 'bridges supported Pi runtime surfaces and cleans up reload ownership',
+  useOpenAIModel: true,
+  aimockFixture: 'pi-plugin-runtime.json',
+  prepare({ projectDir }) {
+    resetPluginScenarioState();
+    piRuntimePluginDir = writePiRuntimePlugin(projectDir, 'version-one');
+    writePiRuntimeRegistry(projectDir, piRuntimePluginDir);
+  },
+  async inProcessApp({ homeDir, projectDir, startMastraCodeApp }) {
+    const { PluginManager } = await import('@mastra/code-sdk/plugins/manager');
+    const pluginManager = new PluginManager({ projectRoot: projectDir, configDir: '.mastracode', homeDir });
+    piRuntimeManager = pluginManager;
+    return startMastraCodeApp({
+      config: { pluginManager },
+      onTuiCreated: tui => {
+        currentTui = tui;
+      },
+    });
+  },
+  async run({ terminal, runtime }) {
+    runtime.startLiveOutput(terminal);
+    await runtime.waitForScreenText(/Resource ID:/i, terminal);
+    await runtime.waitForScreenText(/Pi shortcut "ctrl\+x"/i, terminal, 8_000);
+
+    terminal.submit('/pi-runtime');
+    await runtime.waitForScreenText(/Pi runtime dialog/i, terminal, 8_000);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/version-one runtime notification/i, terminal, 8_000);
+    await runtime.waitForScreenText(/version-one runtime widget/i, terminal, 8_000);
+    await runtime.waitForScreenText(/rendered custom message: version-one/i, terminal, 8_000);
+
+    terminal.submit('Use the Pi runtime probe tool.');
+    await runtime.waitForScreenText(/version-one progress:proof/i, terminal, 10_000);
+    await runtime.waitForScreenText(/Pi runtime adapters completed/i, terminal, 10_000);
+
+    const checkpointDir = process.env.MC_PI_PROOF_CHECKPOINT_DIR;
+    if (checkpointDir) {
+      mkdirSync(checkpointDir, { recursive: true });
+      writeFileSync(join(checkpointDir, 'pi-runtime-ui.txt'), terminal.serialize().view);
+    }
+
+    if (!piRuntimePluginDir || !piRuntimeManager) throw new Error('Pi runtime E2E fixture was not prepared');
+    writePiRuntimePlugin(dirname(dirname(dirname(piRuntimePluginDir))), 'version-two');
+    await piRuntimeManager.reload();
+    await runtime.sleep(100);
+
+    const tuiState = (
+      currentTui as
+        | {
+            state?: {
+              piUiStatusLine?: { render(width: number): string[] };
+              piUiWidgets?: { render(width: number): string[] };
+            };
+          }
+        | undefined
+    )?.state;
+    const retainedUi = [
+      ...(tuiState?.piUiStatusLine?.render(120) ?? []),
+      ...(tuiState?.piUiWidgets?.render(120) ?? []),
+    ].join('\n');
+    if (retainedUi.includes('version-one')) {
+      throw new Error(`Retired Pi UI ownership remained after reload: ${retainedUi}`);
+    }
+    if (piRuntimeManager.getPiCommands().length !== 1) {
+      throw new Error('Expected exactly one replacement Pi command after reload');
+    }
+    if (checkpointDir) {
+      writeFileSync(
+        join(checkpointDir, 'pi-runtime-cleanup.txt'),
+        `${terminal.serialize().view}\n\nRETIRED_UI_PRESENT=false\nREPLACEMENT_COMMANDS=1\n`,
+      );
+    }
+
+    console.log('PROOF: GREEN — Pi runtime adapters passed');
+    terminal.keyCtrlC();
+  },
+  verifyAimockRequests(requests) {
+    const names = getToolNames(requests);
+    if (!names.includes('pi_runtime_probe')) {
+      throw new Error(`Expected provider request to expose pi_runtime_probe. Names: ${names.join(', ')}`);
     }
   },
 };

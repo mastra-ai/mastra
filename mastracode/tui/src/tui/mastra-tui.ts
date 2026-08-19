@@ -53,6 +53,7 @@ import { applyOMModelToSession, seedOMDefaultAfterLogin } from './om-defaults.js
 import type { OnboardingResult } from './onboarding-inline.js';
 import { OnboardingInlineComponent } from './onboarding-inline.js';
 import { showModalOverlay } from './overlay.js';
+import { PiTuiBridge } from './pi/ui-bridge.js';
 import { promptForApiKeyIfNeeded } from './prompt-api-key.js';
 
 import {
@@ -163,6 +164,7 @@ export class MastraTUI {
   private cleanupKeyHandlers?: () => void;
   private cleanupPluginReloadListener?: () => void;
   private cleanupPluginUpdateListener?: () => void;
+  private piTuiBridge?: PiTuiBridge;
   private lastStreamError: string | null = null;
   /**
    * Text submitted while the main loop was busy (running a slash command or a
@@ -577,6 +579,11 @@ export class MastraTUI {
       this.cleanupPluginUpdateListener = undefined;
     }
 
+    if (this.piTuiBridge) {
+      void this.piTuiBridge.stop();
+      this.piTuiBridge = undefined;
+    }
+
     if (this.state.unsubscribe) {
       this.state.unsubscribe();
     }
@@ -635,6 +642,11 @@ export class MastraTUI {
 
     // Build UI layout
     buildLayout(this.state, () => this.refreshModelAuthStatus());
+
+    if (this.state.pluginManager) {
+      this.piTuiBridge = new PiTuiBridge(this.state, this.state.pluginManager);
+      await this.piTuiBridge.start();
+    }
 
     // Setup key handlers
     this.cleanupKeyHandlers = setupKeyHandlers(this.state, {

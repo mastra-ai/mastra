@@ -1,7 +1,9 @@
 import type { PiExtensionGeneration, PiRegisteredCommand } from './types.js';
+import { createPiExtensionContext } from './ui-adapter.js';
 
 export interface PiCommandDispatchOptions {
   mode?: 'tui' | 'rpc' | 'json' | 'print';
+  cwd?: string;
 }
 
 export interface PiOwnedCommand {
@@ -16,7 +18,7 @@ export interface PiOwnedCommand {
 function createCommandContext(generation: PiExtensionGeneration, options: PiCommandDispatchOptions) {
   const api = generation.createApi();
   return Object.freeze({
-    mode: options.mode ?? 'print',
+    ...createPiExtensionContext(generation, { cwd: options.cwd ?? process.cwd(), mode: options.mode }),
     sendMessage: api.sendMessage,
     sendUserMessage: api.sendUserMessage,
     appendEntry: api.appendEntry,

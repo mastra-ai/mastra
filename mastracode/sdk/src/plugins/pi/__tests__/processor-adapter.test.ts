@@ -376,7 +376,7 @@ describe('Pi processor adapter', () => {
         headers: { 'x-safe': 'yes' },
         fromCache: false,
       }),
-      expect.objectContaining({ cwd: '/workspace', mode: 'tui', hasUI: true }),
+      expect.objectContaining({ cwd: '/workspace', mode: 'tui', hasUI: false, ui: expect.any(Object) }),
     );
     expect(response.mock.calls[0]?.[0]).not.toHaveProperty('request');
     expect(response.mock.calls[0]?.[0]).not.toHaveProperty('response');

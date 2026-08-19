@@ -200,6 +200,50 @@ describe('dispatchSlashCommand models routing', () => {
     expect(mocks.showError).toHaveBeenCalledWith(state, 'Unknown command: models:pack');
   });
 
+  it('dispatches an owned Pi command through the plugin manager', async () => {
+    const dispatchPiCommand = vi.fn(async () => 'Pi command complete');
+    const state = {
+      customSlashCommands: [],
+      projectInfo: { rootPath: '/workspace' },
+      pluginManager: {
+        getPiCommands: vi.fn(() => [{ name: 'inspect', originalName: 'inspect' }]),
+        dispatchPiCommand,
+      },
+    } as any;
+
+    const handled = await dispatchSlashCommand('/inspect one two', state, () => ({}) as any);
+
+    expect(handled).toBe(true);
+    expect(dispatchPiCommand).toHaveBeenCalledWith('inspect', 'one two', { mode: 'tui', cwd: '/workspace' });
+    expect(mocks.showInfo).toHaveBeenCalledWith(state, 'Pi command complete');
+  });
+
+  it('preserves custom command precedence over a conflicting Pi command', async () => {
+    const dispatchPiCommand = vi.fn();
+    const state = createMockState({
+      threadId: 'thread-1',
+      extra: {
+        customSlashCommands: [
+          { name: 'inspect', description: 'Custom inspect', template: 'custom inspect', sourcePath: '' },
+        ],
+        pluginManager: {
+          getPiCommands: vi.fn(() => [{ name: 'inspect', originalName: 'inspect' }]),
+          dispatchPiCommand,
+        },
+        allSlashCommandComponents: [],
+        messageComponentsById: new Map(),
+        chatContainer: new Container(),
+        ui: { requestRender: vi.fn() },
+      },
+    }) as any;
+
+    const handled = await dispatchSlashCommand('/inspect', state, () => ({}) as any);
+
+    expect(handled).toBe(true);
+    expect(mocks.processSlashCommand).toHaveBeenCalledWith(state.customSlashCommands[0], [], process.cwd());
+    expect(dispatchPiCommand).not.toHaveBeenCalled();
+  });
+
   it('routes /goal judge to handleGoalCommand', async () => {
     const state = { customSlashCommands: [] } as any;
     const ctx = {} as any;

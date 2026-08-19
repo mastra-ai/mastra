@@ -7,6 +7,7 @@ import { runPiToolCallHooks, runPiToolResultHooks } from './hook-adapter.js';
 import { adaptPiToolRenderers } from './render-adapter.js';
 import { adaptPiTypeBoxSchema, validatePiToolArguments } from './schema-adapter.js';
 import type { PiExtensionGeneration } from './types.js';
+import { createPiExtensionContext } from './ui-adapter.js';
 
 export interface PiToolContentBlock {
   type: 'text' | 'image';
@@ -149,11 +150,11 @@ export function adaptPiTools(generation: PiExtensionGeneration, options: AdaptPi
       execute: async (input, context) => {
         generation.assertActive();
         const toolCallId = context.agent?.toolCallId ?? `${generation.id}:${name}`;
-        const extensionContext = {
+        const extensionContext = createPiExtensionContext(generation, {
           cwd: options.cwd,
-          mode: options.mode ?? 'print',
-          hasUI: false,
-        } as const;
+          mode: options.mode,
+          signal: context.abortSignal,
+        });
         const event = {
           type: 'tool_call' as const,
           toolCallId,

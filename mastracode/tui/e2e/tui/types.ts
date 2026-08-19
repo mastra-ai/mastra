@@ -78,6 +78,7 @@ export type ScenarioName =
   | 'plugins-scaffold-install-tool'
   | 'plugins-assets-loading'
   | 'plugins-command-ui'
+  | 'pi-plugin-runtime'
   | 'process-shortcuts'
   | 'provider-history-compat'
   | 'provider-history-rejection-retry'
