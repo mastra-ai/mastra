@@ -2,7 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { useQueryClient } from '@tanstack/react-query';
@@ -18,6 +18,7 @@ import { useChatSessionContext } from '../../chat/context/useChatSessionContext'
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { githubNumberForItem } from '../../factory/boardItems';
 import { pullRequestCandidateIndex, relatedWorkItems, relationshipLabel } from '../../factory/services/relationships';
+import type { WorkItem } from '../../factory/services/workItems';
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
 import type { FactoryUserSession } from '../services/github';
 import { getFactorySessionKind } from '../services/sessionPresentation';
@@ -76,31 +77,26 @@ export function WorkspacesSection() {
     () => void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(projectRepositoryId) }),
   );
 
-  // Rebuilt only when the polled board changes; the sidebar re-renders far more often.
-  const board = workItems.data;
-  const workItemByPath = useMemo(
-    () =>
-      new Map(
-        (board ?? []).flatMap(item =>
-          Object.values(item.sessions ?? {}).map(
-            sessionRef => [sessionRef.sessionId, { item, threadId: sessionRef.threadId }] as const,
-          ),
-        ),
+  const allWorkItems = workItems.data ?? [];
+  const workItemByPath = new Map(
+    allWorkItems.flatMap(item =>
+      Object.values(item.sessions ?? {}).map(
+        sessionRef => [sessionRef.sessionId, { item, threadId: sessionRef.threadId }] as const,
       ),
-    [board],
+    ),
   );
-  const pullRequestCandidates = useMemo(() => pullRequestCandidateIndex(board ?? []), [board]);
+  const pullRequestCandidates = pullRequestCandidateIndex(allWorkItems);
+  const latestPullRequestFor = (item: WorkItem) => {
+    if (item.source === 'github-pr') return item;
+    return [...relatedWorkItems(item, pullRequestCandidates(item))].sort((a, b) =>
+      b.updatedAt.localeCompare(a.updatedAt),
+    )[0];
+  };
+
   const rows = workspaceRows.flatMap(workspace => {
     const workItemSession = workItemByPath.get(workspace.sessionId);
     const item = workItemSession?.item;
-    const pullRequest =
-      item?.source === 'github-pr'
-        ? item
-        : item
-          ? [...relatedWorkItems(item, pullRequestCandidates(item))].sort((a, b) =>
-              b.updatedAt.localeCompare(a.updatedAt),
-            )[0]
-          : undefined;
+    const pullRequest = item && latestPullRequestFor(item);
     const pullRequestNumber = pullRequest ? githubNumberForItem(pullRequest) : undefined;
     const active = workspace.sessionId === sessionId;
     const running = runningByPath[workspace.sessionId] === true;
