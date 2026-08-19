@@ -1,5 +1,7 @@
 import type { AgentControllerSessionSettings } from '@mastra/client-js';
 import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
+import { useEffect } from 'react';
+import { useLocation } from 'react-router';
 import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -14,52 +16,22 @@ import {
   useUpdateAgentControllerSettingsMutation,
 } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
+import { ConnectedAccountsSection } from './ConnectedAccountsSection';
+import { AccountSettingsSection } from './AccountSettingsSection';
 import { CustomProvidersSection } from './CustomProvidersSection';
 import { SettingsHeader } from './SettingsHeader';
+import { FactoryManagementSection } from './FactoryManagementSection';
 import { FactoryDefaultModelSection } from './FactoryDefaultModelSection';
+import { FactorySkillsSection } from './FactorySkillsSection';
 import { IntakeSection } from './IntakeSection';
 import { ModelPacksSection } from './ModelPacksSection';
-import { FactorySetupSection } from './FactorySetupSection';
-import { SourceControlSection } from './SourceControlSection';
+import { RepositoriesSection } from './RepositoriesSection';
+import { SettingsCard } from './SettingsCard';
+import { SettingsSubsection } from './SettingsSubsection';
 import { OMSection } from './OMSection';
+import { ThinkingDefaultsSection } from './ThinkingDefaultsSection';
 import { ProviderAccessSection } from './ProviderAccessSection';
 import { BehaviorSettings, GeneralSettings, ModelSettings } from './SettingsPanel.parts';
-
-/**
- * Shared subsection recipe: header (title + optional description + optional
- * right-side action) above a contained card. Containment replaces hairline
- * separators so uneven content heights still read as intentional.
- */
-function SettingsSubsection({
-  title,
-  description,
-  action,
-  children,
-}: {
-  title: string;
-  description?: string;
-  action?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center justify-between gap-3">
-          <Txt variant="ui-md" className="text-icon6 font-medium">
-            {title}
-          </Txt>
-          {action}
-        </div>
-        {description && (
-          <Txt variant="ui-sm" className="text-icon3">
-            {description}
-          </Txt>
-        )}
-      </div>
-      <div className="border-border1 rounded-lg border p-4">{children}</div>
-    </div>
-  );
-}
 
 function getSettingsUpdateErrorMessage(error: unknown): string {
   if (error instanceof SettingsUpdateVerificationError) return error.message;
@@ -67,13 +39,16 @@ function getSettingsUpdateErrorMessage(error: unknown): string {
   return 'Failed to update settings';
 }
 
-/**
- * Settings content pane: renders the section addressed by the settings-page
- * URL while the page shell supplies document scrolling.
- */
 export function SettingsPanel() {
   const section = useSettingsSection();
+  const { hash } = useLocation();
   const { theme, setTheme } = useTheme();
+
+  // Deep links like `/settings/models#model-packs` scroll to the subsection.
+  useEffect(() => {
+    if (!hash) return;
+    document.getElementById(hash.slice(1))?.scrollIntoView?.({ block: 'start' });
+  }, [hash, section]);
   const { resourceId, resourceEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { isMobile } = useMainSidebar();
   const { permissions, pendingPermissionCategory, setPermissionForCategory } = useChatPermissions();
@@ -106,44 +81,69 @@ export function SettingsPanel() {
     <section aria-label="Settings" className="flex flex-1 flex-col px-5 pb-5">
       <div className="mx-auto grid w-full max-w-4xl py-3">
         {!isMobile && <SettingsHeader autoFocus placement="desktop" />}
-        {section === 'general' && (
-          <>
-            <GeneralSettings theme={theme} onThemeChange={setTheme} />
-            <FactorySetupSection />
-            <IntakeSection />
-          </>
+        {section === 'account' && <AccountSettingsSection />}
+        {section === 'preferences' && <GeneralSettings theme={theme} onThemeChange={setTheme} />}
+        {section === 'factory' && <FactoryManagementSection />}
+        {section === 'connections' && (
+          <div className="flex flex-col gap-2">
+            <Txt as="p" variant="ui-sm" className="text-icon3">
+              Connect your account to use Factory from Slack.
+            </Txt>
+            <ConnectedAccountsSection />
+          </div>
         )}
-        {section === 'source-control' && <SourceControlSection />}
-        {section === 'model' && (
+        {section === 'repositories' && <RepositoriesSection />}
+        {section === 'intake' && <IntakeSection />}
+        {section === 'models' && (
           <div className="flex flex-col gap-8">
             <SettingsSubsection title="Defaults">
-              {/* Rows bring their own py-3; -my-3 keeps the card's effective padding even on all sides. */}
-              <div className="divide-border1/40 -my-3 divide-y">
+              <SettingsCard>
                 <FactoryDefaultModelSection models={models} />
                 <ModelSettings
                   settings={settings}
                   updating={updateSettingsMutation.isPending}
                   onBehaviorChange={onBehaviorChange}
                 />
-              </div>
-            </SettingsSubsection>
-            <SettingsSubsection title="Providers">
-              <ProviderAccessSection />
+              </SettingsCard>
             </SettingsSubsection>
             <SettingsSubsection
-              title="Model packs"
-              description="A pack sets a model for each mode (build / plan / fast)."
+              title="Thinking defaults"
+              description="Reasoning-effort applied to runs without a session override — including automated Factory runs. The session thinking level above takes precedence."
             >
-              <ModelPacksSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
+              <SettingsCard>
+                <ThinkingDefaultsSection />
+              </SettingsCard>
+            </SettingsSubsection>
+            <SettingsSubsection title="Provider access">
+              <SettingsCard className="p-4">
+                <ProviderAccessSection />
+              </SettingsCard>
+            </SettingsSubsection>
+            <SettingsSubsection title="Custom providers">
+              <SettingsCard className="p-4">
+                <CustomProvidersSection />
+              </SettingsCard>
+            </SettingsSubsection>
+            <SettingsSubsection
+              id="model-packs"
+              title="Chat model packs"
+              description="Set your personal Build, Plan and Fast defaults for interactive chats. Factory work runs are unaffected."
+            >
+              <SettingsCard className="p-4">
+                <ModelPacksSection models={models} />
+              </SettingsCard>
             </SettingsSubsection>
             <SettingsSubsection
               title="Observational memory"
               description="Choose the models and token thresholds used to summarize and retain conversation context."
             >
-              <OMSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
+              <SettingsCard className="p-4">
+                <OMSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
+              </SettingsCard>
             </SettingsSubsection>
           </div>
         )}
+        {section === 'skills' && <FactorySkillsSection />}
         {section === 'behavior' && (
           <BehaviorSettings
             settings={settings}
@@ -154,7 +154,6 @@ export function SettingsPanel() {
             setPermissionForCategory={setPermissionForCategory}
           />
         )}
-        {section === 'custom-providers' && <CustomProvidersSection />}
       </div>
     </section>
   );

@@ -1,6 +1,6 @@
 ---
 title: "Request context | Server"
-description: Learn how to use Mastra's RequestContext to provide dynamic, request-specific configuration to agents.
+description: Learn how to use Mastra's RequestContext to provide runtime, request-specific configuration to agents.
 packages:
   - "@mastra/core"
 ---
@@ -11,7 +11,7 @@ Agents, tools, and workflows can all accept `RequestContext` as a parameter, mak
 
 ## When to use `RequestContext`
 
-Use `RequestContext` when a primitive's behavior should change based on runtime conditions. For example, you might switch models or storage backends based on user attributes, or adjust instructions and tool selection based on language.
+Use `RequestContext` when a primitive's behavior should change based on runtime conditions. For example or you might switch models or storage backends based on user attributes, or alternatively adjust instructions and tool selection based on language.
 
 :::note
 
@@ -65,9 +65,30 @@ await run.resume({
 await weatherTool.execute({ location: 'London' }, { requestContext })
 ```
 
+### Using runtime-only keys
+
+When you provide a type or `requestContextSchema`, the `get`, `set`, `has`, and `delete` methods only accept declared keys. This catches misspelled keys and keeps declared values typed.
+
+Use `getRaw`, `setRaw`, `hasRaw`, and `deleteRaw` for infrastructure or middleware keys that aren't part of the schema. Raw values use the `unknown` type, so narrow them before use.
+
+```typescript
+const requestContext = new RequestContext<{ userId: string }>()
+
+requestContext.set('userId', 'user-123')
+requestContext.setRaw('session.cache', { hits: 0 })
+
+const cache = requestContext.getRaw('session.cache')
+
+if (typeof cache === 'object' && cache !== null && 'hits' in cache) {
+  console.log(cache.hits)
+}
+```
+
+Prefer schema-declared keys for application data. Use the raw methods only when a key must remain outside the request context schema.
+
 ### Setting values based on request headers
 
-You can populate `requestContext` dynamically in server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
+You can populate `requestContext` in a runtime server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -95,7 +116,7 @@ Visit [Middleware](/docs/server/middleware) for how to use server middleware.
 
 ## Studio
 
-When developing locally, you can define named presets in a JSON file and load them into [Studio](/docs/studio/overview) with the [`--request-context-presets`](/reference/cli/mastra#--request-context-presets) CLI flag. This adds a dropdown to the request context editor in Studio so you can quickly switch between configurations without manually editing JSON each time.
+When developing locally, you can define presets in a JSON file and load them into [Studio](/docs/studio/overview) with the [`--request-context-presets`](/reference/cli/mastra#--request-context-presets) CLI flag. This adds a dropdown to the request context editor in Studio so you can quickly switch between configurations without manually editing JSON each time.
 
 ```bash
 mastra dev --request-context-presets ./presets.json
@@ -138,7 +159,7 @@ You can also use `requestContext` with other options like `agents`, `workflows`,
 
 ### Dynamic instructions
 
-Agent instructions can be provided as an async function, enabling you to resolve prompts dynamically at runtime. Combined with `requestContext`, this enables patterns like:
+Agent instructions can be provided as an async function, enabling you to resolve prompts at runtime. Combined with `requestContext`, this enables patterns like:
 
 - **Personalization**: Tailor instructions based on user attributes, preferences, or tier
 - **Localization**: Adjust tone, language, or behavior based on locale
@@ -172,7 +193,7 @@ export const dynamicAgent = new Agent({
 
 #### Fetching from a prompt registry
 
-If your organization uses a prompt registry service for central prompt management, you can fetch instructions at runtime. This allows you to update prompts without redeploying, run experiments with variants, and track prompt usage across your agents.
+If your organization uses a prompt registry service for central prompt management, you can fetch instructions at runtime. You can update prompts without redeploying and run experiments with variants, plus track prompt usage across your agents.
 
 ```typescript title="src/mastra/agents/registry-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -256,7 +277,7 @@ auth: {
 }
 ```
 
-When the resource ID is derived this way, clients can omit `memory.resource` from agent generate and stream request bodies — the server-derived value is used instead (and always takes precedence over any client-provided value). If a request uses memory and neither the body nor the request context provides a resource ID, the server responds with a 400 error.
+When the resource ID is derived this way, clients can omit `memory.resource` from agent generate and stream request bodies, the server-derived value is used instead (and always takes precedence over any client-provided value). If a request uses memory and neither the body nor the request context provides a resource ID, the server responds with a 400 error.
 
 You can also set these keys manually in middleware:
 
@@ -321,7 +342,7 @@ for (const [key, value] of ctx.entries()) {
 
 ## Schema validation
 
-Use `requestContextSchema` to define a [Standard JSON Schema](https://standardschema.dev/json-schema) ([Zod](https://zod.dev/), [Valibot](https://valibot.dev/), [ArkType](https://arktype.io/), etc.) that validates request context values at runtime. This catches missing or invalid context values early, provides clear error messages, and gives you type inference within your component.
+Use `requestContextSchema` to define a [Standard JSON Schema](https://standardschema.dev/json-schema) ([Zod](https://zod.dev/), [Valibot](https://valibot.dev/), [ArkType](https://arktype.io/), etc.) that validates request context values at runtime. This catches missing or invalid context values early and provides clear error messages, plus gives you type inference within your component.
 
 ### Agent schema validation
 
@@ -462,7 +483,7 @@ Steps can also define their own `requestContextSchema` for step-level validation
 
 ### Best practices
 
-**Match your middleware**: Define the same required fields in your schema that your middleware sets. This ensures the contract between middleware and components is explicit and validated.
+**Match your middleware**: Define the same required fields in your schema that your middleware sets. As a result, the contract between middleware and components is explicit and validated.
 
 ```typescript
 // Middleware sets these fields

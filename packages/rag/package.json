@@ -1,6 +1,6 @@
 {
   "name": "@mastra/rag",
-  "version": "2.4.2",
+  "version": "2.6.0",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -34,6 +34,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
+    "@aws-sdk/client-bedrock-agent-runtime": "^3.1076.0",
     "big.js": "^7.0.1",
     "js-tiktoken": "^1.0.21",
     "node-html-better-parser": "^1.5.8",

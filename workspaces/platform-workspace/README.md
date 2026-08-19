@@ -12,18 +12,17 @@ npm install @mastra/platform-workspace
 
 All options can be passed to the constructor or read from environment variables:
 
-| Option          | Env var                       | Required         |
-| --------------- | ----------------------------- | ---------------- |
-| `accessToken`   | `MASTRA_PLATFORM_SECRET_KEY`  | Yes              |
-| `projectId`     | `MASTRA_PROJECT_ID`           | Yes              |
-| `environmentId` | `MASTRA_ENVIRONMENT_ID`       | Yes (sandbox)    |
-| `bucketName`    | `MASTRA_PLATFORM_BUCKET_NAME` | Yes (filesystem) |
-
-`MASTRA_PLATFORM_ACCESS_TOKEN` is still read as a deprecated fallback for `accessToken`.
+| Option          | Env var                        | Required         |
+| --------------- | ------------------------------ | ---------------- |
+| `accessToken`   | `MASTRA_PLATFORM_ACCESS_TOKEN` | Yes              |
+| `projectId`     | `MASTRA_PROJECT_ID`            | Yes              |
+| `environmentId` | `MASTRA_ENVIRONMENT_ID`        | Yes (sandbox)    |
+| `actingUserId`  | —                              | No (sandbox)     |
+| `bucketName`    | `MASTRA_PLATFORM_BUCKET_NAME`  | Yes (filesystem) |
 
 The proxy URL defaults to `https://workspaces.mastra.ai` and can be overridden with the `MASTRA_WORKSPACE_PROXY_URL` env var (useful for staging).
 
-Requests to the proxy are authenticated with `Authorization: Bearer <accessToken>`.
+Requests to the proxy are authenticated with `Authorization: Bearer <accessToken>`. For sandbox requests authenticated with a project access token, set `actingUserId` to the stable opaque user subject from your authentication system. It is sent as `x-acting-user-id` for token partitioning and attribution; it is not an authorization claim.
 
 ## Usage
 
@@ -106,3 +105,12 @@ try {
 `code` / `proxyMessage` are `undefined` when the proxy returns a non-JSON body (e.g. an HTML 502 from a load balancer).
 
 Filesystem-specific errors (`FileNotFoundError`, `FileExistsError`, `WorkspaceReadOnlyError`) are re-exported from `@mastra/core`.
+
+### Sandbox exec errors
+
+`PlatformSandbox.executeCommand` runs over the direct-exec data plane (a WebSocket straight to the Railway tcp-proxy) and can throw two typed errors on unrecoverable failure:
+
+- `SandboxDestroyedError` — the platform returned 410 for `/exec-lease`, meaning the sandbox has been destroyed. The cached sandbox id and lease are cleared, so a reused `PlatformSandbox` instance will re-provision on the next call. Fleet-level code that owns a binding store should catch this, clear the stale sandbox id, and reprovision + replay.
+- `SandboxExecTransportError` — both the initial WebSocket attempt and the built-in retry closed without an `exit` frame against a live sandbox. Carries `{ opened, closeCode, closeReason, wsEndpoint }` diagnostics plus `sandboxId`, `command`, and `attempts` so upstream logs / alerts can distinguish "the Railway data plane is broken" from "your command failed".
+
+`PlatformApiError` (with status 404 / 500 / 501 on `/exec-lease`) can also bubble up from `executeCommand` — those are configuration or platform errors, not "reprovision me" signals, and are propagated as-is.

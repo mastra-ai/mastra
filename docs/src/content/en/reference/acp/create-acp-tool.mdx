@@ -197,7 +197,7 @@ export const codeSupervisor = new Agent({
 
 ## Session lifecycle
 
-Each tool execution creates an ACP connection, starts the configured `command`, initializes the ACP client, creates an ACP session, and sends the `task` with ACP `session/prompt`.
+Each tool execution creates an ACP connection and starts the configured `command`. It initializes the ACP client and creates an ACP session before sending the `task` with ACP `session/prompt`.
 
 By default, `persistSession` is `true` for the ACP connection created during tool execution. Set `persistSession: false` when the ACP process should stop as soon as that prompt completes.
 
@@ -234,7 +234,7 @@ export const codeAgentTool = createACPTool({
 })
 ```
 
-Use this callback to enforce local policy, inspect the permission title, or route the decision to your own approval flow.
+Use this callback to enforce local policy or inspect the permission title. It can also route the decision to your own approval flow.
 
 ## Extension methods
 
@@ -264,7 +264,7 @@ Return a fully custom `Client` implementation when you need to change the standa
 
 ## Related
 
-- [Agent Client Protocol docs](/docs/agents/acp)
+- [Agent Client Protocol docs](/docs/connections/acp)
 - [AcpAgent class reference](/reference/acp/acp-agent)
 - [Tool reference](/reference/tools/create-tool)
 - [Agent Client Protocol introduction](https://agentclientprotocol.com/overview/introduction)

@@ -20,20 +20,21 @@
 
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
+import { AgentControllerChannels } from '@mastra/core/channels';
 import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
-import { hasAuthInit } from '@mastra/core/server';
+import { hasAuthInit, isUserProvider } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
-import type { FactoryAuthUser } from './auth.js';
 import {
   buildAuthRoutes,
   createFactoryAuthGate,
   createFactoryRouteAuth,
   getFactoryAuthOrgId,
+  getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
 } from './auth.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
@@ -53,20 +54,33 @@ import {
 import { builtInFactoryRules } from './rules/defaults.js';
 import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
 import { FactoryPhaseStateProcessor } from './rules/processor.js';
+import { createTerminalStageCleanup } from './rules/terminal-cleanup.js';
 import { createFactoryTransitionTools } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
 import type { FactoryRules } from './rules/types.js';
 import { assertFactoryRules } from './rules/validation.js';
+import type { BaseCheckpointTriggers } from './sandbox/base-checkpoint-triggers.js';
+import { createBaseCheckpointTriggers } from './sandbox/base-checkpoint-triggers.js';
+import { BaseCheckpointBuilder } from './sandbox/base-checkpoint.js';
 import { SandboxFleet } from './sandbox/fleet.js';
 import { registerSandboxReattach } from './sandbox/reattach.js';
+import { SessionRetirementCoordinator } from './sandbox/session-retirement.js';
 import { handleServerError } from './server-error.js';
+import { observeSessionCheckpoint } from './session/checkpoint-capture.js';
+import { observeSessionFilesystem } from './session/filesystem-capture.js';
+import { observeSessionFirstExec } from './session/first-exec-capture.js';
+import { observeSessionFirstMessage } from './session/first-message-capture.js';
+import { hydrateSessionMemorySettings } from './session/memory-settings-hydration.js';
+import { hydrateSessionModelPack } from './session/model-pack-hydration.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
 import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
 import { AuditStorage } from './storage/domains/audit/base.js';
 import { AuditDomain } from './storage/domains/audit/domain.js';
+import { ChannelIdentityStorage } from './storage/domains/channel-identity/base.js';
 import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
 import { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
+import { FilesystemStorage } from './storage/domains/filesystem/base.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
 import { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
@@ -76,7 +90,7 @@ import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import { timedPhase } from './timing.js';
-import { createWorkspaceFactory } from './workspace.js';
+import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.js';
 
 type BuildApiRoutesDeps = Pick<FactoryApiRoutesDeps, 'controller' | 'authStorage'>;
 
@@ -137,6 +151,8 @@ export interface MastraFactoryConfig {
   allowedOrigins?: string[];
   /** Sandbox configuration. Omitted → repository sandboxes are disabled. */
   sandbox?: MastraFactorySandboxConfig;
+  /** Background Factory dispatcher configuration. */
+  dispatcher?: MastraFactoryDispatcherConfig;
   /**
    * Deployment-stable secret for signing integration OAuth `state` values.
    * Omitted → a per-process random secret, which is fine for single-process
@@ -159,6 +175,14 @@ export interface MastraFactoryConfig {
    * Omitted → conservative built-in rules for the current deployment.
    */
   rules?: FactoryRules;
+
+  /**
+   * Platform-specific overrides. `githubAppSlug` identifies Factory's own
+   * GitHub App writes so their webhook deliveries do not retrigger triage.
+   */
+  platform?: {
+    githubAppSlug?: string;
+  };
 }
 
 export interface MastraFactorySandboxConfig {
@@ -181,6 +205,15 @@ export interface MastraFactorySandboxConfig {
    * unlimited. A lightweight per-process budget, not a cross-replica scheduler.
    */
   maxSandboxes?: number;
+}
+
+/**
+ * Per-process cap on concurrent background Factory dispatches. Omitted means
+ * the dispatcher default; this is a local replica budget, not a global queue
+ * limit shared across deployments.
+ */
+export interface MastraFactoryDispatcherConfig {
+  maxInFlight?: number;
 }
 
 const CONTROLLER_ID = 'code';
@@ -321,7 +354,7 @@ export class MastraFactory {
     const integrations = [...(this.#config.integrations ?? [])];
     if (hasPlatformSecretKey()) {
       if (!integrations.some(integration => integration.id === 'github')) {
-        integrations.push(new PlatformGithubIntegration());
+        integrations.push(new PlatformGithubIntegration({ slug: this.#config.platform?.githubAppSlug }));
       }
       if (!integrations.some(integration => integration.id === 'linear')) {
         integrations.push(new PlatformLinearIntegration());
@@ -354,7 +387,11 @@ export class MastraFactory {
     // default persistence surface for integrations without a bespoke domain.
     const integrationStorage = storage.registerDomain(new IntegrationStorage());
     const factoryProjectsStorage = storage.registerDomain(new FactoryProjectsStorage());
+    const filesystemStorage = storage.registerDomain(new FilesystemStorage());
     const sourceControlStorage = storage.registerDomain(new SourceControlStorage());
+    // Reverse index from a platform sender (Slack/Discord/...) to a Mastra
+    // tenant, so inbound channel events can resolve the sender's model creds.
+    const channelIdentityStorage = storage.registerDomain(new ChannelIdentityStorage());
     // Every app-table domain handle the route builders and integrations need,
     // threaded explicitly (no service locator).
     const domains = {
@@ -363,25 +400,23 @@ export class MastraFactory {
       modelPacks: modelPacksStorage,
       memorySettings: memorySettingsStorage,
       customProviders: customProvidersStorage,
+      filesystem: filesystemStorage,
       projects: factoryProjectsStorage,
       queueHealth: queueHealthStorage,
       workItems: workItemsStorage,
+      channelIdentity: channelIdentityStorage,
     };
-    const projectRoutes = new ProjectRoutes({
-      auth: routeAuth,
-      projects: factoryProjectsStorage,
-      sourceControl: sourceControlStorage,
-      versionControlIntegrationIds: integrations
-        .filter(integration => integration.versionControl)
-        .map(integration => integration.id),
-    });
+    // Assigned once the fleet and integrations exist below; the routes only
+    // dereference it at request time, so the late assignment is safe.
+    let baseCheckpoints: BaseCheckpointTriggers | undefined;
     const auditDomain = new AuditDomain({
       auth: routeAuth,
       audit: auditStorage,
       projects: factoryProjectsStorage,
+      users: auth && isUserProvider(auth) ? auth : undefined,
       sinks: integrations,
       agentTenant: requestContext => {
-        const user = requestContext.get('user') as FactoryAuthUser | undefined;
+        const user = getFactoryAuthUserFromContext(requestContext);
         return { orgId: getFactoryAuthOrgId(user), userId: getFactoryAuthUserId(user) };
       },
     });
@@ -415,6 +450,7 @@ export class MastraFactory {
     // Core's `getDynamicWorkspace` reattaches project sandboxes through the
     // SDK seam; only this factory owns the fleet, so register it here.
     registerSandboxReattach(fleet);
+    const workspaceRegistry = new FactoryWorkspaceRegistry();
 
     // One shared OAuth state signer per boot. The deploy entry supplies a
     // replica-stable secret when needed; otherwise local development gets a
@@ -472,7 +508,13 @@ export class MastraFactory {
     // providers additionally require the source-control storage domain. Readiness
     // is derived solely from capability presence, never from provider ids.
     const integrationRegistrations = integrations.map(integration => {
-      const requiredDomains = ['integrations', ...(integration.versionControl ? ['source-control'] : [])];
+      const requiredDomains = [
+        'integrations',
+        ...(integration.versionControl ? ['source-control'] : []),
+        // Channels resolve an inbound sender to a tenant through the reverse
+        // index; without it every message would dispatch tenant-less.
+        ...(integration.channels ? ['channel-identity'] : []),
+      ];
       return {
         integration,
         ready: requiredDomains.every(domain => storage.isDomainReady(domain)),
@@ -484,13 +526,81 @@ export class MastraFactory {
     const intakeReady =
       integrations.some(integration => integration.intake !== undefined) && storage.isDomainReady('intake');
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
+    const knowledgeEnabled = process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
       | GithubIntegration
       | undefined;
+    // Base-checkpoint triggers: keep a warm per-repo checkpoint refreshed on
+    // repo connect, default-branch merges/pushes, and the reconcile sweep.
+    // Constructed only when a sandbox fleet and GitHub source control exist;
+    // otherwise sessions simply keep the cold clone+setup path.
+    if (githubIntegration && fleet.enabled && storage.isDomainReady('source-control')) {
+      const checkpointLogger = {
+        warn: (message: string) => console.warn(`[factory] ${message}`),
+      } as ConstructorParameters<typeof BaseCheckpointBuilder>[0]['logger'];
+      baseCheckpoints = createBaseCheckpointTriggers({
+        builder: new BaseCheckpointBuilder({ fleet, logger: checkpointLogger }),
+        fleet,
+        github: {
+          sourceControlStorage: sourceControlStorage.forIntegration('github'),
+          ...(githubIntegration.versionControl ? { versionControl: githubIntegration.versionControl } : {}),
+        },
+        logger: checkpointLogger,
+      });
+    }
     const workItemsReady = storage.isDomainReady('work-items');
+    const sessionRetirement =
+      machine && storage.isDomainReady('source-control')
+        ? new SessionRetirementCoordinator({
+            fleet,
+            invalidateSession: sessionId => workspaceRegistry.invalidateSession(sessionId),
+          })
+        : undefined;
+    const retireTerminalSessions =
+      sessionRetirement && githubIntegration && workItemsReady
+        ? async ({ orgId, workItemId }: { orgId: string; workItemId: string }) =>
+            sessionRetirement.retireWorkItemSessions({
+              workItems: workItemsStorage,
+              sourceControl: sourceControlStorage.forIntegration(githubIntegration.id),
+              orgId,
+              workItemId,
+            })
+        : undefined;
+    // Terminal-stage cleanup: ingest any trailing tool results from the item's
+    // bound threads, then revoke the bindings so completed items leave the
+    // reconcile walk (the active-binding set otherwise grows forever), and
+    // finally release the item's sandboxes. Each step is best-effort — a
+    // committed transition never fails on cleanup.
+    const onTerminalStage = workItemsReady
+      ? createTerminalStageCleanup({
+          workItems: workItemsStorage,
+          // `factoryProcessor` is assigned below in this scope; the cleanup
+          // only runs on transitions long after bootstrap completes.
+          reconcileBinding: async (binding): Promise<void> => {
+            await factoryProcessor?.reconcileBinding(binding);
+          },
+          // Session retirement supersedes the older direct sandbox release: it
+          // invalidates the session and hands its sandbox back to the pool.
+          ...(retireTerminalSessions ? { releaseSandboxes: retireTerminalSessions } : {}),
+        })
+      : retireTerminalSessions;
     const transitionService = workItemsReady
-      ? new FactoryTransitionService({ rules, storage: workItemsStorage })
+      ? new FactoryTransitionService({
+          rules,
+          storage: workItemsStorage,
+          ...(onTerminalStage ? { onTerminalStage } : {}),
+        })
       : undefined;
+    const projectRoutes = new ProjectRoutes({
+      auth: routeAuth,
+      projects: factoryProjectsStorage,
+      sourceControl: sourceControlStorage,
+      versionControlIntegrationIds: integrations
+        .filter(integration => integration.versionControl)
+        .map(integration => integration.id),
+      ...(sessionRetirement ? { sessionRetirement } : {}),
+      onProjectRepositoryLinked: args => baseCheckpoints?.onProjectRepositoryLinked(args),
+    });
     const factoryProcessor = workItemsReady
       ? new FactoryPhaseStateProcessor({
           rules,
@@ -560,11 +670,16 @@ export class MastraFactory {
           ...(githubIntegration ? { github: githubIntegration } : {}),
           ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
           fleet,
+          workspaceRegistry,
         }),
         disableGithubSignals: true,
         // Memory settings live in the factory's `memory-settings` app table (per
         // org/user), so the host machine's TUI settings.json must not seed them.
         disableSettingsOmSeed: true,
+        // A factory reads the repository it works on and its skill, never the
+        // ~/.claude instructions of whoever hosts the process. On the controller
+        // rather than per session, so webhook-recreated sessions keep it too.
+        initialState: { skipGlobalInstructions: true },
         storage: storage.getMastraStorage(),
         ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
         ...(factoryProcessor ? { inputProcessors: [factoryProcessor] } : {}),
@@ -593,6 +708,14 @@ export class MastraFactory {
                       requestContext,
                       storage: workItemsStorage,
                       transitionService,
+                      // Heals crash-resumed sessions: recovered addresses re-seed
+                      // projectRepositoryId/baseRef from the source session record.
+                      // Only offered while the source-control domain is ready — a
+                      // throwing lookup would abort recovery's catch block and also
+                      // skip the metadata baseRef fallback.
+                      ...(storage.isDomainReady('source-control')
+                        ? { sessions: sourceControlStorage.forIntegration('github').sessions }
+                        : {}),
                     }),
                   );
                 }
@@ -652,6 +775,8 @@ export class MastraFactory {
             publicOrigin,
             stateSigner,
             fleet,
+            ...(baseCheckpoints ? { baseCheckpoints } : {}),
+            sessionRetirement,
             factoryStorage: storage,
             integrationStorage,
             sourceControlStorage,
@@ -659,6 +784,7 @@ export class MastraFactory {
             integrations: integrationRegistrations,
             intakeReady,
             factoryReady,
+            knowledgeEnabled,
             rules,
             factoryTransitionService: transitionService,
             onFactoryRuntime: ({ transitionService: runtimeTransitionService, prepareBinding }) => {
@@ -666,6 +792,12 @@ export class MastraFactory {
                 controller,
                 transitionService: runtimeTransitionService,
                 storage: storage.getDomain<WorkItemsStorage>('work-items'),
+                maxInFlight: this.#config.dispatcher?.maxInFlight,
+                isAutoRunEnabled: async ({ orgId, factoryProjectId }) => {
+                  await factoryProjectsStorage.ensureReady();
+                  const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
+                  return project?.autoRunEnabled ?? false;
+                },
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
                 prepareBinding,
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
@@ -729,8 +861,93 @@ export class MastraFactory {
       }),
     );
 
+    prepared.base.controller.onSessionCreated(session => {
+      observeSessionFilesystem(session, {
+        filesystem: filesystemStorage,
+        sourceControl: sourceControlStorage.forIntegration('github'),
+      });
+      observeSessionCheckpoint(session);
+      observeSessionFirstMessage(session, {
+        sourceControl: sourceControlStorage.forIntegration('github'),
+      });
+      observeSessionFirstExec(session, {
+        sourceControl: sourceControlStorage.forIntegration('github'),
+      });
+    });
+
+    // Blocking: `createSession` awaits this seed, so when hydration succeeds
+    // a session's first run starts with the owner's stored OM settings.
+    // Best-effort — failures are logged inside the helper, never thrown, and
+    // the session then falls back to its persisted/default OM configuration.
+    prepared.base.controller.onSessionCreated(
+      session =>
+        hydrateSessionMemorySettings(session, {
+          sourceControl: sourceControlStorage.forIntegration('github'),
+          memorySettings: memorySettingsStorage,
+        }),
+      { blocking: true },
+    );
+
+    // Personal model packs seed interactive user sessions only. Active Factory
+    // run bindings are excluded and continue to use the project default model.
+    prepared.base.controller.onSessionCreated(
+      session =>
+        hydrateSessionModelPack(session, {
+          sourceControl: sourceControlStorage.forIntegration('github'),
+          workItems: workItemsStorage,
+          modelPacks: modelPacksStorage,
+        }),
+      { blocking: true },
+    );
+
     this.#prepared = prepared;
     this.#factoryProcessor = factoryProcessor;
+
+    // Chat-platform channels (Slack, Discord, …) contributed by integrations,
+    // attached to the mounted controller so inbound platform messages reach
+    // the same agents the web UI drives. READY integrations only — readiness
+    // means the `channel-identity` domain's `init()` succeeded, so its link
+    // table is queryable. Without it a sender can't be resolved to a tenant,
+    // and attaching anyway would dispatch runs on default credentials.
+    const channelRegistrations = integrationRegistrations.filter(
+      ({ integration, ready }) => ready && integration.channels,
+    );
+    // `setChannels` replaces rather than merges, so a second provider would
+    // silently never receive a message. Fail loud instead.
+    if (channelRegistrations.length > 1) {
+      throw new Error(
+        `MastraFactory: integrations [${channelRegistrations
+          .map(({ integration }) => integration.id)
+          .join(', ')}] all provide channels, but only one may. Remove all but one.`,
+      );
+    }
+    for (const { integration } of channelRegistrations) {
+      // Integrations return a channels CONFIG; the factory owns construction.
+      prepared.base.controller.setChannels(
+        new AgentControllerChannels(
+          integration.channels!(
+            buildIntegrationContext(
+              {
+                controller: prepared.base.controller,
+                publicOrigin,
+                auth: routeAuth,
+                stateSigner,
+                fleet,
+                ...(baseCheckpoints ? { baseCheckpoints } : {}),
+                factoryStorage: storage,
+                integrationStorage,
+                sourceControlStorage,
+                rules,
+                factoryReady,
+                domains,
+                ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
+              },
+              integration.id,
+            ),
+          ),
+        ),
+      );
+    }
 
     // Integration lifecycle workers (e.g. polling an upstream without
     // webhooks): collected from READY integrations only, folded into the
@@ -749,12 +966,14 @@ export class MastraFactory {
               auth: routeAuth,
               stateSigner,
               fleet,
+              ...(baseCheckpoints ? { baseCheckpoints } : {}),
               factoryStorage: storage,
               integrationStorage,
               sourceControlStorage,
               rules,
               factoryReady,
               domains,
+              ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
             },
             integration.id,
           ),

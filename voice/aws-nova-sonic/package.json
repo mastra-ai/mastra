@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-aws-nova-sonic",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Mastra AWS Nova 2 Sonic voice integration",
   "type": "module",
   "main": "dist/index.js",
@@ -33,8 +33,8 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.1058.0",
-    "@aws-sdk/credential-provider-node": "^3.972.48",
+    "@aws-sdk/client-bedrock-runtime": "^3.1095.0",
+    "@aws-sdk/credential-provider-node": "^3.972.72",
     "@smithy/node-http-handler": "^4.0.0",
     "@smithy/types": "^4.0.0"
   },

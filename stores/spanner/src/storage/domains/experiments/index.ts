@@ -41,6 +41,12 @@ function rowToExperiment(row: Record<string, any>): Experiment {
     name: t.name ?? undefined,
     description: t.description ?? undefined,
     metadata: t.metadata ?? undefined,
+    provenance: t.provenance ?? null,
+    runnerAttestation: t.runnerAttestation ?? null,
+    experimentSetId: t.experimentSetId ?? null,
+    comparisonId: t.comparisonId ?? null,
+    variantId: t.variantId ?? null,
+    trialIndex: t.trialIndex == null ? null : Number(t.trialIndex),
     datasetId: t.datasetId ?? null,
     datasetVersion: t.datasetVersion == null ? null : Number(t.datasetVersion),
     organizationId: (t.organizationId as string | null | undefined) ?? null,
@@ -79,6 +85,7 @@ function rowToExperimentResult(row: Record<string, any>): ExperimentResult {
     traceId: t.traceId ?? null,
     status: (t.status ?? null) as ExperimentResult['status'],
     tags: (t.tags ?? null) as string[] | null,
+    comment: (t.comment ?? null) as string | null,
     toolMockReport: (t.toolMockReport ?? null) as ExperimentResult['toolMockReport'],
     createdAt: toDate(t.createdAt),
   };
@@ -114,12 +121,22 @@ export class ExperimentsSpanner extends ExperimentsStorage {
     await this.db.alterTable({
       tableName: TABLE_EXPERIMENTS,
       schema: TABLE_SCHEMAS[TABLE_EXPERIMENTS],
-      ifNotExists: ['organizationId', 'projectId'],
+      ifNotExists: [
+        'agentVersion',
+        'organizationId',
+        'projectId',
+        'provenance',
+        'runnerAttestation',
+        'experimentSetId',
+        'comparisonId',
+        'variantId',
+        'trialIndex',
+      ],
     });
     await this.db.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: TABLE_SCHEMAS[TABLE_EXPERIMENT_RESULTS],
-      ifNotExists: ['organizationId', 'projectId'],
+      ifNotExists: ['comment', 'organizationId', 'projectId'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -131,6 +148,11 @@ export class ExperimentsSpanner extends ExperimentsStorage {
         name: 'mastra_experiments_datasetid_idx',
         table: TABLE_EXPERIMENTS,
         columns: ['datasetId'],
+      },
+      {
+        name: 'mastra_experiments_grouping_idx',
+        table: TABLE_EXPERIMENTS,
+        columns: ['experimentSetId', 'comparisonId', 'variantId', 'trialIndex'],
       },
       {
         name: 'mastra_experiment_results_experimentid_idx',
@@ -182,6 +204,12 @@ export class ExperimentsSpanner extends ExperimentsStorage {
         name: input.name ?? undefined,
         description: input.description ?? undefined,
         metadata: input.metadata ?? undefined,
+        provenance: input.provenance ?? null,
+        runnerAttestation: input.runnerAttestation ?? null,
+        experimentSetId: input.experimentSetId ?? null,
+        comparisonId: input.comparisonId ?? null,
+        variantId: input.variantId ?? null,
+        trialIndex: input.trialIndex ?? null,
         datasetId: input.datasetId ?? null,
         datasetVersion: input.datasetVersion ?? null,
         organizationId: input.organizationId ?? null,
@@ -206,6 +234,12 @@ export class ExperimentsSpanner extends ExperimentsStorage {
           name: experiment.name ?? null,
           description: experiment.description ?? null,
           metadata: experiment.metadata ?? null,
+          provenance: experiment.provenance,
+          runnerAttestation: experiment.runnerAttestation,
+          experimentSetId: experiment.experimentSetId,
+          comparisonId: experiment.comparisonId,
+          variantId: experiment.variantId,
+          trialIndex: experiment.trialIndex,
           datasetId: experiment.datasetId,
           datasetVersion: experiment.datasetVersion,
           organizationId: experiment.organizationId,
@@ -353,6 +387,22 @@ export class ExperimentsSpanner extends ExperimentsStorage {
       if (args.status !== undefined) {
         conditions.push(`${quoteIdent('status', 'column name')} = @status`);
         params.status = args.status;
+      }
+      if (args.experimentSetId !== undefined) {
+        conditions.push(`${quoteIdent('experimentSetId', 'column name')} = @experimentSetId`);
+        params.experimentSetId = args.experimentSetId;
+      }
+      if (args.comparisonId !== undefined) {
+        conditions.push(`${quoteIdent('comparisonId', 'column name')} = @comparisonId`);
+        params.comparisonId = args.comparisonId;
+      }
+      if (args.variantId !== undefined) {
+        conditions.push(`${quoteIdent('variantId', 'column name')} = @variantId`);
+        params.variantId = args.variantId;
+      }
+      if (args.trialIndex !== undefined) {
+        conditions.push(`${quoteIdent('trialIndex', 'column name')} = @trialIndex`);
+        params.trialIndex = args.trialIndex;
       }
       if (args.filters) {
         const { organizationId, projectId } = args.filters;
@@ -536,7 +586,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
 
   async updateExperimentResult(input: UpdateExperimentResultInput): Promise<ExperimentResult> {
     try {
-      if (input.status === undefined && input.tags === undefined) {
+      if (input.status === undefined && input.tags === undefined && input.comment === undefined) {
         const existing = await this.getExperimentResultById({ id: input.id });
         // Honor the experimentId scope even on the no-op path: a result that
         // belongs to a different experiment must not be returned.
@@ -564,6 +614,11 @@ export class ExperimentsSpanner extends ExperimentsStorage {
         setClauses.push(`${quoteIdent('tags', 'column name')} = @tags`);
         params.tags = input.tags === null ? null : JSON.stringify(input.tags);
         types.tags = 'json';
+      }
+      if (input.comment !== undefined) {
+        setClauses.push(`${quoteIdent('comment', 'column name')} = @comment`);
+        params.comment = input.comment;
+        if (input.comment === null) types.comment = 'string';
       }
       const whereClauses = [`${quoteIdent('id', 'column name')} = @id`];
       if (input.experimentId !== undefined) {

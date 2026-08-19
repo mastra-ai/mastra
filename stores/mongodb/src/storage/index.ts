@@ -8,6 +8,7 @@ import { BackgroundTasksStorageMongoDB } from './domains/background-tasks';
 import { MongoDBBlobStore } from './domains/blobs';
 import { MongoDBDatasetsStorage } from './domains/datasets';
 import { MongoDBExperimentsStorage } from './domains/experiments';
+import { KnowledgeMongoDB } from './domains/knowledge';
 import { MongoDBMCPClientsStorage } from './domains/mcp-clients';
 import { MongoDBMCPServersStorage } from './domains/mcp-servers';
 import { MemoryStorageMongoDB } from './domains/memory';
@@ -18,6 +19,7 @@ import { SchedulesMongoDB } from './domains/schedules';
 import { MongoDBScorerDefinitionsStorage } from './domains/scorer-definitions';
 import { ScoresStorageMongoDB } from './domains/scores';
 import { MongoDBSkillsStorage } from './domains/skills';
+import { MongoDBWorkflowDefinitionsStore } from './domains/workflow-definitions';
 import { WorkflowsStorageMongoDB } from './domains/workflows';
 import { MongoDBWorkspacesStorage } from './domains/workspaces';
 import type { MongoDBConfig } from './types';
@@ -29,6 +31,7 @@ export {
   MongoDBBlobStore,
   MongoDBDatasetsStorage,
   MongoDBExperimentsStorage,
+  KnowledgeMongoDB,
   MongoDBMCPClientsStorage,
   MongoDBMCPServersStorage,
   MemoryStorageMongoDB,
@@ -37,6 +40,7 @@ export {
   SchedulesMongoDB,
   MongoDBScorerDefinitionsStorage,
   MongoDBSkillsStorage,
+  MongoDBWorkflowDefinitionsStore,
   MongoDBWorkspacesStorage,
   ObservabilityMongoDB,
   ScoresStorageMongoDB,
@@ -80,6 +84,8 @@ export class MongoDBStore extends MastraCompositeStore {
 
     const memory = new MemoryStorageMongoDB(domainConfig);
 
+    const knowledge = new KnowledgeMongoDB(domainConfig);
+
     const notifications = new NotificationsMongoDB(domainConfig);
 
     const scores = new ScoresStorageMongoDB(domainConfig);
@@ -112,8 +118,11 @@ export class MongoDBStore extends MastraCompositeStore {
 
     const schedules = new SchedulesMongoDB(domainConfig);
 
+    const workflowDefinitions = new MongoDBWorkflowDefinitionsStore(domainConfig);
+
     this.stores = {
       memory,
+      knowledge,
       notifications,
       scores,
       workflows,
@@ -130,6 +139,7 @@ export class MongoDBStore extends MastraCompositeStore {
       datasets,
       experiments,
       schedules,
+      workflowDefinitions,
     };
   }
 

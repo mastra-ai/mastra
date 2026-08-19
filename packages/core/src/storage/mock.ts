@@ -9,6 +9,7 @@ import { ExperimentsInMemory } from './domains/experiments/inmemory';
 import { InMemoryFavoritesStorage } from './domains/favorites/inmemory';
 import { InMemoryHarness } from './domains/harness/inmemory';
 import { InMemoryDB } from './domains/inmemory-db';
+import { InMemoryKnowledgeStorage } from './domains/knowledge/inmemory';
 import { InMemoryMCPClientsStorage } from './domains/mcp-clients/inmemory';
 import { InMemoryMCPServersStorage } from './domains/mcp-servers/inmemory';
 import { InMemoryMemory } from './domains/memory/inmemory';
@@ -21,6 +22,7 @@ import { ScoresInMemory } from './domains/scores/inmemory';
 import { InMemorySkillsStorage } from './domains/skills/inmemory';
 import { InMemoryThreadStateStorage } from './domains/thread-state/inmemory';
 import { InMemoryToolProviderConnectionsStorage } from './domains/tool-provider-connections/inmemory';
+import { InMemoryWorkflowDefinitionsStorage } from './domains/workflow-definitions/inmemory';
 import { WorkflowsInMemory } from './domains/workflows/inmemory';
 import { InMemoryWorkspacesStorage } from './domains/workspaces/inmemory';
 /**
@@ -63,7 +65,9 @@ export class InMemoryStore extends MastraCompositeStore {
     // Create all domain instances with the shared db
     this.stores = {
       memory: new InMemoryMemory({ db: this.#db }),
+      knowledge: new InMemoryKnowledgeStorage({ db: this.#db }),
       workflows: new WorkflowsInMemory({ db: this.#db }),
+      workflowDefinitions: new InMemoryWorkflowDefinitionsStorage({ db: this.#db }),
       scores: new ScoresInMemory({ db: this.#db }),
       observability: new ObservabilityInMemory({ db: this.#db }),
       agents: new InMemoryAgentsStorage({ db: this.#db }),

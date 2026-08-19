@@ -1,6 +1,6 @@
 {
   "name": "@mastra/opencode",
-  "version": "0.1.11-alpha.1",
+  "version": "0.1.18-alpha.0",
   "description": "OpenCode plugin for Mastra Observational Memory",
   "type": "module",
   "main": "./dist/index.js",
@@ -59,7 +59,7 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@opencode-ai/plugin": "1.14.48",
-    "@opencode-ai/sdk": "^1.17.4",
+    "@opencode-ai/sdk": "^1.18.5",
     "tsdown": "0.22.9",
     "typescript": "catalog:",
     "vitest": "catalog:"

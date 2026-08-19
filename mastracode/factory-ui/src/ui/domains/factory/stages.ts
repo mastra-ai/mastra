@@ -1,19 +1,41 @@
-/**
- * The Factory board's stage vocabulary, shared by the Board (columns) and the
- * Metrics page (stage labels/ordering). Stages are plain strings server-side —
- * this is purely the UI's naming and ordering of them.
- */
-export const BOARD_STAGES = [
-  { id: 'intake', label: 'Intake' },
-  { id: 'triage', label: 'Triage' },
-  { id: 'planning', label: 'Planning' },
-  { id: 'execute', label: 'Building' },
-  { id: 'review', label: 'Review' },
-  { id: 'done', label: 'Done' },
-  { id: 'canceled', label: 'Canceled' },
-] as const;
+import type { FactoryRuleStage } from '@mastra/factory/rules/types';
+import { FACTORY_RULE_STAGES } from '@mastra/factory/rules/types';
 
-export type BoardStageId = (typeof BOARD_STAGES)[number]['id'];
+const BOARD_STAGE_LABELS = {
+  intake: 'Intake',
+  triage: 'Triage',
+  planning: 'Planning',
+  execute: 'Building',
+  review: 'Review',
+  done: 'Done',
+  canceled: 'Canceled',
+} satisfies Record<FactoryRuleStage, string>;
+
+export type BoardStageId = FactoryRuleStage;
+
+export interface BoardStage {
+  id: BoardStageId;
+  label: string;
+}
+
+export const BOARD_STAGES: ReadonlyArray<BoardStage> = FACTORY_RULE_STAGES.map(id => ({
+  id,
+  label: BOARD_STAGE_LABELS[id],
+}));
+
+/**
+ * Stages that hold work in the pipeline, in column order — the board minus its
+ * terminal columns and minus `intake`.
+ *
+ * Intake is left out because the Board's Intake column merges persisted cards
+ * with live GitHub/Linear candidates that have no `work_items` row yet, so any
+ * aggregation over persisted rows undercounts it. Charting it means merging the
+ * live candidates in first, which needs its own age semantics (upstream open
+ * date vs. time in stage).
+ */
+export const PIPELINE_STAGES: BoardStageId[] = FACTORY_RULE_STAGES.filter(
+  id => id !== 'intake' && id !== 'done' && id !== 'canceled',
+);
 
 /** UI label for a stage, falling back to the raw id for unknown stages. */
 export function stageLabel(stage: string): string {

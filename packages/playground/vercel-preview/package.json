@@ -12,28 +12,19 @@
     "typecheck": "pnpm build:linked-workspace-deps && tsc --noEmit"
   },
   "dependencies": {
-    "@mastra/core": "latest",
-    "@mastra/deployer-vercel": "latest",
-    "@mastra/editor": "latest",
-    "@mastra/memory": "latest",
+    "@mastra/core": "link:../../../packages/core",
+    "@mastra/deployer-vercel": "link:../../../deployers/vercel",
+    "@mastra/editor": "link:../../../packages/editor",
+    "@mastra/memory": "link:../../../packages/memory",
     "hono": "^4.12.8",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "22.19.15",
-    "mastra": "latest",
+    "mastra": "link:../../../packages/cli",
     "turbo": "^2.9.12",
     "typescript": "^6.0.3"
   },
-  "pnpm": {
-    "overrides": {
-      "@mastra/core": "link:../../../packages/core",
-      "@mastra/deployer-vercel": "link:../../../deployers/vercel",
-      "@mastra/editor": "link:../../../packages/editor",
-      "@mastra/memory": "link:../../../packages/memory",
-      "mastra": "link:../../../packages/cli"
-    }
-  },
   "license": "Apache-2.0",
-  "packageManager": "pnpm@10.29.3+sha512.498e1fb4cca5aa06c1dcf2611e6fafc50972ffe7189998c409e90de74566444298ffe43e6cd2acdc775ba1aa7cc5e092a8b7054c811ba8c5770f84693d33d2dc"
+  "packageManager": "pnpm@11.21.0+sha512.521705bce689924eac72f5a3587122f362689ef6571e55ba80076fd637c11132ecffada26fad4ea79c485bfddbfd3d5a2a5b05805a77e893de71ec8a6cca3bb1"
 }

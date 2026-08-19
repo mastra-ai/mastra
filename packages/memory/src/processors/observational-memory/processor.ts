@@ -146,6 +146,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       model,
       abortSignal,
       abort,
+      messageId,
       rotateResponseMessageId,
     } = args;
     const state = _state ?? ({} as Record<string, unknown>);
@@ -201,15 +202,17 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           threadId,
           resourceId,
         });
-        const systemMessages =
-          ctx.hasObservations && ctx.omRecord
-            ? await this.engine.buildContextSystemMessages({
-                threadId,
-                resourceId,
-                record: ctx.omRecord,
-                unobservedContextBlocks: ctx.otherThreadsContext,
-              })
-            : undefined;
+        // Pass the record through even without observations — resource-scoped
+        // retrieval still injects recall guidance so the actor can browse and
+        // search other threads.
+        const systemMessages = ctx.omRecord
+          ? await this.engine.buildContextSystemMessages({
+              threadId,
+              resourceId,
+              record: ctx.omRecord,
+              unobservedContextBlocks: ctx.otherThreadsContext,
+            })
+          : undefined;
 
         injectObservationContextMessages({
           messageList,
@@ -257,6 +260,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         });
         this.turn.writer = writer;
         this.turn.sendSignal = args.sendSignal;
+        this.turn.sendStateSignal = args.sendStateSignal;
         this.turn.agent = args.agent;
         this.turn.requestContext = requestContext;
         await this.turn.start(this.memory);
@@ -275,6 +279,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       state.__omObservabilityContext = observabilityContext;
       this.turn.observabilityContext = observabilityContext;
       this.turn.actorModelContext = actorModelContext;
+      this.turn.responseMessageId = messageId;
 
       // ── Run step preparation (activation, threshold, observation, filtering) ──
       {
@@ -304,35 +309,28 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         });
 
         // ── Progress emission (processor-specific) ──────────
-        // Fetch a fresh record from storage so buffering flags (e.g.
-        // isBufferingObservation set by fire-and-forget buffer()) are visible.
-        // The cached this.turn.record is stale in production DBs where each
-        // query returns a new row object.
-        const freshRecord = await this.engine.getOrCreateRecord(threadId, resourceId);
+        const turnRecord = this.turn.record;
         await this.engine.emitProgress({
-          record: freshRecord,
+          record: turnRecord,
           stepNumber,
           pendingTokens: ctx.status.pendingTokens,
           threshold: ctx.status.threshold,
           effectiveObservationTokensThreshold: ctx.status.effectiveObservationTokensThreshold,
-          currentObservationTokens: freshRecord.observationTokenCount ?? 0,
+          currentObservationTokens: turnRecord.observationTokenCount ?? 0,
           writer,
           threadId,
           resourceId,
         });
 
         // ── Token persistence (processor-specific) ──────────
-        const allDbMsgs = messageList.get.all.db();
-        const tokenCounter = this.engine.getTokenCounter();
-        const contextTokens = await tokenCounter.countMessagesAsync(allDbMsgs);
-        const otherThreadsContext = this.turn.context.otherThreadsContext;
-        const otherThreadTokens = otherThreadsContext ? tokenCounter.countString(otherThreadsContext) : 0;
-        const finalTotalPending = contextTokens + otherThreadTokens;
-
-        await this.engine
-          .getStorage()
-          .setPendingMessageTokens(freshRecord.id, finalTotalPending)
-          .catch(() => {});
+        // prepare() already counted the current unobserved window and resource context.
+        const finalTotalPending = ctx.status.pendingTokens;
+        try {
+          await this.engine.getStorage().setPendingMessageTokens(turnRecord.id, finalTotalPending);
+          this.turn.patchRecord({ pendingMessageTokens: finalTotalPending });
+        } catch {
+          // Token persistence is intentionally non-fatal for streaming UX.
+        }
 
         // ── Repro capture (processor-specific) ──────────────
         if (reproCaptureEnabled) {
@@ -342,7 +340,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
             stepNumber,
             args,
             preRecord: preRecordSnapshot!,
-            postRecord: safeCaptureJson(freshRecord) as ObservationalMemoryRecord,
+            postRecord: safeCaptureJson(turnRecord) as ObservationalMemoryRecord,
             preMessages: preMessagesSnapshot!,
             preBufferedChunks: [],
             preContextTokenCount: 0,

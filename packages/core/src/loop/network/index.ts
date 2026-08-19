@@ -5,6 +5,7 @@ import type { MultiPrimitiveExecutionOptions, NetworkOptions } from '../../agent
 import { Agent, tryGenerateWithJsonFallback } from '../../agent/index';
 import { MessageList } from '../../agent/message-list';
 import type { MastraDBMessage, MessageListInput } from '../../agent/message-list';
+import { DEFAULT_TOOL_DECLINE_REASON, resolveDeclineReason } from '../../agent/tool-approval';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraLLMVNext } from '../../llm/model/model.loop';
@@ -215,7 +216,8 @@ export async function getRoutingAgent({
     .map(([name, tool]) => {
       // Use 'in' check for type narrowing, then nullish coalescing for undefined values
       const inputSchema = 'inputSchema' in tool ? (tool.inputSchema ?? z.object({})) : z.object({});
-      return ` - **${name}**: ${tool.description}, input schema: ${JSON.stringify(schemaToJsonSchema(inputSchema))}`;
+      const description = 'description' in tool ? (tool.description ?? '') : '';
+      return ` - **${name}**: ${description}, input schema: ${JSON.stringify(schemaToJsonSchema(inputSchema))}`;
     })
     .join('\n');
 
@@ -960,6 +962,7 @@ export async function createNetworkLoop({
       let suspendedTools: Record<string, any> | undefined;
 
       let toolCallDeclined = false;
+      let declineReason = DEFAULT_TOOL_DECLINE_REASON;
 
       let agentCallAborted = false;
 
@@ -1005,8 +1008,20 @@ export async function createNetworkLoop({
           };
         }
 
+        // Detect a declined tool call structurally via the approval decision. The legacy
+        // string comparison is kept as a fallback for older persisted results, but it can
+        // no longer be the only signal now that the decline reason is caller-configurable.
+        if (chunk.type === 'tool-output-denied') {
+          toolCallDeclined = true;
+          declineReason = chunk.payload.approval?.reason ?? declineReason;
+        }
+
         if (chunk.type === 'tool-result') {
-          if (chunk.payload.result === 'Tool call was not approved by the user') {
+          const approval = (chunk.payload as { approval?: { approved?: boolean; reason?: string } }).approval;
+          if (approval?.approved === false) {
+            toolCallDeclined = true;
+            declineReason = approval.reason ?? declineReason;
+          } else if (chunk.payload.result === DEFAULT_TOOL_DECLINE_REASON) {
             toolCallDeclined = true;
           }
         }
@@ -1022,7 +1037,7 @@ export async function createNetworkLoop({
 
       let finalText = await result.text;
       if (toolCallDeclined) {
-        finalText = finalText + '\n\nTool call was not approved by the user';
+        finalText = finalText + `\n\n${declineReason}`;
       }
 
       // When the sub-agent was aborted, skip saving partial results to memory
@@ -1458,6 +1473,16 @@ export async function createNetworkLoop({
     },
   });
 
+  const toolApprovalSchema = z.object({
+    approved: z
+      .boolean()
+      .describe('Controls if the tool call is approved or not, should be true when approved and false when declined'),
+    reason: z
+      .string()
+      .optional()
+      .describe('Optional explanation for the decision, surfaced when the tool call is declined'),
+  });
+
   const toolStep = createStep({
     id: 'tool-execution-step',
     inputSchema: z.object({
@@ -1479,11 +1504,7 @@ export async function createNetworkLoop({
       isComplete: z.boolean().optional(),
       iteration: z.number(),
     }),
-    resumeSchema: z.object({
-      approved: z
-        .boolean()
-        .describe('Controls if the tool call is approved or not, should be true when approved and false when declined'),
-    }),
+    resumeSchema: toolApprovalSchema,
     execute: async ({ inputData, getInitData, writer, resumeData, mastra, suspend }) => {
       const initData = await getInitData<{ threadId: string; threadResourceId: string }>();
       const logger = mastra?.getLogger();
@@ -1522,7 +1543,7 @@ export async function createNetworkLoop({
         throw mastraError;
       }
 
-      if (!tool.execute) {
+      if (!('execute' in tool) || typeof tool.execute !== 'function') {
         const mastraError = new MastraError({
           id: 'AGENT_NETWORK_TOOL_EXECUTION_STEP_INVALID_TASK_INPUT',
           domain: ErrorDomain.AGENT_NETWORK,
@@ -1532,6 +1553,7 @@ export async function createNetworkLoop({
         throw mastraError;
       }
 
+      const executeTool = tool.execute;
       const toolId = 'id' in tool && typeof tool.id === 'string' ? tool.id : inputData.primitiveId;
       // Use safeParseLLMJson to handle malformed JSON from LLM (truncated, unescaped chars, etc.)
       const inputDataToUse = await safeParseLLMJson(inputData.prompt);
@@ -1610,15 +1632,8 @@ export async function createNetworkLoop({
           });
         }
         if (!resumeData) {
-          const approvalSchema = z.object({
-            approved: z
-              .boolean()
-              .describe(
-                'Controls if the tool call is approved or not, should be true when approved and false when declined',
-              ),
-          });
           const requireApprovalResumeSchema = JSON.stringify(
-            standardSchemaToJSONSchema(toStandardSchema(approvalSchema)),
+            standardSchemaToJSONSchema(toStandardSchema(toolApprovalSchema)),
           );
           await saveMessagesWithProcessors(
             memory,
@@ -1687,7 +1702,7 @@ export async function createNetworkLoop({
           });
         } else {
           if (!resumeData.approved) {
-            const rejectionResult = 'Tool call was not approved by the user';
+            const rejectionResult = resolveDeclineReason(resumeData);
             await saveMessagesWithProcessors(
               memory,
               [
@@ -1760,7 +1775,7 @@ export async function createNetworkLoop({
 
       let toolSuspendPayload: any;
 
-      const finalResult = await tool.execute(
+      const finalResult = await executeTool(
         inputDataToUse,
         {
           abortSignal,

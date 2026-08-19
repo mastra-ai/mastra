@@ -9,6 +9,7 @@ import {
 } from '@docusaurus/theme-common/internal'
 import { DocsPreferredVersionContextProvider } from '@docusaurus/plugin-content-docs/client'
 import type { Props } from '@theme/Layout/Provider'
+import { ContextualSidebarProvider } from '../../contextual-sidebar-context'
 
 const Provider = composeProviders([
   ColorModeProvider,
@@ -20,5 +21,9 @@ const Provider = composeProviders([
 ])
 
 export default function LayoutProvider({ children }: Props): ReactNode {
-  return <Provider>{children}</Provider>
+  return (
+    <Provider>
+      <ContextualSidebarProvider>{children}</ContextualSidebarProvider>
+    </Provider>
+  )
 }

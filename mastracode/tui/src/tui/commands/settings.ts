@@ -195,7 +195,7 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
   const config = {
     notifications: (state?.notifications ?? 'off') as NotificationMode,
     yolo: state?.yolo === true,
-    thinkingLevel: (state?.thinkingLevel ?? 'off') as string,
+    thinkingLevel: (state?.thinkingLevel ?? globalSettings.preferences.thinkingLevel) as string,
     currentModelId: ctx.state.session.model.get() ?? '',
     escapeAsCancel: ctx.state.editor.escapeEnabled,
     quietMode: globalSettings.preferences.quietMode,
@@ -216,7 +216,9 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         await ctx.state.session.state.set({ yolo: enabled } as any);
       },
       onThinkingLevelChange: async level => {
-        await ctx.state.session.state.set({ thinkingLevel: level } as any);
+        // Global default only — session overrides are managed via /think.
+        // Resolution happens at request time, so this applies immediately to
+        // any session without its own override.
         const current = loadSettings();
         current.preferences.thinkingLevel = level as ThinkingLevelSetting;
         saveSettings(current);
@@ -255,7 +257,8 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         ctx.stop();
         const label = backend === 'pg' ? 'PostgreSQL' : 'LibSQL';
         console.info(`\nStorage backend changed to ${label}. Restarting is required.\n`);
-        process.exit(0);
+        if (ctx.exit) ctx.exit(0);
+        else process.exit(0);
       },
       onExperimentalGithubSignalsChange: async enabled => {
         if (enabled && !(await ensureGitcrawlReady(ctx))) return false;

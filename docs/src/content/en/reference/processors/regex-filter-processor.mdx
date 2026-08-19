@@ -7,7 +7,7 @@ packages:
 
 # RegexFilterProcessor
 
-The `RegexFilterProcessor` applies zero-cost regex pattern matching to filter, redact, or block content in agent messages. No LLM calls are made — all detection is regex-based.
+The `RegexFilterProcessor` applies zero-cost regex pattern matching to filter, redact, or block content in agent messages. No LLM calls are made. All detection is regex-based.
 
 Supports built-in presets for common patterns (PII, secrets, URLs) and custom regex rules. Can be applied to input, output, or both phases.
 
@@ -48,6 +48,25 @@ const filter = new RegexFilterProcessor({
 })
 ```
 
+Raise the streaming carryover window for long custom matches (e.g. a fixed-length secret or a
+value that only matches once its closing delimiter arrives):
+
+```typescript
+import { RegexFilterProcessor } from '@mastra/core/processors'
+
+const filter = new RegexFilterProcessor({
+  rules: [
+    {
+      name: 'armored-key',
+      pattern: /-----BEGIN KEY-----[A-Z]+-----END KEY-----/g,
+      replacement: '[KEY]',
+    },
+  ],
+  strategy: 'redact',
+  streamCarryoverSize: 256,
+})
+```
+
 Attach to an agent:
 
 ```typescript
@@ -58,14 +77,12 @@ const agent = new Agent({
   id: 'my-agent',
   name: 'my-agent',
   model: '__GATEWAY_OPENAI_MODEL_NANO__',
-  processors: {
-    input: [
-      new RegexFilterProcessor({
-        presets: ['pii', 'secrets'],
-        strategy: 'block',
-      }),
-    ],
-  },
+  inputProcessors: [
+    new RegexFilterProcessor({
+      presets: ['pii', 'secrets'],
+      strategy: 'block',
+    }),
+  ],
 })
 ```
 
@@ -128,6 +145,22 @@ const agent = new Agent({
     isOptional: true,
     defaultValue: "'all'",
   },
+  {
+    name: 'includeRedactedValues',
+    type: 'boolean',
+    description:
+      'Include the text that was redacted in each report entry. Off by default, because the values are the data the processor removes.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'streamCarryoverSize',
+    type: 'number',
+    description:
+      'Trailing characters the streaming redact path holds back between chunks, so a match split across a chunk boundary is redacted whole. The default covers every built-in preset with a wide margin. Raise it for custom rules whose matches stay invisible to the rule until they complete, such as a fixed-length secret or a value with a closing delimiter, when such a match can be longer than the window.',
+    isOptional: true,
+    defaultValue: '128',
+  },
 ]}
 />
 
@@ -185,3 +218,132 @@ When the `block` strategy is active (default), `RegexFilterProcessor` throws a `
 | `pii` | Emails, phone numbers, SSNs, credit card numbers | `[EMAIL]`, `[PHONE]`, `[SSN]`, `[CREDIT_CARD]` |
 | `secrets` | API keys, bearer tokens, AWS access keys | `[API_KEY]`, `[BEARER_TOKEN]`, `[AWS_KEY]` |
 | `urls` | HTTP/HTTPS URLs | `[URL]` |
+
+## Redaction behavior
+
+Every rule is matched independently, so two rules can claim text that overlaps. A card number written without separators matches both `phone` and `credit-card`, for example. Overlapping matches are combined into a single region and replaced once, using the replacement of the longest match.
+
+```typescript
+const filter = new RegexFilterProcessor({
+  presets: ['pii'],
+  strategy: 'redact',
+})
+
+// "Charge 4111111111111111 today" becomes "Charge [CREDIT_CARD] today"
+```
+
+A replacement string can reference capture groups with `$1` or `$&`. Those references resolve for a single match whose pattern also matches the matched text on its own. In a combined region, or for a rule anchored on its surroundings with a lookbehind or lookahead, the replacement string is inserted as written. The region is redacted either way.
+
+## Redaction reporting
+
+The `redact` strategy rewrites text in place, so nothing downstream can tell what changed. Assign `onViolation` to record it. The processor calls it once per redacted message, message part, or stream chunk, and offsets are relative to that piece of text. Async callbacks are awaited, and errors are caught so an unavailable audit sink can't fail the request.
+
+```typescript
+import { RegexFilterProcessor, type RegexRedactionDetail } from '@mastra/core/processors'
+
+const filter = new RegexFilterProcessor({
+  presets: ['pii'],
+  strategy: 'redact',
+})
+
+filter.onViolation = async ({ detail }) => {
+  const redaction = detail as RegexRedactionDetail
+
+  for (const entry of redaction.redactions) {
+    await auditLog.write({
+      phase: redaction.phase,
+      messageId: redaction.messageId,
+      rule: entry.rule,
+      offset: entry.index,
+      length: entry.length,
+    })
+  }
+}
+```
+
+The callback is awaited, including in `processOutputStream`, where it runs for every chunk that contains a match. Keep the callback fast, or hand the work to a queue, so a slow audit sink doesn't stall a streaming response. With no callback attached, the `redact` path stays synchronous.
+
+The `block` strategy reports through the same callback. There the processor runner invokes it when it catches the `TripWire`, so `detail` holds the tripwire metadata described under [Error behavior](#error-behavior) rather than the shape below.
+
+`detail` for a redaction is a `RegexRedactionDetail`:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'strategy',
+    type: "'redact'",
+    description: 'Distinguishes a redaction report from the block strategy payload.',
+    isOptional: false,
+  },
+  {
+    name: 'phase',
+    type: "'processInput' | 'processOutputStream' | 'processOutputResult'",
+    description: 'Processor method that applied the redactions.',
+    isOptional: false,
+  },
+  {
+    name: 'messageId',
+    type: 'string',
+    description: 'Id of the message the text came from. Absent for stream chunks.',
+    isOptional: true,
+  },
+  {
+    name: 'partIndex',
+    type: 'number',
+    description:
+      "Index of the redacted part in the message's parts array, which also contains non-text parts. Absent for string content and stream chunks.",
+    isOptional: true,
+  },
+  {
+    name: 'redactions',
+    type: 'RegexRedaction[]',
+    description: 'Redactions in the order they appear in the text.',
+    isOptional: false,
+    properties: [
+      {
+        type: 'RegexRedaction',
+        parameters: [
+          {
+            name: 'rule',
+            type: 'string',
+            description: 'Name of the rule whose replacement was used.',
+            isOptional: false,
+          },
+          {
+            name: 'index',
+            type: 'number',
+            description: 'Start offset of the redacted span in the text.',
+            isOptional: false,
+          },
+          {
+            name: 'length',
+            type: 'number',
+            description: 'Length of the redacted span.',
+            isOptional: false,
+          },
+          {
+            name: 'replacement',
+            type: 'string',
+            description: 'Text that replaced the span.',
+            isOptional: false,
+          },
+          {
+            name: 'overlappingRules',
+            type: 'string[]',
+            description: 'Names of all rules that matched this span, set only when more than one overlapped.',
+            isOptional: true,
+          },
+          {
+            name: 'value',
+            type: 'string',
+            description: 'The text that was redacted. Set only when includeRedactedValues is enabled.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+Values are left out by default. An audit trail that copies the data it protects widens the exposure it was added to narrow. Set `includeRedactedValues` only when the destination is as protected as the original, and note that the `block` strategy also withholds matched text from its `TripWire` metadata for the same reason.

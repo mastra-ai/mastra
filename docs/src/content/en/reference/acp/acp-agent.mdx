@@ -8,7 +8,7 @@ packages:
 
 # AcpAgent class
 
-The `AcpAgent` class wraps an Agent Client Protocol (ACP)-compatible coding agent as a Mastra subagent. Use it when a parent Mastra agent should delegate repository inspection, code edits, or other ACP-backed tasks to a named subagent.
+The `AcpAgent` class wraps an Agent Client Protocol (ACP)-compatible coding agent as a Mastra subagent. Use it when a parent Mastra agent should delegate repository inspection and code edits. It can also delegate other ACP-backed tasks to the subagent.
 
 If you want the parent agent to call the ACP agent as a tool instead, use [`createACPTool()`](/reference/acp/create-acp-tool).
 
@@ -193,7 +193,7 @@ export const claudeCodeAgent = new AcpAgent({
 
 #### `generate(messages, options?)`
 
-Sends the prompt to the ACP agent, buffers text chunks from the ACP response, and returns a Mastra subagent generate result.
+Sends the prompt to the ACP agent and buffers text chunks from the response before returning a Mastra subagent generate result.
 
 ```typescript
 const result = await codeAgent.generate('Inspect the repository and summarize the test setup')
@@ -238,7 +238,7 @@ await codeAgent.setModel('__AI_SDK_ANTHROPIC_MODEL_SONNET__')
 
 ## Session lifecycle
 
-`AcpAgent` starts the configured `command` on first use, initializes the ACP client, and creates an ACP session. By default, `persistSession` is `true`, so the process and session stay alive across `generate()`, `stream()`, `getAvailableModels()`, and `setModel()` calls.
+`AcpAgent` starts the configured `command` on first use and initializes the ACP client. It then creates an ACP session. By default, `persistSession` is `true`, so the process and session stay alive across `generate()`, `stream()`, `getAvailableModels()`, and `setModel()` calls.
 
 Set `persistSession: false` when each prompt should run in a fresh ACP process:
 
@@ -315,13 +315,13 @@ export const codeAgent = new AcpAgent({
 })
 ```
 
-Use this callback to enforce local policy, inspect the permission title, or route the decision to your own approval flow.
+Use this callback to enforce local policy or inspect the permission title. It can also route the decision to your own approval flow.
 
 ## Related
 
-- [Agent Client Protocol docs](/docs/agents/acp)
+- [Agent Client Protocol docs](/docs/connections/acp)
 - [createACPTool() reference](/reference/acp/create-acp-tool)
 - [Agent reference](/reference/agents/agent)
-- [Subagents](/docs/agents/supervisor-agents)
+- [Subagents](/docs/subagents)
 - [Agent Client Protocol introduction](https://agentclientprotocol.com/overview/introduction)
 - [Agent Client Protocol schema](https://agentclientprotocol.com/protocol/schema)

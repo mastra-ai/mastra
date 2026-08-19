@@ -28,7 +28,7 @@ export const mastra = new Mastra({
 
 :::note
 
-You can omit the constructor parameters if you have the appropriately named environment variables (`WORKOS_API_KEY` and `WORKOS_CLIENT_ID`) set. In that case, use `new MastraAuthWorkos()` without any arguments.
+You can omit the constructor parameters if the required environment variables (`WORKOS_API_KEY` and `WORKOS_CLIENT_ID`) are set. In that case, use `new MastraAuthWorkos()` without any arguments.
 
 :::
 
@@ -127,7 +127,7 @@ By default, `MastraAuthWorkos` authorizes any authenticated WorkOS user whose re
 1. **User Retrieval**: User information is extracted from the verified token
 1. **Authorization Decision**: Access is granted if the resolved user contains the required identifiers
 
-This means that by default, `MastraAuthWorkos` acts as an authentication provider rather than a role gate.
+`MastraAuthWorkos` acts as an authentication provider rather than a role gate by default.
 
 ## FGA membership loading
 
@@ -199,4 +199,4 @@ The properties with `urn:myapp:` prefixes are custom claims configured in your W
 
 ## Related
 
-[MastraAuthWorkos Class](/docs/server/auth/workos)
+[MastraAuthWorkos Class](/integrations/auth/workos)

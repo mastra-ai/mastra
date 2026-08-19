@@ -33,6 +33,8 @@ import {
   validateCursorId,
 } from './polling';
 
+const METRIC_FILTER_FIELD_MAPPINGS = { traceIds: 'traceId' };
+
 // ============================================================================
 // Helpers
 // ============================================================================
@@ -340,7 +342,7 @@ export async function listMetrics(db: DuckDBConnection, args: ListMetricsArgs): 
   const page = Number(pagination.page);
   const perPage = Number(pagination.perPage);
 
-  const { clause: filterClause, params: filterParams } = buildWhereClause(filterRecord);
+  const { clause: filterClause, params: filterParams } = buildWhereClause(filterRecord, METRIC_FILTER_FIELD_MAPPINGS);
 
   if (mode === 'delta') {
     assertDeltaPollingEnabled();
@@ -431,6 +433,7 @@ export async function getMetricAggregate(
   const { clause: nameClause, params: nameParams } = buildMetricNameFilter(args.name);
   const { clause: filterClause, params: filterParams } = buildWhereClause(
     args.filters as Record<string, unknown> | undefined,
+    METRIC_FILTER_FIELD_MAPPINGS,
   );
   const { clause: whereClause, params: allParams } = buildCombinedWhereClause(
     nameClause,
@@ -481,6 +484,7 @@ export async function getMetricAggregate(
       };
       const { clause: prevFilterClause, params: prevFilterParams } = buildWhereClause(
         prevFilters as Record<string, unknown>,
+        METRIC_FILTER_FIELD_MAPPINGS,
       );
       const { clause: prevWhereClause, params: prevParams } = buildCombinedWhereClause(
         nameClause,
@@ -536,6 +540,7 @@ export async function getMetricBreakdown(
   const { clause: nameClause, params: nameParams } = buildMetricNameFilter(args.name);
   const { clause: filterClause, params: filterParams } = buildWhereClause(
     args.filters as Record<string, unknown> | undefined,
+    METRIC_FILTER_FIELD_MAPPINGS,
   );
   const { clause: whereClause, params: allParams } = buildCombinedWhereClause(
     nameClause,
@@ -584,6 +589,7 @@ export async function getMetricTimeSeries(
   const { clause: nameClause, params: nameParams } = buildMetricNameFilter(args.name);
   const { clause: filterClause, params: filterParams } = buildWhereClause(
     args.filters as Record<string, unknown> | undefined,
+    METRIC_FILTER_FIELD_MAPPINGS,
   );
   const { clause: whereClause, params: allParams } = buildCombinedWhereClause(
     nameClause,
@@ -690,6 +696,7 @@ export async function getMetricPercentiles(
   const intervalSql = getIntervalSql(args.interval);
   const { clause: filterClause, params: filterParams } = buildWhereClause(
     args.filters as Record<string, unknown> | undefined,
+    METRIC_FILTER_FIELD_MAPPINGS,
   );
 
   const allConditions = [`name = ?`];

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Agent } from '../../../agent';
 import { executeTarget } from '../executor';
-import { TOOL_MOCK_MISMATCH, TOOL_MOCK_EXHAUSTED } from '../tool-mocks';
+import { TOOL_MOCK_MISMATCH, TOOL_MOCK_EXHAUSTED, TOOL_MOCK_NOT_DECLARED } from '../tool-mocks';
 import type { ItemToolMock } from '../tool-mocks';
 
 vi.mock('../../../agent', async importOriginal => {
@@ -131,6 +131,24 @@ describe('executeTarget agent tool mocks', () => {
     expect(result.error).toBeNull();
     expect(liveExecutions).toEqual([{ toolName: 'unmocked', input: { b: 2 } }]);
     expect(result.toolMockReport?.liveCalls).toEqual([{ toolName: 'unmocked', args: { b: 2 } }]);
+  });
+
+  it('denies undeclared tools before live execution', async () => {
+    const liveExecutions: ToolCall[] = [];
+    const agent = createHookDrivenAgent({
+      toolCalls: [{ toolName: 'undeclared', input: { b: 2 } }],
+      liveExecutions,
+    });
+
+    const result = await executeTarget(agent, 'agent', { input: 'hi' }, { unmockedToolPolicy: 'deny' });
+
+    expect(result.output).toBeNull();
+    expect(result.error?.code).toBe(TOOL_MOCK_NOT_DECLARED);
+    expect(liveExecutions).toEqual([]);
+    expect(result.toolMockReport).toMatchObject({
+      liveCalls: [],
+      failure: { code: TOOL_MOCK_NOT_DECLARED, toolName: 'undeclared', args: { b: 2 } },
+    });
   });
 
   it('reports unconsumed mocks without failing the item', async () => {

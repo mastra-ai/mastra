@@ -1,4 +1,4 @@
-import type { MastraDBMessage } from '@mastra/core/agent';
+import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -15,6 +15,13 @@ export interface ObservationRunOpts {
   resourceId?: string;
   messages: MastraDBMessage[];
 
+  /**
+   * Live MessageList for the in-flight agent turn, when observation runs inside
+   * an agent loop. Lets lifecycle markers land on the pending assistant response
+   * message before it reaches storage (see `streamMarker`).
+   */
+  messageList?: MessageList;
+
   /** Pre-generated cycle ID (async buffer only — sync/resource auto-generate). */
   cycleId?: string;
   /** Pre-captured start timestamp (async buffer only). */
@@ -25,6 +32,7 @@ export interface ObservationRunOpts {
   reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
   agent?: ProcessorContext['agent'];
   sendSignal?: ProcessorContext['sendSignal'];
+  sendStateSignal?: ProcessorContext['sendStateSignal'];
   requestContext?: RequestContext;
   currentModel?: ObservationModelContext;
   observabilityContext?: ObservabilityContext;
@@ -48,6 +56,12 @@ export interface ObservationRunResult {
   observed: boolean;
   usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   providerMetadata?: ProviderMetadata;
+  /**
+   * The failure that ended the cycle, for strategies that swallow errors
+   * instead of rethrowing (async buffering). Lets callers report the failure
+   * (e.g. to ObserveHooks) even though the fire-and-forget path never throws.
+   */
+  error?: Error;
 }
 
 /** Processed observation ready for persistence. */

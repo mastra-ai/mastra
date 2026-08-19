@@ -1,5 +1,10 @@
 {
-  "attachment": ["google/gemma-4-31B-it", "mistralai/Mistral-Medium-3.5-128B", "moonshotai/Kimi-K2.6"],
+  "attachment": [
+    "google/gemma-4-31B-it",
+    "mistralai/Mistral-Medium-3.5-128B",
+    "moonshotai/Kimi-K2.6",
+    "moonshotai/Kimi-K3"
+  ],
   "temperature": [
     "google/gemma-4-31B-it",
     "meta-llama/Llama-3.3-70B-Instruct",
@@ -16,6 +21,7 @@
     "mistralai/Mistral-Medium-3.5-128B",
     "mistralai/Mistral-Small-3.2-24B-Instruct-2506",
     "moonshotai/Kimi-K2.6",
+    "moonshotai/Kimi-K3",
     "openai/gpt-oss-120b",
     "zai-org/GLM-4.7",
     "zai-org/GLM-5.2"

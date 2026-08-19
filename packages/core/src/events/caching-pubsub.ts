@@ -18,6 +18,19 @@ export interface CachingPubSubOptions {
    * Falls back to console.error if not provided.
    */
   logger?: IMastraLogger;
+  /**
+   * Optional per-topic caching policy. Defaults to caching every topic.
+   *
+   * Returning `false` takes the same path as a `localOnly` publish: no list
+   * entry, no index, no counter allocation — the event is handed straight to
+   * the inner PubSub and still delivered live.
+   *
+   * This exists because `localOnly` is not always visible here. When a caller
+   * wraps a PubSub that itself decides `localOnly` (e.g. the `mastra.pubsub`
+   * proxy), the cache runs *above* that decision and never sees the flag, so
+   * the policy has to be supplied at construction time instead.
+   */
+  shouldCache?: (topic: string) => boolean;
 }
 
 /**
@@ -56,6 +69,7 @@ export interface CachingPubSubOptions {
 export class CachingPubSub extends PubSub {
   private readonly keyPrefix: string;
   private readonly logger?: IMastraLogger;
+  private readonly shouldCache?: (topic: string) => boolean;
   /** Maps original callbacks to their wrapped versions for proper unsubscribe */
   private callbackMap = new Map<EventCallback, EventCallback>();
 
@@ -67,10 +81,15 @@ export class CachingPubSub extends PubSub {
     super();
     this.keyPrefix = options.keyPrefix ?? 'pubsub:';
     this.logger = options.logger;
+    this.shouldCache = options.shouldCache;
   }
 
   get supportsNativeBatching(): boolean {
     return this.inner.supportsNativeBatching;
+  }
+
+  get supportsOffsets(): boolean {
+    return true;
   }
 
   /**
@@ -121,12 +140,34 @@ export class CachingPubSub extends PubSub {
    *
    * Uses atomic increment for index assignment to prevent race conditions
    * when multiple events are published concurrently.
+   *
+   * `localOnly` events bypass the cache entirely — no list entry, no index, no
+   * counter allocation — and are handed straight to the inner PubSub. They are
+   * never relayed to other instances, so a shared replay cache can have no
+   * reader for them; caching them only grows the store without bound (some
+   * payloads, e.g. `workflow.events.v2.*` watch events carrying cumulative step
+   * results, are multiple megabytes each). Consumers of `localOnly` topics
+   * subscribe live and never replay, and every downstream `index` check is
+   * guarded for absence, so dropping the index is safe.
+   *
+   * Topics rejected by the `shouldCache` option take the exact same path, for
+   * callers whose `localOnly` decision is made below this layer.
    */
   async publish(
     topic: string,
     event: Omit<Event, 'id' | 'createdAt' | 'index'>,
     options?: { localOnly?: boolean },
   ): Promise<void> {
+    if (options?.localOnly || this.shouldCache?.(topic) === false) {
+      const fullEvent: Event = {
+        ...event,
+        id: crypto.randomUUID(),
+        createdAt: new Date(),
+      };
+      await this.inner.publish(topic, fullEvent, options);
+      return;
+    }
+
     const cacheKey = this.getCacheKey(topic);
     const counterKey = this.getCounterKey(topic);
 
@@ -204,8 +245,10 @@ export class CachingPubSub extends PubSub {
 
     const wrappedCb: EventCallback = (event, ack, nack) => {
       // Drop events strictly before the requested offset on the live path.
+      // Dropped deliveries are still acknowledged: the consumer will never see
+      // them, so leaving them unacknowledged would strand them on the backend.
       if (typeof event.index === 'number' && event.index < offset) {
-        return;
+        return ack?.();
       }
 
       if (bootstrapping) {
@@ -218,13 +261,16 @@ export class CachingPubSub extends PubSub {
       // deliveryAttempt > 1, and the consumer must see them to retry processing.
       const isRetry = typeof event.deliveryAttempt === 'number' && event.deliveryAttempt > 1;
       if (typeof event.index === 'number' && event.index <= lastDelivered && !isRetry) {
-        return;
+        // Already delivered via history or the buffer drain. Acknowledge the
+        // duplicate so it doesn't stay pending on the backend.
+        return ack?.();
       }
 
       if (typeof event.index === 'number' && event.index > lastDelivered) {
         lastDelivered = event.index;
       }
-      cb(event, ack, nack);
+      // Hand the consumer's outcome back to the backend so it can ack or nack.
+      return cb(event, ack, nack);
     };
 
     this.callbackMap.set(cb, wrappedCb);
@@ -240,7 +286,10 @@ export class CachingPubSub extends PubSub {
         if (typeof event.index === 'number') {
           lastDelivered = event.index;
         }
-        cb(event);
+        // Awaited so history is delivered in order before the buffer drain.
+        // History comes from storage, not the transport, so there is nothing
+        // to acknowledge.
+        await cb(event);
       }
 
       // --- Phase 3: drain buffer, suppressing duplicates history already covered ---
@@ -253,7 +302,14 @@ export class CachingPubSub extends PubSub {
         if (typeof event.index === 'number') {
           lastDelivered = event.index;
         }
-        cb(event, ack, nack);
+        // The consumer settles these itself through the ack/nack it was handed
+        // on the live path. Awaited so a rejection can still reach nack, which
+        // the backend would otherwise have routed.
+        try {
+          await cb(event, ack, nack);
+        } catch {
+          await nack?.();
+        }
       }
 
       // --- Phase 4: flip to passthrough ---

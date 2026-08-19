@@ -142,6 +142,35 @@ export const ClickableCurves: Story = {
   },
 };
 
+// mirrors the Intelligence page: four uppercased signal columns inside a full-bleed card
+const signalData = [
+  { goal: 'Resolve billing issue', outcome: 'Resolved', behavior: 'Escalated', sentiment: 'Frustrated' },
+  { goal: 'Resolve billing issue', outcome: 'Abandoned', behavior: 'Retried', sentiment: 'Frustrated' },
+  { goal: 'Find documentation', outcome: 'Resolved', behavior: 'Self-served', sentiment: 'Neutral' },
+  { goal: 'Find documentation', outcome: 'Resolved', behavior: 'Retried', sentiment: 'Satisfied' },
+  { goal: 'Configure integration', outcome: 'Deflected', behavior: 'Escalated', sentiment: 'Neutral' },
+  { goal: 'Configure integration', outcome: 'Resolved', behavior: 'Self-served', sentiment: 'Satisfied' },
+];
+
+const signalColumns = [
+  { id: 'goal', label: 'GOAL' },
+  { id: 'outcome', label: 'OUTCOME' },
+  { id: 'behavior', label: 'BEHAVIOR' },
+  { id: 'sentiment', label: 'SENTIMENT' },
+];
+
+export const SignalColumnHeaders: Story = {
+  render: () => (
+    <div className="w-full p-8">
+      <div className="border-border1 rounded-lg border">
+        <Sankey data={signalData} columns={signalColumns}>
+          <SankeyChart height={420} margin={{ top: 64, right: 32, bottom: 24, left: 32 }} />
+        </Sankey>
+      </div>
+    </div>
+  ),
+};
+
 export const Empty: Story = {
   render: () => (
     <div className="w-full p-8">

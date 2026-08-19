@@ -36,7 +36,7 @@ describe('Factory work item service boundary', () => {
   it('maps provider-neutral server work items to the board source model', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ workItems: [wireItem] })));
 
-    const [item] = await listWorkItems('', 'project-1');
+    const [item] = (await listWorkItems('', 'project-1')).workItems;
 
     expect(item).toMatchObject({
       githubProjectId: 'project-1',
@@ -44,6 +44,35 @@ describe('Factory work item service boundary', () => {
       sourceKey: 'github-issue:42',
       url: 'https://github.com/mastra-ai/mastra/issues/42',
       metadata: {},
+    });
+  });
+
+  it('maps Slack thread work items to the Slack board source', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          workItems: [
+            {
+              ...wireItem,
+              externalSource: {
+                integrationId: 'slack',
+                type: 'slack-thread',
+                externalId: 'slack:C-1:1700.42',
+                url: 'https://app.slack.com/client/T-1/C-1/thread/C-1-170042',
+              },
+            },
+          ],
+        }),
+      ),
+    );
+
+    const [item] = (await listWorkItems('', 'project-1')).workItems;
+
+    expect(item).toMatchObject({
+      source: 'slack-thread',
+      sourceKey: 'slack:C-1:1700.42',
+      url: 'https://app.slack.com/client/T-1/C-1/thread/C-1-170042',
     });
   });
 

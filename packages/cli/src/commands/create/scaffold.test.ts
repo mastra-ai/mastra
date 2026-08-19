@@ -2,7 +2,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { execa } from 'execa';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   cleanupOwnedStagingDirectory,
@@ -13,6 +14,10 @@ import {
   publishStagedProject,
   writeEmptyScaffold,
 } from './utils';
+
+vi.mock('execa');
+
+const mockedExeca = vi.mocked(execa);
 
 const temporaryDirectories: string[] = [];
 
@@ -40,6 +45,12 @@ afterEach(async () => {
   await Promise.all(
     temporaryDirectories.splice(0).map(directory => fs.rm(directory, { recursive: true, force: true })),
   );
+});
+
+beforeEach(() => {
+  mockedExeca.mockReset();
+  // Default: resolution fails so structural tests fall back to channel tags.
+  mockedExeca.mockRejectedValue(new Error('npm unavailable') as never);
 });
 
 describe('empty scaffold', () => {
@@ -159,6 +170,77 @@ describe('empty scaffold', () => {
     ).not.toBe(
       JSON.parse(await fs.readFile(path.join(staging.projectPath, 'node_modules/mastra/package.json'), 'utf8')).version,
     );
+  });
+
+  it('writes exact resolved Mastra package versions on successful resolution', async () => {
+    mockedExeca.mockImplementation(((_cmd: string, args: string[]) => {
+      const pkg = args?.[1];
+      if (pkg === '@mastra/core') return Promise.resolve({ stdout: '1.55.0-alpha.0\n' }) as never;
+      if (pkg === 'mastra') return Promise.resolve({ stdout: '1.21.0-alpha.0\n' }) as never;
+      return Promise.reject(new Error('unexpected')) as never;
+    }) as never);
+
+    const invocationCwd = await createInvocationDirectory();
+    const staging = await createOwnedStagingDirectory(invocationCwd, 'exact-project');
+
+    await writeEmptyScaffold({
+      projectPath: staging.projectPath,
+      projectName: 'exact-project',
+      versionTag: 'alpha',
+      packageManager: 'npm',
+    });
+
+    const manifest = JSON.parse(await fs.readFile(path.join(staging.projectPath, 'package.json'), 'utf8'));
+    expect(manifest.dependencies['@mastra/core']).toBe('1.55.0-alpha.0');
+    expect(manifest.devDependencies.mastra).toBe('1.21.0-alpha.0');
+  });
+
+  it('warns once and falls back to the channel tag when resolution fails', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const invocationCwd = await createInvocationDirectory();
+    const staging = await createOwnedStagingDirectory(invocationCwd, 'fallback-project');
+
+    await writeEmptyScaffold({
+      projectPath: staging.projectPath,
+      projectName: 'fallback-project',
+      versionTag: 'alpha',
+      packageManager: 'npm',
+    });
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    warnSpy.mockRestore();
+
+    const manifest = JSON.parse(await fs.readFile(path.join(staging.projectPath, 'package.json'), 'utf8'));
+    expect(manifest.dependencies['@mastra/core']).toBe('alpha');
+    expect(manifest.devDependencies.mastra).toBe('alpha');
+  });
+
+  it('never produces a partial mixture of exact versions and channel tags', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let callCount = 0;
+    mockedExeca.mockImplementation((() => {
+      callCount++;
+      if (callCount === 1) return Promise.resolve({ stdout: '1.55.0-alpha.0\n' }) as never;
+      return Promise.reject(new Error('npm error')) as never;
+    }) as never);
+
+    const invocationCwd = await createInvocationDirectory();
+    const staging = await createOwnedStagingDirectory(invocationCwd, 'partial-project');
+
+    await writeEmptyScaffold({
+      projectPath: staging.projectPath,
+      projectName: 'partial-project',
+      versionTag: 'alpha',
+      packageManager: 'npm',
+    });
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    warnSpy.mockRestore();
+
+    const manifest = JSON.parse(await fs.readFile(path.join(staging.projectPath, 'package.json'), 'utf8'));
+    expect(manifest.dependencies['@mastra/core']).toBe('alpha');
+    expect(manifest.devDependencies.mastra).toBe('alpha');
   });
 });
 

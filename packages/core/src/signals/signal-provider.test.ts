@@ -353,7 +353,7 @@ describe('SignalProvider', () => {
       expect(startFn).toHaveBeenCalledTimes(1);
     });
 
-    it('collects getTools() from providers and merges into agent tools', () => {
+    it('collects getTools() from providers and merges into agent tools', async () => {
       const getToolsSpy = vi.fn(() => ({ myTool: { id: 'myTool' } }));
 
       class ToolProvider extends SignalProvider<'tool-provider'> {
@@ -372,7 +372,7 @@ describe('SignalProvider', () => {
       });
 
       expect(getToolsSpy).toHaveBeenCalledTimes(1);
-      const tools = agent.listTools() as Record<string, unknown>;
+      const tools = (await agent.listTools()) as Record<string, unknown>;
       expect(tools).toHaveProperty('myTool');
     });
 
@@ -463,7 +463,7 @@ describe('SignalProvider', () => {
       expect(p.isConnected).toBe(true);
     });
 
-    it('wires multiple providers independently', () => {
+    it('wires multiple providers independently', async () => {
       class ProviderA extends SignalProvider<'provider-a'> {
         readonly id = 'provider-a' as const;
         getTools() {
@@ -488,7 +488,7 @@ describe('SignalProvider', () => {
         signals: [a, b],
       });
 
-      const tools = agent.listTools() as Record<string, unknown>;
+      const tools = (await agent.listTools()) as Record<string, unknown>;
       expect(tools).toHaveProperty('toolA');
       expect(tools).toHaveProperty('toolB');
       expect(a.isConnected).toBe(true);

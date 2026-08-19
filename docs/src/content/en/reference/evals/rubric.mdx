@@ -179,10 +179,10 @@ The scorer runs in two phases:
 1. **Grade**: The judge model evaluates each criterion independently and returns a per-criterion verdict (`satisfied` / not) with reasoning.
 1. **Score**: The result is `1` only when every required criterion is `satisfied`, otherwise `0`. If no criteria are marked required, all criteria are treated as required.
 
-The `reason` summarizes the overall result and lists each criterion with its verdict, so a failing grade gives the agent targeted, actionable feedback rather than a generic "try again".
+The `reason` summarizes the result and lists each criterion with its verdict, so a failing grade gives the agent targeted, useful feedback rather than a generic "try again".
 
 ## Related
 
 - [isTaskComplete on stream()](/reference/streaming/agents/stream)
-- [Supervisor agents](/docs/agents/supervisor-agents)
+- [Supervisor agents](/docs/subagents)
 - [createScorer](/reference/evals/create-scorer)

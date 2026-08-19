@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: 'AI punctuation: em-dash detected. Use a comma, period, or parentheses instead.'
+message: 'AI punctuation: em-dash detected. In a list item, use a colon after a leading label (link, bold text, or inline code). Otherwise, use a comma, period, or parentheses.'
 level: error
 nonword: true
 tokens:

@@ -10,6 +10,7 @@ import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { ScoresInMemory } from '../../storage/domains/scores/inmemory';
 import type { DatasetItem, ListDatasetItemsOutput } from '../../storage/types';
 import { Dataset } from '../dataset';
+import type { ExperimentEvent } from '../experiment';
 import { SchemaValidationError, SchemaUpdateValidationError } from '../validation/errors';
 
 // Dataset.listItems returns a union: bare `DatasetItem[]` when only `version`
@@ -245,10 +246,14 @@ describe('Dataset', () => {
   });
 
   // 16. updateItem
-  it('updateItem returns updated item', async () => {
-    const added = await ds.addItem({ input: { x: 1 } });
+  it('updateItem returns updated item and supports clearing scorer IDs', async () => {
+    const added = await ds.addItem({ input: { x: 1 }, scorerIds: ['quality'] });
     const updated = await ds.updateItem({ itemId: added.id, input: { x: 2 } });
     expect(updated.input).toEqual({ x: 2 });
+    expect(updated.scorerIds).toEqual(['quality']);
+
+    const cleared = await ds.updateItem({ itemId: added.id, scorerIds: null });
+    expect(cleared.scorerIds).toBeUndefined();
   });
 
   // 17. deleteItem
@@ -338,6 +343,111 @@ describe('Dataset', () => {
 
     // Wait for fire-and-forget to complete
     await new Promise(r => setTimeout(r, 500));
+  });
+
+  it('startExperimentAsync persists provenance and grouping before execution', async () => {
+    await ds.addItem({ input: { prompt: 'Hello' } });
+
+    const { experimentId } = await ds.startExperimentAsync({
+      task: async () => 'ok',
+      scorers: [],
+      provenance: {
+        source: 'github',
+        sourceId: 'mastra-ai/mastra',
+        sourceVersion: 'abc123',
+      },
+      grouping: {
+        experimentSetId: 'set-1',
+        comparisonId: 'comparison-1',
+        variantId: 'variant-a',
+        trialIndex: 0,
+      },
+    });
+
+    const experiment = await experimentsStorage.getExperimentById({ id: experimentId });
+    expect(experiment).toMatchObject({
+      provenance: {
+        source: 'github',
+        sourceId: 'mastra-ai/mastra',
+        sourceVersion: 'abc123',
+      },
+      experimentSetId: 'set-1',
+      comparisonId: 'comparison-1',
+      variantId: 'variant-a',
+      trialIndex: 0,
+    });
+
+    await new Promise(r => setTimeout(r, 500));
+  });
+
+  it('startExperimentAsync emits ordered events without experiment persistence', async () => {
+    await ds.addItem({ input: { prompt: 'Hello' } });
+    await ds.addItem({ input: { prompt: 'World' } });
+    const task = vi.fn().mockImplementation(async ({ input }) => input.prompt);
+    const events: ExperimentEvent[] = [];
+    let resolveFinished!: () => void;
+    const finished = new Promise<void>(resolve => {
+      resolveFinished = resolve;
+    });
+
+    const { experimentId, status, totalItems } = await ds.startExperimentAsync({
+      task,
+      scorers: [],
+      persistence: { experiments: 'none' },
+      onEvent: event => {
+        events.push(event);
+        if (event.type === 'experiment.run.finished') resolveFinished();
+      },
+    });
+
+    expect(status).toBe('pending');
+    expect(experimentId).toBeTruthy();
+    expect(totalItems).toBe(2);
+    await finished;
+
+    expect(events.map(event => event.type)).toEqual([
+      'experiment.run.started',
+      'experiment.item.completed',
+      'experiment.item.completed',
+      'experiment.run.finished',
+    ]);
+    expect(events.map(event => event.sequence)).toEqual([1, 2, 3, 4]);
+    expect(events.every(event => event.experimentId === experimentId)).toBe(true);
+    expect(
+      events
+        .filter(event => event.type === 'experiment.item.completed')
+        .map(event => event.itemIndex)
+        .sort(),
+    ).toEqual([0, 1]);
+    expect(mockStorage.getStore).not.toHaveBeenCalledWith('experiments');
+    expect(db.experiments.size).toBe(0);
+    expect(db.experimentResults.size).toBe(0);
+  });
+
+  it('startExperimentAsync observer failure writes nothing to suppressed persistence domains', async () => {
+    await ds.addItem({ input: { prompt: 'Hello' } });
+    const scorer = createMockScorer('no-persistence-scorer', 'No persistence scorer');
+    const events: ExperimentEvent[] = [];
+    const logger = mastra.getLogger()!;
+
+    await ds.startExperimentAsync({
+      task: async () => 'ok',
+      scorers: [scorer],
+      persistence: { experiments: 'none', scores: 'none' },
+      onEvent: event => {
+        events.push(event);
+        if (event.type === 'experiment.item.completed') throw new Error('observer unavailable');
+      },
+    });
+
+    await vi.waitFor(() =>
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Experiment event observer failed')),
+    );
+    expect(events.map(event => event.type)).toEqual(['experiment.run.started', 'experiment.item.completed']);
+    expect(mockStorage.getStore).not.toHaveBeenCalledWith('experiments');
+    expect(db.experiments.size).toBe(0);
+    expect(db.experimentResults.size).toBe(0);
+    expect(db.scores.size).toBe(0);
   });
 
   it('startExperimentAsync throws EXPERIMENT_NO_ITEMS on empty dataset', async () => {

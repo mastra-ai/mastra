@@ -1,8 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
+import type { ProviderDefinedTool } from '@internal/external-types';
 import { assertType, describe, expectTypeOf, it } from 'vitest';
 import { z } from 'zod/v4';
 import type { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
+import { createTool, webSearchTool } from '../tools';
 import { Agent } from './agent';
 import type { AgentExecutionOptions, PublicAgentExecutionOptions } from './agent.types';
 import type { AgentConfig } from './types';
@@ -172,13 +174,36 @@ describe('Agent Type Tests', () => {
           const documentId = requestContext.get('documentId');
           expectTypeOf(documentId).toEqualTypeOf<string>();
 
-          // Verify unknown keys are rejected
+          // Verify unknown keys are rejected on the strict API
           // @ts-expect-error - key does not exist in the request context schema
           requestContext.get('nonexistentKey');
+
+          // Runtime-only keys are available through the open-map escape hatch
+          const raw = requestContext.getRaw('nonexistentKey');
+          expectTypeOf(raw).toEqualTypeOf<unknown>();
 
           return [];
         },
       });
+    });
+
+    it('should keep a schema-typed agent assignable to Agent (issue #21286)', () => {
+      const schemaAgent = new Agent({
+        id: 'schema-agent',
+        name: 'Schema Agent',
+        model: {} as any,
+        instructions: 'You are a helpful assistant',
+        requestContextSchema: z.object({
+          tenantTier: z.enum(['free', 'pro']).optional(),
+          verbose: z.boolean().optional(),
+        }),
+      });
+
+      // Generic helpers typed as bare `Agent` must accept schema-narrowed agents.
+      expectTypeOf(schemaAgent).toExtend<Agent>();
+
+      const driveAgent = (_agent: Agent): Promise<void> => Promise.resolve();
+      void driveAgent(schemaAgent);
     });
   });
 
@@ -279,6 +304,130 @@ describe('Agent Type Tests', () => {
         // @ts-expect-error - both fields owned by the editor
         instructions: 'hi',
       });
+    });
+  });
+
+  describe('Issue #20201: tool-approval resume methods expose a typed `model` override', () => {
+    // `resumeStream`/`resumeGenerate` already accept and consume a per-resume `model`
+    // override, but the public approve/decline entry points previously omitted it from
+    // their option types — forcing callers to cast past the signature (the source even
+    // carried a `// @ts-expect-error - the types here are wrong`). A `model` key on the
+    // options literal must now type-check against each method's parameter type; without
+    // the fix these object literals fail excess-property checking.
+    const agent = new Agent({ id: 'a', name: 'A', model: {} as any, instructions: 'hi' });
+
+    it('accepts `model` on approveToolCall / declineToolCall (stream)', () => {
+      const approve: Parameters<typeof agent.approveToolCall>[0] = { runId: 'r', model: {} as any };
+      const decline: Parameters<typeof agent.declineToolCall>[0] = { runId: 'r', model: {} as any };
+      assertType<string>(approve.runId);
+      assertType<string>(decline.runId);
+    });
+
+    it('accepts `model` on approveToolCallGenerate / declineToolCallGenerate (generate)', () => {
+      const approve: Parameters<typeof agent.approveToolCallGenerate>[0] = { runId: 'r', model: {} as any };
+      const decline: Parameters<typeof agent.declineToolCallGenerate>[0] = { runId: 'r', model: {} as any };
+      assertType<string>(approve.runId);
+      assertType<string>(decline.runId);
+    });
+  });
+
+  describe('Issue #15229: `AgentConfig.tools` rejects plain functions as individual entries', () => {
+    // `ProviderDefinedTool`'s v5 branch is all-optional with an index signature, which made
+    // any value — including a bare function — satisfy `ToolsInput`. Nested resolvers like
+    // `tools: { myTool: () => realTool }` compiled but crashed at runtime in `listTools()`.
+    const realTool = createTool({
+      id: 'real-tool',
+      description: 'a real tool',
+      inputSchema: z.object({ q: z.string() }),
+      execute: async () => ({ ok: true }),
+    });
+
+    it('rejects a function entry that returns a valid tool', () => {
+      const config: AgentConfig = {
+        id: 'a',
+        name: 'A',
+        model: {} as any,
+        instructions: 'hi',
+        // @ts-expect-error - per-entry resolver functions are not tools
+        tools: { myTool: () => realTool },
+      };
+      assertType<string>(config.name!);
+    });
+
+    it('rejects a function entry that returns a non-tool value', () => {
+      const config: AgentConfig = {
+        id: 'a',
+        name: 'A',
+        model: {} as any,
+        instructions: 'hi',
+        // @ts-expect-error - per-entry resolver functions are not tools
+        tools: { myTool: () => 42 },
+      };
+      assertType<string>(config.name!);
+    });
+
+    it('rejects an async function entry', () => {
+      const config: AgentConfig = {
+        id: 'a',
+        name: 'A',
+        model: {} as any,
+        instructions: 'hi',
+        // @ts-expect-error - per-entry resolver functions are not tools
+        tools: { myTool: async () => ({}) },
+      };
+      assertType<string>(config.name!);
+    });
+
+    it('accepts a static tool entry', () => {
+      const config: AgentConfig = {
+        id: 'a',
+        name: 'A',
+        model: {} as any,
+        instructions: 'hi',
+        tools: { myTool: realTool },
+      };
+      assertType<string>(config.name!);
+    });
+
+    it('accepts the webSearchTool placeholder as an entry', () => {
+      const config: AgentConfig = {
+        id: 'a',
+        name: 'A',
+        model: {} as any,
+        instructions: 'hi',
+        tools: { searchTheWeb: webSearchTool },
+      };
+      assertType<string>(config.name!);
+    });
+
+    it('accepts a provider-defined tool entry', () => {
+      const config: AgentConfig = {
+        id: 'a',
+        name: 'A',
+        model: {} as any,
+        instructions: 'hi',
+        tools: {
+          googleSearch: {
+            type: 'provider-defined',
+            id: 'google.google_search',
+            args: {},
+          } as any as ProviderDefinedTool & {
+            id: string;
+          },
+        },
+      };
+      assertType<string>(config.name!);
+    });
+
+    it('still accepts a whole-map resolver on `tools`', () => {
+      const config: AgentConfig = {
+        id: 'a',
+        name: 'A',
+        model: {} as any,
+        instructions: 'hi',
+        tools: () => ({ myTool: realTool }),
+      };
+      assertType<string>(config.name!);
     });
   });
 });

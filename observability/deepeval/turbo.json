@@ -1,0 +1,25 @@
+{
+  "$schema": "https://v2-9-16.turborepo.dev/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "src/**",
+        "tsup.config.ts",
+        "tsconfig.json",
+        "package.json",
+        "!**/*.md",
+        "!**/*.test.ts",
+        "!**/*.spec.ts",
+        "!**/__tests__/**"
+      ],
+      "outputs": ["dist/**"]
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "inputs": ["src/**", "tsconfig.json", "package.json", "vitest.config.*", "!**/*.md"],
+      "outputs": []
+    }
+  }
+}

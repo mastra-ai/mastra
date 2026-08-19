@@ -1,13 +1,11 @@
-import type { AgentControllerEvent, AgentControllerOMProgress, MastraDBMessage } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerSessionState, MastraDBMessage } from '@mastra/client-js';
 import { useReducer, useRef } from 'react';
 
 import { createInitialTranscript, transcriptReducer } from '../services/transcript';
-import type { OutgoingFile, TranscriptState, UsageSnapshot } from '../services/transcript';
+import type { OutgoingFile, TranscriptState } from '../services/transcript';
 
-export interface SessionStateSnapshot {
-  omProgress?: AgentControllerOMProgress;
-  tokenUsage?: UsageSnapshot;
-}
+/** What the session-state route hydrates the status line with before the first event lands. */
+export type SessionStateSnapshot = Pick<AgentControllerSessionState, 'omProgress' | 'tokenUsage'>;
 
 export function useAgentControllerTranscript({
   initialThreadId,
@@ -58,8 +56,8 @@ export function useAgentControllerTranscript({
     dispatch({ type: 'localNotice', text, level });
   };
 
-  const prependOlder = (messages: MastraDBMessage[]) => {
-    dispatch({ type: 'prependOlder', messages });
+  const mergeWindow = (messages: MastraDBMessage[]) => {
+    dispatch({ type: 'mergeWindow', messages });
   };
 
   return {
@@ -71,6 +69,6 @@ export function useAgentControllerTranscript({
     resolvePrompt,
     clearPending,
     pushNotice,
-    prependOlder,
+    mergeWindow,
   };
 }

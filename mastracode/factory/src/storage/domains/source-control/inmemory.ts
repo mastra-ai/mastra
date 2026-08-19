@@ -1,13 +1,18 @@
 import { randomUUID } from 'node:crypto';
+import { UniqueViolationError } from '@mastra/core/storage';
 
 import type {
+  ConfiguredExternalRepositoryKey,
   CreateProjectSourceControlConnectionInput,
   CreateSourceControlSessionInput,
   ExternalRepositoryProjectTarget,
   LinkProjectRepositoryInput,
+  PooledSandbox,
   ProjectRepository,
+  ProjectRepositoryBaseCheckpoint,
   ProjectRepositorySandbox,
   ProjectSourceControlConnection,
+  ReleasePooledSandboxInput,
   SourceControlInstallation,
   SourceControlRepository,
   SourceControlSession,
@@ -27,6 +32,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
   connectionsRows: ProjectSourceControlConnection[] = [];
   projectRepositoriesRows: ProjectRepository[] = [];
   sandboxesRows: ProjectRepositorySandbox[] = [];
+  sandboxPoolRows: PooledSandbox[] = [];
   worktreesRows: SourceControlWorktree[] = [];
   sessionsRows: SourceControlSession[] = [];
 
@@ -144,6 +150,41 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       this.repositoriesRows.push(created);
       return created;
     },
+    migrateInstallation: async ({
+      orgId,
+      id,
+      newInstallationId,
+    }: {
+      orgId: string;
+      id: string;
+      newInstallationId: string;
+    }) => {
+      const existing = await this.repositories.get({ orgId, id });
+      if (!existing) {
+        throw new Error(`Repository ${id} not found in organization ${orgId}`);
+      }
+      if (!(await this.installations.get({ orgId, id: newInstallationId }))) {
+        throw new Error('Source-control installation not found');
+      }
+      // Check if a repository with the same external_id exists under the new installation
+      const conflict = this.repositoriesRows.find(
+        row => row.installationId === newInstallationId && row.externalId === existing.externalId,
+      );
+      if (conflict) {
+        // Return the existing repository under the new installation
+        return conflict;
+      }
+      // Update the repository's installation
+      existing.installationId = newInstallationId;
+      existing.updatedAt = new Date();
+      // Migrate dependent connections to the new installation
+      for (const conn of this.connectionsRows) {
+        if (conn.installationId === existing.installationId) {
+          conn.installationId = newInstallationId;
+        }
+      }
+      return existing;
+    },
   };
 
   readonly connections = {
@@ -188,6 +229,22 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       (await this.connections.get({ orgId, id: connectionId }))
         ? this.projectRepositoriesRows.filter(row => row.connectionId === connectionId)
         : [],
+    listConfiguredExternalKeys: async (): Promise<ConfiguredExternalRepositoryKey[]> => {
+      const keys = new Map<string, ConfiguredExternalRepositoryKey>();
+      for (const connection of this.connectionsRows.filter(row => row.integrationId === this.integrationId)) {
+        const installation = this.installationsRows.find(row => row.id === connection.installationId);
+        if (!installation) continue;
+        for (const link of this.projectRepositoriesRows.filter(row => row.connectionId === connection.id)) {
+          const repository = this.repositoriesRows.find(row => row.id === link.repositoryId);
+          if (!repository) continue;
+          keys.set(`${installation.externalId}\u0000${repository.externalId}`, {
+            installationExternalId: installation.externalId,
+            repositoryExternalId: repository.externalId,
+          });
+        }
+      }
+      return [...keys.values()];
+    },
     listByExternalRepository: async ({
       installationExternalId,
       repositoryExternalId,
@@ -245,6 +302,8 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         sandboxProvider: input.sandboxProvider,
         sandboxWorkdir: input.sandboxWorkdir,
         setupCommand: input.setupCommand ?? null,
+        baseCheckpoint: null,
+        teardownCommand: input.teardownCommand ?? null,
         createdAt: now,
         updatedAt: now,
       };
@@ -262,8 +321,21 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
     }): Promise<ProjectRepository | null> => {
       const row = await this.projectRepositories.get({ orgId, id });
       if (!row) return null;
+      if (input.setupCommand !== undefined && input.setupCommand !== row.setupCommand) {
+        row.baseCheckpoint = null;
+      }
       Object.assign(row, input, { updatedAt: new Date() });
       return row;
+    },
+    setBaseCheckpoint: async (
+      args:
+        | { id: string; checkpoint: null }
+        | { id: string; checkpoint: ProjectRepositoryBaseCheckpoint; expectedSetupCommand: string | null },
+    ): Promise<void> => {
+      const row = this.projectRepositoriesRows.find(candidate => candidate.id === args.id);
+      if (!row) throw new Error('Project repository not found');
+      if (args.checkpoint && row.setupCommand !== args.expectedSetupCommand) return;
+      row.baseCheckpoint = args.checkpoint;
     },
     unlink: async ({ orgId, id }: { orgId: string; id: string }): Promise<boolean> => {
       if (!(await this.projectRepositories.get({ orgId, id }))) return false;
@@ -317,6 +389,25 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
     markMaterialized: async ({ id }: { id: string }): Promise<void> => {
       const row = this.sandboxesRows.find(candidate => candidate.id === id);
       if (row) row.materializedAt = new Date();
+    },
+  };
+
+  readonly sandboxPool = {
+    release: async (input: ReleasePooledSandboxInput): Promise<void> => {
+      // Mirror the SQL implementation: a missing project-repository link
+      // makes the release a silent no-op.
+      if (!this.projectRepositoriesRows.some(row => row.id === input.projectRepositoryId)) return;
+      if (this.sandboxPoolRows.some(row => row.sandboxId === input.sandboxId)) return;
+      this.sandboxPoolRows.push({ id: randomUUID(), releasedAt: new Date(), ...input });
+    },
+    claim: async ({ projectRepositoryId }: { projectRepositoryId: string }): Promise<PooledSandbox | null> => {
+      const candidates = this.sandboxPoolRows
+        .filter(row => row.projectRepositoryId === projectRepositoryId)
+        .sort((left, right) => right.releasedAt.getTime() - left.releasedAt.getTime());
+      const claimed = candidates[0];
+      if (!claimed) return null;
+      this.sandboxPoolRows.splice(this.sandboxPoolRows.indexOf(claimed), 1);
+      return claimed;
     },
   };
 
@@ -388,8 +479,14 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
   };
 
   readonly sessions = {
-    list: async ({ projectRepositoryId, userId }: { projectRepositoryId: string; userId: string }) =>
-      this.sessionsRows.filter(row => row.projectRepositoryId === projectRepositoryId && row.userId === userId),
+    list: async ({ projectRepositoryId, viewerUserId }: { projectRepositoryId: string; viewerUserId: string }) =>
+      this.sessionsRows.filter(
+        row =>
+          row.projectRepositoryId === projectRepositoryId &&
+          (row.visibility !== 'private' || row.userId === viewerUserId),
+      ),
+    listByProjectRepository: async ({ projectRepositoryId }: { projectRepositoryId: string }) =>
+      this.sessionsRows.filter(row => row.projectRepositoryId === projectRepositoryId),
     getBySessionId: async (sessionId: string): Promise<SourceControlSession | null> =>
       this.sessionsRows.find(row => row.sessionId === sessionId) ?? null,
     getForBranch: async ({
@@ -407,13 +504,20 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
     create: async (input: CreateSourceControlSessionInput): Promise<SourceControlSession> => {
       const existing = await this.sessions.getForBranch(input);
       if (existing) return existing;
+      if (this.sessionsRows.some(row => row.sessionId === input.sessionId)) {
+        throw new UniqueViolationError('Source-control session ID already exists');
+      }
       const now = new Date();
       const session: SourceControlSession = {
         id: randomUUID(),
         ...input,
+        title: input.title ?? null,
+        visibility: input.visibility ?? 'org',
         sandboxId: null,
         sandboxWorkdir: null,
         materializedAt: null,
+        firstMessageAt: null,
+        firstMeaningfulExecAt: null,
         createdAt: now,
         updatedAt: now,
       };
@@ -434,7 +538,17 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
     },
     markMaterialized: async ({ id }: { id: string }) => {
       const row = this.sessionsRows.find(candidate => candidate.id === id);
-      if (row) Object.assign(row, { materializedAt: new Date(), updatedAt: new Date() });
+      if (row && row.materializedAt === null) Object.assign(row, { materializedAt: new Date(), updatedAt: new Date() });
+    },
+    markFirstMessage: async ({ sessionId }: { sessionId: string }) => {
+      const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
+      if (row && row.firstMessageAt === null) Object.assign(row, { firstMessageAt: new Date(), updatedAt: new Date() });
+    },
+    markFirstMeaningfulExec: async ({ sessionId }: { sessionId: string }) => {
+      const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
+      if (row && row.firstMeaningfulExecAt === null) {
+        Object.assign(row, { firstMeaningfulExecAt: new Date(), updatedAt: new Date() });
+      }
     },
     delete: async (id: string) => {
       this.sessionsRows.splice(0, this.sessionsRows.length, ...this.sessionsRows.filter(row => row.id !== id));

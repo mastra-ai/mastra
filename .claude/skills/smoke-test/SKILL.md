@@ -76,25 +76,19 @@ Run the create-mastra command with explicit parameters to avoid interactive prom
 
 ```sh
 # For npm
-npx create-mastra@<tag> <project-name> -c agents,tools,workflows,scorers -l <llmProvider> -e
+npx create-mastra@<tag> <project-name> --no-git --llm <llmProvider> --timeout 120000
 
 # For yarn
-yarn create mastra@<tag> <project-name> -c agents,tools,workflows,scorers -l <llmProvider> -e
+yarn dlx create-mastra@<tag> <project-name> --no-git --llm <llmProvider> --timeout 120000
 
 # For pnpm
-pnpm create mastra@<tag> <project-name> -c agents,tools,workflows,scorers -l <llmProvider> -e
+pnpm create mastra@<tag> <project-name> --no-git --llm <llmProvider> --timeout 120000
 
 # For bun
-bunx create-mastra@<tag> <project-name> -c agents,tools,workflows,scorers -l <llmProvider> -e
+bunx create-mastra@<tag> <project-name> --no-git --llm <llmProvider> --timeout 120000
 ```
 
-**Flags explained:**
-
-- `-c agents,tools,workflows,scorers` - Include all components
-- `-l <provider>` - Set the LLM provider
-- `-e` - Include example code
-
-Being explicit with all parameters ensures the CLI runs non-interactively.
+`-c/--components` and `-e/--example` were removed and must not be used. `-l/--llm` is still supported and is the flag used above. Use the managed template by default, `--empty` for a deliberately empty project, or `--template <template>` for a specific template. If a flag is rejected, inspect the initializer's help rather than retrying a legacy command: `npm create mastra@<tag> -- --help`, `npx create-mastra@<tag> --help`, `pnpm create mastra@<tag> --help`, `yarn dlx create-mastra@<tag> --help`, or `bunx create-mastra@<tag> --help`.
 
 Wait for the installation to complete. This may take 1-2 minutes depending on network speed.
 
@@ -302,13 +296,13 @@ After completing all tests, provide a summary:
 
 ## Quick Reference
 
-| Step           | Action                                                                                                |
-| -------------- | ----------------------------------------------------------------------------------------------------- |
-| Create Project | `cd <directory> && npx create-mastra@<tag> <name> -c agents,tools,workflows,scorers -l <provider> -e` |
-| Install Deps   | Automatic during creation                                                                             |
-| Set Env Vars   | Check global env first, then `.env`, ask user only if needed                                          |
-| Start Server   | `cd <directory>/<name> && npm run dev`                                                                |
-| Studio URL     | `http://localhost:4111`                                                                               |
+| Step           | Action                                                                |
+| -------------- | --------------------------------------------------------------------- |
+| Create Project | Use the package-manager-specific command from Step 1 in `<directory>` |
+| Install Deps   | Automatic during creation                                             |
+| Set Env Vars   | Check global env first, then `.env`, ask user only if needed          |
+| Start Server   | `cd <directory>/<name> && <pm> run dev`                               |
+| Studio URL     | `http://localhost:4111`                                               |
 
 ## Troubleshooting
 
@@ -332,7 +326,7 @@ After completing all tests, provide a summary:
 
 **Browser agent fails**
 
-- Ensure Playwright browsers are installed: `pnpm exec playwright install chromium`
+- Verify a local Chromium browser, such as Google Chrome, is installed and reachable
 - Check that no other browser instance is blocking
 
 ## Studio Routes
@@ -354,10 +348,10 @@ After completing all tests, provide a summary:
 
 ## Notes
 
-- The `-e` flag includes example agents, making smoke testing meaningful
+- The managed default template scaffolds an agent, tools, and storage, which is what makes smoke testing meaningful; use `--empty` or `--template <template>` only when a different starting point is required
 - If the user doesn't specify an LLM provider, default to OpenAI as it's most common
 - Take screenshots at each major step for documentation/debugging
 - Keep the dev server running in the background during testing
-- Always use explicit flags (`-c`, `-l`, `-e`) to ensure non-interactive execution
+- Pass explicit flags (`--llm`, `--no-git`, `--timeout`) so creation stays non-interactive; use the package-manager-specific initializer help command documented in Step 1 instead of assuming legacy flags
 - Browser agent testing validates the new browser automation features
 - Observability traces appear automatically after running agents or workflows

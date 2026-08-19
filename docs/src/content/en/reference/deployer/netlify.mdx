@@ -11,7 +11,7 @@ The `NetlifyDeployer` class handles packaging, configuration, and deployment by 
 
 ## Installation
 
-In order to use `NetlifyDeployer`, you need to install the `@mastra/deployer-netlify` package:
+To use `NetlifyDeployer`, you need to install the `@mastra/deployer-netlify` package:
 
 ```bash npm2yarn
 npm install @mastra/deployer-netlify@latest
@@ -34,9 +34,9 @@ export const mastra = new Mastra({
 
 ## Constructor options
 
-- `target?: 'serverless' | 'edge'` — Deploy target for Netlify. Defaults to `'serverless'`.
-  - `'serverless'` — Standard [Netlify Functions](https://docs.netlify.com/functions/overview/) (Node.js runtime, 60s default timeout).
-  - `'edge'` — [Netlify Edge Functions](https://docs.netlify.com/build/edge-functions/overview/) (Deno-based runtime, runs at the edge closest to users, no hard timeout).
+- `target?: 'serverless' | 'edge'`: Deploy target for Netlify. Defaults to `'serverless'`.
+  - `'serverless'`: Standard [Netlify Functions](https://docs.netlify.com/functions/overview/) (Node.js runtime, 60s default timeout).
+  - `'edge'`: [Netlify Edge Functions](https://docs.netlify.com/build/edge-functions/overview/) (Deno-based runtime that runs at the edge closest to users without a fixed timeout).
 
 ### Edge functions example
 

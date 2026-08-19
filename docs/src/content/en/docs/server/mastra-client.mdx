@@ -1,5 +1,5 @@
 ---
-title: "Mastra client SDK | Server"
+title: "Mastra client | Server"
 description: "Learn how to set up and use the Mastra Client SDK"
 packages:
   - "@mastra/client-js"
@@ -7,9 +7,9 @@ packages:
   - "@mastra/react"
 ---
 
-# Mastra client SDK
+# Mastra client
 
-The Mastra Client SDK provides a concise and type-safe interface for interacting with your [Mastra Server](/docs/server/mastra-server) from your client environment.
+The Mastra Client SDK provides a concise and type-safe interface for interacting with your [Mastra Server](/docs/server/overview) from your client environment.
 
 ## Prerequisites
 
@@ -50,7 +50,7 @@ export const mastraClient = new MastraClient({
 The Mastra Client SDK exposes all resources served by the Mastra Server.
 
 - **[Agents](/reference/client-js/agents)**: Generate responses and stream conversations.
-- **[A2A](/docs/agents/a2a)**: Discover agents through agent cards and work with task-based A2A streams.
+- **[A2A](/docs/connections/a2a)**: Discover agents through agent cards and work with task-based A2A streams.
 - **[Memory](/reference/client-js/memory)**: Manage conversation threads and message history.
 - **[Tools](/reference/client-js/tools)**: Executed and managed tools.
 - **[Workflows](/reference/client-js/workflows)**: Trigger workflows and track their execution.
@@ -59,6 +59,70 @@ The Mastra Client SDK exposes all resources served by the Mastra Server.
 - **[Conversations](/reference/client-js/conversations)**: Work with the stored conversation threads and item history behind Mastra Agents as a Responses API. This API is currently experimental.
 - **[Logs](/reference/client-js/logs)**: View logs and debug system behavior.
 - **[Telemetry](/reference/client-js/telemetry)**: View app performance and trace activity.
+
+## Create and run dynamic workflows
+
+Use `upsertDynamicWorkflow()` to create or replace a persisted workflow definition. A successful upsert validates the complete definition and registers it with the running Mastra instance. The workflow then becomes available through the standard execution API.
+
+The following example shows the full lifecycle of a mapping workflow, from creation and inspection through execution and deletion:
+
+```typescript title="lib/dynamic-workflow.ts"
+import { MastraClient } from '@mastra/client-js'
+import type { UpsertDynamicWorkflowParams } from '@mastra/client-js'
+
+const client = new MastraClient({
+  baseUrl: process.env.MASTRA_API_URL || 'http://localhost:4111',
+})
+
+const definition = {
+  id: 'greeting-workflow',
+  description: 'Returns a greeting for the supplied name',
+  inputSchema: {
+    type: 'object',
+    properties: { name: { type: 'string' } },
+    required: ['name'],
+  },
+  outputSchema: {
+    type: 'object',
+    properties: { message: { type: 'string' } },
+    required: ['message'],
+  },
+  graph: [
+    {
+      type: 'mapping',
+      id: 'create-greeting',
+      mapConfig: JSON.stringify({
+        message: { template: 'Hello, ${initData.name}!' },
+      }),
+    },
+  ],
+} satisfies UpsertDynamicWorkflowParams
+
+await client.upsertDynamicWorkflow(definition)
+
+const dynamicWorkflow = client.getDynamicWorkflow(definition.id)
+const dynamicDefinition = await dynamicWorkflow.details()
+
+const workflow = client.getWorkflow(dynamicDefinition.id)
+const run = await workflow.createRun()
+const result = await run.startAsync({ inputData: { name: 'Ada' } })
+
+console.log(result)
+
+await dynamicWorkflow.delete()
+```
+
+Use `listDynamicWorkflows()` to list persisted definitions. Calling `upsertDynamicWorkflow()` again with the same `id` replaces the stored definition and live workflow registration.
+
+:::warning
+
+Durable storage requires a configured storage adapter that supports the `workflowDefinitions` domain. Without that domain, Core can register a workflow in memory, but the server's dynamic-workflow API can't preserve it across restarts.
+
+Stored definitions support declarative agent, tool, mapping, nested workflow, parallel, foreach, sleep, sleep-until, conditional, and loop entries. They can't contain JavaScript closures. Conditional and loop logic must use the declarative predicate format, and referenced agents, tools, and nested workflows must already be registered.
+
+Authenticated servers require `stored-workflows:read` or `stored-workflows:write` for definition operations and `workflows:execute` to run the workflow.
+
+:::
 
 ## Generating responses
 
@@ -80,7 +144,7 @@ const testAgent = async () => {
 }
 ```
 
-:::info
+:::note
 
 You can also call `.generate()` with an array of message objects that include `role` and `content`. Visit the [.generate() reference](/reference/client-js/agents#generate) for more information.
 
@@ -110,7 +174,7 @@ const testAgent = async () => {
 }
 ```
 
-:::info
+:::note
 
 You can also call `.stream()` with an array of message objects that include `role` and `content`. Visit the [.stream() reference](/reference/client-js/agents#stream) for more information.
 
@@ -137,7 +201,7 @@ Visit [MastraClient](/reference/client-js/mastra-client) for more configuration 
 
 ## Credentials and session cookies
 
-**Authenticate Mastra API calls with session cookies** when your UI and Mastra API aren't on the same origin—different host, subdomain, or port (for example Mastra Studio on one port and a custom server on another). Add **`credentials: 'include'`** to `MastraClient` so each request carries the cookies the user already has after sign-in. Skip this and you will often get **`401`** responses from Mastra even though login succeeded in the browser.
+**Authenticate Mastra API calls with session cookies** when your UI and Mastra API aren't on the same origin, different host, subdomain, or port (for example Mastra Studio on one port and a custom server on another). Add **`credentials: 'include'`** to `MastraClient` so each request carries the cookies the user already has after sign-in. Skip this and you will often get **`401`** responses from Mastra even though login succeeded in the browser.
 
 ```typescript title="lib/mastra-client.ts"
 import { MastraClient } from '@mastra/client-js'
@@ -148,7 +212,7 @@ export const mastraClient = new MastraClient({
 })
 ```
 
-**Allow credentialed cross-origin requests on your server**—see [CORS: requests with credentials](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS#requests_with_credentials). You need a concrete `Access-Control-Allow-Origin` (not `*`) and `Access-Control-Allow-Credentials: true`, or the browser will block the call before it reaches Mastra.
+**Allow credentialed cross-origin requests on your server**, see [CORS: requests with credentials](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS#requests_with_credentials). You need a concrete `Access-Control-Allow-Origin` (not `*`) and `Access-Control-Allow-Credentials: true`, or the browser will block the call before it reaches Mastra.
 
 **Using `@mastra/react`?** Wrap your app with `MastraReactProvider`, set `baseUrl` and `apiPrefix` to match your server, and rely on the default `credentials: 'include'`. Change `credentials` only when you want `same-origin` or `omit` behavior.
 

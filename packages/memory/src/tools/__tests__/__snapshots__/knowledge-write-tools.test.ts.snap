@@ -1,0 +1,72 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Subconscious knowledge write tools > keeps snapshots of all six public input schemas 1`] = `
+{
+  "knowledge_append": JsonSchemaWrapper {
+    "~standard": {
+      "jsonSchema": {
+        "input": [Function],
+        "output": [Function],
+      },
+      "validate": [Function],
+      "vendor": "json-schema",
+      "version": 1,
+    },
+  },
+  "knowledge_merge_nodes": JsonSchemaWrapper {
+    "~standard": {
+      "jsonSchema": {
+        "input": [Function],
+        "output": [Function],
+      },
+      "validate": [Function],
+      "vendor": "json-schema",
+      "version": 1,
+    },
+  },
+  "knowledge_remove": JsonSchemaWrapper {
+    "~standard": {
+      "jsonSchema": {
+        "input": [Function],
+        "output": [Function],
+      },
+      "validate": [Function],
+      "vendor": "json-schema",
+      "version": 1,
+    },
+  },
+  "knowledge_rescope": JsonSchemaWrapper {
+    "~standard": {
+      "jsonSchema": {
+        "input": [Function],
+        "output": [Function],
+      },
+      "validate": [Function],
+      "vendor": "json-schema",
+      "version": 1,
+    },
+  },
+  "knowledge_update_node": JsonSchemaWrapper {
+    "~standard": {
+      "jsonSchema": {
+        "input": [Function],
+        "output": [Function],
+      },
+      "validate": [Function],
+      "vendor": "json-schema",
+      "version": 1,
+    },
+  },
+  "knowledge_write_node_content": JsonSchemaWrapper {
+    "~standard": {
+      "jsonSchema": {
+        "input": [Function],
+        "output": [Function],
+      },
+      "validate": [Function],
+      "vendor": "json-schema",
+      "version": 1,
+    },
+  },
+}
+`;

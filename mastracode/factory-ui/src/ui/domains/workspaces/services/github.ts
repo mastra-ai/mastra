@@ -201,6 +201,10 @@ export interface FactoryProjectPayload {
   name: string;
   /** Org-wide default model for factory runs; null when unset. */
   defaultModelId?: string | null;
+  /** Whether new Slack sessions create Work-board items for this Factory. */
+  slackWorkItemsEnabled?: boolean;
+  /** Whether Factory rules may start agent runs without someone asking for them. */
+  autoRunEnabled?: boolean;
 }
 
 /** `{...projectRepository, repository}` payload from the Factory project routes. */
@@ -234,7 +238,11 @@ export interface FactoryProjectSnapshot extends FactoryProjectPayload {
 export type FactoryProject = FactoryProjectSnapshot;
 
 async function readJsonOrThrow<T>(res: Response, failure: string): Promise<T> {
-  if (!res.ok) throw new Error(`${failure} (${res.status})`);
+  if (!res.ok) {
+    const error = new Error(`${failure} (${res.status})`) as Error & { status?: number };
+    error.status = res.status;
+    throw error;
+  }
   return (await res.json()) as T;
 }
 
@@ -329,6 +337,41 @@ export async function updateFactoryDefaultModel(
   const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
     res,
     'Failed to update Factory default model',
+  );
+  return project;
+}
+
+/** Enable or disable rule-started agent runs (review, triage, planning) for this Factory. */
+export async function updateFactoryAutoRun(
+  baseUrl: string,
+  factoryProjectId: string,
+  autoRunEnabled: boolean,
+): Promise<FactoryProjectPayload> {
+  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ autoRunEnabled }),
+  });
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to update automatic runs');
+  return project;
+}
+
+/** Enable or disable Work-board item creation for new Slack sessions. */
+export async function updateFactorySlackWorkItems(
+  baseUrl: string,
+  factoryProjectId: string,
+  slackWorkItemsEnabled: boolean,
+): Promise<FactoryProjectPayload> {
+  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ slackWorkItemsEnabled }),
+  });
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
+    res,
+    'Failed to update Slack work-item setting',
   );
   return project;
 }
@@ -592,6 +635,8 @@ export interface FactoryUserSession {
   projectRepositoryId: string;
   orgId: string;
   userId: string;
+  visibility: 'org' | 'private';
+  title?: string;
   branch: string;
   baseBranch: string;
   sandboxId: string | null;
@@ -601,26 +646,42 @@ export interface FactoryUserSession {
   updatedAt: string;
 }
 
-export async function listUserSessions(baseUrl: string, projectRepositoryId: string): Promise<FactoryUserSession[]> {
+type FactoryUserSessionPayload = Omit<FactoryUserSession, 'title'> & { title?: string | null };
+
+function normalizeUserSession({ title, ...session }: FactoryUserSessionPayload): FactoryUserSession {
+  return { ...session, title: title ?? undefined };
+}
+
+export async function listUserSessions(
+  baseUrl: string,
+  projectRepositoryId: string,
+  signal?: AbortSignal,
+): Promise<FactoryUserSession[]> {
   const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectRepositoryId)}/sessions`, {
     headers: { Accept: 'application/json' },
     credentials: 'include',
+    signal,
   });
-  if (!res.ok) throw new Error(`Failed to list sessions (${res.status})`);
-  return ((await res.json()) as { sessions: FactoryUserSession[] }).sessions;
+  const body = await readJsonOrThrow<{ sessions: FactoryUserSessionPayload[] }>(res, 'Failed to list sessions');
+  return body.sessions.map(normalizeUserSession);
 }
+
+export type CreateUserSessionOptions =
+  | { branch: string; baseBranch?: string; sessionId?: never; title?: never }
+  | { sessionId: string; title: string; branch?: never; baseBranch?: never };
 
 export async function createUserSession(
   baseUrl: string,
   projectRepositoryId: string,
-  branch: string,
-  baseBranch?: string,
+  options: CreateUserSessionOptions,
 ): Promise<FactoryUserSession> {
-  const result = await postRepositoryGitOp<{ session: FactoryUserSession }>(baseUrl, projectRepositoryId, 'sessions', {
-    branch,
-    baseBranch,
-  });
-  return result.session;
+  const result = await postRepositoryGitOp<{ session: FactoryUserSessionPayload }>(
+    baseUrl,
+    projectRepositoryId,
+    'sessions',
+    options,
+  );
+  return normalizeUserSession(result.session);
 }
 
 export async function getUserSession(baseUrl: string, sessionId: string): Promise<FactoryUserSession> {
@@ -628,8 +689,8 @@ export async function getUserSession(baseUrl: string, sessionId: string): Promis
     headers: { Accept: 'application/json' },
     credentials: 'include',
   });
-  if (!res.ok) throw new Error(`Failed to load session (${res.status})`);
-  return ((await res.json()) as { session: FactoryUserSession }).session;
+  const body = await readJsonOrThrow<{ session: FactoryUserSessionPayload }>(res, 'Failed to load session');
+  return normalizeUserSession(body.session);
 }
 
 export async function deleteUserSession(baseUrl: string, sessionId: string): Promise<void> {
@@ -637,7 +698,7 @@ export async function deleteUserSession(baseUrl: string, sessionId: string): Pro
     method: 'DELETE',
     credentials: 'include',
   });
-  if (!res.ok) throw new Error(`Failed to delete session (${res.status})`);
+  if (!res.ok && res.status !== 404) throw new Error(`Failed to delete session (${res.status})`);
 }
 
 export interface CommitResult {
@@ -696,9 +757,11 @@ export interface RepositorySettings {
    * configured.
    */
   setupCommand: string | null;
+  /** Best-effort shell command run before a session workspace is retired. */
+  teardownCommand: string | null;
 }
 
-/** Read a repository's settings (currently just the worktree setup command). */
+/** Read a repository's worktree lifecycle settings. */
 export async function fetchRepositorySettings(
   baseUrl: string,
   projectRepositoryId: string,
@@ -711,7 +774,7 @@ export async function fetchRepositorySettings(
   return (await res.json()) as RepositorySettings;
 }
 
-/** Persist a repository's setup command. Pass `null` (or blank) to clear it. */
+/** Persist a repository's lifecycle commands. Pass `null` (or blank) to clear one. */
 export async function saveRepositorySettings(
   baseUrl: string,
   projectRepositoryId: string,

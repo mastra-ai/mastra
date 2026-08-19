@@ -13,6 +13,7 @@ Learn more in the [documentation](https://code.mastra.ai/) and [announcement pos
 - **OAuth login**: Authenticate with Anthropic (Claude Max) and OpenAI (ChatGPT Plus/Codex)
 - **Persistent conversations**: Threads are saved per-project and resume automatically
 - **Coding tools**: View files, edit code, run shell commands
+- **Dynamic workflows**: Build workflows through chat, then list, inspect, run, and delete them from the TUI
 - **Goals**: Pursue longer-running objectives with configurable judge models and goal-enabled commands/skills
 - **Plan persistence**: Approved plans are saved as markdown files for future reference
 - **Token tracking**: Monitor usage with persistent token counts per thread
@@ -96,12 +97,14 @@ Select a suggestion with arrow keys and press Tab to insert it.
 | `/diff`             | Show modified files or git diff                                             |
 | `/name`             | Rename current thread                                                       |
 | `/cost`             | Show token usage and estimated costs                                        |
+| `/profile`          | Control process memory diagnostics                                          |
 | `/review`           | Review a GitHub pull request                                                |
 | `/hooks`            | Show/reload configured hooks                                                |
-| `/mcp`              | Show/reload MCP server connections                                          |
+| `/mcp`              | Show/reload MCP server connections, disable or enable servers               |
 | `/sandbox`          | Manage allowed paths (add/remove dirs)                                      |
 | `/permissions`      | View/manage tool approval permissions                                       |
 | `/plugins`          | Install and manage trusted Mastra Code plugins                              |
+| `/workflows`        | List, inspect, run, and delete chat-built workflows                         |
 | `/settings`         | General settings (notifications, YOLO, etc.)                                |
 | `/yolo`             | Toggle YOLO mode (auto-approve all tools)                                   |
 | `/resource`         | Show/switch resource ID (tag for sharing)                                   |
@@ -111,6 +114,75 @@ Select a suggestion with arrow keys and press Tab to insert it.
 | `/setup`            | Re-run the interactive setup wizard                                         |
 | `/help`             | Show available commands                                                     |
 | `/exit`             | Exit the TUI                                                                |
+
+### Process memory diagnostics
+
+Enable process memory diagnostics before startup when you need evidence for memory growth in a long-running TUI or headless process:
+
+```bash
+MASTRACODE_PROFILE=1 mastracode
+```
+
+> **Warning:** Allocation profiles can contain prompts, credentials, file contents, and tool arguments. Keep the output directory private, don't upload it as telemetry, and delete it after the investigation.
+
+Use the same process-wide diagnostics instance from the TUI:
+
+```text
+/profile status
+/profile start
+/profile capture
+/profile stop
+```
+
+Bare `/profile` is an alias for `/profile status`. Starting an active run preserves its original directory and configuration. `capture` persists a Chrome allocation-sampling profile and starts a new sampling epoch. It doesn't force garbage collection (GC) or write a heap snapshot. `stop` writes a final sample and allocation profile before releasing the profiler.
+
+#### Configuration
+
+| Environment variable                           | Default                           | Minimum | Description                                                 |
+| ---------------------------------------------- | --------------------------------- | ------- | ----------------------------------------------------------- |
+| `MASTRACODE_PROFILE`                           | Disabled                          | N/A     | Enables startup profiling for `1`, `true`, `yes`, or `on`   |
+| `MASTRACODE_PROFILE_DIR`                       | `<Mastra Code app-data>/profiles` | N/A     | Parent directory for private, unique run directories        |
+| `MASTRACODE_PROFILE_SAMPLE_INTERVAL_MS`        | `10000`                           | `1000`  | Process and V8 sample interval in milliseconds              |
+| `MASTRACODE_PROFILE_CAPTURE_INTERVAL_MS`       | `300000`                          | `10000` | Durable allocation-profile capture interval in milliseconds |
+| `MASTRACODE_PROFILE_ALLOCATION_INTERVAL_BYTES` | `524288`                          | `32768` | V8 allocation-sampling interval in bytes                    |
+
+Truthy values are case-insensitive and may contain surrounding whitespace. Other values leave startup profiling disabled. When startup profiling is enabled, invalid numeric values produce an actionable warning and leave Mastra Code running without an active profiler.
+
+Each run gets a unique directory under the configured parent with these files:
+
+- `metadata.json`: Immutable runtime and configuration metadata
+- `process-samples.jsonl`: Append-only RSS, JavaScript heap, external memory, ArrayBuffer memory, resource usage, and V8 heap-space samples
+- `gc-events.jsonl`: Append-only GC kind, flags, duration, and nearby memory values when V8 emits GC performance entries. A run can contain zero events.
+- `allocation-<sequence>-<timestamp>.heapprofile`: Atomic Chrome allocation-sampling profiles
+
+Mastra Code requests mode `0700` for run directories and `0600` for files on POSIX systems. Other platforms may apply permissions differently.
+
+Compare JavaScript heap growth with resident set size (RSS). Rising heap-space usage points to retained JavaScript objects. Rising RSS with a stable JavaScript heap can point to external buffers, ArrayBuffers, native libraries, memory-mapped files, or allocator behavior. Allocation profiles include objects collected by major and minor GC, which helps distinguish sustained retention from transient allocation pressure.
+
+Sampling and periodic file writes add overhead. Larger allocation intervals and longer capture intervals reduce it. Manual capture briefly rotates the sampling epoch.
+
+Atomically completed captures survive later `SIGINT`, `SIGTERM`, `SIGHUP`, `SIGKILL`, or native crashes. The TUI writes a final capture for handled graceful signals and awaited fatal errors. Immediate `SIGKILL`, native crashes, power loss, and other abrupt termination can't guarantee a final capture, so the periodic capture interval protects those cases.
+
+Delete the run directory when the investigation is complete. Never commit captured profiles.
+
+### Dynamic workflows
+
+Create a workflow by describing it in build-mode chat. For example:
+
+```text
+Build me a workflow that accepts a topic, researches it, and returns a concise summary.
+```
+
+Mastra Code discovers the registered agents, tools, and workflows, builds a complete workflow definition, validates it, and saves it for future sessions. Workflow creation is chat-driven; `/workflows` manages workflows that have already been saved.
+
+```text
+/workflows list
+/workflows show research-summary
+/workflows run research-summary {"topic":"dynamic workflows"}
+/workflows delete research-summary
+```
+
+Run `/workflows help` for the full command reference.
 
 ### Plugins
 

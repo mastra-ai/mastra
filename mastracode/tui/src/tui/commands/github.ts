@@ -123,7 +123,7 @@ async function describeGithubSubscriptions(ctx: SlashCommandContext): Promise<st
     const notification = subscription.lastNotificationKind
       ? `lastNotification=${subscription.lastNotificationKind}/${subscription.lastNotificationPriority ?? 'unknown'} at ${notificationTime}: ${subscription.lastNotificationSummary ?? ''}`
       : 'lastNotification=none';
-    return `- ${pr} ${sync} ${poll}${subscription.lastSyncError ? ` error=${subscription.lastSyncError}` : ''}${observed.length ? ` (${observed.join(', ')})` : ''}\n  ${notification}`;
+    return `- ${pr} ${sync} ${poll}${subscription.lastSyncError ? ` error=${subscription.lastSyncError}` : ''}${subscription.lastSnapshotError ? ` snapshotError=${subscription.lastSnapshotError}` : ''}${observed.length ? ` (${observed.join(', ')})` : ''}\n  ${notification}`;
   });
   return [header, ...lines].join('\n');
 }

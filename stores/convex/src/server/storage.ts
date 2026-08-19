@@ -546,11 +546,18 @@ export async function handleTypedOperation(
         return { ok: true, result: null };
       }
 
-      const patchRecord = {
-        title: request.title,
-        metadata: mergeMetadata(existing.metadata, request.metadata),
+      // patch() is a partial update, so leaving a key out preserves the stored
+      // value. Writing back the title read a moment ago would clobber one
+      // generated in between; same for metadata on a title-only update.
+      const patchRecord: { title?: string; metadata?: Record<string, any>; updatedAt: string } = {
         updatedAt: request.updatedAt,
       };
+      if (request.title !== undefined) {
+        patchRecord.title = request.title;
+      }
+      if (request.metadata !== undefined) {
+        patchRecord.metadata = mergeMetadata(existing.metadata, request.metadata);
+      }
       await ctx.db.patch(existing._id, patchRecord);
       return { ok: true, result: { ...existing, ...patchRecord } };
     }
@@ -841,7 +848,19 @@ export async function handleTypedOperation(
         return { ok: false, error: `Snapshot for runId ${request.runId} is missing or has invalid context` };
       }
 
-      const mergedSnapshot = { ...snapshot, ...JSON.parse(request.opts) };
+      // `expectedStatus` is a compare-and-set guard, not state. Convex mutations are
+      // serializable, so checking it here keeps the guard and the write atomic. It is stripped
+      // from the merge so it can never be persisted into the snapshot. An empty result signals
+      // "guard did not match" to the caller.
+      const { expectedStatus, ...state } = JSON.parse(request.opts);
+      if (expectedStatus !== undefined) {
+        const expected = Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
+        if (!expected.includes(snapshot.status)) {
+          return { ok: true, result: '' };
+        }
+      }
+
+      const mergedSnapshot = { ...snapshot, ...state };
       await ctx.db.patch(existing._id, {
         snapshot: JSON.stringify(mergedSnapshot),
         updatedAt: new Date().toISOString(),

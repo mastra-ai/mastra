@@ -21,6 +21,8 @@ import path from 'node:path';
 
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 
+import { timedPhase } from '../timing.js';
+
 /** Minimal command result shape sandbox consumers depend on. */
 export interface SandboxCommandResult {
   exitCode: number;
@@ -34,6 +36,16 @@ export interface SandboxCommandResult {
  */
 export interface MaterializationSandbox {
   readonly id: string;
+  /** Human-readable provider name, forwarded from the underlying sandbox. */
+  readonly name?: string;
+  /** Provider type discriminator, forwarded from the underlying sandbox. */
+  readonly provider?: string;
+  /** Sandbox usage instructions surfaced in tool descriptions. */
+  getInstructions?(opts?: { requestContext?: unknown }): string;
+  /** Long-running process capability, when the provider supports it. */
+  readonly processes?: WorkspaceSandbox['processes'];
+  /** Mount capability, when the provider supports it. */
+  readonly mounts?: WorkspaceSandbox['mounts'];
   start(): Promise<void>;
   getInfo(): Promise<{ metadata?: Record<string, unknown> }>;
   executeCommand(
@@ -45,13 +57,23 @@ export interface MaterializationSandbox {
   setEnvironmentVariable?(name: string, value: string): void;
   /** Tear down the underlying VM. Optional: providers without it are no-ops. */
   stop?(): Promise<void>;
+  /** True when the provider persists real checkpoints (snapshot is not a no-op). */
+  readonly supportsCheckpoints?: boolean;
+  /** Persist the sandbox's current state under its bound checkpoint name. */
+  snapshot?(): Promise<void>;
+  /** Boot-only fallback checkpoint requested for this fresh provision. */
+  seedCheckpointNameUsed?: string;
 }
 
 /** Options for building (or reattaching) one sandbox. */
 export interface SandboxCreateOptions {
   /** Reattach to this existing provider VM instead of provisioning a new one. */
   providerSandboxId?: string;
-  /** Environment variables baked into the sandbox. */
+  /**
+   * Environment variables for commands run in the sandbox. Adapter-level
+   * only: merged into every `executeCommand`, never baked into the provider
+   * VM (see `SandboxFleet.#build`).
+   */
   env?: Record<string, string>;
   /** Provider working directory for this sandbox. */
   workingDirectory?: string;
@@ -59,6 +81,14 @@ export interface SandboxCreateOptions {
   idleTimeoutMinutes?: number;
   /** Provider checkpoint used to seed and preserve this sandbox's filesystem. */
   checkpointName?: string;
+  /**
+   * Boot-only fallback checkpoint used when `checkpointName` has no stored
+   * state yet (e.g. the repo base checkpoint for a brand-new session).
+   * Snapshots keep writing to `checkpointName`.
+   */
+  seedCheckpointName?: string;
+  /** Opaque user subject attributed to provider API requests. */
+  actingUserId?: string;
 }
 
 /**
@@ -108,6 +138,8 @@ export class SandboxBudgetError extends Error {
 export interface EnsureSandboxOptions {
   /** Provider working directory for this sandbox. */
   workingDirectory?: string;
+  /** Opaque user subject attributed to provider API requests. */
+  actingUserId?: string;
 }
 
 /**
@@ -120,10 +152,27 @@ export interface SandboxBindingStore {
   readonly sandboxId: string | null;
   /** Provider checkpoint used to seed and preserve this sandbox's filesystem. */
   readonly checkpointName?: string;
+  /** Boot-only fallback checkpoint (e.g. repo base checkpoint) for first provision. */
+  readonly seedCheckpointName?: string;
   /** Persist a freshly provisioned provider id, or clear a stale one with `null`. */
   setSandboxId(id: string | null): Promise<void>;
   /** Clear all stored sandbox state (reattach id + materialization mark) on teardown. */
   clear(): Promise<void>;
+}
+
+/**
+ * Stable identity for one binding's in-flight provision work, used to coalesce
+ * concurrent `ensureSandbox` calls. Prefer `checkpointName` — it is a pure
+ * function of the owning session and is set before the first provision, which
+ * is exactly when the herd forms (the stored `sandboxId` is still null then).
+ * Fall back to the stored provider id, and skip coalescing entirely for
+ * bindings with neither: keying those on a shared constant would wrongly
+ * funnel *different* bindings onto one sandbox.
+ */
+function coalesceKey(store: SandboxBindingStore): string | undefined {
+  if (store.checkpointName) return `checkpoint:${store.checkpointName}`;
+  if (store.sandboxId) return `sandbox:${store.sandboxId}`;
+  return undefined;
 }
 
 /**
@@ -145,6 +194,12 @@ function toMaterializationSandbox(
   const environment = { ...initialEnvironment };
   return {
     id: sandbox.id,
+    name: sandbox.name,
+    provider: sandbox.provider,
+    getInstructions: opts =>
+      sandbox.getInstructions?.(opts as Parameters<NonNullable<WorkspaceSandbox['getInstructions']>>[0]) ?? '',
+    processes: sandbox.processes,
+    mounts: sandbox.mounts,
     start: async () => {
       await (lifecycle._start ?? sandbox.start)?.call(sandbox);
     },
@@ -160,19 +215,25 @@ function toMaterializationSandbox(
     stop: async () => {
       await (lifecycle._stop ?? sandbox.stop)?.call(sandbox);
     },
+    supportsCheckpoints: sandbox.supportsCheckpoints === true,
+    ...(sandbox.snapshot ? { snapshot: sandbox.snapshot.bind(sandbox) } : {}),
   };
 }
 
 /**
- * The provider's reattach id for a started sandbox. For Railway this is the
- * underlying `railwaySandboxId` in `getInfo().metadata`. Providers without a
- * provider-native id (e.g. local) reattach by construction id, so fall back
- * to the sandbox's own logical id.
+ * Provider details reported after startup. Railway exposes its native sandbox
+ * id and the checkpoint it actually restored through `getInfo().metadata`.
  */
-async function readProviderSandboxId(sandbox: MaterializationSandbox): Promise<string | undefined> {
+async function readProviderSandboxDetails(
+  sandbox: MaterializationSandbox,
+): Promise<{ sandboxId: string | undefined; restoredCheckpointName: string | undefined }> {
   const info = await sandbox.getInfo();
   const id = info.metadata?.railwaySandboxId ?? info.metadata?.sandboxId;
-  return typeof id === 'string' ? id : sandbox.id;
+  const restoredCheckpointName = info.metadata?.restoredCheckpointName;
+  return {
+    sandboxId: typeof id === 'string' ? id : sandbox.id,
+    restoredCheckpointName: typeof restoredCheckpointName === 'string' ? restoredCheckpointName : undefined,
+  };
 }
 
 /** Keep each path piece a single safe segment (no separators or traversal). */
@@ -217,6 +278,8 @@ export class SandboxFleet {
   readonly #config: SandboxFleetConfig | undefined;
   #factory: SandboxFactory | undefined;
   #liveCount = 0;
+  /** In-flight `ensureSandbox` work, keyed per binding so concurrent callers coalesce. */
+  readonly #inflight = new Map<string, Promise<MaterializationSandbox>>();
 
   constructor(config?: SandboxFleetConfig) {
     this.#config = config;
@@ -239,6 +302,15 @@ export class SandboxFleet {
    */
   get provider(): string {
     return this.#config?.machine.provider ?? 'none';
+  }
+
+  /**
+   * Usage instructions from the configured template machine, for surfacing in
+   * tool descriptions before any per-session sandbox has materialized.
+   * Empty string when no machine is configured or it exposes none.
+   */
+  getInstructions(): string {
+    return this.#config?.machine.getInstructions?.() ?? '';
   }
 
   /**
@@ -335,16 +407,25 @@ export class SandboxFleet {
    * passed both as the logical `id` (providers that reattach by construction
    * id, e.g. local) and as the provider-native `sandboxId` hint (Railway) so
    * reattach works across the provider matrix.
+   *
+   * `env` is deliberately NOT forwarded to the provider clone: remote
+   * providers bake creation-time env into the VM for its whole lifetime
+   * (`POST /sandbox`), which would persist credentials like `GH_TOKEN` inside
+   * a VM that can outlive the session and be reused by another user via the
+   * sandbox pool. Instead the env lives only on the adapter, which merges it
+   * into every `executeCommand` — commands see the (refreshable) token, but
+   * the VM itself never stores it.
    */
   #build(opts: SandboxCreateOptions): MaterializationSandbox {
     if (this.#factory) return this.#factory(opts);
     if (!this.#config) throw new Error('No sandbox configured');
     const clone = this.#config.machine.clone!({
       ...(opts.providerSandboxId ? { id: opts.providerSandboxId, sandboxId: opts.providerSandboxId } : {}),
-      ...(opts.env ? { env: opts.env } : {}),
       ...(opts.workingDirectory ? { workingDirectory: opts.workingDirectory } : {}),
       ...(opts.idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes: opts.idleTimeoutMinutes } : {}),
       ...(opts.checkpointName ? { checkpointName: opts.checkpointName } : {}),
+      ...(opts.seedCheckpointName ? { seedCheckpointName: opts.seedCheckpointName } : {}),
+      ...(opts.actingUserId ? { actingUserId: opts.actingUserId } : {}),
     });
     return toMaterializationSandbox(clone, opts.env);
   }
@@ -352,6 +433,13 @@ export class SandboxFleet {
   /**
    * Provision a new sandbox (persisting its provider id on first open) or
    * reattach to the stored one. Returns a started, live sandbox.
+   *
+   * Concurrent calls for the same binding coalesce onto one in-flight
+   * provision/reattach and share its sandbox handle — N simultaneous requests
+   * for one cold session (e.g. several browser tabs polling right after boot)
+   * must not each fire their own `POST /sandbox` against the provider.
+   * Failures are not cached: once the shared attempt settles, the next call
+   * starts fresh.
    */
   async ensureSandbox(store: SandboxBindingStore, onProgress?: ProgressFn): Promise<MaterializationSandbox>;
   async ensureSandbox(
@@ -373,6 +461,28 @@ export class SandboxFleet {
       typeof envOrProgress === 'function'
         ? ((progressOrOptions as EnsureSandboxOptions | undefined) ?? {})
         : maybeOptions;
+
+    const key = coalesceKey(store);
+    if (!key) return this.#ensureSandboxUncoalesced(store, env, onProgress, options);
+
+    const existing = this.#inflight.get(key);
+    if (existing) return existing;
+
+    const promise = this.#ensureSandboxUncoalesced(store, env, onProgress, options).finally(() => {
+      // Only clear when this is still the entry we own.
+      if (this.#inflight.get(key) === promise) this.#inflight.delete(key);
+    });
+    this.#inflight.set(key, promise);
+    return promise;
+  }
+
+  /** The single provision/reattach attempt behind {@link ensureSandbox}. */
+  async #ensureSandboxUncoalesced(
+    store: SandboxBindingStore,
+    env: Record<string, string> | undefined,
+    onProgress: ProgressFn | undefined,
+    options: EnsureSandboxOptions,
+  ): Promise<MaterializationSandbox> {
     const idleTimeoutMinutes = this.idleMinutes;
     const checkpointName = store.checkpointName;
 
@@ -388,9 +498,11 @@ export class SandboxFleet {
         ...(checkpointName ? { checkpointName } : {}),
         ...(env ? { env } : {}),
         ...(options.workingDirectory ? { workingDirectory: options.workingDirectory } : {}),
+        ...(options.actingUserId ? { actingUserId: options.actingUserId } : {}),
       });
       try {
-        await reattached.start();
+        await timedPhase('sandbox.reattach', () => reattached.start());
+        reattached.seedCheckpointNameUsed = undefined;
         return reattached;
       } catch {
         await store.setSandboxId(null);
@@ -408,18 +520,35 @@ export class SandboxFleet {
     const sandbox = this.#build({
       idleTimeoutMinutes,
       ...(checkpointName ? { checkpointName } : {}),
+      // Boot-only fallback seed (repo base checkpoint) — only meaningful on a
+      // fresh provision; snapshots keep writing to `checkpointName`.
+      ...(store.seedCheckpointName ? { seedCheckpointName: store.seedCheckpointName } : {}),
       ...(env ? { env } : {}),
       ...(options.workingDirectory ? { workingDirectory: options.workingDirectory } : {}),
+      ...(options.actingUserId ? { actingUserId: options.actingUserId } : {}),
     });
-    await sandbox.start();
+    await timedPhase('sandbox.provision', () => sandbox.start());
     this.#liveCount += 1;
 
-    const providerSandboxId = await readProviderSandboxId(sandbox);
-    if (providerSandboxId) {
-      await store.setSandboxId(providerSandboxId);
-    }
+    try {
+      const provider = await readProviderSandboxDetails(sandbox);
+      if (provider.sandboxId) {
+        await store.setSandboxId(provider.sandboxId);
+      }
 
-    return sandbox;
+      if (store.seedCheckpointName && provider.restoredCheckpointName === store.seedCheckpointName) {
+        sandbox.seedCheckpointNameUsed = store.seedCheckpointName;
+      }
+      return sandbox;
+    } catch (error) {
+      if (this.#liveCount > 0) this.#liveCount -= 1;
+      try {
+        await sandbox.stop?.();
+      } catch {
+        // Preserve the provider-detail or persistence error that made the sandbox unusable.
+      }
+      throw error;
+    }
   }
 
   /**
@@ -458,6 +587,7 @@ export class SandboxFleet {
       providerSandboxId,
       idleTimeoutMinutes: this.idleMinutes,
       ...(options.workingDirectory ? { workingDirectory: options.workingDirectory } : {}),
+      ...(options.actingUserId ? { actingUserId: options.actingUserId } : {}),
     });
     await sandbox.start();
     return sandbox;

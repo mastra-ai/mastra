@@ -1,15 +1,21 @@
 ---
 title: "Skills | File-based Agents"
-description: Add skills to a file-based agent under skills/ using modules, packaged SKILL.md, or flat markdown.
+description: Add skills to a file-based agent under skills/ using modules or packaged SKILL.md files. Flat markdown is also supported.
 packages:
   - "@mastra/core"
 ---
 
 # Skills
 
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 A file-based agent discovers skills from its `skills/` directory and bundles them at build time. Skills are reusable procedures or reference material that the agent can load when relevant, instead of putting every detail into the always-on prompt.
 
-Use this page for the file-based convention. For code-defined skills, see [Agent skills](/docs/agents/skills). For the `SKILL.md` package format, see [Workspace skills](/docs/workspace/skills).
+Use this page for the file-based convention. For code-defined skills, see [Agent skills](/docs/skills). For the `SKILL.md` package format, see [Workspace skills](/docs/sandbox/skills).
 
 ## Quickstart
 
@@ -28,7 +34,7 @@ Always report temperatures in Celsius and Fahrenheit. Include the user's preferr
 | Need | Use | Why |
 | - | - | - |
 | Always-on identity, tone, or rules | [`instructions.md`](/reference/file-based-agents/instructions) | The model should see the guidance every turn. |
-| Callable action with inputs and outputs | [`tools/`](/reference/file-based-agents/tools) | The model needs to execute code, call APIs, or perform side effects. |
+| Callable action with inputs and outputs | [`tools/`](/reference/file-based-agents/tools) | The model needs to execute code or call APIs, including operations that perform side effects. |
 | Detailed reference or procedure loaded when relevant | `skills/` | The model only needs the full guidance for specific tasks. |
 
 ## Skill formats
@@ -45,7 +51,7 @@ For packaged skills, `description` is required in `SKILL.md` frontmatter. Flat m
 
 ## What gets loaded
 
-File-based Agents skills are read at build time and added to the generated bundle. The deployed agent doesn't need to read those skill files from disk at runtime.
+File-based Agent skills are added to the generated bundle at build time, so the deployed agent doesn't read them from disk.
 
 For packaged skills, Mastra reads:
 

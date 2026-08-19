@@ -10,6 +10,8 @@ import {
   routeToFilePath,
   filePathToRoute,
   routeToSidebarId,
+  updateMdxLinks,
+  updateRedirects,
 } from '../move-doc'
 
 async function createTempFiles(files: Array<{ path: string; content: string }>) {
@@ -177,8 +179,25 @@ title: Other Doc
 ---
 Link to [auth](/docs/auth/overview)
 <Card link="/docs/auth/overview#card" />
-const item = { link: '/docs/auth/overview#array' }
+<Card href="/docs/auth/overview#href" />
+const item = { link: '/docs/auth/overview#array', href: '/docs/auth/overview#object-href' }
 [auth-ref]: /docs/auth/overview#ref`,
+  },
+  {
+    path: 'src/content/en/docs/index-links.mdx',
+    content: `---
+title: Index links
+---
+[Auth](/docs/server/auth)
+[Auth slash](/docs/server/auth/)
+<Card href="/docs/server/auth#card" />`,
+  },
+  {
+    path: 'src/learn/content/auth.mdx',
+    content: `# Learn auth
+
+[Auth](/docs/auth/overview)
+[Auth website](https://mastra.ai/docs/auth/overview)`,
   },
   {
     path: 'src/content/en/docs/sidebars.js',
@@ -319,6 +338,21 @@ describe('move-doc Mastra integration tests', () => {
     expect(await tempSetup.listFiles()).toContain('src/content/en/docs/references/auth.mdx')
   })
 
+  test('lets redirect and link helpers suppress informational logging', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const paths = await updateRedirects('/docs/auth/overview', '/docs/authentication/guide', { verbose: false })
+    await updateMdxLinks(paths, '/docs/authentication/guide', { verbose: false })
+    expect(log).not.toHaveBeenCalled()
+  })
+
+  test('keeps redirect and link helper logging enabled by default', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    await updateRedirects('/docs/auth/overview', '/docs/auth/overview')
+    await updateMdxLinks(['/docs/auth/overview'], '/docs/authentication/guide')
+    expect(log).toHaveBeenCalledWith('Skipped redundant static redirect: /docs/auth/overview -> /docs/auth/overview')
+    expect(log).toHaveBeenCalledWith('Updated links in src/content/en/docs/other-doc.mdx')
+  })
+
   test('moves a single file, updates redirects, sidebars, and inbound links', async () => {
     const result = await moveDocuments('/docs/references/auth', '/docs/guide/authentication', { verbose: false })
 
@@ -352,8 +386,23 @@ describe('move-doc Mastra integration tests', () => {
     const content = await tempSetup.readFile('src/content/en/docs/other-doc.mdx')
     expect(content).toContain('[auth](/docs/authentication/guide)')
     expect(content).toContain('link="/docs/authentication/guide#card"')
+    expect(content).toContain('href="/docs/authentication/guide#href"')
     expect(content).toContain("link: '/docs/authentication/guide#array'")
+    expect(content).toContain("href: '/docs/authentication/guide#object-href'")
     expect(content).toContain('[auth-ref]: /docs/authentication/guide#ref')
+
+    const learnContent = await tempSetup.readFile('src/learn/content/auth.mdx')
+    expect(learnContent).toContain('[Auth](/docs/authentication/guide)')
+    expect(learnContent).toContain('[Auth website](https://mastra.ai/docs/authentication/guide)')
+  })
+
+  test('rewrites public directory aliases when an index document moves', async () => {
+    await updateMdxLinks(['/docs/server/auth/index'], '/docs/auth/overview', { verbose: false })
+
+    const content = await tempSetup.readFile('src/content/en/docs/index-links.mdx')
+    expect(content).toContain('[Auth](/docs/auth/overview)')
+    expect(content).toContain('[Auth slash](/docs/auth/overview)')
+    expect(content).toContain('href="/docs/auth/overview#card"')
   })
 
   test('rewrites relative markdown links and preserves relative style', async () => {

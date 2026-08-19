@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { DataList } from '@mastra/playground-ui/components/DataList';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
@@ -12,12 +13,19 @@ import type { ReactNode } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
-import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
+import {
+  useIntakeBindingsQuery,
+  useIntakeConfigQuery,
+  useSaveIntakeBindingMutation,
+  useSaveIntakeConfigMutation,
+} from '../../../../hooks/useIntakeConfig';
 import { useLinearProjectsQuery, useLinearStatusQuery } from '../../../../hooks/useLinearData';
 import { connectLinear, isLinearReauthError } from '../../factory/services/linear';
 import type { LinearProject } from '../../factory/services/linear';
 import type { IntakeConfig } from '../../factory/services/intake';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
+import { SettingsCard, SettingsRow } from './SettingsCard';
+import { SettingsSubsection } from './SettingsSubsection';
 
 /**
  * Toggle `id` in the selection list. `null` means "nothing selected" (nothing
@@ -30,45 +38,13 @@ function toggleId(ids: string[] | null, id: string): string[] | null {
   return next.length ? next : null;
 }
 
-function SourceHeader({
-  title,
-  hint,
-  enabled,
-  onToggle,
-  disabled,
-}: {
-  title: string;
-  hint: string;
-  enabled: boolean;
-  onToggle: (value: boolean) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-3">
-      <div className="flex flex-col">
-        <Txt as="span" variant="ui-sm" className="text-icon5">
-          {title}
-        </Txt>
-        <Txt as="span" variant="ui-xs" className="text-icon3">
-          {hint}
-        </Txt>
-      </div>
-      <Switch aria-label={`Sync ${title}`} checked={enabled} disabled={disabled} onCheckedChange={onToggle} />
-    </div>
-  );
-}
-
 interface SourcePickerItem {
   id: string;
   label: string;
 }
 
-/**
- * Card container for a stack of picker sections: one shared border, dividers
- * between sections, and rounding only on the group's outer edges.
- */
 function SourcePickerGroup({ children }: { children: ReactNode }) {
-  return <div className="border-border1 divide-border1 divide-y overflow-hidden rounded-lg border">{children}</div>;
+  return <div className="divide-border1 divide-y">{children}</div>;
 }
 
 /**
@@ -107,8 +83,6 @@ function SourcePickerSection({
   };
 
   return (
-    // Border/rounding live on the parent SourcePickerGroup so stacked cards
-    // share dividers and only the group's first/last edges are rounded.
     <div role="group" aria-label={label}>
       <Collapsible
         open={open}
@@ -117,7 +91,7 @@ function SourcePickerSection({
           if (!next) setQuery('');
         }}
       >
-        <CollapsibleTrigger className="text-icon4 flex w-full items-center gap-1.5 px-3 py-2">
+        <CollapsibleTrigger className="text-icon4 flex w-full items-center gap-1.5 py-2">
           <ChevronRight className="size-3.5 shrink-0" aria-hidden="true" />
           <Txt as="span" variant="ui-sm">
             {label}
@@ -135,7 +109,7 @@ function SourcePickerSection({
             </span>
           )}
         </CollapsibleTrigger>
-        <CollapsibleContent className="flex flex-col gap-2 px-3 pb-3">
+        <CollapsibleContent className="flex flex-col gap-2 pb-3">
           <ListSearch label={`Search ${label}`} placeholder="Search…" size="sm" value={query} onSearch={setQuery} />
           <DataList columns="auto minmax(0,1fr)" variant="lined" className="max-h-64">
             {visibleItems.length === 0 ? (
@@ -171,12 +145,78 @@ function SourcePickerSection({
   );
 }
 
+const UNROUTED = '__unrouted__';
+
 /**
- * Settings › General › Intake sources: choose which sources feed the Factory
- * Intake page. GitHub syncs selected connected repositories; Linear syncs
- * selected Linear projects (grouped by team). Nothing is synced until
- * something is picked. Every change persists immediately.
+ * Routing for the selected Linear projects. A Linear project feeds exactly one
+ * Factory; until it is routed its issues are not picked up by any board.
  */
+function LinearRouting({
+  sourceIds,
+  projects,
+  factories,
+}: {
+  sourceIds: string[];
+  projects: LinearProject[];
+  factories: { id: string; name: string }[];
+}) {
+  const bindingsQuery = useIntakeBindingsQuery();
+  const saveBinding = useSaveIntakeBindingMutation();
+  const bindings = bindingsQuery.data ?? [];
+  const busy = saveBinding.isPending;
+
+  const route = (sourceId: string, value: string) => {
+    saveBinding.mutate(
+      { integrationId: 'linear', sourceId, factoryProjectId: value === UNROUTED ? null : value },
+      {
+        onSuccess: () => toast.success('Linear routing updated'),
+        onError: err => toast.error(err instanceof Error ? err.message : 'Failed to save Linear routing'),
+      },
+    );
+  };
+
+  return (
+    <div className="flex flex-col">
+      {sourceIds.map(sourceId => {
+        const name = projects.find(project => project.id === sourceId)?.name ?? sourceId;
+        const factoryProjectId = bindings.find(
+          binding => binding.integrationId === 'linear' && binding.sourceId === sourceId,
+        )?.factoryProjectId;
+        return (
+          <SettingsRow
+            key={sourceId}
+            label={name}
+            hint={factoryProjectId ? undefined : "Not routed — this project's issues won't be picked up."}
+          >
+            <Select
+              value={factoryProjectId ?? UNROUTED}
+              disabled={busy || factories.length === 0}
+              onValueChange={value => route(sourceId, value)}
+            >
+              <SelectTrigger variant="outline" size="sm" aria-label={`Factory for ${name}`} className="w-auto">
+                <Txt as="span" variant="ui-sm">
+                  {factories.find(factory => factory.id === factoryProjectId)?.name ?? 'Not routed'}
+                </Txt>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={UNROUTED}>Not routed</SelectItem>
+                {factories.map(factory => (
+                  <SelectItem key={factory.id} value={factory.id}>
+                    {factory.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </SettingsRow>
+        );
+      })}
+    </div>
+  );
+}
+
+const INTAKE_INTRO =
+  'Which sources feed issues into Intake, for your whole account. Code access is set under Repositories.';
+
 export function IntakeSection() {
   const { baseUrl } = useApiConfig();
   const configQuery = useIntakeConfigQuery();
@@ -191,28 +231,20 @@ export function IntakeSection() {
   const config = configQuery.data;
   const linkedRepositories = (factoriesQuery.data ?? []).flatMap(factory => factory.repositories);
 
-  const heading = (
-    <Txt variant="ui-lg" className="text-icon6 font-medium">
-      Intake sources
-    </Txt>
-  );
-
   if (configQuery.isPending) {
     return (
-      <div className="mt-6 pt-4">
-        {heading}
+      <SettingsSubsection title="Issue sources" description={INTAKE_INTRO}>
         <SkeletonRows label="Loading intake sources" rows={4} />
-      </div>
+      </SettingsSubsection>
     );
   }
   if (configQuery.isError || !config) {
     return (
-      <div className="mt-6 pt-4">
-        {heading}
-        <Txt as="p" variant="ui-sm" className="text-icon3 py-4">
+      <SettingsSubsection title="Issue sources" description={INTAKE_INTRO}>
+        <Txt as="p" variant="ui-sm" className="text-icon3">
           Intake configuration is unavailable. Connect GitHub or Linear first.
         </Txt>
-      </div>
+      </SettingsSubsection>
     );
   }
 
@@ -225,54 +257,61 @@ export function IntakeSection() {
   const busy = saveMutation.isPending;
 
   return (
-    <div className="mt-6 flex flex-col gap-6 pt-4">
-      {heading}
-      <section className="flex flex-col gap-2" aria-label="GitHub intake">
-        <SourceHeader
-          title="GitHub repositories"
-          hint="Sync open issues from the selected connected repositories. Nothing syncs until you pick one."
-          enabled={config.github.enabled}
-          disabled={busy}
-          onToggle={enabled => update({ ...config, github: { ...config.github, enabled } })}
-        />
-        {config.github.enabled &&
-          (linkedRepositories.length === 0 ? (
-            <Txt as="span" variant="ui-xs" className="text-icon3">
-              No linked repositories yet — link a repository to a factory to add one.
-            </Txt>
-          ) : (
-            <SourcePickerGroup>
-              <SourcePickerSection
-                label="Repositories"
-                items={linkedRepositories.map(repository => ({ id: repository.slug, label: repository.slug }))}
-                selectedIds={config.github.sourceIds}
-                disabled={busy}
-                pending={busy}
-                onToggleItem={slug =>
-                  update({
-                    ...config,
-                    github: {
-                      ...config.github,
-                      sourceIds: toggleId(config.github.sourceIds, slug),
-                    },
-                  })
-                }
-              />
-            </SourcePickerGroup>
-          ))}
-      </section>
+    <SettingsSubsection title="Issue sources" description={INTAKE_INTRO}>
+      <SettingsCard>
+        <SettingsRow
+          label="GitHub issues"
+          hint="Open issues from the selected repositories. Pull requests always appear in Review."
+        >
+          <Switch
+            aria-label="Sync GitHub issues"
+            checked={config.github.enabled}
+            disabled={busy}
+            onCheckedChange={enabled => update({ ...config, github: { ...config.github, enabled } })}
+          />
+        </SettingsRow>
 
-      <section className="flex flex-col gap-2" aria-label="Linear intake">
-        <SourceHeader
-          title="Linear projects"
-          hint="Sync active issues from the Linear projects picked per team. Nothing syncs until you pick one."
-          enabled={config.linear.enabled}
-          disabled={busy || !linearConnected}
-          onToggle={enabled => update({ ...config, linear: { ...config.linear, enabled } })}
-        />
+        {config.github.enabled && (
+          <div className="px-4">
+            {linkedRepositories.length === 0 ? (
+              <Txt as="p" variant="ui-sm" className="text-icon3 py-3">
+                No linked repositories yet — link a repository to a factory to add one.
+              </Txt>
+            ) : (
+              <SourcePickerGroup>
+                <SourcePickerSection
+                  label="Repositories"
+                  items={linkedRepositories.map(repository => ({ id: repository.slug, label: repository.slug }))}
+                  selectedIds={config.github.sourceIds}
+                  disabled={busy}
+                  pending={busy}
+                  onToggleItem={slug =>
+                    update({
+                      ...config,
+                      github: {
+                        ...config.github,
+                        sourceIds: toggleId(config.github.sourceIds, slug),
+                      },
+                    })
+                  }
+                />
+              </SourcePickerGroup>
+            )}
+          </div>
+        )}
+
+        <SettingsRow label="Linear issues" hint="Active issues from the selected projects.">
+          <Switch
+            aria-label="Sync Linear issues"
+            checked={config.linear.enabled}
+            disabled={busy || !linearConnected}
+            onCheckedChange={enabled => update({ ...config, linear: { ...config.linear, enabled } })}
+          />
+        </SettingsRow>
+
         {!linearConnected ? (
-          <div className="flex items-center gap-3 pl-1">
-            <Txt as="span" variant="ui-xs" className="text-icon3">
+          <div className="flex items-center gap-3 px-4 py-3">
+            <Txt as="span" variant="ui-sm" className="text-icon3">
               {linearStatus?.enabled === false
                 ? 'Linear is not configured on this server.'
                 : 'Connect a Linear workspace to sync its issues.'}
@@ -284,10 +323,9 @@ export function IntakeSection() {
             )}
           </div>
         ) : config.linear.enabled && isLinearReauthError(linearProjectsQuery.error) ? (
-          // Connected on paper, but the token is expired/revoked: offer the
-          // OAuth flow again instead of a silently empty project picker.
-          <div className="flex items-center gap-3 pl-1">
-            <Txt as="span" variant="ui-xs" className="text-icon3">
+          // Expired token still reports connected; offer OAuth again.
+          <div className="flex items-center gap-3 px-4 py-3">
+            <Txt as="span" variant="ui-sm" className="text-icon3">
               Linear authorization expired. Reconnect to keep syncing issues.
             </Txt>
             <Button size="xs" onClick={() => connectLinear(baseUrl)}>
@@ -296,9 +334,9 @@ export function IntakeSection() {
           </div>
         ) : (
           config.linear.enabled && (
-            <div className="flex flex-col gap-2.5">
+            <div className="flex flex-col gap-2.5 px-4 py-3">
               <div className="flex items-center gap-2">
-                <Txt as="span" variant="ui-xs" className="text-icon3">
+                <Txt as="span" variant="ui-sm" className="text-icon3">
                   Connected to {linearStatus?.workspace?.name ?? 'a Linear workspace'}
                 </Txt>
                 <Button size="xs" variant="ghost" onClick={() => connectLinear(baseUrl)}>
@@ -325,11 +363,18 @@ export function IntakeSection() {
                   ))}
                 </SourcePickerGroup>
               )}
+              {(config.linear.sourceIds?.length ?? 0) > 0 && (
+                <LinearRouting
+                  sourceIds={config.linear.sourceIds ?? []}
+                  projects={linearProjectsQuery.data ?? []}
+                  factories={factoriesQuery.data ?? []}
+                />
+              )}
             </div>
           )
         )}
-      </section>
-    </div>
+      </SettingsCard>
+    </SettingsSubsection>
   );
 }
 

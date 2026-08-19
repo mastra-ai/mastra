@@ -110,12 +110,22 @@ const agentMessageInputObjectSchema = z.object({
 
 const agentMessageInputSchema = z.union([userMessageSignalContentsSchema, agentMessageInputObjectSchema]);
 
-const agentSignalSchema = baseSignalSchema.extend({
-  type: z.enum(['user', 'state', 'reactive', 'notification', 'user-message', 'system-reminder']),
+const agentSignalBaseSchema = baseSignalSchema.extend({
   tagName: z.string().optional(),
   contents: userMessageSignalContentsSchema,
   providerOptions: z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional(),
 });
+
+const agentSignalSchema = z.discriminatedUnion('type', [
+  agentSignalBaseSchema.extend({
+    type: z.literal('state'),
+    transient: z.never().optional(),
+  }),
+  agentSignalBaseSchema.extend({
+    type: z.enum(['user', 'reactive', 'notification', 'user-message', 'system-reminder']),
+    transient: z.boolean().optional(),
+  }),
+]);
 
 // Path parameter schemas
 export const agentIdPathParams = z.object({
@@ -124,8 +134,8 @@ export const agentIdPathParams = z.object({
 
 /**
  * Query params for GET /agents/:agentId — controls which stored config version is used for overrides.
- * Use either `status` or `versionId`, not both.
- * - `status` — 'draft' (latest version, default) or 'published' (active published version).
+ * When `status` and `versionId` are both provided, `versionId` takes precedence.
+ * - `status` — 'draft' (latest version) or 'published' (active published version, default).
  * - `versionId` — Resolve with a specific version ID.
  */
 export const agentVersionQuerySchema = z.object({
@@ -133,14 +143,21 @@ export const agentVersionQuerySchema = z.object({
     .enum(['draft', 'published'])
     .optional()
     .describe(
-      'Which stored config version to resolve: draft (latest, default) or published (active version). Mutually exclusive with versionId.',
+      'Which stored config version to resolve: draft (latest version) or published (active version, default). When both status and versionId are provided, versionId takes precedence.',
     ),
   versionId: z
     .string()
     .optional()
-    .describe(
-      'Specific version ID to resolve. Mutually exclusive with status — if both are provided, versionId takes precedence.',
-    ),
+    .describe('Specific version ID to resolve. Takes precedence over status when both are provided.'),
+});
+
+export const agentPlanQuerySchema = agentVersionQuerySchema.extend({
+  path: z.string().describe('Relative path to a markdown plan under .mastracode/plans/'),
+});
+
+export const agentPlanResponseSchema = z.object({
+  path: z.string(),
+  content: z.string(),
 });
 
 export const toolIdPathParams = z.object({
@@ -515,7 +532,10 @@ export const approveToolCallBodySchema = toolCallActionBodySchema;
 /**
  * Body schema for declining tool call
  */
-export const declineToolCallBodySchema = toolCallActionBodySchema;
+export const declineToolCallBodySchema = toolCallActionBodySchema.extend({
+  /** Optional explanation surfaced to the model in place of the default decline message. */
+  reason: z.string().optional(),
+});
 
 /**
  * Body schema for approving network tool call
@@ -525,7 +545,10 @@ export const approveNetworkToolCallBodySchema = networkToolCallActionBodySchema;
 /**
  * Body schema for declining network tool call
  */
-export const declineNetworkToolCallBodySchema = networkToolCallActionBodySchema;
+export const declineNetworkToolCallBodySchema = networkToolCallActionBodySchema.extend({
+  /** Optional explanation surfaced in place of the default decline message. */
+  reason: z.string().optional(),
+});
 
 /**
  * Response schema for tool approval/decline

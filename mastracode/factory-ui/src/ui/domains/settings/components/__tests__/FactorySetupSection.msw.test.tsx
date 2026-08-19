@@ -1,9 +1,3 @@
-/**
- * BDD coverage for Settings › General › Worktree setup.
- *
- * Drives the real FactorySetupSection through the fetch/save services and
- * React Query; only the network is mocked (MSW).
- */
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -12,38 +6,21 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
-import type { RepositorySettings } from '../../../workspaces/services/github';
+import type { FactoryProject, RepositorySettings } from '../../../workspaces/services/github';
 import { FactorySetupSection } from '../FactorySetupSection';
 
 const SETTINGS_URL = `${TEST_BASE_URL}/web/github/projects/ghp-1/settings`;
 const FIELD = 'Setup command for mastra';
+const TEARDOWN_FIELD = 'Teardown command for mastra';
 
-function seedGithubProject() {
-  server.use(
-    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: 'fp-1', name: 'mastra' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
-      HttpResponse.json({
-        connections: [
-          {
-            id: 'conn-fp-1',
-            repositories: [
-              {
-                id: 'ghp-1',
-                branch: null,
-                sandboxWorkdir: null,
-                repository: { slug: 'mastra', defaultBranch: 'main' },
-              },
-            ],
-          },
-        ],
-      }),
-    ),
-  );
-}
+const emptyFactory: FactoryProject = { id: 'fp-1', name: 'mastra', repositories: [] };
+const factory: FactoryProject = {
+  id: 'fp-1',
+  name: 'mastra',
+  repositories: [{ projectRepositoryId: 'ghp-1', slug: 'mastra' }],
+};
 
-function useSettingsHandlers(initial: RepositorySettings = { setupCommand: null }) {
+function useSettingsHandlers(initial: RepositorySettings = { setupCommand: null, teardownCommand: null }) {
   const saved: RepositorySettings[] = [];
   server.use(
     http.get(SETTINGS_URL, () => HttpResponse.json(initial)),
@@ -56,10 +33,10 @@ function useSettingsHandlers(initial: RepositorySettings = { setupCommand: null 
   return saved;
 }
 
-function renderSection() {
+function renderSection(factoryProject: FactoryProject = emptyFactory) {
   return renderWithProviders(
     <>
-      <FactorySetupSection />
+      <FactorySetupSection factory={factoryProject} />
       <Toaster position="bottom-right" />
     </>,
   );
@@ -68,61 +45,61 @@ function renderSection() {
 describe('FactorySetupSection', () => {
   it('given no github projects, when rendered, then the section is hidden', () => {
     renderSection();
-    expect(screen.queryByText('Worktree setup')).not.toBeInTheDocument();
+    expect(screen.queryByText('Worktree lifecycle')).not.toBeInTheDocument();
   });
 
   it('given a stored setup command, when rendered, then the field shows it', async () => {
-    seedGithubProject();
-    useSettingsHandlers({ setupCommand: 'pnpm i && pnpm build' });
+    useSettingsHandlers({ setupCommand: 'pnpm i && pnpm build', teardownCommand: 'pnpm local teardown' });
 
-    renderSection();
+    renderSection(factory);
 
-    expect(await screen.findByText('Worktree setup')).toBeInTheDocument();
+    expect(await screen.findByText('Worktree lifecycle')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('textbox', { name: FIELD })).toHaveValue('pnpm i && pnpm build'));
+    expect(screen.getByRole('textbox', { name: TEARDOWN_FIELD })).toHaveValue('pnpm local teardown');
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
   });
 
   it('given an edited command, when saving, then it persists and the button disables again', async () => {
-    seedGithubProject();
     const saved = useSettingsHandlers();
     const user = userEvent.setup();
 
-    renderSection();
+    renderSection(factory);
 
     const input = await screen.findByRole('textbox', { name: FIELD });
     await waitFor(() => expect(input).toBeEnabled());
     await user.type(input, 'pnpm i && pnpm build');
+    await user.type(screen.getByRole('textbox', { name: TEARDOWN_FIELD }), 'pnpm local teardown');
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
-    await waitFor(() => expect(saved).toEqual([{ setupCommand: 'pnpm i && pnpm build' }]));
-    expect(await screen.findByText('Setup command saved')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(saved).toEqual([{ setupCommand: 'pnpm i && pnpm build', teardownCommand: 'pnpm local teardown' }]),
+    );
+    expect(await screen.findByText('Worktree commands saved')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled());
   });
 
   it('given a stored command, when cleared and saved, then null is persisted', async () => {
-    seedGithubProject();
-    const saved = useSettingsHandlers({ setupCommand: 'pnpm i' });
+    const saved = useSettingsHandlers({ setupCommand: 'pnpm i', teardownCommand: 'pnpm local teardown' });
     const user = userEvent.setup();
 
-    renderSection();
+    renderSection(factory);
 
     const input = await screen.findByRole('textbox', { name: FIELD });
     await waitFor(() => expect(input).toHaveValue('pnpm i'));
     await user.clear(input);
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
-    await waitFor(() => expect(saved).toEqual([{ setupCommand: null }]));
+    await waitFor(() => expect(saved).toEqual([{ setupCommand: null, teardownCommand: 'pnpm local teardown' }]));
   });
 
   it('given the server rejects the save, when saving fails, then an error toast appears', async () => {
-    seedGithubProject();
     server.use(
-      http.get(SETTINGS_URL, () => HttpResponse.json({ setupCommand: null })),
+      http.get(SETTINGS_URL, () => HttpResponse.json({ setupCommand: null, teardownCommand: null })),
       http.post(SETTINGS_URL, () => HttpResponse.json({ error: 'Invalid setupCommand' }, { status: 400 })),
     );
     const user = userEvent.setup();
 
-    renderSection();
+    renderSection(factory);
 
     const input = await screen.findByRole('textbox', { name: FIELD });
     await waitFor(() => expect(input).toBeEnabled());

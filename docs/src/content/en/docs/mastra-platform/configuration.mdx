@@ -37,7 +37,7 @@ A local env file is optional. [`mastra deploy`](/docs/mastra-platform/deploy) re
 
 - **Managed variables**: Injected by platform resources like [hosted databases](/docs/mastra-platform/database). The platform defines these, and you can't edit them.
 - **Stored variables**: Saved on the project or environment through the dashboard. Used as-is on every deploy with no local file needed.
-- **Local env files**: An explicit `--env-file`, or ambient `.env` and `.env.local` files, layered on top at deploy time. Variables from `.env.local` override those in `.env`.
+- **Local env files**: Deployments layer an explicit `--env-file` or the ambient `.env` and `.env.local` files on top. Variables from `.env.local` override those in `.env`.
 
 To pin the deploy to a specific env file instead of relying on the default selection, pass `--env-file`:
 
@@ -62,7 +62,7 @@ The following environment variables configure the Observability product on the M
 
 ## Multiple environments
 
-A single project runs the same codebase across multiple [environments](/docs/mastra-platform/environments), such as `production` and `staging`. Each environment has its own URL, its own stored variables, and its own deploy history. One `.mastra-project.json` file covers all of them:
+A single project runs the same codebase across multiple [environments](/docs/mastra-platform/environments), such as `production` and `staging`. Each environment has its own URL and its own stored variables, plus its own deploy history. One `.mastra-project.json` file covers all of them:
 
 ```bash
 mastra deploy --env production --yes
@@ -70,5 +70,5 @@ mastra deploy --env staging --env-file .env.staging --yes
 ```
 
 :::note
-Earlier platform versions required one project per environment. Environments replace that pattern, so keep one project and deploy to named environments instead.
+Earlier platform versions required one project per environment. Environments replace that pattern, so keep one project and deploy to environments instead.
 :::

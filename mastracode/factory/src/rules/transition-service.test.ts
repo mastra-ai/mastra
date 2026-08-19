@@ -4,16 +4,23 @@ import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { defaultFactoryRules } from './defaults.js';
 import { FactoryTransitionService } from './transition-service.js';
-import type { FactoryRuleBoard, FactoryRuleStage } from './types.js';
+import type { FactoryRuleBoard, FactoryRuleStage, FactoryStageRuleContext } from './types.js';
 import { MAX_FACTORY_RULE_CAUSAL_DEPTH } from './validation.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 
 async function createItem(
   storage: WorkItemsStorage,
-  overrides: Partial<{ orgId: string; source: 'github-issue' | 'github-pr'; sourceKey: string; stages: string[] }> = {},
+  overrides: Partial<{
+    orgId: string;
+    source: 'github-issue' | 'github-pr' | 'slack-thread';
+    sourceKey: string;
+    stages: string[];
+    metadata: Record<string, unknown>;
+  }> = {},
 ) {
   const orgId = overrides.orgId ?? 'org-1';
+  const source = overrides.source ?? 'github-issue';
   return (
     await storage.upsert({
       orgId,
@@ -21,14 +28,14 @@ async function createItem(
       factoryProjectId: PROJECT_ID,
       input: {
         externalSource: {
-          integrationId: 'github',
-          type: (overrides.source ?? 'github-issue') === 'github-pr' ? 'pull-request' : 'issue',
+          integrationId: source === 'slack-thread' ? 'slack' : 'github',
+          type: source === 'slack-thread' ? 'slack-thread' : source === 'github-pr' ? 'pull-request' : 'issue',
           externalId: overrides.sourceKey ?? '1',
         },
         title: 'Fix the bug',
         stages: overrides.stages ?? ['intake'],
         sessions: {},
-        metadata: {},
+        metadata: overrides.metadata ?? {},
       },
     })
   ).item;
@@ -74,6 +81,149 @@ describe('FactoryTransitionService', () => {
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.revision).toBe(item.revision + 1);
   });
 
+  it('does not run GitHub issue rules against a Slack thread card', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { source: 'slack-thread', stages: ['execute'] });
+    const issueRule = vi.fn(() => ({ type: 'notify' as const, idempotencyKey: 'issue-effect', title: 'Issue' }));
+    const manualRule = vi.fn(() => ({ type: 'notify' as const, idempotencyKey: 'manual-effect', title: 'Manual' }));
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({
+        version: 'rules-v1',
+        overrides: { work: { review: { issue: { onEnter: issueRule }, manual: { onEnter: manualRule } } } },
+      }),
+      storage,
+    });
+
+    const result = await service.transition(request(item, { stage: 'review' }));
+
+    expect(result).toMatchObject({ status: 'accepted' });
+    expect(issueRule).not.toHaveBeenCalled();
+    expect(manualRule).toHaveBeenCalledTimes(1);
+  });
+
+  it('hands the intake-stamped facts to the rule that runs on the stage', async () => {
+    // Rules that read intake facts — who reported the issue, which repository it
+    // came from — are unreachable unless the stamped metadata survives into the
+    // context, and a rule reading `undefined` fails silently rather than loudly.
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { metadata: { author: 'octocat' } });
+    const rule = vi.fn((_context: FactoryStageRuleContext) => ({
+      type: 'notify' as const,
+      idempotencyKey: 'effect-1',
+      title: 'Ran',
+    }));
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({
+        version: 'rules-v1',
+        overrides: { work: { execute: { issue: { onEnter: rule } } } },
+      }),
+      storage,
+    });
+
+    await service.transition(request(item, { stage: 'execute' }));
+
+    expect(rule.mock.calls[0]?.[0]).toMatchObject({ item: { metadata: { author: 'octocat' } } });
+  });
+
+  it('invokes onTerminalStage only after a transition commits into a terminal stage', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    const onTerminalStage = vi.fn();
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+      onTerminalStage,
+    });
+
+    const nonTerminal = await service.transition(request(item, { stage: 'execute' }));
+    expect(nonTerminal.status).toBe('accepted');
+    expect(onTerminalStage).not.toHaveBeenCalled();
+
+    const rejected = await service.transition(
+      request(item, { stage: 'done', identity: 'request-2', expectedRevision: 999 }),
+    );
+    expect(rejected.status).toBe('rejected');
+    expect(onTerminalStage).not.toHaveBeenCalled();
+
+    const updated = await storage.get({ orgId: 'org-1', id: item.id });
+    const terminal = await service.transition(request(updated!, { stage: 'done', identity: 'request-3' }));
+    expect(terminal.status).toBe('accepted');
+    expect(onTerminalStage).toHaveBeenCalledExactlyOnceWith({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      stage: 'done',
+    });
+  });
+
+  it('never fails a committed terminal transition when onTerminalStage throws', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    const onTerminalStage = vi.fn().mockRejectedValue(new Error('release failed'));
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+      onTerminalStage,
+    });
+
+    const result = await service.transition(request(item, { stage: 'canceled' }));
+
+    expect(result.status).toBe('accepted');
+    expect(onTerminalStage).toHaveBeenCalledOnce();
+  });
+
+  it('returns a committed terminal transition when onTerminalStage hangs past the cleanup bound', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    // Never settles — models a hung sandbox-provider call during cleanup.
+    const onTerminalStage = vi.fn(() => new Promise<void>(() => {}));
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+      onTerminalStage,
+      terminalCleanupTimeoutMs: 20,
+    });
+
+    const result = await service.transition(request(item, { stage: 'done' }));
+
+    expect(result.status).toBe('accepted');
+    expect(onTerminalStage).toHaveBeenCalledOnce();
+  });
+
+  it('arms autonomy when a person moves a card, so its follow-up runs instead of parking', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['intake'] });
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+    });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeNull();
+
+    const result = await service.transition({ ...request(item, { stage: 'triage' }), cause: 'board_drag' });
+
+    expect(result.status).toBe('accepted');
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeInstanceOf(Date);
+  });
+
+  it('leaves autonomy unarmed when the mover is not a person', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['intake'] });
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+    });
+
+    const result = await service.transition({
+      ...request(item, { stage: 'triage' }),
+      actor: { type: 'system', id: 'reconciler' },
+      ingress: { type: 'rule', identity: 'rule-1' },
+      cause: 'board_drag',
+    });
+
+    expect(result.status).toBe('accepted');
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeNull();
+  });
+
   it('queues an urgent wake-up when a board drag has no skill follow-up', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['triage'] });
@@ -83,7 +233,7 @@ describe('FactoryTransitionService', () => {
     });
 
     const result = await service.transition({
-      ...request(item, { stage: 'execute' }),
+      ...request(item, { stage: 'canceled' }),
       cause: 'board_drag',
     });
 
@@ -93,7 +243,7 @@ describe('FactoryTransitionService', () => {
         {
           type: 'sendMessage',
           role: 'work',
-          message: 'This work was moved from the triage stage to the execute stage.',
+          message: 'This work was moved from the triage stage to the canceled stage.',
           priority: 'urgent',
           idleBehavior: 'wake',
           prepareBinding: true,

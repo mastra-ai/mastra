@@ -108,6 +108,16 @@ describe('width-aware custom component rendering', () => {
     expect(component.render(140).join('\n')).toContain('unique-restored-tail');
   });
 
+  it('reflows ANSI-styled shell output across simple and complex Unicode widths', () => {
+    const component = new ShellStreamComponent('printf styled output');
+    component.setExpanded(true);
+    component.appendOutput(`\x1b[31mℹ ${source}\x1b[0m 中文 Café 👩‍💻`);
+
+    expectReflow(component, 180, 32);
+    expect(component.render(32).every(line => visibleWidth(line) <= 32)).toBe(true);
+    expect(component.render(180).join('\n')).toContain('unique-restored-tail');
+  });
+
   it('reflows expanded slash-command output without collapsing it', () => {
     const component = new SlashCommandComponent('review', source);
     component.setExpanded(true);

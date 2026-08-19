@@ -1,3 +1,4 @@
 {
-  "temperature": ["solar-mini", "solar-pro2", "solar-pro3"]
+  "temperature": ["solar-mini", "solar-pro2", "solar-pro3", "solar-pro4"],
+  "structuredOutput": ["solar-pro4"]
 }

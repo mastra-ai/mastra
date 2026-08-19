@@ -13,7 +13,7 @@ import type {
   FactoryStageRuleContext,
   FactoryTransitionResult,
 } from './types.js';
-import { FACTORY_RULE_STAGES, factoryRuleSourceForWorkItem } from './types.js';
+import { factoryRuleSourceForWorkItem, isFactoryRuleStage } from './types.js';
 import {
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
   validateFactoryRuleDecision,
@@ -22,6 +22,12 @@ import {
 
 const RULE_TIMEOUT_MS = 5_000;
 const MAX_REJECTION_REASON = 512;
+const TERMINAL_STAGES: ReadonlySet<FactoryRuleStage> = new Set(['done', 'canceled']);
+/** Longest a committed transition waits for terminal resource cleanup. Cleanup
+ * reattaches remote sandboxes, so a hung provider call must not leave the
+ * already-committed transition request pending; past this bound the cleanup
+ * keeps running in the background as pure best-effort. */
+const TERMINAL_CLEANUP_TIMEOUT_MS = 30_000;
 
 export interface FactoryTransitionRequest {
   orgId: string;
@@ -36,12 +42,31 @@ export interface FactoryTransitionRequest {
   causalChain?: readonly FactoryRuleCausalEntry[];
   /** Internal materialization path: evaluate only the destination onEnter leaf even when already at that stage. */
   initialEntry?: boolean;
+  /** Re-runs the stage's entry rules when the item already holds that stage, to restart work the entry invalidated. */
+  reenter?: boolean;
 }
 
 export interface FactoryTransitionServiceOptions {
   rules: FactoryRules;
   storage: WorkItemsStorage;
   timeoutMs?: number;
+  /**
+   * Called after a transition commits into a terminal stage (`done` /
+   * `canceled`) — the point where the item's sessions stop receiving runs, so
+   * resources they hold (e.g. sandboxes) can be released for reuse. Awaited,
+   * but failures are swallowed: releasing resources must never break or roll
+   * back the committed transition.
+   */
+  onTerminalStage?: (args: {
+    orgId: string;
+    factoryProjectId: string;
+    workItemId: string;
+    stage: FactoryRuleStage;
+  }) => Promise<void> | void;
+  /** Upper bound on how long a committed transition waits for
+   * `onTerminalStage` before returning (default 30s). The cleanup continues
+   * in the background past the bound. */
+  terminalCleanupTimeoutMs?: number;
 }
 
 function rejection(
@@ -65,15 +90,19 @@ function actorId(actor: FactoryRuleActor): string {
   }
 }
 
-function currentStage(stages: readonly string[]): FactoryRuleStage | undefined {
+export function currentStage(stages: readonly string[]): FactoryRuleStage | undefined {
   if (stages.length !== 1) return undefined;
   const stage = stages[0];
-  return FACTORY_RULE_STAGES.includes(stage as FactoryRuleStage) ? (stage as FactoryRuleStage) : undefined;
+  return isFactoryRuleStage(stage) ? stage : undefined;
 }
 
 function workItemSource(source: ExternalWorkItemSource | null) {
   if (!source) return 'manual' as const;
   if (source.integrationId === 'linear') return 'linear-issue' as const;
+  // Only GitHub and Linear have provider-specific rules. Anything else (a Slack
+  // thread, say) is treated as a plain work item rather than mislabeled as a
+  // GitHub issue, which would hand its rules a non-GitHub url.
+  if (source.integrationId !== 'github') return 'manual' as const;
   return source.type === 'pull-request' ? ('github-pr' as const) : ('github-issue' as const);
 }
 
@@ -111,11 +140,15 @@ export class FactoryTransitionService {
   readonly #rules: FactoryRules;
   readonly #storage: WorkItemsStorage;
   readonly #timeoutMs: number;
+  readonly #onTerminalStage: FactoryTransitionServiceOptions['onTerminalStage'];
+  readonly #terminalCleanupTimeoutMs: number;
 
   constructor(options: FactoryTransitionServiceOptions) {
     this.#rules = options.rules;
     this.#storage = options.storage;
     this.#timeoutMs = options.timeoutMs ?? RULE_TIMEOUT_MS;
+    this.#onTerminalStage = options.onTerminalStage;
+    this.#terminalCleanupTimeoutMs = options.terminalCleanupTimeoutMs ?? TERMINAL_CLEANUP_TIMEOUT_MS;
   }
 
   get ruleSetVersion(): string {
@@ -164,6 +197,9 @@ export class FactoryTransitionService {
       );
     }
 
+    const humanBoardDrag =
+      request.actor.type === 'human' && request.cause === 'board_drag' && fromStage !== request.stage;
+
     const contextBase = {
       tenant: { orgId: request.orgId, projectId: request.factoryProjectId },
       actor: request.actor,
@@ -181,6 +217,7 @@ export class FactoryTransitionService {
         title: item.title,
         url: item.externalSource?.url ?? null,
         stages: [...item.stages],
+        metadata: item.metadata,
       },
       board: request.board,
       itemRevision: item.revision,
@@ -202,6 +239,7 @@ export class FactoryTransitionService {
             fromStage,
             toStage: request.stage,
             initialEntry: request.initialEntry,
+            reenter: request.reenter,
           })) {
             const context: FactoryStageRuleContext = Object.freeze({
               ...contextBase,
@@ -216,7 +254,7 @@ export class FactoryTransitionService {
             decisions.push(decision);
           }
           const validated = validateFactoryRuleDecisions(decisions);
-          if (request.actor.type === 'human' && request.cause === 'board_drag' && fromStage !== request.stage) {
+          if (humanBoardDrag) {
             const message = stageTransitionMessage(fromStage, request.stage);
             const skill = validated.find(decision => decision.type === 'invokeSkill');
             if (skill) {
@@ -247,7 +285,13 @@ export class FactoryTransitionService {
           : ruleFailure(error);
       evaluation = { outcome: 'rejected', ...failed };
     }
-    return this.#commit(request, transitionId, evaluation);
+    // Moving a card by hand is itself the request to do the work. Arm the item
+    // inside the same revision-checked update that commits the transition, so
+    // the decisions it emits run instead of parking as proposals — and so a
+    // stale or rejected commit does not leave the item spuriously armed.
+    return this.#commit(request, transitionId, evaluation, {
+      armAutonomy: evaluation.outcome === 'accepted' && humanBoardDrag,
+    });
   }
 
   async #commitRejection(
@@ -265,8 +309,10 @@ export class FactoryTransitionService {
     evaluation:
       | { outcome: 'accepted'; decisions: Record<string, unknown>[] }
       | { outcome: 'rejected'; code: string; reason: string },
+    options: { armAutonomy?: boolean } = {},
   ): Promise<FactoryTransitionResult> {
     const committed = await this.#storage.commitTransition({
+      armAutonomy: options.armAutonomy === true,
       orgId: request.orgId,
       factoryProjectId: request.factoryProjectId,
       workItemId: request.workItemId,
@@ -281,6 +327,33 @@ export class FactoryTransitionService {
     if (committed.status === 'missing') {
       return rejection(transitionId, request.workItemId, 'invalid_transition', 'Work item not found.');
     }
-    return committed.result as unknown as FactoryTransitionResult;
+    const result = committed.result as unknown as FactoryTransitionResult;
+    if (this.#onTerminalStage && result.status === 'accepted' && TERMINAL_STAGES.has(result.stage)) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const cleanup = Promise.resolve(
+          this.#onTerminalStage({
+            orgId: request.orgId,
+            factoryProjectId: request.factoryProjectId,
+            workItemId: request.workItemId,
+            stage: result.stage,
+          }),
+        );
+        // A late rejection after the timeout wins the race must not surface
+        // as an unhandled rejection.
+        cleanup.catch(() => {});
+        await Promise.race([
+          cleanup,
+          new Promise<void>(resolve => {
+            timer = setTimeout(resolve, this.#terminalCleanupTimeoutMs);
+          }),
+        ]);
+      } catch {
+        // Resource release is best-effort — never fail a committed transition.
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    return result;
   }
 }

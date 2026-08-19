@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { Agent } from '../agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../agent/message-list/state/types';
+import type { ActiveThreadRun } from '../agent/thread-stream-runtime';
 import type { AgentInstructions, ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import { AgentControllerChannels } from '../channels/agent-controller-channels';
@@ -38,6 +39,9 @@ import type {
   AgentControllerMode,
   AgentControllerRequestContext,
   AgentControllerRequestStateUpdater,
+  AgentControllerSessionCreatedListener,
+  AgentControllerSessionCreatedOptions,
+  AgentControllerSessionDeletedListener,
   AgentControllerThread,
   ModelAuthStatus,
   ToolCategory,
@@ -195,6 +199,32 @@ export class AgentController<TState = {}> {
    * that session's model/mode/state instead of an arbitrary one.
    */
   readonly #sessionsByResource = new Map<string, Promise<Session<TState>>>();
+  readonly #sessionCreatedListeners: Array<{
+    listener: AgentControllerSessionCreatedListener<TState>;
+    blocking: boolean;
+  }> = [];
+  readonly #sessionDeletedListeners: AgentControllerSessionDeletedListener<TState>[] = [];
+  /**
+   * In-progress deletions keyed by registry key, so {@link createSession} can
+   * wait for a concurrent deletion to finish before returning a (torn-down)
+   * session. Set synchronously before any await so the flag is visible to
+   * concurrent callers.
+   */
+  readonly #deletionsInProgress = new Map<string, Promise<void>>();
+  /**
+   * Sessions currently being torn down, so {@link setResourceId} can refuse to
+   * re-key a dying session and {@link createSession} can avoid returning one.
+   * Populated inside the deletion IIFE after `await pending` resolves the
+   * session.
+   */
+  readonly #sessionsBeingDeleted = new WeakSet<Session<TState>>();
+  /**
+   * Per-session deletion promise (rejection-tolerant), keyed by the Session
+   * object so {@link createSession} and {@link setResourceId} can wait on a
+   * deletion they discovered via {@link #sessionsBeingDeleted} without knowing
+   * the original registry key.
+   */
+  readonly #sessionDeletionPromises = new WeakMap<Session<TState>, Promise<void>>();
   /**
    * The scope each live session was created under, so re-keying operations
    * (e.g. {@link setResourceId}) preserve the session's registry scope.
@@ -246,6 +276,87 @@ export class AgentController<TState = {}> {
 
     this.workspace = config.workspace;
     this.browser = config.browser;
+  }
+
+  /**
+   * Subscribe to process-local notifications for newly materialized sessions.
+   * Cached `createSession()` calls do not notify listeners again.
+   *
+   * Async listeners are fire-and-forget by default. Pass `blocking: true` to
+   * make `createSession()` await the listener before resolving — for setup that
+   * must land before the caller can start a run (e.g. seeding session state
+   * from storage). Blocking listeners run sequentially in registration order,
+   * before fire-and-forget listeners are notified. Failures are isolated and
+   * logged, never thrown — session creation stays best-effort with respect to
+   * listener setup. A blocking listener must not call `createSession()` for
+   * the same `(resourceId, scope)` it is initializing: that lookup awaits the
+   * in-flight creation that is awaiting the listener, which deadlocks.
+   */
+  onSessionCreated(
+    listener: AgentControllerSessionCreatedListener<TState>,
+    options?: AgentControllerSessionCreatedOptions,
+  ): () => void {
+    const entry = { listener, blocking: options?.blocking === true };
+    this.#sessionCreatedListeners.push(entry);
+    return () => {
+      const index = this.#sessionCreatedListeners.indexOf(entry);
+      if (index !== -1) {
+        this.#sessionCreatedListeners.splice(index, 1);
+      }
+    };
+  }
+
+  async #notifySessionCreated(session: Session<TState>): Promise<void> {
+    const entries = [...this.#sessionCreatedListeners];
+    // Blocking listeners complete sequentially, in registration order, before
+    // fire-and-forget listeners can observe the session.
+    for (const { listener, blocking } of entries) {
+      if (!blocking) continue;
+      try {
+        await listener(session);
+      } catch (error) {
+        console.error('Error in session-created listener:', error);
+      }
+    }
+    for (const { listener, blocking } of entries) {
+      if (blocking) continue;
+      try {
+        const result = listener(session);
+        if (result && typeof result === 'object' && 'catch' in result) {
+          (result as Promise<void>).catch(error => console.error('Error in session-created listener:', error));
+        }
+      } catch (error) {
+        console.error('Error in session-created listener:', error);
+      }
+    }
+  }
+
+  /**
+   * Subscribe to process-local notifications after live sessions are torn
+   * down. Fires even when teardown cleanup fails — the session is
+   * deregistered either way.
+   */
+  onSessionDeleted(listener: AgentControllerSessionDeletedListener<TState>): () => void {
+    this.#sessionDeletedListeners.push(listener);
+    return () => {
+      const index = this.#sessionDeletedListeners.indexOf(listener);
+      if (index !== -1) {
+        this.#sessionDeletedListeners.splice(index, 1);
+      }
+    };
+  }
+
+  #notifySessionDeleted(session: Session<TState>): void {
+    for (const listener of [...this.#sessionDeletedListeners]) {
+      try {
+        const result = listener(session);
+        if (result && typeof result === 'object' && 'catch' in result) {
+          (result as Promise<void>).catch(error => console.error('Error in session-deleted listener:', error));
+        }
+      } catch (error) {
+        console.error('Error in session-deleted listener:', error);
+      }
+    }
   }
 
   /**
@@ -381,54 +492,101 @@ export class AgentController<TState = {}> {
     const effectiveOwnerId = ownerId ?? this.config.id;
     const registryKey = sessionRegistryKey(effectiveResourceId, scope);
 
-    // Get-or-create: a (resourceId, scope) pair maps to exactly one durable
-    // session per AgentController. Asking for the same resource+scope twice returns
-    // the same session, so a user/thread always resumes their own session and
-    // notification delivery reuses it rather than spawning a split-brain
-    // duplicate. Cache the in-flight promise so concurrent calls for the same
-    // resource+scope resolve to one session.
-    const existing = this.#sessionsByResource.get(registryKey);
-    if (existing) {
-      const session = await existing;
-      // An exact thread binding is part of the createSession contract
-      // ("existing threads are resumed; missing threads are created with this
-      // id"), so honor it on cached sessions too. Without this, whichever
-      // request creates the session first wins: a thread-agnostic caller (SSE
-      // subscribe, message listing) racing ahead of an exact-thread create
-      // would leave the session bound to a different thread and the requested
-      // thread never created.
-      if (threadId && session.thread.getId() !== threadId) {
-        const existingThread = await session.thread.getById({ threadId });
-        if (existingThread) {
-          if (existingThread.resourceId !== effectiveResourceId) {
-            throw new Error(`Thread not found: ${threadId}`);
-          }
-          await session.thread.switch({ threadId });
-        } else {
-          await session.thread.create({ id: threadId });
-        }
-      }
-      return session;
-    }
+    // Get-or-create loop: a (resourceId, scope) pair maps to exactly one
+    // durable session per AgentController. Asking for the same resource+scope
+    // twice returns the same session, so a user/thread always resumes their own
+    // session and notification delivery reuses it rather than spawning a
+    // split-brain duplicate. Cache the in-flight promise so concurrent calls
+    // for the same resource+scope resolve to one session.
+    //
+    // The loop also serializes against concurrent deleteSession: if a deletion
+    // is in progress (or starts during an await), wait for it to finish, then
+    // retry so the caller gets a fresh session instead of a torn-down one.
+    for (;;) {
+      // Wait for any in-progress deletion before looking up the registry.
+      let pendingDeletion = this.#deletionsInProgress.get(registryKey);
+      if (pendingDeletion) await pendingDeletion;
 
-    const creation = this.#createSessionForResource(effectiveOwnerId, effectiveSessionId, effectiveResourceId, tags, {
-      scope,
-      threadId,
-      workspace,
-      browser,
-      requestContext,
-    });
-    this.#sessionsByResource.set(registryKey, creation);
-    try {
-      const session = await creation;
-      if (scope !== undefined) this.#sessionScopes.set(session, scope);
-      return session;
-    } catch (error) {
-      // Don't cache a failed creation — let the next call retry.
-      if (this.#sessionsByResource.get(registryKey) === creation) {
-        this.#sessionsByResource.delete(registryKey);
+      const existing = this.#sessionsByResource.get(registryKey);
+      if (existing) {
+        const session = await existing;
+        // A deletion may have started during the await — either for this key
+        // (tracked in #deletionsInProgress) or for a previous key if
+        // setResourceId re-registered the session (tracked in
+        // #sessionsBeingDeleted + #sessionDeletionPromises).
+        pendingDeletion = this.#deletionsInProgress.get(registryKey);
+        if (pendingDeletion) {
+          await pendingDeletion;
+          continue;
+        }
+        if (this.#sessionsBeingDeleted.has(session)) {
+          const sessionDeletion = this.#sessionDeletionPromises.get(session);
+          if (sessionDeletion) await sessionDeletion;
+          // Evict the dead session's registry entry so the retry finds a
+          // fresh slot instead of the same dead session forever.
+          this.#sessionsByResource.delete(registryKey);
+          continue;
+        }
+        // An exact thread binding is part of the createSession contract
+        // ("existing threads are resumed; missing threads are created with this
+        // id"), so honor it on cached sessions too. Without this, whichever
+        // request creates the session first wins: a thread-agnostic caller (SSE
+        // subscribe, message listing) racing ahead of an exact-thread create
+        // would leave the session bound to a different thread and the requested
+        // thread never created.
+        if (threadId && session.thread.getId() !== threadId) {
+          const existingThread = await session.thread.getById({ threadId });
+          if (existingThread) {
+            if (existingThread.resourceId !== effectiveResourceId) {
+              throw new Error(`Thread not found: ${threadId}`);
+            }
+            await session.thread.switch({ threadId });
+          } else {
+            await session.thread.create({ id: threadId });
+          }
+        }
+        // A deletion may have started during the thread-rebinding awaits.
+        pendingDeletion = this.#deletionsInProgress.get(registryKey);
+        if (pendingDeletion) {
+          await pendingDeletion;
+          continue;
+        }
+        if (this.#sessionsBeingDeleted.has(session)) {
+          const sessionDeletion = this.#sessionDeletionPromises.get(session);
+          if (sessionDeletion) await sessionDeletion;
+          // Evict the dead session's registry entry so the retry finds a
+          // fresh slot instead of the same dead session forever.
+          this.#sessionsByResource.delete(registryKey);
+          continue;
+        }
+        return session;
       }
-      throw error;
+
+      const creation = this.#createSessionForResource(effectiveOwnerId, effectiveSessionId, effectiveResourceId, tags, {
+        scope,
+        threadId,
+        workspace,
+        browser,
+        requestContext,
+      });
+      this.#sessionsByResource.set(registryKey, creation);
+      try {
+        const session = await creation;
+        // A deletion may have started during creation.
+        pendingDeletion = this.#deletionsInProgress.get(registryKey);
+        if (pendingDeletion) {
+          await pendingDeletion;
+          continue;
+        }
+        if (scope !== undefined) this.#sessionScopes.set(session, scope);
+        return session;
+      } catch (error) {
+        // Don't cache a failed creation — let the next call retry.
+        if (this.#sessionsByResource.get(registryKey) === creation) {
+          this.#sessionsByResource.delete(registryKey);
+        }
+        throw error;
+      }
     }
   }
 
@@ -522,7 +680,7 @@ export class AgentController<TState = {}> {
           initialState,
           stateSchema: this.config.stateSchema,
         },
-        workspace: workspaceToConnect as Workspace,
+        workspace: workspaceToConnect,
         browser: browserToConnect,
       }),
     );
@@ -557,30 +715,17 @@ export class AgentController<TState = {}> {
         await session.thread.create({ id: overrides.threadId });
       }
     } else {
-      // Bring the session online with a current thread. Selection is tag-aware so
-      // worktrees sharing a resourceId each resume their own thread without
-      // claiming threads owned by another scope. A thread is a candidate only when
-      // its metadata matches every provided tag; with no tags every thread
-      // qualifies. Tags default to the controller-global state when omitted.
-      const selectionTags: Record<string, string> = {};
-      if (tags && Object.keys(tags).length > 0) {
-        Object.assign(selectionTags, tags);
-      } else {
-        const projectPath = (this.config.initialState as any)?.projectPath as string | undefined;
-        if (projectPath) selectionTags.projectPath = projectPath;
-      }
-      const tagEntries = Object.entries(selectionTags);
+      // Same scope `thread.create()` stamps, matched strictly: a thread outside
+      // this session's scope — including one carrying no scope at all — belongs
+      // to nobody here and must not be auto-resumed.
+      const scopeEntries = Object.entries(session.getThreadScope());
 
       const threads = await session.thread.list();
-      const candidates =
-        tagEntries.length > 0
-          ? threads.filter(t => {
-              const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
-              return tagEntries.every(([key, value]) => metadata[key] === value);
-            })
-          : threads;
+      const candidates = threads.filter(t => {
+        const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
+        return scopeEntries.every(([key, value]) => metadata[key] === value);
+      });
 
-      // Resume the most recent same-resource candidate, or create a new thread.
       if (candidates.length === 0) {
         await session.thread.create();
       } else {
@@ -592,6 +737,7 @@ export class AgentController<TState = {}> {
       }
     }
 
+    await this.#notifySessionCreated(session);
     return session;
   }
 
@@ -604,6 +750,57 @@ export class AgentController<TState = {}> {
    */
   async getSessionByResource(resourceId: string, scope?: string): Promise<Session<TState> | undefined> {
     return this.#sessionsByResource.get(sessionRegistryKey(resourceId, scope));
+  }
+
+  /**
+   * Tear down the live session registered for a resource and optional scope.
+   * This only removes runtime state; persisted threads and messages remain.
+   * Returns `false` when no live session is registered.
+   */
+  async deleteSession({ resourceId, scope }: { resourceId: string; scope?: string }): Promise<boolean> {
+    const registryKey = sessionRegistryKey(resourceId, scope);
+
+    // Don't start a second deletion for the same key.
+    if (this.#deletionsInProgress.has(registryKey)) return false;
+
+    const pending = this.#sessionsByResource.get(registryKey);
+    if (!pending) return false;
+
+    // Track the deletion by registry key and set it synchronously, before any
+    // await, so a concurrent createSession that resumes from `await existing`
+    // sees the flag and waits instead of returning a session being torn down.
+    const deletion: { tolerantPromise?: Promise<void> } = {};
+    const deletionPromise = (async () => {
+      const session = await pending;
+      this.#sessionsBeingDeleted.add(session);
+      // tolerantPromise is set synchronously below before this microtask runs.
+      this.#sessionDeletionPromises.set(session, deletion.tolerantPromise!);
+      session.abort();
+      session.thread.cleanupSubscription();
+      try {
+        await session.thread.clearAndReleaseLock();
+      } finally {
+        // Notify inside the finally: even when lock release fails the session
+        // is deregistered for good, and listeners mirror the registry.
+        await this.#dropSessionFromRegistry(registryKey, session);
+        this.#notifySessionDeleted(session);
+      }
+    })();
+    // Waiters only need to know when teardown finished, not why it failed.
+    // Without this, a clearAndReleaseLock rejection would propagate to every
+    // createSession caller that happened to await the in-progress deletion.
+    const tolerantPromise = deletionPromise.then(
+      () => undefined,
+      () => undefined,
+    );
+    deletion.tolerantPromise = tolerantPromise;
+    this.#deletionsInProgress.set(registryKey, tolerantPromise);
+    try {
+      await deletionPromise;
+      return true;
+    } finally {
+      this.#deletionsInProgress.delete(registryKey);
+    }
   }
 
   // ===========================================================================
@@ -653,10 +850,11 @@ export class AgentController<TState = {}> {
   }
 
   /**
-   * Eagerly resolve the workspace. For dynamic workspaces (factory function),
-   * this triggers resolution against the given session's request context and
-   * caches the result so {@link getWorkspace} returns it. Useful for code paths
-   * outside the request flow (e.g. slash commands).
+   * The workspace this session runs against, for code paths outside the request
+   * flow (e.g. slash commands). Sessions resolve their workspace once at
+   * creation — dynamic factories included — so this returns that instance
+   * rather than re-resolving, and only falls back to the factory for a session
+   * created without one.
    */
   async resolveWorkspace({
     session,
@@ -665,11 +863,11 @@ export class AgentController<TState = {}> {
     session: Session<TState>;
     requestContext?: RequestContext;
   }): Promise<Workspace | undefined> {
+    const sessionWorkspace = session.getWorkspace();
+    if (sessionWorkspace) return sessionWorkspace;
     if (typeof this.workspace !== 'function') return this.workspace ?? undefined;
     const ctx = await this.buildRequestContext(session, requestContext);
-    const resolved = await this.workspace({ requestContext: ctx, mastra: this.getMastra() });
-    this.workspace = resolved;
-    return resolved ?? undefined;
+    return (await this.workspace({ requestContext: ctx, mastra: this.getMastra() })) ?? undefined;
   }
 
   /**
@@ -710,19 +908,7 @@ export class AgentController<TState = {}> {
   setBrowser(browser: MastraBrowser | undefined): void {
     this.browser = browser;
 
-    // Collect unique agents: shared backing agent + any deprecated mode.agent
-    // instances so all receive the browser (signal providers may be attached to
-    // any of them).
-    const agents = new Set<Agent<any, any, any, any>>();
-    if (this.config.agent) {
-      agents.add(this.config.agent);
-    }
-    for (const mode of this.config.modes) {
-      if (mode.agent || !this.config.agent) {
-        agents.add(this.getAgentForMode(mode));
-      }
-    }
-    for (const agent of agents) {
+    for (const agent of this.backingAgents()) {
       agent.setBrowser(browser);
     }
   }
@@ -742,7 +928,22 @@ export class AgentController<TState = {}> {
     return this.initPromise;
   }
 
-  private async runInit(): Promise<void> {
+  /**
+   * Initialize only what read-only queries need: the storage layer (either a
+   * fresh internal Mastra wrapping the configured storage, or the inherited
+   * parent Mastra's storage). Skips workspace/sandbox provisioning entirely.
+   *
+   * Idempotent and safe to call from every read query; the underlying
+   * MastraCompositeStore init dedupes.
+   */
+  async initStorage(): Promise<void> {
+    this.#storageInitPromise ??= this.runStorageInit();
+    return this.#storageInitPromise;
+  }
+
+  #storageInitPromise?: Promise<void>;
+
+  private async runStorageInit(): Promise<void> {
     // Create an internal Mastra instance so agents have access to storage
     // (required for tool approval snapshot persistence/resume).
     // We init storage through Mastra's proxied storage so augmentWithInit
@@ -772,6 +973,13 @@ export class AgentController<TState = {}> {
       // is safe even when the parent already initialized it.
       await this.#externalMastra.getStorage()?.init();
     }
+  }
+
+  private async runInit(): Promise<void> {
+    // Storage init is a prerequisite for both reads and writes; share the same
+    // promise so a concurrent read that already triggered storage init doesn't
+    // race with the workspace init we're about to do.
+    await this.initStorage();
 
     // Initialize workspace if configured (skip for dynamic factory — resolved per-request)
     if (this.config.workspace && !this.workspaceInitialized && typeof this.workspace !== 'function') {
@@ -792,18 +1000,7 @@ export class AgentController<TState = {}> {
 
     // Propagate harness-level Mastra, memory, workspace, browser, and pubsub
     // to the agent(s) that back each mode (after workspace init).
-    // Collect unique agents: shared backing agent + any deprecated mode.agent
-    // instances so all receive runtime services.
-    const agents = new Set<Agent<any, any, any, any>>();
-    if (this.config.agent) {
-      agents.add(this.config.agent);
-    }
-    for (const mode of this.config.modes) {
-      if (mode.agent || !this.config.agent) {
-        agents.add(this.getAgentForMode(mode));
-      }
-    }
-    for (const agent of agents) {
+    for (const agent of this.backingAgents()) {
       this.propagateRuntimeServicesToAgent(agent);
     }
 
@@ -966,7 +1163,15 @@ export class AgentController<TState = {}> {
     }
   }
 
-  private async queryThreadById({ threadId }: { threadId: string }): Promise<AgentControllerThread | null> {
+  /**
+   * Read a single thread by id directly from storage, without constructing a
+   * {@link Session}. Read-only server endpoints use this so a GET request for a
+   * thread doesn't spin up a workspace/sandbox as a side effect of session
+   * creation. Returns `null` when the thread doesn't exist or no storage is
+   * configured.
+   */
+  async queryThreadById({ threadId }: { threadId: string }): Promise<AgentControllerThread | null> {
+    await this.initStorage();
     if (!this.#resolveStorage()) return null;
     const memoryStorage = await this.getMemoryStorage();
     const thread = await memoryStorage.getThreadById({ threadId });
@@ -981,7 +1186,12 @@ export class AgentController<TState = {}> {
     };
   }
 
-  private async queryThreads({
+  /**
+   * List threads directly from storage, without constructing a {@link Session}.
+   * Read-only server endpoints use this so a GET on `/threads` doesn't spin up
+   * a workspace/sandbox as a side effect of session creation.
+   */
+  async queryThreads({
     resourceId,
     includeForkedSubagents,
     metadata,
@@ -990,6 +1200,7 @@ export class AgentController<TState = {}> {
     includeForkedSubagents?: boolean;
     metadata?: Record<string, unknown>;
   }): Promise<AgentControllerThread[]> {
+    await this.initStorage();
     if (!this.#resolveStorage()) {
       return [];
     }
@@ -1022,13 +1233,14 @@ export class AgentController<TState = {}> {
     }));
   }
 
-  private async queryThreadMessages({
-    threadId,
-    limit,
-  }: {
-    threadId: string;
-    limit?: number;
-  }): Promise<MastraDBMessage[]> {
+  /**
+   * List messages for a thread directly from storage, without constructing a
+   * {@link Session}. Read-only server endpoints use this so a GET on a thread's
+   * messages doesn't spin up a workspace/sandbox as a side effect of session
+   * creation.
+   */
+  async queryThreadMessages({ threadId, limit }: { threadId: string; limit?: number }): Promise<MastraDBMessage[]> {
+    await this.initStorage();
     if (!this.#resolveStorage()) return [];
 
     const memoryStorage = await this.getMemoryStorage();
@@ -1154,9 +1366,13 @@ export class AgentController<TState = {}> {
     this.#channels = channels;
     channels.__setController(this);
 
-    // Attach to every already-constructed backing agent: shared backing agent
-    // + any deprecated per-mode agent instances. Lazily-built mode agents
-    // receive channels on first run via `propagateRuntimeServicesToAgent`.
+    for (const agent of this.backingAgents()) {
+      agent.setChannels(channels);
+    }
+  }
+
+  /** The distinct agents backing this controller: the shared one plus any deprecated per-mode agent. */
+  private backingAgents(): Set<Agent<any, any, any, any>> {
     const agents = new Set<Agent<any, any, any, any>>();
     if (this.config.agent) {
       agents.add(this.config.agent);
@@ -1166,9 +1382,7 @@ export class AgentController<TState = {}> {
         agents.add(this.getAgentForMode(mode));
       }
     }
-    for (const agent of agents) {
-      agent.setChannels(channels);
-    }
+    return agents;
   }
 
   private getAgentForMode(mode: AgentControllerMode): Agent<any, any, any, any> {
@@ -1259,6 +1473,16 @@ export class AgentController<TState = {}> {
     return this.propagateRuntimeServicesToAgent(this.getAgentForMode(mode), session);
   }
 
+  listActiveThreadRuns(): ActiveThreadRun[] {
+    const byRunId = new Map<string, ActiveThreadRun>();
+    for (const agent of this.backingAgents()) {
+      for (const run of this.propagateRuntimeServicesToAgent(agent).listActiveThreadRuns()) {
+        byRunId.set(run.runId, run);
+      }
+    }
+    return [...byRunId.values()];
+  }
+
   /**
    * Check if the current model's provider has authentication configured.
    * Delegates to the {@link GatewayManager} auth chain (the same resolution
@@ -1341,9 +1565,30 @@ export class AgentController<TState = {}> {
    * lives on the session (`session.identity`); the AgentController orchestrates the
    * surrounding teardown — dropping the current thread subscription and clearing
    * the active thread — since those are AgentController-owned.
+   *
+   * If a deletion is in progress for the session's current resource (or starts
+   * during the re-key), the session is being torn down and re-keying is skipped
+   * — the deletion's {@link #dropSessionFromRegistry} cleans up all keys.
    */
   async setResourceId(session: Session<TState>, { resourceId }: { resourceId: string }): Promise<void> {
+    // If the session was already deleted (or deletion is in progress), don't
+    // re-key it — a dead session must never be registered under a new key.
+    if (this.#sessionsBeingDeleted.has(session)) return;
+
     const previousResourceId = session.identity.getResourceId();
+    const scope = this.#sessionScopes.get(session);
+    const oldKey = sessionRegistryKey(previousResourceId, scope);
+    const newKey = sessionRegistryKey(resourceId, scope);
+
+    // Wait for any in-progress deletion on the old key before touching the
+    // session. If the session was deleted while we waited, skip re-keying
+    // entirely — the session is dead and the deletion already cleaned up.
+    const oldDeletion = this.#deletionsInProgress.get(oldKey);
+    if (oldDeletion) {
+      await oldDeletion;
+      if (this.#sessionsBeingDeleted.has(session)) return;
+    }
+
     session.thread.cleanupSubscription();
     session.identity.setResourceId({ resourceId });
     const releasePreviousThreadLock = session.thread.clearAndReleaseLock();
@@ -1353,20 +1598,60 @@ export class AgentController<TState = {}> {
     // becomes the authoritative owner of the target resource, replacing any
     // prior session registered there. The session keeps its creation scope, so
     // a scoped session re-keys under the same scope on the new resource.
-    const scope = this.#sessionScopes.get(session);
-    const dropPreviousResource = this.#dropSessionFromRegistry(sessionRegistryKey(previousResourceId, scope), session);
-    this.#sessionsByResource.set(sessionRegistryKey(resourceId, scope), Promise.resolve(session));
+    const dropPreviousResource = this.#dropSessionFromRegistry(oldKey, session);
+    // Re-check that a deletion didn't start during the awaits above. If it
+    // did, the session is being torn down — don't register it under the new
+    // key; the deletion's #dropSessionFromRegistry cleans up all keys.
+    if (this.#sessionsBeingDeleted.has(session)) {
+      await releasePreviousThreadLock;
+      await dropPreviousResource;
+      const postDeletion = this.#deletionsInProgress.get(newKey) ?? this.#deletionsInProgress.get(oldKey);
+      if (postDeletion) await postDeletion;
+      return;
+    }
+    this.#sessionsByResource.set(newKey, Promise.resolve(session));
     await releasePreviousThreadLock;
     await dropPreviousResource;
+
+    // A deletion may have started during the awaits. If so, the deletion's
+    // #dropSessionFromRegistry already drops the new key (via the session's
+    // current resourceId), but wait for it to finish so the caller sees a
+    // consistent state.
+    const postDeletion = this.#deletionsInProgress.get(newKey);
+    if (postDeletion) await postDeletion;
   }
 
-  /** Remove `registryKey` from the registry only if it still resolves to `session`. */
+  /**
+   * Remove `registryKey` from the registry only if it still resolves to
+   * `session`. When the session is being torn down (tracked in
+   * {@link #sessionsBeingDeleted}), also checks the session's current
+   * resourceId (which may differ if {@link setResourceId} re-keyed the session
+   * during deletion) and drops that key too, so an aborted session can't be
+   * re-resolved by a subsequent {@link createSession} call.
+   */
   async #dropSessionFromRegistry(registryKey: string, session: Session<TState>): Promise<void> {
     const pending = this.#sessionsByResource.get(registryKey);
-    if (!pending) return;
-    const resolved = await pending.catch(() => undefined);
-    if (resolved === session && this.#sessionsByResource.get(registryKey) === pending) {
-      this.#sessionsByResource.delete(registryKey);
+    if (pending) {
+      const resolved = await pending.catch(() => undefined);
+      if (resolved === session && this.#sessionsByResource.get(registryKey) === pending) {
+        this.#sessionsByResource.delete(registryKey);
+      }
+    }
+    // When tearing down a session, also drop from the session's current
+    // resourceId key, which may differ if setResourceId re-keyed the session
+    // during deletion. Skip this for non-deletion calls (setResourceId itself
+    // drops the old key and registers the new one — we must not undo that).
+    if (!this.#sessionsBeingDeleted.has(session)) return;
+    const scope = this.#sessionScopes.get(session);
+    const currentKey = sessionRegistryKey(session.identity.getResourceId(), scope);
+    if (currentKey !== registryKey) {
+      const currentPending = this.#sessionsByResource.get(currentKey);
+      if (currentPending) {
+        const currentResolved = await currentPending.catch(() => undefined);
+        if (currentResolved === session && this.#sessionsByResource.get(currentKey) === currentPending) {
+          this.#sessionsByResource.delete(currentKey);
+        }
+      }
     }
   }
 
@@ -1382,8 +1667,7 @@ export class AgentController<TState = {}> {
 
   /**
    * Load observational memory progress for the current thread.
-   * Reads the OM record and recent messages to reconstruct status,
-   * then emits an `om_status` event for the UI.
+   * Reconstructs status from the durable OM record, then emits an `om_status` event for the UI.
    */
   async loadOMProgress(session: Session<TState>): Promise<void> {
     const threadId = session.thread.getId();
@@ -1397,8 +1681,12 @@ export class AgentController<TState = {}> {
 
       const config = record.config as
         | {
-            observationThreshold?: number | { min: number; max: number };
-            reflectionThreshold?: number | { min: number; max: number };
+            observation?: { messageTokens?: number | { min: number; max: number } };
+            reflection?: { observationTokens?: number | { min: number; max: number } };
+            _overrides?: {
+              observation?: { messageTokens?: number | { min: number; max: number } };
+              reflection?: { observationTokens?: number | { min: number; max: number } };
+            };
           }
         | undefined;
 
@@ -1408,75 +1696,62 @@ export class AgentController<TState = {}> {
         return val.max;
       };
 
-      let observationThreshold = getThreshold(config?.observationThreshold, 30_000);
-      let reflectionThreshold = getThreshold(config?.reflectionThreshold, 40_000);
-
-      let messageTokens = record.pendingMessageTokens ?? 0;
-      let observationTokens = record.observationTokenCount ?? 0;
-      let bufferedObs = {
-        status: 'idle' as 'idle' | 'running' | 'complete',
-        chunks: 0,
-        messageTokens: 0,
-        projectedMessageRemoval: 0,
-        observationTokens: 0,
-      };
-      let bufferedRef = {
-        status: 'idle' as 'idle' | 'running' | 'complete',
-        inputObservationTokens: 0,
-        observationTokens: 0,
-      };
-      let generationCount = 0;
-      let stepNumber = 0;
-
-      const messagesResult = await memoryStorage.listMessages({
-        threadId,
-        perPage: 70,
-        page: 0,
-        orderBy: { field: 'createdAt', direction: 'DESC' },
-      });
-      const messages = messagesResult.messages;
-      let foundStatus = false;
-      for (const msg of messages) {
-        if (msg.role !== 'assistant') continue;
-        const content = msg.content as { parts?: Array<{ type?: string; data?: Record<string, unknown> }> } | string;
-        if (typeof content === 'string' || !content?.parts) continue;
-
-        for (let i = content.parts.length - 1; i >= 0; i--) {
-          const part = content.parts[i] as { type?: string; data?: Record<string, unknown> };
-          if (part.type === 'data-om-status' && part.data?.windows) {
-            const w = part.data.windows as Record<string, Record<string, Record<string, unknown>>>;
-            messageTokens = (w.active?.messages?.tokens as number) ?? messageTokens;
-            observationTokens = (w.active?.observations?.tokens as number) ?? observationTokens;
-            const msgThresh = w.active?.messages?.threshold as number | undefined;
-            const obsThresh = w.active?.observations?.threshold as number | undefined;
-            if (msgThresh) observationThreshold = msgThresh;
-            if (obsThresh) reflectionThreshold = obsThresh;
-            const bo = w.buffered?.observations as Record<string, unknown> | undefined;
-            if (bo) {
-              bufferedObs = {
-                status: (bo.status as 'idle' | 'running' | 'complete') ?? 'idle',
-                chunks: (bo.chunks as number) ?? 0,
-                messageTokens: (bo.messageTokens as number) ?? 0,
-                projectedMessageRemoval: (bo.projectedMessageRemoval as number) ?? 0,
-                observationTokens: (bo.observationTokens as number) ?? 0,
-              };
-            }
-            const br = w.buffered?.reflection as Record<string, unknown> | undefined;
-            if (br) {
-              bufferedRef = {
-                status: (br.status as 'idle' | 'running' | 'complete') ?? 'idle',
-                inputObservationTokens: (br.inputObservationTokens as number) ?? 0,
-                observationTokens: (br.observationTokens as number) ?? 0,
-              };
-            }
-            generationCount = (part.data.generationCount as number) ?? 0;
-            stepNumber = (part.data.stepNumber as number) ?? 0;
-            foundStatus = true;
-            break;
-          }
+      const observationThreshold = getThreshold(
+        config?._overrides?.observation?.messageTokens ?? config?.observation?.messageTokens,
+        30_000,
+      );
+      const reflectionThreshold = getThreshold(
+        config?._overrides?.reflection?.observationTokens ?? config?.reflection?.observationTokens,
+        40_000,
+      );
+      const messageTokens = record.pendingMessageTokens ?? 0;
+      const observationTokens = record.observationTokenCount ?? 0;
+      // Some storage backends return the chunk list serialized, so parse defensively
+      // (mirrors the OM processor's own `getBufferedChunks` helper).
+      const rawChunks = record.bufferedObservationChunks;
+      let bufferedChunks: { messageTokens?: number; tokenCount?: number }[] = [];
+      if (Array.isArray(rawChunks)) {
+        bufferedChunks = rawChunks;
+      } else if (typeof rawChunks === 'string') {
+        try {
+          const parsed = JSON.parse(rawChunks);
+          if (Array.isArray(parsed)) bufferedChunks = parsed;
+        } catch {
+          bufferedChunks = [];
         }
-        if (foundStatus) break;
       }
+      const bufferedMessageTokens = Math.min(
+        bufferedChunks.reduce((sum, chunk) => sum + (chunk.messageTokens ?? 0), 0),
+        messageTokens,
+      );
+      const bufferedObservationTokens = bufferedChunks.reduce((sum, chunk) => sum + (chunk.tokenCount ?? 0), 0);
+      const bufferedObs = {
+        status: record.isBufferingObservation
+          ? ('running' as const)
+          : bufferedChunks.length
+            ? ('complete' as const)
+            : ('idle' as const),
+        chunks: bufferedChunks.length,
+        messageTokens: bufferedMessageTokens,
+        // The real projection depends on the OM processor's activation boundary math,
+        // which isn't reproducible from the record alone. Report 0 until the first live
+        // status arrives rather than an authoritative-looking approximation.
+        projectedMessageRemoval: 0,
+        observationTokens: bufferedObservationTokens,
+      };
+      const bufferedRef = {
+        status: record.isBufferingReflection
+          ? ('running' as const)
+          : record.bufferedReflection
+            ? ('complete' as const)
+            : ('idle' as const),
+        inputObservationTokens: record.bufferedReflectionInputTokens ?? 0,
+        observationTokens: record.bufferedReflectionTokens ?? 0,
+      };
+      const generationCount = record.generationCount ?? 0;
+      // Step index is per-run and intentionally not durable — a restored thread starts at 0
+      // and picks up the real step number from the next live status update.
+      const stepNumber = 0;
 
       session.emit({
         type: 'om_status',

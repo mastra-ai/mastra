@@ -1,23 +1,23 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { useState } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
 import { useGithubReposQuery } from '../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useLinkRepositoryMutation, useUnlinkRepositoryMutation } from '../../../../hooks/useFactories';
-import { FolderIcon, GithubIcon, SearchIcon } from '../../../ui/icons';
+import { FolderIcon, SearchIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import type { FactoryProject, GithubStatus } from '../services/github';
-import { connectGithub, manageGithubConnection } from '../services/github';
+import { connectGithub } from '../services/github';
 
 /**
- * Repository linking for a server-backed Factory. Lists the factory's linked
- * repositories (with unlink), plus every repo the user's GitHub installations
+ * Repository linking for a server-backed Factory. One list: the factory's
+ * linked repositories first, then every repo the user's GitHub installations
  * can reach (link on click). When GitHub isn't connected the panel shows a
  * Connect GitHub CTA instead — it never hides the Factory itself.
- *
- * Embedded in the Board's no-repository empty state and in Factory settings.
  */
 export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject }) {
   const { baseUrl } = useApiConfig();
@@ -34,6 +34,11 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
   const linkedSlugs = new Set(linked.map(repo => repo.slug));
   const repos = reposQuery.data ?? [];
   const available = repos.filter(repo => !linkedSlugs.has(repo.fullName));
+  // The repo list is filtered server-side; linked repos come from the factory, so filter them here.
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleLinked = normalizedQuery
+    ? linked.filter(repo => repo.slug.toLowerCase().includes(normalizedQuery))
+    : linked;
 
   const error = reposQuery.error ?? linkRepository.error ?? unlinkRepository.error;
   const busyRepoId = linkRepository.isPending ? linkRepository.variables?.repo.id : null;
@@ -45,45 +50,6 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
 
   return (
     <div className="flex flex-col gap-4" aria-label="Connect repositories">
-      {/* Re-run the install flow: GitHub's own page adds/removes accounts and
-          repo access; the callback re-syncs installations here. Kept available
-          whenever connected — including with zero linked/accessible repos, so
-          the user can always grant access — never hidden behind the list. */}
-      {connected && (
-        <div className="flex justify-end">
-          <Button variant="outline" size="sm" onClick={() => manageGithubConnection(baseUrl)}>
-            Manage GitHub connection
-          </Button>
-        </div>
-      )}
-
-      {linked.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <Txt as="h3" variant="ui-sm" className="text-icon5 font-medium">
-            Linked repositories
-          </Txt>
-          {linked.map(repo => (
-            <div key={repo.projectRepositoryId} className="bg-surface3 flex items-center gap-3 rounded-xl px-3 py-2">
-              <GithubIcon size={16} className="text-icon3 shrink-0" />
-              <span className="min-w-0 flex-1">
-                <span className="text-ui-sm text-icon6 block truncate font-medium">{repo.slug}</span>
-                {repo.gitBranch && <span className="text-ui-xs text-icon3 block truncate">{repo.gitBranch}</span>}
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={unlinkingId !== null}
-                onClick={() =>
-                  unlinkRepository.mutate({ factoryProjectId, projectRepositoryId: repo.projectRepositoryId })
-                }
-              >
-                {unlinkingId === repo.projectRepositoryId ? 'Unlinking…' : 'Unlink'}
-              </Button>
-            </div>
-          ))}
-        </div>
-      )}
-
       {status && (
         <StatusCallout
           status={status}
@@ -98,7 +64,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
         status.reason !== 'organization_required' && (
           <div>
             <Button variant="primary" onClick={() => connectGithub(baseUrl)}>
-              <GithubIcon />
+              <GithubIcon className="size-4" />
               Connect GitHub
             </Button>
           </div>
@@ -123,28 +89,58 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
           )}
 
           <div className="flex max-h-80 min-h-0 flex-col gap-2 overflow-y-auto">
+            {visibleLinked.map(repo => (
+              <div
+                key={repo.projectRepositoryId}
+                className="border-border1 flex w-full items-center gap-3 rounded-xl border px-3 py-2"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="text-ui-md text-icon6 flex items-center gap-1.5">
+                    <GithubIcon className="text-icon5 size-3.5 shrink-0" />
+                    <span className="truncate">{repo.slug}</span>
+                    <Badge size="sm" variant="success">
+                      Linked
+                    </Badge>
+                  </span>
+                  {repo.gitBranch && <span className="text-ui-sm text-icon3 block truncate">{repo.gitBranch}</span>}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={unlinkingId !== null}
+                  onClick={() =>
+                    unlinkRepository.mutate({ factoryProjectId, projectRepositoryId: repo.projectRepositoryId })
+                  }
+                >
+                  {unlinkingId === repo.projectRepositoryId ? 'Unlinking…' : 'Unlink'}
+                </Button>
+              </div>
+            ))}
+
             {reposQuery.isPending ? (
               <SkeletonRows label="Loading repositories" rows={3} rowClassName="h-12 w-full rounded-xl" />
             ) : available.length === 0 ? (
-              <Txt as="p" variant="ui-sm" className="text-icon3 m-0">
-                {repos.length > 0 ? 'All available repositories are linked.' : 'No repositories found.'}
-              </Txt>
+              visibleLinked.length === 0 && (
+                <Txt as="p" variant="ui-sm" className="text-icon3 m-0">
+                  {repos.length > 0 ? 'All available repositories are linked.' : 'No repositories found.'}
+                </Txt>
+              )
             ) : (
               available.map(repo => (
                 <button
                   type="button"
                   key={repo.id}
-                  className="bg-surface3 hover:bg-surface4 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left disabled:cursor-not-allowed disabled:opacity-50"
+                  className="hover:bg-surface3 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left disabled:cursor-not-allowed disabled:opacity-50"
                   title={repo.fullName}
                   disabled={busyRepoId !== null}
                   onClick={() => linkRepository.mutate({ factoryProjectId, repo })}
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="text-ui-sm text-icon6 flex items-center gap-1.5 font-medium">
+                    <span className="text-ui-md text-icon5 flex items-center gap-1.5">
                       <FolderIcon size={14} className="text-icon3 shrink-0" />
                       <span className="truncate">{repo.fullName}</span>
                     </span>
-                    <span className="text-ui-xs text-icon3 block truncate">
+                    <span className="text-ui-sm text-icon3 block truncate">
                       {repo.private ? 'private' : 'public'} · {repo.defaultBranch}
                     </span>
                   </span>

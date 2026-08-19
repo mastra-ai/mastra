@@ -203,6 +203,7 @@ describe('Metric Schemas', () => {
         tags: ['prod'],
         environment: 'production',
         traceId: 'trace-1',
+        traceIds: ['trace-1', 'trace-2'],
         provider: 'openai',
         model: 'gpt-4o-mini',
         costUnit: 'usd',
@@ -212,6 +213,7 @@ describe('Metric Schemas', () => {
       expect(filter.name).toHaveLength(2);
       expect(filter.tags).toEqual(['prod']);
       expect(filter.traceId).toBe('trace-1');
+      expect(filter.traceIds).toEqual(['trace-1', 'trace-2']);
       expect(filter.provider).toBe('openai');
       expect(filter.experimentId).toBe('exp-1');
     });
@@ -224,6 +226,18 @@ describe('Metric Schemas', () => {
     it('accepts empty filter', () => {
       const filter = metricsFilterSchema.parse({});
       expect(filter).toEqual({});
+    });
+
+    it('rejects an empty trace ID batch', () => {
+      expect(() => metricsFilterSchema.parse({ traceIds: [] })).toThrow();
+    });
+
+    it('rejects trace ID batches larger than the filter limit', () => {
+      expect(() =>
+        metricsFilterSchema.parse({
+          traceIds: Array.from({ length: 1001 }, (_, index) => `trace-${index}`),
+        }),
+      ).toThrow();
     });
   });
 

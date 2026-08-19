@@ -15,7 +15,7 @@ interface FactoryPageShellProps {
 }
 
 /**
- * Shared frame for the Factory pages (Board, Metrics, Rules, Audit): the standard
+ * Shared frame for the Factory pages (Overview, Board, Rules, Audit): the standard
  * app layout (sidebar + mobile header) around a titled content column. Any
  * server-backed Factory renders its pages — including one with zero linked
  * repositories (the pages show connect prompts). Local folder factories get an

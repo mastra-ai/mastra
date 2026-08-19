@@ -38,6 +38,8 @@ import type {
   ThreadCloneMetadata,
   ObservationalMemoryRecord,
   BufferedObservationChunk,
+  KnowledgeStorage,
+  KnowledgeScope,
 } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
@@ -48,6 +50,13 @@ import type { JSONSchema7 } from 'json-schema';
 import { LRUCache } from 'lru-cache';
 import xxhash from 'xxhash-wasm';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
+import { KnowledgeSemanticIndexCoordinator, Subconscious } from './processors/observational-memory/subconscious';
+import { createCuratorHandler } from './processors/observational-memory/subconscious/curate';
+import { createKnowledgeTools } from './processors/observational-memory/subconscious/knowledge-tools';
+import {
+  composeReflectionAgentHandlers,
+  createLearnerHandler,
+} from './processors/observational-memory/subconscious/learn';
 import { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
 import type {
   SummarizeConversationOptions,
@@ -70,6 +79,27 @@ export {
   type ExtractorSource,
 } from './processors/observational-memory';
 export { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
+export {
+  KnowledgeSemanticIndexCoordinator,
+  StaleKnowledgeSemanticIndexError,
+  Subconscious,
+} from './processors/observational-memory/subconscious';
+export type {
+  KnowledgeSemanticIndexCoordinatorConfig,
+  ResolvedSubconsciousAgent,
+  ResolvedSubconsciousConfig,
+  SubconsciousBuiltInObservationAgent,
+  SubconsciousBuiltInObservationConfig,
+  SubconsciousBuiltInReflectionAgent,
+  SubconsciousBuiltInReflectionConfig,
+  SubconsciousCaptureHook,
+  SubconsciousCaptureOutput,
+  SubconsciousConfig,
+  SubconsciousCustomObservationConfig,
+  SubconsciousCustomReflectionConfig,
+  SubconsciousObservationEntry,
+  SubconsciousReflectionEntry,
+} from './processors/observational-memory/subconscious';
 export { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
 export type {
   SummarizeConversationOptions,
@@ -86,9 +116,12 @@ type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model'
   model?: ObservationalMemoryConfig['model'];
   observation?: ObservationalMemoryConfig['observation'];
   reflection?: ObservationalMemoryConfig['reflection'];
+  /** @experimental This API may change without notice. */
+  experimental_subconscious?: Subconscious;
   activateAfterIdle?: ObservationalMemoryConfig['activateAfterIdle'];
   activateOnProviderChange?: ObservationalMemoryConfig['activateOnProviderChange'];
   temporalMarkers?: boolean;
+  hooks?: ObservationalMemoryConfig['hooks'];
 };
 
 type MemoryOptions = Omit<MemoryConfigInternal, 'observationalMemory'> & {
@@ -104,7 +137,7 @@ type RuntimeMemoryConfig = Omit<MemoryConfig, 'observationalMemory'> & {
 };
 
 type NormalizedObservationalMemoryConfig = MemoryObservationalMemoryOptions & {
-  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
+  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string };
 };
 
 /*
@@ -115,8 +148,9 @@ type NormalizedObservationalMemoryConfig = MemoryObservationalMemoryOptions & {
  * published memory build during ESM instantiation before user code runs.
  *
  * Until v2 can tighten the peer contract, keep these copies manually in sync
- * with packages/core/src/memory/working-memory-utils.ts and
- * packages/core/src/memory/system-reminders.ts. Those source files also carry
+ * with packages/core/src/memory/working-memory-utils.ts,
+ * packages/core/src/memory/system-reminders.ts, and
+ * packages/core/src/agent/signals.ts. Those source files also carry
  * compatibility notes that point back here.
  */
 const WORKING_MEMORY_START_TAG = '<working_memory>';
@@ -218,6 +252,21 @@ function filterSystemReminderMessages(
   return messages.filter(message => !isSystemReminderMessage(message));
 }
 
+// Local copy for compatibility with core versions that predate this export. Keep in sync with
+// packages/core/src/agent/signals.ts until the peer range can be tightened.
+function isTransientSignalMessage(message: MastraDBMessage): boolean {
+  if (message.role !== 'signal' || !isRecord(message.content)) {
+    return false;
+  }
+  const metadata = message.content.metadata;
+  return (
+    isRecord(metadata) &&
+    isRecord(metadata.signal) &&
+    !Array.isArray(metadata.signal) &&
+    metadata.signal.transient === true
+  );
+}
+
 function normalizeObservationalMemoryConfig(
   config: boolean | MemoryObservationalMemoryOptions | undefined,
 ): NormalizedObservationalMemoryConfig | undefined {
@@ -257,6 +306,44 @@ export class Memory extends MastraMemory {
   private _omEngine: Promise<ObservationalMemory | null> | undefined;
   private _omEngineInstance: ObservationalMemory | null | undefined;
   private _mastraInstance: Mastra | undefined;
+  private _knowledgeSemanticIndex?: Promise<KnowledgeSemanticIndexCoordinator>;
+
+  /**
+   * Every vector cleanup that deleteThread or deleteMessages started in the background.
+   * Callers do not wait for the cleanup, so this handle is the only join point.
+   */
+  private pendingVectorCleanup: Promise<void> = Promise.resolve();
+
+  /**
+   * Adds a background vector cleanup to the join handle.
+   * The handle keeps the earlier cleanups, so it settles only after all of them end.
+   */
+  private trackVectorCleanup(cleanup: Promise<void>): void {
+    this.pendingVectorCleanup = Promise.allSettled([this.pendingVectorCleanup, cleanup]).then(() => undefined);
+  }
+
+  /**
+   * Resolve once all background work this Memory started has finished: observational-memory
+   * cycles (buffered observation and reflection, including the nested agent runs they spawn)
+   * and vector cleanup from `deleteThread` / `deleteMessages`.
+   *
+   * Callers that own the storage connection should await this before closing it, otherwise
+   * background statements can race the close.
+   *
+   * ```ts
+   * await agent.generate('hello', { memory: { thread, resource } });
+   * await memory.settled();
+   * await store.close();
+   * ```
+   */
+  override async settled(): Promise<void> {
+    await this.pendingVectorCleanup;
+    // Only join an engine that already exists — never instantiate one just to drain it.
+    const engine = this._omEngine ? await this._omEngine : this._omEngineInstance;
+    await engine?.settled();
+    // Observational-memory cycles can start further vector cleanup; drain once more.
+    await this.pendingVectorCleanup;
+  }
 
   /** The shared ObservationalMemory engine. Lazily created on first access. */
   get omEngine(): Promise<ObservationalMemory | null> {
@@ -283,7 +370,84 @@ export class Memory extends MastraMemory {
   }
 
   public override getMergedThreadConfig(config?: MemoryConfigInternal): MemoryConfigInternal {
-    return this.applyManagedWorkingMemoryDefaults(super.getMergedThreadConfig(config));
+    const merged = super.getMergedThreadConfig(config);
+    return this.applyManagedWorkingMemoryDefaults(this.applySubconsciousDefaults(merged));
+  }
+
+  private applySubconsciousDefaults(config: MemoryConfigInternal): MemoryConfigInternal {
+    const omConfig = normalizeObservationalMemoryConfig(
+      config.observationalMemory as boolean | MemoryObservationalMemoryOptions | undefined,
+    );
+    if (!omConfig?.experimental_subconscious) return config;
+    if (!(omConfig.experimental_subconscious instanceof Subconscious)) {
+      throw new Error('observationalMemory.experimental_subconscious must be a Subconscious instance.');
+    }
+
+    const observation = (omConfig.observation ?? {}) as NonNullable<ObservationalMemoryConfig['observation']>;
+    const extract = observation.extract ?? [];
+    const existingSlugs = new Set(extract.map(extractor => extractor.slug));
+    const subconsciousExtractors = omConfig.experimental_subconscious
+      .createObservationExtractors(observation.model ?? omConfig.model)
+      .filter(extractor => !existingSlugs.has(extractor.slug));
+
+    return {
+      ...config,
+      observationalMemory: {
+        ...omConfig,
+        observation: {
+          ...observation,
+          extract: [...extract, ...subconsciousExtractors],
+        },
+      },
+    } as MemoryConfigInternal;
+  }
+
+  /** Threads with a curation currently in flight in this process; guards same-process double-fire only. */
+  private _curationsInFlight = new Set<string>();
+
+  /**
+   * Run the subconscious curator directly over the pending fact worklist, without a reflection.
+   * Cross-process serialization is the curation cursor's job; a lost race wastes one advisory run.
+   *
+   * Outcomes: `ran` (curator executed), `no-op` (empty worklist and no prompt, or no curate agent
+   * configured), `skipped` (a curation for this thread is already in flight in this process), and
+   * `no-model` (no per-agent, observational memory, or main-agent model could be resolved).
+   */
+  async runCuration(options: {
+    threadId: string;
+    resourceId: string;
+    requestContext?: RequestContext;
+    prompt?: string;
+  }): Promise<{ outcome: 'ran' | 'no-op' | 'skipped' | 'no-model' }> {
+    const omConfig = normalizeObservationalMemoryConfig(this.threadConfig.observationalMemory);
+    const subconscious = omConfig?.experimental_subconscious;
+    if (!omConfig || !(subconscious instanceof Subconscious)) return { outcome: 'no-op' };
+    if (this._curationsInFlight.has(options.threadId)) return { outcome: 'skipped' };
+    this._curationsInFlight.add(options.threadId);
+    try {
+      const handler = createCuratorHandler(
+        this,
+        subconscious.resolved,
+        new Memory({ storage: this.storage, options: { observationalMemory: false } }),
+        { omModel: omConfig.observation?.model ?? omConfig.model },
+      );
+      const outcome = await handler({
+        parentThreadId: options.threadId,
+        resourceId: options.resourceId,
+        // The direct path has no reflection artifacts; the optional prompt (e.g. a phase-exit
+        // framing) rides the observations slot of the curator's own prompt structure.
+        observations: options.prompt ?? '',
+        requestContext: options.requestContext,
+      });
+      return { outcome: outcome === 'ran' ? 'ran' : 'no-op' };
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('requires the main agent to resolve its model')) {
+        return { outcome: 'no-model' };
+      }
+      throw error;
+    } finally {
+      this._curationsInFlight.delete(options.threadId);
+    }
   }
 
   private applyManagedWorkingMemoryDefaults(config: MemoryConfigInternal): MemoryConfigInternal {
@@ -346,6 +510,42 @@ export class Memory extends MastraMemory {
         );
       }
     }
+    if (omConfig?.experimental_subconscious) {
+      if (!this.vector) {
+        throw new Error('Subconscious semantic knowledge requires a vector store. Pass a `vector` option to Memory.');
+      }
+      if (!this.embedder) {
+        throw new Error('Subconscious semantic knowledge requires an embedder. Pass an `embedder` option to Memory.');
+      }
+    }
+  }
+
+  private async getKnowledgeStore(): Promise<KnowledgeStorage> {
+    const store = await this.storage.getStore('knowledge');
+    if (!store) {
+      throw new Error(`Knowledge storage domain is not available on ${this.storage.constructor.name}`);
+    }
+    return store;
+  }
+
+  public async getKnowledgeSemanticIndex(): Promise<KnowledgeSemanticIndexCoordinator> {
+    if (!this.vector || !this.embedder) {
+      throw new Error('Subconscious semantic knowledge requires both a vector store and an embedder.');
+    }
+    this._knowledgeSemanticIndex ??= this.getKnowledgeStore().then(
+      knowledge =>
+        new KnowledgeSemanticIndexCoordinator({
+          knowledge,
+          vector: this.vector!,
+          embedder: this.embedder!,
+          embedderOptions: this.embedderOptions,
+        }),
+    );
+    return this._knowledgeSemanticIndex;
+  }
+
+  public async drainKnowledgeSemanticIndex(scope?: KnowledgeScope): Promise<number> {
+    return (await this.getKnowledgeSemanticIndex()).drain(scope);
   }
 
   /**
@@ -689,12 +889,12 @@ export class Memory extends MastraMemory {
     memoryConfig,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
     memoryConfig?: MemoryConfigInternal;
   }): Promise<StorageThreadType> {
     const memoryStore = await this.getMemoryStore();
-    const updatedThread = await memoryStore.updateThread({
+    const updatedThread = await memoryStore.patchThread({
       id,
       title,
       metadata,
@@ -720,31 +920,47 @@ export class Memory extends MastraMemory {
       await memoryStore.clearObservationalMemory(threadId, thread.resourceId);
     }
     if (this.vector) {
-      void this.deleteThreadVectors(threadId);
+      this.trackVectorCleanup(this.deleteThreadVectors(threadId));
     }
   }
 
   /**
-   * Lists all vector indexes that match the memory messages prefix.
-   * Handles separator differences across vector store backends (e.g. '_' vs '-').
+   * Prefix shared by every message index. The index for the default embedding
+   * dimension is named with the bare prefix; other dimensions add a suffix.
    */
-  private async getMemoryVectorIndexes(): Promise<string[]> {
+  private get messageIndexPrefix(): string {
+    return this.getEmbeddingIndexName();
+  }
+
+  /**
+   * Prefix shared by every observation index. Each observation index adds a dimension suffix.
+   */
+  private get observationIndexPrefix(): string {
+    const separator = this.vector?.indexSeparator ?? '_';
+    return `memory${separator}observations`;
+  }
+
+  /**
+   * Lists the vector indexes whose name starts with one of the given prefixes.
+   * Index names can carry a dimension suffix, so discovery matches on the prefix.
+   */
+  private async getMemoryVectorIndexes(prefixes: string[]): Promise<string[]> {
     if (!this.vector) return [];
-    const separator = this.vector.indexSeparator ?? '_';
-    const prefix = `memory${separator}messages`;
     const indexes = await this.vector.listIndexes();
-    return indexes.filter(name => name.startsWith(prefix));
+    return indexes.filter(name => prefixes.some(prefix => name.startsWith(prefix)));
   }
 
   /**
    * Deletes all vector embeddings associated with a thread.
    * This is called internally by deleteThread to clean up orphaned vectors.
+   * Both message and observation vectors are removed, so no text of the deleted
+   * thread stays reachable through resource-scoped retrieval.
    *
    * @param threadId - The ID of the thread whose vectors should be deleted
    */
   private async deleteThreadVectors(threadId: string): Promise<void> {
     try {
-      const memoryIndexes = await this.getMemoryVectorIndexes();
+      const memoryIndexes = await this.getMemoryVectorIndexes([this.messageIndexPrefix, this.observationIndexPrefix]);
 
       await Promise.all(
         memoryIndexes.map(async (indexName: string) => {
@@ -754,12 +970,13 @@ export class Memory extends MastraMemory {
               filter: { thread_id: threadId },
             });
           } catch {
-            this.logger.debug('Failed to delete vectors for thread, skipping', { threadId, indexName });
+            // The index keeps the vectors of the deleted thread, so report which one.
+            this.logger.warn('Failed to delete vectors of the deleted thread from index', { threadId, indexName });
           }
         }),
       );
     } catch {
-      this.logger.debug('Failed to clean up vectors for thread', { threadId });
+      this.logger.warn('Failed to clean up vectors of the deleted thread', { threadId });
     }
   }
 
@@ -823,9 +1040,8 @@ export class Memory extends MastraMemory {
             throw new Error(`Thread ${threadId} not found`);
           }
 
-          await memoryStore.updateThread({
+          await memoryStore.patchThread({
             id: threadId,
-            title: thread.title || '',
             metadata: {
               ...thread.metadata,
               workingMemory,
@@ -975,9 +1191,8 @@ ${workingMemory}`;
           throw new Error(`Thread ${threadId} not found`);
         }
 
-        await memoryStore.updateThread({
+        await memoryStore.patchThread({
           id: threadId,
-          title: thread.title || '',
           metadata: {
             ...thread.metadata,
             workingMemory,
@@ -1133,9 +1348,10 @@ ${workingMemory}`;
 
     try {
       // System messages are runtime instructions and should never be stored in memory.
+      // Transient signals (`transient: true`) are delivery-only and must never be stored.
       // Then strip working memory tags from all persistable messages.
       const updatedMessages = messages
-        .filter(m => m.role !== 'system')
+        .filter(m => m.role !== 'system' && !isTransientSignalMessage(m))
         .map(m => {
           return this.updateMessageToHideWorkingMemoryV2(m);
         })
@@ -1640,7 +1856,7 @@ ${workingMemory}`;
   async persistMessages(messages: MastraDBMessage[]): Promise<void> {
     if (messages.length === 0) return;
 
-    const persistableMessages = messages.filter(m => m.role !== 'system');
+    const persistableMessages = messages.filter(m => m.role !== 'system' && !isTransientSignalMessage(m));
     if (persistableMessages.length === 0) return;
 
     const memoryStore = await this.getMemoryStore();
@@ -1680,6 +1896,10 @@ ${workingMemory}`;
       );
     }
 
+    if (omConfig.experimental_subconscious) {
+      await this.getKnowledgeStore();
+    }
+
     const { ObservationalMemory: OMClass } = await import('./processors/observational-memory');
 
     const onIndexObservations = this.hasRetrievalSearch(omConfig.retrieval)
@@ -1704,8 +1924,33 @@ ${workingMemory}`;
       activateOnProviderChange: omConfig.activateOnProviderChange,
       shareTokenBudget: omConfig.shareTokenBudget,
       model: omConfig.model,
+      curationCadence:
+        omConfig.experimental_subconscious instanceof Subconscious
+          ? omConfig.experimental_subconscious.resolved.curationCadence
+          : undefined,
       mastra: this._mastraInstance,
       onIndexObservations,
+      hooks: omConfig.hooks,
+      onReflectionCommitted:
+        omConfig.experimental_subconscious instanceof Subconscious
+          ? (() => {
+              const resolved = omConfig.experimental_subconscious.resolved;
+              const omModel = omConfig.observation?.model ?? omConfig.model;
+              const curate = createCuratorHandler(
+                this,
+                resolved,
+                new Memory({ storage: this.storage, options: { observationalMemory: false } }),
+                { omModel },
+              );
+              const learn = createLearnerHandler(
+                this,
+                resolved,
+                new Memory({ storage: this.storage, options: { observationalMemory: false } }),
+                { omModel },
+              );
+              return composeReflectionAgentHandlers([curate, learn]);
+            })()
+          : undefined,
       observation: omConfig.observation
         ? {
             model: omConfig.observation.model,
@@ -1893,7 +2138,7 @@ Notes:
     const defaultDimensions = 384;
     const usedDimensions = dimensions ?? defaultDimensions;
     const separator = this.vector?.indexSeparator ?? '_';
-    return `memory${separator}observations${separator}${usedDimensions}`;
+    return `${this.observationIndexPrefix}${separator}${usedDimensions}`;
   }
 
   private async createObservationEmbeddingIndex(dimensions?: number): Promise<{ indexName: string }> {
@@ -2326,7 +2571,16 @@ Notes:
     if (omConfig?.retrieval) {
       const retrievalScope =
         typeof omConfig.retrieval === 'object' ? (omConfig.retrieval.scope ?? 'resource') : 'resource';
-      tools.recall = recallTool(mergedConfig, { retrievalScope });
+      tools.recall = recallTool(mergedConfig, {
+        retrievalScope,
+        searchEnabled: this.hasRetrievalSearch(omConfig.retrieval),
+      });
+    }
+    if (
+      omConfig?.experimental_subconscious instanceof Subconscious &&
+      omConfig.experimental_subconscious.resolved.tools
+    ) {
+      Object.assign(tools, createKnowledgeTools(this));
     }
 
     return tools;
@@ -2449,7 +2703,7 @@ Notes:
 
         if (messageIdsNeedingDeletion.size > 0) {
           try {
-            const memoryIndexes = await this.getMemoryVectorIndexes();
+            const memoryIndexes = await this.getMemoryVectorIndexes([this.messageIndexPrefix]);
             const idsToDelete = [...messageIdsNeedingDeletion];
 
             await Promise.all(
@@ -2549,7 +2803,7 @@ Notes:
 
       await memoryStore.deleteMessages(messageIds);
       if (this.vector) {
-        void this.deleteMessageVectors(messageIds);
+        this.trackVectorCleanup(this.deleteMessageVectors(messageIds));
       }
 
       span?.end({ output: { success: true }, attributes: { messageCount: messageIds.length } });
@@ -2562,12 +2816,14 @@ Notes:
   /**
    * Deletes vector embeddings for specific messages.
    * This is called internally by deleteMessages to clean up orphaned vectors.
+   * Only the message indexes are touched, because observation vectors can hold
+   * text of other messages of the thread.
    *
    * @param messageIds - The IDs of the messages whose vectors should be deleted
    */
   private async deleteMessageVectors(messageIds: string[]): Promise<void> {
     try {
-      const memoryIndexes = await this.getMemoryVectorIndexes();
+      const memoryIndexes = await this.getMemoryVectorIndexes([this.messageIndexPrefix]);
 
       await Promise.all(
         memoryIndexes.map(async (indexName: string) => {
@@ -3082,6 +3338,11 @@ Notes:
       processors.push(wm);
     }
 
+    const pins = await this.createPinnedStateProcessor(configuredProcessors, context);
+    if (pins) {
+      processors.push(pins);
+    }
+
     return processors;
   }
 
@@ -3118,6 +3379,11 @@ Notes:
     );
     if (hasObservationalMemory) return null;
 
+    // Note: attachment is intentionally permissive — `MastraMemory` may not be
+    // populated in the request context at discovery time (or at all, for direct
+    // `getInputProcessors()` calls). Ephemeral invocations without a thread
+    // (e.g. workflow agent steps) are handled at runtime: the processor no-ops
+    // when `getThreadContext` resolves no thread.
     const runtimeMemory = context?.get('MastraMemory') as { memoryConfig?: RuntimeMemoryConfig } | undefined;
     const runtimeObservationalMemory = normalizeObservationalMemoryConfig(
       runtimeMemory?.memoryConfig?.observationalMemory,
@@ -3150,6 +3416,11 @@ Notes:
     configuredProcessors: InputProcessorOrWorkflow[] = [],
     context?: RequestContext,
   ): Promise<InputProcessor | null> {
+    // Note: attachment is intentionally permissive — `MastraMemory` may not be
+    // populated in the request context at discovery time (or at all, for direct
+    // `getInputProcessors()` calls). Ephemeral invocations without a thread
+    // (e.g. workflow agent steps) are handled at runtime: the processor runner
+    // skips `computeStateSignal` when no thread/resource resolves.
     const runtimeMemory = context?.get('MastraMemory') as { memoryConfig?: MemoryConfigInternal } | undefined;
     const mergedConfig = this.getMergedThreadConfig(runtimeMemory?.memoryConfig);
     this.assertWorkingMemoryStateSignalsCompatibility(mergedConfig);
@@ -3164,6 +3435,31 @@ Notes:
     if (alreadyConfigured) return null;
 
     return new WorkingMemoryStateProcessor(this, runtimeMemory?.memoryConfig);
+  }
+
+  /**
+   * Creates a PinnedStateProcessor when Subconscious pins are enabled on the
+   * merged thread config. The gate is the validated `resolved.pins` on the
+   * Subconscious instance, never the raw user object. Returns null when pins
+   * are off or the processor is already present in the user's configured
+   * processors.
+   */
+  private async createPinnedStateProcessor(
+    configuredProcessors: InputProcessorOrWorkflow[] = [],
+    context?: RequestContext,
+  ): Promise<InputProcessor | null> {
+    const runtimeMemory = context?.get('MastraMemory') as { memoryConfig?: MemoryConfigInternal } | undefined;
+    const mergedConfig = this.getMergedThreadConfig(runtimeMemory?.memoryConfig);
+    const omConfig = normalizeObservationalMemoryConfig(mergedConfig.observationalMemory);
+    const subconscious = omConfig?.experimental_subconscious;
+    if (!(subconscious instanceof Subconscious) || subconscious.resolved.pins === false) return null;
+
+    const { PinnedStateProcessor, SUBCONSCIOUS_PINS_STATE_ID } =
+      await import('./processors/observational-memory/subconscious');
+    const alreadyConfigured = configuredProcessors.some(p => !('workflow' in p) && p.id === SUBCONSCIOUS_PINS_STATE_ID);
+    if (alreadyConfigured) return null;
+
+    return new PinnedStateProcessor({ getKnowledgeStore: () => this.storage.getStore('knowledge') });
   }
 }
 

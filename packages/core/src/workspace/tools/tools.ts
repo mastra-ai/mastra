@@ -401,8 +401,11 @@ export async function createWorkspaceTools(
   const toolsConfig = workspace.getToolsConfig();
   const isReadOnly = workspace.filesystem?.readOnly ?? false;
 
-  // Shared write lock — serializes concurrent writes to the same file path
-  const writeLock: FileWriteLock = new InMemoryFileWriteLock();
+  // Shared write lock — serializes concurrent writes to the same file path.
+  // `timeoutMs: undefined` falls back to the lock's own default (30s).
+  const writeLock: FileWriteLock = new InMemoryFileWriteLock({
+    timeoutMs: toolsConfig?.writeLockTimeoutMs,
+  });
 
   // Shared read tracker — always active so optimistic concurrency (mtime
   // checking) works on every write, regardless of the requireReadBeforeWrite

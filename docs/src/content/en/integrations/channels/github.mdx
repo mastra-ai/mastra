@@ -1,0 +1,91 @@
+---
+title: "GitHub | Channels"
+description: "Notify a Mastra agent when subscribed GitHub pull requests change."
+packages:
+  - "@mastra/core"
+  - "@mastra/github-signals"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+---
+
+# GitHub
+
+The `@mastra/github-signals` provider lets an agent follow pull requests (PRs). It polls subscribed PRs and sends [notification signals](/docs/harness/signals#notification-signals) to the agent thread when relevant activity occurs.
+
+## Installation
+
+Install GitHub Signals and the memory packages used in this example:
+
+```bash npm2yarn
+npm install @mastra/github-signals @mastra/libsql @mastra/memory
+```
+
+## Prerequisites
+
+GitHub Signals requires:
+
+- A Mastra storage adapter with memory and notification support. The provider stores each subscription in the thread's metadata, so the thread must already exist.
+- The `gitcrawl` command on `PATH`, configured to access the repositories you want to monitor. The provider runs `gitcrawl sync` and reads its SQLite database.
+- The `sqlite3` command on `PATH`.
+- The [GitHub CLI](https://cli.github.com/) installed and authenticated. The provider uses `gh api` to check whether comment authors have access to the repository before notifying the agent.
+
+By default, comments from users with `admin`, `maintain`, or `write` access can trigger notifications. CodeRabbit and Devin bot comments are also allowed. Configure `authorizedPermissions`, `authorizedBots`, or `ignoredBots` when you need different rules.
+
+## Agent and subscription
+
+Create one `GithubSignals` instance and register it on the agent. Register the agent and a storage adapter on the Mastra instance:
+
+```typescript title="src/mastra/index.ts"
+import { Agent } from '@mastra/core/agent'
+import { Mastra } from '@mastra/core/mastra'
+import { Memory } from '@mastra/memory'
+import { GithubSignals } from '@mastra/github-signals'
+import { LibSQLStore } from '@mastra/libsql'
+
+export const githubSignals = new GithubSignals()
+
+export const devAgent = new Agent({
+  id: 'dev-agent',
+  name: 'Development Agent',
+  instructions: 'Triage pull request activity and help resolve issues.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory(),
+  signals: [githubSignals],
+})
+
+export const mastra = new Mastra({
+  agents: { devAgent },
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: 'file:./mastra.db',
+  }),
+})
+```
+
+After the agent has created a memory thread, subscribe that thread to a PR. Passing `owner` and `repo` works from any directory:
+
+```typescript
+await githubSignals.subscribeThreadToPR({
+  threadId: 'thread-123',
+  resourceId: 'user-123',
+  pr: {
+    owner: 'acme',
+    repo: 'web-app',
+    number: 42,
+  },
+})
+```
+
+The provider syncs the PR immediately, stores the subscription, and starts polling every five minutes. Set `pollIntervalMs` in the `GithubSignals` constructor to change the interval. If the process restarts, call `startPollingForThread()` for each persisted thread subscription to resume polling.
+
+## Pull request notifications
+
+GitHub Signals notifies the agent when a subscribed PR has:
+
+- A new authorized comment, commit, or other pull request activity.
+- A change in unresolved review threads.
+- Continuous integration (CI) checks that start, fail, or recover.
+- Merge conflicts that appear or are resolved.
+- A state change to closed, reopened, or merged.
+
+The initial sync sends a baseline notification with the current PR state. A merge automatically removes the thread's subscription to that PR.

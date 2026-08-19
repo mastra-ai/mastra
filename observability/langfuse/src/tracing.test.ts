@@ -1,7 +1,7 @@
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import type { AnyExportedSpan } from '@mastra/core/observability';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { LangfuseExporter } from './tracing';
+import { LangfuseExporter, LANGFUSE_DEFAULT_BASE_URL } from './tracing';
 
 type Mutable<T> = { -readonly [P in keyof T]: T[P] };
 
@@ -714,6 +714,31 @@ describe('LangfuseExporter', () => {
       expect(mockScoreCreate).toHaveBeenCalledWith(expect.objectContaining({ name: 'accuracy' }));
     });
 
+    it('includes the configured environment on the score', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test', environment: 'production' });
+
+      await exporter.onScoreEvent({ type: 'score', score: { ...baseScore } } as any);
+
+      expect(mockScoreCreate).toHaveBeenCalledWith(expect.objectContaining({ environment: 'production' }));
+    });
+
+    it('falls back to LANGFUSE_TRACING_ENVIRONMENT when no environment is configured', async () => {
+      process.env.LANGFUSE_TRACING_ENVIRONMENT = 'staging';
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+
+      await exporter.onScoreEvent({ type: 'score', score: { ...baseScore } } as any);
+
+      expect(mockScoreCreate).toHaveBeenCalledWith(expect.objectContaining({ environment: 'staging' }));
+    });
+
+    it('omits environment when none is configured', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+
+      await exporter.onScoreEvent({ type: 'score', score: { ...baseScore } } as any);
+
+      expect(mockScoreCreate.mock.calls[0][0]).not.toHaveProperty('environment');
+    });
+
     it('omits the call when traceId is missing', async () => {
       exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
 
@@ -741,6 +766,73 @@ describe('LangfuseExporter', () => {
 
       expect(mockShutdown).toHaveBeenCalled();
       expect(mockClientShutdown).toHaveBeenCalled();
+    });
+  });
+
+  describe('processor configuration', () => {
+    it('uses default base URL when none provided', () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+
+      expect(processorConstructorArgs[0]).toEqual(
+        expect.objectContaining({
+          baseUrl: LANGFUSE_DEFAULT_BASE_URL,
+        }),
+      );
+    });
+
+    it('uses custom baseUrl', () => {
+      exporter = new LangfuseExporter({
+        publicKey: 'pk-test',
+        secretKey: 'sk-test',
+        baseUrl: 'https://my-langfuse.example.com',
+      });
+
+      expect(processorConstructorArgs[0]).toEqual(
+        expect.objectContaining({
+          baseUrl: 'https://my-langfuse.example.com',
+        }),
+      );
+    });
+
+    it('strips trailing slashes from baseUrl', () => {
+      exporter = new LangfuseExporter({
+        publicKey: 'pk-test',
+        secretKey: 'sk-test',
+        baseUrl: 'https://my-langfuse.example.com///',
+      });
+
+      expect(processorConstructorArgs[0]).toEqual(
+        expect.objectContaining({
+          baseUrl: 'https://my-langfuse.example.com',
+        }),
+      );
+    });
+
+    it('reads baseUrl from LANGFUSE_BASE_URL environment variable', () => {
+      process.env.LANGFUSE_BASE_URL = 'https://env-langfuse.example.com';
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+
+      expect(processorConstructorArgs[0]).toEqual(
+        expect.objectContaining({
+          baseUrl: 'https://env-langfuse.example.com',
+        }),
+      );
+    });
+
+    it('passes environment and release to processor', () => {
+      exporter = new LangfuseExporter({
+        publicKey: 'pk-test',
+        secretKey: 'sk-test',
+        environment: 'staging',
+        release: '2.0.0',
+      });
+
+      expect(processorConstructorArgs[0]).toEqual(
+        expect.objectContaining({
+          environment: 'staging',
+          release: '2.0.0',
+        }),
+      );
     });
   });
 });

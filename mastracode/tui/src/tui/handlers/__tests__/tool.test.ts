@@ -5,6 +5,7 @@ import {
   clearPendingShellOutputs,
   clearToolInputParsers,
   handleShellOutput,
+  handleToolApprovalRequired,
   handleToolEnd,
   handleToolInputDelta,
   handleToolInputEnd,
@@ -315,5 +316,26 @@ describe('tool event handlers', () => {
     const subagentComponent = ctx.state.allToolComponents[0];
     subagentComponent.setExpanded(true);
     expect(subagentComponent.render(120).join('\n')).toContain('Authoritative Alexandria result');
+  });
+});
+
+describe('handleToolApprovalRequired', () => {
+  it('does not notify from the queued handler (#20398 — notification fires at event receipt)', () => {
+    const ctx = {
+      state: {
+        ui: {
+          showOverlay: vi.fn(() => ({ close: vi.fn() })),
+          requestRender: vi.fn(),
+          terminal: { columns: 120, rows: 40 },
+        },
+        hookManager: undefined,
+      },
+      notify: vi.fn(),
+    } as any;
+
+    handleToolApprovalRequired(ctx, 'call-approve', 'execute_command', { command: 'ls' });
+
+    expect(ctx.state.ui.showOverlay).toHaveBeenCalledTimes(1);
+    expect(ctx.notify).not.toHaveBeenCalled();
   });
 });

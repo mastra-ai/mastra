@@ -77,8 +77,7 @@ export function nodeModulesExtensionResolver(): Plugin {
           id: resolvedImportPath,
           external: true,
         };
-      } catch (err) {
-        console.error(err);
+      } catch {
         return null;
       }
     },

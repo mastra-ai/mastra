@@ -1,5 +1,5 @@
 import http from 'node:http';
-import type { Prompt } from '@modelcontextprotocol/sdk/types.js';
+import type { Prompt } from '@modelcontextprotocol/server';
 import getPort from 'get-port';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { InternalMastraMCPClient } from '../../client/client';

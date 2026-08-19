@@ -44,7 +44,7 @@ export const mastra = new Mastra({
 })
 ```
 
-You can also use dynamic workflow routing based on a `workflowId`. The URL `/workflow/weatherWorkflow` will resolve to the workflow with the ID `weatherWorkflow`.
+You can also use runtime-defined workflow routing based on a `workflowId`. The URL `/workflow/weatherWorkflow` will resolve to the workflow with the ID `weatherWorkflow`.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -67,9 +67,9 @@ export const mastra = new Mastra({
   content={[
   {
     name: 'version',
-    type: "'v5' | 'v6'",
+    type: "'v5' | 'v6' | 'v7'",
     description:
-      "Selects the AI SDK stream contract to emit. Omit it or pass `'v5'` for the existing default behavior. Pass `'v6'` when your app is typed against AI SDK v6 response helpers.",
+      "Selects the AI SDK stream contract to emit. Omit it or pass `'v5'` for the existing default behavior. Pass `'v6'` when your app is typed against AI SDK v6 response helpers. Pass `'v7'` when your app is typed against AI SDK v7.",
     isOptional: true,
     defaultValue: "'v5'",
   },

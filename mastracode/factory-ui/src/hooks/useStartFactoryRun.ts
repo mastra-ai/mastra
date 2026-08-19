@@ -1,5 +1,8 @@
+import { isFactoryRuleStage } from '@mastra/factory/rules/types';
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useMutation, useMutationState, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { ExternalLink } from 'lucide-react';
+import { createElement, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../api/config';
@@ -72,6 +75,9 @@ export interface StartFactoryRunInput {
  * Create the durable Factory session, then hand session/thread creation,
  * binding, board persistence, and kickoff delivery to the server coordinator.
  * The coordinator commits exact authority before it dispatches any message.
+ *
+ * The run is started in the background: the board stays put and a toast offers
+ * the way into the thread once it exists.
  */
 export function useStartFactoryRun() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -91,10 +97,10 @@ export function useStartFactoryRun() {
       const setPhase = (phase: FactoryRunPhase) => setPhases(current => ({ ...current, [phaseKey]: phase }));
 
       setPhase('workspace');
-      const userSession = await createUserSession(baseUrl, repository.projectRepositoryId, branch);
+      const userSession = await createUserSession(baseUrl, repository.projectRepositoryId, { branch });
       const sessionId = userSession.sessionId;
       const desiredStage = workItem.stages.length === 1 ? workItem.stages[0] : undefined;
-      if (!desiredStage) throw new Error('Factory runs require one exclusive destination stage');
+      if (!isFactoryRuleStage(desiredStage)) throw new Error('Factory runs require one exclusive destination stage');
 
       setPhase('kickoff');
       const prepared = await startFactoryRun(baseUrl, factoryId, {
@@ -109,7 +115,7 @@ export function useStartFactoryRun() {
                 arguments: `${invocation.arguments.trim()}\n\nPrepared workspace context:\n- Session: ${sessionId}\n- Branch: ${userSession.branch}`,
               }
             : invocation,
-        destinationStage: desiredStage as 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done',
+        destinationStage: desiredStage,
         workItem: {
           id: workItem.id,
           role: workItem.role,
@@ -131,10 +137,42 @@ export function useStartFactoryRun() {
           queryKey: queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, sessionId, undefined),
         }),
         queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryId) }),
+        // The run just minted a session. Without this the sidebar keeps serving
+        // its cached list and the session only appears once some later
+        // navigation happens to refetch it.
         queryClient.invalidateQueries({ queryKey: queryKeys.sessions(repository.projectRepositoryId) }),
       ]);
-      void navigate(`/factories/${factoryId}/workspaces/${sessionId}/threads/${prepared.threadId}`);
+      return { factoryId, sessionId, threadId: prepared.threadId, threadTitle };
     },
+    // Starting a run costs a sandbox provision, a clone, and any repo setup
+    // script — long enough that navigating on completion would rip the board
+    // away from someone who has since moved on or started other cards. Land
+    // the run quietly and let the toast be the way in, so several reviews can
+    // be kicked off back to back from the same board.
+    onSuccess: ({ factoryId: id, sessionId, threadId, threadTitle: title }) => {
+      const sessionPath = `/factories/${id}/workspaces/${sessionId}/threads/${threadId}`;
+      toast(`${title} is ready`, {
+        action: {
+          label: 'Open',
+          onClick: () => void navigate(sessionPath),
+        },
+        cancel: {
+          label: createElement(
+            'span',
+            { className: 'inline-flex items-center gap-1' },
+            'New Tab',
+            createElement(ExternalLink, { size: 12, 'aria-hidden': true }),
+          ),
+          onClick: () => window.open(sessionPath, '_blank', 'noopener,noreferrer'),
+        },
+        cancelButtonStyle: {
+          border: '1px solid var(--color-border1)',
+          background: 'var(--color-surface3)',
+          color: 'var(--color-neutral5)',
+        },
+      });
+    },
+    onError: error => toast.error(error instanceof Error ? error.message : 'Failed to start the run'),
     onSettled: (_result, _error, { workItem }) => {
       if (!workItem) return;
       const phaseKey = runPhaseKey({ id: workItem.id, sourceKey: workItem.sourceKey, role: workItem.role });

@@ -1,5 +1,32 @@
 # @mastra/auth-studio
 
+## 1.3.4
+
+### Patch Changes
+
+- Fixed reading request headers from Express-style plain header objects so cookie-based auth providers no longer throw and fail with a misleading 401. ([#21261](https://github.com/mastra-ai/mastra/pull/21261))
+
+  Related to https://github.com/mastra-ai/mastra/issues/21253
+
+## 1.3.4-alpha.0
+
+### Patch Changes
+
+- Fixed reading request headers from Express-style plain header objects so cookie-based auth providers no longer throw and fail with a misleading 401. ([#21261](https://github.com/mastra-ai/mastra/pull/21261))
+
+  Related to https://github.com/mastra-ai/mastra/issues/21253
+
+## 1.3.3
+
+### Patch Changes
+
+- Speed up Factory hot paths: ([#20261](https://github.com/mastra-ai/mastra/pull/20261))
+
+  - Much lower latency on authenticated requests — successful auth verifications are cached briefly instead of hitting the platform on every request, and credential verification requests time out after 15 seconds instead of hanging
+  - Faster GitHub repository listing and connecting
+  - Opening the same session concurrently no longer provisions duplicate sandboxes, and stuck sandbox commands now fail with a clear error instead of hanging
+  - Factory run dispatching stays fast as work-item history grows
+
 ## 1.3.3-alpha.0
 
 ### Patch Changes

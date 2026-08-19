@@ -46,8 +46,14 @@ export interface ItemToolMock {
 /** Deterministic failure codes surfaced via `ExecutionResult.error.code`. */
 export const TOOL_MOCK_MISMATCH = 'TOOL_MOCK_MISMATCH';
 export const TOOL_MOCK_EXHAUSTED = 'TOOL_MOCK_EXHAUSTED';
+export const TOOL_MOCK_NOT_DECLARED = 'TOOL_MOCK_NOT_DECLARED';
 
-export type ToolMockFailureCode = typeof TOOL_MOCK_MISMATCH | typeof TOOL_MOCK_EXHAUSTED;
+export type UnmockedToolPolicy = 'allow' | 'deny';
+
+export type ToolMockFailureCode =
+  | typeof TOOL_MOCK_MISMATCH
+  | typeof TOOL_MOCK_EXHAUSTED
+  | typeof TOOL_MOCK_NOT_DECLARED;
 
 /** Diagnostic receipt produced for a single item run. Persisted on experiment results. */
 export interface ToolMockReport {
@@ -89,7 +95,10 @@ export class ToolMockMatcher {
   readonly #liveCalls: ToolMockReport['liveCalls'] = [];
   #failure: ToolMockReport['failure'];
 
-  constructor(mocks: ItemToolMock[] | undefined) {
+  constructor(
+    mocks: ItemToolMock[] | undefined,
+    readonly unmockedToolPolicy: UnmockedToolPolicy = 'allow',
+  ) {
     this.#entries = (mocks ?? []).map((mock, mockIndex) => ({
       mockIndex,
       toolName: mock.toolName,
@@ -124,6 +133,10 @@ export class ToolMockMatcher {
     const candidates = this.#entries.filter(entry => entry.toolName === toolName);
 
     if (candidates.length === 0) {
+      if (this.unmockedToolPolicy === 'deny') {
+        this.#failure = { code: TOOL_MOCK_NOT_DECLARED, toolName, args };
+        return { kind: 'fail', code: TOOL_MOCK_NOT_DECLARED };
+      }
       this.#liveCalls.push({ toolName, args });
       return { kind: 'live' };
     }

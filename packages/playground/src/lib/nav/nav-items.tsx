@@ -37,20 +37,23 @@ export interface NavSection {
   items: NavItem[];
 }
 
-// The Signals sidebar link is gated behind the dedicated MASTRA_SIGNALS_UI flag
+// The Intelligence sidebar link is gated behind the dedicated MASTRA_SIGNALS_UI flag
 // so the feature can be toggled independently of the platform config that the
-// Signals route itself consumes.
+// Intelligence route itself consumes.
 const isSignalsEnabled =
   typeof window !== 'undefined' && (window as unknown as Record<string, unknown>).MASTRA_SIGNALS_UI === 'true';
 
 const signalsNavItem: NavItem = {
-  name: 'Signals',
-  url: '/signals',
-  activePaths: ['/signals'],
+  name: 'Intelligence',
+  url: '/intelligence',
+  activePaths: ['/intelligence'],
   Icon: LayoutGrid,
-  docs: { href: 'https://mastra.ai/en/docs/observability/tracing/overview', label: 'Signals documentation' },
+  docs: {
+    href: 'https://mastra.ai/en/docs/mastra-platform/trace-intelligence',
+    label: 'Trace intelligence documentation',
+  },
   isOnMastraPlatform: true,
-  // Kept in the registry so /signals routes and breadcrumbs always resolve, but
+  // Kept in the registry so /intelligence routes and breadcrumbs always resolve, but
   // only surfaced in the sidebar/command palette when the flag is enabled.
   hidden: !isSignalsEnabled,
 };
@@ -141,7 +144,7 @@ export const mainNav: NavSection[] = [
         name: 'Datasets',
         url: '/datasets',
         Icon: DatasetsIcon,
-        docs: { href: 'https://mastra.ai/en/docs/evals/datasets/overview', label: 'Datasets documentation' },
+        docs: { href: 'https://mastra.ai/en/docs/datasets/overview', label: 'Datasets documentation' },
         isOnMastraPlatform: true,
       },
       {
@@ -149,7 +152,7 @@ export const mainNav: NavSection[] = [
         url: '/experiments',
         Icon: ExperimentsIcon,
         docs: {
-          href: 'https://mastra.ai/en/docs/evals/datasets/running-experiments',
+          href: 'https://mastra.ai/en/docs/datasets/running-experiments',
           label: 'Experiments documentation',
         },
         isOnMastraPlatform: true,
@@ -169,8 +172,7 @@ export const mainNav: NavSection[] = [
       },
       {
         name: 'Traces',
-        url: '/observability',
-        activePaths: ['/traces'],
+        url: '/traces',
         Icon: TraceIcon,
         docs: { href: 'https://mastra.ai/en/docs/observability/tracing/overview', label: 'Traces documentation' },
         isOnMastraPlatform: true,

@@ -16,7 +16,35 @@ import {
   isBwrapAvailable,
   buildBwrapCommand,
   generateSeatbeltProfile,
+  GENERATED_PROFILE_MARKER,
 } from './native-sandbox';
+
+/** Minimal local `WorkspaceFilesystem` stub that mounts `basePath` as a symlink. */
+function makeMockLocalFs(basePath: string, overrides: Partial<WorkspaceFilesystem> = {}): WorkspaceFilesystem {
+  return {
+    id: 'test-local',
+    name: 'MockLocalFilesystem',
+    provider: 'local',
+    getMountConfig: () => ({ type: 'local' as const, basePath }),
+    readFile: vi.fn(),
+    writeFile: vi.fn(),
+    deleteFile: vi.fn(),
+    listFiles: vi.fn(),
+    stat: vi.fn(),
+    exists: vi.fn(),
+    getInstructions: vi.fn(),
+    init: vi.fn(),
+    ...overrides,
+  } as WorkspaceFilesystem;
+}
+
+/**
+ * The SBPL that `sandbox-exec` runs with.
+ * `buildSeatbeltCommand` emits `['-p', <profile>, 'sh', '-c', <command>]`, so the profile is args[1].
+ */
+function activeSeatbeltProfile(sandbox: LocalSandbox): string {
+  return sandbox.wrapCommandForIsolation('echo hi').args[1]!;
+}
 
 describe('LocalSandbox', () => {
   let tempDir: string;
@@ -266,6 +294,15 @@ describe('LocalSandbox', () => {
       expect(result.stdout.trim()).toBe('Hello, World!');
       expect(result.exitCode).toBe(0);
       expect(result.executionTimeMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should release the completed foreground process handle', async () => {
+      if (os.platform() === 'win32') return; // Uses POSIX commands
+
+      const result = await sandbox.executeCommand!('echo', ['released']);
+
+      expect(result.stdout.trim()).toBe('released');
+      await expect(sandbox.processes!.list()).resolves.toEqual([]);
     });
 
     it('should handle command failure', async () => {
@@ -932,6 +969,235 @@ describe('LocalSandbox', () => {
       ).toBe(false);
     });
 
+    it('should keep a user-authored seatbelt profile across mount and unmount', async () => {
+      if (os.platform() !== 'darwin') {
+        return;
+      }
+
+      const customProfile = '(version 1)\n(deny default)\n(allow file-read* (literal "/custom-marker"))\n';
+      const customProfilePath = path.join(tempDir, 'custom.sb');
+      await fs.writeFile(customProfilePath, customProfile, 'utf-8');
+
+      const mountTarget = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-custom-profile-mount-'));
+      const seatbeltSandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+        nativeSandbox: { seatbeltProfilePath: customProfilePath },
+      });
+
+      try {
+        await seatbeltSandbox._start();
+        expect(activeSeatbeltProfile(seatbeltSandbox)).toBe(customProfile);
+
+        const mountResult = await seatbeltSandbox.mount(makeMockLocalFs(mountTarget), '/data');
+        expect(mountResult.success).toBe(true);
+        expect(activeSeatbeltProfile(seatbeltSandbox)).toBe(customProfile);
+
+        await seatbeltSandbox.unmount('/data');
+        expect(activeSeatbeltProfile(seatbeltSandbox)).toBe(customProfile);
+      } finally {
+        await seatbeltSandbox._destroy();
+        await fs.rm(mountTarget, { recursive: true, force: true });
+      }
+    });
+
+    it('should add mounted paths to a generated seatbelt profile', async () => {
+      if (os.platform() !== 'darwin') {
+        return;
+      }
+
+      const mountTarget = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-generated-profile-mount-'));
+      const seatbeltSandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+      });
+      const realMountTarget = await fs.realpath(mountTarget);
+
+      try {
+        await seatbeltSandbox._start();
+        expect(activeSeatbeltProfile(seatbeltSandbox)).not.toContain(realMountTarget);
+
+        await seatbeltSandbox.mount(makeMockLocalFs(mountTarget), '/data');
+        expect(activeSeatbeltProfile(seatbeltSandbox)).toContain(realMountTarget);
+
+        await seatbeltSandbox.unmount('/data');
+        expect(activeSeatbeltProfile(seatbeltSandbox)).not.toContain(realMountTarget);
+      } finally {
+        await seatbeltSandbox._destroy();
+        await fs.rm(mountTarget, { recursive: true, force: true });
+      }
+    });
+
+    it('should add mounted paths when seatbeltProfilePath points at a missing file', async () => {
+      if (os.platform() !== 'darwin') {
+        return;
+      }
+
+      // No file exists here yet, so start() generates the default profile and writes it there.
+      // That profile is ours, so it must keep tracking the mount allowlist.
+      const missingProfilePath = path.join(tempDir, 'nested', 'not-yet-written.sb');
+      const mountTarget = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-missing-profile-mount-'));
+      const seatbeltSandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+        nativeSandbox: { seatbeltProfilePath: missingProfilePath },
+      });
+      const realMountTarget = await fs.realpath(mountTarget);
+
+      try {
+        await seatbeltSandbox._start();
+        expect(activeSeatbeltProfile(seatbeltSandbox)).not.toContain(realMountTarget);
+
+        await seatbeltSandbox.mount(makeMockLocalFs(mountTarget), '/data');
+        expect(activeSeatbeltProfile(seatbeltSandbox)).toContain(realMountTarget);
+
+        await seatbeltSandbox.unmount('/data');
+        expect(activeSeatbeltProfile(seatbeltSandbox)).not.toContain(realMountTarget);
+      } finally {
+        await seatbeltSandbox._destroy();
+        // The configured path belongs to the user, so destroy() must leave the file alone.
+        await expect(fs.access(missingProfilePath)).resolves.toBeUndefined();
+        await fs.rm(mountTarget, { recursive: true, force: true });
+      }
+    });
+
+    it('should keep generating mount-aware profiles when restarted on a generated profile file', async () => {
+      if (os.platform() !== 'darwin') {
+        return;
+      }
+
+      // The first run writes a generated profile to the configured path. The second run finds
+      // that file, so it must recognise the profile as ours and keep it mount-aware.
+      const profilePath = path.join(tempDir, 'generated-then-reused.sb');
+      const mountTarget = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-restart-profile-mount-'));
+      const realMountTarget = await fs.realpath(mountTarget);
+
+      const firstRun = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+        nativeSandbox: { seatbeltProfilePath: profilePath },
+      });
+      await firstRun._start();
+      await firstRun._destroy();
+      await expect(fs.readFile(profilePath, 'utf-8')).resolves.toContain('(version 1)');
+
+      const secondRun = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+        nativeSandbox: { seatbeltProfilePath: profilePath },
+      });
+
+      try {
+        await secondRun._start();
+        expect(activeSeatbeltProfile(secondRun)).not.toContain(realMountTarget);
+
+        await secondRun.mount(makeMockLocalFs(mountTarget), '/data');
+        expect(activeSeatbeltProfile(secondRun)).toContain(realMountTarget);
+
+        await secondRun.unmount('/data');
+        expect(activeSeatbeltProfile(secondRun)).not.toContain(realMountTarget);
+      } finally {
+        await secondRun._destroy();
+        await fs.rm(mountTarget, { recursive: true, force: true });
+      }
+    });
+
+    it('should take ownership of a generated profile once its marker comment is removed', async () => {
+      if (os.platform() !== 'darwin') {
+        return;
+      }
+
+      // The marker is the ownership signal. While it is present the profile is Mastra's, so an
+      // edit alongside it is regenerated away. Removing it hands the file to the user, and the
+      // edit then survives, which is how a generated profile is customised.
+      const profilePath = path.join(tempDir, 'generated-then-edited.sb');
+      const editedRule = '(allow file-read* (literal "/edited-marker"))';
+
+      const firstRun = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+        nativeSandbox: { seatbeltProfilePath: profilePath },
+      });
+      await firstRun._start();
+      await firstRun._destroy();
+
+      const generated = await fs.readFile(profilePath, 'utf-8');
+      await fs.writeFile(profilePath, `${generated}\n${editedRule}\n`, 'utf-8');
+
+      const markedRun = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+        nativeSandbox: { seatbeltProfilePath: profilePath },
+      });
+      try {
+        await markedRun._start();
+        expect(activeSeatbeltProfile(markedRun)).not.toContain(editedRule);
+      } finally {
+        await markedRun._destroy();
+      }
+
+      const ownedProfile = `${generated
+        .split('\n')
+        .filter(line => line !== GENERATED_PROFILE_MARKER)
+        .join('\n')}\n${editedRule}\n`;
+      await fs.writeFile(profilePath, ownedProfile, 'utf-8');
+
+      const ownedRun = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+        nativeSandbox: { seatbeltProfilePath: profilePath },
+      });
+      try {
+        await ownedRun._start();
+        expect(activeSeatbeltProfile(ownedRun)).toBe(ownedProfile);
+      } finally {
+        await ownedRun._destroy();
+      }
+    });
+
+    it('should stop caching a user profile once the same instance restarts without one', async () => {
+      if (os.platform() !== 'darwin') {
+        return;
+      }
+
+      // `stop()` keeps the instance alive, so a profile cached on the first `start()` outlives it.
+      // If the user's file is gone by the next `start()`, the profile is ours again and has to go
+      // back to tracking mounts instead of replaying the stale copy held in memory.
+      const profilePath = path.join(tempDir, 'user-then-removed.sb');
+      const userProfile = '(version 1)\n(allow default)\n(allow file-read* (literal "/user-authored"))\n';
+      await fs.writeFile(profilePath, userProfile, 'utf-8');
+
+      const mountTarget = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-restart-cache-mount-'));
+      const realMountTarget = await fs.realpath(mountTarget);
+
+      const sandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+        nativeSandbox: { seatbeltProfilePath: profilePath },
+      });
+
+      try {
+        await sandbox._start();
+        expect(activeSeatbeltProfile(sandbox)).toBe(userProfile);
+
+        await sandbox._stop();
+        await fs.rm(profilePath, { force: true });
+        await sandbox._start();
+
+        // The user's SBPL must not survive as the active profile.
+        expect(activeSeatbeltProfile(sandbox)).not.toContain('/user-authored');
+        expect(activeSeatbeltProfile(sandbox)).toContain(GENERATED_PROFILE_MARKER);
+
+        // And the regenerated profile has to track mounts again.
+        expect(activeSeatbeltProfile(sandbox)).not.toContain(realMountTarget);
+        await sandbox.mount(makeMockLocalFs(mountTarget), '/data');
+        expect(activeSeatbeltProfile(sandbox)).toContain(realMountTarget);
+      } finally {
+        await sandbox._destroy();
+        await fs.rm(mountTarget, { recursive: true, force: true });
+      }
+    });
+
     it('should respect readOnly working directory restriction', async () => {
       if (os.platform() !== 'darwin') {
         return;
@@ -1151,24 +1417,6 @@ describe('LocalSandbox', () => {
   describe.skipIf(os.platform() === 'win32')('mount operations', () => {
     let mountSandbox: LocalSandbox;
     let mountDir: string;
-
-    function makeMockLocalFs(basePath: string, overrides: Partial<WorkspaceFilesystem> = {}): WorkspaceFilesystem {
-      return {
-        id: 'test-local',
-        name: 'MockLocalFilesystem',
-        provider: 'local',
-        getMountConfig: () => ({ type: 'local' as const, basePath }),
-        readFile: vi.fn(),
-        writeFile: vi.fn(),
-        deleteFile: vi.fn(),
-        listFiles: vi.fn(),
-        stat: vi.fn(),
-        exists: vi.fn(),
-        getInstructions: vi.fn(),
-        init: vi.fn(),
-        ...overrides,
-      } as WorkspaceFilesystem;
-    }
 
     beforeEach(async () => {
       mountDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-mount-test-'));
@@ -1586,6 +1834,215 @@ describe('LocalSandbox', () => {
       expect(content).toBe('secret');
     });
   });
+
+  describe('checkpoints', () => {
+    let checkpointsDir: string;
+    let workDir: string;
+
+    beforeEach(async () => {
+      checkpointsDir = path.join(tempDir, '.checkpoints');
+      workDir = path.join(tempDir, 'work');
+    });
+
+    function makeSandbox(
+      options: { checkpointName?: string; seedCheckpointName?: string; workingDirectory?: string } = {},
+    ) {
+      return new LocalSandbox({
+        workingDirectory: options.workingDirectory ?? workDir,
+        checkpointsDirectory: checkpointsDir,
+        ...(options.checkpointName !== undefined && { checkpointName: options.checkpointName }),
+        ...(options.seedCheckpointName !== undefined && { seedCheckpointName: options.seedCheckpointName }),
+      });
+    }
+
+    it('reports supportsCheckpoints = true', () => {
+      expect(makeSandbox().supportsCheckpoints).toBe(true);
+    });
+
+    it('snapshot is a no-op without a checkpoint name', async () => {
+      const sb = makeSandbox();
+      await sb.start();
+      await sb.snapshot();
+      await expect(fs.stat(checkpointsDir)).rejects.toThrow();
+    });
+
+    it('snapshot persists the workdir and start seeds a new sandbox from it', async () => {
+      const sb = makeSandbox({ checkpointName: 'repo-abc' });
+      await sb.start();
+      await fs.writeFile(path.join(workDir, 'file.txt'), 'hello');
+      await fs.mkdir(path.join(workDir, 'nested'), { recursive: true });
+      await fs.writeFile(path.join(workDir, 'nested', 'deep.txt'), 'deep');
+      await sb.snapshot();
+
+      const restored = makeSandbox({
+        checkpointName: 'repo-abc',
+        workingDirectory: path.join(tempDir, 'work2'),
+      });
+      await restored.start();
+      expect(await fs.readFile(path.join(tempDir, 'work2', 'file.txt'), 'utf-8')).toBe('hello');
+      expect(await fs.readFile(path.join(tempDir, 'work2', 'nested', 'deep.txt'), 'utf-8')).toBe('deep');
+    });
+
+    it('missing checkpoint falls back to a normal empty workdir', async () => {
+      const sb = makeSandbox({ checkpointName: 'does-not-exist' });
+      await sb.start();
+      expect(await fs.readdir(workDir)).toEqual([]);
+    });
+
+    it('does not seed over a populated workdir', async () => {
+      const sb = makeSandbox({ checkpointName: 'repo-abc' });
+      await sb.start();
+      await fs.writeFile(path.join(workDir, 'from-checkpoint.txt'), 'ckpt');
+      await sb.snapshot();
+
+      const otherDir = path.join(tempDir, 'work3');
+      await fs.mkdir(otherDir, { recursive: true });
+      await fs.writeFile(path.join(otherDir, 'existing.txt'), 'keep');
+      const populated = makeSandbox({ checkpointName: 'repo-abc', workingDirectory: otherDir });
+      await populated.start();
+      expect(await fs.readdir(otherDir)).toEqual(['existing.txt']);
+    });
+
+    it('seeds a start that overlaps checkpoint replacement (mid-swap window)', async () => {
+      // Build the checkpoint, then simulate the instant inside
+      // _captureCheckpoint where the old checkpoint has been renamed away but
+      // the replacement has not yet been renamed into place.
+      const sb = makeSandbox({ checkpointName: 'repo-abc' });
+      await sb.start();
+      await fs.writeFile(path.join(workDir, 'data.txt'), 'v2');
+      await sb.snapshot();
+
+      const ckptDir = path.join(checkpointsDir, 'repo-abc');
+      const asideDir = path.join(checkpointsDir, '.bak-repo-abc-test');
+      await fs.rename(ckptDir, asideDir);
+      // Restore the checkpoint shortly after the reader first observes it
+      // missing — within the reader's bounded retry window.
+      const restore = new Promise<void>(resolve =>
+        setTimeout(() => {
+          void fs.rename(asideDir, ckptDir).then(resolve);
+        }, 30),
+      );
+
+      const otherDir = path.join(tempDir, 'work-swap');
+      await fs.mkdir(otherDir, { recursive: true });
+      const reader = makeSandbox({ checkpointName: 'repo-abc', workingDirectory: otherDir });
+      await reader.start();
+      await restore;
+
+      expect(await fs.readFile(path.join(otherDir, 'data.txt'), 'utf-8')).toBe('v2');
+    });
+
+    it('re-snapshot atomically replaces the previous checkpoint', async () => {
+      const sb = makeSandbox({ checkpointName: 'repo-abc' });
+      await sb.start();
+      await fs.writeFile(path.join(workDir, 'v1.txt'), 'one');
+      await sb.snapshot();
+      await fs.rm(path.join(workDir, 'v1.txt'));
+      await fs.writeFile(path.join(workDir, 'v2.txt'), 'two');
+      await sb.snapshot();
+
+      const entries = await fs.readdir(path.join(checkpointsDir, 'repo-abc'));
+      expect(entries).toEqual(['v2.txt']);
+      // No leftover temp or backup dirs
+      const ckptEntries = await fs.readdir(checkpointsDir);
+      expect(ckptEntries.filter(e => e.startsWith('.tmp-') || e.startsWith('.bak-'))).toEqual([]);
+    });
+
+    it('rejects unsafe checkpoint names', async () => {
+      const sb = makeSandbox({ checkpointName: '../escape' });
+      await expect(sb.start()).rejects.toThrow(/Invalid checkpoint name/);
+      const sb2 = makeSandbox({ checkpointName: 'ok-name' });
+      await sb2.start();
+      // Bypass seeding validation to hit snapshot validation directly
+      (sb2 as any)._checkpointName = '../escape';
+      await expect(sb2.snapshot()).rejects.toThrow(/Invalid checkpoint name/);
+    });
+
+    it('seeds from seedCheckpointName when the primary checkpoint has no state', async () => {
+      // Build a "base" checkpoint under a repo-level name.
+      const base = makeSandbox({ checkpointName: 'repo-base' });
+      await base.start();
+      await fs.writeFile(path.join(workDir, 'base.txt'), 'warm');
+      await base.snapshot();
+
+      // Fresh "session" sandbox: its own checkpoint doesn't exist yet, so it
+      // seeds from the base checkpoint.
+      const session = makeSandbox({
+        checkpointName: 'session-1',
+        seedCheckpointName: 'repo-base',
+        workingDirectory: path.join(tempDir, 'seed-work'),
+      });
+      await session.start();
+      expect(await fs.readFile(path.join(tempDir, 'seed-work', 'base.txt'), 'utf-8')).toBe('warm');
+
+      // Snapshots write to the session checkpoint, never the base.
+      await fs.writeFile(path.join(tempDir, 'seed-work', 'session.txt'), 's');
+      await session.snapshot();
+      expect(await fs.readdir(path.join(checkpointsDir, 'repo-base'))).toEqual(['base.txt']);
+      expect((await fs.readdir(path.join(checkpointsDir, 'session-1'))).sort()).toEqual(['base.txt', 'session.txt']);
+    });
+
+    it('prefers the primary checkpoint over the seed when both exist', async () => {
+      const base = makeSandbox({ checkpointName: 'repo-base' });
+      await base.start();
+      await fs.writeFile(path.join(workDir, 'marker.txt'), 'base');
+      await base.snapshot();
+
+      const sessionWork = path.join(tempDir, 'prefer-work');
+      const session = makeSandbox({
+        checkpointName: 'session-2',
+        seedCheckpointName: 'repo-base',
+        workingDirectory: sessionWork,
+      });
+      await session.start();
+      await fs.writeFile(path.join(sessionWork, 'marker.txt'), 'session');
+      await session.snapshot();
+
+      const resumed = makeSandbox({
+        checkpointName: 'session-2',
+        seedCheckpointName: 'repo-base',
+        workingDirectory: path.join(tempDir, 'prefer-work-2'),
+      });
+      await resumed.start();
+      expect(await fs.readFile(path.join(tempDir, 'prefer-work-2', 'marker.txt'), 'utf-8')).toBe('session');
+    });
+
+    it('missing seed checkpoint falls back to a normal empty workdir', async () => {
+      const sb = makeSandbox({ checkpointName: 'session-3', seedCheckpointName: 'nope' });
+      await sb.start();
+      expect(await fs.readdir(workDir)).toEqual([]);
+    });
+
+    it('clone propagates seedCheckpointName', async () => {
+      const base = makeSandbox({ checkpointName: 'repo-base' });
+      await base.start();
+      await fs.writeFile(path.join(workDir, 'b.txt'), 'b');
+      await base.snapshot();
+
+      const template = makeSandbox({ checkpointName: 'session-4', seedCheckpointName: 'repo-base' });
+      const cloned = template.clone({ workingDirectory: path.join(tempDir, 'clone-seed-work') });
+      await cloned.start();
+      expect(await fs.readFile(path.join(tempDir, 'clone-seed-work', 'b.txt'), 'utf-8')).toBe('b');
+    });
+
+    it('clone propagates checkpoint configuration and allows override', async () => {
+      const sb = makeSandbox({ checkpointName: 'repo-abc' });
+      await sb.start();
+      await fs.writeFile(path.join(workDir, 'a.txt'), 'a');
+      await sb.snapshot();
+
+      const cloned = sb.clone({ workingDirectory: path.join(tempDir, 'work4') });
+      await cloned.start();
+      expect(await fs.readFile(path.join(tempDir, 'work4', 'a.txt'), 'utf-8')).toBe('a');
+
+      const overridden = sb.clone({
+        workingDirectory: path.join(tempDir, 'work5'),
+        checkpointName: 'other',
+      });
+      await overridden.start();
+      expect(await fs.readdir(path.join(tempDir, 'work5'))).toEqual([]);
+    });
+  });
 });
 
 /**
@@ -1610,6 +2067,7 @@ createSandboxTestSuite({
     supportsTimeout: true,
     defaultCommandTimeout: 10000,
     supportsStreaming: true,
+    supportsCloseStdin: true,
   },
   testDomains: {
     commandExecution: true,

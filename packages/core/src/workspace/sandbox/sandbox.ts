@@ -102,10 +102,21 @@ export interface SandboxCloneOptions {
   /** Idle teardown window (minutes) for the sandbox clone. */
   idleTimeoutMinutes?: number;
   /**
-   * Provider checkpoint used to seed and preserve the sandbox clone.
+   * Named checkpoint (the persisted artifact written by `snapshot()`) used to
+   * seed the sandbox clone on boot and preserve its state across restarts.
    * Providers without checkpoint support may ignore this option.
    */
   checkpointName?: string;
+  /**
+   * Fallback checkpoint used to seed the sandbox when `checkpointName` has no
+   * stored state yet (e.g. a repo-level warm base checkpoint for a brand-new
+   * session). Boot-only: `snapshot()` keeps writing to `checkpointName` and
+   * never overwrites the seed.
+   * Providers without checkpoint support may ignore this option.
+   */
+  seedCheckpointName?: string;
+  /** Opaque user subject attributed to provider requests for this clone. */
+  actingUserId?: string;
 }
 
 // =============================================================================
@@ -137,6 +148,24 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
 
   /** Provider type identifier */
   readonly provider: string;
+
+  /**
+   * Capture the sandbox's current state as a checkpoint when the provider
+   * supports it. Terminology: *snapshot* is the act of capturing; the named,
+   * persisted artifact it writes is a *checkpoint*
+   * (see `SandboxCloneOptions.checkpointName`).
+   * Providers without checkpoint support resolve without performing work.
+   */
+  snapshot(): Promise<void>;
+
+  /**
+   * Whether `snapshot()` persists real checkpoints that can later seed a
+   * sandbox (via `SandboxCloneOptions.checkpointName`). Providers whose
+   * `snapshot()` is a no-op leave this unset/false so checkpoint-dependent
+   * features (base checkpoints, boot-from-checkpoint, revival from
+   * checkpoint) know to skip them.
+   */
+  readonly supportsCheckpoints?: boolean;
 
   /**
    * Get instructions describing how this sandbox works.

@@ -23,8 +23,16 @@ export interface FakeSandboxOptions {
   withNetworking?: boolean;
   /** Content returned when a command `cat`s the install marker. */
   installMarker?: string;
-  /** Content returned when a command tails the server log. */
+  /** Content returned when a command tails a deployment log. */
   serverLog?: string;
+  /** Serialized status returned when worker lifecycle state is queried. */
+  workerStatus?: string;
+  /** Serialized statuses returned in order when worker lifecycle state is queried. */
+  workerStatuses?: string[];
+  /** Base64-encoded worker output returned after the size header. */
+  workerOutput?: string;
+  /** Number of destroy attempts that fail before succeeding. */
+  destroyFailures?: number;
   /** Provide info returned from getInfo(). */
   info?: Partial<SandboxInfo>;
 }
@@ -51,6 +59,7 @@ export class FakeSandbox implements WorkspaceSandbox {
   readonly processes?: SandboxProcessManager;
 
   private readonly opts: FakeSandboxOptions;
+  private readonly workerStatusIndexes = new Map<string, number>();
 
   constructor(opts: FakeSandboxOptions = {}) {
     this.opts = opts;
@@ -76,11 +85,13 @@ export class FakeSandbox implements WorkspaceSandbox {
   async start(): Promise<void> {
     this.started++;
   }
+  async snapshot(): Promise<void> {}
   async stop(): Promise<void> {
     this.stopped++;
   }
   async destroy(): Promise<void> {
     this.destroyed++;
+    if (this.destroyed <= (this.opts.destroyFailures ?? 0)) throw new Error('transient destroy failure');
   }
 
   async getInfo(): Promise<SandboxInfo> {
@@ -106,6 +117,14 @@ export class FakeSandbox implements WorkspaceSandbox {
       stdout = this.opts.installMarker ?? '';
     } else if (script.startsWith('tail')) {
       stdout = this.opts.serverLog ?? '';
+    } else if (script.includes('wc -c <') && script.includes('/stdout')) {
+      stdout = fakeWorkerOutput(script, this.opts.workerOutput ?? '');
+    } else if (script.includes('wc -c <') && script.includes('/stderr')) {
+      stdout = fakeWorkerOutput(script, this.opts.workerOutput ?? '');
+    } else if (script.includes('read worker status') || (script.includes('kill -0') && script.includes('/status'))) {
+      stdout = this.nextWorkerStatus(script);
+    } else if (script.includes('status="$(cat') && script.includes('/status')) {
+      stdout = this.nextWorkerStatus(script);
     } else if (script.includes('$HOME') || script.includes('${HOME')) {
       stdout = '/home/fake';
     }
@@ -118,6 +137,34 @@ export class FakeSandbox implements WorkspaceSandbox {
       executionTimeMs: 1,
     };
   }
+
+  private nextWorkerStatus(script: string): string {
+    const statuses = this.opts.workerStatuses;
+    if (statuses?.length) {
+      const executionId = workerExecutionIdFromScript(script);
+      const index = this.workerStatusIndexes.get(executionId) ?? 0;
+      const status = statuses[Math.min(index, statuses.length - 1)]!;
+      this.workerStatusIndexes.set(executionId, index + 1);
+      return status;
+    }
+    return this.opts.workerStatus ?? workerStatusFromScript(script);
+  }
+}
+
+function workerExecutionIdFromScript(script: string): string {
+  return /\.mastra\/executions\/([A-Za-z0-9._-]+)/.exec(script)?.[1] ?? 'unknown';
+}
+
+function workerStatusFromScript(script: string): string {
+  return `running|${workerExecutionIdFromScript(script)}`;
+}
+
+function fakeWorkerOutput(script: string, output: string): string {
+  const bytes = Buffer.from(output, 'base64');
+  const offset = Number(/tail -c \+(\d+)/.exec(script)?.[1] ?? 1) - 1;
+  const maxBytes = Number(/head -c (\d+)/.exec(script)?.[1] ?? bytes.byteLength);
+  const data = bytes.subarray(offset, offset + maxBytes);
+  return `${bytes.byteLength}\n${data.toString('base64')}\n`;
 }
 
 /** Create a minimal prebuilt Mastra output dir (index.mjs + package.json) for tests. */

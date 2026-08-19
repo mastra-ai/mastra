@@ -122,8 +122,14 @@ export function reconcileChatBoundarySpacers(chatContainer: Container): void {
   }
 
   flushCompactRunColor();
-  chatContainer.children = nextChildren as never[];
-  chatContainer.invalidate();
+
+  const childrenChanged =
+    children.length !== nextChildren.length || children.some((child, index) => child !== nextChildren[index]);
+  if (childrenChanged) {
+    // Container has no render cache; recursively invalidating here would discard
+    // every completed child's Text/Markdown cache on each streamed update.
+    chatContainer.children = nextChildren as never[];
+  }
 }
 
 function getCompactRunLabelColor(participants: CompactToolGroupingParticipant[]): CompactToolLabelColor | undefined {

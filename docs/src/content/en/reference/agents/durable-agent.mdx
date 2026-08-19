@@ -1,11 +1,17 @@
 ---
-title: "Reference: DurableAgent | Agents"
-description: "API reference for DurableAgent, which wraps an Agent with durable execution and resumable streams."
+title: 'Reference: DurableAgent | Agents'
+description: 'API reference for DurableAgent, which wraps an Agent with durable execution and resumable streams.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # DurableAgent
+
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
 
 `DurableAgent` wraps an existing [`Agent`](/reference/agents/agent) with durable execution and resumable streams. It runs the agentic loop so that a client can disconnect and reconnect without missing events, and it streams those events over [PubSub](/docs/server/pubsub). Use it when a run must outlive a single request or survive a dropped connection.
 
@@ -44,7 +50,7 @@ cleanup()
 
 ### Using the `durable` config flag
 
-Set `durable: true` on `AgentConfig` and the agent is automatically wrapped with `createDurableAgent` when it is attached to a `Mastra` instance. Use an object to forward advanced options such as `cache`, `pubsub`, `maxSteps`, or `cleanupTimeoutMs`.
+Set `durable: true` on `AgentConfig` and the agent is automatically wrapped with `createDurableAgent` when it's attached to a `Mastra` instance. Use an object to forward advanced options such as `cache`, `pubsub`, `maxSteps`, or `cleanupTimeoutMs`.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -63,7 +69,7 @@ export const mastra = new Mastra({
 })
 ```
 
-`mastra.getAgent('myAgent')` returns the wrapped `DurableAgent`. Standalone agents (constructed but never registered on a `Mastra` instance) do not become durable; the wrapping is applied at registration.
+`mastra.getAgent('myAgent')` returns the wrapped `DurableAgent`. Standalone agents (constructed but never registered on a `Mastra` instance) don't become durable. The wrapping is applied at registration.
 
 ## `createDurableAgent(options)`
 
@@ -274,11 +280,22 @@ const { output, cleanup } = await durableAgent.observe(runId, {
 await output.text
 ```
 
+By default `observe()` waits indefinitely for events. If the process running the run stops unexpectedly, the run stops producing events but never emits a completion event, so the observed stream would wait forever. Pass `idleTimeoutMs` to bound that wait: after that many milliseconds of silence the stream ends. An optional `isAlive` check is consulted first. Return `true` while the run is still being worked on (for example a long-running tool call, or a run paused waiting for human input) to keep waiting. Returning `false`, or omitting `isAlive`, ends the stream with an error. A transient throw from `isAlive` is treated as "still alive", so a momentary check failure never ends a live stream.
+
+```typescript
+const { output } = await durableAgent.observe(runId, {
+  idleTimeoutMs: 30_000,
+  isAlive: () => runHeartbeat.isFresh(runId),
+})
+```
+
+Ending a run on idle timeout runs the same cleanup as a run that errors (see the warning below), so its cached state is released rather than retained. Both options are opt-in. Omit them for the previous wait-indefinitely behavior.
+
 Returns: `Promise<DurableAgentStreamResult>`
 
 :::warning
 
-The `cleanup()` returned by `observe()` destroys the run's registry entries and cached events. Only call it when you are done with the run. If the run is suspended and you intend to resume later, don't call `cleanup()` — let the auto-cleanup timer handle it after the run finishes or errors. Auto-cleanup doesn't fire on suspended events.
+The `cleanup()` returned by `observe()` destroys the run's registry entries and cached events. Only call it when you are done with the run. If the run is suspended and you intend to resume later, don't call `cleanup()`. Let the auto-cleanup timer handle it after the run finishes or errors. Auto-cleanup doesn't fire on suspended events.
 
 :::
 
@@ -307,6 +324,72 @@ interface PrepareResult {
   resourceId?: string
 }
 ```
+
+### Recovery
+
+#### `recoverActiveRuns(options?)`
+
+Discovers runs stuck in `running` status for this agent and re-drives them from the last persisted snapshot. Recovers up to `options.limit` runs (default: 100). Returns a summary of what was recovered.
+
+```typescript
+const result = await durableAgent.recoverActiveRuns()
+// { recovered: [{ runId, status }], succeeded: 2, failed: 0 }
+```
+
+Pass a `runId` to recover a single known run:
+
+```typescript
+await durableAgent.recoverActiveRuns({ runId: 'run-abc-123' })
+```
+
+Returns:
+
+```typescript
+interface DurableAgentRecoverActiveRunsResult {
+  recovered: Array<{ runId: string; status: 'success' | 'failed'; error?: Error }>
+  succeeded: number
+  failed: number
+}
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options.runId',
+    type: 'string',
+    isOptional: true,
+    description: 'Recover a specific run by ID. When set, discovery filters are ignored.',
+  },
+  {
+    name: 'options.limit',
+    type: 'number',
+    isOptional: true,
+    description: 'Maximum number of active runs to discover. Defaults to 100.',
+  },
+  {
+    name: 'options.createdBefore',
+    type: 'Date',
+    isOptional: true,
+    description: 'Only recover runs created before this date.',
+  },
+]}
+/>
+
+#### `recover(runId, options?)`
+
+Recovers a single run by ID. Returns a streamable result with the same shape as `stream()`. Use this when you need to observe the recovery stream in real time.
+
+```typescript
+const { output, cleanup } = await durableAgent.recover('run-abc-123', {
+  onChunk: chunk => console.log(chunk),
+  onError: ({ error }) => console.error(error),
+})
+
+await output.text
+cleanup()
+```
+
+Returns: [`Promise<DurableAgentStreamResult>`](#durableagentstreamresult)
 
 ## Stream options
 
@@ -533,7 +616,8 @@ interface PrepareResult {
     name: 'onAbort',
     type: "AgentExecutionOptions['onAbort']",
     isOptional: true,
-    description: 'Called when the run is aborted via `abortSignal` or `result.abort()`.',
+    description:
+      'Called when the run is aborted via `abortSignal` or `result.abort()`. Receives the steps completed before the abort and, in `text`, the assistant text streamed so far.',
   },
   {
     name: 'onIterationComplete',
@@ -549,7 +633,7 @@ interface PrepareResult {
 
 ## DurableAgentStreamResult
 
-The object returned by `stream()`, `resume()`, and `observe()`.
+The object returned by `stream()`, `resume()`, `observe()`, and `recover()`.
 
 ```typescript
 interface DurableAgentStreamResult<OUTPUT = undefined> {

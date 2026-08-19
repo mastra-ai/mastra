@@ -71,10 +71,10 @@ interface SkillMetadata {
 
 ## Merging behavior
 
-When both agent-level skills and workspace skills are configured, `.listSkills()` returns the merged set. Agent-level skills take precedence on name conflicts — if both define a skill named `code-review`, only the agent-level version is returned.
+When both agent-level skills and workspace skills are configured, `.listSkills()` returns the merged set. Agent-level skills take precedence on name conflicts. If both define a skill called `code-review`, only the agent-level version is returned.
 
 ## Related
 
-- [Agent skills](/docs/agents/skills)
+- [Agent skills](/docs/skills)
 - [`.getSkill()` reference](/reference/agents/getSkill)
 - [`createSkill()` reference](/reference/agents/createSkill)

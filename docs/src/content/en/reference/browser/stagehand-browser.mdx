@@ -47,8 +47,9 @@ Use stagehand_extract to get data from pages.`,
   },
   {
     name: 'viewport',
-    type: '{ width: number; height: number }',
-    description: 'Browser viewport dimensions.',
+    type: "{ width: number; height: number } | 'window'",
+    description:
+      "Browser viewport dimensions. 'window' matches the real browser window and only applies when connecting over CDP; a locally launched browser falls back to the default size.",
     isOptional: true,
     defaultValue: '{ width: 1280, height: 720 }',
   },
@@ -150,7 +151,7 @@ Use stagehand_extract to get data from pages.`,
     name: 'recording',
     type: 'BrowserRecordingOptions',
     description:
-      'Alpha option for adding browser recording tools. Provide outputDir to add browser_record and browser_record_caption to the toolset. You can also set maxDurationMs, maxWidth, and maxHeight as defaults for every recording.',
+      'Beta option for adding browser recording tools. Provide outputDir to add browser_record and browser_record_caption to the toolset. You can also set maxDurationMs, maxWidth, and maxHeight as defaults for every recording.',
     isOptional: true,
   },
   {
@@ -167,7 +168,7 @@ Use stagehand_extract to get data from pages.`,
 
 `StagehandBrowser` provides 7 AI-powered tools for browser automation.
 
-When `recording` is configured, `StagehandBrowser` also adds the alpha `browser_record` and `browser_record_caption` tools. See [Browser recording (alpha)](/docs/browser/recording).
+When `recording` is configured, `StagehandBrowser` also adds the Beta `browser_record` and `browser_record_caption` tools. See [Browser recording (Beta)](/docs/browser#record-browser-sessions).
 
 Core tools:
 
@@ -175,7 +176,7 @@ Core tools:
 | - | - |
 | `stagehand_act` | Perform actions using natural language instructions |
 | `stagehand_extract` | Extract structured data from pages |
-| `stagehand_observe` | Discover actionable elements on a page |
+| `stagehand_observe` | Discover useful elements on a page |
 | `stagehand_navigate` | Navigate to a URL |
 | `stagehand_tabs` | Manage browser tabs |
 | `stagehand_screenshot` | Capture a screenshot as PNG (viewport by default; set `fullPage: true` for full page) |
@@ -267,7 +268,7 @@ interface ExtractResult<T = unknown> {
 
 ### `stagehand_observe`
 
-Discover actionable elements on a page. Returns a list of elements with their selectors and descriptions.
+Discover useful elements on a page. Returns a list of elements with their selectors and descriptions.
 
 ```text
 // Find specific elements
@@ -318,7 +319,7 @@ Navigate to a URL.
 
 | Parameter | Type | Description |
 | - | - | - |
-| `url` | `string` | URL to navigate to (required) |
+| `url` | `string` | URL to open (required) |
 | `waitUntil` | `"load" \| "domcontentloaded" \| "networkidle"` | When to consider navigation complete (optional) |
 
 ### `stagehand_tabs`
@@ -341,7 +342,7 @@ Manage browser tabs.
 
 ### `stagehand_screenshot`
 
-Capture a screenshot of the current page as PNG (viewport by default; set `fullPage: true` for full-page capture). Returns image content that vision-capable models can interpret directly. Use `stagehand_observe` or `stagehand_extract` when you only need text or structured data.
+Capture a screenshot of the current page as PNG (viewport by default. Set `fullPage: true` for full-page capture). Returns image content that vision-capable models can interpret directly. Use `stagehand_observe` or `stagehand_extract` when you only need text or structured data.
 
 ```text
 // Viewport only (default)
@@ -413,5 +414,5 @@ Choose `AgentBrowser` for precise, reproducible automation. Choose `StagehandBro
 
 - [MastraBrowser](/reference/browser/mastra-browser): Base class reference
 - [AgentBrowser](/reference/browser/agent-browser): Deterministic alternative
-- [Browser overview](/docs/browser/overview): Conceptual guide
-- [Stagehand guide](/docs/browser/stagehand): Usage guide
+- [Browser overview](/docs/browser): Conceptual guide
+- [Stagehand guide](/integrations/browsers/stagehand): Usage guide

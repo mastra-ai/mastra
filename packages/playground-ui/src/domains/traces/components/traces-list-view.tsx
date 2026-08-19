@@ -1,17 +1,16 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useRef } from 'react';
-import { getInputPreview } from '../utils/span-utils';
-import { DataListSkeleton, TracesDataList } from '@/ds/components/DataList';
+import {
+  DEFAULT_TRACE_COLUMN_PREFERENCES,
+  buildTraceListColumns,
+  formatTraceMetadataValue,
+  hasTraceColumn,
+} from '../trace-list-columns';
+import type { TraceColumnPreferences, TraceUsageSummary } from '../trace-list-columns';
+import { formatSpanDuration, getInputPreview } from '../utils/span-utils';
+import { formatCompact, formatCost } from '@/domains/metrics/components/metrics-utils';
+import { DataList, DataListSkeleton, TracesDataList } from '@/ds/components/DataList';
 import { cn } from '@/lib/utils';
-
-/** Span attributes fields the list view reads directly. Extra unknown keys are allowed so callers
- *  can pass the full attributes record from @mastra/core/storage without mapping. */
-export type TraceAttributes = {
-  status?: string | null;
-  agentId?: string | null;
-  workflowId?: string | null;
-  [key: string]: unknown;
-};
 
 export type TracesListViewTrace = {
   traceId: string;
@@ -23,14 +22,15 @@ export type TracesListViewTrace = {
   entityType?: string | null;
   entityId?: string | null;
   entityName?: string | null;
-  attributes?: TraceAttributes | null;
+  status?: string | null;
+  /** Server-rendered preview of `input`. Present on lightweight rows, which omit `input` itself. */
+  inputPreview?: string | null;
   input?: unknown;
+  metadata?: Record<string, unknown> | null;
   startedAt?: Date | string | null;
+  endedAt?: Date | string | null;
   createdAt: Date | string;
 };
-
-// Fixed widths on non-flex columns prevent track shifts as the virtualizer swaps rows in/out.
-const COLUMNS = '6rem 9rem 14rem minmax(8rem,1fr) 14rem 6rem';
 
 const ROW_HEIGHT = 36;
 const OVERSCAN = 8;
@@ -56,6 +56,10 @@ export type TracesListViewProps = {
    *  this set get a temporary tint to distinguish them from rows present since the last page-mode
    *  fetch. Auto-expires upstream (in useTraces) after a short window. */
   recentlyAddedKeys?: Set<string>;
+  /** Optional and metadata columns selected for this project. */
+  columnPreferences?: TraceColumnPreferences;
+  /** Token and estimated-cost totals, aggregated across model spans by trace ID. */
+  usageByTraceId?: ReadonlyMap<string, TraceUsageSummary>;
   /** Called when a row is clicked. The current selection logic (toggle on same id) is the consumer's call. */
   onTraceClick: (trace: TracesListViewTrace) => void;
 };
@@ -75,9 +79,12 @@ export function TracesListView({
   featuredSpanId,
   isBranchesMode,
   recentlyAddedKeys,
+  columnPreferences = DEFAULT_TRACE_COLUMN_PREFERENCES,
+  usageByTraceId,
   onTraceClick,
 }: TracesListViewProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const columns = buildTraceListColumns(columnPreferences);
 
   const virtualizer = useVirtualizer({
     count: traces.length,
@@ -105,7 +112,7 @@ export function TracesListView({
   }, [isLoading]);
 
   if (isLoading) {
-    return <DataListSkeleton columns={COLUMNS} />;
+    return <DataListSkeleton columns={columns} />;
   }
 
   const virtualItems = virtualizer.getVirtualItems();
@@ -115,14 +122,31 @@ export function TracesListView({
     virtualItems.length > 0 ? Math.max(0, totalSize - (virtualItems[virtualItems.length - 1]?.end ?? 0)) : 0;
 
   return (
-    <TracesDataList columns={COLUMNS} variant="striped" scrollRef={scrollRef} className="min-w-0">
+    <TracesDataList columns={columns} variant="striped" scrollRef={scrollRef} className="min-w-0">
       <TracesDataList.Top>
         <TracesDataList.TopCell>Date</TracesDataList.TopCell>
         <TracesDataList.TopCell>Time</TracesDataList.TopCell>
         <TracesDataList.TopCell>Name</TracesDataList.TopCell>
-        <TracesDataList.TopCell>Input</TracesDataList.TopCell>
-        <TracesDataList.TopCell>Entity</TracesDataList.TopCell>
+        {hasTraceColumn(columnPreferences, 'input') && <TracesDataList.TopCell>Input</TracesDataList.TopCell>}
+        {hasTraceColumn(columnPreferences, 'entity') && <TracesDataList.TopCell>Entity</TracesDataList.TopCell>}
         <TracesDataList.TopCell>Status</TracesDataList.TopCell>
+        {hasTraceColumn(columnPreferences, 'duration') && (
+          <TracesDataList.TopCell className="justify-end text-right">Duration</TracesDataList.TopCell>
+        )}
+        {hasTraceColumn(columnPreferences, 'inputTokens') && (
+          <TracesDataList.TopCell className="justify-end text-right">Input tokens</TracesDataList.TopCell>
+        )}
+        {hasTraceColumn(columnPreferences, 'outputTokens') && (
+          <TracesDataList.TopCell className="justify-end text-right">Output tokens</TracesDataList.TopCell>
+        )}
+        {hasTraceColumn(columnPreferences, 'estimatedCost') && (
+          <TracesDataList.TopCell className="justify-end text-right">Est. cost</TracesDataList.TopCell>
+        )}
+        {columnPreferences.metadataKeys.map(key => (
+          <TracesDataList.TopCellWithTooltip key={key} tooltip={key}>
+            {key}
+          </TracesDataList.TopCellWithTooltip>
+        ))}
       </TracesDataList.Top>
 
       {traces.length === 0 ? (
@@ -141,8 +165,8 @@ export function TracesListView({
             const rowKey = `${trace.traceId}:${trace.spanId ?? ''}`;
             const isRecentlyAdded = recentlyAddedKeys?.has(rowKey) ?? false;
             const displayDate = trace.startedAt ?? trace.createdAt;
-            const entityName =
-              trace.entityName || trace.entityId || trace.attributes?.agentId || trace.attributes?.workflowId;
+            const entityName = trace.entityName || trace.entityId;
+            const usage = usageByTraceId?.get(trace.traceId);
 
             return (
               <TracesDataList.RowButton
@@ -160,9 +184,35 @@ export function TracesListView({
                   parentSpanId={trace.parentSpanId}
                   showLevelTooltip={isBranchesMode}
                 />
-                <TracesDataList.InputCell input={getInputPreview(trace.input)} />
-                <TracesDataList.EntityCell entityType={trace.entityType} entityName={entityName} />
-                <TracesDataList.StatusCell status={trace.attributes?.status} />
+                {hasTraceColumn(columnPreferences, 'input') && (
+                  <TracesDataList.InputCell input={trace.inputPreview ?? getInputPreview(trace.input)} />
+                )}
+                {hasTraceColumn(columnPreferences, 'entity') && (
+                  <TracesDataList.EntityCell entityType={trace.entityType} entityName={entityName} />
+                )}
+                <TracesDataList.StatusCell status={trace.status} />
+                {hasTraceColumn(columnPreferences, 'duration') && (
+                  <DataList.NumberCell>{formatSpanDuration(trace.startedAt, trace.endedAt)}</DataList.NumberCell>
+                )}
+                {hasTraceColumn(columnPreferences, 'inputTokens') && (
+                  <DataList.NumberCell>
+                    {usage?.inputTokens === undefined ? undefined : formatCompact(usage.inputTokens)}
+                  </DataList.NumberCell>
+                )}
+                {hasTraceColumn(columnPreferences, 'outputTokens') && (
+                  <DataList.NumberCell>
+                    {usage?.outputTokens === undefined ? undefined : formatCompact(usage.outputTokens)}
+                  </DataList.NumberCell>
+                )}
+                {hasTraceColumn(columnPreferences, 'estimatedCost') && (
+                  <DataList.NumberCell>
+                    {usage?.estimatedCost === undefined ? undefined : formatCost(usage.estimatedCost, usage.costUnit)}
+                  </DataList.NumberCell>
+                )}
+                {columnPreferences.metadataKeys.map(key => {
+                  const value = formatTraceMetadataValue(trace.metadata, key);
+                  return <DataList.MonoCell key={key}>{value}</DataList.MonoCell>;
+                })}
               </TracesDataList.RowButton>
             );
           })}

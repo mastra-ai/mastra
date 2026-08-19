@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, normalize } from 'node:path';
@@ -15,7 +16,11 @@ vi.mock('node:os', async importOriginal => {
   };
 });
 
-import { loadAgentInstructions } from './agent-instructions.js';
+import {
+  createGitRefInstructionReader,
+  createGitRefReminderReader,
+  loadAgentInstructions,
+} from './agent-instructions.js';
 
 function write(path: string, content: string): void {
   mkdirSync(join(path, '..'), { recursive: true });
@@ -78,5 +83,85 @@ describe('loadAgentInstructions', () => {
       normalize(join(mocks.home, '.config', 'acme-code', 'AGENTS.md')),
       normalize(join(project, '.acme-code', 'CLAUDE.md')),
     ]);
+  });
+
+  it('loads project instructions only when skipGlobal is set', () => {
+    write(join(mocks.home, '.claude', 'CLAUDE.md'), 'global instructions');
+    write(join(project, 'AGENTS.md'), 'project instructions');
+
+    const sources = loadAgentInstructions(project, undefined, undefined, { skipGlobal: true });
+
+    expect(sources).toEqual([{ path: join(project, 'AGENTS.md'), content: 'project instructions', scope: 'project' }]);
+  });
+});
+
+describe('git-ref instruction readers', () => {
+  let root: string;
+  let repo: string;
+
+  const git = (...args: string[]) => execFileSync('git', ['-C', repo, ...args], { stdio: 'ignore' });
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'mastracode-gitref-'));
+    mocks.home = join(root, 'home');
+    mkdirSync(mocks.home, { recursive: true });
+    repo = join(root, 'repo');
+    mkdirSync(repo, { recursive: true });
+    git('init', '-b', 'main');
+    git('config', 'user.email', 'test@example.com');
+    git('config', 'user.name', 'Test');
+    writeFileSync(join(repo, 'AGENTS.md'), 'trusted base instructions');
+    git('add', 'AGENTS.md');
+    git('commit', '-m', 'base');
+    // Untrusted checkout tampers with the working tree.
+    writeFileSync(join(repo, 'AGENTS.md'), 'INJECTED working-tree content');
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('loadAgentInstructions serves project content from the ref, never the working tree', () => {
+    const reader = createGitRefInstructionReader(repo, 'main');
+    const sources = loadAgentInstructions(repo, undefined, reader);
+
+    expect(sources).toEqual([
+      {
+        path: join(repo, 'AGENTS.md'),
+        content: 'trusted base instructions',
+        scope: 'project',
+        ref: 'main',
+      },
+    ]);
+  });
+
+  it('reports files as absent when the ref does not exist', () => {
+    const reader = createGitRefInstructionReader(repo, 'no-such-branch');
+    expect(loadAgentInstructions(repo, undefined, reader)).toEqual([]);
+  });
+
+  it('reports working-tree-only files as absent at the ref', () => {
+    writeFileSync(join(repo, 'CLAUDE.md'), 'INJECTED new file');
+    git('rm', '--cached', 'AGENTS.md');
+    git('commit', '-m', 'remove instructions');
+
+    const reader = createGitRefInstructionReader(repo, 'main');
+    expect(loadAgentInstructions(repo, undefined, reader)).toEqual([]);
+  });
+
+  it('reminder reader resolves project paths at the ref and falls back to fs outside the project', () => {
+    const reader = createGitRefReminderReader(repo, 'main');
+
+    expect(reader.pathExists(join(repo, 'AGENTS.md'))).toBe(true);
+    expect(reader.readFile(join(repo, 'AGENTS.md'))).toBe('trusted base instructions');
+    expect(reader.isDirectory(repo)).toBe(true);
+    // Working-tree-only file is invisible at the ref.
+    writeFileSync(join(repo, 'CLAUDE.md'), 'INJECTED new file');
+    expect(reader.pathExists(join(repo, 'CLAUDE.md'))).toBe(false);
+    // Outside the project the operator filesystem is trusted.
+    const outside = join(root, 'outside.md');
+    writeFileSync(outside, 'operator file');
+    expect(reader.pathExists(outside)).toBe(true);
+    expect(reader.readFile(outside)).toBe('operator file');
   });
 });

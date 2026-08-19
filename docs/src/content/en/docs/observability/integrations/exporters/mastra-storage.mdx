@@ -1,11 +1,11 @@
 ---
-title: "Mastra Storage exporter | Integrations | Observability"
+title: "Storage exporter | Observability"
 description: "Store traces locally for development and debugging"
 packages:
   - "@mastra/observability"
 ---
 
-# Mastra Storage exporter
+# Storage exporter
 
 The `MastraStorageExporter` persists traces to your configured storage backend, making them accessible through Studio. It requires no external services.
 
@@ -16,7 +16,7 @@ The `MastraStorageExporter` persists traces to your configured storage backend, 
 :::
 
 :::warning[Production Observability]
-Observability data can quickly overwhelm general-purpose databases in production. For high-traffic applications, route the observability storage domain to [ClickHouse](/reference/storage/clickhouse) through [composite storage](/reference/storage/composite). See [Production Recommendations](#production-recommendations) for details.
+Observability data can quickly overwhelm general-purpose databases in production. For high-traffic applications, route the observability storage domain to [ClickHouse](/integrations/databases/clickhouse) through [composite storage](/reference/storage/composite). See [Production Recommendations](#production-recommendations) for details.
 :::
 
 ## Configuration
@@ -129,22 +129,23 @@ If you set the strategy to `'auto'`, the `MastraStorageExporter` automatically s
 
 | Storage Provider | Preferred Strategy | Supported Strategies | Recommended Use |
 | - | - | - | - |
-| **[ClickHouse](/reference/storage/clickhouse)** | insert-only | insert-only | Production (high-volume) |
-| **[PostgreSQL](/reference/storage/postgresql)** | batch-with-updates | batch-with-updates, insert-only | Production (low volume) |
-| **[MSSQL](/reference/storage/mssql)** | batch-with-updates | batch-with-updates, insert-only | Production (low volume) |
-| **[MongoDB](/reference/storage/mongodb)** | batch-with-updates | batch-with-updates, insert-only | Production (low volume) |
-| **[libSQL](/reference/storage/libsql)** | batch-with-updates | batch-with-updates, insert-only | Default storage, good for development |
+| **[ClickHouse](/integrations/databases/clickhouse)** | insert-only | insert-only | Production (high-volume) |
+| **[PostgreSQL](/integrations/databases/postgresql)** | batch-with-updates | batch-with-updates, insert-only | Production (low volume) |
+| **[MSSQL](/integrations/databases/mssql)** | batch-with-updates | batch-with-updates, insert-only | Production (low volume) |
+| **[MongoDB](/integrations/databases/mongodb)** | batch-with-updates | batch-with-updates, insert-only | Production (low volume) |
+| **[OracleDB](/integrations/databases/oracledb)** | batch-with-updates | batch-with-updates, insert-only | Production (low volume) |
+| **[libSQL](/integrations/databases/libsql)** | batch-with-updates | batch-with-updates, insert-only | Default storage, good for development |
 
 ### Providers without Observability Support
 
 The following storage providers **don't support** the observability domain. If you're using one of these providers and need observability, use [composite storage](/reference/storage/composite) to route observability data to a supported provider:
 
-- [Convex](/reference/storage/convex)
-- [DynamoDB](/reference/storage/dynamodb)
-- [Cloudflare D1](/reference/storage/cloudflare-d1)
-- [Cloudflare Durable Objects](/reference/storage/cloudflare)
-- [Upstash](/reference/storage/upstash)
-- [LanceDB](/reference/storage/lance)
+- [Convex](/integrations/databases/convex)
+- [DynamoDB](/integrations/databases/dynamodb)
+- [Cloudflare D1](/integrations/databases/cloudflare-d1)
+- [Cloudflare Durable Objects](/integrations/databases/cloudflare-kv)
+- [Upstash](/integrations/databases/upstash)
+- [LanceDB](/integrations/databases/lancedb)
 
 ### Strategy Benefits
 
@@ -158,7 +159,7 @@ Observability data grows quickly in production environments. A single agent inte
 
 ### Recommended: ClickHouse for High-Volume Production
 
-[ClickHouse](/reference/storage/clickhouse) is a columnar database designed for high-volume analytics workloads. It's the recommended choice for production observability because:
+[ClickHouse](/integrations/databases/clickhouse) is a columnar database designed for high-volume analytics workloads. It's the recommended choice for production observability because:
 
 - **Optimized for writes**: Handles millions of inserts per second
 - **Efficient compression**: Reduces storage costs for trace data
@@ -182,7 +183,7 @@ For both batch strategies (`batch-with-updates` and `insert-only`), traces are f
 
 ### Error handling
 
-The MastraStorageExporter includes robust error handling for production use:
+The MastraStorageExporter includes reliable error handling for production use:
 
 - **Retry Logic**: Exponential backoff (500ms, 1s, 2s, 4s)
 - **Transient Failures**: Automatic retry with backoff
@@ -252,6 +253,6 @@ new MastraStorageExporter({
 ## Related
 
 - [Tracing Overview](/docs/observability/tracing/overview)
-- [MastraPlatformExporter](/docs/observability/integrations/exporters/mastra-platform)
+- [MastraPlatformExporter](/docs/mastra-platform/observability)
 - [Composite Storage](/reference/storage/composite): Combine multiple storage providers
-- [Storage Configuration](/docs/storage/overview)
+- [Storage Configuration](/docs/storage)

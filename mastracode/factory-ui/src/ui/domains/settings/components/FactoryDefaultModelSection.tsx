@@ -6,11 +6,13 @@ import { useFactoryProjectQuery, useSetFactoryDefaultModelMutation } from '../..
 import { useParams } from 'react-router';
 
 import { ModelCombobox } from './ModelCombobox';
+import { SettingsRow } from './SettingsCard';
+import { SharedCredentialNotice } from './SharedCredentialNotice';
 
 /**
- * Factory default model. Persisted on the Factory project itself; factory
- * runs (issue triage, board work items) and new chats start on it. The
- * setting is mandatory — it can be changed but not cleared.
+ * Factory default model. Persisted on the Factory project itself; Factory
+ * runs use it, and new chats fall back to it when the user has no default
+ * model pack. The setting is mandatory and can be changed but not cleared.
  */
 export function FactoryDefaultModelSection({ models }: { models: AvailableModelOption[] }) {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -23,20 +25,20 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
   const error = setDefaultModel.error ?? projectQuery.error;
 
   return (
-    <div className="flex items-center justify-between gap-4 py-3">
-      <div className="flex flex-col gap-0.5">
-        <Txt as="span" variant="ui-md" className="text-icon5">
-          Factory default model
-        </Txt>
-        <Txt as="span" variant="ui-sm" className="text-icon3">
-          Factory runs (triage, board work items) start on this model
-        </Txt>
-        {error && (
-          <Txt as="span" variant="ui-xs" className="text-notice-destructive-fg">
-            {error instanceof Error ? error.message : String(error)}
-          </Txt>
-        )}
-      </div>
+    <SettingsRow
+      label="Factory default model"
+      hint={
+        <>
+          <span>Factory runs (triage, board work items) start on this model</span>
+          {error && (
+            <Txt as="span" variant="ui-xs" className="text-notice-destructive-fg">
+              {error instanceof Error ? error.message : String(error)}
+            </Txt>
+          )}
+          <SharedCredentialNotice modelId={defaultModelId || undefined} />
+        </>
+      }
+    >
       <div className="flex w-full max-w-72 items-center gap-2">
         {setDefaultModel.isPending && (
           <Spinner size="sm" aria-label="Saving default model" className="text-icon3 shrink-0" />
@@ -52,6 +54,6 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
           />
         </label>
       </div>
-    </div>
+    </SettingsRow>
   );
 }

@@ -227,6 +227,12 @@ export interface SkillSearchOptions extends BaseSearchOptions {
  * ```
  */
 export interface WorkspaceSkills {
+  /**
+   * Resolve a request-scoped skills view for dynamic path resolvers.
+   * The returned view remains pinned to the resolved path set for the request.
+   */
+  getScoped?(context?: SkillsContext): Promise<WorkspaceSkills>;
+
   // ===========================================================================
   // Discovery
   // ===========================================================================
@@ -249,6 +255,17 @@ export interface WorkspaceSkills {
    * Also accepts a skill path for disambiguation.
    */
   has(name: string): Promise<boolean>;
+
+  /**
+   * Register an alternate location string that resolves to the skill at `skillPath`.
+   *
+   * `SkillsProcessor` calls this when a `formatLocation` override remaps the
+   * advertised location, so the `skill` and `skill_read` tools can resolve the
+   * remapped location back to the underlying skill. Optional: implementations
+   * that omit it do not support remapped-location lookups, and the processor
+   * falls back to by-name guidance in its injected instruction.
+   */
+  registerLocationAlias?(location: string, skillPath: string): void;
 
   /**
    * Refresh skills from filesystem (re-scan skills)

@@ -1,5 +1,6 @@
-import type { Processor } from '..';
+import type { OutputResult, Processor } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
+import { isTransientSignalMessage } from '../../agent/signals';
 import { parseMemoryRequestContext } from '../../memory';
 import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
 import { SpanType, EntityType } from '../../observability';
@@ -164,9 +165,10 @@ export class MessageHistory implements Processor {
   /**
    * Filters messages before persisting to storage:
    * 1. Removes system messages - these are runtime instructions and should never be stored
-   * 2. Removes streaming tool calls (state === 'partial-call') - these are intermediate states
-   * 3. Removes updateWorkingMemory tool invocations (hide args from message history)
-   * 4. Strips <working_memory> tags from text content
+   * 2. Removes transient signals (`transient: true`) - delivery-only, must never be retained
+   * 3. Removes streaming tool calls (state === 'partial-call') - these are intermediate states
+   * 4. Removes updateWorkingMemory tool invocations (hide args from message history)
+   * 5. Strips <working_memory> tags from text content
    *
    * Note: We preserve 'call' state tool invocations because:
    * - For server-side tools, 'call' should have been converted to 'result' by the time OUTPUT is processed
@@ -174,7 +176,7 @@ export class MessageHistory implements Processor {
    */
   private filterMessagesForPersistence(messages: MastraDBMessage[]): MastraDBMessage[] {
     return messages
-      .filter(m => m.role !== 'system')
+      .filter(m => m.role !== 'system' && !isTransientSignalMessage(m))
       .map(m => {
         const newMessage = { ...m };
         // Only spread content if it's a proper V2 object
@@ -230,9 +232,10 @@ export class MessageHistory implements Processor {
       messageList: MessageList;
       abort: (reason?: string) => never;
       requestContext?: RequestContext;
+      result?: OutputResult;
     } & Partial<ObservabilityContext>,
   ): Promise<MessageList> {
-    const { messageList, requestContext, ...observabilityContext } = args;
+    const { messageList, requestContext, result, ...observabilityContext } = args;
 
     // Get memory context from RequestContext or MessageList
     const context = this.getMemoryContext(requestContext, messageList);
@@ -252,6 +255,12 @@ export class MessageHistory implements Processor {
     const messagesToSave = [...newInput, ...newOutput];
 
     if (messagesToSave.length === 0) {
+      return messageList;
+    }
+
+    // Don't persist an input-only failed turn: if the provider errored before
+    // producing any output, saving the user message would orphan it in history.
+    if (result?.finishReason === 'error' && newOutput.length === 0) {
       return messageList;
     }
 
@@ -295,15 +304,11 @@ export class MessageHistory implements Processor {
       return;
     }
 
-    // Ensure thread exists (create if needed) before saving messages
+    // Ensure thread exists (create if needed) before saving messages.
+    // Nothing to write when it already exists: re-writing the row we just read
+    // would clobber a title generated concurrently with this save.
     const thread = await this.storage.getThreadById({ threadId });
-    if (thread) {
-      await this.storage.updateThread({
-        id: threadId,
-        title: thread.title || '',
-        metadata: thread.metadata || {},
-      });
-    } else {
+    if (!thread) {
       // Auto-create thread if it doesn't exist
       await this.storage.saveThread({
         thread: {

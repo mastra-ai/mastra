@@ -1,10 +1,22 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { AssistantRenderRegistry, getAssistantSegmentKey } from '../../assistant-render-registry.js';
+import { AssistantMessageComponent } from '../../components/assistant-message.js';
 import { handleNewCommand } from '../new.js';
 import type { SlashCommandContext } from '../types.js';
 
 function createMockState() {
+  const assistantRenderRegistry = new AssistantRenderRegistry();
+  const assistantSegment = assistantRenderRegistry.start(
+    'assistant-1',
+    getAssistantSegmentKey('assistant-1'),
+    () => new AssistantMessageComponent(),
+  ).segment;
+  vi.spyOn(assistantSegment.component, 'disposeRenderState');
+
   return {
+    assistantRenderRegistry,
+    assistantSegment,
     pendingNewThread: false,
     chatContainer: { clear: vi.fn() },
     pendingTools: { clear: vi.fn() },
@@ -88,6 +100,8 @@ describe('handleNewCommand', () => {
     expect(state.allSlashCommandComponents).toEqual([]);
     expect(state.allSystemReminderComponents).toEqual([]);
     expect(state.messageComponentsById.size).toBe(0);
+    expect(state.assistantRenderRegistry.size).toBe(0);
+    expect(state.assistantSegment.component.disposeRenderState).toHaveBeenCalledOnce();
     expect(state.allShellComponents).toEqual([]);
     expect(state.globalBackgroundNotice.setActivities).toHaveBeenCalledWith([]);
     expect(state.session.state.set).toHaveBeenCalledWith({

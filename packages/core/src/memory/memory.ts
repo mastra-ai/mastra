@@ -539,8 +539,8 @@ https://mastra.ai/en/docs/memory/overview`,
     memoryConfig,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
     memoryConfig?: MemoryConfigInternal;
   }): Promise<StorageThreadType>;
 
@@ -549,6 +549,23 @@ https://mastra.ai/en/docs/memory/overview`,
    * @param threadId - the id of the thread to delete
    */
   abstract deleteThread(threadId: string): Promise<void>;
+
+  /**
+   * Resolve once all background work this memory started has finished.
+   *
+   * Some memory work continues after an agent run returns, and it writes to storage.
+   * Callers that own the storage connection should await this before closing it,
+   * otherwise background statements can race the close.
+   *
+   * ```ts
+   * await agent.generate('hello', { memory: { thread, resource } });
+   * await memory.settled();
+   * await store.close();
+   * ```
+   *
+   * Implementations that do no background work can leave this as a no-op.
+   */
+  async settled(): Promise<void> {}
 
   /**
    * Helper method to add a single message to a thread

@@ -1,11 +1,11 @@
 ---
-title: "Tracing | Observability"
+title: "Traces | Observability"
 description: "Record and inspect hierarchical execution for agents, workflows, tools, and model calls."
 packages:
   - "@mastra/observability"
 ---
 
-# Tracing
+# Traces
 
 Tracing is the observability signal that records how a request moves through agents, workflows, tools, and model calls. Mastra represents each operation as a span and groups related spans into a trace so you can inspect the full execution path.
 
@@ -26,13 +26,16 @@ This page focuses on trace-specific concepts: span hierarchy, sampling, metadata
 
 To get started with tracing, configure observability in your Mastra instance and run an agent or workflow. You can configure behavior through the following features:
 
-- [Configuration](/docs/observability/config): Base observability config, multiple configs, and serverless flushing
-- [Storage](/docs/observability/storage): Storage routing for traces, logs, and metrics
-- [Integrations overview](/docs/observability/integrations/overview): Exporters, bridges, and processors
+- [Configuration](/docs/observability/overview#configuration): Base observability config and multiple configs, plus serverless flushing
+- [Storage](/docs/observability/overview#storage): Storage routing for traces, logs, and metrics
 
 ## Sampling strategies
 
-Sampling allows you to control which traces are collected, helping you balance between observability needs and resource costs. In production environments with high traffic, collecting every trace can be expensive and unnecessary. Sampling strategies let you capture a representative subset of traces while ensuring you don't miss critical information about errors or important operations.
+Sampling allows you to control which traces are collected, helping you balance between observability needs and resource costs.
+
+In production environments with high traffic, collecting every trace can be expensive and unnecessary.
+
+Sampling strategies let you capture a representative subset of traces while ensuring you don't miss critical information about errors or important operations.
 
 You can configure sampling at the observability config level:
 
@@ -100,7 +103,9 @@ The `sampling` option allows you to control which traces are collected, helping 
 
 ## Adding custom metadata
 
-Custom metadata allows you to attach additional context to your traces, making it easier to debug issues and understand system behavior in production. Metadata can include business logic details, performance metrics, user context, or any information that helps you understand what happened during execution.
+Custom metadata allows you to attach additional context to your traces, making it easier to debug issues and understand system behavior in production.
+
+Metadata can include business logic and performance metrics. It can also carry user context or any other information that explains what happened during execution.
 
 You can add metadata to any span using the tracing context:
 
@@ -150,7 +155,7 @@ Per-call `tracingOptions.metadata.environment` always takes precedence, so indiv
 
 ### Automatic metadata from `RequestContext`
 
-Instead of manually adding metadata to each span, you can configure Mastra to automatically extract values from RequestContext and attach them as metadata to all spans in a trace. This is useful for consistently tracking user identifiers, environment information, feature flags, or any request-scoped data across your entire trace.
+Instead of manually adding metadata to each span, you can configure Mastra to automatically extract values from RequestContext and attach them as metadata to all spans in a trace. This is useful for consistently tracking user identifiers and environment information, along with feature flags or other request-scoped data across your entire trace.
 
 #### Configuration-level extraction
 
@@ -316,7 +321,7 @@ const result = await agent.generate([{ role: 'user', content: 'Handle confidenti
 
 #### How it works
 
-- **Trace-wide effect**: When set on the root span, these options apply to all child spans in the trace (tool calls, model generations, etc.)
+- **Trace-wide effect**: When set on the root span and these options apply to all child spans in the trace (tool calls, plus model generations, etc.)
 - **Export-time filtering**: The data remains available internally during execution but is excluded when spans are exported to observability platforms
 - **Combinable with other options**: You can use `hideInput`/`hideOutput` alongside `tags`, `metadata`, and other `tracingOptions`
 
@@ -331,7 +336,7 @@ const result = await agent.generate([{ role: 'user', content: 'Sensitive operati
 })
 ```
 
-For more granular control over sensitive data, consider using the [Sensitive Data Filter](/docs/observability/integrations/processors/sensitive-data-filter) processor, which can redact specific fields (like passwords, tokens, and keys) while preserving the rest of the input/output.
+For more fine-grained control over sensitive data, consider using the [Sensitive Data Filter](/reference/observability/tracing/processors/sensitive-data-filter) processor, which can redact specific fields (like passwords, tokens, and keys) while preserving the rest of the input/output.
 
 #### Child spans and metadata extraction
 
@@ -360,11 +365,11 @@ execute: async (inputData, context) => {
 }
 ```
 
-This gives you fine-grained control over which child spans include RequestContext metadata. Root spans (agent/workflow executions) always extract metadata automatically, while child spans only extract when you explicitly pass `requestContext`.
+You get fine-grained control over which child spans include RequestContext metadata. Root spans (agent/workflow executions) always extract metadata automatically, while child spans only extract when you explicitly pass `requestContext`.
 
 ## Creating child spans
 
-Child spans allow you to track fine-grained operations within your workflow steps or tools. They provide visibility into sub-operations like database queries, API calls, file operations, or complex calculations. This hierarchical structure helps you identify performance bottlenecks and understand the exact sequence of operations.
+Child spans allow you to track fine-grained operations within your workflow steps or tools. They provide visibility into sub-operations like database queries and API calls, as well as file operations or complex calculations. This hierarchical structure helps you identify performance bottlenecks and understand the exact sequence of operations.
 
 Create child spans inside a tool call or workflow step to track specific operations:
 
@@ -421,7 +426,7 @@ Span processors transform, filter, or enrich trace data before it's exported. Th
 
 #### Built-in processors
 
-- [Sensitive Data Filter](/docs/observability/integrations/processors/sensitive-data-filter) redacts sensitive information. It's enabled in the default observability config.
+- [Sensitive Data Filter](/reference/observability/tracing/processors/sensitive-data-filter) redacts sensitive information. It's enabled in the default observability config.
 
 #### Creating custom processors
 
@@ -463,8 +468,6 @@ Processors are executed in the order they're defined, allowing you to chain mult
 - Filtering out spans based on criteria
 - Normalizing data formats
 - Enriching spans with business context
-
-For the broader exporter, bridge, and processor model, see [Integrations overview](/docs/observability/integrations/overview).
 
 ## Span filtering
 
@@ -684,7 +687,7 @@ export const mastra = new Mastra({
 
 ### Use cases
 
-**Increasing limits for debugging**: If your agents or tools work with large documents, API responses, or data structures, increase these limits to capture more context in your traces:
+**Increasing limits for debugging**: Increase these limits to capture more context for large documents and API responses, as well as other data structures:
 
 ```ts prettier:false
 serializationOptions: {
@@ -705,11 +708,11 @@ serializationOptions: {
 }
 ```
 
-All options are optional — if not specified, they fall back to the defaults shown above.
+All options are optional, if not specified, they fall back to the defaults shown above.
 
 ## Retrieving trace IDs
 
-When you execute agents or workflows with tracing enabled, the response includes a `traceId` that you can use to look up the full trace in your observability platform. This is useful for debugging, customer support, or correlating traces with other events in your system.
+When you execute agents or workflows with tracing enabled, the response includes a `traceId` that you can use to look up the full trace in your observability platform. This is useful for debugging or customer support, or alternatively correlating traces with other events in your system.
 
 ### Agent trace IDs
 
@@ -789,7 +792,7 @@ const result = await agent.generate('Analyze this data', {
 
 ### OpenTelemetry integration
 
-Integration with OpenTelemetry allows Mastra traces to appear seamlessly in your existing observability platform:
+Integration with OpenTelemetry allows Mastra traces to appear directly in your existing observability platform:
 
 ```ts
 import { trace } from '@opentelemetry/api'
@@ -832,12 +835,12 @@ Mastra validates trace and span IDs to ensure compatibility:
 - **Trace IDs**: 1-32 hexadecimal characters (OpenTelemetry uses 32)
 - **Span IDs**: 1-16 hexadecimal characters (OpenTelemetry uses 16)
 
-Invalid IDs are handled gracefully — Mastra logs an error and continues:
+Invalid IDs are handled gracefully, Mastra logs an error and continues:
 
 - Invalid trace ID → generates a new trace ID
 - Invalid parent span ID → ignores the parent relationship
 
-This ensures tracing never crashes your application, even with malformed input.
+As a result, tracing never crashes your application, even with malformed input.
 
 ### Example: Express middleware
 
@@ -895,4 +898,4 @@ Mastra automatically creates spans for:
 - [Tracing Classes](/reference/observability/tracing/instances): Core classes and methods
 - [Span Interfaces](/reference/observability/tracing/spans): Span types and lifecycle
 - [Type Definitions](/reference/observability/tracing/interfaces): Complete interface reference
-- [Span filtering](/reference/observability/tracing/span-filtering): Filtering behavior, span types, and examples
+- [Span filtering](/reference/observability/tracing/span-filtering): Filtering behavior and span types, plus examples

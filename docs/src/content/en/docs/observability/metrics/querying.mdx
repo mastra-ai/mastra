@@ -1,5 +1,5 @@
 ---
-title: "Querying metrics | Observability"
+title: "Querying metrics | Metrics"
 description: "Read metric data from the Mastra observability store from code, HTTP, or the CLI."
 packages:
   - "@mastra/core"
@@ -8,7 +8,7 @@ packages:
 
 # Querying metrics
 
-Mastra exposes the same five OLAP queries (`getMetricAggregate`, `getMetricBreakdown`, `getMetricTimeSeries`, `getMetricPercentiles`, and discovery helpers) through three surfaces: an in-process store accessor, the runtime HTTP API, and the `mastra api metric` CLI. All three accept the same Zod-validated input shapes, so you can move from a one-off CLI investigation to a programmatic dashboard tool without re-learning the API.
+Mastra exposes the same five OLAP queries (`getMetricAggregate`, `getMetricBreakdown`, `getMetricTimeSeries`, `getMetricPercentiles`, and discovery helpers) through three surfaces: an in-process store accessor and the runtime HTTP API, plus the `mastra api metric` CLI. All three accept the same Zod-validated input shapes, so you can move from a one-off CLI investigation to a programmatic dashboard tool without re-learning the API.
 
 <Inject>
   **For AI agents:** Run `npx mastra api metric aggregate '{"name":"mastra_agent_duration_ms","aggregation":"avg"}'` to query average agent latency directly instead of writing a temporary script. Querying local metrics requires a running Mastra server with an OLAP-capable observability store; start the local server with `npx mastra dev`, or pass the reachable server's base URL with `--url`. Run `npx mastra api metric aggregate --schema` before constructing a different query. Install Mastra's skill with `npx skills add mastra-ai/skills --skill mastra` for complete API CLI discovery, targeting, schema, authentication, and error-handling guidance.
@@ -101,7 +101,7 @@ By default the CLI targets hosted Mastra observability (`https://observability.m
 
 ### `getMetricAggregate`
 
-Returns a single scalar — the building block for KPI cards.
+Returns a single scalar, the building block for KPI cards.
 
 Inputs:
 
@@ -129,7 +129,7 @@ console.log(cost.value, cost.estimatedCost, cost.costUnit, cost.changePercent)
 
 ### `getMetricBreakdown`
 
-Groups rows by one or more dimensions and aggregates each group — the building block for top-N tables (e.g. "tokens by agent").
+Groups rows by one or more dimensions and aggregates each group, the building block for top-N tables (e.g. "tokens by agent").
 
 Inputs:
 
@@ -154,14 +154,14 @@ const byAgent = await observability!.getMetricBreakdown({
 
 ### `getMetricTimeSeries`
 
-Buckets values by a fixed interval — the building block for line and bar charts.
+Buckets values by a fixed interval, the building block for line and bar charts.
 
 Inputs:
 
 - `name`: Array of metric names.
 - `interval`: One of `'1m' | '5m' | '15m' | '1h' | '1d'`.
 - `aggregation`: Same enum.
-- `groupBy`: Optional. When omitted, multiple metric names are summed into one series; use one call per metric to keep them separate.
+- `groupBy`: Optional. When omitted, multiple metric names are summed into one series. Use one call per metric to keep them separate.
 - `filters`: Optional.
 
 Response: `series[]`, each with `name`, `costUnit`, and `points[]` of `{ timestamp, value, estimatedCost }`.
@@ -179,7 +179,7 @@ const inputTokens = await observability!.getMetricTimeSeries({
 
 ### `getMetricPercentiles`
 
-Returns percentile values bucketed by time — the building block for latency charts.
+Returns percentile values bucketed by time, the building block for latency charts.
 
 Inputs:
 
@@ -224,8 +224,8 @@ Use these endpoints to populate dropdowns or to give an agent the menu of values
 
 Every query accepts the same `filters` object. The most useful fields:
 
-- `name`: Restrict to specific metric names. (Top-level `name` already does this for aggregate/breakdown/timeseries; use `filters.name` when you want to mix multiple metrics under a single query.)
-- `timestamp`: `{ start, end, startExclusive, endExclusive }`. Both bounds are optional; omit `end` for "until now".
+- `name`: Restrict to specific metric names. (Top-level `name` already does this for aggregate/breakdown/timeseries. Use `filters.name` when you want to mix multiple metrics under a single query.)
+- `timestamp`: `{ start, end, startExclusive, endExclusive }`. Both bounds are optional. Omit `end` for "until now".
 - `provider`, `model`, `costUnit`: For token and cost metrics.
 - `labels`: Exact key-value match on metric labels, for example `{ status: 'error' }` for duration metrics.
 - Correlation fields: `entityType`, `entityName`, `parentEntityName`, `rootEntityName`, `userId`, `organizationId`, `resourceId`, `runId`, `sessionId`, `threadId`, `requestId`, `executionSource`, `environment`, `serviceName`, `experimentId`, `tags`.
@@ -257,7 +257,7 @@ curl -sS -X POST http://localhost:4111/api/observability/metrics/aggregate \
 
 ### Always provide a time range
 
-`filters.timestamp` is optional, but you should treat it as required for any query that runs against a production store. Observability tables are typically partitioned (or chunked, for TimescaleDB) by event time. When you supply `timestamp.start` (and ideally `end`), the backend can prune to the partitions that overlap the range — usually one or two. Without a time range, the planner has to scan every partition, which can be hundreds of segments over a year of retention and is the most common cause of slow OLAP queries on Postgres-backed stores.
+`filters.timestamp` is optional, but you should treat it as required for any query that runs against a production store. Observability tables are typically partitioned (or chunked, for TimescaleDB) by event time. When you supply `timestamp.start` (and ideally `end`), the backend can prune to the partitions that overlap the range, usually one or two. Without a time range, the planner has to scan every partition, which can be hundreds of segments over a year of retention and is the most common cause of slow OLAP queries on Postgres-backed stores.
 
 A safe default for ad-hoc queries is the last 24 hours; alerts and dashboards should match their actual evaluation window:
 

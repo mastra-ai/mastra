@@ -1,5 +1,4 @@
 export { ChatHeader } from './components/ChatHeader';
-export { ChatMessageList } from './components/ChatMessageList';
 export { ChatOverlays } from './components/ChatOverlays';
 export { ComposerPanel } from './components/ComposerPanel';
 export { Composer } from './components/Composer';
@@ -27,6 +26,5 @@ export type { ChatPermissionsApi } from './context/ChatPermissionsContext';
 export type { ChatModelsApi } from './context/ChatModelsContext';
 export type { ChatModesApi } from './context/ChatModesContext';
 export { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
-export { useTranscriptScroll } from './hooks/useTranscriptScroll';
 export type { SlashCommand } from './services/commands';
 export type { TranscriptState } from './services/transcript';

@@ -1,16 +1,15 @@
+import { CommandEmpty, CommandGroup } from '@mastra/playground-ui/components/Command';
 import {
-  CommandDialog,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-  CommandShortcut,
-} from '@mastra/playground-ui/components/Command';
-import { Kbd } from '@mastra/playground-ui/components/Kbd';
-import { useMaybeSidebar } from '@mastra/playground-ui/components/MainSidebar';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
-import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboard-shortcut-label';
+  CommandPaletteBody,
+  CommandPaletteDialog,
+  CommandPaletteFooter,
+  CommandPaletteInput,
+  CommandPaletteItem,
+  CommandPaletteRail,
+  CommandPaletteResults,
+  CommandPaletteScope,
+} from '@mastra/playground-ui/components/CommandPalette';
+import { useMaybeSidebarState } from '@mastra/playground-ui/components/MainSidebar';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
@@ -42,9 +41,6 @@ import { useLinkComponent } from '@/lib/framework';
 import { useMastraPlatform } from '@/lib/mastra-platform';
 import { bottomNav, mainNav } from '@/lib/nav/nav-items';
 import type { NavItem } from '@/lib/nav/nav-items';
-import { cn } from '@/lib/utils';
-
-import './navigation-command.css';
 
 type CommandScope = 'all' | 'paths' | 'agents' | 'workflows' | 'tooling' | 'evaluation' | 'observability' | 'settings';
 
@@ -55,86 +51,6 @@ type ScopeOption = {
   count: number;
 };
 
-type NavigationCommandItemProps = Omit<React.ComponentProps<typeof CommandItem>, 'children'> & {
-  icon: React.ReactNode;
-  title: string;
-  subtitle?: string;
-  path?: string;
-  badge?: string;
-  shortcut?: React.ReactNode;
-};
-
-const scopeButtonClassName =
-  'flex h-9 w-full cursor-pointer items-center gap-2 rounded-lg border border-transparent px-2.5 text-left text-ui-smd leading-ui-sm text-neutral3 transition-[background-color,border-color,color,transform] duration-150 ease-out hover:border-border1 hover:bg-surface4 hover:text-neutral6 active:scale-[0.99] data-[active=true]:border-border1 data-[active=true]:bg-surface4 data-[active=true]:text-neutral6';
-
-const resultIconClassName =
-  'mt-0.5 flex size-4 min-w-4 max-w-4 basis-4 shrink-0 items-center justify-center text-neutral3 transition-colors duration-150 ease-out group-data-[selected=true]:text-neutral6 [&>svg]:!size-4 [&>svg]:shrink-0';
-
-const CommandPath = ({ children }: { children: React.ReactNode }) => (
-  <span className="border-border1 bg-surface4/70 text-neutral3 max-w-[13rem] truncate rounded-md border px-1.5 py-0.5 font-mono text-[10px] leading-none">
-    {children}
-  </span>
-);
-
-const NavigationCommandItem = ({
-  icon,
-  title,
-  subtitle,
-  path,
-  badge,
-  shortcut,
-  className,
-  ...props
-}: NavigationCommandItemProps) => {
-  return (
-    <CommandItem
-      className={cn(
-        'group h-auto items-start gap-3 rounded-xl border border-transparent px-3 py-2.5 data-[selected=true]:border-border1 data-[selected=true]:bg-surface4/80',
-        'transition-[background-color,border-color] duration-150 ease-out',
-        className,
-      )}
-      {...props}
-    >
-      <span className={resultIconClassName}>{icon}</span>
-      <span className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className="flex min-w-0 items-center gap-2">
-          <span className="text-ui-smd leading-ui-sm text-neutral6 truncate font-medium">{title}</span>
-          {badge && (
-            <span className="border-border1 bg-surface4/60 text-neutral3 shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] leading-none font-medium uppercase">
-              {badge}
-            </span>
-          )}
-        </span>
-        {(subtitle || path) && (
-          <span className="text-ui-xs leading-ui-xs text-neutral3 flex min-w-0 items-center gap-2">
-            {subtitle && <span className="truncate">{subtitle}</span>}
-            {path && <CommandPath>{path}</CommandPath>}
-          </span>
-        )}
-      </span>
-      {shortcut}
-    </CommandItem>
-  );
-};
-
-const ScopeButton = ({
-  option,
-  activeScope,
-  onSelect,
-}: {
-  option: ScopeOption;
-  activeScope: CommandScope;
-  onSelect: () => void;
-}) => (
-  <button type="button" className={scopeButtonClassName} data-active={activeScope === option.id} onClick={onSelect}>
-    <span className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4">{option.icon}</span>
-    <span className="min-w-0 flex-1 truncate">{option.label}</span>
-    <span className="border-border1 bg-surface4/70 text-neutral3 rounded-md border px-1.5 py-0.5 text-[10px] leading-none">
-      {option.count}
-    </span>
-  </button>
-);
-
 function getRouteValue(item: NavItem, sectionTitle?: string) {
   return [item.name, item.url, sectionTitle, item.docs?.label, 'path route navigate'].filter(Boolean).join(' ');
 }
@@ -144,8 +60,8 @@ function getRouteBadge(sectionTitle?: string) {
   return sectionTitle;
 }
 
-function getObservabilityEntityPath(entity: string) {
-  return `/observability?entity=${encodeURIComponent(entity)}`;
+function getTracesEntityPath(entity: string) {
+  return `/traces?entity=${encodeURIComponent(entity)}`;
 }
 
 type NavigationSection = {
@@ -155,7 +71,7 @@ type NavigationSection = {
 };
 
 type NavigationPaths = ReturnType<typeof useLinkComponent>['paths'];
-type SidebarContextValue = NonNullable<ReturnType<typeof useMaybeSidebar>>;
+type SidebarContextValue = NonNullable<ReturnType<typeof useMaybeSidebarState>>;
 type HandleSelect = (path: string) => void;
 type AgentEntry = [string, { name: string }];
 type WorkflowEntry = [string, { name: string }];
@@ -190,52 +106,42 @@ const CommandRail = ({
   activeScope: CommandScope;
   onScopeChange: (scope: CommandScope) => void;
 }) => (
-  <aside className="navigation-command-surface navigation-command-surface-rail border-border1 bg-surface2 flex max-h-[min(14rem,32dvh)] min-h-0 flex-col overflow-hidden rounded-2xl border p-3 shadow-[0_8px_24px_-20px_rgb(0_0_0_/_0.55)] md:h-full md:max-h-none">
-    <ScrollArea className="-m-1 min-h-0 flex-1 p-1" viewPortClassName="pr-1">
-      <div className="flex flex-col gap-1">
-        {scopeOptions.map(option => (
-          <ScopeButton
-            key={option.id}
-            option={option}
-            activeScope={activeScope}
-            onSelect={() => onScopeChange(option.id)}
-          />
-        ))}
-      </div>
-    </ScrollArea>
-  </aside>
+  <CommandPaletteRail aria-label="Search categories">
+    {scopeOptions.map(option => (
+      <CommandPaletteScope
+        key={option.id}
+        icon={option.icon}
+        label={option.label}
+        count={option.count}
+        active={activeScope === option.id}
+        onSelect={() => onScopeChange(option.id)}
+      />
+    ))}
+  </CommandPaletteRail>
 );
 
-const ShortcutResults = ({
+const CommandResults = ({
   sidebar,
   activeScope,
-  sidebarShortcutLabel,
-  setOpen,
+  closeCommand,
 }: {
   sidebar: SidebarContextValue | null;
   activeScope: CommandScope;
-  sidebarShortcutLabel: string;
-  setOpen: (open: boolean) => void;
+  closeCommand: () => void;
 }) => {
   if (!sidebar || (activeScope !== 'all' && activeScope !== 'settings')) return null;
 
   return (
-    <CommandGroup heading="Shortcuts">
-      <NavigationCommandItem
-        value="toggle sidebar collapse expand layout panel shortcut command b ctrl b"
+    <CommandGroup heading="Commands">
+      <CommandPaletteItem
+        value="toggle sidebar collapse expand layout panel"
         onSelect={() => {
           sidebar.toggleSidebar();
-          setOpen(false);
+          closeCommand();
         }}
         icon={<PanelLeftIcon />}
         title="Toggle Sidebar"
         subtitle="Studio layout"
-        badge="Shortcut"
-        shortcut={
-          <CommandShortcut className="flex items-center">
-            <Kbd className="text-[10px]">{sidebarShortcutLabel}</Kbd>
-          </CommandShortcut>
-        }
       />
     </CommandGroup>
   );
@@ -254,7 +160,7 @@ const PathSectionResults = ({
         {section.items.map(item => {
           const Icon = item.Icon;
           return (
-            <NavigationCommandItem
+            <CommandPaletteItem
               key={item.url}
               value={getRouteValue(item, section.title)}
               onSelect={() => handleSelect(item.url)}
@@ -287,7 +193,7 @@ const AgentResults = ({
   return (
     <CommandGroup heading="Agents">
       {entries.map(([id, agent]) => (
-        <NavigationCommandItem
+        <CommandPaletteItem
           key={id}
           value={`${agent.name} ${id} chat agent conversation thread ${paths.agentLink(id)}`}
           onSelect={() => handleSelect(paths.agentLink(id))}
@@ -318,7 +224,7 @@ const WorkflowResults = ({
   return (
     <CommandGroup heading="Workflows">
       {entries.map(([id, workflow]) => (
-        <NavigationCommandItem
+        <CommandPaletteItem
           key={id}
           value={`${workflow.name} ${id} graph workflow view ${paths.workflowLink(id)}`}
           onSelect={() => handleSelect(paths.workflowLink(id))}
@@ -349,7 +255,7 @@ const ToolResults = ({
   return (
     <CommandGroup heading="Tools">
       {entries.map(([id, tool]) => (
-        <NavigationCommandItem
+        <CommandPaletteItem
           key={id}
           value={`tool ${tool.id} ${id} ${paths.toolLink(id)}`}
           onSelect={() => handleSelect(paths.toolLink(id))}
@@ -385,7 +291,7 @@ const ProcessorResults = ({
           ? paths.workflowLink(processor.id) + '/graph'
           : paths.processorLink(processor.id);
         return (
-          <NavigationCommandItem
+          <CommandPaletteItem
             key={processor.id}
             value={`processor ${displayName} ${processor.id} ${targetPath}`}
             onSelect={() => handleSelect(targetPath)}
@@ -417,7 +323,7 @@ const McpServerResults = ({
   return (
     <CommandGroup heading="MCP Servers">
       {entries.map(server => (
-        <NavigationCommandItem
+        <CommandPaletteItem
           key={server.id}
           value={`mcp server ${server.name} ${server.id} ${paths.mcpServerLink(server.id)}`}
           onSelect={() => handleSelect(paths.mcpServerLink(server.id))}
@@ -448,16 +354,16 @@ const ObservabilityResults = ({
   return (
     <>
       <CommandGroup heading="Observability">
-        <NavigationCommandItem
-          value="observability traces telemetry signals /observability"
-          onSelect={() => handleSelect('/observability')}
+        <CommandPaletteItem
+          value="observability traces telemetry signals /traces"
+          onSelect={() => handleSelect('/traces')}
           icon={<EyeIcon />}
           title="Traces"
           subtitle="Runtime traces"
-          path="/observability"
+          path="/traces"
           badge="Signal"
         />
-        <NavigationCommandItem
+        <CommandPaletteItem
           value="metrics usage latency performance tokens /metrics"
           onSelect={() => handleSelect('/metrics')}
           icon={<GaugeIcon />}
@@ -466,7 +372,7 @@ const ObservabilityResults = ({
           path="/metrics"
           badge="Signal"
         />
-        <NavigationCommandItem
+        <CommandPaletteItem
           value="logs events runtime /logs"
           onSelect={() => handleSelect('/logs')}
           icon={<EyeIcon />}
@@ -480,10 +386,10 @@ const ObservabilityResults = ({
       {agentEntries.length > 0 && (
         <CommandGroup heading="Agent Traces">
           {agentEntries.map(([id, agent]) => {
-            const path = getObservabilityEntityPath(id);
+            const path = getTracesEntityPath(id);
 
             return (
-              <NavigationCommandItem
+              <CommandPaletteItem
                 key={id}
                 value={`${agent.name} ${id} traces agent observability telemetry`}
                 onSelect={() => handleSelect(path)}
@@ -501,10 +407,10 @@ const ObservabilityResults = ({
       {workflowEntries.length > 0 && (
         <CommandGroup heading="Workflow Traces">
           {workflowEntries.map(([id, workflow]) => {
-            const path = getObservabilityEntityPath(workflow.name);
+            const path = getTracesEntityPath(workflow.name);
 
             return (
-              <NavigationCommandItem
+              <CommandPaletteItem
                 key={id}
                 value={`${workflow.name} ${id} traces workflow observability telemetry`}
                 onSelect={() => handleSelect(path)}
@@ -540,7 +446,7 @@ const EvaluationResults = ({
       {entries.map(([id, scorer]) => {
         const name = scorer.scorer?.config?.name || scorer.scorer?.config?.id || id;
         return (
-          <NavigationCommandItem
+          <CommandPaletteItem
             key={id}
             value={`scorer score evaluation ${name} ${id} ${paths.scorerLink(id)}`}
             onSelect={() => handleSelect(paths.scorerLink(id))}
@@ -556,24 +462,11 @@ const EvaluationResults = ({
   );
 };
 
-const CommandFooter = () => (
-  <div className="navigation-command-footer text-ui-xs text-neutral3 pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-end justify-between gap-3 px-4 pt-5 pb-2">
-    <span className="truncate">Studio search</span>
-    <span className="flex shrink-0 items-center gap-1.5">
-      <Kbd className="min-w-5 px-1 text-[10px]">↑</Kbd>
-      <Kbd className="min-w-5 px-1 text-[10px]">↓</Kbd>
-      <Kbd className="min-w-5 px-1 text-[10px]">↵</Kbd>
-      <Kbd className="min-w-5 px-1 text-[10px]">Esc</Kbd>
-    </span>
-  </div>
-);
-
 export const NavigationCommand = () => {
   const { open, setOpen } = useNavigationCommand();
   const { navigate, paths } = useLinkComponent();
   const { isMastraPlatform } = useMastraPlatform();
-  const sidebar = useMaybeSidebar();
-  const sidebarShortcutLabel = useKeyboardShortcutLabel('B');
+  const sidebar = useMaybeSidebarState();
   const [activeScope, setActiveScope] = React.useState<CommandScope>('all');
 
   const { data: agents = {} } = useAgents();
@@ -585,13 +478,16 @@ export const NavigationCommand = () => {
   const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
   const { hasPermission, hasAnyPermission, isLoading: isPermissionsLoading } = usePermissions();
 
-  React.useEffect(() => {
-    if (!open) setActiveScope('all');
-  }, [open]);
+  const updateOpen = (nextOpen: boolean) => {
+    setOpen(nextOpen);
+    if (!nextOpen) setActiveScope('all');
+  };
+
+  const closeCommand = () => updateOpen(false);
 
   const handleSelect = (path: string) => {
     navigate(path);
-    setOpen(false);
+    closeCommand();
   };
 
   const filterNavItem = React.useCallback(
@@ -654,7 +550,7 @@ export const NavigationCommand = () => {
     { id: 'workflows', label: 'Workflows', icon: <WorkflowIcon />, count: workflowEntries.length },
     { id: 'tooling', label: 'Tooling', icon: <Layers3Icon />, count: toolingCount },
     { id: 'evaluation', label: 'Evaluation', icon: <GaugeIcon />, count: evaluationCount },
-    { id: 'observability', label: 'Signals', icon: <EyeIcon />, count: observabilityCount },
+    { id: 'observability', label: 'Intelligence', icon: <EyeIcon />, count: observabilityCount },
     { id: 'settings', label: 'Studio', icon: <SlidersHorizontalIcon />, count: settingsCount },
   ];
 
@@ -685,79 +581,48 @@ export const NavigationCommand = () => {
   }, [activeScope, navigationSections, showPaths, showSettings]);
 
   return (
-    <CommandDialog
+    <CommandPaletteDialog
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={updateOpen}
       title="Mastra Studio Search"
       description="Search Studio routes and runtime entities"
-      showOverlay
-      overlayClassName="bg-surface1/40 backdrop-blur-none"
-      contentClassName="navigation-command-popup max-w-[min(56rem,calc(100vw-2rem))] overflow-visible border-none bg-transparent p-0 shadow-none backdrop-blur-none sm:max-w-[min(56rem,calc(100vw-2rem))]"
-      commandClassName={cn(
-        'h-[min(42rem,calc(100dvh-2rem))] min-h-[min(30rem,calc(100dvh-2rem))] max-h-[calc(100dvh-2rem)] gap-2 overflow-visible rounded-none bg-transparent text-neutral4 shadow-none backdrop-blur-none',
-        '[&_[data-slot=command-input-wrapper]]:h-14 [&_[data-slot=command-input-wrapper]]:shrink-0 [&_[data-slot=command-input-wrapper]]:rounded-xl [&_[data-slot=command-input-wrapper]]:border [&_[data-slot=command-input-wrapper]]:border-border1 [&_[data-slot=command-input-wrapper]]:bg-surface3 [&_[data-slot=command-input-wrapper]]:px-4 [&_[data-slot=command-input-wrapper]]:shadow-[0_6px_18px_-16px_rgb(0_0_0_/_0.55)]',
-        '[&_[data-slot=command-input-wrapper]]:pr-11 [&_[data-slot=command-input-wrapper]]:transition-[border-color,box-shadow] [&_[data-slot=command-input-wrapper]]:duration-150 [&_[data-slot=command-input-wrapper]]:ease-out [&_[data-slot=command-input-wrapper]:focus-within]:border-border1 [&_[data-slot=command-input-wrapper]:focus-within]:bg-surface3 [&_[data-slot=command-input-wrapper]:focus-within]:shadow-[0_8px_22px_-18px_rgb(0_0_0_/_0.6)] [&_[data-slot=command-input-wrapper]_svg]:text-neutral4',
-        '**:[[cmdk-input]]:h-full **:[[cmdk-input]]:text-ui-md',
-        '**:[[cmdk-group]]:p-0 **:[[cmdk-group-heading]]:px-3 **:[[cmdk-group-heading]]:pb-2 **:[[cmdk-group-heading]]:pt-3',
-        '**:[[cmdk-item]]:px-3 **:[[cmdk-item]]:py-2.5',
-      )}
     >
-      <CommandInput
-        placeholder="Search Studio, agents, workflows, tools, paths..."
-        wrapperClassName="navigation-command-surface navigation-command-surface-input"
-      />
-
-      <div className="min-h-0 flex-1 rounded-2xl">
-        <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2 md:grid-cols-[13rem_minmax(0,1fr)] md:grid-rows-none">
-          <CommandRail scopeOptions={scopeOptions} activeScope={activeScope} onScopeChange={setActiveScope} />
-
-          <div className="navigation-command-surface navigation-command-surface-results navigation-command-results-panel border-border1 bg-surface2 relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border shadow-[0_10px_28px_-22px_rgb(0_0_0_/_0.6)]">
-            <CommandList
-              scrollArea
-              scrollAreaClassName="min-h-0 flex-1 rounded-none"
-              scrollAreaViewportClassName="navigation-command-scroll-viewport"
-              className="navigation-command-list max-h-none rounded-none border-none bg-transparent shadow-none"
-            >
-              <CommandEmpty>No matching results.</CommandEmpty>
-              <ShortcutResults
-                sidebar={sidebar}
-                activeScope={activeScope}
-                sidebarShortcutLabel={sidebarShortcutLabel}
-                setOpen={setOpen}
-              />
-              <PathSectionResults sections={visiblePathSections} handleSelect={handleSelect} />
-              <AgentResults visible={showAgents} entries={agentEntries} paths={paths} handleSelect={handleSelect} />
-              <WorkflowResults
-                visible={showWorkflows}
-                entries={workflowEntries}
-                paths={paths}
-                handleSelect={handleSelect}
-              />
-              <ToolResults visible={showTooling} entries={toolEntries} paths={paths} handleSelect={handleSelect} />
-              <ProcessorResults
-                visible={showTooling}
-                entries={processorEntries}
-                paths={paths}
-                handleSelect={handleSelect}
-              />
-              <McpServerResults visible={showTooling} entries={mcpServers} paths={paths} handleSelect={handleSelect} />
-              <ObservabilityResults
-                visible={showObservability}
-                agentEntries={agentEntries}
-                workflowEntries={workflowEntries}
-                handleSelect={handleSelect}
-              />
-              <EvaluationResults
-                visible={showEvaluation}
-                entries={scorerEntries}
-                paths={paths}
-                handleSelect={handleSelect}
-              />
-            </CommandList>
-            <CommandFooter />
-          </div>
-        </div>
-      </div>
-    </CommandDialog>
+      <CommandPaletteInput placeholder="Search Studio, agents, workflows, tools, paths..." />
+      <CommandPaletteBody>
+        <CommandRail scopeOptions={scopeOptions} activeScope={activeScope} onScopeChange={setActiveScope} />
+        <CommandPaletteResults aria-label="Search results" footer={<CommandPaletteFooter label="Studio search" />}>
+          <CommandEmpty>No matching results.</CommandEmpty>
+          <CommandResults sidebar={sidebar} activeScope={activeScope} closeCommand={closeCommand} />
+          <PathSectionResults sections={visiblePathSections} handleSelect={handleSelect} />
+          <AgentResults visible={showAgents} entries={agentEntries} paths={paths} handleSelect={handleSelect} />
+          <WorkflowResults
+            visible={showWorkflows}
+            entries={workflowEntries}
+            paths={paths}
+            handleSelect={handleSelect}
+          />
+          <ToolResults visible={showTooling} entries={toolEntries} paths={paths} handleSelect={handleSelect} />
+          <ProcessorResults
+            visible={showTooling}
+            entries={processorEntries}
+            paths={paths}
+            handleSelect={handleSelect}
+          />
+          <McpServerResults visible={showTooling} entries={mcpServers} paths={paths} handleSelect={handleSelect} />
+          <ObservabilityResults
+            visible={showObservability}
+            agentEntries={agentEntries}
+            workflowEntries={workflowEntries}
+            handleSelect={handleSelect}
+          />
+          <EvaluationResults
+            visible={showEvaluation}
+            entries={scorerEntries}
+            paths={paths}
+            handleSelect={handleSelect}
+          />
+        </CommandPaletteResults>
+      </CommandPaletteBody>
+    </CommandPaletteDialog>
   );
 };

@@ -62,6 +62,12 @@ function transformExperimentRow(row: Record<string, unknown>): Experiment {
     name: (row.name as string) ?? undefined,
     description: (row.description as string) ?? undefined,
     metadata: parseJsonField(row.metadata) ?? undefined,
+    provenance: parseJsonField(row.provenance) ?? null,
+    runnerAttestation: parseJsonField(row.runnerAttestation) ?? null,
+    experimentSetId: (row.experimentSetId as string | null) ?? null,
+    comparisonId: (row.comparisonId as string | null) ?? null,
+    variantId: (row.variantId as string | null) ?? null,
+    trialIndex: row.trialIndex != null ? Number(row.trialIndex) : null,
     datasetId: (row.datasetId as string | null) ?? null,
     datasetVersion: row.datasetVersion != null ? Number(row.datasetVersion) : null,
     organizationId: (row.organizationId as string | null) ?? null,
@@ -99,6 +105,7 @@ function transformExperimentResultRow(row: Record<string, unknown>): ExperimentR
     traceId: (row.traceId as string | null) ?? null,
     status: (row.status as ExperimentResultStatus | null) ?? null,
     tags: Array.isArray(row.tags) ? row.tags : (parseJsonField(row.tags) ?? null),
+    comment: (row.comment as string | null) ?? null,
     toolMockReport: (parseJsonField(row.toolMockReport) as ExperimentResult['toolMockReport']) ?? null,
     createdAt: toDate(row.createdAt),
   };
@@ -210,6 +217,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       { collection: TABLE_EXPERIMENTS, keys: { id: 1 }, options: { unique: true } },
       { collection: TABLE_EXPERIMENTS, keys: { datasetId: 1 } },
       { collection: TABLE_EXPERIMENTS, keys: { createdAt: -1, id: 1 } },
+      { collection: TABLE_EXPERIMENTS, keys: { experimentSetId: 1, comparisonId: 1, variantId: 1, trialIndex: 1 } },
       // Tenancy: leading-tenant indexes for multi-tenant scans (parity with datasets domain).
       { collection: TABLE_EXPERIMENTS, keys: { organizationId: 1, projectId: 1 } },
       { collection: TABLE_EXPERIMENT_RESULTS, keys: { id: 1 }, options: { unique: true } },
@@ -263,6 +271,12 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       name: input.name ?? null,
       description: input.description ?? null,
       metadata: input.metadata ?? null,
+      provenance: input.provenance ?? null,
+      runnerAttestation: input.runnerAttestation ?? null,
+      experimentSetId: input.experimentSetId ?? null,
+      comparisonId: input.comparisonId ?? null,
+      variantId: input.variantId ?? null,
+      trialIndex: input.trialIndex ?? null,
       datasetId: input.datasetId ?? null,
       datasetVersion: input.datasetVersion ?? null,
       organizationId: input.organizationId ?? null,
@@ -285,28 +299,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       const collection = await this.getCollection(TABLE_EXPERIMENTS);
       await collection.insertOne(doc);
 
-      return {
-        id,
-        name: input.name,
-        description: input.description,
-        metadata: input.metadata,
-        datasetId: input.datasetId ?? null,
-        datasetVersion: input.datasetVersion ?? null,
-        organizationId: input.organizationId ?? null,
-        projectId: input.projectId ?? null,
-        targetType: input.targetType,
-        targetId: input.targetId,
-        status: 'pending',
-        totalItems: input.totalItems,
-        succeededCount: 0,
-        failedCount: 0,
-        skippedCount: 0,
-        agentVersion: input.agentVersion ?? null,
-        startedAt: null,
-        completedAt: null,
-        createdAt: now,
-        updatedAt: now,
-      };
+      return transformExperimentRow(structuredClone(doc));
     } catch (error) {
       throw new MastraError(
         {
@@ -411,6 +404,10 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       if (args.status) {
         filter.status = args.status;
       }
+      if (args.experimentSetId !== undefined) filter.experimentSetId = args.experimentSetId;
+      if (args.comparisonId !== undefined) filter.comparisonId = args.comparisonId;
+      if (args.variantId !== undefined) filter.variantId = args.variantId;
+      if (args.trialIndex !== undefined) filter.trialIndex = args.trialIndex;
       if (args.filters) {
         const { organizationId, projectId } = args.filters;
         if (organizationId !== undefined) {
@@ -569,6 +566,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
 
     if (input.status !== undefined) updateFields.status = input.status;
     if (input.tags !== undefined) updateFields.tags = input.tags;
+    if (input.comment !== undefined) updateFields.comment = input.comment;
 
     if (Object.keys(updateFields).length === 0) {
       const existing = await this.getExperimentResultById({ id: input.id });

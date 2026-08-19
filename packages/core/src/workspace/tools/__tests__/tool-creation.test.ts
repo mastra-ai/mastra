@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { WORKSPACE_TOOLS } from '../../constants';
 import { LocalFilesystem } from '../../filesystem';
@@ -492,6 +492,49 @@ describe('createWorkspaceTools', () => {
 
       expect(writeTool.requireApproval).toBe(true);
       expect(writeTool.needsApprovalFn).toBeUndefined();
+    });
+  });
+  describe('writeLockTimeoutMs', () => {
+    /** A filesystem whose writes never settle, so the lock timeout is what ends the call. */
+    function hangingWriteFilesystem(basePath: string) {
+      const filesystem = new LocalFilesystem({ basePath });
+      filesystem.writeFile = () => new Promise<never>(() => {});
+      return filesystem;
+    }
+
+    it('bounds a hung write by the configured timeout', async () => {
+      const workspace = new Workspace({
+        filesystem: hangingWriteFilesystem(tempDir),
+        tools: { writeLockTimeoutMs: 50 },
+      });
+      const tools = await createWorkspaceTools(workspace);
+
+      await expect(
+        tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].execute({ path: 'hangs.txt', content: 'x' }, { workspace }),
+      ).rejects.toThrow('write-lock timeout on "hangs.txt" after 50ms');
+    });
+
+    it('falls back to the 30s default when unset', async () => {
+      const workspace = new Workspace({
+        filesystem: hangingWriteFilesystem(tempDir),
+      });
+      const tools = await createWorkspaceTools(workspace);
+
+      // Fake timers so the 30s default can be asserted exactly without waiting
+      // it out, and so the test leaves no pending lock timer behind.
+      vi.useFakeTimers();
+      try {
+        const write = tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].execute(
+          { path: 'hangs.txt', content: 'x' },
+          { workspace },
+        );
+        const rejected = expect(write).rejects.toThrow('write-lock timeout on "hangs.txt" after 30000ms');
+
+        await vi.advanceTimersByTimeAsync(30_000);
+        await rejected;
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });

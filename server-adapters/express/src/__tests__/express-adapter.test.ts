@@ -13,13 +13,16 @@ import {
   expectSerializedStreamChunks,
   consumeSSEStream,
   createMultipartTestSuite,
+  createBodyLimitTestSuite,
 } from '@internal/server-adapter-test-utils';
 import { Mastra } from '@mastra/core';
 import { registerApiRoute } from '@mastra/core/server';
+import { createRoute } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import express from 'express';
 import type { Application } from 'express';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { z } from 'zod';
 import { MastraServer } from '../index';
 
 function sleep(ms: number): Promise<void> {
@@ -975,6 +978,42 @@ describe('Express Server Adapter', () => {
     },
   });
 
+  describe('Channel webhook diagnostics', () => {
+    let server: Server | null = null;
+
+    afterEach(async () => {
+      if (server) {
+        await new Promise<void>(resolve => server!.close(() => resolve()));
+        server = null;
+      }
+    });
+
+    it('warns for an unregistered channel webhook when no custom API routes exist', async () => {
+      const mastra = new Mastra({ logger: false });
+      const warnSpy = vi.spyOn(mastra.getLogger(), 'warn');
+      const app = express();
+      const adapter = new MastraServer({ app, mastra });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const startedServer = app.listen(0, () => resolve(startedServer));
+      });
+      const address = server!.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/api/agents/support/channels/slack/webhook`, {
+        method: 'POST',
+      });
+
+      expect(response.status).toBe(404);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('channels.adapters configuration'), {
+        agentId: 'support',
+        platform: 'slack',
+      });
+    });
+  });
+
   describe('Custom API Routes (registerApiRoute)', () => {
     let server: Server | null = null;
 
@@ -1063,6 +1102,71 @@ describe('Express Server Adapter', () => {
       expect(response.status).toBe(200);
       const data = await response.json();
       expect(data).toEqual({ echo: { test: 'data' } });
+    });
+
+    it('registers createRoute routes from customApiRoutes with runtime validation', async () => {
+      const route = createRoute({
+        method: 'POST',
+        path: '/custom/validated',
+        responseType: 'json',
+        requiresAuth: false,
+        bodySchema: z.object({ name: z.string() }),
+        handler: async ({ name }) => ({ greeting: `Hello, ${name}` }),
+      });
+      const protectedRoute = createRoute({
+        method: 'GET',
+        path: '/custom/secure',
+        responseType: 'json',
+        requiresAuth: true,
+        handler: async () => ({ secret: true }),
+      });
+
+      const mastra = new Mastra({ server: { apiRoutes: [route, protectedRoute] } });
+      const originalGetServer = mastra.getServer.bind(mastra);
+      mastra.getServer = () =>
+        ({
+          ...originalGetServer(),
+          auth: {
+            authenticateToken: async (token: string) => (token === 'valid-token' ? { id: 'user-1' } : null),
+            authorize: async () => true,
+          },
+        }) as any;
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new MastraServer({ app, mastra });
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+      const address = server!.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const invalidResponse = await fetch(`http://localhost:${port}/custom/validated`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 42 }),
+      });
+      expect(invalidResponse.status).toBe(400);
+      await expect(invalidResponse.json()).resolves.toMatchObject({ error: 'Invalid request body' });
+
+      const validResponse = await fetch(`http://localhost:${port}/custom/validated`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Ada' }),
+      });
+      expect(validResponse.status).toBe(200);
+      await expect(validResponse.json()).resolves.toEqual({ greeting: 'Hello, Ada' });
+
+      const unauthenticated = await fetch(`http://localhost:${port}/custom/secure`);
+      expect(unauthenticated.status).toBe(401);
+
+      const authenticated = await fetch(`http://localhost:${port}/custom/secure`, {
+        headers: { Authorization: 'Bearer valid-token' },
+      });
+      expect(authenticated.status).toBe(200);
+      await expect(authenticated.json()).resolves.toEqual({ secret: true });
     });
   });
 
@@ -1230,5 +1334,45 @@ describe('Express Server Adapter', () => {
       const data = await response.json();
       expect(data).toEqual({ message: 'Hello from custom route!' });
     });
+  });
+
+  createBodyLimitTestSuite({
+    suiteName: 'Body Size Limit',
+
+    createApp: () => {
+      const app = express();
+      app.use(express.json());
+      return app;
+    },
+
+    setupAdapter: (app, mastra, bodyLimitOptions) => {
+      const adapter = new MastraServer({ app, mastra, bodyLimitOptions });
+      app.use(adapter.createContextMiddleware());
+      return { adapter, app };
+    },
+
+    registerRoute: (adapter, app, route) => adapter.registerRoute(app, route, { prefix: '' }),
+
+    executeRequest: async (app, method, url, options = {}) => {
+      const server: Server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      try {
+        const address = server.address();
+        if (!address || typeof address === 'string') {
+          throw new Error('Failed to get server address');
+        }
+        const parsedUrl = new URL(url);
+        const response = await fetch(`http://localhost:${address.port}${parsedUrl.pathname}${parsedUrl.search}`, {
+          method,
+          headers: options.headers,
+          ...(options.body ? { body: options.body } : {}),
+        });
+        return { status: response.status };
+      } finally {
+        await new Promise<void>(resolve => server.close(() => resolve()));
+      }
+    },
   });
 });

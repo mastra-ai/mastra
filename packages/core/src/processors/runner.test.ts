@@ -1,5 +1,6 @@
 import type { TextPart } from '@internal/ai-sdk-v4';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MastraDBMessage } from '../agent/message-list';
 import { MessageList } from '../agent/message-list';
 import { createSignal } from '../agent/signals';
 import { TripWire } from '../agent/trip-wire';
@@ -555,6 +556,55 @@ describe('ProcessorRunner', () => {
         .map(part => (part as TextPart).text);
 
       expect(assistantTexts).toEqual(['initial response', 'extra message A', 'extra message B']);
+    });
+
+    it('should still pass response messages after drainUnsavedMessages clears the live set', async () => {
+      let receivedMessages: MastraDBMessage[] = [];
+      const outputProcessors: Processor[] = [
+        {
+          id: 'processor1',
+          name: 'Processor 1',
+          processOutputResult: async ({ messages }) => {
+            receivedMessages = messages;
+            return messages.map(message => ({
+              ...message,
+              content: {
+                ...message.content,
+                parts: [{ type: 'text' as const, text: 'rewritten' }],
+                content: 'rewritten',
+              },
+            }));
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('initial response', 'assistant')], 'response');
+      expect(messageList.drainUnsavedMessages()).toHaveLength(1);
+      expect(messageList.get.response.db()).toHaveLength(0);
+      expect(messageList.getPersisted.response.db()).toHaveLength(1);
+
+      await runner.runOutputProcessors(messageList);
+
+      expect(receivedMessages).toHaveLength(1);
+      expect(receivedMessages[0]?.content.parts?.[0]).toMatchObject({
+        type: 'text',
+        text: 'initial response',
+      });
+
+      const messages = await messageList.get.all.prompt();
+      const assistantTexts = messages
+        .filter(m => m.role === 'assistant')
+        .flatMap(m => (Array.isArray(m.content) ? m.content : [{ type: 'text' as const, text: m.content }]))
+        .map(part => (part as TextPart).text);
+
+      expect(assistantTexts).toEqual(['rewritten']);
     });
 
     it('should abort if tripwire is triggered in output processor', async () => {
@@ -3498,6 +3548,37 @@ describe('ProcessorRunner', () => {
           retryCount: 0,
         }),
       ).rejects.toThrow('computeStateSignal requires Mastra memory');
+    });
+
+    it('skips computeStateSignal when memory is present but no threadId/resourceId resolves', async () => {
+      const compute = vi.fn(() => ({ cacheKey: 'state', contents: 'state' }));
+      const memory = {
+        getThreadById: vi.fn(),
+        saveThread: vi.fn(),
+      };
+      runner = new ProcessorRunner({
+        inputProcessors: [{ id: 'state-processor', computeStateSignal: compute }],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      // Ephemeral invocation (e.g. workflow agent step): memory is configured
+      // but there is no thread/resource identity for this run.
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        model: {} as any,
+        tools: {},
+        retryCount: 0,
+        requestContext: new RequestContext(),
+        memory: memory as any,
+      });
+
+      expect(compute).not.toHaveBeenCalled();
+      expect(messageList.get.all.db().filter(m => m.role === 'signal')).toHaveLength(0);
+      expect(memory.saveThread).not.toHaveBeenCalled();
     });
 
     it('honors processor.stateId over processor.id in computeStateSignal', async () => {

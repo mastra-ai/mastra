@@ -55,7 +55,7 @@ const response = await agent.generate('List all files in the workspace')
     name: 'contained',
     type: 'boolean',
     description:
-      'When true, all file operations are restricted to stay within basePath. Prevents path traversal attacks and symlink escapes. See [containment](/docs/workspace/filesystem#containment).',
+      'When true, all file operations are restricted to stay within basePath. Prevents path traversal attacks and symlink escapes. See [containment](/docs/sandbox/filesystem#containment).',
     isOptional: true,
     defaultValue: 'true',
   },
@@ -611,7 +611,7 @@ await filesystem.readFile('docs/guide.md')
 
 ### Relative paths and execution context
 
-When you use a relative path for `basePath`, it resolves from `process.cwd()`. In Mastra projects, cwd varies depending on how you run your code:
+When you use a relative path for `basePath`, it resolves from `process.cwd()`. In Mastra projects, the cwd changes based on how you run your code:
 
 | Context | Working directory | `./workspace` resolves to |
 | - | - | - |
@@ -633,10 +633,10 @@ const filesystem = new LocalFilesystem({
 })
 ```
 
-Set `WORKSPACE_PATH` in your environment to an absolute path like `/home/user/my-project/workspace`. This ensures the workspace path is consistent regardless of how you run your code.
+Set `WORKSPACE_PATH` in your environment to an absolute path like `/home/user/my-project/workspace`. It ensures the workspace path is consistent regardless of how you run your code.
 
 ## Related
 
 - [WorkspaceFilesystem interface](/reference/workspace/filesystem)
 - [Workspace class](/reference/workspace/workspace-class)
-- [Workspace overview](/docs/workspace/overview)
+- [Sandbox](/docs/sandbox/overview)

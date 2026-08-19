@@ -27,6 +27,15 @@ interface SlackAdapterChannelConfigBase {
   formatError?: ChannelAdapterConfig['formatError'];
 
   /**
+   * Dialect for the agent's final reply text. See `ChannelAdapterConfig['textFormat']`.
+   * `'markdown'` (default) posts replies as markdown for native Slack rendering;
+   * `'plain'` posts literal plain text (escape hatch for agents prompted to emit
+   * Slack mrkdwn). Applies to the static driver and the streaming fallback;
+   * native streaming is always markdown.
+   */
+  textFormat?: ChannelAdapterConfig['textFormat'];
+
+  /**
    * Control Slack typing indicators and Assistant-mode status text.
    *
    * - `true` — use built-in defaults: `"is typing…"` while generating text,

@@ -8,6 +8,7 @@ describe('MCPClient tool discovery retries', () => {
   const clients: MCPClient[] = [];
 
   afterEach(async () => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     await Promise.all(clients.map(client => client.disconnect().catch(() => {})));
     clients.length = 0;
@@ -90,6 +91,68 @@ describe('MCPClient tool discovery retries', () => {
     });
     expect(weatherClient.tools).toHaveBeenCalledTimes(1);
     expect(stockClient.tools).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns healthy tools and timing diagnostics when another server exceeds its discovery budget', async () => {
+    vi.useFakeTimers();
+    const client = createMultiServerClient();
+    const weatherTools = { getWeather: {} as any };
+    const weatherClient = {
+      tools: vi.fn().mockResolvedValue(weatherTools),
+    } as any;
+    const stockClient = {
+      tools: vi.fn().mockImplementation(() => new Promise(() => {})),
+    } as any;
+
+    vi.spyOn(client as any, 'getConnectedClientForServer').mockImplementation(async (serverName: string) => {
+      return serverName === 'weather' ? weatherClient : stockClient;
+    });
+
+    const pending = client.listToolsWithErrors({ perServerTimeoutMs: 50 });
+    await vi.advanceTimersByTimeAsync(50);
+    const result = await pending;
+
+    expect(result).toEqual({
+      tools: {
+        weather_getWeather: weatherTools.getWeather,
+      },
+      errors: {
+        stock: 'Discovery timed out after 50ms',
+      },
+      durations: {
+        weather: 0,
+        stock: 50,
+      },
+    });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('returns durations from toolset and tool definition discovery when options are supplied', async () => {
+    vi.useFakeTimers();
+    const client = createClient();
+    const toolset = { getWeather: {} as any };
+    const definitions = { getWeather: { name: 'getWeather' } } as any;
+    const internalClient = {
+      tools: vi.fn().mockResolvedValue(toolset),
+      toolDefinitions: vi.fn().mockResolvedValue(definitions),
+    } as any;
+
+    vi.spyOn(client as any, 'getConnectedClientForServer').mockResolvedValue(internalClient);
+
+    const toolsetsResult = await client.listToolsetsWithErrors({ perServerTimeoutMs: 50 });
+    const definitionsResult = await client.listToolDefinitionsWithErrors({ perServerTimeoutMs: 50 });
+
+    expect(toolsetsResult).toEqual({
+      toolsets: { weather: toolset },
+      errors: {},
+      durations: { weather: 0 },
+    });
+    expect(definitionsResult).toEqual({
+      definitions: { weather: definitions },
+      errors: {},
+      durations: { weather: 0 },
+    });
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('retries listToolsWithErrors once after a reconnectable discovery failure', async () => {
@@ -283,4 +346,97 @@ describe('MCPClient tool discovery retries', () => {
       empty: undefined,
     });
   });
+
+  const makeThreeServerClient = () => {
+    const client = new MCPClient({
+      id: `configuration-test-${++clientId}`,
+      servers: {
+        alpha: { url: new URL('http://localhost:1111/sse') },
+        bravo: { url: new URL('http://localhost:2222/sse') },
+        charlie: { url: new URL('http://localhost:3333/sse') },
+      },
+    });
+    clients.push(client);
+    return client;
+  };
+
+  // Spies getConnectedClientForServer so each server's discovery call awaits
+  // `gate(serverName)` before returning a probe result. `gate` is where each
+  // test injects its timing — a per-server delay, or a concurrency latch.
+  type Gate = (serverName: string) => Promise<void>;
+  const installToolsMock = (client: MCPClient, gate: Gate) =>
+    vi.spyOn(client as any, 'getConnectedClientForServer').mockImplementation(async (serverName: string) => ({
+      tools: vi.fn().mockImplementation(async () => {
+        await gate(serverName);
+        return { probe: {} as any };
+      }),
+    }));
+  const installResourcesMock = (client: MCPClient, gate: Gate) =>
+    vi.spyOn(client as any, 'getConnectedClientForServer').mockImplementation(async (serverName: string) => ({
+      resources: {
+        list: vi.fn().mockImplementation(async () => {
+          await gate(serverName);
+          return [{ uri: `${serverName}://probe` } as any];
+        }),
+      },
+    }));
+
+  // Servers resolve in reverse configuration order; asserts the folded result
+  // still keys in configuration order (a completion-order fold would not).
+  const expectConfigOrder = async (
+    installMock: (client: MCPClient, gate: Gate) => void,
+    invoke: (client: MCPClient) => Promise<Record<string, unknown>>,
+    expectedKeys: string[],
+  ) => {
+    const client = makeThreeServerClient();
+    const delays: Record<string, number> = { alpha: 30, bravo: 15, charlie: 0 };
+    installMock(client, serverName => new Promise(resolve => setTimeout(resolve, delays[serverName])));
+    expect(Object.keys(await invoke(client))).toEqual(expectedKeys);
+  };
+
+  // Asserts every server's discovery is in flight at once; deadlocks against a
+  // serial implementation, where only the first server would ever start.
+  const expectConcurrentDiscovery = async (
+    installMock: (client: MCPClient, gate: Gate) => void,
+    invoke: (client: MCPClient) => Promise<unknown>,
+  ) => {
+    const client = makeThreeServerClient();
+    const serverCount = 3;
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const release: Array<() => void> = [];
+    const allStarted = new Promise<void>(resolveAllStarted => {
+      installMock(client, async () => {
+        inFlight++;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        if (inFlight === serverCount) resolveAllStarted();
+        await new Promise<void>(resolve => release.push(resolve));
+        inFlight--;
+      });
+    });
+
+    const pending = invoke(client);
+    await allStarted;
+    expect(maxInFlight).toBe(serverCount);
+    release.forEach(fn => fn());
+    await pending;
+  };
+
+  it('preserves configuration order in listToolsWithErrors even when servers resolve out of order', () =>
+    expectConfigOrder(installToolsMock, async client => (await client.listToolsWithErrors()).tools, [
+      'alpha_probe',
+      'bravo_probe',
+      'charlie_probe',
+    ]));
+
+  it('discovers tools from all servers concurrently rather than serially', () =>
+    expectConcurrentDiscovery(installToolsMock, client => client.listToolsWithErrors()));
+
+  // resources.list() shares the concurrent settle/fold path but is an
+  // independent code path from tool discovery, so cover it directly too.
+  it('preserves configuration order in resources.list even when servers resolve out of order', () =>
+    expectConfigOrder(installResourcesMock, client => client.resources.list(), ['alpha', 'bravo', 'charlie']));
+
+  it('lists resources from all servers concurrently rather than serially', () =>
+    expectConcurrentDiscovery(installResourcesMock, client => client.resources.list()));
 });

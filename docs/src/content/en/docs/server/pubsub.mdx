@@ -9,7 +9,7 @@ packages:
 
 # PubSub
 
-Mastra uses a publish/subscribe (pub/sub) system as its internal event bus. Components publish events to named topics, and other components subscribe to those topics to react. The backend you configure decides how far those events travel: within one process, across processes on one host, or across separate instances.
+Mastra uses a publish/subscribe (pub/sub) system as its internal event bus. Components publish events to topics, and other components subscribe to those topics to react. The backend you configure decides how far those events travel: within one process or across processes on one host, or alternatively across separate instances.
 
 You set the backend once on the `Mastra` instance, and the rest of the system uses it without changes. By default, Mastra uses an in-process backend that needs no setup.
 
@@ -19,7 +19,7 @@ Several built-in systems publish and subscribe to events through the same pub/su
 
 - **Workflow execution**: The scheduler publishes a `workflow.start` event, and a long-lived worker consumes it to run the workflow. Step and lifecycle events flow over pub/sub during execution.
 - **Scheduled workflows**: The scheduler dispatches due runs by publishing to the workflow topic. See [Scheduled workflows](/docs/workflows/scheduled-workflows).
-- **Background tasks**: A task manager dispatches work to a worker group and fans task lifecycle updates out to subscribers, which is how background task streams stay live. See [Background task streaming](/docs/long-running-agents/background-tasks#subscribe-to-all-task-events).
+- **Background tasks**: A task manager dispatches work to a worker group and fans task lifecycle updates out to subscribers, which is how background task streams stay live. See [Background task streaming](/docs/harness/background-tasks#subscribe-to-all-task-events).
 - **Agent signals**: Sending a signal to an active agent run publishes an event on a thread topic, so a run executing in another process receives the signal.
 - **Resumable streams**: Stream chunks are published per run, so a client that reconnects can replay what it missed.
 
@@ -32,7 +32,7 @@ Backends deliver events in one of two modes, defined by the [`PubSub`](/referenc
 - **Pull**: Consumers read from the backend on their own, which Mastra does with a long-lived worker loop. Distributed backends such as [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) use this mode.
 - **Push**: Events arrive without the consumer asking, either in process or over HTTP. The default [`EventEmitterPubSub`](/reference/pubsub/event-emitter) delivers this way in process.
 
-Subscribers can also opt into work distribution. A group of subscribers that share a consumer group split the events between them, so each event is handled once. Subscribers without a group each receive every event, which fans the stream out to all of them.
+Subscribers can also distribute work through consumer groups. Members of the same group split the events so each event is handled once. A subscriber without a group receives every event, which fans the stream out to all ungrouped subscribers.
 
 ## Default backend
 
@@ -75,7 +75,9 @@ export const mastra = new Mastra({
 
 ### Distributed deployments
 
-Use a distributed backend when you run more than one instance or host, so every instance receives the same events. This matters whenever a request handled by one instance must reach work running on another. For example, sending a signal to an agent run requires the signal event to cross the process boundary to the instance that owns the run. With the in-process default, that instance never receives the event.
+Use a distributed backend when you run more than one instance or host, so every instance receives the same events. This matters whenever a request handled by one instance must reach work running on another.
+
+For example, sending a signal to an agent run requires the signal event to cross the process boundary to the instance that owns the run. With the in-process default, that instance never receives the event.
 
 Both backends below deliver across processes and hosts and persist events for redelivery.
 
@@ -129,5 +131,6 @@ Visit the [PubSub reference](/reference/pubsub/base) for the full delivery contr
 
 - [PubSub reference](/reference/pubsub/base)
 - [Mastra class](/reference/core/mastra-class)
-- [Background task streaming](/docs/long-running-agents/background-tasks#subscribe-to-all-task-events)
+- [Workers](/docs/deployment/workers): Run workflow orchestration and background tasks in dedicated processes using PubSub
+- [Background task streaming](/docs/harness/background-tasks#subscribe-to-all-task-events)
 - [Scheduled workflows](/docs/workflows/scheduled-workflows)

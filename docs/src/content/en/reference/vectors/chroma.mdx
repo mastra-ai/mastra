@@ -10,11 +10,11 @@ packages:
 The ChromaVector class provides vector search using [Chroma](https://docs.trychroma.com/docs/overview/getting-started), an open-source embedding database.
 It offers efficient vector search with metadata filtering and hybrid search capabilities.
 
-:::info
+:::note
 
 <b>Chroma Cloud</b>
 
-Chroma Cloud powers serverless vector and full-text search. It's extremely fast, cost-effective, scalable and painless. Create a DB and try it out in under 30 seconds with $5 of free credits.
+Chroma Cloud powers serverless vector and full-text search. It's extremely fast, cost-effective, high-capacity, and painless. Create a DB and try it out in under 30 seconds with $5 of free credits.
 
 [Get started with Chroma Cloud](https://trychroma.com/signup)
 
@@ -119,7 +119,7 @@ Otherwise, you have several options for setting up your single-node Chroma serve
 
 Note: Forking is only supported on Chroma Cloud, or if you deploy your own OSS **distributed** Chroma.
 
-`forkIndex` lets you fork an existing Chroma index instantly. Operations on the forked index don't affect the original one. Learn more on the [Chroma docs](https://docs.trychroma.com/cloud/collection-forking).
+`forkIndex` instantly forks an existing Chroma index without affecting the original index. Learn more on the [Chroma docs](https://docs.trychroma.com/cloud/collection-forking).
 
 <PropertiesTable
   content={[
@@ -417,7 +417,7 @@ await vectorStore.updateVector({
 
 ### `deleteVectors()`
 
-Delete multiple vectors by IDs or by metadata filter. This method enables bulk deletion and source-based vector management. Either `ids` or `filter` must be provided, but not both.
+Delete multiple vectors by IDs or by metadata filter. The method supports bulk deletion and source-based vector management. Either `ids` or `filter` must be provided, but not both.
 
 <PropertiesTable
   content={[

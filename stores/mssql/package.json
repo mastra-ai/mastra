@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mssql",
-  "version": "1.5.0-alpha.0",
+  "version": "1.7.2-alpha.0",
   "description": "MSSQL provider for Mastra - db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -32,7 +32,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "mssql": "^12.5.5"
+    "mssql": "^12.7.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

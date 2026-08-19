@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import type { PackageManager } from '../../utils/package-manager';
+import { resolveMastraPackageVersions } from './version-resolver';
 
 export const EMPTY_TSCONFIG = {
   compilerOptions: {
@@ -36,11 +37,11 @@ minimumReleaseAgeExclude:
   - mastra
   - "@mastra/*"
 allowBuilds:
+  bufferutil: true
   esbuild: true
+  protobufjs: true
   sharp: true
-onlyBuiltDependencies:
-  - esbuild
-  - sharp
+  utf-8-validate: true
 `;
 
 export interface OwnedStagingDirectory {
@@ -103,6 +104,16 @@ export async function writeEmptyScaffold({
 }): Promise<void> {
   await fs.mkdir(path.join(projectPath, 'src/mastra'), { recursive: true });
 
+  const mastraPackages = ['@mastra/core', 'mastra'];
+  const resolved = await resolveMastraPackageVersions(mastraPackages, versionTag);
+  if (resolved === undefined) {
+    console.warn(
+      `We could not resolve exact Mastra package versions for the "${versionTag}" channel, using the channel tag instead`,
+    );
+  }
+  const coreVersion = resolved?.['@mastra/core'] ?? versionTag;
+  const mastraVersion = resolved?.mastra ?? versionTag;
+
   const packageJson = {
     name: projectName,
     version: '1.0.0',
@@ -117,10 +128,10 @@ export async function writeEmptyScaffold({
       start: 'mastra start',
     },
     dependencies: {
-      '@mastra/core': versionTag,
+      '@mastra/core': coreVersion,
     },
     devDependencies: {
-      mastra: versionTag,
+      mastra: mastraVersion,
       typescript: '^6.0.3',
       '@types/node': 'latest',
     },

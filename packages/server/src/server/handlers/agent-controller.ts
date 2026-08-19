@@ -1,5 +1,15 @@
 import type { Agent } from '@mastra/core/agent';
-import type { AgentController, Session } from '@mastra/core/agent-controller';
+import type {
+  AgentController,
+  AgentControllerDisplayState,
+  AgentControllerEvent,
+  ErrorCarryingAgentControllerEvent,
+  JsonReadyAgentControllerEvent,
+  ReservedThreadMetadataKey,
+  Session,
+  TokenUsage,
+  WireDisplayState,
+} from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 // Type-only import: erased at runtime, so this cannot crash against an older
 // @mastra/core that lacks the `./agent-controller` subpath export. Controller
@@ -29,20 +39,23 @@ import { handleError } from './error';
  * usage). They share the flat thread `metadata` bag with user-provided session
  * scoping tags, so they must never be treated as tags here.
  *
- * Mirrors core's `isReservedThreadMetadataKey`; kept local because importing the
- * value from `@mastra/core` would exceed this package's peer-dependency floor.
+ * Importing core's list as a value would exceed this package's peer-dependency
+ * floor, so it is mirrored under `satisfies`: tsc rejects a missing or extra key.
  */
+const RESERVED_THREAD_METADATA_KEYS = {
+  currentModelId: true,
+  currentModeId: true,
+  observerModelId: true,
+  reflectorModelId: true,
+  observationThreshold: true,
+  reflectionThreshold: true,
+  tokenUsage: true,
+  thinkingLevel: true,
+  notifications: true,
+} satisfies Record<ReservedThreadMetadataKey, true>;
+
 function isReservedThreadMetadataKey(key: string): boolean {
-  return (
-    key === 'currentModelId' ||
-    key === 'currentModeId' ||
-    key === 'observerModelId' ||
-    key === 'reflectorModelId' ||
-    key === 'observationThreshold' ||
-    key === 'reflectionThreshold' ||
-    key === 'tokenUsage' ||
-    key.startsWith('modeModelId_')
-  );
+  return Object.hasOwn(RESERVED_THREAD_METADATA_KEYS, key) || key.startsWith('modeModelId_');
 }
 
 /**
@@ -78,6 +91,49 @@ async function getSession(
   return controller.createSession({ resourceId, id, ownerId: controller.id, tags, scope, threadId, requestContext });
 }
 
+/**
+ * Acknowledges a session operation that keeps running after the response is
+ * sent.
+ *
+ * The messages/steer/follow-up routes answer `{ ok: true }` as soon as the
+ * message is handed to the session: the reply itself arrives on the session's
+ * SSE stream, so the request must not block for the whole turn. Those session
+ * methods can still reject — `sendMessage` deliberately rejects when signal
+ * submission fails before a stream starts — and a bare `void promise` turns
+ * that into an unhandled rejection, which terminates the process on Node's
+ * default `--unhandled-rejections=throw`.
+ *
+ * Observing the promise keeps the immediate acknowledgement while logging the
+ * failure and emitting an `error` event on the session, so a client streaming
+ * the session is told the turn died instead of waiting for an `agent_end` that
+ * will never come.
+ */
+function ackBackgroundSessionWork({
+  work,
+  session,
+  mastra,
+  operation,
+}: {
+  work: Promise<unknown>;
+  session: Session<any>;
+  mastra: { getLogger?: () => { error?: (message: string, context?: Record<string, unknown>) => void } | undefined };
+  operation: string;
+}): void {
+  void work.catch((error: unknown) => {
+    const failure = error instanceof Error ? error : new Error(String(error));
+    mastra.getLogger?.()?.error?.(`AgentController ${operation} failed after the request was acknowledged`, {
+      operation,
+      error: failure,
+    });
+    try {
+      session.emit({ type: 'error', error: failure });
+    } catch {
+      // A session that can no longer accept events (e.g. torn down mid-flight)
+      // must not turn a logged failure into a second unhandled rejection.
+    }
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Schemas
 // ---------------------------------------------------------------------------
@@ -91,6 +147,7 @@ const sessionPathParams = z.object({ controllerId: z.string(), resourceId: z.str
  * on session routes; named to avoid colliding with the model-switch `scope`.
  */
 const sessionScopeQuerySchema = z.object({ sessionScope: z.string().optional() });
+const sessionStateQuerySchema = sessionScopeQuerySchema.extend({ threadId: z.string().optional() });
 
 const createSessionBodySchema = z.object({
   resourceId: z.string(),
@@ -220,12 +277,31 @@ const omProgressSummarySchema = z.object({
   /** Tokens the next reflection is projected to save. */
   projectedReflectionSavings: z.number(),
 });
+const tokenUsageSchema = z.object({
+  promptTokens: z.number(),
+  completionTokens: z.number(),
+  totalTokens: z.number(),
+  reasoningTokens: z.number().optional(),
+  cachedInputTokens: z.number().optional(),
+  cacheCreationInputTokens: z.number().optional(),
+  cacheCreationInputTokens5m: z.number().optional(),
+  cacheCreationInputTokens1h: z.number().optional(),
+  raw: z.unknown().optional(),
+}) satisfies z.ZodType<TokenUsage>;
 const sessionSettingsSchema = z.object({
   yolo: z.boolean(),
-  thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh']),
+  /** Session override only — absent when the session inherits a configured default. */
+  thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh', 'max']).optional(),
   notifications: z.enum(['off', 'bell', 'system', 'both']),
   smartEditing: z.boolean(),
 });
+const taskSnapshotSchema = z.object({
+  id: z.string(),
+  content: z.string(),
+  status: z.enum(['pending', 'in_progress', 'completed']),
+  activeForm: z.string(),
+});
+type SessionTaskSnapshot = z.infer<typeof taskSnapshotSchema>;
 const sessionStateResponseSchema = z.object({
   controllerId: z.string(),
   resourceId: z.string(),
@@ -234,8 +310,9 @@ const sessionStateResponseSchema = z.object({
   modelId: z.string(),
   /** Whether the agent is currently executing a run (for initial UI hydration). */
   running: z.boolean().optional(),
+  tasks: z.array(taskSnapshotSchema).optional(),
   omProgress: omProgressSummarySchema.optional(),
-  tokenUsage: z.record(z.string(), z.unknown()).optional(),
+  tokenUsage: tokenUsageSchema.optional(),
   settings: sessionSettingsSchema.optional(),
 });
 const listModesResponseSchema = z.object({
@@ -376,20 +453,37 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
 });
 
 /**
- * Session `error` events carry an `Error` instance whose `message`/`name` are
- * non-enumerable, so JSON serialization in the SSE adapter would send
- * `"error": {}` and clients could only render a generic "Error". Flatten the
- * Error into a plain object so the actual failure reaches the client.
+ * `display_state_changed` Maps JSON-serialize to `{}`. Snapshot the display state
+ * before converting its Maps so queued wire events retain point-in-time state.
  */
-function toWireEvent(event: unknown): unknown {
-  if (
-    typeof event === 'object' &&
-    event !== null &&
-    (event as { type?: unknown }).type === 'error' &&
-    (event as { error?: unknown }).error instanceof Error
-  ) {
-    const error = (event as { error: Error }).error;
-    return { ...event, error: { name: error.name, message: error.message } };
+function toWireDisplayState(displayState: AgentControllerDisplayState): WireDisplayState {
+  const snapshot = structuredClone(displayState);
+  return {
+    ...snapshot,
+    activeTools: Object.fromEntries(snapshot.activeTools),
+    toolInputBuffers: Object.fromEntries(snapshot.toolInputBuffers),
+    pendingSuspensions: Object.fromEntries(snapshot.pendingSuspensions),
+    activeSubagents: Object.fromEntries(snapshot.activeSubagents),
+    modifiedFiles: Object.fromEntries(snapshot.modifiedFiles),
+  };
+}
+
+function carriesError(event: AgentControllerEvent): event is ErrorCarryingAgentControllerEvent & { error: Error } {
+  return 'error' in event && event.error instanceof Error;
+}
+
+/**
+ * An `Error`'s `message`/`name` are non-enumerable, so flatten it before JSON
+ * serialization. Streamed message events intentionally retain the controller's
+ * live accumulated message; consumers requiring temporal isolation must copy or
+ * serialize at their own ownership boundary.
+ */
+function toWireEvent(event: AgentControllerEvent): JsonReadyAgentControllerEvent {
+  if ('displayState' in event) {
+    return { ...event, displayState: toWireDisplayState(event.displayState) };
+  }
+  if (carriesError(event)) {
+    return { ...event, error: { name: event.error.name, message: event.error.message } };
   }
   return event;
 }
@@ -501,7 +595,12 @@ export const SEND_AGENT_CONTROLLER_MESSAGE_ROUTE = createRoute({
       // Forward the server middleware's requestContext so identity injected in
       // `server.middleware` reaches dynamic instructions and tools (same as the
       // plain agent message route).
-      void session.sendMessage({ content: message, files, requestContext });
+      ackBackgroundSessionWork({
+        work: session.sendMessage({ content: message, files, requestContext }),
+        session,
+        mastra,
+        operation: 'sendMessage',
+      });
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error sending controller message');
@@ -606,7 +705,12 @@ export const STEER_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
-      void session.steer({ content: message, requestContext });
+      ackBackgroundSessionWork({
+        work: session.steer({ content: message, requestContext }),
+        session,
+        mastra,
+        operation: 'steer',
+      });
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error steering controller session');
@@ -696,31 +800,45 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
   path: '/agent-controller/:controllerId/sessions/:resourceId',
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
-  queryParamSchema: sessionScopeQuerySchema,
+  queryParamSchema: sessionStateQuerySchema,
   responseSchema: sessionStateResponseSchema,
   summary: 'Get session state',
-  description: 'Returns the current mode, model, and thread for the session (for initial UI hydration).',
+  description: 'Returns the current mode, model, thread, and durable tasks for initial UI hydration.',
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, requestContext }) => {
+  handler: async ({ mastra, controllerId, resourceId, sessionScope, threadId: requestedThreadId, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
       const ds = session.displayState.get();
+      const threadId = requestedThreadId ?? session.thread.getId() ?? undefined;
+      const storage = mastra.getStorage();
+      if (requestedThreadId) {
+        const memory = await storage?.getStore('memory');
+        const thread = await memory?.getThreadById({ threadId: requestedThreadId, resourceId });
+        if (!thread) throw new HTTPException(404, { message: `thread "${requestedThreadId}" not found` });
+      }
+      const threadState = threadId ? await storage?.getStore('threadState') : undefined;
+      const storedTasks = threadId ? await threadState?.getState<unknown>({ threadId, type: 'task' }) : undefined;
+      const parsedTasks = taskSnapshotSchema.array().safeParse(storedTasks);
+      const tasks: SessionTaskSnapshot[] = parsedTasks.success ? parsedTasks.data : [];
       const om = ds.omProgress;
       const reflectionSavings =
         om.buffered.reflection.inputObservationTokens - om.buffered.reflection.observationTokens;
       const st = session.state.get() as Record<string, unknown>;
       const oneOf = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T =>
         allowed.includes(value as T) ? (value as T) : fallback;
+      const oneOfOptional = <T extends string>(value: unknown, allowed: readonly T[]): T | undefined =>
+        allowed.includes(value as T) ? (value as T) : undefined;
       return {
         controllerId,
         resourceId,
-        threadId: session.thread.getId() ?? undefined,
+        threadId,
         modeId: session.mode.get(),
         modelId: session.model.get(),
         running: ds.isRunning === true,
+        tasks,
         omProgress: {
           status: om.status,
           pendingTokens: om.pendingTokens,
@@ -732,10 +850,12 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
           projectedMessageRemoval: om.buffered.observations.projectedMessageRemoval,
           projectedReflectionSavings: reflectionSavings > 0 ? reflectionSavings : 0,
         },
-        tokenUsage: ds.tokenUsage as unknown as Record<string, unknown>,
+        tokenUsage: ds.tokenUsage,
         settings: {
           yolo: st.yolo === true,
-          thinkingLevel: oneOf(st.thinkingLevel, ['off', 'low', 'medium', 'high', 'xhigh'] as const, 'off'),
+          // No session override → omit, so clients don't mistake an inherited
+          // configured default (resolved at request time) for an explicit 'off'.
+          thinkingLevel: oneOfOptional(st.thinkingLevel, ['off', 'low', 'medium', 'high', 'xhigh', 'max'] as const),
           notifications: oneOf(st.notifications, ['off', 'bell', 'system', 'both'] as const, 'off'),
           smartEditing: st.smartEditing !== false,
         },
@@ -769,6 +889,38 @@ export const LIST_AGENT_CONTROLLER_MODES_ROUTE = createRoute({
   },
 });
 
+const listActiveRunsResponseSchema = z.object({
+  runs: z.array(
+    z.object({
+      runId: z.string(),
+      resourceId: z.string().optional(),
+      threadId: z.string(),
+    }),
+  ),
+});
+
+export const LIST_AGENT_CONTROLLER_ACTIVE_RUNS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/agent-controller/:controllerId/active-runs',
+  responseType: 'json' as const,
+  pathParamSchema: controllerIdPathParams,
+  responseSchema: listActiveRunsResponseSchema,
+  summary: 'List active controller runs',
+  description:
+    'Lists the runs in flight on the controller across all resources, without creating or touching a session.',
+  tags: ['AgentController'],
+  requiresAuth: true,
+  requiresPermission: 'agent-controller:read',
+  handler: async ({ mastra, controllerId }) => {
+    try {
+      const controller = getAgentControllerOrThrow(mastra, controllerId);
+      return { runs: controller.listActiveThreadRuns() };
+    } catch (error) {
+      return handleError(error, 'error listing active controller runs');
+    }
+  },
+});
+
 export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
   method: 'GET',
   path: '/agent-controller/:controllerId/sessions/:resourceId/threads',
@@ -782,11 +934,15 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, limit, tags, requestContext }) => {
+  handler: async ({ mastra, controllerId, resourceId, limit, tags }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
-      const threads = await session.thread.list();
+      // Read-only route: query storage directly instead of constructing a
+      // Session. `createSession` triggers workspace/sandbox initialization
+      // (5–17s stall, cost per provisioned sandbox) as a side effect — reads
+      // shouldn't pay that. Session creation happens on the write path.
+      // `queryThreads` lazily initializes storage (not workspace) on its own.
+      const threads = await controller.queryThreads({ resourceId });
       // A thread's metadata mixes the session scoping tags (stamped at creation,
       // e.g. `projectPath`) with internal session bookkeeping that
       // `Session.loadMetadata()` reads back (selected model/mode, observer/
@@ -819,12 +975,19 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
       const sorted = [...scoped].sort((a, b) => toTime(b) - toTime(a));
       const max = Number(limit);
       const limited = Number.isFinite(max) && max > 0 ? sorted.slice(0, max) : sorted;
-      // Thread run state comes from the agent thread-stream runtime (the same
-      // per-thread active/idle tracking the signals `ifIdle` path uses). It is
-      // keyed by resourceId + threadId, so it covers runs started by any
-      // session on this resource — including sessions scoped to other git
-      // worktrees — letting one listing report activity across all of them.
-      const agent = controller.getCurrentAgent(session);
+      // Thread run state comes from the controller-wide active-run registry,
+      // which unions per-agent active thread runs across all backing agents.
+      // Keyed by resourceId + threadId so it covers runs started by any session
+      // on this resource — including sessions scoped to other git worktrees.
+      // Using this controller-level accessor (rather than resolving an agent
+      // via a Session) keeps the read path free of session/workspace
+      // side-effects.
+      const activeThreadIds = new Set(
+        controller
+          .listActiveThreadRuns()
+          .filter(r => r.resourceId === resourceId)
+          .map(r => r.threadId),
+      );
       return {
         threads: limited.map(t => {
           const threadTags = getTags(t);
@@ -833,7 +996,7 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
             title: t.title,
             tags: Object.keys(threadTags).length > 0 ? threadTags : undefined,
             updatedAt: t.updatedAt instanceof Date ? t.updatedAt.toISOString() : undefined,
-            state: agent.getActiveThreadRunId({ resourceId, threadId: t.id }) ? ('active' as const) : ('idle' as const),
+            state: activeThreadIds.has(t.id) ? ('active' as const) : ('idle' as const),
           };
         }),
       };
@@ -1037,11 +1200,23 @@ export const LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE = createRoute({
   tags: ['AgentController', 'Threads'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, threadId, limit, requestContext }) => {
+  handler: async ({ mastra, controllerId, resourceId, threadId, limit }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
-      const messages = await session.thread.listMessages({ threadId, limit });
+      // Read-only route: query storage directly instead of constructing a
+      // Session. Session creation would trigger workspace/sandbox
+      // initialization as a side effect; reads should never pay that cost.
+      // The query methods lazily initialize storage (not workspace) on their own.
+      // The route is authorized for the URL's resourceId, but `threadId` is
+      // otherwise unscoped. Verify the thread belongs to this resource so a
+      // caller can't peek at another resource's messages by guessing an id
+      // — matches the check `session.thread.listMessages` performed via
+      // `session.thread.set` before we bypassed session construction.
+      const thread = await controller.queryThreadById({ threadId });
+      if (!thread || thread.resourceId !== resourceId) {
+        throw new Error(`Thread not found: ${threadId}`);
+      }
+      const messages = await controller.queryThreadMessages({ threadId, limit });
       return {
         messages: messages.map(m => ({
           id: m.id,
@@ -1081,7 +1256,12 @@ export const FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
-      void session.followUp({ content: message, requestContext });
+      ackBackgroundSessionWork({
+        work: session.followUp({ content: message, requestContext }),
+        session,
+        mastra,
+        operation: 'followUp',
+      });
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error queuing controller follow-up');

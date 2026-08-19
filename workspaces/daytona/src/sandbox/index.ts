@@ -161,6 +161,14 @@ export interface DaytonaSandboxOptions extends Omit<MastraSandboxOptions, 'proce
   networkBlockAll?: boolean;
   /** Comma-separated list of allowed CIDR network addresses for the sandbox */
   networkAllowList?: string;
+  /**
+   * Comma-separated list of allowed domains for the sandbox, e.g.
+   * `'registry.npmjs.org,*.githubusercontent.com'`.
+   *
+   * Use this instead of {@link networkAllowList} for services whose IP addresses
+   * change. Daytona defines and enforces the policy; this option selects it.
+   */
+  domainAllowList?: string;
 }
 
 // =============================================================================
@@ -258,6 +266,7 @@ export class DaytonaSandbox extends MastraSandbox {
   private readonly sandboxPublic?: boolean;
   private readonly networkBlockAll?: boolean;
   private readonly networkAllowList?: string;
+  private readonly domainAllowList?: string;
   private readonly connectionOpts: { apiKey?: string; apiUrl?: string; target?: string };
   private readonly _constructorOptions: DaytonaSandboxOptions;
 
@@ -289,6 +298,7 @@ export class DaytonaSandbox extends MastraSandbox {
     this.sandboxPublic = options.public;
     this.networkBlockAll = options.networkBlockAll;
     this.networkAllowList = options.networkAllowList;
+    this.domainAllowList = options.domainAllowList;
 
     this.connectionOpts = {
       ...(options.apiKey !== undefined && { apiKey: options.apiKey }),
@@ -405,6 +415,7 @@ export class DaytonaSandbox extends MastraSandbox {
       public: this.sandboxPublic,
       networkBlockAll: this.networkBlockAll,
       networkAllowList: this.networkAllowList,
+      domainAllowList: this.domainAllowList,
     });
 
     // Snapshot takes precedence. Image alone (with optional resources) triggers image-based creation.

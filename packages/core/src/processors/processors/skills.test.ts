@@ -236,6 +236,95 @@ describe('SkillsProcessor', () => {
       );
     });
 
+    it('should render default location as skill path + SKILL.md', async () => {
+      await processor.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+      } as any);
+
+      expect(mockMessageList.addSystem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          role: 'system',
+          content: expect.stringContaining('<location>/skills/code-review/SKILL.md</location>'),
+        }),
+      );
+    });
+
+    it('should render location via formatLocation override', async () => {
+      const remappedProcessor = new SkillsProcessor({
+        workspace: mockWorkspace,
+        formatLocation: skill => `/mnt/bundle/${skill.name}/SKILL.md`,
+      });
+
+      await remappedProcessor.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+      } as any);
+
+      expect(mockMessageList.addSystem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          role: 'system',
+          content: expect.stringContaining('<location>/mnt/bundle/code-review/SKILL.md</location>'),
+        }),
+      );
+      const contents = mockMessageList.addSystem.mock.calls.map(c => c[0].content).join('\n');
+      expect(contents).not.toContain('/skills/code-review/SKILL.md');
+    });
+
+    it('should instruct that the default location identifies a skill and files are read via skill_read', async () => {
+      await processor.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+      } as any);
+
+      const contents = mockMessageList.addSystem.mock.calls.map(c => c[0].content).join('\n');
+      expect(contents).toContain('The location field identifies a skill for the `skill` and `skill_read` tools');
+      expect(contents).toContain('read skill files with `skill_read` rather than with filesystem tools');
+      expect(contents).toContain('use the exact location (shown in the location field)');
+    });
+
+    it('should register remapped locations as aliases and keep the location a skill identifier', async () => {
+      const registerLocationAlias = vi.fn();
+      const aliasSkills: WorkspaceSkills = { ...createMockWorkspaceSkills(), registerLocationAlias };
+      const remappedProcessor = new SkillsProcessor({
+        skills: aliasSkills,
+        formatLocation: skill => `/mnt/bundle/${skill.name}/SKILL.md`,
+      });
+
+      await remappedProcessor.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+      } as any);
+
+      // Every rendered location is registered so tools can resolve it back to the skill.
+      expect(registerLocationAlias).toHaveBeenCalledWith('/mnt/bundle/code-review/SKILL.md', '/skills/code-review');
+      expect(registerLocationAlias).toHaveBeenCalledWith('/mnt/bundle/testing/SKILL.md', '/skills/testing');
+
+      const contents = mockMessageList.addSystem.mock.calls.map(c => c[0].content).join('\n');
+      expect(contents).toContain('The location field identifies a skill for the `skill` and `skill_read` tools');
+      expect(contents).not.toContain('refer to skills by name and read skill files');
+    });
+
+    it('should fall back to by-name guidance when the skills registry cannot register aliases', async () => {
+      // createMockWorkspaceSkills() does not implement registerLocationAlias,
+      // so remapped locations cannot round-trip through get()/has().
+      const remappedProcessor = new SkillsProcessor({
+        workspace: mockWorkspace,
+        formatLocation: skill => `/mnt/bundle/${skill.name}/SKILL.md`,
+      });
+
+      await remappedProcessor.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+      } as any);
+
+      const contents = mockMessageList.addSystem.mock.calls.map(c => c[0].content).join('\n');
+      expect(contents).not.toContain('The location field identifies a skill');
+      expect(contents).not.toContain('use the exact location (shown in the location field)');
+      expect(contents).toContain('refer to skills by name');
+      expect(contents).toContain('read skill files with `skill_read` rather than with filesystem tools');
+    });
+
     it('should not inject skills when none are configured', async () => {
       const emptyMockSkills = {
         ...createMockWorkspaceSkills(),
@@ -265,6 +354,145 @@ describe('SkillsProcessor', () => {
 
       expect(mockSkills.maybeRefresh).toHaveBeenCalledTimes(1);
       expect(mockSkills.maybeRefresh).toHaveBeenCalledWith({ requestContext });
+    });
+
+    it('resolves without awaiting a slow maybeRefresh (fire-and-forget revalidation)', async () => {
+      // maybeRefresh never resolves - the step must still complete and serve the cache
+      const slowSkills = {
+        ...createMockWorkspaceSkills(),
+        maybeRefresh: vi.fn().mockReturnValue(new Promise<void>(() => {})),
+      };
+      const workspace = createMockWorkspace(slowSkills);
+      const proc = new SkillsProcessor({ workspace });
+
+      await proc.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+        stepNumber: 0,
+        requestContext: {},
+      } as any);
+
+      // Revalidation was fired...
+      expect(slowSkills.maybeRefresh).toHaveBeenCalledTimes(1);
+      // ...and the cached catalog was injected without waiting on it
+      const allSystemContent = mockMessageList.addSystem.mock.calls
+        .map((call: any) => call[0]?.content || call[0])
+        .join('\n');
+      expect(allSystemContent).toContain('code-review');
+    });
+
+    it('does not fail the step when maybeRefresh rejects, and warns via console fallback', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const rejectingSkills = {
+          ...createMockWorkspaceSkills(),
+          maybeRefresh: vi.fn().mockRejectedValue(new Error('sandbox unreachable')),
+        };
+        const workspace = createMockWorkspace(rejectingSkills);
+        const proc = new SkillsProcessor({ workspace });
+
+        await expect(
+          proc.processInputStep({
+            messageList: mockMessageList as any,
+            tools: {},
+            stepNumber: 0,
+            requestContext: {},
+          } as any),
+        ).resolves.not.toThrow();
+
+        // Fire-and-forget: the catch handler runs after the step resolves
+        await vi.waitFor(() => {
+          expect(warnSpy).toHaveBeenCalledWith(
+            'SkillsProcessor: skills refresh failed',
+            expect.objectContaining({ error: expect.any(Error) }),
+          );
+        });
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it('warns through the Mastra logger when registered and maybeRefresh rejects', async () => {
+      const rejectingSkills = {
+        ...createMockWorkspaceSkills(),
+        maybeRefresh: vi.fn().mockRejectedValue(new Error('sandbox unreachable')),
+      };
+      const workspace = createMockWorkspace(rejectingSkills);
+      const proc = new SkillsProcessor({ workspace });
+      const loggerWarn = vi.fn();
+      proc.__registerMastra({ getLogger: () => ({ warn: loggerWarn }) } as any);
+
+      await proc.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+        stepNumber: 0,
+        requestContext: {},
+      } as any);
+
+      await vi.waitFor(() => {
+        expect(loggerWarn).toHaveBeenCalledWith(
+          'SkillsProcessor: skills refresh failed',
+          expect.objectContaining({ error: expect.any(Error) }),
+        );
+      });
+    });
+
+    it('awaits maybeRefresh before step 0 when blockingRefresh is enabled', async () => {
+      // Gated maybeRefresh: the step must not complete until it resolves
+      let releaseRefresh!: () => void;
+      let refreshResolved = false;
+      const gatedSkills = {
+        ...createMockWorkspaceSkills(),
+        maybeRefresh: vi.fn().mockReturnValue(
+          new Promise<void>(resolve => {
+            releaseRefresh = () => {
+              refreshResolved = true;
+              resolve();
+            };
+          }),
+        ),
+      };
+      const workspace = createMockWorkspace(gatedSkills);
+      const proc = new SkillsProcessor({ workspace, blockingRefresh: true });
+
+      let stepDone = false;
+      const stepP = proc
+        .processInputStep({
+          messageList: mockMessageList as any,
+          tools: {},
+          stepNumber: 0,
+          requestContext: {},
+        } as any)
+        .then(() => {
+          stepDone = true;
+        });
+
+      // Give the step a chance to (incorrectly) complete without the refresh
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(stepDone).toBe(false);
+
+      releaseRefresh();
+      await stepP;
+      expect(refreshResolved).toBe(true);
+      expect(stepDone).toBe(true);
+    });
+
+    it('does not fail the step when maybeRefresh rejects under blockingRefresh', async () => {
+      const rejectingSkills = {
+        ...createMockWorkspaceSkills(),
+        maybeRefresh: vi.fn().mockRejectedValue(new Error('sandbox unreachable')),
+      };
+      const workspace = createMockWorkspace(rejectingSkills);
+      const proc = new SkillsProcessor({ workspace, blockingRefresh: true });
+
+      await expect(
+        proc.processInputStep({
+          messageList: mockMessageList as any,
+          tools: {},
+          stepNumber: 0,
+          requestContext: {},
+        } as any),
+      ).resolves.not.toThrow();
     });
 
     it('should sort skills by name for deterministic output', async () => {

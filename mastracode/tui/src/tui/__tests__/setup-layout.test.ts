@@ -102,6 +102,8 @@ function createState(modeCount = 2) {
       ui: {
         addChild: vi.fn(child => uiChildren.push(child)),
         setFocus: vi.fn(),
+        hasOverlay: vi.fn(() => false),
+        hideOverlay: vi.fn(),
       },
       chatContainer: { type: 'chat' },
       globalBackgroundNoticeContainer: { type: 'global-background-notice' },

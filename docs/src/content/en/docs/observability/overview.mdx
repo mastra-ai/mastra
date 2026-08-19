@@ -1,21 +1,20 @@
 ---
-title: "Observability overview"
+title: "Observability"
 description: "Understand how Mastra's tracing, metrics, and logging work together to help you monitor, debug, and optimize AI applications."
 packages:
   - "@mastra/observability"
 ---
 
-# Observability overview
+# Observability
 
 Mastra's observability system gives you visibility into every agent run, workflow step, tool call, and model interaction. Agent behavior depends on model responses, prompts, tools, memory, and workflow state, so observability helps you inspect runtime decisions from day one. It captures complementary signals that work together to help you understand what your application is doing and why.
 
-- [**Configuration**](/docs/observability/config): Configure observability once for traces, logs, metrics, and feedback.
-- [**Storage**](/docs/observability/storage): Choose storage backends for persisted traces, logs, metrics aggregation, and feedback queries.
+- [**Configuration**](#configuration): Configure observability once for traces, logs, metrics, and feedback.
+- [**Storage**](#storage): Choose storage backends for persisted traces, logs, metrics aggregation, and feedback queries.
 - [**Tracing**](/docs/observability/tracing/overview): Records every operation as a hierarchical timeline of spans, capturing inputs, outputs, token usage, and timing.
 - [**Logging**](/docs/observability/logging): Forwards structured log entries from your application and Mastra internals to observability storage, correlated to traces automatically.
-- [**Metrics**](/docs/observability/metrics/overview): Extracts duration, token usage, and cost data from traces automatically, with no additional instrumentation required.
+- [**Metrics**](/docs/observability/metrics/overview): Extracts trace usage and cost data. No additional instrumentation is required.
 - [**Feedback**](/docs/observability/feedback): Stores ratings, comments, corrections, and other review signals linked to traces and spans.
-- [**Integrations**](/docs/observability/integrations/overview): Choose exporters, bridges, and span processors for Studio, hosted, or external observability workflows.
 
 ## When to use observability
 
@@ -31,11 +30,11 @@ Tracing is the foundation. When observability is configured, every agent run, wo
 
 Metrics are derived from traces automatically. When a span ends, Mastra extracts duration, token counts, and cost estimates without any extra code. These metrics power the dashboards in [Studio](/docs/studio/observability).
 
-Logs are correlated to traces automatically. Every `logger.info()`, `logger.warn()`, or `logger.error()` call within a traced context is tagged with the current trace and span IDs. You can navigate from a log entry directly to the trace that produced it.
+Logs are correlated to traces automatically. Every `logger.info()`, `logger.warn()`, or `logger.error()` call within a traced context is tagged with the current trace and span IDs. You can move through from a log entry directly to the trace that produced it.
 
 Feedback records human review signals such as ratings, comments, and corrections. Feedback can be linked to traces and spans, then queried with the same observability store used for metrics.
 
-These signals share correlation IDs (trace ID, span ID, entity type, entity name), so you can jump between a metric spike, the traces behind it, logs within those traces, and related feedback.
+These signals share correlation IDs such as trace ID, span ID, entity type, and entity name. You can use them to move from a metric spike to its traces, logs, and related feedback.
 
 ## Quickstart
 
@@ -81,21 +80,135 @@ export const mastra = new Mastra({
         spanOutputProcessors: [
           new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
         ],
+        logging: {
+          enabled: true,
+          level: 'info',
+        },
       },
     },
   }),
 })
 ```
 
-This enables tracing, log forwarding, and metrics. Mastra also supports external tracing providers like Langfuse, Datadog, and any OpenTelemetry-compatible platform. Use [Configuration](/docs/observability/config), [Storage](/docs/observability/storage), and [Integrations overview](/docs/observability/integrations/overview) to set up observability.
+It enables tracing, log forwarding, and metrics. Mastra also supports external tracing providers like Langfuse, Datadog, and any OpenTelemetry-compatible platform. See [Maintaining Studio access](#maintaining-studio-access) to keep Mastra Studio access while sending data to an external provider.
+
+## Configuration
+
+Observability is configured once on your Mastra instance and applies across traces, logs, and metrics.
+
+### Basic config
+
+An observability config usually contains:
+
+- `serviceName`: The service identifier attached to exported observability data.
+- `exporters`: One or more destinations for traces, logs, and derived metrics.
+- `spanOutputProcessors`: Transformations that run before spans are exported.
+- `logging`: Log forwarding settings for observability storage.
+
+### Maintaining Studio access
+
+When you add external exporters, keep `MastraStorageExporter` for Studio observability and/or `MastraPlatformExporter` for hosted Mastra platform observability.
+
+The following example shows only the observability config. Configure storage separately.
+
+```ts title="src/mastra/observability.ts"
+import { Observability, MastraStorageExporter, MastraPlatformExporter } from '@mastra/observability'
+import { ArizeExporter } from '@mastra/arize'
+
+export const observability = new Observability({
+  configs: {
+    production: {
+      serviceName: 'my-service',
+      exporters: [
+        new ArizeExporter({
+          endpoint: process.env.PHOENIX_COLLECTOR_ENDPOINT,
+          apiKey: process.env.PHOENIX_API_KEY,
+        }),
+        new MastraStorageExporter(),
+        new MastraPlatformExporter(),
+      ],
+    },
+  },
+})
+```
+
+### Flushing in serverless environments
+
+In serverless environments, flush observability exporters before the runtime pauses or exits:
+
+```ts
+await mastra.observability.flush()
+```
+
+Use external storage in serverless environments instead of local file storage. See [Storage](#storage) for storage selection and routing.
+
+### Multi-config setup
+
+Use multiple configs when different environments or request types need different exporters or sampling behavior. Select the active config at runtime with `configSelector`.
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Observability, MastraStorageExporter } from '@mastra/observability'
+import { LangfuseExporter } from '@mastra/langfuse'
+
+const storageExporter = new MastraStorageExporter()
+const langfuseExporter = new LangfuseExporter()
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      development: {
+        serviceName: 'my-service-dev',
+        exporters: [storageExporter],
+      },
+      production: {
+        serviceName: 'my-service-prod',
+        exporters: [storageExporter, langfuseExporter],
+      },
+    },
+    configSelector: () => process.env.NODE_ENV || 'development',
+  }),
+})
+```
+
+For trace sampling, see [Tracing](/docs/observability/tracing/overview).
+
+## Storage
+
+Storage determines which observability signals persist, which queries are available, and whether metrics aggregation works. Use a dedicated observability store instead of your primary application store.
+
+### Signal support
+
+Storage support depends on the signal and workload. `MastraStorageExporter` can persist traces to ClickHouse, PostgreSQL, MSSQL, MongoDB, and LibSQL. Metrics require an analytics-capable store:
+
+- DuckDB: Recommended for local testing and development.
+- ClickHouse: Recommended for high-volume production observability.
+- `PostgresStoreVNext`: Supports metrics when the observability domain is enabled. Always provide a time range to avoid full partition scans.
+- Mastra platform: Use `MastraPlatformExporter` for hosted observability without managing the backend yourself.
+
+For the complete provider list and supported tracing strategies, see [Mastra Storage exporter](/docs/observability/integrations/exporters/mastra-storage#storage-provider-support). Use composite storage to route the `observability` domain separately when your primary store doesn't support observability or when the workload needs independent scaling.
+
+### Local development
+
+For local development, use:
+
+- `LibSQLStore` for primary application storage
+- `DuckDBStore` for the `observability` domain
+- `MastraStorageExporter` for local Studio access
+
+### Production deployment
+
+Observability traffic is usually more write-heavy than the rest of the application. In production:
+
+- Use `MastraStorageExporter` with ClickHouse for the `observability` domain when you keep observability in your own storage.
+- Use `MastraPlatformExporter` for hosted Mastra platform observability instead of managing the backend yourself.
+- Use composite storage when observability needs a different backend or scaling policy from your primary application data.
+
+For backend compatibility details and exporter batching behavior, see [Mastra Storage exporter](/docs/observability/integrations/exporters/mastra-storage).
 
 ## Mastra platform
 
 For hosted traces, logs, and metrics across projects and deploys, see [Observability on Mastra platform](/docs/mastra-platform/observability).
-
-## Storage
-
-Not all storage backends support every signal. Traces work with most backends, but metrics and logs require an OLAP-capable store like DuckDB (development) or ClickHouse (production). For setup guidance, see [Storage](/docs/observability/storage).
 
 ## Next steps
 
@@ -103,9 +216,6 @@ Not all storage backends support every signal. Traces work with most backends, b
 - [Logging](/docs/observability/logging)
 - [Metrics](/docs/observability/metrics/overview)
 - [Feedback](/docs/observability/feedback)
-- [Configuration](/docs/observability/config)
-- [Storage](/docs/observability/storage)
-- [Integrations overview](/docs/observability/integrations/overview)
 - [Mastra Studio](/docs/studio/observability)
 - [Automatic metrics reference](/reference/observability/metrics/automatic-metrics)
 - [Mastra platform observability](/docs/mastra-platform/observability)

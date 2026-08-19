@@ -1,6 +1,6 @@
 {
   "name": "@mastra/redis-streams",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Mastra Redis Streams PubSub integration",
   "type": "module",
   "main": "dist/index.js",
@@ -35,7 +35,7 @@
     "redis": "5.12.1"
   },
   "devDependencies": {
-    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.114",
+    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.115",
     "@copilotkit/aimock": "^1.29.0",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",

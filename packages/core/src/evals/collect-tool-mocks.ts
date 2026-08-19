@@ -50,7 +50,11 @@ function collectToolMocksInto(steps: TrajectoryStep[] | undefined, acc: DatasetI
       acc.push({
         toolName,
         args: toolArgs ?? {},
-        output: toolResult,
+        // `toolResult` is optional on the step (e.g. failed/suspended calls, or
+        // non-record outputs). `JSON.stringify` drops `undefined` keys, and the
+        // server schema requires `output` (zod v4 rejects a missing key with
+        // "expected nonoptional, received undefined"), so persist `null`.
+        output: toolResult ?? null,
         // Sub-agent delegation args are LLM-authored + runtime-injected; default
         // to ignore-args matching so the saved mock matches on replay.
         ...(isSubAgentDelegation(toolName) ? { matchArgs: 'ignore' as const } : {}),

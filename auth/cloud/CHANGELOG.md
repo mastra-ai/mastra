@@ -1,5 +1,27 @@
 # @mastra/auth-cloud
 
+## 1.2.4
+
+### Patch Changes
+
+- Fixed reading request headers from Express-style plain header objects so cookie-based auth providers no longer throw and fail with a misleading 401. ([#21261](https://github.com/mastra-ai/mastra/pull/21261))
+
+  Related to https://github.com/mastra-ai/mastra/issues/21253
+
+## 1.2.4-alpha.0
+
+### Patch Changes
+
+- Fixed reading request headers from Express-style plain header objects so cookie-based auth providers no longer throw and fail with a misleading 401. ([#21261](https://github.com/mastra-ai/mastra/pull/21261))
+
+  Related to https://github.com/mastra-ai/mastra/issues/21253
+
+## 1.2.3
+
+### Patch Changes
+
+- Fixed a race condition in the Mastra Cloud auth provider where two users signing in with SSO at the same time could receive each other's PKCE verifier cookies. Login state is now tracked per request, keyed by the OAuth state parameter, so concurrent logins can no longer cross-wire cookies. Fixes [#20203](https://github.com/mastra-ai/mastra/issues/20203) ([#20233](https://github.com/mastra-ai/mastra/pull/20233))
+
 ## 1.2.3-alpha.0
 
 ### Patch Changes

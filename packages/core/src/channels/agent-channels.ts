@@ -21,6 +21,7 @@ import { createTool } from '../tools/tool';
 
 import { chatModule, getChatModule } from './chat-lazy';
 import { resolveSlackTopLevelThreadId } from './compat/slack';
+import { ChannelSessionRejectedError } from './errors';
 
 import { formatArgsSummary, formatToolApproved, formatToolDenied, stripToolPrefix } from './formatting';
 import {
@@ -255,6 +256,7 @@ export class AgentChannels {
   protected async dispatchInboundMessage(args: {
     signalContents: AgentSignalContents;
     attributes: Record<string, string | undefined>;
+    signalMetadata: Record<string, unknown>;
     providerOptions: MastraProviderMetadata;
     requestContext: RequestContext;
     /** The mapped Mastra thread for the chat thread this message arrived on. */
@@ -263,12 +265,21 @@ export class AgentChannels {
     /** Set when the adapter can't render approval buttons, to avoid runs parking forever. */
     autoResumeSuspendedTools: true | undefined;
   }): Promise<void> {
-    const { signalContents, attributes, providerOptions, requestContext, memory, autoResumeSuspendedTools } = args;
+    const {
+      signalContents,
+      attributes,
+      signalMetadata,
+      providerOptions,
+      requestContext,
+      memory,
+      autoResumeSuspendedTools,
+    } = args;
 
     const result = this.agent.sendMessage(
       {
         contents: signalContents,
         attributes,
+        ...(Object.keys(signalMetadata).length > 0 ? { metadata: signalMetadata } : {}),
         providerOptions,
       },
       {
@@ -394,7 +405,7 @@ export class AgentChannels {
             'Channels require storage to be configured on the Mastra instance. Configure a storage provider like LibSQLStore.',
           );
         }
-        this.stateAdapter = new MastraStateAdapter(memoryStore);
+        this.stateAdapter = new MastraStateAdapter(memoryStore, () => this.getOwnerId());
         this.log('info', 'Using MastraStateAdapter (subscriptions persist across restarts)');
       }
 
@@ -412,19 +423,28 @@ export class AgentChannels {
         ...this.chatOptions,
       });
 
-      // Default handler that routes messages to the agent
-      const defaultHandler = (chatThread: Thread, message: Message) =>
-        this.handleChatMessage(chatThread, message, mastra);
-
       // Register handlers with optional overrides
       const { onDirectMessage, onMention, onSubscribedMessage } = this.handlerOverrides;
 
-      // Context handed to custom handlers so they can reach the resolved Mastra
-      // instance without being injected with an external accessor.
-      const handlerContext: ChannelHandlerContext = { mastra };
+      // Per-message dispatch scope. The request context and the handler context
+      // MUST be built per message, never once at initialize() time: a custom
+      // handler may write the sender's tenant onto the request context, and a
+      // shared instance would leak that tenant into the next message's run.
+      const beginMessage = () => {
+        const requestContext = new RequestContext();
+        const signalMetadata: Record<string, unknown> = {};
+        const defaultHandler = (chatThread: Thread, message: Message) =>
+          this.handleChatMessage(chatThread, message, mastra, requestContext, signalMetadata);
+        // Context handed to custom handlers so they can reach the resolved Mastra
+        // instance without being injected with an external accessor, and
+        // contribute to the request context the run will dispatch with.
+        const handlerContext: ChannelHandlerContext = { mastra, requestContext, signalMetadata };
+        return { defaultHandler, handlerContext };
+      };
 
       if (onDirectMessage !== false) {
         chat.onDirectMessage((thread, message) => {
+          const { defaultHandler, handlerContext } = beginMessage();
           if (typeof onDirectMessage === 'function') {
             return onDirectMessage(thread, message, defaultHandler, handlerContext);
           }
@@ -434,6 +454,7 @@ export class AgentChannels {
 
       if (onMention !== false) {
         chat.onNewMention((thread, message) => {
+          const { defaultHandler, handlerContext } = beginMessage();
           if (typeof onMention === 'function') {
             return onMention(thread, message, defaultHandler, handlerContext);
           }
@@ -443,6 +464,7 @@ export class AgentChannels {
 
       if (onSubscribedMessage !== false) {
         chat.onSubscribedMessage((thread, message) => {
+          const { defaultHandler, handlerContext } = beginMessage();
           if (typeof onSubscribedMessage === 'function') {
             return onSubscribedMessage(thread, message, defaultHandler, handlerContext);
           }
@@ -474,13 +496,19 @@ export class AgentChannels {
           if (!adapter) throw new Error(`No adapter for platform "${platform}"`);
 
           const externalThreadId = this.resolveExternalThreadId({ platform, chatThread, messageId });
-          const mastraThread = await this.getOrCreateThread({
+          const { thread: mastraThread } = await this.findThreadMapping({
             externalThreadId,
             channelId: chatThread.channelId,
             platform,
-            resourceId: `${platform}:${event.user.userId}`,
             mastra,
           });
+          if (!mastraThread) {
+            // Approval cards can only continue runs on threads created by an
+            // earlier message. Do not mint a replacement from the clicker's
+            // identity when that durable mapping is missing.
+            this.log('warn', `No mapped channel thread found for tool approval action toolCallId=${toolCallId}`);
+            return;
+          }
 
           // Look up the runId for this toolCallId. Prefer the in-memory
           // `pendingApprovalCards` map (set when the approval card was posted)
@@ -648,6 +676,13 @@ export class AgentChannels {
           const isStaleApproval = err instanceof Error && err.message.includes('No snapshot found');
           if (isStaleApproval) {
             this.log('info', `Ignoring stale tool approval action (runId already consumed)`);
+            return;
+          }
+          // The resolver also runs on approval continuations, so a refusal
+          // here means this clicker isn't allowed to act — same silence as the
+          // inbound path (see handleChatMessage).
+          if (err instanceof ChannelSessionRejectedError) {
+            this.log('info', 'Session resolver refused the tool approval action', { reason: err.message });
             return;
           }
           this.log('error', 'Error handling tool approval action', err);
@@ -981,11 +1016,29 @@ export class AgentChannels {
    * and onSubscribedMessage. Streams the Mastra agent response and
    * updates the channel message in real-time via edits.
    */
-  private async handleChatMessage(chatThread: Thread, message: Message, mastra: Mastra): Promise<void> {
+  private async handleChatMessage(
+    chatThread: Thread,
+    message: Message,
+    mastra: Mastra,
+    requestContext: RequestContext,
+    signalMetadata: Record<string, unknown>,
+  ): Promise<void> {
     try {
-      await this.processChatMessage(chatThread, message, mastra);
+      await this.processChatMessage(chatThread, message, mastra, requestContext, signalMetadata);
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
+      // A refused request is not a malfunction: the host decided this sender
+      // gets nothing. Log it and stop — posting would echo the host's
+      // authorization message into the chat thread and confirm the bot is
+      // present to a sender who was just turned away.
+      if (err instanceof ChannelSessionRejectedError) {
+        this.log('info', `[${chatThread.adapter.name}] Session resolver refused the message`, {
+          messageId: message.id,
+          authorId: message.author?.userId,
+          reason: error.message,
+        });
+        return;
+      }
       this.log('error', `[${chatThread.adapter.name}] Error handling message`, {
         messageId: message.id,
         authorId: message.author?.userId,
@@ -1003,8 +1056,28 @@ export class AgentChannels {
     }
   }
 
-  private async processChatMessage(chatThread: Thread, message: Message, mastra: Mastra): Promise<void> {
+  private async processChatMessage(
+    chatThread: Thread,
+    message: Message,
+    mastra: Mastra,
+    requestContext: RequestContext,
+    signalMetadata: Record<string, unknown> = {},
+  ): Promise<void> {
     const platform = chatThread.adapter.name;
+
+    // Some adapters lift platform side-channel events (read receipts, delivery
+    // acks) into inbound messages carrying no text and no attachments. Running
+    // the agent on nothing still produces a reply, which produces another
+    // receipt, which wakes the agent again — a self-sustaining loop. There is
+    // nothing to answer here, so drop it before any thread, memory, or run
+    // work happens. Custom handlers run ahead of this and still see the
+    // message if they want it.
+    if (this.isContentlessMessage(message)) {
+      this.log('debug', `[${platform}] Skipping message with no text and no attachments`, {
+        messageId: message.id,
+      });
+      return;
+    }
 
     // Map to a Mastra thread for memory/history.
     // chatThread.id encodes channel + threadTs, so it's stable per conversation:
@@ -1189,7 +1262,10 @@ export class AgentChannels {
       actor: message.author,
     });
 
-    const requestContext = new RequestContext();
+    // NOTE: `requestContext` is constructed per message at the handler boundary
+    // (see `beginMessage` in initialize) so a custom handler can contribute to
+    // it — e.g. stamping the tenant — before the run dispatches. Core only
+    // enriches it here.
     requestContext.set('channel', channelContext);
 
     // Stash the per-event render deps so `ChatChannelOutputProcessor` can
@@ -1213,6 +1289,7 @@ export class AgentChannels {
     await this.dispatchInboundMessage({
       signalContents,
       attributes,
+      signalMetadata,
       providerOptions,
       requestContext,
       thread: mastraThread,
@@ -1222,6 +1299,14 @@ export class AgentChannels {
       },
       autoResumeSuspendedTools: canRenderApprovalButtons ? undefined : true,
     });
+  }
+
+  /** A message with neither text nor attachments gives the agent nothing to run on. */
+  private isContentlessMessage(message: Message): boolean {
+    if (message.attachments?.length) return false;
+    if (message.text?.trim()) return false;
+    const richText = message.formatted ? chatModule().stringifyMarkdown(message.formatted).trim() : '';
+    return !richText;
   }
 
   /**
@@ -1315,6 +1400,7 @@ export class AgentChannels {
       wrapStream: stream => this.withTypingStatus(stream, chatThread, platform, adapterConfig, typingGate),
       typingGate,
       formatError: adapterConfig?.formatError,
+      textFormat: adapterConfig?.textFormat,
       approvalContext,
     };
   }
@@ -1439,6 +1525,88 @@ export class AgentChannels {
   }
 
   /**
+   * Look up a channel-backed Mastra thread and retain the store/metadata needed
+   * by the create path when no mapping exists.
+   */
+  private async findThreadMapping({
+    externalThreadId,
+    channelId,
+    platform,
+    mastra,
+  }: {
+    externalThreadId: string;
+    channelId: string;
+    platform: string;
+    mastra: Mastra;
+  }) {
+    const storage = mastra.getStorage();
+    if (!storage) {
+      throw new Error('Storage is required for channel thread mapping. Configure storage in your Mastra instance.');
+    }
+
+    const memoryStore = await storage.getStore('memory');
+    if (!memoryStore) {
+      throw new Error(
+        'Memory store is required for channel thread mapping. Configure storage in your Mastra instance.',
+      );
+    }
+
+    const legacyMetadata = {
+      channel_platform: platform,
+      channel_externalThreadId: externalThreadId,
+      channel_externalChannelId: channelId,
+    };
+
+    const ownerId = this.getOwnerId();
+    if (ownerId === null) {
+      // No owner bound yet - scoping is impossible; behave exactly as before
+      // and never stamp a null owner id.
+      const { threads } = await memoryStore.listThreads({
+        filter: { metadata: legacyMetadata },
+        perPage: 1,
+      });
+      return { thread: threads[0], memoryStore, metadata: legacyMetadata };
+    }
+
+    const metadata = { ...legacyMetadata, channel_ownerId: ownerId };
+
+    // Primary lookup: threads already scoped to this agent.
+    const { threads: scoped } = await memoryStore.listThreads({
+      filter: { metadata },
+      perPage: 1,
+    });
+    if (scoped[0]) return { thread: scoped[0], memoryStore, metadata };
+
+    // Legacy fallback: pre-upgrade threads carry no channel_ownerId. Metadata
+    // filters match subsets, so this query also returns threads claimed by
+    // OTHER agents - post-filter to unclaimed rows only, oldest first so
+    // adoption deterministically picks the original thread. If a conversation
+    // somehow accumulates more than 10 candidate rows, an unclaimed one past
+    // the page could be missed and a fresh thread created - acceptable
+    // degradation.
+    const { threads: candidates } = await memoryStore.listThreads({
+      filter: { metadata: legacyMetadata },
+      perPage: 10,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+    const unclaimed = candidates.find(candidate => {
+      const candidateMeta = (candidate.metadata ?? {}) as Record<string, unknown>;
+      return !('channel_ownerId' in candidateMeta);
+    });
+    if (unclaimed) {
+      // Lazily adopt the legacy thread: the first agent to touch it claims it
+      // by stamping its own id, preserving all existing metadata.
+      const claimed = await memoryStore.patchThread({
+        id: unclaimed.id,
+        metadata: { ...((unclaimed.metadata ?? {}) as Record<string, unknown>), channel_ownerId: ownerId },
+      });
+      return { thread: claimed, memoryStore, metadata };
+    }
+
+    return { thread: undefined, memoryStore, metadata };
+  }
+
+  /**
    * Resolves an existing Mastra thread for the given external IDs, or creates one.
    */
   private async getOrCreateThread({
@@ -1466,32 +1634,17 @@ export class AgentChannels {
     threadId?: (resolvedResourceId: string, defaultThreadId: string) => string | Promise<string>;
     mastra: Mastra;
   }): Promise<StorageThreadType> {
-    const storage = mastra.getStorage();
-    if (!storage) {
-      throw new Error('Storage is required for channel thread mapping. Configure storage in your Mastra instance.');
-    }
-
-    const memoryStore = await storage.getStore('memory');
-    if (!memoryStore) {
-      throw new Error(
-        'Memory store is required for channel thread mapping. Configure storage in your Mastra instance.',
-      );
-    }
-
-    const metadata = {
-      channel_platform: platform,
-      channel_externalThreadId: externalThreadId,
-      channel_externalChannelId: channelId,
-    };
-
-    const { threads } = await memoryStore.listThreads({
-      filter: { metadata },
-      perPage: 1,
+    const {
+      thread: existingThread,
+      memoryStore,
+      metadata,
+    } = await this.findThreadMapping({
+      externalThreadId,
+      channelId,
+      platform,
+      mastra,
     });
-
-    if (threads.length > 0) {
-      return threads[0]!;
-    }
+    if (existingThread) return existingThread;
 
     const resolvedResourceId = typeof resourceId === 'function' ? await resourceId() : resourceId;
     const defaultThreadId = crypto.randomUUID();

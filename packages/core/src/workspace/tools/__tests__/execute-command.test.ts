@@ -253,23 +253,24 @@ describe('executeCommandTool data chunks', () => {
 
       const result = await execute({ command: 'test', args: [], timeout: null, cwd: null }, context);
 
-      expect(result).toBe('partial output\nsome error\nExit code: 2');
+      expect(result).toBe('stdout:\npartial output\n\nstderr:\nsome error\n\nExit code: 2');
     });
 
-    it('returns accumulated stdout + error message when sandbox throws', async () => {
+    it('labels accumulated stdout and stderr when sandbox throws', async () => {
       const { context } = createMockContext({
         executeCommand: async (_cmd, _args, opts) => {
           opts?.onStdout?.('Log #1\n');
-          opts?.onStdout?.('Log #2\n');
+          opts?.onStdout?.('Log #2');
+          opts?.onStderr?.('warning: cleanup incomplete');
           throw new Error('Process timed out after 4000ms');
         },
       });
 
       const result = await execute({ command: 'node', args: ['slow.js'], timeout: null, cwd: null }, context);
 
-      expect(result).toContain('Log #1\n');
-      expect(result).toContain('Log #2\n');
-      expect(result).toContain('Error: Process timed out after 4000ms');
+      expect(result).toBe(
+        'stdout:\nLog #1\nLog #2\n\nstderr:\nwarning: cleanup incomplete\n\nError: Process timed out after 4000ms',
+      );
     });
 
     it('returns only error when no stdout was captured before throw', async () => {
@@ -287,14 +288,14 @@ describe('executeCommandTool data chunks', () => {
     it('returns accumulated stderr + error when only stderr before throw', async () => {
       const { context } = createMockContext({
         executeCommand: async (_cmd, _args, opts) => {
-          opts?.onStderr?.('warning: something bad\n');
+          opts?.onStderr?.('warning: something bad');
           throw new Error('killed');
         },
       });
 
       const result = await execute({ command: 'test', args: [], timeout: null, cwd: null }, context);
 
-      expect(result).toBe('warning: something bad\n\nError: killed');
+      expect(result).toBe('stderr:\nwarning: something bad\n\nError: killed');
     });
 
     it('returns "(no output)" for successful command with empty stdout', async () => {

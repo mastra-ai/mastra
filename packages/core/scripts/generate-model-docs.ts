@@ -30,6 +30,7 @@ function formatProviderName(name: string): string {
     'github-models': 'GitHub Models',
     deepinfra: 'Deep Infra',
     fastrouter: 'FastRouter',
+    'merge-gateway': 'Merge Gateway',
     baseten: 'Baseten',
     lmstudio: 'LMStudio',
     modelscope: 'ModelScope',
@@ -98,6 +99,7 @@ function getRequiredEnvVars(provider: ProviderInfo): string[] {
 }
 
 function getEnvVarPlaceholder(envVar: string): string {
+  if (/_URL$/.test(envVar)) return 'https://your-base-url';
   if (/_API_TOKEN$|_TOKEN$/.test(envVar)) return 'your-api-token';
   if (/_API_KEY$|_KEY$|_PAT$/.test(envVar)) return 'your-api-key';
   if (/_ACCOUNT_ID$|_PROJECT_ID$|_SITE_ID$|_WORKSPACE_ID$|_ORG_ID$|_ORGANIZATION_ID$/.test(envVar)) {
@@ -113,7 +115,7 @@ const __dirname = path.dirname(__filename);
 const POPULAR_PROVIDERS = ['openai', 'anthropic', 'google', 'deepseek', 'groq', 'mistral', 'xai'];
 
 // Providers that are actually gateways (aggregate multiple model providers)
-const GATEWAY_PROVIDERS = ['netlify', 'openrouter', 'vercel', 'azure-openai'];
+const GATEWAY_PROVIDERS = ['netlify', 'neon', 'openrouter', 'vercel', 'azure-openai', 'merge-gateway'];
 
 const MANUALLY_DOCUMENTED_PROVIDERS = ['azure-openai'];
 const MANUALLY_DOCUMENTED_GATEWAYS = ['azure-openai', 'mastra'];
@@ -354,7 +356,7 @@ ${
   !PROVIDERS_WITH_INSTALLED_PACKAGES.includes(provider.id)
     ? // if it's not a directly supported provider then it's openai compatible, so warn about it
       `
-:::info
+:::note
 
 Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-specific features may not be available. Check the [${provider.name} documentation](${docUrl || '#'}) for details.
 
@@ -572,7 +574,7 @@ const agent = new Agent({
 });
 \`\`\`
 
-:::info
+:::note
 
 Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-specific features may not be available. ${docUrl ? `Check the [${displayName} documentation](${docUrl}) for details.` : `Check the ${displayName} documentation for details.`}
 
@@ -581,18 +583,38 @@ Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-
 ## Configuration
 
 \`\`\`bash
-# Use gateway API key
 ${(() => {
   const envVar = providers[0]?.apiKeyEnvVar;
-  if (Array.isArray(envVar)) {
-    return envVar.map(v => `${v}=your-${v.toLowerCase().replace(/_/g, '-')}`).join('\n');
+  const authEnvVars = Array.isArray(envVar) ? envVar : [envVar || `${gatewayName.toUpperCase()}_API_KEY`];
+  const authLines = Array.isArray(envVar)
+    ? envVar.map(v => `${v}=your-${v.toLowerCase().replace(/_/g, '-')}`)
+    : [`${authEnvVars[0]}=your-gateway-key`];
+
+  // A gateway whose base URL is a template needs those env vars too, otherwise
+  // the config shown here cannot build a URL at all.
+  const urlLines = extractEnvVarsFromUrl(providers[0]?.url)
+    .filter(v => !authEnvVars.includes(v))
+    .map(v => `${v}=${getEnvVarPlaceholder(v)}`);
+
+  // Keep the API-key wording when the key is all there is; a gateway that also
+  // needs URL vars gets a heading that covers both.
+  const heading = urlLines.length > 0 ? '# Gateway configuration' : '# Use gateway API key';
+  const gatewayKeySection = [heading, ...urlLines, ...authLines].join('\n');
+
+  // Only gateways that expose the upstream provider in their model ids (e.g.
+  // `openai/gpt-4o`) can be called with that provider's own key. Gateways with
+  // bare model ids authenticate with the gateway credential alone.
+  const exposesUpstreamProviders = allModels.some(m => m.includes('/'));
+  if (!exposesUpstreamProviders) {
+    return gatewayKeySection;
   }
-  return `${envVar || `${gatewayName.toUpperCase()}_API_KEY`}=your-gateway-key`;
-})()}
+
+  return `${gatewayKeySection}
 
 # Or use provider API keys directly
 OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=ant-...
+ANTHROPIC_API_KEY=ant-...`;
+})()}
 \`\`\`
 
 ${modelTable}
@@ -835,7 +857,7 @@ You can also discover models directly in your editor. Mastra provides full autoc
 
 Alternatively, browse and test models in [Studio](/docs/studio/overview) UI.
 
-:::info
+:::note
 
 In development, we auto-refresh your local model list every hour, ensuring your TypeScript autocomplete and Studio stay up-to-date with the latest models. To disable, set \`MASTRA_AUTO_REFRESH_PROVIDERS=false\`. Auto-refresh is disabled by default in production.
 
@@ -939,7 +961,7 @@ const agent = new Agent({
 });
 \`\`\`
 
-:::info
+:::note
 
 Configuration differs by provider. See the provider pages in the left navigation for details on custom headers.
 
@@ -1134,7 +1156,7 @@ ${gatewaysList
       title="Mastra"
       description="Built-in Observational Memory"
       href="/models/gateways/${g}"
-      logo="https://mastra.ai/brand/logo.svg"
+      logo="/img/integrations/mastra.svg"
     />`;
       }
     }
@@ -1222,7 +1244,7 @@ function generateProvidersSidebarItems(grouped: GroupedProviders, aiSdkProviders
     }),
   ].sort((a, b) => a.label.localeCompare(b.label));
 
-  return [{ type: 'doc', id: 'providers/index', label: 'Providers' }, ...popularProviders, ...otherProviders];
+  return [...popularProviders, ...otherProviders];
 }
 
 async function generateAiSdkProviderPage(provider: any, aiSdkDocsUrl: string | null): Promise<string> {
@@ -1261,10 +1283,7 @@ function generateGatewaysSidebarItems(grouped: GroupedProviders): any[] {
   // Sort gateways alphabetically
   const gatewaysList = Array.from(grouped.gateways.keys()).sort((a, b) => a.localeCompare(b));
 
-  const items = [
-    { type: 'doc', id: 'gateways/index', label: 'Gateways' },
-    { type: 'doc', id: 'gateways/custom-gateways', label: 'Custom Gateways' },
-  ];
+  const items = [{ type: 'doc', id: 'gateways/custom-gateways', label: 'Custom Gateways' }];
 
   for (const gatewayId of gatewaysList) {
     const providers = grouped.gateways.get(gatewayId);
@@ -1307,12 +1326,20 @@ const sidebars = {
       type: "category",
       label: "Gateways",
       collapsed: false,
+      link: {
+        type: "doc",
+        id: "gateways/index",
+      },
       items: ${JSON.stringify(gatewaysItems, null, 6).replace(/^/gm, '      ').trim()},
     },
     {
       type: "category",
       label: "Providers",
       collapsed: false,
+      link: {
+        type: "doc",
+        id: "providers/index",
+      },
       items: ${JSON.stringify(providersItems, null, 6).replace(/^/gm, '      ').trim()},
     },
   ],

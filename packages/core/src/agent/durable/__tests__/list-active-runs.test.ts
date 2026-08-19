@@ -10,7 +10,7 @@
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
 import type { WorkflowRunState, WorkflowRunStatus } from '../../../workflows/types';
@@ -269,6 +269,57 @@ describe('DurableAgent.listActiveRuns', () => {
       ...third.runs.map(r => r.runId),
     ]);
     expect(seen.size).toBe(5);
+  });
+
+  it('fetches candidates from storage in bounded batches instead of one unbounded call', async () => {
+    // 250 runs spanning three 100-row storage batches. Interleave runs owned
+    // by another agent so app-level filtering is exercised across batches.
+    for (let i = 0; i < 250; i++) {
+      await seed(
+        store,
+        makeSnapshot(`run-${i}`, 'running', {
+          agentId: i % 5 === 0 ? 'agent-B' : 'agent-A',
+          threadId: 't',
+          resourceId: 'r',
+        }),
+        'r',
+      );
+    }
+
+    const workflows = (await store.getStore('workflows'))!;
+    const spy = vi.spyOn(workflows, 'listWorkflowRuns');
+
+    const { runs, total } = await agent.listActiveRuns();
+    expect(total).toBe(200);
+    expect(runs).toHaveLength(200);
+
+    expect(spy).toHaveBeenCalledTimes(3);
+    for (const [i, call] of spy.mock.calls.entries()) {
+      expect(call[0]).toMatchObject({ status: 'running', perPage: 100, page: i });
+    }
+  });
+
+  it('does not loop when the storage adapter ignores pagination', async () => {
+    for (let i = 0; i < 150; i++) {
+      await seed(
+        store,
+        makeSnapshot(`run-${i}`, 'running', { agentId: 'agent-A', threadId: 't', resourceId: 'r' }),
+        'r',
+      );
+    }
+
+    const workflows = (await store.getStore('workflows'))!;
+    const original = workflows.listWorkflowRuns.bind(workflows);
+    // Simulate an adapter that returns the full result set regardless of
+    // perPage/page.
+    const spy = vi
+      .spyOn(workflows, 'listWorkflowRuns')
+      .mockImplementation(args => original({ ...args, perPage: undefined, page: undefined }));
+
+    const { runs, total } = await agent.listActiveRuns();
+    expect(total).toBe(150);
+    expect(runs).toHaveLength(150);
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 
   it('rejects invalid perPage', async () => {

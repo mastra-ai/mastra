@@ -63,6 +63,8 @@ export interface OtelUsageMetrics {
   [ATTR_GEN_AI_USAGE_OUTPUT_TOKENS]?: number;
   [ATTR_GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS]?: number;
   [ATTR_GEN_AI_USAGE_CACHE_CREATION_INPUT_TOKENS]?: number;
+  'gen_ai.usage.cache_creation.5m_input_tokens'?: number;
+  'gen_ai.usage.cache_creation.1h_input_tokens'?: number;
   'gen_ai.usage.reasoning_tokens'?: number;
   'gen_ai.usage.audio_input_tokens'?: number;
   'gen_ai.usage.audio_output_tokens'?: number;
@@ -97,6 +99,12 @@ export function formatUsageMetrics(usage?: UsageStats): OtelUsageMetrics {
   // Cache creation input tokens (subset of input_tokens)
   if (usage.inputDetails?.cacheWrite !== undefined) {
     metrics[ATTR_GEN_AI_USAGE_CACHE_CREATION_INPUT_TOKENS] = usage.inputDetails.cacheWrite;
+  }
+  if (usage.inputDetails?.cacheWrite5m !== undefined) {
+    metrics['gen_ai.usage.cache_creation.5m_input_tokens'] = usage.inputDetails.cacheWrite5m;
+  }
+  if (usage.inputDetails?.cacheWrite1h !== undefined) {
+    metrics['gen_ai.usage.cache_creation.1h_input_tokens'] = usage.inputDetails.cacheWrite1h;
   }
 
   // Audio tokens from inputDetails/outputDetails
@@ -321,30 +329,34 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
 
   // Add tool-specific attributes using OTEL conventions
   if (
-    (span.type === SpanType.TOOL_CALL ||
-      span.type === SpanType.MCP_TOOL_CALL ||
-      span.type === SpanType.PROVIDER_TOOL_CALL) &&
-    span.attributes
+    span.type === SpanType.TOOL_CALL ||
+    span.type === SpanType.MCP_TOOL_CALL ||
+    span.type === SpanType.PROVIDER_TOOL_CALL
   ) {
-    // Tool identification
+    // Tool identification (entityName/entityId are always set by producers)
     attributes[ATTR_GEN_AI_TOOL_NAME] = span.entityName ?? span.entityId;
 
-    //TODO:
-    // attributes['gen_ai.tool.call.id'] = call_mszuSIzqtI65i1wAUOE8w5H4
+    const toolCallId =
+      (span.attributes as { toolCallId?: string } | undefined)?.toolCallId ?? span.metadata?.toolCallId;
+    if (toolCallId) {
+      attributes['gen_ai.tool.call.id'] = toolCallId;
+    }
 
-    // MCP-specific attributes
-    if (span.type === SpanType.MCP_TOOL_CALL) {
-      const mcpAttrs = span.attributes as MCPToolCallAttributes;
-      if (mcpAttrs.mcpServer) {
-        attributes[ATTR_SERVER_ADDRESS] = mcpAttrs.mcpServer;
-      }
-    } else {
-      const toolAttrs = span.attributes as ToolCallAttributes;
-      if (toolAttrs.toolDescription) {
-        attributes[ATTR_GEN_AI_TOOL_DESCRIPTION] = toolAttrs.toolDescription;
-      }
-      if (toolAttrs.toolType) {
-        attributes['gen_ai.tool.type'] = toolAttrs.toolType;
+    // Attribute-dependent fields (description, type, MCP server)
+    if (span.attributes) {
+      if (span.type === SpanType.MCP_TOOL_CALL) {
+        const mcpAttrs = span.attributes as MCPToolCallAttributes;
+        if (mcpAttrs.mcpServer) {
+          attributes[ATTR_SERVER_ADDRESS] = mcpAttrs.mcpServer;
+        }
+      } else {
+        const toolAttrs = span.attributes as ToolCallAttributes;
+        if (toolAttrs.toolDescription) {
+          attributes[ATTR_GEN_AI_TOOL_DESCRIPTION] = toolAttrs.toolDescription;
+        }
+        if (toolAttrs.toolType) {
+          attributes['gen_ai.tool.type'] = toolAttrs.toolType;
+        }
       }
     }
   }

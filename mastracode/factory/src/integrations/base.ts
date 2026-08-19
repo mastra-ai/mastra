@@ -18,6 +18,7 @@
  */
 
 import type { MastraCodeConfig, MountedMastraCode } from '@mastra/code-sdk';
+import type { AgentControllerChannelsConfig, ChannelAdapterConfig } from '@mastra/core/channels';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
@@ -27,12 +28,16 @@ import type { Intake } from '../capabilities/intake.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { RouteAuth } from '../routes/route.js';
 import type { FactoryRules } from '../rules/types.js';
+import type { BaseCheckpointTriggers } from '../sandbox/base-checkpoint-triggers.js';
 import type { SandboxFleet } from '../sandbox/fleet.js';
+import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEventRow } from '../storage/domains/audit/base.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
+import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorageHandle } from '../storage/domains/integrations/base.js';
+import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -71,6 +76,13 @@ export interface IntegrationContext {
    */
   fleet: SandboxFleet;
   /**
+   * Base-checkpoint trigger surface — present when the factory constructed a
+   * builder (fleet enabled + a source-control owner registered). Integrations
+   * feed webhook events and reconcile sweeps into it so connected repos keep
+   * a warm base checkpoint.
+   */
+  baseCheckpoints?: BaseCheckpointTriggers;
+  /**
    * Root factory storage backend and source of the `appDbConfigured`
    * diagnostic. Absent when the host runs without an application database.
    */
@@ -84,14 +96,35 @@ export interface IntegrationContext {
    * every integration's OAuth flow signs and verifies with the same secret.
    */
   stateSigner?: StateSigner;
+  /** Shared source-control session retirement lifecycle used by integration routes. */
+  sessionRetirement?: SessionRetirementCoordinator;
   /** Persistence handles pre-scoped to this integration's stable id. */
   storage: {
     generic: IntegrationStorageHandle;
     sourceControl: SourceControlStorageHandle;
+    /**
+     * The factory's source-control-owning integration's storage handle
+     * (today: GitHub when registered; the handle carries its own
+     * `integrationId`). Channel integrations use it to make sessions
+     * repo-backed without the entry hand-wiring a source-control slice.
+     * Absent when no source-control owner is registered.
+     */
+    sourceControlOwner?: SourceControlStorageHandle;
     /** Factory projects domain — e.g. resolving a project's default model. */
     projects: FactoryProjectsStorage;
+    /**
+     * Observational-memory settings domain, so a session an integration starts
+     * adopts the same memory configuration the web kickoff applies.
+     */
+    memorySettings: MemorySettingsStorage;
     /** Cross-integration intake selection (which sources are synced). */
     intake: IntakeStorage;
+    /**
+     * Reverse index from a chat-platform sender to a Mastra tenant. Channel
+     * integrations resolve an inbound sender through this to run under the
+     * right user's credentials.
+     */
+    channelIdentity: ChannelIdentityStorage;
   };
   /**
    * Factory rule runtime available when the work-item domain is ready.
@@ -104,6 +137,37 @@ export interface IntegrationContext {
   };
   /** System hooks integrations may invoke. */
   hooks?: IntegrationHooks;
+}
+
+/**
+ * One adapter entry in a {@link FactoryChannelsConfig} adapter map.
+ *
+ * Core's adapter-map entry is `ChannelAdapterConfig | Adapter<any, any>`, and
+ * `ChannelAdapterConfig` is itself a union — so this MUST be a type alias, not
+ * an interface extends (illegal on unions). Factory's contract deliberately
+ * EXCLUDES the bare-`Adapter` shorthand core accepts: entries use the config
+ * form so future per-platform extras (e.g. a `resolveWorkspaceId`, connect
+ * handlers) have a home. Today the alias adds no fields; it is the stable
+ * extension point.
+ */
+export type FactoryChannelAdapterEntry = ChannelAdapterConfig;
+
+/**
+ * The channels contribution a {@link FactoryIntegration} returns from
+ * `channels()`. A config object, not a built instance — the factory constructs
+ * the `AgentControllerChannels` at the attach site.
+ *
+ * The adapter-map key is the platform identity (`'slack'`, `'discord'`, …).
+ * One integration = one platform = one entry is the norm: the map shape is
+ * inherited from core (one `AgentControllerChannels` instance drives multiple
+ * adapters) and is where cross-integration merging will happen later — it is
+ * NOT an invitation for a single integration to bundle multiple platforms.
+ * Note the top-level `handlers` and resolvers are shared across all adapters
+ * in the map. Entries use the config form; the bare-`Adapter` shorthand core
+ * accepts is deliberately excluded (see {@link FactoryChannelAdapterEntry}).
+ */
+export interface FactoryChannelsConfig extends Omit<AgentControllerChannelsConfig, 'adapters'> {
+  adapters: Record<string, FactoryChannelAdapterEntry>;
 }
 
 /**
@@ -158,6 +222,24 @@ export interface FactoryIntegration {
    * duplicates fail the `new Mastra(...)` construction loudly.
    */
   workers?(ctx: IntegrationContext): MastraWorker[];
+  /**
+   * Chat-platform channels this integration contributes (Slack, Discord, …).
+   * Called once at boot for READY integrations only; the factory constructs an
+   * `AgentControllerChannels` from the returned config and attaches it to the
+   * mounted agent controller via `setChannels`, so inbound platform messages
+   * reach the same agents the web UI drives.
+   *
+   * An integration providing this slot also declares a dependency on the
+   * `channel-identity` domain, which the factory folds into its readiness
+   * gate — so an integration whose reverse index isn't migrated yet reports
+   * not-ready and its channels never attach, rather than dispatching runs it
+   * can't resolve a tenant for.
+   *
+   * Only one integration may provide channels; the factory fails loud at boot
+   * on a second, because `setChannels` replaces rather than merges and the
+   * loser would silently never receive a message.
+   */
+  channels?(ctx: IntegrationContext): FactoryChannelsConfig;
   /**
    * Non-secret config snapshot (booleans + names only, never values). The
    * factory merges it into system diagnostics/startup logs.

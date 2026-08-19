@@ -8,6 +8,7 @@ import type { LoopOptions } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import { SpanType, resolveObservabilityContext } from '../../observability';
 import { executeWithContextSync } from '../../observability/utils';
+import { getToolDefinitionsForTracing } from '../../stream/aisdk/v5/compat/prepare-tools';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { ModelManagerModelConfig } from '../../stream/types';
 import { delay } from '../../utils';
@@ -130,8 +131,10 @@ export class MastraLLMVNext extends MastraBase {
     toolCallId,
     requestContext,
     actor,
+    mcp,
     methodType,
     includeRawChunks,
+    experimentalTransform,
     autoResumeSuspendedTools,
     maxProcessorRetries,
     processorStates,
@@ -159,7 +162,14 @@ export class MastraLLMVNext extends MastraBase {
 
     const firstModel = this.#firstModel.model;
 
-    const modelSpan = observabilityContext.tracingContext.currentSpan?.createChildSpan({
+    const parentSpan = observabilityContext.tracingContext.currentSpan;
+    // Serialized once per generation so exporters can surface the tool schemas
+    // the model received; skipped entirely when tracing is off.
+    const toolDefinitions = parentSpan
+      ? getToolDefinitionsForTracing({ tools, toolChoice, activeTools: activeTools as string[] | undefined })
+      : undefined;
+
+    const modelSpan = parentSpan?.createChildSpan({
       name: `llm: '${firstModel.modelId}'`,
       type: SpanType.MODEL_GENERATION,
       input: {
@@ -170,6 +180,7 @@ export class MastraLLMVNext extends MastraBase {
         provider: firstModel.provider,
         streaming: true,
         parameters: modelSettings,
+        ...(toolDefinitions ? { tools: toolDefinitions } : {}),
       },
       metadata: {
         runId,
@@ -227,8 +238,10 @@ export class MastraLLMVNext extends MastraBase {
         agentName,
         requestContext,
         actor,
+        mcp,
         methodType,
         includeRawChunks,
+        experimentalTransform,
         autoResumeSuspendedTools,
         maxProcessorRetries,
         processorStates,
@@ -314,6 +327,7 @@ export class MastraLLMVNext extends MastraBase {
               },
               usage: props?.totalUsage,
               providerMetadata: props?.providerMetadata,
+              stepProviderMetadata: props?.steps.map(step => step.providerMetadata),
             });
 
             try {

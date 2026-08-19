@@ -33,6 +33,42 @@ describe('Factory rule validation', () => {
     expect(JSON.parse(JSON.stringify(validated))).toEqual(validated);
   });
 
+  it('validates the optional session message on transition decisions', () => {
+    expect(
+      validateFactoryRuleDecision({
+        type: 'transition',
+        idempotencyKey: 'merged-1',
+        board: 'review',
+        stage: 'done',
+        message: { text: '  PR merged; card moved to Done.  ', role: 'work' },
+      }),
+    ).toEqual({
+      type: 'transition',
+      idempotencyKey: 'merged-1',
+      board: 'review',
+      stage: 'done',
+      message: { text: 'PR merged; card moved to Done.', role: 'work' },
+    });
+    expect(() =>
+      validateFactoryRuleDecision({
+        type: 'transition',
+        idempotencyKey: 'merged-1',
+        board: 'review',
+        stage: 'done',
+        message: { text: 'PR merged.', extra: true },
+      }),
+    ).toThrow(/unsupported field/i);
+    expect(() =>
+      validateFactoryRuleDecision({
+        type: 'transition',
+        idempotencyKey: 'merged-1',
+        board: 'review',
+        stage: 'done',
+        message: { text: 'PR merged.', role: 'bad role' },
+      }),
+    ).toThrow(FactoryRuleValidationError);
+  });
+
   it('keeps rejection exclusive from commit-only fields and decisions', () => {
     expect(validateFactoryRuleDecision({ type: 'reject', code: 'forbidden', reason: 'Not authorized.' })).toEqual({
       type: 'reject',
@@ -110,6 +146,72 @@ describe('Factory rule validation', () => {
     }
     expect(error).toBeInstanceOf(FactoryRuleValidationError);
     expect(String(error)).not.toContain(secret);
+  });
+
+  it('takes a prompt in place of a skill, but never both and never neither', () => {
+    expect(
+      validateFactoryRuleDecision({
+        type: 'invokeSkill',
+        idempotencyKey: 'build-1',
+        role: 'work',
+        prompt: 'Implement the approved plan.',
+      }),
+    ).toEqual({
+      type: 'invokeSkill',
+      idempotencyKey: 'build-1',
+      role: 'work',
+      prompt: 'Implement the approved plan.',
+    });
+    // Both are ways of authoring the same kickoff message, so accepting both
+    // would leave the dispatcher to pick a winner.
+    for (const invalid of [
+      { type: 'invokeSkill', idempotencyKey: 'build-2', role: 'work', skillName: 'factory-plan', prompt: 'Build it.' },
+      { type: 'invokeSkill', idempotencyKey: 'build-3', role: 'work' },
+    ]) {
+      expect(() => validateFactoryRuleDecision(invalid)).toThrow(/exactly one of skillName or prompt/);
+    }
+  });
+
+  it('accepts and normalizes the optional cancelInFlight flag on invokeSkill decisions', () => {
+    expect(
+      validateFactoryRuleDecision({
+        type: 'invokeSkill',
+        idempotencyKey: 'skill-2',
+        role: 'review',
+        skillName: 'factory-review',
+        cancelInFlight: true,
+      }),
+    ).toEqual({
+      type: 'invokeSkill',
+      idempotencyKey: 'skill-2',
+      role: 'review',
+      skillName: 'factory-review',
+      cancelInFlight: true,
+    });
+    // false is the default and is dropped so persisted decisions stay minimal.
+    expect(
+      validateFactoryRuleDecision({
+        type: 'invokeSkill',
+        idempotencyKey: 'skill-3',
+        role: 'review',
+        skillName: 'factory-review',
+        cancelInFlight: false,
+      }),
+    ).toEqual({
+      type: 'invokeSkill',
+      idempotencyKey: 'skill-3',
+      role: 'review',
+      skillName: 'factory-review',
+    });
+    expect(() =>
+      validateFactoryRuleDecision({
+        type: 'invokeSkill',
+        idempotencyKey: 'skill-4',
+        role: 'review',
+        skillName: 'factory-review',
+        cancelInFlight: 'yes',
+      }),
+    ).toThrow(/cancelInFlight must be a boolean/i);
   });
 
   it('requires unique decision idempotency keys', () => {

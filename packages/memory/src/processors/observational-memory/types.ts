@@ -1,6 +1,9 @@
 import type { AgentConfig } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { ObservationalMemoryModelSettings } from '@mastra/core/memory';
+import type { ObservabilityContext } from '@mastra/core/observability';
+import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage } from '@mastra/core/storage';
 import type { ProviderMetadata } from '@mastra/core/stream';
 import type { Memory } from '../..';
@@ -60,6 +63,24 @@ export type ResolvedActivationTTL = number | 'auto';
  * Configuration for the observation step (Observer agent).
  */
 export type ObservationalMemoryModel = Exclude<AgentConfig['model'], undefined> | ModelByInputTokens;
+
+/**
+ * Controls which continuation-hint sections OM asks the Observer and Reflector to emit.
+ *
+ * Pass `false` to disable both, or an object to disable them individually. Agents that
+ * drive their own control flow generally want `suggestedResponse: false` so memory does
+ * not compete with the agent for what to say next.
+ *
+ * @default true
+ */
+export type ContinuationHintsConfig =
+  | boolean
+  | {
+      /** Emit the `<current-task>` section. @default true */
+      currentTask?: boolean;
+      /** Emit the `<suggested-response>` section. @default true */
+      suggestedResponse?: boolean;
+    };
 
 export interface ObservationConfig {
   /**
@@ -169,14 +190,15 @@ export interface ObservationConfig {
   activateOnProviderChange?: boolean;
 
   /**
-   * Token threshold above which synchronous (blocking) observation is forced.
-   * Between `messageTokens` and `blockAfter`, only async buffering/activation is used.
-   * Above `blockAfter`, a synchronous observation runs as a last resort.
+   * Token threshold above which buffered activation is allowed to overshoot the
+   * retention target. Crossing `blockAfter` does not trigger a blocking observation;
+   * a synchronous observation runs when `messageTokens` is reached and buffered
+   * activation did not happen.
    *
    * Accepts either:
-   * - A multiplier (1 < value < 2): multiplied by `messageTokens`.
+   * - A multiplier (1 ≤ value < 100): multiplied by `messageTokens`.
    *   e.g. `blockAfter: 1.5` with `messageTokens: 20_000` → blocks at 30,000.
-   * - An absolute token count (≥ 2): must be greater than `messageTokens`.
+   * - An absolute token count (≥ 100): must be greater than `messageTokens`.
    *
    * Only relevant when `bufferTokens` is set.
    * If not set, synchronous observation is never used when async buffering is enabled.
@@ -196,6 +218,14 @@ export interface ObservationConfig {
    * Use this to customize observation behavior for specific use cases.
    */
   instruction?: string;
+
+  /**
+   * Which continuation-hint sections the Observer should emit.
+   * Set `{ suggestedResponse: false }` when the agent owns its own control flow.
+   *
+   * @default true
+   */
+  continuationHints?: ContinuationHintsConfig;
 
   /**
    * Manage working memory through Observational Memory extraction.
@@ -289,14 +319,15 @@ export interface ReflectionConfig {
   providerOptions?: ProviderOptions;
 
   /**
-   * Token threshold above which synchronous (blocking) reflection is forced.
-   * Between `observationTokens` and `blockAfter`, only async buffering/activation is used.
-   * Above `blockAfter`, a synchronous reflection runs as a last resort.
+   * Token threshold above which synchronous reflection is used as a last resort.
+   * Between `observationTokens` and `blockAfter`, only async buffering/activation
+   * is used. Above `blockAfter`, a synchronous reflection runs when no buffered
+   * reflection is ready to activate.
    *
    * Accepts either:
-   * - A multiplier (1 < value < 2): multiplied by `observationTokens`.
+   * - A multiplier (1 ≤ value < 100): multiplied by `observationTokens`.
    *   e.g. `blockAfter: 1.5` with `observationTokens: 30_000` → blocks at 45,000.
-   * - An absolute token count (≥ 2): must be greater than `observationTokens`.
+   * - An absolute token count (≥ 100): must be greater than `observationTokens`.
    *
    * Only relevant when `bufferActivation` is set.
    * If not set, synchronous reflection is never used when async reflection is enabled.
@@ -333,6 +364,14 @@ export interface ReflectionConfig {
    * Use this to customize reflection behavior for specific use cases.
    */
   instruction?: string;
+
+  /**
+   * Which continuation-hint sections the Reflector should emit.
+   * Set `{ suggestedResponse: false }` when the agent owns its own control flow.
+   *
+   * @default true
+   */
+  continuationHints?: ContinuationHintsConfig;
 
   /**
    * Additional values to extract from reflector output. Built-in OM fields are registered automatically.
@@ -534,6 +573,8 @@ export interface DataOmObservationFailedPart {
  */
 export interface DataOmStatusPart {
   type: 'data-om-status';
+  /** Stream to clients without persisting as a standalone data-only message. */
+  transient?: boolean;
   data: {
     windows: {
       /** Active context windows — current token usage and thresholds */
@@ -883,6 +924,18 @@ export interface ObservationDebugEvent {
 /**
  * Configuration for ObservationalMemory
  */
+export interface ReflectionCommittedContext {
+  parentThreadId: string;
+  resourceId: string;
+  observations: string;
+  requestContext?: RequestContext;
+  mainAgent?: ProcessorContext['agent'];
+  sendStateSignal?: ProcessorContext['sendStateSignal'];
+  writer?: ProcessorStreamWriter;
+  abortSignal?: AbortSignal;
+  observabilityContext?: ObservabilityContext;
+}
+
 export interface ObservationalMemoryConfig {
   /**
    * Storage adapter for persisting observations.
@@ -894,6 +947,12 @@ export interface ObservationalMemoryConfig {
   memory?: Memory;
 
   /**
+   * Run the subconscious curator (via `memory.runCuration`) after every N committed
+   * observation runs on the synchronous observe path. Off by default. Requires `memory`.
+   */
+  curationCadence?: number;
+
+  /**
    * Enable retrieval-mode observation group metadata.
    * When true, observation groups are treated as durable pointers to raw
    * message history and a `recall` tool is registered so the actor can
@@ -903,9 +962,13 @@ export interface ObservationalMemoryConfig {
    * configured vector store for semantic recall, and `scope` to limit recall
    * browsing to the current thread instead of the whole resource.
    *
+   * Use `instructions` to append application-specific recall guidance after
+   * Mastra's built-in retrieval instructions. The built-in instructions are
+   * never replaced.
+   *
    * @default false
    */
-  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
+  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string };
 
   /**
    * Optional callback used to index emitted observation groups for semantic retrieval.
@@ -952,6 +1015,27 @@ export interface ObservationalMemoryConfig {
    */
   onDebugEvent?: (event: ObservationDebugEvent) => void;
 
+  /**
+   * Lifecycle hooks fired for every observation/reflection cycle: the manual
+   * APIs (`observe()` / `reflect()`), turn-engine sync observation, and
+   * fire-and-forget async buffering — the automatic paths that per-call
+   * `observe()` hooks never see. Callbacks receive `threadId` / `resourceId`
+   * / `trigger` context, plus `usage` and `providerMetadata` on cycle end,
+   * so consumers can account for OM model economics without wrapping the
+   * observer/reflector models in middleware.
+   *
+   * Semantics worth knowing:
+   * - Failed async-buffer cycles never throw (fire-and-forget), so the
+   *   failure is reported via the end hook's `error` field instead.
+   * - An end hook may fire with neither `usage` nor `error` when a cycle
+   *   concludes without a model call (e.g. a concurrent-observation
+   *   stale-record check skips the work).
+   * - Errors thrown (or promise rejections returned) by these hooks are
+   *   caught and logged at OM debug level (`OM_DEBUG`); they never fail the
+   *   cycle.
+   */
+  hooks?: ObserveHooks;
+
   obscureThreadIds?: boolean;
 
   /**
@@ -994,6 +1078,9 @@ export interface ObservationalMemoryConfig {
    * to opt reflections into provider-change activation.
    */
   activateOnProviderChange?: boolean;
+
+  /** @internal Runs Subconscious reflection work only after a reflection is durably committed. */
+  onReflectionCommitted?: (context: ReflectionCommittedContext) => Promise<void>;
 
   /** @internal Parent Mastra instance for custom gateway model resolution. */
   mastra?: Mastra;
@@ -1067,24 +1154,54 @@ export interface ObserveHookUsage {
   totalTokens?: number;
 }
 
+/**
+ * Which pipeline path INITIATED the observation/reflection cycle a hook fires
+ * for — not whether the cycle itself ran synchronously:
+ * - 'manual': direct API calls (`observe()`, `reflect()`).
+ * - 'turn-sync': the observation turn engine's synchronous lane, including
+ *   reflections it initiates (even when those buffer asynchronously).
+ * - 'async-buffer': the buffered-observation lane (`buffer()` /
+ *   `triggerAsyncBuffering`), whether awaited or fire-and-forget.
+ */
+export type ObserveTrigger = 'manual' | 'turn-sync' | 'async-buffer';
+
+/**
+ * Call context passed to config-level `ObserveHooks` callbacks. Config-level
+ * hooks are shared across all threads/resources of an ObservationalMemory
+ * instance, so every invocation carries the identifiers of the cycle it fires
+ * for. Per-call `observe()` hooks do not receive these fields — the caller
+ * already knows its own thread.
+ */
+export interface ObserveHookContext {
+  threadId?: string;
+  resourceId?: string;
+  trigger?: ObserveTrigger;
+}
+
 export interface ObserveHooks {
-  onObservationStart?: () => void;
+  onObservationStart?: (info?: ObserveHookContext) => void;
   /**
    * Fires when an observation cycle ends. `providerMetadata` carries the OM
    * observer model call's full provider metadata (e.g. AI Gateway cost and
    * generation id under `providerMetadata.gateway`); it is undefined when the
    * provider emits none. For batched resource-scoped observations it reflects
    * the last batch that emitted provider metadata (per-call values are not
-   * summed/merged).
+   * summed/merged). The `ObserveHookContext` fields are populated for
+   * config-level hooks only.
    */
-  onObservationEnd?: (result: { usage?: ObserveHookUsage; error?: Error; providerMetadata?: ProviderMetadata }) => void;
-  onReflectionStart?: () => void;
+  onObservationEnd?: (
+    result: { usage?: ObserveHookUsage; error?: Error; providerMetadata?: ProviderMetadata } & ObserveHookContext,
+  ) => void;
+  onReflectionStart?: (info?: ObserveHookContext) => void;
   /**
    * Fires when a reflection cycle ends. `providerMetadata` carries the OM
    * reflector model call's full provider metadata; it is undefined when the
    * provider emits none. Across retry attempts `usage` is summed but
    * `providerMetadata` reflects the last attempt that emitted it (per-call
-   * values are not merged).
+   * values are not merged). The `ObserveHookContext` fields are populated for
+   * config-level hooks only.
    */
-  onReflectionEnd?: (result: { usage?: ObserveHookUsage; error?: Error; providerMetadata?: ProviderMetadata }) => void;
+  onReflectionEnd?: (
+    result: { usage?: ObserveHookUsage; error?: Error; providerMetadata?: ProviderMetadata } & ObserveHookContext,
+  ) => void;
 }

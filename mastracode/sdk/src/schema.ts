@@ -18,6 +18,8 @@ export interface MastraCodeState {
   projectName?: string;
   /** Factory project that owns this session. */
   factoryProjectId?: string;
+  /** Authoritative organization id seeded by factory at session construction. */
+  factoryOrgId?: string;
   /** Linked repository used by this session when source-control execution is required. */
   projectRepositoryId?: string;
   /** Persisted sandbox id for reattaching the project's cloud workspace. */
@@ -28,6 +30,25 @@ export interface MastraCodeState {
   worktreePath?: string;
   /** Active feature branch checked out in the worktree. */
   branch?: string;
+  /**
+   * The session's checkout contains third-party content (e.g. a PR branch
+   * under review). Project-level instruction files (AGENTS.md, CLAUDE.md)
+   * are attacker-writable there and must not be ingested into the system
+   * prompt or injected as reminders.
+   */
+  untrustedCheckout?: boolean;
+  /**
+   * Trusted git ref (typically the PR's base branch) to serve project
+   * instruction files from when the checkout is untrusted. Without it,
+   * project-scope instruction files are skipped entirely.
+   */
+  baseRef?: string;
+  /**
+   * Skip the home-directory instruction files (~/.claude/AGENTS.md and
+   * friends). Hosts running sessions for someone else set this so a run never
+   * inherits the machine owner's personal configuration.
+   */
+  skipGlobalInstructions?: boolean;
   configDir: string;
   homeDir?: string;
   gitBranch?: string;
@@ -39,7 +60,12 @@ export interface MastraCodeState {
   cavemanObservations: boolean;
   observeAttachments: 'auto' | boolean;
   omScope?: 'thread' | 'resource';
-  thinkingLevel: 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+  /**
+   * Session-level reasoning-effort override. When unset, the effective level is
+   * resolved at request time from settings (`models.modeThinkingDefaults[mode]`
+   * falling back to `preferences.thinkingLevel`).
+   */
+  thinkingLevel?: 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
   yolo: boolean;
   permissionRules: {
     categories: Record<string, PermissionPolicy>;
@@ -66,10 +92,7 @@ export interface MastraCodeState {
     enabled: boolean;
     provider: 'stagehand' | 'agent-browser';
     headless?: boolean;
-    viewport?: {
-      width: number;
-      height: number;
-    };
+    viewport?: { width: number; height: number } | 'window';
     cdpUrl?: string;
     stagehand?: {
       env: 'LOCAL' | 'BROWSERBASE';
@@ -90,11 +113,18 @@ export const stateSchema = z.object({
   projectPath: z.string().optional(),
   projectName: z.string().optional(),
   factoryProjectId: z.string().optional(),
+  factoryOrgId: z.string().optional(),
   projectRepositoryId: z.string().optional(),
   sandboxId: z.string().optional(),
   sandboxWorkdir: z.string().optional(),
   worktreePath: z.string().optional(),
   branch: z.string().optional(),
+  // Session operates on an untrusted checkout — suppress AGENTS.md ingestion.
+  untrustedCheckout: z.boolean().optional(),
+  // Trusted ref to serve instruction files from on untrusted checkouts.
+  baseRef: z.string().optional(),
+  // Skip the operator machine's home-directory instruction files.
+  skipGlobalInstructions: z.boolean().optional(),
   configDir: z.string().default(DEFAULT_CONFIG_DIR),
   homeDir: z.string().optional(),
   gitBranch: z.string().optional(),
@@ -115,8 +145,10 @@ export const stateSchema = z.object({
   observeAttachments: z.union([z.literal('auto'), z.boolean()]).default('auto'),
   // Observational Memory scope — 'thread' (per-conversation) or 'resource' (shared across threads)
   omScope: z.enum(['thread', 'resource']).optional(),
-  // Thinking level for model reasoning effort
-  thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh']).default('off'),
+  // Thinking level for model reasoning effort. Optional: absent means "no
+  // session override" — the effective level is resolved from settings
+  // (per-mode defaults, then the global preference) at request time.
+  thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh', 'max']).optional(),
   // YOLO mode — auto-approve all tool calls
   yolo: z.boolean().default(false),
   // Permission rules — per-category and per-tool approval policies
@@ -163,10 +195,13 @@ export const stateSchema = z.object({
       provider: z.enum(['stagehand', 'agent-browser']),
       headless: z.boolean().optional(),
       viewport: z
-        .object({
-          width: z.number(),
-          height: z.number(),
-        })
+        .union([
+          z.object({
+            width: z.number(),
+            height: z.number(),
+          }),
+          z.literal('window'),
+        ])
         .optional(),
       cdpUrl: z.string().optional(),
       stagehand: z

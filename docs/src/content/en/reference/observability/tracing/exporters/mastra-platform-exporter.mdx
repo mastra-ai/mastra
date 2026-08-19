@@ -152,7 +152,7 @@ async onMetricEvent(event: MetricEvent): Promise<void>
 
 Processes metric signals for export.
 
-Every `MetricEvent` passed to this handler is buffered and exported to the metrics endpoint derived from the configured base endpoint. No additional filtering by metric subtype or status inside `MastraPlatformExporter` is performed; the exporter forwards every metric event it receives unless it's disabled.
+Every `MetricEvent` passed to this handler is buffered and exported to the metrics endpoint derived from the configured base endpoint. No additional filtering by metric subtype or status inside `MastraPlatformExporter` is performed. The exporter forwards every metric event it receives unless it's disabled.
 
 <PropertiesTable
   props={[
@@ -198,7 +198,7 @@ async onFeedbackEvent(event: FeedbackEvent): Promise<void>
 
 Processes feedback signals for export.
 
-Every `FeedbackEvent` passed to this handler is buffered and exported to the feedback endpoint derived from the configured base endpoint. No feedback-type filtering inside `MastraPlatformExporter` is performed; all feedback events received here are forwarded unless the exporter is disabled.
+Every `FeedbackEvent` passed to this handler is buffered and exported to the feedback endpoint derived from the configured base endpoint. No feedback-type filtering inside `MastraPlatformExporter` is performed. All feedback events received here are forwarded unless the exporter is disabled.
 
 <PropertiesTable
   props={[
@@ -254,6 +254,20 @@ The exporter batches tracing spans, logs, metrics, scores, and feedback for effi
 
 Errors raised by `MastraPlatformExporter` use the `MASTRA_PLATFORM_EXPORTER_*` `id` prefix. The deprecated `CloudExporter` continues to emit `CLOUD_EXPORTER_*` `id`s.
 
+### Quota pause
+
+When an organization has exhausted its observability quota, the Mastra platform rejects publish requests with `402 Payment Required` plus the `x-mastra-observability: disabled` header. When the exporter sees a `402` (or the header) on any publish route, it:
+
+- Drops the rejected batch without retrying it
+- Pauses all five signal types (traces, logs, metrics, scores, feedback) and drops buffered and new events instead of sending them
+- Logs a warning that telemetry is paused
+- Probes the platform periodically with an empty batch, using the interval from the `x-mastra-observability-retry-after` header (seconds), or every 5 minutes if the header is absent
+- Resumes exporting automatically and logs a warning once the platform stops rejecting with `402`
+
+The probe timer doesn't keep the Node.js process alive, so short-lived and serverless processes exit normally while paused.
+
+Every request the exporter sends (batch uploads for all five signal types, plus the traces recovery probe) includes the `x-mastra-observability-capabilities: quota-pause-v1` header. This tells the platform that the client understands the quota-pause contract, so it can safely respond with `402` instead of silently dropping telemetry for older clients that would retry it.
+
 ### Endpoint routing
 
 - Base origins derive signal endpoints automatically
@@ -264,12 +278,12 @@ Errors raised by `MastraPlatformExporter` use the `MASTRA_PLATFORM_EXPORTER_*` `
 ### Signal Processing
 
 - `exportTracingEvent()` only exports `SPAN_ENDED` tracing events
-- `onLogEvent()`, `onMetricEvent()`, `onScoreEvent()`, and `onFeedbackEvent()` buffer every event they receive for their respective signal type
+- `onLogEvent()`, `onMetricEvent()`, `onScoreEvent()`, and `onFeedbackEvent()` buffer every event they receive for that signal type
 - All supported signal batches are uploaded to their matching publish endpoints during `flush()` and `shutdown()`
 
 ## Span wire format
 
-The shape of each span sent to Mastra platform is documented here for reference only — it's not exported from `@mastra/observability` and shouldn't be imported. The exporter spreads the original `AnyExportedSpan` (so the source field names are preserved) and layers a small set of platform-friendly aliases on top:
+The shape of each span sent to Mastra platform is documented here for reference only: it's not exported from `@mastra/observability` and shouldn't be imported. The exporter spreads the original `AnyExportedSpan` (so the source field names are preserved) and layers a small set of platform-friendly aliases on top:
 
 ```typescript
 type MastraPlatformSpanRecord = AnyExportedSpan & {
@@ -308,7 +322,7 @@ const customExporter = new MastraPlatformExporter({
 
 ## Migrating from `CloudExporter`
 
-The two classes share the same constructor signature, environment variables, and behavior. To migrate, replace the import and constructor:
+Both classes share the same constructor signature, environment variables, and behavior. To migrate, replace the import and constructor:
 
 ```typescript
 // Before
@@ -327,7 +341,6 @@ The original `CloudExporter` is preserved unchanged so dashboards or alert rules
 ### Documentation
 
 - [Tracing Overview](/docs/observability/tracing/overview): Complete guide
-- [Exporters](/docs/observability/integrations/overview#exporters): Exporter concepts
 
 ### Other Exporters
 

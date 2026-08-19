@@ -1,8 +1,8 @@
 ---
-title: "Reference: PubSub | PubSub"
+title: 'Reference: PubSub | PubSub'
 description: API reference for the PubSub abstract base class that defines the pub/sub contract in Mastra.
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # PubSub
@@ -82,12 +82,18 @@ await pubsub.publish('my-topic', {
 
 Registers a callback to receive events published to a topic. When `options.group` is set, subscribers in the same group compete for messages and each event is delivered to one member. Without a group, every subscriber receives every event.
 
-Pass `options.batch` to opt in to batched delivery. The callback signature is unchanged: a batch of N events is delivered as N consecutive `cb(event, ack, nack)` calls in publish order. Batching is honored only when the backend's [`supportsNativeBatching`](#properties) is `true`; other backends ignore the option and deliver events one at a time.
+Pass `options.batch` to opt in to batched delivery. The callback signature is unchanged: a batch of N events is delivered as N consecutive `cb(event, ack, nack)` calls in publish order. Batching is honored only when the backend's [`supportsNativeBatching`](#properties) is `true`. Other backends ignore the option and deliver events one at a time.
+
+Set `options.startFrom` to `"latest"` to receive only events published after a new consumer group is created. The default, `"earliest"`, includes retained events. Existing consumer groups keep their current checkpoint.
 
 ```typescript
-await pubsub.subscribe('my-topic', (event, ack, nack) => {
-  console.log(event)
-})
+await pubsub.subscribe(
+  'my-topic',
+  (event, ack, nack) => {
+    console.log(event)
+  },
+  { startFrom: 'latest' },
+)
 ```
 
 #### `unsubscribe(topic, cb)`
@@ -108,9 +114,9 @@ await pubsub.flush()
 
 #### `clearTopic(topic)`
 
-Deletes all retained state for a topic — cached history, persistent stream entries, and consumer groups — once no more events will be published to it. Mastra's run lifecycles (durable agents and the evented workflow engine) call this automatically when a run reaches a terminal state, so per-run topics don't accumulate on transports that retain messages.
+Deletes all retained state for a topic (cached history, persistent stream entries, and consumer groups) once no more events will be published to it. Mastra's run lifecycles (durable agents and the evented workflow engine) call this automatically when a run reaches a terminal state, so per-run topics don't accumulate on transports that retain messages.
 
-The default implementation is a no-op: transports that retain nothing per topic (such as `EventEmitterPubSub`) have nothing to clear. Backends that persist messages, like [`RedisStreamsPubSub`](/reference/pubsub/redis-streams), override it. The contract is best-effort — implementations log failures rather than throwing, because callers invoke it fire-and-forget at cleanup boundaries.
+The default implementation is a no-op: transports that retain nothing per topic (such as `EventEmitterPubSub`) have nothing to clear. Backends that persist messages, like [`RedisStreamsPubSub`](/reference/pubsub/redis-streams), override it. The contract is best-effort: implementations log failures rather than throwing, because callers invoke it fire-and-forget at cleanup boundaries.
 
 ```typescript
 await pubsub.clearTopic('workflow.events.v2.run-123')
@@ -164,6 +170,12 @@ await pubsub.subscribeFromOffset('my-topic', 42, event => {
     type: 'boolean',
     description:
       'Whether the implementation honors `options.batch` on `subscribe()`. Defaults to `false`. Backends that integrate batching internally override this and return `true`.',
+  },
+  {
+    name: 'supportsOffsets',
+    type: 'boolean',
+    description:
+      'Whether `subscribeFromOffset()` honors numeric offsets. Defaults to `false`. A non-zero offset on an unsupported implementation falls back to replay subscription and emits a diagnostic warning when a logger is configured.',
   },
 ]}
 />
@@ -233,12 +245,20 @@ await pubsub.subscribeFromOffset('my-topic', 42, event => {
       'Opt in to batched delivery for this subscription. When omitted, events are delivered one at a time. Honored only by backends where `supportsNativeBatching` is `true`.',
     isOptional: true,
   },
+  {
+    name: 'startFrom',
+    type: '"earliest" | "latest"',
+    description:
+      'Starting position used when a backend creates a new consumer group. `"earliest"` includes retained events. `"latest"` receives only events published after group creation. Existing groups keep their checkpoint.',
+    isOptional: true,
+    defaultValue: '"earliest"',
+  },
 ]}
 />
 
 ### `SubscribeBatchOptions`
 
-Per-subscription batching policy. The callback signature doesn't change; a batch of N events becomes N consecutive callback invocations in publish order.
+Per-subscription batching policy. The callback signature doesn't change. A batch of N events becomes N consecutive callback invocations in publish order.
 
 <PropertiesTable
   content={[

@@ -1,16 +1,12 @@
 import type { AgentControllerThread, MastraDBMessage } from '@mastra/core/agent-controller';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { AssistantRenderRegistry, getAssistantSegmentKey } from '../../assistant-render-registry.js';
+import { AssistantMessageComponent } from '../../components/assistant-message.js';
 import { askModalQuestion } from '../../modal-question.js';
 import { handleThreadsCommand, showThreadLockPrompt } from '../threads.js';
 import type { SlashCommandContext } from '../types.js';
 
 const selectorInstances: Array<any> = [];
-
-vi.mock('@earendil-works/pi-tui', () => ({
-  Spacer: class {
-    constructor(public size: number) {}
-  },
-}));
 
 vi.mock('../clone.js', () => ({
   askCloneName: vi.fn(),
@@ -58,7 +54,16 @@ function createMessage(id: string, text: string): MastraDBMessage {
 function createContext(threads: AgentControllerThread[]) {
   const showOverlay = vi.fn();
   const trackInteractivePrompt = vi.fn();
+  const assistantRenderRegistry = new AssistantRenderRegistry();
+  const assistantSegment = assistantRenderRegistry.start(
+    'assistant-1',
+    getAssistantSegmentKey('assistant-1'),
+    () => new AssistantMessageComponent(),
+  ).segment;
+  vi.spyOn(assistantSegment.component, 'disposeRenderState');
   const state = {
+    assistantRenderRegistry,
+    assistantSegment,
     pendingNewThread: false,
     projectInfo: { rootPath: '/repo', gitBranch: 'main' },
     threadPreviewCache: new Map<string, { preview: string; updatedAt: number }>(),
@@ -71,7 +76,11 @@ function createContext(threads: AgentControllerThread[]) {
     },
     chatContainer: { clear: vi.fn(), addChild: vi.fn(), invalidate: vi.fn() },
     allToolComponents: [] as any[],
+    allSystemReminderComponents: [] as any[],
+    allShellComponents: [] as any[],
+    messageComponentsById: new Map(),
     pendingTools: new Map(),
+    pendingTaskToolIds: new Set(),
     session: {
       identity: { getResourceId: vi.fn(() => 'resource-1') },
       thread: {
@@ -184,7 +193,7 @@ describe('handleThreadsCommand thread listing', () => {
     await commandPromise;
   });
 
-  it('waits for thread-change rendering before returning control to the editor', async () => {
+  it('waits for thread-change rendering and disposes assistant render ownership when switching threads', async () => {
     const threads = [createThread('thread-1', '2026-03-17T15:10:00.000Z')];
     const { ctx, state, showOverlay } = createContext(threads);
     const rendered = vi.fn();
@@ -200,7 +209,10 @@ describe('handleThreadsCommand thread listing', () => {
     expect(state.session.thread.switch).toHaveBeenCalledWith({ threadId: 'thread-1' });
     expect(state.waitForAgentControllerEvents).toHaveBeenCalledTimes(1);
     expect(rendered).toHaveBeenCalledTimes(1);
-    expect(ctx.renderExistingMessages).not.toHaveBeenCalled();
+    expect(state.assistantRenderRegistry.size).toBe(0);
+    expect(state.assistantSegment.component.disposeRenderState).toHaveBeenCalledOnce();
+    expect(state.chatContainer.clear).toHaveBeenCalledOnce();
+    expect(ctx.renderExistingMessages).toHaveBeenCalledOnce();
   });
 
   it('tracks the thread lock prompt when shown', () => {

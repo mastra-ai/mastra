@@ -7,6 +7,7 @@ packages:
   - "@mastra/libsql"
   - "@mastra/memory"
   - "@mastra/mongodb"
+  - "@mastra/oracledb"
   - "@mastra/pg"
 ---
 
@@ -27,7 +28,7 @@ Watch [Mastra semantic recall](https://www.youtube.com/watch?v=UVZtK8cK8xQ\&pp=y
 
 Semantic recall is RAG-based search that helps agents maintain context across longer interactions when messages are no longer within [recent message history](./message-history).
 
-It uses vector embeddings of messages for similarity search, integrates with various vector stores, and has configurable context windows around retrieved messages.
+It uses vector embeddings of messages for similarity search and integrates with vector stores, plus has configurable context windows around retrieved messages.
 
 ![Diagram showing Mastra Memory semantic recall](/img/semantic-recall.png)
 
@@ -167,6 +168,7 @@ Each vector store page below includes installation instructions, configuration p
 - [libSQL](/reference/vectors/libsql)
 - [MongoDB](/reference/vectors/mongodb)
 - [OpenSearch](/reference/vectors/opensearch)
+- [OracleDB](/reference/vectors/oracledb)
 - [Pinecone](/reference/vectors/pinecone)
 - [PostgreSQL](/reference/vectors/pg)
 - [Qdrant](/reference/vectors/qdrant)
@@ -201,7 +203,7 @@ const agent = new Agent({
 
 :::note
 
-`scope: 'resource'` is supported by the LibSQL, PostgreSQL, MongoDB, and Upstash storage adapters.
+`scope: 'resource'` is supported by the LibSQL, OracleDB, PostgreSQL, MongoDB, and Upstash storage adapters.
 
 :::
 
@@ -292,7 +294,7 @@ Supported embedding models:
 
 - **OpenAI**: `text-embedding-3-small`, `text-embedding-3-large`, `text-embedding-ada-002`
 - **Google**: `gemini-embedding-001`
-- **OpenRouter**: Access embedding models from various providers
+- **OpenRouter**: Access embedding models from multiple providers
 
 ```ts {7}
 import { Agent } from '@mastra/core/agent'

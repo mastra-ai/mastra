@@ -25,7 +25,7 @@ Provide both the project name and provider to create the project without prompts
 npx create-mastra@latest my-mastra-project --llm anthropic
 ```
 
-Omit `--llm` to select the provider and optionally enter its API key interactively. The interactive setup also offers to connect your project to the Mastra platform. If enabled, the command opens the browser authentication flow, creates a platform project with the same name as the local project, and writes `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` to `.env`.
+Omit `--llm` to select the provider and optionally enter its API key interactively. The interactive setup also offers to connect your project to the Mastra platform. If enabled, the command opens the browser authentication flow and creates a platform project with the same name as the local project. It then writes `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` to `.env`.
 
 ### Template
 
@@ -97,7 +97,8 @@ Invalid input is rejected before templates are fetched or files are created.
   {
     name: '-k, --llm-api-key <key>',
     type: 'string',
-    description: 'Write the selected provider API key to the generated .env file.',
+    description:
+      'Write the selected provider API key to the generated .env file when automatic provider setup succeeds.',
     isOptional: true,
   },
   {
@@ -110,6 +111,12 @@ Invalid input is rejected before templates are fetched or files are created.
     name: '--no-git',
     type: 'boolean',
     description: 'Skip automatic Git initialization and the initial commit.',
+    isOptional: true,
+  },
+  {
+    name: '--no-install',
+    type: 'boolean',
+    description: 'Skip dependency installation.',
     isOptional: true,
   },
   {

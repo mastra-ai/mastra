@@ -229,9 +229,9 @@ describe('create-mastra published binaries', () => {
         build: 'mastra build',
         start: 'mastra start',
       },
-      dependencies: { '@mastra/core': tag },
+      dependencies: { '@mastra/core': publishedVersions['@mastra/core'] },
       devDependencies: {
-        mastra: tag,
+        mastra: publishedVersions.mastra,
         typescript: '^6.0.3',
         '@types/node': 'latest',
       },

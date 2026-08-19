@@ -29,7 +29,7 @@ The `WorkspaceSandbox` interface defines how workspaces execute commands and man
 
 ### `start()`
 
-Start the sandbox. Called automatically by `workspace.init()` or on first `executeCommand()` call.
+Starts the sandbox and is called automatically by `workspace.init()` or the first `executeCommand()` call.
 
 ```typescript
 await sandbox.start()
@@ -52,6 +52,16 @@ Clean up sandbox resources. Called by `workspace.destroy()`.
 ```typescript
 await sandbox.destroy()
 ```
+
+### `snapshot()`
+
+Persists the sandbox's current state when the provider supports snapshots. Other providers resolve without doing work.
+
+```typescript
+await sandbox.snapshot()
+```
+
+**Returns:** `Promise<void>`
 
 ### `executeCommand(command, args?, options?)`
 
@@ -159,6 +169,6 @@ const instructions = sandbox.getInstructions?.()
 ## Related
 
 - [SandboxProcessManager reference](/reference/workspace/process-manager)
-- [Sandbox](/docs/workspace/sandbox)
+- [Sandbox](/docs/sandbox/overview)
 - [Workspace Class](/reference/workspace/workspace-class)
 - [Filesystem Interface](/reference/workspace/filesystem)
