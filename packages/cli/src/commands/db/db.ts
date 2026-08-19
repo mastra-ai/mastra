@@ -259,8 +259,8 @@ async function listDatabasesAction(envArg: string | undefined, options: { projec
 /* ------------------------------------------------------------------ */
 
 function parseKind(kind: string): DatabaseKind {
-  if (kind !== 'turso' && kind !== 'neon') {
-    throw new Error(`Unsupported database kind: ${kind}. Supported kinds: turso, neon`);
+  if (kind !== 'turso' && kind !== 'neon' && kind !== 'redis') {
+    throw new Error(`Unsupported database kind: ${kind}. Supported kinds: turso, neon, redis`);
   }
   return kind;
 }
