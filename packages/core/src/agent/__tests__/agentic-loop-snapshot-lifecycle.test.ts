@@ -10,6 +10,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
+import { MASTRA_VERSIONS_KEY, RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import type { WorkflowRunState } from '../../workflows';
@@ -90,6 +91,68 @@ function summarizeRuns(runs: { workflowName: string; runId: string; snapshot: st
 }
 
 describe('agentic-loop snapshot lifecycle', () => {
+  it('pins a resolved root agent version in the snapshot and restores it on resume', async () => {
+    const agent = new Agent({
+      id: 'versioned-agent',
+      name: 'Versioned Agent',
+      instructions: 'You find users.',
+      model: createMockModel(),
+      tools: { findUserTool: createFindUserTool() },
+    });
+
+    let publishedVersionId = 'v1';
+    const applyStoredOverrides = vi.fn(async (source: Agent, selector: { versionId: string } | { status: string }) => {
+      const versionId = 'versionId' in selector ? selector.versionId : publishedVersionId;
+      const fork = source.__fork();
+      fork.__setRawConfig({ ...(source.toRawConfig() ?? {}), resolvedVersionId: versionId });
+      return fork;
+    });
+
+    const mastra = new Mastra({
+      agents: { agent },
+      versions: { agents: { 'versioned-agent': { status: 'published' } } },
+      editor: { agent: { applyStoredOverrides } } as any,
+      logger: false,
+      storage: new InMemoryStore(),
+    });
+    const workflowsStore = (await mastra.getStorage()!.getStore('workflows'))!;
+
+    const requestContext = new RequestContext();
+    const stream = await agent.stream('Find the user with name - Dero Israel', {
+      requireToolApproval: true,
+      requestContext,
+    });
+
+    let toolCallId = '';
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'tool-call-approval') {
+        toolCallId = chunk.payload.toolCallId;
+      }
+    }
+    expect(toolCallId).toBeTruthy();
+
+    const loopRow = (await workflowsStore.listWorkflowRuns({})).runs.find(row => row.workflowName === 'agentic-loop');
+    const snapshot =
+      typeof loopRow?.snapshot === 'string' ? JSON.parse(loopRow.snapshot) : (loopRow?.snapshot as WorkflowRunState);
+    expect(snapshot.requestContext?.[MASTRA_VERSIONS_KEY]).toEqual({
+      agents: { 'versioned-agent': { versionId: 'v1' } },
+    });
+    expect(requestContext.get(MASTRA_VERSIONS_KEY)).toEqual({
+      agents: { 'versioned-agent': { status: 'published' } },
+    });
+
+    // Publishing v2 after the run suspended must not change the version used
+    // to resume the already-started v1 run.
+    publishedVersionId = 'v2';
+    const resumed = await agent.approveToolCall({ runId: stream.runId, toolCallId });
+    for await (const _chunk of resumed.fullStream) {
+      // consume
+    }
+
+    expect(applyStoredOverrides).toHaveBeenNthCalledWith(1, agent, { status: 'published' });
+    expect(applyStoredOverrides).toHaveBeenNthCalledWith(2, agent, { versionId: 'v1' });
+  }, 30000);
+
   it('keeps snapshot rows while suspended and deletes all rows after resume completes', async () => {
     const agent = new Agent({
       id: 'user-agent',

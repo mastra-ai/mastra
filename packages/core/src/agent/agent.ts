@@ -6690,6 +6690,15 @@ export class Agent<
     return undefined;
   }
 
+  #getSnapshotVersionOverrides(existingSnapshot: WorkflowRunState | null | undefined): VersionOverrides | undefined {
+    const snapshotVersions = existingSnapshot?.requestContext?.[MASTRA_VERSIONS_KEY];
+    if (!snapshotVersions || typeof snapshotVersions !== 'object' || Array.isArray(snapshotVersions)) {
+      return undefined;
+    }
+
+    return snapshotVersions as VersionOverrides;
+  }
+
   #getSuspendedToolCalls(existingSnapshot: WorkflowRunState | null | undefined): AgentRunToolCall[] {
     const toolCalls: AgentRunToolCall[] = [];
 
@@ -6980,15 +6989,28 @@ export class Agent<
     const threadStreamPubSub = _threadStreamPubSub ?? this.getPubSub();
     const existingSnapshot = resumeContext?.snapshot;
     const snapshotMemoryInfo = this.#getSnapshotMemoryInfo(existingSnapshot);
+    const snapshotVersions = this.#getSnapshotVersionOverrides(existingSnapshot);
     const requestContext = options.requestContext || new RequestContext();
 
-    // Build version overrides by merging: Mastra defaults < requestContext < call-site
+    // Build version overrides by merging: Mastra defaults < snapshot < requestContext < call-site.
+    // A resumed run carries the versions that were active when it suspended.
     const requestVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
-    let mergedVersions = mergeVersionOverrides(this.#mastra?.getVersionOverrides(), requestVersions);
+    let mergedVersions = mergeVersionOverrides(this.#mastra?.getVersionOverrides(), snapshotVersions);
+    mergedVersions = mergeVersionOverrides(mergedVersions, requestVersions);
 
-    // Merge call-site version overrides on top (call-site wins over request + Mastra defaults)
+    // Merge call-site version overrides on top for new runs.
     if (options.versions) {
       mergedVersions = mergeVersionOverrides(mergedVersions, options.versions);
+    }
+
+    // The root agent version is part of the suspended run's identity. Once a
+    // status selector has been resolved and persisted as an exact versionId,
+    // a resume must not move that run to a newer published/draft version.
+    const snapshotSelfVersion = snapshotVersions?.agents?.[this.id];
+    if (snapshotSelfVersion && typeof snapshotSelfVersion === 'object' && 'versionId' in snapshotSelfVersion) {
+      mergedVersions = mergeVersionOverrides(mergedVersions, {
+        agents: { [this.id]: snapshotSelfVersion },
+      });
     }
 
     if (mergedVersions) {
@@ -7007,6 +7029,19 @@ export class Agent<
         try {
           const resolved = await this.#mastra.resolveVersionedAgent(this as unknown as Agent, selfVersionSelector);
           if (resolved !== (this as unknown as Agent)) {
+            const resolvedVersionId = resolved.toRawConfig()?.resolvedVersionId;
+            let resolvedRequestContext = requestContext;
+            if (typeof resolvedVersionId === 'string' && resolvedVersionId.length > 0) {
+              const pinnedVersions = mergeVersionOverrides(mergedVersions, {
+                agents: { [this.id]: { versionId: resolvedVersionId } },
+              });
+              // Keep the caller-owned RequestContext selector unchanged so it
+              // can resolve the latest published/draft version on a later run.
+              // Only this execution and its persisted snapshot are pinned.
+              resolvedRequestContext = new RequestContext(requestContext.entries());
+              resolvedRequestContext.set(MASTRA_VERSIONS_KEY, pinnedVersions);
+            }
+
             // Cast: reassembled options are exactly this method's input. The
             // `unknown` annotation breaks the circular return-type inference
             // of the self-recursion (TS7023).
@@ -7015,7 +7050,7 @@ export class Agent<
               resumeContext,
               _threadStreamPubSub,
               ...options,
-              requestContext,
+              requestContext: resolvedRequestContext,
             } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub });
             return delegated as never;
           }
