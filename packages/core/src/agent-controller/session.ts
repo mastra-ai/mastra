@@ -3277,8 +3277,6 @@ export class Session<TState = unknown> {
       | AgentSignalInput
       | {
           content: AgentSignalContents;
-          /** Attributes carried whichever delivery path the signal takes. */
-          attributes?: AgentSignalAttributes;
           ifActive?: { attributes?: AgentSignalAttributes };
           ifIdle?: { attributes?: AgentSignalAttributes };
           tracingContext?: TracingContext;
@@ -3341,13 +3339,7 @@ export class Session<TState = unknown> {
     const submittedAbortRequested = this.run.isAbortRequested();
     const signal = createSignal(
       'content' in input
-        ? {
-            type: 'user',
-            tagName: 'user',
-            contents: input.content,
-            attributes: input.attributes,
-            providerOptions: input.providerOptions,
-          }
+        ? { type: 'user', tagName: 'user', contents: input.content, providerOptions: input.providerOptions }
         : input,
     );
     const accepted = Promise.resolve().then(async () => {
@@ -3511,13 +3503,10 @@ export class Session<TState = unknown> {
             resolveAgentEnd?.();
           }
         });
-    const signal = this.sendSignal({
-      content: messageInput,
-      attributes,
-      tracingContext,
-      tracingOptions,
-      requestContext: requestContextInput,
-    });
+    const signal = this.sendSignal(
+      { type: 'user', tagName: 'user', contents: messageInput, attributes },
+      { tracingContext, tracingOptions, requestContext: requestContextInput },
+    );
     if (wasActive) {
       await signal.accepted;
     } else {
