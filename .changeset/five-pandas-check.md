@@ -3,4 +3,14 @@
 'mastra': patch
 ---
 
-Improved model selection in Factory chats with a single combined picker: the status line now shows the effective model for the current mode, and its searchable menu offers model packs as presets (with the personal default marked), models grouped by provider for per-mode overrides, a reset to the default pack, and a deep link to pack management in settings. The picker works in draft and active user chats, applies a draft selection before the first prompt runs, and live user chats can now switch models directly.
+Improved model selection in Factory chats. The status line now shows one combined picker with the effective model for the current mode.
+
+The picker offers:
+
+- Model packs as presets, with your personal default marked.
+- Models grouped by provider, to override the model for the current mode.
+- A reset action that returns the chat to your default pack.
+- A link to pack management in settings.
+- Search across packs and models.
+
+The picker works in draft chats and in active user chats. A pack chosen in a draft applies before the first prompt runs. Live user chats can now switch models directly from the status line.
