@@ -1,12 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { appendFile, chmod, mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { Session } from 'node:inspector/promises';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { PerformanceObserver, type PerformanceEntry } from 'node:perf_hooks';
 import { arch, platform } from 'node:process';
 import { getHeapSpaceStatistics, getHeapStatistics } from 'node:v8';
-
-import { getAppDataDir } from './utils/project.js';
 
 export const PROCESS_MEMORY_DIAGNOSTICS_DEFAULTS = {
   sampleIntervalMs: 10_000,
@@ -19,6 +18,9 @@ export const PROCESS_MEMORY_DIAGNOSTICS_MINIMUMS = {
   captureIntervalMs: 10_000,
   allocationIntervalBytes: 32_768,
 } as const;
+
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
+const MAX_PENDING_GC_EVENTS = 1_000;
 
 export interface ProcessMemoryDiagnosticsConfig {
   parentDirectory: string;
@@ -104,16 +106,30 @@ function parseBoundedInteger(
   name: keyof ProcessMemoryDiagnosticsEnvironment,
   fallback: number,
   minimum: number,
+  maximum?: number,
 ): number {
   const raw = env[name];
   if (raw === undefined || raw.trim() === '') return fallback;
   const value = Number(raw);
-  if (!Number.isSafeInteger(value) || value < minimum) {
+  if (!Number.isSafeInteger(value) || value < minimum || (maximum !== undefined && value > maximum)) {
+    const range = maximum === undefined ? `greater than or equal to ${minimum}` : `between ${minimum} and ${maximum}`;
     throw new ProcessMemoryDiagnosticsConfigError(
-      `${name} must be an integer greater than or equal to ${minimum}; received ${JSON.stringify(raw)}.`,
+      `${name} must be an integer ${range}; received ${JSON.stringify(raw)}.`,
     );
   }
   return value;
+}
+
+function getDefaultProfileParentDirectory(): string {
+  if (process.env.MASTRA_APP_DATA_DIR) return join(process.env.MASTRA_APP_DATA_DIR, 'profiles');
+
+  const baseDirectory =
+    platform === 'darwin'
+      ? join(homedir(), 'Library', 'Application Support')
+      : platform === 'win32'
+        ? process.env.APPDATA || join(homedir(), 'AppData', 'Roaming')
+        : process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share');
+  return join(baseDirectory, 'mastracode', 'profiles');
 }
 
 export function parseProcessMemoryDiagnosticsEnvironment(env: ProcessMemoryDiagnosticsEnvironment = process.env): {
@@ -123,18 +139,20 @@ export function parseProcessMemoryDiagnosticsEnvironment(env: ProcessMemoryDiagn
   return {
     enabled: isEnabled(env.MASTRACODE_PROFILE),
     config: {
-      parentDirectory: env.MASTRACODE_PROFILE_DIR?.trim() || join(getAppDataDir(), 'profiles'),
+      parentDirectory: env.MASTRACODE_PROFILE_DIR?.trim() || getDefaultProfileParentDirectory(),
       sampleIntervalMs: parseBoundedInteger(
         env,
         'MASTRACODE_PROFILE_SAMPLE_INTERVAL_MS',
         PROCESS_MEMORY_DIAGNOSTICS_DEFAULTS.sampleIntervalMs,
         PROCESS_MEMORY_DIAGNOSTICS_MINIMUMS.sampleIntervalMs,
+        MAX_TIMER_DELAY_MS,
       ),
       captureIntervalMs: parseBoundedInteger(
         env,
         'MASTRACODE_PROFILE_CAPTURE_INTERVAL_MS',
         PROCESS_MEMORY_DIAGNOSTICS_DEFAULTS.captureIntervalMs,
         PROCESS_MEMORY_DIAGNOSTICS_MINIMUMS.captureIntervalMs,
+        MAX_TIMER_DELAY_MS,
       ),
       allocationIntervalBytes: parseBoundedInteger(
         env,
@@ -155,7 +173,7 @@ export function createProcessMemoryDiagnosticsFromEnvironment(
     return { diagnostics: new ProcessMemoryDiagnostics(config, dependencies), enabled, error: null };
   } catch (error) {
     const config: ProcessMemoryDiagnosticsConfig = {
-      parentDirectory: env.MASTRACODE_PROFILE_DIR?.trim() || join(getAppDataDir(), 'profiles'),
+      parentDirectory: env.MASTRACODE_PROFILE_DIR?.trim() || getDefaultProfileParentDirectory(),
       ...PROCESS_MEMORY_DIAGNOSTICS_DEFAULTS,
     };
     const message = error instanceof Error ? error.message : String(error);
@@ -182,6 +200,30 @@ export async function startConfiguredProcessMemoryDiagnostics(
     warn(`Process memory diagnostics were not started: ${status.error ?? 'unknown inspector error'}`);
   }
   return setup.diagnostics;
+}
+
+export async function stopProcessMemoryDiagnosticsWithTimeout(
+  diagnostics: ProcessMemoryDiagnostics,
+  warn: (message: string) => void,
+  timeoutMs = 5_000,
+): Promise<void> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = await Promise.race([
+    diagnostics.stop().then(
+      () => false,
+      error => {
+        warn(`Process memory diagnostics did not stop cleanly: ${errorMessage(error)}`);
+        return false;
+      },
+    ),
+    new Promise<true>(resolve => {
+      timeout = setTimeout(() => resolve(true), timeoutMs);
+      timeout.unref();
+    }),
+  ]);
+  if (timeout) clearTimeout(timeout);
+  if (timedOut)
+    warn(`Process memory diagnostics did not stop within ${timeoutMs}ms; final artifacts may be incomplete.`);
 }
 
 function defaultInspectorSession(): InspectorSessionAdapter {
@@ -233,6 +275,9 @@ export class ProcessMemoryDiagnostics {
   private samplingActive = false;
   private stopRequested = false;
   private stoppingPromise: Promise<ProcessMemoryDiagnosticsStatus> | null = null;
+  private pendingGcEvents: Array<Record<string, unknown>> = [];
+  private gcEventBufferOverflowed = false;
+  private artifactWriteFailed = false;
   private captureQueue: Promise<unknown> = Promise.resolve();
   private writeQueue: Promise<unknown> = Promise.resolve();
 
@@ -272,7 +317,10 @@ export class ProcessMemoryDiagnostics {
 
   async start(): Promise<ProcessMemoryDiagnosticsStatus> {
     if (this.state === 'active' || this.state === 'starting') return this.getStatus();
-    if (this.state === 'stopping' && this.stoppingPromise) return this.stoppingPromise;
+    if (this.state === 'stopping' && this.stoppingPromise) {
+      await this.stoppingPromise;
+      return this.start();
+    }
     if (this.latestError && this.outputDirectory === null) {
       this.state = 'error';
       return this.getStatus();
@@ -285,6 +333,9 @@ export class ProcessMemoryDiagnostics {
     this.sampleCount = 0;
     this.captureCount = 0;
     this.gcEventCount = 0;
+    this.pendingGcEvents = [];
+    this.gcEventBufferOverflowed = false;
+    this.artifactWriteFailed = false;
     this.latestSample = null;
     this.latestCapturePath = null;
     this.latestError = null;
@@ -335,17 +386,24 @@ export class ProcessMemoryDiagnostics {
     this.clearTimersAndObserver();
 
     this.stoppingPromise = (async () => {
+      let stopError: string | null = null;
       try {
         if (this.outputDirectory) await this.takeSample();
         await this.enqueueCapture(async () => {
           if (this.inspector && this.samplingActive) await this.captureEpoch('stop', true);
         });
         await this.writeQueue;
+        if (this.gcEventBufferOverflowed) {
+          throw new Error(`GC event buffer exceeded ${MAX_PENDING_GC_EVENTS} records before the next process sample.`);
+        }
+        if (this.artifactWriteFailed) throw new Error('One or more process memory diagnostic artifact writes failed.');
+        this.latestError = null;
       } catch (error) {
-        this.latestError = `Unable to stop process memory diagnostics cleanly: ${errorMessage(error)}`;
+        stopError = `Unable to stop process memory diagnostics cleanly: ${errorMessage(error)}`;
+        this.latestError = stopError;
       } finally {
         this.disconnectInspector();
-        this.state = this.latestError ? 'error' : 'inactive';
+        this.state = stopError ? 'error' : 'inactive';
       }
       return this.getStatus();
     })();
@@ -354,7 +412,8 @@ export class ProcessMemoryDiagnostics {
   }
 
   private async createArtifacts(): Promise<void> {
-    await mkdir(this.config.parentDirectory, { recursive: true });
+    await mkdir(this.config.parentDirectory, { recursive: true, mode: 0o700 });
+    await chmod(this.config.parentDirectory, 0o700);
     const runName = `run-${safeTimestamp(this.startedAt!)}-${process.pid}-${this.randomId()
       .replaceAll(/[^a-zA-Z0-9-]/g, '')
       .slice(0, 12)}`;
@@ -382,17 +441,23 @@ export class ProcessMemoryDiagnostics {
 
   private observeGc(): void {
     const observer = this.createPerformanceObserver(entries => {
+      const before = this.latestSample?.memory ?? null;
+      const after = process.memoryUsage();
+      const timestamp = this.now().toISOString();
       for (const entry of entries) {
-        const before = this.latestSample?.memory ?? null;
-        const after = process.memoryUsage();
         const gcEntry = entry as PerformanceEntry & {
           kind?: number;
           flags?: number;
           detail?: { kind?: number; flags?: number };
         };
         this.gcEventCount += 1;
-        void this.enqueueWrite('gc-events.jsonl', {
-          timestamp: this.now().toISOString(),
+        if (this.pendingGcEvents.length >= MAX_PENDING_GC_EVENTS) {
+          this.gcEventBufferOverflowed = true;
+          this.latestError = `GC event buffer exceeded ${MAX_PENDING_GC_EVENTS} records before the next process sample.`;
+          continue;
+        }
+        this.pendingGcEvents.push({
+          timestamp,
           sequence: this.gcEventCount,
           name: entry.name,
           startTime: entry.startTime,
@@ -402,7 +467,7 @@ export class ProcessMemoryDiagnostics {
           before,
           after,
           latestSampleSequence: this.latestSample?.sequence ?? null,
-        }).catch(error => this.recordError('GC event write failed', error));
+        });
       }
     });
     observer.observe({ entryTypes: ['gc'] });
@@ -433,13 +498,25 @@ export class ProcessMemoryDiagnostics {
     this.sampleCount = sample.sequence;
     this.latestSample = sample;
     await this.enqueueWrite('process-samples.jsonl', sample);
+    const gcEvents = this.pendingGcEvents.splice(0);
+    if (gcEvents.length > 0) await this.enqueueWriteBatch('gc-events.jsonl', gcEvents);
     return sample;
   }
 
   private enqueueWrite(fileName: string, value: unknown): Promise<void> {
+    return this.enqueueWriteBatch(fileName, [value]);
+  }
+
+  private enqueueWriteBatch(fileName: string, values: unknown[]): Promise<void> {
     const operation = this.writeQueue.then(async () => {
-      if (!this.outputDirectory) return;
-      await appendFile(join(this.outputDirectory, fileName), `${JSON.stringify(value)}\n`, { mode: 0o600 });
+      if (!this.outputDirectory || values.length === 0) return;
+      const lines = values.map(value => JSON.stringify(value)).join('\n');
+      try {
+        await appendFile(join(this.outputDirectory, fileName), `${lines}\n`, { mode: 0o600 });
+      } catch (error) {
+        this.artifactWriteFailed = true;
+        throw error;
+      }
     });
     this.writeQueue = operation.catch(() => undefined);
     return operation;
@@ -491,6 +568,7 @@ export class ProcessMemoryDiagnostics {
       this.latestCapturePath = finalPath;
       this.latestError = null;
     } catch (error) {
+      this.artifactWriteFailed = true;
       this.latestError = `Unable to persist allocation capture: ${errorMessage(error)}`;
       throw new Error(this.latestError, { cause: error });
     } finally {

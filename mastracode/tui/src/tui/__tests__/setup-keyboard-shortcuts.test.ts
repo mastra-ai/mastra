@@ -192,9 +192,44 @@ describe('setupKeyHandlers', () => {
     expect(state.session.abort).toHaveBeenCalledTimes(1);
     expect(state.userInitiatedAbort).toBe(true);
   });
+
+  it('exits on double process SIGINT without also aborting the active run', () => {
+    const { state } = createState(true);
+    const stop = vi.fn();
+    const exit = vi.fn();
+    state.lastCtrlCTime = Date.now();
+    let handler: (() => void) | undefined;
+    vi.spyOn(process, 'on').mockImplementation((event: string | symbol, listener: (...args: any[]) => void) => {
+      if (event === 'SIGINT') handler = listener as () => void;
+      return process;
+    });
+    vi.spyOn(process, 'off').mockImplementation(() => process);
+
+    const cleanup = setupKeyHandlers(state, { stop, exit, doubleCtrlCMs: 500 });
+    handler!();
+    cleanup();
+
+    expect(stop).toHaveBeenCalledOnce();
+    expect(exit).toHaveBeenCalledWith(0);
+    expect(state.session.abort).not.toHaveBeenCalled();
+  });
 });
 
 describe('setupKeyboardShortcuts', () => {
+  it('exits on double Ctrl+C without also aborting the active run', () => {
+    const { state, actions } = createState(true);
+    const stop = vi.fn();
+    const exit = vi.fn();
+    state.lastCtrlCTime = Date.now();
+
+    setupKeyboardShortcuts(state, { stop, exit, doubleCtrlCMs: 500, queueFollowUpMessage: vi.fn() });
+    actions.get('clear')!();
+
+    expect(stop).toHaveBeenCalledOnce();
+    expect(exit).toHaveBeenCalledWith(0);
+    expect(state.session.abort).not.toHaveBeenCalled();
+  });
+
   it('defaults slash-command autocomplete to the first visible built-in command before custom commands', () => {
     process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
     autocompleteProviders.length = 0;

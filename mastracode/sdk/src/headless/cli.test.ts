@@ -12,6 +12,7 @@ const lifecycleMocks = vi.hoisted(() => {
       order.push('diagnostics-start');
       return diagnostics;
     }),
+    stopDiagnostics: vi.fn(async () => diagnostics.stop()),
     runMC: vi.fn(),
   };
 });
@@ -20,6 +21,7 @@ vi.mock('../index.js', () => ({ createMastraCode: lifecycleMocks.createMastraCod
 vi.mock('../process-memory-diagnostics.js', () => ({
   createProcessMemoryDiagnosticsFromEnvironment: lifecycleMocks.createDiagnostics,
   startConfiguredProcessMemoryDiagnostics: lifecycleMocks.startDiagnostics,
+  stopProcessMemoryDiagnosticsWithTimeout: lifecycleMocks.stopDiagnostics,
 }));
 vi.mock('./run-mc.js', () => ({ runMC: lifecycleMocks.runMC }));
 
