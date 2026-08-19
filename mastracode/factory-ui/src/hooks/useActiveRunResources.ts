@@ -29,6 +29,6 @@ export function useActiveRunResources({
     refetchInterval: 5_000,
     retry: false,
   });
-  const runs = query.data ?? [];
-  return Object.fromEntries(resourceIds.map(id => [id, runs.some(run => run.resourceId === id)]));
+  const running = new Set((query.data ?? []).map(run => run.resourceId));
+  return Object.fromEntries(resourceIds.map(id => [id, running.has(id)]));
 }

@@ -219,16 +219,23 @@ describe('POST /web/factory/projects/:id/work-items', () => {
 
 // ── Read wire ────────────────────────────────────────────────────────────
 describe('work item read wire', () => {
-  it('keeps the dispatcher idempotency token out of every read', async () => {
+  it('keeps the dispatcher idempotency token in storage and out of every read', async () => {
     const created = await json(
       'POST',
       `/web/factory/projects/${PROJECT_ID}/work-items`,
       createBody({ metadata: { number: 42, [FACTORY_RULE_MATERIALIZATION_KEY]: 'rule-7:issue-42' } }),
     );
-    expect((await created.json()).workItem.metadata).toEqual({ number: 42 });
+    const { workItem } = await created.json();
+    expect(workItem.metadata).toEqual({ number: 42 });
 
     const listed = await json('GET', `/web/factory/projects/${PROJECT_ID}/work-items`);
     expect((await listed.json()).workItems[0].metadata).toEqual({ number: 42 });
+
+    const patched = await json('PATCH', `/web/factory/work-items/${workItem.id}`, { metadata: { prNumber: 7 } });
+    expect((await patched.json()).workItem.metadata).toEqual({ number: 42, prNumber: 7 });
+
+    const [stored] = await listItems();
+    expect(stored?.metadata[FACTORY_RULE_MATERIALIZATION_KEY]).toBe('rule-7:issue-42');
   });
 });
 
