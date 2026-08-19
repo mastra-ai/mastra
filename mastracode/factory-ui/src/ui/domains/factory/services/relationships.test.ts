@@ -146,7 +146,29 @@ describe('pull request candidate index', () => {
     const parentPr = workItem({ id: 'pr-94', source: 'github-pr' });
     const byParent = workItem({ id: 'issue-95', source: 'github-issue', parentWorkItemId: 'pr-94' });
     const unrelated = workItem({ id: 'pr-96', source: 'github-pr', metadata: { headBranch: 'other/branch' } });
-    const board = [orphanBranch, byBranch, byChild, childPr, parentPr, byParent, unrelated];
+    // Linked through two different buckets, each sitting on a different side of the card:
+    // whatever order the caller sorts on, board order has to survive the narrowing.
+    const multiLinked = workItem({
+      id: 'issue-97',
+      source: 'github-issue',
+      sessions: {
+        work: { sessionId: '/w/97', branch: 'factory/issue-97', threadId: 't-97', startedBy: 'u' },
+      },
+    });
+    const branchPr = workItem({ id: 'pr-98', source: 'github-pr', metadata: { headBranch: 'factory/issue-97' } });
+    const childOfMultiLinked = workItem({ id: 'pr-99', source: 'github-pr', parentWorkItemId: 'issue-97' });
+    const board = [
+      orphanBranch,
+      byBranch,
+      byChild,
+      childPr,
+      parentPr,
+      byParent,
+      unrelated,
+      branchPr,
+      multiLinked,
+      childOfMultiLinked,
+    ];
     const candidatesFor = pullRequestCandidateIndex(board);
 
     for (const item of board.filter(candidate => candidate.source !== 'github-pr')) {
