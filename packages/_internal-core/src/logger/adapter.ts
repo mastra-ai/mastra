@@ -71,12 +71,6 @@ export function isAdaptableLogger(logger: IMastraLogger): logger is AdaptableLog
 }
 
 /**
- * Adapt IMastraLogger's variadic args into the structured `data` payload of
- * an exported log record. Extracts the first plain object as data,
- * serializes an Error arg, and collects remaining primitives under `args`
- * so the derived record preserves all context from the native call.
- */
-/**
  * Export a tracked exception through the adapter sink, mirroring the
  * DualLogger dual-write shape (`errorId`/`domain`/`category`/`details`/`cause`
  * when present on a MastraError-like value). Never throws into the caller.
@@ -107,6 +101,12 @@ export function exportTrackedException(
   }
 }
 
+/**
+ * Adapt IMastraLogger's variadic args into the structured `data` payload of
+ * an exported log record. Extracts the first plain object as data,
+ * serializes an Error arg, and collects remaining primitives under `args`
+ * so the derived record preserves all context from the native call.
+ */
 export function buildLogRecordData(args: unknown[]): Record<string, unknown> | undefined {
   const objectData = args.find(
     (arg): arg is Record<string, unknown> =>

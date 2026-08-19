@@ -31,6 +31,11 @@ export function resolveTraceFields(): TraceFields | undefined {
 // which could feed on itself (export fails → error log → export → ...).
 // Mastra hands observability an export-suppressed view of the logger; the
 // adapter wiring checks the flag synchronously on every log call.
+//
+// Limitation: suppression only covers synchronous execution within the
+// guarded call. If an observability internal logs from an asynchronous
+// continuation (after an `await`, in a `.then()` callback, or from a timer),
+// the flag has already been restored and that record is exported normally.
 // ---------------------------------------------------------------------------
 
 let observabilityExportSuppressed = false;

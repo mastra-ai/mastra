@@ -695,6 +695,7 @@ export class Mastra<
   #logger: TLogger;
   #loggerAdapterOptions: LoggerAdapterOptions = { correlation: true, export: true };
   #wiredLoggers = new WeakSet<IMastraLogger>();
+  #fallbackWrappers = new WeakMap<IMastraLogger, DualLogger>();
   #loggerExplicit = false;
   #workflows: TWorkflows;
   #harnesses: Record<string, Harness<any>> = {};
@@ -5322,6 +5323,12 @@ export class Mastra<
     // Already wrapped (e.g. setLogger() re-invoked with the wired logger).
     if (inner instanceof DualLogger) return logger;
 
+    // Idempotent: the constructor wires the logger and then setLogger() is
+    // called with the same unwrapped instance — reuse the existing wrapper
+    // so the deprecation notice fires only once per logger instance.
+    const existing = this.#fallbackWrappers.get(inner);
+    if (existing) return existing as unknown as TLogger;
+
     // Deprecated fallback: dual-write wrapper. Native records (stdout) do
     // not receive trace correlation on this path.
     try {
@@ -5332,10 +5339,9 @@ export class Mastra<
     } catch {
       // A throwing logger must not break Mastra construction.
     }
-    return new DualLogger(
-      inner,
-      this.#loggerAdapterOptions.export ? () => this.loggerVNext : undefined,
-    ) as unknown as TLogger;
+    const wrapper = new DualLogger(inner, this.#loggerAdapterOptions.export ? () => this.loggerVNext : undefined);
+    this.#fallbackWrappers.set(inner, wrapper);
+    return wrapper as unknown as TLogger;
   }
 
   public setLogger({ logger }: { logger: TLogger }) {

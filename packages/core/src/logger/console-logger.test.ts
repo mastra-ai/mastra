@@ -368,6 +368,28 @@ describe('ConsoleLogger', () => {
       });
     });
 
+    it('forwards details and serializes the Error cause on tracked exceptions', () => {
+      const logger = new ConsoleLogger({ level: LogLevel.INFO });
+      const { ctx, sink } = makeCtx();
+      logger.__attachObservability(ctx);
+
+      const err = Object.assign(new Error('tracked boom', { cause: new Error('root cause') }), {
+        id: 'ERR_1',
+        domain: 'AGENT',
+        category: 'USER',
+        details: { step: 'generate' },
+      });
+      logger.trackException(err);
+
+      expect(sink.error).toHaveBeenCalledWith('tracked boom', {
+        errorId: 'ERR_1',
+        domain: 'AGENT',
+        category: 'USER',
+        details: { step: 'generate' },
+        cause: 'root cause',
+      });
+    });
+
     it('does not export tracked exceptions when export is disabled', () => {
       const logger = new ConsoleLogger({ level: LogLevel.INFO });
       const { ctx, sink } = makeCtx({ options: { correlation: true, export: false } });

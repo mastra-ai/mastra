@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Mastra } from '../mastra';
 import { NoOpObservability } from '../observability';
 import { executeWithContext } from '../observability/utils';
@@ -16,7 +16,7 @@ import { DualLogger } from './dual-logger';
 import type { IMastraLogger } from './logger';
 
 // Production path that registers the AsyncLocalStorage span resolver.
-new Mastra();
+new Mastra({ __ephemeral: true });
 
 const VALID_TRACE_ID = '0af7651916cd43dd8448eb211c80319c';
 const VALID_SPAN_ID = 'b7ad6b7169203331';
@@ -129,11 +129,15 @@ describe('createExportSuppressedLogger', () => {
 });
 
 describe('Mastra logger wiring', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('attaches observability to adaptable loggers without wrapping them', () => {
     const logger = new ConsoleLogger();
     const attach = vi.spyOn(logger, '__attachObservability');
 
-    const mastra = new Mastra({ logger });
+    const mastra = new Mastra({ logger, __ephemeral: true });
 
     expect(attach).toHaveBeenCalledTimes(1);
     expect(mastra.getLogger()).toBe(logger);
@@ -142,10 +146,13 @@ describe('Mastra logger wiring', () => {
   it('falls back to DualLogger for non-adaptable loggers', () => {
     const logger = makePlainLogger();
 
-    const mastra = new Mastra({ logger: logger as any });
+    const mastra = new Mastra({ logger: logger as any, __ephemeral: true });
 
     expect(mastra.getLogger()).toBeInstanceOf(DualLogger);
     expect((mastra.getLogger() as unknown as DualLogger).baseLogger).toBe(logger);
+    // Constructor wiring + setLogger() both run over the same inner logger;
+    // the wrapper is reused and the deprecation notice fires only once.
+    expect(logger.debug).toHaveBeenCalledTimes(1);
   });
 
   it('passes loggerOptions through to the adapter context', () => {
@@ -155,7 +162,7 @@ describe('Mastra logger wiring', () => {
       ctx = c;
     });
 
-    new Mastra({ logger, loggerOptions: { export: false } });
+    new Mastra({ logger, loggerOptions: { export: false }, __ephemeral: true });
 
     expect(ctx?.options).toEqual({ correlation: true, export: false });
     // Export disabled → no sink even though correlation stays on.
@@ -169,7 +176,7 @@ describe('Mastra logger wiring', () => {
       ctx = c;
     });
 
-    new Mastra({ logger });
+    new Mastra({ logger, __ephemeral: true });
 
     // No real logger context exists → no sink, so adapters skip record
     // derivation entirely instead of dispatching into a no-op.
@@ -190,7 +197,7 @@ describe('Mastra logger wiring', () => {
       ctx = c;
     });
 
-    new Mastra({ logger, observability: new TestObservability() as any });
+    new Mastra({ logger, observability: new TestObservability() as any, __ephemeral: true });
 
     // Observability configured → the real sink is resolved.
     expect(ctx?.getLogSink()).toBe(sink);
@@ -209,7 +216,8 @@ describe('Mastra logger wiring', () => {
 
   it('end to end: a Mastra-wired logger emits trace fields on its native record inside a span', async () => {
     const logger = new ConsoleLogger({ level: LogLevel.INFO });
-    const mastra = new Mastra({ logger });
+    const mastra = new Mastra({ logger, __ephemeral: true });
+    // Restored by the afterEach vi.restoreAllMocks(), even on assertion failure.
     const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
     await executeWithContext({
@@ -225,6 +233,5 @@ describe('Mastra logger wiring', () => {
       span_id: VALID_SPAN_ID,
     });
     expect(infoSpy).toHaveBeenCalledWith('outside span');
-    infoSpy.mockRestore();
   });
 });
