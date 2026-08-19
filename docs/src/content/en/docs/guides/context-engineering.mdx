@@ -9,11 +9,15 @@ packages:
 
 # Context engineering
 
+{/* vale ai-tells.VerbTricolon = NO */}
+
 A model can only work with the information available in its context window. That might include the current conversation, remembered details, application data, tool results, or relevant passages from a knowledge base.
 
 Context engineering is the practice of deciding what information the model should see and when. The goal isn't to provide as much as possible, but to keep the context relevant and current. Too little context leaves the model without information it needs; too much can make important details harder to find, increase cost, and reduce the quality of the response long before the model reaches its context limit.
 
 Mastra provides different ways to bring information into context, keep it available over time, retrieve it when needed, and reduce or isolate it as a task grows. This guide explains when to use each mechanism and how they fit together.
+
+{/* vale ai-tells.VerbTricolon = YES */}
 
 | Need | Start with | What the model sees |
 | - | - | - |
