@@ -327,7 +327,7 @@ export const mastra = new Mastra({ workspace })
 await workspace.init()
 ```
 
-Top-level `await` keeps module startup pending until initialization finishes. When `init()` resolves, Mastra has attempted to read and index every matching file. An unchunked file uses its path as the document ID. Large files use IDs such as `<path>#chunk-0` and include the original path in `sourceFile` metadata. Files that can't be read or indexed may be skipped and logged without failing initialization.
+Top-level `await` keeps module startup pending until initialization finishes. When `init()` resolves, Mastra has attempted to read and index every matching file.
 
 Each `autoIndexPaths` entry can be a file, directory, or glob pattern. Recursive directory and glob traversal is limited to ten levels:
 
