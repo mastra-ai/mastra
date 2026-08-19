@@ -1393,11 +1393,7 @@ export class MessageList {
     return true;
   }
 
-  /**
-   * Mint the id of the next response message, sealing the current one first.
-   * Merging looks at roles, not ids, and only ever targets the tail: a moved id
-   * whose boundary is missing folds the next response into the previous row.
-   */
+  /** Sealing is not optional: a moved id whose boundary is missing folds the next response into the previous row. */
   public rotateResponseMessageId(generateId: () => string, sealMessageId?: string): string {
     if (!this.markResponseMessageBoundary(sealMessageId)) this.markResponseMessageBoundary();
     return generateId();

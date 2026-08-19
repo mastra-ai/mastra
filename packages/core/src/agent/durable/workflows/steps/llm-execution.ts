@@ -415,7 +415,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   model: currentModel,
                   messageId: currentMessageId,
                   rotateResponseMessageId: () => {
-                    currentMessageId = messageList.rotateResponseMessageId(() => crypto.randomUUID(), currentMessageId);
+                    currentMessageId = messageList.rotateResponseMessageId(
+                      () => mastra?.generateId?.() ?? crypto.randomUUID(),
+                      currentMessageId,
+                    );
                     return currentMessageId;
                   },
                   tools: currentTools,
