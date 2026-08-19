@@ -304,7 +304,6 @@ describe('createStep with Processor', () => {
       await step.execute({ inputData, outputWriter: writer } as any);
 
       expect(processInputStepMock).toHaveBeenCalledWith(expect.objectContaining({ sendSignal: expect.any(Function) }));
-      expect(messageList.markResponseMessageBoundary).toHaveBeenCalledTimes(1);
       expect(messageList.addSignal).toHaveBeenCalledWith(expect.objectContaining({ tagName: 'system-reminder' }));
       expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
       expect(writer).toHaveBeenCalledWith(expect.objectContaining({ type: 'data-signal', transient: true }), {

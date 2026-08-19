@@ -307,8 +307,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         typedInput.options?.maxProcessorRetries ??
         (globalRunRegistry.get(runId)?.errorProcessors?.length ? 10 : undefined);
 
-      // A retry must keep the id the error processor rotated to, so this lives
-      // outside both loops.
+      // Hoisted: a retry must keep the id an error processor rotated to.
       let currentMessageId = messageId;
       const rotateResponseMessageId = () => {
         currentMessageId = messageList.rotateResponseMessageId(currentMessageId);
