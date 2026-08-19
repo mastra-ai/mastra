@@ -243,8 +243,6 @@ The first request in a thread runs the resolver and starts the sandbox. Later re
 
 The example mounts the filesystem inside the resolver because static `mounts` can't be combined with a sandbox resolver. Generated tools resolve the filesystem and sandbox from the request context automatically.
 
-Mastra doesn't automatically destroy sandboxes returned by a resolver. Plan how your application will release them when users or sessions end. See [Cleanup](#cleanup).
-
 ### Resolver ownership
 
 You are responsible for every sandbox returned by a resolver. It must be ready to use when returned. Keep track of it and destroy it through your application lifecycle code when it's no longer needed. `workspace.destroy()` doesn't destroy resolver-returned sandboxes.
