@@ -249,6 +249,9 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
 
     await expect(runMCCli('do it')).rejects.toThrow('EXIT:0');
 
+    expect(lifecycleMocks.order).toEqual(
+      expect.arrayContaining(['diagnostics-start', 'mastracode-create', 'intervals-stop', 'diagnostics-stop']),
+    );
     expect(lifecycleMocks.order.indexOf('diagnostics-start')).toBeLessThan(
       lifecycleMocks.order.indexOf('mastracode-create'),
     );
