@@ -13,7 +13,7 @@ A filesystem gives an agent tools for reading, writing, listing, and [searching]
 
 Configure files in two ways:
 
-- `filesystem` accepts one filesystem provider, a per-request resolver, or a `CompositeFilesystem` that you create yourself.
+- `filesystem` accepts one filesystem provider or a `CompositeFilesystem` that you create yourself.
 - `mounts` creates a `CompositeFilesystem` from path-prefixed providers. When the workspace also has a static sandbox, Mastra attempts to mount each provider at its configured path inside the sandbox so commands can access the same files. Remote sandbox mounts typically use Filesystem in Userspace (FUSE).
 
 Both configurations give the agent file tools. Sandbox commands can only see a provider when the sandbox can mount it successfully. Configure either `filesystem` or `mounts`, not both. Configuring both throws a `WorkspaceError` with the code `INVALID_CONFIG`.
