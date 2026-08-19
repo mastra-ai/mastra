@@ -1,5 +1,25 @@
 # @mastra/mysql
 
+## 0.8.0-alpha.3
+
+### Minor Changes
+
+- Added foundational support for an upcoming experimental memory capability across storage, runtime, and developer tooling. ([#19538](https://github.com/mastra-ai/mastra/pull/19538))
+
+### Patch Changes
+
+- Updated dependencies [[`c549e2f`](https://github.com/mastra-ai/mastra/commit/c549e2f40edc1cac5d9e74e82f90da22b48df084), [`c549e2f`](https://github.com/mastra-ai/mastra/commit/c549e2f40edc1cac5d9e74e82f90da22b48df084), [`2ef2f23`](https://github.com/mastra-ai/mastra/commit/2ef2f230a7aed342e7dc3b2000cd42e4c43e08a7), [`5740ec6`](https://github.com/mastra-ai/mastra/commit/5740ec60c760ffdfbfaa59d603d03b847c864e05)]:
+  - @mastra/core@1.60.0-alpha.13
+
+## 0.7.1-alpha.2
+
+### Patch Changes
+
+- Cut warm initialization from around 110 client-server round trips to single digits with an init-scoped schema snapshot, on top of the column-probe casing fix that removed the ALTER TABLE storm. Three information_schema reads at the start of init() now answer table, column, and index existence locally; createTable, alterTable, createIndex, and hasColumn consult the snapshot and maintain it as objects are created, and the memory domain's raw CREATE INDEX for idx_om_lookup_key consults it too instead of raising and swallowing ER_DUP_KEYNAME on every boot. The snapshot lives for exactly the init window and is cleared in a finally, so runtime callers keep querying the live catalog. Measured on docker mysql:9.7: warm init 109 to 111 round trips down to 7 (6 excluding measurement scaffolding), cold init 253 down to 153 or 154 across runs, with an identical cold-init table and index census before and after. ([#21634](https://github.com/mastra-ai/mastra/pull/21634))
+
+- Updated dependencies [[`6db7a5d`](https://github.com/mastra-ai/mastra/commit/6db7a5dd3dd2b6f7ef75dcd804fcffef5fa83963), [`0cdc5dc`](https://github.com/mastra-ai/mastra/commit/0cdc5dc69024957815da4f51acc4119eb4f447d7)]:
+  - @mastra/core@1.60.0-alpha.12
+
 ## 0.7.1-alpha.1
 
 ### Patch Changes

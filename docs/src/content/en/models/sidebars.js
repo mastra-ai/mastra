@@ -40,6 +40,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'gateways/merge-gateway',
+          label: 'Merge Gateway',
+        },
+        {
+          type: 'doc',
           id: 'gateways/neon',
           label: 'Neon',
         },
@@ -536,11 +541,6 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/merge-gateway',
-          label: 'Merge Gateway',
-        },
-        {
-          type: 'doc',
           id: 'providers/meta',
           label: 'Meta',
         },
@@ -766,7 +766,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/scx',
+          id: 'providers/scx-ai',
           label: 'SCX.ai',
         },
         {

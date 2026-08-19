@@ -1,5 +1,29 @@
 # @mastra/pg
 
+## 1.21.0-alpha.4
+
+### Minor Changes
+
+- Added foundational support for an upcoming experimental memory capability across storage, runtime, and developer tooling. ([#19538](https://github.com/mastra-ai/mastra/pull/19538))
+
+### Patch Changes
+
+- Updated dependencies [[`c549e2f`](https://github.com/mastra-ai/mastra/commit/c549e2f40edc1cac5d9e74e82f90da22b48df084), [`c549e2f`](https://github.com/mastra-ai/mastra/commit/c549e2f40edc1cac5d9e74e82f90da22b48df084), [`2ef2f23`](https://github.com/mastra-ai/mastra/commit/2ef2f230a7aed342e7dc3b2000cd42e4c43e08a7), [`5740ec6`](https://github.com/mastra-ai/mastra/commit/5740ec60c760ffdfbfaa59d603d03b847c864e05)]:
+  - @mastra/core@1.60.0-alpha.13
+
+## 1.20.1-alpha.3
+
+### Patch Changes
+
+- Stop a dropped Postgres connection from killing the process while a client is checked out. ([#21765](https://github.com/mastra-ai/mastra/pull/21765))
+
+  `PgFactoryStorage` attached an `error` listener to the pool, but pg only routes pool-level errors for _idle_ clients — it hands ownership of a client to the borrower for the duration of a checkout. A backend restart or network blip that landed on a client mid-transaction therefore reached an emitter with nothing listening, and Node escalated it to an uncaughtException that took the whole server down (`Connection terminated unexpectedly` at `pg/lib/client.js`), even though the idle siblings were logged and discarded cleanly.
+
+  Pools created by `PgFactoryStorage` now attach a listener once per physical connection as it is established, so a client stays covered while borrowed. While the client is idle the pool's own listener already reports the failure, so the extra listener stays quiet and a dropped connection is announced once, as the right thing. The pool still discards the failed connection and reconnects on the next checkout; the failure is now logged instead of fatal. Caller-supplied pools are left untouched, as before.
+
+- Updated dependencies [[`6db7a5d`](https://github.com/mastra-ai/mastra/commit/6db7a5dd3dd2b6f7ef75dcd804fcffef5fa83963), [`0cdc5dc`](https://github.com/mastra-ai/mastra/commit/0cdc5dc69024957815da4f51acc4119eb4f447d7)]:
+  - @mastra/core@1.60.0-alpha.12
+
 ## 1.20.1-alpha.2
 
 ### Patch Changes

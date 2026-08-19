@@ -445,6 +445,34 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
     );
   });
 
+  it('arms the item so the runs that follow a person’s start need no further consent', async () => {
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    const { workItem } = await created.json();
+    const prepare = vi.fn(async (input: any) => ({
+      workItemId: input.workItem.id,
+      bindingId: 'binding-1',
+      threadId: input.sessionId,
+      resourceId: input.sessionId,
+      sessionId: input.sessionId,
+      branch: 'factory/issue-42',
+      revision: 2,
+      kickoffStatus: 'pending',
+      replayed: false,
+    }));
+    const app = buildApp(orgUser, { prepare });
+
+    const res = await app.request(`/web/factory/projects/${PROJECT_ID}/runs/start`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(startBody(workItem.id)),
+    });
+
+    expect(res.status).toBe(202);
+    // Arming rides inside prepareRunStart's transaction; the route's contract
+    // is passing the flag through to the coordinator.
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ armAutonomy: true }));
+  });
+
   it('rejects a non-UUID kickoff identity before coordination', async () => {
     const prepare = vi.fn();
     const app = buildApp(orgUser, { prepare });

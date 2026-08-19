@@ -13,7 +13,17 @@ Some workflows need to pause for human input before continuing. When a workflow 
 
 Human-in-the-loop (HITL) input works much like [pausing a workflow](/docs/workflows/suspend-and-resume) using `suspend()`. The key difference is that when human input is required, you can return `suspend()` with a payload that provides context or guidance to the user on how to continue.
 
-![Pausing a workflow with suspend()](/img/workflows/workflows-suspend.jpg)
+```mermaid
+flowchart LR
+  accTitle: Suspending a workflow for human input
+  accDescr: The workflow starts step1. The step either completes the workflow or suspends while it waits for human input.
+  start(( start )) -- in --> step1([step1])
+  step1 -- out --> stop(( end ))
+  step1 pending1@-. suspend .-> paused@{ shape: manual-input, label: "awaiting<br/>human input" }
+
+  class stop accent
+  class paused pending
+```
 
 ```typescript {12-17,22-26} title="src/mastra/workflows/test-workflow.ts"
 import { createWorkflow, createStep } from '@mastra/core/workflows'
@@ -98,7 +108,16 @@ The data returned by the step can include a reason and help the user understand 
 
 As with [restarting a workflow](/docs/workflows/suspend-and-resume#restarting-a-workflow-with-resume), use `resume()` with `resumeData` to continue a workflow after receiving input from a human. The workflow resumes from the step where it was paused.
 
-![Restarting a workflow with resume()](/img/workflows/workflows-resume.jpg)
+```mermaid
+flowchart LR
+  accTitle: Resuming a workflow with human input
+  accDescr: Human input resumes step1. The step then completes the workflow.
+  paused@{ shape: manual-input, label: "human input" } pending1@-. resume .-> step1([step1])
+  step1 -- out --> stop(( end ))
+
+  class paused pending
+  class stop accent
+```
 
 ```typescript {13}
 const workflow = mastra.getWorkflow('testWorkflow')

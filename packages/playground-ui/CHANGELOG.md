@@ -1,5 +1,35 @@
 # @mastra/playground-ui
 
+## 50.0.0-alpha.13
+
+### Minor Changes
+
+- Added filled and ghost destructive Button variants for dangerous actions. ([#21790](https://github.com/mastra-ai/mastra/pull/21790))
+
+  ```tsx
+  <Button variant="destructive">Delete</Button>
+  <Button variant="destructive-ghost">Remove</Button>
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`951a126`](https://github.com/mastra-ai/mastra/commit/951a126e43ed45155fed534ddabf0a1a94f2d7bb), [`c549e2f`](https://github.com/mastra-ai/mastra/commit/c549e2f40edc1cac5d9e74e82f90da22b48df084), [`c549e2f`](https://github.com/mastra-ai/mastra/commit/c549e2f40edc1cac5d9e74e82f90da22b48df084), [`2ef2f23`](https://github.com/mastra-ai/mastra/commit/2ef2f230a7aed342e7dc3b2000cd42e4c43e08a7), [`5740ec6`](https://github.com/mastra-ai/mastra/commit/5740ec60c760ffdfbfaa59d603d03b847c864e05)]:
+  - @mastra/client-js@1.41.0-alpha.13
+  - @mastra/core@1.60.0-alpha.13
+  - @mastra/memory@1.27.0-alpha.3
+  - @mastra/react@1.4.4-alpha.13
+
+## 50.0.0-alpha.12
+
+### Patch Changes
+
+- Improved trace details with readable times, precise hover values, responsive layouts, and clearer statuses. ([#21660](https://github.com/mastra-ai/mastra/pull/21660))
+
+- Updated dependencies [[`6db7a5d`](https://github.com/mastra-ai/mastra/commit/6db7a5dd3dd2b6f7ef75dcd804fcffef5fa83963), [`0cdc5dc`](https://github.com/mastra-ai/mastra/commit/0cdc5dc69024957815da4f51acc4119eb4f447d7)]:
+  - @mastra/core@1.60.0-alpha.12
+  - @mastra/client-js@1.41.0-alpha.12
+  - @mastra/react@1.4.4-alpha.12
+
 ## 50.0.0-alpha.11
 
 ### Patch Changes

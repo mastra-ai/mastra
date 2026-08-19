@@ -1,5 +1,61 @@
 # @mastra/core
 
+## 1.60.0-alpha.13
+
+### Minor Changes
+
+- Added checkpoint support to LocalSandbox and a checkpoint capability signal to sandboxes. Sandboxes now expose `supportsCheckpoints` so features can detect whether `snapshot()` persists real state. LocalSandbox gained filesystem-backed checkpoints: pass `checkpointName` to seed the working directory on `start()` and persist it on `snapshot()`, and `seedCheckpointName` as a boot-only fallback (for example a shared warm base image) that never gets overwritten by later snapshots. ([#21798](https://github.com/mastra-ai/mastra/pull/21798))
+
+  ```ts
+  import { LocalSandbox } from '@mastra/core/workspace';
+
+  const sandbox = new LocalSandbox({
+    workingDirectory: './workspace',
+    checkpointName: 'session-123',
+    seedCheckpointName: 'repo-base',
+  });
+
+  await sandbox.start();
+  await sandbox.snapshot();
+  ```
+
+- Added foundational support for an upcoming experimental memory capability across storage, runtime, and developer tooling. ([#19538](https://github.com/mastra-ai/mastra/pull/19538))
+
+- Added invoker-bound tool provider connections. Providers now receive the connection kind, toolkit, and live RequestContext so they can execute as the authenticated user without coupling provider identity to the Memory resource. The stored connection ID continues to select the exact provider account. ([#21783](https://github.com/mastra-ai/mastra/pull/21783))
+
+  ```typescript
+  import type { ToolProviders } from '@mastra/core/tool-provider';
+
+  const toolProviders: ToolProviders = {
+    crm: {
+      tools: {
+        CREATE_LEAD: { toolkit: 'salesforce' },
+      },
+      connections: {
+        salesforce: [
+          {
+            kind: 'invoker',
+            toolkit: 'salesforce',
+            connectionId: 'connected-account-id',
+          },
+        ],
+      },
+    },
+  };
+  ```
+
+### Patch Changes
+
+- LocalSandbox now replaces an existing checkpoint atomically. A concurrent boot never observes a missing or half-written checkpoint while a snapshot is being saved. ([#21798](https://github.com/mastra-ai/mastra/pull/21798))
+
+## 1.60.0-alpha.12
+
+### Patch Changes
+
+- Skills discovery no longer blocks agent turns: the skills processors serve the cached catalog and revalidate in the background, and refresh swaps the catalog atomically. Mid-session skill changes now appear one turn later (plus a staleness cooldown of up to 30 seconds); pass blockingRefresh: true to SkillsProcessor or SkillSearchProcessor to restore same-turn freshness by awaiting the refresh before the first step. ([#21555](https://github.com/mastra-ai/mastra/pull/21555))
+
+- Normalize instruction-file paths (AGENTS.md/CLAUDE.md/CONTEXT.md) to forward slashes in dynamic `system-reminder` injection. On Windows, `node:path` produced backslash-separated paths that leaked into the prompt reminders and the metadata used to avoid re-injection; paths are now identical across platforms and match the paths tool calls report. Windows filesystem APIs accept forward slashes, so file reads are unaffected. ([#21071](https://github.com/mastra-ai/mastra/pull/21071))
+
 ## 1.60.0-alpha.11
 
 ### Minor Changes
