@@ -291,6 +291,27 @@ describe('ModelPicker', () => {
       expect(setModelPack).toHaveBeenCalledWith('mine');
     });
 
+    it('surfaces a failed pack activation and keeps the control usable', async () => {
+      const user = userEvent.setup();
+      const setModelPack = vi
+        .fn<(packId: string) => Promise<void>>()
+        .mockRejectedValue(new Error('Pack storage is unavailable'));
+      stubModelCatalog(['anthropic/claude-sonnet-4-5']);
+      renderPicker({
+        models: { activeModelId: 'anthropic/claude-sonnet-4-5', modelPacks: packs, setModelPack },
+      });
+
+      const trigger = await screen.findByLabelText('Session model');
+      await user.click(trigger);
+      await user.click(await screen.findByRole('option', { name: /Model pack Mine/ }));
+
+      expect(await screen.findByText('Pack storage is unavailable')).toBeInTheDocument();
+      // pendingPackId must clear on failure so another attempt is possible.
+      expect(trigger).toBeEnabled();
+      expect(trigger).toHaveAttribute('aria-busy', 'false');
+      expect(trigger).toHaveTextContent('Claude Sonnet 4.5');
+    });
+
     it('keeps packs selectable when no credentialed models are listed', async () => {
       const user = userEvent.setup();
       const setModelPack = vi.fn<(packId: string) => Promise<void>>().mockResolvedValue();
