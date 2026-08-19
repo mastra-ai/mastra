@@ -305,15 +305,15 @@ function ToolPayloadSection({ label, value }: { label: 'Input' | 'Output'; value
       <Txt as="div" variant="ui-xs" className="bg-surface2 text-neutral4 px-3 py-2 font-medium">
         {label}
       </Txt>
-      <div className="group/payload relative min-w-0 bg-black">
+      <div className="group/payload bg-surface3 relative min-w-0 dark:bg-black">
         {payload.isJson ? (
           <Code
             code={payload.text}
             lang="json"
-            className="text-neutral5 m-0 max-h-60 min-w-0 overflow-auto bg-black px-3 py-2 font-mono text-xs leading-normal whitespace-pre"
+            className="text-neutral5 m-0 max-h-60 min-w-0 overflow-auto px-3 py-2 font-mono text-xs leading-normal whitespace-pre"
           />
         ) : (
-          <pre className="text-neutral5 m-0 max-h-60 min-w-0 overflow-auto bg-black px-3 py-2 font-mono text-xs leading-normal break-words whitespace-pre-wrap">
+          <pre className="text-neutral5 m-0 max-h-60 min-w-0 overflow-auto px-3 py-2 font-mono text-xs leading-normal break-words whitespace-pre-wrap">
             {payload.text}
           </pre>
         )}
