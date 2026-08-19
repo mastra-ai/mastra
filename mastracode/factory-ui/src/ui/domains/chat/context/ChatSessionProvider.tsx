@@ -123,6 +123,7 @@ export function ChatSessionConfigProvider({
     resourceReady,
     sandboxPreparing,
     sandboxProgress,
+    sandboxWarming,
     resourceEnabled,
     sessionError,
     warmupError,
