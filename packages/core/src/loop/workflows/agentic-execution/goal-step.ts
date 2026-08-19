@@ -482,7 +482,10 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
             }
           : undefined,
         rotateResponseMessageId: () => {
-          currentMessageId = _internal?.generateId?.() ?? generateId();
+          currentMessageId = messageList.rotateResponseMessageId(
+            () => _internal?.generateId?.() ?? generateId(),
+            currentMessageId,
+          );
           inputData.messageId = currentMessageId;
           return currentMessageId;
         },

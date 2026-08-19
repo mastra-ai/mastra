@@ -103,6 +103,10 @@ async function runGoalStep(
       return signal;
     },
     markResponseMessageBoundary: vi.fn(),
+    rotateResponseMessageId: (generateId: () => string, sealMessageId?: string) => {
+      messageList.markResponseMessageBoundary(sealMessageId);
+      return generateId();
+    },
     get: { all: { db: () => opts?.dbMessages ?? [] } },
   };
 

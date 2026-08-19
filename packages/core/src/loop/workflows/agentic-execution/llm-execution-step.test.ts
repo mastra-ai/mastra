@@ -2178,7 +2178,17 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     });
   });
 
-  it('syncs outputStream.messageId with the rotated id on the API-error retry path', async () => {
+  it('rotates and seals the failed response on the API-error retry path', async () => {
+    messageList.add(
+      {
+        id: 'msg-0',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: { format: 2, parts: [{ type: 'text', text: 'half a sentence' }] },
+      },
+      'response',
+    );
+
     const doStream = vi.fn(async () => {
       throw new APICallError({
         message: 'upstream failed',
@@ -2246,6 +2256,23 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     // subsequent chunks written through the stream would split across two ids.
     expect(result.stepResult.reason).toBe('retry');
     expect(result.messageId).toBe('rotated-response-id');
+
+    // The rotated id only splits the transcript if the failed response was
+    // sealed; without the boundary the retry merges back under `msg-0`.
+    messageList.add(
+      {
+        id: result.messageId,
+        role: 'assistant',
+        createdAt: new Date(),
+        content: { format: 2, parts: [{ type: 'text', text: 'the retried answer' }] },
+      },
+      'response',
+    );
+    const assistantIds = messageList.get.all
+      .db()
+      .filter(message => message.role === 'assistant')
+      .map(message => message.id);
+    expect(assistantIds).toEqual(['msg-0', 'rotated-response-id']);
   });
 
   it('passes the rotated response message id to processor custom data writers', async () => {

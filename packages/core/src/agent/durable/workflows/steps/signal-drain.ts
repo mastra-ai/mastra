@@ -42,12 +42,13 @@ export function createDurableSignalDrainStep() {
 
         const drainList = new MessageList();
         drainList.deserialize(execOutput.messageListState);
-        drainList.markResponseMessageBoundary(execOutput.messageId);
-
-        const nextMessageId =
-          (params.mastra as Mastra | undefined)?.generateId?.() ??
-          globalThis.crypto?.randomUUID?.() ??
-          `msg_${Date.now()}`;
+        const nextMessageId = drainList.rotateResponseMessageId(
+          () =>
+            (params.mastra as Mastra | undefined)?.generateId?.() ??
+            globalThis.crypto?.randomUUID?.() ??
+            `msg_${Date.now()}`,
+          execOutput.messageId,
+        );
 
         const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
         for (const pendingSignal of pendingSignals) {

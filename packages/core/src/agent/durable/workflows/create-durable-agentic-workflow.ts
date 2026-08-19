@@ -418,12 +418,12 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
             if (pendingSignals.length > 0) {
               const drainList = new MessageList();
               drainList.deserialize(state.messageListState);
-              drainList.markResponseMessageBoundary();
-
-              const nextMessageId =
-                (mastra as Mastra | undefined)?.generateId?.() ??
-                globalThis.crypto?.randomUUID?.() ??
-                `msg_${Date.now()}`;
+              const nextMessageId = drainList.rotateResponseMessageId(
+                () =>
+                  (mastra as Mastra | undefined)?.generateId?.() ??
+                  globalThis.crypto?.randomUUID?.() ??
+                  `msg_${Date.now()}`,
+              );
               state.messageId = nextMessageId;
 
               for (const pendingSignal of pendingSignals) {
@@ -561,30 +561,23 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
           }
         }
 
-        // Rotate messageId for the next iteration. Each iteration's assistant
-        // response is a distinct message, mirroring the non-durable agentic
-        // loop which calls rotateResponseMessageId() between iterations. The
-        // mutated state.messageId flows into the next singleIterationWorkflow
-        // input via map-to-llm-input.
-        //
-        // We also mark the current MessageList's last assistant message as a
-        // response boundary so MessageMerger won't collapse the next
-        // iteration's assistant content into it. Without this, persisted
-        // memory keeps a single assistant message and the rotated id is never
-        // observable to consumers.
+        // Each iteration's assistant response is a distinct message, mirroring
+        // the non-durable agentic loop. The mutated state.messageId flows into
+        // the next singleIterationWorkflow input via map-to-llm-input.
         if (!isFinal) {
-          const nextMessageId =
-            (mastra as Mastra | undefined)?.generateId?.() ?? globalThis.crypto?.randomUUID?.() ?? `msg_${Date.now()}`;
-          state.messageId = nextMessageId;
-
           try {
             const boundaryList = new MessageList();
             boundaryList.deserialize(state.messageListState);
-            boundaryList.markResponseMessageBoundary();
+            state.messageId = boundaryList.rotateResponseMessageId(
+              () =>
+                (mastra as Mastra | undefined)?.generateId?.() ??
+                globalThis.crypto?.randomUUID?.() ??
+                `msg_${Date.now()}`,
+            );
             state.messageListState = boundaryList.serialize();
           } catch {
-            // Boundary marking is best-effort; if deserialization fails the
-            // next iteration will still run with the un-marked state.
+            // Keep the id when the state can't be sealed: an un-sealed merge is
+            // recoverable, a rotated id without its boundary duplicates on reload.
           }
         }
 

@@ -487,7 +487,10 @@ export function createDurableGoalStep() {
             }
           : undefined,
         rotateResponseMessageId: () => {
-          currentMessageId = mastra?.generateId?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+          currentMessageId = messageList.rotateResponseMessageId(
+            () => mastra?.generateId?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+            currentMessageId,
+          );
           nextState.messageId = currentMessageId;
           return currentMessageId;
         },
