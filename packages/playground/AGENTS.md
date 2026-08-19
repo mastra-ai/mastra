@@ -12,6 +12,21 @@ Vitest + MSW + typed @mastra/client-js fixtures is the primary test strategy
 
 Test-first (TDD): RED failing MSW test → GREEN minimum code → REFACTOR.
 
+After the relevant Vitest tests pass, mutation testing is mandatory for every
+production `.ts` or `.tsx` file changed by the current task:
+
+- Pass only the exact package-relative files changed by the current task, for
+  example `pnpm --filter ./packages/playground test:mutate "src/foo.ts,src/bar.tsx"`.
+- Never pass a directory or glob, never include unrelated dirty files, and never
+  run `stryker run` directly. The empty default `mutate` list and required CLI
+  argument intentionally prevent a package-wide mutation run.
+- Do not mutate tests, fixtures, generated files, configuration, or docs. If the
+  task changes no production TypeScript file, no mutation run is needed.
+- For every surviving mutant, strengthen the existing TDD/BDD tests and rerun
+  the same targeted command. Kill as many mutants as reasonably possible
+  without weakening assertions or distorting production code; report any truly
+  equivalent or unreachable survivors in the handoff.
+
 BDD-style, lint-enforced in `eslint.config.js`; MSW runs with
 `onUnhandledRequest: 'error'`:
 
