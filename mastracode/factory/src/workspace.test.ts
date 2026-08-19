@@ -871,13 +871,14 @@ describe('GitHub session workspace preparation', () => {
     expect(second.executeCommand).toHaveBeenCalledWith('echo', ['hi'], undefined);
   });
 
-  it('revives a local session whose checkout was removed from under a running turn', async () => {
-    // Session retirement tears down the local checkout when a work item
-    // finishes, but an in-flight run still holds the sandbox handle. Every
-    // subsequent tool call then spawns into a directory that no longer
-    // exists, which Node reports as `spawn /bin/sh ENOENT` — nothing in the
-    // message says "sandbox", so this has to be classified by probing the
-    // workdir or the session wedges for the rest of the run.
+  it('revives a live local session whose checkout was removed from under a running turn', async () => {
+    // A local checkout can disappear while the session is still live (a user
+    // or external cleanup removes the directory). Every subsequent tool call
+    // then spawns into a directory that no longer exists, which Node reports
+    // as `spawn /bin/sh ENOENT` — nothing in the message says "sandbox", so
+    // this has to be classified by probing the workdir or the session wedges
+    // for the rest of the run. The session is NOT retired here, so revival
+    // passes the generation check and rebuilds the checkout.
     const { workspace } = await createLocalFactory();
     addProject();
     addSession({ id: 'session-a' });
@@ -898,6 +899,87 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.materializeRepo).toHaveBeenCalledTimes(2);
     const second = await mocks.ensureSandbox.mock.results[1]!.value;
     expect(second.executeCommand).toHaveBeenCalledWith('echo', ['hi'], undefined);
+  });
+
+  it('fails a held run with a clear retirement error instead of resurrecting a retired checkout', async () => {
+    // Session retirement (`workspaceRegistry.invalidateSession`) increments
+    // the generation and tears the workspace down while an in-flight run may
+    // still hold the lazy handle. That run's next sandbox operation re-enters
+    // materialization, which ends at the generation check — the retired
+    // checkout is never handed back, and the run gets a clear retirement
+    // error instead of wedging on `spawn /bin/sh ENOENT`.
+    const registry = new FactoryWorkspaceRegistry();
+    const { workspace } = await createLocalFactory('mastracode-web-local-retired-run-', registry);
+    addProject();
+    addSession({ id: 'session-a' });
+
+    const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    await registry.invalidateSession('session-a');
+
+    await expect((resolved as any).sandbox.executeCommand('echo', ['hi'])).rejects.toThrow(
+      'retired during workspace materialization',
+    );
+  });
+
+  it('revives and replays when the exec transport never opened (command provably never started)', async () => {
+    // `opened: false` means the WebSocket upgrade was refused outright, so
+    // the command never reached the sandbox — safe to revive and replay.
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    const first = await mocks.ensureSandbox.mock.results[0]!.value;
+    const transport = Object.assign(new Error('exec transport failed'), { opened: false });
+    transport.name = 'SandboxExecTransportError';
+    first.executeCommand.mockRejectedValueOnce(transport);
+
+    const result = await (resolved as any).sandbox.executeCommand('echo', ['hi']);
+
+    expect(result.exitCode).toBe(0);
+    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(2);
+  });
+
+  it('surfaces a transport error whose command may have started instead of replaying it', async () => {
+    // `opened: true` means the WebSocket connected before closing without an
+    // exit frame — the command may have run and mutated state before the
+    // result was lost. Replaying `git commit`, an upload, or an arbitrary
+    // shell command could execute the side effect twice, so the error goes
+    // to the caller instead of triggering revive-and-replay.
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    const first = await mocks.ensureSandbox.mock.results[0]!.value;
+    const transport = Object.assign(new Error('exec transport failed'), { opened: true });
+    transport.name = 'SandboxExecTransportError';
+    first.executeCommand.mockRejectedValueOnce(transport);
+
+    await expect((resolved as any).sandbox.executeCommand('git', ['commit'])).rejects.toThrow('exec transport failed');
+    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns an existing workspace immediately while its materialization is still in flight', async () => {
+    // The first session-start request can launch a slow warm-up. A second
+    // metadata-only resolution (/threads, /messages, activity) must get the
+    // same workspace back without waiting on the clone/setup gate.
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    const first = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    let finishMaterialization!: () => void;
+    mocks.materializeRepo.mockImplementationOnce(() => new Promise<void>(resolve => (finishMaterialization = resolve)));
+    const leader = (first as any).sandbox.getInfo();
+    await vi.waitFor(() => expect(mocks.materializeRepo).toHaveBeenCalled());
+
+    // Resolves while the gate is held; without the fix this awaits the gate.
+    const second = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    expect(second).toBe(first);
+
+    finishMaterialization();
+    await leader;
   });
 
   it('surfaces a missing command without rebuilding the checkout it ran in', async () => {
@@ -1324,7 +1406,11 @@ describe('GitHub session workspace preparation', () => {
     ).resolves.toBe(existing);
   });
 
-  it('reconciles the current role for callers reusing an inflight materialization', async () => {
+  it('reconciles a role change on the next reuse after materialization completes', async () => {
+    // A follower arriving while materialization is in flight returns
+    // immediately (metadata-only requests must not block on the gate); the
+    // injector is not registered yet, so its reconciliation no-ops. The role
+    // rotation is applied by the first reuse after the leader finishes.
     mocks.githubPat = 'ghp_worker';
     mocks.githubReviewerPat = 'ghp_reviewer';
     let releaseMaterialization!: () => void;
@@ -1334,7 +1420,7 @@ describe('GitHub session workspace preparation', () => {
           releaseMaterialization = resolve;
         }),
     );
-    const { workspace } = await createLocalFactory();
+    const { workspace, resolver } = await createLocalFactory();
     addProject();
     addSession({ id: 'session-a' });
     const mastra = {
@@ -1351,13 +1437,22 @@ describe('GitHub session workspace preparation', () => {
     await vi.waitFor(() => expect(mocks.materializeRepo).toHaveBeenCalledTimes(1));
 
     mocks.runBindingRole = 'review';
-    const follower = workspace({
+    // The follower resolves without waiting on the materialization gate and
+    // without touching the (not yet registered) injector.
+    await resolver({
       requestContext: createGithubRequestContext('project-1', 'session-a'),
       mastra: mastra as any,
     });
-    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalledWith('GH_TOKEN', 'ghp_reviewer');
+
     releaseMaterialization();
-    await Promise.all([leader, follower]);
+    await leader;
+
+    // The next reuse sees the registered injector and applies the rotation.
+    await resolver({
+      requestContext: createGithubRequestContext('project-1', 'session-a'),
+      mastra: mastra as any,
+    });
 
     expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
     expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_reviewer');

@@ -40,13 +40,25 @@ export function checkpointNameForSession(sessionId: string): string {
 
 /**
  * Whether a command failure means the sandbox itself is gone (destroyed by
- * idle GC, provider teardown, or a broken exec transport) rather than the
- * command failing. Matched by error name so any provider's equivalent error
- * classes participate without a package dependency.
+ * idle GC or provider teardown) AND the command provably never started, so
+ * reviving the sandbox and replaying the command cannot run a side effect
+ * twice. Matched by error name so any provider's equivalent error classes
+ * participate without a package dependency.
+ *
+ * `SandboxExecTransportError` means both WebSocket attempts closed without an
+ * exit frame against a live sandbox. It only proves the command never started
+ * when the transport never opened (`opened: false` — the upgrade was refused
+ * outright). When the transport opened, the command may have run and mutated
+ * state before the result was lost, so replaying `git commit`, uploads, or
+ * arbitrary shell commands could execute the side effect twice; those errors
+ * surface to the caller instead.
  */
 export function isDeadSandboxError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
-  if (error.name === 'SandboxExecTransportError' || error.name === 'SandboxDestroyedError') return true;
+  if (error.name === 'SandboxDestroyedError') return true;
+  if (error.name === 'SandboxExecTransportError') {
+    return (error as Error & { opened?: boolean }).opened === false;
+  }
   return /sandbox .*(destroyed|no longer exists|not found)/i.test(error.message);
 }
 
@@ -500,11 +512,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     if (existing) {
       existing.setToolsConfig(MASTRACODE_WORKSPACE_TOOLS);
       // A materialization kicked off by another caller may still be running.
-      // Wait for it (without starting one) so the GitHub token reconciliation
-      // below sees the registered injector for the live sandbox; failures are
-      // the leader's to surface and retryable on the next sandbox use.
-      const inflight = inflightMaterializations.get(workspaceId);
-      if (inflight) await inflight.catch(() => {});
+      // Deliberately do NOT wait for it: a metadata-only resolution (thread
+      // list, messages, activity) must not block on the clone/setup that lazy
+      // materialization exists to avoid. Token reconciliation below no-ops
+      // until the leader registers the injector, and the next reuse after
+      // materialization completes reconciles against the live sandbox.
       return reconcileRegisteredWorkspace(existing);
     }
 
@@ -577,9 +589,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         !session.materializedAt &&
         !claimedPooledSandbox &&
         (await hasExistingCheckout(sandbox, workdir, repoFullName));
-      process.stderr.write(
-        `[factory:timing] workspace.materialize.seed seeded=${seededFromBaseCheckpoint} seedName=${binding.seedCheckpointName ?? 'none'} materializedAt=${session.materializedAt ? 'set' : 'null'} pooled=${claimedPooledSandbox}\n`,
-      );
       try {
         await runMaterialize(sandbox, seededFromBaseCheckpoint);
       } catch (error) {
