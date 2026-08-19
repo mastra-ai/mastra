@@ -157,11 +157,13 @@ test.describe('Agent chat streaming', () => {
       await fillAndSend(page, 'Give me the weather in Paris');
 
       // Assert partial streaming chunks
-      await expect(page.getByTestId('thread-wrapper').getByRole('button', { name: `lessComplexWorkflow` })).toBeVisible(
-        {
-          timeout: 20000,
-        },
-      );
+      const workflowToggle = page.getByTestId('thread-wrapper').getByRole('button', { name: `lessComplexWorkflow` });
+      await expect(workflowToggle).toBeVisible({
+        timeout: 20000,
+      });
+
+      // The unified tool card is collapsed by default; expand it to reveal the graph.
+      await workflowToggle.click();
 
       // Node 9 is the last step. While streaming, it transitions from "idle" to
       // "running" to "success". Depending on machine speed it may already be in
@@ -197,6 +199,10 @@ test.describe('Agent chat streaming', () => {
       // Memory
       await expect(page.getByTestId('thread-list').locator('li')).toHaveCount(1); // The new thread
       await page.reload();
+      // Expand the collapsed tool card again after the reload.
+      const reloadedToggle = page.getByTestId('thread-wrapper').getByRole('button', { name: `lessComplexWorkflow` });
+      await expect(reloadedToggle).toBeVisible({ timeout: 20000 });
+      await reloadedToggle.click();
       await expect(page.locator('[data-workflow-node]').nth(0)).toHaveAttribute('data-workflow-step-status', 'success');
       await expect(page.locator('[data-workflow-node]').nth(1)).toHaveAttribute('data-workflow-step-status', 'success');
       await expect(page.locator('[data-workflow-node]').nth(2)).toHaveAttribute('data-workflow-step-status', 'success');
