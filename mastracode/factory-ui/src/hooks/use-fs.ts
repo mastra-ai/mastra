@@ -33,6 +33,14 @@ function workspaceFileUrl(workspacePath: string | undefined, path: string | unde
   return `/web/workspace/file?${new URLSearchParams({ workspacePath, path, threadId })}`;
 }
 
+function planFileUrl(workspacePath: string | undefined, path: string | undefined) {
+  if (!workspacePath || !path) return undefined;
+  // The session file route only approves `.artifacts/*` reads without a thread
+  // file listing; Factory plans always live under `.artifacts/plans/`.
+  if (!path.startsWith('.artifacts/')) return undefined;
+  return `/web/workspace/file?${new URLSearchParams({ workspacePath, path })}`;
+}
+
 function workspaceChangesUrl(workspacePath: string | undefined) {
   if (!workspacePath) return undefined;
   return `/web/workspace/changes?${new URLSearchParams({ workspacePath })}`;
@@ -114,6 +122,26 @@ export function useWorkspaceFile(
   const url = workspaceFileUrl(workspacePath, filePath, threadId);
   return useQuery<WorkspaceFile>({
     queryKey: queryKeys.workspaceFile(workspacePath, filePath, threadId),
+    enabled,
+    queryFn: url ? () => client.get<WorkspaceFile>(url) : skipToken,
+  });
+}
+
+/**
+ * Read a submitted plan's markdown from the session workspace. Keyed by
+ * `toolCallId` so a plan resubmission (same path, new tool call) fetches the
+ * revised file instead of replaying the previous submission from cache.
+ */
+export function usePlanFile(
+  workspacePath: string | undefined,
+  path: string | undefined,
+  toolCallId: string | undefined,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
+  const { client } = useApiConfig();
+  const url = planFileUrl(workspacePath, path);
+  return useQuery<WorkspaceFile>({
+    queryKey: queryKeys.planFile(workspacePath, path, toolCallId),
     enabled,
     queryFn: url ? () => client.get<WorkspaceFile>(url) : skipToken,
   });
