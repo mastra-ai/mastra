@@ -479,6 +479,33 @@ describe('transcript reducer message entries', () => {
       runtimeTools: { 'tool-1': { argsText: 'the implementation reuses the backing agent' } },
     });
   });
+
+  it('rewrites the entry when the same turn comes back under a new message id', () => {
+    // The engine adopts the run loop's message id only while its own message is
+    // still empty, so a turn can start streaming under one identity and keep
+    // going under another. Drawing both leaves the first copy stripped of the
+    // tool parts the second one claims, next to a full copy of its own text.
+    const started = dbMessage('streamed-turn', 'assistant', [
+      { type: 'text', text: 'gh is missing here.' },
+      {
+        type: 'tool-invocation',
+        toolInvocation: { state: 'result', toolCallId: 'tool-1', toolName: 'execute_command', args: {}, result: 'ok' },
+      },
+    ]);
+    const reidentified = dbMessage('adopted-turn', 'assistant', [
+      ...started.content.parts,
+      { type: 'text', text: 'Installing it now.' },
+    ]);
+
+    let state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'message_start', message: started },
+    });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_update', message: reidentified } });
+
+    expect(state.entries).toHaveLength(1);
+    expect(messageParts(state.entries[0])).toEqual(reidentified.content.parts);
+  });
 });
 
 describe('transcript reducer mergeWindow', () => {
@@ -900,6 +927,61 @@ describe('transcript reducer mergeWindow', () => {
     expect(next.entries).toHaveLength(2);
   });
 
+  it('inserts a window copy whose parts prove it is a different turn', () => {
+    let state = createInitialTranscript({ messages: [] });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('streamed-turn', 'assistant', [
+          { type: 'text', text: 'Checking.' },
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'result', toolCallId: 'tool-1', toolName: 'view', args: {}, result: 'ok' },
+          },
+        ]),
+      },
+    });
+
+    const next = transcriptReducer(state, {
+      type: 'mergeWindow',
+      messages: [
+        dbMessage('other-turn', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'result', toolCallId: 'tool-9', toolName: 'view', args: {}, result: 'ok' },
+          },
+          { type: 'text', text: 'Checking.' },
+        ]),
+      ],
+    });
+
+    expect(next.entries).toHaveLength(2);
+  });
+
+  it('inserts a window copy that adds a text part the gap swallowed', () => {
+    let state = createInitialTranscript({ messages: [] });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('streamed-turn', 'assistant', [{ type: 'text', text: 'Almost' }]),
+      },
+    });
+
+    const next = transcriptReducer(state, {
+      type: 'mergeWindow',
+      messages: [
+        dbMessage('step-2', 'assistant', [
+          { type: 'text', text: 'Almost' },
+          { type: 'text', text: 'but not approvable yet.' },
+        ]),
+      ],
+    });
+
+    expect(next.entries).toHaveLength(2);
+  });
+
   it('lets the persisted copy claim the local echo of a steer', () => {
     // A steer sent while the tab is hidden loses its live signal event to the
     // SSE gap: the reconnect refetch is the first time the timeline sees it, and
@@ -914,6 +996,39 @@ describe('transcript reducer mergeWindow', () => {
 
     expect(next.entries).toHaveLength(1);
     expect(next.entries[0]).toMatchObject({ steer: true });
+  });
+
+  it('does not redraw a turn whose persisted copy carries tool calls the stream never delivered', () => {
+    let state = createInitialTranscript({ messages: [] });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('streamed-turn', 'assistant', [{ type: 'text', text: 'gh is missing here.' }]),
+      },
+    });
+
+    const next = transcriptReducer(state, {
+      type: 'mergeWindow',
+      messages: [
+        dbMessage('persisted-turn', 'assistant', [
+          { type: 'text', text: 'gh is missing here.' },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'execute_command',
+              args: {},
+              result: 'ok',
+            },
+          },
+        ]),
+      ],
+    });
+
+    expect(next.entries).toHaveLength(1);
+    expect(messageParts(next.entries[0])).toHaveLength(2);
   });
 
   it('draws both when the same text is sent twice', () => {
