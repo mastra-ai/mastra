@@ -61,6 +61,8 @@ export interface MaterializationSandbox {
   readonly supportsCheckpoints?: boolean;
   /** Persist the sandbox's current state under its bound checkpoint name. */
   snapshot?(): Promise<void>;
+  /** Boot-only fallback checkpoint requested for this fresh provision. */
+  seedCheckpointNameUsed?: string;
 }
 
 /** Options for building (or reattaching) one sandbox. */
@@ -214,7 +216,7 @@ function toMaterializationSandbox(
       await (lifecycle._stop ?? sandbox.stop)?.call(sandbox);
     },
     supportsCheckpoints: sandbox.supportsCheckpoints === true,
-    snapshot: () => sandbox.snapshot(),
+    ...(sandbox.snapshot ? { snapshot: sandbox.snapshot.bind(sandbox) } : {}),
   };
 }
 
@@ -496,6 +498,7 @@ export class SandboxFleet {
       });
       try {
         await timedPhase('sandbox.reattach', () => reattached.start());
+        reattached.seedCheckpointNameUsed = undefined;
         return reattached;
       } catch {
         await store.setSandboxId(null);
@@ -528,6 +531,9 @@ export class SandboxFleet {
       await store.setSandboxId(providerSandboxId);
     }
 
+    if (store.seedCheckpointName) {
+      sandbox.seedCheckpointNameUsed = store.seedCheckpointName;
+    }
     return sandbox;
   }
 

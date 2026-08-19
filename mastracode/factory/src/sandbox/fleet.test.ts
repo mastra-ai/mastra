@@ -216,6 +216,65 @@ describe('sandbox option forwarding', () => {
     );
   });
 
+  it('forwards a fallback seed only on fresh provision and reports that it was used', async () => {
+    const clone = vi.fn(() => ({
+      id: 'derived-1',
+      provider: 'railway',
+      executeCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+      _start: vi.fn(async () => {}),
+      getInfo: vi.fn(async () => ({ metadata: { sandboxId: 'derived-1' } })),
+    }));
+    const subject = new SandboxFleet({
+      machine: { id: 'template', name: 'Template', provider: 'railway', clone } as unknown as WorkspaceSandbox,
+      workdirBase: '/workspace',
+    });
+    const store = {
+      sandboxId: null as string | null,
+      checkpointName: 'session-checkpoint',
+      seedCheckpointName: 'repo-base',
+      setSandboxId: vi.fn(async (id: string | null) => {
+        store.sandboxId = id;
+      }),
+      clear: vi.fn(async () => {}),
+    };
+
+    const provisioned = await subject.ensureSandbox(store);
+    const reattached = await subject.ensureSandbox(store);
+
+    expect(clone).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ checkpointName: 'session-checkpoint', seedCheckpointName: 'repo-base' }),
+    );
+    expect(clone).toHaveBeenNthCalledWith(2, expect.not.objectContaining({ seedCheckpointName: expect.anything() }));
+    expect(provisioned.seedCheckpointNameUsed).toBe('repo-base');
+    expect(reattached.seedCheckpointNameUsed).toBeUndefined();
+  });
+
+  it('omits snapshot from the adapter when the provider does not implement it', async () => {
+    const clone = vi.fn(() => ({
+      id: 'derived-1',
+      provider: 'railway',
+      supportsCheckpoints: true,
+      executeCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+      _start: vi.fn(async () => {}),
+      getInfo: vi.fn(async () => ({ metadata: { sandboxId: 'derived-1' } })),
+    }));
+    const subject = new SandboxFleet({
+      machine: { id: 'template', name: 'Template', provider: 'railway', clone } as unknown as WorkspaceSandbox,
+      workdirBase: '/workspace',
+    });
+    const store = {
+      sandboxId: null,
+      setSandboxId: vi.fn(async () => {}),
+      clear: vi.fn(async () => {}),
+    };
+
+    const sandbox = await subject.ensureSandbox(store);
+
+    expect(sandbox.supportsCheckpoints).toBe(true);
+    expect(sandbox.snapshot).toBeUndefined();
+  });
+
   it('never bakes env into the machine clone — commands get it per execution', async () => {
     const executeCommand = vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' }));
     const clone = vi.fn(() => ({
