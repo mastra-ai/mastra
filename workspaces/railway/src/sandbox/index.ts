@@ -78,6 +78,11 @@ export interface RailwaySandboxOptions extends Omit<MastraSandboxOptions, 'proce
    */
   checkpointName?: string;
   /**
+   * Fallback checkpoint used to seed a new sandbox when `checkpointName` has
+   * no stored state. Snapshots continue writing to `checkpointName`.
+   */
+  seedCheckpointName?: string;
+  /**
    * How long the sandbox can sit idle (no `exec` interaction) before Railway
    * destroys it automatically. Range depends on plan (1–120 minutes on
    * Hobby/Pro, 1–5 on Trial/Free). Defaults to the plan default when omitted.
@@ -178,6 +183,7 @@ export class RailwaySandbox extends MastraSandbox {
   private readonly _token?: string;
   private readonly _environmentId?: string;
   private readonly _checkpointName?: string;
+  private readonly _seedCheckpointName?: string;
   private readonly _idleTimeoutMinutes?: number;
   private readonly _networkIsolation?: SandboxNetworkIsolation;
   private readonly _env: Record<string, string>;
@@ -197,6 +203,7 @@ export class RailwaySandbox extends MastraSandbox {
     this._environmentId = options.environmentId ?? process.env.RAILWAY_ENVIRONMENT_ID;
     this._sandboxId = options.sandboxId;
     this._checkpointName = options.checkpointName;
+    this._seedCheckpointName = options.seedCheckpointName;
     this._idleTimeoutMinutes = options.idleTimeoutMinutes;
     this._networkIsolation = options.networkIsolation;
     this._env = options.env ?? {};
@@ -280,20 +287,18 @@ export class RailwaySandbox extends MastraSandbox {
   private async _createNewSandbox(createOptions: ReturnType<RailwaySandbox['_createOptions']>): Promise<Sandbox> {
     this.logger.debug(`${LOG_PREFIX} Creating Railway sandbox for: ${this.id}`);
     try {
-      let checkpoinAlreadyExists = false;
-      if (this._checkpointName) {
+      let checkpointToRestore: string | undefined;
+      if (this._checkpointName || this._seedCheckpointName) {
         const checkpoints = await Sandbox.checkpoints(this._clientConfig());
-        checkpoinAlreadyExists = checkpoints.some(checkpoint => checkpoint.key === this._checkpointName);
+        const checkpointNames = new Set(checkpoints.map(checkpoint => checkpoint.key));
+        checkpointToRestore = checkpointNames.has(this._checkpointName ?? '')
+          ? this._checkpointName
+          : checkpointNames.has(this._seedCheckpointName ?? '')
+            ? this._seedCheckpointName
+            : undefined;
       }
 
-      let sandbox: Sandbox | undefined;
-      if (checkpoinAlreadyExists) {
-        sandbox = await Sandbox.create(this._checkpointName!, createOptions);
-      } else {
-        sandbox = await Sandbox.create(createOptions);
-      }
-
-      return sandbox;
+      return checkpointToRestore ? Sandbox.create(checkpointToRestore, createOptions) : Sandbox.create(createOptions);
     } catch (error) {
       throw error;
     }
@@ -564,6 +569,7 @@ export class RailwaySandbox extends MastraSandbox {
       ...((options.checkpointName ?? this._checkpointName) !== undefined && {
         checkpointName: options.checkpointName ?? this._checkpointName,
       }),
+      ...(options.seedCheckpointName !== undefined && { seedCheckpointName: options.seedCheckpointName }),
       idleTimeoutMinutes: options.idleTimeoutMinutes ?? this._idleTimeoutMinutes,
       ...(this._networkIsolation !== undefined && { networkIsolation: this._networkIsolation }),
       env: options.env ?? this._env,
