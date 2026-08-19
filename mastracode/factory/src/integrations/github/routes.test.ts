@@ -402,14 +402,20 @@ const ensureProjectSandbox = vi.fn(
     onProgress?: (e: any) => void;
     seedCheckpointName?: string;
   }) => {
+    const freshProvision = !opts.row.sandboxId;
     await opts.storage.setSandboxId({ id: opts.row.id, sandboxId: 'sb' });
     opts.onProgress?.({ phase: 'provisioning', message: 'Provisioning a new sandbox…' });
-    return { id: 'sb' };
+    return {
+      id: 'sb',
+      ...(freshProvision && opts.seedCheckpointName ? { seedCheckpointNameUsed: opts.seedCheckpointName } : {}),
+    };
   },
 );
-const materializeRepo = vi.fn(async (opts: { onProgress?: (e: any) => void }) => {
-  opts.onProgress?.({ phase: 'cloning', message: 'Cloning octo/hello…' });
-});
+const materializeRepo = vi.fn(
+  async (opts: { onProgress?: (e: any) => void; skipPullOnExistingCheckout?: boolean }) => {
+    opts.onProgress?.({ phase: 'cloning', message: 'Cloning octo/hello…' });
+  },
+);
 const reattachSandbox = vi.fn(async (_id: string, _options?: { actingUserId?: string }) => ({ id: 'sb' }));
 const recycleClaimedWorkdir = vi.fn(async (_sb: any, _workdir: string, _defaultBranch: string) => {});
 const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: string; baseBranch: string }) => ({
@@ -1319,6 +1325,78 @@ describe('ensure (materialize)', () => {
     // A per-user sandbox binding row was created for the caller.
     expect(tables.sandboxes).toHaveLength(1);
     expect(tables.sandboxes[0]).toMatchObject({ projectRepositoryId: 'p1', userId: 'u1' });
+    // No base checkpoint on this repo → no seed name is passed.
+    expect(ensureProjectSandbox.mock.calls[0]![0].seedCheckpointName).toBeUndefined();
+  });
+
+  it('seeds provisioning from the repo base checkpoint when one exists', async () => {
+    tables.projectRepositories.push(
+      projectRepositoryRow({
+        id: 'p1',
+        orgId: 'org1',
+        userId: 'u1',
+        installationId: 7,
+        repoFullName: 'octo/hello',
+        defaultBranch: 'main',
+        sandboxWorkdir: '/workspace/hello',
+        baseCheckpoint: { name: 'repo-p1', sha: 'abc123', builtAt: new Date(), setupCommandHash: null },
+      }),
+    );
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
+    expect(res.status).toBe(200);
+    expect(ensureProjectSandbox).toHaveBeenCalledOnce();
+    expect(ensureProjectSandbox).toHaveBeenCalledWith(expect.objectContaining({ seedCheckpointName: 'repo-p1' }));
+    expect(materializeRepo).toHaveBeenCalledWith(
+      expect.objectContaining({ skipPullOnExistingCheckout: true }),
+    );
+  });
+
+  it('does not skip the pull when the provider restores the primary session checkpoint', async () => {
+    tables.projectRepositories.push(
+      projectRepositoryRow({
+        id: 'p1',
+        orgId: 'org1',
+        userId: 'u1',
+        installationId: 7,
+        repoFullName: 'octo/hello',
+        defaultBranch: 'main',
+        sandboxWorkdir: '/workspace/hello',
+        baseCheckpoint: { name: 'repo-p1', sha: 'abc123', builtAt: new Date(), setupCommandHash: null },
+      }),
+    );
+    ensureProjectSandbox.mockResolvedValueOnce({ id: 'sb' });
+
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
+
+    expect(res.status).toBe(200);
+    expect(ensureProjectSandbox).toHaveBeenCalledWith(expect.objectContaining({ seedCheckpointName: 'repo-p1' }));
+    expect(materializeRepo).toHaveBeenCalledWith(
+      expect.objectContaining({ skipPullOnExistingCheckout: false }),
+    );
+  });
+
+  it('does not seed provisioning from a stale repo base checkpoint', async () => {
+    tables.projectRepositories.push(
+      projectRepositoryRow({
+        id: 'p1',
+        orgId: 'org1',
+        userId: 'u1',
+        installationId: 7,
+        repoFullName: 'octo/hello',
+        defaultBranch: 'main',
+        sandboxWorkdir: '/workspace/hello',
+        setupCommand: 'pnpm install',
+        baseCheckpoint: { name: 'repo-p1', sha: 'abc123', builtAt: new Date(), setupCommandHash: null },
+      }),
+    );
+
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
+
+    expect(res.status).toBe(200);
+    expect(ensureProjectSandbox.mock.calls[0]![0].seedCheckpointName).toBeUndefined();
+    expect(materializeRepo).toHaveBeenCalledWith(
+      expect.objectContaining({ skipPullOnExistingCheckout: false }),
+    );
   });
 
   it('404s for a project the user does not own', async () => {

@@ -1707,6 +1707,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             // original call. Re-running them on replay would double up.
             outputProcessors: cachedResponse ? [] : outputProcessors,
             isLLMExecutionStep: true,
+            // Error chunks describe this single model call, which processAPIError
+            // or a fallback model may still recover from. Keep them away from the
+            // per-chunk processor pass; the deferred-error branch below runs
+            // processors on the error once recovery has been ruled out.
+            deferErrorChunks: true,
             tracingContext,
             processorStates,
             requestContext,
@@ -2169,7 +2174,46 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         const deferredError = getErrorFromUnknown(deferredChunk.payload.error, {
           fallbackMessage: 'Unknown error in agent stream',
         });
-        safeEnqueue(controller, { ...deferredChunk, payload: { ...deferredChunk.payload, error: deferredError } });
+        let errorChunk = {
+          ...deferredChunk,
+          payload: { ...deferredChunk.payload, error: deferredError },
+        };
+
+        // The per-chunk processor pass skipped this chunk (deferErrorChunks) so
+        // processors would not react to a failure that retry or a fallback model
+        // might still have recovered from. Nothing recovered, so run it through
+        // them now — this is the one place a terminal error reaches processors.
+        // A processor must never be able to swallow it: a blocked or missing
+        // result falls back to the original chunk, and a throwing processor is
+        // logged and ignored.
+        if (outputProcessors?.length) {
+          try {
+            const errorChunkRunner = new ProcessorRunner({
+              inputProcessors: inputProcessors || [],
+              outputProcessors,
+              errorProcessors: errorProcessors || [],
+              logger: logger || new ConsoleLogger({ level: 'error' }),
+              agentName: agentId || 'unknown',
+              processorStates,
+            });
+
+            const { part: processedErrorChunk } = await errorChunkRunner.processPart(
+              errorChunk as ChunkType,
+              processorStates as Map<string, ProcessorState>,
+              createObservabilityContext(modelSpanTracker?.getTracingContext() ?? tracingContext),
+              requestContext,
+              messageList,
+            );
+
+            if (processedErrorChunk) {
+              errorChunk = processedErrorChunk as typeof errorChunk;
+            }
+          } catch (processorError) {
+            logger?.debug?.(`Output processor failed on deferred error chunk: ${processorError}`, { runId });
+          }
+        }
+
+        safeEnqueue(controller, errorChunk);
         await options?.onError?.({ error: deferredError });
         runState.setState({ deferredErrorChunk: undefined });
       }

@@ -92,11 +92,17 @@ Install AI SDK UI along with the Mastra adapter:
 npm install @mastra/ai-sdk@latest @ai-sdk/react ai
 ```
 
-Next, initialize AI Elements. When prompted, choose the default options:
+Next, initialize AI Elements. When prompted to select a component library, choose **Radix UI**, then accept the defaults for the remaining prompts:
 
 ```bash npm2yarn
 npx ai-elements@latest
 ```
+
+:::note
+The `ai-elements` command runs `shadcn add` against the AI Elements registry, which currently publishes Radix UI components only. Installing them into a Base UI project produces TypeScript errors, tracked in [vercel/ai-elements#383](https://github.com/vercel/ai-elements/issues/383).
+
+The component library prompt only appears when your project has no `components.json`. If you already have one, check that its `style` is a Radix option, such as `new-york` or a `radix-*` style, and not a `base-*` style, before running the command.
+:::
 
 This downloads the entire AI Elements UI component library into a `@/components/ai-elements` folder.
 

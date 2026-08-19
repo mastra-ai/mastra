@@ -1,7 +1,10 @@
+import { promises as fs } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 
+import { LocalSandbox } from '@mastra/core/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { resolveContainedLocalWorkdir, SandboxFleet } from './fleet.js';
 import type { MaterializationSandbox, SandboxBindingStore } from './fleet.js';
 
@@ -213,6 +216,151 @@ describe('sandbox option forwarding', () => {
     );
   });
 
+  it('forwards a fallback seed only on fresh provision and reports that it was used', async () => {
+    const clone = vi.fn(() => ({
+      id: 'derived-1',
+      provider: 'railway',
+      executeCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+      _start: vi.fn(async () => {}),
+      getInfo: vi.fn(async () => ({
+        metadata: { sandboxId: 'derived-1', restoredCheckpointName: 'repo-base' },
+      })),
+    }));
+    const subject = new SandboxFleet({
+      machine: { id: 'template', name: 'Template', provider: 'railway', clone } as unknown as WorkspaceSandbox,
+      workdirBase: '/workspace',
+    });
+    const store = {
+      sandboxId: null as string | null,
+      checkpointName: 'session-checkpoint',
+      seedCheckpointName: 'repo-base',
+      setSandboxId: vi.fn(async (id: string | null) => {
+        store.sandboxId = id;
+      }),
+      clear: vi.fn(async () => {}),
+    };
+
+    const provisioned = await subject.ensureSandbox(store);
+    const reattached = await subject.ensureSandbox(store);
+
+    expect(clone).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ checkpointName: 'session-checkpoint', seedCheckpointName: 'repo-base' }),
+    );
+    expect(clone).toHaveBeenNthCalledWith(2, expect.not.objectContaining({ seedCheckpointName: expect.anything() }));
+    expect(provisioned.seedCheckpointNameUsed).toBe('repo-base');
+    expect(reattached.seedCheckpointNameUsed).toBeUndefined();
+  });
+
+  it('does not report the seed when the provider restores the primary checkpoint', async () => {
+    const clone = vi.fn(() => ({
+      id: 'derived-1',
+      provider: 'railway',
+      executeCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+      _start: vi.fn(async () => {}),
+      getInfo: vi.fn(async () => ({
+        metadata: { sandboxId: 'derived-1', restoredCheckpointName: 'session-checkpoint' },
+      })),
+    }));
+    const subject = new SandboxFleet({
+      machine: { id: 'template', name: 'Template', provider: 'railway', clone } as unknown as WorkspaceSandbox,
+      workdirBase: '/workspace',
+    });
+    const store = {
+      sandboxId: null,
+      checkpointName: 'session-checkpoint',
+      seedCheckpointName: 'repo-base',
+      setSandboxId: vi.fn(async () => {}),
+      clear: vi.fn(async () => {}),
+    };
+
+    const provisioned = await subject.ensureSandbox(store);
+
+    expect(provisioned.seedCheckpointNameUsed).toBeUndefined();
+  });
+
+  it('releases a provisioned sandbox when reading provider details fails', async () => {
+    const stop = vi.fn(async () => {});
+    const getInfo = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('provider details unavailable'))
+      .mockResolvedValue({ metadata: { sandboxId: 'derived-1' } });
+    const sandbox = {
+      id: 'derived-1',
+      start: vi.fn(async () => {}),
+      stop,
+      getInfo,
+      executeCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+    };
+    const subject = fleet({ maxSandboxes: 1 });
+    subject.setFactory(() => sandbox);
+    const store = {
+      sandboxId: null as string | null,
+      setSandboxId: vi.fn(async (id: string | null) => {
+        store.sandboxId = id;
+      }),
+      clear: vi.fn(async () => {}),
+    };
+
+    await expect(subject.ensureSandbox(store)).rejects.toThrow('provider details unavailable');
+    await expect(subject.ensureSandbox(store)).resolves.toBe(sandbox);
+
+    expect(stop).toHaveBeenCalledOnce();
+  });
+
+  it('releases a provisioned sandbox when persisting its provider id fails', async () => {
+    const stop = vi.fn(async () => {});
+    const sandbox = {
+      id: 'derived-1',
+      start: vi.fn(async () => {}),
+      stop,
+      getInfo: vi.fn(async () => ({ metadata: { sandboxId: 'derived-1' } })),
+      executeCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+    };
+    const subject = fleet({ maxSandboxes: 1 });
+    subject.setFactory(() => sandbox);
+    const store = {
+      sandboxId: null as string | null,
+      setSandboxId: vi
+        .fn<(id: string | null) => Promise<void>>()
+        .mockRejectedValueOnce(new Error('storage unavailable'))
+        .mockImplementation(async id => {
+          store.sandboxId = id;
+        }),
+      clear: vi.fn(async () => {}),
+    };
+
+    await expect(subject.ensureSandbox(store)).rejects.toThrow('storage unavailable');
+    await expect(subject.ensureSandbox(store)).resolves.toBe(sandbox);
+
+    expect(stop).toHaveBeenCalledOnce();
+  });
+
+  it('omits snapshot from the adapter when the provider does not implement it', async () => {
+    const clone = vi.fn(() => ({
+      id: 'derived-1',
+      provider: 'railway',
+      supportsCheckpoints: true,
+      executeCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+      _start: vi.fn(async () => {}),
+      getInfo: vi.fn(async () => ({ metadata: { sandboxId: 'derived-1' } })),
+    }));
+    const subject = new SandboxFleet({
+      machine: { id: 'template', name: 'Template', provider: 'railway', clone } as unknown as WorkspaceSandbox,
+      workdirBase: '/workspace',
+    });
+    const store = {
+      sandboxId: null,
+      setSandboxId: vi.fn(async () => {}),
+      clear: vi.fn(async () => {}),
+    };
+
+    const sandbox = await subject.ensureSandbox(store);
+
+    expect(sandbox.supportsCheckpoints).toBe(true);
+    expect(sandbox.snapshot).toBeUndefined();
+  });
+
   it('never bakes env into the machine clone — commands get it per execution', async () => {
     const executeCommand = vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' }));
     const clone = vi.fn(() => ({
@@ -336,6 +484,22 @@ describe('provision coalescing', () => {
     expect(store.setSandboxId).toHaveBeenCalledTimes(1);
   });
 
+  it('forwards seedCheckpointName to the factory on fresh provision', async () => {
+    const { sandbox, release } = slowSandbox('sb-1');
+    const factory = vi.fn(() => sandbox);
+    const subject = fleet();
+    subject.setFactory(factory);
+    const store = { ...bindingStore('mastracode-session-a'), seedCheckpointName: 'repo-pr-1' };
+
+    const pending = subject.ensureSandbox(store);
+    release();
+    await pending;
+
+    expect(factory).toHaveBeenCalledWith(
+      expect.objectContaining({ checkpointName: 'mastracode-session-a', seedCheckpointName: 'repo-pr-1' }),
+    );
+  });
+
   it('does not block provisioning across different bindings', async () => {
     const one = slowSandbox('sb-1');
     const two = slowSandbox('sb-2');
@@ -410,5 +574,70 @@ describe('provision coalescing', () => {
     expect(sandbox.stop).toHaveBeenCalledTimes(1);
     expect(store.clear).toHaveBeenCalledTimes(1);
     expect(store.sandboxId).toBeNull();
+  });
+});
+
+describe('LocalSandbox end-to-end through the fleet', () => {
+  let tempDir: string;
+
+  afterEach(async () => {
+    if (tempDir) await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  function localFleet(machine: LocalSandbox): SandboxFleet {
+    return new SandboxFleet({ machine, workdirBase: tempDir });
+  }
+
+  function bindingStore(extra: Partial<SandboxBindingStore> = {}): SandboxBindingStore & { sandboxId: string | null } {
+    const store = {
+      sandboxId: null as string | null,
+      setSandboxId: vi.fn(async (id: string | null) => {
+        store.sandboxId = id;
+      }),
+      clear: vi.fn(async () => {
+        store.sandboxId = null;
+      }),
+      ...extra,
+    };
+    return store;
+  }
+
+  it('seeds a fresh session sandbox from a repo base checkpoint and snapshots to the session checkpoint', async () => {
+    tempDir = await fs.mkdtemp(path.join(tmpdir(), 'fleet-local-e2e-'));
+    const checkpointsDirectory = path.join(tempDir, '.checkpoints');
+    const machine = new LocalSandbox({ workingDirectory: path.join(tempDir, 'template'), checkpointsDirectory });
+
+    // 1. Base-checkpoint build: boot a builder sandbox, "clone + setup", snapshot.
+    const fleetA = localFleet(machine);
+    const builderStore = bindingStore({ checkpointName: 'repo-pr-1' });
+    const builderWorkdir = path.join(tempDir, 'builder-work');
+    const builder = await fleetA.ensureSandbox(builderStore, undefined, undefined, {
+      workingDirectory: builderWorkdir,
+    });
+    await fs.writeFile(path.join(builderWorkdir, 'cloned.txt'), 'repo');
+    await fs.writeFile(path.join(builderWorkdir, 'node_modules.txt'), 'installed');
+    await builder.snapshot?.();
+    await fleetA.teardownSandbox(builderStore, builder);
+
+    // 2. New session: seeds from the base checkpoint on first provision.
+    const sessionStore = bindingStore({
+      checkpointName: 'mastracode-session-s1',
+      seedCheckpointName: 'repo-pr-1',
+    });
+    const sessionWorkdir = path.join(tempDir, 'session-work');
+    const session = await localFleet(machine).ensureSandbox(sessionStore, undefined, undefined, {
+      workingDirectory: sessionWorkdir,
+    });
+    expect(await fs.readFile(path.join(sessionWorkdir, 'cloned.txt'), 'utf-8')).toBe('repo');
+    expect(await fs.readFile(path.join(sessionWorkdir, 'node_modules.txt'), 'utf-8')).toBe('installed');
+
+    // 3. Session snapshots write to the session checkpoint; the base image stays untouched.
+    await fs.writeFile(path.join(sessionWorkdir, 'session-edit.txt'), 'work');
+    await session.snapshot?.();
+    expect((await fs.readdir(path.join(checkpointsDirectory, 'repo-pr-1'))).sort()).toEqual([
+      'cloned.txt',
+      'node_modules.txt',
+    ]);
+    expect(await fs.readdir(path.join(checkpointsDirectory, 'mastracode-session-s1'))).toContain('session-edit.txt');
   });
 });

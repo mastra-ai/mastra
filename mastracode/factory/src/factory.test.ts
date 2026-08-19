@@ -230,10 +230,11 @@ describe('MastraFactory.prepare', () => {
     const factory = new MastraFactory({ storage });
     await factory.prepare();
 
-    const blockingCall = controllerMock.onSessionCreated.mock.calls.find(
+    const blockingCalls = controllerMock.onSessionCreated.mock.calls.filter(
       call => (call[1] as { blocking?: boolean } | undefined)?.blocking === true,
     );
-    expect(blockingCall).toBeDefined();
+    expect(blockingCalls).toHaveLength(2);
+    const blockingCall = blockingCalls[0];
 
     // Seed the owner's web session row and stored memory settings through the
     // same storage domains the factory registered.
