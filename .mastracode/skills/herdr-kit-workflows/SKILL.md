@@ -12,6 +12,8 @@ Activate this skill when the user asks to install or configure Herdr Kit, change
 
 ## Safety and authority
 
+- Before issuing any `herdr` command, verify you are running inside a Herdr session: `HERDR_ENV` must be set to `1` in the environment. If it is not, stop and tell the user these workflows require running inside Herdr.
+- Never run bare `herdr` with no subcommand for discovery: it launches or attaches the interactive TUI and will hang a non-interactive session. Always use an explicit subcommand such as `herdr plugin list`.
 - Discover the enabled `herdr-kit` plugin through Herdr. Do not assume the current repository contains the plugin.
 - Negotiate capabilities before using the public CLI. Treat protocol and request schema versions as compatibility boundaries.
 - Use `manager query` as the authoritative source for manager keys, revisions, heads, checkout generations, paths, warnings, and postconditions.
@@ -276,6 +278,10 @@ When asked to change Herdr Kit settings or shortcuts:
 4. Never remove or replace official `herdr integration install mastracode` hooks as legacy files.
 5. Run `herdr config check`, then `herdr server reload-config`.
 6. Report the exact setting/action changed and whether reload returned `status: applied`.
+
+## Related skills
+
+This skill covers only Herdr Kit's manager workflows. For generic Herdr control — panes, tabs, agents, layouts, running commands in panes — a separate general-purpose `herdr` skill exists; recommend installing it when the user needs Herdr control beyond manager workflows. Do not improvise pane/agent semantics from this skill.
 
 ## Completion report
 
