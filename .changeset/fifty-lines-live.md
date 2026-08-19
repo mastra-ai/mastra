@@ -2,15 +2,20 @@
 '@mastra/core': minor
 ---
 
-Messages sent to a busy agent are now marked as interjections by the session itself. Any user message submitted while a run is in flight — including the one `session.steer()` sends after interrupting a run — carries `delivery: 'while-active'`, so the agent reads it as context for the work in progress and a reloaded transcript can still tell a steer apart from a normal message. Clients no longer have to attach the attribute themselves.
+The session now records whether the user was watching the agent work when they hit send, and every client gets it for free. A message typed into a live run — including the one `session.steer()` sends after interrupting — carries `delivery: 'while-active'`; a message that opens a new turn carries `delivery: 'message'`. The agent reads the first as context for the work in progress, and a reloaded transcript can still tell a steer apart from a normal message.
+
+Before, the attribute was resolved from the run state at dispatch time, which reads idle for a steer (a steer aborts its own run before sending), so each client had to describe both delivery routes itself.
 
 ```ts
-// before: only callers that passed delivery options got the attribute
-session.sendSignal({ content, ifActive: { attributes: { delivery: 'while-active' } } });
+// before
+session.sendSignal({
+  content,
+  ifActive: { attributes: { delivery: 'while-active' } },
+  ifIdle: { attributes: { delivery: 'message' } },
+});
 
-// now: the session stamps it from the run state it already tracks
+// now
 session.sendSignal({ content });
-session.steer({ content });
 ```
 
-Delivery attributes supplied by the caller still win.
+A `delivery` the caller sets on the signal still wins.

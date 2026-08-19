@@ -1884,10 +1884,10 @@ class SessionPermissions {
   }
 }
 
-/** Mark a user signal as reaching the agent mid-work. A delivery the caller chose wins. */
-function asInterjection(signal: CreatedAgentSignal): CreatedAgentSignal {
+/** Stamp at submit time: a steer aborts its own run, so the route resolved downstream reads idle. */
+function withDelivery(signal: CreatedAgentSignal, delivery: 'while-active' | 'message'): CreatedAgentSignal {
   if (signal.type !== 'user' || signal.attributes?.delivery !== undefined) return signal;
-  return resolveDeliveryAttributes(signal, { delivery: 'while-active' });
+  return resolveDeliveryAttributes(signal, { delivery });
 }
 
 /** The session-state / thread-settings key holding a subagent model id. */
@@ -3348,16 +3348,16 @@ export class Session<TState = unknown> {
     // the post-interrupt window where a fresh signal must wait for the dying
     // run to fully idle before starting a new run.
     const submittedAbortRequested = this.run.isAbortRequested();
-    const signalInput: AgentSignalInput =
-      'content' in input
-        ? { type: 'user', tagName: 'user', contents: input.content, providerOptions: input.providerOptions }
-        : input;
-    // A steer lands in the second window: its abort already cleared the controller,
-    // so the delivery route resolved downstream reads idle and cannot tag it.
     const submittedWhileWorking =
-      submittedIsRunning || (submittedAbortRequested && Boolean(submittedRunId ?? submittedActiveRunId));
-    const submittedSignal = createSignal(signalInput);
-    const signal = submittedWhileWorking ? asInterjection(submittedSignal) : submittedSignal;
+      submittedIsRunning || (submittedAbortRequested && Boolean(submittedRunId || submittedActiveRunId));
+    const signal = withDelivery(
+      createSignal(
+        'content' in input
+          ? { type: 'user', tagName: 'user', contents: input.content, providerOptions: input.providerOptions }
+          : input,
+      ),
+      submittedWhileWorking ? 'while-active' : 'message',
+    );
     const accepted = Promise.resolve().then(async () => {
       if (!this.thread.getId()) {
         const thread = await this.thread.create();
