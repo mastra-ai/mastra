@@ -1,5 +1,6 @@
 import path from 'node:path';
 import type { SkillSource, SkillSourceStat } from '@mastra/core/workspace';
+import matter from 'gray-matter';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createFactorySkillExtension, FACTORY_SKILLS_MOUNT, renderSkillMarkdown } from './workspace.js';
@@ -48,7 +49,7 @@ describe('factory skill source overrides', () => {
     const source = createSource(resolver);
     const raw = String(await source.readFile(triageSkillMd));
     expect(raw).toBe(renderSkillMarkdown(override));
-    expect(raw).toContain('description: Custom triage description');
+    expect(raw).toContain('description: "Custom triage description"');
     expect(raw).toContain('Do it my way.');
     expect(resolver).toHaveBeenCalledWith('factory-triage');
   });
@@ -65,6 +66,19 @@ describe('factory skill source overrides', () => {
     const source = createSource(resolver);
     await source.stat(path.join(FACTORY_SKILLS_MOUNT, 'factory-triage'));
     expect(resolver).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['a colon', 'Review: strict mode'],
+    ['a leading hash', '#1 priority reviews'],
+    ['double quotes', 'The "final" review pass'],
+    ['a trailing colon', 'Watch out for this:'],
+  ])('renders parseable frontmatter when the description contains %s', (_label, description) => {
+    const rendered = renderSkillMarkdown({ ...override, description });
+    const parsed = matter(rendered);
+    expect(parsed.data.name).toBe(override.name);
+    expect(parsed.data.description).toBe(description);
+    expect(parsed.content.trim()).toBe(override.content.trim());
   });
 
   it('falls back to the bundled default when the resolver throws', async () => {

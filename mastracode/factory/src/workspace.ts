@@ -10,7 +10,7 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import { LocalSandbox, LocalSkillSource, Workspace } from '@mastra/core/workspace';
 import type { SkillSource, SkillSourceEntry, SkillSourceStat } from '@mastra/core/workspace';
-import { getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
+import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
 import type { MastraFactorySandboxConfig } from './factory.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import { getGithubPat } from './integrations/github/pat.js';
@@ -117,7 +117,10 @@ export type FactorySkillOverrideResolver = (skillName: string) => Promise<Factor
 
 /** Reassemble a SKILL.md document from an override's parts. */
 export function renderSkillMarkdown(override: Pick<FactorySkillOverride, 'name' | 'description' | 'content'>): string {
-  return `---\nname: ${override.name}\ndescription: ${override.description}\n---\n\n${override.content}\n`;
+  // Serialize the description as a quoted YAML scalar: user-provided text like
+  // "Review: strict mode" or "#1 priority reviews" would otherwise break or
+  // corrupt frontmatter parsing. JSON strings are valid YAML double-quoted scalars.
+  return `---\nname: ${override.name}\ndescription: ${JSON.stringify(override.description)}\n---\n\n${override.content}\n`;
 }
 
 class FactorySkillSource implements SkillSource {
@@ -364,7 +367,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
 
     // Skill reads resolve the org's stored customizations; the sentinel
     // `local` org matches how no-auth deployments key org-scoped settings.
-    const skillOverrideOrgId = session?.orgId ?? 'local';
+    // Chat-only sessions have no source-control session record, so fall back
+    // to the authenticated user's org — the same key the skills routes write
+    // overrides under — before the local sentinel.
+    const skillOverrideOrgId =
+      session?.orgId ?? getFactoryAuthOrgId(getFactoryAuthUserFromContext(requestContext)) ?? 'local';
     const effectiveSkillExtension =
       skillExtension ??
       (skillOverrides

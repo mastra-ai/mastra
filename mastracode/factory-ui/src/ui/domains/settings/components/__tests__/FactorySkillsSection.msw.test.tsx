@@ -153,9 +153,7 @@ describe('FactorySkillsSection', () => {
   it('surfaces a save failure from the server', async () => {
     server.use(
       http.get(SKILLS_URL, () => HttpResponse.json(catalog)),
-      http.put(`${SKILLS_URL}/factory-triage`, () =>
-        HttpResponse.json({ error: 'invalid_request' }, { status: 400 }),
-      ),
+      http.put(`${SKILLS_URL}/factory-triage`, () => HttpResponse.json({ error: 'invalid_request' }, { status: 400 })),
     );
 
     const user = userEvent.setup();
