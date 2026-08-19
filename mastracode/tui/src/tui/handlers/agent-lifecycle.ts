@@ -5,6 +5,7 @@
 import { getCurrentGitBranchAsync } from '@mastra/code-sdk/utils/project';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 
+import { finalizeStreamingAssistant } from '../assistant-render-registry.js';
 import { insertChatComponentWithBoundarySpacing } from '../chat-boundary-reconciliation.js';
 import { JudgeDisplayComponent } from '../components/judge-display.js';
 import { GradientAnimator } from '../components/obi-loader.js';
@@ -49,8 +50,7 @@ export function handleAgentEnd(ctx: EventHandlerContext): void {
   });
 
   if (state.streamingComponent) {
-    state.streamingComponent = undefined;
-    state.streamingMessage = undefined;
+    finalizeStreamingAssistant(state);
   }
   // Drop the live judge reference so that a continuation turn creates a fresh
   // JudgeDisplayComponent *after* the new streaming text. Without this the
@@ -144,19 +144,23 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
   // The timing line already says "canceled after x", so don't also render a
   // redundant "Error: Interrupted" message in the transcript.
   if (state.planRejectionAbort || state.userInitiatedAbort) {
-    state.streamingComponent = undefined;
-    state.streamingMessage = undefined;
+    finalizeStreamingAssistant(state);
   } else if (state.streamingComponent && state.streamingMessage) {
-    // Update streaming message to show it was interrupted. Terminal status
-    // lives in content.metadata under the DB-native contract.
+    const terminalStatus = { stopReason: 'aborted' as const, errorMessage: 'Interrupted' };
+    const queuedTerminalStatus = state.assistantRenderRegistry.queueActiveTerminalStatus(
+      state.streamingMessage.id,
+      terminalStatus,
+    );
+
+    // Keep the canonical streaming message consistent with the rendered terminal status.
     state.streamingMessage.content.metadata = {
       ...state.streamingMessage.content.metadata,
-      stopReason: 'aborted',
-      errorMessage: 'Interrupted',
+      ...terminalStatus,
     };
-    state.streamingComponent.updateContent(state.streamingMessage);
-    state.streamingComponent = undefined;
-    state.streamingMessage = undefined;
+    if (!queuedTerminalStatus) {
+      state.streamingComponent.updateContent(state.streamingMessage);
+    }
+    finalizeStreamingAssistant(state);
   }
   state.userInitiatedAbort = false;
   state.planRejectionAbort = false;
@@ -185,8 +189,7 @@ export function handleAgentError(ctx: EventHandlerContext): void {
   }
 
   if (state.streamingComponent) {
-    state.streamingComponent = undefined;
-    state.streamingMessage = undefined;
+    finalizeStreamingAssistant(state);
   }
   if (state.activeGoalJudge) {
     removeJudgeComponent(state, state.activeGoalJudge.component);
