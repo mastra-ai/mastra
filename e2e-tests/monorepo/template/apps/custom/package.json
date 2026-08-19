@@ -15,6 +15,7 @@
   "dependencies": {
     "@ai-sdk/openai": "^2.0.110",
     "@mastra/core": "monorepo-test",
+    "@mastra/server": "monorepo-test",
     "@inner/inner-tools": "workspace:*",
     "@inner/hello-world": "workspace:*",
     "@inner/transitive-a": "workspace:*",

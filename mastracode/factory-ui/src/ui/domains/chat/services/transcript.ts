@@ -151,8 +151,6 @@ export interface TranscriptState {
   omProgress?: OMBudgets;
   /** Observational memory phase. */
   omPhase: OMPhase;
-  /** Whether the workspace is ready. */
-  workspaceReady?: boolean;
   /** Latest goal evaluation. */
   goal?: GoalSnapshot;
   /** Current tokens/sec throughput (0 when idle). */
@@ -496,10 +494,11 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent): Transc
       return { ...state, omPhase: 'idle' };
 
     // Workspace lifecycle.
-    case 'workspace_ready':
-      return { ...state, workspaceReady: true };
     case 'workspace_error':
-      return { ...state, workspaceReady: false };
+      return pushNotice(state, 'error', `Workspace: ${event.error.message}`);
+    case 'workspace_status_changed':
+      if (event.status !== 'error' || !event.error) return state;
+      return pushNotice(state, 'error', `Workspace: ${event.error.message}`);
 
     // Notices.
     case 'info':

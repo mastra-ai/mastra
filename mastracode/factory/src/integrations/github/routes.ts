@@ -20,6 +20,7 @@ import type { FactoryStorage } from '@mastra/core/storage';
 import type { Context } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import type { RouteAuth } from '../../routes/route.js';
+import { baseCheckpointIsStale } from '../../sandbox/base-checkpoint-triggers.js';
 import { SandboxBudgetError } from '../../sandbox/fleet.js';
 import type { MaterializationSandbox, PrepareProgress, ProgressFn, SandboxFleet } from '../../sandbox/fleet.js';
 import type { StateSigner } from '../../state-signing.js';
@@ -1086,12 +1087,18 @@ async function prepareProject(options: {
   // there. Git clone/pull below keep the minted installation token.
   const ghCliToken =
     (await getGithubPat(() => github.integrationStorage, project.installation.orgId)) ?? access.authorization.token;
+  const seedCheckpointName =
+    project.baseCheckpoint && !baseCheckpointIsStale(project) ? project.baseCheckpoint.name : undefined;
   const sandbox = await ensureProjectSandbox({
     fleet,
     row: sandboxRow,
     storage: github.sourceControlStorage.sandboxes,
     token: ghCliToken,
     onProgress,
+    // Seed fresh provisions from the repo's warm base checkpoint so the
+    // materialize step below finds an existing checkout and skips the
+    // redundant default-branch pull.
+    ...(seedCheckpointName ? { seedCheckpointName } : {}),
   });
   // Re-read the sandbox binding so we have the freshly persisted sandboxId.
   const fresh = await github.sourceControlStorage.sandboxes.getById({ id: sandboxRow.id });
@@ -1103,6 +1110,7 @@ async function prepareProject(options: {
     token: access.authorization.token,
     storage: github.sourceControlStorage.sandboxes,
     onProgress,
+    skipPullOnExistingCheckout: Boolean(seedCheckpointName && sandbox.seedCheckpointNameUsed === seedCheckpointName),
   });
   const result: EnsureResult = {
     resourceId: project.factoryProjectId,
@@ -1212,7 +1220,10 @@ function buildProjectGitRoutes({
           ? await resolveProjectRepository({ github, orgId, projectRepositoryId })
           : null;
         if (!project) return c.json({ error: 'Project repository not found' }, 404);
-        const sessions = await github.sourceControlStorage.sessions.list({ projectRepositoryId: project.id, userId });
+        const sessions = await github.sourceControlStorage.sessions.list({
+          projectRepositoryId: project.id,
+          viewerUserId: userId,
+        });
         return c.json({ sessions });
       },
     }),
@@ -1291,6 +1302,7 @@ function buildProjectGitRoutes({
             branch,
             baseBranch,
             title: normalizedTitle,
+            visibility: 'org',
           })
           .catch(async error => {
             if (!(error instanceof UniqueViolationError) || requestedSessionId === undefined) throw error;
@@ -1318,7 +1330,13 @@ function buildProjectGitRoutes({
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
         const session = await github.sourceControlStorage.sessions.getBySessionId(c.req.param('sessionId'));
-        if (!session || session.orgId !== resolved.tenant.orgId || session.userId !== resolved.tenant.userId) {
+        // Private sessions 404 (not 403) for non-owners so their IDs do not
+        // leak existence; the body must match the genuinely-missing case.
+        if (
+          !session ||
+          session.orgId !== resolved.tenant.orgId ||
+          (session.visibility === 'private' && session.userId !== resolved.tenant.userId)
+        ) {
           return c.json({ error: 'Session not found' }, 404);
         }
         return c.json({ session });

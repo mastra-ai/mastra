@@ -1,5 +1,146 @@
 # @mastra/client-js
 
+## 1.41.0
+
+### Minor Changes
+
+- Added `Agent.readPlan()` for loading submitted plan Markdown. ([#21658](https://github.com/mastra-ai/mastra/pull/21658))
+
+  ```ts
+  const agent = client.getAgent('agent-id');
+  const plan = await agent.readPlan('.mastracode/plans/add-dark-mode.md');
+  ```
+
+- Added a `durable` option to stored agents so agents created through the Agents API can run with durable execution — no code deployment required. ([#21715](https://github.com/mastra-ai/mastra/pull/21715))
+
+  ```typescript
+  await mastraClient.createStoredAgent({
+    id: 'helper',
+    name: 'Helper',
+    instructions: 'You are a helpful assistant.',
+    model: { provider: 'openai', name: 'gpt-5' },
+    durable: true,
+  });
+  ```
+
+  Pass `true` for defaults, or `{ maxSteps, cleanupTimeoutMs }` to tune the durable loop. Cache and pubsub are inherited from the server's Mastra instance, so configure distributed backends there for durability across replicas. Automatic recovery is still configured in code via `recovery.durableAgents`.
+
+- Fixed the agent controller event types, which described payloads the server never sends. ([#21739](https://github.com/mastra-ai/mastra/pull/21739))
+
+  `KnownAgentControllerEvent` was written by hand and had drifted from the controller. Narrowing on `om_activation` gave you an `enabled` boolean that does not exist, `om_status` a `status` string instead of the token windows, `om_thread_title_updated` a `title` instead of `newTitle`, and `subagent_end` only a `toolCallId` — its `agentType`, `result`, `isError` and `durationMs` were missing. `usage_update` typed its payload as `unknown`, so every consumer cast it. Seven events the controller emits (`state_changed`, `command_exit`, `tool_suspension_cancelled`, and the four remaining `subagent_*` events) were not typed at all and fell through `isKnownAgentControllerEvent`.
+
+  `isKnownAgentControllerEvent` now returns `true` for those seven events as well. If you route unrecognised events to a fallback branch, they no longer reach it — give them a case in your `switch` or they are silently dropped.
+
+  `thread_created` now delivers `thread.createdAt` and `thread.updatedAt` as `Date`s, the way the `message_*` events already did — the stream carries them as ISO strings.
+
+  Payload drift is now a compile error instead of a wrong field at runtime, so handlers reading the old fields need updating.
+
+  ```ts
+  // Before: compiled, but `enabled` is always undefined
+  if (event.type === 'om_activation' && event.enabled) { ... }
+
+  // After: tsc rejects it; the event carries cycleId, tokensActivated, generationCount, …
+  if (event.type === 'om_activation') { console.log(event.tokensActivated) }
+  ```
+
+### Patch Changes
+
+- Updated observability trace response types to include derived span statuses. ([#21450](https://github.com/mastra-ai/mastra/pull/21450))
+
+- Fixed the agent controller event types to match what the server actually sends. `KnownAgentControllerEvent` is now derived from the wire type `@mastra/core` exports instead of a hand-written copy: the `display_state_changed` fields are no longer all optional, and the `error` event no longer claims its `error` may be a bare string. Runtime behavior is unchanged; only fallbacks written for those two type gaps become unnecessary. ([#21761](https://github.com/mastra-ai/mastra/pull/21761))
+
+  ```ts
+  import type { KnownAgentControllerEvent } from '@mastra/client-js';
+
+  function onEvent(event: KnownAgentControllerEvent) {
+    if (event.type === 'display_state_changed') {
+      // before: event.displayState.isRunning ?? false
+      const running = event.displayState.isRunning;
+    }
+    if (event.type === 'error') {
+      // before: typeof event.error === 'string' ? event.error : event.error.message
+      const message = event.error.message;
+    }
+  }
+  ```
+
+- `session.state()` now accepts a `threadId`, so reopening a chat can load the durable task list for that specific thread. ([#21545](https://github.com/mastra-ai/mastra/pull/21545))
+
+  ```ts
+  const state = await session.state({ threadId: 'thread-123' });
+  ```
+
+- Fixed the agent controller types so they match what the server actually sends. The REST types are now derived from the route contracts the server publishes instead of being maintained by hand, so they can no longer drift. ([#21503](https://github.com/mastra-ai/mastra/pull/21503))
+
+  Three types were describing fields that never arrive over the wire:
+
+  - `AgentControllerAvailableModel.apiKeyEnvVar` — the models route sends `id`, `provider`, `modelName`, `hasApiKey` and `useCount` only. The field is gone; reading it was always `undefined`.
+  - `AgentControllerThreadInfo` — now the thread shape `listThreads()` actually returns (`id`, `title`, `updatedAt`, `tags`, `state`). It no longer claims `resourceId` and `createdAt`, which that route does not send.
+  - `createThread()` and `cloneThread()` return the new `CreateAgentControllerThreadResponse` (`id`, `title`, `resourceId`, `createdAt`, `updatedAt`), which is a different shape from a listing entry.
+
+  Only `apiKeyEnvVar` needs action on your side. If you read it to tell whether a model is usable, read `hasApiKey` instead:
+
+  ```ts
+  const models = await client.getAgentController('my-controller').listModels();
+
+  // Before: typed string | undefined, undefined at runtime, so always empty
+  const usable = models.filter(model => model.apiKeyEnvVar);
+
+  // After
+  const usable = models.filter(model => model.hasApiKey);
+  ```
+
+  The thread types need no migration: `listThreads()`, `createThread()` and `cloneThread()` each infer the shape their own route returns.
+
+  `PermissionPolicy`, `ToolCategory` and `AgentControllerTaskSnapshot` are now re-exported from `@mastra/core` rather than redeclared, so the SDK and core can't disagree about them. `AgentControllerActiveRun` is now exported from the package root alongside the other agent controller types.
+
+- Preserve tool-call `providerMetadata` at the message-part level during client-tool continuations. ([#21703](https://github.com/mastra-ai/mastra/pull/21703))
+
+  The stream reducers nested `providerMetadata` inside `toolInvocation`, but the server reads it from `part.providerMetadata` when rebuilding the prompt. As a result the metadata was dropped on the recursive request, and Gemini thinking models (e.g. `gemini-3-flash-preview`) failed the follow-up turn with `Function call is missing a thought_signature in functionCall parts`.
+
+- Updated dependencies [[`587f6ef`](https://github.com/mastra-ai/mastra/commit/587f6efcfc25880b93760a8607d1cd381ec612fe), [`7e096f0`](https://github.com/mastra-ai/mastra/commit/7e096f02f0dddbf09b85d306458351245ed2f886), [`d7e6745`](https://github.com/mastra-ai/mastra/commit/d7e67456954863c55440ea9c49bc6ceb9949972d), [`6223446`](https://github.com/mastra-ai/mastra/commit/6223446ddce6166e96e0ba5e00d628b615dee8ca), [`15101bb`](https://github.com/mastra-ai/mastra/commit/15101bb53c0d934f31af6b8813b88191e382a5e5), [`4e7a421`](https://github.com/mastra-ai/mastra/commit/4e7a421dce8a48742f785d1e93ad2f43a572b282), [`c2c3deb`](https://github.com/mastra-ai/mastra/commit/c2c3debcf670c7082d0a5e553aa99818a864698c), [`d8308a2`](https://github.com/mastra-ai/mastra/commit/d8308a2be3c07e777393d1017a381dcae3890d30), [`b0a2a07`](https://github.com/mastra-ai/mastra/commit/b0a2a07800d42bd9823292e7db832374ed084c9c), [`74e5bd3`](https://github.com/mastra-ai/mastra/commit/74e5bd315b8b3a1e04cb6cf480bb0f5fc4951dc8), [`242e324`](https://github.com/mastra-ai/mastra/commit/242e3241e73cbd5c9bb86a31ebb49ca0256488d4), [`217e967`](https://github.com/mastra-ai/mastra/commit/217e9672d8b3160eb729d8e9f0044949e88da239), [`d774e89`](https://github.com/mastra-ai/mastra/commit/d774e8930c781df8c9effe3763e6b501c099b6cc), [`9c27a53`](https://github.com/mastra-ai/mastra/commit/9c27a53cd9d3de4f3f025bc387d94ce371c33f95), [`8f0a332`](https://github.com/mastra-ai/mastra/commit/8f0a3321bf180368d76fe7b36aa1a8f60f00b6de), [`0b4f108`](https://github.com/mastra-ai/mastra/commit/0b4f1089aa8d92e67c2a8e99726822c5ee410784), [`9acb50f`](https://github.com/mastra-ai/mastra/commit/9acb50f71cec9c362f06820033f90ae6b1f8282f), [`46e9e3f`](https://github.com/mastra-ai/mastra/commit/46e9e3f73babe1bc70080a596cf2ac0b9da48519), [`3f9a190`](https://github.com/mastra-ai/mastra/commit/3f9a19057c027155867b9317294ee4ca7bd0581a), [`dff25a1`](https://github.com/mastra-ai/mastra/commit/dff25a1103fa72ee082a9b6f805ebeb5ce400753), [`6db7a5d`](https://github.com/mastra-ai/mastra/commit/6db7a5dd3dd2b6f7ef75dcd804fcffef5fa83963), [`217e967`](https://github.com/mastra-ai/mastra/commit/217e9672d8b3160eb729d8e9f0044949e88da239), [`583e235`](https://github.com/mastra-ai/mastra/commit/583e23519c13af16c1746f9c49722d011216611b), [`b098de9`](https://github.com/mastra-ai/mastra/commit/b098de9d7cb9f672e0883a5c716465a3a689693d), [`e8808e3`](https://github.com/mastra-ai/mastra/commit/e8808e3d8eb585a2565be53e56a7e0e1477352a4), [`a77f8d4`](https://github.com/mastra-ai/mastra/commit/a77f8d4740d2178a74c41e4bf678b4fcd8fa0bb2), [`7f78585`](https://github.com/mastra-ai/mastra/commit/7f785857e401570e2ffb316911f126ed363aa537), [`33374ba`](https://github.com/mastra-ai/mastra/commit/33374ba359e4fb13eaa918ae925fe167a3c55414), [`940bf5c`](https://github.com/mastra-ai/mastra/commit/940bf5ccf04f2c9ebd8a1390431733222a03b1cd), [`c549e2f`](https://github.com/mastra-ai/mastra/commit/c549e2f40edc1cac5d9e74e82f90da22b48df084), [`58c43d3`](https://github.com/mastra-ai/mastra/commit/58c43d3f7cb2eeaeb8ac733ae71dde822348e588), [`ef6e295`](https://github.com/mastra-ai/mastra/commit/ef6e295b59bc25a5b61b633a89c97bcfce9fb465), [`208e1b3`](https://github.com/mastra-ai/mastra/commit/208e1b39f30f4b386e494394e9d71d96f0f90241), [`c938d34`](https://github.com/mastra-ai/mastra/commit/c938d34739936c8ecbabd67ad6a4a4396f41c4c6), [`88ddc7c`](https://github.com/mastra-ai/mastra/commit/88ddc7ce01d40175f13a3228b789a906779680bd), [`f2a4afd`](https://github.com/mastra-ai/mastra/commit/f2a4afd7e37e809669001ed17724b341a5c1f45e), [`d438148`](https://github.com/mastra-ai/mastra/commit/d438148e222c1e2fb3c652725ce75680962ebec4), [`ba05fe0`](https://github.com/mastra-ai/mastra/commit/ba05fe0738f70cb686777546e968237d09269142), [`40d358e`](https://github.com/mastra-ai/mastra/commit/40d358e29d55543803e64b49241122f598ffabc7), [`d26a8d4`](https://github.com/mastra-ai/mastra/commit/d26a8d4281f28414715b333c85bedaf70d0b2890), [`e80cd7e`](https://github.com/mastra-ai/mastra/commit/e80cd7e7683e7d732e1cc6784bcac1d2640d2ce3), [`ccbbcd9`](https://github.com/mastra-ai/mastra/commit/ccbbcd974eedff4367a54ed0e24c9ee742ab2f61), [`1d9a0ea`](https://github.com/mastra-ai/mastra/commit/1d9a0ea4a9901baee6cd56737243bd6d1f631ac0), [`677cdc6`](https://github.com/mastra-ai/mastra/commit/677cdc6af564dec29a13464d12b7ab2a4efc22e9), [`c549e2f`](https://github.com/mastra-ai/mastra/commit/c549e2f40edc1cac5d9e74e82f90da22b48df084), [`a7dd322`](https://github.com/mastra-ai/mastra/commit/a7dd32247d95afc539f483ca37f4594af0387f59), [`3f5c6f7`](https://github.com/mastra-ai/mastra/commit/3f5c6f728ea35da344248de9aa070f12849f3aa0), [`a318490`](https://github.com/mastra-ai/mastra/commit/a318490e17da32f338d50929c770d901a9b3dd72), [`b860493`](https://github.com/mastra-ai/mastra/commit/b86049391100e665d579f700c8a2034c036defc3), [`d4be8c1`](https://github.com/mastra-ai/mastra/commit/d4be8c1739d22d621e3f78790e1dd5eb5ecc3589), [`a5d2eb1`](https://github.com/mastra-ai/mastra/commit/a5d2eb10347eade1ae2816d88f466c25186c54a5), [`3667679`](https://github.com/mastra-ai/mastra/commit/3667679db057edfb086846d13369fdda4902ad65), [`49696e8`](https://github.com/mastra-ai/mastra/commit/49696e8e42f870674a0a58f5abcd22cc54dd2864), [`2ef2f23`](https://github.com/mastra-ai/mastra/commit/2ef2f230a7aed342e7dc3b2000cd42e4c43e08a7), [`763e0c6`](https://github.com/mastra-ai/mastra/commit/763e0c61e04d76ad9a9efd301aa57525ca0cbea9), [`20504b2`](https://github.com/mastra-ai/mastra/commit/20504b2ecebd0e077acda3d457ab57480a98ed3e), [`77e6b1b`](https://github.com/mastra-ai/mastra/commit/77e6b1bc4c46ce94fe501023fb4393c812ec6be3), [`c5f964d`](https://github.com/mastra-ai/mastra/commit/c5f964d3f77064e978f8066ec506eed77ba5c63c), [`23e0be2`](https://github.com/mastra-ai/mastra/commit/23e0be261381e49534b4ff3101c60ee64a946cbf), [`7fc8806`](https://github.com/mastra-ai/mastra/commit/7fc880627d3cbf995d31ea0e8b807bf15417e651), [`0e02eac`](https://github.com/mastra-ai/mastra/commit/0e02eacdb2e30e1697a41910b41163742a181dc1), [`4df174c`](https://github.com/mastra-ai/mastra/commit/4df174c32bddf093a82f273070b8380aef7c9e90), [`f7c25b5`](https://github.com/mastra-ai/mastra/commit/f7c25b5106ddfb48e591f98df7a51e0f2dd01dba), [`7aad631`](https://github.com/mastra-ai/mastra/commit/7aad631b43bc10db77d5b8c66b200d7a49d18bf2), [`512100a`](https://github.com/mastra-ai/mastra/commit/512100a7d8b7e9c920f2590c6b3612f5de0d3cff), [`e81744c`](https://github.com/mastra-ai/mastra/commit/e81744cd13c46619c142dc521dc0baac47607a84), [`f8f653f`](https://github.com/mastra-ai/mastra/commit/f8f653f10980d01a73706cc3c8689ca5e40ce808), [`dc09cc1`](https://github.com/mastra-ai/mastra/commit/dc09cc1083d861cde192c1cd235324dc75b8c731), [`9ef432b`](https://github.com/mastra-ai/mastra/commit/9ef432b6faa534b57b0d182a610e13dd9a7123ff), [`36b4649`](https://github.com/mastra-ai/mastra/commit/36b4649045a3a380cbab8ceca866db4086223aff), [`b9cf308`](https://github.com/mastra-ai/mastra/commit/b9cf30846f97f99ac1906ee8a68f4f2d117b0378), [`2e1d098`](https://github.com/mastra-ai/mastra/commit/2e1d0984e325fd319d32ea182f596b3170be3847), [`377eb81`](https://github.com/mastra-ai/mastra/commit/377eb81ce43b964e3a6b541df172da74a8ff3716), [`1794a79`](https://github.com/mastra-ai/mastra/commit/1794a79178c418004a7261b1ad9114066f7ef01d), [`0cdc5dc`](https://github.com/mastra-ai/mastra/commit/0cdc5dc69024957815da4f51acc4119eb4f447d7), [`5740ec6`](https://github.com/mastra-ai/mastra/commit/5740ec60c760ffdfbfaa59d603d03b847c864e05)]:
+  - @mastra/core@1.60.0
+
+## 1.41.0-alpha.14
+
+### Patch Changes
+
+- Fixed the agent controller event types to match what the server actually sends. `KnownAgentControllerEvent` is now derived from the wire type `@mastra/core` exports instead of a hand-written copy: the `display_state_changed` fields are no longer all optional, and the `error` event no longer claims its `error` may be a bare string. Runtime behavior is unchanged; only fallbacks written for those two type gaps become unnecessary. ([#21761](https://github.com/mastra-ai/mastra/pull/21761))
+
+  ```ts
+  import type { KnownAgentControllerEvent } from '@mastra/client-js';
+
+  function onEvent(event: KnownAgentControllerEvent) {
+    if (event.type === 'display_state_changed') {
+      // before: event.displayState.isRunning ?? false
+      const running = event.displayState.isRunning;
+    }
+    if (event.type === 'error') {
+      // before: typeof event.error === 'string' ? event.error : event.error.message
+      const message = event.error.message;
+    }
+  }
+  ```
+
+- Updated dependencies [[`58c43d3`](https://github.com/mastra-ai/mastra/commit/58c43d3f7cb2eeaeb8ac733ae71dde822348e588)]:
+  - @mastra/core@1.60.0-alpha.14
+
+## 1.41.0-alpha.13
+
+### Patch Changes
+
+- Updated observability trace response types to include derived span statuses. ([#21450](https://github.com/mastra-ai/mastra/pull/21450))
+
+- Updated dependencies [[`c549e2f`](https://github.com/mastra-ai/mastra/commit/c549e2f40edc1cac5d9e74e82f90da22b48df084), [`c549e2f`](https://github.com/mastra-ai/mastra/commit/c549e2f40edc1cac5d9e74e82f90da22b48df084), [`2ef2f23`](https://github.com/mastra-ai/mastra/commit/2ef2f230a7aed342e7dc3b2000cd42e4c43e08a7), [`5740ec6`](https://github.com/mastra-ai/mastra/commit/5740ec60c760ffdfbfaa59d603d03b847c864e05)]:
+  - @mastra/core@1.60.0-alpha.13
+
+## 1.41.0-alpha.12
+
+### Patch Changes
+
+- Updated dependencies [[`6db7a5d`](https://github.com/mastra-ai/mastra/commit/6db7a5dd3dd2b6f7ef75dcd804fcffef5fa83963), [`0cdc5dc`](https://github.com/mastra-ai/mastra/commit/0cdc5dc69024957815da4f51acc4119eb4f447d7)]:
+  - @mastra/core@1.60.0-alpha.12
+
 ## 1.41.0-alpha.11
 
 ### Minor Changes
