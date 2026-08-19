@@ -101,8 +101,16 @@ Basic filtering examples:
 <Tabs>
   <TabItem value="mongodb" label="MongoDB">
     ```ts
+    import { MongoDBVector } from '@mastra/mongodb'
+
+    const mongoVector = new MongoDBVector({
+      id: 'mongodb-vector',
+      uri: process.env.MONGODB_URI,
+      dbName: process.env.MONGODB_DB_NAME,
+    })
+
     // Simple equality filter
-    const results = await mongoVector.query({
+    const equalityResults = await mongoVector.query({
       indexName: 'embeddings',
       queryVector: embedding,
       topK: 10,
@@ -112,7 +120,7 @@ Basic filtering examples:
     })
 
     // Numeric comparison
-    const results = await mongoVector.query({
+    const priceResults = await mongoVector.query({
       indexName: 'embeddings',
       queryVector: embedding,
       topK: 10,
@@ -122,7 +130,7 @@ Basic filtering examples:
     })
 
     // Multiple conditions
-    const results = await mongoVector.query({
+    const compoundResults = await mongoVector.query({
       indexName: 'embeddings',
       queryVector: embedding,
       topK: 10,
@@ -134,7 +142,7 @@ Basic filtering examples:
     })
 
     // Array operations
-    const results = await mongoVector.query({
+    const tagResults = await mongoVector.query({
       indexName: 'embeddings',
       queryVector: embedding,
       topK: 10,
@@ -144,7 +152,7 @@ Basic filtering examples:
     })
 
     // Logical operators
-    const results = await mongoVector.query({
+    const categoryResults = await mongoVector.query({
       indexName: 'embeddings',
       queryVector: embedding,
       topK: 10,
@@ -159,7 +167,7 @@ Basic filtering examples:
   <TabItem value="pgvector" label="pgVector">
     ```ts
     // Simple equality filter
-    const results = await pgVector.query({
+    const equalityResults = await pgVector.query({
       indexName: 'embeddings',
       queryVector: embedding,
       topK: 10,
@@ -169,7 +177,7 @@ Basic filtering examples:
     })
 
     // Numeric comparison
-    const results = await pgVector.query({
+    const priceResults = await pgVector.query({
       indexName: 'embeddings',
       queryVector: embedding,
       topK: 10,
@@ -179,7 +187,7 @@ Basic filtering examples:
     })
 
     // Multiple conditions
-    const results = await pgVector.query({
+    const compoundResults = await pgVector.query({
       indexName: 'embeddings',
       queryVector: embedding,
       topK: 10,
@@ -191,7 +199,7 @@ Basic filtering examples:
     })
 
     // Array operations
-    const results = await pgVector.query({
+    const tagResults = await pgVector.query({
       indexName: 'embeddings',
       queryVector: embedding,
       topK: 10,
@@ -201,7 +209,7 @@ Basic filtering examples:
     })
 
     // Logical operators
-    const results = await pgVector.query({
+    const categoryResults = await pgVector.query({
       indexName: 'embeddings',
       queryVector: embedding,
       topK: 10,
@@ -246,7 +254,7 @@ const results = await mongoVector.query({
 })
 ```
 
-Mastra passes the filter to the index only when every field it references is declared in `filterFields` and every operator is one the index accepts: `$and`, `$or`, `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, and `$nin`. A filter that uses an undeclared field or any other operator still returns correct results, but Mastra matches the collection first and passes the matching document IDs into the vector search. On large collections, the results can exceed MongoDB's 16 MB document limit, so declare your filter fields when you expect selective filters over large data sets.
+Mastra passes the filter to the index only when every field it references is declared in `filterFields` and every operator is one the index accepts: `$and`, `$or`, `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, and `$nin`. A filter that uses an undeclared field or any other operator takes a fallback path: Mastra matches the collection first and passes the matching document IDs into the vector search. That fallback holds only while the ID set fits within MongoDB's 16 MB BSON document limit. On large collections the query fails once that limit is exceeded, so declare your filter fields when you expect selective filters over large data sets.
 
 pgVector applies the filter as an ordinary query condition:
 

@@ -343,7 +343,7 @@ await store.createIndex({
 })
 ```
 
-- Filters that reference an undeclared field or use another operator still work, but Mastra pre-filters the collection and passes the matching document IDs to `$vectorSearch`. On large collections, that pre-filter can exceed the 16 MB BSON document limit, so declare your filter fields for selective queries over large data sets.
+- Filters that reference an undeclared field or use another operator take a fallback path: Mastra pre-filters the collection and passes the matching document IDs to `$vectorSearch`. This works only while the ID set fits within MongoDB's 16 MB BSON document limit. On large collections the query fails once that limit is exceeded, so declare your filter fields for selective queries over large data sets.
 
 ### Couchbase
 
