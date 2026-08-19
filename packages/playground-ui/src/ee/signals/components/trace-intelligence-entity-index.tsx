@@ -186,7 +186,9 @@ export function TraceIntelligenceEntityIndex({
             headerAction || signalManagement ? (
               <>
                 {headerAction}
-                {signalManagement ? <TraceSignalSettingsButton onClick={() => setSettingsOpen(true)} /> : null}
+                {signalManagement ? (
+                  <TraceSignalSettingsButton open={settingsOpen} onClick={() => setSettingsOpen(open => !open)} />
+                ) : null}
               </>
             ) : undefined
           }

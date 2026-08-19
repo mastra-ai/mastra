@@ -78,7 +78,7 @@ function SettingsHarness() {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <TraceSignalSettingsButton onClick={() => setOpen(true)} />
+      <TraceSignalSettingsButton open={open} onClick={() => setOpen(value => !value)} />
       {open ? <TraceSignalSettingsPanel onClose={() => setOpen(false)} /> : null}
     </>
   );
@@ -108,8 +108,11 @@ describe('TraceSignalSettingsButton', () => {
 
   it('opens an in-page right-side section with scope copy, read-only built-ins, and organization usage', async () => {
     renderSettings(management());
+    const settingsButton = screen.getByRole('button', { name: 'Signal settings' });
+    expect(settingsButton.getAttribute('aria-expanded')).toBe('false');
     await openSettings();
 
+    expect(settingsButton.getAttribute('aria-expanded')).toBe('true');
     expect(await screen.findByText('Organization signal library')).toBeTruthy();
     expect(screen.getByText(/definitions, prompts, and versions are shared by every project/i)).toBeTruthy();
     expect(screen.getByText('Current project')).toBeTruthy();

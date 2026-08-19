@@ -11,7 +11,7 @@ import { Skeleton } from '@/ds/components/Skeleton';
 import { StatusBadge } from '@/ds/components/StatusBadge';
 import { Switch } from '@/ds/components/Switch';
 
-export function TraceSignalSettingsButton({ onClick }: { onClick: () => void }) {
+export function TraceSignalSettingsButton({ open, onClick }: { open: boolean; onClick: () => void }) {
   const { signalManagement } = useTraceIntelligence();
   if (!signalManagement) return null;
 
@@ -22,6 +22,8 @@ export function TraceSignalSettingsButton({ onClick }: { onClick: () => void }) 
       size="icon-md"
       tooltip="Signal settings"
       aria-label="Signal settings"
+      aria-controls="trace-signal-settings"
+      aria-expanded={open}
       onClick={onClick}
     >
       <Settings aria-hidden="true" />
@@ -32,8 +34,9 @@ export function TraceSignalSettingsButton({ onClick }: { onClick: () => void }) 
 export function TraceSignalSettingsPanel({ onClose }: { onClose: () => void }) {
   return (
     <aside
+      id="trace-signal-settings"
       aria-label="Trace signal settings"
-      className="border-border1 bg-surface1 min-h-0 overflow-y-auto border-t pt-4 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6"
+      className="border-border1 bg-surface1 order-first min-h-0 overflow-y-auto border-t pt-4 lg:order-none lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6"
     >
       <header className="mb-5 flex items-center justify-between gap-3">
         <h2 className="text-ui-lg text-neutral5 flex items-center gap-2 font-medium">
@@ -132,9 +135,9 @@ function TraceSignalSettingsContent() {
       </div>
 
       <section aria-labelledby="built-in-signals-heading">
-        <h2 id="built-in-signals-heading" className="text-ui-md text-neutral4 mb-2 font-medium">
+        <h3 id="built-in-signals-heading" className="text-ui-md text-neutral4 mb-2 font-medium">
           Built-in signals
-        </h2>
+        </h3>
         <div className="divide-border1 border-border1 divide-y rounded-md border px-3">
           {signalCatalog
             .filter(signal => signal.builtIn)
@@ -155,9 +158,9 @@ function TraceSignalSettingsContent() {
       <section aria-labelledby="custom-signals-heading">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 id="custom-signals-heading" className="text-ui-md text-neutral4 font-medium">
+            <h3 id="custom-signals-heading" className="text-ui-md text-neutral4 font-medium">
               Custom signals
-            </h2>
+            </h3>
             <p className="text-ui-xs text-neutral3">
               {active.length} of {limit} active organization definitions
             </p>
