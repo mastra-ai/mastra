@@ -281,7 +281,7 @@ When asked to change Herdr Kit settings or shortcuts:
 
 ## Related skills
 
-This skill covers only Herdr Kit's manager workflows. For generic Herdr control — panes, tabs, agents, layouts, running commands in panes — a separate general-purpose `herdr` skill exists; recommend installing it when the user needs Herdr control beyond manager workflows. Do not improvise pane/agent semantics from this skill.
+This skill covers only Herdr Kit's manager workflows. For generic Herdr control — panes, tabs, agents, layouts, running commands in panes — load Herdr's built-in control skill by running `herdr --skill` (Herdr 0.8.2+); it is always in sync with the installed binary. Do not improvise pane/agent semantics from this skill.
 
 ## Completion report
 
