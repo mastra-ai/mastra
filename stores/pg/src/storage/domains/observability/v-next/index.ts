@@ -289,21 +289,40 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
 
       const results: PruneResult[] = [];
       const now = Date.now();
+      let invalidatesTagDiscovery = false;
 
-      for (const [key, entry] of Object.entries(ObservabilityStoragePostgresVNext.retentionTables)) {
-        const policy = policies[key];
-        if (!policy) continue;
+      try {
+        for (const [key, entry] of Object.entries(ObservabilityStoragePostgresVNext.retentionTables)) {
+          const policy = policies[key];
+          if (!policy) continue;
 
-        if (options?.signal?.aborted) {
-          results.push({ domain: 'observability', table: entry.table, deleted: 0, done: false });
-          continue;
+          if (options?.signal?.aborted) {
+            results.push({ domain: 'observability', table: entry.table, deleted: 0, done: false });
+            continue;
+          }
+
+          const cutoff = retentionCutoff(policy, now);
+          const args = { client: this.#client, schema: this.#schema, table: entry.table, cutoff, options };
+          const outcome = mode === 'timescale' ? await pruneTimescaleTable(args) : await prunePartitionedTable(args);
+
+          if (
+            outcome.deleted > 0 &&
+            (entry.table === TABLE_SPAN_EVENTS ||
+              entry.table === TABLE_METRIC_EVENTS ||
+              entry.table === TABLE_LOG_EVENTS)
+          ) {
+            invalidatesTagDiscovery = true;
+          }
+
+          results.push({ domain: 'observability', table: entry.table, deleted: outcome.deleted, done: outcome.done });
         }
-
-        const cutoff = retentionCutoff(policy, now);
-        const args = { client: this.#client, schema: this.#schema, table: entry.table, cutoff, options };
-        const outcome = mode === 'timescale' ? await pruneTimescaleTable(args) : await prunePartitionedTable(args);
-
-        results.push({ domain: 'observability', table: entry.table, deleted: outcome.deleted, done: outcome.done });
+      } finally {
+        // Pruning is not atomic across signal tables. If a later table fails
+        // after an earlier one deleted rows, the monotonic tag cache still
+        // has to be rebuilt on its next read.
+        if (invalidatesTagDiscovery) {
+          await discoveryOps.invalidateTagDiscoveryCache(this.#client, this.#schema);
+        }
       }
 
       return results;
@@ -576,9 +595,16 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   // -------------------------------------------------------------------------
 
   override async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
-    await this.#run('BATCH_DELETE_TRACES', () => tracingOps.batchDeleteTraces(this.#client, this.#schema, args), {
-      count: args.traceIds.length,
-    });
+    await this.#run(
+      'BATCH_DELETE_TRACES',
+      async () => {
+        await tracingOps.batchDeleteTraces(this.#client, this.#schema, args);
+        if (args.traceIds.length > 0) {
+          await discoveryOps.invalidateTagDiscoveryCache(this.#client, this.#schema);
+        }
+      },
+      { count: args.traceIds.length },
+    );
   }
 
   override async dangerouslyClearAll(): Promise<void> {

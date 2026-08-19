@@ -848,6 +848,133 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
     });
   });
 
+  describe('discovery — incremental tags', () => {
+    it('refreshes tags from rows after the persisted signal cursors', async () => {
+      const harness = await createHarness({
+        schemaPrefix: 'obs_vnext_discovery_tags_incremental',
+        discovery: { ttlSeconds: 0 },
+      });
+
+      try {
+        await harness.domain.createSpan({
+          span: makeSpan({
+            traceId: 'tag-cursor-trace',
+            spanId: 'tag-cursor-span',
+            tags: ['initial-tag'],
+          }),
+        });
+
+        expect(await harness.domain.getTags({})).toEqual({ tags: ['initial-tag'] });
+
+        const cursorRows = await harness.baseClient.manyOrNone<{ cacheKey: string; values: string[] }>(
+          `SELECT "cacheKey", "values"
+           FROM ${qualifiedTable(harness.schema, TABLE_DISCOVERY)}
+           WHERE "cacheKey" LIKE 'tags:cursor:%'
+           ORDER BY "cacheKey"`,
+        );
+        expect(cursorRows).toHaveLength(3);
+        expect(cursorRows.every(row => /^\d+:\d+$/.test(row.values[0] ?? ''))).toBe(true);
+
+        // Signal tables are insert-only. Mutating an old row here makes a
+        // repeated full-history scan observable without relying on timing or
+        // EXPLAIN output: an incremental refresh must not revisit this row.
+        await harness.baseClient.none(
+          `UPDATE ${qualifiedTable(harness.schema, TABLE_SPAN_EVENTS)}
+           SET "tags" = ARRAY['mutated-old-tag']::text[]
+           WHERE "traceId" = 'tag-cursor-trace'`,
+        );
+        await harness.domain.batchCreateLogs({
+          logs: [makeLog({ logId: 'tag-cursor-log', tags: ['new-tag'] })],
+        });
+
+        expect(await harness.domain.getTags({})).toEqual({ tags: ['initial-tag', 'new-tag'] });
+      } finally {
+        await harness.close();
+      }
+    });
+
+    it('does not skip tags from a lower cursor that commits after a higher cursor', async () => {
+      const harness = await createHarness({
+        schemaPrefix: 'obs_vnext_discovery_tags_xact',
+        discovery: { ttlSeconds: 0 },
+      });
+      const txA = await harness.baseClient.connect();
+      const txB = await harness.baseClient.connect();
+      let txAReleased = false;
+      let txBReleased = false;
+
+      try {
+        expect(await harness.domain.getTags({})).toEqual({ tags: [] });
+        const table = qualifiedTable(harness.schema, TABLE_LOG_EVENTS);
+
+        await txA.query('BEGIN');
+        await txA.query(
+          `INSERT INTO ${table} ("logId", "timestamp", "level", "message", "tags")
+           VALUES ($1, $2, $3, $4, $5::text[])`,
+          ['tag-xact-a', dayAt(0, 8).toISOString(), 'info', 'lower cursor commits last', ['lower-tag']],
+        );
+
+        await txB.query('BEGIN');
+        await txB.query(
+          `INSERT INTO ${table} ("logId", "timestamp", "level", "message", "tags")
+           VALUES ($1, $2, $3, $4, $5::text[])`,
+          ['tag-xact-b', dayAt(0, 8, 0, 1).toISOString(), 'info', 'higher cursor commits first', ['higher-tag']],
+        );
+        await txB.query('COMMIT');
+        txB.release();
+        txBReleased = true;
+
+        expect(await harness.domain.getTags({})).toEqual({ tags: [] });
+
+        await txA.query('COMMIT');
+        txA.release();
+        txAReleased = true;
+
+        expect(await harness.domain.getTags({})).toEqual({ tags: ['higher-tag', 'lower-tag'] });
+      } finally {
+        if (!txAReleased) {
+          await txA.query('ROLLBACK').catch(() => undefined);
+          txA.release();
+        }
+        if (!txBReleased) {
+          await txB.query('ROLLBACK').catch(() => undefined);
+          txB.release();
+        }
+        await harness.close();
+      }
+    });
+
+    it('invalidates tag values and cursors when traces are deleted', async () => {
+      const harness = await createHarness({
+        schemaPrefix: 'obs_vnext_discovery_tags_delete',
+        discovery: { ttlSeconds: 0 },
+      });
+
+      try {
+        await harness.domain.createSpan({
+          span: makeSpan({
+            traceId: 'deleted-tag-trace',
+            spanId: 'deleted-tag-span',
+            tags: ['deleted-tag'],
+          }),
+        });
+        expect(await harness.domain.getTags({})).toEqual({ tags: ['deleted-tag'] });
+
+        await harness.domain.batchDeleteTraces({ traceIds: ['deleted-tag-trace'] });
+
+        const cacheRows = await harness.baseClient.one<{ count: string }>(
+          `SELECT COUNT(*)::text AS "count"
+           FROM ${qualifiedTable(harness.schema, TABLE_DISCOVERY)}
+           WHERE "cacheKey" = 'tags' OR "cacheKey" LIKE 'tags:%'`,
+        );
+        expect(Number(cacheRows.count)).toBe(0);
+        expect(await harness.domain.getTags({})).toEqual({ tags: [] });
+      } finally {
+        await harness.close();
+      }
+    });
+  });
+
   describe('discovery — stale SWR', () => {
     it('returns stale cached values immediately and refreshes them in the background', async () => {
       const harness = await createHarness({

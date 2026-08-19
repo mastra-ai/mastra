@@ -7,8 +7,9 @@
  *   - if no cache row exists, compute synchronously and serve.
  *   - if cache row exists and is fresher than `discoveryTtlSeconds`, serve as-is.
  *   - if cache row is stale, kick off an async refresh and serve the cached
- *     value. The refresh upserts on a single row keyed by cacheKey, so
- *     concurrent readers race harmlessly with last-write-wins semantics.
+ *     value. Generic discovery values use last-write-wins upserts; tag
+ *     discovery additionally serializes its value/cursor refresh across
+ *     processes with a PostgreSQL advisory lock.
  *
  * No in-memory caching: the table-backed cache works across multiple
  * frontends pointing at the same database and survives serverless restarts.
@@ -37,7 +38,7 @@ import type {
 
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
-import type { DbClient } from '../../../client';
+import type { DbClient, TxClient } from '../../../client';
 import {
   qualifiedTable,
   TABLE_DISCOVERY,
@@ -47,6 +48,7 @@ import {
   TABLE_FEEDBACK_EVENTS,
   TABLE_SPAN_EVENTS,
 } from './ddl';
+import { decodeDeltaCursor, encodeDeltaCursor, readSafeXactHorizon } from './polling';
 
 const DEFAULT_TTL_SECONDS = 5 * 60; // 5 minutes
 
@@ -81,7 +83,7 @@ export interface DiscoveryConfig {
  *
  * Covers two stampede shapes:
  *  - cold start: N concurrent first-callers all want the values, but only
- *    one of them needs to actually run `refresh()` + `upsertCache()`. The
+ *    one of them needs to actually run the refresh-and-store operation. The
  *    others await the same promise.
  *  - stale refresh: N concurrent stale-readers serve the cached values
  *    immediately and share one background refresh.
@@ -95,8 +97,7 @@ const inFlightRefreshes = new Map<string, Promise<string[]>>();
 function startOrJoinRefresh(
   dedupeKey: string,
   cacheKey: string,
-  refresh: () => Promise<string[]>,
-  upsert: (values: string[]) => Promise<void>,
+  refreshAndStore: () => Promise<string[]>,
   logger: IMastraLogger | undefined,
 ): Promise<string[]> {
   const existing = inFlightRefreshes.get(dedupeKey);
@@ -104,9 +105,7 @@ function startOrJoinRefresh(
 
   const promise = (async () => {
     try {
-      const values = await refresh();
-      await upsert(values);
-      return values;
+      return await refreshAndStore();
     } catch (error) {
       // Surface refresh failures — silently swallowing them would mask real
       // DB/connectivity issues behind permanently stale data. Prefer the
@@ -148,6 +147,7 @@ async function readWithRefresh(
   refresh: () => Promise<string[]>,
   ttlSeconds: number,
   logger: IMastraLogger | undefined,
+  options?: { refreshStoresValues?: boolean },
 ): Promise<string[]> {
   const table = qualifiedTable(schema, TABLE_DISCOVERY);
   // pg returns `timestamptz` as a JS Date — type the field accordingly.
@@ -162,13 +162,15 @@ async function readWithRefresh(
   if (!stale) return row!.values;
 
   const dedupeKey = `${schema}:${cacheKey}`;
-  const refreshing = startOrJoinRefresh(
-    dedupeKey,
-    cacheKey,
-    refresh,
-    values => upsertCache(client, schema, cacheKey, values),
-    logger,
-  );
+  const refreshAndStore =
+    options?.refreshStoresValues === true
+      ? refresh
+      : async () => {
+          const values = await refresh();
+          await upsertCache(client, schema, cacheKey, values);
+          return values;
+        };
+  const refreshing = startOrJoinRefresh(dedupeKey, cacheKey, refreshAndStore, logger);
 
   // Force-refresh path: `ttlSeconds <= 0` is the contract used by
   // `refreshAllDiscoveryCaches()` (and the future `mastra observability
@@ -203,7 +205,12 @@ async function readWithRefresh(
   return row.values;
 }
 
-async function upsertCache(client: DbClient, schema: string, cacheKey: string, values: string[]): Promise<void> {
+async function upsertCache(
+  client: Pick<DbClient, 'query'>,
+  schema: string,
+  cacheKey: string,
+  values: string[],
+): Promise<void> {
   const table = qualifiedTable(schema, TABLE_DISCOVERY);
   await client.query(
     `INSERT INTO ${table} ("cacheKey", "refreshedAt", "values")
@@ -212,6 +219,141 @@ async function upsertCache(client: DbClient, schema: string, cacheKey: string, v
        "refreshedAt" = EXCLUDED."refreshedAt",
        "values" = EXCLUDED."values"`,
     [cacheKey, JSON.stringify(values)],
+  );
+}
+
+const ZERO_CURSOR = '0:0';
+
+function tagCursorCacheKey(cacheKey: string, table: string): string {
+  return `${cacheKey}:cursor:${table}`;
+}
+
+function readCachedCursor(values: unknown): string | null {
+  if (!Array.isArray(values) || typeof values[0] !== 'string') return null;
+  try {
+    const cursor = decodeDeltaCursor(values[0]);
+    return encodeDeltaCursor(cursor.xactId, cursor.cursorId);
+  } catch {
+    // Discovery state is disposable. A malformed cursor should cause a safe
+    // full rebuild rather than make tag discovery permanently fail.
+    return null;
+  }
+}
+
+interface IncrementalTagsResult {
+  values: string[];
+  xactId: string | null;
+  cursorId: string | null;
+}
+
+async function readIncrementalTags(
+  client: Pick<TxClient, 'one'>,
+  schema: string,
+  table: string,
+  cursor: string,
+  safeXactHorizon: string,
+  entityType?: EntityType,
+): Promise<IncrementalTagsResult> {
+  const { xactId, cursorId } = decodeDeltaCursor(cursor);
+  const entityFilter = entityType ? `AND "entityType" = $4` : '';
+  const params: unknown[] = [xactId, cursorId, safeXactHorizon];
+  if (entityType) params.push(entityType);
+
+  return client.one<IncrementalTagsResult>(
+    `WITH new_rows AS MATERIALIZED (
+       SELECT "xactId", "cursorId", "entityType", "tags"
+       FROM ${qualifiedTable(schema, table)}
+       WHERE ("xactId", "cursorId") > ($1::xid8, $2::bigint)
+         AND "xactId" < $3::xid8
+     ),
+     new_tags AS (
+       SELECT DISTINCT tag AS v
+       FROM new_rows
+       CROSS JOIN LATERAL UNNEST("tags") AS expanded(tag)
+       WHERE tag IS NOT NULL AND tag <> '' ${entityFilter}
+     ),
+     last_cursor AS (
+       SELECT "xactId", "cursorId"
+       FROM new_rows
+       ORDER BY "xactId" DESC, "cursorId" DESC
+       LIMIT 1
+     )
+     SELECT
+       COALESCE((SELECT ARRAY_AGG(v ORDER BY v) FROM new_tags), '{}'::text[]) AS "values",
+       (SELECT "xactId"::text FROM last_cursor) AS "xactId",
+       (SELECT "cursorId"::text FROM last_cursor) AS "cursorId"`,
+    params,
+  );
+}
+
+async function refreshTagsIncrementally(
+  client: DbClient,
+  schema: string,
+  cacheKey: string,
+  args: GetTagsArgs,
+  ttlSeconds: number,
+): Promise<string[]> {
+  const discoveryTable = qualifiedTable(schema, TABLE_DISCOVERY);
+  const cursorKeys = ENTITY_DISCOVERY_TABLES.map(table => tagCursorCacheKey(cacheKey, table));
+
+  return client.tx(async tx => {
+    // The in-memory map only dedupes callers in this process. A transaction
+    // advisory lock serializes refreshes across server instances that share
+    // the same schema and cache key.
+    await tx.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [`${schema}:${cacheKey}`]);
+
+    const current = await tx.oneOrNone<{ values: string[]; refreshedAt: Date }>(
+      `SELECT "values", "refreshedAt" FROM ${discoveryTable} WHERE "cacheKey" = $1`,
+      [cacheKey],
+    );
+
+    // Another process may have refreshed while this caller waited for the
+    // lock. Recheck freshness before touching the signal tables.
+    if (ttlSeconds > 0 && current) {
+      const ageMs = Date.now() - new Date(current.refreshedAt).getTime();
+      if (ageMs <= ttlSeconds * 1000) return current.values;
+    }
+
+    const cursorRows = current
+      ? await tx.manyOrNone<{ cacheKey: string; values: unknown }>(
+          `SELECT "cacheKey", "values"
+           FROM ${discoveryTable}
+           WHERE "cacheKey" = ANY($1::text[])`,
+          [cursorKeys],
+        )
+      : [];
+    const cursorByKey = new Map(cursorRows.map(row => [row.cacheKey, readCachedCursor(row.values)]));
+    const canRefreshIncrementally =
+      current !== null && cursorKeys.every(key => typeof cursorByKey.get(key) === 'string');
+    const safeXactHorizon = await readSafeXactHorizon(tx);
+    const discovered = new Set(canRefreshIncrementally ? (current?.values ?? []) : []);
+    const nextCursors = new Map<string, string>();
+
+    for (const table of ENTITY_DISCOVERY_TABLES) {
+      const cursorKey = tagCursorCacheKey(cacheKey, table);
+      const cursor = canRefreshIncrementally ? (cursorByKey.get(cursorKey) ?? ZERO_CURSOR) : ZERO_CURSOR;
+      const result = await readIncrementalTags(tx, schema, table, cursor, safeXactHorizon, args.entityType);
+      for (const value of result.values) discovered.add(value);
+      nextCursors.set(
+        cursorKey,
+        result.xactId !== null && result.cursorId !== null ? encodeDeltaCursor(result.xactId, result.cursorId) : cursor,
+      );
+    }
+
+    const values = [...discovered].sort();
+    await upsertCache(tx, schema, cacheKey, values);
+    for (const [cursorKey, cursor] of nextCursors) {
+      await upsertCache(tx, schema, cursorKey, [cursor]);
+    }
+    return values;
+  });
+}
+
+/** Remove tag values and cursor state after signal rows are deleted. */
+export async function invalidateTagDiscoveryCache(client: DbClient, schema: string): Promise<void> {
+  await client.none(
+    `DELETE FROM ${qualifiedTable(schema, TABLE_DISCOVERY)}
+     WHERE "cacheKey" = 'tags' OR "cacheKey" LIKE 'tags:%'`,
   );
 }
 
@@ -330,22 +472,10 @@ export async function getTags(
 ): Promise<GetTagsResponse> {
   const ttl = config.ttlSeconds ?? DEFAULT_TTL_SECONDS;
   const cacheKey = args.entityType ? `tags:${args.entityType}` : 'tags';
-
-  const refresh = async (): Promise<string[]> => {
-    const filter = args.entityType ? `AND "entityType" = $1` : '';
-    const params = args.entityType ? [args.entityType] : [];
-    const unions = ENTITY_DISCOVERY_TABLES.map(
-      t =>
-        `SELECT DISTINCT UNNEST("tags") AS v FROM ${qualifiedTable(schema, t)} WHERE array_length("tags", 1) > 0 ${filter}`,
-    ).join(' UNION ');
-    const rows = await client.manyOrNone<{ v: string }>(
-      `SELECT v FROM (${unions}) sub WHERE v IS NOT NULL AND v <> '' ORDER BY v`,
-      params,
-    );
-    return rows.map(r => r.v);
-  };
-
-  const values = await readWithRefresh(client, schema, cacheKey, refresh, ttl, config.logger);
+  const refreshAndStore = () => refreshTagsIncrementally(client, schema, cacheKey, args, ttl);
+  const values = await readWithRefresh(client, schema, cacheKey, refreshAndStore, ttl, config.logger, {
+    refreshStoresValues: true,
+  });
   return { tags: values };
 }
 
