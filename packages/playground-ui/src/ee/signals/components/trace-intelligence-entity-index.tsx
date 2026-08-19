@@ -1,9 +1,9 @@
 import type { ThemeLearningEntity } from '@mastra/client-js';
 import { Columns2, List, Radar } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { useThemeEntities } from '../hooks';
-import { TraceSignalSettingsButton } from '../settings/trace-signal-settings';
+import { TraceSignalSettingsButton, TraceSignalSettingsPanel } from '../settings/trace-signal-settings';
 import { useTraceIntelligence } from '../use-trace-intelligence';
 import { EntityIndexCompactGrid } from './entity-index-compact-grid';
 import { EntityIndexList } from './entity-index-list';
@@ -133,6 +133,7 @@ export function TraceIntelligenceEntityIndex({
 }: TraceIntelligenceEntityIndexProps) {
   const entitiesQuery = useThemeEntities(entityType);
   const { LinkComponent, signalManagement } = useTraceIntelligence();
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   if (entitiesQuery.error) return <EntityIndexError error={entitiesQuery.error} />;
 
@@ -185,13 +186,18 @@ export function TraceIntelligenceEntityIndex({
             headerAction || signalManagement ? (
               <>
                 {headerAction}
-                {signalManagement ? <TraceSignalSettingsButton /> : null}
+                {signalManagement ? <TraceSignalSettingsButton onClick={() => setSettingsOpen(true)} /> : null}
               </>
             ) : undefined
           }
         />
       </PageLayout.TopArea>
-      {body}
+      <div
+        className={settingsOpen ? 'grid min-h-0 gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]' : 'grid min-h-0 grid-cols-1'}
+      >
+        <div className="min-h-0 min-w-0">{body}</div>
+        {settingsOpen ? <TraceSignalSettingsPanel onClose={() => setSettingsOpen(false)} /> : null}
+      </div>
     </PageLayout>
   );
 }

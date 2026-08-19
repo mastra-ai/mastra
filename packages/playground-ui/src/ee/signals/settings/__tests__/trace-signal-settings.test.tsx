@@ -8,11 +8,12 @@ import type {
 } from '@mastra/client-js';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { TraceSignalManagement } from '../../trace-intelligence-context';
 import { TraceIntelligenceProvider } from '../../trace-intelligence-provider';
-import { TraceSignalSettingsButton } from '../trace-signal-settings';
+import { TraceSignalSettingsButton, TraceSignalSettingsPanel } from '../trace-signal-settings';
 
 const activeDefinition: TraceSignalDefinition = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -73,12 +74,22 @@ function management(overrides: Partial<TraceSignalManagement> = {}): TraceSignal
   };
 }
 
+function SettingsHarness() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <TraceSignalSettingsButton onClick={() => setOpen(true)} />
+      {open ? <TraceSignalSettingsPanel onClose={() => setOpen(false)} /> : null}
+    </>
+  );
+}
+
 function renderSettings(signalManagement?: TraceSignalManagement) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
       <TraceIntelligenceProvider cacheScope="settings-test" signalManagement={signalManagement}>
-        <TraceSignalSettingsButton />
+        <SettingsHarness />
       </TraceIntelligenceProvider>
     </QueryClientProvider>,
   );
@@ -86,7 +97,7 @@ function renderSettings(signalManagement?: TraceSignalManagement) {
 
 async function openSettings() {
   fireEvent.click(screen.getByRole('button', { name: 'Signal settings' }));
-  return screen.findByRole('dialog', { name: 'Trace signal settings' });
+  return screen.findByRole('complementary', { name: 'Trace signal settings' });
 }
 
 describe('TraceSignalSettingsButton', () => {
@@ -95,16 +106,18 @@ describe('TraceSignalSettingsButton', () => {
     expect(screen.queryByRole('button', { name: 'Signal settings' })).toBeNull();
   });
 
-  it('opens a right-side pane with scope copy, read-only built-ins, and organization usage', async () => {
+  it('opens an in-page right-side section with scope copy, read-only built-ins, and organization usage', async () => {
     renderSettings(management());
     await openSettings();
 
-    expect(await screen.findByText(/definitions belong to the organization/i)).toBeTruthy();
-    expect(screen.getByText(/enablement applies only to the current project/i)).toBeTruthy();
+    expect(await screen.findByText('Organization signal library')).toBeTruthy();
+    expect(screen.getByText(/definitions, prompts, and versions are shared by every project/i)).toBeTruthy();
+    expect(screen.getByText('Current project')).toBeTruthy();
+    expect(screen.getByText(/enable switches apply only to this project/i)).toBeTruthy();
     expect(screen.getAllByText('Read only')).toHaveLength(4);
     expect(screen.getByText('1 of 7 active organization definitions')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Trace signal settings' })).toBeNull());
+    fireEvent.click(screen.getByRole('button', { name: 'Close settings' }));
+    await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Trace signal settings' })).toBeNull());
   });
 
   it('creates and edits definitions while keeping the name immutable', async () => {

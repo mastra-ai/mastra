@@ -1,5 +1,5 @@
 import type { TraceSignalDefinition } from '@mastra/client-js';
-import { Settings } from 'lucide-react';
+import { Settings, X } from 'lucide-react';
 import { useState } from 'react';
 
 import { useTraceIntelligence } from '../use-trace-intelligence';
@@ -7,46 +7,44 @@ import { SignalDefinitionFormDialog } from './signal-definition-form-dialog';
 import { useSignalManagementList, useSignalManagementMutations } from './use-signal-management';
 import { Button } from '@/ds/components/Button';
 import { Notice } from '@/ds/components/Notice';
-import { SideDialog } from '@/ds/components/SideDialog';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { StatusBadge } from '@/ds/components/StatusBadge';
 import { Switch } from '@/ds/components/Switch';
 
-export function TraceSignalSettingsButton() {
+export function TraceSignalSettingsButton({ onClick }: { onClick: () => void }) {
   const { signalManagement } = useTraceIntelligence();
-  const [open, setOpen] = useState(false);
-
   if (!signalManagement) return null;
 
   return (
-    <>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-md"
-        tooltip="Signal settings"
-        aria-label="Signal settings"
-        onClick={() => setOpen(true)}
-      >
-        <Settings aria-hidden="true" />
-      </Button>
-      <SideDialog
-        dialogTitle="Trace signal settings"
-        dialogDescription="Manage organization signal definitions and project enablement."
-        isOpen={open}
-        onClose={() => setOpen(false)}
-        className="4xl:w-1/2 w-full sm:w-3/4 2xl:w-2/3"
-      >
-        <SideDialog.Content>
-          <SideDialog.Header>
-            <SideDialog.Heading>
-              <Settings aria-hidden="true" /> Trace signal settings
-            </SideDialog.Heading>
-          </SideDialog.Header>
-          <TraceSignalSettingsContent />
-        </SideDialog.Content>
-      </SideDialog>
-    </>
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-md"
+      tooltip="Signal settings"
+      aria-label="Signal settings"
+      onClick={onClick}
+    >
+      <Settings aria-hidden="true" />
+    </Button>
+  );
+}
+
+export function TraceSignalSettingsPanel({ onClose }: { onClose: () => void }) {
+  return (
+    <aside
+      aria-label="Trace signal settings"
+      className="border-border1 bg-surface1 min-h-0 overflow-y-auto border-t pt-4 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6"
+    >
+      <header className="mb-5 flex items-center justify-between gap-3">
+        <h2 className="text-ui-lg text-neutral5 flex items-center gap-2 font-medium">
+          <Settings aria-hidden="true" /> Trace signal settings
+        </h2>
+        <Button type="button" variant="ghost" size="icon-md" tooltip="Close settings" onClick={onClose}>
+          <X aria-hidden="true" />
+        </Button>
+      </header>
+      <TraceSignalSettingsContent />
+    </aside>
   );
 }
 
@@ -111,9 +109,16 @@ function TraceSignalSettingsContent() {
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <p className="text-ui-sm text-neutral4">
-          Signal definitions belong to the organization. Enablement applies only to the current project.
-        </p>
+        <div className="border-border1 grid gap-2 rounded-md border p-3 sm:grid-cols-2">
+          <div>
+            <p className="text-ui-sm text-neutral4 font-medium">Organization signal library</p>
+            <p className="text-ui-xs text-neutral3">Definitions, prompts, and versions are shared by every project.</p>
+          </div>
+          <div>
+            <p className="text-ui-sm text-neutral4 font-medium">Current project</p>
+            <p className="text-ui-xs text-neutral3">Enable switches apply only to this project.</p>
+          </div>
+        </div>
         {!canManage ? (
           <Notice variant="info">
             <Notice.Message>You have read-only access. An organization admin can change these settings.</Notice.Message>
