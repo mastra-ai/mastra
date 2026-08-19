@@ -44,7 +44,7 @@ No code changes are required. Loggers with adapter support (`PinoLogger` and `Co
 
 When a log call happens inside a traced operation (an agent run, workflow step, or tool call), Mastra injects `trace_id` and `span_id` into the logger's native output. The fields use W3C trace context format and match the trace shown in Studio, so you can correlate a stdout log line with its trace directly.
 
-To get machine-parseable JSON on stdout, configure `PinoLogger` with `prettyPrint: false` — pretty printing is enabled by default and produces human-readable text instead of JSON:
+To get machine-parseable JSON on stdout, configure `PinoLogger` with `prettyPrint: false`, pretty printing is enabled by default and produces human-readable text instead of JSON:
 
 ```typescript title="src/mastra/index.ts"
 export const mastra = new Mastra({
