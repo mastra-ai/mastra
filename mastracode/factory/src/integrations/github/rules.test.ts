@@ -1874,30 +1874,31 @@ describe('createGithubPullRequestReconciler', () => {
     expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(0);
   });
 
-  it('backfills status once for terminal pull request cards created before status metadata existed', async () => {
+  it('picks up a merge on a card an approving review already moved to done', async () => {
     const context = await setup('read');
-    const card = await createCard(context, { number: 17, stages: ['done'] });
-    const fetchPullRequest = vi.fn(async () => ({
-      ...mergedState(17),
-      state: 'open' as const,
-      draft: true,
-      merged: false,
-    }));
+    const card = await createCard(context, {
+      number: 17,
+      stages: ['done'],
+      metadata: {
+        author: 'pr-author',
+        state: 'open',
+        draft: false,
+        merged: false,
+        assignees: [],
+        requestedReviewers: [],
+        labels: [],
+      },
+    });
+    const fetchPullRequest = vi.fn(async () => ({ ...mergedState(17), state: 'open' as const, merged: false }));
     const reconcile = createReconciler(context, fetchPullRequest);
 
     await reconcile([repositoryTarget]);
+    fetchPullRequest.mockImplementation(async () => mergedState(17));
     await reconcile([repositoryTarget]);
 
-    expect(fetchPullRequest).toHaveBeenCalledTimes(1);
+    expect(fetchPullRequest).toHaveBeenCalledTimes(2);
     await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
-      metadata: {
-        state: 'open',
-        draft: true,
-        merged: false,
-        assignees: ['assignee'],
-        requestedReviewers: ['reviewer'],
-        labels: ['bug'],
-      },
+      metadata: { state: 'closed', merged: true },
     });
   });
 
