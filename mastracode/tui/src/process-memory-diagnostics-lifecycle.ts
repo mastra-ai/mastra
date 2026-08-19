@@ -29,7 +29,6 @@ export function createShutdownCoordinator(
         cleanup().catch(() => undefined),
         new Promise<void>(resolve => {
           timeout = setTimeout(resolve, timeoutMs);
-          timeout.unref();
         }),
       ]);
       if (timeout) clearTimeout(timeout);

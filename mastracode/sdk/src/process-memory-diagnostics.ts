@@ -274,13 +274,17 @@ export class ProcessMemoryDiagnostics {
   private latestError: string | null;
   private samplingActive = false;
   private stopRequested = false;
+  private startingPromise: Promise<ProcessMemoryDiagnosticsStatus> | null = null;
   private stoppingPromise: Promise<ProcessMemoryDiagnosticsStatus> | null = null;
+  private restartAfterStopPromise: Promise<ProcessMemoryDiagnosticsStatus> | null = null;
+  private restartRequested = false;
   private pendingGcEvents: Array<Record<string, unknown>> = [];
   private gcEventBufferOverflowed = false;
   private artifactWriteFailed = false;
   private captureQueue: Promise<unknown> = Promise.resolve();
   private writeQueue: Promise<unknown> = Promise.resolve();
 
+  private readonly configError: string | null;
   private readonly createInspectorSession: () => InspectorSessionAdapter;
   private readonly createPerformanceObserver: NonNullable<
     ProcessMemoryDiagnosticsDependencies['createPerformanceObserver']
@@ -294,6 +298,7 @@ export class ProcessMemoryDiagnostics {
     initialError: string | null = null,
   ) {
     this.config = { ...config };
+    this.configError = initialError;
     this.latestError = initialError;
     this.createInspectorSession = dependencies.createInspectorSession ?? defaultInspectorSession;
     this.createPerformanceObserver = dependencies.createPerformanceObserver ?? defaultPerformanceObserver;
@@ -315,19 +320,28 @@ export class ProcessMemoryDiagnostics {
     };
   }
 
-  async start(): Promise<ProcessMemoryDiagnosticsStatus> {
-    if (this.state === 'active' || this.state === 'starting') return this.getStatus();
+  start(): Promise<ProcessMemoryDiagnosticsStatus> {
+    if (this.state === 'active') return Promise.resolve(this.getStatus());
+    if (this.state === 'starting' && this.startingPromise) return this.startingPromise;
     if (this.state === 'stopping' && this.stoppingPromise) {
-      await this.stoppingPromise;
-      return this.start();
+      this.restartRequested = true;
+      this.restartAfterStopPromise ??= this.stoppingPromise.then(() => {
+        this.restartAfterStopPromise = null;
+        if (!this.restartRequested) return this.getStatus();
+        this.restartRequested = false;
+        return this.start();
+      });
+      return this.restartAfterStopPromise;
     }
-    if (this.latestError && this.outputDirectory === null) {
+    if (this.configError) {
+      this.latestError = this.configError;
       this.state = 'error';
-      return this.getStatus();
+      return Promise.resolve(this.getStatus());
     }
 
     this.state = 'starting';
     this.stoppingPromise = null;
+    this.restartRequested = false;
     this.stopRequested = false;
     this.outputDirectory = null;
     this.sampleCount = 0;
@@ -341,13 +355,27 @@ export class ProcessMemoryDiagnostics {
     this.latestError = null;
     this.startedAt = this.now();
 
+    const startingPromise = this.startRun();
+    this.startingPromise = startingPromise;
+    void startingPromise.finally(() => {
+      if (this.startingPromise === startingPromise) this.startingPromise = null;
+    });
+    return startingPromise;
+  }
+
+  private async startRun(): Promise<ProcessMemoryDiagnosticsStatus> {
     try {
       await this.createArtifacts();
+      if (await this.abortStartIfRequested()) return this.getStatus();
+
       this.observeGc();
       this.inspector = this.createInspectorSession();
       this.inspector.connect();
       await this.startSampling();
+      if (await this.abortStartIfRequested()) return this.getStatus();
+
       await this.takeSample();
+      if (await this.abortStartIfRequested()) return this.getStatus();
 
       this.sampleTimer = setInterval(() => {
         void this.takeSample().catch(error => this.recordError('Process sample failed', error));
@@ -369,6 +397,13 @@ export class ProcessMemoryDiagnostics {
     }
   }
 
+  private async abortStartIfRequested(): Promise<boolean> {
+    if (!this.stopRequested) return false;
+    await this.cleanupAfterStartFailure();
+    this.state = 'inactive';
+    return true;
+  }
+
   capture(reason: 'manual' | 'periodic' = 'manual'): Promise<ProcessMemoryDiagnosticsCapture> {
     if (this.state !== 'active') {
       return Promise.reject(new Error(this.latestError ?? 'Process memory diagnostics are not active.'));
@@ -377,13 +412,22 @@ export class ProcessMemoryDiagnostics {
   }
 
   async stop(): Promise<ProcessMemoryDiagnosticsStatus> {
-    if (this.stoppingPromise) return this.stoppingPromise;
+    if (this.stoppingPromise) {
+      this.restartRequested = false;
+      return this.stoppingPromise;
+    }
     if (this.state === 'inactive') return this.getStatus();
     if (this.state === 'error' && !this.inspector && !this.outputDirectory) return this.getStatus();
 
+    const startingPromise = this.state === 'starting' ? this.startingPromise : null;
     this.stopRequested = true;
     this.state = 'stopping';
     this.clearTimersAndObserver();
+
+    if (startingPromise) {
+      this.stoppingPromise = startingPromise.then(() => this.getStatus());
+      return this.stoppingPromise;
+    }
 
     this.stoppingPromise = (async () => {
       let stopError: string | null = null;

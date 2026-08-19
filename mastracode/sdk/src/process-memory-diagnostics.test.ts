@@ -42,11 +42,17 @@ function allocationProfile() {
 }
 
 function createInspector(
-  options: { stopResponses?: Array<Promise<Record<string, unknown>>>; startError?: Error } = {},
+  options: {
+    stopResponses?: Array<Promise<Record<string, unknown>>>;
+    startError?: Error;
+    startErrors?: Array<Error | undefined>;
+    startResponses?: Array<Promise<Record<string, unknown>>>;
+  } = {},
 ) {
   const posts: Array<{ method: string; params?: Record<string, unknown> }> = [];
   const disconnect = vi.fn();
   const connect = vi.fn();
+  let startIndex = 0;
   let stopIndex = 0;
   return {
     posts,
@@ -58,8 +64,10 @@ function createInspector(
       async post(method: string, params?: Record<string, unknown>) {
         posts.push({ method, params });
         if (method === 'HeapProfiler.startSampling') {
-          if (options.startError) throw options.startError;
-          return {};
+          const index = startIndex++;
+          const startError = options.startErrors?.[index] ?? options.startError;
+          if (startError) throw startError;
+          return options.startResponses?.[index] ?? {};
         }
         const response = options.stopResponses?.[stopIndex++];
         return response ? response : { profile: allocationProfile() };
@@ -319,7 +327,8 @@ describe('ProcessMemoryDiagnostics', () => {
     expect(lines).toHaveLength(1_000);
   });
 
-  it.each([
+  const skipPermissionTestsAsRoot = typeof process.getuid === 'function' && process.getuid() === 0;
+  it.skipIf(skipPermissionTestsAsRoot).each([
     ['JSONL sample', async (outputDirectory: string) => chmod(join(outputDirectory, 'process-samples.jsonl'), 0o400)],
     ['allocation capture', async (outputDirectory: string) => chmod(outputDirectory, 0o500)],
   ])('does not clear a prior %s write failure after a successful final write', async (_kind, makeReadOnly) => {
@@ -330,7 +339,7 @@ describe('ProcessMemoryDiagnostics', () => {
     await makeReadOnly(started.outputDirectory!);
 
     await vi.advanceTimersByTimeAsync(60_000);
-    await Promise.resolve();
+    await vi.waitFor(() => expect(harness.diagnostics.getStatus().error).not.toBeNull());
     await chmod(join(started.outputDirectory!, 'process-samples.jsonl'), 0o600);
     await chmod(started.outputDirectory!, 0o700);
 
@@ -367,6 +376,42 @@ describe('ProcessMemoryDiagnostics', () => {
     expect(await readdir(harness.parentDirectory)).toEqual([]);
     expect(harness.observer.disconnect).toHaveBeenCalledOnce();
     expect(harness.inspector.disconnect).toHaveBeenCalledOnce();
+  });
+
+  it('retries after a transient sampling startup failure', async () => {
+    const harness = await createHarness({ startErrors: [new Error('inspector unavailable'), undefined] });
+    roots.push(harness.parentDirectory);
+
+    await expect(harness.diagnostics.start()).resolves.toMatchObject({
+      state: 'error',
+      error: expect.stringContaining('inspector unavailable'),
+    });
+    await expect(harness.diagnostics.start()).resolves.toMatchObject({ state: 'active', error: null });
+
+    expect(harness.inspector.connect).toHaveBeenCalledTimes(2);
+    await harness.diagnostics.stop();
+  });
+
+  it('does not finish startup after stop is requested', async () => {
+    const samplingStarted = deferred<Record<string, unknown>>();
+    const harness = await createHarness({ startResponses: [samplingStarted.promise] });
+    roots.push(harness.parentDirectory);
+
+    const starting = harness.diagnostics.start();
+    await vi.waitFor(() =>
+      expect(harness.inspector.posts.filter(post => post.method === 'HeapProfiler.startSampling')).toHaveLength(1),
+    );
+    const stopping = harness.diagnostics.stop();
+
+    samplingStarted.resolve({});
+
+    await expect(starting).resolves.toMatchObject({ state: 'inactive' });
+    await expect(stopping).resolves.toMatchObject({ state: 'inactive' });
+    expect(harness.observer.disconnect).toHaveBeenCalledOnce();
+    expect(harness.inspector.disconnect).toHaveBeenCalledOnce();
+
+    await expect(harness.diagnostics.start()).resolves.toMatchObject({ state: 'active' });
+    await harness.diagnostics.stop();
   });
 
   it('serializes overlapping captures and writes one profile per sampling epoch', async () => {
@@ -434,6 +479,23 @@ describe('ProcessMemoryDiagnostics', () => {
     await expect(restarting).resolves.toMatchObject({ state: 'active' });
     expect(harness.diagnostics.getStatus().outputDirectory).not.toBe(firstRun.outputDirectory);
     await harness.diagnostics.stop();
+  });
+
+  it('cancels a queued restart when stop is requested again', async () => {
+    const finalCapture = deferred<Record<string, unknown>>();
+    const harness = await createHarness({ stopResponses: [finalCapture.promise] });
+    roots.push(harness.parentDirectory);
+    await harness.diagnostics.start();
+
+    const stopping = harness.diagnostics.stop();
+    const restarting = harness.diagnostics.start();
+    const duplicateStop = harness.diagnostics.stop();
+    finalCapture.resolve({ profile: allocationProfile() });
+
+    await expect(stopping).resolves.toMatchObject({ state: 'inactive' });
+    await expect(duplicateStop).resolves.toMatchObject({ state: 'inactive' });
+    await expect(restarting).resolves.toMatchObject({ state: 'inactive' });
+    expect(harness.inspector.connect).toHaveBeenCalledOnce();
   });
 
   it('reports a missing inspector profile and clears that background error after a clean stop', async () => {
