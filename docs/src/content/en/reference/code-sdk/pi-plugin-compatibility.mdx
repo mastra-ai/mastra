@@ -1,0 +1,157 @@
+---
+title: 'Reference: Pi plugin compatibility | Code SDK'
+description: 'Compatibility reference for running supported Pi Package contributions in Mastra Code.'
+packages:
+  - '@mastra/code-sdk'
+---
+
+# Pi plugin compatibility
+
+Mastra Code supports a bounded subset of the Pi Package extension API. The compatibility host adapts supported contributions into Mastra Code's existing plugin and AgentController runtime. It doesn't run Pi's coding-agent loop, `ExtensionRunner`, `SessionManager`, or transcript store.
+
+This contract targets `@earendil-works/pi-coding-agent@0.84.2` and matching `@earendil-works/pi-*` packages. Other Pi API versions are unverified and don't become compatible automatically.
+
+## Status vocabulary
+
+| Capability status | Meaning |
+| - | - |
+| Direct | Mastra Code preserves the capability's intent with native machinery. |
+| Adapted | Mastra Code supports the capability with the documented semantic differences. |
+| Version-gated | Mastra Code enables the capability only after a runtime compatibility check. |
+| Unsupported | Mastra Code reports an extension-attributed diagnostic and doesn't run the capability. |
+
+Package status uses these values:
+
+| Package status | Meaning |
+| - | - |
+| `native` | A native Mastra Code plugin, not a Pi compatibility package. |
+| `pi-compatible` | Every discovered capability is direct or adapted. |
+| `pi-partial` | The package has useful supported capabilities and at least one version-gated or unsupported capability. |
+| `pi-incompatible` | The package has no usable direct or adapted capability for the target API version. |
+| `load failed` | Mastra Code couldn't load or characterize the package. This retains the existing native plugin failure meaning. |
+
+A partial package is never reported as fully compatible. Unsupported registrations and actions are diagnosed rather than ignored.
+
+## Registration and resource capabilities
+
+| Pi surface | Status | Mastra Code behavior |
+| - | - | - |
+| Async extension factory | Adapted | Executes through `jiti@2.7.0` with a registration-only API, then binds runtime actions. It never instantiates Pi's `ExtensionRunner`. |
+| `registerTool` | Adapted | Converts TypeBox to a schema accepted by `createTool`. It preserves the name, description, abort signal, and progress while keeping Mastra Code collision and approval policies authoritative. |
+| Tool `execute` and progress callback | Adapted | Maps the Mastra execution context abort signal and writer events, then normalizes Pi content and details into a Mastra tool result. |
+| Tool `executionMode` | Adapted | Preserves sequential intent through Mastra metadata and scheduling where available. A diagnostic reports when the host can't enforce it globally. |
+| Tool `prepareArguments` and constrained sampling | Version-gated | Enables only when the target Pi definition exposes a stable callable form and Mastra Code has a request-time equivalent. Unvalidated arguments aren't mutated. |
+| Tool call and result renderers | Adapted | Translates supported Pi TUI components into Mastra Code tool render configuration. Unsupported component nodes use safe text and produce diagnostics. |
+| `registerCommand` | Adapted | Adds an owned slash command with collision diagnostics. Its command context contains only mapped actions. |
+| `registerShortcut` | Version-gated | Uses Mastra Code keybindings only after reserved-key validation. It doesn't override built-in bindings silently. |
+| `registerFlag` and `getFlag` | Adapted | Persists typed package configuration in Mastra Code plugin records. It doesn't mutate process-global CLI parsing after startup. |
+| `registerMessageRenderer` | Adapted | Converts supported output into Mastra Code custom-message rendering and otherwise uses text. |
+| `registerMarkdownTransformer` | Unsupported | Mastra Code has no transcript-wide Markdown transformer contract. |
+| `registerEntryRenderer` | Unsupported | Mastra Code doesn't expose Pi's non-context session-entry stream. |
+| `registerProvider` | Adapted | Translates declarative provider and model configuration into owned Mastra model-router configuration with teardown. |
+| `registerNativeProvider` | Unsupported | Pi provider objects aren't injected directly into Mastra. |
+| Pi skills | Direct | Adds discovered skill paths as PluginManager-owned resources. |
+| Pi prompt templates | Adapted | Exposes templates as owned Mastra Code commands or templates with explicit names. It doesn't alter unrelated prompt expansion. |
+| Pi themes | Version-gated | Accepts a theme only when it matches Mastra Code's pinned Pi TUI contract. An incompatible theme leaves the current theme unchanged. |
+| `resources_discover` | Adapted | Runs during characterization or reload and merges owned extension, skill, prompt, and theme resources through Mastra Code precedence. |
+| `package.json#pi` resources | Direct | Resolves declared extensions, skills, prompts, and themes relative to the installed package root and rejects path escapes. |
+| Conventional `.pi/` directories | Adapted | Discovers resources only inside explicit package or local roots rather than scanning an arbitrary home directory during normal startup. |
+
+## Event capabilities
+
+| Pi event | Status | Mastra Code behavior |
+| - | - | - |
+| `project_trust` | Adapted | Runs as the install and enable trust gate. The first decisive result wins during characterization, not on every request. |
+| `session_start`, `session_shutdown` | Adapted | Maps to active Session or controller mount and teardown. Mastra Code threads aren't Pi transcript files. |
+| `session_info_changed` | Adapted | Maps to available thread and session metadata listeners. |
+| `session_before_switch`, `session_before_fork` | Adapted | Maps to thread switching and creation. Cancellation applies only where the Mastra flow supports it. |
+| `session_before_compact`, `session_compact`, `session_compact_failed` | Adapted | Maps to Mastra processor and compaction hooks without Pi `SessionManager` entries. |
+| `session_before_tree`, `session_tree` | Unsupported | Mastra Code has no Pi session-tree navigation model. |
+| `context` | Adapted | Uses a stateless input processor that can transform model-visible messages and system context while preserving Mastra processor ordering. |
+| `before_provider_request` | Adapted | Uses an input or request processor before model dispatch and exposes only mapped fields. |
+| `before_provider_headers` | Unsupported | Mastra Code has no public per-provider raw-header mutation contract. |
+| `after_provider_response` | Adapted | Uses an output processor or observability listener with normalized response metadata. |
+| `before_agent_start` | Adapted | Uses a pre-run input processor and validates returned system-prompt or message changes. |
+| `agent_start`, `agent_end`, `agent_settled` | Adapted | Maps to AgentController run lifecycle events. `agent_settled` can't veto completion unless Mastra exposes an equivalent, and unsupported return values produce diagnostics. |
+| `turn_start`, `turn_end` | Adapted | Maps to AgentController run lifecycle and reports how Mastra Code run boundaries differ from Pi turn boundaries. |
+| `message_start`, `message_update`, `message_end` | Adapted | Maps to streaming message listeners. Final-message replacement uses supported output processing only. |
+| `tool_execution_start`, `tool_execution_update`, `tool_execution_end` | Direct | Maps to AgentController tool lifecycle with extension ownership and normalized details. |
+| `tool_call` | Adapted | A pre-tool hook can block a call or return replacement arguments. Replacements must pass schema validation. |
+| `tool_result` | Adapted | A post-tool hook can normalize content, details, errors, and usage where the Mastra hook contract permits it. |
+| `model_select`, `thinking_level_select` | Adapted | Maps to model and mode state listeners scoped to the active Mastra Code session. |
+| `user_bash` | Adapted | Maps to Mastra Code shell tool or passthrough hooks. It can't intercept arbitrary child processes. |
+| `input` | Adapted | Maps `continue`, `transform`, and `handled` through input processing. Images and steer or follow-up delivery are preserved when supported. |
+
+## Actions, context, and UI
+
+| Pi surface | Status | Mastra Code behavior |
+| - | - | - |
+| `sendMessage` | Adapted | Emits an owned custom message or notification. `triggerTurn` and delivery queues map only when the Session API supports them. |
+| `sendUserMessage` | Adapted | Enqueues steer or follow-up input through Session APIs. Template expansion uses Mastra Code command and skill resolution. |
+| `appendEntry` | Adapted | Persists namespaced plugin state, not raw Pi transcript entries. |
+| Session names and labels | Adapted | Uses public thread or session metadata and namespaced labels when no generic label field exists. |
+| Active-tool actions | Adapted | Reads or requests changes through PluginManager and controller policy. It can't force-enable built-in or permission-denied tools. |
+| `getCommands` | Direct | Returns the effective Mastra Code commands visible to the session. |
+| Model actions | Adapted | Uses the model router and controller with existing allowed models only. |
+| Thinking-level actions | Adapted | Maps to Mastra Code mode or model settings where supported. |
+| Idle and pending-message actions | Direct | Uses Session and controller state and queues. |
+| `abort`, `shutdown` | Adapted | Aborts an owned run or requests host shutdown through approved actions. The API can't terminate the process directly. |
+| `getContextUsage` | Adapted | Normalizes Mastra usage into Pi-compatible fields. |
+| `compact` | Adapted | Triggers Mastra compaction. Custom Pi compaction results require a processor-compatible form. |
+| `getSystemPrompt` | Adapted | Returns a sanitized view of assembled Mastra Code instructions, never a mutable reference. |
+| `newSession`, `switchSession`, `fork` | Adapted | Maps to Mastra Code threads. |
+| `navigateTree` | Unsupported | Arbitrary Pi transcript-tree navigation isn't available. |
+| `reload` | Direct | Delegates to serialized PluginManager reload and invalidates old contexts first. |
+| `cwd`, mode, trust, abort signal | Direct | Provides scoped immutable values from the active plugin and session runtime. |
+| `sessionManager`, raw model registry | Unsupported | Provides narrow facades where mapped and never exposes Pi or Mastra mutable owners. |
+| `ui.notify`, `setStatus`, `setWidget` | Adapted | Uses owned Mastra Code notification, status, and widget slots that clear on invalidation. |
+| UI dialogs | Adapted | Uses compatible Mastra Code or Pi TUI overlays. Non-TUI modes return documented no-UI behavior. |
+| Custom components and shell replacement | Version-gated or unsupported | Allows only an explicitly supported Pi TUI component subset. Header, footer, editor, and whole-shell replacement are unsupported. |
+| Theme and terminal-input actions | Version-gated | Uses Mastra Code-owned theme and keybinding APIs after compatibility and conflict checks. |
+
+## Lifecycle and security
+
+| Concern | Contract |
+| - | - |
+| Load and bind | Registrations work while the factory executes. Action methods throw `Extension runtime not initialized. Action methods cannot be called during extension loading.` until the Mastra Code host binds them. |
+| Reload | Validates a candidate generation before invalidating old contexts. The host then unsubscribes handlers and clears UI before atomically publishing the candidate. A failed candidate leaves the previous generation active. |
+| Stale context | Every action and context closure checks generation ownership. Calls after reload, uninstall, or session replacement throw an extension-attributed stale-context error. |
+| Teardown | Awaits owned event unsubscriptions, provider and UI cleanup, and asynchronous services before controller workers stop. |
+| Concurrency | Serializes install, update, and reload per plugin so a partial package generation can't become active. |
+| Trust | Resolves and statically inspects the source before trust. Executing install scripts or a factory requires an explicit arbitrary-code warning and trust decision. Characterization and enablement are separate confirmations. Project packages also require project trust. |
+| Isolation | Because Pi extensions are trusted in-process code, they have the launching user's filesystem, process, network, and credential access without a Mastra Code sandbox. |
+| Versioning | Persists the target API version and exact package version or commit. Unknown versions are incompatible or partial, never assumed compatible. |
+
+## Native Mastra Code plugin policy
+
+Native plugins remain the richer host API and retain existing status semantics.
+
+1. Pi packages use the existing plugin registry and manager with a `pi-package` source kind. They don't create a second registry.
+1. Every adapted tool, processor, command, resource, listener, provider, UI slot, and state namespace keeps its `pluginId` and `versionStamp` ownership.
+1. Built-in, Model Context Protocol (MCP), extra, and native plugin tools retain their current priority. A conflicting adapted Pi contribution produces a diagnostic.
+1. Native processors keep their full Mastra typing and context. Pi event handlers compile into owned processors or hooks.
+1. Native signal providers remain lifecycle-authoritative instead of wrapping arbitrary Pi background services as signal providers.
+1. Mastra request context, workspaces, tool suspension, and mutable runtime owners stay native-only unless a capability explicitly maps a narrow facade.
+1. Disable, reload, and uninstall reconcile runtime contributions. Namespaced persistent package state remains until an explicit data-removal action deletes it.
+
+## Reverse compatibility matrix
+
+| Native Mastra Code capability | Pi relation | Policy |
+| - | - | - |
+| Input and output processors | Pi uses event handlers | Compiles Pi handlers into owned processors or hooks without narrowing native processor access. |
+| Signal providers and lanes | No direct Pi equivalent | Doesn't synthesize arbitrary Pi services as signal providers. |
+| Request context, workspace, and Mastra access | Pi context is coding-agent specific | Keeps native accessors private and exposes narrow Pi facades only. |
+| Tool approval and suspend or resume | Pi can block calls but lacks Mastra suspension semantics | Wraps adapted tools in Mastra policy, which Pi code can't bypass. |
+| MCP tool composition | Pi often adapts MCP through extensions | Adds Pi tools after built-in, MCP, extra, and native tools without duplicating an existing MCP tool. |
+| Subagent rendering | Pi tools can define renderers | Translates a supported subset while native render configurations remain richer. |
+| Controller listeners | Pi has an overlapping event bus | Subscribes adapters with plugin ownership and doesn't force native plugins through Pi events. |
+| Mode and tool policy | Pi has active-tool actions | Treats Pi mutations as requests. Permissions and disabled-tool removal take precedence. |
+| Global and project registry blocking | Pi has user and project settings | Uses one Mastra Code registry with existing project-blocking precedence. |
+| GitHub polling and version stamps | Pi resolves package sources | Includes exact npm versions or git commits in existing reload stamps. |
+| Memory and thread model | Pi has `SessionManager` and transcript trees | Maps thread create, switch, fork, and metadata only. It doesn't emulate transcript trees. |
+
+## Credentialed provider proof fixture
+
+The pinned provider fixture is [`pi-ds-web-search@0.1.0`](https://github.com/Lan-zk/pi-ds-web-search), source commit `67641a27d3205bad00526d79b23fa7205944c077`, integrity `sha512-zleaPMScxCbw43qg3cNl9OADZS8RDAbkryj3pIEwzOsxHQnOd/JEU5MVpkctKMx3iobeQgQ7wGnbmBtMOKq7yQ==`, published on August 6, 2026. Its extension calls `registerProvider("deepseek", ...)` with declarative `openai-responses` model configuration, registers a tool and command, and uses `session_start` and `before_provider_request` events. It uses `DEEPSEEK_API_KEY` or an existing DeepSeek login and doesn't require provider OAuth UI or `registerNativeProvider`.
+
+The fixture's peer dependency accepts Pi 0.84.2, and the package requires Node.js 22 or later. Pinning the package and integrity makes the provider proof reproducible without allowing floating package resolution during normal startup.

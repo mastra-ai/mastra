@@ -4,8 +4,8 @@
  * and other modules can operate on the state without coupling to the
  * MastraTUI class.
  */
-import { Container, TUI, ProcessTerminal } from '@earendil-works/pi-tui';
-import type { CombinedAutocompleteProvider, Component, Terminal, Text } from '@earendil-works/pi-tui';
+import { Container, ProcessTerminal, TuiMainScreen } from '@earendil-works/pi-tui';
+import type { CombinedAutocompleteProvider, Component, Terminal, Text, TUI } from '@earendil-works/pi-tui';
 import type { MastraCodeAnalytics } from '@mastra/code-sdk/analytics';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import type { HookManager } from '@mastra/code-sdk/hooks/index';
@@ -350,7 +350,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
       get: () => (process.stdout.columns || 80) - TERM_WIDTH_BUFFER,
     });
   }
-  const ui = new TUI(terminal);
+  const ui = new TuiMainScreen(terminal);
   const renderScheduler = new RenderScheduler(() => ui.requestRender());
 
   // Perf profiling removed

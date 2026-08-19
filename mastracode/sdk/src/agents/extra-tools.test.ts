@@ -15,10 +15,15 @@ import { MC_TOOLS } from '../tool-names.js';
 import { buildToolGuidance } from './prompts/tool-guidance.js';
 import { createDynamicTools } from './tools.js';
 
+function hasExecute(tool: unknown): tool is { execute: (...args: unknown[]) => unknown } {
+  return typeof tool === 'object' && tool !== null && 'execute' in tool && typeof tool.execute === 'function';
+}
+
 // Minimal mock of AgentControllerRequestContext shape that createDynamicTools reads
 function makeRequestContext(
   overrides: {
     modeId?: string;
+    modelId?: string;
     projectPath?: string;
     permissionRules?: { categories?: Record<string, string>; tools?: Record<string, string> };
   } = {},
@@ -32,7 +37,7 @@ function makeRequestContext(
     getState,
     session: {
       modeId: overrides.modeId ?? 'build',
-      modelId: 'anthropic/claude-opus-4-6',
+      modelId: overrides.modelId ?? 'anthropic/claude-opus-4-6',
       state: {
         get: getState,
       },
@@ -120,6 +125,43 @@ describe('createDynamicTools – extraTools', () => {
     const tools = await getDynamicTools({ requestContext: makeRequestContext() });
 
     expect(tools.shared_tool).toBe(extraTool);
+  });
+
+  it('should preserve MCP priority over extra and plugin tools', async () => {
+    const mcpTool = createTool({
+      id: 'shared_tool',
+      description: 'MCP tool',
+      inputSchema: z.object({}),
+      execute: async () => ({ result: 'mcp' }),
+    });
+    const extraTool = createTool({
+      id: 'shared_tool',
+      description: 'Extra tool',
+      inputSchema: z.object({}),
+      execute: async () => ({ result: 'extra' }),
+    });
+    const pluginTool = createTool({
+      id: 'shared_tool',
+      description: 'Plugin tool',
+      inputSchema: z.object({}),
+      execute: async () => ({ result: 'plugin' }),
+    });
+    const mcpManager = { getTools: () => ({ shared_tool: mcpTool }) };
+
+    const tools = await createDynamicTools(mcpManager, { shared_tool: extraTool }, undefined, undefined, {
+      shared_tool: pluginTool,
+    })({ requestContext: makeRequestContext() });
+
+    expect(tools.shared_tool).toBe(mcpTool);
+  });
+
+  it.each([
+    { modelId: 'anthropic/claude-opus-4-6', expectedId: 'anthropic.web_search_20250305' },
+    { modelId: 'openai/gpt-5.4', expectedId: 'openai.web_search' },
+  ])('returns provider web search tools with their runtime id for $modelId', async ({ modelId, expectedId }) => {
+    const tools = await createDynamicTools()({ requestContext: makeRequestContext({ modelId }) });
+
+    expect(tools.web_search).toMatchObject({ type: 'provider', id: expectedId });
   });
 
   it('should return extraTools even when no MCP manager is provided', async () => {
@@ -242,10 +284,13 @@ describe('createDynamicTools – extraTools', () => {
     const getDynamicTools = createDynamicTools(undefined, undefined, undefined, storage as any);
     const tools = await getDynamicTools({ requestContext: makeRequestContext() });
 
-    expect(tools).toHaveProperty(MC_TOOLS.NOTIFICATION_INBOX);
-    await expect(
-      tools[MC_TOOLS.NOTIFICATION_INBOX]?.execute?.({ action: 'list' }, { agent: { threadId: 'thread-1' } }),
-    ).resolves.toMatchObject({ notifications: [{ id: 'n1' }] });
+    const inboxTool = tools[MC_TOOLS.NOTIFICATION_INBOX];
+    expect(hasExecute(inboxTool)).toBe(true);
+    if (!hasExecute(inboxTool)) throw new Error('Expected notification inbox tool to be executable');
+
+    await expect(inboxTool.execute({ action: 'list' }, { agent: { threadId: 'thread-1' } })).resolves.toMatchObject({
+      notifications: [{ id: 'n1' }],
+    });
     expect(notificationStore.listNotifications).toHaveBeenCalledWith({
       threadId: 'thread-1',
       status: undefined,
@@ -278,9 +323,12 @@ describe('createDynamicTools – extraTools', () => {
     }));
     const getDynamicTools = createDynamicTools(undefined, undefined, undefined, storage as any);
     const tools = await getDynamicTools({ requestContext: makeRequestContext() });
+    const inboxTool = tools[MC_TOOLS.NOTIFICATION_INBOX];
+    expect(hasExecute(inboxTool)).toBe(true);
+    if (!hasExecute(inboxTool)) throw new Error('Expected notification inbox tool to be executable');
 
     await expect(
-      tools[MC_TOOLS.NOTIFICATION_INBOX]?.execute?.(
+      inboxTool.execute(
         { action: 'read', id: 'n1' },
         {
           agent: { agentId: 'agent-1', threadId: 'thread-1', resourceId: 'resource-1' },

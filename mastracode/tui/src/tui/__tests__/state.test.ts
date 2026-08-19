@@ -20,7 +20,7 @@ vi.mock('@earendil-works/pi-tui', () => {
   return {
     Container: MockContainer,
     ProcessTerminal: MockProcessTerminal,
-    TUI: MockTUI,
+    TuiMainScreen: MockTUI,
     Spacer: MockSpacer,
   };
 });

@@ -1,5 +1,6 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
+import type { ToolsInput } from '@mastra/core/agent';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import { createNotificationInboxTool, NotificationsStorage } from '@mastra/core/notifications';
 import type {
@@ -23,10 +24,8 @@ import { listWorkflowsTool } from '../tools/workflows/list-workflows.js';
 import { runWorkflowTool } from '../tools/workflows/run-workflow.js';
 import { WORKFLOW_MANAGEMENT_TOOL_IDS } from '../tools/workflows/tool-ids.js';
 
-/** Minimal shape for tools passed to createDynamicTools. */
-export type ToolLike = {
-  execute?: (...args: any[]) => Promise<unknown> | unknown;
-} & Record<string, any>;
+/** A tool accepted by Mastra's agent tool map. */
+export type ToolLike = ToolsInput[string];
 
 export class LazyNotificationsStorage extends NotificationsStorage {
   constructor(private readonly storage: MastraCompositeStore) {
@@ -106,24 +105,24 @@ export function createToolHooks(hookManager?: HookManager, postToolObserver?: Po
   };
 }
 
+type ToolMapInput = Partial<ToolsInput>;
+
 type DynamicToolProvider =
-  | Record<string, ToolLike | undefined>
-  | ((ctx: {
-      requestContext: RequestContext;
-    }) => Record<string, ToolLike | undefined> | Promise<Record<string, ToolLike | undefined>>);
+  | ToolMapInput
+  | ((ctx: { requestContext: RequestContext }) => ToolMapInput | Promise<ToolMapInput>);
 
 export function createDynamicTools(
-  mcpManager?: McpManager,
+  mcpManager?: Pick<McpManager, 'getTools'>,
   extraTools?: DynamicToolProvider,
   disabledTools?: string[],
   storage?: MastraCompositeStore,
-  pluginTools?: Record<string, ToolLike>,
+  pluginTools?: ToolsInput,
 ) {
   return function getDynamicTools({
     requestContext,
   }: {
     requestContext: RequestContext;
-  }): Record<string, ToolLike> | Promise<Record<string, ToolLike>> {
+  }): ToolsInput | Promise<ToolsInput> {
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeComposedState> | undefined;
     const state = ctx?.getState();
 
@@ -134,7 +133,7 @@ export function createDynamicTools(
     // Filesystem, grep, glob, edit, write, execute_command, and process
     // management tools are now provided by the workspace (see workspace.ts).
     // Only tools without a workspace equivalent remain here.
-    const tools: Record<string, ToolLike> = {
+    const tools: ToolsInput = {
       request_access: requestSandboxAccessTool,
       // Workflow surface. `create-workflow` delegates to the workflow-builder
       // sub-agent; the other four are Dynamic Workflow management operations.
@@ -157,10 +156,16 @@ export function createDynamicTools(
       tools.web_extract = createWebExtractTool();
     } else if (isAnthropicModel) {
       const anthropic = createAnthropic({});
-      tools.web_search = anthropic.tools.webSearch_20250305();
+      tools.web_search = {
+        ...anthropic.tools.webSearch_20250305(),
+        id: 'anthropic.web_search_20250305',
+      };
     } else if (isOpenAIModel) {
       const openai = createOpenAI({});
-      tools.web_search = openai.tools.webSearch();
+      tools.web_search = {
+        ...openai.tools.webSearch(),
+        id: 'openai.web_search',
+      };
     }
 
     if (mcpManager) {
@@ -168,7 +173,7 @@ export function createDynamicTools(
       Object.assign(tools, mcpTools);
     }
 
-    const finish = (resolvedExtra: Record<string, ToolLike | undefined> | undefined) => {
+    const finish = (resolvedExtra: ToolMapInput | undefined): ToolsInput => {
       if (resolvedExtra) {
         for (const [name, tool] of Object.entries(resolvedExtra)) {
           if (tool && !(name in tools)) {
@@ -208,10 +213,10 @@ export function createDynamicTools(
     if (typeof extraTools === 'function') {
       const resolved = extraTools({ requestContext });
       // Stay synchronous for sync providers; only go async when the provider does.
-      if (resolved && typeof (resolved as PromiseLike<unknown>).then === 'function') {
-        return Promise.resolve(resolved).then(finish);
+      if (resolved instanceof Promise) {
+        return resolved.then(finish);
       }
-      return finish(resolved as Record<string, ToolLike | undefined>);
+      return finish(resolved);
     }
 
     return finish(extraTools);

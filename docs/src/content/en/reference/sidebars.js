@@ -180,6 +180,12 @@ const sidebars = {
           label: 'mountAgentControllerOnMastra()',
           customProps: { tags: ['new'] },
         },
+        {
+          type: 'doc',
+          id: 'code-sdk/pi-plugin-compatibility',
+          label: 'Pi plugin compatibility',
+          customProps: { tags: ['new'] },
+        },
       ],
     },
     {
