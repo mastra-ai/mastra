@@ -11,7 +11,7 @@ import { IntegrationGrid } from '@site/src/components/integrations/grid';
 
 {/* vale ai-tells.VerbTricolon = NO */}
 
-A sandbox gives an agent an execution environment where it can run commands, execute code, install dependencies, and manage processes. Isolating that environment limits what agent-run code can access on your host, including files, credentials, and the network. Its lifetime and persistence depend on the backend.
+A sandbox gives an agent an execution environment where it can run commands, execute code, install dependencies, and manage processes. Isolating that environment limits what agent-run code can access on your host, including files, credentials, and the network.
 
 {/* vale ai-tells.VerbTricolon = YES */}
 
@@ -128,8 +128,6 @@ export const startServerTool = createTool({
 })
 ```
 
-The authored function itself runs in your application process. Only operations called through the sandbox handle run inside the sandbox.
-
 ## Supported backends
 
 ### `LocalSandbox`
@@ -164,35 +162,9 @@ If Mastra doesn't support your execution backend, implement the [sandbox provide
 
 ## Persistent storage
 
-Some execution backends can also mount cloud filesystems through FUSE. Mounted files appear as local directories inside the sandbox, so commands such as `cat /data/report.md` or `python /data/analyze.py` can use them directly.
+Files stored only inside a sandbox follow that backend's lifecycle. Configure a filesystem when inputs or outputs must remain available outside the sandbox environment.
 
-Configure mounts alongside the sandbox:
-
-```typescript
-import { Workspace } from '@mastra/core/workspace'
-import { DaytonaSandbox } from '@mastra/daytona'
-import { S3Filesystem } from '@mastra/s3'
-
-const workspace = new Workspace({
-  mounts: {
-    '/data': new S3Filesystem({
-      bucket: 'agent-data',
-      region: 'us-east-1',
-    }),
-  },
-  sandbox: new DaytonaSandbox(),
-})
-```
-
-The agent receives file tools such as `read_file` and `write_file` for the mounted storage, and commands in the sandbox can access the same files under `/data`. This lets you seed an ephemeral sandbox with existing files and persist its output after the sandbox stops.
-
-:::warning
-
-After you mount a filesystem, the agent can access its files through both file tools and shell commands. Configure policies for each tool surface independently. For example, requiring approval for `write_file` doesn't stop the agent from using `execute_command` to run a shell command that writes the same file. The sandbox has no notion of the file-tool policy. Tell the agent not to bypass it and, ideally, add a [tool hook](/reference/workspace/workspace-class#tool-hooks) that rejects shell commands that write to protected paths.
-
-:::
-
-Mount support varies by sandbox backend. See [Filesystem](/docs/sandbox/filesystem) for supported storage backends, detailed mount configuration, and how to mount multiple filesystems.
+Use [`mounts`](/docs/sandbox/filesystem#mounts) when file tools and sandbox commands should access the same persistent files. File tools access each provider directly. Commands can use a mount path only when the sandbox backend mounts that provider successfully. See [Mount availability](/docs/sandbox/filesystem#mount-availability) for supported combinations and failure behavior.
 
 ## Multi-tenant sandboxes
 
