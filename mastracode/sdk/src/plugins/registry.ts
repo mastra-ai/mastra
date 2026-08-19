@@ -24,7 +24,13 @@ export function loadPluginRegistry(registryPath: string): PluginRegistry {
 
 export function savePluginRegistry(registryPath: string, registry: PluginRegistry): void {
   fs.mkdirSync(path.dirname(registryPath), { recursive: true });
-  fs.writeFileSync(registryPath, `${JSON.stringify(validatePluginRegistry(registry), null, 2)}\n`);
+  const temporaryPath = `${registryPath}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    fs.writeFileSync(temporaryPath, `${JSON.stringify(validatePluginRegistry(registry), null, 2)}\n`, { mode: 0o600 });
+    fs.renameSync(temporaryPath, registryPath);
+  } finally {
+    fs.rmSync(temporaryPath, { force: true });
+  }
 }
 
 export function mergePluginRegistries(
@@ -138,6 +144,8 @@ function validatePiPackageMetadata(raw: unknown): InstalledPiPackageMetadata | u
     return undefined;
   }
   const trustRecord = trust as Record<string, unknown>;
+  const pendingCleanup = validatePendingPiPackageCleanup(record.pendingCleanup);
+  if (record.pendingCleanup !== undefined && !pendingCleanup) return undefined;
   if (
     trustRecord.codeExecution !== 'trusted' ||
     (trustRecord.project !== 'trusted' && trustRecord.project !== 'not-required') ||
@@ -156,7 +164,23 @@ function validatePiPackageMetadata(raw: unknown): InstalledPiPackageMetadata | u
       project: trustRecord.project,
       installScripts: trustRecord.installScripts,
     },
+    ...(pendingCleanup ? { pendingCleanup } : {}),
   };
+}
+
+function validatePendingPiPackageCleanup(raw: unknown): { paths: string[]; error: string } | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const record = raw as Record<string, unknown>;
+  if (
+    !Array.isArray(record.paths) ||
+    record.paths.length === 0 ||
+    record.paths.some(entry => typeof entry !== 'string' || !isSafeOwnedRegistryPath(entry)) ||
+    typeof record.error !== 'string' ||
+    record.error.length === 0
+  ) {
+    return undefined;
+  }
+  return { paths: [...new Set(record.paths as string[])].sort(), error: record.error };
 }
 
 function validatePiPackageResolution(raw: unknown): PiPackageResolution | undefined {
@@ -165,7 +189,10 @@ function validatePiPackageResolution(raw: unknown): PiPackageResolution | undefi
   if (
     (record.sourceType !== 'npm' && record.sourceType !== 'git' && record.sourceType !== 'local') ||
     typeof record.resolvedSpecifier !== 'string' ||
+    typeof record.sourceRoot !== 'string' ||
+    !isSafeOwnedRegistryPath(record.sourceRoot) ||
     typeof record.packageRoot !== 'string' ||
+    !isSafeOwnedRegistryPath(record.packageRoot) ||
     typeof record.integrity !== 'string' ||
     !record.integrity.startsWith('sha512-') ||
     typeof record.contentIntegrity !== 'string' ||
@@ -178,6 +205,7 @@ function validatePiPackageResolution(raw: unknown): PiPackageResolution | undefi
   return {
     sourceType: record.sourceType,
     resolvedSpecifier: record.resolvedSpecifier,
+    sourceRoot: record.sourceRoot,
     packageRoot: record.packageRoot,
     integrity: record.integrity,
     contentIntegrity: record.contentIntegrity,
@@ -271,6 +299,11 @@ function validatePiDiagnostics(raw: unknown[]): InstalledPiPackageMetadata['comp
       },
     ];
   });
+}
+
+function isSafeOwnedRegistryPath(storedPath: string): boolean {
+  const normalized = path.normalize(storedPath);
+  return !path.isAbsolute(storedPath) && normalized !== '..' && !normalized.startsWith(`..${path.sep}`);
 }
 
 function validatePluginConfigValues(raw: object): Record<string, string | boolean> {

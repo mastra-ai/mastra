@@ -45,6 +45,9 @@ export type PiPackageInstallScriptsPolicy = 'deny' | 'allow';
 export type PiPackageResolution = {
   sourceType: PiPackageSourceType;
   resolvedSpecifier: string;
+  /** Scope-owned immutable source snapshot used to recreate/update the execution tree. */
+  sourceRoot: string;
+  /** Scope-owned materialized execution root, including installed production dependencies. */
   packageRoot: string;
   integrity: string;
   contentIntegrity: string;
@@ -73,6 +76,7 @@ export type InstalledPiPackageMetadata = {
   observedApiVersion?: string;
   compatibilityReport: PiPackageCompatibility;
   trust: PiPackageTrustDecision;
+  pendingCleanup?: { paths: string[]; error: string };
 };
 
 export type InstalledPluginRecord = {

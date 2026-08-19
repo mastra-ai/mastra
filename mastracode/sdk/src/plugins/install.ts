@@ -47,7 +47,9 @@ export async function installLocalPlugin(
   ensureMastraCodePackageLink(sourcePath);
   const plugin = await loadPluginFromEntry(path.join(sourcePath, entry));
   const registryPath = getPluginScopePaths(scope, options).registryPath;
-  const registry = removePluginRecord(loadPluginRegistry(registryPath), plugin.id);
+  const installedRegistry = loadPluginRegistry(registryPath);
+  assertNativeInstallDoesNotReplacePiPackage(installedRegistry.plugins[plugin.id], plugin.id, scope);
+  const registry = removePluginRecord(installedRegistry, plugin.id);
   const record: InstalledPluginRecord = {
     enabled: true,
     source: 'local',
@@ -74,38 +76,70 @@ export async function installGithubPlugin(
   await assertGithubCliAvailable(githubCli);
   await assertGithubCliAuthenticated(githubCli);
 
-  fs.rmSync(checkoutDir, { recursive: true, force: true });
   fs.mkdirSync(path.dirname(checkoutDir), { recursive: true });
+  const stagingDir = fs.mkdtempSync(path.join(path.dirname(checkoutDir), `.${parsed.owner}-${parsed.repo}-staging-`));
+  fs.rmSync(stagingDir, { recursive: true, force: true });
   const ref = options.ref ?? parsed.ref;
-  const cloneArgs = ['repo', 'clone', parsed.repoSpec, checkoutDir, ...(ref ? [] : ['--', '--depth', '1'])];
-  await runPluginInstallCommand(githubCli, cloneArgs, { env: NON_INTERACTIVE_GIT_ENV }, options);
-  if (ref) {
-    await runPluginInstallCommand(
-      'git',
-      ['checkout', ref],
-      { cwd: checkoutDir, env: NON_INTERACTIVE_GIT_ENV },
-      options,
-    );
+  try {
+    const cloneArgs = ['repo', 'clone', parsed.repoSpec, stagingDir, ...(ref ? [] : ['--', '--depth', '1'])];
+    await runPluginInstallCommand(githubCli, cloneArgs, { env: NON_INTERACTIVE_GIT_ENV }, options);
+    if (ref) {
+      await runPluginInstallCommand(
+        'git',
+        ['checkout', ref],
+        { cwd: stagingDir, env: NON_INTERACTIVE_GIT_ENV },
+        options,
+      );
+    }
+
+    const entry = detectEntry(stagingDir, options.entry);
+    await installPluginDependenciesForEntry(stagingDir, entry, options);
+    ensureMastraCodePackageLink(getEntryPackageRoot(stagingDir, entry));
+    const plugin = await loadPluginFromEntry(path.join(stagingDir, entry));
+    const installedRegistry = loadPluginRegistry(paths.registryPath);
+    assertNativeInstallDoesNotReplacePiPackage(installedRegistry.plugins[plugin.id], plugin.id, scope);
+    const registry = removePluginRecord(installedRegistry, plugin.id);
+    const relativePath = path.relative(getPluginRoot(scope, options), checkoutDir);
+    const record: InstalledPluginRecord = {
+      enabled: true,
+      source: 'github',
+      specifier: url,
+      path: relativePath,
+      entry,
+      ...(ref ? { ref } : {}),
+      ...(plugin.version ? { version: plugin.version } : {}),
+    };
+
+    const backupDir = fs.existsSync(checkoutDir)
+      ? fs.mkdtempSync(path.join(path.dirname(checkoutDir), `.${parsed.owner}-${parsed.repo}-backup-`))
+      : undefined;
+    if (backupDir) {
+      fs.rmSync(backupDir, { recursive: true, force: true });
+      fs.renameSync(checkoutDir, backupDir);
+    }
+    try {
+      fs.renameSync(stagingDir, checkoutDir);
+      savePluginRegistry(paths.registryPath, setPluginRecord(registry, plugin.id, record));
+    } catch (error) {
+      fs.rmSync(checkoutDir, { recursive: true, force: true });
+      if (backupDir) fs.renameSync(backupDir, checkoutDir);
+      throw error;
+    }
+    if (backupDir) fs.rmSync(backupDir, { recursive: true, force: true });
+    return plugin.id;
+  } finally {
+    fs.rmSync(stagingDir, { recursive: true, force: true });
   }
+}
 
-  const entry = detectEntry(checkoutDir, options.entry);
-  await installPluginDependenciesForEntry(checkoutDir, entry, options);
-  ensureMastraCodePackageLink(getEntryPackageRoot(checkoutDir, entry));
-  const plugin = await loadPluginFromEntry(path.join(checkoutDir, entry));
-  const registry = removePluginRecord(loadPluginRegistry(paths.registryPath), plugin.id);
-  const relativePath = path.relative(getPluginRoot(scope, options), checkoutDir);
-  const record: InstalledPluginRecord = {
-    enabled: true,
-    source: 'github',
-    specifier: url,
-    path: relativePath,
-    entry,
-    ...(ref ? { ref } : {}),
-    ...(plugin.version ? { version: plugin.version } : {}),
-  };
-
-  savePluginRegistry(paths.registryPath, setPluginRecord(registry, plugin.id, record));
-  return plugin.id;
+function assertNativeInstallDoesNotReplacePiPackage(
+  installed: InstalledPluginRecord | undefined,
+  pluginId: string,
+  scope: PluginScope,
+): void {
+  if (installed?.source === 'pi-package') {
+    throw new Error(`Plugin "${pluginId}" is already installed as a Pi Package in ${scope} scope`);
+  }
 }
 
 export function discoverLocalPlugins(searchRoot: string, options: PluginPathOptions): DiscoveredLocalPlugin[] {

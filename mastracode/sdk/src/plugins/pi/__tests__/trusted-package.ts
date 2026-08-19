@@ -24,6 +24,7 @@ export function createTrustedPiPackageRecord(
       resolution: {
         sourceType: 'local',
         resolvedSpecifier: `local:${packageRoot}#${integrity}`,
+        sourceRoot: relativeRoot,
         packageRoot: relativeRoot,
         integrity,
         contentIntegrity: integrity,

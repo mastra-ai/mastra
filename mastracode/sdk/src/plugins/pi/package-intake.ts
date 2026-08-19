@@ -3,8 +3,7 @@ import path from 'node:path';
 
 import { execa } from 'execa';
 
-import { getPluginRoot, getPluginScopePaths } from '../paths.js';
-import { loadPluginRegistry, savePluginRegistry, setPluginRecord } from '../registry.js';
+import { getPluginRoot } from '../paths.js';
 import type {
   InstalledPluginRecord,
   PiPackageInstallScriptsPolicy,
@@ -53,10 +52,6 @@ export interface CharacterizedPiPackage extends PreparedPiPackageInspection {
   compatibility: PiPackageCompatibility;
   extensions: PiPackageExtensionCompatibility[];
   trust: PiPackageTrustDecision;
-}
-
-export interface EnablePiPackageOptions extends ResolvePiPackageOptions {
-  confirmEnable: true;
 }
 
 export async function preparePiPackage(
@@ -179,19 +174,19 @@ function createMaterializedPackage(prepared: PreparedPiPackageInspection): Prepa
   }
 }
 
-export function enablePiPackage(characterized: CharacterizedPiPackage, options: EnablePiPackageOptions): string {
-  if (options.confirmEnable !== true) throw new Error('Enabling a Pi Package requires explicit enable confirmation');
+export function createPiPackageRecord(
+  characterized: CharacterizedPiPackage,
+  options: ResolvePiPackageOptions,
+): InstalledPluginRecord {
   if (characterized.resources.extensions.length === 0) {
     throw new Error(`Pi Package "${characterized.manifest.name}" has no extension entry to enable`);
   }
 
-  const paths = getPluginScopePaths(characterized.scope, options);
-  const relativeRoot = path.relative(getPluginRoot(characterized.scope, options), characterized.resolution.packageRoot);
-  if (relativeRoot === '..' || relativeRoot.startsWith(`..${path.sep}`) || path.isAbsolute(relativeRoot)) {
-    throw new Error('Resolved Pi Package must be inside the scope-owned plugin directory');
-  }
+  const scopeRoot = getPluginRoot(characterized.scope, options);
+  const relativeRoot = toOwnedRelativePath(characterized.resolution.packageRoot, scopeRoot);
+  const relativeSourceRoot = toOwnedRelativePath(characterized.resolution.sourceRoot, scopeRoot);
   const entries = characterized.resources.extensions;
-  const record: InstalledPluginRecord = {
+  return {
     enabled: true,
     source: 'pi-package',
     compatibility: 'pi',
@@ -203,6 +198,7 @@ export function enablePiPackage(characterized: CharacterizedPiPackage, options: 
     piPackage: {
       resolution: {
         ...characterized.resolution,
+        sourceRoot: relativeSourceRoot,
         packageRoot: relativeRoot,
       },
       resources: characterized.resources,
@@ -214,9 +210,14 @@ export function enablePiPackage(characterized: CharacterizedPiPackage, options: 
       trust: characterized.trust,
     },
   };
-  const registry = loadPluginRegistry(paths.registryPath);
-  savePluginRegistry(paths.registryPath, setPluginRecord(registry, characterized.manifest.name, record));
-  return characterized.manifest.name;
+}
+
+function toOwnedRelativePath(absolutePath: string, scopeRoot: string): string {
+  const relativePath = path.relative(scopeRoot, absolutePath);
+  if (relativePath === '..' || relativePath.startsWith(`..${path.sep}`) || path.isAbsolute(relativePath)) {
+    throw new Error('Resolved Pi Package must be inside the scope-owned plugin directory');
+  }
+  return relativePath;
 }
 
 function assertCharacterizationTrust(scope: PluginScope, options: PiPackageCharacterizationOptions): void {

@@ -10,7 +10,8 @@ vi.mock('execa', () => ({ execa: execaMock }));
 
 import { detectEntry, discoverLocalPlugins, installGithubPlugin, installLocalPlugin } from '../install.js';
 import { findMastraCodePackageRoot } from '../package-link.js';
-import { loadPluginRegistry } from '../registry.js';
+import { createTrustedPiPackageRecord } from '../pi/__tests__/trusted-package.js';
+import { loadPluginRegistry, savePluginRegistry } from '../registry.js';
 
 const mastracodePackageRoot = findMastraCodePackageRoot(path.dirname(fileURLToPath(import.meta.url)));
 
@@ -146,7 +147,6 @@ describe('installGithubPlugin', () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-install-'));
     const projectRoot = path.join(tempDir, 'project');
     const homeDir = path.join(tempDir, 'home');
-    const checkoutDir = path.join(homeDir, '.mastracode/plugins/sources/github/acme-mastracode-plugin');
     execaMock.mockImplementation(async (cmd: string, args: string[]) => {
       if (cmd === 'gh' && args[0] === 'repo' && args[1] === 'clone') {
         const destination = args[3];
@@ -172,10 +172,12 @@ describe('installGithubPlugin', () => {
       ['auth', 'status'],
       expect.objectContaining({ env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }) }),
     );
+    const stagingDir = execaMock.mock.calls[2]?.[1]?.[3] as string;
+    expect(stagingDir).toMatch(/\.acme-mastracode-plugin-staging-/);
     expect(execaMock).toHaveBeenNthCalledWith(
       3,
       'gh',
-      ['repo', 'clone', 'acme/mastracode-plugin', checkoutDir],
+      ['repo', 'clone', 'acme/mastracode-plugin', stagingDir],
       expect.objectContaining({ env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }) }),
     );
     expect(execaMock).toHaveBeenNthCalledWith(
@@ -183,7 +185,7 @@ describe('installGithubPlugin', () => {
       'git',
       ['checkout', 'main'],
       expect.objectContaining({
-        cwd: checkoutDir,
+        cwd: stagingDir,
         env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }),
       }),
     );
@@ -196,11 +198,92 @@ describe('installGithubPlugin', () => {
     });
   });
 
+  it('preserves a sibling GitHub checkout when its staged plugin conflicts with a Pi Package id', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-install-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const pluginRoot = path.join(homeDir, '.mastracode/plugins');
+    const registryPath = path.join(pluginRoot, 'plugins.json');
+    const checkoutDir = path.join(pluginRoot, 'sources/github/acme-shared');
+    const piPackageRoot = path.join(pluginRoot, 'sources/pi/pi-conflict');
+    writePlugin(checkoutDir, 'native.sibling');
+    writePlugin(piPackageRoot, 'pi.conflict');
+    savePluginRegistry(registryPath, {
+      disabledPlugins: [],
+      plugins: {
+        'native.sibling': {
+          enabled: true,
+          source: 'github',
+          specifier: 'https://github.com/acme/shared',
+          path: 'sources/github/acme-shared',
+          entry: 'src/index.ts',
+        },
+        'pi.conflict': createTrustedPiPackageRecord(piPackageRoot, pluginRoot, 'global', 'src/index.ts'),
+      },
+    });
+    execaMock.mockImplementation(async (cmd: string, args: string[]) => {
+      if (cmd === 'gh' && args[0] === 'repo' && args[1] === 'clone') {
+        const destination = args[3];
+        if (!destination) throw new Error('missing checkout dir');
+        writePlugin(destination, 'pi.conflict');
+      }
+      return { stdout: '' };
+    });
+
+    await expect(
+      installGithubPlugin('https://github.com/acme/shared', 'global', { projectRoot, homeDir }),
+    ).rejects.toThrow('already installed as a Pi Package');
+
+    expect(fs.readFileSync(path.join(checkoutDir, 'src/index.ts'), 'utf8')).toContain("id: 'native.sibling'");
+    expect(loadPluginRegistry(registryPath).plugins).toHaveProperty('native.sibling');
+    expect(loadPluginRegistry(registryPath).plugins).toHaveProperty('pi.conflict');
+  });
+
+  it('restores the previous GitHub checkout when registry promotion fails', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-install-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const pluginRoot = path.join(homeDir, '.mastracode/plugins');
+    const registryPath = path.join(pluginRoot, 'plugins.json');
+    const checkoutDir = path.join(pluginRoot, 'sources/github/acme-update');
+    writePlugin(checkoutDir, 'acme.update');
+    fs.appendFileSync(path.join(checkoutDir, 'src/index.ts'), '\n// previous checkout\n');
+    const previousRecord = {
+      enabled: true as const,
+      source: 'github' as const,
+      specifier: 'https://github.com/acme/update',
+      path: 'sources/github/acme-update',
+      entry: 'src/index.ts',
+      version: '1.2.3',
+    };
+    savePluginRegistry(registryPath, { disabledPlugins: [], plugins: { 'acme.update': previousRecord } });
+    execaMock.mockImplementation(async (cmd: string, args: string[]) => {
+      if (cmd === 'gh' && args[0] === 'repo' && args[1] === 'clone') {
+        const destination = args[3];
+        if (!destination) throw new Error('missing checkout dir');
+        writePlugin(destination, 'acme.update');
+        fs.appendFileSync(path.join(destination, 'src/index.ts'), '\n// candidate checkout\n');
+      }
+      return { stdout: '' };
+    });
+    fs.chmodSync(pluginRoot, 0o555);
+
+    try {
+      await expect(
+        installGithubPlugin('https://github.com/acme/update', 'global', { projectRoot, homeDir }),
+      ).rejects.toThrow();
+    } finally {
+      fs.chmodSync(pluginRoot, 0o755);
+    }
+
+    expect(fs.readFileSync(path.join(checkoutDir, 'src/index.ts'), 'utf8')).toContain('// previous checkout');
+    expect(loadPluginRegistry(registryPath).plugins['acme.update']).toEqual(previousRecord);
+  });
+
   it('installs checkout dependencies before loading and writing the registry record', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-install-'));
     const projectRoot = path.join(tempDir, 'project');
     const homeDir = path.join(tempDir, 'home');
-    const checkoutDir = path.join(homeDir, '.mastracode/plugins/sources/github/acme-dep-plugin');
     execaMock.mockImplementation(async (cmd: string, args: string[]) => {
       if (cmd === 'gh' && args[0] === 'repo' && args[1] === 'clone') {
         const destination = args[3];
@@ -216,17 +299,19 @@ describe('installGithubPlugin', () => {
       installGithubPlugin('https://github.com/acme/dep-plugin', 'global', { projectRoot, homeDir }),
     ).resolves.toBe('acme.dep');
 
+    const stagingDir = execaMock.mock.calls[2]?.[1]?.[3] as string;
+    expect(stagingDir).toMatch(/\.acme-dep-plugin-staging-/);
     expect(execaMock).toHaveBeenNthCalledWith(
       3,
       'gh',
-      ['repo', 'clone', 'acme/dep-plugin', checkoutDir, '--', '--depth', '1'],
+      ['repo', 'clone', 'acme/dep-plugin', stagingDir, '--', '--depth', '1'],
       expect.anything(),
     );
     expect(execaMock).toHaveBeenNthCalledWith(
       4,
       'corepack',
       ['pnpm@10.0.0', 'install', '--ignore-workspace', '--frozen-lockfile', '--ignore-scripts'],
-      expect.objectContaining({ cwd: checkoutDir }),
+      expect.objectContaining({ cwd: stagingDir }),
     );
     expect(
       loadPluginRegistry(path.join(homeDir, '.mastracode/plugins/plugins.json')).plugins['acme.dep'],
@@ -316,15 +401,20 @@ describe('installGithubPlugin', () => {
 
     const checkoutDir = path.join(projectRoot, '.mastracode/plugins/sources/github/acme-alexandria');
     const nestedPluginDir = path.join(checkoutDir, '.mastracode/plugins/sources/local/alexandria');
+    const cloneCall = execaMock.mock.calls.find(
+      ([command, args]) => command === 'gh' && args[0] === 'repo' && args[1] === 'clone',
+    );
+    const stagingDir = cloneCall?.[1]?.[3] as string;
+    expect(stagingDir).toMatch(/\.acme-alexandria-staging-/);
     expect(execaMock).toHaveBeenCalledWith(
       'gh',
-      ['repo', 'clone', 'acme/alexandria', checkoutDir, '--', '--depth', '1'],
+      ['repo', 'clone', 'acme/alexandria', stagingDir, '--', '--depth', '1'],
       expect.objectContaining({ env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }) }),
     );
     expect(execaMock).toHaveBeenCalledWith(
       'corepack',
       ['pnpm@11.8.0', 'install', '--ignore-workspace', '--ignore-scripts'],
-      expect.objectContaining({ cwd: nestedPluginDir }),
+      expect.objectContaining({ cwd: path.join(stagingDir, '.mastracode/plugins/sources/local/alexandria') }),
     );
     expect(fs.realpathSync(path.join(nestedPluginDir, 'node_modules', 'mastracode'))).toBe(
       fs.realpathSync(mastracodePackageRoot),

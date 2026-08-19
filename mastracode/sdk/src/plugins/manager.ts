@@ -14,11 +14,20 @@ import { getPluginScopePaths } from './paths.js';
 import type { PluginPathOptions } from './paths.js';
 import { PiCommandAdapter } from './pi/command-adapter.js';
 import type { PiCommandDispatchOptions, PiOwnedCommand } from './pi/command-adapter.js';
+import { createPiPackageRecord } from './pi/package-intake.js';
+import type { CharacterizedPiPackage } from './pi/package-intake.js';
 import type { PiExtensionGeneration, PiRuntimeActions } from './pi/types.js';
 import { bindPiUiHost } from './pi/ui-adapter.js';
 import type { PiUiHost } from './pi/ui-adapter.js';
 import { loadPluginRegistry, removePluginRecord, savePluginRegistry, setPluginRecord } from './registry.js';
-import type { LoadedPlugin, PluginContribution, PluginProcessorEntries, PluginScope } from './types.js';
+import type {
+  InstalledPluginRecord,
+  LoadedPlugin,
+  PluginContribution,
+  PluginProcessorEntries,
+  PluginRegistry,
+  PluginScope,
+} from './types.js';
 
 const GITHUB_PLUGIN_POLL_INTERVAL_MS = 60_000;
 
@@ -70,6 +79,7 @@ export class PluginManager {
   private githubPollTimer: ReturnType<typeof setInterval> | undefined;
   private githubPollInFlight: Promise<boolean> | undefined;
   private reloadInFlight: Promise<LoadedPlugin[]> | undefined;
+  private pluginMutationTail: Promise<void> = Promise.resolve();
   private readonly reloadListeners = new Set<(plugins: LoadedPlugin[]) => void | Promise<void>>();
   private readonly piGenerationListeners = new Set<(generations: PiExtensionGeneration[]) => void | Promise<void>>();
   private readonly githubUpdateListeners = new Set<(pluginNames: string[]) => void | Promise<void>>();
@@ -117,10 +127,20 @@ export class PluginManager {
   }
 
   async reload(): Promise<LoadedPlugin[]> {
+    await this.pluginMutationTail;
+    return this.reloadRegistry();
+  }
+
+  private async reloadRegistry(override?: { scope: PluginScope; registry: PluginRegistry }): Promise<LoadedPlugin[]> {
     if (this.reloadInFlight) return this.reloadInFlight;
 
     this.reloadInFlight = (async () => {
-      const candidates = await loadPlugins({ ...this.options, runtime: this.runtime });
+      const candidates = await loadPlugins({
+        ...this.options,
+        runtime: this.runtime,
+        ...(override?.scope === 'global' ? { globalRegistry: override.registry } : {}),
+        ...(override?.scope === 'project' ? { projectRegistry: override.registry } : {}),
+      });
       await this.stampLoadedPlugins(candidates);
       const { plugins, retiredGenerations, newGenerations } = this.reconcilePiGenerations(
         candidates,
@@ -220,6 +240,8 @@ export class PluginManager {
   }
 
   async dispose(): Promise<void> {
+    await this.pluginMutationTail;
+    if (this.reloadInFlight) await this.reloadInFlight;
     for (const entryPath of this.watchedLocalEntries) fs.unwatchFile(entryPath);
     this.watchedLocalEntries.clear();
     this.localEntryVersions.clear();
@@ -316,7 +338,7 @@ export class PluginManager {
         ) {
           nextGenerationIds.add(previous.piGeneration.id);
           retiredGenerations.add(candidate.piGeneration);
-          return previous;
+          return previous.candidateError ? { ...previous, candidateError: undefined } : previous;
         }
         newGenerations.push(candidate.piGeneration);
         nextGenerationIds.add(candidate.piGeneration.id);
@@ -373,6 +395,17 @@ export class PluginManager {
 
   private async readSourceStamp(plugin: LoadedPlugin): Promise<string> {
     try {
+      if (plugin.source === 'pi-package') {
+        return JSON.stringify({
+          resolution: plugin.piPackage?.resolution,
+          resources: plugin.piPackage?.resources,
+          targetApiVersion: plugin.piPackage?.targetApiVersion,
+          observedApiVersion: plugin.piPackage?.observedApiVersion,
+          compatibilityReport: plugin.piPackage?.compatibilityReport,
+          entries: plugin.entries,
+          enabled: plugin.enabled,
+        });
+      }
       if (plugin.source === 'github') {
         const checkoutPath = this.resolvePluginSourcePath(plugin);
         let head = this.githubCheckoutHeads.get(checkoutPath);
@@ -687,14 +720,90 @@ export class PluginManager {
     return discoverLocalPlugins(searchRoot, this.options);
   }
 
+  async installPiPackage(characterized: CharacterizedPiPackage, options: { confirmEnable: boolean }): Promise<string> {
+    if (options.confirmEnable !== true) throw new Error('Enabling a Pi Package requires explicit enable confirmation');
+    const pluginId = characterized.manifest.name;
+    return this.enqueuePluginMutation(async () => {
+      const paths = getPluginScopePaths(characterized.scope, this.options);
+      let previousRegistry = loadPluginRegistry(paths.registryPath);
+      let previousRecord = previousRegistry.plugins[pluginId];
+      if (previousRecord?.source === 'pi-package' && previousRecord.piPackage?.pendingCleanup) {
+        await this.retryPendingPiPackageCleanup(pluginId, characterized.scope, previousRecord);
+        previousRegistry = loadPluginRegistry(paths.registryPath);
+        previousRecord = previousRegistry.plugins[pluginId];
+      }
+      if (previousRecord && previousRecord.source !== 'pi-package') {
+        throw new Error(
+          `Plugin "${pluginId}" is already installed as a native Mastra Code plugin in ${characterized.scope} scope`,
+        );
+      }
+      const candidateRecord = createPiPackageRecord(characterized, this.options);
+      if (previousRecord && JSON.stringify(previousRecord) === JSON.stringify(candidateRecord)) {
+        await this.reloadRegistry();
+        return pluginId;
+      }
+
+      const candidateRegistry = setPluginRecord(previousRegistry, pluginId, candidateRecord);
+      try {
+        const plugins = await this.reloadRegistry({ scope: characterized.scope, registry: candidateRegistry });
+        this.assertPiPackagePromotion(pluginId, characterized.scope, candidateRecord, plugins);
+        savePluginRegistry(paths.registryPath, candidateRegistry);
+      } catch (error) {
+        try {
+          await this.reloadRegistry();
+          this.recordPiPackageCandidateError(pluginId, characterized.scope, error);
+        } catch (rollbackError) {
+          throw new AggregateError([error, rollbackError], `Failed to install Pi Package "${pluginId}" and restore it`);
+        }
+        try {
+          this.removeOwnedPiPackageFiles(candidateRecord, characterized.scope, previousRecord);
+        } catch (cleanupError) {
+          throw new AggregateError(
+            [error, cleanupError],
+            `Pi Package "${pluginId}" candidate failed and its staged files could not be removed`,
+          );
+        }
+        throw error;
+      }
+
+      if (previousRecord?.source === 'pi-package') {
+        try {
+          this.removeOwnedPiPackageFiles(previousRecord, characterized.scope, candidateRecord);
+        } catch (error) {
+          await this.persistPendingPiPackageCleanup(
+            pluginId,
+            characterized.scope,
+            candidateRecord,
+            previousRecord,
+            error,
+          );
+          throw new Error(`Pi Package "${pluginId}" was updated, but previous source cleanup is pending`, {
+            cause: error,
+          });
+        }
+      }
+      return pluginId;
+    });
+  }
+
+  async reloadPiPackage(pluginId: string, scope: PluginScope): Promise<void> {
+    await this.enqueuePluginMutation(async () => {
+      const record = this.getInstalledPiPackage(pluginId, scope);
+      const plugins = await this.reloadRegistry();
+      this.assertPiPackagePromotion(pluginId, scope, record, plugins);
+    });
+  }
+
   async installLocal(
     localPath: string,
     scope: PluginScope,
     options: Pick<InstallPluginOptions, 'entry'> = {},
   ): Promise<string> {
-    const id = await installLocalPlugin(localPath, scope, { ...this.options, ...options });
-    await this.reload();
-    return id;
+    return this.enqueuePluginMutation(async () => {
+      const id = await installLocalPlugin(localPath, scope, { ...this.options, ...options });
+      await this.reloadRegistry();
+      return id;
+    });
   }
 
   async installGithub(
@@ -702,24 +811,30 @@ export class PluginManager {
     scope: PluginScope,
     options: Pick<InstallPluginOptions, 'entry' | 'ref' | 'onOutput' | 'signal'> = {},
   ): Promise<string> {
-    const id = await installGithubPlugin(url, scope, { ...this.options, ...options });
-    // Installing over an existing checkout replaces it at the same path, so the
-    // cached head would make a genuinely different commit stamp as unchanged and
-    // leave the previous signal providers running.
-    this.githubCheckoutHeads.clear();
-    await this.reload();
-    return id;
+    return this.enqueuePluginMutation(async () => {
+      const id = await installGithubPlugin(url, scope, { ...this.options, ...options });
+      // Installing over an existing checkout replaces it at the same path, so the
+      // cached head would make a genuinely different commit stamp as unchanged and
+      // leave the previous signal providers running.
+      this.githubCheckoutHeads.clear();
+      await this.reloadRegistry();
+      return id;
+    });
   }
 
   async setEnabled(pluginId: string, scope: PluginScope, enabled: boolean): Promise<void> {
-    const paths = getPluginScopePaths(scope, this.options);
-    const registry = loadPluginRegistry(paths.registryPath);
-    const record = registry.plugins[pluginId];
-    if (!record) {
-      throw new Error(`Plugin "${pluginId}" is not installed in ${scope} scope`);
-    }
-    savePluginRegistry(paths.registryPath, setPluginRecord(registry, pluginId, { ...record, enabled }));
-    await this.reload();
+    await this.enqueuePluginMutation(async () => {
+      const paths = getPluginScopePaths(scope, this.options);
+      const registry = loadPluginRegistry(paths.registryPath);
+      const record = registry.plugins[pluginId];
+      if (!record) throw new Error(`Plugin "${pluginId}" is not installed in ${scope} scope`);
+      if (record.source === 'pi-package') {
+        await this.commitPiPackageRegistryMutation(pluginId, scope, { ...record, enabled });
+        return;
+      }
+      savePluginRegistry(paths.registryPath, setPluginRecord(registry, pluginId, { ...record, enabled }));
+      await this.reloadRegistry();
+    });
   }
 
   async setConfigValue(
@@ -728,42 +843,256 @@ export class PluginManager {
     key: string,
     value: MastraCodePluginConfigValue,
   ): Promise<void> {
-    const paths = getPluginScopePaths(scope, this.options);
-    const registry = loadPluginRegistry(paths.registryPath);
-    const record = registry.plugins[pluginId];
-    if (!record) {
-      throw new Error(`Plugin "${pluginId}" is not installed in ${scope} scope`);
-    }
-    const config = { ...(record.config ?? {}) };
-    if (value === undefined || value === '') {
-      delete config[key];
-    } else {
-      config[key] = value;
-    }
-    const nextRecord = { ...record, config: Object.keys(config).length > 0 ? config : undefined };
-    savePluginRegistry(paths.registryPath, setPluginRecord(registry, pluginId, nextRecord));
-    await this.reload();
+    await this.enqueuePluginMutation(async () => {
+      const paths = getPluginScopePaths(scope, this.options);
+      const registry = loadPluginRegistry(paths.registryPath);
+      const record = registry.plugins[pluginId];
+      if (!record) throw new Error(`Plugin "${pluginId}" is not installed in ${scope} scope`);
+      const nextRecord = updatePluginConfig(record, key, value);
+      if (record.source === 'pi-package') {
+        await this.commitPiPackageRegistryMutation(pluginId, scope, nextRecord);
+        return;
+      }
+      savePluginRegistry(paths.registryPath, setPluginRecord(registry, pluginId, nextRecord));
+      await this.reloadRegistry();
+    });
   }
 
   async uninstall(pluginId: string, scope: PluginScope): Promise<void> {
+    await this.enqueuePluginMutation(async () => {
+      const paths = getPluginScopePaths(scope, this.options);
+      const registry = loadPluginRegistry(paths.registryPath);
+      const record = registry.plugins[pluginId];
+      if (!record) throw new Error(`Plugin "${pluginId}" is not installed in ${scope} scope`);
+
+      if (record.source === 'pi-package') {
+        const cleanupPaths = this.getOwnedPiPackageCleanupPaths(record, scope).map(cleanupPath =>
+          path.relative(paths.root, cleanupPath),
+        );
+        await this.commitPiPackageRegistryMutation(pluginId, scope, undefined);
+        try {
+          this.removeOwnedPiPackageFiles(record, scope);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const retryRecord: InstalledPluginRecord = {
+            ...record,
+            enabled: false,
+            piPackage: record.piPackage
+              ? { ...record.piPackage, pendingCleanup: { paths: cleanupPaths, error: message } }
+              : undefined,
+          };
+          const removedRegistry = loadPluginRegistry(paths.registryPath);
+          savePluginRegistry(paths.registryPath, setPluginRecord(removedRegistry, pluginId, retryRecord));
+          await this.reloadRegistry();
+          throw error;
+        }
+        return;
+      }
+
+      savePluginRegistry(paths.registryPath, removePluginRecord(registry, pluginId));
+      if (record.source === 'github') {
+        const checkoutPath = path.resolve(
+          path.isAbsolute(record.path) ? record.path : path.join(paths.root, record.path),
+        );
+        const githubSourcesPath = path.resolve(paths.sourcesPath, 'github');
+        if (isInsideDirectory(checkoutPath, githubSourcesPath)) {
+          fs.rmSync(checkoutPath, { recursive: true, force: true });
+        }
+        this.githubCheckoutHeads.delete(checkoutPath);
+      }
+      await this.reloadRegistry();
+    });
+  }
+
+  private enqueuePluginMutation<T>(operation: () => Promise<T>): Promise<T> {
+    const run = this.pluginMutationTail.then(async () => {
+      if (this.reloadInFlight) await this.reloadInFlight;
+      return operation();
+    });
+    this.pluginMutationTail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  private getInstalledPiPackage(pluginId: string, scope: PluginScope): InstalledPluginRecord {
+    const paths = getPluginScopePaths(scope, this.options);
+    const record = loadPluginRegistry(paths.registryPath).plugins[pluginId];
+    if (!record) throw new Error(`Plugin "${pluginId}" is not installed in ${scope} scope`);
+    if (record.source !== 'pi-package') throw new Error(`Plugin "${pluginId}" is not a Pi Package`);
+    return record;
+  }
+
+  private async commitPiPackageRegistryMutation(
+    pluginId: string,
+    scope: PluginScope,
+    nextRecord: InstalledPluginRecord | undefined,
+  ): Promise<void> {
+    const paths = getPluginScopePaths(scope, this.options);
+    const previousRegistry = loadPluginRegistry(paths.registryPath);
+    const previousRecord = previousRegistry.plugins[pluginId];
+    if (!previousRecord || previousRecord.source !== 'pi-package') {
+      throw new Error(`Pi Package "${pluginId}" is not installed in ${scope} scope`);
+    }
+    const nextRegistry = nextRecord
+      ? setPluginRecord(previousRegistry, pluginId, nextRecord)
+      : removePluginRecord(previousRegistry, pluginId);
+    try {
+      const plugins = await this.reloadRegistry({ scope, registry: nextRegistry });
+      if (nextRecord?.enabled) this.assertPiPackagePromotion(pluginId, scope, nextRecord, plugins);
+      savePluginRegistry(paths.registryPath, nextRegistry);
+    } catch (error) {
+      try {
+        await this.reloadRegistry();
+        this.recordPiPackageCandidateError(pluginId, scope, error);
+      } catch (rollbackError) {
+        throw new AggregateError([error, rollbackError], `Failed to update Pi Package "${pluginId}" and restore it`);
+      }
+      throw error;
+    }
+  }
+
+  private recordPiPackageCandidateError(pluginId: string, scope: PluginScope, error: unknown): void {
+    const restored = this.loadedPlugins.find(plugin => plugin.id === pluginId && plugin.scope === scope);
+    if (restored) restored.candidateError = error instanceof Error ? error.message : String(error);
+  }
+
+  private assertPiPackagePromotion(
+    pluginId: string,
+    scope: PluginScope,
+    record: InstalledPluginRecord,
+    plugins: LoadedPlugin[],
+  ): void {
+    const loaded = plugins.find(plugin => plugin.id === pluginId);
+    if (loaded?.scope !== scope) {
+      if (scope === 'global' && loaded?.scope === 'project') return;
+      throw new Error(`Pi Package "${pluginId}" was not published from ${scope} scope`);
+    }
+    if (loaded.status === 'blocked') return;
+    if (loaded.status !== 'active' || loaded.path !== record.path || loaded.candidateError) {
+      throw new Error(
+        loaded.candidateError ?? loaded.error ?? `Pi Package "${pluginId}" candidate did not become active`,
+      );
+    }
+  }
+
+  private async retryPendingPiPackageCleanup(
+    pluginId: string,
+    scope: PluginScope,
+    record: InstalledPluginRecord,
+  ): Promise<void> {
+    const piPackage = record.piPackage;
+    const pending = piPackage?.pendingCleanup;
+    if (!piPackage || !pending) return;
+    this.removeOwnedPiPackagePaths(pending.paths.map(storedPath => this.resolveOwnedPiPackagePath(storedPath, scope)));
+    const clearedRecord: InstalledPluginRecord = {
+      ...record,
+      piPackage: { ...piPackage, pendingCleanup: undefined },
+    };
     const paths = getPluginScopePaths(scope, this.options);
     const registry = loadPluginRegistry(paths.registryPath);
-    const record = registry.plugins[pluginId];
-    if (!record) {
-      throw new Error(`Plugin "${pluginId}" is not installed in ${scope} scope`);
+    savePluginRegistry(paths.registryPath, setPluginRecord(registry, pluginId, clearedRecord));
+    const loaded = this.loadedPlugins.find(plugin => plugin.id === pluginId && plugin.scope === scope);
+    if (loaded) {
+      loaded.piPackage = clearedRecord.piPackage;
+      loaded.candidateError = undefined;
+      await this.notifyReloadListeners(this.loadedPlugins);
     }
-
-    savePluginRegistry(paths.registryPath, removePluginRecord(registry, pluginId));
-    if (record.source === 'github') {
-      const checkoutPath = path.resolve(
-        path.isAbsolute(record.path) ? record.path : path.join(paths.root, record.path),
-      );
-      const githubSourcesPath = path.resolve(paths.sourcesPath, 'github');
-      if (isInsideDirectory(checkoutPath, githubSourcesPath)) {
-        fs.rmSync(checkoutPath, { recursive: true, force: true });
-      }
-      this.githubCheckoutHeads.delete(checkoutPath);
-    }
-    await this.reload();
   }
+
+  private async persistPendingPiPackageCleanup(
+    pluginId: string,
+    scope: PluginScope,
+    activeRecord: InstalledPluginRecord,
+    previousRecord: InstalledPluginRecord,
+    error: unknown,
+  ): Promise<void> {
+    if (!activeRecord.piPackage) return;
+    const paths = getPluginScopePaths(scope, this.options);
+    const cleanupPaths = this.getOwnedPiPackageCleanupPaths(previousRecord, scope, activeRecord).map(cleanupPath =>
+      path.relative(paths.root, cleanupPath),
+    );
+    const message = error instanceof Error ? error.message : String(error);
+    const pendingRecord: InstalledPluginRecord = {
+      ...activeRecord,
+      piPackage: { ...activeRecord.piPackage, pendingCleanup: { paths: cleanupPaths, error: message } },
+    };
+    const registry = loadPluginRegistry(paths.registryPath);
+    savePluginRegistry(paths.registryPath, setPluginRecord(registry, pluginId, pendingRecord));
+    const loaded = this.loadedPlugins.find(plugin => plugin.id === pluginId && plugin.scope === scope);
+    if (loaded) {
+      loaded.piPackage = pendingRecord.piPackage;
+      loaded.candidateError = message;
+      await this.notifyReloadListeners(this.loadedPlugins);
+    }
+  }
+
+  private removeOwnedPiPackageFiles(
+    record: InstalledPluginRecord,
+    scope: PluginScope,
+    retainedRecord?: InstalledPluginRecord,
+  ): void {
+    this.removeOwnedPiPackagePaths(this.getOwnedPiPackageCleanupPaths(record, scope, retainedRecord));
+  }
+
+  private getOwnedPiPackageCleanupPaths(
+    record: InstalledPluginRecord,
+    scope: PluginScope,
+    retainedRecord?: InstalledPluginRecord,
+  ): string[] {
+    if (record.source !== 'pi-package' || !record.piPackage) return [];
+    const candidateRoots = [
+      record.piPackage.resolution.sourceRoot,
+      record.piPackage.resolution.packageRoot,
+      ...(record.piPackage.pendingCleanup?.paths ?? []),
+    ].map(storedPath => this.resolveOwnedPiPackagePath(storedPath, scope));
+    const retainedRoots =
+      retainedRecord?.source === 'pi-package' && retainedRecord.piPackage
+        ? [
+            this.resolveOwnedPiPackagePath(retainedRecord.piPackage.resolution.sourceRoot, scope),
+            this.resolveOwnedPiPackagePath(retainedRecord.piPackage.resolution.packageRoot, scope),
+          ]
+        : [];
+    return [...new Set(candidateRoots)]
+      .filter(candidate => !retainedRoots.some(retained => isInsideDirectory(retained, candidate)))
+      .sort((a, b) => a.length - b.length)
+      .filter((candidate, index, candidates) =>
+        candidates.slice(0, index).every(parent => !isInsideDirectory(candidate, parent)),
+      );
+  }
+
+  private resolveOwnedPiPackagePath(storedPath: string, scope: PluginScope): string {
+    const paths = getPluginScopePaths(scope, this.options);
+    const packagesRoot = path.resolve(paths.sourcesPath, 'pi-packages');
+    const resolved = path.resolve(path.isAbsolute(storedPath) ? storedPath : path.join(paths.root, storedPath));
+    if (resolved === packagesRoot || !isInsideDirectory(resolved, packagesRoot)) {
+      throw new Error(`Refusing to remove unowned Pi Package path: ${storedPath}`);
+    }
+    return resolved;
+  }
+
+  private removeOwnedPiPackagePaths(paths: string[]): void {
+    const errors: unknown[] = [];
+    for (const candidate of paths) {
+      try {
+        fs.rmSync(candidate, { recursive: true, force: true });
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) throw new AggregateError(errors, 'Failed to remove owned Pi Package source paths');
+  }
+}
+
+function updatePluginConfig(
+  record: InstalledPluginRecord,
+  key: string,
+  value: MastraCodePluginConfigValue,
+): InstalledPluginRecord {
+  const config = { ...(record.config ?? {}) };
+  if (value === undefined || value === '') delete config[key];
+  else config[key] = value;
+  return { ...record, config: Object.keys(config).length > 0 ? config : undefined };
 }

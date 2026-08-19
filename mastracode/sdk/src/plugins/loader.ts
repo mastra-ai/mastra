@@ -46,11 +46,23 @@ export async function loadPlugins(options: LoadPluginsOptions): Promise<LoadedPl
 
   for (const record of records) {
     if (record.blocked) {
-      loaded.push({ ...record, status: 'blocked', tools: {}, toolNames: [] });
+      loaded.push({
+        ...record,
+        status: 'blocked',
+        tools: {},
+        toolNames: [],
+        ...(record.piPackage?.pendingCleanup ? { candidateError: record.piPackage.pendingCleanup.error } : {}),
+      });
       continue;
     }
     if (!record.enabled) {
-      loaded.push({ ...record, status: 'inactive', tools: {}, toolNames: [] });
+      loaded.push({
+        ...record,
+        status: 'inactive',
+        tools: {},
+        toolNames: [],
+        ...(record.piPackage?.pendingCleanup ? { candidateError: record.piPackage.pendingCleanup.error } : {}),
+      });
       continue;
     }
 
@@ -91,9 +103,11 @@ export async function loadPluginRecord(
           renderConfigs,
           toolNames: Object.keys(tools).sort(),
           processors,
+          skillPaths: resolvePiPackageSkillPaths(record, pluginRoot),
           configValues: config,
           piCompatibility: piGeneration.compatibility,
           piGeneration,
+          ...(record.piPackage?.pendingCleanup ? { candidateError: record.piPackage.pendingCleanup.error } : {}),
         };
       } catch (error) {
         await piGeneration.invalidate(`Pi extension "${piGeneration.extensionId}" candidate failed validation.`);
@@ -221,6 +235,18 @@ export function isInsideDirectory(targetPath: string, root: string): boolean {
   const resolvedTarget = path.resolve(targetPath);
   const resolvedRoot = path.resolve(root);
   return resolvedTarget === resolvedRoot || resolvedTarget.startsWith(resolvedRoot + path.sep);
+}
+
+function resolvePiPackageSkillPaths(record: ScopedInstalledPluginRecord, pluginRoot: string): string[] {
+  if (record.source !== 'pi-package') return [];
+  const roots = new Set<string>();
+  for (const resource of record.piPackage?.resources.skills ?? []) {
+    if (path.basename(resource).toLowerCase() !== 'skill.md') continue;
+    const skillRoot = path.resolve(pluginRoot, resource);
+    if (!isInsideDirectory(skillRoot, pluginRoot)) continue;
+    roots.add(path.dirname(path.dirname(skillRoot)));
+  }
+  return [...roots].sort();
 }
 
 function resolveExistingAssetDirs(pluginRoot: string, dirname: 'skills' | 'commands'): string[] {

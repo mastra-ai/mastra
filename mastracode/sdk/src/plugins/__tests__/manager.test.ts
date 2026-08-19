@@ -82,6 +82,25 @@ describe('PluginManager', () => {
     expect(fs.existsSync(pluginDir)).toBe(true);
   });
 
+  it('keeps concurrent public reload requests on one serialized publication lane', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const pluginDir = path.join(tempDir, 'plugin');
+    writePlugin(pluginDir, 'acme.reload-lane', 'reload_lane_tool');
+    const manager = new PluginManager({ projectRoot, homeDir });
+    await manager.installLocal(pluginDir, 'project');
+    let publications = 0;
+    manager.onReload(() => {
+      publications += 1;
+    });
+
+    await Promise.all([manager.reload(), manager.reload(), manager.reload()]);
+
+    expect(publications).toBe(1);
+    await manager.dispose();
+  });
+
   it('persists plugin config values and reloads plugin context', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
     const projectRoot = path.join(tempDir, 'project');
@@ -412,9 +431,11 @@ describe('PluginManager', () => {
     execaMock.mockImplementation(async (command: string, args: string[]) => {
       if (args[0] === 'rev-parse' && args[1] === 'HEAD') return { stdout: head };
       if (command === 'gh' && args[0] === 'repo' && args[1] === 'clone') {
+        const destination = args[3];
+        if (!destination) throw new Error('missing checkout dir');
         head = 'new';
-        writePlugin(checkoutDir, 'acme.github', 'github_tool', 'second');
-        fs.mkdirSync(path.join(checkoutDir, '.git'), { recursive: true });
+        writePlugin(destination, 'acme.github', 'github_tool', 'second');
+        fs.mkdirSync(path.join(destination, '.git'), { recursive: true });
       }
       return { stdout: '' };
     });

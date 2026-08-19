@@ -105,6 +105,7 @@ async function resolveNpmPackage(
       resolution: {
         sourceType: 'npm',
         resolvedSpecifier: `npm:${exactSpecifier}`,
+        sourceRoot: finalRoot,
         packageRoot: finalRoot,
         integrity: metadata.integrity,
         contentIntegrity: hashPackageDirectory(finalRoot),
@@ -149,6 +150,7 @@ async function resolveGitPackage(
       resolution: {
         sourceType: 'git',
         resolvedSpecifier: `git:${url}@${commit}`,
+        sourceRoot: finalRoot,
         packageRoot: finalRoot,
         integrity,
         contentIntegrity: integrity,
@@ -200,6 +202,7 @@ function resolveLocalPackage(
     resolution: {
       sourceType: 'local',
       resolvedSpecifier: `local:${sourceRoot}#${integrity}`,
+      sourceRoot: finalRoot,
       packageRoot: finalRoot,
       integrity,
       contentIntegrity: integrity,

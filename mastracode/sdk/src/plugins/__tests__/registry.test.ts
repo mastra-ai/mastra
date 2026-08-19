@@ -131,6 +131,7 @@ describe('plugin registry', () => {
         resolution: {
           sourceType: 'npm',
           resolvedSpecifier: 'npm:pi-fixture@1.0.0',
+          sourceRoot: 'sources/pi-packages/npm/pi-fixture/source-1.0.0-hash',
           packageRoot: 'sources/pi-packages/npm/pi-fixture/1.0.0-hash',
           integrity: 'sha512-fixture',
           contentIntegrity: 'sha512-content',
@@ -174,6 +175,10 @@ describe('plugin registry', () => {
         compatibilityReport: { status: 'pi-compatible' },
       },
     });
+
+    registry.plugins['pi-fixture']!.piPackage!.resolution.sourceRoot = '../outside';
+    savePluginRegistry(registryPath, registry);
+    expect(loadPluginRegistry(registryPath).plugins['pi-fixture']).toBeUndefined();
   });
 
   it('returns empty registries when files are missing or invalid', () => {

@@ -6,8 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const execaMock = vi.hoisted(() => vi.fn());
 vi.mock('execa', () => ({ execa: execaMock }));
 
-import { loadPluginRegistry } from '../registry.js';
-import { characterizePiPackage, enablePiPackage, preparePiPackage } from './package-intake.js';
+import { characterizePiPackage, createPiPackageRecord, preparePiPackage } from './package-intake.js';
 
 let tempDir: string | undefined;
 
@@ -88,7 +87,7 @@ describe('Pi Package intake trust boundary', () => {
     expect(characterized.trust.installScripts).toBe('allow');
   });
 
-  it('characterizes only after trust, applies the script policy, then requires separate enable confirmation', async () => {
+  it('characterizes only after trust and creates an owned record after applying the script policy', async () => {
     const fixture = makeFixture({ lifecycleScript: true });
     execaMock.mockResolvedValue({ stdout: '' });
     const prepared = await preparePiPackage('./fixture', 'project', fixture);
@@ -107,14 +106,7 @@ describe('Pi Package intake trust boundary', () => {
     expect(fs.existsSync(fixture.factoryMarker)).toBe(true);
     expect(characterized.compatibility.status).toBe('pi-compatible');
     expect(characterized.compatibility.capabilities.map(capability => capability.name)).toContain('registerTool');
-    expect(() => enablePiPackage(characterized, { ...fixture, confirmEnable: false } as never)).toThrow(
-      'explicit enable confirmation',
-    );
-
-    expect(enablePiPackage(characterized, { ...fixture, confirmEnable: true })).toBe('pi-intake-fixture');
-    const record = loadPluginRegistry(path.join(fixture.projectRoot, '.mastracode/plugins/plugins.json')).plugins[
-      'pi-intake-fixture'
-    ];
+    const record = createPiPackageRecord(characterized, fixture);
     expect(record).toMatchObject({
       enabled: true,
       source: 'pi-package',
