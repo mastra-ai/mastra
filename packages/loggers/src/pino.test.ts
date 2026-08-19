@@ -313,7 +313,27 @@ describe('PinoLogger observability adapter (__attachObservability)', () => {
 
     logger.warn('watch out', { code: 42 });
 
-    expect(sink.calls).toEqual([{ level: 'warn', message: 'watch out', data: { code: 42 } }]);
+    // Mirrors the native record: correlation fields land in the exported
+    // payload too, just as the mixin injects them into the pino record.
+    expect(sink.calls).toEqual([{ level: 'warn', message: 'watch out', data: { code: 42, ...TRACE_FIELDS } }]);
+  });
+
+  it('exported trace fields win over conflicting user data; absent without a span or when correlation is off', () => {
+    const conflicting = makeCtx();
+    const logger = new PinoLogger({ transports: { memory: memoryStream } });
+    logger.__attachObservability(conflicting.ctx);
+    logger.info('conflict', { trace_id: 'user-supplied' });
+    expect(conflicting.sink.calls[0]?.data).toEqual(TRACE_FIELDS);
+
+    const noSpan = makeCtx({ resolveTraceFields: () => undefined });
+    logger.__attachObservability(noSpan.ctx);
+    logger.info('no span', { code: 1 });
+    expect(noSpan.sink.calls[0]?.data).toEqual({ code: 1 });
+
+    const noCorrelation = makeCtx({ options: { correlation: false, export: true } });
+    logger.__attachObservability(noCorrelation.ctx);
+    logger.info('uncorrelated', { code: 2 });
+    expect(noCorrelation.sink.calls[0]?.data).toEqual({ code: 2 });
   });
 
   it('does not export when export is disabled but still correlates', async () => {
@@ -361,7 +381,7 @@ describe('PinoLogger observability adapter (__attachObservability)', () => {
       {
         level: 'error',
         message: 'failed',
-        data: { error: { name: 'Error', message: 'boom', stack: err.stack } },
+        data: { error: { name: 'Error', message: 'boom', stack: err.stack }, ...TRACE_FIELDS },
       },
     ]);
   });
@@ -435,7 +455,7 @@ describe('PinoLogger observability adapter (__attachObservability)', () => {
       requestId: 'req-1',
       ...TRACE_FIELDS,
     });
-    expect(sink.calls).toEqual([{ level: 'info', message: 'from child', data: undefined }]);
+    expect(sink.calls).toEqual([{ level: 'info', message: 'from child', data: { ...TRACE_FIELDS } }]);
   });
 });
 

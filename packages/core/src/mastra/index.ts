@@ -5343,8 +5343,14 @@ export class Mastra<
       return logger;
     }
 
-    // Already wrapped (e.g. setLogger() re-invoked with the wired logger).
-    if (inner instanceof DualLogger) return logger;
+    // Already wrapped (e.g. setLogger() re-invoked with the wired logger, or
+    // another Mastra instance's wrapper passed in). Rewire the underlying
+    // logger for this instance so exports target this instance's
+    // observability; for our own wrapper this is idempotent via
+    // #fallbackWrappers.
+    if (inner instanceof DualLogger) {
+      return this.#wireLoggerObservability(inner.baseLogger as unknown as TLogger);
+    }
 
     // Idempotent: the constructor wires the logger and then setLogger() is
     // called with the same unwrapped instance — reuse the existing wrapper
@@ -5362,7 +5368,15 @@ export class Mastra<
     } catch {
       // A throwing logger must not break Mastra construction.
     }
-    const wrapper = new DualLogger(inner, this.#loggerAdapterOptions.export ? () => this.loggerVNext : undefined);
+    // Resolve the real logger context directly (not `loggerVNext`, which
+    // falls back to a truthy no-op) so the fallback skips record derivation
+    // entirely when observability is not configured.
+    const wrapper = new DualLogger(
+      inner,
+      this.#loggerAdapterOptions.export
+        ? () => this.#observability.getDefaultInstance()?.getLoggerContext?.()
+        : undefined,
+    );
     this.#fallbackWrappers.set(inner, wrapper);
     return wrapper as unknown as TLogger;
   }

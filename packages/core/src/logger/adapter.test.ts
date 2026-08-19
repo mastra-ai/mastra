@@ -238,6 +238,26 @@ describe('Mastra logger wiring', () => {
     expect(ctx?.getLogSink()).toBe(sink);
   });
 
+  it('rewires a foreign DualLogger for the current instance instead of reusing it', () => {
+    const inner = makePlainLogger();
+    const first = new Mastra({ logger: inner as any, __ephemeral: true });
+    const firstWrapper = first.getLogger();
+    expect(firstWrapper).toBeInstanceOf(DualLogger);
+
+    // Passing the first instance's wrapper into a second Mastra must not
+    // reuse it (its export getter targets the first instance): the base
+    // logger is unwrapped and wired for the second instance.
+    const second = new Mastra({ logger: firstWrapper as any, __ephemeral: true });
+    const secondWrapper = second.getLogger();
+    expect(secondWrapper).toBeInstanceOf(DualLogger);
+    expect(secondWrapper).not.toBe(firstWrapper);
+    expect((secondWrapper as unknown as DualLogger).baseLogger).toBe(inner);
+
+    // Re-invoking setLogger with our own wrapper stays idempotent.
+    second.setLogger({ logger: secondWrapper });
+    expect(second.getLogger()).toBe(secondWrapper);
+  });
+
   it('warns when the same logger instance is attached to a second Mastra instance', () => {
     const logger = new ConsoleLogger({ level: LogLevel.INFO });
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});

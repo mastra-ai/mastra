@@ -173,7 +173,12 @@ export class PinoLogger<CustomLevels extends string = never> extends MastraLogge
       // An Error passed as the args value often has no enumerable keys but
       // must still be exported (serialized by buildLogRecordData).
       const hasPayload = args instanceof Error || Object.keys(args).length > 0;
-      ctx.getLogSink()?.[level](message, buildLogRecordData(hasPayload ? [args] : []));
+      // Mirror the native record: the mixin injects trace fields into the
+      // pino record, so the exported payload carries them too (trace fields
+      // win over user data on key conflicts).
+      const traceFields = ctx.options.correlation ? ctx.resolveTraceFields() : undefined;
+      const data = buildLogRecordData(hasPayload ? [args] : []);
+      ctx.getLogSink()?.[level](message, traceFields ? { ...data, ...traceFields } : data);
     } catch {
       // Never let observability export break the primary logger
     }
