@@ -245,6 +245,9 @@ await mongoVector.createIndex({
   filterFields: ['source', 'price', 'category', 'inStock', 'tags'],
 })
 
+// createIndex() returns before the index finishes building
+await mongoVector.waitForIndexReady({ indexName: 'embeddings' })
+
 // The filter is applied during the index search
 const results = await mongoVector.query({
   indexName: 'embeddings',
