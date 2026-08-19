@@ -89,7 +89,7 @@ export const mastra = new Mastra({ workspace })
 
 ### Using mounts
 
-Objects already in the bucket become available under `/workspace`. The agent can call `read_file('/workspace/report.md')` or run `cat /workspace/report.md`. Files written through either interface are saved to S3 and remain available after the sandbox stops.
+Files already available through the provider appear under `/workspace`. The agent can call `read_file('/workspace/report.md')` or run `cat /workspace/report.md`. Files written through either interface are saved by the provider and remain available after the sandbox stops.
 
 Without a mount, an agent can still combine file tools with sandbox commands by passing file contents between tool calls. This works for selected text files. Mounts are a better fit when programs expect a directory tree or need to process large or binary files.
 
