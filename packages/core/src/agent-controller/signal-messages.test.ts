@@ -8,27 +8,67 @@ import { AgentController } from './agent-controller';
 import { createMockWorkspace } from './test-utils';
 import type { AgentControllerEvent } from './types';
 
-function createTextStreamModel(responseText: string, onPrompt?: (prompt: unknown) => void) {
+function createTextStreamModel(responseText: string) {
   return new MockLanguageModelV2({
-    doStream: async ({ prompt }) => {
-      onPrompt?.(prompt);
-      return {
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-        stream: convertArrayToReadableStream([
-          { type: 'stream-start', warnings: [] },
-          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-          { type: 'text-start', id: 'text-1' },
-          { type: 'text-delta', id: 'text-1', delta: responseText },
-          { type: 'text-end', id: 'text-1' },
-          {
-            type: 'finish',
-            finishReason: 'stop',
-            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-          },
-        ]),
-      };
-    },
+    doStream: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start', warnings: [] },
+        { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+        { type: 'text-start', id: 'text-1' },
+        { type: 'text-delta', id: 'text-1', delta: responseText },
+        { type: 'text-end', id: 'text-1' },
+        {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        },
+      ]),
+    }),
+  });
+}
+
+function createGatedAgent(prompts: unknown[], releases: Array<() => void>) {
+  let callCount = 0;
+  return new Agent({
+    id: 'gated-agent',
+    name: 'gated-agent',
+    instructions: 'You are a test agent.',
+    model: new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        callCount += 1;
+        const callIndex = callCount;
+        prompts.push(prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: new ReadableStream({
+            async start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({
+                type: 'response-metadata',
+                id: `id-${callIndex}`,
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              });
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
+              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: `response ${callIndex}` });
+              controller.enqueue({ type: 'text-end', id: 'text-1' });
+              if (callIndex === 1) {
+                await new Promise<void>(resolve => releases.push(resolve));
+              }
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+        };
+      },
+    }),
   });
 }
 
@@ -961,6 +1001,42 @@ describe('AgentController signal messages', () => {
     expect(JSON.stringify(prompts[3])).toContain('second active interjection');
   });
 
+  it('tags a message sent into a live run as a while-active interjection', async () => {
+    const releases: Array<() => void> = [];
+    const prompts: unknown[] = [];
+    const { session } = await createController(new InMemoryStore(), createGatedAgent(prompts, releases));
+    await session.thread.create();
+
+    const first = session.sendSignal({ content: 'start the run' });
+    await first.accepted;
+    await waitFor(() => session.getCurrentRunId() !== null && releases.length === 1);
+    const interjection = session.sendSignal({ content: 'also do this' });
+    await interjection.accepted;
+    releases.shift()?.();
+    await waitFor(() => session.getCurrentRunId() === null);
+
+    expect(JSON.stringify(prompts)).toContain('<user delivery=\\"while-active\\">also do this</user>');
+  });
+
+  // A steer aborts before it sends, so by the time the runtime resolves a delivery
+  // route it sees an idle session — the interjection has to be stamped at submit time.
+  it('tags a steer as a while-active interjection even though its abort left the session idle', async () => {
+    const releases: Array<() => void> = [];
+    const prompts: unknown[] = [];
+    const { session } = await createController(new InMemoryStore(), createGatedAgent(prompts, releases));
+    await session.thread.create();
+
+    const first = session.sendSignal({ content: 'start the run' });
+    await first.accepted;
+    await waitFor(() => session.getCurrentRunId() !== null && releases.length === 1);
+    const steered = session.steer({ content: 'do this instead' });
+    releases.shift()?.();
+    await steered;
+    await waitFor(() => prompts.length === 2);
+
+    expect(JSON.stringify(prompts)).toContain('<user delivery=\\"while-active\\">do this instead</user>');
+  });
+
   it('emits echoed file user-message signals as user message events', async () => {
     const storage = new InMemoryStore();
     const { session } = await createController(storage);
@@ -1282,21 +1358,6 @@ describe('AgentController signal messages', () => {
         }),
       }),
     });
-  });
-
-  it('tags a steer as a while-active user message so it survives a reload as an interjection', async () => {
-    const prompts: unknown[] = [];
-    const agent = new Agent({
-      id: 'test-agent',
-      name: 'test-agent',
-      instructions: 'You are a test agent.',
-      model: createTextStreamModel('Hello', prompt => prompts.push(prompt)),
-    });
-    const { session } = await createController(new InMemoryStore(), agent);
-
-    await session.steer({ content: 'do this instead' });
-
-    expect(JSON.stringify(prompts)).toContain('<user delivery=\\"while-active\\">do this instead</user>');
   });
 
   it('emits state signal data parts as renderable message updates', async () => {

@@ -3337,10 +3337,18 @@ export class Session<TState = unknown> {
     // the post-interrupt window where a fresh signal must wait for the dying
     // run to fully idle before starting a new run.
     const submittedAbortRequested = this.run.isAbortRequested();
-    const signal = createSignal(
+    const signalInput: AgentSignalInput =
       'content' in input
         ? { type: 'user', tagName: 'user', contents: input.content, providerOptions: input.providerOptions }
-        : input,
+        : input;
+    // A steer's abort leaves the delivery route reading idle, so the interjection is
+    // stamped from this snapshot instead. Caller-supplied delivery attributes win.
+    const interjected =
+      submittedIsRunning || (submittedAbortRequested && Boolean(submittedRunId ?? submittedActiveRunId));
+    const signal = createSignal(
+      signalInput.type === 'user' && interjected
+        ? { ...signalInput, attributes: { delivery: 'while-active', ...signalInput.attributes } }
+        : signalInput,
     );
     const accepted = Promise.resolve().then(async () => {
       if (!this.thread.getId()) {
@@ -3477,14 +3485,12 @@ export class Session<TState = unknown> {
   async sendMessage({
     content,
     files,
-    attributes,
     tracingContext,
     tracingOptions,
     requestContext: requestContextInput,
   }: {
     content: string;
     files?: Array<{ data: string; mediaType: string; filename?: string }>;
-    attributes?: AgentSignalAttributes;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     requestContext?: RequestContext;
@@ -3503,10 +3509,12 @@ export class Session<TState = unknown> {
             resolveAgentEnd?.();
           }
         });
-    const signal = this.sendSignal(
-      { type: 'user', tagName: 'user', contents: messageInput, attributes },
-      { tracingContext, tracingOptions, requestContext: requestContextInput },
-    );
+    const signal = this.sendSignal({
+      content: messageInput,
+      tracingContext,
+      tracingOptions,
+      requestContext: requestContextInput,
+    });
     if (wasActive) {
       await signal.accepted;
     } else {
@@ -3530,9 +3538,7 @@ export class Session<TState = unknown> {
     this.abort();
     this.followUps.clear();
     this.emit({ type: 'follow_up_queued', count: 0 });
-    // Tagged here because the interjection outlives the run it interrupts: the
-    // delivery branches see an idle session once the abort lands.
-    await this.sendMessage({ content, requestContext, attributes: { delivery: 'while-active' } });
+    await this.sendMessage({ content, requestContext });
   }
 
   /**
