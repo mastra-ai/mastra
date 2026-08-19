@@ -163,14 +163,18 @@ describe('buildBasePrompt', () => {
     expect(prompt).toContain('Co-Authored-By: Acme Bot <bot@acme.dev>');
   });
 
-  it('names the tag the runtime wraps a while-active message in', () => {
+  it('names the delivery wrapper the runtime emits, and no other', () => {
     const wrapped = signalToXmlMarkup({
       type: 'user',
       attributes: { delivery: 'while-active' },
       contents: 'fix the bug',
     });
     const openingTag = wrapped.slice(0, wrapped.indexOf('>') + 1);
+    const emittedTagName = openingTag.slice(1, openingTag.indexOf(' '));
+    const prompt = buildBasePrompt(promptContext());
+    const namedTagNames = new Set([...prompt.matchAll(/<([a-zA-Z][\w-]*) delivery="/g)].map(([, name]) => name));
 
-    expect(buildBasePrompt(promptContext())).toContain(openingTag);
+    expect(prompt).toContain(openingTag);
+    expect(namedTagNames).toEqual(new Set([emittedTagName]));
   });
 });
