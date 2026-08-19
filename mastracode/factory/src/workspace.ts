@@ -520,7 +520,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       return reconcileRegisteredWorkspace(existing);
     }
 
+    const retiredError = () =>
+      new Error(`Factory session ${session.sessionId} was retired during workspace materialization`);
     const materializeSandbox = async (): Promise<FleetSandbox> => {
+      // A session already retired by the time a held lazy handle re-enters
+      // materialization must not provision anything — bail before touching
+      // the pool or the fleet budget.
+      if (workspaceRegistry.generation(session.sessionId) !== workspaceGeneration) {
+        throw retiredError();
+      }
       // A terminal work item or a deleted session may have returned a
       // still-warm VM — with this repository already cloned — to the reuse
       // pool. Adopt it before provisioning a fresh sandbox. Pooled VMs carry
@@ -657,10 +665,21 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // The session can be retired while this deferred phase is in flight.
       // Registration happened back at construction time (the workspace exists
       // before it materializes), so the retirement callback has already torn
-      // the workspace down — surface that to the caller instead of handing back
-      // a sandbox belonging to a dead session.
+      // the workspace down — tear the just-built sandbox back down (freeing
+      // its binding and, on remote providers, its fleet budget slot) and
+      // surface the retirement to the caller instead of handing back a
+      // sandbox belonging to a dead session.
       if (workspaceRegistry.generation(session.sessionId) !== workspaceGeneration) {
-        throw new Error(`Factory session ${session.sessionId} was retired during workspace materialization`);
+        try {
+          await fleet.teardownSandbox(binding, sandbox);
+        } catch (teardownError) {
+          console.warn('[Mastra Factory] Sandbox teardown after mid-materialization retirement failed', {
+            orgId: session.orgId,
+            sessionId: session.sessionId,
+            error: teardownError instanceof Error ? teardownError.message.slice(-2000) : String(teardownError),
+          });
+        }
+        throw retiredError();
       }
       githubTokenInjectors.set(workspaceId, tokenRegistration);
       registerGithubTokenContext(tokenRegistration);

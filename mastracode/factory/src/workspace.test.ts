@@ -597,6 +597,7 @@ describe('GitHub session workspace preparation', () => {
     });
     return {
       root,
+      fleet,
       resolver,
       workspace: eager(resolver),
     };
@@ -919,6 +920,18 @@ describe('GitHub session workspace preparation', () => {
     await expect((resolved as any).sandbox.executeCommand('echo', ['hi'])).rejects.toThrow(
       'retired during workspace materialization',
     );
+    // The single provision/materialization happened before retirement (the
+    // eager helper materializes at resolution). Re-entering materialization
+    // after retirement bails at the generation check before provisioning, so
+    // no fleet slot is consumed and the checkout is never recreated — even
+    // across repeated operations on the held handle.
+    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
+    expect(mocks.materializeRepo).toHaveBeenCalledTimes(1);
+    await expect((resolved as any).sandbox.executeCommand('echo', ['hi'])).rejects.toThrow(
+      'retired during workspace materialization',
+    );
+    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
+    expect(mocks.materializeRepo).toHaveBeenCalledTimes(1);
   });
 
   it('revives and replays when the exec transport never opened (command provably never started)', async () => {
@@ -1826,7 +1839,8 @@ describe('GitHub session workspace preparation', () => {
 
     it('does not register a workspace that finishes materializing after session retirement', async () => {
       const registry = new FactoryWorkspaceRegistry();
-      const { workspace } = await createLocalFactory('mastracode-web-local-retire-race-', registry);
+      const { workspace, fleet } = await createLocalFactory('mastracode-web-local-retire-race-', registry);
+      const teardownSandbox = vi.spyOn(fleet, 'teardownSandbox').mockResolvedValue(undefined);
       addProject();
       addSession({ id: 'session-a' });
       const mastra = createMastraStub();
@@ -1846,6 +1860,14 @@ describe('GitHub session workspace preparation', () => {
       await expect(opening).rejects.toThrow('retired during workspace materialization');
       expect(mastra.removeWorkspace).toHaveBeenCalledWith('mfw-project-1-session-a-web-factory');
       expect(mastra.workspaces.size).toBe(0);
+      // Retirement mid-materialization must not leave a live sandbox binding
+      // behind: the just-built sandbox is torn down (releasing the binding
+      // and any fleet budget slot) before the error is surfaced, and no
+      // second provision is attempted.
+      expect(teardownSandbox).toHaveBeenCalledTimes(1);
+      expect(teardownSandbox).toHaveBeenCalledWith(expect.anything(), await mocks.ensureSandbox.mock.results[0]!.value);
+      expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
+      expect(mocks.materializeRepo).toHaveBeenCalledTimes(1);
     });
   });
 });
