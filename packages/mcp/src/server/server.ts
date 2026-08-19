@@ -984,7 +984,7 @@ export class MCPServer extends MCPServerBase {
           const toolSpec: any = {
             name: tool.id || 'unknown',
             description: tool.description,
-            inputSchema: this.convertSchema(tool.parameters),
+            inputSchema: this.convertInputSchema(tool.parameters),
           };
           if (tool.outputSchema) {
             toolSpec.outputSchema = this.convertSchema(tool.outputSchema);
@@ -2656,6 +2656,10 @@ export class MCPServer extends MCPServerBase {
     return jsonSchema;
   }
 
+  private convertInputSchema(schema: any) {
+    return this.convertSchema(schema) ?? { type: 'object', properties: {} };
+  }
+
   /**
    * Gets a list of all tools provided by this MCP server with their schemas.
    *
@@ -2701,7 +2705,7 @@ export class MCPServer extends MCPServerBase {
           id: toolId,
           name: tool.id || toolId,
           description: tool.description,
-          inputSchema: this.convertSchema(tool.parameters),
+          inputSchema: this.convertInputSchema(tool.parameters),
           outputSchema: this.convertSchema(tool.outputSchema),
           toolType: tool.mcp?.toolType,
           _meta: withMastraToolStrictMeta(tool.mcp?._meta, tool.strict),
@@ -2719,7 +2723,7 @@ export class MCPServer extends MCPServerBase {
         id: toolId,
         name: tool.id || toolId,
         description: tool.description,
-        inputSchema: this.convertSchema(tool.parameters),
+        inputSchema: this.convertInputSchema(tool.parameters),
         outputSchema: this.convertSchema(tool.outputSchema),
         toolType: tool.mcp?.toolType,
         _meta: withMastraToolStrictMeta(tool.mcp?._meta, tool.strict),
@@ -2764,7 +2768,7 @@ export class MCPServer extends MCPServerBase {
     return {
       name: tool.id || toolId,
       description: tool.description,
-      inputSchema: this.convertSchema(tool.parameters),
+      inputSchema: this.convertInputSchema(tool.parameters),
       outputSchema: this.convertSchema(tool.outputSchema),
       toolType: tool.mcp?.toolType,
       _meta: withMastraToolStrictMeta(tool.mcp?._meta, tool.strict),

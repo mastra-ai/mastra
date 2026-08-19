@@ -13,6 +13,7 @@ import type {
   WorkItemRow,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
+import { FACTORY_RULE_MATERIALIZATION_KEY } from '../storage/domains/work-items/base.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
 import { FACTORY_RULE_STAGES } from './types.js';
@@ -665,11 +666,11 @@ export class FactoryDecisionDispatcher {
         title: decision.title,
         stages: ['intake'],
         sessions: {},
-        metadata: { ...decision.metadata, factoryRuleMaterializationKey: record.idempotencyKey },
+        metadata: { ...decision.metadata, [FACTORY_RULE_MATERIALIZATION_KEY]: record.idempotencyKey },
       },
       reuseMode: 'preserve',
     });
-    const materializedByDecision = result.item.metadata?.factoryRuleMaterializationKey === record.idempotencyKey;
+    const materializedByDecision = result.item.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey;
     if (!materializedByDecision && (decision.stage === 'intake' || !result.item.stages.includes('intake'))) return;
 
     const board = decision.board;

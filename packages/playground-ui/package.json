@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "50.0.0-alpha.14",
+  "version": "50.0.1-alpha.0",
   "description": "Mastra Playground components",
   "sideEffects": [
     "**/*.css"
@@ -108,6 +108,7 @@
     "build": "vite build",
     "dev": "vite build && vite build --watch --mode development",
     "test": "vitest",
+    "test:mutate": "stryker run --mutate",
     "typecheck": "tsc",
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix .",
@@ -176,6 +177,8 @@
     "@storybook/addon-docs": "^10.4.1",
     "@storybook/addon-mcp": "^0.6.0",
     "@storybook/react-vite": "^10.4.1",
+    "@stryker-mutator/core": "catalog:",
+    "@stryker-mutator/vitest-runner": "catalog:",
     "@tailwindcss/postcss": "^4.3.3",
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "4.3.3",

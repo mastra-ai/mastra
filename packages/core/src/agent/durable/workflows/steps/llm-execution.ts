@@ -38,7 +38,6 @@ import type { CoreTool } from '../../../../tools/types';
 import { createMastraProxy, makeCoreTool } from '../../../../utils';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
-import { MessageList } from '../../../message-list';
 import { TripWire } from '../../../trip-wire';
 import { isSupportedLanguageModel } from '../../../utils';
 import { ensureRemoteAbortListener } from '../../abort-transport';
@@ -308,6 +307,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         typedInput.options?.maxProcessorRetries ??
         (globalRunRegistry.get(runId)?.errorProcessors?.length ? 10 : undefined);
 
+      // Hoisted: a retry must keep the id an error processor rotated to.
+      let currentMessageId = messageId;
+      const rotateResponseMessageId = () => {
+        currentMessageId = messageList.rotateResponseMessageId(currentMessageId);
+        return currentMessageId;
+      };
+
       for (let modelIndex = 0; modelIndex < modelList.length; modelIndex++) {
         const modelEntry = modelList[modelIndex]!;
         const maxRetries = modelEntry.maxRetries || 0;
@@ -330,8 +336,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 `Unsupported model version: ${(model as any).specificationVersion}. Model must implement doStream.${hint}`,
               );
             }
-
-            let currentMessageId = messageId;
 
             // 5. Prepare tools - cast through unknown as CoreTool and ToolSet are structurally compatible at runtime
             let currentModel = model;
@@ -414,10 +418,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   threadId: typedInput.state?.threadId,
                   model: currentModel,
                   messageId: currentMessageId,
-                  rotateResponseMessageId: () => {
-                    currentMessageId = crypto.randomUUID();
-                    return currentMessageId;
-                  },
+                  rotateResponseMessageId,
                   tools: currentTools,
                   toolChoice: currentToolChoice,
                   providerOptions: currentProviderOptions,
@@ -574,7 +575,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               if (isFirstModelRequest && registryEntry?.drainPendingSignals) {
                 const preRunSignals = registryEntry.drainPendingSignals('pre-run');
                 if (preRunSignals.length > 0) {
-                  currentMessageId = mastra?.generateId?.() ?? crypto.randomUUID();
+                  rotateResponseMessageId();
                 }
                 for (const preRunSignal of preRunSignals) {
                   const signalForTranscript = messageList.addSignal(preRunSignal);
@@ -1400,12 +1401,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     agentName: typedInput.agentName ?? typedInput.agentId,
                     processorStates: registryEntryInner.processorStates,
                   });
-                  const currentMessageList = new MessageList();
-                  currentMessageList.deserialize(typedInput.messageListState);
                   const { retry } = await runner.runProcessAPIError({
                     error: lastError,
-                    messages: currentMessageList.get.all.db(),
-                    messageList: currentMessageList,
+                    messages: messageList.get.all.db(),
+                    messageList,
+                    messageId: currentMessageId,
+                    rotateResponseMessageId,
                     stepNumber: (inputData as any).stepIndex ?? 0,
                     steps: (inputData as any).accumulatedSteps ?? [],
                     retryCount: processorRetryCount,
@@ -1809,12 +1810,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   agentName: typedInput.agentName ?? typedInput.agentId,
                   processorStates: registryEntry.processorStates,
                 });
-                const currentMessageList = new MessageList();
-                currentMessageList.deserialize(typedInput.messageListState);
                 const { retry } = await runner.runProcessAPIError({
                   error: lastError,
-                  messages: currentMessageList.get.all.db(),
-                  messageList: currentMessageList,
+                  messages: messageList.get.all.db(),
+                  messageList,
+                  messageId: currentMessageId,
+                  rotateResponseMessageId,
                   stepNumber: (inputData as any).stepIndex ?? 0,
                   steps: (inputData as any).accumulatedSteps ?? [],
                   retryCount: processorRetryCount,

@@ -848,7 +848,19 @@ export async function handleTypedOperation(
         return { ok: false, error: `Snapshot for runId ${request.runId} is missing or has invalid context` };
       }
 
-      const mergedSnapshot = { ...snapshot, ...JSON.parse(request.opts) };
+      // `expectedStatus` is a compare-and-set guard, not state. Convex mutations are
+      // serializable, so checking it here keeps the guard and the write atomic. It is stripped
+      // from the merge so it can never be persisted into the snapshot. An empty result signals
+      // "guard did not match" to the caller.
+      const { expectedStatus, ...state } = JSON.parse(request.opts);
+      if (expectedStatus !== undefined) {
+        const expected = Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
+        if (!expected.includes(snapshot.status)) {
+          return { ok: true, result: '' };
+        }
+      }
+
+      const mergedSnapshot = { ...snapshot, ...state };
       await ctx.db.patch(existing._id, {
         snapshot: JSON.stringify(mergedSnapshot),
         updatedAt: new Date().toISOString(),

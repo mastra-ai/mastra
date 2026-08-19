@@ -1,7 +1,12 @@
 import type { Agent } from '../agent';
 import type { MastraDBMessage, MastraProviderMetadata } from '../agent/message-list/state/types';
-import { createSignal } from '../agent/signals';
-import type { AgentSignalAttributes, AgentSignalContents, AgentSignalInput } from '../agent/signals';
+import { createSignal, resolveDeliveryAttributes } from '../agent/signals';
+import type {
+  AgentSignalAttributes,
+  AgentSignalContents,
+  AgentSignalInput,
+  CreatedAgentSignal,
+} from '../agent/signals';
 import type {
   AgentThreadSubscription,
   MastraBrowser,
@@ -1879,6 +1884,12 @@ class SessionPermissions {
   }
 }
 
+/** Stamp at submit time: a steer aborts its own run, so the route resolved downstream reads idle. */
+function asInterjection(signal: CreatedAgentSignal): CreatedAgentSignal {
+  if (signal.type !== 'user' || signal.attributes?.delivery !== undefined) return signal;
+  return resolveDeliveryAttributes(signal, { delivery: 'while-active' });
+}
+
 /** The session-state / thread-settings key holding a subagent model id. */
 function subagentModelKey(agentType?: string): string {
   return agentType ? `subagentModelId_${agentType}` : 'subagentModelId';
@@ -3337,11 +3348,14 @@ export class Session<TState = unknown> {
     // the post-interrupt window where a fresh signal must wait for the dying
     // run to fully idle before starting a new run.
     const submittedAbortRequested = this.run.isAbortRequested();
-    const signal = createSignal(
+    const submittedWhileWorking =
+      submittedIsRunning || (submittedAbortRequested && Boolean(submittedRunId || submittedActiveRunId));
+    const submitted = createSignal(
       'content' in input
         ? { type: 'user', tagName: 'user', contents: input.content, providerOptions: input.providerOptions }
         : input,
     );
+    const signal = submittedWhileWorking ? asInterjection(submitted) : submitted;
     const accepted = Promise.resolve().then(async () => {
       if (!this.thread.getId()) {
         const thread = await this.thread.create();

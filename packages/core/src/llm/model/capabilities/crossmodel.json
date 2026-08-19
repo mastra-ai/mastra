@@ -76,7 +76,8 @@
     "z-ai/glm-5",
     "z-ai/glm-5-turbo",
     "z-ai/glm-5.1",
-    "z-ai/glm-5.2"
+    "z-ai/glm-5.2",
+    "z-ai/glm-5.3"
   ],
   "structuredOutput": [
     "anthropic/claude-fable-5",
@@ -129,6 +130,7 @@
     "z-ai/glm-5",
     "z-ai/glm-5-turbo",
     "z-ai/glm-5.1",
-    "z-ai/glm-5.2"
+    "z-ai/glm-5.2",
+    "z-ai/glm-5.3"
   ]
 }
