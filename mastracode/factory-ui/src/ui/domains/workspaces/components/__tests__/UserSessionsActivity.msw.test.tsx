@@ -146,6 +146,7 @@ describe('User sessions sidebar activity', () => {
     await client.invalidateQueries({
       queryKey: queryKeys.agentControllerSessionActivity(AGENT_CONTROLLER_ID, 'sess-4'),
     });
+    await waitForMutationsIdle(client);
 
     // Run end must refetch the sessions list: the dot lands on solid attention,
     // not back on (or stuck at) initializing.
