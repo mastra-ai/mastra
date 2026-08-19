@@ -1,5 +1,12 @@
 # @internal/playground
 
+## 1.25.1-alpha.14
+
+### Patch Changes
+
+- Updated dependencies [[`22b972d`](https://github.com/mastra-ai/mastra/commit/22b972da2d1e3ee5de6d5050cce93f62f9592ac4)]:
+  - @mastra/ai-sdk@1.9.0-alpha.0
+
 ## 1.25.1-alpha.13
 
 ### Patch Changes

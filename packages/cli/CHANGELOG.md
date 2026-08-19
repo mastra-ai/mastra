@@ -1,5 +1,11 @@
 # mastra
 
+## 1.25.1-alpha.14
+
+### Patch Changes
+
+- Improved Factory model-pack controls so settings can choose or clear the default for new chats, while each chat can select its own pack from the composer status line. ([#21762](https://github.com/mastra-ai/mastra/pull/21762))
+
 ## 1.25.1-alpha.13
 
 ### Patch Changes

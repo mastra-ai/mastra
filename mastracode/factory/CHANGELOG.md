@@ -1,5 +1,11 @@
 # @mastra/factory
 
+## 0.8.0-alpha.15
+
+### Patch Changes
+
+- Fixed model packs so each user can set a default for new interactive Factory chats while preserving thread-specific pack and model choices, refreshing edited packs, and leaving Factory work runs unaffected. ([#21762](https://github.com/mastra-ai/mastra/pull/21762))
+
 ## 0.8.0-alpha.14
 
 ### Minor Changes
