@@ -136,9 +136,14 @@ export function useOverlayControllerHandlers() {
   );
 }
 
-/** Renders wherever a command navigates the app, so tests can assert the destination. */
+/** Renders where a command navigated and the location it carries back, so tests can assert both. */
 function NavigatedPath() {
-  return <span data-testid="navigated-path">{useLocation().pathname}</span>;
+  const { pathname, state } = useLocation();
+  return (
+    <span data-testid="navigated-path" data-return-to={JSON.stringify(state)}>
+      {pathname}
+    </span>
+  );
 }
 
 export function OverlayTestProviders({ children }: { children: ReactNode }) {

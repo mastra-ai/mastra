@@ -93,8 +93,28 @@ function extractRequestUrl(error: unknown): string | undefined {
   return undefined;
 }
 
+/** A flattened error crossing the wire: the server sends `{ name, message }`, not an `Error`. */
+function isSerializedError(value: unknown): value is { name: string; message: string } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'name' in value &&
+    typeof value.name === 'string' &&
+    'message' in value &&
+    typeof value.message === 'string'
+  );
+}
+
+function toError(error: unknown): Error {
+  if (error instanceof Error) return error;
+  if (!isSerializedError(error)) return new Error(String(error));
+  const rebuilt = new Error(error.message);
+  rebuilt.name = error.name;
+  return rebuilt;
+}
+
 export function parseError(error: unknown): ParsedError {
-  const err = error instanceof Error ? error : new Error(String(error));
+  const err = toError(error);
   const message = err.message.toLowerCase();
   const errorObj = error as Record<string, unknown>;
   const detail = summarizeErrorDetail(error);

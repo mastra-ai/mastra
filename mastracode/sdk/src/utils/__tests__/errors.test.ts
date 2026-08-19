@@ -11,6 +11,14 @@ describe('parseError', () => {
     expect(parsed.message).toBe('Not logged in to Anthropic.');
   });
 
+  it('classifies a credential failure that reached the host as a flattened wire payload', () => {
+    const parsed = parseError({ name: 'ProviderAuthRequiredError', message: 'Not logged in to Anthropic.' });
+
+    expect(parsed.type).toBe('auth');
+    expect(parsed.message).toBe('Not logged in to Anthropic.');
+    expect(parsed.retryable).toBe(false);
+  });
+
   it('preserves useful detail for network-style errors', () => {
     const error = new Error('fetch failed: socket hang up');
 

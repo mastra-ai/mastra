@@ -21,6 +21,8 @@ describe('the /login command', () => {
     await waitFor(() => expect(input).toBeEnabled());
     await user.type(input, '/login{Enter}');
 
-    expect(await screen.findByTestId('navigated-path')).toHaveTextContent(/\/settings\/models$/);
+    const navigated = await screen.findByTestId('navigated-path');
+    expect(navigated).toHaveTextContent(/\/settings\/models$/);
+    expect(navigated).toHaveAttribute('data-return-to', expect.stringContaining('/threads/thread-test'));
   });
 });
