@@ -31,10 +31,18 @@ LSP starts a long-running language-server process and exchanges JSON-RPC message
 - A language-server binary and its runtime installed where the sandbox process runs.
 - An absolute project root and project files available through matching paths to both the Mastra application and the sandbox process.
 
-This local TypeScript setup satisfies those requirements. Install the protocol packages, TypeScript, and its language server:
+Mastra has built-in server definitions for TypeScript and JavaScript, Python, Go, and Rust. The matching language-server binary must still be installed. You can [register another server](#custom-language-servers) for other file types.
+
+Install the shared protocol packages:
 
 ```bash npm2yarn
-npm install vscode-jsonrpc vscode-languageserver-protocol typescript typescript-language-server
+npm install vscode-jsonrpc vscode-languageserver-protocol
+```
+
+Then install a language server for your project. For example, install TypeScript and its language server:
+
+```bash npm2yarn
+npm install typescript typescript-language-server
 ```
 
 Create a static `LocalSandbox` and point the filesystem, sandbox, and LSP root at the same directory:
@@ -59,8 +67,6 @@ export const workspace = new Workspace({
 ```
 
 The filesystem gives the agent file tools for the project. The sandbox starts the language server in the same directory when an LSP query first needs it. If any required protocol package, process manager, or server binary is unavailable, Mastra disables LSP or returns that no language server is available.
-
-Mastra has built-in server definitions for TypeScript and JavaScript, Python, Go, and Rust. The matching language-server binary must still be installed. You can [register another server](#custom-language-servers) for other file types.
 
 ## Inspect code with the agent tool
 
