@@ -3,6 +3,8 @@
  * Parses API errors and provides user-friendly messages.
  */
 
+import { PROVIDER_AUTH_REQUIRED_ERROR } from '../auth/provider-auth-error.js';
+
 export interface ParsedError {
   /** User-friendly error message */
   message: string;
@@ -98,6 +100,11 @@ export function parseError(error: unknown): ParsedError {
   const detail = summarizeErrorDetail(error);
   const requestUrl = extractRequestUrl(error);
 
+  // Matched by name, not instance: the error may have crossed a serialization boundary.
+  if (err.name === PROVIDER_AUTH_REQUIRED_ERROR) {
+    return { message: err.message, detail, requestUrl, type: 'auth', retryable: false, originalError: err };
+  }
+
   // Check for rate limiting
   if (
     message.includes('rate limit') ||
@@ -127,7 +134,7 @@ export function parseError(error: unknown): ParsedError {
     errorObj.status === 401
   ) {
     return {
-      message: 'Authentication failed. Please check your API key or login with /login.',
+      message: 'Authentication failed. Check the credential configured for this provider.',
       detail,
       requestUrl,
       type: 'auth',

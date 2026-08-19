@@ -1,7 +1,7 @@
 import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 
 import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -136,6 +136,11 @@ export function useOverlayControllerHandlers() {
   );
 }
 
+/** Renders wherever a command navigates the app, so tests can assert the destination. */
+function NavigatedPath() {
+  return <span data-testid="navigated-path">{useLocation().pathname}</span>;
+}
+
 export function OverlayTestProviders({ children }: { children: ReactNode }) {
   return (
     <MemoryRouter
@@ -152,6 +157,7 @@ export function OverlayTestProviders({ children }: { children: ReactNode }) {
             </MainSidebarProvider>
           }
         />
+        <Route path="*" element={<NavigatedPath />} />
       </Routes>
     </MemoryRouter>
   );

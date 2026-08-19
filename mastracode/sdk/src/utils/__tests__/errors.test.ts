@@ -1,8 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
+import { ProviderAuthRequiredError } from '../../auth/provider-auth-error.js';
 import { parseError } from '../errors.js';
 
 describe('parseError', () => {
+  it('classifies a provider credential failure as auth without rewriting its message', () => {
+    const parsed = parseError(new ProviderAuthRequiredError('Not logged in to Anthropic.'));
+
+    expect(parsed.type).toBe('auth');
+    expect(parsed.message).toBe('Not logged in to Anthropic.');
+  });
+
   it('preserves useful detail for network-style errors', () => {
     const error = new Error('fetch failed: socket hang up');
 
