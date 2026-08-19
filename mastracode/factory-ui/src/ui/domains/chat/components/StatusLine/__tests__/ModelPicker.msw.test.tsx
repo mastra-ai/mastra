@@ -291,6 +291,28 @@ describe('ModelPicker', () => {
       expect(setModelPack).toHaveBeenCalledWith('mine');
     });
 
+    it('keeps packs selectable when no credentialed models are listed', async () => {
+      const user = userEvent.setup();
+      const setModelPack = vi.fn<(packId: string) => Promise<void>>().mockResolvedValue();
+      stubModelCatalog([]);
+      renderPicker({
+        models: {
+          activeModelId: 'anthropic/claude-sonnet-4-5',
+          defaultModelPackId: 'balanced',
+          modelPacks: packs,
+          setModelPack,
+        },
+      });
+
+      await user.click(await screen.findByLabelText(/Session model/));
+
+      expect(await screen.findByRole('option', { name: /Model pack Balanced/ })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'Manage model packs' })).toBeInTheDocument();
+
+      await user.click(screen.getByRole('option', { name: /Model pack Mine/ }));
+      expect(setModelPack).toHaveBeenCalledWith('mine');
+    });
+
     it('offers a reset to the personal default when another pack is applied', async () => {
       const user = userEvent.setup();
       const setModelPack = vi.fn<(packId: string) => Promise<void>>().mockResolvedValue();

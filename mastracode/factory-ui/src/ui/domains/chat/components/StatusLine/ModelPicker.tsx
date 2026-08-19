@@ -135,7 +135,9 @@ export function ModelPicker() {
   const canReset =
     showPacks && Boolean(defaultModelPackId) && (selectedPackId !== defaultModelPackId || packModelDeviates);
 
-  if (!switchable || !modelsQuery.data?.length) {
+  // Packs remain selectable even when no credentialed models are listed, so
+  // only fall back to the plain label when there is nothing to pick at all.
+  if (!switchable || (!showPacks && !modelsQuery.data?.length)) {
     return (
       <span
         className={notConfigured ? 'text-accent2' : 'text-neutral3'}
