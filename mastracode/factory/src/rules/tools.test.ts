@@ -389,6 +389,98 @@ describe('factory_transition_work_item', () => {
     ).rejects.toThrow(/binding is unavailable, revoked, or no longer matches/);
   });
 
+  it('keeps working when the next role takes its turn in the same session', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepareBoundItem(storage);
+    const transition = vi.fn(async () => ({
+      status: 'accepted' as const,
+      transitionId: 'transition-2',
+      itemId: prepared.item.id,
+      revision: 2,
+      stage: 'execute' as const,
+      decisions: [],
+    }));
+    const context = requestContext();
+    const tools = await createFactoryTransitionTools({
+      requestContext: context,
+      storage,
+      transitionService: { transition },
+    });
+
+    // Handing planning its turn in the live session rotates the binding row.
+    const rotated = await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        id: prepared.item.id,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Factory item',
+          stages: ['planning'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'plan',
+      session: { sessionId: 'resource-1', branch: 'factory/item', threadId: 'thread-1' },
+      resourceId: 'resource-1',
+      kickoffKey: 'kickoff-2',
+      kickoffMessage: null,
+    });
+    expect(rotated.binding.id).not.toBe(prepared.binding.id);
+
+    await expect(
+      execute(tools.factory_transition_work_item as ExecutableTool, context, {
+        stage: 'execute',
+        expectedRevision: 1,
+        rationale: 'The plan is ready to build.',
+      }),
+    ).resolves.toMatchObject({ status: 'accepted' });
+    expect(transition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workItemId: prepared.item.id,
+        actor: expect.objectContaining({ bindingId: rotated.binding.id }),
+      }),
+    );
+  });
+
+  it('rejects a session that has been re-pointed at a different work item', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepareBoundItem(storage);
+    const service = new FactoryTransitionService({ storage, rules: defaultFactoryRules({ version: 'rules-v1' }) });
+    const context = requestContext();
+    const tools = await createFactoryTransitionTools({ requestContext: context, storage, transitionService: service });
+
+    await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:2' },
+          title: 'A different item',
+          stages: ['intake'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'work',
+      session: { sessionId: 'resource-1', branch: 'factory/other', threadId: 'thread-1' },
+      resourceId: 'resource-1',
+      kickoffKey: 'kickoff-3',
+      kickoffMessage: null,
+    });
+
+    await expect(
+      execute(tools.factory_transition_work_item as ExecutableTool, context, {
+        stage: 'planning',
+        expectedRevision: 1,
+        rationale: 'Continue.',
+      }),
+    ).rejects.toThrow(/binding is unavailable, revoked, or no longer matches/);
+  });
+
   it('returns canonical stale and rule rejection results from transition authority', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepareBoundItem(storage);
