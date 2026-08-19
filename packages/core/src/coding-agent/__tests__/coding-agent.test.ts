@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { Agent } from '../../agent/agent';
 import { DEFAULT_GOAL_JUDGE_PROMPT } from '../../agent/goal/objective';
+import { signalToXmlMarkup } from '../../agent/signals';
 import { LocalFilesystem, LocalSandbox, Workspace } from '../../workspace';
 import type { PromptContext } from '../index';
-import { signalToXmlMarkup } from '../../agent/signals';
 import { buildBasePrompt, createCodingAgent } from '../index';
 
 const MODEL = 'openai/gpt-4o-mini';
