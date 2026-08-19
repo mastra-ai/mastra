@@ -73,7 +73,7 @@ export class PluginSignalLane {
    * Providers of plugins that went inactive, failed to load or were uninstalled
    * are absent from the contributions and get stopped here.
    */
-  sync(contributions: PluginContribution<SignalProvider<string>>[]): void {
+  async sync(contributions: PluginContribution<SignalProvider<string>>[]): Promise<void> {
     const seen = new Set<string>();
 
     for (const { pluginId, versionStamp, value: provider } of contributions) {
@@ -82,7 +82,7 @@ export class PluginSignalLane {
 
       const live = this.#live.get(key);
       if (live && live.versionStamp === versionStamp) continue;
-      if (live) this.#retire(key, live);
+      if (live) await this.#retire(key, live);
 
       if (this.#isProviderIdTaken(provider.id)) {
         this.#onError(
@@ -96,8 +96,8 @@ export class PluginSignalLane {
       this.#live.set(key, { pluginId, provider, versionStamp, started: false });
     }
 
-    for (const [key, live] of this.#live) {
-      if (!seen.has(key)) this.#retire(key, live);
+    for (const [key, live] of [...this.#live]) {
+      if (!seen.has(key)) await this.#retire(key, live);
     }
 
     this.#startPending();
@@ -123,8 +123,8 @@ export class PluginSignalLane {
    * `PluginManager` across controllers would otherwise leave a controller's
    * providers polling after it is gone.
    */
-  stopAll(): void {
-    for (const [key, live] of this.#live) this.#retire(key, live);
+  async stopAll(): Promise<void> {
+    await Promise.all([...this.#live].map(([key, live]) => this.#retire(key, live)));
     this.#rebuildProcessors();
   }
 
@@ -146,7 +146,7 @@ export class PluginSignalLane {
         // constructor treats it the same way (agent.ts: `void provider.start?.()`).
         void this.#runStart(key, live);
       } catch (error) {
-        this.#failProvider(key, live, error);
+        void this.#failProvider(key, live, error);
       }
     }
   }
@@ -158,13 +158,13 @@ export class PluginSignalLane {
       // armed after this provider was stopped, so it is stopped again. Without
       // this a provider replaced mid-warm-up keeps working against the thread
       // its successor is now watching.
-      if (this.#live.get(key) !== live) this.#stopProvider(live);
+      if (this.#live.get(key) !== live) await this.#stopProvider(live);
     } catch (error) {
       if (this.#live.get(key) !== live) {
-        this.#stopProvider(live);
+        await this.#stopProvider(live);
         return;
       }
-      this.#failProvider(key, live, error);
+      void this.#failProvider(key, live, error);
       this.#rebuildProcessors();
     }
   }
@@ -175,19 +175,19 @@ export class PluginSignalLane {
    * treated as required throws from the `signalProviders` resolver instead,
    * which fails the whole plugin record.
    */
-  #failProvider(key: string, live: LiveProvider, error: unknown): void {
+  async #failProvider(key: string, live: LiveProvider, error: unknown): Promise<void> {
     this.#onError(`Plugin "${live.pluginId}" signal provider "${live.provider.id}" failed to start:`, error);
-    this.#retire(key, live);
+    await this.#retire(key, live);
   }
 
-  #retire(key: string, live: LiveProvider): void {
-    this.#stopProvider(live);
-    this.#live.delete(key);
+  async #retire(key: string, live: LiveProvider): Promise<void> {
+    if (this.#live.get(key) === live) this.#live.delete(key);
+    await this.#stopProvider(live);
   }
 
-  #stopProvider(live: LiveProvider): void {
+  async #stopProvider(live: LiveProvider): Promise<void> {
     try {
-      live.provider.stop();
+      await live.provider.stop();
     } catch (error) {
       this.#onError(`Plugin "${live.pluginId}" signal provider "${live.provider.id}" failed to stop:`, error);
     }

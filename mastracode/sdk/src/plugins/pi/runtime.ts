@@ -190,6 +190,10 @@ export class MastraPiExtensionGeneration implements PiExtensionGeneration {
     if (this.staleMessage) throw new Error(this.staleMessage);
   }
 
+  hasHandlers(event: string): boolean {
+    return (this.registrations.events.get(event)?.length ?? 0) > 0;
+  }
+
   async emit(event: string, payload: unknown, context?: unknown): Promise<unknown[]> {
     this.assertActive();
     const results: unknown[] = [];
@@ -204,7 +208,6 @@ export class MastraPiExtensionGeneration implements PiExtensionGeneration {
           }`,
           `event:${event}`,
         );
-        throw error;
       }
     }
     return results;

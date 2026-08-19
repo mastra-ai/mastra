@@ -3,6 +3,7 @@ import type { ToolExecutionContext } from '@mastra/core/tools';
 
 import { writeToolProgress } from '../../plugin.js';
 import type { MastraCodePluginTools, MastraCodeToolRenderConfig } from '../../plugin.js';
+import { runPiToolCallHooks, runPiToolResultHooks } from './hook-adapter.js';
 import { adaptPiToolRenderers } from './render-adapter.js';
 import { adaptPiTypeBoxSchema, validatePiToolArguments } from './schema-adapter.js';
 import type { PiExtensionGeneration } from './types.js';
@@ -154,19 +155,18 @@ export function adaptPiTools(generation: PiExtensionGeneration, options: AdaptPi
           hasUI: false,
         } as const;
         const event = {
-          type: 'tool_call',
+          type: 'tool_call' as const,
           toolCallId,
           toolName: name,
-          input: structuredClone(input),
+          input: isRecord(input) ? structuredClone(input) : {},
         };
-        const hookResults = await generation.emit('tool_call', event, extensionContext);
-        const blocked = hookResults.find(result => isRecord(result) && result.block === true) as
-          | { block: true; reason?: unknown }
-          | undefined;
-        if (blocked) {
-          throw new Error(typeof blocked.reason === 'string' ? blocked.reason : `Pi tool "${name}" was blocked`);
+        const hookResult = await runPiToolCallHooks(generation, event, extensionContext);
+        if (hookResult.blocked) {
+          throw new Error(hookResult.reason ?? `Pi tool "${name}" was blocked`);
         }
-        const replacement = options.replaceArguments ? await options.replaceArguments(name, event.input) : event.input;
+        const replacement = options.replaceArguments
+          ? await options.replaceArguments(name, hookResult.input)
+          : hookResult.input;
         const args = await validatePiToolArguments(inputSchema, replacement, name, 'replacement arguments');
         let settled = false;
         const progressWrites: Promise<void>[] = [];
@@ -187,7 +187,23 @@ export function adaptPiTools(generation: PiExtensionGeneration, options: AdaptPi
           settled = true;
           await Promise.all(progressWrites);
         }
-        const result = normalizeResult(value, name);
+        let result = normalizeResult(value, name);
+        const hookedResult = await runPiToolResultHooks(
+          generation,
+          {
+            type: 'tool_result',
+            toolCallId,
+            toolName: name,
+            input: isRecord(args) ? args : {},
+            content: result.content,
+            details: result.details,
+            isError: result.isError === true,
+            usage: result.usage,
+          },
+          extensionContext,
+        );
+        const terminate = result.terminate === true || hookResult.terminate;
+        result = normalizeResult({ ...result, ...hookedResult, ...(terminate ? { terminate: true } : {}) }, name);
         if (result.addedToolNames?.length) generation.recordCapability('tool:addedToolNames');
         if (result.terminate) generation.recordCapability('tool:terminate');
         if (result.isError) throw new PiToolExecutionError(name, result);

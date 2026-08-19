@@ -114,6 +114,70 @@ describe('PluginManager Pi generation integration', () => {
     );
   });
 
+  it('reconciles session lifecycle before retiring replaced generations', async () => {
+    const fixture = createFixture();
+    fs.writeFileSync(
+      path.join(fixture.piRoot, 'index.ts'),
+      `export default function (pi) {
+         pi.on('session_shutdown', () => 'shutdown-before-retire');
+       }`,
+    );
+    const first = await fixture.manager.reload();
+    const prior = first.find(plugin => plugin.id === 'fixture.pi')?.piGeneration;
+    expect(prior).toBeDefined();
+    let shutdownResults: unknown[] = [];
+    fixture.manager.onPiGenerationsReconcile(async generations => {
+      if (prior && !generations.includes(prior)) {
+        shutdownResults = await prior.emit('session_shutdown', { type: 'session_shutdown' }, {});
+      }
+    });
+    fs.writeFileSync(
+      path.join(fixture.piRoot, 'index.ts'),
+      `export default function (pi) {
+         pi.on('session_shutdown', () => 'replacement');
+         pi.registerCommand('replacement-command', { handler: async () => {} });
+       }`,
+    );
+
+    await fixture.manager.reload();
+
+    expect(shutdownResults).toEqual(['shutdown-before-retire']);
+    await expect(prior?.emit('session_shutdown', {}, {})).rejects.toThrow('stale');
+  });
+
+  it('rolls back bound candidates when generation reconciliation fails', async () => {
+    const fixture = createFixture();
+    const first = await fixture.manager.reload();
+    const prior = first.find(plugin => plugin.id === 'fixture.pi')?.piGeneration;
+    expect(prior).toBeDefined();
+    let candidate: typeof prior;
+    let adapterGenerations = [prior!];
+    fixture.manager.onPiGenerationsReconcile(async generations => {
+      await Promise.resolve();
+      adapterGenerations = generations;
+    });
+    fixture.manager.onPiGenerationsReconcile(generations => {
+      const nextCandidate = generations.find(generation => generation !== prior);
+      if (nextCandidate) {
+        candidate = nextCandidate;
+        throw new Error('reconcile failed');
+      }
+    });
+    fs.writeFileSync(
+      path.join(fixture.piRoot, 'index.ts'),
+      `export default function (pi) {
+         pi.registerCommand('failed-candidate', { handler: async () => {} });
+       }`,
+    );
+
+    await expect(fixture.manager.reload()).rejects.toThrow('reconcile failed');
+
+    expect(fixture.manager.getPiGenerations()).toEqual([prior]);
+    expect(adapterGenerations).toEqual([prior]);
+    await expect(prior?.emit('session_start', {}, {})).resolves.toEqual([]);
+    await expect(candidate?.emit('session_start', {}, {})).rejects.toThrow('stale');
+  });
+
   it('keeps native plugin tools ahead of conflicting Pi tools and diagnoses the Pi contribution', async () => {
     const fixture = createFixture();
     fs.writeFileSync(

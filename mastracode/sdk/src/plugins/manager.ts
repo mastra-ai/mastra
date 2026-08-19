@@ -50,6 +50,7 @@ export class PluginManager {
   private githubPollInFlight: Promise<boolean> | undefined;
   private reloadInFlight: Promise<LoadedPlugin[]> | undefined;
   private readonly reloadListeners = new Set<(plugins: LoadedPlugin[]) => void | Promise<void>>();
+  private readonly piGenerationListeners = new Set<(generations: PiExtensionGeneration[]) => void | Promise<void>>();
   private readonly githubUpdateListeners = new Set<(pluginNames: string[]) => void | Promise<void>>();
   private runtime: MastraCodePluginRuntime | undefined;
   private piRuntimeActions: ((generation: PiExtensionGeneration) => PiRuntimeActions) | undefined;
@@ -83,6 +84,11 @@ export class PluginManager {
     return () => this.reloadListeners.delete(listener);
   }
 
+  onPiGenerationsReconcile(listener: (generations: PiExtensionGeneration[]) => void | Promise<void>): () => void {
+    this.piGenerationListeners.add(listener);
+    return () => this.piGenerationListeners.delete(listener);
+  }
+
   /** Notified with the display names of GitHub plugins that were updated by the background poll. */
   onGithubPluginsUpdated(listener: (pluginNames: string[]) => void | Promise<void>): () => void {
     this.githubUpdateListeners.add(listener);
@@ -109,8 +115,18 @@ export class PluginManager {
         await Promise.all(candidateGenerations.map(generation => generation.invalidate()));
         throw error;
       }
-      await Promise.all(retiredGenerations.map(generation => generation.invalidate()));
       for (const generation of newGenerations) generation.bind(actionsByGeneration.get(generation));
+      const previousGenerations = this.getPiGenerations();
+      try {
+        await this.notifyPiGenerationListeners(
+          plugins.flatMap(plugin => (plugin.piGeneration ? [plugin.piGeneration] : [])),
+        );
+      } catch (error) {
+        await Promise.all(newGenerations.map(generation => generation.invalidate()));
+        await this.notifyPiGenerationListeners(previousGenerations).catch(() => undefined);
+        throw error;
+      }
+      await Promise.all(retiredGenerations.map(generation => generation.invalidate()));
       this.loadedPlugins = plugins;
       this.loadedRuntimeGeneration = this.runtimeGeneration;
       this.updateLocalEntryWatchers(plugins);
@@ -193,6 +209,13 @@ export class PluginManager {
     return this.collectActive(plugin => plugin.signalProviders ?? []);
   }
 
+  /** Active Pi generations for controller/session event adapters. */
+  getPiGenerations(): PiExtensionGeneration[] {
+    return this.loadedPlugins.flatMap(plugin =>
+      plugin.status === 'active' && plugin.piGeneration?.active ? [plugin.piGeneration] : [],
+    );
+  }
+
   private reconcilePiGenerations(
     candidates: LoadedPlugin[],
     reuseUnchanged: boolean,
@@ -250,6 +273,18 @@ export class PluginManager {
 
   private async notifyReloadListeners(plugins: LoadedPlugin[]): Promise<void> {
     await Promise.all([...this.reloadListeners].map(listener => Promise.resolve(listener(plugins))));
+  }
+
+  private async notifyPiGenerationListeners(generations: PiExtensionGeneration[]): Promise<void> {
+    let firstError: unknown;
+    for (const listener of this.piGenerationListeners) {
+      try {
+        await listener(generations);
+      } catch (error) {
+        firstError ??= error;
+      }
+    }
+    if (firstError !== undefined) throw firstError;
   }
 
   /**

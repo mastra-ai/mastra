@@ -20,6 +20,7 @@ import type {
 import { getPluginRoot } from './paths.js';
 import type { PluginPathOptions } from './paths.js';
 import { loadPiExtensionGeneration } from './pi/loader.js';
+import { createPiProcessorAdapters } from './pi/processor-adapter.js';
 import { adaptPiTools } from './pi/tool-adapter.js';
 import { loadPluginRegistry, mergePluginRegistries } from './registry.js';
 import type { LoadedPlugin, LoadedPluginProcessors, PluginRegistry, ScopedInstalledPluginRecord } from './types.js';
@@ -78,6 +79,7 @@ export async function loadPluginRecord(
       });
       try {
         const { tools, renderConfigs } = adaptPiTools(piGeneration, { cwd: options.projectRoot });
+        const processors = createPiProcessorAdapters(piGeneration, options.projectRoot);
         return {
           ...record,
           name: record.id,
@@ -85,6 +87,7 @@ export async function loadPluginRecord(
           tools,
           renderConfigs,
           toolNames: Object.keys(tools).sort(),
+          processors,
           configValues: config,
           piCompatibility: piGeneration.compatibility,
           piGeneration,

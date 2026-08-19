@@ -118,6 +118,7 @@ export interface PiExtensionGeneration {
   readonly bound: boolean;
   assertActive(): void;
   recordCapability(name: string): void;
+  hasHandlers(event: string): boolean;
   emit(event: string, payload: unknown, context?: unknown): Promise<unknown[]>;
   addDiagnostic(severity: PiCompatibilityDiagnostic['severity'], message: string, capability: string): void;
   createApi(flagValues?: Readonly<Record<string, string | boolean>>): PiExtensionApi;

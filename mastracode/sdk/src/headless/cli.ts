@@ -253,7 +253,7 @@ export async function runMCCli(predrainedInput?: string | null): Promise<never> 
     // before quiescing workers: a provider that keeps polling past this point
     // could dispatch into a controller that is shutting down.
     try {
-      boot.stopPluginSignalProviders();
+      await boot.stopPluginSignalProviders();
     } catch {
       // Best-effort — the process is exiting.
     }

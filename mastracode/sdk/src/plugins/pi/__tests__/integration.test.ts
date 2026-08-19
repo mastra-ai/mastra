@@ -43,6 +43,10 @@ describe('Pi tool adapter integration', () => {
     const loaded = await manager.reload();
     const plugin = loaded.find(candidate => candidate.id === 'fixture.pi-tool');
     expect(plugin).toMatchObject({ status: 'active', toolNames: ['pi_fixture_echo'] });
+    expect(manager.getPluginProcessors()).toMatchObject({
+      input: [{ pluginId: 'fixture.pi-tool', value: { id: expect.stringContaining(':input') } }],
+      output: [{ pluginId: 'fixture.pi-tool', value: { id: expect.stringContaining(':output') } }],
+    });
     const tool = manager.getPluginTools().pi_fixture_echo;
     if (!tool || typeof tool.execute !== 'function') throw new Error('Pi fixture tool was not executable');
     const chunks: unknown[] = [];

@@ -160,7 +160,7 @@ const asyncCleanup = async () => {
   // before quiescing workers: a provider that keeps polling past this point
   // could dispatch into a controller that is shutting down.
   try {
-    stopPluginSignalProviders?.();
+    await stopPluginSignalProviders?.();
   } catch {
     // Best-effort — the process is exiting.
   }

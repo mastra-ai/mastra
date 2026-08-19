@@ -1142,12 +1142,13 @@ describe('createMastraCode', () => {
     }
     const provider = new AcmeProvider();
     const stop = vi.spyOn(provider, 'stop');
-    const unsubscribeReload = vi.fn();
+    const unsubscribePiReload = vi.fn();
+    const unsubscribeSignalReload = vi.fn();
     const pluginManager = {
       reload: vi.fn(async () => [{ id: 'acme.plugin', status: 'active', toolNames: [] }]),
       getPluginTools: vi.fn(() => ({})),
       setRuntime: vi.fn(),
-      onReload: vi.fn(() => unsubscribeReload),
+      onReload: vi.fn().mockReturnValueOnce(unsubscribePiReload).mockReturnValueOnce(unsubscribeSignalReload),
       getPluginSignalProviders: vi.fn(() => [{ pluginId: 'acme.plugin', versionStamp: 'v1', value: provider }]),
       getPluginProcessors: vi.fn(() => ({ input: [], output: [] })),
     };
@@ -1158,10 +1159,11 @@ describe('createMastraCode', () => {
     // A pluginManager can be shared across controllers, so it outlives this one:
     // without teardown its providers keep polling and its reload listener keeps
     // firing for a controller that is gone.
-    built.stopPluginSignalProviders();
+    await built.stopPluginSignalProviders();
 
     expect(stop).toHaveBeenCalledTimes(1);
-    expect(unsubscribeReload).toHaveBeenCalledTimes(1);
+    expect(unsubscribePiReload).toHaveBeenCalledTimes(1);
+    expect(unsubscribeSignalReload).toHaveBeenCalledTimes(1);
     expect(resolveInputProcessors().map(processor => processor.id)).not.toContain('acme-provider-input');
   });
 

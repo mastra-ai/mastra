@@ -86,6 +86,7 @@ import {
 } from './onboarding/settings.js';
 import { getToolCategory } from './permissions.js';
 import { PluginManager } from './plugins/manager.js';
+import { PiEventAdapter } from './plugins/pi/event-adapter.js';
 import { PluginSignalLane } from './plugins/signal-lane.js';
 import type { PluginProcessorEntries } from './plugins/types.js';
 import { PlanRejectionAbortProcessor } from './processors/plan-rejection-abort.js';
@@ -669,6 +670,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   });
   const loadedPlugins = pluginManager ? await pluginManager.reload() : [];
   const pluginTools = pluginManager?.getPluginTools() ?? {};
+  const piEventAdapter = new PiEventAdapter({ cwd: project.rootPath });
+  await piEventAdapter.setGenerations(pluginManager?.getPiGenerations?.() ?? []);
 
   // Scorers (live evaluation with sampling)
   const outcomeScorer = createOutcomeScorer();
@@ -802,6 +805,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       })
     : undefined;
   let unsubscribePluginReload: (() => void) | undefined;
+  let unsubscribePiReload: (() => void) | undefined;
 
   /**
    * Plugin processors are read through a function so that enabling, disabling or
@@ -1153,13 +1157,18 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   // Publish the controller to the plugin runtime accessors now that it exists.
   pluginRuntimeController = controller;
+  if (pluginManager) {
+    unsubscribePiReload = pluginManager.onPiGenerationsReconcile(generations =>
+      piEventAdapter.setGenerations(generations),
+    );
+  }
 
   if (pluginSignalLane && pluginManager) {
     // Register the plugins loaded at startup, and re-reconcile on every reload.
     // Providers are not started here: they need a Mastra instance for storage,
     // and Mastra does not exist until the composition layer boots the controller
     // (see `startPluginSignalProviders` on the returned object).
-    pluginSignalLane.sync(pluginManager.getPluginSignalProviders());
+    await pluginSignalLane.sync(pluginManager.getPluginSignalProviders());
     unsubscribePluginReload = pluginManager.onReload(() =>
       pluginSignalLane.sync(pluginManager.getPluginSignalProviders()),
     );
@@ -1215,8 +1224,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     codeAgent,
     // Lets the composition layer publish the created session back into the
     // config closures (e.g. notification stream options read it lazily).
-    setActiveSession: (session: Session<MastraCodeState>) => {
+    setActiveSession: async (session: Session<MastraCodeState>) => {
       activeSession = session;
+      await piEventAdapter.attach(session);
     },
     /**
      * Starts the signal providers contributed by plugins. Called by the
@@ -1238,10 +1248,13 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
      * them, so without this its providers keep polling and its reload listener
      * keeps firing for a controller that is gone.
      */
-    stopPluginSignalProviders: () => {
+    stopPluginSignalProviders: async () => {
       unsubscribePluginReload?.();
       unsubscribePluginReload = undefined;
-      pluginSignalLane?.stopAll();
+      unsubscribePiReload?.();
+      unsubscribePiReload = undefined;
+      await piEventAdapter.detach();
+      await pluginSignalLane?.stopAll();
     },
     /**
      * Hands Mastra to the statically configured input processors.
@@ -1290,7 +1303,7 @@ export async function wireSessionConcerns(
   session: Session<MastraCodeState>,
 ): Promise<void> {
   const { hookManager, githubSignals } = base;
-  base.setActiveSession(session);
+  await base.setActiveSession(session);
 
   // Sync hookManager session ID on thread changes
   if (hookManager) {

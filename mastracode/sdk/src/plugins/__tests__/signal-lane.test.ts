@@ -78,7 +78,7 @@ describe('PluginSignalLane', () => {
     const provider = new TestProvider('demo-signals');
     const lane = new PluginSignalLane();
 
-    lane.sync(contributions('acme.demo', 'v1', [provider]));
+    await lane.sync(contributions('acme.demo', 'v1', [provider]));
 
     // Deferred: a provider without Mastra has no storage, so nothing runs yet.
     expect(provider.registeredMastra).toHaveLength(0);
@@ -99,12 +99,12 @@ describe('PluginSignalLane', () => {
   it('keeps the live provider instance when the plugin stamp is unchanged', async () => {
     const first = new TestProvider('demo-signals');
     const lane = laneWithMastra();
-    lane.sync(contributions('acme.demo', 'v1', [first]));
+    await lane.sync(contributions('acme.demo', 'v1', [first]));
 
     // Reload re-runs every plugin's resolver, so an unchanged plugin hands over
     // a brand new instance. It must be dropped on the floor.
     const second = new TestProvider('demo-signals');
-    lane.sync(contributions('acme.demo', 'v1', [second]));
+    await lane.sync(contributions('acme.demo', 'v1', [second]));
 
     expect(first.stopped).toBe(0);
     expect(first.polling).toBe(1);
@@ -116,11 +116,11 @@ describe('PluginSignalLane', () => {
   it('stops and replaces the provider when the plugin stamp changes, leaving no orphan', async () => {
     const first = new TestProvider('demo-signals', 'old');
     const lane = laneWithMastra();
-    lane.sync(contributions('acme.demo', 'v1', [first]));
+    await lane.sync(contributions('acme.demo', 'v1', [first]));
     expect(processorIds(lane.getInputProcessors())).toEqual(['old-input']);
 
     const second = new TestProvider('demo-signals', 'new');
-    lane.sync(contributions('acme.demo', 'v2', [second]));
+    await lane.sync(contributions('acme.demo', 'v2', [second]));
 
     expect(first.stopped).toBe(1);
     expect(second.polling).toBe(1);
@@ -133,15 +133,15 @@ describe('PluginSignalLane', () => {
   it('stops providers of plugins that disappear or go inactive', async () => {
     const provider = new TestProvider('demo-signals');
     const lane = laneWithMastra();
-    lane.sync(contributions('acme.demo', 'v1', [provider]));
+    await lane.sync(contributions('acme.demo', 'v1', [provider]));
 
     // An inactive, blocked or uninstalled plugin contributes nothing.
-    lane.sync([]);
+    await lane.sync([]);
 
     expect(provider.stopped).toBe(1);
     expect(lane.getInputProcessors()).toEqual([]);
 
-    lane.sync([]);
+    await lane.sync([]);
     expect(provider.stopped).toBe(1);
   });
 
@@ -150,7 +150,7 @@ describe('PluginSignalLane', () => {
     const provider = new TestProvider('task-signals');
     const lane = laneWithMastra({ reservedProviderIds: ['task-signals'], onError });
 
-    lane.sync(contributions('acme.demo', 'v1', [provider]));
+    await lane.sync(contributions('acme.demo', 'v1', [provider]));
 
     expect(provider.polling).toBe(0);
     expect(provider.connectedAgents).toHaveLength(0);
@@ -164,7 +164,7 @@ describe('PluginSignalLane', () => {
     const second = new TestProvider('demo-signals', 'second');
     const lane = laneWithMastra({ onError });
 
-    lane.sync([...contributions('acme.demo', 'v1', [first]), ...contributions('other.demo', 'v1', [second])]);
+    await lane.sync([...contributions('acme.demo', 'v1', [first]), ...contributions('other.demo', 'v1', [second])]);
 
     expect(first.polling).toBe(1);
     expect(second.polling).toBe(0);
@@ -179,7 +179,7 @@ describe('PluginSignalLane', () => {
     const healthy = new TestProvider('healthy-signals');
     const lane = laneWithMastra({ onError });
 
-    lane.sync(contributions('acme.demo', 'v1', [broken, healthy]));
+    await lane.sync(contributions('acme.demo', 'v1', [broken, healthy]));
 
     expect(processorIds(lane.getInputProcessors())).toEqual(['healthy-signals-input']);
     expect(broken.stopped).toBe(1);
@@ -195,7 +195,7 @@ describe('PluginSignalLane', () => {
     const healthy = new TestProvider('healthy-signals');
     const lane = laneWithMastra({ onError });
 
-    lane.sync(contributions('acme.demo', 'v1', [broken, healthy]));
+    await lane.sync(contributions('acme.demo', 'v1', [broken, healthy]));
 
     // Neither lane carries anything from the broken provider: both getters are
     // read before either lane is touched, so a throw cannot leave it half-contributed.
@@ -216,7 +216,7 @@ describe('PluginSignalLane', () => {
 
     // sync() returns while start() is still pending: it runs on the boot path
     // and on every plugin reload, so a slow provider must block neither.
-    lane.sync(contributions('acme.demo', 'v1', [slow]));
+    await lane.sync(contributions('acme.demo', 'v1', [slow]));
     expect(slow.polling).toBe(1);
     expect(processorIds(lane.getInputProcessors())).toEqual(['slow-signals-input']);
     expect(onError).not.toHaveBeenCalled();
@@ -238,11 +238,11 @@ describe('PluginSignalLane', () => {
         finishStart = resolve;
       });
     const lane = laneWithMastra();
-    lane.sync(contributions('acme.demo', 'v1', [slow]));
+    await lane.sync(contributions('acme.demo', 'v1', [slow]));
 
     // Replaced mid-warm-up: stop() already ran, so anything start() arms after
     // that would outlive the instance and double up on its replacement.
-    lane.sync(contributions('acme.demo', 'v2', [new TestProvider('demo-signals', 'new')]));
+    await lane.sync(contributions('acme.demo', 'v2', [new TestProvider('demo-signals', 'new')]));
     expect(slow.stopped).toBe(1);
 
     finishStart?.();
@@ -250,16 +250,16 @@ describe('PluginSignalLane', () => {
     expect(processorIds(lane.getInputProcessors())).toEqual(['new-input']);
   });
 
-  it('stops every live provider on teardown', () => {
+  it('stops every live provider on teardown', async () => {
     const first = new TestProvider('first-signals');
     const second = new TestProvider('second-signals');
     const lane = laneWithMastra();
-    lane.sync([...contributions('acme.one', 'v1', [first]), ...contributions('acme.two', 'v1', [second])]);
+    await lane.sync([...contributions('acme.one', 'v1', [first]), ...contributions('acme.two', 'v1', [second])]);
     expect(processorIds(lane.getInputProcessors())).toEqual(['first-signals-input', 'second-signals-input']);
 
     // A pluginManager can outlive the controller that used it, so a controller
     // that is done with the lane must leave nothing polling behind.
-    lane.stopAll();
+    await lane.stopAll();
 
     expect(first.stopped).toBe(1);
     expect(second.stopped).toBe(1);
@@ -267,15 +267,36 @@ describe('PluginSignalLane', () => {
     expect(lane.getOutputProcessors()).toEqual([]);
   });
 
-  it('does not mutate the processor array a request already resolved', () => {
+  it('awaits asynchronous provider shutdown before teardown completes', async () => {
+    let release: (() => void) | undefined;
+    class SlowStopProvider extends TestProvider {
+      override async stop(): Promise<void> {
+        await new Promise<void>(resolve => {
+          release = resolve;
+        });
+        super.stop();
+      }
+    }
+    const provider = new SlowStopProvider('slow-stop');
+    const lane = laneWithMastra();
+    await lane.sync(contributions('acme.demo', 'v1', [provider]));
+
+    const stopping = lane.stopAll();
+    expect(provider.stopped).toBe(0);
+    release?.();
+    await stopping;
+    expect(provider.stopped).toBe(1);
+  });
+
+  it('does not mutate the processor array a request already resolved', async () => {
     const first = new TestProvider('demo-signals', 'old');
     const lane = laneWithMastra();
-    lane.sync(contributions('acme.demo', 'v1', [first]));
+    await lane.sync(contributions('acme.demo', 'v1', [first]));
 
     // A reload can fire mid-request (plugin tool proxies reload before execute),
     // so the array a request in flight is running must not change underneath it.
     const inFlight = lane.getInputProcessors();
-    lane.sync(contributions('acme.demo', 'v2', [new TestProvider('demo-signals', 'new')]));
+    await lane.sync(contributions('acme.demo', 'v2', [new TestProvider('demo-signals', 'new')]));
 
     expect(processorIds(inFlight)).toEqual(['old-input']);
     expect(processorIds(lane.getInputProcessors())).toEqual(['new-input']);

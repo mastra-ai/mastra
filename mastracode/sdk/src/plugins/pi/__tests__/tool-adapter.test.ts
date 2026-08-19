@@ -170,6 +170,26 @@ describe('Pi tool adapter', () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
+  it('applies chained tool_result transformations before returning to Mastra', async () => {
+    const generation = createGeneration(async () => ({
+      content: [{ type: 'text', text: 'original' }],
+      details: { original: true },
+    }));
+    generation.createApi().on('tool_result', () => ({
+      content: [{ type: 'text', text: 'transformed' }],
+      details: { transformed: true },
+      usage: { input: 1, output: 2 },
+    }));
+    const { tools } = adaptPiTools(generation, { cwd: '/workspace' });
+
+    await expect(getTool(tools, 'fixture_tool').execute({ value: 'valid' }, createContext())).resolves.toEqual({
+      content: [{ type: 'text', text: 'transformed' }],
+      details: { transformed: true },
+      usage: { input: 1, output: 2 },
+      isError: false,
+    });
+  });
+
   it('keeps Pi error results as tool execution failures', async () => {
     const generation = createGeneration(async () => ({
       content: [{ type: 'text', text: 'permission denied' }],
