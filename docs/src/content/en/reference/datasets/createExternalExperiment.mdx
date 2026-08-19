@@ -1,0 +1,126 @@
+---
+title: 'Reference: dataset.createExternalExperiment() | Datasets'
+description: 'Documentation for the `dataset.createExternalExperiment()` method, which creates an experiment whose execution is owned by an external runner.'
+packages:
+  - '@mastra/core'
+---
+
+# dataset.createExternalExperiment()
+
+**Added in:** `@mastra/core@1.61.0`
+
+Creates an experiment with `targetType: 'external'`. Mastra does not run anything: your own infrastructure (for example a Temporal worker) executes each item and reports back with [`submitExperimentResult()`](/reference/datasets/submitExperimentResult), then marks the run complete with [`finalizeExperiment()`](/reference/datasets/finalizeExperiment).
+
+The experiment pins the dataset version at creation time, so submissions are validated against a stable set of items even if the dataset changes afterwards.
+
+## Usage example
+
+```typescript
+import { Mastra } from '@mastra/core'
+
+const mastra = new Mastra({/* storage config */})
+
+const dataset = await mastra.datasets.get({ id: 'dataset-id' })
+
+const { experimentId, totalItems, datasetVersion } = await dataset.createExternalExperiment({
+  id: 'temporal-wf-run-42', // optional: idempotent create on retry
+  name: 'external-eval',
+})
+```
+
+Passing your own `id` makes creation idempotent: calling it again with the same `id` returns the existing experiment instead of failing, so a retried workflow activity is safe. If the `id` belongs to an experiment on another dataset or a non-external experiment, the call throws an `EXPERIMENT_ID_CONFLICT` error.
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    isOptional: true,
+    description: 'Caller-supplied experiment ID (for example a workflow run ID). Makes creation idempotent on retry.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    isOptional: true,
+    description: 'Human-readable experiment name.',
+  },
+  {
+    name: 'description',
+    type: 'string',
+    isOptional: true,
+    description: 'Experiment description.',
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, unknown>',
+    isOptional: true,
+    description: 'Arbitrary metadata stored on the experiment.',
+  },
+  {
+    name: 'provenance',
+    type: 'ExperimentProvenance',
+    isOptional: true,
+    description: 'Where the experiment came from (source system, ID, and version).',
+  },
+  {
+    name: 'grouping',
+    type: 'ExperimentGrouping',
+    isOptional: true,
+    description:
+      'Grouping fields (`experimentSetId`, `comparisonId`, `variantId`, `trialIndex`) for organizing related runs.',
+  },
+  {
+    name: 'version',
+    type: 'number',
+    isOptional: true,
+    description: 'Dataset version to pin. Defaults to the current dataset version.',
+  },
+]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'result',
+    type: 'Promise<object>',
+    description: 'Immediate response with experiment ID.',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'experimentId',
+            type: 'string',
+            description: 'ID of the created (or existing) experiment.',
+          },
+          {
+            name: 'status',
+            type: 'ExperimentStatus',
+            description: "`'running'` for a new experiment; the stored status when an existing experiment is returned.",
+          },
+          {
+            name: 'totalItems',
+            type: 'number',
+            description: 'Number of dataset items visible at the pinned version.',
+          },
+          {
+            name: 'datasetVersion',
+            type: 'number',
+            description: 'The pinned dataset version.',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Related
+
+- [dataset.submitExperimentResult()](/reference/datasets/submitExperimentResult)
+- [dataset.finalizeExperiment()](/reference/datasets/finalizeExperiment)
+- [Running experiments](/docs/datasets/running-experiments#external-experiments)

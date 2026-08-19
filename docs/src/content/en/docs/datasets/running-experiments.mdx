@@ -442,6 +442,58 @@ while (experiment.status === 'pending' || experiment.status === 'running') {
 console.log(experiment.status) // 'completed' | 'failed'
 ```
 
+## External experiments
+
+If you run evaluations on your own infrastructure (for example a Temporal, Airflow, or custom worker fleet), Mastra can act as the system of record without owning execution. An external experiment is created with `targetType: 'external'`, your workers submit per-item results as they finish, and a final call computes counts and marks the experiment complete. Results land in the same tables as native runs, so Studio views, comparisons, and review summaries work unchanged.
+
+Create the experiment with [`createExternalExperiment()`](/reference/datasets/createExternalExperiment). Pass your own `id` (for example a workflow run id) to make creation idempotent — retrying the call with the same id returns the existing experiment instead of failing:
+
+```typescript title="src/mastra/experiments/external.ts"
+const dataset = await mastra.datasets.get({ id: 'translation-dataset-id' })
+
+const { experimentId, totalItems, datasetVersion } = await dataset.createExternalExperiment({
+  id: 'temporal-wf-run-42', // optional: reuse your workflow run id for idempotent creates
+  name: 'external-eval',
+})
+```
+
+Submit one result per item with [`submitExperimentResult()`](/reference/datasets/submitExperimentResult). Submissions are upserts keyed by `(experimentId, itemId, attempt)`, so a retried worker converges on a single row instead of duplicating results:
+
+```typescript
+await dataset.submitExperimentResult({
+  experimentId,
+  itemId: 'item-1',
+  output: { translation: 'Hola' },
+  scores: [{ scorerId: 'accuracy', score: 0.92, reason: 'Faithful translation' }],
+})
+```
+
+`input` and `groundTruth` default to the dataset item's values at the experiment's pinned dataset version. Inline `scores` are persisted to the scores store under the experiment, so they show up in comparisons alongside native scorer runs.
+
+When all items are done, call [`finalizeExperiment()`](/reference/datasets/finalizeExperiment). Mastra computes `succeededCount`, `failedCount`, and `skippedCount` from the persisted rows — your workers never track completion bookkeeping. Finalization is idempotent; calling it again returns the stored record:
+
+```typescript
+const experiment = await dataset.finalizeExperiment({ experimentId })
+
+console.log(experiment.status) // 'completed'
+console.log(experiment.succeededCount) // items with at least one attempt that didn't error
+console.log(experiment.failedCount) // items where every attempt errored
+console.log(experiment.skippedCount) // items never submitted
+```
+
+The same lifecycle is available over HTTP (`POST /api/datasets/:datasetId/experiments/external`, `POST .../experiments/:experimentId/results`, `POST .../experiments/:experimentId/finalize` — see [Server routes](/reference/server/routes#datasets-and-experiments)) and through `@mastra/client-js` (see the [Datasets API](/reference/client-js/datasets)).
+
+### Retry and idempotency contract
+
+External submissions are designed to be retried aggressively (for example by a Temporal retry policy). The exact guarantees:
+
+- **Create is idempotent on `id`.** Calling `createExternalExperiment` again with the same caller-supplied `id` returns the existing experiment. Reusing an `id` that belongs to another dataset or a non-external experiment fails with `EXPERIMENT_ID_CONFLICT` (HTTP `409`).
+- **Results upsert on `(experimentId, itemId, attempt)`.** Re-submitting the same key updates the existing row — last write wins for all mutable fields. A retried worker never creates duplicates.
+- **`attempt` separates deliberate trials from retries.** Retries of the same run should reuse the same `attempt` (default `0`) so they converge. To record repeated trials of an item as separate rows, submit with `attempt: 0`, `attempt: 1`, and so on.
+- **The dataset version is pinned at creation.** Submissions are validated against the items visible at that version; editing or deleting items afterwards doesn't affect an in-flight experiment. Submitting an `itemId` that isn't visible at the pinned version fails with `404`.
+- **Finalize is idempotent and terminal.** Finalizing an already-completed experiment returns the stored record without recomputing. After finalization, further submissions are rejected with `EXPERIMENT_ALREADY_FINALIZED` (HTTP `409`).
+- **Counts are server-computed and per-item.** At finalize time Mastra rolls attempts up per item: `succeededCount` (at least one attempt without an error), `failedCount` (every attempt errored), `skippedCount` (never submitted). `succeededCount + failedCount + skippedCount === totalItems` always holds, and callers keep no completion bookkeeping. Attempt-level rows remain available via `listExperimentResults`.
+
 ## Configuration options
 
 ### Concurrency

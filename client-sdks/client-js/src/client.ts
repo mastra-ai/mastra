@@ -191,6 +191,10 @@ import type {
   GenerateDatasetItemsParams,
   GeneratedItem,
   TriggerDatasetExperimentParams,
+  CreateExternalExperimentParams,
+  CreateExternalExperimentResponse,
+  SubmitExperimentResultParams,
+  FinalizeExperimentParams,
   UpdateExperimentResultParams,
   CompareExperimentsParams,
   CompareExperimentsResponse,
@@ -2208,6 +2212,47 @@ export class MastraClient extends BaseResource {
       method: 'POST',
       body,
     });
+  }
+
+  /**
+   * Creates an external experiment whose execution is owned by the caller (e.g. a Temporal workflow).
+   * Idempotent when a caller-supplied `id` is provided.
+   */
+  public createExternalExperiment(params: CreateExternalExperimentParams): Promise<CreateExternalExperimentResponse> {
+    const { datasetId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments/external`, {
+      method: 'POST',
+      body,
+    });
+  }
+
+  /**
+   * Submits (or re-submits) one item result for an external experiment.
+   * Upsert semantics on (experimentId, itemId, attempt) — safe to retry.
+   */
+  public submitExperimentResult(params: SubmitExperimentResultParams): Promise<DatasetExperimentResult> {
+    const { datasetId, experimentId, ...body } = params;
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/results`,
+      {
+        method: 'POST',
+        body,
+      },
+    );
+  }
+
+  /**
+   * Finalizes an external experiment. The server computes counts from persisted results. Idempotent.
+   */
+  public finalizeExperiment(params: FinalizeExperimentParams): Promise<DatasetExperiment> {
+    const { datasetId, experimentId } = params;
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/finalize`,
+      {
+        method: 'POST',
+        body: {},
+      },
+    );
   }
 
   /**

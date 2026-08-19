@@ -21,6 +21,7 @@ import type {
   UpdateExperimentInput,
   AddExperimentResultInput,
   UpdateExperimentResultInput,
+  UpsertExperimentResultInput,
   ListExperimentsInput,
   ListExperimentsOutput,
   ListExperimentResultsInput,
@@ -85,7 +86,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
     await this.#db.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: EXPERIMENT_RESULTS_SCHEMA,
-      ifNotExists: ['status', 'tags', 'comment', 'toolMockReport', 'organizationId', 'projectId'],
+      ifNotExists: ['status', 'tags', 'comment', 'toolMockReport', 'organizationId', 'projectId', 'attempt'],
     });
 
     // Indexes — idempotent, safe to run on every init
@@ -103,8 +104,14 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
           sql: `CREATE INDEX IF NOT EXISTS idx_experiment_results_experimentid ON "${TABLE_EXPERIMENT_RESULTS}" ("experimentId")`,
           args: [],
         },
+        // The natural key includes `attempt` so external runners can record
+        // repeated trials as separate rows (retry convergence happens per attempt).
         {
-          sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_experiment_results_exp_item ON "${TABLE_EXPERIMENT_RESULTS}" ("experimentId", "itemId")`,
+          sql: `DROP INDEX IF EXISTS idx_experiment_results_exp_item`,
+          args: [],
+        },
+        {
+          sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_experiment_results_exp_item_attempt ON "${TABLE_EXPERIMENT_RESULTS}" ("experimentId", "itemId", "attempt")`,
           args: [],
         },
         // Tenancy: leading-tenant indexes for multi-tenant scans (parity with datasets domain).
@@ -235,6 +242,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       startedAt: ensureDate(row.startedAt as string | Date)!,
       completedAt: ensureDate(row.completedAt as string | Date)!,
       retryCount: row.retryCount as number,
+      attempt: row.attempt != null ? Number(row.attempt) : 0,
       traceId: (row.traceId as string | null) ?? null,
       status: (row.status as ExperimentResult['status']) ?? null,
       tags: row.tags ? safelyParseJSON(row.tags as string) : null,
@@ -579,6 +587,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
           startedAt: input.startedAt.toISOString(),
           completedAt: input.completedAt.toISOString(),
           retryCount: input.retryCount,
+          attempt: input.attempt ?? 0,
           traceId: input.traceId ?? null,
           status: input.status ?? null,
           tags: input.tags !== undefined && input.tags !== null ? JSON.stringify(input.tags) : null,
@@ -601,6 +610,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         startedAt: input.startedAt,
         completedAt: input.completedAt,
         retryCount: input.retryCount,
+        attempt: input.attempt ?? 0,
         traceId: input.traceId ?? null,
         status: input.status ?? null,
         tags: input.tags ?? null,
@@ -611,6 +621,70 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'ADD_EXPERIMENT_RESULT', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async upsertExperimentResult(input: UpsertExperimentResultInput): Promise<ExperimentResult> {
+    try {
+      const attempt = input.attempt ?? 0;
+      const existing = await this.#client.execute({
+        sql: `SELECT "id" FROM ${TABLE_EXPERIMENT_RESULTS} WHERE "experimentId" = ? AND "itemId" = ? AND COALESCE("attempt", 0) = ?`,
+        args: [input.experimentId, input.itemId, attempt],
+      });
+      const existingId = existing.rows[0]?.id as string | undefined;
+
+      if (!existingId) {
+        return await this.addExperimentResult({ ...input, attempt });
+      }
+
+      // Last write wins on the natural key; keep row id + createdAt stable.
+      await this.#client.execute({
+        sql: `UPDATE ${TABLE_EXPERIMENT_RESULTS} SET
+          "itemDatasetVersion" = ?, "organizationId" = ?, "projectId" = ?,
+          "input" = ?, "output" = ?, "groundTruth" = ?, "error" = ?,
+          "startedAt" = ?, "completedAt" = ?, "retryCount" = ?, "attempt" = ?,
+          "traceId" = ?, "status" = ?, "tags" = ?, "toolMockReport" = ?
+        WHERE "id" = ?`,
+        args: [
+          input.itemDatasetVersion ?? null,
+          input.organizationId ?? null,
+          input.projectId ?? null,
+          JSON.stringify(input.input),
+          input.output != null ? JSON.stringify(input.output) : null,
+          input.groundTruth != null ? JSON.stringify(input.groundTruth) : null,
+          input.error != null ? JSON.stringify(input.error) : null,
+          input.startedAt.toISOString(),
+          input.completedAt.toISOString(),
+          input.retryCount,
+          attempt,
+          input.traceId ?? null,
+          input.status ?? null,
+          input.tags != null ? JSON.stringify(input.tags) : null,
+          input.toolMockReport != null ? JSON.stringify(input.toolMockReport) : null,
+          existingId,
+        ],
+      });
+
+      const result = await this.getExperimentResultById({ id: existingId });
+      if (!result) {
+        throw new MastraError({
+          id: createStorageErrorId('LIBSQL', 'UPSERT_EXPERIMENT_RESULT', 'NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { resultId: existingId },
+        });
+      }
+      return result;
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'UPSERT_EXPERIMENT_RESULT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

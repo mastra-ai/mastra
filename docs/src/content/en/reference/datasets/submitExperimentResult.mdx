@@ -1,0 +1,110 @@
+---
+title: 'Reference: dataset.submitExperimentResult() | Datasets'
+description: 'Documentation for the `dataset.submitExperimentResult()` method, which submits one item result for an external experiment with upsert semantics.'
+packages:
+  - '@mastra/core'
+---
+
+# dataset.submitExperimentResult()
+
+**Added in:** `@mastra/core@1.61.0`
+
+Submits (or re-submits) one item result for an external experiment created with [`createExternalExperiment()`](/reference/datasets/createExternalExperiment).
+
+Submissions are upserts keyed by `(experimentId, itemId, attempt)`: a retried worker that submits the same key converges on a single row instead of duplicating results. Use a different `attempt` value to record repeated trials as separate rows.
+
+## Usage example
+
+```typescript
+const result = await dataset.submitExperimentResult({
+  experimentId,
+  itemId: 'item-1',
+  output: { translation: 'Hola' },
+  scores: [{ scorerId: 'accuracy', score: 0.92, reason: 'Faithful translation' }],
+})
+```
+
+The item must be visible at the experiment's pinned dataset version. Submissions to a non-external experiment throw `EXPERIMENT_NOT_EXTERNAL`; submissions after finalization throw `EXPERIMENT_ALREADY_FINALIZED`.
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'experimentId',
+    type: 'string',
+    description: 'ID of the external experiment.',
+  },
+  {
+    name: 'itemId',
+    type: 'string',
+    description: 'ID of the dataset item this result belongs to.',
+  },
+  {
+    name: 'attempt',
+    type: 'number',
+    isOptional: true,
+    description:
+      'Attempt number for repeated trials. Defaults to `0`. Same `(experimentId, itemId, attempt)` upserts the existing row.',
+  },
+  {
+    name: 'input',
+    type: 'unknown',
+    isOptional: true,
+    description: "Input the worker ran. Defaults to the dataset item's input at the pinned version.",
+  },
+  {
+    name: 'output',
+    type: 'unknown',
+    isOptional: true,
+    description: 'Output produced by the external worker.',
+  },
+  {
+    name: 'groundTruth',
+    type: 'unknown',
+    isOptional: true,
+    description: "Expected output. Defaults to the dataset item's ground truth at the pinned version.",
+  },
+  {
+    name: 'error',
+    type: 'object',
+    isOptional: true,
+    description: 'Error details (`message`, optional `stack` and `code`) when the item failed.',
+  },
+  {
+    name: 'startedAt',
+    type: 'Date',
+    isOptional: true,
+    description: 'When the worker started this item.',
+  },
+  {
+    name: 'completedAt',
+    type: 'Date',
+    isOptional: true,
+    description: 'When the worker finished this item.',
+  },
+  {
+    name: 'traceId',
+    type: 'string',
+    isOptional: true,
+    description: 'Trace ID linking the result to observability data.',
+  },
+  {
+    name: 'scores',
+    type: 'array',
+    isOptional: true,
+    description:
+      'Externally computed scores (`scorerId`, `score`, optional `scorerName`, `reason`, `metadata`). Persisted to the scores store under the experiment, so they appear in comparisons alongside native scorer runs. Score persistence is best-effort and never fails the submission.',
+  },
+]}
+/>
+
+## Returns
+
+Returns a `Promise<ExperimentResult>` — the persisted result row, including its `id`, `attempt`, and timestamps.
+
+## Related
+
+- [dataset.createExternalExperiment()](/reference/datasets/createExternalExperiment)
+- [dataset.finalizeExperiment()](/reference/datasets/finalizeExperiment)
+- [Running experiments](/docs/datasets/running-experiments#external-experiments)

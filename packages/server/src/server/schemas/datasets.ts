@@ -377,6 +377,71 @@ export const triggerExperimentBodySchema = z.object({
     .describe('Version overrides for sub-agent delegation during experiment execution'),
 });
 
+export const createExternalExperimentBodySchema = z.object({
+  id: z.string().optional().describe('Caller-supplied experiment id (e.g. a workflow run id) for idempotent creates'),
+  name: z.string().optional().describe('Name of the experiment'),
+  description: z.string().optional().describe('Description of the experiment'),
+  metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
+  version: z.coerce.number().int().optional().describe('Pin to specific dataset version'),
+  provenance: z
+    .object({
+      source: z.string().optional(),
+      sourceId: z.string().optional(),
+      sourceVersion: z.string().optional(),
+      metadata: z.record(z.string(), z.unknown()).optional(),
+    })
+    .optional()
+    .describe('Caller-provided provenance claims for the experiment execution'),
+  grouping: z
+    .object({
+      experimentSetId: z.string().optional(),
+      comparisonId: z.string().optional(),
+      variantId: z.string().optional(),
+      trialIndex: z.number().int().min(0).optional(),
+    })
+    .optional()
+    .describe('Stable grouping dimensions for comparisons and repeated trials'),
+});
+
+export const externalExperimentResponseSchema = z.object({
+  experimentId: z.string(),
+  status: z.enum(['pending', 'running', 'completed', 'failed']),
+  totalItems: z.number(),
+  datasetVersion: z.number().int(),
+});
+
+export const submitExperimentResultBodySchema = z.object({
+  itemId: z.string().describe('Dataset item this result belongs to'),
+  attempt: z.number().int().min(0).optional().describe('Zero-based repetition index. Defaults to 0.'),
+  input: z.unknown().optional().describe('Input replayed by the external runner. Defaults to the dataset item input.'),
+  output: z.unknown().optional().describe('Output produced by the external runner'),
+  groundTruth: z.unknown().optional().describe('Ground truth. Defaults to the dataset item groundTruth.'),
+  error: z
+    .object({
+      message: z.string(),
+      stack: z.string().optional(),
+      code: z.string().optional(),
+    })
+    .nullable()
+    .optional()
+    .describe('Failure info when the item run failed'),
+  startedAt: z.coerce.date().optional(),
+  completedAt: z.coerce.date().optional(),
+  traceId: z.string().optional(),
+  scores: z
+    .array(
+      z.object({
+        scorerId: z.string(),
+        scorerName: z.string().optional(),
+        score: z.number(),
+        reason: z.string().optional(),
+        metadata: z.record(z.string(), z.unknown()).optional(),
+      }),
+    )
+    .optional()
+    .describe('Externally computed scores, persisted keyed by runId = experimentId'),
+});
+
 export const compareExperimentsBodySchema = z.object({
   experimentIdA: z.string().describe('ID of baseline experiment'),
   experimentIdB: z.string().describe('ID of candidate experiment'),
@@ -429,7 +494,7 @@ export const experimentResponseSchema = z.object({
   datasetId: z.string().nullable(),
   datasetVersion: z.number().int().nullable(),
   agentVersion: z.string().nullable().optional(),
-  targetType: z.enum(['agent', 'workflow', 'scorer', 'processor']),
+  targetType: z.enum(['agent', 'workflow', 'scorer', 'processor', 'external']),
   targetId: z.string(),
   name: z.string().optional(),
   description: z.string().optional(),
@@ -495,6 +560,7 @@ export const experimentResultResponseSchema = z.object({
   startedAt: z.coerce.date(),
   completedAt: z.coerce.date(),
   retryCount: z.number(),
+  attempt: z.number().int().optional(),
   traceId: z.string().nullable(),
   status: z.enum(['needs-review', 'reviewed', 'complete']).nullable().optional(),
   tags: z.array(z.string()).nullable().optional(),

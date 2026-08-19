@@ -21,6 +21,7 @@ import type {
   UpdateExperimentInput,
   AddExperimentResultInput,
   UpdateExperimentResultInput,
+  UpsertExperimentResultInput,
   ListExperimentsInput,
   ListExperimentsOutput,
   ListExperimentResultsInput,
@@ -88,6 +89,7 @@ interface ExperimentResultRow {
   startedAt: Date | string;
   completedAt: Date | string;
   retryCount: number;
+  attempt?: number | null;
   traceId: string | null;
   status: string | null;
   tags: string | null;
@@ -207,7 +209,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     await this.operations.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: EXPERIMENT_RESULTS_SCHEMA,
-      ifNotExists: ['comment', 'organizationId', 'projectId'],
+      ifNotExists: ['comment', 'organizationId', 'projectId', 'attempt'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -264,6 +266,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       startedAt: parseDateTime(row.startedAt) ?? new Date(),
       completedAt: parseDateTime(row.completedAt) ?? new Date(),
       retryCount: row.retryCount,
+      attempt: row.attempt != null ? Number(row.attempt) : 0,
       traceId: row.traceId ?? null,
       status: (row.status as ExperimentResultStatus | null) ?? null,
       tags: row.tags ? (parseJSON<string[]>(row.tags) ?? null) : null,
@@ -619,6 +622,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           startedAt: input.startedAt,
           completedAt: input.completedAt,
           retryCount: input.retryCount,
+          attempt: input.attempt ?? 0,
           traceId: input.traceId ?? null,
           status: input.status ?? null,
           tags: input.tags ? JSON.stringify(input.tags) : null,
@@ -640,6 +644,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         startedAt: input.startedAt,
         completedAt: input.completedAt,
         retryCount: input.retryCount,
+        attempt: input.attempt ?? 0,
         traceId: input.traceId ?? null,
         status: input.status ?? null,
         tags: input.tags ?? null,
@@ -677,6 +682,68 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       throw new MastraError(
         {
           id: 'MYSQL_GET_EXPERIMENT_RESULT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async upsertExperimentResult(input: UpsertExperimentResultInput): Promise<ExperimentResult> {
+    // Mirror the addExperimentResult guard: this adapter never persists tool mock reports.
+    if (input.toolMockReport) {
+      throw new MastraError({
+        id: 'MYSQL_EXPERIMENT_TOOL_MOCK_REPORT_UNSUPPORTED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Tool mock reports are not supported on the MySQL storage adapter. Use a supported adapter (LibSQL, PostgreSQL, MongoDB, or Spanner) to persist experiment tool mock reports.',
+      });
+    }
+    try {
+      const attempt = input.attempt ?? 0;
+      const rows = await this.operations.query<{ id: string }>(
+        `SELECT ${quoteIdentifier('id', 'column name')} FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} = ? AND ${quoteIdentifier('itemId', 'column name')} = ? AND COALESCE(${quoteIdentifier('attempt', 'column name')}, 0) = ?`,
+        [input.experimentId, input.itemId, attempt],
+      );
+      const existingId = rows[0]?.id;
+
+      if (!existingId) {
+        return await this.addExperimentResult({ ...input, attempt });
+      }
+
+      // Last write wins on the natural key; keep row id + createdAt stable.
+      await this.operations.update({
+        tableName: TABLE_EXPERIMENT_RESULTS,
+        keys: { id: existingId },
+        data: {
+          itemDatasetVersion: input.itemDatasetVersion ?? null,
+          organizationId: input.organizationId ?? null,
+          projectId: input.projectId ?? null,
+          input: JSON.stringify(input.input),
+          output: input.output ? JSON.stringify(input.output) : null,
+          groundTruth: input.groundTruth ? JSON.stringify(input.groundTruth) : null,
+          error: input.error ? JSON.stringify(input.error) : null,
+          startedAt: input.startedAt,
+          completedAt: input.completedAt,
+          retryCount: input.retryCount,
+          attempt,
+          traceId: input.traceId ?? null,
+          status: input.status ?? null,
+          tags: input.tags ? JSON.stringify(input.tags) : null,
+        },
+      });
+
+      const updated = await this.getExperimentResultById({ id: existingId });
+      if (!updated) {
+        throw new Error(`Experiment result ${existingId} not found after upsert`);
+      }
+      return updated;
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: 'MYSQL_UPSERT_EXPERIMENT_RESULT_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

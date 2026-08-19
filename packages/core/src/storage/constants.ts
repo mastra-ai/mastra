@@ -646,6 +646,8 @@ export const EXPERIMENT_RESULTS_SCHEMA: Record<string, StorageColumn> = {
   startedAt: { type: 'timestamp', nullable: false },
   completedAt: { type: 'timestamp', nullable: false },
   retryCount: { type: 'integer', nullable: false },
+  // Nullable for backwards compatibility with pre-existing rows; readers treat NULL as 0.
+  attempt: { type: 'integer', nullable: true },
   traceId: { type: 'text', nullable: true },
   status: { type: 'text', nullable: true },
   tags: { type: 'jsonb', nullable: true },

@@ -2776,7 +2776,7 @@ export interface DatasetExperiment {
   datasetId: string | null;
   datasetVersion: number | null;
   agentVersion: string | null;
-  targetType: 'agent' | 'workflow' | 'scorer' | 'processor';
+  targetType: 'agent' | 'workflow' | 'scorer' | 'processor' | 'external';
   targetId: string;
   /** Human-readable name used as the primary label wherever the experiment is displayed. */
   name?: string;
@@ -2810,6 +2810,7 @@ export interface DatasetExperimentResult {
   startedAt: string | Date;
   completedAt: string | Date;
   retryCount: number;
+  attempt?: number;
   traceId: string | null;
   status: 'needs-review' | 'reviewed' | 'complete' | null;
   tags: string[] | null;
@@ -2941,6 +2942,54 @@ export interface TriggerDatasetExperimentParams {
   provenance?: ExperimentProvenance;
   grouping?: ExperimentGrouping;
   requestContext?: Record<string, unknown>;
+}
+
+export interface CreateExternalExperimentParams {
+  datasetId: string;
+  /** Caller-supplied experiment id (e.g. a workflow run id) for idempotent creates. */
+  id?: string;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  /** Pin to a specific dataset version. Defaults to the latest version. */
+  version?: number;
+  provenance?: ExperimentProvenance;
+  grouping?: ExperimentGrouping;
+}
+
+export interface CreateExternalExperimentResponse {
+  experimentId: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  totalItems: number;
+  datasetVersion: number;
+}
+
+export interface SubmitExperimentResultParams {
+  datasetId: string;
+  experimentId: string;
+  itemId: string;
+  /** Zero-based repetition index. Defaults to 0. Retried submissions with the same (experimentId, itemId, attempt) converge on one row. */
+  attempt?: number;
+  input?: unknown;
+  output?: unknown;
+  groundTruth?: unknown;
+  error?: { message: string; stack?: string; code?: string } | null;
+  startedAt?: Date;
+  completedAt?: Date;
+  traceId?: string;
+  /** Externally computed scores, persisted keyed by runId = experimentId. */
+  scores?: Array<{
+    scorerId: string;
+    scorerName?: string;
+    score: number;
+    reason?: string;
+    metadata?: Record<string, unknown>;
+  }>;
+}
+
+export interface FinalizeExperimentParams {
+  datasetId: string;
+  experimentId: string;
 }
 
 export interface CompareExperimentsParams {

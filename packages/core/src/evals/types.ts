@@ -26,6 +26,8 @@ export const scoringEntityTypeSchema = z.enum([
   'WORKFLOW',
   'TRAJECTORY',
   'STEP',
+  // Externally executed experiment items (targetType: 'external')
+  'EXTERNAL',
   ...Object.values(SpanType),
 ] as [string, string, ...string[]]);
 

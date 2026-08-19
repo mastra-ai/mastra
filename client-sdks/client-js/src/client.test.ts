@@ -1031,6 +1031,76 @@ describe('MastraClient', () => {
     });
   });
 
+  describe('External Experiments', () => {
+    let client: MastraClient;
+
+    beforeEach(() => {
+      vi.resetAllMocks();
+      client = new MastraClient({ baseUrl: 'http://localhost:4111', retries: 0 });
+    });
+
+    it('createExternalExperiment posts to /experiments/external with the caller-supplied id', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ experimentId: 'wf-run-42', status: 'running', totalItems: 3, datasetVersion: 1 }),
+      });
+
+      const result = await client.createExternalExperiment({
+        datasetId: 'ds-1',
+        id: 'wf-run-42',
+        name: 'external-eval',
+      });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe('http://localhost:4111/api/datasets/ds-1/experiments/external');
+      expect(init.method).toBe('POST');
+      expect(JSON.parse(init.body)).toMatchObject({ id: 'wf-run-42', name: 'external-eval' });
+      expect(result.experimentId).toBe('wf-run-42');
+      expect(result.totalItems).toBe(3);
+    });
+
+    it('submitExperimentResult posts itemId, attempt, output, and scores to the results route', async () => {
+      const scores = [{ scorerId: 'accuracy', score: 0.92, reason: 'ok' }];
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ id: 'res-1', experimentId: 'exp-1', itemId: 'item-1', attempt: 1 }),
+      });
+
+      const result = await client.submitExperimentResult({
+        datasetId: 'ds-1',
+        experimentId: 'exp-1',
+        itemId: 'item-1',
+        attempt: 1,
+        output: { answer: 42 },
+        scores,
+      });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe('http://localhost:4111/api/datasets/ds-1/experiments/exp-1/results');
+      expect(init.method).toBe('POST');
+      expect(JSON.parse(init.body)).toMatchObject({ itemId: 'item-1', attempt: 1, output: { answer: 42 }, scores });
+      expect(result.attempt).toBe(1);
+    });
+
+    it('finalizeExperiment posts to the finalize route and returns the updated experiment', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ id: 'exp-1', status: 'completed', succeededCount: 2, failedCount: 1, skippedCount: 0 }),
+      });
+
+      const result = await client.finalizeExperiment({ datasetId: 'ds-1', experimentId: 'exp-1' });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe('http://localhost:4111/api/datasets/ds-1/experiments/exp-1/finalize');
+      expect(init.method).toBe('POST');
+      expect(result.status).toBe('completed');
+      expect(result.succeededCount).toBe(2);
+    });
+  });
+
   describe('Dataset Item Tool Mocks', () => {
     let client: MastraClient;
 

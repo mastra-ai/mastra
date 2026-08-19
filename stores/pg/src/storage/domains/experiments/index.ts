@@ -21,6 +21,7 @@ import type {
   UpdateExperimentInput,
   AddExperimentResultInput,
   UpdateExperimentResultInput,
+  UpsertExperimentResultInput,
   ListExperimentsInput,
   ListExperimentsOutput,
   ListExperimentResultsInput,
@@ -105,7 +106,7 @@ export class ExperimentsPG extends ExperimentsStorage {
     await this.#db.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: EXPERIMENT_RESULTS_SCHEMA,
-      ifNotExists: ['status', 'tags', 'comment', 'toolMockReport', 'organizationId', 'projectId'],
+      ifNotExists: ['status', 'tags', 'comment', 'toolMockReport', 'organizationId', 'projectId', 'attempt'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -200,10 +201,12 @@ export class ExperimentsPG extends ExperimentsStorage {
         columns: ['experimentSetId', 'comparisonId', 'variantId', 'trialIndex'],
       },
       { name: 'idx_experiment_results_experimentid', table: TABLE_EXPERIMENT_RESULTS, columns: ['experimentId'] },
+      // The natural key includes `attempt` so external runners can record
+      // repeated trials as separate rows (retry convergence happens per attempt).
       {
-        name: 'idx_experiment_results_exp_item',
+        name: 'idx_experiment_results_exp_item_attempt',
         table: TABLE_EXPERIMENT_RESULTS,
-        columns: ['experimentId', 'itemId'],
+        columns: ['experimentId', 'itemId', 'attempt'],
         unique: true,
       },
       // Tenancy: leading-tenant indexes for multi-tenant scans (parity with datasets domain).
@@ -222,6 +225,12 @@ export class ExperimentsPG extends ExperimentsStorage {
 
   async createDefaultIndexes(): Promise<void> {
     if (this.#skipDefaultIndexes) return;
+    // Legacy unique index without `attempt` — superseded by idx_experiment_results_exp_item_attempt.
+    try {
+      await this.#db.client.none(`DROP INDEX IF EXISTS "idx_experiment_results_exp_item"`);
+    } catch (error) {
+      this.logger?.warn?.('Failed to drop legacy index idx_experiment_results_exp_item:', error);
+    }
     for (const indexDef of this.getDefaultIndexDefinitions()) {
       try {
         await this.#db.createIndex(indexDef);
@@ -290,6 +299,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       startedAt: ensureDate(row.startedAtZ || row.startedAt)!,
       completedAt: ensureDate(row.completedAtZ || row.completedAt)!,
       retryCount: row.retryCount as number,
+      attempt: row.attempt != null ? (row.attempt as number) : 0,
       traceId: (row.traceId as string | null) ?? null,
       status: (row.status as ExperimentResult['status']) ?? null,
       tags: row.tags ? safelyParseJSON(row.tags) : null,
@@ -642,6 +652,7 @@ export class ExperimentsPG extends ExperimentsStorage {
           startedAt: input.startedAt.toISOString(),
           completedAt: input.completedAt.toISOString(),
           retryCount: input.retryCount,
+          attempt: input.attempt ?? 0,
           traceId: input.traceId ?? null,
           status: input.status ?? null,
           tags: input.tags ?? null,
@@ -664,6 +675,7 @@ export class ExperimentsPG extends ExperimentsStorage {
         startedAt: input.startedAt,
         completedAt: input.completedAt,
         retryCount: input.retryCount,
+        attempt: input.attempt ?? 0,
         traceId: input.traceId ?? null,
         status: input.status ?? null,
         tags: input.tags ?? null,
@@ -674,6 +686,94 @@ export class ExperimentsPG extends ExperimentsStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'ADD_EXPERIMENT_RESULT', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async upsertExperimentResult(input: UpsertExperimentResultInput): Promise<ExperimentResult> {
+    try {
+      const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
+      const attempt = input.attempt ?? 0;
+
+      const row = await this.#db.client.tx(async t => {
+        // Natural key lookup under FOR UPDATE so concurrent retries serialize
+        // on the same row instead of inserting duplicates.
+        const existing = await t.oneOrNone(
+          `SELECT "id" FROM ${tableName} WHERE "experimentId" = $1 AND "itemId" = $2 AND COALESCE("attempt", 0) = $3 FOR UPDATE`,
+          [input.experimentId, input.itemId, attempt],
+        );
+
+        if (!existing) {
+          const id = crypto.randomUUID();
+          return t.one(
+            `INSERT INTO ${tableName} (
+              "id", "experimentId", "itemId", "itemDatasetVersion", "organizationId", "projectId",
+              "input", "output", "groundTruth", "error", "startedAt", "completedAt",
+              "retryCount", "attempt", "traceId", "status", "tags", "toolMockReport", "createdAt"
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+            RETURNING *`,
+            [
+              id,
+              input.experimentId,
+              input.itemId,
+              input.itemDatasetVersion ?? null,
+              input.organizationId ?? null,
+              input.projectId ?? null,
+              JSON.stringify(input.input),
+              input.output != null ? JSON.stringify(input.output) : null,
+              input.groundTruth != null ? JSON.stringify(input.groundTruth) : null,
+              input.error != null ? JSON.stringify(input.error) : null,
+              input.startedAt.toISOString(),
+              input.completedAt.toISOString(),
+              input.retryCount,
+              attempt,
+              input.traceId ?? null,
+              input.status ?? null,
+              input.tags != null ? JSON.stringify(input.tags) : null,
+              input.toolMockReport != null ? JSON.stringify(input.toolMockReport) : null,
+              new Date().toISOString(),
+            ],
+          );
+        }
+
+        // Last write wins on the natural key; keep row id + createdAt stable.
+        return t.one(
+          `UPDATE ${tableName} SET
+            "itemDatasetVersion" = $2, "organizationId" = $3, "projectId" = $4,
+            "input" = $5, "output" = $6, "groundTruth" = $7, "error" = $8,
+            "startedAt" = $9, "completedAt" = $10, "retryCount" = $11, "attempt" = $12,
+            "traceId" = $13, "status" = $14, "tags" = $15, "toolMockReport" = $16
+          WHERE "id" = $1 RETURNING *`,
+          [
+            existing.id,
+            input.itemDatasetVersion ?? null,
+            input.organizationId ?? null,
+            input.projectId ?? null,
+            JSON.stringify(input.input),
+            input.output != null ? JSON.stringify(input.output) : null,
+            input.groundTruth != null ? JSON.stringify(input.groundTruth) : null,
+            input.error != null ? JSON.stringify(input.error) : null,
+            input.startedAt.toISOString(),
+            input.completedAt.toISOString(),
+            input.retryCount,
+            attempt,
+            input.traceId ?? null,
+            input.status ?? null,
+            input.tags != null ? JSON.stringify(input.tags) : null,
+            input.toolMockReport != null ? JSON.stringify(input.toolMockReport) : null,
+          ],
+        );
+      });
+
+      return this.transformExperimentResultRow(row);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'UPSERT_EXPERIMENT_RESULT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

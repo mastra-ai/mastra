@@ -47,6 +47,9 @@ import {
   batchDeleteItemsResponseSchema,
   updateExperimentResultBodySchema,
   reviewSummaryResponseSchema,
+  createExternalExperimentBodySchema,
+  externalExperimentResponseSchema,
+  submitExperimentResultBodySchema,
 } from '../schemas/datasets';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
@@ -114,7 +117,13 @@ function getHttpStatusForMastraError(errorId: string): number {
     case 'DATASET_ITEM_EXTERNAL_ID_INVALID':
     case 'DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE':
       return 400;
+    case 'DATASET_ITEM_NOT_FOUND':
+      return 404;
+    case 'EXPERIMENT_NOT_EXTERNAL':
+      return 400;
     case 'DATASET_ITEM_IDENTITY_CONFLICT':
+    case 'EXPERIMENT_ID_CONFLICT':
+    case 'EXPERIMENT_ALREADY_FINALIZED':
       return 409;
     default:
       return 500;
@@ -779,6 +788,128 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
       }
       return handleError(error, 'Error triggering experiment');
+    }
+  },
+});
+
+export const CREATE_EXTERNAL_EXPERIMENT_ROUTE = createRoute({
+  method: 'POST',
+  path: '/datasets/:datasetId/experiments/external',
+  responseType: 'json',
+  pathParamSchema: datasetIdPathParams,
+  bodySchema: createExternalExperimentBodySchema,
+  responseSchema: externalExperimentResponseSchema,
+  summary: 'Create an external experiment',
+  description:
+    'Creates an experiment whose execution is owned by an external system. No runner is spawned; the caller submits per-item results and finalizes the experiment. Idempotent on the caller-supplied id.',
+  tags: ['Datasets'],
+  requiresAuth: true,
+  handler: async ({ mastra, datasetId, ...params }) => {
+    assertDatasetsAvailable();
+    try {
+      const { id, name, description, metadata, version, provenance, grouping } = params as {
+        id?: string;
+        name?: string;
+        description?: string;
+        metadata?: Record<string, unknown>;
+        version?: number;
+        provenance?: {
+          source?: string;
+          sourceId?: string;
+          sourceVersion?: string;
+          metadata?: Record<string, unknown>;
+        };
+        grouping?: { experimentSetId?: string; comparisonId?: string; variantId?: string; trialIndex?: number };
+      };
+      const ds = await mastra.datasets.get({ id: datasetId });
+      return await ds.createExternalExperiment({ id, name, description, metadata, version, provenance, grouping });
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
+      return handleError(error, 'Error creating external experiment');
+    }
+  },
+});
+
+export const SUBMIT_EXPERIMENT_RESULT_ROUTE = createRoute({
+  method: 'POST',
+  path: '/datasets/:datasetId/experiments/:experimentId/results',
+  responseType: 'json',
+  pathParamSchema: datasetAndExperimentIdPathParams,
+  bodySchema: submitExperimentResultBodySchema,
+  responseSchema: experimentResultResponseSchema,
+  summary: 'Submit an external experiment result',
+  description:
+    'Submits (or re-submits) one item result for an external experiment. Upsert semantics on (experimentId, itemId, attempt): a retried submission converges on a single row.',
+  tags: ['Datasets'],
+  requiresAuth: true,
+  handler: async ({ mastra, datasetId, experimentId, ...params }) => {
+    assertDatasetsAvailable();
+    try {
+      const { itemId, attempt, input, output, groundTruth, error, startedAt, completedAt, traceId, scores } =
+        params as {
+          itemId: string;
+          attempt?: number;
+          input?: unknown;
+          output?: unknown;
+          groundTruth?: unknown;
+          error?: { message: string; stack?: string; code?: string } | null;
+          startedAt?: Date;
+          completedAt?: Date;
+          traceId?: string;
+          scores?: {
+            scorerId: string;
+            scorerName?: string;
+            score: number;
+            reason?: string;
+            metadata?: Record<string, unknown>;
+          }[];
+        };
+      const ds = await mastra.datasets.get({ id: datasetId });
+      return await ds.submitExperimentResult({
+        experimentId,
+        itemId,
+        attempt,
+        input,
+        output,
+        groundTruth,
+        error,
+        startedAt,
+        completedAt,
+        traceId,
+        scores,
+      });
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
+      return handleError(error, 'Error submitting experiment result');
+    }
+  },
+});
+
+export const FINALIZE_EXPERIMENT_ROUTE = createRoute({
+  method: 'POST',
+  path: '/datasets/:datasetId/experiments/:experimentId/finalize',
+  responseType: 'json',
+  pathParamSchema: datasetAndExperimentIdPathParams,
+  responseSchema: experimentResponseSchema,
+  summary: 'Finalize an external experiment',
+  description:
+    'Marks an external experiment completed. The server computes succeeded/failed/skipped counts from the persisted result rows. Idempotent: finalizing an already-completed experiment returns the stored record.',
+  tags: ['Datasets'],
+  requiresAuth: true,
+  handler: async ({ mastra, datasetId, experimentId }) => {
+    assertDatasetsAvailable();
+    try {
+      const ds = await mastra.datasets.get({ id: datasetId });
+      return await ds.finalizeExperiment({ experimentId });
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
+      return handleError(error, 'Error finalizing experiment');
     }
   },
 });

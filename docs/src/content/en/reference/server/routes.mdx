@@ -373,6 +373,98 @@ On authenticated servers, the read routes require the `stored-workflows:read` pe
 }
 ```
 
+## Datasets and experiments
+
+| Method | Path | Description |
+| - | - | - |
+| `GET` | `/api/datasets` | List datasets |
+| `POST` | `/api/datasets` | Create a dataset |
+| `GET` | `/api/datasets/:datasetId` | Get dataset by ID |
+| `PATCH` | `/api/datasets/:datasetId` | Update a dataset |
+| `DELETE` | `/api/datasets/:datasetId` | Delete a dataset |
+| `GET` | `/api/datasets/:datasetId/items` | List dataset items |
+| `POST` | `/api/datasets/:datasetId/items` | Add a dataset item |
+| `GET` | `/api/experiments` | List experiments across datasets |
+| `GET` | `/api/datasets/:datasetId/experiments` | List experiments for a dataset |
+| `POST` | `/api/datasets/:datasetId/experiments` | Trigger an experiment against a registered target |
+| `POST` | `/api/datasets/:datasetId/experiments/external` | Create an external experiment (no runner spawned) |
+| `POST` | `/api/datasets/:datasetId/experiments/:experimentId/results` | Submit an item result for an external experiment |
+| `POST` | `/api/datasets/:datasetId/experiments/:experimentId/finalize` | Finalize an external experiment |
+| `GET` | `/api/datasets/:datasetId/experiments/:experimentId` | Get experiment by ID |
+| `GET` | `/api/datasets/:datasetId/experiments/:experimentId/results` | List experiment results |
+| `POST` | `/api/datasets/:datasetId/compare` | Compare two experiments |
+
+### External experiment routes
+
+Use these routes when an external system (for example a Temporal workflow) owns experiment execution and Mastra acts as the system of record. All three are safe to retry: create is idempotent on the caller-supplied `id`, result submission upserts on `(experimentId, itemId, attempt)`, and finalize returns the stored record if the experiment is already completed.
+
+#### Create external experiment request body
+
+```typescript prettier:false
+{
+  id?: string;                  // Caller-supplied experiment id (e.g. a workflow run id) for idempotent creates
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  version?: number;             // Pin to a specific dataset version (defaults to latest)
+  provenance?: {
+    source?: string;
+    sourceId?: string;
+    sourceVersion?: string;
+    metadata?: Record<string, unknown>;
+  };
+  grouping?: {                  // Stable grouping dimensions for comparisons and repeated trials
+    experimentSetId?: string;
+    comparisonId?: string;
+    variantId?: string;
+    trialIndex?: number;
+  };
+}
+```
+
+Returns `{ experimentId, status, totalItems, datasetVersion }`.
+
+#### Submit experiment result request body
+
+```typescript prettier:false
+{
+  itemId: string;               // Dataset item this result belongs to
+  attempt?: number;             // Zero-based repetition index. Defaults to 0.
+  input?: unknown;              // Defaults to the dataset item input
+  output?: unknown;             // Output produced by the external runner
+  groundTruth?: unknown;        // Defaults to the dataset item groundTruth
+  error?: {                     // Failure info when the item run failed
+    message: string;
+    stack?: string;
+    code?: string;
+  } | null;
+  startedAt?: string;           // ISO date
+  completedAt?: string;         // ISO date
+  traceId?: string;
+  scores?: Array<{              // Externally computed scores, persisted keyed by runId = experimentId
+    scorerId: string;
+    scorerName?: string;
+    score: number;
+    reason?: string;
+    metadata?: Record<string, unknown>;
+  }>;
+}
+```
+
+Returns the persisted experiment result row.
+
+#### Finalize experiment
+
+`POST /api/datasets/:datasetId/experiments/:experimentId/finalize` takes no body. The server computes per-item counts from the persisted result rows — `succeededCount` (at least one attempt without an error), `failedCount` (every attempt errored), `skippedCount` (never submitted) — and marks the experiment `completed`. Returns the updated experiment record.
+
+#### External experiment error responses
+
+| Status | Condition |
+| - | - |
+| `400` | Experiment is not external (`EXPERIMENT_NOT_EXTERNAL`), or the dataset has no items at the pinned version (`EXPERIMENT_NO_ITEMS`) |
+| `404` | Dataset, experiment, or dataset item not found |
+| `409` | Caller-supplied experiment `id` already exists for a different dataset or a non-external experiment (`EXPERIMENT_ID_CONFLICT`), or a result was submitted after finalization (`EXPERIMENT_ALREADY_FINALIZED`) |
+
 ## MCP
 
 | Method | Path | Description |

@@ -24,6 +24,7 @@ import type {
   ListExperimentsOutput,
   UpdateExperimentInput,
   UpdateExperimentResultInput,
+  UpsertExperimentResultInput,
 } from '@mastra/core/storage';
 import { SpannerDB, resolveSpannerConfig } from '../../db';
 import type { SpannerDomainConfig } from '../../db';
@@ -82,6 +83,7 @@ function rowToExperimentResult(row: Record<string, any>): ExperimentResult {
     startedAt: toDate(t.startedAt),
     completedAt: toDate(t.completedAt),
     retryCount: Number(t.retryCount ?? 0),
+    attempt: t.attempt == null ? 0 : Number(t.attempt),
     traceId: t.traceId ?? null,
     status: (t.status ?? null) as ExperimentResult['status'],
     tags: (t.tags ?? null) as string[] | null,
@@ -136,7 +138,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
     await this.db.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: TABLE_SCHEMAS[TABLE_EXPERIMENT_RESULTS],
-      ifNotExists: ['comment', 'organizationId', 'projectId'],
+      ifNotExists: ['comment', 'organizationId', 'projectId', 'attempt'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -160,10 +162,11 @@ export class ExperimentsSpanner extends ExperimentsStorage {
         columns: ['experimentId', 'startedAt'],
       },
       {
-        // One result per (experiment, item).
-        name: 'mastra_experiment_results_exp_item_idx',
+        // One result per (experiment, item, attempt) — external runners can
+        // record repeated trials as separate rows.
+        name: 'mastra_experiment_results_exp_item_attempt_idx',
         table: TABLE_EXPERIMENT_RESULTS,
-        columns: ['experimentId', 'itemId'],
+        columns: ['experimentId', 'itemId', 'attempt'],
         unique: true,
       },
       // Tenancy: leading-tenant indexes for multi-tenant scans (parity with datasets domain).
@@ -182,6 +185,8 @@ export class ExperimentsSpanner extends ExperimentsStorage {
 
   async createDefaultIndexes(): Promise<void> {
     if (this.skipDefaultIndexes) return;
+    // Legacy unique index without `attempt` — superseded by mastra_experiment_results_exp_item_attempt_idx.
+    await this.db.dropIndex('mastra_experiment_results_exp_item_idx');
     await this.db.createIndexes(this.getDefaultIndexDefinitions());
   }
 
@@ -541,6 +546,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
         startedAt: input.startedAt,
         completedAt: input.completedAt,
         retryCount: input.retryCount,
+        attempt: input.attempt ?? 0,
         traceId: input.traceId ?? null,
         status: input.status ?? null,
         tags: input.tags ?? null,
@@ -563,6 +569,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
           startedAt: result.startedAt,
           completedAt: result.completedAt,
           retryCount: result.retryCount,
+          attempt: result.attempt,
           traceId: result.traceId,
           status: result.status,
           tags: result.tags,
@@ -575,6 +582,100 @@ export class ExperimentsSpanner extends ExperimentsStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('SPANNER', 'ADD_EXPERIMENT_RESULT', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { experimentId: input.experimentId, itemId: input.itemId },
+        },
+        error,
+      );
+    }
+  }
+
+  async upsertExperimentResult(input: UpsertExperimentResultInput): Promise<ExperimentResult> {
+    try {
+      const attempt = input.attempt ?? 0;
+      const [rows] = await this.database.run({
+        sql: `SELECT ${quoteIdent('id', 'column name')} FROM ${quoteIdent(TABLE_EXPERIMENT_RESULTS, 'table name')}
+              WHERE ${quoteIdent('experimentId', 'column name')} = @experimentId
+                AND ${quoteIdent('itemId', 'column name')} = @itemId
+                AND COALESCE(${quoteIdent('attempt', 'column name')}, 0) = @attempt`,
+        params: { experimentId: input.experimentId, itemId: input.itemId, attempt },
+        json: true,
+      });
+      const existingId = (rows as Array<Record<string, any>>)[0]?.id as string | undefined;
+
+      if (!existingId) {
+        return await this.addExperimentResult({ ...input, attempt });
+      }
+
+      // Last write wins on the natural key; keep row id + createdAt stable.
+      await this.db.runDml({
+        sql: `UPDATE ${quoteIdent(TABLE_EXPERIMENT_RESULTS, 'table name')} SET
+                ${quoteIdent('itemDatasetVersion', 'column name')} = @itemDatasetVersion,
+                ${quoteIdent('organizationId', 'column name')} = @organizationId,
+                ${quoteIdent('projectId', 'column name')} = @projectId,
+                ${quoteIdent('input', 'column name')} = @input,
+                ${quoteIdent('output', 'column name')} = @output,
+                ${quoteIdent('groundTruth', 'column name')} = @groundTruth,
+                ${quoteIdent('error', 'column name')} = @error,
+                ${quoteIdent('startedAt', 'column name')} = @startedAt,
+                ${quoteIdent('completedAt', 'column name')} = @completedAt,
+                ${quoteIdent('retryCount', 'column name')} = @retryCount,
+                ${quoteIdent('attempt', 'column name')} = @attempt,
+                ${quoteIdent('traceId', 'column name')} = @traceId,
+                ${quoteIdent('status', 'column name')} = @status,
+                ${quoteIdent('tags', 'column name')} = @tags,
+                ${quoteIdent('toolMockReport', 'column name')} = @toolMockReport
+              WHERE ${quoteIdent('id', 'column name')} = @id`,
+        params: {
+          id: existingId,
+          itemDatasetVersion: input.itemDatasetVersion ?? null,
+          organizationId: input.organizationId ?? null,
+          projectId: input.projectId ?? null,
+          input: JSON.stringify(input.input),
+          output: input.output == null ? null : JSON.stringify(input.output),
+          groundTruth: input.groundTruth == null ? null : JSON.stringify(input.groundTruth),
+          error: input.error == null ? null : JSON.stringify(input.error),
+          startedAt: input.startedAt,
+          completedAt: input.completedAt,
+          retryCount: input.retryCount,
+          attempt,
+          traceId: input.traceId ?? null,
+          status: input.status ?? null,
+          tags: input.tags == null ? null : JSON.stringify(input.tags),
+          toolMockReport: input.toolMockReport == null ? null : JSON.stringify(input.toolMockReport),
+        },
+        types: {
+          itemDatasetVersion: 'int64',
+          organizationId: 'string',
+          projectId: 'string',
+          input: 'json',
+          output: 'json',
+          groundTruth: 'json',
+          error: 'json',
+          traceId: 'string',
+          status: 'string',
+          tags: 'json',
+          toolMockReport: 'json',
+        },
+      });
+
+      const updated = await this.getExperimentResultById({ id: existingId });
+      if (!updated) {
+        throw new MastraError({
+          id: createStorageErrorId('SPANNER', 'UPSERT_EXPERIMENT_RESULT', 'NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: `Experiment result ${existingId} not found after upsert`,
+          details: { id: existingId },
+        });
+      }
+      return updated;
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('SPANNER', 'UPSERT_EXPERIMENT_RESULT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { experimentId: input.experimentId, itemId: input.itemId },

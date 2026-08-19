@@ -2460,7 +2460,7 @@ export type StorageBrowserRef = { type: 'inline'; config: StorageBrowserConfig }
 // Dataset Types
 // ============================================
 
-export type TargetType = 'agent' | 'workflow' | 'scorer' | 'processor';
+export type TargetType = 'agent' | 'workflow' | 'scorer' | 'processor' | 'external';
 
 export interface DatasetRecord {
   id: string;
@@ -2931,6 +2931,14 @@ export interface ExperimentResult {
   startedAt: Date;
   completedAt: Date;
   retryCount: number;
+  /**
+   * Zero-based repetition index for this item within the experiment. Part of
+   * the natural result identity `(experimentId, itemId, attempt)` used by
+   * {@link ExperimentsStorage.upsertExperimentResult} so external runners can
+   * retry submissions safely (retries converge on one row) while repeated
+   * trials use distinct attempt values on purpose.
+   */
+  attempt: number;
   traceId: string | null;
   status: ExperimentResultStatus | null;
   tags: string[] | null;
@@ -3014,6 +3022,11 @@ export interface AddExperimentResultInput {
   startedAt: Date;
   completedAt: Date;
   retryCount: number;
+  /**
+   * Zero-based repetition index. Defaults to `0`. See
+   * {@link ExperimentResult.attempt} for the identity contract.
+   */
+  attempt?: number;
   traceId?: string | null;
   status?: ExperimentResultStatus | null;
   tags?: string[] | null;
@@ -3028,6 +3041,15 @@ export interface AddExperimentResultInput {
   /** Platform project scope. Hydrated from the parent experiment on insert. */
   projectId?: string | null;
 }
+
+/**
+ * Input for {@link ExperimentsStorage.upsertExperimentResult}. Identical to
+ * {@link AddExperimentResultInput} minus the caller-supplied `id`: the row is
+ * identified by the natural key `(experimentId, itemId, attempt)` instead.
+ * Submitting the same key twice converges on a single row (last write wins),
+ * which makes retried external submissions idempotent.
+ */
+export type UpsertExperimentResultInput = Omit<AddExperimentResultInput, 'id'>;
 
 /**
  * Multi-tenant scoping filters for experiment queries. Mirrors
