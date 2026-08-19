@@ -6,11 +6,12 @@ import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 
-function makeFailThenAnswerModel(failures = 1) {
+function makeFailThenAnswerModel(failures = 1, recordPrompt?: (prompt: unknown) => void) {
   let calls = 0;
   return new MockLanguageModelV2({
-    doStream: async () => {
+    doStream: async ({ prompt }) => {
       calls++;
+      recordPrompt?.(prompt);
       if (calls <= failures) {
         throw new APICallError({
           message: 'upstream failed',
@@ -102,6 +103,36 @@ describe('durable agent API-error retry', () => {
     await cleanup?.();
 
     expect(rotations).toHaveLength(2);
+    expect(rotations[0]!.after).toBeTruthy();
     expect(rotations[1]!.before).toBe(rotations[0]!.after);
+  });
+  it('lets an error processor put a signal in front of the retried request', async () => {
+    const prompts: unknown[] = [];
+    const agent = new Agent({
+      id: 'durable-api-error-signal',
+      name: 'durable-api-error-signal',
+      instructions: 'You are helpful.',
+      model: [{ model: makeFailThenAnswerModel(1, prompt => prompts.push(prompt)) as LanguageModelV2, maxRetries: 0 }],
+      maxProcessorRetries: 1,
+      errorProcessors: [
+        {
+          id: 'signal-on-api-error',
+          processAPIError: async ({ sendSignal }) => {
+            await sendSignal?.({ type: 'user', contents: 'keep the answer short this time' });
+            return { retry: true };
+          },
+        },
+      ],
+    });
+
+    const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+    const { fullStream, cleanup } = await durableAgent.stream('hello');
+    for await (const _chunk of fullStream) {
+    }
+    await cleanup?.();
+
+    expect(prompts).toHaveLength(2);
+    expect(JSON.stringify(prompts[0])).not.toContain('keep the answer short this time');
+    expect(JSON.stringify(prompts[1])).toContain('keep the answer short this time');
   });
 });
