@@ -34,7 +34,7 @@ Package status uses these values:
 
 A partial package is never reported as fully compatible. Unsupported registrations and actions are diagnosed rather than ignored.
 
-## Registration and resource capabilities
+## Release contract: Registration and resources
 
 | Pi surface | Status | Mastra Code behavior |
 | - | - | - |
@@ -59,7 +59,7 @@ A partial package is never reported as fully compatible. Unsupported registratio
 | `package.json#pi` resources | Direct | Resolves declared extensions, skills, prompts, and themes relative to the installed package root and rejects path escapes. |
 | Conventional `.pi/` directories | Adapted | Discovers resources only inside explicit package or local roots rather than scanning an arbitrary home directory during normal startup. |
 
-## Event capabilities
+## Release contract: Events
 
 | Pi event | Status | Mastra Code behavior |
 | - | - | - |
@@ -84,7 +84,7 @@ A partial package is never reported as fully compatible. Unsupported registratio
 | `user_bash` | Adapted | Maps to Mastra Code shell tool or passthrough hooks. It can't intercept arbitrary child processes. |
 | `input` | Adapted | Maps `continue`, `transform`, and `handled` through input processing. Images and steer or follow-up delivery are preserved when supported. |
 
-## Actions, context, and UI
+## Release contract: Actions, context, and UI
 
 | Pi surface | Status | Mastra Code behavior |
 | - | - | - |
@@ -111,7 +111,7 @@ A partial package is never reported as fully compatible. Unsupported registratio
 | Custom components and shell replacement | Version-gated or unsupported | Allows only an explicitly supported Pi TUI component subset. Header, footer, editor, and whole-shell replacement are unsupported. |
 | Theme and terminal-input actions | Version-gated | Uses Mastra Code-owned theme and keybinding APIs after compatibility and conflict checks. |
 
-## Lifecycle and security
+## Release contract: Lifecycle and security
 
 | Concern | Contract |
 | - | - |
@@ -136,7 +136,7 @@ Native plugins remain the richer host API and retain existing status semantics.
 1. Mastra request context, workspaces, tool suspension, and mutable runtime owners stay native-only unless a capability explicitly maps a narrow facade.
 1. Disable, reload, and uninstall reconcile runtime contributions. Namespaced persistent package state remains until an explicit data-removal action deletes it.
 
-## Reverse compatibility matrix
+## Release contract: Reverse compatibility
 
 | Native Mastra Code capability | Pi relation | Policy |
 | - | - | - |
