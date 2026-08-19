@@ -1394,9 +1394,9 @@ export class MessageList {
   }
 
   /** Sealing is not optional: a moved id whose boundary is missing folds the next response into the previous row. */
-  public rotateResponseMessageId(generateId: () => string, sealMessageId?: string): string {
+  public rotateResponseMessageId(sealMessageId?: string): string {
     if (!this.markResponseMessageBoundary(sealMessageId)) this.markResponseMessageBoundary();
-    return generateId();
+    return this.newMessageId('assistant');
   }
 
   public markResponseMessageBoundary(messageId?: string): boolean {

@@ -2237,8 +2237,10 @@ describe('createLLMExecutionStep gateway provider tools', () => {
         serialize: vi.fn(),
         deserialize: vi.fn(),
       },
-      rotateResponseMessageId: (sealMessageId?: string) =>
-        messageList.rotateResponseMessageId(() => 'rotated-response-id', sealMessageId),
+      rotateResponseMessageId: (sealMessageId?: string) => {
+        messageList.markResponseMessageBoundary(sealMessageId);
+        return 'rotated-response-id';
+      },
       _internal: {
         generateId: () => 'rotated-response-id',
         threadId: 'thread-123',
@@ -2330,8 +2332,10 @@ describe('createLLMExecutionStep gateway provider tools', () => {
         serialize: vi.fn(),
         deserialize: vi.fn(),
       },
-      rotateResponseMessageId: (sealMessageId?: string) =>
-        messageList.rotateResponseMessageId(() => 'rotated-response-id', sealMessageId),
+      rotateResponseMessageId: (sealMessageId?: string) => {
+        messageList.markResponseMessageBoundary(sealMessageId);
+        return 'rotated-response-id';
+      },
       _internal: {
         generateId: () => 'rotated-response-id',
         threadId: 'thread-123',

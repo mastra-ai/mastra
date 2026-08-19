@@ -7,7 +7,6 @@ import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '../../../obs
 import { RequestContext } from '../../../request-context';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
 import { createWorkflow } from '../../../workflows/create';
-import { MessageList } from '../../message-list';
 import { DurableStepIds, DurableAgentDefaults } from '../constants';
 import { globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
@@ -18,6 +17,7 @@ import type {
   DurableLLMStepOutput,
   DurableToolCallOutput,
 } from '../types';
+import { createRunMessageList } from '../utils/run-message-list';
 import { runDurableFinishSideEffects } from './finalize-run';
 import {
   modelConfigSchema,
@@ -416,14 +416,10 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
           try {
             const pendingSignals = registryEntry.drainPendingSignals('pending');
             if (pendingSignals.length > 0) {
-              const drainList = new MessageList();
-              drainList.deserialize(state.messageListState);
-              const nextMessageId = drainList.rotateResponseMessageId(
-                () =>
-                  (mastra as Mastra | undefined)?.generateId?.() ??
-                  globalThis.crypto?.randomUUID?.() ??
-                  `msg_${Date.now()}`,
+              const drainList = createRunMessageList({ mastra: mastra as Mastra | undefined }).deserialize(
+                state.messageListState,
               );
+              const nextMessageId = drainList.rotateResponseMessageId();
               state.messageId = nextMessageId;
 
               for (const pendingSignal of pendingSignals) {
@@ -460,7 +456,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
 
           try {
             // Deserialize messageList for the callback's messages snapshot
-            const callbackMessageList = new MessageList();
+            const callbackMessageList = createRunMessageList({ mastra: mastra as Mastra | undefined });
             try {
               callbackMessageList.deserialize(state.messageListState);
             } catch {
@@ -566,14 +562,10 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
         // the next singleIterationWorkflow input via map-to-llm-input.
         if (!isFinal) {
           try {
-            const boundaryList = new MessageList();
-            boundaryList.deserialize(state.messageListState);
-            state.messageId = boundaryList.rotateResponseMessageId(
-              () =>
-                (mastra as Mastra | undefined)?.generateId?.() ??
-                globalThis.crypto?.randomUUID?.() ??
-                `msg_${Date.now()}`,
+            const boundaryList = createRunMessageList({ mastra: mastra as Mastra | undefined }).deserialize(
+              state.messageListState,
             );
+            state.messageId = boundaryList.rotateResponseMessageId();
             state.messageListState = boundaryList.serialize();
           } catch {
             // Keep the id when the state can't be sealed: an un-sealed merge is

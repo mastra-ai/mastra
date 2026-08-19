@@ -86,10 +86,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
 
   let currentResponseMessageId = rest.experimental_generateMessageId?.() || internalToUse.generateId?.();
   const rotateResponseMessageId = (sealMessageId?: string) => {
-    currentResponseMessageId = messageList.rotateResponseMessageId(
-      () => internalToUse.generateId?.() ?? generateId(),
-      sealMessageId ?? currentResponseMessageId,
-    );
+    currentResponseMessageId = messageList.rotateResponseMessageId(sealMessageId ?? currentResponseMessageId);
     return currentResponseMessageId;
   };
 
