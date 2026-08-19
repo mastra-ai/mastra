@@ -185,15 +185,15 @@ describe('maybeApplyPreflightAutofixes', () => {
 
   it('provisions when the user confirms, drops the resolved issue, and reports the injected vars', async () => {
     confirmMock.mockResolvedValue(true);
-    attachDatabaseMock.mockResolvedValue({ id: 'db-1', name: 'my-app-db', kind: 'turso' });
-    pollDatabaseUntilReadyMock.mockResolvedValue({ id: 'db-1', name: 'my-app-db', kind: 'turso' });
+    attachDatabaseMock.mockResolvedValue({ id: 'db-1', name: 'my-app-turso', kind: 'turso' });
+    pollDatabaseUntilReadyMock.mockResolvedValue({ id: 'db-1', name: 'my-app-turso', kind: 'turso' });
 
     const issues = [tursoIssue(), unrelatedIssue()];
     const result = await maybeApplyPreflightAutofixes(issues, makeCtx());
 
     expect(attachDatabaseMock).toHaveBeenCalledWith('t', 'org-1', 'proj-1', {
       kind: 'turso',
-      name: 'my-app-db',
+      name: 'my-app-turso',
       environmentId: 'env-prod',
     });
     expect(pollDatabaseUntilReadyMock).toHaveBeenCalled();
@@ -204,15 +204,15 @@ describe('maybeApplyPreflightAutofixes', () => {
 
   it('provisions a managed Redis when the user confirms and reports REDIS_URL as newly managed', async () => {
     confirmMock.mockResolvedValue(true);
-    attachDatabaseMock.mockResolvedValue({ id: 'db-redis-1', name: 'my-app-db', kind: 'redis' });
-    pollDatabaseUntilReadyMock.mockResolvedValue({ id: 'db-redis-1', name: 'my-app-db', kind: 'redis' });
+    attachDatabaseMock.mockResolvedValue({ id: 'db-redis-1', name: 'my-app-redis', kind: 'redis' });
+    pollDatabaseUntilReadyMock.mockResolvedValue({ id: 'db-redis-1', name: 'my-app-redis', kind: 'redis' });
 
     const issues = [redisIssue()];
     const result = await maybeApplyPreflightAutofixes(issues, makeCtx());
 
     expect(attachDatabaseMock).toHaveBeenCalledWith('t', 'org-1', 'proj-1', {
       kind: 'redis',
-      name: 'my-app-db',
+      name: 'my-app-redis',
       environmentId: 'env-prod',
     });
     expect(result.issues).toEqual([]);
@@ -301,8 +301,8 @@ describe('maybeApplyPreflightAutofixes', () => {
 
   it('derives an env-suffixed default name for non-production environments', async () => {
     confirmMock.mockResolvedValue(true);
-    attachDatabaseMock.mockResolvedValue({ id: 'db-1', name: 'my-app-eu-db', kind: 'turso' });
-    pollDatabaseUntilReadyMock.mockResolvedValue({ id: 'db-1', name: 'my-app-eu-db', kind: 'turso' });
+    attachDatabaseMock.mockResolvedValue({ id: 'db-1', name: 'my-app-eu-turso', kind: 'turso' });
+    pollDatabaseUntilReadyMock.mockResolvedValue({ id: 'db-1', name: 'my-app-eu-turso', kind: 'turso' });
 
     await maybeApplyPreflightAutofixes(
       [tursoIssue()],
@@ -313,14 +313,14 @@ describe('maybeApplyPreflightAutofixes', () => {
       't',
       'org-1',
       'proj-1',
-      expect.objectContaining({ name: 'my-app-eu-db' }),
+      expect.objectContaining({ name: 'my-app-eu-turso' }),
     );
   });
 
   it('keeps the canonical unsuffixed name for the production environment', async () => {
     confirmMock.mockResolvedValue(true);
-    attachDatabaseMock.mockResolvedValue({ id: 'db-1', name: 'my-app-db', kind: 'turso' });
-    pollDatabaseUntilReadyMock.mockResolvedValue({ id: 'db-1', name: 'my-app-db', kind: 'turso' });
+    attachDatabaseMock.mockResolvedValue({ id: 'db-1', name: 'my-app-turso', kind: 'turso' });
+    pollDatabaseUntilReadyMock.mockResolvedValue({ id: 'db-1', name: 'my-app-turso', kind: 'turso' });
 
     await maybeApplyPreflightAutofixes(
       [tursoIssue()],
@@ -333,7 +333,7 @@ describe('maybeApplyPreflightAutofixes', () => {
       't',
       'org-1',
       'proj-1',
-      expect.objectContaining({ name: 'my-app-db' }),
+      expect.objectContaining({ name: 'my-app-turso' }),
     );
   });
 
