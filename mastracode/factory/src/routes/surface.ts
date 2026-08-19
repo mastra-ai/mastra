@@ -13,6 +13,7 @@ import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRules } from '../rules/types.js';
 import { isFactoryRuleStage } from '../rules/types.js';
+import type { BaseCheckpointTriggers } from '../sandbox/base-checkpoint-triggers.js';
 import type { SandboxFleet } from '../sandbox/fleet.js';
 import { ensureFactorySourceSession, resolveFactoryDefaultModelId } from '../session/factory-session.js';
 import { LiveSessions } from '../session/live-sessions.js';
@@ -59,6 +60,8 @@ export interface FactoryApiRoutesDeps {
   stateSigner?: StateSigner;
   /** Sandbox fleet constructed by the factory (disabled when no machine). */
   fleet: SandboxFleet;
+  /** Base-checkpoint trigger surface, when the factory constructed one. */
+  baseCheckpoints?: BaseCheckpointTriggers;
   /** Root factory storage backend (distributed locks, app-db diagnostics). */
   factoryStorage?: FactoryStorage;
   integrationStorage: IntegrationStorage;
@@ -237,12 +240,15 @@ export function buildIntegrationContext(
      * `routes()`, `channels()`, and `workers()` all see the same context shape.
      */
     sourceControlOwnerId?: string;
+    /** Base-checkpoint trigger surface, when the factory constructed one. */
+    baseCheckpoints?: BaseCheckpointTriggers;
   },
   integrationId: string,
 ): IntegrationContext {
   return {
     auth: deps.auth,
     fleet: deps.fleet,
+    ...(deps.baseCheckpoints ? { baseCheckpoints: deps.baseCheckpoints } : {}),
     factoryStorage: deps.factoryStorage,
     baseUrl: deps.publicOrigin,
     controller: deps.controller,
