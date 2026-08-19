@@ -35,14 +35,22 @@ describe('workspace warm-up repository targeting', () => {
   it('warms the repository from the session metadata, never the factory fallback', async () => {
     stubPreparingSession({ materialized: true });
     const ensuredRepositories: string[] = [];
+    let connectionsServed = false;
+    // The session row is held open explicitly (not on a timer) so the test
+    // deterministically creates — and then closes — the window where the
+    // connections list is known but the session row is not. An ungated
+    // warm-up fired for repositories[0] inside exactly that window.
+    let releaseSession!: () => void;
+    const sessionGate = new Promise<void>(resolve => (releaseSession = resolve));
 
     server.use(
       // Two repositories: the factory's first repository is NOT the one the
       // session belongs to. Before the session row resolves, the provider's
       // `repository` fallback points at the first repository — warm-up must
       // wait for the session metadata instead of using that fallback.
-      http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/source-control-connections`, () =>
-        HttpResponse.json({
+      http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/source-control-connections`, () => {
+        connectionsServed = true;
+        return HttpResponse.json({
           connections: [
             {
               id: 'conn-1',
@@ -63,13 +71,10 @@ describe('workspace warm-up repository targeting', () => {
               ],
             },
           ],
-        }),
-      ),
+        });
+      }),
       http.get(`${TEST_BASE_URL}/web/user-sessions/:sessionId`, async () => {
-        // Resolve the session AFTER the repository list so the provider spends
-        // real time in the "connections known, session unknown" window — the
-        // exact window where an ungated warm-up fired for repositories[0].
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await sessionGate;
         return HttpResponse.json({
           session: {
             id: 'row-1',
@@ -93,11 +98,25 @@ describe('workspace warm-up repository targeting', () => {
       }),
     );
 
-    renderSession();
+    const { client } = renderSession();
+
+    // Hold the "connections known, session unknown" window open until the
+    // repository list has definitely been served, then release the session.
+    await waitFor(() => expect(connectionsServed).toBe(true));
+    releaseSession();
 
     expect(await screen.findByTestId('chat-content')).toBeInTheDocument();
-    await waitFor(() => expect(ensuredRepositories.length).toBeGreaterThan(0));
-    expect(ensuredRepositories).toContain(SESSION_REPOSITORY_ID);
-    expect(ensuredRepositories).not.toContain(OTHER_REPOSITORY_ID);
+    // The warm-up is a mutation; wait until every mutation has settled — and
+    // stays settled across a macrotask gap — so a late warm-up request for
+    // the fallback repository cannot escape the assertion below. (Full
+    // query-idle is not usable here: the agent-controller connection-init
+    // queries in this fixture are long-lived by design.)
+    await waitFor(async () => {
+      expect(client.isMutating()).toBe(0);
+      expect(ensuredRepositories.length).toBeGreaterThan(0);
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(client.isMutating()).toBe(0);
+    });
+    expect(ensuredRepositories).toEqual([SESSION_REPOSITORY_ID]);
   });
 });

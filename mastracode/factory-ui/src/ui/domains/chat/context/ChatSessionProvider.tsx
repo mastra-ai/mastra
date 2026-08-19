@@ -222,8 +222,8 @@ export function ChatMessageBoundary({ children }: { children: ReactNode }) {
   // A denied or missing session is fatal — replace the chat instead of
   // spinning on the preparing loader. A failed workspace warm-up is
   // non-fatal (the run path materializes lazily), so that stays a banner.
-  if (sessionError) return <ChatMessageFeedback error={sessionError} />;
-  const warmupBanner = warmupError ? <ChatMessageFeedback error={warmupError} /> : null;
+  if (sessionError) return <ChatMessageFeedback error={sessionError} source="session" />;
+  const warmupBanner = warmupError ? <ChatMessageFeedback error={warmupError} source="warmup" /> : null;
 
   // Any pre-transcript wait — session metadata resolution OR the initial
   // thread messages fetch — is shown as the step loader. Splitting these into
@@ -257,11 +257,13 @@ export function ChatMessageBoundary({ children }: { children: ReactNode }) {
   );
 }
 
-function ChatMessageFeedback({ error }: { error: Error }) {
+function ChatMessageFeedback({ error, source }: { error: Error; source: 'session' | 'warmup' }) {
   const { retrySession } = useChatSessionContext();
   // The server intentionally returns the same 404 for a missing session and a
-  // private one owned by someone else, so the message covers both.
-  const notFound = (error as { status?: number }).status === 404;
+  // private one owned by someone else, so the message covers both — but only
+  // for the session lookup itself. A warm-up (`/ensure`) 404 describes a
+  // missing repository or workspace, so it keeps its actual error details.
+  const notFound = source === 'session' && (error as { status?: number }).status === 404;
   return (
     <div className="flex flex-col items-stretch gap-4">
       <Notice variant="destructive">
