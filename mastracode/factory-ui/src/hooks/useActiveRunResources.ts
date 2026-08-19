@@ -20,7 +20,7 @@ export function useActiveRunResources({
 }: ActiveRunResourcesOptions): Record<string, boolean> {
   const { baseUrl } = useApiConfig();
   const query = useQuery({
-    queryKey: queryKeys.agentControllerActivity(agentControllerId),
+    queryKey: queryKeys.agentControllerActivity(agentControllerId, baseUrl),
     queryFn: async () => {
       const { controller } = createAgentControllerClient({ agentControllerId, baseUrl });
       return requireAgentController(controller).listActiveRuns();

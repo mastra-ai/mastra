@@ -118,8 +118,8 @@ export const queryKeys = {
       ...(threadId ? [threadId] : []),
     ] as const,
   // Session state must stay out of the key: it would reset the query on navigation, and a reset reads as every run going idle.
-  agentControllerActivity: (agentControllerId: string | undefined) =>
-    ['agent-controller', agentControllerId ?? null, 'activity'] as const,
+  agentControllerActivity: (agentControllerId: string | undefined, baseUrl: string) =>
+    ['agent-controller', agentControllerId ?? null, 'activity', baseUrl] as const,
   agentControllerSettings: (
     agentControllerId: string | undefined,
     resourceId: string | undefined,
