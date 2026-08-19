@@ -1018,6 +1018,29 @@ describe('AgentController signal messages', () => {
     expect(JSON.stringify(prompts)).toContain('<user delivery=\\"while-active\\">also do this</user>');
   });
 
+  it('leaves a delivery chosen by the caller alone', async () => {
+    const releases: Array<() => void> = [];
+    const prompts: unknown[] = [];
+    const { session } = await createController(new InMemoryStore(), createGatedAgent(prompts, releases));
+    await session.thread.create();
+
+    const first = session.sendSignal({ content: 'start the run' });
+    await first.accepted;
+    await waitFor(() => session.getCurrentRunId() !== null && releases.length === 1);
+    const interjection = session.sendSignal({
+      type: 'user',
+      tagName: 'user',
+      contents: 'queued for later',
+      attributes: { delivery: 'message' },
+    });
+    await interjection.accepted;
+    releases.shift()?.();
+    await waitFor(() => session.getCurrentRunId() === null);
+
+    expect(JSON.stringify(prompts)).toContain('<user delivery=\\"message\\">queued for later</user>');
+    expect(JSON.stringify(prompts)).not.toContain('while-active');
+  });
+
   // A steer aborts before it sends, so by the time the runtime resolves a delivery
   // route it sees an idle session — the interjection has to be stamped at submit time.
   it('tags a steer as a while-active interjection even though its abort left the session idle', async () => {

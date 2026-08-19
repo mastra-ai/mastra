@@ -1,7 +1,12 @@
 import type { Agent } from '../agent';
 import type { MastraDBMessage, MastraProviderMetadata } from '../agent/message-list/state/types';
 import { createSignal, resolveDeliveryAttributes } from '../agent/signals';
-import type { AgentSignalAttributes, AgentSignalContents, AgentSignalInput } from '../agent/signals';
+import type {
+  AgentSignalAttributes,
+  AgentSignalContents,
+  AgentSignalInput,
+  CreatedAgentSignal,
+} from '../agent/signals';
 import type {
   AgentThreadSubscription,
   MastraBrowser,
@@ -1879,6 +1884,12 @@ class SessionPermissions {
   }
 }
 
+/** Mark a user signal as reaching the agent mid-work. A delivery the caller chose wins. */
+function asInterjection(signal: CreatedAgentSignal): CreatedAgentSignal {
+  if (signal.type !== 'user' || signal.attributes?.delivery !== undefined) return signal;
+  return resolveDeliveryAttributes(signal, { delivery: 'while-active' });
+}
+
 /** The session-state / thread-settings key holding a subagent model id. */
 function subagentModelKey(agentType?: string): string {
   return agentType ? `subagentModelId_${agentType}` : 'subagentModelId';
@@ -3341,15 +3352,12 @@ export class Session<TState = unknown> {
       'content' in input
         ? { type: 'user', tagName: 'user', contents: input.content, providerOptions: input.providerOptions }
         : input;
-    // A steer's abort leaves the delivery route reading idle, so the interjection is
-    // stamped from this snapshot instead. An explicit delivery from the caller wins.
-    const interjected =
+    // A steer lands in the second window: its abort already cleared the controller,
+    // so the delivery route resolved downstream reads idle and cannot tag it.
+    const submittedWhileWorking =
       submittedIsRunning || (submittedAbortRequested && Boolean(submittedRunId ?? submittedActiveRunId));
-    const created = createSignal(signalInput);
-    const signal =
-      interjected && created.type === 'user' && created.attributes?.delivery === undefined
-        ? resolveDeliveryAttributes(created, { delivery: 'while-active' })
-        : created;
+    const submittedSignal = createSignal(signalInput);
+    const signal = submittedWhileWorking ? asInterjection(submittedSignal) : submittedSignal;
     const accepted = Promise.resolve().then(async () => {
       if (!this.thread.getId()) {
         const thread = await this.thread.create();
