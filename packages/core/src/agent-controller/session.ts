@@ -69,7 +69,12 @@ export type SessionSendNotificationSignalOptions = {
 };
 
 /** Usage fields that are summed across steps when present on a step's usage. */
-type OptionalUsageField = 'reasoningTokens' | 'cachedInputTokens' | 'cacheCreationInputTokens';
+type OptionalUsageField =
+  | 'reasoningTokens'
+  | 'cachedInputTokens'
+  | 'cacheCreationInputTokens'
+  | 'cacheCreationInputTokens5m'
+  | 'cacheCreationInputTokens1h';
 
 function addOptionalUsageField(usage: TokenUsage, key: OptionalUsageField, value: number | undefined): void {
   if (value !== undefined) {
@@ -91,8 +96,7 @@ export const ABORTED_BY_USER_REASON = 'Aborted by the user';
  * Session-state keys that are transparently persisted to thread metadata on
  * every state update and restored by `Session.loadMetadata()`. These are user
  * preferences that must survive a host restart (sessions themselves are
- * in-memory only). Keys listed here must also be reserved in
- * {@link isReservedThreadMetadataKey}.
+ * in-memory only).
  */
 const PERSISTED_STATE_KEYS = ['thinkingLevel', 'notifications'] as const;
 /** Persisted thread-setting key prefix for a mode's last-used model. */
@@ -106,19 +110,22 @@ const modeModelKey = (modeId: string) => `modeModelId_${modeId}`;
  * skipped when stamping tags onto a thread and excluded when reading tags
  * back out of thread metadata.
  */
+const RESERVED_THREAD_METADATA_KEYS = [
+  'currentModelId',
+  MODE_ID_KEY,
+  'observerModelId',
+  'reflectorModelId',
+  'observationThreshold',
+  'reflectionThreshold',
+  'tokenUsage',
+  ...PERSISTED_STATE_KEYS,
+] as const;
+
+/** Packages that cannot import the list as a value pin their copy to it with `satisfies Record<ReservedThreadMetadataKey, true>`. */
+export type ReservedThreadMetadataKey = (typeof RESERVED_THREAD_METADATA_KEYS)[number];
+
 function isReservedThreadMetadataKey(key: string): boolean {
-  return (
-    key === 'currentModelId' ||
-    key === MODE_ID_KEY ||
-    key === 'observerModelId' ||
-    key === 'reflectorModelId' ||
-    key === 'observationThreshold' ||
-    key === 'reflectionThreshold' ||
-    key === 'tokenUsage' ||
-    key === 'thinkingLevel' ||
-    key === 'notifications' ||
-    key.startsWith('modeModelId_')
-  );
+  return RESERVED_THREAD_METADATA_KEYS.some(reserved => reserved === key) || key.startsWith('modeModelId_');
 }
 
 /**
@@ -1692,7 +1699,7 @@ export class SessionMode {
     if (this.#switchVersion !== version) return;
     if (modelId) {
       this.#model.set({ modelId });
-      this.#bus.emit({ type: 'model_changed', modelId } as AgentControllerEvent);
+      this.#bus.emit({ type: 'model_changed', modelId });
     }
   }
 }
@@ -3916,6 +3923,8 @@ export class Session<TState = unknown> {
     addOptionalUsageField(this.#tokenUsage, 'reasoningTokens', stepUsage.reasoningTokens);
     addOptionalUsageField(this.#tokenUsage, 'cachedInputTokens', stepUsage.cachedInputTokens);
     addOptionalUsageField(this.#tokenUsage, 'cacheCreationInputTokens', stepUsage.cacheCreationInputTokens);
+    addOptionalUsageField(this.#tokenUsage, 'cacheCreationInputTokens5m', stepUsage.cacheCreationInputTokens5m);
+    addOptionalUsageField(this.#tokenUsage, 'cacheCreationInputTokens1h', stepUsage.cacheCreationInputTokens1h);
     if (stepUsage.raw !== undefined) {
       this.#tokenUsage.raw = stepUsage.raw;
     }

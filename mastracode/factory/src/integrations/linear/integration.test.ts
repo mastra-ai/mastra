@@ -89,6 +89,46 @@ describe('LinearIntegration capability surface', () => {
     expect(request.variables).toMatchObject({ labels: ['bug', 'urgent'] });
   });
 
+  it('fetches issue details without a project', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              data: {
+                issue: {
+                  id: 'issue-1',
+                  identifier: 'ENG-42',
+                  title: 'Fix intake',
+                  description: 'Issue body',
+                  url: 'https://linear.app/acme/issue/ENG-42',
+                  priorityLabel: 'High',
+                  createdAt: '2026-07-01T00:00:00Z',
+                  updatedAt: '2026-07-02T00:00:00Z',
+                  state: { name: 'Todo', type: 'unstarted' },
+                  project: null,
+                  assignee: { name: 'Ada' },
+                  creator: { name: 'Grace' },
+                  team: { key: 'ENG' },
+                  labels: { nodes: [{ name: 'bug' }] },
+                  comments: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } },
+                },
+              },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+      ),
+    );
+
+    await expect(integration().fetchIssueDetail('linear-token', 'ENG-42')).resolves.toMatchObject({
+      id: 'issue-1',
+      projectId: null,
+      identifier: 'ENG-42',
+      title: 'Fix intake',
+    });
+  });
+
   it('fetches issue details and creates comments through the shared Intake contract', async () => {
     const linear = integration();
     const detail: LinearIssueDetail = {

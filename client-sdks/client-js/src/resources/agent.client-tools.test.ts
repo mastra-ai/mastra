@@ -191,6 +191,54 @@ describe('Agent client-side tools', () => {
     expect(Object.keys(secondCallBody.clientTools)).toEqual(['finalizeTool']);
   });
 
+  it('stream: preserves tool-call providerMetadata at the part level in the recursive call', async () => {
+    // Regression test for #16220: Gemini's `thoughtSignature` arrives as `providerMetadata` on the
+    // tool-call chunk. The server reads `part.providerMetadata`, so nesting it inside
+    // `toolInvocation` loses it and the next turn fails with "missing a thought_signature".
+    const toolCallId = 'call_1';
+    const providerMetadata = { google: { thoughtSignature: 'sig-abc-123' } };
+
+    const firstCycle = [
+      { type: 'step-start', payload: { messageId: 'm1' } },
+      {
+        type: 'tool-call',
+        payload: { toolCallId, toolName: 'weatherTool', args: { location: 'NYC' }, providerMetadata },
+      },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 2 } } },
+    ];
+
+    const secondCycle = [
+      { type: 'step-start', payload: { messageId: 'm2' } },
+      { type: 'text-delta', payload: { text: 'Tool handled' } },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 3 } } },
+    ];
+
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse(firstCycle))
+      .mockResolvedValueOnce(sseResponse(secondCycle));
+
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Weather',
+      inputSchema: z.object({ location: z.string() }),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async () => ({ ok: true }),
+    });
+
+    const resp = await agent.stream('weather?', { clientTools: { weatherTool } });
+    await resp.processDataStream({ onChunk: async () => {} });
+
+    const secondCallBody = JSON.parse((global.fetch as any).mock.calls[1][1].body);
+    const toolInvocationPart = secondCallBody.messages
+      .flatMap((m: any) => (Array.isArray(m.parts) ? m.parts : []))
+      .find((p: any) => p.type === 'tool-invocation' && p.toolInvocation?.toolCallId === toolCallId);
+
+    expect(toolInvocationPart).toBeDefined();
+    expect(toolInvocationPart.providerMetadata).toEqual(providerMetadata);
+  });
+
   it('stream: applies client tool toModelOutput and sends it as tool-result providerOptions in the recursive call', async () => {
     const toolCallId = 'call_1';
 

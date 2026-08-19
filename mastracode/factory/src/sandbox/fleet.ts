@@ -36,6 +36,16 @@ export interface SandboxCommandResult {
  */
 export interface MaterializationSandbox {
   readonly id: string;
+  /** Human-readable provider name, forwarded from the underlying sandbox. */
+  readonly name?: string;
+  /** Provider type discriminator, forwarded from the underlying sandbox. */
+  readonly provider?: string;
+  /** Sandbox usage instructions surfaced in tool descriptions. */
+  getInstructions?(opts?: { requestContext?: unknown }): string;
+  /** Long-running process capability, when the provider supports it. */
+  readonly processes?: WorkspaceSandbox['processes'];
+  /** Mount capability, when the provider supports it. */
+  readonly mounts?: WorkspaceSandbox['mounts'];
   start(): Promise<void>;
   getInfo(): Promise<{ metadata?: Record<string, unknown> }>;
   executeCommand(
@@ -47,6 +57,12 @@ export interface MaterializationSandbox {
   setEnvironmentVariable?(name: string, value: string): void;
   /** Tear down the underlying VM. Optional: providers without it are no-ops. */
   stop?(): Promise<void>;
+  /** True when the provider persists real checkpoints (snapshot is not a no-op). */
+  readonly supportsCheckpoints?: boolean;
+  /** Persist the sandbox's current state under its bound checkpoint name. */
+  snapshot?(): Promise<void>;
+  /** Boot-only fallback checkpoint requested for this fresh provision. */
+  seedCheckpointNameUsed?: string;
 }
 
 /** Options for building (or reattaching) one sandbox. */
@@ -65,6 +81,14 @@ export interface SandboxCreateOptions {
   idleTimeoutMinutes?: number;
   /** Provider checkpoint used to seed and preserve this sandbox's filesystem. */
   checkpointName?: string;
+  /**
+   * Boot-only fallback checkpoint used when `checkpointName` has no stored
+   * state yet (e.g. the repo base checkpoint for a brand-new session).
+   * Snapshots keep writing to `checkpointName`.
+   */
+  seedCheckpointName?: string;
+  /** Opaque user subject attributed to provider API requests. */
+  actingUserId?: string;
 }
 
 /**
@@ -114,6 +138,8 @@ export class SandboxBudgetError extends Error {
 export interface EnsureSandboxOptions {
   /** Provider working directory for this sandbox. */
   workingDirectory?: string;
+  /** Opaque user subject attributed to provider API requests. */
+  actingUserId?: string;
 }
 
 /**
@@ -126,6 +152,8 @@ export interface SandboxBindingStore {
   readonly sandboxId: string | null;
   /** Provider checkpoint used to seed and preserve this sandbox's filesystem. */
   readonly checkpointName?: string;
+  /** Boot-only fallback checkpoint (e.g. repo base checkpoint) for first provision. */
+  readonly seedCheckpointName?: string;
   /** Persist a freshly provisioned provider id, or clear a stale one with `null`. */
   setSandboxId(id: string | null): Promise<void>;
   /** Clear all stored sandbox state (reattach id + materialization mark) on teardown. */
@@ -166,6 +194,12 @@ function toMaterializationSandbox(
   const environment = { ...initialEnvironment };
   return {
     id: sandbox.id,
+    name: sandbox.name,
+    provider: sandbox.provider,
+    getInstructions: opts =>
+      sandbox.getInstructions?.(opts as Parameters<NonNullable<WorkspaceSandbox['getInstructions']>>[0]) ?? '',
+    processes: sandbox.processes,
+    mounts: sandbox.mounts,
     start: async () => {
       await (lifecycle._start ?? sandbox.start)?.call(sandbox);
     },
@@ -181,19 +215,25 @@ function toMaterializationSandbox(
     stop: async () => {
       await (lifecycle._stop ?? sandbox.stop)?.call(sandbox);
     },
+    supportsCheckpoints: sandbox.supportsCheckpoints === true,
+    ...(sandbox.snapshot ? { snapshot: sandbox.snapshot.bind(sandbox) } : {}),
   };
 }
 
 /**
- * The provider's reattach id for a started sandbox. For Railway this is the
- * underlying `railwaySandboxId` in `getInfo().metadata`. Providers without a
- * provider-native id (e.g. local) reattach by construction id, so fall back
- * to the sandbox's own logical id.
+ * Provider details reported after startup. Railway exposes its native sandbox
+ * id and the checkpoint it actually restored through `getInfo().metadata`.
  */
-async function readProviderSandboxId(sandbox: MaterializationSandbox): Promise<string | undefined> {
+async function readProviderSandboxDetails(
+  sandbox: MaterializationSandbox,
+): Promise<{ sandboxId: string | undefined; restoredCheckpointName: string | undefined }> {
   const info = await sandbox.getInfo();
   const id = info.metadata?.railwaySandboxId ?? info.metadata?.sandboxId;
-  return typeof id === 'string' ? id : sandbox.id;
+  const restoredCheckpointName = info.metadata?.restoredCheckpointName;
+  return {
+    sandboxId: typeof id === 'string' ? id : sandbox.id,
+    restoredCheckpointName: typeof restoredCheckpointName === 'string' ? restoredCheckpointName : undefined,
+  };
 }
 
 /** Keep each path piece a single safe segment (no separators or traversal). */
@@ -262,6 +302,15 @@ export class SandboxFleet {
    */
   get provider(): string {
     return this.#config?.machine.provider ?? 'none';
+  }
+
+  /**
+   * Usage instructions from the configured template machine, for surfacing in
+   * tool descriptions before any per-session sandbox has materialized.
+   * Empty string when no machine is configured or it exposes none.
+   */
+  getInstructions(): string {
+    return this.#config?.machine.getInstructions?.() ?? '';
   }
 
   /**
@@ -375,6 +424,8 @@ export class SandboxFleet {
       ...(opts.workingDirectory ? { workingDirectory: opts.workingDirectory } : {}),
       ...(opts.idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes: opts.idleTimeoutMinutes } : {}),
       ...(opts.checkpointName ? { checkpointName: opts.checkpointName } : {}),
+      ...(opts.seedCheckpointName ? { seedCheckpointName: opts.seedCheckpointName } : {}),
+      ...(opts.actingUserId ? { actingUserId: opts.actingUserId } : {}),
     });
     return toMaterializationSandbox(clone, opts.env);
   }
@@ -447,9 +498,11 @@ export class SandboxFleet {
         ...(checkpointName ? { checkpointName } : {}),
         ...(env ? { env } : {}),
         ...(options.workingDirectory ? { workingDirectory: options.workingDirectory } : {}),
+        ...(options.actingUserId ? { actingUserId: options.actingUserId } : {}),
       });
       try {
         await timedPhase('sandbox.reattach', () => reattached.start());
+        reattached.seedCheckpointNameUsed = undefined;
         return reattached;
       } catch {
         await store.setSandboxId(null);
@@ -467,18 +520,35 @@ export class SandboxFleet {
     const sandbox = this.#build({
       idleTimeoutMinutes,
       ...(checkpointName ? { checkpointName } : {}),
+      // Boot-only fallback seed (repo base checkpoint) — only meaningful on a
+      // fresh provision; snapshots keep writing to `checkpointName`.
+      ...(store.seedCheckpointName ? { seedCheckpointName: store.seedCheckpointName } : {}),
       ...(env ? { env } : {}),
       ...(options.workingDirectory ? { workingDirectory: options.workingDirectory } : {}),
+      ...(options.actingUserId ? { actingUserId: options.actingUserId } : {}),
     });
     await timedPhase('sandbox.provision', () => sandbox.start());
     this.#liveCount += 1;
 
-    const providerSandboxId = await readProviderSandboxId(sandbox);
-    if (providerSandboxId) {
-      await store.setSandboxId(providerSandboxId);
-    }
+    try {
+      const provider = await readProviderSandboxDetails(sandbox);
+      if (provider.sandboxId) {
+        await store.setSandboxId(provider.sandboxId);
+      }
 
-    return sandbox;
+      if (store.seedCheckpointName && provider.restoredCheckpointName === store.seedCheckpointName) {
+        sandbox.seedCheckpointNameUsed = store.seedCheckpointName;
+      }
+      return sandbox;
+    } catch (error) {
+      if (this.#liveCount > 0) this.#liveCount -= 1;
+      try {
+        await sandbox.stop?.();
+      } catch {
+        // Preserve the provider-detail or persistence error that made the sandbox unusable.
+      }
+      throw error;
+    }
   }
 
   /**
@@ -517,6 +587,7 @@ export class SandboxFleet {
       providerSandboxId,
       idleTimeoutMinutes: this.idleMinutes,
       ...(options.workingDirectory ? { workingDirectory: options.workingDirectory } : {}),
+      ...(options.actingUserId ? { actingUserId: options.actingUserId } : {}),
     });
     await sandbox.start();
     return sandbox;

@@ -57,6 +57,8 @@ describe('experiment worker workspace, sandbox, and persistence behavior', () =>
     await installPnpmProject(projectRoot, inject('registry'));
     const build = await buildWorker(projectRoot);
     manifest = (await inspectManifest(build.artifactRoot)).manifest;
+    expect(await pathExists(join(build.artifactRoot, 'app-storage.db'))).toBe(false);
+    expect(await pathExists(join(build.artifactRoot, 'vector-store.db'))).toBe(false);
     artifactRoot = resources.trackPath(
       await copyArtifact({
         artifactRoot: build.artifactRoot,
@@ -238,6 +240,7 @@ describe('experiment worker workspace, sandbox, and persistence behavior', () =>
       const vectorStoreExists = await pathExists(join(artifactRoot, 'vector-store.db'));
       expect(vectorStoreExists).toBe(true);
       await recordAssertionEvidence(persistenceIsolationScenario, {
+        'config-initialization-isolated': true,
         'application-storage-written': completed,
         'vector-adapter-executed': vectorStoreExists,
         'experiment-records-absent': true,

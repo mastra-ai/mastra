@@ -455,9 +455,10 @@ export class AgentsDSQL extends AgentsStorage {
               "defaultOptions", workflows, agents, "integrationTools",
               "inputProcessors", "outputProcessors", memory, scorers,
               "mcpClients", "requestContextSchema", workspace, skills, "skillsFormat",
+              durable,
               "changedFields", "changeMessage",
               "createdAt", "createdAtZ"
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)`,
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)`,
           [
             input.id,
             input.agentId,
@@ -480,6 +481,7 @@ export class AgentsDSQL extends AgentsStorage {
             input.workspace ? JSON.stringify(input.workspace) : null,
             input.skills ? JSON.stringify(input.skills) : null,
             input.skillsFormat ?? null,
+            input.durable !== undefined ? JSON.stringify(input.durable) : null,
             input.changedFields ? JSON.stringify(input.changedFields) : null,
             input.changeMessage ?? null,
             nowIso,
@@ -741,6 +743,7 @@ export class AgentsDSQL extends AgentsStorage {
       workspace: this.parseJson(row.workspace, 'workspace'),
       skills: this.parseJson(row.skills, 'skills'),
       skillsFormat: row.skillsFormat as 'xml' | 'json' | 'markdown' | undefined,
+      durable: this.parseJson(row.durable, 'durable'),
       changedFields: this.parseJson(row.changedFields, 'changedFields'),
       changeMessage: row.changeMessage as string | undefined,
       createdAt: row.createdAtZ || row.createdAt,

@@ -16,13 +16,18 @@
   ],
   "redirects": [
     {
+      "source": "/docs/workspace/overview",
+      "destination": "/docs/sandbox/overview",
+      "permanent": true
+    },
+    {
       "source": "/docs/editor/prompts",
-      "destination": "/docs/editor/overview",
+      "destination": "/docs/studio/editor",
       "permanent": true
     },
     {
       "source": "/docs/editor/tools",
-      "destination": "/docs/editor/overview",
+      "destination": "/docs/studio/editor",
       "permanent": true
     },
     {
@@ -32,7 +37,7 @@
     },
     {
       "source": "/docs/agents/channels",
-      "destination": "/docs/capabilities/channels",
+      "destination": "/docs/channels",
       "permanent": true
     },
     {
@@ -151,6 +156,11 @@
       "permanent": true
     },
     {
+      "source": "/models/providers/merge-gateway",
+      "destination": "/models/gateways/merge-gateway",
+      "permanent": true
+    },
+    {
       "source": "/guides/v1/:path*",
       "destination": "/guides/:path*",
       "permanent": true
@@ -197,37 +207,37 @@
     },
     {
       "source": "/docs/agents/background-tasks",
-      "destination": "/docs/long-running-agents/background-tasks",
+      "destination": "/docs/harness/background-tasks",
       "permanent": true
     },
     {
       "source": "/docs/agents/durable-agents",
-      "destination": "/docs/long-running-agents/durable-agents",
+      "destination": "/docs/harness/durable-agents",
       "permanent": true
     },
     {
       "source": "/docs/agents/goals",
-      "destination": "/docs/long-running-agents/goals",
+      "destination": "/docs/harness/goals",
       "permanent": true
     },
     {
       "source": "/docs/agents/heartbeats",
-      "destination": "/docs/long-running-agents/schedules",
+      "destination": "/docs/harness/schedules",
       "permanent": true
     },
     {
       "source": "/docs/long-running-agents/heartbeats",
-      "destination": "/docs/long-running-agents/schedules",
+      "destination": "/docs/harness/schedules",
       "permanent": true
     },
     {
       "source": "/docs/agents/signal-providers",
-      "destination": "/docs/long-running-agents/signal-providers",
+      "destination": "/docs/harness/signal-providers",
       "permanent": true
     },
     {
       "source": "/docs/agents/signals",
-      "destination": "/docs/long-running-agents/signals",
+      "destination": "/docs/harness/signals",
       "permanent": true
     },
     {
@@ -427,7 +437,7 @@
     },
     {
       "source": "/docs/agents/human-in-the-loop-with-tools",
-      "destination": "/docs/agents/agent-approval",
+      "destination": "/docs/agents/human-in-the-loop",
       "permanent": true
     },
     {
@@ -462,12 +472,12 @@
     },
     {
       "source": "/docs/server-db/storage",
-      "destination": "/docs/storage/overview",
+      "destination": "/docs/storage",
       "permanent": true
     },
     {
       "source": "/docs/server-db/mastra-server",
-      "destination": "/docs/server/mastra-server",
+      "destination": "/docs/server/overview",
       "permanent": true
     },
     {
@@ -501,43 +511,38 @@
       "permanent": true
     },
     {
-      "source": "/docs/auth",
-      "destination": "/docs/server/auth",
+      "source": "/docs/server/auth",
+      "destination": "/docs/auth/overview",
       "permanent": true
     },
     {
-      "source": "/docs/auth/index",
-      "destination": "/docs/server/auth/index",
+      "source": "/docs/server/auth/composite-auth",
+      "destination": "/docs/auth/composite-auth",
       "permanent": true
     },
     {
-      "source": "/docs/auth/jwt",
-      "destination": "/docs/server/auth/jwt",
+      "source": "/docs/server/auth/custom-auth-provider",
+      "destination": "/docs/auth/custom-auth-provider",
       "permanent": true
     },
     {
-      "source": "/docs/auth/clerk",
-      "destination": "/integrations/auth/clerk",
+      "source": "/docs/server/auth/fga",
+      "destination": "/docs/auth/fga",
       "permanent": true
     },
     {
-      "source": "/docs/auth/supabase",
-      "destination": "/integrations/auth/supabase",
+      "source": "/docs/server/auth/jwt",
+      "destination": "/docs/auth/jwt",
       "permanent": true
     },
     {
-      "source": "/docs/auth/firebase",
-      "destination": "/integrations/auth/firebase",
+      "source": "/docs/server/auth/simple-auth",
+      "destination": "/docs/auth/simple-auth",
       "permanent": true
     },
     {
-      "source": "/docs/auth/workos",
-      "destination": "/integrations/auth/workos",
-      "permanent": true
-    },
-    {
-      "source": "/docs/auth/auth0",
-      "destination": "/integrations/auth/auth0",
+      "source": "/docs/server/auth/workers",
+      "destination": "/docs/auth/workers",
       "permanent": true
     },
     {
@@ -647,7 +652,7 @@
     },
     {
       "source": "/docs/memory/storage/overview",
-      "destination": "/docs/storage/overview",
+      "destination": "/docs/storage",
       "permanent": true
     },
     {
@@ -672,7 +677,7 @@
     },
     {
       "source": "/docs/memory/threads-and-resources",
-      "destination": "/docs/storage/overview",
+      "destination": "/docs/storage",
       "permanent": true
     },
     {
@@ -762,17 +767,17 @@
     },
     {
       "source": "/docs/tools-mcp/advanced-usage",
-      "destination": "/docs/agents/using-tools",
+      "destination": "/docs/agents/tools",
       "permanent": true
     },
     {
       "source": "/docs/tools-mcp/mcp-overview",
-      "destination": "/docs/mcp/overview",
+      "destination": "/docs/connections/mcp",
       "permanent": true
     },
     {
       "source": "/docs/tools-mcp/overview",
-      "destination": "/docs/agents/using-tools",
+      "destination": "/docs/agents/tools",
       "permanent": true
     },
     {
@@ -892,7 +897,7 @@
     },
     {
       "source": "/docs/mcp/publishing-mcp-server",
-      "destination": "/docs/mcp/overview",
+      "destination": "/docs/connections/mcp",
       "permanent": true
     },
     {
@@ -927,7 +932,7 @@
     },
     {
       "source": "/docs/streaming/tool-streaming",
-      "destination": "/docs/agents/using-tools",
+      "destination": "/docs/agents/tools",
       "permanent": true
     },
     {
@@ -937,7 +942,7 @@
     },
     {
       "source": "/docs/streaming/background-task-streaming",
-      "destination": "/docs/long-running-agents/background-tasks",
+      "destination": "/docs/harness/background-tasks",
       "permanent": true
     },
     {
@@ -1012,7 +1017,7 @@
     },
     {
       "source": "/docs/tools/overview",
-      "destination": "/docs/agents/using-tools",
+      "destination": "/docs/agents/tools",
       "permanent": true
     },
     {
@@ -1027,12 +1032,12 @@
     },
     {
       "source": "/docs/memory/storage",
-      "destination": "/docs/storage/overview",
+      "destination": "/docs/storage",
       "permanent": true
     },
     {
       "source": "/docs/agents/file-based-agents",
-      "destination": "/docs/getting-started/develop",
+      "destination": "/docs/develop",
       "permanent": true
     },
     {
@@ -1102,7 +1107,7 @@
     },
     {
       "source": "/docs/guide/tools",
-      "destination": "/docs/agents/using-tools",
+      "destination": "/docs/agents/tools",
       "permanent": true
     },
     {
@@ -1122,7 +1127,7 @@
     },
     {
       "source": "/docs/getting-started/file-based-agents",
-      "destination": "/docs/getting-started/develop",
+      "destination": "/docs/develop",
       "permanent": true
     },
     {
@@ -1267,12 +1272,12 @@
     },
     {
       "source": "/docs/agents/supervisor-agents",
-      "destination": "/docs/capabilities/subagents",
+      "destination": "/docs/subagents",
       "permanent": true
     },
     {
       "source": "/docs/mcp/mcp-apps",
-      "destination": "/docs/mcp/overview",
+      "destination": "/docs/connections/mcp",
       "permanent": true
     },
     {
@@ -1782,7 +1787,7 @@
     },
     {
       "source": "/docs/capabilities/channels/other-adapters",
-      "destination": "/docs/capabilities/channels",
+      "destination": "/docs/channels",
       "permanent": true
     },
     {
@@ -1867,7 +1872,7 @@
     },
     {
       "source": "/docs/capabilities/channels/overview",
-      "destination": "/docs/capabilities/channels",
+      "destination": "/docs/channels",
       "permanent": true
     },
     {
@@ -1887,12 +1892,12 @@
     },
     {
       "source": "/guides/guide/web-search",
-      "destination": "/docs/agents/using-tools",
+      "destination": "/docs/agents/tools",
       "permanent": true
     },
     {
       "source": "/guides/guide/publishing-mcp-server",
-      "destination": "/docs/mcp/overview",
+      "destination": "/docs/connections/mcp",
       "permanent": true
     },
     {
@@ -1902,7 +1907,7 @@
     },
     {
       "source": "/guides/guide/stock-agent",
-      "destination": "/docs/agents/using-tools",
+      "destination": "/docs/agents/tools",
       "permanent": true
     },
     {
@@ -2052,17 +2057,167 @@
     },
     {
       "source": "/docs/browser/recording",
-      "destination": "/docs/browser/overview#record-browser-sessions",
+      "destination": "/docs/browser#record-browser-sessions",
+      "permanent": true
+    },
+    {
+      "source": "/reference/processors/cost-guard-processor",
+      "destination": "/reference/processors/token-cost-control",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/a2a",
+      "destination": "/docs/connections/a2a",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/acp",
+      "destination": "/docs/connections/acp",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/sdk-agents",
+      "destination": "/docs/connections/sdk-agents",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mcp/overview",
+      "destination": "/docs/connections/mcp",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/using-tools",
+      "destination": "/docs/agents/tools",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/agent-approval",
+      "destination": "/docs/agents/human-in-the-loop",
+      "permanent": true
+    },
+    {
+      "source": "/docs/long-running-agents/durable-agents",
+      "destination": "/docs/harness/durable-agents",
+      "permanent": true
+    },
+    {
+      "source": "/docs/long-running-agents/background-tasks",
+      "destination": "/docs/harness/background-tasks",
+      "permanent": true
+    },
+    {
+      "source": "/docs/long-running-agents/goals",
+      "destination": "/docs/harness/goals",
+      "permanent": true
+    },
+    {
+      "source": "/docs/long-running-agents/schedules",
+      "destination": "/docs/harness/schedules",
+      "permanent": true
+    },
+    {
+      "source": "/docs/long-running-agents/signals",
+      "destination": "/docs/harness/signals",
+      "permanent": true
+    },
+    {
+      "source": "/docs/long-running-agents/signal-providers",
+      "destination": "/docs/harness/signal-providers",
+      "permanent": true
+    },
+    {
+      "source": "/docs/capabilities/subagents",
+      "destination": "/docs/subagents",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/skills",
+      "destination": "/docs/skills",
+      "permanent": true
+    },
+    {
+      "source": "/docs/capabilities/channels",
+      "destination": "/docs/channels",
+      "permanent": true
+    },
+    {
+      "source": "/docs/browser/overview",
+      "destination": "/docs/browser",
+      "permanent": true
+    },
+    {
+      "source": "/docs/storage/overview",
+      "destination": "/docs/storage",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workspace/sandbox",
+      "destination": "/docs/sandbox/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workspace/filesystem",
+      "destination": "/docs/sandbox/filesystem",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workspace/search",
+      "destination": "/docs/sandbox/search",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workspace/skills",
+      "destination": "/docs/sandbox/skills",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workspace/lsp",
+      "destination": "/docs/sandbox/lsp",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server/mastra-server",
+      "destination": "/docs/server/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/editor/overview",
+      "destination": "/docs/studio/editor",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server/auth/:path*",
+      "destination": "/docs/auth/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/auth/index",
+      "destination": "/docs/auth/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/develop",
+      "destination": "/docs/develop",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents",
+      "destination": "/docs/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workspace/overview/llms.txt",
+      "destination": "/docs/sandbox/overview/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/editor/prompts/llms.txt",
-      "destination": "/docs/editor/overview/llms.txt",
+      "destination": "/docs/studio/editor/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/editor/tools/llms.txt",
-      "destination": "/docs/editor/overview/llms.txt",
+      "destination": "/docs/studio/editor/llms.txt",
       "permanent": true
     },
     {
@@ -2072,7 +2227,7 @@
     },
     {
       "source": "/docs/agents/channels/llms.txt",
-      "destination": "/docs/capabilities/channels/llms.txt",
+      "destination": "/docs/channels/llms.txt",
       "permanent": true
     },
     {
@@ -2191,6 +2346,11 @@
       "permanent": true
     },
     {
+      "source": "/models/providers/merge-gateway/llms.txt",
+      "destination": "/models/gateways/merge-gateway/llms.txt",
+      "permanent": true
+    },
+    {
       "source": "/guides/v1/:path*/llms.txt",
       "destination": "/guides/:path*/llms.txt",
       "permanent": true
@@ -2217,37 +2377,37 @@
     },
     {
       "source": "/docs/agents/background-tasks/llms.txt",
-      "destination": "/docs/long-running-agents/background-tasks/llms.txt",
+      "destination": "/docs/harness/background-tasks/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/agents/durable-agents/llms.txt",
-      "destination": "/docs/long-running-agents/durable-agents/llms.txt",
+      "destination": "/docs/harness/durable-agents/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/agents/goals/llms.txt",
-      "destination": "/docs/long-running-agents/goals/llms.txt",
+      "destination": "/docs/harness/goals/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/agents/heartbeats/llms.txt",
-      "destination": "/docs/long-running-agents/schedules/llms.txt",
+      "destination": "/docs/harness/schedules/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/long-running-agents/heartbeats/llms.txt",
-      "destination": "/docs/long-running-agents/schedules/llms.txt",
+      "destination": "/docs/harness/schedules/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/agents/signal-providers/llms.txt",
-      "destination": "/docs/long-running-agents/signal-providers/llms.txt",
+      "destination": "/docs/harness/signal-providers/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/agents/signals/llms.txt",
-      "destination": "/docs/long-running-agents/signals/llms.txt",
+      "destination": "/docs/harness/signals/llms.txt",
       "permanent": true
     },
     {
@@ -2322,7 +2482,7 @@
     },
     {
       "source": "/docs/agents/human-in-the-loop-with-tools/llms.txt",
-      "destination": "/docs/agents/agent-approval/llms.txt",
+      "destination": "/docs/agents/human-in-the-loop/llms.txt",
       "permanent": true
     },
     {
@@ -2347,12 +2507,12 @@
     },
     {
       "source": "/docs/server-db/storage/llms.txt",
-      "destination": "/docs/storage/overview/llms.txt",
+      "destination": "/docs/storage/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/server-db/mastra-server/llms.txt",
-      "destination": "/docs/server/mastra-server/llms.txt",
+      "destination": "/docs/server/overview/llms.txt",
       "permanent": true
     },
     {
@@ -2386,43 +2546,38 @@
       "permanent": true
     },
     {
-      "source": "/docs/auth/llms.txt",
-      "destination": "/docs/server/auth/llms.txt",
+      "source": "/docs/server/auth/llms.txt",
+      "destination": "/docs/auth/overview/llms.txt",
       "permanent": true
     },
     {
-      "source": "/docs/auth/index/llms.txt",
-      "destination": "/docs/server/auth/index/llms.txt",
+      "source": "/docs/server/auth/composite-auth/llms.txt",
+      "destination": "/docs/auth/composite-auth/llms.txt",
       "permanent": true
     },
     {
-      "source": "/docs/auth/jwt/llms.txt",
-      "destination": "/docs/server/auth/jwt/llms.txt",
+      "source": "/docs/server/auth/custom-auth-provider/llms.txt",
+      "destination": "/docs/auth/custom-auth-provider/llms.txt",
       "permanent": true
     },
     {
-      "source": "/docs/auth/clerk/llms.txt",
-      "destination": "/integrations/auth/clerk/llms.txt",
+      "source": "/docs/server/auth/fga/llms.txt",
+      "destination": "/docs/auth/fga/llms.txt",
       "permanent": true
     },
     {
-      "source": "/docs/auth/supabase/llms.txt",
-      "destination": "/integrations/auth/supabase/llms.txt",
+      "source": "/docs/server/auth/jwt/llms.txt",
+      "destination": "/docs/auth/jwt/llms.txt",
       "permanent": true
     },
     {
-      "source": "/docs/auth/firebase/llms.txt",
-      "destination": "/integrations/auth/firebase/llms.txt",
+      "source": "/docs/server/auth/simple-auth/llms.txt",
+      "destination": "/docs/auth/simple-auth/llms.txt",
       "permanent": true
     },
     {
-      "source": "/docs/auth/workos/llms.txt",
-      "destination": "/integrations/auth/workos/llms.txt",
-      "permanent": true
-    },
-    {
-      "source": "/docs/auth/auth0/llms.txt",
-      "destination": "/integrations/auth/auth0/llms.txt",
+      "source": "/docs/server/auth/workers/llms.txt",
+      "destination": "/docs/auth/workers/llms.txt",
       "permanent": true
     },
     {
@@ -2492,7 +2647,7 @@
     },
     {
       "source": "/docs/memory/storage/overview/llms.txt",
-      "destination": "/docs/storage/overview/llms.txt",
+      "destination": "/docs/storage/llms.txt",
       "permanent": true
     },
     {
@@ -2517,7 +2672,7 @@
     },
     {
       "source": "/docs/memory/threads-and-resources/llms.txt",
-      "destination": "/docs/storage/overview/llms.txt",
+      "destination": "/docs/storage/llms.txt",
       "permanent": true
     },
     {
@@ -2582,17 +2737,17 @@
     },
     {
       "source": "/docs/tools-mcp/advanced-usage/llms.txt",
-      "destination": "/docs/agents/using-tools/llms.txt",
+      "destination": "/docs/agents/tools/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/tools-mcp/mcp-overview/llms.txt",
-      "destination": "/docs/mcp/overview/llms.txt",
+      "destination": "/docs/connections/mcp/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/tools-mcp/overview/llms.txt",
-      "destination": "/docs/agents/using-tools/llms.txt",
+      "destination": "/docs/agents/tools/llms.txt",
       "permanent": true
     },
     {
@@ -2677,7 +2832,7 @@
     },
     {
       "source": "/docs/mcp/publishing-mcp-server/llms.txt",
-      "destination": "/docs/mcp/overview/llms.txt",
+      "destination": "/docs/connections/mcp/llms.txt",
       "permanent": true
     },
     {
@@ -2712,7 +2867,7 @@
     },
     {
       "source": "/docs/streaming/tool-streaming/llms.txt",
-      "destination": "/docs/agents/using-tools/llms.txt",
+      "destination": "/docs/agents/tools/llms.txt",
       "permanent": true
     },
     {
@@ -2722,7 +2877,7 @@
     },
     {
       "source": "/docs/streaming/background-task-streaming/llms.txt",
-      "destination": "/docs/long-running-agents/background-tasks/llms.txt",
+      "destination": "/docs/harness/background-tasks/llms.txt",
       "permanent": true
     },
     {
@@ -2787,7 +2942,7 @@
     },
     {
       "source": "/docs/tools/overview/llms.txt",
-      "destination": "/docs/agents/using-tools/llms.txt",
+      "destination": "/docs/agents/tools/llms.txt",
       "permanent": true
     },
     {
@@ -2802,12 +2957,12 @@
     },
     {
       "source": "/docs/memory/storage/llms.txt",
-      "destination": "/docs/storage/overview/llms.txt",
+      "destination": "/docs/storage/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/agents/file-based-agents/llms.txt",
-      "destination": "/docs/getting-started/develop/llms.txt",
+      "destination": "/docs/develop/llms.txt",
       "permanent": true
     },
     {
@@ -2877,7 +3032,7 @@
     },
     {
       "source": "/docs/guide/tools/llms.txt",
-      "destination": "/docs/agents/using-tools/llms.txt",
+      "destination": "/docs/agents/tools/llms.txt",
       "permanent": true
     },
     {
@@ -2897,7 +3052,7 @@
     },
     {
       "source": "/docs/getting-started/file-based-agents/llms.txt",
-      "destination": "/docs/getting-started/develop/llms.txt",
+      "destination": "/docs/develop/llms.txt",
       "permanent": true
     },
     {
@@ -2967,12 +3122,12 @@
     },
     {
       "source": "/docs/agents/supervisor-agents/llms.txt",
-      "destination": "/docs/capabilities/subagents/llms.txt",
+      "destination": "/docs/subagents/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/mcp/mcp-apps/llms.txt",
-      "destination": "/docs/mcp/overview/llms.txt",
+      "destination": "/docs/connections/mcp/llms.txt",
       "permanent": true
     },
     {
@@ -3482,7 +3637,7 @@
     },
     {
       "source": "/docs/capabilities/channels/other-adapters/llms.txt",
-      "destination": "/docs/capabilities/channels/llms.txt",
+      "destination": "/docs/channels/llms.txt",
       "permanent": true
     },
     {
@@ -3567,7 +3722,7 @@
     },
     {
       "source": "/docs/capabilities/channels/overview/llms.txt",
-      "destination": "/docs/capabilities/channels/llms.txt",
+      "destination": "/docs/channels/llms.txt",
       "permanent": true
     },
     {
@@ -3587,12 +3742,12 @@
     },
     {
       "source": "/guides/guide/web-search/llms.txt",
-      "destination": "/docs/agents/using-tools/llms.txt",
+      "destination": "/docs/agents/tools/llms.txt",
       "permanent": true
     },
     {
       "source": "/guides/guide/publishing-mcp-server/llms.txt",
-      "destination": "/docs/mcp/overview/llms.txt",
+      "destination": "/docs/connections/mcp/llms.txt",
       "permanent": true
     },
     {
@@ -3602,7 +3757,7 @@
     },
     {
       "source": "/guides/guide/stock-agent/llms.txt",
-      "destination": "/docs/agents/using-tools/llms.txt",
+      "destination": "/docs/agents/tools/llms.txt",
       "permanent": true
     },
     {
@@ -3702,7 +3857,152 @@
     },
     {
       "source": "/docs/browser/recording/llms.txt",
-      "destination": "/docs/browser/overview/llms.txt",
+      "destination": "/docs/browser/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/processors/cost-guard-processor/llms.txt",
+      "destination": "/reference/processors/token-cost-control/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/a2a/llms.txt",
+      "destination": "/docs/connections/a2a/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/acp/llms.txt",
+      "destination": "/docs/connections/acp/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/sdk-agents/llms.txt",
+      "destination": "/docs/connections/sdk-agents/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mcp/overview/llms.txt",
+      "destination": "/docs/connections/mcp/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/using-tools/llms.txt",
+      "destination": "/docs/agents/tools/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/agent-approval/llms.txt",
+      "destination": "/docs/agents/human-in-the-loop/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/long-running-agents/durable-agents/llms.txt",
+      "destination": "/docs/harness/durable-agents/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/long-running-agents/background-tasks/llms.txt",
+      "destination": "/docs/harness/background-tasks/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/long-running-agents/goals/llms.txt",
+      "destination": "/docs/harness/goals/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/long-running-agents/schedules/llms.txt",
+      "destination": "/docs/harness/schedules/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/long-running-agents/signals/llms.txt",
+      "destination": "/docs/harness/signals/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/long-running-agents/signal-providers/llms.txt",
+      "destination": "/docs/harness/signal-providers/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/capabilities/subagents/llms.txt",
+      "destination": "/docs/subagents/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/skills/llms.txt",
+      "destination": "/docs/skills/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/capabilities/channels/llms.txt",
+      "destination": "/docs/channels/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/browser/overview/llms.txt",
+      "destination": "/docs/browser/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/storage/overview/llms.txt",
+      "destination": "/docs/storage/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workspace/sandbox/llms.txt",
+      "destination": "/docs/sandbox/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workspace/filesystem/llms.txt",
+      "destination": "/docs/sandbox/filesystem/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workspace/search/llms.txt",
+      "destination": "/docs/sandbox/search/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workspace/skills/llms.txt",
+      "destination": "/docs/sandbox/skills/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workspace/lsp/llms.txt",
+      "destination": "/docs/sandbox/lsp/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server/mastra-server/llms.txt",
+      "destination": "/docs/server/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/editor/overview/llms.txt",
+      "destination": "/docs/studio/editor/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server/auth/:path*/llms.txt",
+      "destination": "/docs/auth/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/auth/index/llms.txt",
+      "destination": "/docs/auth/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/develop/llms.txt",
+      "destination": "/docs/develop/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/llms.txt",
+      "destination": "/docs/agents/overview/llms.txt",
       "permanent": true
     }
   ]

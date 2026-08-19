@@ -36,4 +36,17 @@ describe('ProcessStepListItem', () => {
     render(<ProcessStepListItem step={step} isActive position={2} variant="plain" />);
     expect(cardOf('Cloning repository')?.classList.contains('bg-surface3')).toBe(false);
   });
+
+  it('drops the filled disc and its glow from a completed marker in the plain variant', () => {
+    const completed: ProcessStep = { ...step, status: 'success', isActive: false };
+
+    render(<ProcessStepListItem step={completed} isActive={false} position={2} />);
+    expect(document.querySelector('.bg-accent1Dark.shadow-glow-accent1')).toBeTruthy();
+
+    cleanup();
+
+    render(<ProcessStepListItem step={completed} isActive={false} position={2} variant="plain" />);
+    expect(document.querySelector('.bg-accent1Dark')).toBeNull();
+    expect(document.querySelector('.shadow-glow-accent1')).toBeNull();
+  });
 });

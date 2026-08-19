@@ -12,6 +12,8 @@ import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRules } from '../rules/types.js';
+import { isFactoryRuleStage } from '../rules/types.js';
+import type { BaseCheckpointTriggers } from '../sandbox/base-checkpoint-triggers.js';
 import type { SandboxFleet } from '../sandbox/fleet.js';
 import { ensureFactorySourceSession, resolveFactoryDefaultModelId } from '../session/factory-session.js';
 import { LiveSessions } from '../session/live-sessions.js';
@@ -33,6 +35,7 @@ import { ConfigRoutes } from './config.js';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
 import { buildFsRoutes } from './fs.js';
 import { IntakeRoutes } from './intake.js';
+import { KnowledgeRoutes } from './knowledge.js';
 import { OAuthRoutes } from './oauth.js';
 import type { RouteAuth } from './route.js';
 import { SkillRoutes } from './skills.js';
@@ -57,6 +60,8 @@ export interface FactoryApiRoutesDeps {
   stateSigner?: StateSigner;
   /** Sandbox fleet constructed by the factory (disabled when no machine). */
   fleet: SandboxFleet;
+  /** Base-checkpoint trigger surface, when the factory constructed one. */
+  baseCheckpoints?: BaseCheckpointTriggers;
   /** Root factory storage backend (distributed locks, app-db diagnostics). */
   factoryStorage?: FactoryStorage;
   integrationStorage: IntegrationStorage;
@@ -77,9 +82,11 @@ export interface FactoryApiRoutesDeps {
   integrations?: IntegrationRegistration[];
   intakeReady: boolean;
   factoryReady: boolean;
+  knowledgeEnabled: boolean;
   /** Resolved Factory rule set, threaded from the host (no service locator). */
   rules: FactoryRules;
   factoryTransitionService?: FactoryTransitionService;
+  sessionRetirement?: import('../sandbox/session-retirement.js').SessionRetirementCoordinator;
   onFactoryRuntime?: (runtime: {
     transitionService: FactoryTransitionService;
     prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
@@ -181,7 +188,8 @@ export async function prepareFactoryRuleBinding(
     branch,
   });
   const destinationStage = input.item.stages.length === 1 ? input.item.stages[0] : undefined;
-  if (!destinationStage) throw new Error('Factory skill invocation requires one exclusive board stage.');
+  if (!isFactoryRuleStage(destinationStage))
+    throw new Error('Factory skill invocation requires one exclusive board stage.');
 
   await coordinator.prepare({
     orgId: input.record.orgId,
@@ -191,7 +199,7 @@ export async function prepareFactoryRuleBinding(
     defaultModelId: await resolveFactoryDefaultModelId(projects, input.record.factoryProjectId),
     threadTitle: `${input.role === 'review' ? 'PR' : 'Issue'}: ${input.item.title}`,
     kickoffKey: input.record.id,
-    destinationStage: destinationStage as 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done',
+    destinationStage,
     workItem: {
       id: input.item.id,
       role: input.role,
@@ -232,12 +240,15 @@ export function buildIntegrationContext(
      * `routes()`, `channels()`, and `workers()` all see the same context shape.
      */
     sourceControlOwnerId?: string;
+    /** Base-checkpoint trigger surface, when the factory constructed one. */
+    baseCheckpoints?: BaseCheckpointTriggers;
   },
   integrationId: string,
 ): IntegrationContext {
   return {
     auth: deps.auth,
     fleet: deps.fleet,
+    ...(deps.baseCheckpoints ? { baseCheckpoints: deps.baseCheckpoints } : {}),
     factoryStorage: deps.factoryStorage,
     baseUrl: deps.publicOrigin,
     controller: deps.controller,
@@ -411,8 +422,10 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       authStorage: deps.authStorage,
       modelCredentials: deps.domains.modelCredentials,
       modelPacks: deps.domains.modelPacks,
+      sourceControlSessions: deps.sourceControlStorage.forIntegration('github').sessions,
       memorySettings: deps.domains.memorySettings,
       customProviders: deps.domains.customProviders,
+      features: { knowledge: deps.knowledgeEnabled },
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
       onCustomProvidersChanged: invalidateCustomProvidersSnapshots,
     }).routes(),
@@ -437,9 +450,17 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           auth: deps.auth,
           audit: deps.audit,
           intake: deps.domains.intake,
+          projects: deps.domains.projects,
           integrations: (deps.integrations ?? []).flatMap(({ integration }) =>
             integration.intake ? [{ id: integration.id, intake: integration.intake }] : [],
           ),
+        }).routes()
+      : []),
+    ...(deps.factoryReady && deps.knowledgeEnabled
+      ? new KnowledgeRoutes({
+          auth: deps.auth,
+          projects: deps.domains.projects,
+          knowledge: async () => deps.factoryStorage?.getMastraStorage().getStore('knowledge'),
         }).routes()
       : []),
     ...(deps.factoryReady

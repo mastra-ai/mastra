@@ -534,7 +534,9 @@ describe('applyStoredOverrides', () => {
     });
 
     const result = await editor.agent.applyStoredOverrides(codeAgent);
-    const tools = await result.listTools({ requestContext: new RequestContext() });
+    const requestContext = new RequestContext();
+    requestContext.setRaw('nonSerializable', () => 'preserved');
+    const tools = await result.listTools({ requestContext });
 
     expect(tools['code-tool']).toBeDefined();
     expect(tools['GITHUB_LIST_REPOSITORY_ISSUES']).toBeDefined();
@@ -547,5 +549,8 @@ describe('applyStoredOverrides', () => {
         authorId: 'author-1',
       }),
     );
+    const providerRequestContext = vi.mocked(stubProvider.resolveToolsVNext!).mock.calls[0]?.[0].requestContext;
+    expect(providerRequestContext).toBe(requestContext);
+    expect(providerRequestContext?.getRaw('nonSerializable')).toBe(requestContext.getRaw('nonSerializable'));
   });
 });

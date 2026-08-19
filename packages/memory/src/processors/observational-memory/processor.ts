@@ -6,7 +6,6 @@ import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
 import { omDebug } from './debug';
-import { getObservableMessages } from './message-utils';
 import type { ObservationTurn } from './observation-turn/index';
 import { loadMemoryContextMessages } from './observation-turn/load-memory-context';
 import type { ObservationalMemory } from './observational-memory';
@@ -261,6 +260,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         });
         this.turn.writer = writer;
         this.turn.sendSignal = args.sendSignal;
+        this.turn.sendStateSignal = args.sendStateSignal;
         this.turn.agent = args.agent;
         this.turn.requestContext = requestContext;
         await this.turn.start(this.memory);
@@ -309,35 +309,28 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         });
 
         // ── Progress emission (processor-specific) ──────────
-        // Fetch a fresh record from storage so buffering flags (e.g.
-        // isBufferingObservation set by fire-and-forget buffer()) are visible.
-        // The cached this.turn.record is stale in production DBs where each
-        // query returns a new row object.
-        const freshRecord = await this.engine.getOrCreateRecord(threadId, resourceId);
+        const turnRecord = this.turn.record;
         await this.engine.emitProgress({
-          record: freshRecord,
+          record: turnRecord,
           stepNumber,
           pendingTokens: ctx.status.pendingTokens,
           threshold: ctx.status.threshold,
           effectiveObservationTokensThreshold: ctx.status.effectiveObservationTokensThreshold,
-          currentObservationTokens: freshRecord.observationTokenCount ?? 0,
+          currentObservationTokens: turnRecord.observationTokenCount ?? 0,
           writer,
           threadId,
           resourceId,
         });
 
         // ── Token persistence (processor-specific) ──────────
-        const allDbMsgs = getObservableMessages(messageList);
-        const tokenCounter = this.engine.getTokenCounter();
-        const contextTokens = await tokenCounter.countMessagesAsync(allDbMsgs);
-        const otherThreadsContext = this.turn.context.otherThreadsContext;
-        const otherThreadTokens = otherThreadsContext ? tokenCounter.countString(otherThreadsContext) : 0;
-        const finalTotalPending = contextTokens + otherThreadTokens;
-
-        await this.engine
-          .getStorage()
-          .setPendingMessageTokens(freshRecord.id, finalTotalPending)
-          .catch(() => {});
+        // prepare() already counted the current unobserved window and resource context.
+        const finalTotalPending = ctx.status.pendingTokens;
+        try {
+          await this.engine.getStorage().setPendingMessageTokens(turnRecord.id, finalTotalPending);
+          this.turn.patchRecord({ pendingMessageTokens: finalTotalPending });
+        } catch {
+          // Token persistence is intentionally non-fatal for streaming UX.
+        }
 
         // ── Repro capture (processor-specific) ──────────────
         if (reproCaptureEnabled) {
@@ -347,7 +340,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
             stepNumber,
             args,
             preRecord: preRecordSnapshot!,
-            postRecord: safeCaptureJson(freshRecord) as ObservationalMemoryRecord,
+            postRecord: safeCaptureJson(turnRecord) as ObservationalMemoryRecord,
             preMessages: preMessagesSnapshot!,
             preBufferedChunks: [],
             preContextTokenCount: 0,

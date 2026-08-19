@@ -1,9 +1,11 @@
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { baseCheckpointIsStale } from '../../../sandbox/base-checkpoint-triggers.js';
 import { FactoryProjectsStorage } from '../projects/base.js';
 import { SourceControlStorage } from './base.js';
 import type { ProjectRepository, SourceControlStorageHandle } from './base.js';
+import { SourceControlStorageInMemory } from './inmemory.js';
 
 const repositoryInput = {
   externalId: 'repository-34',
@@ -208,6 +210,7 @@ describe('SourceControlStorage', () => {
       ...projectRepositoryInput,
       branch: 'main',
       setupCommand: 'pnpm install',
+      teardownCommand: 'pnpm local worktree teardown',
     });
     const secondLink = await github.projectRepositories.link({
       orgId: 'org-1',
@@ -218,9 +221,142 @@ describe('SourceControlStorage', () => {
       sandboxProvider: 'railway',
     });
 
-    expect(firstLink).toMatchObject({ repositoryId: repository.id, branch: 'main', setupCommand: 'pnpm install' });
+    expect(firstLink).toMatchObject({
+      repositoryId: repository.id,
+      branch: 'main',
+      setupCommand: 'pnpm install',
+      teardownCommand: 'pnpm local worktree teardown',
+    });
+    await github.projectRepositories.update({
+      orgId: 'org-1',
+      id: firstLink.id,
+      input: { teardownCommand: 'docker compose down --remove-orphans' },
+    });
+    expect(await github.projectRepositories.get({ orgId: 'org-1', id: firstLink.id })).toMatchObject({
+      teardownCommand: 'docker compose down --remove-orphans',
+    });
     expect(secondLink).toMatchObject({ repositoryId: repository.id, branch: 'develop', sandboxProvider: 'railway' });
     expect(firstLink.id).not.toBe(secondLink.id);
+  });
+
+  it('stores, reads, and clears base-checkpoint metadata', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    expect(link.baseCheckpoint).toBeNull();
+
+    const builtAt = new Date();
+    await github.projectRepositories.setBaseCheckpoint({
+      id: link.id,
+      checkpoint: { name: `repo-${link.id}`, sha: 'abc123', builtAt, setupCommandHash: 'hash-1' },
+      expectedSetupCommand: null,
+    });
+    let fresh = await github.projectRepositories.get({ orgId: 'org-1', id: link.id });
+    expect(fresh?.baseCheckpoint).toMatchObject({ name: `repo-${link.id}`, sha: 'abc123', setupCommandHash: 'hash-1' });
+
+    await github.projectRepositories.setBaseCheckpoint({ id: link.id, checkpoint: null });
+    fresh = await github.projectRepositories.get({ orgId: 'org-1', id: link.id });
+    expect(fresh?.baseCheckpoint).toBeNull();
+  });
+
+  it('preserves base-checkpoint metadata when link() is retried for the same connection', async () => {
+    const project = await createProject();
+    const installation = await createInstallation(github);
+    const repository = await github.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, ...repositoryInput },
+    });
+    const connection = await github.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    const firstLink = await github.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection.id,
+      repositoryId: repository.id,
+      ...projectRepositoryInput,
+    });
+    await github.projectRepositories.setBaseCheckpoint({
+      id: firstLink.id,
+      checkpoint: { name: `repo-${firstLink.id}`, sha: 'abc123', builtAt: new Date(), setupCommandHash: 'hash-1' },
+      expectedSetupCommand: null,
+    });
+
+    const retried = await github.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection.id,
+      repositoryId: repository.id,
+      ...projectRepositoryInput,
+      branch: 'retry-should-not-overwrite',
+    });
+    const fresh = await github.projectRepositories.get({ orgId: 'org-1', id: firstLink.id });
+
+    expect(retried.id).toBe(firstLink.id);
+    expect(retried.branch).toBeNull();
+    expect(retried.baseCheckpoint).toMatchObject({
+      name: `repo-${firstLink.id}`,
+      sha: 'abc123',
+      setupCommandHash: 'hash-1',
+    });
+    expect(fresh?.baseCheckpoint).toMatchObject({
+      name: `repo-${firstLink.id}`,
+      sha: 'abc123',
+      setupCommandHash: 'hash-1',
+    });
+  });
+
+  it('round-trips a null setupCommandHash so no-setup-command checkpoints stay fresh', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    await github.projectRepositories.setBaseCheckpoint({
+      id: link.id,
+      checkpoint: { name: `repo-${link.id}`, sha: 'abc123', builtAt: new Date(), setupCommandHash: null },
+      expectedSetupCommand: null,
+    });
+    const fresh = await github.projectRepositories.get({ orgId: 'org-1', id: link.id });
+    // Must stay null (not ''), otherwise baseCheckpointIsStale() compares
+    // '' !== hashSetupCommand(null) and permanently marks the checkpoint stale.
+    expect(fresh?.baseCheckpoint?.setupCommandHash).toBeNull();
+    expect(baseCheckpointIsStale(fresh!)).toBe(false);
+  });
+
+  it('invalidates base-checkpoint metadata when the setup command changes', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    await github.projectRepositories.setBaseCheckpoint({
+      id: link.id,
+      checkpoint: { name: `repo-${link.id}`, sha: 'abc123', builtAt: new Date(), setupCommandHash: 'hash-1' },
+      expectedSetupCommand: null,
+    });
+
+    // Unrelated update keeps the checkpoint.
+    await github.projectRepositories.update({ orgId: 'org-1', id: link.id, input: { branch: 'develop' } });
+    let fresh = await github.projectRepositories.get({ orgId: 'org-1', id: link.id });
+    expect(fresh?.baseCheckpoint).not.toBeNull();
+
+    // Setup-command change invalidates it.
+    await github.projectRepositories.update({ orgId: 'org-1', id: link.id, input: { setupCommand: 'pnpm i' } });
+    fresh = await github.projectRepositories.get({ orgId: 'org-1', id: link.id });
+    expect(fresh?.baseCheckpoint).toBeNull();
+  });
+
+  it('ignores a base-checkpoint build that finishes after the setup command changes', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+
+    await github.projectRepositories.update({
+      orgId: 'org-1',
+      id: link.id,
+      input: { setupCommand: 'pnpm install' },
+    });
+    await github.projectRepositories.setBaseCheckpoint({
+      id: link.id,
+      checkpoint: { name: `repo-${link.id}`, sha: 'stale', builtAt: new Date(), setupCommandHash: null },
+      expectedSetupCommand: null,
+    });
+
+    expect((await github.projectRepositories.get({ orgId: 'org-1', id: link.id }))?.baseCheckpoint).toBeNull();
   });
 
   it('scopes sandboxes and worktrees to the project-repository link', async () => {
@@ -430,12 +566,93 @@ describe('SourceControlStorage', () => {
     await expect(github.sessions.getBySessionId(titled.sessionId)).resolves.toMatchObject({
       title: 'Fix login flow',
     });
-    await expect(github.sessions.list({ projectRepositoryId: link.id, userId: 'user-1' })).resolves.toEqual(
+    await expect(github.sessions.list({ projectRepositoryId: link.id, viewerUserId: 'user-1' })).resolves.toEqual(
       expect.arrayContaining([
         expect.objectContaining({ sessionId: titled.sessionId, title: 'Fix login flow' }),
         expect.objectContaining({ sessionId: untitled.sessionId, title: null }),
       ]),
     );
+  });
+
+  it('defaults session visibility to org and round-trips private', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const defaulted = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000011',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-000000000011',
+      baseBranch: 'main',
+    });
+    expect(defaulted.visibility).toBe('org');
+
+    const dm = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000012',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'slack/1786574059-209929',
+      baseBranch: 'main',
+      visibility: 'private',
+    });
+    expect(dm.visibility).toBe('private');
+    await expect(github.sessions.getBySessionId(dm.sessionId)).resolves.toMatchObject({
+      visibility: 'private',
+    });
+    await expect(
+      github.sessions.getForBranch({
+        projectRepositoryId: link.id,
+        userId: 'user-1',
+        branch: 'slack/1786574059-209929',
+      }),
+    ).resolves.toMatchObject({ visibility: 'private' });
+  });
+
+  it('reads NULL visibility as org for rows created before the column existed', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const session = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000013',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-000000000013',
+      baseBranch: 'main',
+      visibility: 'private',
+    });
+
+    // Simulate a legacy row from before the visibility column existed.
+    await backend.ops.updateMany('source_control_sessions', { session_id: session.sessionId }, { visibility: null });
+    await expect(github.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+      visibility: 'org',
+    });
+  });
+
+  it("lists org-visible sessions from all users plus the viewer's own private ones", async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const create = (sessionId: string, userId: string, visibility?: 'org' | 'private') =>
+      github.sessions.create({
+        sessionId,
+        projectRepositoryId: link.id,
+        orgId: 'org-1',
+        userId,
+        branch: `user/session-${sessionId}`,
+        baseBranch: 'main',
+        ...(visibility ? { visibility } : {}),
+      });
+    const orgOther = await create('00000000-0000-4000-8000-000000000021', 'user-1', 'org');
+    const privateOther = await create('00000000-0000-4000-8000-000000000022', 'user-1', 'private');
+    const privateMine = await create('00000000-0000-4000-8000-000000000023', 'user-2', 'private');
+    const legacyNull = await create('00000000-0000-4000-8000-000000000024', 'user-1');
+    // Simulate a legacy row from before the visibility column existed.
+    await backend.ops.updateMany('source_control_sessions', { session_id: legacyNull.sessionId }, { visibility: null });
+
+    const listed = await github.sessions.list({ projectRepositoryId: link.id, viewerUserId: 'user-2' });
+    const ids = listed.map(s => s.sessionId).sort();
+    expect(ids).toEqual([orgOther.sessionId, privateMine.sessionId, legacyNull.sessionId].sort());
+    expect(ids).not.toContain(privateOther.sessionId);
   });
 
   it('records first_message_at write-once via markFirstMessage', async () => {
@@ -494,6 +711,33 @@ describe('SourceControlStorage', () => {
     await expect(github.sessions.markFirstMeaningfulExec({ sessionId: 'missing-session' })).resolves.toBeUndefined();
   });
 
+  it('records materialized_at write-once via sessions.markMaterialized', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const session = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000005',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-000000000005',
+      baseBranch: 'main',
+    });
+    expect(session.materializedAt).toBeNull();
+
+    await github.sessions.markMaterialized({ id: session.id });
+    const marked = await github.sessions.getBySessionId(session.sessionId);
+    expect(marked?.materializedAt).toBeInstanceOf(Date);
+
+    // A resume (second markMaterialized call) must not move the timestamp:
+    // the guarded update only matches rows where the column is still NULL.
+    // Without this, `materialize_s = materialized_at - created_at` counts the
+    // entire idle-and-resume duration as initial-materialize latency.
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await github.sessions.markMaterialized({ id: session.id });
+    const again = await github.sessions.getBySessionId(session.sessionId);
+    expect(again?.materializedAt?.getTime()).toBe(marked!.materializedAt!.getTime());
+  });
+
   it('clears every owned source-control collection', async () => {
     const project = await createProject();
     const link = await linkRepository({ factoryProjectId: project.id });
@@ -510,5 +754,29 @@ describe('SourceControlStorage', () => {
 
     expect(await github.installations.list({ orgId: 'org-1' })).toEqual([]);
     expect(await github.projectRepositories.get({ orgId: 'org-1', id: link.id })).toBeNull();
+  });
+});
+
+describe('SourceControlStorageInMemory sessions.markMaterialized', () => {
+  it('records materialized_at write-once', async () => {
+    const store = new SourceControlStorageInMemory();
+    const session = await store.sessions.create({
+      sessionId: '00000000-0000-4000-8000-00000000aaaa',
+      projectRepositoryId: 'proj-1',
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-00000000aaaa',
+      baseBranch: 'main',
+    });
+    expect(session.materializedAt).toBeNull();
+
+    await store.sessions.markMaterialized({ id: session.id });
+    const first = await store.sessions.getBySessionId(session.sessionId);
+    expect(first?.materializedAt).toBeInstanceOf(Date);
+
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await store.sessions.markMaterialized({ id: session.id });
+    const second = await store.sessions.getBySessionId(session.sessionId);
+    expect(second?.materializedAt?.getTime()).toBe(first!.materializedAt!.getTime());
   });
 });

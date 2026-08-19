@@ -13,6 +13,20 @@ const createMastraCodeGatewayMock = vi.fn(() => mastraCodeGatewayMock);
 const mastraCodeCatalogProviderMock = vi.fn();
 const createMastraCodeModelCatalogProviderMock = vi.fn(() => mastraCodeCatalogProviderMock);
 const resolveModelMock = vi.fn();
+const knowledgeScopeTreeMock = vi.fn(async () => ({
+  identityKey: 'identity-key',
+  defaultLevel: 'resource' as const,
+  roots: [
+    { level: 'org' as const, id: 'owner-1', available: true },
+    { level: 'resource' as const, id: 'project-resource', available: true },
+    { level: 'thread' as const, id: 'thread-1', available: true },
+  ],
+}));
+const createKnowledgeInspectorMock = vi.fn(async () => ({ getScopeTree: knowledgeScopeTreeMock }));
+
+vi.mock('../knowledge-inspector.js', () => ({
+  createKnowledgeInspector: createKnowledgeInspectorMock,
+}));
 
 vi.mock('@mastra/core/llm', () => ({
   MastraModelGateway: class {},
@@ -128,6 +142,7 @@ function createMockSettings() {
     },
     observability: { resources: {}, localTracing: false },
     signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
+    mcp: { claudeCodeGlobal: false, codexGlobal: false },
   };
 }
 
@@ -154,10 +169,17 @@ vi.mock('@mastra/core/agent-controller', () => ({
       return {
         subscribe: (eventHandler: unknown) => controllerSubscribeMock(eventHandler),
         identity: {
+          getOwnerId: () => 'owner-1',
           getResourceId: () => 'project-resource',
         },
         thread: {
           getId: () => controllerGetCurrentThreadIdMock(),
+          getById: async ({ threadId }: { threadId: string }) => ({
+            id: threadId,
+            resourceId: 'project-resource',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }),
           list: (options: unknown) => controllerListThreadsMock(options),
           setSetting: (setting: unknown) => controllerSetThreadSettingMock(setting),
         },
@@ -370,6 +392,8 @@ describe('createMastraCode', () => {
     createMastraCodeModelCatalogProviderMock.mockClear();
     mastraCodeCatalogProviderMock.mockClear();
     resolveModelMock.mockClear();
+    createKnowledgeInspectorMock.mockClear();
+    knowledgeScopeTreeMock.mockClear();
     mastraCodeGatewayMock.fetchProviders.mockClear();
     mastraCodeGatewayMock.buildUrl.mockClear();
     mastraCodeGatewayMock.getApiKey.mockClear();
@@ -583,7 +607,10 @@ describe('createMastraCode', () => {
     expect(agentControllerConfig?.initialState?.configDir).toBe('.acme-code');
     expect(getDynamicMemoryMock).not.toHaveBeenCalled();
     expect(getStorageConfigMock).toHaveBeenCalledWith(projectPath, expect.anything(), '.acme-code');
-    expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', undefined);
+    expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', undefined, {
+      claudeCodeGlobal: false,
+      codexGlobal: false,
+    });
     expect(hookManagerConstructorMock).toHaveBeenCalledWith(
       projectPath,
       'session-init',
@@ -723,7 +750,10 @@ describe('createMastraCode', () => {
 
     expect(getResourceIdOverrideMock).toHaveBeenCalledWith(projectPath, '.acme-code');
     expect(getStorageConfigMock).toHaveBeenCalledWith(projectPath, expect.anything(), '.acme-code');
-    expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', undefined);
+    expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', undefined, {
+      claudeCodeGlobal: false,
+      codexGlobal: false,
+    });
     expect(hookManagerConstructorMock).toHaveBeenCalledWith(
       projectPath,
       'session-init',
@@ -762,7 +792,25 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ cwd, configDir: '.acme-code', mcpServers });
 
-    expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', mcpServers);
+    expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', mcpServers, {
+      claudeCodeGlobal: false,
+      codexGlobal: false,
+    });
+  });
+
+  it('passes persisted external MCP discovery opt-ins into the startup manager', async () => {
+    loadSettingsMock.mockReturnValue({
+      ...createMockSettings(),
+      mcp: { claudeCodeGlobal: true, codexGlobal: true },
+    });
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    expect(createMcpManagerMock).toHaveBeenCalledWith(expect.any(String), '.mastracode', undefined, {
+      claudeCodeGlobal: true,
+      codexGlobal: true,
+    });
   });
 
   it('rejects cross-process PubSub mode without a PubSub instance', async () => {

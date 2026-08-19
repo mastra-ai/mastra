@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -38,6 +38,51 @@ describe('slash command loader', () => {
 
     expect(commands).toHaveLength(1);
     expect(commands[0]).toMatchObject({ name: 'review', goal: true });
+  });
+
+  it('ignores node_modules while preserving nested commands', async () => {
+    const projectDir = await mkdtemp(join(tmpdir(), 'mastracode-project-'));
+    const commandsDir = join(projectDir, '.mastracode', 'commands');
+    const presentationDir = join(commandsDir, 'presentation');
+    const dependencyDir = join(
+      presentationDir,
+      'node_modules',
+      '.pnpm',
+      'example@1.0.0',
+      'node_modules',
+      'dependency-readme-sentinel',
+    );
+    const symlinkSourceDir = join(projectDir, '.mastracode', 'command-sources', 'dependencies');
+    const symlinkNamespaceDir = join(commandsDir, 'linked');
+    await mkdir(presentationDir, { recursive: true });
+    await mkdir(dependencyDir, { recursive: true });
+    await mkdir(symlinkSourceDir, { recursive: true });
+    await mkdir(symlinkNamespaceDir, { recursive: true });
+    await writeFile(join(presentationDir, 'review.md'), 'Review the presentation\n');
+    await writeFile(join(dependencyDir, 'README.md'), 'Dependency README\n');
+    await writeFile(join(symlinkSourceDir, 'README.md'), 'Symlinked dependency README\n');
+    await symlink(symlinkSourceDir, join(symlinkNamespaceDir, 'node_modules'));
+
+    const commands = await loadCustomCommands(projectDir);
+
+    expect(commands.find(command => command.name === 'presentation:review')).toMatchObject({
+      sourcePath: join(presentationDir, 'review.md'),
+    });
+    expect(commands.every(command => !command.name.includes('node_modules'))).toBe(true);
+    expect(commands.every(command => !command.sourcePath.split(sep).includes('node_modules'))).toBe(true);
+  });
+
+  it('loads an explicitly configured command root beneath node_modules', async () => {
+    const projectDir = await mkdtemp(join(tmpdir(), 'mastracode-project-'));
+    const commandsDir = join(projectDir, 'node_modules', 'example-plugin', 'commands');
+    await mkdir(commandsDir, { recursive: true });
+    await writeFile(join(commandsDir, 'review.md'), 'Review the plugin\n');
+
+    const commands = await loadCustomCommands(projectDir, '.mastracode', [commandsDir]);
+
+    expect(commands.find(command => command.name === 'review')).toMatchObject({
+      sourcePath: join(commandsDir, 'review.md'),
+    });
   });
 
   it('loads individually symlinked command files', async () => {

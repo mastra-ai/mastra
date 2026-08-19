@@ -1,5 +1,21 @@
 # @mastra/auth-better-auth
 
+## 1.1.4-alpha.1
+
+### Patch Changes
+
+- Resolve a default `activeOrganizationId` from the user's oldest existing membership when the stored better-auth session has no `activeOrganizationId` set. Nothing in a default sign-in flow calls the organization plugin's `setActive`, so the field was always null and org-scoped consumers saw users with no organization. ([#21482](https://github.com/mastra-ai/mastra/pull/21482))
+
+  The resolution is read-only and best-effort: the session row is not mutated, users with no memberships still authenticate, and a failed lookup falls back to today's behavior. Caveats: the resolved value is an inferred default, not an explicit user selection, and a session whose active organization was deliberately cleared via `setActive` is indistinguishable from one that was never set, so it also receives the default. A membership removed by an administrator stops being applied to new sessions within about a minute.
+
+## 1.1.4-alpha.0
+
+### Patch Changes
+
+- Fixed reading request headers from Express-style plain header objects so cookie-based auth providers no longer throw and fail with a misleading 401. ([#21261](https://github.com/mastra-ai/mastra/pull/21261))
+
+  Related to https://github.com/mastra-ai/mastra/issues/21253
+
 ## 1.1.3
 
 ### Patch Changes

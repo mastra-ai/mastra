@@ -420,6 +420,24 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /agents/:agentId/plans/file": {
+    "method": "GET",
+    "path": "/agents/:agentId/plans/file",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [
+      "path",
+      "status",
+      "versionId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /agents/:agentId/skills/:skillName": {
     "method": "GET",
     "path": "/agents/:agentId/skills/:skillName",
@@ -3318,6 +3336,7 @@ export const API_ROUTE_METADATA = {
       "browser",
       "defaultOptions",
       "description",
+      "durable",
       "inputProcessors",
       "instructions",
       "integrationTools",
@@ -3353,6 +3372,7 @@ export const API_ROUTE_METADATA = {
       "changeMessage",
       "defaultOptions",
       "description",
+      "durable",
       "inputProcessors",
       "inspectOnly",
       "instructions",
@@ -3405,6 +3425,7 @@ export const API_ROUTE_METADATA = {
       "browser",
       "defaultOptions",
       "description",
+      "durable",
       "id",
       "inputProcessors",
       "instructions",
@@ -3445,6 +3466,7 @@ export const API_ROUTE_METADATA = {
       "changeMessage",
       "defaultOptions",
       "description",
+      "durable",
       "inputProcessors",
       "instructions",
       "integrationTools",
@@ -5962,6 +5984,21 @@ export const API_ROUTE_METADATA = {
       "listProperty": "models"
     }
   },
+  "GET /agent-controller/:controllerId/active-runs": {
+    "method": "GET",
+    "path": "/agent-controller/:controllerId/active-runs",
+    "pathParams": [
+      "controllerId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "runs"
+    }
+  },
   "POST /agent-controller/:controllerId/sessions": {
     "method": "POST",
     "path": "/agent-controller/:controllerId/sessions",
@@ -5989,7 +6026,8 @@ export const API_ROUTE_METADATA = {
       "resourceId"
     ],
     "queryParams": [
-      "sessionScope"
+      "sessionScope",
+      "threadId"
     ],
     "bodyParams": [],
     "hasQuery": true,

@@ -67,7 +67,48 @@ export interface MountLinearRoutesOptions {
    * project filter; when absent, only the disabled `status` route is served.
    */
   intake?: IntakeStorage;
+  /**
+   * Factory project domain, used to keep single-project installs working
+   * without any source binding. When absent, unbound sources are treated as
+   * belonging to no project.
+   */
+  projects?: { list(input: { orgId: string }): Promise<unknown[]> };
   ingestFactoryIssues?: (input: LinearRulesIngress) => Promise<unknown>;
+}
+
+/**
+ * Narrow the caller's selected Linear sources to the ones that feed this
+ * Factory project.
+ *
+ * A Linear issue carries no Factory project of its own, so without a binding
+ * every board view would ingest every selected source's issues into whichever
+ * project happened to be on screen. Bound sources win; when the org has no
+ * bindings at all we fall back to the full selection for single-project
+ * installs, where "which project" is unambiguous.
+ */
+async function scopeSourceIdsToProject({
+  intake,
+  projects,
+  orgId,
+  factoryProjectId,
+  selectedIds,
+}: {
+  intake: IntakeStorage;
+  projects: MountLinearRoutesOptions['projects'];
+  orgId: string;
+  factoryProjectId: string;
+  selectedIds: string[];
+}): Promise<string[]> {
+  const bound = await intake.listBoundSourceIds({ orgId, integrationId: 'linear', factoryProjectId });
+  if (bound.length > 0) {
+    const boundSet = new Set(bound);
+    return selectedIds.filter(id => boundSet.has(id));
+  }
+  const orgBindings = await intake.listBindings({ orgId, integrationId: 'linear' });
+  if (orgBindings.length > 0) return [];
+  if (!projects) return [];
+  const all = await projects.list({ orgId });
+  return all.length <= 1 ? selectedIds : [];
 }
 
 /**
@@ -301,7 +342,18 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
         }
 
         // No projects selected means nothing is synced — don't fan out to Linear.
-        const projectIds = selection.sourceIds ?? [];
+        const selectedIds = selection.sourceIds ?? [];
+        // A board request is also an ingest, so it only ever sees the sources
+        // bound to that Factory project.
+        const projectIds = factoryProjectId
+          ? await scopeSourceIdsToProject({
+              intake,
+              projects: options.projects,
+              orgId: resolved.tenant.orgId,
+              factoryProjectId,
+              selectedIds,
+            })
+          : selectedIds;
         if (projectIds.length === 0) {
           return c.json({ issues: [], nextCursor: null });
         }

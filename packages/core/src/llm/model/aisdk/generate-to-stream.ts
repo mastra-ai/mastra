@@ -86,10 +86,12 @@ export function createStreamFromGenerateResult(result: {
             type: 'text-delta',
             id,
             delta: text.text,
+            providerMetadata: text.providerMetadata,
           });
           controller.enqueue({
             type: 'text-end',
             id,
+            providerMetadata: text.providerMetadata,
           });
         } else if (message.type === 'reasoning') {
           const id = `reasoning_${randomUUID()}`;
@@ -119,11 +121,13 @@ export function createStreamFromGenerateResult(result: {
             type: 'file';
             mediaType: string;
             data: unknown;
+            providerMetadata?: unknown;
           };
           controller.enqueue({
             type: 'file',
             mediaType: file.mediaType,
             data: file.data,
+            providerMetadata: file.providerMetadata,
           });
         } else if (message.type === 'source') {
           const source = message as {

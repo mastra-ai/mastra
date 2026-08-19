@@ -238,7 +238,11 @@ export interface FactoryProjectSnapshot extends FactoryProjectPayload {
 export type FactoryProject = FactoryProjectSnapshot;
 
 async function readJsonOrThrow<T>(res: Response, failure: string): Promise<T> {
-  if (!res.ok) throw new Error(`${failure} (${res.status})`);
+  if (!res.ok) {
+    const error = new Error(`${failure} (${res.status})`) as Error & { status?: number };
+    error.status = res.status;
+    throw error;
+  }
   return (await res.json()) as T;
 }
 
@@ -631,6 +635,7 @@ export interface FactoryUserSession {
   projectRepositoryId: string;
   orgId: string;
   userId: string;
+  visibility: 'org' | 'private';
   title?: string;
   branch: string;
   baseBranch: string;
@@ -752,9 +757,11 @@ export interface RepositorySettings {
    * configured.
    */
   setupCommand: string | null;
+  /** Best-effort shell command run before a session workspace is retired. */
+  teardownCommand: string | null;
 }
 
-/** Read a repository's settings (currently just the worktree setup command). */
+/** Read a repository's worktree lifecycle settings. */
 export async function fetchRepositorySettings(
   baseUrl: string,
   projectRepositoryId: string,
@@ -767,7 +774,7 @@ export async function fetchRepositorySettings(
   return (await res.json()) as RepositorySettings;
 }
 
-/** Persist a repository's setup command. Pass `null` (or blank) to clear it. */
+/** Persist a repository's lifecycle commands. Pass `null` (or blank) to clear one. */
 export async function saveRepositorySettings(
   baseUrl: string,
   projectRepositoryId: string,
