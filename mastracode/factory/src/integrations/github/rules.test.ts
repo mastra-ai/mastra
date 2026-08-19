@@ -1902,6 +1902,28 @@ describe('createGithubPullRequestReconciler', () => {
     });
   });
 
+  it('backfills status once for terminal pull request cards created before status metadata existed', async () => {
+    const context = await setup('read');
+    const card = await createCard(context, { number: 17, stages: ['done'] });
+    const fetchPullRequest = vi.fn(async () => ({ ...mergedState(17), merged: false, mergedBy: undefined }));
+    const reconcile = createReconciler(context, fetchPullRequest);
+
+    await reconcile([repositoryTarget]);
+    await reconcile([repositoryTarget]);
+
+    expect(fetchPullRequest).toHaveBeenCalledTimes(1);
+    await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
+      metadata: {
+        state: 'closed',
+        draft: false,
+        merged: false,
+        assignees: ['assignee'],
+        requestedReviewers: ['reviewer'],
+        labels: ['bug'],
+      },
+    });
+  });
+
   it('backfills authors once for terminal pull request cards created before author metadata existed', async () => {
     const context = await setup('read');
     const card = await createCard(context, {
