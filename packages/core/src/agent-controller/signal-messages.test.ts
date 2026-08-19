@@ -8,24 +8,27 @@ import { AgentController } from './agent-controller';
 import { createMockWorkspace } from './test-utils';
 import type { AgentControllerEvent } from './types';
 
-function createTextStreamModel(responseText: string) {
+function createTextStreamModel(responseText: string, onPrompt?: (prompt: unknown) => void) {
   return new MockLanguageModelV2({
-    doStream: async () => ({
-      rawCall: { rawPrompt: null, rawSettings: {} },
-      warnings: [],
-      stream: convertArrayToReadableStream([
-        { type: 'stream-start', warnings: [] },
-        { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-        { type: 'text-start', id: 'text-1' },
-        { type: 'text-delta', id: 'text-1', delta: responseText },
-        { type: 'text-end', id: 'text-1' },
-        {
-          type: 'finish',
-          finishReason: 'stop',
-          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-        },
-      ]),
-    }),
+    doStream: async ({ prompt }) => {
+      onPrompt?.(prompt);
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: responseText },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          },
+        ]),
+      };
+    },
   });
 }
 
@@ -1279,6 +1282,21 @@ describe('AgentController signal messages', () => {
         }),
       }),
     });
+  });
+
+  it('tags a steer as a while-active user message so it survives a reload as an interjection', async () => {
+    const prompts: unknown[] = [];
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'test-agent',
+      instructions: 'You are a test agent.',
+      model: createTextStreamModel('Hello', prompt => prompts.push(prompt)),
+    });
+    const { session } = await createController(new InMemoryStore(), agent);
+
+    await session.steer({ content: 'do this instead' });
+
+    expect(JSON.stringify(prompts)).toContain('<user delivery=\\"while-active\\">do this instead</user>');
   });
 
   it('emits state signal data parts as renderable message updates', async () => {

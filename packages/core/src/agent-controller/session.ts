@@ -3277,6 +3277,8 @@ export class Session<TState = unknown> {
       | AgentSignalInput
       | {
           content: AgentSignalContents;
+          /** Attributes carried whichever delivery path the signal takes. */
+          attributes?: AgentSignalAttributes;
           ifActive?: { attributes?: AgentSignalAttributes };
           ifIdle?: { attributes?: AgentSignalAttributes };
           tracingContext?: TracingContext;
@@ -3339,7 +3341,13 @@ export class Session<TState = unknown> {
     const submittedAbortRequested = this.run.isAbortRequested();
     const signal = createSignal(
       'content' in input
-        ? { type: 'user', tagName: 'user', contents: input.content, providerOptions: input.providerOptions }
+        ? {
+            type: 'user',
+            tagName: 'user',
+            contents: input.content,
+            attributes: input.attributes,
+            providerOptions: input.providerOptions,
+          }
         : input,
     );
     const accepted = Promise.resolve().then(async () => {
@@ -3477,12 +3485,14 @@ export class Session<TState = unknown> {
   async sendMessage({
     content,
     files,
+    attributes,
     tracingContext,
     tracingOptions,
     requestContext: requestContextInput,
   }: {
     content: string;
     files?: Array<{ data: string; mediaType: string; filename?: string }>;
+    attributes?: AgentSignalAttributes;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     requestContext?: RequestContext;
@@ -3503,6 +3513,7 @@ export class Session<TState = unknown> {
         });
     const signal = this.sendSignal({
       content: messageInput,
+      attributes,
       tracingContext,
       tracingOptions,
       requestContext: requestContextInput,
@@ -3530,7 +3541,9 @@ export class Session<TState = unknown> {
     this.abort();
     this.followUps.clear();
     this.emit({ type: 'follow_up_queued', count: 0 });
-    await this.sendMessage({ content, requestContext });
+    // Tagged here because the interjection outlives the run it interrupts: the
+    // delivery branches see an idle session once the abort lands.
+    await this.sendMessage({ content, requestContext, attributes: { delivery: 'while-active' } });
   }
 
   /**
