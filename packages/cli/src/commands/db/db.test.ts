@@ -186,6 +186,29 @@ describe('defaultDatabaseName', () => {
     expect(name).toContain('-e');
   });
 
+  it('keeps truncated env discriminators unique via a hash suffix', () => {
+    // Two env names sharing the same >56-char prefix must not produce the
+    // same database name once the env segment is truncated to fit the cap —
+    // the platform rejects duplicate names, stranding the second attach.
+    const prefix = 'e'.repeat(60);
+    const project = { name: 'App', slug: 'app' };
+    const first = defaultDatabaseName('redis', project, {
+      name: `${prefix}-one`,
+      slug: `${prefix}-one`,
+      type: 'preview',
+    });
+    const second = defaultDatabaseName('redis', project, {
+      name: `${prefix}-two`,
+      slug: `${prefix}-two`,
+      type: 'preview',
+    });
+    expect(first).not.toBe(second);
+    expect(first.length).toBeLessThanOrEqual(64);
+    expect(second.length).toBeLessThanOrEqual(64);
+    expect(first.endsWith('-redis')).toBe(true);
+    expect(second.endsWith('-redis')).toBe(true);
+  });
+
   it('drops a hyphen at the truncation boundary so the joined name stays DNS-clean', () => {
     // A slug whose char at the cutoff is `-` would leave `foo--eu-turso`
     // if we naively sliced. The result must have no double hyphens.

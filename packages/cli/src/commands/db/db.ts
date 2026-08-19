@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import * as p from '@clack/prompts';
 import type { Command } from 'commander';
 import { getToken } from '../auth/credentials.js';
@@ -150,11 +151,13 @@ export function defaultDatabaseName(
   if (projectRoom < 1) {
     // Extreme case: env name alone eats the whole budget. Give the project
     // segment 1 char (always keep some project context) and clamp the env
-    // to what remains — but keep at least 1 char of env so the discriminator
-    // survives.
+    // to what remains. Truncating the env would let two long env names with
+    // the same prefix collide, so replace the cut portion with a short hash
+    // of the full env part to keep the discriminator unique.
     projectRoom = 1;
-    const envRoom = MAX_DB_NAME_LEN - projectRoom - separatorLen - tail.length;
-    envSegment = envPart.slice(0, Math.max(1, envRoom));
+    const hash = createHash('sha256').update(envPart).digest('hex').slice(0, 6);
+    const envRoom = MAX_DB_NAME_LEN - projectRoom - separatorLen - tail.length - hash.length - 1;
+    envSegment = `${truncateToMax(envPart, Math.max(1, envRoom))}-${hash}`;
   }
   const projectSegment = truncateToMax(projectPart, projectRoom) || projectPart.slice(0, 1);
   return `${projectSegment}-${envSegment}${tail}`;
