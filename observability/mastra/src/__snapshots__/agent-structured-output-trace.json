@@ -116,6 +116,14 @@
                 "entityId": "test-agent",
                 "attributes": {
                   "stepIndex": 0,
+                  "promptRegions": {
+                    "method": "tokenx-estimate",
+                    "totalEstimated": 14,
+                    "regions": {
+                      "system": 5,
+                      "messages": 9
+                    }
+                  },
                   "messageId": "<messageId-1>",
                   "usage": {
                     "inputTokens": 15,

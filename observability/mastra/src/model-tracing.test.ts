@@ -1,6 +1,12 @@
 import { ReadableStream } from 'node:stream/web';
 import { coreFeatures } from '@mastra/core/features';
-import type { ObservabilityExporter, TracingEvent, ExportedSpan, MetricEvent } from '@mastra/core/observability';
+import type {
+  ObservabilityExporter,
+  TracingEvent,
+  ExportedSpan,
+  MetricEvent,
+  UsageStats,
+} from '@mastra/core/observability';
 import { SpanType, SamplingStrategyType, TracingEventType } from '@mastra/core/observability';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1684,6 +1690,62 @@ describe('ModelSpanTracker', () => {
       const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
       expect(stepSpans).toHaveLength(1);
       expect(stepSpans[0]!.input).toEqual([{ role: 'tool', content: '[tool-result: someTool]' }]);
+    });
+
+    it('stamps incrementing stepIndex on distinct MODEL_STEP spans and populates cache details only when the provider reported them', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'gpt-test', provider: 'test', streaming: true },
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const stepChunk = (usage: Record<string, number>) => [
+        { type: 'step-start', payload: { messageId: 'msg' } },
+        { type: 'text-delta', payload: { text: 'hi' } },
+        {
+          type: 'step-finish',
+          payload: { output: { usage }, stepResult: { reason: 'stop', warnings: [] }, metadata: {} },
+        },
+      ];
+
+      const chunks = [
+        // Step 0: provider reported no cache fields — must NOT be zero-stuffed.
+        ...stepChunk({ inputTokens: 100, outputTokens: 5, totalTokens: 105 }),
+        // Step 1: cache read reported.
+        ...stepChunk({ inputTokens: 100, cachedInputTokens: 94, outputTokens: 5, totalTokens: 105 }),
+        // Step 2: cache read + cache write reported.
+        ...stepChunk({
+          inputTokens: 100,
+          cachedInputTokens: 90,
+          cacheCreationInputTokens: 6,
+          outputTokens: 5,
+          totalTokens: 105,
+        }),
+      ];
+
+      const stream = createMockStream(chunks);
+      await consumeStream(tracker.wrapStream(stream));
+      modelSpan.end();
+
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(3);
+      expect(stepSpans.map(s => s!.attributes?.stepIndex)).toEqual([0, 1, 2]);
+
+      const usages = stepSpans.map(s => (s!.attributes as { usage?: UsageStats })?.usage);
+      // Unreported cache fields stay absent — never recorded as zero.
+      expect(usages[0]?.inputDetails?.cacheRead).toBeUndefined();
+      expect(usages[0]?.inputDetails?.cacheWrite).toBeUndefined();
+      // Reported fields land on the step's own span.
+      expect(usages[1]?.inputDetails?.cacheRead).toBe(94);
+      expect(usages[1]?.inputDetails?.cacheWrite).toBeUndefined();
+      expect(usages[2]?.inputDetails?.cacheRead).toBe(90);
+      expect(usages[2]?.inputDetails?.cacheWrite).toBe(6);
+      // inputTokens populated on every step (rollup's delta denominator).
+      for (const usage of usages) {
+        expect(usage?.inputTokens).toBe(100);
+      }
     });
   });
 

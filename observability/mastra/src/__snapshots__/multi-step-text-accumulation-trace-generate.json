@@ -139,6 +139,14 @@
                 "entityId": "multi-step-agent",
                 "attributes": {
                   "stepIndex": 0,
+                  "promptRegions": {
+                    "method": "tokenx-estimate",
+                    "totalEstimated": 26,
+                    "regions": {
+                      "system": 20,
+                      "messages": 6
+                    }
+                  },
                   "messageId": "<messageId-1>",
                   "usage": {
                     "inputTokens": 10,
@@ -374,6 +382,15 @@
                 "entityId": "multi-step-agent",
                 "attributes": {
                   "stepIndex": 1,
+                  "promptRegions": {
+                    "method": "tokenx-estimate",
+                    "totalEstimated": 126,
+                    "regions": {
+                      "system": 20,
+                      "messages": 106
+                    }
+                  },
+                  "promptPrefixChangedFromPreviousStep": false,
                   "messageId": "<messageId-1>",
                   "usage": {
                     "inputTokens": 20,

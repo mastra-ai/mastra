@@ -150,6 +150,14 @@
                 "entityId": "workflow-agent",
                 "attributes": {
                   "stepIndex": 0,
+                  "promptRegions": {
+                    "method": "tokenx-estimate",
+                    "totalEstimated": 20,
+                    "regions": {
+                      "system": 11,
+                      "messages": 9
+                    }
+                  },
                   "messageId": "<messageId-1>",
                   "usage": {
                     "inputTokens": 15,
@@ -421,6 +429,15 @@
                 "entityId": "workflow-agent",
                 "attributes": {
                   "stepIndex": 1,
+                  "promptRegions": {
+                    "method": "tokenx-estimate",
+                    "totalEstimated": 136,
+                    "regions": {
+                      "system": 11,
+                      "messages": 125
+                    }
+                  },
+                  "promptPrefixChangedFromPreviousStep": false,
                   "messageId": "<messageId-1>",
                   "usage": {
                     "inputTokens": 15,

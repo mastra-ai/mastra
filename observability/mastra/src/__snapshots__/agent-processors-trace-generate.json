@@ -196,6 +196,14 @@
                         "entityId": "validator-agent",
                         "attributes": {
                           "stepIndex": 0,
+                          "promptRegions": {
+                            "method": "tokenx-estimate",
+                            "totalEstimated": 15,
+                            "regions": {
+                              "system": 6,
+                              "messages": 9
+                            }
+                          },
                           "messageId": "<messageId-1>",
                           "usage": {
                             "inputTokens": 15,
@@ -392,6 +400,14 @@
                 "entityId": "test-agent",
                 "attributes": {
                   "stepIndex": 0,
+                  "promptRegions": {
+                    "method": "tokenx-estimate",
+                    "totalEstimated": 13,
+                    "regions": {
+                      "system": 7,
+                      "messages": 6
+                    }
+                  },
                   "messageId": "<messageId-2>",
                   "usage": {
                     "inputTokens": 15,
@@ -664,6 +680,14 @@
                         "entityId": "summarizer-agent",
                         "attributes": {
                           "stepIndex": 0,
+                          "promptRegions": {
+                            "method": "tokenx-estimate",
+                            "totalEstimated": 15,
+                            "regions": {
+                              "system": 6,
+                              "messages": 9
+                            }
+                          },
                           "messageId": "<messageId-3>",
                           "usage": {
                             "inputTokens": 15,

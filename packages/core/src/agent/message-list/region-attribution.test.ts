@@ -1,0 +1,225 @@
+import { estimateTokenCount } from 'tokenx';
+import { describe, expect, it } from 'vitest';
+import { attributePromptRegions, didPromptPrefixChange } from './region-attribution';
+import { MessageList } from './index';
+
+const sumRegions = (regions: Record<string, number>) => Object.values(regions).reduce((a, b) => a + b, 0);
+
+describe('attributePromptRegions', () => {
+  it('attributes untagged system messages to the system region', () => {
+    const messageList = new MessageList();
+    messageList.addSystem('You are a helpful assistant.');
+
+    const inputMessages = [{ role: 'system', content: 'You are a helpful assistant.' }];
+    const result = attributePromptRegions({ messageList, inputMessages });
+
+    expect(Object.keys(result.regions)).toEqual(['system']);
+    expect(result.regions.system).toBeGreaterThan(0);
+    expect(result.method).toBe('tokenx-estimate');
+    expect(sumRegions(result.regions)).toBe(result.totalEstimated);
+  });
+
+  it('does not let a binary content part dominate the estimate', () => {
+    const messageList = new MessageList();
+    const hugeBase64 = 'A'.repeat(200_000);
+
+    const withImage = attributePromptRegions({
+      messageList,
+      inputMessages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'What is in this picture?' },
+            { type: 'image', image: `data:image/png;base64,${hugeBase64}` },
+          ],
+        },
+      ],
+    });
+    const textOnly = attributePromptRegions({
+      messageList,
+      inputMessages: [{ role: 'user', content: [{ type: 'text', text: 'What is in this picture?' }] }],
+    });
+
+    // The image part contributes a bounded placeholder, not its payload.
+    expect(withImage.totalEstimated).toBeLessThan(textOnly.totalEstimated + 20);
+  });
+
+  it('counts tool-call arguments and tool results, which the provider also charges for', () => {
+    const messageList = new MessageList();
+    const args = { query: 'quarterly revenue by region', limit: 50, includeProjections: true };
+
+    const withToolCall = attributePromptRegions({
+      messageList,
+      inputMessages: [
+        {
+          role: 'assistant',
+          content: [{ type: 'tool-call', toolCallId: 'call_1', toolName: 'searchReports', input: args }],
+        },
+      ],
+    });
+    const bare = attributePromptRegions({
+      messageList,
+      inputMessages: [{ role: 'assistant', content: [{ type: 'text', text: '' }] }],
+    });
+
+    // A tool payload is text the provider serializes and bills. Collapsing it to
+    // a placeholder would understate the messages region in exactly the
+    // tool-calling loops this instrumentation exists to measure. Pinned against
+    // the payload's own estimate, not just a floor: dropping `input` while
+    // keeping `toolName` would clear a floor and still be the bug.
+    const payloadTokens = estimateTokenCount(JSON.stringify(args));
+    expect(withToolCall.regions.messages).toBeGreaterThanOrEqual(bare.regions.messages + payloadTokens * 0.8);
+  });
+
+  it('does not serialize raw bytes nested in an untyped part', () => {
+    const messageList = new MessageList();
+    const bytes = new Uint8Array(20_000).fill(137);
+
+    const result = attributePromptRegions({
+      messageList,
+      inputMessages: [
+        { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'call_1', output: { screenshot: bytes } }] },
+      ],
+    });
+
+    // A Uint8Array stringifies to {"0":137,"1":137,...}: bigger than the base64
+    // it stands in for, and not text the provider bills.
+    expect(result.regions.messages).toBeLessThan(40);
+  });
+
+  it('replaces a base64 payload buried inside a structured part', () => {
+    const messageList = new MessageList();
+    const blob = 'QUJDREVG'.repeat(500);
+
+    const result = attributePromptRegions({
+      messageList,
+      inputMessages: [
+        {
+          role: 'tool',
+          content: [{ type: 'tool-result', toolCallId: 'call_1', output: { screenshot: blob, status: 'ok' } }],
+        },
+      ],
+    });
+
+    expect(result.regions.messages).toBeLessThan(40);
+  });
+
+  it('attributes tagged system messages to per-tag regions', () => {
+    const messageList = new MessageList();
+    messageList.addSystem('Base instructions.');
+    messageList.addSystem('Working memory block contents.', 'memory');
+    messageList.addSystem('Observation block contents here.', 'observational-memory');
+
+    const inputMessages = [
+      { role: 'system', content: 'Base instructions.' },
+      { role: 'system', content: 'Working memory block contents.' },
+      { role: 'system', content: 'Observation block contents here.' },
+    ];
+    const result = attributePromptRegions({ messageList, inputMessages });
+
+    expect(Object.keys(result.regions).sort()).toEqual([
+      'system',
+      'tagged-system:memory',
+      'tagged-system:observational-memory',
+    ]);
+    expect(sumRegions(result.regions)).toBe(result.totalEstimated);
+  });
+
+  it('attributes non-system messages to the messages region', () => {
+    const messageList = new MessageList();
+    messageList.addSystem('Instructions.', 'memory');
+
+    const inputMessages = [
+      { role: 'system', content: 'Instructions.' },
+      { role: 'user', content: [{ type: 'text', text: 'Hello there' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'Hi! How can I help?' }] },
+    ];
+    const result = attributePromptRegions({ messageList, inputMessages });
+
+    expect(Object.keys(result.regions).sort()).toEqual(['messages', 'tagged-system:memory']);
+    expect(result.regions.messages).toBeGreaterThan(0);
+    expect(sumRegions(result.regions)).toBe(result.totalEstimated);
+  });
+
+  it('returns an empty attribution for an empty prompt', () => {
+    const messageList = new MessageList();
+    const result = attributePromptRegions({ messageList, inputMessages: [] });
+
+    expect(result.regions).toEqual({});
+    expect(result.totalEstimated).toBe(0);
+  });
+
+  it('puts injected system content not present in the MessageList into unattributed', () => {
+    const messageList = new MessageList();
+    messageList.addSystem('Known system message.');
+
+    const inputMessages = [
+      { role: 'system', content: 'Known system message.' },
+      // e.g. applyAutoResumeSystemMessage / injectBackgroundTaskPrompt / processor rewrite
+      { role: 'system', content: 'Injected by a processor after render.' },
+      { role: 'user', content: [{ type: 'text', text: 'question' }] },
+    ];
+    const result = attributePromptRegions({ messageList, inputMessages });
+
+    expect(Object.keys(result.regions).sort()).toEqual(['messages', 'system', 'unattributed']);
+    expect(result.regions.unattributed).toBeGreaterThan(0);
+    expect(sumRegions(result.regions)).toBe(result.totalEstimated);
+  });
+
+  it('never mutates its inputs', () => {
+    const messageList = new MessageList();
+    messageList.addSystem('Stable.');
+    const inputMessages = [{ role: 'system', content: 'Stable.' }];
+    const before = JSON.stringify(inputMessages);
+    const serializedBefore = JSON.stringify(messageList.serializeForSpan());
+
+    attributePromptRegions({ messageList, inputMessages });
+
+    expect(JSON.stringify(inputMessages)).toBe(before);
+    expect(JSON.stringify(messageList.serializeForSpan())).toBe(serializedBefore);
+  });
+});
+
+describe('didPromptPrefixChange', () => {
+  it('returns undefined on the first step for a key', () => {
+    const key = {};
+    expect(didPromptPrefixChange(key, [{ role: 'system', content: 'a' }])).toBeUndefined();
+  });
+
+  it('returns false when the prompt grows append-only', () => {
+    const key = {};
+    const first = [{ role: 'system', content: 'a' }];
+    didPromptPrefixChange(key, first);
+    expect(didPromptPrefixChange(key, [...first, { role: 'user', content: 'b' }])).toBe(false);
+  });
+
+  it('returns true when earlier prompt bytes change', () => {
+    const key = {};
+    didPromptPrefixChange(key, [
+      { role: 'system', content: 'a' },
+      { role: 'user', content: 'b' },
+    ]);
+    expect(
+      didPromptPrefixChange(key, [
+        { role: 'system', content: 'CHANGED' },
+        { role: 'user', content: 'b' },
+      ]),
+    ).toBe(true);
+  });
+
+  it('returns true when the prompt shrinks', () => {
+    const key = {};
+    didPromptPrefixChange(key, [
+      { role: 'system', content: 'a' },
+      { role: 'user', content: 'b' },
+    ]);
+    expect(didPromptPrefixChange(key, [{ role: 'system', content: 'a' }])).toBe(true);
+  });
+
+  it('tracks keys independently', () => {
+    const keyA = {};
+    const keyB = {};
+    didPromptPrefixChange(keyA, [{ role: 'system', content: 'a' }]);
+    expect(didPromptPrefixChange(keyB, [{ role: 'system', content: 'completely different' }])).toBeUndefined();
+  });
+});

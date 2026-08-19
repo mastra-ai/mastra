@@ -133,6 +133,14 @@
                 "entityId": "child-span-agent",
                 "attributes": {
                   "stepIndex": 0,
+                  "promptRegions": {
+                    "method": "tokenx-estimate",
+                    "totalEstimated": 17,
+                    "regions": {
+                      "system": 7,
+                      "messages": 10
+                    }
+                  },
                   "messageId": "<messageId-1>",
                   "usage": {
                     "inputTokens": 15,
@@ -360,6 +368,15 @@
                 "entityId": "child-span-agent",
                 "attributes": {
                   "stepIndex": 1,
+                  "promptRegions": {
+                    "method": "tokenx-estimate",
+                    "totalEstimated": 109,
+                    "regions": {
+                      "system": 7,
+                      "messages": 102
+                    }
+                  },
+                  "promptPrefixChangedFromPreviousStep": false,
                   "messageId": "<messageId-1>",
                   "usage": {
                     "inputTokens": 15,
