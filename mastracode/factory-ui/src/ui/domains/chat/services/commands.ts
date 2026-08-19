@@ -24,6 +24,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: 'think', description: 'Hint on extended thinking', requiresSession: false },
   { name: 'om', description: 'Show observational-memory phase', requiresSession: false },
   { name: 'settings', description: 'Show session state', requiresSession: false },
+  { name: 'login', description: 'Connect a model provider', requiresSession: false },
   { name: 'follow-up', args: '<message>', description: 'Queue a follow-up message', requiresSession: true },
   { name: 'abort', description: 'Abort the current run', requiresSession: true },
   { name: 'help', description: 'Show the command list', requiresSession: false },

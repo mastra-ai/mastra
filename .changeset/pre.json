@@ -179,5 +179,18 @@
     "@mastra/s3": "0.6.1",
     "@mastra/vercel": "1.4.0"
   },
-  "changesets": []
+  "changesets": [
+    "automated-provider-registry-20260819-061917",
+    "connection-status-in-status-line",
+    "dry-feet-tell",
+    "factory-ui-duplicate-transcript-turn",
+    "green-birds-knock",
+    "large-goats-tie",
+    "legal-chairs-cover",
+    "quick-pianos-heal",
+    "quiet-bears-align",
+    "smooth-contextual-sidebars",
+    "thirty-trams-change",
+    "upset-suns-study"
+  ]
 }
