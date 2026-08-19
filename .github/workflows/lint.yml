@@ -14,7 +14,7 @@ permissions: {}
 jobs:
   changes:
     name: Detect code changes
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-24.04-2
     permissions:
       contents: read
     outputs:
