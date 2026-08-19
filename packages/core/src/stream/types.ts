@@ -1148,6 +1148,14 @@ export type MastraModelOutputOptions<OUTPUT = undefined> = {
    * processor processing (isLLMExecutionStep) AND final promise resolution.
    */
   resolveFinalPromises?: boolean;
+  /**
+   * When true, `error` chunks and `finish` chunks with stepResult.reason
+   * 'error' bypass the per-chunk output processor pass. These chunks describe a
+   * single model call that the caller may still recover from via an error
+   * processor retry or a fallback model, so the caller becomes responsible for
+   * running output processors on the error once recovery has been ruled out.
+   */
+  deferErrorChunks?: boolean;
   returnScorerData?: boolean;
   processorStates?: Map<string, any>;
   requestContext?: RequestContext;

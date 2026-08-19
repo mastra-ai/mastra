@@ -698,8 +698,6 @@
         "Steelskull/L3.3-Nevoria-R1-70b",
         "TEE/deepseek-v3.2",
         "TEE/deepseek-v4-flash",
-        "TEE/deepseek-v4-pro-0813",
-        "TEE/deepseek-v4-pro-0813:thinking",
         "TEE/gemma-3-27b-it",
         "TEE/gemma-4-26b-a4b-uncensored",
         "TEE/gemma-4-31b-it",
@@ -2989,7 +2987,7 @@
         "minimax-m2.5",
         "minimax-m2.7",
         "minimax-m3",
-        "muse-spark-1.2",
+        "muse-spark-1.2-contributor",
         "qwen3.5-plus",
         "qwen3.6-plus",
         "qwen3.7-max",
@@ -3011,11 +3009,11 @@
         "minimax-m2.7": {
           "npm": "@ai-sdk/anthropic"
         },
-        "muse-spark-1.2": {
-          "npm": "@ai-sdk/openai"
-        },
         "minimax-m2.5": {
           "npm": "@ai-sdk/anthropic"
+        },
+        "muse-spark-1.2-contributor": {
+          "npm": "@ai-sdk/openai"
         }
       },
       "deprecatedModels": ["glm-5", "kimi-k2.5", "mimo-v2-omni", "mimo-v2-pro", "minimax-m2.5", "qwen3.5-plus"]
@@ -9182,8 +9180,6 @@
       "Steelskull/L3.3-Nevoria-R1-70b",
       "TEE/deepseek-v3.2",
       "TEE/deepseek-v4-flash",
-      "TEE/deepseek-v4-pro-0813",
-      "TEE/deepseek-v4-pro-0813:thinking",
       "TEE/gemma-3-27b-it",
       "TEE/gemma-4-26b-a4b-uncensored",
       "TEE/gemma-4-31b-it",
@@ -11063,7 +11059,7 @@
       "minimax-m2.5",
       "minimax-m2.7",
       "minimax-m3",
-      "muse-spark-1.2",
+      "muse-spark-1.2-contributor",
       "qwen3.5-plus",
       "qwen3.6-plus",
       "qwen3.7-max",
