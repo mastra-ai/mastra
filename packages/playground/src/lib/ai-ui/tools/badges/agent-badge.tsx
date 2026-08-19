@@ -13,6 +13,7 @@ import { ToolCard } from '../tool-card';
 import { isInlineToolCallHidden } from '../tool-card-visibility';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
+import { isToolApprovalPending } from './tool-action-state';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
 import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
@@ -99,7 +100,12 @@ export const AgentBadge = ({
     );
 
   return (
-    <Tool data-testid="agent-badge" status={isComplete ? 'success' : 'running'} aria-label={`Tool: ${toolName}`}>
+    <Tool
+      data-testid="agent-badge"
+      status={isComplete ? 'success' : 'running'}
+      defaultOpen={isToolApprovalPending(toolApprovalMetadata, toolCalled) || Boolean(suspendPayload)}
+      aria-label={`Tool: ${toolName}`}
+    >
       <ToolHeader
         actions={
           metadata?.mode === 'network' ? (

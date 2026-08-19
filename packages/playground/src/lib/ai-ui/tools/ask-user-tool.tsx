@@ -1,7 +1,8 @@
 import { Tool, ToolContent, ToolHeader, ToolIcon } from '@mastra/playground-ui/components/ai/tool-call';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { AskUserBadge } from './badges/ask-user-badge';
-import type { AskUserResult, AskUserSuspendPayload } from './badges/types';
+import type { AskUserResult } from './badges/types';
+import { getAskUserSuspendPayload } from './tool-card-visibility';
 import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 
 export interface AskUserToolProps {
@@ -9,15 +10,6 @@ export interface AskUserToolProps {
   toolCallId: string;
   output: unknown;
   metadata?: MessageMetadata;
-}
-
-function isAskUserSuspendPayload(payload: unknown): payload is AskUserSuspendPayload {
-  return (
-    typeof payload === 'object' &&
-    payload !== null &&
-    'question' in payload &&
-    typeof (payload as AskUserSuspendPayload).question === 'string'
-  );
 }
 
 function asAskUserResult(output: unknown): AskUserResult | undefined {
@@ -39,10 +31,9 @@ function asAskUserResult(output: unknown): AskUserResult | undefined {
  * (new core), so both keys are tried.
  */
 export const AskUserTool = ({ toolName, toolCallId, output, metadata }: AskUserToolProps) => {
-  const suspendPayload = (metadata?.suspendedTools?.[toolName] ?? metadata?.suspendedTools?.[toolCallId])
-    ?.suspendPayload;
+  const suspendPayload = getAskUserSuspendPayload(metadata, toolName, toolCallId);
 
-  if (!isAskUserSuspendPayload(suspendPayload)) {
+  if (!suspendPayload) {
     return null;
   }
 

@@ -62,6 +62,19 @@ const omPart = (name: string, data: Record<string, unknown>) => ({
   data,
 });
 
+type MessagePart = MastraDBMessage['content']['parts'][number];
+
+const completedToolPart = (toolName: string, toolCallId: string): MessagePart => ({
+  type: 'tool-invocation',
+  toolInvocation: {
+    toolName,
+    toolCallId,
+    state: 'result',
+    args: {},
+    result: { ok: true },
+  },
+});
+
 const baseMessage = (over: Partial<MastraDBMessage>): MastraDBMessage =>
   ({
     id: 'msg-1',
@@ -80,6 +93,50 @@ describe('MessageRow', () => {
       }),
     );
     expect(screen.getByText('world')).toBeTruthy();
+  });
+
+  describe('when one message contains multiple visible parts', () => {
+    it('spaces assistant parts within their shared message container', () => {
+      renderRow(
+        baseMessage({
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'first assistant part' },
+              { type: 'text', text: 'second assistant part' },
+            ],
+          },
+        }),
+      );
+
+      const firstPart = screen.getByText('first assistant part').closest('.mastra-markdown');
+      const secondPart = screen.getByText('second assistant part').closest('.mastra-markdown');
+
+      expect(firstPart?.parentElement).toBe(secondPart?.parentElement);
+      expect(firstPart?.parentElement?.classList.contains('space-y-1.5')).toBe(true);
+    });
+
+    it('spaces user parts within their shared message container', () => {
+      renderRow(
+        baseMessage({
+          role: 'user',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'first user part' },
+              { type: 'text', text: 'second user part' },
+            ],
+          },
+        }),
+      );
+
+      const firstPart = screen.getByText('first user part').closest('.mastra-markdown');
+      const secondPart = screen.getByText('second user part').closest('.mastra-markdown');
+
+      expect(firstPart?.parentElement).toBe(secondPart?.parentElement);
+      expect(firstPart?.parentElement?.classList.contains('space-y-1.5')).toBe(true);
+    });
   });
 
   // The reveal only paces if the factory keeps the text part mounted as the
@@ -110,7 +167,11 @@ describe('MessageRow', () => {
         content: { format: 2, parts: [{ type: 'text', text: 'a user line' }] },
       }),
     );
-    expect(screen.getByText('a user line')).toBeTruthy();
+    const bubble = screen.getByText('a user line').closest('.bg-surface3');
+
+    expect(bubble).toBeTruthy();
+    expect(bubble?.classList.contains('px-2')).toBe(true);
+    expect(bubble?.classList.contains('py-1')).toBe(true);
   });
 
   it('drops messages with no displayable role', () => {
@@ -294,6 +355,70 @@ describe('MessageRow', () => {
     expect(document.querySelector('[data-tool-call-rail]')).toBeNull();
   });
 
+  describe('when visible content separates two tool calls', () => {
+    it('does not connect tools across assistant prose', () => {
+      renderRow(
+        baseMessage({
+          role: 'assistant',
+          content: {
+            format: 2,
+            metadata: { mode: 'stream' },
+            parts: [
+              completedToolPart('firstTool', 'call-first'),
+              { type: 'text', text: 'The first result needs explanation.' },
+              completedToolPart('secondTool', 'call-second'),
+            ],
+          },
+        }),
+      );
+
+      expect(screen.getAllByTestId('tool-badge')).toHaveLength(2);
+      expect(document.querySelector('[data-tool-call-rail]')).toBeNull();
+    });
+
+    it('does not connect tools across reasoning', () => {
+      renderRow(
+        baseMessage({
+          role: 'assistant',
+          content: {
+            format: 2,
+            metadata: { mode: 'stream' },
+            parts: [
+              completedToolPart('firstTool', 'call-first'),
+              { type: 'reasoning', reasoning: 'Checking whether another tool is needed.' } as never,
+              completedToolPart('secondTool', 'call-second'),
+            ],
+          },
+        }),
+      );
+
+      expect(screen.getAllByTestId('tool-badge')).toHaveLength(2);
+      expect(document.querySelector('[data-tool-call-rail]')).toBeNull();
+    });
+  });
+
+  describe('when only non-rendered content separates two tool calls', () => {
+    it('connects the visible tools across a hidden tool part', () => {
+      renderRow(
+        baseMessage({
+          role: 'assistant',
+          content: {
+            format: 2,
+            metadata: { mode: 'stream' },
+            parts: [
+              completedToolPart('firstTool', 'call-first'),
+              completedToolPart('updateWorkingMemory', 'call-hidden'),
+              completedToolPart('secondTool', 'call-second'),
+            ],
+          },
+        }),
+      );
+
+      expect(screen.getAllByTestId('tool-badge')).toHaveLength(2);
+      expect(document.querySelectorAll('[data-tool-call-rail]')).toHaveLength(1);
+    });
+  });
+
   it('routes an OM observation tool into the observation marker badge', () => {
     renderRow(
       baseMessage({
@@ -397,7 +522,7 @@ describe('MessageRow', () => {
     expect(container.querySelector('[data-testid="tool-badge"]')).toBeNull();
   });
 
-  it('reveals approval buttons after the collapsed tool is opened', () => {
+  it('reveals approval buttons without requiring the pending tool to be opened', () => {
     renderRow(
       baseMessage({
         role: 'assistant',
@@ -423,10 +548,7 @@ describe('MessageRow', () => {
         },
       }),
     );
-    expect(screen.queryByText('Approve')).toBeNull();
-
-    fireEvent.click(screen.getByRole('button', { name: 'DangerousTool' }));
-
+    expect(screen.getByRole('button', { name: 'DangerousTool' }).getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByText('Approve')).toBeTruthy();
     expect(screen.getByText('Decline')).toBeTruthy();
   });

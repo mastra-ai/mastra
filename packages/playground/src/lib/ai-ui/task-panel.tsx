@@ -9,7 +9,7 @@ export const TaskPanel = () => {
 
   return (
     <div className="px-2 pb-1" data-testid="task-panel">
-      <div className="mx-auto w-full max-w-3xl">
+      <div className="mx-auto w-full max-w-[740px]">
         <TaskList tasks={tasks} />
       </div>
     </div>

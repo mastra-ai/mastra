@@ -5,6 +5,7 @@ import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { ToolCoinIcon } from '@mastra/playground-ui/icons/ToolCoinIcon';
 import { formatTypeScript } from '@mastra/playground-ui/utils/formatting';
 import { useEffect, useState } from 'react';
+import { isToolApprovalPending } from './tool-action-state';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
 import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
@@ -98,7 +99,12 @@ export const CodeModeBadge = ({
   }, [code]);
 
   return (
-    <Tool data-testid="code-mode-badge" status={status} aria-label={`Tool: ${toolName}`}>
+    <Tool
+      data-testid="code-mode-badge"
+      status={status}
+      defaultOpen={isToolApprovalPending(toolApprovalMetadata, toolCalled)}
+      aria-label={`Tool: ${toolName}`}
+    >
       <ToolHeader>
         <ToolIcon tooltip="Code mode">
           <ToolCoinIcon className="text-accent6" />

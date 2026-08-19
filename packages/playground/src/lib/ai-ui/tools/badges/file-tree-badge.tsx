@@ -6,6 +6,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { CopyIcon, CheckIcon, FolderTree, HardDrive } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { DataMessagePart } from '../tool-card';
+import { isToolApprovalPending } from './tool-action-state';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
 import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
@@ -59,7 +60,6 @@ export const FileTreeBadge = ({
   toolCalled: toolCalledProp,
   dataParts,
 }: FileTreeBadgeProps) => {
-  const [isCollapsed, setIsCollapsed] = useState(true);
   const { isCopied, copyToClipboard } = useCopyToClipboard({ copiedDuration: 1500, showToast: false });
   const { Link } = useLinkComponent();
 
@@ -105,7 +105,13 @@ export const FileTreeBadge = ({
   }
 
   const hasResult = !!treeOutput;
-  const toolCalled = toolCalledProp ?? hasResult;
+  const toolCalled = toolCalledProp ?? result !== undefined;
+  const approvalPending = isToolApprovalPending(toolApprovalMetadata, toolCalled);
+  const [isCollapsed, setIsCollapsed] = useState(!approvalPending);
+
+  useEffect(() => {
+    setIsCollapsed(!approvalPending);
+  }, [approvalPending]);
 
   useEffect(() => {
     if (toolApprovalMetadata && !toolCalled) {
@@ -213,7 +219,7 @@ export const FileTreeBadge = ({
         {/* Loading state */}
         {toolCalled && !hasResult && (
           <div className="border-border1 bg-surface2 rounded-md border px-3 py-2">
-            <span className="text-neutral6 text-xs">Loading...</span>
+            <span className="text-neutral6 text-xs">{result === undefined ? 'Loading...' : 'No files found.'}</span>
           </div>
         )}
       </ToolContent>
