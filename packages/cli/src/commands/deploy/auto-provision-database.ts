@@ -10,7 +10,7 @@
 import * as p from '@clack/prompts';
 import { defaultDatabaseName } from '../db/db.js';
 import type { DatabaseKind, ProjectDatabase } from '../db/platform-api.js';
-import { attachDatabase, DB_ENV_VAR_NAMES, pollDatabaseUntilReady } from '../db/platform-api.js';
+import { attachDatabase, DB_ENV_VAR_NAMES, fetchDatabaseCatalog, pollDatabaseUntilReady } from '../db/platform-api.js';
 import type { PreflightAutofix, PreflightIssue } from '../deploy-preflight.js';
 import type { Environment } from '../env/platform-api.js';
 import { enableBackgroundWorkers } from '../env/platform-api.js';
@@ -108,6 +108,21 @@ export async function maybeApplyPreflightAutofixes(
   const groups = collectAutofixes(issues);
   if (groups.length === 0 || !isInteractive() || ctx.autoAccept) return untouched;
 
+  // The platform filters the provider catalog per-organization (feature
+  // flags, e.g. `managed-redis`). Only offer kinds the platform would let
+  // this org attach — the same gate the dashboard UI uses. Fail closed on
+  // errors, matching the platform: a flag-service hiccup must not lead to
+  // prompts whose attach would then be rejected anyway.
+  let availableKinds: Set<DatabaseKind>;
+  try {
+    const catalog = await fetchDatabaseCatalog(ctx.token, ctx.orgId, ctx.projectId);
+    availableKinds = new Set(catalog.filter(entry => entry.status === 'available').map(entry => entry.kind));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    p.log.warn(`Could not check managed database availability (${message}); skipping auto-provisioning.`);
+    return untouched;
+  }
+
   const resolved = new Set<PreflightAutofix>();
   const state: AutofixState = {
     newlyManagedEnvVarNames: [],
@@ -116,7 +131,7 @@ export async function maybeApplyPreflightAutofixes(
   };
 
   for (const group of groups) {
-    if (await handleAutofix(group.fix, ctx, state)) {
+    if (await handleAutofix(group.fix, ctx, state, availableKinds)) {
       for (const fix of group.members) resolved.add(fix);
     }
   }
@@ -129,12 +144,17 @@ export async function maybeApplyPreflightAutofixes(
   };
 }
 
-async function handleAutofix(fix: PreflightAutofix, ctx: AutoProvisionContext, state: AutofixState): Promise<boolean> {
+async function handleAutofix(
+  fix: PreflightAutofix,
+  ctx: AutoProvisionContext,
+  state: AutofixState,
+  availableKinds: Set<DatabaseKind>,
+): Promise<boolean> {
   switch (fix.kind) {
     case 'create-managed-database':
-      return handleDatabaseAutofix(fix, ctx, state);
+      return handleDatabaseAutofix(fix, ctx, state, availableKinds);
     case 'enable-background-workers':
-      return handleWorkerAutofix(ctx, state);
+      return handleWorkerAutofix(ctx, state, availableKinds);
   }
 }
 
@@ -142,7 +162,12 @@ async function handleDatabaseAutofix(
   fix: DatabaseAutofix,
   ctx: AutoProvisionContext,
   state: AutofixState,
+  availableKinds: Set<DatabaseKind>,
 ): Promise<boolean> {
+  // Silently skip kinds the platform doesn't offer this org — mirrors the
+  // dashboard, where a gated provider simply doesn't appear.
+  if (!availableKinds.has(fix.provider)) return false;
+
   const providerEnvVars = DB_ENV_VAR_NAMES[fix.provider] ?? [];
   const confirm = await p.confirm({
     message:
@@ -166,7 +191,11 @@ async function handleDatabaseAutofix(
   }
 }
 
-async function handleWorkerAutofix(ctx: AutoProvisionContext, state: AutofixState): Promise<boolean> {
+async function handleWorkerAutofix(
+  ctx: AutoProvisionContext,
+  state: AutofixState,
+  availableKinds: Set<DatabaseKind>,
+): Promise<boolean> {
   const managedNames = [...(ctx.environment.managedEnvVarNames ?? []), ...state.newlyManagedEnvVarNames];
   const hasManagedRedis = managedNames.includes('REDIS_URL');
   // BYO Redis must come from the vars *stored* on the environment — the
@@ -181,6 +210,11 @@ async function handleWorkerAutofix(ctx: AutoProvisionContext, state: AutofixStat
     );
     return false;
   }
+
+  // Enabling workers without any Redis means creating a managed one — skip
+  // the offer entirely when the platform doesn't offer this org managed
+  // Redis (feature-flag gate), mirroring the dashboard.
+  if (!hasManagedRedis && !hasByoRedis && !availableKinds.has('redis')) return false;
 
   const confirm = await p.confirm({
     message:
