@@ -25,7 +25,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import type { MessageFactoryPart } from '@mastra/react';
 import { useSpeechRecognition } from '@mastra/react';
 import { ArrowUp, Mic } from 'lucide-react';
-import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
+import { startTransition, useEffect, useRef, useState } from 'react';
 
 import { AttachFilePopover } from './attachments/attach-file-popover';
 import { ComposerAttachments as ChatComposerAttachments } from './attachments/attachment';
@@ -36,6 +36,7 @@ import { BracketOverlay } from './components/bracket-overlay';
 import './thread.css';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { MessageRow } from './messages/message-row';
+import { toRenderableMessage } from './messages/message-visibility';
 import { SuggestedPromptList } from './suggested-prompt-list';
 import { TaskPanel } from './task-panel';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
@@ -49,7 +50,7 @@ import { usePlaygroundStore } from '@/store/playground-store';
 
 const SKELETON_DELAY_MS = 300;
 const EMPTY_SUGGESTED_PROMPTS: string[] = [];
-const TOOL_MESSAGE_ITEM_STYLE = { contentVisibility: 'visible' } as const;
+const VISIBLE_MESSAGE_ITEM_STYLE = { contentVisibility: 'visible' } as const;
 
 /**
  * Returns true only after `flag` has stayed true for `delayMs` continuously, so
@@ -140,6 +141,7 @@ export const Thread = ({
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   const messages = useChatMessages();
+  const renderableMessages = messages.filter(message => toRenderableMessage(message) !== null);
   const { isRunning } = useChatRunning();
   const { requestContext } = usePlaygroundStore();
   const { isSpeaking, readAloud, stop: stopSpeaking } = useReadAloud(agentId, requestContext);
@@ -147,17 +149,17 @@ export const Thread = ({
   const { hasSession, viewMode } = useBrowserSession();
   const showThumbnailInChat = hasSession && (viewMode === 'collapsed' || viewMode === 'expanded');
 
-  const isEmpty = messages.length === 0;
+  const isEmpty = renderableMessages.length === 0;
   const lastMessage = messages[messages.length - 1];
   const showPending = isRunning && (lastMessage?.role !== 'assistant' || !hasStreamingPart(lastMessage));
   const delayedPending = useDelayedFlag(showPending, SKELETON_DELAY_MS);
-  const threadRailTurns = useMemo(() => buildThreadRailTurns(messages), [messages]);
-  const threadRailAnchorIds = useMemo(() => new Set(threadRailTurns.map(turn => turn.messageId)), [threadRailTurns]);
+  const threadRailTurns = buildThreadRailTurns(renderableMessages);
+  const threadRailAnchorIds = new Set(threadRailTurns.map(turn => turn.messageId));
   // Keyed by the opening message's client key: `data-user-message` reconciliation
   // swaps `message.id` to the server signal id, and a changing key would remount
   // the whole turn.
   const turnGroups: { key: string; messages: MastraDBMessage[]; opensTurn: boolean }[] = [];
-  for (const message of messages) {
+  for (const message of renderableMessages) {
     if (threadRailAnchorIds.has(message.id) || turnGroups.length === 0) {
       turnGroups.push({
         key: getClientMessageKey(message),
@@ -202,7 +204,9 @@ export const Thread = ({
                                 key={getClientMessageKey(message)}
                                 messageId={message.id}
                                 scrollAnchor={threadRailAnchorIds.has(message.id)}
-                                style={hasToolCallPart(message) ? TOOL_MESSAGE_ITEM_STYLE : undefined}
+                                style={
+                                  isLiveTurn || hasToolCallPart(message) ? VISIBLE_MESSAGE_ITEM_STYLE : undefined
+                                }
                               >
                                 <MessageRow
                                   message={message}

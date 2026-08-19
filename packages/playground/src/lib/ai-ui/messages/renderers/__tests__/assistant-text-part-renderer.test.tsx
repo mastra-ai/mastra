@@ -20,12 +20,13 @@ afterEach(() => {
 });
 
 describe('AssistantTextPartRenderer', () => {
-  it('renders markdown text', () => {
+  it('renders markdown text without extra vertical margin', () => {
     const part = { type: 'text', text: 'hello **world**' } as TextPart;
 
-    render(<AssistantTextPartRenderer part={part} />);
+    const { container } = render(<AssistantTextPartRenderer part={part} />);
 
     expect(screen.getByText('world')).not.toBeNull();
+    expect(container.querySelector('.mastra-markdown')?.classList.contains('my-3')).toBe(false);
   });
 
   it('renders the empty string safely when text is missing', () => {

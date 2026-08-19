@@ -170,6 +170,34 @@ const assistantMessage = (text: string, metadata?: MastraDBMessage['content']['m
   content: { format: 2, parts: [{ type: 'text', text }], metadata },
 });
 
+const emptyAssistantMessage = (): MastraDBMessage => ({
+  id: 'a-empty',
+  role: 'assistant',
+  createdAt: new Date(),
+  content: { format: 2, parts: [] },
+});
+
+const askUserMessageWithoutSuspendPayload = (): MastraDBMessage => ({
+  id: 'a-ask-user-without-payload',
+  role: 'assistant',
+  createdAt: new Date(),
+  content: {
+    format: 2,
+    parts: [
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'call-ask-user',
+          toolName: 'ask_user',
+          args: { question: 'What is your favorite color?' },
+          result: { content: 'User answered: Blue', isError: false },
+        },
+      },
+    ],
+  },
+});
+
 const assistantToolMessage = (): MastraDBMessage => ({
   id: 'a-tool-call',
   role: 'assistant',
@@ -224,6 +252,36 @@ describe('Thread', () => {
     expect(screen.queryByText('How can I help you today?')).toBeFalsy();
   });
 
+  describe('when a stored message has no renderable parts', () => {
+    it('does not mount a message scroller item for it', async () => {
+      server.use(...baseHandlers());
+
+      await act(async () => {
+        renderThread([userMessage('question'), emptyAssistantMessage(), assistantMessage('answer')]);
+      });
+
+      expect(
+        document.querySelector('[data-slot="message-scroller-item"][data-message-id="a-empty"]'),
+      ).toBeNull();
+    });
+  });
+
+  describe('when a stored tool message renders no content', () => {
+    it('does not mount a message scroller item for it', async () => {
+      server.use(...baseHandlers());
+
+      await act(async () => {
+        renderThread([userMessage('question'), askUserMessageWithoutSuspendPayload(), assistantMessage('answer')]);
+      });
+
+      expect(
+        document.querySelector(
+          '[data-slot="message-scroller-item"][data-message-id="a-ask-user-without-payload"]',
+        ),
+      ).toBeNull();
+    });
+  });
+
   it('limits the aligned chat surfaces to 740px', async () => {
     server.use(...baseHandlers());
 
@@ -250,15 +308,40 @@ describe('Thread', () => {
       expect(messageItem?.style.contentVisibility).toBe('visible');
     });
 
-    it('keeps off-screen rendering optimization on text-only messages', async () => {
+    it('keeps the latest text-only turn visible so hydration cannot substitute its intrinsic height', async () => {
       server.use(...baseHandlers());
 
       await act(async () => {
-        renderThread([assistantMessage('plain response')]);
+        renderThread([
+          userMessage('previous question'),
+          assistantMessage('previous response'),
+          userMessage('latest question'),
+          assistantMessage('latest response'),
+        ]);
       });
 
       const messageItem = screen
-        .getByText('plain response')
+        .getByText('latest response')
+        .closest<HTMLElement>('[data-slot="message-scroller-item"]');
+
+      expect(messageItem).not.toBeNull();
+      expect(messageItem?.style.contentVisibility).toBe('visible');
+    });
+
+    it('keeps off-screen rendering optimization on historical text-only messages', async () => {
+      server.use(...baseHandlers());
+
+      await act(async () => {
+        renderThread([
+          userMessage('previous question'),
+          assistantMessage('previous response'),
+          userMessage('latest question'),
+          assistantMessage('latest response'),
+        ]);
+      });
+
+      const messageItem = screen
+        .getByText('previous response')
         .closest<HTMLElement>('[data-slot="message-scroller-item"]');
 
       expect(messageItem).not.toBeNull();

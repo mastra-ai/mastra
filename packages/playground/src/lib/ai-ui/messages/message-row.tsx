@@ -10,8 +10,8 @@ import type { ReactNode } from 'react';
 import { forwardRef, useCallback, useMemo } from 'react';
 
 import type { DataMessagePart } from '../tools/tool-card';
-import { isInlineToolCallHidden } from '../tools/tool-card-visibility';
 import { DatasetSaveAction } from './dataset-save-action';
+import { getMessageMetadata, getToolPartName, toRenderableMessage } from './message-visibility';
 import { AssistantTextPartRenderer } from './renderers/assistant-text-part-renderer';
 import { DataPartRenderer } from './renderers/data-part-renderer';
 import { DynamicToolPartRenderer } from './renderers/dynamic-tool-part-renderer';
@@ -20,7 +20,6 @@ import { messageStatusRenderers } from './renderers/status-renderers';
 import { ToolInvocationPartRenderer } from './renderers/tool-invocation-part-renderer';
 import { UserFilePartRenderer } from './renderers/user-file-part-renderer';
 import { UserTextPartRenderer } from './renderers/user-text-part-renderer';
-import { getSignalType, isSignalData, isTaskSignalData, isUserSignalType, toReactiveSignalData } from './signal-data';
 import { ProviderLogo } from '@/domains/llm/components/provider-logo';
 
 export interface MessageRowProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> {
@@ -43,48 +42,6 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const readField = (value: unknown, key: string): unknown => (isRecord(value) ? value[key] : undefined);
 
 /**
- * Normalize the stored message role for display. A `signal`+`type:'user'` row
- * renders as a user message; a non-user (reactive) `signal` row is folded onto
- * an assistant message as a `data-signal` badge (see `toReactiveSignalMessage`);
- * messages without a displayable role are dropped.
- */
-const getMessageDisplayRole = (message: MastraDBMessage): MastraDBMessage['role'] | null => {
-  if (message.role === 'assistant' || message.role === 'user' || message.role === 'system') return message.role;
-  if (message.role === 'signal') return isUserSignalType(getSignalType(message)) ? 'user' : 'assistant';
-  return null;
-};
-
-/**
- * Convert a persisted reactive (non-user) `signal` row into an assistant message
- * carrying a single `data-signal` part, so the existing `SignalBadge` renderer
- * shows it on read-back. Restores 1.41.0 behavior lost in the chat renderer
- * rewrite (PR #17774). Returns `null` when the signal payload is not a shape the
- * `SignalBadge` can render, so the row is dropped instead of leaving an empty
- * assistant bubble.
- */
-const toReactiveSignalMessage = (message: MastraDBMessage): MastraDBMessage | null => {
-  const data = toReactiveSignalData(message);
-  if (!isSignalData(data)) return null;
-  const parts: MastraDBMessage['content']['parts'] = [{ type: 'data-signal', data }];
-  return {
-    ...message,
-    role: 'assistant',
-    content: { ...message.content, parts },
-  };
-};
-
-const toDisplayMessage = (message: MastraDBMessage): MastraDBMessage | null => {
-  const displayRole = getMessageDisplayRole(message);
-  if (displayRole === null) return null;
-  if (message.role === 'signal' && displayRole === 'assistant') return toReactiveSignalMessage(message);
-  if (displayRole === message.role) return message;
-  return { ...message, role: displayRole };
-};
-
-const getMessageMetadata = (message: MastraDBMessage): Record<string, unknown> | undefined =>
-  isRecord(message.content.metadata) ? message.content.metadata : undefined;
-
-/**
  * Collect `data-*` parts from the message so badges (file-tree, sandbox) can read
  * live streaming metadata without reaching into assistant-ui state.
  */
@@ -99,56 +56,6 @@ const getDataParts = (message: MastraDBMessage): DataMessagePart[] =>
       name: 'name' in part && typeof part.name === 'string' ? part.name : undefined,
       data: readField(part, 'data'),
     }));
-
-const getToolPartName = (part: { type: string }): string | undefined => {
-  if (part.type === 'tool-invocation') {
-    const toolName = readField(readField(part, 'toolInvocation'), 'toolName');
-    return typeof toolName === 'string' ? toolName : undefined;
-  }
-
-  if (part.type === 'dynamic-tool' || (part.type.startsWith('tool-') && part.type !== 'tool-invocation')) {
-    const toolName = readField(part, 'toolName');
-    return typeof toolName === 'string' ? toolName : part.type.replace(/^tool-/, '');
-  }
-
-  return undefined;
-};
-
-/** Keep only parts that produce visible UI. This prevents hidden task/state
- * plumbing from leaving empty message rows and action bars behind. */
-const isRenderableMessagePart = (part: MessagePart): boolean => {
-  const toolName = getToolPartName(part);
-  if (toolName !== undefined) return !isInlineToolCallHidden(toolName);
-
-  if (part.type === 'text') {
-    const value = readField(part, 'text');
-    return typeof value === 'string' && value.trim().length > 0;
-  }
-
-  if (part.type === 'reasoning') {
-    const value = readField(part, 'text') ?? readField(part, 'reasoning');
-    return (
-      (typeof value === 'string' && value.trim().length > 0) ||
-      readField(part, 'redacted') === true ||
-      readField(part, 'state') === 'streaming'
-    );
-  }
-
-  if (part.type === 'file') return true;
-
-  if (part.type === 'data-signal') {
-    const data = readField(part, 'data');
-    return isSignalData(data) && !isTaskSignalData(data);
-  }
-
-  return false;
-};
-
-const withRenderableParts = (message: MastraDBMessage): MastraDBMessage => {
-  const parts = message.content.parts.filter(isRenderableMessagePart);
-  if (parts.length === message.content.parts.length) return message;
-  return { ...message, content: { ...message.content, parts } };
-};
 
 const getTextFromParts = (message: MastraDBMessage): string =>
   message.content.parts
@@ -243,8 +150,7 @@ const AssistantActionBar = ({
 
 export const MessageRow = forwardRef<HTMLDivElement, MessageRowProps>(
   ({ message, hasModelList, isSpeaking, onReadAloud, onStopSpeaking, className, ...rootProps }, ref) => {
-    const dbMessage = useMemo(() => toDisplayMessage(message), [message]);
-    const displayMessage = useMemo(() => (dbMessage ? withRenderableParts(dbMessage) : null), [dbMessage]);
+    const displayMessage = useMemo(() => toRenderableMessage(message), [message]);
     const metadata = getMessageMetadata(message);
     const modelMetadata = hasModelList ? getModelMetadata(metadata) : undefined;
     const dataParts = useMemo(() => getDataParts(message), [message]);
@@ -306,7 +212,7 @@ export const MessageRow = forwardRef<HTMLDivElement, MessageRowProps>(
       return (
         <div
           ref={ref}
-          className={cn('w-full flex items-end pb-4 pt-2 flex-col', className)}
+          className={cn('flex w-full flex-col items-end', className)}
           {...rootProps}
           data-message-id={message.id}
           data-message-pending={isPending ? 'true' : undefined}
@@ -314,7 +220,7 @@ export const MessageRow = forwardRef<HTMLDivElement, MessageRowProps>(
           <DatasetSaveAction messageText={getTextFromParts(message)} />
           <div
             className={cn(
-              'max-w-[max(366px,70%)] break-words px-2 py-1 text-neutral6 text-ui-lg leading-ui-lg rounded-xl bg-surface3',
+              'max-w-[max(366px,70%)] space-y-1.5 break-words px-2 py-1 text-neutral6 text-ui-lg leading-ui-lg rounded-xl bg-surface3',
               isPending && 'opacity-60 animate-pulse',
             )}
           >
@@ -328,7 +234,7 @@ export const MessageRow = forwardRef<HTMLDivElement, MessageRowProps>(
 
     return (
       <div ref={ref} className={cn('max-w-full', className)} {...rootProps} data-message-id={message.id}>
-        <div className="text-neutral6 text-ui-lg leading-ui-lg pt-2">
+        <div className="text-neutral6 text-ui-lg leading-ui-lg space-y-1.5 pt-2">
           <MessageFactory message={displayMessage} {...assistantRenderers} status={messageStatusRenderers} />
         </div>
         {showActionBar && (

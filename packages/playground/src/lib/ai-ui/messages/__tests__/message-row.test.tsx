@@ -95,6 +95,50 @@ describe('MessageRow', () => {
     expect(screen.getByText('world')).toBeTruthy();
   });
 
+  describe('when one message contains multiple visible parts', () => {
+    it('spaces assistant parts within their shared message container', () => {
+      renderRow(
+        baseMessage({
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'first assistant part' },
+              { type: 'text', text: 'second assistant part' },
+            ],
+          },
+        }),
+      );
+
+      const firstPart = screen.getByText('first assistant part').closest('.mastra-markdown');
+      const secondPart = screen.getByText('second assistant part').closest('.mastra-markdown');
+
+      expect(firstPart?.parentElement).toBe(secondPart?.parentElement);
+      expect(firstPart?.parentElement?.classList.contains('space-y-1.5')).toBe(true);
+    });
+
+    it('spaces user parts within their shared message container', () => {
+      renderRow(
+        baseMessage({
+          role: 'user',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'first user part' },
+              { type: 'text', text: 'second user part' },
+            ],
+          },
+        }),
+      );
+
+      const firstPart = screen.getByText('first user part').closest('.mastra-markdown');
+      const secondPart = screen.getByText('second user part').closest('.mastra-markdown');
+
+      expect(firstPart?.parentElement).toBe(secondPart?.parentElement);
+      expect(firstPart?.parentElement?.classList.contains('space-y-1.5')).toBe(true);
+    });
+  });
+
   // The reveal only paces if the factory keeps the text part mounted as the
   // reply grows; a remount would show every chunk whole again.
   describe('when a streaming reply grows', () => {

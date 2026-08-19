@@ -86,7 +86,7 @@ export const MessageText = ({ text, metadata, externalLinkTarget, streaming }: M
   }
 
   return (
-    <MarkdownRenderer className="my-3" externalLinkTarget={externalLinkTarget} streaming={streaming}>
+    <MarkdownRenderer externalLinkTarget={externalLinkTarget} streaming={streaming}>
       {text}
     </MarkdownRenderer>
   );
