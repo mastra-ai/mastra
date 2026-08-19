@@ -171,7 +171,7 @@ async function handleDatabaseAutofix(
   const providerEnvVars = DB_ENV_VAR_NAMES[fix.provider] ?? [];
   const confirm = await p.confirm({
     message:
-      `Preflight needs ${providerEnvVars.join(', ')} for the ${ctx.environment.slug} environment. ` +
+      `Preflight needs ${providerEnvVars.join(', ')} for the ${ctx.environment.name} environment. ` +
       `Create a managed ${fix.provider} database now and attach it?`,
     initialValue: true,
   });
@@ -280,7 +280,7 @@ async function provisionOne(ctx: AutoProvisionContext, provider: DatabaseKind): 
     const ready = await pollDatabaseUntilReady(ctx.token, ctx.orgId, ctx.projectId, created.id, {
       onStatus: status => spinner.message(`Provisioning ${provider} database "${created.name}" — ${status}`),
     });
-    spinner.stop(`Database "${ready.name}" is ready and attached to ${ctx.environment.slug}.`);
+    spinner.stop(`Database "${ready.name}" is ready and attached to the ${ctx.environment.name} environment.`);
     return ready;
   } catch (error) {
     spinner.stop('Provisioning failed.');
