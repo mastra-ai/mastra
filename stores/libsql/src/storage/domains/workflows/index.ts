@@ -16,6 +16,7 @@ import {
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
+  matchesExpectedWorkflowStatus,
   WorkflowsStorage,
 } from '@mastra/core/storage';
 import type { WorkflowRunState, StepResult } from '@mastra/core/workflows';
@@ -247,8 +248,14 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
               throw new Error(`Snapshot not found for runId ${runId}`);
             }
 
+            const { expectedStatus, ...state } = opts;
+            if (!matchesExpectedWorkflowStatus(snapshot.status, expectedStatus)) {
+              await tx.rollback();
+              return undefined;
+            }
+
             // Merge the new options with the existing snapshot
-            const updatedSnapshot = { ...snapshot, ...opts };
+            const updatedSnapshot = { ...snapshot, ...state };
 
             // Update the snapshot within the same transaction
             await tx.execute({

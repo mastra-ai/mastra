@@ -1,5 +1,13 @@
 # create-mastra
 
+## 1.25.1
+
+### Patch Changes
+
+- Reduced create-mastra's runtime dependencies while preserving project creation behavior. ([#21649](https://github.com/mastra-ai/mastra/pull/21649))
+
+- Removed unused starter files and templates from the `create-mastra` package. The command-line tool still clones the starter repository. ([#21644](https://github.com/mastra-ai/mastra/pull/21644))
+
 ## 1.25.1-alpha.15
 
 ## 1.25.1-alpha.14
