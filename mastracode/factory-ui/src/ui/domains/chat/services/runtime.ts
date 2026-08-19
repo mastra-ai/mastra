@@ -105,8 +105,8 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
         ...state,
         omProgress: event.displayState.omProgress,
         usage: event.displayState.tokenUsage,
-        bufferingMessages: event.displayState.bufferingMessages,
-        bufferingObservations: event.displayState.bufferingObservations,
+        bufferingMessages: event.displayState.bufferingMessages ?? false,
+        bufferingObservations: event.displayState.bufferingObservations ?? false,
       };
     case 'goal_evaluation':
       return {
