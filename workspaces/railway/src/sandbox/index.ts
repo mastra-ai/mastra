@@ -178,6 +178,7 @@ export class RailwaySandbox extends MastraSandbox {
   private _checkpointRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   private _checkpointRefreshInFlight: Promise<void> | null = null;
   private _sandboxId?: string;
+  private _restoredCheckpointName?: string;
   private _startInFlight: Promise<void> | null = null;
 
   private readonly _token?: string;
@@ -249,6 +250,7 @@ export class RailwaySandbox extends MastraSandbox {
     if (this._sandboxId) {
       const sandboxId = this._sandboxId;
       this._startInFlight ??= (async () => {
+        this._restoredCheckpointName = undefined;
         try {
           this._sandbox = await this._reconnectSandbox(sandboxId, clientConfig);
         } catch (error) {
@@ -298,7 +300,11 @@ export class RailwaySandbox extends MastraSandbox {
             : undefined;
       }
 
-      return checkpointToRestore ? Sandbox.create(checkpointToRestore, createOptions) : Sandbox.create(createOptions);
+      const sandbox = checkpointToRestore
+        ? await Sandbox.create(checkpointToRestore, createOptions)
+        : await Sandbox.create(createOptions);
+      this._restoredCheckpointName = checkpointToRestore;
+      return sandbox;
     } catch (error) {
       throw error;
     }
@@ -613,6 +619,7 @@ export class RailwaySandbox extends MastraSandbox {
           ...(this._sandbox.idleTimeoutMinutes != null && {
             idleTimeoutMinutes: this._sandbox.idleTimeoutMinutes,
           }),
+          ...(this._restoredCheckpointName && { restoredCheckpointName: this._restoredCheckpointName }),
         }),
       },
     };

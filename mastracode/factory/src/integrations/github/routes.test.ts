@@ -1351,6 +1351,30 @@ describe('ensure (materialize)', () => {
     );
   });
 
+  it('does not skip the pull when the provider restores the primary session checkpoint', async () => {
+    tables.projectRepositories.push(
+      projectRepositoryRow({
+        id: 'p1',
+        orgId: 'org1',
+        userId: 'u1',
+        installationId: 7,
+        repoFullName: 'octo/hello',
+        defaultBranch: 'main',
+        sandboxWorkdir: '/workspace/hello',
+        baseCheckpoint: { name: 'repo-p1', sha: 'abc123', builtAt: new Date(), setupCommandHash: null },
+      }),
+    );
+    ensureProjectSandbox.mockResolvedValueOnce({ id: 'sb' });
+
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
+
+    expect(res.status).toBe(200);
+    expect(ensureProjectSandbox).toHaveBeenCalledWith(expect.objectContaining({ seedCheckpointName: 'repo-p1' }));
+    expect(materializeRepo).toHaveBeenCalledWith(
+      expect.objectContaining({ skipPullOnExistingCheckout: false }),
+    );
+  });
+
   it('does not seed provisioning from a stale repo base checkpoint', async () => {
     tables.projectRepositories.push(
       projectRepositoryRow({

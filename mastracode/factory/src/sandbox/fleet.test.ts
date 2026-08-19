@@ -222,7 +222,9 @@ describe('sandbox option forwarding', () => {
       provider: 'railway',
       executeCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
       _start: vi.fn(async () => {}),
-      getInfo: vi.fn(async () => ({ metadata: { sandboxId: 'derived-1' } })),
+      getInfo: vi.fn(async () => ({
+        metadata: { sandboxId: 'derived-1', restoredCheckpointName: 'repo-base' },
+      })),
     }));
     const subject = new SandboxFleet({
       machine: { id: 'template', name: 'Template', provider: 'railway', clone } as unknown as WorkspaceSandbox,
@@ -248,6 +250,33 @@ describe('sandbox option forwarding', () => {
     expect(clone).toHaveBeenNthCalledWith(2, expect.not.objectContaining({ seedCheckpointName: expect.anything() }));
     expect(provisioned.seedCheckpointNameUsed).toBe('repo-base');
     expect(reattached.seedCheckpointNameUsed).toBeUndefined();
+  });
+
+  it('does not report the seed when the provider restores the primary checkpoint', async () => {
+    const clone = vi.fn(() => ({
+      id: 'derived-1',
+      provider: 'railway',
+      executeCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+      _start: vi.fn(async () => {}),
+      getInfo: vi.fn(async () => ({
+        metadata: { sandboxId: 'derived-1', restoredCheckpointName: 'session-checkpoint' },
+      })),
+    }));
+    const subject = new SandboxFleet({
+      machine: { id: 'template', name: 'Template', provider: 'railway', clone } as unknown as WorkspaceSandbox,
+      workdirBase: '/workspace',
+    });
+    const store = {
+      sandboxId: null,
+      checkpointName: 'session-checkpoint',
+      seedCheckpointName: 'repo-base',
+      setSandboxId: vi.fn(async () => {}),
+      clear: vi.fn(async () => {}),
+    };
+
+    const provisioned = await subject.ensureSandbox(store);
+
+    expect(provisioned.seedCheckpointNameUsed).toBeUndefined();
   });
 
   it('omits snapshot from the adapter when the provider does not implement it', async () => {

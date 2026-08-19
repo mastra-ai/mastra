@@ -221,15 +221,19 @@ function toMaterializationSandbox(
 }
 
 /**
- * The provider's reattach id for a started sandbox. For Railway this is the
- * underlying `railwaySandboxId` in `getInfo().metadata`. Providers without a
- * provider-native id (e.g. local) reattach by construction id, so fall back
- * to the sandbox's own logical id.
+ * Provider details reported after startup. Railway exposes its native sandbox
+ * id and the checkpoint it actually restored through `getInfo().metadata`.
  */
-async function readProviderSandboxId(sandbox: MaterializationSandbox): Promise<string | undefined> {
+async function readProviderSandboxDetails(
+  sandbox: MaterializationSandbox,
+): Promise<{ sandboxId: string | undefined; restoredCheckpointName: string | undefined }> {
   const info = await sandbox.getInfo();
   const id = info.metadata?.railwaySandboxId ?? info.metadata?.sandboxId;
-  return typeof id === 'string' ? id : sandbox.id;
+  const restoredCheckpointName = info.metadata?.restoredCheckpointName;
+  return {
+    sandboxId: typeof id === 'string' ? id : sandbox.id,
+    restoredCheckpointName: typeof restoredCheckpointName === 'string' ? restoredCheckpointName : undefined,
+  };
 }
 
 /** Keep each path piece a single safe segment (no separators or traversal). */
@@ -526,12 +530,12 @@ export class SandboxFleet {
     await timedPhase('sandbox.provision', () => sandbox.start());
     this.#liveCount += 1;
 
-    const providerSandboxId = await readProviderSandboxId(sandbox);
-    if (providerSandboxId) {
-      await store.setSandboxId(providerSandboxId);
+    const provider = await readProviderSandboxDetails(sandbox);
+    if (provider.sandboxId) {
+      await store.setSandboxId(provider.sandboxId);
     }
 
-    if (store.seedCheckpointName) {
+    if (store.seedCheckpointName && provider.restoredCheckpointName === store.seedCheckpointName) {
       sandbox.seedCheckpointNameUsed = store.seedCheckpointName;
     }
     return sandbox;

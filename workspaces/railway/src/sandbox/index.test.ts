@@ -251,6 +251,9 @@ describe('RailwaySandbox', () => {
       await sandbox._start();
 
       expect(mockCreate).toHaveBeenCalledWith('repo-base', expect.objectContaining({ token: 'tok' }));
+      await expect(sandbox.getInfo()).resolves.toMatchObject({
+        metadata: { restoredCheckpointName: 'repo-base' },
+      });
     });
 
     it('prefers checkpointName over seedCheckpointName when both have state', async () => {
@@ -267,6 +270,9 @@ describe('RailwaySandbox', () => {
       await sandbox._start();
 
       expect(mockCreate).toHaveBeenCalledWith('session-checkpoint', expect.objectContaining({ token: 'tok' }));
+      await expect(sandbox.getInfo()).resolves.toMatchObject({
+        metadata: { restoredCheckpointName: 'session-checkpoint' },
+      });
     });
 
     it('refreshes checkpoints at the one-second floor when idle timeout is below the safety margin', async () => {
