@@ -7,7 +7,7 @@ packages:
 
 # Filesystem-backed skills
 
-Filesystem-backed skills are directories of reusable instructions and supporting files. Mastra discovers them from paths configured on a `Workspace`, then makes them available to every agent that uses that workspace. Skills follow the [Agent Skills specification](https://agentskills.io).
+Filesystem-backed skills are directories of reusable instructions and supporting files. Mastra discovers them from paths in the `skills` option, then makes them available to every agent using that configuration. Skills follow the [Agent Skills specification](https://agentskills.io).
 
 Use [agent skills](/docs/skills) instead when you want to define a skill directly in one agent's code. An agent can use both types. If a direct agent skill and a filesystem-backed skill have the same name, the direct agent skill takes precedence.
 
@@ -26,7 +26,7 @@ description: Reviews code for bugs and readability issues
 Check the code for bugs, missing error handling, and unclear naming.
 ```
 
-Configure the directory on a workspace:
+Configure the directory:
 
 ```typescript title="src/mastra/workspaces.ts"
 import { LocalFilesystem, Workspace } from '@mastra/core/workspace'
@@ -39,7 +39,7 @@ export const workspace = new Workspace({
 })
 ```
 
-The `skills` path is relative to the filesystem root, so this workspace discovers `./workspace/skills/code-review/SKILL.md`. An agent that uses this workspace can now discover and load `code-review` when a request needs it.
+The `skills` path is relative to the filesystem root, so Mastra discovers `./workspace/skills/code-review/SKILL.md`. An agent using this configuration can now discover and load `code-review` when a request needs it.
 
 ## Skill structure
 
@@ -71,7 +71,7 @@ Mastra also reads the optional `license`, `compatibility`, `user-invocable`, and
 
 ## How agents use skills
 
-When an agent uses a workspace with skills, Mastra adds each skill's name, description, path, and source type to the system message. This lets the agent discover available skills without loading every instruction file into its context.
+When skills are configured, Mastra adds each skill's name, description, path, and source type to the system message. This lets the agent discover available skills without loading every instruction file into its context.
 
 Mastra also gives the agent three tools:
 
@@ -99,7 +99,7 @@ Add more entries to discover skills from several roots, such as project, team, o
 
 Glob traversal is limited to four directory levels below the glob base.
 
-Paths use the configured workspace filesystem when one is available. Without a filesystem, Mastra reads them from local disk relative to the application process's current working directory. An explicit [`skillSource`](#custom-skill-sources) replaces both defaults.
+Paths use the configured filesystem when one is available. Without a filesystem, Mastra reads them from local disk relative to the application process's current working directory. An explicit [`skillSource`](#custom-skill-sources) replaces both defaults.
 
 ## Same-named skills
 
@@ -117,7 +117,7 @@ Direct [agent skills](/docs/skills) are resolved before filesystem-backed skills
 
 ## Search skill content
 
-When [BM25 or vector search](/docs/sandbox/search) is configured on the workspace, Mastra automatically indexes each skill's `SKILL.md` instructions and reference files. Scripts and assets aren't indexed.
+When [BM25 or vector search](/docs/sandbox/search) is configured alongside skills, Mastra automatically indexes each skill's `SKILL.md` instructions and reference files. Scripts and assets aren't indexed.
 
 Without BM25 or vector search, `skill_search` falls back to case-insensitive text matching across the instructions and references. This keeps skill search available without a separate search configuration, while indexed search provides ranking and semantic retrieval for larger collections.
 
@@ -146,7 +146,7 @@ Mastra resolves the function for each execution and gives the agent the skill se
 
 ## Custom skill sources
 
-Set `skillSource` when skills should come from a backend other than the workspace filesystem or local disk. A custom source handles skill discovery and file reads for every configured path.
+Set `skillSource` when skills should come from a backend other than the configured filesystem or local disk. A custom source handles skill discovery and file reads for every configured path.
 
 For example, `CompositeVersionedSkillSource` mounts published skill versions from a content-addressable blob store under directories where Mastra can discover them:
 
@@ -170,7 +170,7 @@ const workspace = new Workspace({
 })
 ```
 
-An explicit `skillSource` doesn't fall back to the workspace filesystem or local disk when a path is missing. See the [`Workspace` configuration reference](/reference/workspace/workspace-class#constructor-parameters) for the source interface and related options.
+An explicit `skillSource` doesn't fall back to the configured filesystem or local disk when a path is missing. See the [configuration reference](/reference/workspace/workspace-class#constructor-parameters) for the source interface and related options.
 
 ## Related
 
