@@ -186,8 +186,28 @@ export class MastraPiExtensionGeneration implements PiExtensionGeneration {
     }
   }
 
-  private assertActive(): void {
+  assertActive(): void {
     if (this.staleMessage) throw new Error(this.staleMessage);
+  }
+
+  async emit(event: string, payload: unknown, context?: unknown): Promise<unknown[]> {
+    this.assertActive();
+    const results: unknown[] = [];
+    for (const handler of this.registrations.events.get(event) ?? []) {
+      try {
+        results.push(await handler(payload, context));
+      } catch (error) {
+        this.addDiagnostic(
+          'warning',
+          `Pi extension "${this.extensionId}" ${event} handler failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+          `event:${event}`,
+        );
+        throw error;
+      }
+    }
+    return results;
   }
 
   private registerEvent(event: string, handler: PiExtensionHandler): void {
@@ -274,7 +294,7 @@ export class MastraPiExtensionGeneration implements PiExtensionGeneration {
     collection.set(name, value);
   }
 
-  private recordCapability(name: string): void {
+  recordCapability(name: string): void {
     if (this.capabilities.has(name)) return;
     const support = getPiCapabilitySupport(name);
     const diagnostic =
@@ -303,7 +323,7 @@ export class MastraPiExtensionGeneration implements PiExtensionGeneration {
     );
   }
 
-  private addDiagnostic(severity: PiCompatibilityDiagnostic['severity'], message: string, capability: string): void {
+  addDiagnostic(severity: PiCompatibilityDiagnostic['severity'], message: string, capability: string): void {
     this.diagnostics.push(createPiCompatibilityDiagnostic(this.extensionId, capability, severity, message));
   }
 }

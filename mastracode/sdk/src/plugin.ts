@@ -13,7 +13,7 @@ export type { SignalProviderTarget, SignalSubscription } from '@mastra/core/sign
 export type { Tool, ToolAction, ToolExecutionContext } from '@mastra/core/tools';
 export { z } from 'zod';
 
-export type MastraCodeToolRenderConfig = {
+export type MastraCodeSubagentToolRenderConfig = {
   type: 'subagent';
   agentType?: string;
   modelId?: string;
@@ -33,6 +33,25 @@ export type MastraCodeToolRenderConfig = {
     error?: string;
   };
 };
+
+export interface MastraCodePiToolRenderOptions {
+  toolCallId?: string;
+  args?: unknown;
+  executionStarted?: boolean;
+  argsComplete?: boolean;
+  isPartial?: boolean;
+  expanded?: boolean;
+  showImages?: boolean;
+  isError?: boolean;
+}
+
+export type MastraCodePiToolRenderConfig = {
+  type: 'pi-text';
+  renderCall(args: unknown, options?: MastraCodePiToolRenderOptions): string;
+  renderResult(result: unknown, options?: MastraCodePiToolRenderOptions): string;
+};
+
+export type MastraCodeToolRenderConfig = MastraCodeSubagentToolRenderConfig | MastraCodePiToolRenderConfig;
 
 export type MastraCodeSubagentProgress =
   | {

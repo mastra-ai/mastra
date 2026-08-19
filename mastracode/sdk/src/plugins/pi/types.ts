@@ -1,4 +1,4 @@
-import type { PiPackageCompatibility } from './compatibility.js';
+import type { PiCompatibilityDiagnostic, PiPackageCompatibility } from './compatibility.js';
 
 export type PiExtensionHandler = (event: unknown, context: unknown) => unknown | Promise<unknown>;
 export type PiEventBusHandler = (data: unknown) => unknown | Promise<unknown>;
@@ -27,7 +27,12 @@ export interface PiRegisteredTool {
   label?: string;
   description?: string;
   parameters?: unknown;
+  executionMode?: 'sequential' | 'parallel';
+  constrainedSampling?: false | Record<string, unknown>;
+  prepareArguments?: (args: unknown) => unknown;
   execute?: (...args: unknown[]) => unknown;
+  renderCall?: (...args: unknown[]) => unknown;
+  renderResult?: (...args: unknown[]) => unknown;
   [key: string]: unknown;
 }
 
@@ -111,6 +116,10 @@ export interface PiExtensionGeneration {
   readonly compatibility: PiPackageCompatibility;
   readonly active: boolean;
   readonly bound: boolean;
+  assertActive(): void;
+  recordCapability(name: string): void;
+  emit(event: string, payload: unknown, context?: unknown): Promise<unknown[]>;
+  addDiagnostic(severity: PiCompatibilityDiagnostic['severity'], message: string, capability: string): void;
   createApi(flagValues?: Readonly<Record<string, string | boolean>>): PiExtensionApi;
   bind(actions?: PiRuntimeActions): void;
   addCleanup(cleanup: PiRuntimeCleanup): () => void;

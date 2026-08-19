@@ -411,6 +411,25 @@ describe('createDynamicTools – denied tool filtering', () => {
     expect(tools).not.toHaveProperty('my_tool');
   });
 
+  it('should deny adapted Pi tools supplied through the plugin lane', async () => {
+    const adaptedPiTool = createTool({
+      id: 'pi_tool',
+      description: 'Adapted Pi tool',
+      inputSchema: z.object({}),
+      execute: async () => ({ content: [{ type: 'text', text: 'pi' }] }),
+    });
+    const getDynamicTools = createDynamicTools(undefined, undefined, undefined, undefined, {
+      pi_tool: adaptedPiTool,
+    });
+    const tools = await getDynamicTools({
+      requestContext: makeRequestContext({
+        permissionRules: { categories: {}, tools: { pi_tool: 'deny' } },
+      }),
+    });
+
+    expect(tools).not.toHaveProperty('pi_tool');
+  });
+
   it('should keep tools with allow or ask policies', async () => {
     const getDynamicTools = createDynamicTools();
     const tools = await getDynamicTools({
@@ -455,6 +474,21 @@ describe('createDynamicTools – disabledTools filtering', () => {
     expect(tools).not.toHaveProperty('request_access');
     // web_search is provided by the Anthropic model mock and should survive filtering
     expect(tools).toHaveProperty('web_search');
+  });
+
+  it('should omit disabled adapted Pi tools supplied through the plugin lane', async () => {
+    const adaptedPiTool = createTool({
+      id: 'pi_tool',
+      description: 'Adapted Pi tool',
+      inputSchema: z.object({}),
+      execute: async () => ({ content: [{ type: 'text', text: 'pi' }] }),
+    });
+    const getDynamicTools = createDynamicTools(undefined, undefined, ['pi_tool'], undefined, {
+      pi_tool: adaptedPiTool,
+    });
+
+    const tools = await getDynamicTools({ requestContext: makeRequestContext() });
+    expect(tools).not.toHaveProperty('pi_tool');
   });
 
   it('should omit disabled extraTools', async () => {

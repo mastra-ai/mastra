@@ -20,6 +20,7 @@ import type {
 import { getPluginRoot } from './paths.js';
 import type { PluginPathOptions } from './paths.js';
 import { loadPiExtensionGeneration } from './pi/loader.js';
+import { adaptPiTools } from './pi/tool-adapter.js';
 import { loadPluginRegistry, mergePluginRegistries } from './registry.js';
 import type { LoadedPlugin, LoadedPluginProcessors, PluginRegistry, ScopedInstalledPluginRecord } from './types.js';
 
@@ -75,16 +76,23 @@ export async function loadPluginRecord(
         pluginRoot: resolvePluginRoot(record, options),
         config,
       });
-      return {
-        ...record,
-        name: record.id,
-        status: 'active',
-        tools: {},
-        toolNames: [],
-        configValues: config,
-        piCompatibility: piGeneration.compatibility,
-        piGeneration,
-      };
+      try {
+        const { tools, renderConfigs } = adaptPiTools(piGeneration, { cwd: options.projectRoot });
+        return {
+          ...record,
+          name: record.id,
+          status: 'active',
+          tools,
+          renderConfigs,
+          toolNames: Object.keys(tools).sort(),
+          configValues: config,
+          piCompatibility: piGeneration.compatibility,
+          piGeneration,
+        };
+      } catch (error) {
+        await piGeneration.invalidate(`Pi extension "${piGeneration.extensionId}" candidate failed validation.`);
+        throw error;
+      }
     }
 
     const plugin = await importPluginModule(entryPath);
@@ -392,12 +400,50 @@ export function collectActivePluginTools(plugins: LoadedPlugin[]): MastraCodePlu
 
 function markToolConflicts(plugins: LoadedPlugin[]): LoadedPlugin[] {
   const seen = new Map<string, string>();
-  return plugins.map(plugin => {
-    if (plugin.status !== 'active') return plugin;
+  const resolved = new Map<LoadedPlugin, LoadedPlugin>();
+
+  for (const plugin of plugins.filter(candidate => candidate.compatibility !== 'pi')) {
+    if (plugin.status !== 'active') continue;
     const conflicts = plugin.toolNames.filter(toolName => seen.has(toolName));
     for (const toolName of plugin.toolNames) {
       if (!seen.has(toolName)) seen.set(toolName, plugin.id);
     }
-    return conflicts.length > 0 ? { ...plugin, status: 'conflicted', conflicts } : plugin;
-  });
+    if (conflicts.length > 0) resolved.set(plugin, { ...plugin, status: 'conflicted', conflicts });
+  }
+
+  seen.clear();
+  for (const plugin of plugins.filter(candidate => candidate.compatibility !== 'pi')) {
+    const candidate = resolved.get(plugin) ?? plugin;
+    if (candidate.status !== 'active') continue;
+    for (const toolName of candidate.toolNames) seen.set(toolName, candidate.id);
+  }
+
+  for (const plugin of plugins.filter(candidate => candidate.compatibility === 'pi')) {
+    if (plugin.status !== 'active') continue;
+    const conflicts = plugin.toolNames.filter(toolName => seen.has(toolName));
+    for (const toolName of plugin.toolNames) {
+      if (!seen.has(toolName)) seen.set(toolName, plugin.id);
+    }
+    if (conflicts.length === 0) continue;
+
+    for (const toolName of conflicts) {
+      plugin.piGeneration?.addDiagnostic(
+        'warning',
+        `Pi extension "${plugin.piGeneration.extensionId}" tool "${toolName}" conflicts with plugin "${seen.get(toolName)}"; the existing contribution wins.`,
+        'registerTool',
+      );
+    }
+    const tools = Object.fromEntries(
+      Object.entries(plugin.tools).filter(([toolName]) => !conflicts.includes(toolName)),
+    );
+    resolved.set(plugin, {
+      ...plugin,
+      tools,
+      toolNames: Object.keys(tools).sort(),
+      conflicts,
+      piCompatibility: plugin.piGeneration?.compatibility,
+    });
+  }
+
+  return plugins.map(plugin => resolved.get(plugin) ?? plugin);
 }

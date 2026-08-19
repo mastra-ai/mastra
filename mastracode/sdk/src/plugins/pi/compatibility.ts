@@ -32,6 +32,12 @@ export interface PiPackageCompatibility {
 
 const PI_CAPABILITY_SUPPORT: Readonly<Record<string, PiCapabilitySupport>> = {
   registerTool: 'adapted',
+  'tool:prepareArguments': 'version-gated',
+  'tool:constrainedSampling': 'version-gated',
+  'tool:executionMode': 'adapted',
+  'tool:renderer': 'adapted',
+  'tool:addedToolNames': 'unsupported',
+  'tool:terminate': 'unsupported',
   registerCommand: 'adapted',
   registerShortcut: 'version-gated',
   registerFlag: 'adapted',
