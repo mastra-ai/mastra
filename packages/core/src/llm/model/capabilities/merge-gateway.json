@@ -82,7 +82,6 @@
     "qwen/qwen3.5-122b-a10b",
     "qwen/qwen3.5-27b",
     "qwen/qwen3.5-35b-a3b",
-    "qwen/qwen3.5-397b-a17b",
     "qwen/qwen3.5-9b",
     "qwen/qwen3.7-plus",
     "qwen/qwen3.8-max",
@@ -218,6 +217,7 @@
     "qwen/qwen3.6-plus",
     "qwen/qwen3.7-max",
     "qwen/qwen3.7-plus",
+    "qwen/qwen3.8-2.4t-a95b",
     "qwen/qwen3.8-max",
     "sakana/sakana-namazu",
     "thinkingmachines/inkling",
@@ -239,7 +239,8 @@
     "zai/glm-5",
     "zai/glm-5-turbo",
     "zai/glm-5.1",
-    "zai/glm-5.2"
+    "zai/glm-5.2",
+    "zai/glm-5.3"
   ],
   "structuredOutput": [
     "anthropic/claude-3-7-sonnet-20250219",

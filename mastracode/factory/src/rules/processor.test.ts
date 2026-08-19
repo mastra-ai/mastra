@@ -684,4 +684,25 @@ describe('FactoryPhaseStateProcessor', () => {
       lastMessageId: 'assistant-aborted',
     });
   });
+
+  it('short-circuits reconcile before message reads when the bound item cannot ingest', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepare(storage);
+    const reader = { listMessages: vi.fn(async () => ({ messages: [], hasMore: false })) };
+    const rules = defaultFactoryRules({ version: 'rules-v1' });
+    const processor = new FactoryPhaseStateProcessor({ rules, storage, messageReader: reader as never });
+
+    await processor.reconcileAllBoundThreads();
+    expect(reader.listMessages).toHaveBeenCalledTimes(1);
+
+    // Malformed stage set: no ingest is possible, so no cursor/message reads.
+    await storage.update({ orgId: 'org-1', id: prepared.item.id, userId: 'user-1', patch: { stages: [] } });
+    await processor.reconcileAllBoundThreads();
+    expect(reader.listMessages).toHaveBeenCalledTimes(1);
+
+    // Missing item: same short-circuit.
+    await storage.delete({ orgId: 'org-1', id: prepared.item.id });
+    await processor.reconcileAllBoundThreads();
+    expect(reader.listMessages).toHaveBeenCalledTimes(1);
+  });
 });

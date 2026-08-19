@@ -22,6 +22,7 @@ function makeSession(index: number, overrides: Partial<FactoryUserSession> = {})
     projectRepositoryId,
     orgId: 'org-1',
     userId: 'user-1',
+    visibility: 'org' as const,
     branch: `factory/task-${index}`,
     baseBranch: 'main',
     sandboxId: null,
