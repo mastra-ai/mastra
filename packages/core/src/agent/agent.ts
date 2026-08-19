@@ -6727,32 +6727,36 @@ export class Agent<
       });
     }
 
+    // Version selectors are execution metadata. Keep them on an execution-local
+    // context so an exact version restored from a snapshot cannot pin a later
+    // run that reuses the caller-owned context.
+    const executionRequestContext = mergedVersions ? new RequestContext(requestContext.entries()) : requestContext;
     if (mergedVersions) {
-      requestContext.set(MASTRA_VERSIONS_KEY, mergedVersions);
+      executionRequestContext.set(MASTRA_VERSIONS_KEY, mergedVersions);
     }
 
     if (!mergedVersions || this.#storedVersionApplied || !this.#mastra) {
-      return { agent: this, requestContext, versions: mergedVersions };
+      return { agent: this, requestContext: executionRequestContext, versions: mergedVersions };
     }
 
     const selfVersionSelector =
       mergedVersions.agents?.[this.id] ??
       (mergedVersions.defaultStatus ? { status: mergedVersions.defaultStatus } : undefined);
     if (!selfVersionSelector) {
-      return { agent: this, requestContext, versions: mergedVersions };
+      return { agent: this, requestContext: executionRequestContext, versions: mergedVersions };
     }
 
     try {
       const resolved = await this.#mastra.resolveVersionedAgent(this as unknown as Agent, selfVersionSelector);
       if (resolved === (this as unknown as Agent)) {
-        return { agent: this, requestContext, versions: mergedVersions };
+        return { agent: this, requestContext: executionRequestContext, versions: mergedVersions };
       }
 
       const resolvedVersionId = resolved.toRawConfig()?.resolvedVersionId;
       if (typeof resolvedVersionId !== 'string' || resolvedVersionId.length === 0) {
         return {
           agent: resolved as unknown as Agent<TAgentId, TTools, TOutput, TRequestContext>,
-          requestContext,
+          requestContext: executionRequestContext,
           versions: mergedVersions,
         };
       }
@@ -6760,14 +6764,11 @@ export class Agent<
       const pinnedVersions = mergeVersionOverrides(mergedVersions, {
         agents: { [this.id]: { versionId: resolvedVersionId } },
       });
-      // Keep the caller-owned selector unchanged for future new runs. Only
-      // this execution and the workflow snapshot receive the exact version.
-      const resolvedRequestContext = new RequestContext(requestContext.entries());
-      resolvedRequestContext.set(MASTRA_VERSIONS_KEY, pinnedVersions);
+      executionRequestContext.set(MASTRA_VERSIONS_KEY, pinnedVersions);
 
       return {
         agent: resolved as unknown as Agent<TAgentId, TTools, TOutput, TRequestContext>,
-        requestContext: resolvedRequestContext,
+        requestContext: executionRequestContext,
         versions: pinnedVersions,
       };
     } catch (versionError) {
@@ -6777,7 +6778,7 @@ export class Agent<
         versionSelector: selfVersionSelector,
         error: versionError,
       });
-      return { agent: this, requestContext, versions: mergedVersions };
+      return { agent: this, requestContext: executionRequestContext, versions: mergedVersions };
     }
   }
 

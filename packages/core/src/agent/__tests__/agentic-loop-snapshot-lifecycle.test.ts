@@ -120,11 +120,12 @@ describe('agentic-loop snapshot lifecycle', () => {
     });
     const workflowsStore = (await mastra.getStorage()!.getStore('workflows'))!;
 
-    const requestContext = new RequestContext();
+    const requestContext = new RequestContext([
+      [MASTRA_VERSIONS_KEY, { agents: { 'versioned-agent': { status: 'published' } } }],
+    ]);
     const stream = await agent.stream('Find the user with name - Dero Israel', {
       requireToolApproval: true,
       requestContext,
-      versions: { agents: { 'versioned-agent': { status: 'published' } } },
     });
 
     let toolCallId = '';
@@ -153,8 +154,20 @@ describe('agentic-loop snapshot lifecycle', () => {
       // consume
     }
 
+    // Resuming with the exact v1 snapshot must not replace the caller-owned
+    // published selector that a later new run will reuse.
+    expect(requestContext.get(MASTRA_VERSIONS_KEY)).toEqual({
+      agents: { 'versioned-agent': { status: 'published' } },
+    });
+
+    const nextRun = await agent.stream('Start a new run', { requestContext });
+    for await (const _chunk of nextRun.fullStream) {
+      // consume
+    }
+
     expect(applyStoredOverrides).toHaveBeenNthCalledWith(1, agent, { status: 'published' });
     expect(applyStoredOverrides).toHaveBeenNthCalledWith(2, agent, { versionId: 'v1' });
+    expect(applyStoredOverrides).toHaveBeenNthCalledWith(3, agent, { status: 'published' });
   }, 30000);
 
   it('keeps snapshot rows while suspended and deletes all rows after resume completes', async () => {
