@@ -423,8 +423,7 @@ async function authorizePackSession({
     !sourceSession ||
     sourceSession.orgId !== packContext.orgId ||
     sourceSession.userId !== packContext.userId ||
-    !scope ||
-    sourceSession.sandboxWorkdir !== scope
+    (scope !== undefined && sourceSession.sandboxWorkdir !== scope)
   ) {
     return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
   }
