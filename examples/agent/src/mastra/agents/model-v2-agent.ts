@@ -88,7 +88,6 @@ const chefUiDemoApprovalTool = createTool({
   id: 'confirm-tomato-prep',
   description: 'Confirm a mise en place checklist before the sous-chef continues.',
   inputSchema: z.object({ ingredient: z.string() }),
-  requireApproval: true,
   execute: async ({ ingredient }) => ({ approvedIngredient: ingredient }),
 });
 
