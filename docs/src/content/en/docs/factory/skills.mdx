@@ -1,0 +1,231 @@
+---
+title: "Skills | Factory"
+description: "Where Factory finds skills, which skill names are reserved, how roles relate to skills, and how to replace the built-in pull request review pass with your own skill."
+packages:
+  - "@mastra/factory"
+---
+
+# Factory skills
+
+Factory runs its triage, planning, building, and review passes as agent sessions that activate skills. The sessions run against your repository in a sandbox, and the rules that decide which skill runs are your deployment's code. You customize a pass by writing your own skill and overriding the rule that would have invoked the built-in one.
+
+Two facts decide how that works, and neither is guessable from outside the source:
+
+- Six skill names are **reserved**. A project skill that shares one of those names is silently dropped from the workspace. It doesn't error or warn, and it isn't listed.
+- You don't override a built-in pass by naming your skill the same as the built-in one. You override it by **repointing a rule** at your differently-named skill.
+
+## Where skills come from
+
+A Factory session exposes skills from two places:
+
+1. **The built-in mount.** Six skills ship with the Factory server and are exposed from the Factory skill mount: `factory-triage`, `factory-plan`, `factory-review`, `factory-rereview`, `factory-complete-issue`, and `configure-factory-rules`.
+1. **The project skill roots**, resolved in priority order inside the session's repository checkout:
+
+   - `<configDir>/skills`: `.mastracode/skills` by default, or the sandbox workdir when one is configured
+   - `.claude/skills`
+   - `.agents/skills`
+
+   A skill is a directory containing a `SKILL.md` file with a `name` frontmatter field that matches the directory name. All three roots are searched. Keep one copy of a skill per name. A duplicate name across two roots fails resolution with an error rather than silently picking one.
+
+### Reserved skill names
+
+The built-in mount reserves these six names. A project skill whose directory at a project skill root is named one of them is **filtered out of the workspace listing entirely**. The filter is silent: discovery simply never lists your directory. Nothing errors, nothing warns, and until you notice the behavior never changing, nothing tells you the skill was dropped.
+
+- `configure-factory-rules`
+- `factory-complete-issue`
+- `factory-plan`
+- `factory-rereview`
+- `factory-review`
+- `factory-triage`
+
+This is why naming a skill `factory-review` does nothing. Your directory is dropped, the built-in `factory-review` skill still exists at the built-in mount, and a rule that invokes `factory-review` keeps running the built-in behavior. You get no error because Factory can still resolve a skill with that name. The failure is that your skill never runs.
+
+## Naming a skill
+
+A skill name must match `^[a-z0-9]+(?:-[a-z0-9]+)*$` and be at most 128 characters: lowercase letters, digits, and interior hyphens. No underscores, no leading or trailing hyphens. The same rule validates the `skillName` field of an `invokeSkill` decision when a rule dispatches it.
+
+Name your skill with a project-specific prefix, such as `acme-review` or `acme-rereview`:
+
+- It can't collide with the reserved set, so the warning above can't swallow it.
+- It makes the skill's origin obvious later. In audit history, thread titles, and the skill listing, a run of `acme-review` identifies itself as yours.
+
+## Roles vs. skills
+
+A **role** is the session identity a skill runs under. It is the key the work item uses to track its session, not the skill's name. A rule's `invokeSkill` decision names both: `role` is which bound session lineage the run joins, `skillName` is which skill document the run activates.
+
+Factory's built-in rules use four roles:
+
+- `triage`: Issue investigation and issue completion
+- `plan`: Planning the work item
+- `work`: Building and addressing review feedback
+- `review`: Pull request review, both the first pass and the re-review
+
+A role must match `^[a-z0-9][a-z0-9_-]*$` (letters, digits, underscores, and hyphens; case-insensitive) and be at most 32 characters. These limits apply to the `role` field of `invokeSkill` and `sendMessage` decisions.
+
+The consequence is concrete: Factory keeps one bound session and thread per work item and role. Reuse `role: 'review'` and your skill shares session lineage with the built-in review pass. Later review runs on the same card continue the same thread, and re-entry logic such as canceling an in-flight run keyed to the review session keeps working. Pick a new role, such as `sre-review`, and your skill gets its own session, thread, and lineage on the card. It has no shared history with the built-in pass, but nothing to inherit either, including the session a prior pass left behind.
+
+Choose a new role when the custom pass must be a separate identity: its own conversation history for an audit trail, its own approval flow, or a different actor in the audit record. Reuse the built-in role when the custom pass is a replacement for the built-in one and should continue where prior passes left off.
+
+## Replace the review pass
+
+The built-in rule tree is built with `defaultFactoryRules({ version, overrides })`, and overrides replace exact handler leaves. They never compose with the built-in handler at the same leaf. This Factory rules example replaces the review pass end to end: a custom skill, a rule override that invokes it, and a worked example of what the built-in leaf did that you must decide whether to keep.
+
+### 1. Write the skill
+
+Create a `SKILL.md` file at a project skill root. `factory-review` runs as a bound agent session, so your skill's contract is the same one the built-in skill uses: parse the PR reference from `$ARGUMENTS`, verify the change, and make `factory_transition_work_item` your terminal step using the revision from the `factory-phase` signal.
+
+```markdown title=".claude/skills/acme-review/SKILL.md"
+---
+name: acme-review
+description: Review a pull request for a Factory work item, verify the change, then publish a verdict on the PR
+---
+
+# Acme Review
+
+Parse the PR reference from `$ARGUMENTS` and review the pull request behind
+this Factory work item. Read the change and its context, run the narrowest
+relevant tests in the session sandbox, and pick one verdict: `approve` or
+`request changes`.
+
+When the pass is complete:
+
+1. Publish the verdict on the PR with `gh pr review <number> --approve --body-file <file>` (or `--request-changes`; fall back to a comment if GitHub rejects the review).
+2. Make `factory_transition_work_item` your terminal step, using the current stage and `expectedRevision` from the `factory-phase` signal.
+```
+
+The `name` frontmatter must match the directory name and satisfy the naming rules above.
+
+### 2. Override the rule
+
+Point the `review.review.pullRequest.onEnter` leaf at a decision that invokes your skill:
+
+```typescript title="src/mastra/factory.ts"
+import { MastraFactory } from '@mastra/factory'
+import { defaultFactoryRules } from '@mastra/factory/rules/defaults'
+
+const rules = defaultFactoryRules({
+  // Pick a version you own. It identifies persisted evaluations and audit
+  // records, so bump it whenever rule behavior changes.
+  version: 'acme-review-v1',
+  overrides: {
+    review: {
+      review: {
+        pullRequest: {
+          onEnter: context => ({
+            type: 'invokeSkill',
+            // Stable across retries of the same ingress: the rule persists
+            // decisions and replays by this key.
+            idempotencyKey: `${context.ingress.id}:acme-review`,
+            role: 'review',
+            skillName: 'acme-review',
+            arguments: context.item.url
+              ? `GitHub pull request (${context.item.url})`
+              : context.item.title,
+          }),
+        },
+      },
+    },
+  },
+})
+
+export const factory = new MastraFactory({
+  // ...your existing MastraFactory configuration...
+  rules,
+})
+```
+
+Pass the result to the `rules` option of `MastraFactory`. The Factory rules object that ships with your deployment decides when review runs. The skill's handoff is the runtime contract: verdict line, findings, verification evidence, and the terminal transition.
+
+### 3. The replacement replaces the whole leaf
+
+An override replaces the entire `onEnter` handler. The built-in handler is not consulted, chained, or merged. Only your function runs. The built-in leaf did two things besides dispatching a skill that you are now responsible for:
+
+```typescript
+// From the built-in review.review.pullRequest.onEnter handler:
+const priorReviewCompleted = context.fromStage === 'done'
+const skillName = priorReviewCompleted ? 'factory-rereview' : 'factory-review'
+
+return {
+  type: 'invokeSkill',
+  idempotencyKey: `${context.ingress.id}:${skillName}`,
+  role: 'review',
+  skillName,
+  arguments: context.item.url ? `GitHub pull request (${context.item.url})` : context.item.title,
+  ...(context.fromStage !== 'intake' ? { cancelInFlight: true } : {}),
+}
+```
+
+- **The re-review pass.** When a card returns to Review from `done`, after the author pushed fixes to a pull request that was already reviewed, the built-in leaf dispatches `factory-rereview` instead of `factory-review`. That skill reconciles the previous verdict against the new commits instead of reviewing from scratch. Without it, a returned card runs your skill as a first-time review.
+- **`cancelInFlight`.** When Review is re-entered from any post-intake stage, the built-in leaf cancels the previous in-flight review run on the same session before starting a fresh one. Without it, a re-entry can race the prior pass.
+
+Both are lost with your override unless you reproduce them. If you want the re-review split, the second variant below keeps both.
+
+### 4. Bump the version
+
+Change `version` whenever rule behavior changes. It labels the evaluations and audit records these rules produce, so a stale version makes old and new behavior indistinguishable in history.
+
+### 5. Test it
+
+Exercise the replaced leaf directly with `rules.review.review?.pullRequest?.onEnter` and a synthetic stage context covering `fromStage` values. Exercise an unaffected sibling leaf, for example `work.planning.issue.onEnter`, so a bad override can't silently change behavior elsewhere.
+
+### Variant: keep the re-review split
+
+```typescript title="src/mastra/factory.ts"
+import { defaultFactoryRules } from '@mastra/factory/rules/defaults'
+
+const rules = defaultFactoryRules({
+  version: 'acme-review-v1',
+  overrides: {
+    review: {
+      review: {
+        pullRequest: {
+          onEnter: context => {
+            // A card returning from `done` had a prior pass completed; run a
+            // re-review that reconciles the previous verdict against the new
+            // commits. Add a matching acme-rereview skill.
+            const priorReviewCompleted = context.fromStage === 'done'
+            const skillName = priorReviewCompleted ? 'acme-rereview' : 'acme-review'
+            return {
+              type: 'invokeSkill',
+              idempotencyKey: `${context.ingress.id}:${skillName}`,
+              role: 'review',
+              skillName,
+              arguments: context.item.url
+                ? `GitHub pull request (${context.item.url})`
+                : context.item.title,
+              // Re-entry from any post-intake stage supersedes the pass that
+              // was in flight: cancel it before starting the new one.
+              ...(context.fromStage !== 'intake' ? { cancelInFlight: true } : {}),
+            }
+          },
+        },
+      },
+    },
+  },
+})
+```
+
+This reproduces the built-in behavior exactly, with your skills in place of `factory-review` and `factory-rereview`. The `idempotencyKey` derives from both the ingress and the chosen skill so the two branches never deduplicate into each other. That matches the stable-key rule the built-in leaf follows.
+
+## What a review skill can and can't do
+
+A review skill runs as a normal agent session with the workspace checked out.
+
+It **can**:
+
+- read anything in the checked-out repository: history, diffs, tests, configuration;
+- run commands in the session sandbox, including installing and executing the repository's own tests;
+- read GitHub through the session's authenticated CLI and push to the session branch.
+
+It **cannot**:
+
+- write Factory storage or execute rule policy directly. Work items, stages, bindings, and the rule evaluation each pass are server-side state; a skill session never touches the database or the rule tree;
+- change authoritative state by convention. Every authoritative state transition comes back through a `FactoryRuleDecision`, either a rule's returned `type: 'transition'` decision or the `factory_transition_work_item` tool. The tool is governed by the same rules: it checks the `expectedRevision` from the `factory-phase` signal, runs the stage's entry rules, and can be rejected.
+
+The boundary is deliberate: the skill is untrusted repository-proximate code, and the rule tree is trusted deployment code.
+
+## Related
+
+- [Skills](/docs/skills): General Mastra skills
+- [Sandbox skills](/docs/sandbox/skills): How skill discovery works on a workspace filesystem
+- [Agent Controller](/docs/harness/agent-controller): The session runtime Factory skills run on
