@@ -628,6 +628,25 @@ describe('cerebrasStripReasoningContent', () => {
     expect(result).toBeDefined();
     expect(result![0]).toEqual(prompt[0]);
   });
+
+  it('omits assistant messages that become empty after stripping reasoning (#14559)', () => {
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+      {
+        role: 'assistant',
+        content: [{ type: 'reasoning', text: 'only thinking' }],
+      },
+      { role: 'user', content: [{ type: 'text', text: 'again' }] },
+    ];
+    const result = cerebrasStripReasoningContent.applyToPrompt!({
+      prompt,
+      model: { provider: 'cerebras.chat', modelId: 'zai-glm-4.7' },
+    });
+
+    expect(result).toBeDefined();
+    expect(result!.map(m => m.role)).toEqual(['user', 'user']);
+    expect(result!.some(m => m.role === 'assistant')).toBe(false);
+  });
 });
 
 describe('ProviderHistoryCompat.processLLMRequest', () => {

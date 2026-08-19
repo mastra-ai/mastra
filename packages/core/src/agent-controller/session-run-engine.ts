@@ -40,7 +40,6 @@ type StreamIgnoredChunk =
   | StreamPayloadChunk<'abort'>
   | StreamPayloadChunk<'response-metadata'>
   | StreamPayloadChunk<'text-end'>
-  | StreamPayloadChunk<'reasoning-end'>
   | StreamPayloadChunk<'reasoning-signature'>
   | StreamPayloadChunk<'redacted-reasoning'>
   | StreamPayloadChunk<'source'>
@@ -69,6 +68,7 @@ type StreamChunk =
   | StreamPayloadChunk<'text-delta'>
   | StreamPayloadChunk<'reasoning-start'>
   | StreamPayloadChunk<'reasoning-delta'>
+  | StreamPayloadChunk<'reasoning-end'>
   | StreamPayloadChunk<'tool-call-input-streaming-start'>
   | StreamPayloadChunk<'tool-call-delta'>
   | StreamPayloadChunk<'tool-call-input-streaming-end'>
@@ -536,23 +536,51 @@ export class SessionRunEngine {
       }
 
       case 'reasoning-start': {
+        const payload = getPayload(chunk);
         const thinkingIndex = state.currentMessage.content.parts.length;
-        state.currentMessage.content.parts.push({ type: 'reasoning', reasoning: '', details: [] });
-        state.thinkingContentById.set(getString(getPayload(chunk).id) ?? '', { index: thinkingIndex, text: '' });
+        const providerMetadata = isProviderMetadata(payload.providerMetadata) ? payload.providerMetadata : undefined;
+        // Mirror buildMessagesFromChunks: keep providerMetadata on the reasoning
+        // part (Anthropic thinking signatures arrive on start/delta/end; end wins).
+        state.currentMessage.content.parts.push({
+          type: 'reasoning',
+          reasoning: '',
+          details: [],
+          ...(providerMetadata ? { providerMetadata } : {}),
+        });
+        state.thinkingContentById.set(getString(payload.id) ?? '', { index: thinkingIndex, text: '' });
         this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });
         break;
       }
 
       case 'reasoning-delta': {
-        const thinkingState = state.thinkingContentById.get(getString(getPayload(chunk).id) ?? '');
+        const payload = getPayload(chunk);
+        const thinkingState = state.thinkingContentById.get(getString(payload.id) ?? '');
         if (thinkingState) {
-          thinkingState.text += getString(getPayload(chunk).text) ?? '';
+          thinkingState.text += getString(payload.text) ?? '';
           const thinkingContent = state.currentMessage.content.parts[thinkingState.index];
           if (thinkingContent && thinkingContent.type === 'reasoning') {
             thinkingContent.reasoning = thinkingState.text;
             thinkingContent.details = [{ type: 'text', text: thinkingState.text }];
+            if (isProviderMetadata(payload.providerMetadata)) {
+              thinkingContent.providerMetadata = payload.providerMetadata;
+            }
           }
           this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });
+        }
+        break;
+      }
+
+      case 'reasoning-end': {
+        // Anthropic puts `providerMetadata.anthropic.signature` on reasoning-end.
+        // Dropping this chunk left stored thinking blocks unsigned and broke replay (#14559).
+        const payload = getPayload(chunk);
+        const thinkingState = state.thinkingContentById.get(getString(payload.id) ?? '');
+        if (thinkingState && isProviderMetadata(payload.providerMetadata)) {
+          const thinkingContent = state.currentMessage.content.parts[thinkingState.index];
+          if (thinkingContent && thinkingContent.type === 'reasoning') {
+            thinkingContent.providerMetadata = payload.providerMetadata;
+            this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });
+          }
         }
         break;
       }
