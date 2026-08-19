@@ -1018,7 +1018,7 @@ describe('AgentController signal messages', () => {
     expect(JSON.stringify(prompts)).toContain('<user delivery=\\"while-active\\">also do this</user>');
   });
 
-  it('tags a message sent to an idle session as a plain message', async () => {
+  it('leaves a message that opens a new turn unmarked', async () => {
     const releases: Array<() => void> = [];
     const prompts: unknown[] = [];
     const { session } = await createController(new InMemoryStore(), createGatedAgent(prompts, releases));
@@ -1033,7 +1033,9 @@ describe('AgentController signal messages', () => {
     await followUp.accepted;
     await waitFor(() => prompts.length === 2);
 
-    expect(JSON.stringify(prompts)).toContain('<user delivery=\\"message\\">a new turn</user>');
+    const idleTurn = JSON.stringify(prompts[1]);
+    expect(idleTurn).toContain('a new turn');
+    expect(idleTurn).not.toContain('delivery');
   });
 
   it('leaves a delivery chosen by the caller alone', async () => {

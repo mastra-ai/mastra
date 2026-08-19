@@ -1885,9 +1885,9 @@ class SessionPermissions {
 }
 
 /** Stamp at submit time: a steer aborts its own run, so the route resolved downstream reads idle. */
-function withDelivery(signal: CreatedAgentSignal, delivery: 'while-active' | 'message'): CreatedAgentSignal {
+function asInterjection(signal: CreatedAgentSignal): CreatedAgentSignal {
   if (signal.type !== 'user' || signal.attributes?.delivery !== undefined) return signal;
-  return resolveDeliveryAttributes(signal, { delivery });
+  return resolveDeliveryAttributes(signal, { delivery: 'while-active' });
 }
 
 /** The session-state / thread-settings key holding a subagent model id. */
@@ -3350,14 +3350,12 @@ export class Session<TState = unknown> {
     const submittedAbortRequested = this.run.isAbortRequested();
     const submittedWhileWorking =
       submittedIsRunning || (submittedAbortRequested && Boolean(submittedRunId || submittedActiveRunId));
-    const signal = withDelivery(
-      createSignal(
-        'content' in input
-          ? { type: 'user', tagName: 'user', contents: input.content, providerOptions: input.providerOptions }
-          : input,
-      ),
-      submittedWhileWorking ? 'while-active' : 'message',
+    const submitted = createSignal(
+      'content' in input
+        ? { type: 'user', tagName: 'user', contents: input.content, providerOptions: input.providerOptions }
+        : input,
     );
+    const signal = submittedWhileWorking ? asInterjection(submitted) : submitted;
     const accepted = Promise.resolve().then(async () => {
       if (!this.thread.getId()) {
         const thread = await this.thread.create();
