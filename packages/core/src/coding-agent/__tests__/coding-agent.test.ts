@@ -3,6 +3,7 @@ import { Agent } from '../../agent/agent';
 import { DEFAULT_GOAL_JUDGE_PROMPT } from '../../agent/goal/objective';
 import { LocalFilesystem, LocalSandbox, Workspace } from '../../workspace';
 import type { PromptContext } from '../index';
+import { signalToXmlMarkup } from '../../agent/signals';
 import { buildBasePrompt, createCodingAgent } from '../index';
 
 const MODEL = 'openai/gpt-4o-mini';
@@ -160,5 +161,16 @@ describe('buildBasePrompt', () => {
   it('parameterizes the Co-Authored-By email', () => {
     const prompt = buildBasePrompt(promptContext({ coAuthorName: 'Acme Bot', coAuthorEmail: 'bot@acme.dev' }));
     expect(prompt).toContain('Co-Authored-By: Acme Bot <bot@acme.dev>');
+  });
+
+  it('names the tag the runtime wraps a while-active message in', () => {
+    const wrapped = signalToXmlMarkup({
+      type: 'user',
+      attributes: { delivery: 'while-active' },
+      contents: 'fix the bug',
+    });
+    const openingTag = wrapped.slice(0, wrapped.indexOf('>') + 1);
+
+    expect(buildBasePrompt(promptContext())).toContain(openingTag);
   });
 });
