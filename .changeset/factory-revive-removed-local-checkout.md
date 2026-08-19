@@ -1,5 +1,0 @@
----
-'@mastra/factory': patch
----
-
-Stop a running local Factory session from wedging when its checkout directory disappears. A tool spawned into a removed directory fails with `spawn /bin/sh ENOENT` — an error that names the shell rather than the sandbox — so it was never recognized as a dead sandbox, and every later filesystem or command tool (including GitHub token refresh) failed the same way for the rest of the run. A missing working directory is now treated as the local equivalent of a destroyed sandbox: if the session is still live, the revival ladder rebuilds the checkout and retries the command; if the session was retired (retirement deletes the checkout on purpose), the run fails fast with a clear retirement error instead of resurrecting the retired checkout — before provisioning anything, so a retired session never consumes a sandbox or fleet budget slot, and a sandbox already mid-build when retirement lands is torn down rather than left bound to a dead session. A missing *command* reports the same ENOENT code, so the working directory is probed to tell the two apart and healthy sandboxes are never rebuilt for an unknown command.
