@@ -242,7 +242,7 @@ MongoDB can evaluate the filter inside the vector index itself. This keeps the q
 await mongoVector.createIndex({
   indexName: 'embeddings',
   dimension: 1536,
-  filterFields: ['source'],
+  filterFields: ['source', 'price', 'category', 'inStock', 'tags'],
 })
 
 // The filter is applied during the index search
