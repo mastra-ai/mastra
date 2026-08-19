@@ -110,11 +110,13 @@ import {
   pluginsStreamingToolOutputScenario,
 } from './plugins.js';
 import { processShortcutsScenario } from './process-shortcuts.js';
+import { profileCommandScenario } from './profile-command.js';
 import { promptContextInstructionsScenario } from './prompt-context-instructions.js';
 import { promptQueueInterleaveScenario } from './prompt-queue-interleave.js';
 import { providerHistoryCompatScenario } from './provider-history-compat.js';
 import { providerHistoryRejectionRetryScenario } from './provider-history-rejection-retry.js';
 import { pruneCommandScenario } from './prune-command.js';
+import { pruneRenderStateScenario } from './prune-render-state.js';
 import { quietSettingsScenario } from './quiet-settings.js';
 import { quietStreamingPreviewHeightScenario } from './quiet-streaming-preview-height.js';
 import { quietToolHistoryParityScenario } from './quiet-tool-history-parity.js';
@@ -145,6 +147,7 @@ import { storageFallbackHistoryReloadScenario } from './storage-fallback-history
 import { storageSettingsScenario } from './storage-settings.js';
 import { storageStartupPgFallbackScenario } from './storage-startup-pg-fallback.js';
 import { streamErrorRetryScenario } from './stream-error-retry.js';
+import { streamingRenderStabilityScenario } from './streaming-render-stability.js';
 import { streamingToolArgsScenario } from './streaming-tool-args.js';
 import { subagentDelegationScenario } from './subagent-delegation.js';
 import { subagentModelStartupRestoreScenario } from './subagent-model-startup-restore.js';
@@ -292,7 +295,9 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'provider-history-rejection-retry': providerHistoryRejectionRetryScenario,
   'prompt-context-instructions': promptContextInstructionsScenario,
   'prompt-queue-interleave': promptQueueInterleaveScenario,
+  'profile-command': profileCommandScenario,
   'prune-command': pruneCommandScenario,
+  'prune-render-state': pruneRenderStateScenario,
   'quiet-settings': quietSettingsScenario,
   'quiet-streaming-preview-height': quietStreamingPreviewHeightScenario,
   'quiet-tool-history-parity': quietToolHistoryParityScenario,
@@ -321,6 +326,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'storage-settings': storageSettingsScenario,
   'storage-startup-pg-fallback': storageStartupPgFallbackScenario,
   'stream-error-retry': streamErrorRetryScenario,
+  'streaming-render-stability': streamingRenderStabilityScenario,
   'streaming-tool-args': streamingToolArgsScenario,
   'subagent-delegation': subagentDelegationScenario,
   'subagent-plan-execute-tools': subagentPlanExecuteToolsScenario,

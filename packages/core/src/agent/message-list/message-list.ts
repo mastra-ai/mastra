@@ -1393,6 +1393,12 @@ export class MessageList {
     return true;
   }
 
+  /** Sealing is not optional: a moved id whose boundary is missing folds the next response into the previous row. */
+  public rotateResponseMessageId(sealMessageId?: string): string {
+    if (!this.markResponseMessageBoundary(sealMessageId)) this.markResponseMessageBoundary();
+    return this.newMessageId('assistant');
+  }
+
   public markResponseMessageBoundary(messageId?: string): boolean {
     const message = messageId
       ? this.messages.find(message => message.id === messageId)

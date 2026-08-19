@@ -1,6 +1,6 @@
 import type { ToolCategory } from '@mastra/client-js';
 
-import { useParams } from 'react-router';
+import { useLocation, useNavigate, useParams } from 'react-router';
 import {
   useClearAgentControllerGoalMutation,
   usePauseAgentControllerGoalMutation,
@@ -12,6 +12,7 @@ import {
   useFollowUpAgentControllerMutation,
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
+import { settingsSectionPath } from '../../settings/settingsSections';
 import type { SlashCommand } from '../services/commands';
 import { SLASH_COMMANDS } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
@@ -26,6 +27,8 @@ const TOOL_CATEGORIES: ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'othe
 export function useRunPaletteCommand(prefillComposer: (draft: string) => void) {
   const { factoryId } = useParams<{ factoryId: string }>();
   const factoryQuery = useFactoryQuery(factoryId);
+  const navigate = useNavigate();
+  const location = useLocation();
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { transcript, busy, localUser, pushNotice } = useChatTranscript();
   const { activeModeId } = useChatModes();
@@ -104,6 +107,9 @@ export function useRunPaletteCommand(prefillComposer: (draft: string) => void) {
             `Running: ${busy}`,
           ].join('\n'),
         );
+        return;
+      case 'login':
+        if (factoryId) void navigate(settingsSectionPath(factoryId, 'models'), { state: { from: location } });
         return;
       case 'abort':
         await abortMutation.mutateAsync();

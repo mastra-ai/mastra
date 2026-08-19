@@ -122,4 +122,30 @@ describe('handleError', () => {
       expect(caught!.status).not.toBe(422);
     });
   });
+
+  describe('WORKFLOW_RESUME_ALREADY_CLAIMED', () => {
+    it('maps a losing concurrent resume to 409', () => {
+      const err = Object.assign(new Error('already resumed'), { id: 'WORKFLOW_RESUME_ALREADY_CLAIMED' });
+      let caught: HTTPException | undefined;
+      try {
+        handleError(err, 'default');
+      } catch (e) {
+        caught = e as HTTPException;
+      }
+      expect(caught).toBeInstanceOf(HTTPException);
+      expect(caught!.status).toBe(409);
+      expect(caught!.message).toBe('already resumed');
+    });
+
+    it('does not treat other workflow errors as a conflict', () => {
+      const err = Object.assign(new Error('boom'), { id: 'SOME_OTHER_ID' });
+      let caught: HTTPException | undefined;
+      try {
+        handleError(err, 'default');
+      } catch (e) {
+        caught = e as HTTPException;
+      }
+      expect(caught!.status).not.toBe(409);
+    });
+  });
 });

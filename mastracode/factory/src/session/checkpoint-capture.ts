@@ -10,8 +10,9 @@ export interface CheckpointCaptureSession {
  * Snapshot the session's sandbox before every agent-end event so providers
  * with checkpoint support (for example Railway-backed sandboxes) persist the
  * last completed turn's writes. Captures are chained sequentially so a slow
- * snapshot never overlaps the next one, and failures are logged rather than
- * thrown so they never break the agent turn.
+ * snapshot never overlaps the next one, but the chain is intentionally NOT
+ * returned to the session: turn completion must never block on snapshot I/O.
+ * Failures are logged rather than thrown so they never break the agent turn.
  */
 export function observeSessionCheckpoint(session: CheckpointCaptureSession): () => void {
   let capture = Promise.resolve();
@@ -27,6 +28,6 @@ export function observeSessionCheckpoint(session: CheckpointCaptureSession): () 
         console.warn('[Factory checkpoint capture] Unable to snapshot sandbox.', error);
       }
     });
-    return capture;
+    // Fire-and-forget: do not gate the terminal agent event on the snapshot.
   });
 }

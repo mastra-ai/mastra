@@ -1,7 +1,6 @@
 import type {
-  AgentControllerDisplayState,
-  AgentControllerEvent as ControllerEvent,
   AgentControllerThread,
+  AgentControllerWireEvent,
   MastraDBMessage,
   MastraMessagePart,
 } from '@mastra/core/agent-controller';
@@ -43,46 +42,14 @@ import { BaseResource } from './base';
  *   POST /agent-controller/:id/sessions/:resourceId/tool-approval   session().approveTool()
  */
 
+/** One arm of the wire union, selected by its `type`. */
+type WireEventOf<T extends AgentControllerWireEvent['type']> = Extract<AgentControllerWireEvent, { type: T }>;
+
 /** A `MastraDBMessage` before {@link hydrateMessage} turns its `createdAt` back into a `Date`. */
-type SerializedMastraDBMessage = Omit<MastraDBMessage, 'createdAt'> & { createdAt: Date | string };
+type SerializedMastraDBMessage = WireEventOf<'message_start'>['message'];
 
 /** An `AgentControllerThread` before {@link hydrateThread} turns its timestamps back into `Date`s. */
-type SerializedThread = Omit<AgentControllerThread, 'createdAt' | 'updatedAt'> & {
-  createdAt: Date | string;
-  updatedAt: Date | string;
-};
-
-/** One arm of the controller's event union, selected by its `type`. */
-type ControllerEventOf<T extends ControllerEvent['type']> = Extract<ControllerEvent, { type: T }>;
-
-/** `Object.fromEntries` stringifies keys, so the record is keyed by string whatever the Map was. */
-type MapToRecord<T> = T extends Map<unknown, infer V> ? Record<string, V> : T;
-
-/** An `Error` as the stream handler flattens it — JSON drops a real `Error` to `{}`. */
-export interface WireError {
-  name: string;
-  message: string;
-}
-
-/**
- * The display-state snapshot as it arrives: the server converts its Maps to
- * plain records, and servers predating that conversion send `{}` for those
- * fields — so every field is optional.
- */
-type WireDisplayState = Partial<
-  Omit<
-    { [K in keyof AgentControllerDisplayState]: MapToRecord<AgentControllerDisplayState[K]> },
-    'modifiedFiles' | 'currentMessage'
-  > & {
-    /** `firstModified` is an ISO string on the wire. */
-    modifiedFiles: Record<string, { operations: string[]; firstModified: string }>;
-    /** Unlike the `message_*` events, this snapshot is not hydrated: `createdAt` stays a string. */
-    currentMessage: SerializedMastraDBMessage | null;
-  }
->;
-
-/** Events whose payload JSON cannot carry as-is, and that the server rewrites on the way out. */
-type RewrittenEventType = 'error' | 'workspace_error' | 'workspace_status_changed' | 'display_state_changed';
+type SerializedThread = WireEventOf<'thread_created'>['thread'];
 
 /**
  * Notifications reach a session as agent signals carried on messages, not as
@@ -109,18 +76,19 @@ type NotificationEvent =
       notificationIds: string[];
     };
 
+/** The timestamps the SDK gives back as `Date`s. {@link hydrateKnownEvent} is typed against this, so the two cannot drift. */
+type Hydrated<T> = T extends { type: 'thread_created' }
+  ? Omit<T, 'thread'> & { thread: AgentControllerThread }
+  : T extends { type: 'message_start' | 'message_update' | 'message_end' }
+    ? Omit<T, 'message'> & { message: MastraDBMessage }
+    : T;
+
 /**
- * AgentController events the SDK types explicitly: the controller's own union,
- * with the four events the wire reshapes overridden. This is a discriminated
- * union, so narrowing on `event.type` gives you the right payload fields.
+ * AgentController events the SDK types explicitly: the wire union `@mastra/core`
+ * derives from the controller's own events, with timestamps hydrated. This is a
+ * discriminated union, so narrowing on `event.type` gives the right payload.
  */
-export type KnownAgentControllerEvent =
-  | Exclude<ControllerEvent, { type: RewrittenEventType }>
-  | (Omit<ControllerEventOf<'error'>, 'error'> & { error: WireError | string })
-  | (Omit<ControllerEventOf<'workspace_error'>, 'error'> & { error: WireError })
-  | (Omit<ControllerEventOf<'workspace_status_changed'>, 'error'> & { error?: WireError })
-  | (Omit<ControllerEventOf<'display_state_changed'>, 'displayState'> & { displayState: WireDisplayState })
-  | NotificationEvent;
+export type KnownAgentControllerEvent = Hydrated<AgentControllerWireEvent> | NotificationEvent;
 
 /** Any other agent controller event the SDK doesn't model explicitly. */
 export interface OtherAgentControllerEvent {
@@ -211,9 +179,15 @@ function hydrateThread(thread: SerializedThread): AgentControllerThread {
   return { ...thread, createdAt: toDate(thread.createdAt), updatedAt: toDate(thread.updatedAt) };
 }
 
-/** The stream carries every timestamp as an ISO string; give consumers back the `Date`s the type promises. */
-function hydrateEventTimestamps(event: AgentControllerEvent): AgentControllerEvent {
-  if (!isKnownAgentControllerEvent(event)) return event;
+/** A frame straight off the stream: still wire-shaped, so its timestamps are strings. */
+type ParsedEvent = AgentControllerWireEvent | NotificationEvent | OtherAgentControllerEvent;
+
+function isKnownParsedEvent(event: ParsedEvent): event is AgentControllerWireEvent | NotificationEvent {
+  return KNOWN_AGENT_CONTROLLER_EVENT_TYPES.has(event.type);
+}
+
+/** The stream carries every timestamp as an ISO string; give consumers back the `Date`s {@link Hydrated} promises. */
+function hydrateKnownEvent(event: AgentControllerWireEvent | NotificationEvent): KnownAgentControllerEvent {
   switch (event.type) {
     case 'message_start':
     case 'message_update':
@@ -224,6 +198,10 @@ function hydrateEventTimestamps(event: AgentControllerEvent): AgentControllerEve
     default:
       return event;
   }
+}
+
+function hydrateEventTimestamps(event: ParsedEvent): AgentControllerEvent {
+  return isKnownParsedEvent(event) ? hydrateKnownEvent(event) : event;
 }
 
 /** Resume payload for the built-in `submit_plan` suspension. */
@@ -436,7 +414,7 @@ export class AgentControllerSession extends BaseResource {
               if (!data) continue;
               let event: AgentControllerEvent;
               try {
-                event = hydrateEventTimestamps(JSON.parse(data) as AgentControllerEvent);
+                event = hydrateEventTimestamps(JSON.parse(data));
               } catch {
                 continue;
               }

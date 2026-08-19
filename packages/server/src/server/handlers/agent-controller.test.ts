@@ -460,6 +460,44 @@ describe('agent-controller routes', () => {
       expect(received.type).toBe('agent_start');
     });
 
+    it('preserves live streamed messages across the SSE boundary without cloning', async () => {
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-live-message',
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<unknown>;
+
+      const reader = stream.getReader();
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({
+        resourceId: 'user-live-message',
+        id: 'user-live-message',
+        ownerId: 'code',
+      });
+      const message = {
+        id: 'assistant-live-1',
+        role: 'assistant',
+        createdAt: new Date('2026-01-02T03:04:05.000Z'),
+        content: { format: 2, parts: [{ type: 'text', text: 'first' }] },
+      } as any;
+
+      session.emit({ type: 'message_update', message });
+      message.content.parts[0].text = 'later';
+
+      let received: any;
+      for (let i = 0; i < 10 && received === undefined; i++) {
+        const { value } = await reader.read();
+        if (value && typeof value === 'object' && (value as any).type === 'message_update') received = value;
+      }
+      await reader.cancel();
+
+      expect(received.message).toBe(message);
+      expect(received.message.content.parts[0].text).toBe('later');
+      expect(received.message.createdAt).toEqual(new Date('2026-01-02T03:04:05.000Z'));
+    });
+
     it('flattens Error instances on error events so the message survives JSON serialization', async () => {
       const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
         mastra,

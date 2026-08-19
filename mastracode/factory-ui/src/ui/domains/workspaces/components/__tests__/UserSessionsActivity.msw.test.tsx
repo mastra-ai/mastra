@@ -1,8 +1,8 @@
 /**
  * Sidebar activity dot for user sessions.
  *
- * Unlike factory workspaces, user sessions each own their own `resourceId`
- * (=== `sessionId`), so activity is polled per session. This suite pins down
+ * User sessions are addressed by their own `sessionId` as `resourceId`, so they
+ * read the same active-run registry as factory workspaces. This suite pins down
  * the three-state indicator (initializing / working / idle) for those rows.
  */
 import { screen } from '@testing-library/react';
@@ -26,6 +26,7 @@ function makeSession(
     projectRepositoryId,
     orgId: 'org-1',
     userId: 'user-1',
+    visibility: 'org' as const,
     baseBranch: 'main',
     sandboxId: null,
     sandboxWorkdir: null,
@@ -67,15 +68,15 @@ function stubProjectAndSessions(sessions: FactoryUserSession[]) {
 
 function stubActiveSessions(activeIds: Set<string>) {
   server.use(
-    http.get(`${TEST_BASE_URL}/api/agent-controller/:agentControllerId/sessions/:resourceId/threads`, ({ params }) => {
-      const resourceId = String(params.resourceId);
-      if (activeIds.has(resourceId)) {
-        return HttpResponse.json({
-          threads: [{ id: `${resourceId}-thread`, state: 'active', tags: {}, createdAt: '2026-07-20T00:00:00.000Z' }],
-        });
-      }
-      return HttpResponse.json({ threads: [] });
-    }),
+    http.get(`${TEST_BASE_URL}/api/agent-controller/:agentControllerId/active-runs`, () =>
+      HttpResponse.json({
+        runs: [...activeIds].map(sessionId => ({
+          runId: `run-${sessionId}`,
+          resourceId: sessionId,
+          threadId: sessionId,
+        })),
+      }),
+    ),
   );
 }
 
