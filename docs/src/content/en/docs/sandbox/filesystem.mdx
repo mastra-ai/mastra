@@ -66,7 +66,7 @@ See [Search](/docs/sandbox/search) to index the files for keyword or semantic re
 
 Use `mounts` when programs inside a sandbox need to access persistent files by path. The agent still receives file tools, while command tools can run commands such as `ls`, `cat`, or `python` against the same files.
 
-Mount an S3 bucket at `/workspace` inside a Daytona sandbox:
+For example, mount an S3 bucket at `/workspace` inside a Daytona sandbox:
 
 ```typescript
 import { Mastra } from '@mastra/core'
