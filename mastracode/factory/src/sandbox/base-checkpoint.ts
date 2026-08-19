@@ -179,10 +179,12 @@ export class BaseCheckpointBuilder {
           builtAt: new Date(),
           setupCommandHash: hashSetupCommand(job.setupCommand),
         },
+        expectedSetupCommand: job.setupCommand,
       });
     } finally {
-      // Best-effort teardown: the builder VM is single-use.
-      await sandbox?.stop?.().catch(() => {});
+      // Best-effort teardown: the builder VM is single-use. Route cleanup
+      // through the fleet so the live-sandbox budget is released as well.
+      await this.#fleet.teardownSandbox(binding, sandbox).catch(() => {});
     }
   }
 }

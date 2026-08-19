@@ -12,7 +12,9 @@ interface FakeSandbox extends MaterializationSandbox {
 }
 
 /** Scripted sandbox that behaves like a fresh VM with git installed. */
-function fakeSandbox(opts: { supportsCheckpoints?: boolean; failCommand?: RegExp } = {}): FakeSandbox {
+function fakeSandbox(
+  opts: { supportsCheckpoints?: boolean; hasSnapshot?: boolean; failCommand?: RegExp } = {},
+): FakeSandbox {
   const scripts: string[] = [];
   const sandbox: FakeSandbox = {
     id: 'sb-1',
@@ -34,17 +36,23 @@ function fakeSandbox(opts: { supportsCheckpoints?: boolean; failCommand?: RegExp
       sandbox.stopped = true;
     },
     supportsCheckpoints: opts.supportsCheckpoints ?? true,
-    snapshot: async () => {
-      sandbox.snapshotCalls += 1;
-    },
   };
+  if (opts.hasSnapshot !== false) {
+    sandbox.snapshot = async () => {
+      sandbox.snapshotCalls += 1;
+    };
+  }
   return sandbox;
 }
 
-function fleetWith(build: (opts: SandboxCreateOptions) => MaterializationSandbox): SandboxFleet {
+function fleetWith(
+  build: (opts: SandboxCreateOptions) => MaterializationSandbox,
+  options: { maxSandboxes?: number } = {},
+): SandboxFleet {
   const fleet = new SandboxFleet({
     machine: { id: 't', name: 't', provider: 'test', clone: () => ({}) } as any,
     workdirBase: '/workspace',
+    ...(options.maxSandboxes !== undefined && { maxSandboxes: options.maxSandboxes }),
   });
   fleet.setFactory(build);
   return fleet;
@@ -87,11 +95,15 @@ describe('BaseCheckpointBuilder', () => {
   it('clones, runs setup, snapshots, stores metadata, and tears down', async () => {
     const sandbox = fakeSandbox();
     const created: SandboxCreateOptions[] = [];
-    const fleet = fleetWith(opts => {
-      created.push(opts);
-      return sandbox;
-    });
+    const fleet = fleetWith(
+      opts => {
+        created.push(opts);
+        return sandbox;
+      },
+      { maxSandboxes: 1 },
+    );
     const storage = fakeStorage();
+    const teardownSandbox = vi.spyOn(fleet, 'teardownSandbox');
     const builder = new BaseCheckpointBuilder({ fleet });
 
     await builder.request(job(storage.handle));
@@ -101,6 +113,7 @@ describe('BaseCheckpointBuilder', () => {
     expect(sandbox.scripts.some(s => s.includes('pnpm install'))).toBe(true);
     expect(sandbox.snapshotCalls).toBe(1);
     expect(sandbox.stopped).toBe(true);
+    expect(teardownSandbox).toHaveBeenCalledOnce();
     expect(storage.setBaseCheckpoint).toHaveBeenCalledWith({
       id: 'pr-1',
       checkpoint: expect.objectContaining({
@@ -108,7 +121,16 @@ describe('BaseCheckpointBuilder', () => {
         sha: 'abc123',
         setupCommandHash: hashSetupCommand('pnpm install'),
       }),
+      expectedSetupCommand: 'pnpm install',
     });
+
+    await expect(
+      fleet.ensureSandbox({
+        sandboxId: null,
+        setSandboxId: async () => {},
+        clear: async () => {},
+      }),
+    ).resolves.toBe(sandbox);
   });
 
   it('skips snapshot and metadata for sandboxes without checkpoint support', async () => {
@@ -120,6 +142,18 @@ describe('BaseCheckpointBuilder', () => {
     await builder.request(job(storage.handle));
 
     expect(sandbox.snapshotCalls).toBe(0);
+    expect(storage.setBaseCheckpoint).not.toHaveBeenCalled();
+    expect(sandbox.stopped).toBe(true);
+  });
+
+  it('skips metadata when the sandbox advertises checkpoints without a snapshot implementation', async () => {
+    const sandbox = fakeSandbox({ hasSnapshot: false });
+    const fleet = fleetWith(() => sandbox);
+    const storage = fakeStorage();
+    const builder = new BaseCheckpointBuilder({ fleet });
+
+    await builder.request(job(storage.handle));
+
     expect(storage.setBaseCheckpoint).not.toHaveBeenCalled();
     expect(sandbox.stopped).toBe(true);
   });

@@ -466,9 +466,14 @@ export interface SourceControlStorageHandle {
     update(args: { orgId: string; id: string; input: UpdateProjectRepositoryInput }): Promise<ProjectRepository | null>;
     /**
      * Record (or clear, with `checkpoint: null`) the repo's base-checkpoint
-     * metadata after a build job snapshots the prepared workdir.
+     * metadata after a build job snapshots the prepared workdir. Writes from a
+     * build are ignored when the setup command changed while it was running.
      */
-    setBaseCheckpoint(args: { id: string; checkpoint: ProjectRepositoryBaseCheckpoint | null }): Promise<void>;
+    setBaseCheckpoint(
+      args:
+        | { id: string; checkpoint: null }
+        | { id: string; checkpoint: ProjectRepositoryBaseCheckpoint; expectedSetupCommand: string | null },
+    ): Promise<void>;
     unlink(args: { orgId: string; id: string }): Promise<boolean>;
   };
   readonly sandboxes: {
@@ -1170,17 +1175,17 @@ export class SourceControlStorage extends FactoryStorageDomain {
           await db().updateMany(PROJECT_REPOSITORIES, { id }, patch);
           return getProjectRepository({ orgId, id });
         },
-        setBaseCheckpoint: async ({ id, checkpoint }) => {
-          await requireProjectRepositoryById(id);
+        setBaseCheckpoint: async args => {
+          await requireProjectRepositoryById(args.id);
           await db().updateMany(
             PROJECT_REPOSITORIES,
-            { id },
-            checkpoint
+            args.checkpoint ? { id: args.id, setup_command: args.expectedSetupCommand } : { id: args.id },
+            args.checkpoint
               ? {
-                  base_checkpoint_name: checkpoint.name,
-                  base_checkpoint_sha: checkpoint.sha,
-                  base_checkpoint_built_at: checkpoint.builtAt,
-                  base_checkpoint_setup_hash: checkpoint.setupCommandHash,
+                  base_checkpoint_name: args.checkpoint.name,
+                  base_checkpoint_sha: args.checkpoint.sha,
+                  base_checkpoint_built_at: args.checkpoint.builtAt,
+                  base_checkpoint_setup_hash: args.checkpoint.setupCommandHash,
                 }
               : {
                   base_checkpoint_name: null,

@@ -248,6 +248,7 @@ describe('SourceControlStorage', () => {
     await github.projectRepositories.setBaseCheckpoint({
       id: link.id,
       checkpoint: { name: `repo-${link.id}`, sha: 'abc123', builtAt, setupCommandHash: 'hash-1' },
+      expectedSetupCommand: null,
     });
     let fresh = await github.projectRepositories.get({ orgId: 'org-1', id: link.id });
     expect(fresh?.baseCheckpoint).toMatchObject({ name: `repo-${link.id}`, sha: 'abc123', setupCommandHash: 'hash-1' });
@@ -279,6 +280,7 @@ describe('SourceControlStorage', () => {
     await github.projectRepositories.setBaseCheckpoint({
       id: firstLink.id,
       checkpoint: { name: `repo-${firstLink.id}`, sha: 'abc123', builtAt: new Date(), setupCommandHash: 'hash-1' },
+      expectedSetupCommand: null,
     });
 
     const retried = await github.projectRepositories.link({
@@ -310,6 +312,7 @@ describe('SourceControlStorage', () => {
     await github.projectRepositories.setBaseCheckpoint({
       id: link.id,
       checkpoint: { name: `repo-${link.id}`, sha: 'abc123', builtAt: new Date(), setupCommandHash: null },
+      expectedSetupCommand: null,
     });
     const fresh = await github.projectRepositories.get({ orgId: 'org-1', id: link.id });
     // Must stay null (not ''), otherwise baseCheckpointIsStale() compares
@@ -324,6 +327,7 @@ describe('SourceControlStorage', () => {
     await github.projectRepositories.setBaseCheckpoint({
       id: link.id,
       checkpoint: { name: `repo-${link.id}`, sha: 'abc123', builtAt: new Date(), setupCommandHash: 'hash-1' },
+      expectedSetupCommand: null,
     });
 
     // Unrelated update keeps the checkpoint.
@@ -335,6 +339,24 @@ describe('SourceControlStorage', () => {
     await github.projectRepositories.update({ orgId: 'org-1', id: link.id, input: { setupCommand: 'pnpm i' } });
     fresh = await github.projectRepositories.get({ orgId: 'org-1', id: link.id });
     expect(fresh?.baseCheckpoint).toBeNull();
+  });
+
+  it('ignores a base-checkpoint build that finishes after the setup command changes', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+
+    await github.projectRepositories.update({
+      orgId: 'org-1',
+      id: link.id,
+      input: { setupCommand: 'pnpm install' },
+    });
+    await github.projectRepositories.setBaseCheckpoint({
+      id: link.id,
+      checkpoint: { name: `repo-${link.id}`, sha: 'stale', builtAt: new Date(), setupCommandHash: null },
+      expectedSetupCommand: null,
+    });
+
+    expect((await github.projectRepositories.get({ orgId: 'org-1', id: link.id }))?.baseCheckpoint).toBeNull();
   });
 
   it('scopes sandboxes and worktrees to the project-repository link', async () => {

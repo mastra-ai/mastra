@@ -327,16 +327,15 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       Object.assign(row, input, { updatedAt: new Date() });
       return row;
     },
-    setBaseCheckpoint: async ({
-      id,
-      checkpoint,
-    }: {
-      id: string;
-      checkpoint: ProjectRepositoryBaseCheckpoint | null;
-    }): Promise<void> => {
-      const row = this.projectRepositoriesRows.find(candidate => candidate.id === id);
+    setBaseCheckpoint: async (
+      args:
+        | { id: string; checkpoint: null }
+        | { id: string; checkpoint: ProjectRepositoryBaseCheckpoint; expectedSetupCommand: string | null },
+    ): Promise<void> => {
+      const row = this.projectRepositoriesRows.find(candidate => candidate.id === args.id);
       if (!row) throw new Error('Project repository not found');
-      row.baseCheckpoint = checkpoint;
+      if (args.checkpoint && row.setupCommand !== args.expectedSetupCommand) return;
+      row.baseCheckpoint = args.checkpoint;
     },
     unlink: async ({ orgId, id }: { orgId: string; id: string }): Promise<boolean> => {
       if (!(await this.projectRepositories.get({ orgId, id }))) return false;
