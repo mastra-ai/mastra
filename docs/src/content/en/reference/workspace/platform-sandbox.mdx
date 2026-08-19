@@ -138,6 +138,15 @@ await sandbox.snapshot()
 
 Each `id` maps to one independent filesystem. Reusing the same `id` across unrelated sandboxes causes the platform to boot them from each other's checkpoint.
 
+Set `seedCheckpointName` to provide a boot-only fallback when the checkpoint for `id` doesn't exist yet. The platform restores the checkpoint for `id` first when both exist. Later snapshots continue writing to the checkpoint for `id`, so the seed remains unchanged.
+
+```typescript
+const sandbox = new PlatformSandbox({
+  id: `project-session-${sessionId}`,
+  seedCheckpointName: 'project-base',
+})
+```
+
 ### Cloning for a fleet of sandboxes
 
 `clone()` returns an independent sibling `PlatformSandbox` that inherits credentials and defaults (access token, project, environment, network isolation, timeout, instructions, env, idle timeout) with per-instance overrides. The returned sandbox is unstarted and provisions on its own `start()`, so `clone()` performs no I/O:
@@ -203,6 +212,13 @@ The `command` argument is a shell string and is concatenated verbatim into the r
     type: 'string',
     description:
       'Existing sandbox ID to reattach to instead of creating a new sandbox. When set, environmentId is not required.',
+    isOptional: true,
+  },
+  {
+    name: 'seedCheckpointName',
+    type: 'string',
+    description:
+      'Boot-only fallback checkpoint used when the primary recovery checkpoint for id has no stored state. Later snapshots continue writing to the checkpoint for id.',
     isOptional: true,
   },
   {

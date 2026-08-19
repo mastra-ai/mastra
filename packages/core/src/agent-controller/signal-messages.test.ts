@@ -29,6 +29,49 @@ function createTextStreamModel(responseText: string) {
   });
 }
 
+function createGatedAgent(prompts: unknown[], releases: Array<() => void>) {
+  let callCount = 0;
+  return new Agent({
+    id: 'gated-agent',
+    name: 'gated-agent',
+    instructions: 'You are a test agent.',
+    model: new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        callCount += 1;
+        const callIndex = callCount;
+        prompts.push(prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: new ReadableStream({
+            async start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({
+                type: 'response-metadata',
+                id: `id-${callIndex}`,
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              });
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
+              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: `response ${callIndex}` });
+              controller.enqueue({ type: 'text-end', id: 'text-1' });
+              if (callIndex === 1) {
+                await new Promise<void>(resolve => releases.push(resolve));
+              }
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+        };
+      },
+    }),
+  });
+}
+
 async function waitFor(predicate: () => boolean) {
   const deadline = Date.now() + 5_000;
   while (Date.now() < deadline) {
@@ -956,6 +999,85 @@ describe('AgentController signal messages', () => {
     releaseInitialCalls.shift()?.();
     await waitFor(() => session.getCurrentRunId() === null);
     expect(JSON.stringify(prompts[3])).toContain('second active interjection');
+  });
+
+  it('tags a message sent into a live run as a while-active interjection', async () => {
+    const releases: Array<() => void> = [];
+    const prompts: unknown[] = [];
+    const { session } = await createController(new InMemoryStore(), createGatedAgent(prompts, releases));
+    await session.thread.create();
+
+    const first = session.sendSignal({ content: 'start the run' });
+    await first.accepted;
+    await waitFor(() => session.getCurrentRunId() !== null && releases.length === 1);
+    const interjection = session.sendSignal({ content: 'also do this' });
+    await interjection.accepted;
+    releases.shift()?.();
+    await waitFor(() => session.getCurrentRunId() === null);
+
+    expect(JSON.stringify(prompts)).toContain('<user delivery=\\"while-active\\">also do this</user>');
+  });
+
+  it('leaves a message that opens a new turn unmarked', async () => {
+    const releases: Array<() => void> = [];
+    const prompts: unknown[] = [];
+    const { session } = await createController(new InMemoryStore(), createGatedAgent(prompts, releases));
+    await session.thread.create();
+
+    const first = session.sendSignal({ content: 'start the run' });
+    await first.accepted;
+    await waitFor(() => session.getCurrentRunId() !== null && releases.length === 1);
+    releases.shift()?.();
+    await waitFor(() => session.getCurrentRunId() === null);
+    const followUp = session.sendSignal({ content: 'a new turn' });
+    await followUp.accepted;
+    await waitFor(() => prompts.length === 2);
+
+    const idleTurn = JSON.stringify(prompts[1]);
+    expect(idleTurn).toContain('a new turn');
+    expect(idleTurn).not.toContain('delivery');
+  });
+
+  it('leaves a delivery chosen by the caller alone', async () => {
+    const releases: Array<() => void> = [];
+    const prompts: unknown[] = [];
+    const { session } = await createController(new InMemoryStore(), createGatedAgent(prompts, releases));
+    await session.thread.create();
+
+    const first = session.sendSignal({ content: 'start the run' });
+    await first.accepted;
+    await waitFor(() => session.getCurrentRunId() !== null && releases.length === 1);
+    const interjection = session.sendSignal({
+      type: 'user',
+      tagName: 'user',
+      contents: 'queued for later',
+      attributes: { delivery: 'message' },
+    });
+    await interjection.accepted;
+    releases.shift()?.();
+    await waitFor(() => session.getCurrentRunId() === null);
+
+    expect(JSON.stringify(prompts)).toContain('<user delivery=\\"message\\">queued for later</user>');
+    expect(JSON.stringify(prompts)).not.toContain('while-active');
+  });
+
+  // A steer aborts before it sends, so by the time the runtime resolves a delivery
+  // route it sees an idle session — the interjection has to be stamped at submit time.
+  it('tags a steer as a while-active interjection even though its abort left the session idle', async () => {
+    const releases: Array<() => void> = [];
+    const prompts: unknown[] = [];
+    const { session } = await createController(new InMemoryStore(), createGatedAgent(prompts, releases));
+    await session.thread.create();
+
+    const first = session.sendSignal({ content: 'start the run' });
+    await first.accepted;
+    await waitFor(() => session.getCurrentRunId() !== null && releases.length === 1);
+    const steered = session.steer({ content: 'do this instead' });
+    releases.shift()?.();
+    await steered;
+    await waitFor(() => prompts.length === 2);
+
+    expect(JSON.stringify(prompts)).toContain('<user delivery=\\"while-active\\">do this instead</user>');
   });
 
   it('emits echoed file user-message signals as user message events', async () => {

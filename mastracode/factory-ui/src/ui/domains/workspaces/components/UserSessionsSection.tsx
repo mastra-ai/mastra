@@ -12,8 +12,9 @@ import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { useUserSessionActivity } from '../../../../hooks/useUserSessionActivity';
+import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
 import { useWorkspaceAttention } from '../../../../hooks/useWorkspaceAttention';
+import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { removeCachedSession, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
 import { deleteUserSession } from '../services/github';
@@ -65,10 +66,9 @@ export function UserSessionsSection() {
       Number(pinnedSessions.has(b.sessionId)) - Number(pinnedSessions.has(a.sessionId)) ||
       Number(isOwn(b)) - Number(isOwn(a)),
   );
-  const runningBySessionId = useUserSessionActivity({
-    baseUrl,
-    sessionIds: sessions.map(session => session.sessionId),
-    enabled: sessionsEnabled,
+  const runningBySessionId = useActiveRunResources({
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceIds: sessions.map(session => session.sessionId),
   });
   const { attentionByPath: attentionBySessionId, clearAttention } = useWorkspaceAttention(runningBySessionId);
 
