@@ -530,15 +530,25 @@ export class SandboxFleet {
     await timedPhase('sandbox.provision', () => sandbox.start());
     this.#liveCount += 1;
 
-    const provider = await readProviderSandboxDetails(sandbox);
-    if (provider.sandboxId) {
-      await store.setSandboxId(provider.sandboxId);
-    }
+    try {
+      const provider = await readProviderSandboxDetails(sandbox);
+      if (provider.sandboxId) {
+        await store.setSandboxId(provider.sandboxId);
+      }
 
-    if (store.seedCheckpointName && provider.restoredCheckpointName === store.seedCheckpointName) {
-      sandbox.seedCheckpointNameUsed = store.seedCheckpointName;
+      if (store.seedCheckpointName && provider.restoredCheckpointName === store.seedCheckpointName) {
+        sandbox.seedCheckpointNameUsed = store.seedCheckpointName;
+      }
+      return sandbox;
+    } catch (error) {
+      if (this.#liveCount > 0) this.#liveCount -= 1;
+      try {
+        await sandbox.stop?.();
+      } catch {
+        // Preserve the provider-detail or persistence error that made the sandbox unusable.
+      }
+      throw error;
     }
-    return sandbox;
   }
 
   /**

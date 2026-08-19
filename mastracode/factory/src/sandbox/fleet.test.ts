@@ -279,6 +279,63 @@ describe('sandbox option forwarding', () => {
     expect(provisioned.seedCheckpointNameUsed).toBeUndefined();
   });
 
+  it('releases a provisioned sandbox when reading provider details fails', async () => {
+    const stop = vi.fn(async () => {});
+    const getInfo = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('provider details unavailable'))
+      .mockResolvedValue({ metadata: { sandboxId: 'derived-1' } });
+    const sandbox = {
+      id: 'derived-1',
+      start: vi.fn(async () => {}),
+      stop,
+      getInfo,
+      executeCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+    };
+    const subject = fleet({ maxSandboxes: 1 });
+    subject.setFactory(() => sandbox);
+    const store = {
+      sandboxId: null as string | null,
+      setSandboxId: vi.fn(async (id: string | null) => {
+        store.sandboxId = id;
+      }),
+      clear: vi.fn(async () => {}),
+    };
+
+    await expect(subject.ensureSandbox(store)).rejects.toThrow('provider details unavailable');
+    await expect(subject.ensureSandbox(store)).resolves.toBe(sandbox);
+
+    expect(stop).toHaveBeenCalledOnce();
+  });
+
+  it('releases a provisioned sandbox when persisting its provider id fails', async () => {
+    const stop = vi.fn(async () => {});
+    const sandbox = {
+      id: 'derived-1',
+      start: vi.fn(async () => {}),
+      stop,
+      getInfo: vi.fn(async () => ({ metadata: { sandboxId: 'derived-1' } })),
+      executeCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+    };
+    const subject = fleet({ maxSandboxes: 1 });
+    subject.setFactory(() => sandbox);
+    const store = {
+      sandboxId: null as string | null,
+      setSandboxId: vi
+        .fn<(id: string | null) => Promise<void>>()
+        .mockRejectedValueOnce(new Error('storage unavailable'))
+        .mockImplementation(async id => {
+          store.sandboxId = id;
+        }),
+      clear: vi.fn(async () => {}),
+    };
+
+    await expect(subject.ensureSandbox(store)).rejects.toThrow('storage unavailable');
+    await expect(subject.ensureSandbox(store)).resolves.toBe(sandbox);
+
+    expect(stop).toHaveBeenCalledOnce();
+  });
+
   it('omits snapshot from the adapter when the provider does not implement it', async () => {
     const clone = vi.fn(() => ({
       id: 'derived-1',
