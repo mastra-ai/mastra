@@ -13,6 +13,7 @@ import { createMastraCode } from '../index.js';
 import {
   createProcessMemoryDiagnosticsFromEnvironment,
   startConfiguredProcessMemoryDiagnostics,
+  stopProcessMemoryDiagnosticsWithTimeout,
 } from '../process-memory-diagnostics.js';
 import { setupDebugLogging } from '../utils/debug-log.js';
 import { releaseAllThreadLocks } from '../utils/thread-lock.js';
@@ -277,7 +278,9 @@ export async function runMCCli(predrainedInput?: string | null): Promise<never> 
         closeSignalsPubSub?.(),
       ]);
     }
-    await processMemoryDiagnostics.stop();
+    await stopProcessMemoryDiagnosticsWithTimeout(processMemoryDiagnostics, warning => {
+      process.stderr.write(`Warning: ${warning}\n`);
+    });
   }
 
   process.exit(exitCode);

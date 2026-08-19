@@ -19,10 +19,22 @@ export async function startTuiProcessMemoryDiagnostics(
 export function createShutdownCoordinator(
   cleanup: () => Promise<void>,
   exit: (exitCode: number) => never,
+  timeoutMs = 5_000,
 ): (exitCode: number) => Promise<void> {
   let shutdownPromise: Promise<void> | null = null;
   return exitCode => {
-    shutdownPromise ??= cleanup().then(() => exit(exitCode));
+    shutdownPromise ??= (async () => {
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        cleanup().catch(() => undefined),
+        new Promise<void>(resolve => {
+          timeout = setTimeout(resolve, timeoutMs);
+          timeout.unref();
+        }),
+      ]);
+      if (timeout) clearTimeout(timeout);
+      exit(exitCode);
+    })();
     return shutdownPromise;
   };
 }
