@@ -532,6 +532,7 @@ describe('transcript reducer message entries', () => {
 
     expect(state.entries).toHaveLength(2);
     expect(messageParts(state.entries[0])).toEqual(first.content.parts);
+    expect(messageParts(state.entries[1])).toEqual([{ type: 'text', text: 'Let me check the tests too' }]);
   });
 });
 
@@ -1249,5 +1250,27 @@ describe('live user-signal events render the same as their persisted copy', () =
 
     const entry = state.entries.find(e => 'id' in e && e.id === 'sig-2');
     expect(messageParts(entry)).toEqual([{ type: 'text', text: 'stay on task' }]);
+  });
+
+  it('leaves a sealed turn alone when a later turn opens with the same words', () => {
+    // A turn only gets re-identified while it is still streaming. Once sealed it
+    // is history, and a fresh turn that happens to open on the same words — an
+    // SSE gap having swallowed its empty opening event — must not overwrite it.
+    const sealed = dbMessage('turn-1', 'assistant', [{ type: 'text', text: 'Done.' }]);
+    let state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'message_start', message: sealed },
+    });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: sealed } });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('turn-2', 'assistant', [{ type: 'text', text: 'Done. Now the next thing' }]),
+      },
+    });
+
+    expect(state.entries).toHaveLength(2);
+    expect(messageParts(state.entries[0])).toEqual(sealed.content.parts);
   });
 });

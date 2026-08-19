@@ -4,4 +4,4 @@
 
 Fixed assistant turns showing up twice in the chat transcript, with the first copy stripped of the tool cards that belong to it.
 
-A turn can reach the transcript under two identities: the run loop hands the engine a message id that the engine only adopts while its own message is still empty, and a refetched window after a stream gap brings the persisted copy back. The transcript now recognises a message that extends what is already drawn as that same turn and rewrites it in place, instead of drawing a second copy and moving the tool parts over to it.
+The duplicate showed up when a reply came back under a second identity: the server stores a long turn as several messages, and a refetch after a stream gap brings those copies back. The transcript now recognises such a copy as the turn it is already drawing and updates it in place, so the tool cards stay with the text they ran under and nothing lands on screen twice.

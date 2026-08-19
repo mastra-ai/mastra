@@ -920,23 +920,16 @@ function toMessageEntry(
 
 /**
  * Where an assistant message the timeline has never seen under this id belongs.
- * A message that extends an entry part for part is that entry re-identified —
- * rewrite it, or the tool parts migrate to the new copy and leave the old text
- * stranded beside a full copy of itself. A resumed turn carries the suspended
- * turn's tool call but not its text, fails the prefix, and stays its own entry.
+ * A live turn the message extends part for part is that turn re-identified —
+ * rewrite it, or its tool parts migrate to the copy and strand the old text
+ * beside it. Only the live turn is a candidate; sealed entries are history.
  */
 function indexOfSameTurn(entries: TimelineEntry[], message: MastraDBMessage): number {
-  for (let index = entries.length - 1; index >= 0; index--) {
-    const entry = entries[index];
-    if (entry.kind !== 'message' || entry.message.role !== 'assistant') continue;
-    if (windowCopyCovers(entry.message.content.parts, message.content.parts)) return index;
-  }
-
-  const latestIdx = latestAssistantIndex(entries);
-  const latest = latestIdx === -1 ? undefined : entries[latestIdx];
-  const isPlaceholder =
-    latest?.kind === 'message' && latest.message.role === 'assistant' && latest.id.startsWith('assistant-tools-');
-  return isPlaceholder ? latestIdx : -1;
+  const index = latestAssistantIndex(entries);
+  const entry = entries[index];
+  if (entry?.kind !== 'message') return -1;
+  if (entry.id.startsWith('assistant-tools-')) return index;
+  return entry.streaming && windowCopyCovers(entry.message.content.parts, message.content.parts) ? index : -1;
 }
 
 function upsertMessage(state: TranscriptState, message: MastraDBMessage, streaming: boolean): TranscriptState {
