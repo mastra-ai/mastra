@@ -318,6 +318,7 @@ describe('handlePluginsCommand', () => {
       installLocal: vi.fn().mockRejectedValueOnce(entryError).mockResolvedValueOnce('acme.foo'),
     };
     modal.askModalQuestion
+      .mockResolvedValueOnce('Native Mastra Code plugin')
       .mockResolvedValueOnce('Local path')
       .mockResolvedValueOnce('../foo')
       .mockResolvedValueOnce('project')
@@ -355,6 +356,7 @@ describe('handlePluginsCommand', () => {
       installLocal: vi.fn().mockResolvedValueOnce('acme.foo'),
     };
     modal.askModalQuestion
+      .mockResolvedValueOnce('Native Mastra Code plugin')
       .mockResolvedValueOnce('Local path')
       .mockResolvedValueOnce(discoveredPath)
       .mockResolvedValueOnce('project')
@@ -373,7 +375,7 @@ describe('handlePluginsCommand', () => {
     await new Promise(resolve => setImmediate(resolve));
 
     expect(pluginManager.discoverLocal).toHaveBeenCalledWith('.');
-    expect(modal.askModalQuestion).toHaveBeenNthCalledWith(2, ctx.state.ui, {
+    expect(modal.askModalQuestion).toHaveBeenNthCalledWith(3, ctx.state.ui, {
       question: 'Local plugin path or discovered plugin:',
       options: [{ label: discoveredPath, description: 'foo' }],
       allowCustomResponse: true,
@@ -393,6 +395,7 @@ describe('handlePluginsCommand', () => {
       installLocal: vi.fn().mockRejectedValueOnce(entryError).mockResolvedValueOnce('acme.foo'),
     };
     modal.askModalQuestion
+      .mockResolvedValueOnce('Native Mastra Code plugin')
       .mockResolvedValueOnce('Local path')
       .mockResolvedValueOnce('../other-project')
       .mockResolvedValueOnce('project')
@@ -420,6 +423,319 @@ describe('handlePluginsCommand', () => {
     expect(pluginManager.installLocal).toHaveBeenNthCalledWith(2, discoveredPath, 'project');
   });
 
+  it('trusts, characterizes, reports, and separately enables a Pi Package', async () => {
+    const prepared = {
+      specifier: './pi-package',
+      scope: 'project',
+      resolution: { resolvedSpecifier: 'local:pi-package#sha512-fixed' },
+      manifest: {
+        name: 'pi-package',
+        version: '1.0.0',
+        observedApiVersion: '^0.84.0',
+        lifecycleScripts: { postinstall: 'node setup.js' },
+      },
+    };
+    const characterized = {
+      ...prepared,
+      compatibility: { targetApiVersion: '0.84.2', status: 'pi-partial' },
+      extensions: [
+        {
+          entry: 'index.ts',
+          compatibility: {
+            capabilities: [
+              { name: 'registerTool', support: 'adapted' },
+              { name: 'registerMarkdownTransformer', support: 'unsupported' },
+            ],
+            diagnostics: [{ message: 'Markdown transformers are unsupported.' }],
+          },
+        },
+      ],
+    };
+    const pluginManager = {
+      reload: vi.fn(async () => undefined),
+      getLoadedPlugins: vi.fn(() => []),
+      preparePiPackage: vi.fn(async () => prepared),
+      characterizePiPackage: vi.fn(async () => characterized),
+      installPiPackage: vi.fn(async () => 'pi-package'),
+      discardPiPackageCandidate: vi.fn(),
+    };
+    modal.askModalQuestion
+      .mockResolvedValueOnce('Pi Package')
+      .mockResolvedValueOnce('Local directory')
+      .mockResolvedValueOnce('./pi-package')
+      .mockResolvedValueOnce('project')
+      .mockResolvedValueOnce('Trust code')
+      .mockResolvedValueOnce('Trust project')
+      .mockResolvedValueOnce('Block lifecycle scripts')
+      .mockResolvedValueOnce('Enable package');
+    const ctx = {
+      pluginManager,
+      state: { ui: { hideOverlay: vi.fn(), requestRender: vi.fn() } },
+      showInfo: vi.fn(),
+      showError: vi.fn(),
+    } as any;
+    overlay.showModalOverlay.mockReturnValue({ hide: vi.fn(), focus: vi.fn() });
+
+    await handlePluginsCommand(ctx);
+    const container = overlay.showModalOverlay.mock.calls[0]?.[1] as any;
+    const list = container.children.find((child: any) => Array.isArray(child.items));
+    list.onSelect({ value: '__install__' });
+    await waitForOverlayCalls(4);
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(pluginManager.preparePiPackage).toHaveBeenCalledWith(
+      './pi-package',
+      'project',
+      expect.objectContaining({ signal: expect.any(AbortSignal), onOutput: expect.any(Function) }),
+    );
+    expect(pluginManager.characterizePiPackage).toHaveBeenCalledWith(
+      prepared,
+      expect.objectContaining({
+        trustCodeExecution: true,
+        projectTrust: true,
+        installScripts: 'deny',
+        signal: expect.any(AbortSignal),
+      }),
+    );
+    const trustPrompt = modal.askModalQuestion.mock.calls[4]?.[1].question as string;
+    expect(trustPrompt).toContain('ARBITRARY CODE WARNING');
+    expect(trustPrompt).toContain('environment variables, and credentials');
+    expect(trustPrompt).toContain('local:pi-package#sha512-fixed');
+    const report = modal.askModalQuestion.mock.calls[7]?.[1].question as string;
+    expect(report).toContain('Compatibility: pi-partial');
+    expect(report).toContain('Extension: index.ts');
+    expect(report).toContain('adapted: registerTool');
+    expect(report).toContain('unsupported: registerMarkdownTransformer');
+    expect(pluginManager.installPiPackage).toHaveBeenCalledWith(characterized, { confirmEnable: true });
+    expect(pluginManager.discardPiPackageCandidate).not.toHaveBeenCalled();
+    expect(ctx.showInfo).toHaveBeenCalledWith('Installed Pi Package pi-package.');
+  });
+
+  it.each([
+    ['npm package', 'pi-package@1.0.0', 'npm:pi-package@1.0.0'],
+    ['Git or GitHub', 'https://github.com/acme/pi-package.git#abc123', 'https://github.com/acme/pi-package.git#abc123'],
+  ])('routes the %s Pi Package source to immutable intake', async (source, answer, expectedSpecifier) => {
+    const prepared = {
+      specifier: expectedSpecifier,
+      scope: 'global',
+      resolution: { resolvedSpecifier: expectedSpecifier },
+      manifest: { name: 'pi-package', version: '1.0.0', lifecycleScripts: {} },
+    };
+    const pluginManager = {
+      reload: vi.fn(async () => undefined),
+      getLoadedPlugins: vi.fn(() => []),
+      preparePiPackage: vi.fn(async () => prepared),
+      discardPiPackageCandidate: vi.fn(),
+    };
+    modal.askModalQuestion
+      .mockResolvedValueOnce('Pi Package')
+      .mockResolvedValueOnce(source)
+      .mockResolvedValueOnce(answer)
+      .mockResolvedValueOnce('global')
+      .mockResolvedValueOnce('Cancel');
+    const ctx = {
+      pluginManager,
+      state: { ui: { hideOverlay: vi.fn(), requestRender: vi.fn() } },
+      showInfo: vi.fn(),
+      showError: vi.fn(),
+    } as any;
+    overlay.showModalOverlay.mockReturnValue({ hide: vi.fn(), focus: vi.fn() });
+
+    await handlePluginsCommand(ctx);
+    const container = overlay.showModalOverlay.mock.calls[0]?.[1] as any;
+    const list = container.children.find((child: any) => Array.isArray(child.items));
+    list.onSelect({ value: '__install__' });
+    await waitForOverlayCalls(2);
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(pluginManager.preparePiPackage).toHaveBeenCalledWith(expectedSpecifier, 'global', expect.any(Object));
+    expect(pluginManager.discardPiPackageCandidate).toHaveBeenCalledWith(prepared);
+  });
+
+  it('removes a prepared Pi Package when code trust is cancelled', async () => {
+    const prepared = {
+      specifier: 'npm:pi-package@1.0.0',
+      scope: 'global',
+      resolution: { resolvedSpecifier: 'npm:pi-package@1.0.0' },
+      manifest: { name: 'pi-package', version: '1.0.0', lifecycleScripts: {} },
+    };
+    const pluginManager = {
+      reload: vi.fn(async () => undefined),
+      getLoadedPlugins: vi.fn(() => []),
+      preparePiPackage: vi.fn(async () => prepared),
+      discardPiPackageCandidate: vi.fn(),
+    };
+    modal.askModalQuestion
+      .mockResolvedValueOnce('Pi Package')
+      .mockResolvedValueOnce('npm package')
+      .mockResolvedValueOnce('pi-package@1.0.0')
+      .mockResolvedValueOnce('global')
+      .mockResolvedValueOnce('Cancel');
+    const ctx = {
+      pluginManager,
+      state: { ui: { hideOverlay: vi.fn(), requestRender: vi.fn() } },
+      showInfo: vi.fn(),
+      showError: vi.fn(),
+    } as any;
+    overlay.showModalOverlay.mockReturnValue({ hide: vi.fn(), focus: vi.fn() });
+
+    await handlePluginsCommand(ctx);
+    const container = overlay.showModalOverlay.mock.calls[0]?.[1] as any;
+    const list = container.children.find((child: any) => Array.isArray(child.items));
+    list.onSelect({ value: '__install__' });
+    await waitForOverlayCalls(2);
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(pluginManager.preparePiPackage).toHaveBeenCalledWith('npm:pi-package@1.0.0', 'global', expect.any(Object));
+    expect(pluginManager.discardPiPackageCandidate).toHaveBeenCalledWith(prepared);
+    expect(pluginManager).not.toHaveProperty('installPiPackage');
+  });
+
+  it('waits for an aborted Pi resolution and discards its late candidate', async () => {
+    const prepared = {
+      specifier: 'npm:pi-package@1.0.0',
+      scope: 'global',
+      resolution: { resolvedSpecifier: 'npm:pi-package@1.0.0' },
+      manifest: { name: 'pi-package', version: '1.0.0', lifecycleScripts: {} },
+    };
+    let resolvePreparation!: (value: typeof prepared) => void;
+    const preparation = new Promise<typeof prepared>(resolve => {
+      resolvePreparation = resolve;
+    });
+    const pluginManager = {
+      reload: vi.fn(async () => undefined),
+      getLoadedPlugins: vi.fn(() => []),
+      preparePiPackage: vi.fn(async () => preparation),
+      discardPiPackageCandidate: vi.fn(),
+    };
+    modal.askModalQuestion
+      .mockResolvedValueOnce('Pi Package')
+      .mockResolvedValueOnce('npm package')
+      .mockResolvedValueOnce('pi-package@1.0.0')
+      .mockResolvedValueOnce('global');
+    const ctx = {
+      pluginManager,
+      state: { ui: { hideOverlay: vi.fn(), requestRender: vi.fn() } },
+      showInfo: vi.fn(),
+      showError: vi.fn(),
+    } as any;
+    overlay.showModalOverlay.mockReturnValue({ hide: vi.fn(), focus: vi.fn() });
+
+    await handlePluginsCommand(ctx);
+    const container = overlay.showModalOverlay.mock.calls[0]?.[1] as any;
+    const list = container.children.find((child: any) => Array.isArray(child.items));
+    list.onSelect({ value: '__install__' });
+    await waitForOverlayCalls(2);
+    const progress = overlay.showModalOverlay.mock.calls[1]?.[1] as any;
+    progress.handleInput('\x1b');
+    resolvePreparation(prepared);
+    await new Promise(resolve => setImmediate(resolve));
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(pluginManager.discardPiPackageCandidate).toHaveBeenCalledWith(prepared);
+    expect(ctx.showError).toHaveBeenCalledWith('Pi Package resolution cancelled');
+  });
+
+  it('reports cleanup failure when an aborted Pi resolution returns a late candidate', async () => {
+    const prepared = {
+      specifier: 'npm:pi-package@1.0.0',
+      scope: 'global',
+      resolution: { resolvedSpecifier: 'npm:pi-package@1.0.0' },
+      manifest: { name: 'pi-package', version: '1.0.0', lifecycleScripts: {} },
+    };
+    let resolvePreparation!: (value: typeof prepared) => void;
+    const pluginManager = {
+      reload: vi.fn(async () => undefined),
+      getLoadedPlugins: vi.fn(() => []),
+      preparePiPackage: vi.fn(
+        async () =>
+          new Promise<typeof prepared>(resolve => {
+            resolvePreparation = resolve;
+          }),
+      ),
+      discardPiPackageCandidate: vi.fn(() => {
+        throw new Error('candidate cleanup failed');
+      }),
+    };
+    modal.askModalQuestion
+      .mockResolvedValueOnce('Pi Package')
+      .mockResolvedValueOnce('npm package')
+      .mockResolvedValueOnce('pi-package@1.0.0')
+      .mockResolvedValueOnce('global');
+    const ctx = {
+      pluginManager,
+      state: { ui: { hideOverlay: vi.fn(), requestRender: vi.fn() } },
+      showInfo: vi.fn(),
+      showError: vi.fn(),
+    } as any;
+    overlay.showModalOverlay.mockReturnValue({ hide: vi.fn(), focus: vi.fn() });
+
+    await handlePluginsCommand(ctx);
+    const container = overlay.showModalOverlay.mock.calls[0]?.[1] as any;
+    const list = container.children.find((child: any) => Array.isArray(child.items));
+    list.onSelect({ value: '__install__' });
+    await waitForOverlayCalls(2);
+    const progress = overlay.showModalOverlay.mock.calls[1]?.[1] as any;
+    progress.handleInput('\x1b');
+    resolvePreparation(prepared);
+    await new Promise(resolve => setImmediate(resolve));
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(ctx.showError).toHaveBeenCalledWith('candidate cleanup failed');
+  });
+
+  it('shows Pi compatibility identity, rollback errors, and lifecycle actions', async () => {
+    const plugin = {
+      id: 'pi-package',
+      name: 'Pi Package',
+      scope: 'project',
+      source: 'pi-package',
+      compatibility: 'pi',
+      specifier: 'npm:pi-package@1.0.0',
+      enabled: true,
+      status: 'active',
+      path: 'sources/pi-package',
+      entry: 'index.ts',
+      tools: {},
+      toolNames: ['pi_tool'],
+      candidateError: 'candidate update failed',
+      piCompatibility: { status: 'pi-partial' },
+      piPackage: {
+        resolution: { resolvedSpecifier: 'npm:pi-package@1.0.0' },
+        targetApiVersion: '0.84.2',
+        observedApiVersion: '^0.84.0',
+        compatibilityReport: {
+          status: 'pi-partial',
+          capabilities: [
+            { name: 'registerTool', support: 'adapted' },
+            { name: 'registerEntryRenderer', support: 'unsupported' },
+          ],
+        },
+      },
+    };
+    const pluginManager = { reload: vi.fn(async () => undefined), getLoadedPlugins: vi.fn(() => [plugin]) };
+    const ctx = { pluginManager, state: { ui: { hideOverlay: vi.fn() } } } as any;
+
+    await handlePluginsCommand(ctx, ['pi-package']);
+
+    const detail = overlay.showModalOverlay.mock.calls[0]?.[1] as any;
+    const text = detail.children
+      .map((child: any) => child.text)
+      .filter(Boolean)
+      .join('\n');
+    const actions = detail.children.find((child: any) => Array.isArray(child.items));
+    expect(text).toContain('immutable source: npm:pi-package@1.0.0');
+    expect(text).toContain('compatibility: pi-partial');
+    expect(text).toContain('last update failed: candidate update failed');
+    expect(actions.items.map((item: any) => item.value)).toEqual([
+      'update',
+      'reload',
+      'toggle',
+      'uninstall',
+      '__back__',
+    ]);
+  });
+
   it('shows progress while installing a GitHub plugin', async () => {
     let resolveInstall: (id: string) => void = () => {};
     const installPromise = new Promise<string>(resolve => {
@@ -432,6 +748,7 @@ describe('handlePluginsCommand', () => {
       installGithub: vi.fn(() => installPromise),
     };
     modal.askModalQuestion
+      .mockResolvedValueOnce('Native Mastra Code plugin')
       .mockResolvedValueOnce('GitHub URL')
       .mockResolvedValueOnce('https://github.com/acme/foo')
       .mockResolvedValueOnce('global')
@@ -452,10 +769,14 @@ describe('handlePluginsCommand', () => {
     await waitForOverlayCalls(2);
 
     expect(modal.askModalQuestion).toHaveBeenNthCalledWith(1, ctx.state.ui, {
-      question: 'Install plugin from:',
+      question: 'Install plugin type:',
+      options: [{ label: 'Native Mastra Code plugin' }, { label: 'Pi Package' }],
+    });
+    expect(modal.askModalQuestion).toHaveBeenNthCalledWith(2, ctx.state.ui, {
+      question: 'Install native plugin from:',
       options: [{ label: 'GitHub URL' }, { label: 'Local path' }],
     });
-    expect(modal.askModalQuestion).toHaveBeenNthCalledWith(3, ctx.state.ui, {
+    expect(modal.askModalQuestion).toHaveBeenNthCalledWith(4, ctx.state.ui, {
       question: 'Install scope:',
       options: [{ label: 'global' }, { label: 'project' }],
     });
@@ -489,6 +810,7 @@ describe('handlePluginsCommand', () => {
       installGithub: vi.fn(() => installPromise),
     };
     modal.askModalQuestion
+      .mockResolvedValueOnce('Native Mastra Code plugin')
       .mockResolvedValueOnce('GitHub URL')
       .mockResolvedValueOnce('https://github.com/acme/foo')
       .mockResolvedValueOnce('global')
@@ -529,6 +851,7 @@ describe('handlePluginsCommand', () => {
       installGithub: vi.fn().mockRejectedValueOnce(entryError).mockResolvedValueOnce('acme.foo'),
     };
     modal.askModalQuestion
+      .mockResolvedValueOnce('Native Mastra Code plugin')
       .mockResolvedValueOnce('GitHub URL')
       .mockResolvedValueOnce('https://github.com/acme/foo')
       .mockResolvedValueOnce('global')
@@ -547,7 +870,7 @@ describe('handlePluginsCommand', () => {
     list.onSelect({ value: '__install__' });
     await new Promise(resolve => setImmediate(resolve));
 
-    expect(modal.askModalQuestion).toHaveBeenNthCalledWith(4, ctx.state.ui, {
+    expect(modal.askModalQuestion).toHaveBeenNthCalledWith(5, ctx.state.ui, {
       question:
         'Plugins run code inside Mastra Code and can access your workspace. GitHub plugins also auto-update from their repository, so only install plugins from sources you trust. Continue?',
       options: [{ label: 'Install' }, { label: 'Cancel' }],

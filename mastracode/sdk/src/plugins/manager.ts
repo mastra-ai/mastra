@@ -14,8 +14,17 @@ import { getPluginScopePaths } from './paths.js';
 import type { PluginPathOptions } from './paths.js';
 import { PiCommandAdapter } from './pi/command-adapter.js';
 import type { PiCommandDispatchOptions, PiOwnedCommand } from './pi/command-adapter.js';
-import { createPiPackageRecord } from './pi/package-intake.js';
-import type { CharacterizedPiPackage } from './pi/package-intake.js';
+import {
+  characterizePiPackage as characterizePreparedPiPackage,
+  createPiPackageRecord,
+  preparePiPackage as resolvePiPackageForIntake,
+} from './pi/package-intake.js';
+import type {
+  CharacterizedPiPackage,
+  PiPackageCharacterizationOptions,
+  PreparedPiPackageInspection,
+} from './pi/package-intake.js';
+import type { ResolvePiPackageOptions } from './pi/package-resolver.js';
 import type { PiExtensionGeneration, PiRuntimeActions } from './pi/types.js';
 import { bindPiUiHost } from './pi/ui-adapter.js';
 import type { PiUiHost } from './pi/ui-adapter.js';
@@ -718,6 +727,48 @@ export class PluginManager {
 
   discoverLocal(searchRoot = '.'): ReturnType<typeof discoverLocalPlugins> {
     return discoverLocalPlugins(searchRoot, this.options);
+  }
+
+  async preparePiPackage(
+    specifier: string,
+    scope: PluginScope,
+    options: Omit<ResolvePiPackageOptions, keyof PluginPathOptions> = {},
+  ): Promise<PreparedPiPackageInspection> {
+    return resolvePiPackageForIntake(specifier, scope, { ...this.options, ...options });
+  }
+
+  async characterizePiPackage(
+    prepared: PreparedPiPackageInspection,
+    options: PiPackageCharacterizationOptions,
+  ): Promise<CharacterizedPiPackage> {
+    return characterizePreparedPiPackage(prepared, options);
+  }
+
+  discardPiPackageCandidate(candidate: PreparedPiPackageInspection | CharacterizedPiPackage): void {
+    const scopeRoot = getPluginScopePaths(candidate.scope, this.options).root;
+    const activeRoots = new Set<string>();
+    for (const scope of ['global', 'project'] as const) {
+      const paths = getPluginScopePaths(scope, this.options);
+      for (const record of Object.values(loadPluginRegistry(paths.registryPath).plugins)) {
+        if (record.source !== 'pi-package' || !record.piPackage) continue;
+        activeRoots.add(path.resolve(paths.root, record.piPackage.resolution.sourceRoot));
+        activeRoots.add(path.resolve(paths.root, record.piPackage.resolution.packageRoot));
+      }
+    }
+
+    const roots = new Set([candidate.resolution.sourceRoot, candidate.resolution.packageRoot]);
+    for (const root of roots) {
+      const absoluteRoot = path.resolve(root);
+      if (!isInsideDirectory(absoluteRoot, scopeRoot)) {
+        throw new Error('Pi Package candidate cleanup must remain inside the scope-owned plugin directory');
+      }
+      const ownedRoot = absoluteRoot.includes(`${path.sep}.materialized${path.sep}`)
+        ? path.dirname(absoluteRoot)
+        : absoluteRoot;
+      if ([...activeRoots].some(activeRoot => activeRoot === ownedRoot || isInsideDirectory(activeRoot, ownedRoot)))
+        continue;
+      fs.rmSync(ownedRoot, { recursive: true, force: true });
+    }
   }
 
   async installPiPackage(characterized: CharacterizedPiPackage, options: { confirmEnable: boolean }): Promise<string> {

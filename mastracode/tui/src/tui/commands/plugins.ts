@@ -19,6 +19,7 @@ class PluginInstallProgress extends Box {
   private _focused = false;
 
   constructor(
+    private title: string,
     private specifier: string,
     private onCancel: () => void,
   ) {
@@ -52,7 +53,7 @@ class PluginInstallProgress extends Box {
 
   private rebuild(): void {
     this.clear();
-    this.addChild(new Text(theme.bold(theme.fg('accent', 'Installing GitHub plugin')), 0, 0));
+    this.addChild(new Text(theme.bold(theme.fg('accent', this.title)), 0, 0));
     this.addChild(new Text(this.specifier, 0, 0));
     this.addChild(new Text(theme.fg('dim', 'Press Esc or Ctrl-C to cancel.'), 0, 0));
     this.addChild(new Spacer(1));
@@ -97,7 +98,9 @@ function pluginStatus(plugin: LoadedPlugin): string {
 
 function pluginLabel(plugin: LoadedPlugin): string {
   const name = plugin.name ? `${plugin.name} ` : '';
-  return `  ${name}${theme.fg('dim', `(${plugin.id})`)}  ${theme.fg('dim', plugin.scope)}  ${pluginStatus(plugin)}`;
+  const compatibilityStatus = plugin.piCompatibility?.status ?? plugin.piPackage?.compatibilityReport.status;
+  const compatibility = plugin.compatibility === 'pi' ? `  ${compatibilityStatus ?? 'load failed'}` : '';
+  return `  ${name}${theme.fg('dim', `(${plugin.id})`)}  ${theme.fg('dim', plugin.scope)}  ${pluginStatus(plugin)}${compatibility}`;
 }
 
 function buildPluginItems(plugins: LoadedPlugin[]): SelectItem[] {
@@ -143,38 +146,56 @@ function showPluginsList(ctx: SlashCommandContext): void {
   showModalOverlay(ctx.state.ui, modal, { maxHeight: '80%' });
 }
 
+function formatCompatibilityCapabilities(capabilities: readonly { name: string; support: string }[]): string[] {
+  const groups = new Map<string, string[]>();
+  for (const capability of capabilities) {
+    const names = groups.get(capability.support) ?? [];
+    names.push(capability.name);
+    groups.set(capability.support, names);
+  }
+  return ['direct', 'adapted', 'version-gated', 'unsupported'].flatMap(support => {
+    const names = groups.get(support);
+    return names?.length ? [`${support}: ${names.sort().join(', ')}`] : [];
+  });
+}
+
 function reportPluginMutationError(ctx: SlashCommandContext, action: string, error: unknown): void {
   const message = error instanceof Error ? error.message : String(error);
   ctx.showError(`${action} failed: ${message}`);
 }
 
-async function withGithubPluginInstallProgress<T>(
+async function withPluginInstallProgress<T>(
   ctx: SlashCommandContext,
+  title: string,
   specifier: string,
+  cancelledMessage: string,
   install: (options: { onOutput: (chunk: Buffer | string) => void; signal: AbortSignal }) => Promise<T>,
+  discardCancelledResult?: (result: T) => void,
 ): Promise<T> {
   const controller = new AbortController();
-  let rejectCancelled: (error: Error) => void = () => {};
-  const cancelled = new Promise<never>((_, reject) => {
-    rejectCancelled = reject;
-  });
-  const progress = new PluginInstallProgress(specifier, () => {
-    controller.abort();
-    rejectCancelled(new Error('GitHub plugin install cancelled'));
-  });
+  const progress = new PluginInstallProgress(title, specifier, () => controller.abort());
   const overlay = showModalOverlay(ctx.state.ui, progress, { maxHeight: '70%' });
   overlay?.focus?.();
   ctx.state.ui.requestRender?.();
   try {
-    const installPromise = install({
-      onOutput: chunk => {
-        progress.addOutput(chunk);
-        ctx.state.ui.requestRender?.();
-      },
-      signal: controller.signal,
-    });
-    installPromise.catch(() => undefined);
-    return await Promise.race([installPromise, cancelled]);
+    let result: T;
+    try {
+      result = await install({
+        onOutput: chunk => {
+          progress.addOutput(chunk);
+          ctx.state.ui.requestRender?.();
+        },
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (controller.signal.aborted) throw new Error(cancelledMessage);
+      throw error;
+    }
+    if (controller.signal.aborted) {
+      discardCancelledResult?.(result);
+      throw new Error(cancelledMessage);
+    }
+    return result;
   } finally {
     overlay?.hide?.();
     ctx.state.ui.requestRender?.();
@@ -190,6 +211,17 @@ function showPluginDetail(ctx: SlashCommandContext, plugin: LoadedPlugin): void 
   container.addChild(new Text(`source: ${plugin.source} ${plugin.specifier}`, 0, 0));
   container.addChild(new Text(`status: ${plugin.status}`, 0, 0));
   if (plugin.version) container.addChild(new Text(`version: ${plugin.version}`, 0, 0));
+  if (plugin.piPackage) {
+    container.addChild(new Text(`immutable source: ${plugin.piPackage.resolution.resolvedSpecifier}`, 0, 0));
+    container.addChild(new Text(`target Pi API: ${plugin.piPackage.targetApiVersion}`, 0, 0));
+    if (plugin.piPackage.observedApiVersion) {
+      container.addChild(new Text(`observed Pi API: ${plugin.piPackage.observedApiVersion}`, 0, 0));
+    }
+    container.addChild(new Text(`compatibility: ${plugin.piPackage.compatibilityReport.status}`, 0, 0));
+    for (const line of formatCompatibilityCapabilities(plugin.piPackage.compatibilityReport.capabilities)) {
+      container.addChild(new Text(line, 0, 0));
+    }
+  }
   if (plugin.description) container.addChild(new Text(`description: ${plugin.description}`, 0, 0));
   container.addChild(new Text(`tools: ${plugin.toolNames.length ? plugin.toolNames.join(', ') : '(none)'}`, 0, 0));
   const configEntries = Object.entries(plugin.configSchema ?? {});
@@ -197,6 +229,9 @@ function showPluginDetail(ctx: SlashCommandContext, plugin: LoadedPlugin): void 
     container.addChild(new Text(`config: ${configEntries.map(([key]) => key).join(', ')}`, 0, 0));
   }
   if (plugin.error) container.addChild(new Text(theme.fg('error', `error: ${plugin.error}`), 0, 0));
+  if (plugin.candidateError) {
+    container.addChild(new Text(theme.fg('warning', `last update failed: ${plugin.candidateError}`), 0, 0));
+  }
   if (plugin.status === 'blocked')
     container.addChild(new Text(theme.fg('warning', 'blocked by plugins.json disabledPlugins'), 0, 0));
   if (plugin.conflicts?.length)
@@ -206,6 +241,12 @@ function showPluginDetail(ctx: SlashCommandContext, plugin: LoadedPlugin): void 
   const actionLabel = plugin.enabled ? 'Deactivate' : 'Activate';
   const actionItems: SelectItem[] = [
     ...(configEntries.length && plugin.status !== 'blocked' ? [{ value: 'configure', label: '  Configure' }] : []),
+    ...(plugin.compatibility === 'pi' && plugin.status !== 'blocked'
+      ? [
+          { value: 'update', label: '  Update from source' },
+          { value: 'reload', label: '  Reload' },
+        ]
+      : []),
     ...(plugin.status === 'blocked' ? [] : [{ value: 'toggle', label: `  ${actionLabel}` }]),
     { value: 'uninstall', label: '  Uninstall' },
     { value: BACK_VALUE, label: '  Back' },
@@ -221,6 +262,21 @@ function showPluginDetail(ctx: SlashCommandContext, plugin: LoadedPlugin): void 
     if (item.value === 'configure') {
       ctx.state.ui.hideOverlay();
       void configurePluginFlow(ctx, plugin);
+      return;
+    }
+    if (item.value === 'update') {
+      ctx.state.ui.hideOverlay();
+      void installPiPackageFlow(ctx, plugin.specifier, plugin.scope, true);
+      return;
+    }
+    if (item.value === 'reload') {
+      void ctx.pluginManager
+        .reloadPiPackage(plugin.id, plugin.scope)
+        .then(() => {
+          ctx.state.ui.hideOverlay();
+          showPluginsList(ctx);
+        })
+        .catch(error => reportPluginMutationError(ctx, 'Reload', error));
       return;
     }
     if (item.value === 'toggle') {
@@ -384,8 +440,21 @@ async function askPluginModelValue(
 
 async function installPluginFlow(ctx: SlashCommandContext): Promise<void> {
   if (!ctx.pluginManager) return;
+  const kind = await askModalQuestion(ctx.state.ui, {
+    question: 'Install plugin type:',
+    options: [{ label: 'Native Mastra Code plugin' }, { label: 'Pi Package' }],
+  });
+  if (kind === 'Native Mastra Code plugin') {
+    await installNativePluginFlow(ctx);
+  } else if (kind === 'Pi Package') {
+    await installPiPackageFlow(ctx);
+  }
+}
+
+async function installNativePluginFlow(ctx: SlashCommandContext): Promise<void> {
+  if (!ctx.pluginManager) return;
   const source = await askModalQuestion(ctx.state.ui, {
-    question: 'Install plugin from:',
+    question: 'Install native plugin from:',
     options: [{ label: 'GitHub URL' }, { label: 'Local path' }],
   });
   if (!source) return;
@@ -399,11 +468,8 @@ async function installPluginFlow(ctx: SlashCommandContext): Promise<void> {
         });
   if (!specifier) return;
 
-  const scopeAnswer = await askModalQuestion(ctx.state.ui, {
-    question: 'Install scope:',
-    options: [{ label: 'global' }, { label: 'project' }],
-  });
-  if (scopeAnswer !== 'project' && scopeAnswer !== 'global') return;
+  const scopeAnswer = await askPluginScope(ctx);
+  if (!scopeAnswer) return;
 
   const installWarning =
     source === 'GitHub URL'
@@ -423,6 +489,157 @@ async function installPluginFlow(ctx: SlashCommandContext): Promise<void> {
   } catch (error) {
     ctx.showError(error instanceof Error ? error.message : String(error));
   }
+}
+
+async function installPiPackageFlow(
+  ctx: SlashCommandContext,
+  existingSpecifier?: string,
+  existingScope?: PluginScope,
+  updating = false,
+): Promise<void> {
+  if (!ctx.pluginManager) return;
+  const source = existingSpecifier
+    ? undefined
+    : await askModalQuestion(ctx.state.ui, {
+        question: 'Pi Package source:',
+        options: [{ label: 'npm package' }, { label: 'Git or GitHub' }, { label: 'Local directory' }],
+      });
+  if (!existingSpecifier && !source) return;
+  const specifier = existingSpecifier ?? (await askPiPackageSpecifier(ctx, source!));
+  if (!specifier) return;
+  const scope = existingScope ?? (await askPluginScope(ctx));
+  if (!scope) return;
+
+  let prepared: Awaited<ReturnType<NonNullable<typeof ctx.pluginManager>['preparePiPackage']>> | undefined;
+  let characterized: Awaited<ReturnType<NonNullable<typeof ctx.pluginManager>['characterizePiPackage']>> | undefined;
+  let installed = false;
+  try {
+    prepared = await withPluginInstallProgress(
+      ctx,
+      'Resolving Pi Package',
+      specifier,
+      'Pi Package resolution cancelled',
+      options => ctx.pluginManager!.preparePiPackage(specifier, scope, options),
+      candidate => ctx.pluginManager!.discardPiPackageCandidate(candidate),
+    );
+    const scripts = Object.keys(prepared.manifest.lifecycleScripts);
+    const identity = prepared.resolution.resolvedSpecifier;
+    const trust = await askModalQuestion(ctx.state.ui, {
+      question: [
+        `${updating ? 'Update' : 'Install'} Pi Package ${prepared.manifest.name}`,
+        `Immutable source: ${identity}`,
+        '',
+        'ARBITRARY CODE WARNING: Pi extensions are trusted in-process code. They can access your files, workspace, processes, network, environment variables, and credentials with your user permissions. Mastra Code does not sandbox them.',
+        `Lifecycle scripts declared: ${scripts.length ? scripts.join(', ') : 'none'}.`,
+        'Trust this source for code execution?',
+      ].join('\n'),
+      options: [{ label: 'Trust code' }, { label: 'Cancel' }],
+    });
+    if (trust !== 'Trust code') return;
+
+    if (scope === 'project') {
+      const projectTrust = await askModalQuestion(ctx.state.ui, {
+        question: 'This package belongs to the current project. Trust the project to execute this Pi Package?',
+        options: [{ label: 'Trust project' }, { label: 'Cancel' }],
+      });
+      if (projectTrust !== 'Trust project') return;
+    }
+
+    const scriptPolicy = await askModalQuestion(ctx.state.ui, {
+      question: scripts.length
+        ? `Dependency installation can run these lifecycle scripts: ${scripts.join(', ')}. Choose a policy:`
+        : 'Dependency installation script policy:',
+      options: [
+        { label: 'Block lifecycle scripts', description: 'Install dependencies with --ignore-scripts' },
+        { label: 'Allow lifecycle scripts', description: 'Run package lifecycle scripts with your user permissions' },
+      ],
+    });
+    if (scriptPolicy !== 'Block lifecycle scripts' && scriptPolicy !== 'Allow lifecycle scripts') return;
+
+    characterized = await withPluginInstallProgress(
+      ctx,
+      'Characterizing Pi Package',
+      identity,
+      'Pi Package characterization cancelled',
+      options =>
+        ctx.pluginManager!.characterizePiPackage(prepared!, {
+          trustCodeExecution: true,
+          ...(scope === 'project' ? { projectTrust: true } : {}),
+          installScripts: scriptPolicy === 'Allow lifecycle scripts' ? 'allow' : 'deny',
+          ...options,
+        }),
+      candidate => ctx.pluginManager!.discardPiPackageCandidate(candidate),
+    );
+
+    const enable = await askModalQuestion(ctx.state.ui, {
+      question: formatPiPackageCapabilityReport(characterized),
+      options: [{ label: updating ? 'Enable update' : 'Enable package' }, { label: 'Cancel' }],
+    });
+    if (enable !== (updating ? 'Enable update' : 'Enable package')) return;
+
+    const id = await ctx.pluginManager.installPiPackage(characterized, { confirmEnable: true });
+    installed = true;
+    ctx.showInfo(`${updating ? 'Updated' : 'Installed'} Pi Package ${id}.`);
+    showPluginsList(ctx);
+  } catch (error) {
+    ctx.showError(error instanceof Error ? error.message : String(error));
+  } finally {
+    const discarded = characterized ?? prepared;
+    if (discarded && !installed) {
+      try {
+        ctx.pluginManager.discardPiPackageCandidate(discarded);
+      } catch (error) {
+        reportPluginMutationError(ctx, 'Pi Package cleanup', error);
+      }
+    }
+  }
+}
+
+async function askPluginScope(ctx: SlashCommandContext): Promise<PluginScope | undefined> {
+  const answer = await askModalQuestion(ctx.state.ui, {
+    question: 'Install scope:',
+    options: [{ label: 'global' }, { label: 'project' }],
+  });
+  return answer === 'project' || answer === 'global' ? answer : undefined;
+}
+
+async function askPiPackageSpecifier(ctx: SlashCommandContext, source: string): Promise<string | null> {
+  if (source === 'Local directory') {
+    return askModalQuestion(ctx.state.ui, { question: 'Local Pi Package directory:', allowCustomResponse: true });
+  }
+  if (source === 'npm package') {
+    const value = await askModalQuestion(ctx.state.ui, {
+      question: 'Exact npm package and version (for example, acme-pi@1.2.3):',
+      allowCustomResponse: true,
+    });
+    return value ? (value.startsWith('npm:') ? value : `npm:${value}`) : null;
+  }
+  return askModalQuestion(ctx.state.ui, {
+    question: 'Git/GitHub URL with ref (for example, github:owner/repo@v1.2.3):',
+    allowCustomResponse: true,
+  });
+}
+
+function formatPiPackageCapabilityReport(
+  candidate: Awaited<ReturnType<NonNullable<SlashCommandContext['pluginManager']>['characterizePiPackage']>>,
+): string {
+  const lines = [
+    `${candidate.manifest.name}${candidate.manifest.version ? `@${candidate.manifest.version}` : ''}`,
+    `Immutable source: ${candidate.resolution.resolvedSpecifier}`,
+    `Target Pi API: ${candidate.compatibility.targetApiVersion}`,
+    `Observed Pi API: ${candidate.manifest.observedApiVersion ?? 'not declared'}`,
+    `Compatibility: ${candidate.compatibility.status}`,
+  ];
+  for (const extension of candidate.extensions) {
+    lines.push(
+      '',
+      `Extension: ${extension.entry}`,
+      ...formatCompatibilityCapabilities(extension.compatibility.capabilities),
+    );
+    for (const diagnostic of extension.compatibility.diagnostics) lines.push(`diagnostic: ${diagnostic.message}`);
+  }
+  lines.push('', 'Enable this characterized package? Trust and enablement are separate decisions.');
+  return lines.join('\n');
 }
 
 async function askLocalPluginPath(ctx: SlashCommandContext): Promise<string | null> {
@@ -451,10 +668,15 @@ async function installPluginWithOptionalEntryPrompt(
         ? ctx.pluginManager!.installLocal(specifier, scope, { entry })
         : ctx.pluginManager!.installLocal(specifier, scope);
     }
-    return withGithubPluginInstallProgress(ctx, specifier, options =>
-      entry
-        ? ctx.pluginManager!.installGithub(specifier, scope, { entry, ...options })
-        : ctx.pluginManager!.installGithub(specifier, scope, options),
+    return withPluginInstallProgress(
+      ctx,
+      'Installing GitHub plugin',
+      specifier,
+      'GitHub plugin install cancelled',
+      options =>
+        entry
+          ? ctx.pluginManager!.installGithub(specifier, scope, { entry, ...options })
+          : ctx.pluginManager!.installGithub(specifier, scope, options),
     );
   };
 

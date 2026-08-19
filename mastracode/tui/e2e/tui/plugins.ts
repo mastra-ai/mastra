@@ -25,6 +25,11 @@ let piRuntimePluginDir: string | undefined;
 let piRuntimeManager:
   | { reload: () => Promise<unknown>; getLoadedPlugins: () => unknown[]; getPiCommands: () => unknown[] }
   | undefined;
+let piPackageManagementSourceDir: string | undefined;
+let piPackageManagementProjectDir: string | undefined;
+let piPackageManagementManager:
+  | { getLoadedPlugins: () => Array<{ id: string; status: string; version?: string; toolNames: string[] }> }
+  | undefined;
 let hotReloadPluginDir: string | undefined;
 let githubPollSourceDir: string | undefined;
 let githubPollManager: { pollGithubSourcesForUpdates: () => Promise<boolean> } | undefined;
@@ -41,6 +46,9 @@ function resetPluginScenarioState(): void {
   currentTui = undefined;
   piRuntimePluginDir = undefined;
   piRuntimeManager = undefined;
+  piPackageManagementSourceDir = undefined;
+  piPackageManagementProjectDir = undefined;
+  piPackageManagementManager = undefined;
   hotReloadPluginDir = undefined;
   githubPollSourceDir = undefined;
   githubPollManager = undefined;
@@ -155,6 +163,31 @@ export default defineMastraCodePlugin({
   );
 
   return pluginDir;
+}
+
+function writePiPackageManagementFixture(projectDir: string, version: string): string {
+  const packageDir = join(projectDir, 'fixtures', 'pi-packages', 'management');
+  mkdirSync(packageDir, { recursive: true });
+  writeFileSync(
+    join(packageDir, 'package.json'),
+    JSON.stringify({
+      name: 'e2e-pi-package-management',
+      version,
+      pi: { extensions: ['./index.ts'] },
+      peerDependencies: { '@earendil-works/pi-agent-core': '^0.84.0' },
+    }),
+  );
+  writeFileSync(
+    join(packageDir, 'index.ts'),
+    `export default function (pi) {
+  pi.registerCommand('pi-package-version', {
+    handler: async (_args, ctx) => ctx.ui.notify('Pi Package ${version} active', 'info'),
+  });
+  pi.registerMarkdownTransformer(() => {});
+}
+`,
+  );
+  return packageDir;
 }
 
 function writePiRuntimePlugin(projectDir: string, version: string): string {
@@ -709,7 +742,9 @@ export const pluginsScaffoldInstallToolScenario: McE2eScenario = {
     terminal.submit('/plugins');
     await runtime.waitForScreenText(/Install new plugin/i, terminal, 8_000);
     terminal.write('\r');
-    await runtime.waitForScreenText(/Install plugin from:/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Install plugin type:/i, terminal, 8_000);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Install native plugin from:/i, terminal, 8_000);
     terminal.write('\x1b[B');
     terminal.write('\r');
     await runtime.waitForScreenText(/Local plugin path or discovered plugin:/i, terminal, 8_000);
@@ -732,6 +767,119 @@ export const pluginsScaffoldInstallToolScenario: McE2eScenario = {
     if (!names.includes('example_tool')) {
       throw new Error(`Expected provider request to expose scaffolded example_tool. Names: ${names.join(', ')}`);
     }
+  },
+};
+
+export const piPackageManagementScenario: McE2eScenario = {
+  name: 'pi-package-management',
+  description: 'Installs, inspects, updates, disables, and uninstalls a trusted local Pi Package through /plugins.',
+  testName: 'manages the full Pi Package lifecycle through the plugins UI',
+  prepare({ projectDir }) {
+    resetPluginScenarioState();
+    piPackageManagementProjectDir = projectDir;
+    piPackageManagementSourceDir = writePiPackageManagementFixture(projectDir, '1.0.0');
+  },
+  async inProcessApp({ homeDir, projectDir, startMastraCodeApp }) {
+    const { PluginManager } = await import('@mastra/code-sdk/plugins/manager');
+    const pluginManager = new PluginManager({ projectRoot: projectDir, configDir: '.mastracode', homeDir });
+    piPackageManagementManager = pluginManager;
+    return startMastraCodeApp({ config: { pluginManager } });
+  },
+  async run({ terminal, runtime }) {
+    runtime.startLiveOutput(terminal);
+    await runtime.waitForScreenText(/Resource ID:/i, terminal);
+    if (!piPackageManagementSourceDir || !piPackageManagementProjectDir || !piPackageManagementManager) {
+      throw new Error('Pi Package management E2E fixture was not prepared');
+    }
+
+    terminal.submit('/plugins');
+    await runtime.waitForScreenText(/Install new plugin/i, terminal, 8_000);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Install plugin type:/i, terminal, 8_000);
+    terminal.write('\x1b[B\r');
+    await runtime.waitForScreenText(/Pi Package source:/i, terminal, 8_000);
+    terminal.write('\x1b[B\x1b[B\r');
+    await runtime.waitForScreenText(/Local Pi Package directory:/i, terminal, 8_000);
+    terminal.submit(piPackageManagementSourceDir);
+    await runtime.waitForScreenText(/Install scope:/i, terminal, 8_000);
+    terminal.write('\x1b[B\r');
+    await runtime.waitForScreenText(/ARBITRARY CODE WARNING/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Immutable source:/i, terminal, 8_000);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Trust the project/i, terminal, 8_000);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Dependency installation script policy:/i, terminal, 8_000);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Compatibility: pi-partial/i, terminal, 8_000);
+    await runtime.waitForScreenText(/unsupported: registerMarkdownTransformer/i, terminal, 8_000);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/e2e-pi-package-management/i, terminal, 8_000);
+    await runtime.waitForScreenText(/pi-partial/i, terminal, 8_000);
+
+    const registryPath = join(piPackageManagementProjectDir, '.mastracode', 'plugins', 'plugins.json');
+    const installedRegistry = JSON.parse(readFileSync(registryPath, 'utf8'));
+    const installedRecord = installedRegistry.plugins['e2e-pi-package-management'];
+    if (installedRecord?.piPackage?.resolution?.resolvedSpecifier === undefined) {
+      throw new Error('Expected immutable Pi Package resolution in project registry');
+    }
+    const firstSourceRoot = join(
+      piPackageManagementProjectDir,
+      '.mastracode',
+      'plugins',
+      installedRecord.piPackage.resolution.sourceRoot,
+    );
+    if (!existsSync(firstSourceRoot)) throw new Error('Expected installed Pi Package source tree');
+
+    writePiPackageManagementFixture(piPackageManagementProjectDir, '2.0.0');
+    terminal.write('\x1b[B\r');
+    await runtime.waitForScreenText(/Update from source/i, terminal, 8_000);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Update Pi Package e2e-pi-package-management/i, terminal, 8_000);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Trust the project/i, terminal, 8_000);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Dependency installation script policy:/i, terminal, 8_000);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/e2e-pi-package-management@2\.0\.0/i, terminal, 8_000);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/pi-partial/i, terminal, 8_000);
+    const updatedRegistry = JSON.parse(readFileSync(registryPath, 'utf8'));
+    const updatedRecord = updatedRegistry.plugins['e2e-pi-package-management'];
+    if (updatedRecord?.version !== '2.0.0')
+      throw new Error(`Expected registry version 2.0.0, received ${updatedRecord?.version}`);
+    const updatedSourceRoot = join(
+      piPackageManagementProjectDir,
+      '.mastracode',
+      'plugins',
+      updatedRecord.piPackage.resolution.sourceRoot,
+    );
+    if (!existsSync(updatedSourceRoot)) throw new Error('Expected updated Pi Package source tree');
+    if (existsSync(firstSourceRoot)) throw new Error('Superseded Pi Package source remained after update');
+
+    terminal.write('\x1b[B\r');
+    await runtime.waitForScreenText(/Update from source/i, terminal, 8_000);
+    terminal.write('\x1b[B\x1b[B\r');
+    await runtime.waitForScreenText(/inactive/i, terminal, 8_000);
+    const inactive = piPackageManagementManager
+      .getLoadedPlugins()
+      .find(plugin => plugin.id === 'e2e-pi-package-management');
+    if (inactive?.status !== 'inactive') throw new Error(`Expected inactive Pi Package, received ${inactive?.status}`);
+
+    terminal.write('\x1b[B\r');
+    await runtime.waitForScreenText(/Uninstall/i, terminal, 8_000);
+    terminal.write('\x1b[B\x1b[B\x1b[B\r');
+    await runtime.sleep(100);
+    const uninstalledRegistry = JSON.parse(readFileSync(registryPath, 'utf8'));
+    if (uninstalledRegistry.plugins['e2e-pi-package-management']) {
+      throw new Error('Pi Package registry record remained after uninstall');
+    }
+    if (piPackageManagementManager.getLoadedPlugins().some(plugin => plugin.id === 'e2e-pi-package-management')) {
+      throw new Error('Pi Package runtime remained after uninstall');
+    }
+    if (existsSync(updatedSourceRoot)) throw new Error('Pi Package source remained after uninstall');
+
+    console.log('PROOF: GREEN — Pi packages run in Mastra Code');
+    terminal.keyCtrlC();
   },
 };
 
@@ -1298,8 +1446,8 @@ export const pluginsCommandUiScenario: McE2eScenario = {
     await runtime.waitForScreenText(/active/i, terminal, 8_000);
 
     terminal.write('\r');
-    await runtime.waitForScreenText(/Install plugin from:/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Local path/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Install plugin type:/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Native Mastra Code plugin/i, terminal, 8_000);
     terminal.write('\x1b');
     await runtime.sleep(100);
 

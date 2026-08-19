@@ -135,6 +135,10 @@ describe('Pi Package lifecycle', () => {
     expect(manager.getPluginTools().pi_lifecycle_tool?.description).toBe('1.0.0');
     expect(manager.getPluginSkillPaths()).toEqual([path.join(characterized.resolution.packageRoot, 'skills')]);
 
+    manager.discardPiPackageCandidate(characterized);
+    expect(fs.existsSync(characterized.resolution.sourceRoot)).toBe(true);
+    expect(fs.existsSync(characterized.resolution.packageRoot)).toBe(true);
+
     await manager.reloadPiPackage('pi-lifecycle', 'project');
     expect(manager.getPiGenerations()[0]).toBe(firstGeneration);
     await manager.installPiPackage(characterized, { confirmEnable: true });

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const execaMock = vi.hoisted(() => vi.fn());
 vi.mock('execa', () => ({ execa: execaMock }));
 
+import { PluginManager } from '../manager.js';
 import { characterizePiPackage, createPiPackageRecord, preparePiPackage } from './package-intake.js';
 
 let tempDir: string | undefined;
@@ -85,6 +86,24 @@ describe('Pi Package intake trust boundary', () => {
     const installArgs = execaMock.mock.calls[0]?.[1] as string[];
     expect(installArgs).not.toContain('--ignore-scripts');
     expect(characterized.trust.installScripts).toBe('allow');
+  });
+
+  it('requires explicit trust through the non-interactive manager API and cleans cancelled candidates', async () => {
+    const fixture = makeFixture();
+    const manager = new PluginManager(fixture);
+    try {
+      const prepared = await manager.preparePiPackage('./fixture', 'project');
+      await expect(
+        manager.characterizePiPackage(prepared, { trustCodeExecution: false, installScripts: 'deny' } as never),
+      ).rejects.toThrow('code-execution trust');
+      expect(fs.existsSync(fixture.factoryMarker)).toBe(false);
+      expect(fs.existsSync(prepared.resolution.sourceRoot)).toBe(true);
+
+      manager.discardPiPackageCandidate(prepared);
+      expect(fs.existsSync(prepared.resolution.sourceRoot)).toBe(false);
+    } finally {
+      await manager.dispose();
+    }
   });
 
   it('characterizes only after trust and creates an owned record after applying the script policy', async () => {
