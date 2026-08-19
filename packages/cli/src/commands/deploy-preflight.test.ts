@@ -98,7 +98,8 @@ describe('preflightBuildOutput', () => {
         const issues = await preflightBuildOutput(tmpDir, { REDIS_URL: 'redis://localhost:6379' });
         const issue = issues.find(i => i.code === 'LOCALHOST_ENV_VAR');
         expect(issue?.severity).toBe('warning');
-        expect(issue?.message).toContain('redis://localhost:6379');
+        expect(issue?.message).toContain('REDIS_URL');
+        expect(issue?.message).toContain('localhost:6379');
         expect(issue?.autofix).toEqual({
           kind: 'create-managed-database',
           provider: 'redis',
@@ -106,12 +107,16 @@ describe('preflightBuildOutput', () => {
         });
       });
 
-      it('flags loopback IPs too (127.0.0.1)', async () => {
+      it('flags loopback IPs too (127.0.0.1) without echoing credentials', async () => {
         writeBundle(`const url = process.env.REDIS_URL;`);
         const issues = await preflightBuildOutput(tmpDir, {
           REDIS_URL: 'redis://default:secret@127.0.0.1:6379',
         });
-        expect(issues.find(i => i.code === 'LOCALHOST_ENV_VAR')).toBeDefined();
+        const issue = issues.find(i => i.code === 'LOCALHOST_ENV_VAR');
+        expect(issue).toBeDefined();
+        expect(issue!.message).toContain('127.0.0.1:6379');
+        expect(issue!.message).not.toContain('secret');
+        expect(issue!.message).not.toContain('default');
       });
 
       it('does not flag hosted URLs', async () => {

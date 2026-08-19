@@ -376,6 +376,16 @@ export function isLocalhostUrl(value: string): boolean {
   );
 }
 
+/**
+ * The host (hostname + port) of a localhost URL, safe to echo in warnings.
+ * Never returns credentials — connection strings can carry passwords and
+ * preflight output lands in CI logs. Only called on values that already
+ * passed {@link isLocalhostUrl}, so the URL parse cannot fail.
+ */
+function localhostHostOf(value: string): string {
+  return new URL(value).host;
+}
+
 function checkEnvVarNames(
   referenced: Iterable<string>,
   envVars: Record<string, string>,
@@ -399,7 +409,9 @@ function checkEnvVarNames(
         issues.push({
           code: 'LOCALHOST_ENV_VAR',
           severity: 'warning',
-          message: `${name} in the env file being deployed points at localhost (${envVars[name]}) — the deployed server won't be able to reach it.`,
+          // Only the host is echoed — connection URLs can carry credentials,
+          // and preflight warnings end up in CI logs.
+          message: `${name} in the env file being deployed points at localhost (${localhostHostOf(envVars[name]!)}) — the deployed server won't be able to reach it.`,
           fix: `Point ${name} at a hosted ${autofix.provider} instance, or let \`mastra deploy\` provision a managed ${autofix.provider} for this environment.`,
           autofix,
         });
