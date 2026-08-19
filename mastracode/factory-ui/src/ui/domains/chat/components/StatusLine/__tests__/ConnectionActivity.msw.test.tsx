@@ -49,16 +49,13 @@ function renderActivity(status: ChatConnectionApi['status'], busy: boolean) {
 }
 
 describe('ConnectionActivity', () => {
-  it('given the stream drops while the agent runs, then the status line still shows the reconnect', () => {
-    renderActivity('reconnecting', true);
+  it.each([
+    ['reconnecting', 'Reconnecting…'],
+    ['error', 'Disconnected'],
+  ] as const)('given the %s stream while the agent runs, then it outranks the working state', (status, label) => {
+    renderActivity(status, true);
 
-    expect(screen.getByText('Reconnecting…')).toBeVisible();
-  });
-
-  it('given the connection is lost for good, then the status line says so instead of Working', () => {
-    renderActivity('error', true);
-
-    expect(screen.getByText('Disconnected')).toBeVisible();
+    expect(screen.getByText(label)).toBeVisible();
     expect(screen.queryByText('Working…')).toBeNull();
   });
 });
