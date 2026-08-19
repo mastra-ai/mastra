@@ -506,6 +506,33 @@ describe('transcript reducer message entries', () => {
     expect(state.entries).toHaveLength(1);
     expect(messageParts(state.entries[0])).toEqual(reidentified.content.parts);
   });
+
+  it('draws a rotated turn as its own entry even when its text repeats the last one', () => {
+    // The run loop seals one response and opens the next at a step boundary, and
+    // the engine announces the new id on its first empty text part. That
+    // announcement is what tells a fresh turn apart from a re-identified one
+    // when the model happens to open with the same words.
+    const first = dbMessage('turn-1', 'assistant', [{ type: 'text', text: 'Let me check' }]);
+    let state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'message_start', message: first },
+    });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: first } });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'message_start', message: dbMessage('turn-2', 'assistant', [{ type: 'text', text: '' }]) },
+    });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('turn-2', 'assistant', [{ type: 'text', text: 'Let me check the tests too' }]),
+      },
+    });
+
+    expect(state.entries).toHaveLength(2);
+    expect(messageParts(state.entries[0])).toEqual(first.content.parts);
+  });
 });
 
 describe('transcript reducer mergeWindow', () => {
