@@ -1,6 +1,6 @@
 import type { Agent } from '../agent';
 import type { MastraDBMessage, MastraProviderMetadata } from '../agent/message-list/state/types';
-import { createSignal } from '../agent/signals';
+import { createSignal, resolveDeliveryAttributes } from '../agent/signals';
 import type { AgentSignalAttributes, AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import type {
   AgentThreadSubscription,
@@ -3342,14 +3342,14 @@ export class Session<TState = unknown> {
         ? { type: 'user', tagName: 'user', contents: input.content, providerOptions: input.providerOptions }
         : input;
     // A steer's abort leaves the delivery route reading idle, so the interjection is
-    // stamped from this snapshot instead. Caller-supplied delivery attributes win.
+    // stamped from this snapshot instead. An explicit delivery from the caller wins.
     const interjected =
       submittedIsRunning || (submittedAbortRequested && Boolean(submittedRunId ?? submittedActiveRunId));
-    const signal = createSignal(
-      signalInput.type === 'user' && interjected
-        ? { ...signalInput, attributes: { delivery: 'while-active', ...signalInput.attributes } }
-        : signalInput,
-    );
+    const created = createSignal(signalInput);
+    const signal =
+      interjected && created.type === 'user' && created.attributes?.delivery === undefined
+        ? resolveDeliveryAttributes(created, { delivery: 'while-active' })
+        : created;
     const accepted = Promise.resolve().then(async () => {
       if (!this.thread.getId()) {
         const thread = await this.thread.create();
