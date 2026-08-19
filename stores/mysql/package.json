@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mysql",
-  "version": "0.8.0-alpha.3",
+  "version": "0.8.1-alpha.0",
   "description": "MySQL provider for Mastra - db storage capabilities",
   "type": "module",
   "main": "dist/index.js",

@@ -31,6 +31,7 @@ export function setupKeyboardShortcuts(
   state: TUIState,
   callbacks: {
     stop: () => void;
+    exit?: (exitCode: number) => void;
     doubleCtrlCMs: number;
     queueFollowUpMessage: (text: string) => void;
   },
@@ -41,7 +42,9 @@ export function setupKeyboardShortcuts(
     if (now - state.lastCtrlCTime < callbacks.doubleCtrlCMs) {
       // Double Ctrl+C → exit
       callbacks.stop();
-      process.exit(0);
+      if (callbacks.exit) callbacks.exit(0);
+      else process.exit(0);
+      return;
     }
     state.lastCtrlCTime = now;
 
@@ -114,7 +117,8 @@ export function setupKeyboardShortcuts(
   // Ctrl+D - exit when editor is empty
   state.editor.onCtrlD = () => {
     callbacks.stop();
-    process.exit(0);
+    if (callbacks.exit) callbacks.exit(0);
+    else process.exit(0);
   };
 
   // Ctrl+T - toggle thinking blocks visibility
@@ -463,6 +467,17 @@ export function setupAutocomplete(state: TUIState): void {
         ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
     },
     {
+      name: 'profile',
+      description: 'Control process memory diagnostics',
+      getArgumentCompletions: (argumentPrefix: string) =>
+        [
+          { value: 'status', label: 'status', description: 'Show diagnostics status and latest process sample' },
+          { value: 'start', label: 'start', description: 'Start process memory diagnostics' },
+          { value: 'capture', label: 'capture', description: 'Persist an allocation profile without forcing GC' },
+          { value: 'stop', label: 'stop', description: 'Write final artifacts and stop diagnostics' },
+        ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
+    },
+    {
       name: 'prune',
       description: 'Prune old storage data (closes the TUI, shows progress)',
       getArgumentCompletions: (argumentPrefix: string) =>
@@ -597,6 +612,7 @@ export function setupKeyHandlers(
   state: TUIState,
   callbacks: {
     stop: () => void;
+    exit?: (exitCode: number) => void;
     doubleCtrlCMs: number;
   },
 ): () => void {
@@ -605,7 +621,9 @@ export function setupKeyHandlers(
     const now = Date.now();
     if (now - state.lastCtrlCTime < callbacks.doubleCtrlCMs) {
       callbacks.stop();
-      process.exit(0);
+      if (callbacks.exit) callbacks.exit(0);
+      else process.exit(0);
+      return;
     }
     state.lastCtrlCTime = now;
     if (abortActiveGoalJudge(state)) {

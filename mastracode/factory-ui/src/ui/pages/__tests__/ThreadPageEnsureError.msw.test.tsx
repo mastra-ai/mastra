@@ -144,6 +144,16 @@ describe('ThreadPage workspace preparation failure', () => {
     ).toBeInTheDocument();
     const retry = screen.getByRole('button', { name: 'Retry' });
 
+    // The warm-up failure is a banner, not a wall: the composer stays mounted
+    // and usable while the error is visible, because the run path can still
+    // materialize the sandbox lazily.
+    const composer = await screen.findByRole('region', { name: 'Thread composer' });
+    expect(composer).toBeInTheDocument();
+    const input = screen.getByRole('textbox');
+    expect(input).toBeEnabled();
+    await userEvent.type(input, 'still usable');
+    expect(input).toHaveValue('still usable');
+
     // Retry re-runs preparation; on success the error clears and the thread mounts.
     await userEvent.click(retry);
     expect(await screen.findByRole('region', { name: 'Thread composer' })).toBeInTheDocument();

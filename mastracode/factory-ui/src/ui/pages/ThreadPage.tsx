@@ -16,7 +16,6 @@ import { ChatHeader } from '../domains/chat/components/ChatHeader';
 import { FactorySessionHeader } from '../domains/factory/components/RelatedFactorySessions';
 import { ComposerPanel } from '../domains/chat/components/ComposerPanel';
 import { ActivityLine } from '../domains/chat/components/ActivityLine';
-import { ConnectionNotice } from '../domains/chat/components/ConnectionNotice';
 import { EmptyThreadState } from '../domains/chat/components/EmptyThreadState';
 import { GoalPanel } from '../domains/chat/components/GoalPanel';
 import { TaskPanel } from '../domains/chat/components/TaskPanel';
@@ -110,7 +109,6 @@ function ThreadPageMain({
             {railFits && <ThreadRailLayer />}
             <ChatShell.Content className="gap-0 pt-6">
               <ChatShell.Column className="flex-1">
-                <ConnectionNotice />
                 <ChatMessageBoundary>
                   <ThreadTranscript />
                 </ChatMessageBoundary>

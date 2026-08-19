@@ -17,6 +17,7 @@ import { getGithubPat } from './integrations/github/pat.js';
 import type { GithubPatKind } from './integrations/github/pat.js';
 import {
   checkoutSessionBranch,
+  hasExistingCheckout,
   DEFAULT_COMMAND_TIMEOUT_MS,
   MaterializeError,
   materializeRepo,
@@ -26,6 +27,7 @@ import {
 } from './integrations/github/sandbox.js';
 import { registerGithubPatKind, registerGithubTokenInjector } from './integrations/github/token-refresh.js';
 import { getFactorySessionAddress } from './rules/binding-context.js';
+import { baseCheckpointIsStale } from './sandbox/base-checkpoint-triggers.js';
 import type { SandboxBindingStore, SandboxFleet } from './sandbox/fleet.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 
@@ -34,6 +36,47 @@ const SESSION_CHECKPOINT_PREFIX = 'mastracode-session';
 
 export function checkpointNameForSession(sessionId: string): string {
   return `${SESSION_CHECKPOINT_PREFIX}-${sessionId}`;
+}
+
+/**
+ * Whether a command failure means the sandbox itself is gone (destroyed by
+ * idle GC or provider teardown) AND the command provably never started, so
+ * reviving the sandbox and replaying the command cannot run a side effect
+ * twice. Matched by error name so any provider's equivalent error classes
+ * participate without a package dependency.
+ *
+ * `SandboxExecTransportError` means both WebSocket attempts closed without an
+ * exit frame against a live sandbox. It only proves the command never started
+ * when the transport never opened (`opened: false` — the upgrade was refused
+ * outright). When the transport opened, the command may have run and mutated
+ * state before the result was lost, so replaying `git commit`, uploads, or
+ * arbitrary shell commands could execute the side effect twice; those errors
+ * surface to the caller instead.
+ */
+export function isDeadSandboxError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  if (error.name === 'SandboxDestroyedError') return true;
+  if (error.name === 'SandboxExecTransportError') {
+    return (error as Error & { opened?: boolean }).opened === false;
+  }
+  return /sandbox .*(destroyed|no longer exists|not found)/i.test(error.message);
+}
+
+/**
+ * The local-provider equivalent of {@link isDeadSandboxError}: a local sandbox
+ * is just a directory, so it "dies" when that directory is removed — which
+ * session retirement does while an in-flight run still holds the handle.
+ *
+ * Node surfaces a missing `cwd` as ENOENT against the binary it tried to spawn
+ * (`spawn /bin/sh ENOENT`), which is textually identical to the shell itself
+ * being absent, and is also what a genuinely missing command reports. Probing
+ * the working directory is what separates "the sandbox is gone" from "that
+ * command does not exist", so only the former triggers a rebuild.
+ */
+export function isMissingWorkdirError(error: unknown, workdir: string | undefined): boolean {
+  if (!workdir) return false;
+  if ((error as NodeJS.ErrnoException | null)?.code !== 'ENOENT') return false;
+  return !existsSync(workdir);
 }
 
 const bundleDirectory = dirname(fileURLToPath(import.meta.url));
@@ -114,6 +157,52 @@ class FactorySkillSource implements SkillSource {
   }
 }
 
+function skillSourceEnoent(skillPath: string): Error {
+  const error = new Error(`ENOENT: no such file or directory, '${skillPath}'`) as Error & { code: string };
+  error.code = 'ENOENT';
+  return error;
+}
+
+/**
+ * Sandbox-backed skill fallback that stays inert until the session sandbox is
+ * actually materialized. Skill discovery runs on latency-sensitive paths (the
+ * Factory start coordinator resolves the kickoff skill before the start route
+ * responds); without this guard the first project-root read would hit the lazy
+ * sandbox handle and force full provisioning + repo materialization. While the
+ * sandbox is unmaterialized, project skill roots simply appear empty — bundled
+ * Factory skills resolve from local disk via `FactorySkillSource`. Once the
+ * sandbox exists, every call delegates straight through.
+ */
+class UnmaterializedAwareSkillSource implements SkillSource {
+  constructor(
+    readonly fallback: SkillSource,
+    readonly isMaterialized: () => boolean,
+  ) {}
+
+  async exists(skillPath: string): Promise<boolean> {
+    return this.isMaterialized() ? this.fallback.exists(skillPath) : false;
+  }
+
+  async stat(skillPath: string): Promise<SkillSourceStat> {
+    if (!this.isMaterialized()) throw skillSourceEnoent(skillPath);
+    return this.fallback.stat(skillPath);
+  }
+
+  async readFile(skillPath: string): Promise<string | Buffer> {
+    if (!this.isMaterialized()) throw skillSourceEnoent(skillPath);
+    return this.fallback.readFile(skillPath);
+  }
+
+  async readdir(skillPath: string): Promise<SkillSourceEntry[]> {
+    return this.isMaterialized() ? this.fallback.readdir(skillPath) : [];
+  }
+
+  realpath(skillPath: string): Promise<string> {
+    if (!this.isMaterialized()) return Promise.resolve(skillPath);
+    return this.fallback.realpath ? this.fallback.realpath(skillPath) : Promise.resolve(skillPath);
+  }
+}
+
 const factorySkillExtension: WorkspaceSkillExtension = {
   id: 'web-factory',
   paths: [FACTORY_SKILLS_MOUNT],
@@ -186,12 +275,21 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     generation: number;
     tokenReplacementPending: boolean;
   };
+  type FleetSandbox = Awaited<ReturnType<SandboxFleet['ensureSandbox']>>;
   const githubTokenInjectors = new Map<string, GithubTokenRegistration>();
   const githubTokenReconciliations = new Map<string, Promise<void>>();
   // Concurrent requests for the same session (thread list + activity polling +
   // chat) must not each provision a sandbox and clone the repository. The
-  // first caller materializes; followers await the same promise.
-  const inflightMaterializations = new Map<string, Promise<Workspace>>();
+  // first caller materializes; followers await the same promise. Failed
+  // materializations are dropped from the map so the next use retries.
+  const inflightMaterializations = new Map<string, Promise<FleetSandbox>>();
+  // Fully materialized sandboxes, keyed by workspace id. The lazy sandbox
+  // handle delegates here once materialization completed.
+  const materializedSandboxes = new Map<string, FleetSandbox>();
+  // Workspace identity cache: concurrent resolutions of the same session must
+  // observe the same Workspace object even when no Mastra registry is wired
+  // (the registry stays the source of truth when present).
+  const constructedWorkspaces = new Map<string, Workspace>();
 
   return async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
     const effectiveSkillExtension = skillExtension ?? factorySkillExtension;
@@ -233,8 +331,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       id: session.projectRepositoryId,
     });
     if (!projectRepository) throw new Error(`Repository link ${session.projectRepositoryId} was not found`);
-    const connection = await storage.connections.get({ orgId: session.orgId, id: projectRepository.connectionId });
-    const repository = await storage.repositories.get({ orgId: session.orgId, id: projectRepository.repositoryId });
+    // The remaining reads only depend on the repository link — issue them in
+    // parallel instead of paying four sequential storage round-trips.
+    const [connection, repository] = await Promise.all([
+      storage.connections.get({ orgId: session.orgId, id: projectRepository.connectionId }),
+      storage.repositories.get({ orgId: session.orgId, id: projectRepository.repositoryId }),
+    ]);
     if (!connection || !repository) throw new Error(`Repository link ${session.projectRepositoryId} is incomplete`);
     const installation = await storage.installations.get({ orgId: session.orgId, id: connection.installationId });
     if (!installation) throw new Error(`GitHub installation ${connection.installationId} was not found`);
@@ -250,8 +352,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // During createSession this seeds the session's initial state (the
     // workspace resolves before the session is built); on later requests it
     // self-heals live state.
+    let stateSeeded = false;
     if (ctx && workdir && ctx.getState()?.projectPath !== workdir) {
       await ctx.setState({ projectPath: workdir, projectName: repoFullName });
+      stateSeeded = true;
     }
     const binding: SandboxBindingStore = {
       // Read through to the session row so teardown after a fresh provision
@@ -260,6 +364,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         return session.sandboxId;
       },
       checkpointName: checkpointNameForSession(session.id),
+      // Boot-only fallback: a brand-new session (no session checkpoint yet)
+      // seeds from the repo's warm base checkpoint when one is available and
+      // still matches the current setup command. Snapshots keep writing to
+      // the session checkpoint, so the shared base image is never mutated.
+      ...(!session.materializedAt && projectRepository.baseCheckpoint && !baseCheckpointIsStale(projectRepository)
+        ? { seedCheckpointName: projectRepository.baseCheckpoint.name }
+        : {}),
       setSandboxId: async id => {
         await storage.sessions.setSandbox({ id: session.id, sandboxId: id, sandboxWorkdir: workdir });
         session.sandboxId = id;
@@ -378,6 +489,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           }
           if (evicted && githubTokenInjectors.get(workspaceId) === registered) {
             githubTokenInjectors.delete(workspaceId);
+            materializedSandboxes.delete(workspaceId);
+            constructedWorkspaces.delete(workspaceId);
           }
         }
         throw error;
@@ -391,16 +504,31 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     let existing: Workspace | undefined;
     try {
       existing = mastra?.getWorkspaceById(workspaceId) as Workspace | undefined;
-      existing?.setToolsConfig(MASTRACODE_WORKSPACE_TOOLS);
     } catch {
       // Not registered yet.
       existing = undefined;
     }
+    existing ??= constructedWorkspaces.get(workspaceId);
     if (existing) {
+      existing.setToolsConfig(MASTRACODE_WORKSPACE_TOOLS);
+      // A materialization kicked off by another caller may still be running.
+      // Deliberately do NOT wait for it: a metadata-only resolution (thread
+      // list, messages, activity) must not block on the clone/setup that lazy
+      // materialization exists to avoid. Token reconciliation below no-ops
+      // until the leader registers the injector, and the next reuse after
+      // materialization completes reconciles against the live sandbox.
       return reconcileRegisteredWorkspace(existing);
     }
 
-    const materialize = async (): Promise<Workspace> => {
+    const retiredError = () =>
+      new Error(`Factory session ${session.sessionId} was retired during workspace materialization`);
+    const materializeSandbox = async (): Promise<FleetSandbox> => {
+      // A session already retired by the time a held lazy handle re-enters
+      // materialization must not provision anything — bail before touching
+      // the pool or the fleet budget.
+      if (workspaceRegistry.generation(session.sessionId) !== workspaceGeneration) {
+        throw retiredError();
+      }
       // A terminal work item or a deleted session may have returned a
       // still-warm VM — with this repository already cloned — to the reuse
       // pool. Adopt it before provisioning a fresh sandbox. Pooled VMs carry
@@ -441,13 +569,17 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           ...(isLocalSandbox ? { workingDirectory: workdir } : {}),
           actingUserId: userId,
         });
-      const runMaterialize = (target: Awaited<ReturnType<typeof ensureSandbox>>) =>
+      const runMaterialize = (target: Awaited<ReturnType<typeof ensureSandbox>>, skipPull: boolean) =>
         materializeRepo({
           row: { id: session.id, sandboxWorkdir: workdir, materializedAt: session.materializedAt },
           repoInfo: { repoFullName: repoFullName, defaultBranch: repository.defaultBranch },
           sandbox: target,
           token,
           storage: storage.sessions,
+          // A checkpoint-seeded checkout is already at (or minutes behind) the
+          // default branch HEAD — skip the redundant network pull so the first
+          // agent turn isn't stalled behind it.
+          skipPullOnExistingCheckout: skipPull,
         });
       const isGitMissing = (error: unknown) => error instanceof MaterializeError && error.code === 'git-missing';
 
@@ -457,8 +589,16 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // pooled VM was already reaped, `ensureSandbox` provisioned fresh and
       // the recycle is a no-op (no checkout on disk yet).
       if (claimedPooledSandbox) await recycleClaimedWorkdir(sandbox, workdir, repository.defaultBranch);
+      // A never-materialized session whose workdir already holds this repo's
+      // checkout was seeded from the warm base checkpoint — the setup command
+      // already ran during the base build, so skip it below.
+      const seededFromBaseCheckpoint =
+        !!binding.seedCheckpointName &&
+        !session.materializedAt &&
+        !claimedPooledSandbox &&
+        (await hasExistingCheckout(sandbox, workdir, repoFullName));
       try {
-        await runMaterialize(sandbox);
+        await runMaterialize(sandbox, seededFromBaseCheckpoint);
       } catch (error) {
         if (!isGitMissing(error)) throw error;
         // A sandbox without git was booted from a bare base image (e.g. the
@@ -469,7 +609,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         await fleet.teardownSandbox(binding, sandbox);
         sandbox = await ensureSandbox();
         try {
-          await runMaterialize(sandbox);
+          // The retry runs on a freshly provisioned VM with no checkout, so
+          // the skip flag is moot — pass false to take the normal clone path.
+          await runMaterialize(sandbox, false);
         } catch (retryError) {
           // Still bare — the provider's template is persistently broken.
           // Clear the binding so a later manual retry provisions fresh.
@@ -483,7 +625,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         token,
         repoFullName: repoFullName,
       });
-      if (projectRepository.setupCommand) {
+      // A checkpoint-seeded checkout already ran the setup command during the
+      // base build, so re-running it here is pure latency.
+      if (projectRepository.setupCommand && !seededFromBaseCheckpoint) {
         try {
           await runWorktreeSetup(sandbox, workdir, projectRepository.setupCommand);
         } catch (setupError) {
@@ -518,60 +662,198 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         generation: 0,
         tokenReplacementPending: false,
       };
+      // The session can be retired while this deferred phase is in flight.
+      // Registration happened back at construction time (the workspace exists
+      // before it materializes), so the retirement callback has already torn
+      // the workspace down — tear the just-built sandbox back down (freeing
+      // its binding and, on remote providers, its fleet budget slot) and
+      // surface the retirement to the caller instead of handing back a
+      // sandbox belonging to a dead session.
+      if (workspaceRegistry.generation(session.sessionId) !== workspaceGeneration) {
+        try {
+          await fleet.teardownSandbox(binding, sandbox);
+        } catch (teardownError) {
+          console.warn('[Mastra Factory] Sandbox teardown after mid-materialization retirement failed', {
+            orgId: session.orgId,
+            sessionId: session.sessionId,
+            error: teardownError instanceof Error ? teardownError.message.slice(-2000) : String(teardownError),
+          });
+        }
+        throw retiredError();
+      }
       githubTokenInjectors.set(workspaceId, tokenRegistration);
       registerGithubTokenContext(tokenRegistration);
-
-      const filesystem = new SandboxFilesystem({ sandbox, workdir });
-      const projectSkillPaths = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'];
-      const skillPaths = [...(effectiveSkillExtension?.paths ?? []), ...projectSkillPaths];
-      const workspace = new Workspace({
-        id: workspaceId,
-        name: 'Mastra Code Factory Session Workspace',
-        filesystem,
-        sandbox: sandbox as unknown as ConstructorParameters<typeof Workspace>[0]['sandbox'],
-        tools: MASTRACODE_WORKSPACE_TOOLS,
-        skills: skillPaths,
-        skillSource: effectiveSkillExtension?.createSource(filesystem, projectSkillPaths) ?? filesystem,
-      });
-      // Register with the Mastra instance so sync HTTP handlers that resolve
-      // the workspace via `mastra.getWorkspaceById(id)` (file tree, permissions
-      // probe, MCP/tool routes) find it instead of throwing
-      // `MASTRA_GET_WORKSPACE_BY_ID_NOT_FOUND`. `addWorkspace` is idempotent on
-      // key collision, so the inflight coalescing and reuse paths above stay
-      // race-safe. Registration happens synchronously with the return so a
-      // concurrent lookup on another request cannot observe an unregistered
-      // workspace.
-      mastra?.addWorkspace(workspace, workspaceId, { source: 'mastra' });
-      const registered = await workspaceRegistry.register(
-        session.sessionId,
-        workspaceId,
-        workspaceGeneration,
-        async () => {
-          githubTokenInjectors.delete(workspaceId);
-          await mastra?.removeWorkspace?.(workspaceId);
-        },
-      );
-      if (!registered) {
-        throw new Error(`Factory session ${session.sessionId} was retired during workspace materialization`);
-      }
-      return workspace;
+      return sandbox;
     };
 
-    // Dedupe concurrent materializations of the same workspace: followers
-    // await the leader's promise instead of provisioning a second sandbox,
-    // then bind the shared token injector into their own request context.
-    const inflight = inflightMaterializations.get(workspaceId);
-    if (inflight) {
-      const workspace = await inflight;
-      return reconcileRegisteredWorkspace(workspace);
+    // Memoized deferred phase. The first caller (a background warm-up at
+    // session start, or the first FS/sandbox operation) materializes; followers
+    // await the same in-flight promise. Failures are dropped from the map so
+    // the next use retries instead of caching a broken sandbox.
+    const ensureMaterialized = async (): Promise<FleetSandbox> => {
+      const ready = materializedSandboxes.get(workspaceId);
+      if (ready) return ready;
+      let inflight = inflightMaterializations.get(workspaceId);
+      if (!inflight) {
+        inflight = materializeSandbox();
+        inflightMaterializations.set(workspaceId, inflight);
+        inflight.then(
+          sb => {
+            materializedSandboxes.set(workspaceId, sb);
+            // Project skill roots (.claude/skills etc.) were reported empty by
+            // the unmaterialized-source guard during discovery; rescan now that
+            // the checkout exists so repo-local skills become visible without
+            // waiting for the maybeRefresh cooldown. Fire-and-forget.
+            void workspace.skills?.refresh().catch(() => {});
+          },
+          () => {},
+        );
+      }
+      try {
+        return await inflight;
+      } finally {
+        if (inflightMaterializations.get(workspaceId) === inflight) {
+          inflightMaterializations.delete(workspaceId);
+        }
+      }
+    };
+
+    // Lazy sandbox handle: resolution returns immediately and the sandbox
+    // work (provision/boot-from-checkpoint + materialize + checkout + setup)
+    // runs on first use. Metadata-only resolutions (thread-list polling)
+    // never touch it.
+    const lazySandbox = {
+      get id() {
+        return materializedSandboxes.get(workspaceId)?.id ?? workspaceId;
+      },
+      name: 'Factory Lazy Sandbox',
+      get provider() {
+        return fleet.provider;
+      },
+      get status() {
+        return materializedSandboxes.has(workspaceId) ? 'ready' : 'pending';
+      },
+      get supportsCheckpoints() {
+        return materializedSandboxes.get(workspaceId)?.supportsCheckpoints ?? false;
+      },
+      getInstructions() {
+        // Prefer the live sandbox's instructions once materialized; before
+        // that, forward the configured template machine's instructions so
+        // tool descriptions are accurate without forcing materialization.
+        return materializedSandboxes.get(workspaceId)?.getInstructions?.() ?? fleet.getInstructions();
+      },
+      clone(): never {
+        throw new Error('The Factory session sandbox cannot be cloned from a lazy handle.');
+      },
+      async start() {
+        // Intentionally a no-op. `Workspace.init()` calls `sandbox.start()`
+        // during session creation, and sessions are get-or-created by
+        // metadata-only GET routes (/threads, /messages). Materializing here
+        // would provision a sandbox for every read-only poll. The sandbox
+        // materializes on first real use (executeCommand/getInfo) instead.
+      },
+      async getInfo() {
+        const sandbox = await ensureMaterialized();
+        return sandbox.getInfo();
+      },
+      async executeCommand(command: string, args?: string[], options?: Record<string, unknown>) {
+        const sandbox = await ensureMaterialized();
+        try {
+          return await sandbox.executeCommand(command, args, options);
+        } catch (error) {
+          if (!isDeadSandboxError(error) && !(isLocalSandbox && isMissingWorkdirError(error, workdir))) throw error;
+          // The sandbox died mid-session (idle GC, provider destroy, broken
+          // transport, or a retired local checkout removed from under us).
+          // Drop the dead handle and re-run the materialization
+          // pipeline — fleet's ensureSandbox walks the revival ladder
+          // (reattach → checkpoint-seeded provision → fresh clone) — then
+          // retry the command once. Concurrent failures coalesce onto the
+          // same revival through `inflightMaterializations`.
+          if (materializedSandboxes.get(workspaceId) === sandbox) {
+            materializedSandboxes.delete(workspaceId);
+          }
+          const revived = await ensureMaterialized();
+          return revived.executeCommand(command, args, options);
+        }
+      },
+      setEnvironmentVariable(name: string, value: string) {
+        const sandbox = materializedSandboxes.get(workspaceId);
+        if (!sandbox?.setEnvironmentVariable) {
+          throw new Error('The Factory session sandbox is not materialized yet.');
+        }
+        sandbox.setEnvironmentVariable(name, value);
+      },
+      async snapshot() {
+        // Nothing to checkpoint before the sandbox exists.
+        await materializedSandboxes.get(workspaceId)?.snapshot?.();
+      },
+      async stop() {
+        await materializedSandboxes.get(workspaceId)?.stop?.();
+      },
+    };
+
+    const filesystem = new SandboxFilesystem({
+      id: `sandbox-fs:${workspaceId}:${workdir}`,
+      sandbox: lazySandbox,
+      workdir,
+    });
+    const projectSkillPaths = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'];
+    const guardedSkillFallback = new UnmaterializedAwareSkillSource(filesystem, () =>
+      materializedSandboxes.has(workspaceId),
+    );
+    const skillPaths = [...(effectiveSkillExtension?.paths ?? []), ...projectSkillPaths];
+    const workspace = new Workspace({
+      id: workspaceId,
+      name: 'Mastra Code Factory Session Workspace',
+      filesystem,
+      sandbox: lazySandbox as unknown as ConstructorParameters<typeof Workspace>[0]['sandbox'],
+      tools: MASTRACODE_WORKSPACE_TOOLS,
+      skills: skillPaths,
+      // Project skill roots live in the sandbox checkout; guard them so skill
+      // discovery before materialization (e.g. kickoff skill resolution in the
+      // start coordinator) never forces sandbox provisioning.
+      skillSource:
+        effectiveSkillExtension?.createSource(guardedSkillFallback, projectSkillPaths) ?? guardedSkillFallback,
+    });
+    // Register with the Mastra instance so sync HTTP handlers that resolve
+    // the workspace via `mastra.getWorkspaceById(id)` (file tree, permissions
+    // probe, MCP/tool routes) find it instead of throwing
+    // `MASTRA_GET_WORKSPACE_BY_ID_NOT_FOUND`. `addWorkspace` is idempotent on
+    // key collision, so concurrent first resolutions stay race-safe (the
+    // deferred phase is deduped separately through `inflightMaterializations`).
+    mastra?.addWorkspace(workspace, workspaceId, { source: 'mastra' });
+    // Cache synchronously with construction: the `await` below is a suspension
+    // point, and a concurrent resolution for the same session must observe this
+    // workspace rather than build a second one.
+    constructedWorkspaces.set(workspaceId, workspace);
+    // Retirement is registered against the workspace itself rather than the
+    // sandbox: construction is now eager while materialization is deferred, so
+    // a session retired before its first tool call still has a workspace (and a
+    // token injector) that must be torn down.
+    const registered = await workspaceRegistry.register(
+      session.sessionId,
+      workspaceId,
+      workspaceGeneration,
+      async () => {
+        githubTokenInjectors.delete(workspaceId);
+        materializedSandboxes.delete(workspaceId);
+        constructedWorkspaces.delete(workspaceId);
+        await mastra?.removeWorkspace?.(workspaceId);
+      },
+    );
+    if (!registered) {
+      throw new Error(`Factory session ${session.sessionId} was retired during workspace materialization`);
     }
-    const materialization = materialize();
-    inflightMaterializations.set(workspaceId, materialization);
-    try {
-      return await materialization;
-    } finally {
-      inflightMaterializations.delete(workspaceId);
+
+    // Session start (the resolution that seeds the session's initial state)
+    // warms the sandbox in the background so it materializes in parallel with
+    // the model's first turn instead of on the first tool call.
+    if (stateSeeded) {
+      void ensureMaterialized().catch(error => {
+        console.error(`[factory:workspace] background materialization for ${workspaceId} failed`, error);
+      });
     }
+    return workspace;
   };
 }
 

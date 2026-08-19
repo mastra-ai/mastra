@@ -2307,6 +2307,23 @@ describe('PlatformSandbox', () => {
       expect(child.id).toBe('mastra-recovery-session-42');
     });
 
+    it('forwards seedCheckpointName separately from the primary recovery key', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_child', createdAt: '2026-06-26T00:00:00.000Z' }));
+      const template = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+
+      const child = template.clone({ checkpointName: 'session-42', seedCheckpointName: 'repo-base' });
+      await child._start();
+
+      const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
+      expect(body).toMatchObject({ id: 'session-42', seedCheckpointName: 'repo-base' });
+    });
+
     it('prefers an explicit id over checkpointName when both are passed to clone', async () => {
       vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
       const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_child', createdAt: '2026-06-26T00:00:00.000Z' }));
