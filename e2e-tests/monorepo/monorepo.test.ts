@@ -98,6 +98,14 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       expect(res.status).toBe(200);
       expect(body).toEqual({ message: 'Hello, world!', a: 'b' });
     });
+
+    it('should resolve createRoute api routes', async () => {
+      const res = await fetch(`http://localhost:${port}/create-route`);
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body).toEqual({ message: 'Hello from createRoute!' });
+    });
+
     it('should resolve api ALL routes', async () => {
       let res = await fetch(`http://localhost:${port}/all`);
       let body = await res.json();

@@ -92,6 +92,59 @@ describe('preflightBuildOutput', () => {
       expect(issues.find(i => i.code === 'MISSING_ENV_VAR')).toBeUndefined();
     });
 
+    describe('LOCALHOST_ENV_VAR', () => {
+      it('flags a provider-known env var whose value points at localhost, with an autofix', async () => {
+        writeBundle(`const url = process.env.REDIS_URL;`);
+        const issues = await preflightBuildOutput(tmpDir, { REDIS_URL: 'redis://localhost:6379' });
+        const issue = issues.find(i => i.code === 'LOCALHOST_ENV_VAR');
+        expect(issue?.severity).toBe('warning');
+        expect(issue?.message).toContain('redis://localhost:6379');
+        expect(issue?.autofix).toEqual({
+          kind: 'create-managed-database',
+          provider: 'redis',
+          envVarName: 'REDIS_URL',
+        });
+      });
+
+      it('flags loopback IPs too (127.0.0.1)', async () => {
+        writeBundle(`const url = process.env.REDIS_URL;`);
+        const issues = await preflightBuildOutput(tmpDir, {
+          REDIS_URL: 'redis://default:secret@127.0.0.1:6379',
+        });
+        expect(issues.find(i => i.code === 'LOCALHOST_ENV_VAR')).toBeDefined();
+      });
+
+      it('does not flag hosted URLs', async () => {
+        writeBundle(`const url = process.env.REDIS_URL;`);
+        const issues = await preflightBuildOutput(tmpDir, {
+          REDIS_URL: 'redis://default:secret@fly-my-redis.upstash.io:6379',
+        });
+        expect(issues.find(i => i.code === 'LOCALHOST_ENV_VAR')).toBeUndefined();
+      });
+
+      it('does not flag localhost values when a managed database already injects the var', async () => {
+        writeBundle(`const url = process.env.REDIS_URL;`);
+        const issues = await preflightBuildOutput(
+          tmpDir,
+          { REDIS_URL: 'redis://localhost:6379' },
+          { managedEnvVarNames: ['REDIS_URL'] },
+        );
+        expect(issues.find(i => i.code === 'LOCALHOST_ENV_VAR')).toBeUndefined();
+      });
+
+      it('does not flag localhost values for non-provider env vars', async () => {
+        writeBundle(`const url = process.env.MY_SERVICE_URL;`);
+        const issues = await preflightBuildOutput(tmpDir, { MY_SERVICE_URL: 'http://localhost:3000' });
+        expect(issues.find(i => i.code === 'LOCALHOST_ENV_VAR')).toBeUndefined();
+      });
+
+      it('ignores values that are not URLs', async () => {
+        writeBundle(`const url = process.env.DATABASE_URL;`);
+        const issues = await preflightBuildOutput(tmpDir, { DATABASE_URL: 'not-a-url' });
+        expect(issues.find(i => i.code === 'LOCALHOST_ENV_VAR')).toBeUndefined();
+      });
+    });
+
     it('does not flag platform-set env vars (PORT, NODE_ENV, MASTRA_*)', async () => {
       writeBundle(`
         const port = process.env.PORT;

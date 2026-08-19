@@ -1109,11 +1109,20 @@ describe('PlatformGithubIntegration', () => {
     });
   });
 
-  it('keeps the reconciliation worker alive when polling is disabled', () => {
+  it('keeps the reconciliation worker alive when polling is disabled', async () => {
     vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_ENABLED', 'false');
+    const seed = await createPlatformStorageForTests();
     const integration = createIntegration();
+    const context = {
+      controller: {},
+      storage: {
+        generic: seed.integrations.forIntegration('github'),
+        sourceControl: seed.sourceControl.forIntegration('github'),
+      },
+    } as unknown as IntegrationContext;
+    integration.versionControl.initialize({ storage: context.storage.sourceControl });
 
-    const workers = integration.workers({ controller: {}, storage: { generic: {} } } as unknown as IntegrationContext);
+    const workers = integration.workers(context);
     expect(workers).toHaveLength(1);
     expect(integration.diagnostics()).toMatchObject({
       polling: { enabled: false },
@@ -1124,13 +1133,22 @@ describe('PlatformGithubIntegration', () => {
     });
   });
 
-  it('allows issue reconciliation to override a disabled legacy reconcile switch', () => {
+  it('allows issue reconciliation to override a disabled legacy reconcile switch', async () => {
     vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_ENABLED', 'false');
     vi.stubEnv('MASTRA_PLATFORM_GITHUB_RECONCILE_ENABLED', 'false');
     vi.stubEnv('MASTRACODE_PLATFORM_GITHUB_ISSUE_RECONCILE_ENABLED', 'true');
+    const seed = await createPlatformStorageForTests();
     const integration = createIntegration();
+    const context = {
+      controller: {},
+      storage: {
+        generic: seed.integrations.forIntegration('github'),
+        sourceControl: seed.sourceControl.forIntegration('github'),
+      },
+    } as unknown as IntegrationContext;
+    integration.versionControl.initialize({ storage: context.storage.sourceControl });
 
-    const workers = integration.workers({ controller: {}, storage: { generic: {} } } as unknown as IntegrationContext);
+    const workers = integration.workers(context);
     expect(workers).toHaveLength(1);
     expect(integration.diagnostics()).toMatchObject({
       reconcile: {

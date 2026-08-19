@@ -28,6 +28,15 @@ const STATE_ID = 'factory-phase';
 const RULE_TIMEOUT_MS = 5_000;
 const TRANSCRIPT_PAGE_SIZE = 50;
 const MAX_LINKED_ITEMS = 5;
+function ruleStage(item: WorkItemRow | null | undefined): FactoryRuleStage | undefined {
+  const stage = item?.stages.length === 1 ? item.stages[0] : undefined;
+  return stage !== undefined && isFactoryRuleStage(stage) ? stage : undefined;
+}
+
+function itemInRuleStage(item: WorkItemRow | null | undefined): item is WorkItemRow {
+  return ruleStage(item) !== undefined;
+}
+
 const PHASE_LABELS: Record<FactoryRuleStage, string> = {
   intake: 'Intake',
   triage: 'Investigating',
@@ -262,8 +271,8 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     }
 
     const item = await this.options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
-    const stage = item?.stages.length === 1 ? item.stages[0] : undefined;
-    if (!item || !isFactoryRuleStage(stage)) return;
+    const stage = ruleStage(item);
+    if (!item || !stage) return;
     const allItems = await this.options.storage.list({
       orgId: binding.orgId,
       factoryProjectId: binding.factoryProjectId,
@@ -317,6 +326,11 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
   async reconcileBinding(binding: FactoryRunBindingRecord): Promise<void> {
     const reader = this.options.messageReader;
     if (!reader || binding.status !== 'active') return;
+    // One keyed read up front: a binding whose item is gone or no longer in a
+    // single rule stage would ingest nothing, so skip the cursor and message
+    // reads entirely instead of paying them on every walk.
+    const item = await this.options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
+    if (!itemInRuleStage(item)) return;
     const cursor = await this.options.storage.getToolResultCursor(binding.orgId, binding.factoryProjectId, binding.id);
     let page = 0;
     while (true) {
@@ -328,7 +342,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         ...(cursor ? { filter: { dateRange: { start: cursor.lastMessageCreatedAt } } } : {}),
         orderBy: { field: 'createdAt', direction: 'ASC' },
       });
-      await this.ingestMessages(binding, result.messages);
+      await this.ingestMessages(binding, result.messages, undefined, item);
       const last = result.messages.at(-1);
       if (last) {
         await this.options.storage.advanceToolResultCursor({
@@ -349,9 +363,10 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     binding: FactoryRunBindingRecord,
     messages: MastraDBMessage[],
     toolCallIds?: ReadonlySet<string>,
+    preloadedItem?: WorkItemRow,
   ): Promise<void> {
-    const item = await this.options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
-    if (!item || item.stages.length !== 1 || !isFactoryRuleStage(item.stages[0])) return;
+    const item = preloadedItem ?? (await this.options.storage.get({ orgId: binding.orgId, id: binding.workItemId }));
+    if (!itemInRuleStage(item)) return;
     for (const message of messages) {
       for (const toolResult of completedToolResults(message)) {
         if (toolCallIds && !toolCallIds.has(toolResult.toolCallId)) continue;
@@ -409,6 +424,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         title: item.title,
         url: item.externalSource?.url ?? null,
         stages: item.stages,
+        metadata: item.metadata,
       },
       board,
       itemRevision: item.revision,

@@ -60,6 +60,8 @@ A local `.env` file is optional. Environment variables stored on the platform ar
 
     The environment slug (`production` above) matches the environment the CLI would have deployed to — this is important because `mastra env db create` requires an environment argument in non-interactive shells when the project has more than one environment.
 
+    Preflight also catches database URLs that point at your local machine. A `.env` file with `REDIS_URL=redis://localhost:6379` works during development, but the deployed server can't reach your laptop — so the CLI warns and offers the same managed provisioning. If you decline, the deploy continues with your value as-is; if you accept, the managed database's connection variables take precedence at deploy time while your local `.env` keeps working for development.
+
     :::note
     If preflight reports a hard-coded local path instead (`Build contains a host-local storage URL`), it can't offer the inline fix. Guard the path with an environment variable first so the file is only used during local development:
 
