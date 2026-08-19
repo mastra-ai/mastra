@@ -113,7 +113,7 @@ describe('Composer on a lazy user-session draft', () => {
         HttpResponse.json({ session: createdDraftSession('keep my prompt') }),
       ),
       http.post(`${TEST_BASE_URL}/web/config/model-packs/mine/activate`, () =>
-        HttpResponse.json({ message: 'Pack unavailable' }, { status: 500 }),
+        HttpResponse.json({ error: 'Pack unavailable' }, { status: 500 }),
       ),
     );
     const user = userEvent.setup();
@@ -132,6 +132,8 @@ describe('Composer on a lazy user-session draft', () => {
     preparation.finishWorkspace();
     await waitForMutationsIdle(client);
     await waitFor(() => expect(preparation.delivered).toEqual(['keep my prompt']));
+    // The user must learn the pack was not applied.
+    expect(await screen.findByText('Pack unavailable')).toBeInTheDocument();
     // The pack failed, so its build model must not be half-applied either —
     // the session keeps its own defaults.
     expect(preparation.operations).toEqual(['mode:build', 'message']);
