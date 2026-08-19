@@ -44,6 +44,7 @@ export function setupKeyboardShortcuts(
       callbacks.stop();
       if (callbacks.exit) callbacks.exit(0);
       else process.exit(0);
+      return;
     }
     state.lastCtrlCTime = now;
 
@@ -607,6 +608,7 @@ export function setupKeyHandlers(
       callbacks.stop();
       if (callbacks.exit) callbacks.exit(0);
       else process.exit(0);
+      return;
     }
     state.lastCtrlCTime = now;
     if (abortActiveGoalJudge(state)) {

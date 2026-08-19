@@ -10,7 +10,10 @@ import { isStreamDestroyedError } from '@mastra/code-sdk/error-classification';
 import { hasHeadlessFlag, runMCCli } from '@mastra/code-sdk/headless/index';
 import { createBrowserFromSettings, loadSettings } from '@mastra/code-sdk/onboarding/settings';
 import { formatScaffoldSuccess, scaffoldPlugin } from '@mastra/code-sdk/plugins/scaffold';
-import type { ProcessMemoryDiagnostics } from '@mastra/code-sdk/process-memory-diagnostics';
+import {
+  stopProcessMemoryDiagnosticsWithTimeout,
+  type ProcessMemoryDiagnostics,
+} from '@mastra/code-sdk/process-memory-diagnostics';
 import { setupDebugLogging } from '@mastra/code-sdk/utils/debug-log';
 import { drainPipedStdin, reopenStdinFromTTY } from '@mastra/code-sdk/utils/stdin-pipe';
 import { releaseAllThreadLocks } from '@mastra/code-sdk/utils/thread-lock';
@@ -189,7 +192,9 @@ const asyncCleanup = (): Promise<void> => {
         // Swallow — best-effort cleanup during shutdown. The process is exiting.
       });
     }
-    await processMemoryDiagnostics?.stop();
+    if (processMemoryDiagnostics) {
+      await stopProcessMemoryDiagnosticsWithTimeout(processMemoryDiagnostics, message => console.warn(message));
+    }
   })();
   return cleanupPromise;
 };

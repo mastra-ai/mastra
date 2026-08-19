@@ -12,6 +12,7 @@ const lifecycleMocks = vi.hoisted(() => {
       order.push('diagnostics-start');
       return diagnostics;
     }),
+    stopDiagnostics: vi.fn(async () => diagnostics.stop()),
     runMC: vi.fn(),
   };
 });
@@ -20,6 +21,7 @@ vi.mock('../index.js', () => ({ createMastraCode: lifecycleMocks.createMastraCod
 vi.mock('../process-memory-diagnostics.js', () => ({
   createProcessMemoryDiagnosticsFromEnvironment: lifecycleMocks.createDiagnostics,
   startConfiguredProcessMemoryDiagnostics: lifecycleMocks.startDiagnostics,
+  stopProcessMemoryDiagnosticsWithTimeout: lifecycleMocks.stopDiagnostics,
 }));
 vi.mock('./run-mc.js', () => ({ runMC: lifecycleMocks.runMC }));
 
@@ -247,6 +249,9 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
 
     await expect(runMCCli('do it')).rejects.toThrow('EXIT:0');
 
+    expect(lifecycleMocks.order).toEqual(
+      expect.arrayContaining(['diagnostics-start', 'mastracode-create', 'intervals-stop', 'diagnostics-stop']),
+    );
     expect(lifecycleMocks.order.indexOf('diagnostics-start')).toBeLessThan(
       lifecycleMocks.order.indexOf('mastracode-create'),
     );

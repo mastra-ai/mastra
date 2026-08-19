@@ -2,7 +2,7 @@
 'mastracode': minor
 ---
 
-Added environment-controlled process memory diagnostics and the `/profile` command for the TUI and headless CLI.
+Added environment-controlled process memory diagnostics for TUI and headless CLI sessions. The `/profile` command controls diagnostics interactively in the TUI.
 
 Enable diagnostics before startup:
 

@@ -91,4 +91,35 @@ describe('createShutdownCoordinator', () => {
     expect(exit).toHaveBeenCalledOnce();
     expect(exit).toHaveBeenCalledWith(1);
   });
+
+  it('exits after the timeout when cleanup does not settle', async () => {
+    vi.useFakeTimers();
+    const cleanup = vi.fn(() => new Promise<void>(() => {}));
+    const exit = vi.fn((_exitCode: number): never => {
+      throw new Error('exit');
+    });
+    const shutdown = createShutdownCoordinator(cleanup, exit, 100);
+
+    const stopping = expect(shutdown(1)).rejects.toThrow('exit');
+    await vi.advanceTimersByTimeAsync(100);
+    await stopping;
+
+    expect(cleanup).toHaveBeenCalledOnce();
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
+  it('exits even when cleanup rejects', async () => {
+    const cleanupError = new Error('cleanup failed');
+    const cleanup = vi.fn().mockRejectedValue(cleanupError);
+    const exit = vi.fn((_exitCode: number): never => {
+      throw new Error('exit');
+    });
+    const shutdown = createShutdownCoordinator(cleanup, exit);
+
+    await expect(shutdown(1)).rejects.toThrow('exit');
+
+    expect(cleanup).toHaveBeenCalledOnce();
+    expect(exit).toHaveBeenCalledOnce();
+    expect(exit).toHaveBeenCalledWith(1);
+  });
 });
