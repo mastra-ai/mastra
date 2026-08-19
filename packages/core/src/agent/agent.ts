@@ -7031,6 +7031,7 @@ export class Agent<
           if (resolved !== (this as unknown as Agent)) {
             const resolvedVersionId = resolved.toRawConfig()?.resolvedVersionId;
             let resolvedRequestContext = requestContext;
+            let resolvedVersions: VersionOverrides | undefined = options.versions;
             if (typeof resolvedVersionId === 'string' && resolvedVersionId.length > 0) {
               const pinnedVersions = mergeVersionOverrides(mergedVersions, {
                 agents: { [this.id]: { versionId: resolvedVersionId } },
@@ -7040,6 +7041,10 @@ export class Agent<
               // Only this execution and its persisted snapshot are pinned.
               resolvedRequestContext = new RequestContext(requestContext.entries());
               resolvedRequestContext.set(MASTRA_VERSIONS_KEY, pinnedVersions);
+              // The delegated fork merges call-site versions again. Pass the
+              // pinned aggregate so an original status selector cannot replace
+              // the exact root version before the workflow snapshot is saved.
+              resolvedVersions = pinnedVersions;
             }
 
             // Cast: reassembled options are exactly this method's input. The
@@ -7051,6 +7056,7 @@ export class Agent<
               _threadStreamPubSub,
               ...options,
               requestContext: resolvedRequestContext,
+              versions: resolvedVersions,
             } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub });
             return delegated as never;
           }

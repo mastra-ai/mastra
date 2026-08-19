@@ -110,7 +110,6 @@ describe('agentic-loop snapshot lifecycle', () => {
 
     const mastra = new Mastra({
       agents: { agent },
-      versions: { agents: { 'versioned-agent': { status: 'published' } } },
       editor: { agent: { applyStoredOverrides } } as any,
       logger: false,
       storage: new InMemoryStore(),
@@ -121,6 +120,7 @@ describe('agentic-loop snapshot lifecycle', () => {
     const stream = await agent.stream('Find the user with name - Dero Israel', {
       requireToolApproval: true,
       requestContext,
+      versions: { agents: { 'versioned-agent': { status: 'published' } } },
     });
 
     let toolCallId = '';
