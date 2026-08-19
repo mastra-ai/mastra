@@ -1,0 +1,316 @@
+---
+title: "Context engineering"
+description: "Learn how to choose, retrieve, persist, and control the context a Mastra agent receives."
+packages:
+  - "@mastra/core"
+  - "@mastra/memory"
+  - "@mastra/rag"
+---
+
+# Context engineering
+
+A model can only work with the information available in its context window. That might include the current conversation, remembered details, application data, tool results, or relevant passages from a knowledge base.
+
+Context engineering is the practice of deciding what information the model should see and when. The goal isn't to provide as much as possible, but to keep the context relevant and current. Too little context leaves the model without information it needs; too much can make important details harder to find, increase cost, and reduce the quality of the response long before the model reaches its context limit.
+
+Mastra provides different ways to bring information into context, keep it available over time, retrieve it when needed, and reduce or isolate it as a task grows. This guide explains when to use each mechanism and how they fit together.
+
+| Need | Start with | What the model sees |
+| - | - | - |
+| Stable identity, rules, or constraints | [Instructions](#instructions) | System context on each model call |
+| Data from a database or API | [Tools](#tools) | Tool definitions followed by selected results |
+| Current customer or application data | [Inline context](#inline-context) | Data interpolated into the user message |
+| A large, stable knowledge base | [RAG](#rag) | Semantically relevant chunks from an index |
+| User- or organization-managed documents | [Filesystems](#filesystems) | Files selected through read or search tools |
+| Recent conversation or durable facts | [Memory](#memory) | History, observations, or retrieved memories |
+| A long-running conversation | [Observational Memory](#observational-memory) | Dense observations plus recent unobserved messages |
+| New events or changing state during a run | [Signals](#signals) | User, reactive, notification, or state messages |
+| Instructions needed only for some tasks | [Dynamic skills](#dynamic-skills) | Skill metadata followed by instructions loaded on demand |
+
+## Instructions
+
+An agent's [`instructions`](/reference/agents/agent#constructor-parameters) define its stable identity, behavior, and constraints. They're system messages and appear before conversation messages in the model request.
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: `You help customers understand their account.
+    Today is ${new Date().toDateString()}.
+    Use plain language and don't invent account details.`,
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+```
+
+Keep instructions focused on behavior that applies to most calls. Adding current account data, retrieved documents, or task-specific details makes the base prompt larger and harder to reuse.
+
+Instructions can also be resolved at runtime from [`RequestContext`](/docs/server/request-context):
+
+```typescript title="src/mastra/agents/support-agent.ts"
+instructions: ({ requestContext }) => {
+  const name = requestContext.get('name')
+
+  return `You help ${name} understand their account.`
+}
+```
+
+Use `RequestContext` when instructions depend on data that changes with each request, such as the current user, tenant, locale, role, or feature flags. Values that don't come from the request, such as the current date, can be interpolated directly as shown in the first example.
+
+:::tip
+
+If the resolved instructions change often, the model provider may not be able to reuse the same prompt cache prefix. Keep the stable part first, and pass frequently changing background through messages or signals instead.
+
+Watch [this short video on prompt caching](https://youtu.be/eBB0dBqfvuQ) to learn how cacheable prompt prefixes reduce latency and cost.
+
+:::
+
+## Inline context
+
+Most applications pass runtime context by interpolating relevant values into the current message. This works well when your code has already loaded customer or application data:
+
+```typescript
+const customer = await db.customer.findById(customerId)
+
+await supportAgent.generate(`
+  Customer: ${customer.name}
+  Plan: ${customer.plan}
+  Question: ${question}
+`)
+```
+
+Select and label the fields the model needs instead of serializing an entire database record. This keeps the prompt smaller and makes the meaning of each value clear.
+
+When memory is enabled, Mastra saves the current user message. Don't interpolate sensitive or temporary data that shouldn't appear in conversation history.
+
+For the less common case where background should affect one response without being saved as conversation history, pass a [`context`](/reference/agents/generate) message:
+
+```typescript
+await supportAgent.generate('Recommend the next action.', {
+  context: [{ role: 'user', content: 'The customer has an unresolved billing dispute.' }],
+})
+```
+
+The model sees this background for the current execution, but Mastra doesn't save it to memory. Use `context` when persisting the background would pollute the conversation or expose temporary application state on later turns.
+
+## Tools
+
+[Tools](/docs/agents/tools) are the recommended way to fetch current data from a database, API, or service. The model decides when it needs the data and supplies the tool arguments, while your application controls the query and returned fields.
+
+```typescript title="src/mastra/tools/customer-tool.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+export const getCustomer = createTool({
+  id: 'get-customer',
+  description: 'Gets the current profile and plan for a customer',
+  inputSchema: z.object({ customerId: z.string() }),
+  execute: async ({ customerId }) => {
+    const customer = await db.customer.findById(customerId)
+    return { name: customer.name, plan: customer.plan, status: customer.status }
+  },
+})
+```
+
+Use [`toModelOutput`](/docs/agents/tools#shape-output-for-the-model) when application code needs the full result but the model needs a smaller representation.
+
+## RAG
+
+[Retrieval-Augmented Generation (RAG)](/reference/rag/overview) retrieves semantically relevant chunks from an indexed corpus. It still fits large, stable knowledge bases where users ask open-ended questions that don't map cleanly to structured database queries.
+
+```typescript
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
+import { createVectorQueryTool } from '@mastra/rag'
+
+const knowledgeBase = createVectorQueryTool({
+  vectorStoreName: 'knowledgeBase',
+  indexName: 'support-docs',
+  model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
+})
+```
+
+Register the vector store referenced by `vectorStoreName` on the same Mastra instance as the agent. Mastra supports [multiple vector databases](/reference/rag/vector-databases). RAG is often exposed through a tool, as in this example. The design choice is whether the agent needs semantic retrieval or can query the source directly.
+
+Many applications now start with direct, source-specific tools. Models have become better at selecting them, and a direct query is often simpler and cheaper because it doesn't require a chunking, embedding, and vector-index pipeline. Choose RAG when semantic search over unstructured content is the actual requirement, then constrain the returned context with metadata filters, reranking, and a conservative `topK`.
+
+## Filesystems
+
+A [filesystem](/docs/sandbox/filesystem) gives an agent persistent access to documents and other files. Files can live in a local directory or in providers such as Amazon S3, AgentFS, or Google Drive. The agent receives built-in tools to list, read, and search them.
+
+```typescript title="src/mastra/workspace.ts"
+import { LocalFilesystem, Workspace } from '@mastra/core/workspace'
+
+export const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './knowledge-base' }),
+  bm25: true,
+  autoIndexPaths: ['**/*.md'],
+})
+
+// Agents receive tools including read_file, list_files, grep,
+// mastra_workspace_search, and mastra_workspace_index.
+await workspace.init()
+```
+
+[Workspace search](/docs/sandbox/search) supports BM25 keyword search, vector semantic search, or a hybrid of both. Use a filesystem for a personal assistant that works with a user's files or an organization knowledge base that teammates update in a service such as Google Drive. Search runs against the workspace index, so changed files must be indexed before the agent can retrieve their latest contents.
+
+:::tip
+
+Filesystem search can also use vectors, so it overlaps with RAG. Choose a filesystem when the source of truth is a set of files that the agent may need to list, read, or update. Choose a standalone RAG pipeline when retrieval is the main requirement and the source content doesn't need to behave like files.
+
+:::
+
+## Memory
+
+[Memory](/docs/memory/overview) gives an agent conversational coherence across turns. It brings recent messages and remembered details into context without requiring the application to resend the full transcript on every turn.
+
+Memory requires a storage provider. Each call also identifies a `resource` that owns the memory and a `thread` that identifies the conversation. Reuse both values to continue the same conversation:
+
+```typescript title="src/mastra/agents/assistant.ts"
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+
+export const assistant = new Agent({
+  id: 'assistant',
+  name: 'Assistant',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory({
+    options: {
+      lastMessages: 20,
+    },
+  }),
+})
+
+await assistant.generate('Help me plan the next project milestone.', {
+  memory: {
+    resource: 'user-123',
+    thread: 'project-456',
+  },
+})
+```
+
+The example assumes storage is configured on the registered Mastra instance or directly on `Memory`. `lastMessages` controls how many recent messages Mastra loads from the thread. The default is 10.
+
+Message history works well for shorter conversations where recent turns contain the context the agent needs. For long-running conversations, Mastra recommends [Observational Memory](/docs/memory/observational-memory), which keeps recent conversation available and turns older history into a dense observation log.
+
+## Observational Memory
+
+Conversation history grows with every user message, response, and tool call. Even before it reaches the model's hard context limit, a long transcript can increase cost and make relevant details harder for the model to find. Compression replaces old, verbose history with a smaller representation.
+
+[Observational Memory](/docs/memory/observational-memory) handles this continuously. An Observer turns older messages and tool interactions into dense observations, while periodic reflection reorganizes and compresses those observations.
+
+You don't need to configure `lastMessages` when Observational Memory is enabled. Observational Memory manages history itself, keeping recent unobserved messages in context and replacing older messages with observations.
+
+```typescript title="src/mastra/agents/assistant.ts"
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+
+export const assistant = new Agent({
+  id: 'assistant',
+  name: 'Assistant',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory({
+    options: {
+      observationalMemory: true,
+    },
+  }),
+})
+```
+
+After messages are observed, the model receives the observation log, recent messages that haven't been observed, and a continuation reminder. The raw messages remain stored but no longer occupy the active model context.
+
+Observations are added in stable chunks, which helps providers reuse the existing prompt prefix. Observational Memory can also activate buffered observations after a prompt cache is likely to expire or before the agent changes providers.
+
+## Signals
+
+:::beta
+
+Signals may change without a major version bump until the API is stable.
+
+:::
+
+[Signals](/docs/harness/signals) add messages or system-generated context to a memory-backed thread. Delivery depends on the thread's state: a signal can wake an idle agent or enter an active loop. It can also wait for the next turn or persist without waking the agent.
+
+State signals require memory and an existing thread. Notification inbox signals require a storage adapter with notification support.
+
+| API | Use | Context behavior |
+| - | - | - |
+| `sendMessage()` | User input that the active agent should see now | Enters the active loop or wakes an idle thread |
+| `queueMessage()` | User input that should wait for the next turn | Starts after the current run finishes |
+| `sendSignal()` | Background results, policy reminders, or external events | Adds reactive or notification context according to its delivery options |
+| `sendStateSignal()` | Browser state, editor state, task state, or another changing value | Maintains a thread-scoped state lane with snapshots and deltas |
+
+Use `sendSignal()` for context produced by the system rather than the user:
+
+```typescript
+const result = agent.sendSignal(
+  {
+    type: 'notification',
+    contents: 'CI failed on pull request 123: three tests failed.',
+    attributes: { source: 'github', pullRequest: 123 },
+  },
+  {
+    resourceId: 'user-123',
+    threadId: 'project-456',
+  },
+)
+
+await result.accepted
+```
+
+A processor can send a reactive signal during `processInputStep()`. This is useful for guidance that depends on the current step or a recent tool result. Set `transient: true` when the signal should reach only the current model call. Re-send it when needed instead of storing repeated reminders in conversation history.
+
+State signals represent context that changes over time. Mastra tracks snapshots and deltas for each state lane and can reinsert a fresh snapshot after the previous one leaves the active context window. Use `computeStateSignal()` when a processor owns the state. Working memory, browser context, and task lists can use this lane to stay available even after history or Observational Memory removes older messages.
+
+Signals append changing context near the current turn instead of rewriting the agent's base instructions. Transient and state signals can therefore preserve a more stable prompt prefix while keeping current guidance and state visible to the model.
+
+## Dynamic skills
+
+[Agent skills](/docs/skills) let an agent load task-specific instructions only when needed instead of carrying every procedure in its base instructions. Use them for specialized guidance that applies to some requests and keep the default context smaller.
+
+## Context control
+
+Context control limits what the model sees as a task grows. Compaction and processors reduce context within one agent, while subagent boundaries control what moves between agents.
+
+### Compaction
+
+If you've used Claude Code, you may have seen compaction happen during a long session. The Mastra team likes to joke, "Friends don't let friends do compaction."
+
+Compaction waits until a conversation reaches a token threshold. It then summarizes the transcript and replaces earlier messages. It's a blunt fallback. The compaction turn adds latency, and a single summary has to represent everything that came before. Repeated summaries can flatten chronology or lose details that later become important.
+
+Prefer [Observational Memory](#observational-memory) for long-running conversations. It can process history asynchronously in the background while preserving temporal context. Reflection revisits accumulated memories and naturally prunes details that no longer matter. Mastra doesn't provide compaction out of the box, though you could implement it with a custom [processor](/docs/agents/processors).
+
+### Processors
+
+[Processors](/docs/agents/processors) control what enters model context and can rewrite content before a model call. Use them when information should remain in stored history or application output but doesn't need to be sent back to the model on every step.
+
+For example, `ToolCallFilter` removes old tool arguments and results from the next model request without deleting those messages from storage. The model gets a smaller prompt, while your application can still display or inspect the complete interaction.
+
+Use `processInput()` or `processInputStep()` to change the active message list. Those changes may later be saved to memory. Use `processLLMRequest()` when a rewrite should apply only to the current provider call and leave memory untouched.
+
+Mastra includes several controls for common sources of context bloat:
+
+- [`toModelOutput`](/docs/agents/tools#shape-output-for-the-model): Replace a verbose tool result with a smaller model-facing representation.
+- [`ToolCallFilter`](/reference/processors/tool-call-filter): Remove old tool calls and results from model input while retaining them in memory and the UI.
+- [`ToolSearchProcessor`](/reference/processors/tool-search-processor): Replace a large tool catalog with search and load tools.
+- [`TokenLimiter`](/reference/processors/token-limiter-processor): Prune non-system messages until the prompt fits a token budget.
+
+Start with [`toModelOutput`](/docs/agents/tools#shape-output-for-the-model) for verbose tool results and `ToolCallFilter` for old tool interactions. Add `TokenLimiter` as a final budget guard rather than relying on the model's maximum context window.
+
+### Subagents
+
+A common source of context bloat is passing too much information to and from [subagents](/docs/subagents). A subagent gets a separate model context for its delegated task, but the boundary still needs deliberate controls.
+
+By default, Mastra forwards the parent's conversation to the subagent. Use `messageFilter` to pass only the messages that specialist needs:
+
+```typescript
+await supervisor.generate('Investigate the failed deployment.', {
+  delegation: {
+    messageFilter: ({ messages }) => messages.slice(-10),
+  },
+})
+```
+
+In the other direction, Mastra returns the subagent's text to the parent model by default while keeping nested tool calls and metadata available to application code. Leave `includeSubAgentToolResultsInModelContext` disabled unless the parent must reason over those details. Use `onDelegationStart` to refine the child prompt and `onDelegationComplete` to reduce or replace the text returned to the parent.
+
+See [Subagents](/docs/subagents) for delegation hooks, memory isolation, iteration monitoring, and result controls.
