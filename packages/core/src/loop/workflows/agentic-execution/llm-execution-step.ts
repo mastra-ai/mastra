@@ -1,7 +1,7 @@
 import { ReadableStream } from 'node:stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
-import { APICallError, generateId } from '@internal/ai-sdk-v5';
+import { APICallError } from '@internal/ai-sdk-v5';
 import type { CallSettings, StepResult, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
 import type { MessageList } from '../../../agent/message-list';
@@ -1294,7 +1294,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           workspace,
         };
         const rotateResponseMessageId = () => {
-          currentMessageId = readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ?? generateId();
+          currentMessageId = rotateLoopResponseMessageId(currentMessageId);
           currentStep.messageId = currentMessageId;
           return currentMessageId;
         };
@@ -1951,7 +1951,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               abortSignal: options?.abortSignal,
               messageId: currentMessageId,
               rotateResponseMessageId: () => {
-                currentMessageId = readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ?? generateId();
+                currentMessageId = rotateLoopResponseMessageId(currentMessageId);
                 // Keep the active output stream in sync so bail/retry paths
                 // below report the rotated id instead of the stale one, and so
                 // any subsequent chunks the stream writes itself use the new id.
@@ -2097,7 +2097,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           abortSignal: options?.abortSignal,
           messageId: currentMessageId,
           rotateResponseMessageId: () => {
-            currentMessageId = readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ?? generateId();
+            currentMessageId = rotateLoopResponseMessageId(currentMessageId);
             // Keep the active output stream in sync so the retry payload and
             // any downstream chunks use the rotated id.
             outputStream.messageId = currentMessageId;
