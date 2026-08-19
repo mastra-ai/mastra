@@ -163,7 +163,7 @@ async function handleDatabaseAutofix(
   const providerEnvVars = DB_ENV_VAR_NAMES[fix.provider] ?? [];
   const confirm = await p.confirm({
     message:
-      `Preflight needs ${providerEnvVars.join(', ')} for the ${ctx.environment.slug} environment. ` +
+      `Preflight needs ${providerEnvVars.join(', ')} for the ${ctx.environment.name} environment. ` +
       `Create a managed ${fix.provider} database now and attach it?`,
     initialValue: true,
   });
