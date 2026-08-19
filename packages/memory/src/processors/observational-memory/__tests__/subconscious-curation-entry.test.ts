@@ -116,6 +116,7 @@ describe('Memory.runCuration', () => {
 
   it('composes canonical identifier and URL preservation into capture extraction', async () => {
     let prompt = '';
+    const recordText = 'Project Atlas is tracked as COR-1165 at https://linear.app/kepler-crm/issue/COR-1165.';
     const agent = new Agent({
       id: 'capture-instruction-test',
       name: 'Capture Instruction Test',
@@ -127,7 +128,22 @@ describe('Memory.runCuration', () => {
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
             usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-            content: [{ type: 'text', text: '{"capture":{"nodes":[]}}' }],
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  capture: {
+                    nodes: [
+                      {
+                        name: 'Project Atlas',
+                        kind: 'project',
+                        records: [{ text: recordText, reason: 'Preserves the canonical issue reference.' }],
+                      },
+                    ],
+                  },
+                }),
+              },
+            ],
             warnings: [],
           };
         },
@@ -138,11 +154,14 @@ describe('Memory.runCuration', () => {
       learnedGuidance: false,
     }).resolve({ source: 'observer' });
 
-    await extractStructuredValues({ agent, source: 'observer', extractors: [capture] });
+    const result = await extractStructuredValues({ agent, source: 'observer', extractors: [capture] });
 
     expect(prompt).toContain(
       'When the conversation states a canonical identifier or URL for an entity, preserve it verbatim in the record text.',
     );
+    expect(result.values.capture).toMatchObject({
+      nodes: [{ records: [{ text: recordText }] }],
+    });
   });
 
   it('writes and refines entity content through the curator tool path', async () => {
@@ -187,7 +206,10 @@ describe('Memory.runCuration', () => {
       }),
     });
     const store = (await memory.storage.getStore('knowledge'))!;
-    const firstRecord = await seedItem(memory);
+    const firstRecord = await seedItem(
+      memory,
+      'Project Atlas launches soon. Repository: https://github.com/mastra-ai/mastra',
+    );
     currentRecordId = firstRecord.id;
 
     await memory.runCuration({
