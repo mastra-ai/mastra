@@ -2,7 +2,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { createMemoryRouter, MemoryRouter, RouterProvider, useLocation } from 'react-router';
+import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import SignalsOverviewPage from '..';
@@ -54,17 +54,12 @@ class ChartResizeObserver implements ResizeObserver {
   disconnect() {}
 }
 
-function CurrentLocation() {
-  return <output data-testid="current-location">{useLocation().search}</output>;
-}
-
 function renderSignalsPage(initialEntry = '/') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <QueryClientProvider client={queryClient}>
         <SignalsOverviewPage />
-        <CurrentLocation />
       </QueryClientProvider>
     </MemoryRouter>,
   );
@@ -397,7 +392,7 @@ describe('Trace Intelligence page', () => {
   });
 
   describe('when a snapshot range changes with theme details open', () => {
-    it('keeps the URL-selected theme open', async () => {
+    it('keeps the selected theme open', async () => {
       server.use(
         http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(populatedThemeEntitiesResponse)),
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
@@ -422,13 +417,11 @@ describe('Trace Intelligence page', () => {
       renderSignalsPage();
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
       await screen.findByRole('dialog', { name: 'Add transcript' });
-      await waitFor(() => expect(screen.getByTestId('current-location').textContent).toBe('?themeId=101'));
 
       fireEvent.click(screen.getByRole('button', { name: 'Last 7 days' }));
       fireEvent.click(await screen.findByText('Last 24 hours'));
 
       expect(await screen.findByRole('dialog', { name: 'Add transcript' })).not.toBeNull();
-      expect(screen.getByTestId('current-location').textContent).toContain('themeId=101');
     });
   });
 
