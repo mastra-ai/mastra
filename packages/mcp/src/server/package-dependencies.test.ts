@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { intersects } from 'semver';
+import { subset } from 'semver';
 import { expect, it } from 'vitest';
 
 const packageRoot = new URL('../../', import.meta.url);
@@ -32,9 +32,11 @@ it('declares every required peer of its runtime dependencies (#21974)', async ()
 
       const declaredRange = pkg.dependencies[peerName] ?? pkg.peerDependencies?.[peerName];
       if (declaredRange) {
-        if (!intersects(declaredRange, peerRange, { includePrerelease: true })) {
+        // Containment (not just overlap): every version our range can resolve to
+        // must satisfy the peer range.
+        if (!subset(declaredRange, peerRange, { includePrerelease: true })) {
           problems.push(
-            `${depName} requires peer ${peerName}@${peerRange}, but @mastra/mcp declares ${peerName}@${declaredRange}, which never satisfies it`,
+            `${depName} requires peer ${peerName}@${peerRange}, but @mastra/mcp declares ${peerName}@${declaredRange}, which can resolve to versions outside that range`,
           );
         }
         continue;
