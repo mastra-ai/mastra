@@ -34,15 +34,20 @@ describe('PlatformClient', () => {
     expect(init.method).toBe('POST');
   });
 
-  it('defaults to Railway provider routes when SANDBOX_PROVIDER is unset', () => {
+  it('uses the legacy Railway routes when SANDBOX_PROVIDER is unset', async () => {
     vi.stubEnv('SANDBOX_PROVIDER', undefined);
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi.fn().mockResolvedValue(response('{}', { status: 200 }));
+    const client = new PlatformClient({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      fetch: fetchMock,
+    });
 
-    expect(
-      resolvePlatformOptions({
-        accessToken: 'sk_test',
-        projectId: 'proj_123',
-      }).sandboxProvider,
-    ).toBe('railway');
+    await client.request('/sandbox');
+
+    expect(client.sandboxProvider).toBe('railway');
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox');
   });
 
   it('uses E2B provider routes when SANDBOX_PROVIDER is e2b', async () => {
