@@ -19,7 +19,7 @@ function runPlugin(
 ): {
   metadata: PreflightMetadata;
   legacy: LocalStorageDetection[];
-  workersConfig: Record<string, unknown> | undefined;
+  workersConfig: Record<string, unknown> | null;
   emitted: Array<{ fileName: string; source: string }>;
 } {
   const plugin = localStorageDetector(rootDir) as Plugin & { transform: Function; generateBundle: Function };
@@ -49,7 +49,7 @@ function runPlugin(
   return {
     metadata: JSON.parse(metadataFile.source),
     legacy: JSON.parse(legacyFile.source),
-    workersConfig: workersFile ? JSON.parse(workersFile.source) : undefined,
+    workersConfig: workersFile ? JSON.parse(workersFile.source) : null,
     emitted,
   };
 }
@@ -97,7 +97,7 @@ describe('localStorageDetector', () => {
     });
   });
 
-  it('does not emit a manifest for disabled, dynamic, or tree-shaken background task configs', () => {
+  it('emits a null manifest for disabled, dynamic, or tree-shaken background task configs', () => {
     const { workersConfig } = runPlugin([
       {
         id: '/project/src/mastra/index.ts',
@@ -126,7 +126,7 @@ describe('localStorageDetector', () => {
       },
     ]);
 
-    expect(workersConfig).toBeUndefined();
+    expect(workersConfig).toBeNull();
   });
 
   it('ignores modules from node_modules', () => {
