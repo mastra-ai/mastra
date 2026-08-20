@@ -59,6 +59,8 @@ function SignalsOverviewContent() {
       signalNames={signalNames}
       dateFrom={url.selectedDateFrom}
       dateTo={url.selectedDateTo}
+      selectedThemeId={url.selectedThemeId}
+      onSelectedThemeIdChange={url.handleThemeIdChange}
       dateRangePicker={
         <DateTimeRangePicker
           preset={url.datePreset}

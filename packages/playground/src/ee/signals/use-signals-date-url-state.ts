@@ -5,6 +5,7 @@ import { useSearchParams } from 'react-router';
 const DATE_PRESET_PARAM = 'datePreset';
 const DATE_FROM_PARAM = 'dateFrom';
 const DATE_TO_PARAM = 'dateTo';
+const THEME_ID_PARAM = 'themeId';
 const DEFAULT_DATE_PRESET = 'last-7d';
 
 const DATE_PRESETS = new Set<DateRangePreset>([
@@ -47,6 +48,10 @@ export function useSignalsDateUrlState() {
     () => (datePreset === 'custom' ? parseDate(searchParams.get(DATE_TO_PARAM)) : undefined),
     [datePreset, searchParams],
   );
+  const selectedThemeId = useMemo(() => {
+    const value = searchParams.get(THEME_ID_PARAM);
+    return value && /^\d+$/.test(value) ? value : undefined;
+  }, [searchParams]);
 
   const datePresetRef = useRef(datePreset);
   datePresetRef.current = datePreset;
@@ -60,6 +65,17 @@ export function useSignalsDateUrlState() {
       const param = type === 'from' ? DATE_FROM_PARAM : DATE_TO_PARAM;
       if (value) next.set(param, value.toISOString());
       else next.delete(param);
+      searchParamsRef.current = next;
+      setSearchParams(next, { replace: true });
+    },
+    [setSearchParams],
+  );
+
+  const handleThemeIdChange = useCallback(
+    (themeId: string | undefined) => {
+      const next = new URLSearchParams(searchParamsRef.current);
+      if (themeId) next.set(THEME_ID_PARAM, themeId);
+      else next.delete(THEME_ID_PARAM);
       searchParamsRef.current = next;
       setSearchParams(next, { replace: true });
     },
@@ -94,7 +110,9 @@ export function useSignalsDateUrlState() {
     datePreset,
     selectedDateFrom,
     selectedDateTo,
+    selectedThemeId,
     handleDateChange,
     handleDatePresetChange,
+    handleThemeIdChange,
   };
 }
