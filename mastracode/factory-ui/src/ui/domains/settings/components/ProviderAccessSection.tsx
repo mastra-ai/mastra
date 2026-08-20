@@ -31,6 +31,7 @@ import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { AddApiKeyDialog } from './AddApiKeyDialog';
 import { ProviderOAuthDialog } from './ProviderOAuthDialog';
 import { providerDisplayName } from './provider-display-name';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 
 const SOURCE_LABEL: Record<ProviderInfo['source'], string> = {
   oauth: 'Signed in',
@@ -102,26 +103,49 @@ function OAuthScopeDialog({
   onClose: () => void;
 }) {
   const displayName = providerDisplayName(provider.provider);
+  const [scope, setScope] = useState<'user' | 'org'>('user');
   return (
     <Dialog open onOpenChange={open => !open && onClose()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Sign in to {displayName}</DialogTitle>
-          <DialogDescription>Who can use this sign-in?</DialogDescription>
+          <DialogDescription>Choose who can use this sign-in before authorizing.</DialogDescription>
         </DialogHeader>
-        <DialogBody className="flex flex-col gap-2">
-          <Button variant="outline" onClick={() => onSelect('user')}>
-            Just me
-          </Button>
-          <Button variant="outline" onClick={() => onSelect('org')}>
-            Everyone in org
-          </Button>
-          <Txt as="p" variant="ui-sm" className="text-icon4">
-            Org-wide sign-ins share this account&apos;s access with everyone in your organization.
-          </Txt>
+        <DialogBody className="flex flex-col gap-4">
+          <div className="flex items-center justify-between gap-4">
+            <Txt as="span" variant="ui-sm" className="text-icon4">
+              Who can use this sign-in
+            </Txt>
+            <ButtonsGroup spacing="close" role="group" aria-label="Sign-in access">
+              {(
+                [
+                  { value: 'user', label: 'Just me' },
+                  { value: 'org', label: 'Everyone in org' },
+                ] as const
+              ).map(option => (
+                <Button
+                  key={option.value}
+                  variant={scope === option.value ? 'primary' : 'outline'}
+                  size="sm"
+                  aria-pressed={scope === option.value}
+                  onClick={() => setScope(option.value)}
+                >
+                  {option.label}
+                </Button>
+              ))}
+            </ButtonsGroup>
+          </div>
+          {scope === 'org' && (
+            <Txt as="p" variant="ui-sm" className="text-icon4" role="note">
+              Everyone in your organization will be able to run models through this {displayName} account.
+            </Txt>
+          )}
         </DialogBody>
         <DialogFooter>
           <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" onClick={() => onSelect(scope)}>
+            Continue
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
