@@ -570,16 +570,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         throw retiredError();
       }
 
-      const token = await getRepositoryToken();
-
-      // The `gh` CLI needs a PAT when the org configured one (installation
-      // tokens 403 on integration-restricted endpoints); git clone/checkout
-      // keep using the minted installation token. Review-board sessions
-      // (run-binding role `review`) authenticate `gh` as the reviewer account
-      // when a reviewer token is configured; everything else — including
-      // sessions with no resolvable run binding — uses the worker token.
-      const patKind = await resolveGithubPatKind('default');
-      const ghCliToken = (await getGithubPat(() => github.integrationStorage, session.orgId, patKind)) ?? token;
+      // Fail fast on credential resolution BEFORE constructing a VM: a
+      // session whose repo token cannot be minted must not provision, and
+      // this await is the ordering seam that keeps metadata-only resolution
+      // from reaching the provider.
+      await getRepositoryToken();
 
       // Sandbox identity is the session id: the provider resolves it on
       // start (reconnect/resume an existing VM, create otherwise), and the
@@ -611,9 +606,20 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         sandbox as unknown as Parameters<typeof runSessionSetupFallback>[0],
         runSetupOn,
         workdir,
+        session.id,
       );
-      // GH_TOKEN for the `gh` CLI. Injected post-start rather than baked into
-      // the VM's creation env, so the credential never outlives its rotation.
+      // The `gh` CLI needs a PAT when the org configured one (installation
+      // tokens 403 on integration-restricted endpoints); git clone/checkout
+      // keep using the minted installation token. Review-board sessions
+      // (run-binding role `review`) authenticate `gh` as the reviewer account
+      // when a reviewer token is configured; everything else — including
+      // sessions with no resolvable run binding — uses the worker token.
+      // Resolved AFTER start + setup so the installed credential is at least
+      // as fresh as the one the setup hook used; injected post-start rather
+      // than baked into the VM's creation env, so it never outlives rotation.
+      const patKind = await resolveGithubPatKind('default');
+      const ghCliToken =
+        (await getGithubPat(() => github.integrationStorage, session.orgId, patKind)) ?? (await getRepositoryToken());
       sandbox.setEnvironmentVariable?.('GH_TOKEN', ghCliToken);
       // Observability only — nothing reads these columns for decisions.
       void storage.sessions

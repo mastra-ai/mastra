@@ -197,6 +197,29 @@ describe('session setup hook + fallback', () => {
     expect(runs).toBe(1);
   });
 
+  it('two logical sessions sharing a provider sandbox id do not share the fallback single-flight', async () => {
+    const bootA = path.join(dir, 'a');
+    const bootB = path.join(dir, 'b');
+    const a = new LocalSandbox({ workingDirectory: bootA });
+    const b = new LocalSandbox({ workingDirectory: bootB });
+    await a._start();
+    await b._start();
+
+    let runs = 0;
+    const run = async (sb: typeof a | typeof b) => {
+      runs += 1;
+      await sb.executeCommand!('mkdir -p repo/.git');
+    };
+    // Same provider-reported id would coalesce these without the logical key.
+    Object.defineProperty(a, 'id', { value: 'shared-id' });
+    Object.defineProperty(b, 'id', { value: 'shared-id' });
+    await Promise.all([
+      runSessionSetupFallback(a, run as never, path.join(bootA, 'repo'), 'session-a'),
+      runSessionSetupFallback(b, run as never, path.join(bootB, 'repo'), 'session-b'),
+    ]);
+    expect(runs).toBe(2);
+  });
+
   it('the fallback surfaces failures with the exit code and writes no marker', async () => {
     const sandbox = new LocalSandbox({ workingDirectory: dir });
     await sandbox._start();
