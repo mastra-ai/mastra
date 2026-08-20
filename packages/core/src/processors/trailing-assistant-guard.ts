@@ -64,6 +64,11 @@ export class TrailingAssistantGuard implements Processor<'trailing-assistant-gua
     const lastMessage = messages[messages.length - 1];
     if (!lastMessage || lastMessage.role !== 'assistant') return;
 
+    // MessageList orders by createdAt and assigns fast-arriving messages synthetic
+    // future timestamps, so a plain `new Date()` can tie with (or precede) the
+    // trailing assistant message and get sorted before it. Stamp strictly later.
+    const createdAt = new Date(Math.max(Date.now(), new Date(lastMessage.createdAt).getTime() + 1));
+
     return {
       messages: [
         ...messages,
@@ -74,7 +79,7 @@ export class TrailingAssistantGuard implements Processor<'trailing-assistant-gua
             format: 2 as const,
             parts: [{ type: 'text' as const, text: 'Generate the structured response.' }],
           },
-          createdAt: new Date(),
+          createdAt,
         },
       ],
     };
