@@ -2,12 +2,20 @@
 '@mastra/playground-ui': minor
 ---
 
-Added `SettingsSectionAlt` for composable, flat settings layouts.
+Added `flat` and `factory` variants to `Section`, including standard, view-only, and destructive row compositions.
 
 ```tsx
-<SettingsSectionAlt title="Security">
-  <SettingsSectionAlt.Row label="Two-factor authentication" description="Require a verification code when signing in.">
-    <Switch />
-  </SettingsSectionAlt.Row>
-</SettingsSectionAlt>
+<Section variant="factory">
+  <Section.Header>
+    <div>
+      <Section.Heading>Security</Section.Heading>
+      <Section.Description>Manage sign-in requirements.</Section.Description>
+    </div>
+  </Section.Header>
+  <Section.Content>
+    <Section.Row label="Two-factor authentication">
+      <Switch />
+    </Section.Row>
+  </Section.Content>
+</Section>
 ```
