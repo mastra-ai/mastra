@@ -265,7 +265,7 @@ export function KnowledgeFlyout({
           </header>
 
           <div className="min-h-0 flex-1 overflow-y-auto pb-4">
-            {nodeQuery.data.node.content ? (
+            {nodeQuery.data.node.content.trim() ? (
               <Collapsible defaultOpen>
                 <SectionHeader title="Content" />
                 <CollapsibleContent>
