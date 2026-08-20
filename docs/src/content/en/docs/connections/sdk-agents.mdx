@@ -5,7 +5,7 @@ packages:
   - "@mastra/claude"
   - "@mastra/cursor"
   - "@mastra/openai"
-  - "@mastra/opencode"
+  - "@mastra/opencode-sdk"
   - "@mastra/core"
 ---
 
@@ -25,7 +25,7 @@ SDK agents let you use other agent SDK frameworks inside Mastra. Use them to reg
 - [Claude Agent SDK](#claude-agent-sdk): Use `@mastra/claude` to register a Claude SDK agent and call it with Mastra `generate()` and `stream()`.
 - [Cursor Agent SDK](#cursor-agent-sdk): Use `@mastra/cursor` to register a Cursor SDK agent and call it with Mastra `generate()` and `stream()`.
 - [OpenAI Agents SDK](#openai-agents-sdk): Use `@mastra/openai` to register an OpenAI SDK agent and call it with Mastra `generate()` and `stream()`.
-- [OpenCode SDK](#opencode-sdk): Use `@mastra/opencode` to register an OpenCode SDK agent and call it with Mastra `generate()` and `stream()`.
+- [OpenCode SDK](#opencode-sdk): Use `@mastra/opencode-sdk` to register an OpenCode SDK agent and call it with Mastra `generate()` and `stream()`.
 
 Coding agents without a dedicated Mastra package, such as Cline, run through the [Agent Client Protocol](/docs/connections/acp). You can also use OpenCode through ACP when your app needs an ACP coding-agent process rather than the OpenCode SDK runtime.
 
@@ -191,6 +191,49 @@ export const cursorSDKAgent = new CursorSDKAgent({
 })
 ```
 
+## OpenCode SDK
+
+Use `@mastra/opencode-sdk` to run an OpenCode SDK agent through Mastra. The wrapper can start a local OpenCode server, connect to an existing server, or use an existing OpenCode SDK client.
+
+### Install OpenCode packages
+
+Install the Mastra package and the OpenCode SDK peer dependency. Install the [OpenCode CLI](https://opencode.ai/docs) when the wrapper starts a local server.
+
+```bash npm2yarn
+npm install @mastra/opencode-sdk @opencode-ai/sdk
+```
+
+### Create an OpenCode SDK agent
+
+Pass `serverOptions` to start a local OpenCode server when the agent first runs. The wrapper reuses the client for later runs. Call `close()` during application shutdown to stop the server.
+
+```typescript title="src/mastra/agents/opencode-sdk-agent.ts"
+import { OpenCodeSDKAgent } from '@mastra/opencode-sdk'
+
+export const openCodeSDKAgent = new OpenCodeSDKAgent({
+  id: 'opencode-sdk-agent',
+  name: 'OpenCode SDK Agent',
+  description: 'Use OpenCode SDK through Mastra.',
+  serverOptions: {},
+})
+```
+
+To connect to an OpenCode server that is already running, pass its URL with `config`. You can also pass a preconfigured OpenCode SDK `client`.
+
+```typescript title="src/mastra/agents/opencode-sdk-agent.ts"
+import { OpenCodeSDKAgent } from '@mastra/opencode-sdk'
+
+export const openCodeSDKAgent = new OpenCodeSDKAgent({
+  id: 'opencode-sdk-agent',
+  name: 'OpenCode SDK Agent',
+  description: 'Use OpenCode SDK through Mastra.',
+  config: {
+    baseUrl: 'http://127.0.0.1:4096',
+    directory: process.cwd(),
+  },
+})
+```
+
 ## OpenAI Agents SDK
 
 Use `@mastra/openai` to register an OpenAI Agents SDK agent in Mastra while keeping OpenAI-specific agent settings in OpenAI SDK options.
@@ -290,12 +333,14 @@ Register SDK agents in the Mastra instance like other agents:
 import { Mastra } from '@mastra/core'
 import { claudeSDKAgent } from './agents/claude-sdk-agent'
 import { cursorSDKAgent } from './agents/cursor-sdk-agent'
+import { openCodeSDKAgent } from './agents/opencode-sdk-agent'
 import { openaiSDKAgent } from './agents/openai-sdk-agent'
 
 export const mastra = new Mastra({
   agents: {
     claudeSDKAgent,
     cursorSDKAgent,
+    openCodeSDKAgent,
     openaiSDKAgent,
   },
 })
@@ -344,14 +389,25 @@ for await (const chunk of stream.textStream) {
 
 Cursor SDK agents can continue with the wrapped SDK agent. If you need to resume a stored Cursor SDK agent by ID, pass `agentId` in `resumeData`.
 
+OpenCode SDK agents can resume a known session with `sessionId`:
+
+```typescript title="src/mastra/resume-opencode.ts"
+const result = await openCodeSDKAgent.resumeGenerate({
+  message: 'Continue the previous task.',
+  sessionId: 'opencode-session-id',
+})
+
+console.log(result.text)
+```
+
 ## Structured output
 
-Claude and OpenAI SDK agents support Mastra `structuredOutput` through their provider-native structured output APIs. The validated value is available on `result.object`.
+Claude, OpenAI, and OpenCode SDK agents support Mastra `structuredOutput` through their provider-native structured output APIs. OpenCode passes the JSON Schema to its native schema-constrained output format, then Mastra validates the returned value. The validated value is available on `result.object`.
 
-```typescript title="src/mastra/run-openai-structured-output.ts"
+```typescript title="src/mastra/run-opencode-structured-output.ts"
 import { z } from 'zod'
 
-const result = await openaiSDKAgent.generate<{ summary: string }>('Summarize this project.', {
+const result = await openCodeSDKAgent.generate<{ summary: string }>('Summarize this project.', {
   structuredOutput: {
     schema: z.object({
       summary: z.string(),
@@ -368,7 +424,7 @@ Cursor SDK agents throw a clear error when `structuredOutput` is requested becau
 
 SDK agents create Mastra agent and model spans for `generate()` and `stream()` calls. Mastra records SDK-provided usage, tool activity, and provider metadata when the vendor SDK exposes those events.
 
-Claude SDK runs can include SDK-estimated cost from the Claude result message. Cursor SDK runs include token usage from Cursor interaction updates. OpenAI SDK runs include token usage from OpenAI run state.
+Claude SDK runs can include SDK-estimated cost from the Claude result message. Cursor SDK runs include token usage from Cursor interaction updates. OpenAI SDK runs include token usage from OpenAI run state. OpenCode SDK runs include token usage, estimated cost, tool activity, and provider metadata from OpenCode session events.
 
 For storage and dashboard setup, see [Observability](/docs/observability/overview).
 

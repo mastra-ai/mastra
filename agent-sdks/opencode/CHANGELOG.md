@@ -1,4 +1,4 @@
-# @mastra/opencode
+# @mastra/opencode-sdk
 
 ## 0.1.0
 

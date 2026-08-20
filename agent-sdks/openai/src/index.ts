@@ -1,6 +1,27 @@
 import { randomUUID } from 'node:crypto';
 import { ReadableStream } from 'node:stream/web';
 
+import {
+  createMastraOutput,
+  createNoopModel,
+  createProviderMetadata,
+  createSDKAgentTelemetry,
+  enqueueFinishChunks,
+  enqueueStartChunks,
+  enqueueTextDelta,
+  getNumber,
+  getObjectValue,
+  getString,
+  getStructuredOutputFromValue,
+  getStructuredOutputSchema,
+  isRecord,
+  promptToText,
+  sumDefined,
+  toFullOutput,
+  toLanguageModelUsage,
+  toRecord,
+} from '@internal/agent-sdk-base';
+import type { SDKAgentRunOptions, SDKAgentTelemetry, SDKModelGenerateResult, V3Usage } from '@internal/agent-sdk-base';
 import { Agent } from '@mastra/core/agent';
 import type { StructuredOutputOptions } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
@@ -10,22 +31,6 @@ import type { ChunkType, FullOutput, ProviderMetadata, MastraModelOutput } from 
 import { ChunkFrom } from '@mastra/core/stream';
 import { Agent as OpenAIAgent, run } from '@openai/agents';
 import type { AgentOptions as OpenAIAgentOptions, RunItem, RunStreamEvent } from '@openai/agents';
-import {
-  createMastraOutput,
-  createNoopModel,
-  createProviderMetadata,
-  createSDKAgentTelemetry,
-  enqueueFinishChunks,
-  enqueueStartChunks,
-  enqueueTextDelta,
-  getStructuredOutputFromValue,
-  getStructuredOutputSchema,
-  promptToText,
-  sumDefined,
-  toFullOutput,
-  toLanguageModelUsage,
-} from '@internal/agent-sdk-base';
-import type { SDKAgentRunOptions, SDKAgentTelemetry, SDKModelGenerateResult, V3Usage } from '@internal/agent-sdk-base';
 
 const PROVIDER = '@openai/agents';
 const MODEL_ID = 'openai-agents-sdk';
@@ -291,7 +296,6 @@ async function runOpenAIGenerate<OUTPUT>(
     itemCount: result.newItems.length,
     usage,
   });
-  //TODO : finishReason from openai Stop reason ? 
   return {
     content: [{ type: 'text', text }],
     finishReason: { unified: 'stop', raw: 'stop' },
@@ -563,7 +567,6 @@ function getOpenAIProviderMetadata({
   });
 }
 
-//TODO : tool call chunks can have broader set of items ? 
 function recordOpenAIToolTelemetry(items: RunItem[], telemetry: OpenAIToolTelemetry): void {
   for (const item of items) {
     if (item.type === 'tool_call_item') {
@@ -582,7 +585,6 @@ function recordOpenAIToolTelemetry(items: RunItem[], telemetry: OpenAIToolTeleme
     }
   }
 }
-//TODO : similar can have more set of keys ?
 function recordOpenAIStreamToolTelemetry(event: RunStreamEvent, telemetry: OpenAIToolTelemetry): void {
   if (event.type !== 'run_item_stream_event') {
     return;
@@ -704,29 +706,4 @@ function parseJsonString(value: unknown): unknown {
   } catch {
     return value;
   }
-}
-
-
-// codex: import the base package and cleanup
-function getNumber(value: unknown): number | undefined {
-  return typeof value === 'number' ? value : undefined;
-}
-
-function getString(record: Record<string, unknown> | undefined, key: string): string | undefined {
-  const value = record?.[key];
-  return typeof value === 'string' ? value : undefined;
-}
-
-function getObjectValue(value: unknown, key: string): unknown {
-  return toRecord(value)?.[key];
-}
-
-//TODO : move to utils /
-
-function toRecord(value: unknown): Record<string, unknown> | undefined {
-  return isRecord(value) ? value : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object';
 }

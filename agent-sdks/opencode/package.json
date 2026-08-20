@@ -1,5 +1,5 @@
 {
-  "name": "@mastra/opencode",
+  "name": "@mastra/opencode-sdk",
   "version": "0.1.0",
   "description": "OpenCode SDK package for Mastra",
   "type": "module",
