@@ -47,3 +47,30 @@ export function stageOrder(stage: string): number {
   const index = BOARD_STAGES.findIndex(s => s.id === stage);
   return index === -1 ? BOARD_STAGES.length : index;
 }
+
+/**
+ * Stage hue, shared by every chart so one colour means one stage everywhere.
+ * Tailwind cannot build class names at runtime, so both paints are spelled out.
+ */
+interface StagePaint {
+  fill: string;
+  stroke: string;
+  /** The raw token, for gradient stops — SVG stops take a colour, not a class. */
+  color: string;
+}
+
+const STAGE_PAINT = {
+  intake: { fill: 'fill-icon2', stroke: 'stroke-icon2', color: 'var(--color-icon2)' },
+  triage: { fill: 'fill-stage-triage', stroke: 'stroke-stage-triage', color: 'var(--color-stage-triage)' },
+  planning: { fill: 'fill-stage-planning', stroke: 'stroke-stage-planning', color: 'var(--color-stage-planning)' },
+  execute: { fill: 'fill-stage-execute', stroke: 'stroke-stage-execute', color: 'var(--color-stage-execute)' },
+  review: { fill: 'fill-stage-review', stroke: 'stroke-stage-review', color: 'var(--color-stage-review)' },
+  done: { fill: 'fill-positive1', stroke: 'stroke-positive1', color: 'var(--color-positive1)' },
+  canceled: { fill: 'fill-icon2', stroke: 'stroke-icon2', color: 'var(--color-icon2)' },
+} satisfies Record<BoardStageId, StagePaint>;
+
+const PAINT_BY_STAGE: Record<string, StagePaint> = STAGE_PAINT;
+
+export function stagePaint(stage: string): StagePaint {
+  return PAINT_BY_STAGE[stage] ?? STAGE_PAINT.intake;
+}

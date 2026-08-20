@@ -11,62 +11,45 @@
  * window always returns the same numbers.
  */
 
-import { FACTORY_RULE_STAGES } from '../../../rules/types.js';
 import { isAgentActor } from './base.js';
 import type { WorkItemRow } from './base.js';
+import type { Window } from './metrics/base.js';
+import {
+  CANCELED_STAGE,
+  DAY_MS,
+  DONE_STAGE,
+  FUNNEL_GATES,
+  hasFactoryRun,
+  isPipelineStage,
+  splitBoards,
+  parseTime,
+  percentile,
+  share,
+  stagesHeldAt,
+  TERMINAL_STAGES,
+  utcDay,
+  utcDayStart,
+} from './metrics/base.js';
+import type { FactoryFunnel } from './metrics/funnel.js';
+import { funnel } from './metrics/funnel.js';
+import type { FactorySeries } from './metrics/series.js';
+import { dailySeries } from './metrics/series.js';
 
 /** Default window span (days) when the request omits or malforms the range. */
 export const DEFAULT_METRICS_WINDOW = 30;
 /** Hard cap on the range span (days) — bounds the gap-filled throughput array. */
 export const MAX_METRICS_WINDOW = 366;
 
-const DAY_MS = 86_400_000;
-
-/** Terminal stage — items here count as completed, not in-flight. */
-const DONE_STAGE = 'done';
-
-/** Terminal stage for tracked non-completions — never a completion. */
-const CANCELED_STAGE = 'canceled';
-
-/**
- * Terminal stages — items holding only these are not in-flight. `done` is a
- * completion (feeds throughput/lead time); `canceled` is a tracked
- * non-completion outcome and feeds neither.
- */
-const TERMINAL_STAGES = new Set([DONE_STAGE, CANCELED_STAGE]);
-
-const INTAKE_STAGE = 'intake';
-
-/**
- * Pipeline work excludes the inbox as well as the terminal stages: an intake
- * card is queued, not in flight, and its pass through is the poller filing it.
- */
-function isPipelineStage(stage: string): boolean {
-  return !TERMINAL_STAGES.has(stage) && stage !== INTAKE_STAGE;
-}
-
-/**
- * The funnel's axis: the pipeline in board order, capped by `done`. A card sits
- * at the furthest gate it ever entered, so one that skipped a stage still
- * counts as having got past it and the band can only ever narrow.
- */
-const FUNNEL_GATES: string[] = [...FACTORY_RULE_STAGES.filter(isPipelineStage), DONE_STAGE];
-
-/**
- * Cards the Factory ran: starting a run records its session on the row. The
- * integrations sync every issue and PR of a connected repo into the board and
- * those outnumber the Factory's own work by an order of magnitude, so counting
- * them reports the upstream repo's flow as the Factory's.
- */
-function hasFactoryRun(item: WorkItemRow): boolean {
-  return Object.keys(item.sessions).length > 0;
-}
-
 /**
  * Flow metrics over the cards the Factory ran ({@link hasFactoryRun}) — synced
- * upstream issues and PRs nobody started a run on are not the Factory's work
- * and are excluded from every field below except {@link FactoryMetrics.intake},
- * which exists to report them.
+ * upstream issues nobody started a run on are not the Factory's work and are
+ * excluded from every field below except {@link FactoryMetrics.intake}, which
+ * exists to report them.
+ *
+ * Every field is the *work* board. Reviewing a pull request and building a card
+ * are different jobs on different clocks — minutes against days — so a median
+ * over both lands between two answers and is neither. The review board is
+ * counted apart, in {@link FactoryMetrics.review}.
  */
 export interface FactoryMetrics {
   /**
@@ -79,8 +62,6 @@ export interface FactoryMetrics {
   throughput: { date: string; count: number }[];
   /** Card creation → `done` for every completion that landed in the window. */
   leadTime: { medianMs: number | null; p90Ms: number | null; samples: number };
-  /** Distinct cards in a pipeline stage — past intake, not yet terminal. */
-  wipTotal: number;
   /** Cards created in the window, by source. */
   sourceMix: { source: string; count: number }[];
   /**
@@ -103,19 +84,43 @@ export interface FactoryMetrics {
    * therefore only narrows, and each gate's drop is exactly the two counts
    * under it.
    */
-  funnel: {
-    gates: {
-      stage: string;
-      /** Cards that got at least this far. */
-      reached: number;
-      /** Of the ones that got no further: abandoned here. */
-      canceled: number;
-      /** Of the ones that got no further: still open here. */
-      stalled: number;
-    }[];
-    /** Cards the pipeline sent back to a stage they had already passed. */
-    sentBack: number;
+  funnel: FactoryFunnel;
+  /** One point per day in {@link throughput}, so a headline and its sparkline agree. */
+  series: FactorySeries;
+  /**
+   * How long a first visit held a card, per pipeline stage, over the visits that
+   * ended in the window. The funnel says where work stops; this says where it
+   * lingers — the slowest stage is whichever row is highest, not a second field
+   * that could disagree with them.
+   */
+  stageDwell: { stage: string; medianMs: number; p90Ms: number }[];
+  /**
+   * The same span immediately before the window. Null unless it covers as many
+   * board days as the window itself — comparing a full period against one that
+   * predates the first card reads every metric as growth from nothing.
+   */
+  previous: {
+    completed: number;
+    leadTimeMedianMs: number | null;
+    agentCoveragePercent: number | null;
+    reworkPercent: number | null;
+  } | null;
+  /**
+   * The review board on its own clock: pull requests the Factory did not open
+   * for a card of its own. Same vocabulary as the work board above, so the two
+   * sections read the same way without ever being averaged together.
+   */
+  review: {
+    intake: FactoryMetrics['intake'];
+    /** Entries into `done` per UTC day, on the review board's own covered days. */
+    throughput: FactoryMetrics['throughput'];
+    /** Entries into `done` inside the window — reviews the Factory finished. */
+    completed: number;
+    /** Filed → reviewed, for every completion that landed in the window. */
+    leadTime: FactoryMetrics['leadTime'];
   };
+  /** {@link agentCoverage} read as one number, across every stage. */
+  agentCoveragePercent: number | null;
   /** Per-stage agent coverage over first visits that ended in the window. */
   agentCoverage: {
     stage: string;
@@ -160,21 +165,13 @@ function parseRangeParam(value: unknown, boundary: 'from' | 'to'): number | unde
   return boundary === 'to' && dateOnly ? time + DAY_MS : time;
 }
 
-function utcDayStart(time: number): number {
-  return Date.parse(`${utcDay(time)}T00:00:00Z`);
-}
-
 /**
  * Resolve untrusted `from`/`to` into a bounded half-open UTC window. A date-only
  * `to` covers the whole day; an open/future end resolves to the end of the
  * current UTC day (not `now`) so an event at this instant stays inside the
  * window instead of on its excluded edge.
  */
-export function parseMetricsRange(
-  fromParam: unknown,
-  toParam: unknown,
-  now: Date,
-): { windowStart: number; windowEnd: number } {
+export function parseMetricsRange(fromParam: unknown, toParam: unknown, now: Date): Window {
   const nowMs = now.getTime();
   const endOfToday = utcDayStart(nowMs) + DAY_MS;
   const requestedEnd = parseRangeParam(toParam, 'to') ?? endOfToday;
@@ -188,13 +185,6 @@ export function parseMetricsRange(
   return { windowStart, windowEnd };
 }
 
-/** Stage history is server-appended, so an unparsable stamp is a corrupt row. */
-function parseTime(iso: string): number {
-  const time = Date.parse(iso);
-  if (Number.isNaN(time)) throw new Error(`Unparsable stage-history timestamp: ${iso}`);
-  return time;
-}
-
 /** Asserted up front so a corrupt row fails every window, not just the ones that read it. */
 function assertParsableHistory(items: WorkItemRow[]): void {
   for (const item of items) {
@@ -204,32 +194,6 @@ function assertParsableHistory(items: WorkItemRow[]): void {
     }
   }
 }
-
-/** Nearest-rank percentile over an unsorted sample list. */
-function percentile(samples: number[], fraction: number): number | null {
-  if (samples.length === 0) return null;
-  const sorted = [...samples].sort((a, b) => a - b);
-  const rank = Math.max(1, Math.ceil(fraction * sorted.length));
-  return sorted[rank - 1]!;
-}
-
-/** UTC `YYYY-MM-DD` for a timestamp. */
-function utcDay(time: number): string {
-  return new Date(time).toISOString().slice(0, 10);
-}
-
-/** Stages the item was holding at `time`, replayed from its history. */
-function stagesHeldAt(item: WorkItemRow, time: number): Set<string> {
-  const held = new Set<string>();
-  for (const entry of item.stageHistory) {
-    if (parseTime(entry.enteredAt) >= time) continue;
-    if (entry.exitedAt !== undefined && parseTime(entry.exitedAt) <= time) continue;
-    held.add(entry.stage);
-  }
-  return held;
-}
-
-type Window = { windowStart: number; windowEnd: number };
 
 /**
  * Completions per UTC day, plus one lead-time sample each. A completion is an
@@ -259,11 +223,6 @@ function completions(items: WorkItemRow[], { windowStart, windowEnd }: Window) {
     }
   }
   return { byDay, leadSamples };
-}
-
-/** Cards holding at least one pipeline stage right now — window-independent. */
-function countInFlight(items: WorkItemRow[]): number {
-  return items.filter(item => item.stages.some(isPipelineStage)).length;
 }
 
 /** Where the window's cards came from, most common first. */
@@ -323,51 +282,55 @@ function agentCoverage(items: WorkItemRow[], { windowStart, windowEnd }: Window)
   return [...byStage.values()];
 }
 
-/** Furthest {@link FUNNEL_GATES} index the card ever entered; `-1` if none. */
-function furthestGate(item: WorkItemRow): number {
-  let furthest = -1;
-  for (const entry of item.stageHistory) furthest = Math.max(furthest, FUNNEL_GATES.indexOf(entry.stage));
-  return furthest;
-}
-
-/** Card moved back into a gate it had already passed. */
-function wasSentBack(item: WorkItemRow): boolean {
-  let deepest = -1;
-  for (const entry of item.stageHistory) {
-    const gate = FUNNEL_GATES.indexOf(entry.stage);
-    if (gate === -1) continue;
-    if (gate < deepest) return true;
-    deepest = gate;
-  }
-  return false;
+/** The per-stage rows read as one number. */
+function coverageShare(rows: FactoryMetrics['agentCoverage']): number | null {
+  const passes = rows.reduce((total, row) => total + row.passes, 0);
+  const byAgent = rows.reduce((total, row) => total + row.byAgent, 0);
+  return share(byAgent, passes);
 }
 
 /**
- * Cards whose first pipeline pass started inside the window. Anchoring the
- * cohort on that rather than on creation keeps a card that sat in intake for
- * weeks out of the cohort of the week it finally moved.
+ * Time a first visit held a card, per pipeline stage. Scoped to visits that
+ * *ended* in the window, like every other duration here: a visit still open has
+ * only spent part of what it will.
  */
-function pulledInDuringWindow(item: WorkItemRow, { windowStart, windowEnd }: Window): boolean {
-  const first = item.stageHistory.find(entry => isPipelineStage(entry.stage));
-  if (!first) return false;
-  const entered = parseTime(first.enteredAt);
-  return entered >= windowStart && entered < windowEnd;
+function stageDwell(items: WorkItemRow[], { windowStart, windowEnd }: Window): FactoryMetrics['stageDwell'] {
+  const dwellsByStage = new Map<string, number[]>();
+  for (const item of items) {
+    const visited = new Set<string>();
+    for (const entry of item.stageHistory) {
+      if (!isPipelineStage(entry.stage) || visited.has(entry.stage)) continue;
+      visited.add(entry.stage);
+      if (entry.exitedAt === undefined) continue;
+      const exited = parseTime(entry.exitedAt);
+      if (exited < windowStart || exited >= windowEnd) continue;
+      const dwells = dwellsByStage.get(entry.stage) ?? [];
+      dwells.push(exited - parseTime(entry.enteredAt));
+      dwellsByStage.set(entry.stage, dwells);
+    }
+  }
+
+  return [...dwellsByStage.entries()]
+    .map(([stage, dwells]) => ({ stage, medianMs: percentile(dwells, 0.5)!, p90Ms: percentile(dwells, 0.9)! }))
+    .sort((a, b) => FUNNEL_GATES.indexOf(a.stage) - FUNNEL_GATES.indexOf(b.stage));
 }
 
-/** Where the window's cohort got to, and how much of it came back. */
-function funnel(items: WorkItemRow[], window: Window): FactoryMetrics['funnel'] {
-  const cohort = items.filter(item => pulledInDuringWindow(item, window));
-  const gates = FUNNEL_GATES.map(stage => ({ stage, reached: 0, canceled: 0, stalled: 0 }));
-  const shipped = FUNNEL_GATES.length - 1;
-  for (const item of cohort) {
-    const furthest = furthestGate(item);
-    for (let gate = 0; gate <= furthest; gate++) gates[gate]!.reached += 1;
-    const stopped = furthest === shipped ? undefined : gates[furthest];
-    if (!stopped) continue;
-    if (item.stageHistory.some(entry => entry.stage === CANCELED_STAGE)) stopped.canceled += 1;
-    else stopped.stalled += 1;
-  }
-  return { gates, sentBack: cohort.filter(wasSentBack).length };
+/**
+ * The window's headline numbers over the same span immediately before it. Null
+ * unless that span covers as many board days as the window, so a period can
+ * only ever be compared against an equally long one.
+ */
+function previousPeriod(items: WorkItemRow[], window: Window, daysCovered: number): FactoryMetrics['previous'] {
+  const span = window.windowEnd - window.windowStart;
+  const before = { windowStart: window.windowStart - span, windowEnd: window.windowStart };
+  const { byDay, leadSamples } = completions(items, before);
+  if (byDay.size !== daysCovered) return null;
+  return {
+    completed: [...byDay.values()].reduce((total, count) => total + count, 0),
+    leadTimeMedianMs: percentile(leadSamples, 0.5),
+    agentCoveragePercent: coverageShare(agentCoverage(items, before)),
+    reworkPercent: funnel(items, before).rework.percent,
+  };
 }
 
 /** Demand versus pickup — see {@link FactoryMetrics.intake}. */
@@ -387,26 +350,57 @@ function intakeFlow(boardItems: WorkItemRow[], { windowStart, windowEnd }: Windo
   return { arrived, pickedUp, waiting };
 }
 
-export function computeFactoryMetrics(boardItems: WorkItemRow[], window: Window): FactoryMetrics {
-  const items = boardItems.filter(hasFactoryRun);
-  assertParsableHistory(items);
+function daily(byDay: Map<string, number>): FactoryMetrics['throughput'] {
+  return [...byDay.entries()].map(([date, count]) => ({ date, count })).sort((a, b) => a.date.localeCompare(b.date));
+}
 
-  const { byDay, leadSamples } = completions(items, window);
-
+/** The review board read on its own clock — see {@link FactoryMetrics.review}. */
+function reviewFlow(threads: WorkItemRow[], window: Window): FactoryMetrics['review'] {
+  const ran = threads.filter(hasFactoryRun);
+  assertParsableHistory(ran);
+  const { byDay, leadSamples } = completions(ran, window);
+  const throughput = daily(byDay);
   return {
-    daysCovered: byDay.size,
-    throughput: [...byDay.entries()]
-      .map(([date, count]) => ({ date, count }))
-      .sort((a, b) => a.date.localeCompare(b.date)),
+    intake: intakeFlow(threads, window),
+    throughput,
+    completed: throughput.reduce((total, point) => total + point.count, 0),
     leadTime: {
       medianMs: percentile(leadSamples, 0.5),
       p90Ms: percentile(leadSamples, 0.9),
       samples: leadSamples.length,
     },
-    wipTotal: countInFlight(items),
+  };
+}
+
+export function computeFactoryMetrics(boardItems: WorkItemRow[], window: Window): FactoryMetrics {
+  const boards = splitBoards(boardItems);
+  const items = boards.work.filter(hasFactoryRun);
+  assertParsableHistory(items);
+
+  const { byDay, leadSamples } = completions(items, window);
+  const throughput = daily(byDay);
+  const coverage = agentCoverage(items, window);
+
+  return {
+    daysCovered: byDay.size,
+    throughput,
+    leadTime: {
+      medianMs: percentile(leadSamples, 0.5),
+      p90Ms: percentile(leadSamples, 0.9),
+      samples: leadSamples.length,
+    },
     sourceMix: demandMix(items, window),
-    intake: intakeFlow(boardItems, window),
+    intake: intakeFlow(boards.work, window),
+    review: reviewFlow(boards.review, window),
     funnel: funnel(items, window),
-    agentCoverage: agentCoverage(items, window),
+    series: dailySeries(
+      items,
+      throughput.map(point => point.date),
+      window,
+    ),
+    agentCoverage: coverage,
+    agentCoveragePercent: coverageShare(coverage),
+    stageDwell: stageDwell(items, window),
+    previous: previousPeriod(items, window, byDay.size),
   };
 }

@@ -1,103 +1,141 @@
-import type { AuditAction, AuditNamespace } from '@mastra/factory/storage/domains/audit/base';
-import { AUDIT_ACTIONS } from '@mastra/factory/storage/domains/audit/base';
+import type { AuditNamespace } from '@mastra/factory/storage/domains/audit/actions';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ScrollText } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
-import { useAuditEvents, useAuditPortalLink } from '../../hooks/useAuditEvents';
-import { relativeTime } from '../../lib/date/relativeTime';
+import { useAuditPortalLink, useAuditWindow } from '../../hooks/useAuditEvents';
+import { useWorkItemsQuery } from '../../hooks/useWorkItems';
+import { formatDuration } from '../../lib/date';
 import { SkeletonRows } from '../ui/SkeletonRows';
+import {
+  AUDIT_NAMESPACES,
+  NAMESPACE_LABELS,
+  namespaceOf,
+  targetItemId,
+  type TimeSlice,
+} from '../domains/factory/audit-log';
+import { AuditEventRow } from '../domains/factory/components/AuditEventRow';
+import { AuditStrip } from '../domains/factory/components/AuditStrip';
+import { Chip, ChipRow } from '../domains/factory/components/Chips';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import type { AuditEvent } from '../domains/factory/services/audit';
 
-type GroupKey = 'all' | AuditNamespace;
+type ActorKey = 'all' | AuditEvent['actorType'];
 
-/** Labelling every namespace is what keeps a new action from shipping as an unnamed tab. */
-const NAMESPACE_LABELS: Record<AuditNamespace, string> = {
-  work_item: 'Work items',
-  run: 'Runs',
-  git: 'Git',
-  agent: 'Agent',
-  intake: 'Intake',
-};
+const DAY = 86_400_000;
+const AUDIT_SPAN = 7 * DAY;
+/** Past this the list stops being a list; the strip is how you get to the rest. */
+const LIST_CAP = 260;
 
-const isNamespace = (segment: string | undefined): segment is AuditNamespace =>
-  segment !== undefined && segment in NAMESPACE_LABELS;
-
-const namespaces = [...new Set(AUDIT_ACTIONS.map(action => action.split('.')[1]))].filter(isNamespace);
-
-/**
- * One filter per namespace the Factory records, in taxonomy order. Derived from
- * the taxonomy rather than restating it, so no tab can sit permanently empty and
- * no recorded action can hide from every tab.
- */
-const ACTION_GROUPS: { key: GroupKey; label: string; actions?: AuditAction[] }[] = [
-  { key: 'all', label: 'All' },
-  ...namespaces.map(namespace => ({
-    key: namespace,
-    label: NAMESPACE_LABELS[namespace],
-    actions: AUDIT_ACTIONS.filter(action => action.startsWith(`factory.${namespace}.`)),
-  })),
+const ACTOR_FILTERS: { key: ActorKey; label: string }[] = [
+  { key: 'all', label: 'Everyone' },
+  { key: 'agent', label: 'Agents' },
+  { key: 'human', label: 'People' },
 ];
 
-/** Short human label for a dot-namespaced action, e.g. 'Stage moved'. */
-function actionLabel(action: string): string {
-  const leaf = action.split('.').pop() ?? action;
-  const words = leaf.replace(/_/g, ' ');
-  return words.charAt(0).toUpperCase() + words.slice(1);
+function clock(at: number): string {
+  return new Date(at).toLocaleTimeString(undefined, { hour12: false, hour: '2-digit', minute: '2-digit' });
+}
+
+function dayOf(at: number): string {
+  return new Date(at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+/** Two identical clock times is what a seven-day window reads as without its days. */
+function stamp(at: number, withDay: boolean): string {
+  return withDay ? `${dayOf(at)} ${clock(at)}` : clock(at);
 }
 
 /**
- * The Factory audit log: an append-only, org-scoped record of who did what,
- * when — every action in {@link AUDIT_ACTIONS}, newest first. Backed by the
- * local `audit_events` table; the "Open in WorkOS" button (shown when WorkOS is
- * configured) opens the enterprise viewer.
+ * The Factory audit log: an append-only, org-scoped record of who did what, when.
+ * Backed by the local `audit_events` table; "Open in WorkOS" opens the enterprise
+ * viewer when WorkOS is configured.
  */
 export function AuditPage() {
   return <FactoryPageShell>{project => <AuditContent factoryProjectId={project.id} />}</FactoryPageShell>;
 }
 
 function AuditContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
-  const [group, setGroup] = useState<GroupKey>('all');
-  const actionFilter = ACTION_GROUPS.find(entry => entry.key === group);
-  const eventsQuery = useAuditEvents(factoryProjectId, group, actionFilter?.actions);
-  const portalQuery = useAuditPortalLink(true);
+  const [actor, setActor] = useState<ActorKey>('all');
+  const [namespaces, setNamespaces] = useState<ReadonlySet<AuditNamespace>>(new Set());
+  const [slice, setSlice] = useState<TimeSlice | null>(null);
+  const [opened, setOpened] = useState<string | null>(null);
 
-  if (eventsQuery.isError) {
-    const message = eventsQuery.error instanceof Error ? eventsQuery.error.message : 'Unable to load audit events.';
+  const windowQuery = useAuditWindow(factoryProjectId, AUDIT_SPAN);
+  const portalQuery = useAuditPortalLink(true);
+  const itemsQuery = useWorkItemsQuery(factoryProjectId);
+  const titles = useMemo(() => new Map((itemsQuery.data ?? []).map(item => [item.id, item.title])), [itemsQuery.data]);
+
+  if (windowQuery.isError) {
+    const message = windowQuery.error instanceof Error ? windowQuery.error.message : 'Unable to load audit events.';
     return <Notice variant="destructive">{message}</Notice>;
   }
 
-  const events = eventsQuery.data?.pages.flatMap(page => page.events) ?? [];
-  const hasActionFilter = group !== 'all';
+  const trail = windowQuery.data;
+  const shown: ReadonlySet<AuditNamespace> = namespaces.size === 0 ? new Set(AUDIT_NAMESPACES) : namespaces;
+  const covered = trail ? { from: trail.coveredFrom, to: trail.to } : null;
+  const picked = slice ?? covered;
+  const rows = (trail?.events ?? []).filter(event => {
+    const namespace = namespaceOf(event.action);
+    const at = Date.parse(event.occurredAt);
+    return (
+      (namespace === undefined || shown.has(namespace)) &&
+      (actor === 'all' || actor === event.actorType) &&
+      (!picked || (at >= picked.from && at <= picked.to))
+    );
+  });
+  const filtered = actor !== 'all' || namespaces.size > 0 || slice !== null;
+  const spansDays = picked ? dayOf(picked.from) !== dayOf(picked.to) : false;
+
+  const clearFilters = () => {
+    setActor('all');
+    setNamespaces(new Set());
+    setSlice(null);
+  };
+
+  const toggle = (namespace: AuditNamespace) => {
+    const next = new Set(namespaces);
+    if (!next.delete(namespace)) next.add(namespace);
+    setNamespaces(next);
+  };
+
   return (
-    <section className="flex min-h-0 flex-1 flex-col gap-2" aria-label="Audit history">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <ButtonsGroup spacing="close" role="group" aria-label="Audit filter">
-          {ACTION_GROUPS.map(entry => (
-            <Button
-              key={entry.key}
-              variant={group === entry.key ? 'primary' : 'outline'}
-              size="sm"
-              aria-pressed={group === entry.key}
-              onClick={() => setGroup(entry.key)}
-            >
+    <section className="flex min-h-0 flex-1 flex-col gap-4" aria-label="Audit history">
+      <h1 className="sr-only">Audit log</h1>
+
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <ChipRow label="Actor filter">
+          {ACTOR_FILTERS.map(entry => (
+            <Chip key={entry.key} active={actor === entry.key} onClick={() => setActor(entry.key)}>
               {entry.label}
-            </Button>
+            </Chip>
           ))}
-        </ButtonsGroup>
+        </ChipRow>
+        <span aria-hidden="true" className="bg-border1 h-4 w-px" />
+        <ChipRow label="Audit filter">
+          {AUDIT_NAMESPACES.map(namespace => (
+            <Chip key={namespace} active={namespaces.has(namespace)} onClick={() => toggle(namespace)}>
+              {NAMESPACE_LABELS[namespace]}
+            </Chip>
+          ))}
+        </ChipRow>
+        {filtered ? (
+          <Chip active={false} onClick={clearFilters} className="text-icon5">
+            All 7 days
+          </Chip>
+        ) : null}
         {portalQuery.data ? (
           <Button
             variant="outline"
             size="sm"
+            className="ml-auto"
             onClick={() => {
               // Portal links are one-time use: open, then fetch a fresh one.
-              window.open(portalQuery.data!, '_blank', 'noopener,noreferrer');
+              globalThis.open(portalQuery.data!, '_blank', 'noopener,noreferrer');
               void portalQuery.refetch();
             }}
           >
@@ -106,24 +144,52 @@ function AuditContent({ factoryProjectId }: { factoryProjectId: string | undefin
         ) : null}
       </div>
 
-      {eventsQuery.isPending ? (
-        <div className="min-h-0 flex-1">
-          <SkeletonRows label="Loading audit events" rows={4} rowClassName="h-16 w-full" />
+      {trail && covered && trail.events.length > 0 ? (
+        <AuditStrip
+          events={trail.events}
+          from={covered.from}
+          to={covered.to}
+          slice={slice ?? covered}
+          onSlice={setSlice}
+          shown={shown}
+        />
+      ) : null}
+
+      {picked ? (
+        <div className="text-ui-xs text-icon2 flex flex-wrap items-center gap-x-4 gap-y-1">
+          <span className="font-mono tabular-nums">
+            {stamp(picked.from, spansDays)} → {stamp(picked.to, spansDays)}
+          </span>
+          <span className="font-mono tabular-nums">{formatDuration(picked.to - picked.from)}</span>
+          <span className="text-icon3 ml-auto font-mono tabular-nums">{rows.length} events</span>
         </div>
-      ) : events.length === 0 ? (
+      ) : null}
+
+      {trail && trail.coveredFrom > trail.from ? (
+        <Txt as="p" variant="ui-xs" className="text-icon2 m-0">
+          Seven days runs past what one read can hold — this window starts at {dayOf(trail.coveredFrom)}{' '}
+          {clock(trail.coveredFrom)}.
+        </Txt>
+      ) : null}
+
+      {windowQuery.isPending ? (
+        <div className="min-h-0 flex-1">
+          <SkeletonRows label="Loading audit events" rows={12} rowClassName="h-7 w-full" />
+        </div>
+      ) : rows.length === 0 ? (
         <EmptyState
           className="min-h-0 flex-1"
           as="h2"
           iconSlot={<ScrollText className="text-icon3 size-5" aria-hidden />}
-          titleSlot={hasActionFilter ? 'No matching audit events' : 'No audit events yet'}
+          titleSlot={filtered ? 'Nothing happened in this slice' : 'No audit events yet'}
           descriptionSlot={
-            hasActionFilter
-              ? `No audit events match the “${actionFilter?.label ?? 'selected'}” filter.`
+            filtered
+              ? 'Nothing recorded matches these filters.'
               : 'Board changes, runs, and git actions will appear here.'
           }
           actionSlot={
-            hasActionFilter ? (
-              <Button variant="outline" size="sm" onClick={() => setGroup('all')}>
+            filtered ? (
+              <Button variant="outline" size="sm" onClick={clearFilters}>
                 Show all events
               </Button>
             ) : undefined
@@ -131,62 +197,30 @@ function AuditContent({ factoryProjectId }: { factoryProjectId: string | undefin
         />
       ) : (
         <ScrollArea className="min-h-0 flex-1">
-          <div className="flex flex-col gap-2 pr-1">
-            <ul className="m-0 flex list-none flex-col gap-1 p-0" aria-label="Audit events">
-              {events.map(event => (
-                <AuditEventRow key={event.id} event={event} />
-              ))}
-            </ul>
-            {eventsQuery.hasNextPage ? (
-              <Button
-                variant="outline"
-                size="sm"
-                className="self-center"
-                disabled={eventsQuery.isFetchingNextPage}
-                onClick={() => void eventsQuery.fetchNextPage()}
-              >
-                {eventsQuery.isFetchingNextPage ? 'Loading…' : 'Load more'}
-              </Button>
-            ) : null}
-          </div>
+          <ul className="border-border1 m-0 flex list-none flex-col border-t p-0 pr-1" aria-label="Audit events">
+            {rows.slice(0, LIST_CAP).map(event => {
+              const at = Date.parse(event.occurredAt);
+              return (
+                <AuditEventRow
+                  key={event.id}
+                  event={event}
+                  actor={trail?.actors[event.actorId]}
+                  stamp={stamp(at, spansDays)}
+                  title={titles.get(targetItemId(event) ?? '')}
+                  expanded={opened === event.id}
+                  onToggle={() => setOpened(current => (current === event.id ? null : event.id))}
+                />
+              );
+            })}
+          </ul>
+          {rows.length > LIST_CAP ? (
+            <Txt as="p" variant="ui-xs" className="text-icon2 m-0 px-2 py-2.5">
+              {rows.length - LIST_CAP} older events in this slice are not drawn — narrow the strip or a filter to reach
+              them.
+            </Txt>
+          ) : null}
         </ScrollArea>
       )}
     </section>
-  );
-}
-
-function AuditEventRow({ event }: { event: AuditEvent }) {
-  const target = event.targets[0];
-  const hasMetadata = Object.keys(event.metadata).length > 0;
-
-  return (
-    <li className="border-border1 bg-surface2 rounded-lg border px-3 py-2">
-      <div className="grid grid-cols-[4rem_10rem_1fr] items-baseline gap-3">
-        <Txt as="span" variant="ui-xs" className="text-icon3" title={event.occurredAt}>
-          {relativeTime(event.occurredAt)}
-        </Txt>
-        <span className="bg-surface4 text-ui-xs text-icon5 inline-flex w-fit rounded-md px-1.5 py-0.5">
-          {actionLabel(event.action)}
-        </span>
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <Txt as="span" variant="ui-sm" className="text-icon6 truncate">
-            {target?.name ?? target?.id ?? '—'}
-          </Txt>
-          <Txt as="span" variant="ui-xs" className="text-icon3">
-            {event.actorType === 'agent'
-              ? `by agent${typeof event.metadata.startedBy === 'string' ? ` · started by ${event.metadata.startedBy}` : ''}`
-              : `by ${event.actorId}`}
-          </Txt>
-        </div>
-      </div>
-      {hasMetadata ? (
-        <details className="mt-1">
-          <summary className="text-ui-xs text-icon3 cursor-pointer">Details</summary>
-          <pre className="bg-surface1 text-ui-xs text-icon4 m-0 mt-1 overflow-x-auto rounded-md p-2">
-            {JSON.stringify(event.metadata, null, 2)}
-          </pre>
-        </details>
-      ) : null}
-    </li>
   );
 }

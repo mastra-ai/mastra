@@ -30,6 +30,7 @@ function makeItem(overrides: Partial<WorkItemRow>): WorkItemRow {
     createdBy: 'user_1',
     factoryProjectId: '00000000-0000-4000-8000-0000000000aa',
     externalSource: null,
+    parentWorkItemId: null,
     title: 'Item',
     stages: ['intake'],
     stageHistory: [{ stage: 'intake', enteredAt: hoursAgo(1), by: 'user_1' }],
@@ -136,7 +137,6 @@ describe('computeFactoryMetrics', () => {
     expect(metrics.throughput.at(-1)?.date).toBe('2026-07-15');
     expect(metrics.throughput[0]?.date).toBe('2026-07-09');
     expect(metrics.leadTime).toEqual({ medianMs: null, p90Ms: null, samples: 0 });
-    expect(metrics.wipTotal).toBe(0);
     expect(metrics.sourceMix).toEqual([]);
     expect(metrics.agentCoverage).toEqual([]);
   });
@@ -192,8 +192,6 @@ describe('computeFactoryMetrics', () => {
 
     expect(metrics.throughput.every(point => point.count === 0)).toBe(true);
     expect(metrics.leadTime.samples).toBe(0);
-    // ...but it still isn't in-flight.
-    expect(metrics.wipTotal).toBe(0);
   });
 
   it('given an item pulled back out of done, then the day it shipped keeps its completion', () => {
@@ -210,8 +208,6 @@ describe('computeFactoryMetrics', () => {
 
     expect(metrics.leadTime.samples).toBe(1);
     expect(metrics.throughput.find(point => point.date === '2026-07-15')?.count).toBe(1);
-    // Reopened, so it is in flight again — completion count and WIP disagree by design.
-    expect(metrics.wipTotal).toBe(1);
   });
 
   it('given an item that shipped twice, then each completion is counted', () => {
@@ -244,40 +240,6 @@ describe('computeFactoryMetrics', () => {
     });
 
     expect(() => computeFactoryMetrics([item], lastDays(7))).toThrow(/Unparsable stage-history timestamp/);
-  });
-
-  it('given multi-stage and terminal cards, then wipTotal counts distinct in-flight cards', () => {
-    const items = [
-      makeItem({
-        id: '00000000-0000-4000-8000-000000000001',
-        stages: ['review'],
-        stageHistory: [{ stage: 'review', enteredAt: hoursAgo(70), by: 'user_1' }],
-      }),
-      makeItem({
-        id: '00000000-0000-4000-8000-000000000002',
-        stages: ['execute', 'review'],
-        stageHistory: [
-          { stage: 'execute', enteredAt: hoursAgo(20), by: 'user_1' },
-          { stage: 'review', enteredAt: hoursAgo(4), by: 'user_1' },
-        ],
-      }),
-      doneItem('00000000-0000-4000-8000-000000000003', 40, 2),
-    ];
-
-    const metrics = computeFactoryMetrics(items, lastDays(30));
-
-    expect(metrics.wipTotal).toBe(2); // multi-stage item counted once, done item excluded
-  });
-
-  it('given a card still in intake, then it is queued, not in flight', () => {
-    // Intake is the inbox the pollers file into — counting it as in-flight work
-    // reports the connected repo's open issues as the Factory's workload.
-    const item = makeItem({
-      stages: ['intake'],
-      stageHistory: [{ stage: 'intake', enteredAt: hoursAgo(10), by: 'factory-rule-dispatcher' }],
-    });
-
-    expect(computeFactoryMetrics([item], lastDays(7)).wipTotal).toBe(0);
   });
 
   it('given items created inside and outside the window, then source mix only counts the window', () => {
@@ -339,19 +301,6 @@ describe('computeFactoryMetrics', () => {
 
     expect(metrics.throughput.every(point => point.count === 0)).toBe(true);
     expect(metrics.leadTime.samples).toBe(0);
-    expect(metrics.wipTotal).toBe(0);
-  });
-
-  it('given an item pulled back out of canceled, then it counts as in-flight again', () => {
-    const item = makeItem({
-      stages: ['triage'],
-      stageHistory: [
-        { stage: 'canceled', enteredAt: hoursAgo(8), exitedAt: hoursAgo(2), by: 'user_1' },
-        { stage: 'triage', enteredAt: hoursAgo(2), by: 'user_1' },
-      ],
-    });
-
-    expect(computeFactoryMetrics([item], lastDays(7)).wipTotal).toBe(1);
   });
 
   it('given the rules engine queueing a stage the agent finishes, then the pass is the agent’s', () => {
@@ -672,7 +621,7 @@ describe('computeFactoryMetrics', () => {
       expect(metrics.funnel.gates.every(gate => gate.canceled + gate.stalled === 0)).toBe(true);
     });
 
-    it('given a card review sent back, then it counts as rework once however far back it went', () => {
+    it('given a card review sent back, then it counts once however far back it went, priced by the lap it redid', () => {
       const metrics = computeFactoryMetrics(
         [
           walked(1, ['triage', 'planning', 'execute', 'review', 'planning', 'execute', 'review', 'done']),
@@ -681,7 +630,20 @@ describe('computeFactoryMetrics', () => {
         lastDays(7),
       );
 
-      expect(metrics.funnel.sentBack).toBe(1);
+      // one hour per stage, so the second lap through planning/execute/review
+      // is the three hours the redo cost
+      expect(metrics.funnel.rework).toEqual({ cards: 1, medianExtraMs: 3 * HOUR, percent: 50 });
+    });
+
+    it('given a card sent back to a stage it skipped, then the redo is still priced', () => {
+      // Counting only repeat visits prices this send-back at nothing, and a
+      // median over enough of them reports every redo on the board as free.
+      const metrics = computeFactoryMetrics(
+        [walked(1, ['triage', 'execute', 'planning', 'execute', 'review', 'done'])],
+        lastDays(7),
+      );
+
+      expect(metrics.funnel.rework).toEqual({ cards: 1, medianExtraMs: 3 * HOUR, percent: 100 });
     });
 
     it('given a card that sat in intake for weeks, then its cohort is when it moved, not when it arrived', () => {
@@ -724,5 +686,184 @@ describe('computeFactoryMetrics', () => {
 
       expect(metrics.intake).toEqual({ arrived: 3, pickedUp: 1, waiting: 2 });
     });
+  });
+});
+
+describe('stage dwell', () => {
+  it('reports how long a first visit held a card, per stage, in board order', () => {
+    const item = makeItem({
+      stages: ['done'],
+      stageHistory: [
+        { stage: 'triage', enteredAt: hoursAgo(20), exitedAt: hoursAgo(19), by: 'user_1' },
+        { stage: 'execute', enteredAt: hoursAgo(19), exitedAt: hoursAgo(9), by: 'user_1' },
+        { stage: 'review', enteredAt: hoursAgo(9), exitedAt: hoursAgo(7), by: 'user_1' },
+        { stage: 'done', enteredAt: hoursAgo(7), by: 'user_1' },
+      ],
+      createdAt: new Date(NOW.getTime() - 21 * HOUR),
+    });
+
+    expect(computeFactoryMetrics([item], lastDays(7)).stageDwell).toEqual([
+      { stage: 'triage', medianMs: HOUR, p90Ms: HOUR },
+      { stage: 'execute', medianMs: 10 * HOUR, p90Ms: 10 * HOUR },
+      { stage: 'review', medianMs: 2 * HOUR, p90Ms: 2 * HOUR },
+    ]);
+  });
+
+  it('given a stage nobody has left yet, then it holds no dwell at all', () => {
+    // Otherwise a card that just entered would report the stage as instant.
+    const item = makeItem({
+      stages: ['execute'],
+      stageHistory: [
+        { stage: 'triage', enteredAt: hoursAgo(20), exitedAt: hoursAgo(2), by: 'user_1' },
+        { stage: 'execute', enteredAt: hoursAgo(2), by: 'user_1' },
+      ],
+      createdAt: new Date(NOW.getTime() - 21 * HOUR),
+    });
+
+    expect(computeFactoryMetrics([item], lastDays(7)).stageDwell).toEqual([
+      { stage: 'triage', medianMs: 18 * HOUR, p90Ms: 18 * HOUR },
+    ]);
+  });
+});
+
+describe('previous period', () => {
+  it('reports the same span before the window, so a figure can be read as a trend', () => {
+    const inWindow = doneItem('00000000-0000-4000-8000-000000000001', 20 * 24, 2 * 24);
+    const before = doneItem('00000000-0000-4000-8000-000000000002', 21 * 24, 9 * 24);
+
+    const metrics = computeFactoryMetrics([inWindow, before], lastDays(7));
+
+    expect(metrics.previous).toEqual({
+      agentCoveragePercent: 0,
+      reworkPercent: 0,
+      completed: 1,
+      leadTimeMedianMs: 12 * DAY,
+    });
+  });
+
+  it('given a board younger than two windows, then there is nothing to compare against', () => {
+    // The missing days would read as growth from nothing rather than as no data.
+    const metrics = computeFactoryMetrics(
+      [doneItem('00000000-0000-4000-8000-000000000001', 3 * 24, 2 * 24)],
+      lastDays(7),
+    );
+
+    expect(metrics.previous).toBeNull();
+  });
+});
+
+describe('funnel edges', () => {
+  it('reads a hop from the stage it left, so the wait and the actor are the departing stage’s', () => {
+    // Attributing them to the arriving stage would report the time a card is
+    // about to spend as the time it already spent.
+    const item = makeItem({
+      stages: ['review'],
+      stageHistory: [
+        { stage: 'triage', enteredAt: hoursAgo(20), exitedAt: hoursAgo(16), by: 'user_1', exitedBy: 'agent:binding-1' },
+        { stage: 'execute', enteredAt: hoursAgo(16), exitedAt: hoursAgo(15), by: 'user_1', exitedBy: 'user_1' },
+        { stage: 'review', enteredAt: hoursAgo(15), by: 'user_1' },
+      ],
+      createdAt: new Date(NOW.getTime() - 21 * HOUR),
+    });
+
+    expect(computeFactoryMetrics([item], lastDays(7)).funnel.edges).toEqual([
+      { from: 'triage', to: 'execute', count: 1, byAgent: 1, dwellMedianMs: 4 * HOUR, dwellP90Ms: 4 * HOUR },
+      { from: 'execute', to: 'review', count: 1, byAgent: 0, dwellMedianMs: HOUR, dwellP90Ms: HOUR },
+    ]);
+  });
+
+  it('reports the hop that runs backwards, so a send-back can be drawn', () => {
+    const item = makeItem({
+      stages: ['execute'],
+      stageHistory: [
+        { stage: 'triage', enteredAt: hoursAgo(20), exitedAt: hoursAgo(18), by: 'user_1' },
+        { stage: 'execute', enteredAt: hoursAgo(18), exitedAt: hoursAgo(10), by: 'user_1' },
+        { stage: 'review', enteredAt: hoursAgo(10), exitedAt: hoursAgo(4), by: 'user_1' },
+        { stage: 'execute', enteredAt: hoursAgo(4), by: 'user_1' },
+      ],
+      createdAt: new Date(NOW.getTime() - 21 * HOUR),
+    });
+
+    const edges = computeFactoryMetrics([item], lastDays(7)).funnel.edges;
+
+    expect(edges.map(edge => `${edge.from}\u2192${edge.to}`)).toContain('review\u2192execute');
+  });
+});
+
+describe('series', () => {
+  it('leaves a day with nothing to divide empty rather than plotting it as zero', () => {
+    // A zero would draw the sparkline to the floor and read as "shipped instantly".
+    const metrics = computeFactoryMetrics([doneItem('00000000-0000-4000-8000-000000000001', 30 * 24, 20)], lastDays(3));
+
+    expect(metrics.series.leadTimeHours).toEqual([null, 30 * 24 - 20, 30 * 24 - 20]);
+  });
+});
+
+describe('work board versus review board', () => {
+  const PULL_REQUEST = { integrationId: 'github', type: 'pull-request', externalId: '1' };
+
+  /** A review thread: filed, reviewed, done — it never sees the build stages. */
+  function reviewThread(id: string, overrides: Partial<WorkItemRow> = {}): WorkItemRow {
+    return makeItem({
+      id,
+      externalSource: PULL_REQUEST,
+      stages: ['done'],
+      stageHistory: [
+        { stage: 'intake', enteredAt: hoursAgo(3), exitedAt: hoursAgo(2), by: 'user_1' },
+        { stage: 'review', enteredAt: hoursAgo(2), exitedAt: hoursAgo(1), by: 'user_1' },
+        { stage: 'done', enteredAt: hoursAgo(1), by: 'user_1' },
+      ],
+      createdAt: new Date(NOW.getTime() - 3 * HOUR),
+      ...overrides,
+    });
+  }
+
+  // Reviewing takes minutes and building takes days; a median over both is
+  // neither number. Worse, the funnel credits a thread that only ever saw
+  // `review` with the three build gates it skipped.
+  it('keeps review threads out of the work board figures', () => {
+    const metrics = computeFactoryMetrics(
+      [doneItem('00000000-0000-4000-8000-00000000000a', 60, 12), reviewThread('00000000-0000-4000-8000-00000000000b')],
+      lastDays(30),
+    );
+
+    expect(metrics.leadTime.samples).toBe(1);
+    expect(metrics.leadTime.medianMs).toBe(48 * HOUR);
+    expect(metrics.funnel.gates.map(gate => gate.reached)).toEqual([1, 1, 1, 1, 1]);
+  });
+
+  it('reports the review board on its own clock', () => {
+    const metrics = computeFactoryMetrics(
+      [
+        reviewThread('00000000-0000-4000-8000-00000000000b'),
+        makeItem({ id: '00000000-0000-4000-8000-00000000000c', externalSource: PULL_REQUEST, sessions: {} }),
+      ],
+      lastDays(30),
+    );
+
+    expect(metrics.review.completed).toBe(1);
+    expect(metrics.review.leadTime.medianMs).toBe(2 * HOUR);
+    expect(metrics.review.intake).toEqual({ arrived: 2, pickedUp: 1, waiting: 1 });
+    // Covered days are the review board's own, so a board that opened this
+    // morning is not read as one review across the whole 30-day window.
+    expect(metrics.review.throughput).toEqual([{ date: NOW.toISOString().slice(0, 10), count: 1 }]);
+  });
+
+  // The Factory opens the pull request that ships a card of its own. Counting
+  // it as review demand reports one delivery twice, once per board.
+  it('leaves a pull request opened for its own card on neither board', () => {
+    const metrics = computeFactoryMetrics(
+      [
+        doneItem('00000000-0000-4000-8000-00000000000a', 60, 12),
+        reviewThread('00000000-0000-4000-8000-00000000000b', {
+          parentWorkItemId: '00000000-0000-4000-8000-00000000000a',
+        }),
+      ],
+      lastDays(30),
+    );
+
+    expect(metrics.leadTime.samples).toBe(1);
+    expect(metrics.review.completed).toBe(0);
+    expect(metrics.review.intake.arrived).toBe(0);
   });
 });

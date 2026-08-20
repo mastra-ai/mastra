@@ -21,7 +21,7 @@ function stageAgg(overrides: Partial<QueueHealthStage> & { stage: string }): Que
 }
 
 function makeHealth(stages: QueueHealthStage[]): QueueHealth {
-  return { stages, entries: [] };
+  return { stages, entries: [], waiting: 0, inFlight: 0 };
 }
 
 function defaultStages(overrides: Partial<Record<string, Partial<QueueHealthStage>>> = {}): QueueHealthStage[] {
@@ -77,8 +77,8 @@ describe('QueueHealthChart', () => {
     renderWithProviders(<Harness health={health} />);
 
     const legend = screen.getByTestId('queue-health-legend');
-    expect(within(legend).getByText('Fresh (< 4h)')).toBeInTheDocument();
-    expect(within(legend).getByText('Critical (≥ 3d)')).toBeInTheDocument();
+    expect(within(legend).getByRole('button', { name: /Fresh/ })).toHaveAttribute('title', 'Fresh · < 4h');
+    expect(within(legend).getByRole('button', { name: /Critical/ })).toHaveAttribute('title', 'Critical · ≥ 3d');
     expect(within(legend).getByText('75%')).toBeInTheDocument();
     expect(within(legend).getByText('25%')).toBeInTheDocument();
     expect(within(legend).getByRole('button', { name: /Stale/ })).toBeDisabled();

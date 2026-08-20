@@ -77,7 +77,7 @@ export function QueueHealthChart({ health, thresholdsSeconds, selected, onSelect
   if (totals.total === 0) {
     return (
       <Txt as="p" variant="ui-sm" className="text-icon3 m-0">
-        Nothing in flight — the queue is clear.
+        Nothing in flight.
       </Txt>
     );
   }
@@ -92,7 +92,7 @@ export function QueueHealthChart({ health, thresholdsSeconds, selected, onSelect
         if (event.key === 'Escape') onSelect(null);
       }}
     >
-      <div className="flex h-10 gap-1" onMouseLeave={() => setHovered(null)}>
+      <div className="flex h-6 gap-1" onMouseLeave={() => setHovered(null)}>
         {AGE_BUCKETS.map(bucket => {
           const count = totals.buckets[bucket];
           if (count === 0) return null;
@@ -107,7 +107,7 @@ export function QueueHealthChart({ health, thresholdsSeconds, selected, onSelect
               fade={fade(bucket)}
               onHover={setHovered}
               onSelect={onSelect}
-              className="rounded-lg hover:-translate-y-0.5"
+              className={`rounded-full hover:-translate-y-0.5 ${bucket === 'red' ? 'shadow-[0_0_18px_-6px_var(--queue-critical)]' : ''}`}
             />
           );
         })}
@@ -122,7 +122,7 @@ export function QueueHealthChart({ health, thresholdsSeconds, selected, onSelect
         onSelect={onSelect}
       />
 
-      <ul className="border-border1 m-0 flex list-none flex-col border-t p-0 pt-3">
+      <ul className="border-border1 m-0 flex list-none flex-col border-t p-0 pt-2">
         {health.stages.map(stage => (
           <StageRow
             key={stage.stage}
@@ -210,10 +210,7 @@ function Legend({
   onSelect: QueueHealthSelect;
 }) {
   return (
-    <ul
-      data-testid="queue-health-legend"
-      className="m-0 grid list-none grid-cols-1 gap-x-4 gap-y-0.5 p-0 sm:grid-cols-2"
-    >
+    <ul data-testid="queue-health-legend" className="m-0 flex list-none flex-wrap items-center gap-1 p-0">
       {AGE_BUCKETS.map(bucket => {
         const count = totals.buckets[bucket];
         const isSelected = sameSelection(selected, null, bucket);
@@ -224,32 +221,25 @@ function Legend({
               type="button"
               disabled={count === 0}
               aria-pressed={isSelected}
+              title={`${BUCKET_LABEL[bucket]} · ${bucketRangeLabel(bucket, thresholdsSeconds)}`}
               onMouseEnter={() => onHover(bucket)}
               onMouseLeave={() => onHover(null)}
               onFocus={() => onHover(bucket)}
               onBlur={() => onHover(null)}
               onClick={event => onSelect(isSelected ? null : { stage: null, bucket }, event.currentTarget)}
-              className="group hover:bg-surface4 aria-pressed:bg-surface4 focus-visible:outline-accent1 flex w-full items-center gap-2.5 rounded-lg p-2 text-left transition-colors focus-visible:outline-2 disabled:pointer-events-none disabled:opacity-40"
+              className={`text-ui-xs focus-visible:outline-accent1 flex cursor-pointer items-center gap-2 rounded-full px-2.5 py-1 transition-colors focus-visible:outline-2 disabled:pointer-events-none disabled:opacity-40 ${
+                isSelected ? 'bg-surface4 text-icon6' : 'text-icon3 hover:bg-surface4/60 hover:text-icon5'
+              }`}
             >
               <span
                 aria-hidden="true"
-                className={[
-                  'h-7 w-[3px] shrink-0 rounded-full transition-opacity duration-200',
-                  BUCKET_COLOR[bucket],
-                  focused !== null && focused !== bucket ? 'opacity-25' : 'opacity-100',
-                ].join(' ')}
+                className={`size-1.5 rounded-full transition-opacity duration-200 ${BUCKET_COLOR[bucket]} ${
+                  focused !== null && focused !== bucket ? 'opacity-25' : 'opacity-100'
+                }`}
               />
-              <span className="flex min-w-0 flex-col">
-                <Txt as="span" variant="ui-xs" className="text-icon3 truncate">
-                  {BUCKET_LABEL[bucket]} ({bucketRangeLabel(bucket, thresholdsSeconds)})
-                </Txt>
-                <Txt as="span" variant="ui-sm" className="text-icon5 font-medium tabular-nums">
-                  {count}
-                </Txt>
-              </span>
-              <span className="bg-surface4 text-ui-xs text-icon4 group-hover:bg-surface6 ml-auto shrink-0 rounded-full px-2 py-0.5 tabular-nums transition-colors">
-                {share}%
-              </span>
+              {BUCKET_LABEL[bucket]}
+              <span className="text-icon5 font-mono tabular-nums">{count}</span>
+              <span className="text-icon2 font-mono tabular-nums">{share}%</span>
             </button>
           </li>
         );
@@ -274,15 +264,15 @@ function StageRow({
   onSelect: QueueHealthSelect;
 }) {
   return (
-    <li className="hover:bg-surface4 grid grid-cols-[6.5rem_1fr_auto] items-center gap-3 rounded-md px-2 py-2 transition-colors">
+    <li className="hover:bg-surface4 grid grid-cols-[6.5rem_1fr_auto] items-center gap-4 rounded-md px-2 py-1.5 transition-colors">
       <Txt as="span" variant="ui-sm" className="text-icon4 truncate">
         {stageLabel(stage.stage)}
       </Txt>
 
       {stage.total === 0 ? (
-        <div className="bg-surface4 h-2 rounded-full opacity-50" aria-hidden="true" />
+        <div className="bg-surface4 h-1.5 rounded-full opacity-50" aria-hidden="true" />
       ) : (
-        <div className="flex h-2 gap-0.5" onMouseLeave={() => onHover(null)}>
+        <div className="flex h-1.5 gap-0.5" onMouseLeave={() => onHover(null)}>
           {AGE_BUCKETS.map(bucket => {
             const count = stage.buckets[bucket];
             if (count === 0) return null;
@@ -306,7 +296,7 @@ function StageRow({
 
       <span className="flex items-center justify-end gap-2">
         {stage.activeCount > 0 ? <ActivePulse stage={stage.stage} activeCount={stage.activeCount} /> : null}
-        <Txt as="span" variant="ui-xs" className="text-icon3 w-6 text-right tabular-nums">
+        <Txt as="span" variant="ui-xs" className="text-icon3 w-6 text-right font-mono tabular-nums">
           {stage.total}
         </Txt>
       </span>

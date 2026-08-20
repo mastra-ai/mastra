@@ -178,7 +178,7 @@ describe('computeQueueHealth', () => {
     expect(health.entries[0]!.ageSeconds).toBe(3600);
   });
 
-  it('exposes a flat entries index with itemId/title/url/stage/age/bucket/active', () => {
+  it('exposes a flat entries index with itemId/title/url/stage/age/bucket/active/sentBack', () => {
     const item = inStage('review', 100, { title: 'Fix login', url: 'https://github.com/acme/app/issues/1' });
     const health = computeQueueHealth([item], new Set(), DEFAULT, NOW);
     expect(health.entries[0]).toEqual({
@@ -189,6 +189,18 @@ describe('computeQueueHealth', () => {
       ageSeconds: 100,
       bucket: 'green',
       active: false,
+      sentBack: false,
     });
+  });
+
+  it('flags a card that already moved backwards through the pipeline', () => {
+    const item = inStage('execute', 100);
+    item.stageHistory = [
+      { stage: 'planning', enteredAt: '2020-01-01T00:00:00.000Z', exitedAt: '2020-01-01T01:00:00.000Z', by: 'user-1' },
+      { stage: 'review', enteredAt: '2020-01-01T01:00:00.000Z', exitedAt: '2020-01-01T02:00:00.000Z', by: 'user-1' },
+      ...item.stageHistory,
+    ];
+    const health = computeQueueHealth([item], new Set(), DEFAULT, NOW);
+    expect(health.entries[0]!.sentBack).toBe(true);
   });
 });

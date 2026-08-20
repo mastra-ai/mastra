@@ -106,7 +106,7 @@ export function UserSessionsSection() {
   return (
     <section className="flex flex-col gap-2" aria-label="User sessions">
       <div className="flex items-center justify-between px-1">
-        <Txt as="span" variant="ui-xs" className="text-icon3 tracking-wide uppercase">
+        <Txt as="span" variant="ui-xs" className="text-icon3">
           User Sessions
         </Txt>
         <Button

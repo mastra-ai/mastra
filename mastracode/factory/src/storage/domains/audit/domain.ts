@@ -6,8 +6,9 @@ import type { Context } from 'hono';
 
 import type { RouteAuth } from '../../../routes/route.js';
 import type { FactoryProjectsStorage } from '../projects/base.js';
+import type { AuditAction } from './actions.js';
 import type {
-  AuditAction,
+  AuditActorType,
   AuditContext,
   AuditEventPage,
   AuditEventRow,
@@ -139,6 +140,10 @@ function parseActionsParam(raw: string | undefined): string[] | undefined {
     .filter(Boolean)
     .slice(0, MAX_ACTION_FILTERS);
   return actions.length > 0 ? actions : undefined;
+}
+
+function parseActorTypeParam(raw: string | undefined): AuditActorType | undefined {
+  return raw === 'agent' || raw === 'human' ? raw : undefined;
 }
 
 function isHumanActorId(actorId: string | undefined): actorId is string {
@@ -377,6 +382,7 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
             factoryProjectId: projectId,
             actions: parseActionsParam(c.req.query('actions')),
             actorId: c.req.query('actor') || undefined,
+            actorType: parseActorTypeParam(c.req.query('actorType')),
             before: c.req.query('before') || undefined,
             limit: parseLimitParam(c.req.query('limit')),
           });

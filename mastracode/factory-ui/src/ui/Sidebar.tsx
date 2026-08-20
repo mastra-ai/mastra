@@ -5,6 +5,7 @@ import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { SidebarAccountLink } from './domains/auth/components/SidebarAccountLink';
 import { FactorySection } from './domains/factory/components/FactorySection';
+import { NeedsYouButton } from './domains/factory/components/NeedsYouButton';
 import { SidebarGlobalSearchButton } from './domains/search/components/SidebarGlobalSearchButton';
 import { SettingsNavigation } from './domains/settings/components/SettingsNavigation';
 import { useCloseSettings } from './domains/settings/hooks/useCloseSettings';
@@ -112,6 +113,8 @@ function SidebarFooter() {
 
   return (
     <MainSidebar.NavList>
+      {/* settings replaces the factory nav wholesale, badge included */}
+      {factoryId && !settingsOpen ? <NeedsYouButton factoryId={factoryId} /> : null}
       <SidebarAccountLink />
       <MainSidebar.NavLink
         asChild

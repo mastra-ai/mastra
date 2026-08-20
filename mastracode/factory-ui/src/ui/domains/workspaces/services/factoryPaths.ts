@@ -1,7 +1,7 @@
 import type { FactoryProject } from './github';
 
 const PRESERVED_FACTORY_ROUTE =
-  /^(?:\/(?:work|review|overview|metrics|rules|audit|new)|\/settings(?:\/[^/]+){0,2})\/?$/;
+  /^(?:\/(?:work|review|overview|traces|metrics|rules|audit|new)|\/settings(?:\/[^/]+){0,2})\/?$/;
 
 /** Landing path for a server-backed factory project. */
 export function factoryHomePath(factory: FactoryProject): string {

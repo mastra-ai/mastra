@@ -23,6 +23,7 @@ import { CreateFactoryPage } from './pages/CreateFactoryPage';
 import { NewPage } from './pages/NewPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { OverviewPage } from './pages/OverviewPage';
+import { TracesPage } from './pages/TracesPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { SlackConnectionPage } from './pages/SlackConnectionPage';
 import { RulesPage } from './pages/RulesPage';
@@ -168,6 +169,7 @@ export function createAppRoutes(): RouteObject[] {
                 { path: 'work', element: <WorkBoardPage /> },
                 { path: 'review', element: <ReviewBoardPage /> },
                 { path: 'overview', element: <OverviewPage /> },
+                { path: 'traces', element: <TracesPage /> },
                 { path: 'metrics', element: <MetricsRedirect /> },
                 { path: 'rules', element: <RulesPage /> },
                 { path: 'audit', element: <AuditPage /> },

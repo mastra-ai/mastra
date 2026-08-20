@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../e2e/ui/msw-server';
 import { renderWithProviders } from '../../../../../e2e/ui/render';
+import { useQueueHealth } from '../../../../hooks/useQueueHealth';
 import { QueueHealthPanel } from '../components/QueueHealthPanel';
 
 const FACTORY_ID = 'factory-1';
@@ -32,6 +33,11 @@ function card(id: string, title: string, enteredAt: string) {
   };
 }
 
+/** Same wiring the Overview page uses — the panel itself only renders. */
+function ConnectedPanel() {
+  return <QueueHealthPanel {...useQueueHealth(PROJECT_ID)} />;
+}
+
 function renderPanel(initial: ReturnType<typeof card>[], runningSessionIds: string[] = []) {
   let workItems = initial;
   server.use(
@@ -41,7 +47,7 @@ function renderPanel(initial: ReturnType<typeof card>[], runningSessionIds: stri
   const rendered = renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/overview`]}>
       <Routes>
-        <Route path="/factories/:factoryId/overview" element={<QueueHealthPanel factoryProjectId={PROJECT_ID} />} />
+        <Route path="/factories/:factoryId/overview" element={<ConnectedPanel />} />
       </Routes>
     </MemoryRouter>,
   );

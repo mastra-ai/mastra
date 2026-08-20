@@ -333,6 +333,7 @@ describe('AuditDomain', () => {
     const query = new URLSearchParams({
       actions: 'factory.work_item.created, factory.git.push,',
       actor: 'user-2',
+      actorType: 'agent',
       before: '2026-07-15T00:00:00.000Z_event-9',
       limit: '25',
     });
@@ -343,11 +344,13 @@ describe('AuditDomain', () => {
       factoryProjectId: project.id,
       actions: ['factory.work_item.created', 'factory.git.push'],
       actorId: 'user-2',
+      actorType: 'agent',
       before: '2026-07-15T00:00:00.000Z_event-9',
       limit: 25,
     });
 
-    await app.request(`/web/factory/projects/${project.id}/audit?limit=lots`);
+    await app.request(`/web/factory/projects/${project.id}/audit?limit=lots&actorType=robot`);
     expect(list.mock.calls[1]?.[0].limit).toBeUndefined();
+    expect(list.mock.calls[1]?.[0].actorType).toBeUndefined();
   });
 });

@@ -8,6 +8,7 @@
  */
 
 import type { QueueHealthConfig } from '@mastra/factory/storage/domains/queue-health/base';
+import { sentBackAt } from '@mastra/factory/storage/domains/work-items/metrics/base';
 import type { WorkItem, WorkItemStageEntry } from './services/workItems';
 import { PIPELINE_STAGES } from './stages';
 
@@ -42,6 +43,8 @@ export interface QueueHealthEntry {
   ageSeconds: number;
   bucket: AgeBucket;
   active: boolean;
+  /** Card has already moved backwards through the pipeline at least once. */
+  sentBack: boolean;
 }
 
 /** One bar in the chart: a non-done stage segmented by age bucket. */
@@ -53,10 +56,19 @@ export interface QueueHealthStage {
   activeCount: number;
 }
 
+/** The board as it stands this instant — every live figure the Overview reads. */
 export interface QueueHealth {
   stages: QueueHealthStage[];
   /** Flat per-(item, stage) index so the drill-down list needs no second fetch. */
   entries: QueueHealthEntry[];
+  /**
+   * Cards no run has started that have not reached a terminal stage — the
+   * standing queue, counted across both boards. Windowed delivery is split
+   * between work and review; what the board is holding right now is not.
+   */
+  waiting: number;
+  /** Distinct cards holding a pipeline stage: the work actually under way. */
+  inFlight: number;
 }
 
 function parseTime(iso: string): number {
@@ -135,15 +147,19 @@ export function computeQueueHealth(
   }
 
   const entries: QueueHealthEntry[] = [];
+  let waiting = 0;
 
   for (const item of items) {
-    if (!hasFactoryRun(item)) continue;
-
     const inFlightStages = item.stages.filter(stage => !TERMINAL_STAGES.has(stage));
+    if (!hasFactoryRun(item)) {
+      if (inFlightStages.length > 0) waiting += 1;
+      continue;
+    }
     if (inFlightStages.length === 0) continue;
 
     const open = openEntries(item);
     const active = Object.values(item.sessions).some(ref => activeSessions.has(ref.sessionId));
+    const sentBack = sentBackAt(item) !== -1;
 
     for (const stage of inFlightStages) {
       const stageAgg = byStage.get(stage);
@@ -162,9 +178,14 @@ export function computeQueueHealth(
       stageAgg.buckets[bucket] += 1;
       if (active) stageAgg.activeCount += 1;
 
-      entries.push({ itemId: item.id, title: item.title, url: item.url, stage, ageSeconds, bucket, active });
+      entries.push({ itemId: item.id, title: item.title, url: item.url, stage, ageSeconds, bucket, active, sentBack });
     }
   }
 
-  return { stages: [...byStage.values()], entries };
+  return {
+    stages: [...byStage.values()],
+    entries,
+    waiting,
+    inFlight: new Set(entries.map(entry => entry.itemId)).size,
+  };
 }

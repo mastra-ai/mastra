@@ -19,6 +19,8 @@
 import { FactoryStorageDomain } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 
+import type { AuditAction } from './actions.js';
+
 /** What an audit event acted on (WorkOS Audit Logs target shape). */
 export interface AuditTarget {
   /** Target kind, e.g. 'work_item', 'worktree', 'issue', 'pull_request'. */
@@ -31,38 +33,6 @@ export interface AuditTarget {
 
 /** Who performed the audited action. */
 export type AuditActorType = 'human' | 'agent';
-
-/**
- * Every action the Factory records, `factory.<namespace>.<verb>`. Register each
- * one in the WorkOS dashboard under Audit Logs → Events — the export mirror
- * drops what it does not know. Recording is typed against this list and the
- * audit UI derives its filters from it: an action missing here will not
- * compile, and one listed but never emitted shows up as an empty filter.
- */
-export const AUDIT_ACTIONS = [
-  'factory.work_item.created',
-  'factory.work_item.updated',
-  'factory.work_item.stage_moved',
-  'factory.work_item.deleted',
-  'factory.work_item.transition_rejected',
-  'factory.run.started',
-  'factory.run.approved',
-  'factory.run.dismissed',
-  'factory.git.commit',
-  'factory.git.push',
-  'factory.git.pr_opened',
-  'factory.agent.commit',
-  'factory.agent.push',
-  'factory.intake.config_updated',
-  'factory.intake.binding_updated',
-] as const;
-
-export type AuditAction = (typeof AUDIT_ACTIONS)[number];
-
-type NamespaceOf<Action extends string> = Action extends `factory.${infer Namespace}.${string}` ? Namespace : never;
-
-/** The middle segment of an action — what it acted on. */
-export type AuditNamespace = NamespaceOf<AuditAction>;
 
 /** Request context captured alongside the event. */
 export interface AuditContext {
@@ -119,6 +89,8 @@ export interface ListAuditEventsInput {
   /** Restrict to these actions (exact match). */
   actions?: string[];
   actorId?: string;
+  /** Restrict to what a person did, or what an agent did inside a run. */
+  actorType?: AuditActorType;
   /** Opaque cursor from a previous page (`nextCursor`). */
   before?: string;
   limit?: number;
@@ -267,6 +239,7 @@ export class AuditStorage extends FactoryStorageDomain {
     if (input.factoryProjectId) where.factory_project_id = input.factoryProjectId;
     if (input.actions && input.actions.length > 0) where.action = { in: input.actions };
     if (input.actorId) where.actor_id = input.actorId;
+    if (input.actorType) where.actor_type = input.actorType;
 
     const cursor = input.before ? decodeAuditCursor(input.before) : undefined;
 

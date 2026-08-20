@@ -722,9 +722,6 @@ describe('GET /web/factory/projects/:id/metrics', () => {
     expect(metrics.throughput).toHaveLength(1);
     expect(metrics.throughput.reduce((sum: number, p: any) => sum + p.count, 0)).toBe(1);
     expect(metrics.leadTime.samples).toBe(1);
-    // The manual card sits in intake — queued, not in flight — and the synced
-    // card is out of the population entirely.
-    expect(metrics.wipTotal).toBe(0);
     expect(metrics.sourceMix).toEqual(
       expect.arrayContaining([
         { source: 'github:issue', count: 1 },
@@ -739,7 +736,6 @@ describe('GET /web/factory/projects/:id/metrics', () => {
     const { metrics } = await res.json();
     expect(metrics.throughput).toHaveLength(30);
     expect(metrics.leadTime).toEqual({ medianMs: null, p90Ms: null, samples: 0 });
-    expect(metrics.wipTotal).toBe(0);
     expect(metrics.agentCoverage).toEqual([]);
   });
 
