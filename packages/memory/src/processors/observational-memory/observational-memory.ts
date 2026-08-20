@@ -3651,8 +3651,8 @@ ${formattedMessages}
       );
     }
 
-    if (thrownError) throw thrownError;
     if (hookError) throw hookError;
+    if (thrownError) throw thrownError;
     return runResult;
   }
 

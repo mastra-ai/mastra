@@ -343,6 +343,23 @@ describe('observation-cadence curation trigger', () => {
     await vi.waitFor(() => expect(runCuration).toHaveBeenCalledOnce());
   });
 
+  it('preserves buffered end-hook error precedence when the observation also throws', async () => {
+    const om = createEngine({ cadence: 1, memory: { runCuration: vi.fn() } });
+    const runError = new Error('buffered observation failed');
+    const hookError = new Error('buffered end hook failed');
+    vi.spyOn(om as any, 'composeHooks').mockReturnValue({
+      onObservationEnd: () => {
+        throw hookError;
+      },
+    });
+
+    await expect(
+      (om as any).runBufferedObservationCycle({ threadId: 'buffered-double-error-thread' }, undefined, async () => {
+        throw runError;
+      }),
+    ).rejects.toBe(hookError);
+  });
+
   it('does not fail buffered observation when cadence curation rejects', async () => {
     const runCuration = vi.fn(async () => {
       throw new Error('curation failed');
