@@ -5,13 +5,14 @@
  * request bumped `updatedAt`, so the finished session jumped to the top and
  * every poll could reshuffle the list under the reader.
  */
+import type { QueryClient } from '@tanstack/react-query';
 import { screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import type { FactoryUserSession } from '../../services/github';
 import { WorkspacesSection } from '../WorkspacesSection';
@@ -105,7 +106,9 @@ function renderSection() {
   );
 }
 
-async function reviewRowLabels(): Promise<(string | null)[]> {
+/** Rows only hold their final order once the sessions and work-items queries have both landed. */
+async function reviewRowLabels(client: QueryClient): Promise<(string | null)[]> {
+  await waitForMutationsIdle(client);
   const group = await screen.findByRole('region', { name: 'Review Sessions' });
   const rows = await within(group).findAllByRole('button', { name: /^factory\/pr-\d+$/ });
   return rows.map(row => row.getAttribute('aria-label'));
@@ -126,9 +129,9 @@ describe('Workspaces sidebar order', () => {
       ],
     );
 
-    renderSection();
+    const { client } = renderSection();
 
-    expect(await reviewRowLabels()).toEqual(['factory/pr-102', 'factory/pr-101', 'factory/pr-103']);
+    expect(await reviewRowLabels(client)).toEqual(['factory/pr-102', 'factory/pr-101', 'factory/pr-103']);
   });
 
   it('holds one order for sessions created at the same instant, whichever way the endpoint returns them', async () => {
@@ -138,14 +141,14 @@ describe('Workspaces sidebar order', () => {
 
     stubSidebar([first, second], cards);
     const rendered = renderSection();
-    const forward = await reviewRowLabels();
+    const forward = await reviewRowLabels(rendered.client);
     rendered.unmount();
 
     // The sessions endpoint sorts nothing, so the same rows can come back either way round.
     stubSidebar([second, first], cards);
-    renderSection();
+    const reversed = renderSection();
 
-    expect(await reviewRowLabels()).toEqual(forward);
+    expect(await reviewRowLabels(reversed.client)).toEqual(forward);
     expect(forward).toHaveLength(2);
   });
 });
