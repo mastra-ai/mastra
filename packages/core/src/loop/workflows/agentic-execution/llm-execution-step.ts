@@ -32,9 +32,9 @@ import type {
 } from '../../../processors/index';
 import { isProcessorWorkflow } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
-import { ProcessorRunner } from '../../../processors/runner';
-import { isMaybeAnthropic } from '../../../processors/trailing-assistant-guard';
+import { isMaybeAnthropic } from '../../../processors/provider-history-compat';
 import type { ProcessorState } from '../../../processors/runner';
+import { ProcessorRunner } from '../../../processors/runner';
 import { RequestContext } from '../../../request-context';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';

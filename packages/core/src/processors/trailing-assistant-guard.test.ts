@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 
 import type { MastraDBMessage } from '../agent/message-list';
-import { isMaybeAnthropic, TrailingAssistantGuard } from './trailing-assistant-guard';
+import { TrailingAssistantGuard } from './trailing-assistant-guard';
 import type { ProcessInputStepArgs } from './index';
 
 const createMessage = (role: 'user' | 'assistant', text: string): MastraDBMessage => ({
@@ -24,46 +24,6 @@ const makeArgs = (
     structuredOutput:
       'structuredOutput' in overrides ? overrides.structuredOutput : { schema: z.object({ answer: z.string() }) },
   }) as ProcessInputStepArgs;
-
-describe('isMaybeAnthropic', () => {
-  it('detects Anthropic string model configs across model versions', () => {
-    expect(isMaybeAnthropic('anthropic/claude-opus-4-6')).toBe(true);
-    expect(isMaybeAnthropic('anthropic/claude-opus-5')).toBe(true);
-  });
-
-  it('rejects non-Anthropic string model configs', () => {
-    expect(isMaybeAnthropic('openai/gpt-5')).toBe(false);
-    expect(isMaybeAnthropic('openai/claude-opus-4-6')).toBe(false);
-  });
-
-  it('detects Anthropic language model objects across model versions', () => {
-    expect(isMaybeAnthropic({ provider: 'anthropic', modelId: 'claude-opus-5' })).toBe(true);
-    expect(isMaybeAnthropic({ provider: 'anthropic.messages', modelId: 'claude-sonnet-4.6' })).toBe(true);
-  });
-
-  it('rejects non-Anthropic language model objects', () => {
-    expect(isMaybeAnthropic({ provider: 'openai', modelId: 'gpt-5' })).toBe(false);
-    expect(isMaybeAnthropic({ provider: 'openai', modelId: 'claude-opus-4-6' })).toBe(false);
-  });
-
-  it('treats dynamic model functions and unknown shapes as possibly Anthropic', () => {
-    expect(isMaybeAnthropic(() => 'anthropic/claude-opus-5')).toBe(true);
-    expect(isMaybeAnthropic({})).toBe(true);
-    expect(isMaybeAnthropic(undefined)).toBe(true);
-  });
-
-  it('detects Anthropic providers inside fallback arrays', () => {
-    expect(
-      isMaybeAnthropic([{ model: 'openai/gpt-5' }, { model: { provider: 'anthropic', modelId: 'claude-opus-5' } }]),
-    ).toBe(true);
-  });
-
-  it('rejects fallback arrays without an Anthropic candidate', () => {
-    expect(
-      isMaybeAnthropic([{ model: 'openai/gpt-5' }, { model: { provider: 'google', modelId: 'gemini-2.5-pro' } }]),
-    ).toBe(false);
-  });
-});
 
 describe('TrailingAssistantGuard', () => {
   it('has the expected id and name', () => {

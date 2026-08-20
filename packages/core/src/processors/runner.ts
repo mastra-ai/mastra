@@ -21,6 +21,7 @@ import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { LanguageModelUsage, ProviderMetadata } from '../stream/types';
 import { isProcessorWorkflow } from './is-processor-workflow';
+import { isMaybeAnthropic } from './provider-history-compat';
 import { createProcessorSendSignal } from './send-signal';
 import {
   summarizeActiveToolsForSpan,
@@ -31,7 +32,7 @@ import {
 } from './span-payload';
 import type { ProcessorStepOutput } from './step-schema';
 import { REPROCESS_PART_KEY } from './stream-reprocess';
-import { isMaybeAnthropic, TrailingAssistantGuard } from './trailing-assistant-guard';
+import { TrailingAssistantGuard } from './trailing-assistant-guard';
 import type {
   CachedLLMStepChunk,
   CachedLLMStepResponse,
