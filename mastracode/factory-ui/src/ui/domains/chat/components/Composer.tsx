@@ -31,6 +31,7 @@ import {
 import { useCreateAgentControllerThreadMutation } from '../../../../hooks/useAgentControllerThreadMutations';
 import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
 import { useCreateUserSessionFromDraft } from '../hooks/useCreateUserSessionFromDraft';
+import { usePendingPlanFeedback } from '../hooks/usePendingPlanFeedback';
 import { commandRequiresReadySession, matchCommands } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { getModeColorClass } from './mode-colors';
@@ -85,27 +86,32 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const sendMutation = useSendAgentControllerMessageMutation(hookArgs);
   const steerMutation = useSteerAgentControllerMutation(hookArgs);
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
+  const planFeedback = usePendingPlanFeedback();
 
   const preparingThreadId = usePreparingThreadId();
   const createDraftSessionMutation = useCreateUserSessionFromDraft();
   const blocked = onUserDraft ? !factorySessionState : status !== 'ready' && !preparingThreadId;
   const draftConfigNotReady =
     onUserDraft && (modesLoading || modesError !== undefined || modelLoading || modelError !== undefined);
-  const attachDisabled = onUserDraft || blocked || chatPreparing;
+  const attachDisabled = onUserDraft || blocked || chatPreparing || planFeedback.pending;
   const { images, setImages, fileInputRef, removeImage, onPaste, onDrop, onFileInputChange } = useComposerImages({
     onUserDraft,
-    disabled: chatPreparing,
+    disabled: chatPreparing || planFeedback.pending,
   });
   const spotlightRef = useComposerSpotlight();
   const modeSwitchPendingRef = useRef(false);
-  const suggestions = matchCommands(draft);
+  const suggestions = planFeedback.pending ? [] : matchCommands(draft);
   const showSuggestions = suggestions.length > 0;
   const [activeSuggestion, setActiveSuggestion] = useState(0);
-  const composerDisabled = createDraftSessionMutation.isPending || blocked;
-  const sendDisabled = composerDisabled || draftConfigNotReady || chatPreparing;
+  const composerDisabled = createDraftSessionMutation.isPending || blocked || planFeedback.isSubmitting;
+  const sendDisabled = composerDisabled || draftConfigNotReady || chatPreparing || planFeedback.loading;
   const textareaDisabled = composerDisabled && !chatPreparing;
   const initializingPlaceholder = useInitializingPlaceholder(chatPreparing, draft.length === 0);
-  const normalPlaceholder = busy && !preparingThreadId ? 'Steer the agent…' : 'Ask Mastra Code…';
+  const normalPlaceholder = planFeedback.pending
+    ? 'Give feedback on this plan…'
+    : busy && !preparingThreadId
+      ? 'Steer the agent…'
+      : 'Ask Mastra Code…';
   const placeholder = initializingPlaceholder ?? normalPlaceholder;
   const sendTitle = chatPreparing ? 'Initializing session…' : undefined;
 
@@ -169,9 +175,10 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     e.preventDefault();
     if (sendDisabled) return;
     const text = draft.trim();
-    if (!text && images.length === 0) return;
+    if ((!text && images.length === 0) || (planFeedback.pending && !text)) return;
     updateDraft('');
     void handleInput(text).catch(error => {
+      if (planFeedback.pending) updateDraft(text);
       clearPending();
       pushNotice(error instanceof Error ? error.message : 'The message could not be sent.', 'error');
     });
@@ -236,6 +243,11 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
 
   async function handleInput(text: string) {
+    if (planFeedback.pending) {
+      await planFeedback.submitFeedback(text);
+      setImages([]);
+      return;
+    }
     if (onUserDraft && text.startsWith('/')) {
       if (commandRequiresReadySession(text)) {
         updateDraft(text);
@@ -331,7 +343,9 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
                 type="submit"
                 variant="outline"
                 size="icon-sm"
-                disabled={sendDisabled || (!draft.trim() && images.length === 0)}
+                disabled={
+                  sendDisabled || (!draft.trim() && images.length === 0) || (planFeedback.pending && !draft.trim())
+                }
                 aria-label="Send message"
                 title={sendTitle}
               >

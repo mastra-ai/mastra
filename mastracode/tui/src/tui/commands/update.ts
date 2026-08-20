@@ -79,7 +79,8 @@ export async function handleUpdateCommand(ctx: SlashCommandContext): Promise<voi
       // Printed after TUI teardown — a message rendered inside it is lost in the exit race.
       ctx.stop();
       console.info(outcome.message);
-      process.exit(0);
+      if (ctx.exit) ctx.exit(0);
+      else process.exit(0);
     } else {
       ctx.showError(outcome.message);
     }
