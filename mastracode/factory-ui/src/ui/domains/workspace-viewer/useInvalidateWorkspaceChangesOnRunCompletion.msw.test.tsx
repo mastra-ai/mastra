@@ -1,9 +1,9 @@
 import { waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { queryKeys } from '../../../../api/keys';
-import { renderHookWithProviders } from '../../../../../e2e/ui/render';
-import { useInvalidateWorkspaceChangesOnRunCompletion } from '../useInvalidateWorkspaceChangesOnRunCompletion';
+import { queryKeys } from '../../../api/keys';
+import { renderHookWithProviders } from '../../../../e2e/ui/render';
+import { useInvalidateWorkspaceChangesOnRunCompletion } from './useInvalidateWorkspaceChangesOnRunCompletion';
 
 const WORKSPACE = 'session-1';
 const THREAD = 'thread-1';
