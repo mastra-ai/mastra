@@ -45,7 +45,30 @@ import type { TemplateBuilder } from 'e2b';
  * })
  * ```
  */
-export type TemplateSpec = string | TemplateBuilder | ((base: TemplateBuilder) => TemplateBuilder);
+export type TemplateSpec = string | TemplateBuilder | ((base: TemplateBuilder) => TemplateBuilder) | NamedTemplateSpec;
+
+/**
+ * A template builder paired with a deterministic alias.
+ *
+ * Resolution is lazy build-if-missing: the sandbox checks
+ * `Template.exists(alias)` and reuses the existing build when present, so
+ * every sandbox constructed with the same alias shares one template. When
+ * the alias is missing the build runs once; if the build fails the sandbox
+ * falls back to `fallbackTemplate` (or the default mountable template) so a
+ * broken build degrades to a cold start instead of a wedged session.
+ */
+export interface NamedTemplateSpec {
+  /** Deterministic template alias (e.g. content-hashed). */
+  alias: string;
+  /** Builder used when no template exists under the alias yet. */
+  template: TemplateBuilder;
+  /** Template used when the aliased build fails. Defaults to the default mountable template. */
+  fallbackTemplate?: string | TemplateBuilder;
+}
+
+export function isNamedTemplateSpec(spec: TemplateSpec): spec is NamedTemplateSpec {
+  return typeof spec === 'object' && spec !== null && 'alias' in spec && 'template' in spec;
+}
 
 /**
  * Result from createMountableTemplate containing both the template and its ID.
