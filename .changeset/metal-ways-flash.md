@@ -2,15 +2,11 @@
 '@mastra/playground-ui': minor
 ---
 
-Added `NoticeAlt` and `SettingsSectionAlt` for status messaging and composable settings layouts.
+Added `SettingsSectionAlt` for composable, flat settings layouts.
 
 ```tsx
-<NoticeAlt variant="info" surface="grainy-fade" title="Read-only dataset">
-  <NoticeAlt.Message>Clone this dataset before making changes.</NoticeAlt.Message>
-</NoticeAlt>
-
-<SettingsSectionAlt title="General">
-  <SettingsSectionAlt.Row label="Telemetry" description="Share anonymous usage data.">
+<SettingsSectionAlt title="Security">
+  <SettingsSectionAlt.Row label="Two-factor authentication" description="Require a verification code when signing in.">
     <Switch />
   </SettingsSectionAlt.Row>
 </SettingsSectionAlt>
