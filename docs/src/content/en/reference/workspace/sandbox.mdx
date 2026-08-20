@@ -83,7 +83,7 @@ new E2BSandbox({
   },
   {
     name: 'env',
-    type: 'NodeJS.ProcessEnv',
+    type: 'Record<string, string>',
     description:
       'Environment variables passed only to the bootstrap command execution. Use this for credentials instead of interpolating them into the command string.',
     isOptional: true,
@@ -103,6 +103,7 @@ Semantics:
 - Otherwise the base class probes a sentinel file (`~/.mastra-bootstrapped` in the VM filesystem; inside the working directory for `LocalSandbox`) and runs the bootstrap only when the sentinel is absent. The sentinel survives pause/resume and disappears with VM replacement.
 - The sentinel is written only after the command succeeds. A failed bootstrap fails `start()` and leaves the sandbox in `error` status, so a half-bootstrapped VM is never marked running; the next `start()` retries.
 - The sandbox status flips to `running` before the bootstrap executes (the bootstrap runs through the sandbox's own command path), so commands issued concurrently through `ensureRunning()` can interleave with the bootstrap.
+- The bootstrap runs before pending filesystem mounts are processed, so it cannot rely on mounted paths.
 
 ### `stop()`
 

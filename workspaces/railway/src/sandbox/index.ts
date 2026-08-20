@@ -673,6 +673,14 @@ export class RailwaySandbox extends MastraSandbox {
         throw new SandboxNotReadyError(this.id);
       }
 
+      // If a start attempt is already in flight, this executeCommand may be
+      // running INSIDE it (e.g. the base-class bootstrap command) — calling
+      // start() here would join that in-flight promise and await itself
+      // forever. Fail loudly instead of hanging.
+      if (this._startPromise) {
+        throw new SandboxNotReadyError(this.id);
+      }
+
       // The VM is provably down — reset local state so the base-class start
       // wrapper (which early-returns while status is 'running') actually
       // re-runs the reconnect/provision logic.

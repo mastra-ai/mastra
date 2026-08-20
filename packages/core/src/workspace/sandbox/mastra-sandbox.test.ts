@@ -597,6 +597,17 @@ describe('MastraSandbox start lifecycle wrap', () => {
     expect(r3).toEqual({ created: true });
   });
 
+  it('reports created: false from the already-running early return without re-invoking the impl', async () => {
+    const sandbox = new LifecycleSandbox();
+    sandbox.startResult = { created: true };
+
+    await sandbox.start();
+    const second = await sandbox.start();
+
+    expect(second).toEqual({ created: false });
+    expect(sandbox.implCalls).toBe(1);
+  });
+
   it('does not latch failures: a failed start can be retried', async () => {
     const sandbox = new LifecycleSandbox();
     sandbox.startError = new Error('provider down');

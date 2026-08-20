@@ -307,9 +307,12 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
    * Subclasses override `start()` to provide their startup logic.
    */
   async _start(): Promise<SandboxStartResult | void> {
-    // Already running
+    // Already running — definitionally not a fresh create, so report
+    // `created: false` (keeps concretely-typed provider `start()` signatures
+    // sound: every path through the wrapper yields a result for providers
+    // whose impl always reports one).
     if (this.status === 'running') {
-      return;
+      return { created: false };
     }
 
     // Wait for in-flight stop/destroy before starting.

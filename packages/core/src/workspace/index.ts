@@ -11,7 +11,13 @@ export { LocalSandbox, type LocalSandboxOptions } from './sandbox';
 
 // Base Classes for External Providers
 export { MastraFilesystem, type FilesystemLifecycleHook, type MastraFilesystemOptions } from './filesystem';
-export { MastraSandbox, SandboxProcessManager, ProcessHandle, UnsupportedStdinCloseError } from './sandbox';
+export {
+  MastraSandbox,
+  SandboxProcessManager,
+  ProcessHandle,
+  UnsupportedStdinCloseError,
+  SANDBOX_BOOTSTRAP_SENTINEL_BASENAME,
+} from './sandbox';
 
 // Errors
 export * from './errors';

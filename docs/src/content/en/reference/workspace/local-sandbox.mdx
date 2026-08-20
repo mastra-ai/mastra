@@ -97,7 +97,7 @@ const response = await agent.generate('Run npm install')
   },
   {
     name: 'bootstrap',
-    type: '{ command: string; env?: NodeJS.ProcessEnv; timeoutMs?: number }',
+    type: '{ command: string; env?: Record<string, string>; timeoutMs?: number }',
     description:
       'Command run once per sandbox lifetime after start(). For LocalSandbox the guard sentinel (.mastra-bootstrapped) lives inside the working directory. See the WorkspaceSandbox reference for full semantics.',
     isOptional: true,
