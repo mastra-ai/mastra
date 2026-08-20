@@ -14,7 +14,7 @@ function boardColumnEmptyCopy(stage: BoardStageId, kind: BoardKind, hasIntakeSou
       if (!hasIntakeSource) {
         return {
           title: 'No intake sources',
-          description: 'Choose GitHub or Linear in Settings to feed this column.',
+          description: 'Choose GitHub, Linear, or Jira in Settings to feed this column.',
         };
       }
       return kind === 'review'

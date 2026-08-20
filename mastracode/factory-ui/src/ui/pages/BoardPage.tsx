@@ -370,6 +370,7 @@ function BoardContent({
                     issues={intake.issues}
                     pulls={intake.pulls}
                     linearIssues={intake.linearIssues}
+                    jiraIssues={intake.jiraIssues}
                   />
                 )}
               </BoardColumn>
