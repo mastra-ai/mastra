@@ -4,7 +4,7 @@ import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { CopyIcon, CheckIcon, FolderTree, HardDrive } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { DataMessagePart } from '../tool-card';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
@@ -106,6 +106,12 @@ export const FileTreeBadge = ({
 
   const hasResult = !!treeOutput;
   const toolCalled = toolCalledProp ?? hasResult;
+
+  useEffect(() => {
+    if (toolApprovalMetadata && !toolCalled) {
+      setIsCollapsed(false);
+    }
+  }, [toolApprovalMetadata, toolCalled]);
 
   // Extract filesystem metadata from message data parts (via writer.custom), scoped to this tool call
   const workspaceMetadata = useMemo(() => {

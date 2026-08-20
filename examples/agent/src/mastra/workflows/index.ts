@@ -31,7 +31,7 @@ const step = createStep({
     const userId = requestContext?.get('userId');
     await new Promise(resolve => setTimeout(resolve, 3000));
     return {
-      result: inputData.ingredient + ' from ' + userId,
+      result: userId ? `${inputData.ingredient} from ${userId}` : inputData.ingredient,
     };
   },
 });

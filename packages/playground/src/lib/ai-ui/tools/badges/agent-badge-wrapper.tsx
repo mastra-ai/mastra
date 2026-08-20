@@ -82,7 +82,7 @@ export const AgentBadgeWrapper = ({
   }
 
   if (!childMessages && persistedMessages.length) {
-    childMessages = resolveToChildMessages(persistedMessages) as AgentMessage[];
+    childMessages = resolveToChildMessages(persistedMessages);
   }
 
   if (!childMessages && result?.text) {
@@ -90,7 +90,7 @@ export const AgentBadgeWrapper = ({
   }
 
   if (!childMessages) {
-    childMessages = resolveToChildMessages(fetchedMessages) as AgentMessage[];
+    childMessages = resolveToChildMessages(fetchedMessages);
   }
 
   return (

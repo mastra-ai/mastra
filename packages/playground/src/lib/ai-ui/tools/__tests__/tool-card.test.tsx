@@ -228,29 +228,32 @@ describe('ToolCard dispatch', () => {
     expect(badge.querySelector('.text-accent6')).toBeTruthy();
   });
 
-  it('keeps list_files approval UI collapsed until requested', () => {
+  it('opens list_files when approval metadata arrives', async () => {
     const toolName = WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES;
-    renderToolCard(
-      baseProps({
-        toolName,
-        input: { path: '.' },
-        output: undefined,
-        state: 'input-available',
-        metadata: {
+    const props = baseProps({
+      toolName,
+      input: { path: '.' },
+      output: undefined,
+      state: 'input-available',
+    });
+    const view = renderToolCard(props);
+
+    const trigger = screen.getByRole('button', { name: /List Files/ });
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+
+    view.rerender(
+      <ToolCard
+        {...props}
+        metadata={{
           mode: 'stream',
           requireApprovalMetadata: {
             [toolName]: { toolCallId: 'call-1', toolName, args: { path: '.' } },
           },
-        },
-      }),
+        }}
+      />,
     );
 
-    const trigger = screen.getByRole('button', { name: /List Files/ });
-    expect(trigger.getAttribute('aria-expanded')).toBe('false');
-    expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
-
-    fireEvent.click(trigger);
-
+    await waitFor(() => expect(trigger.getAttribute('aria-expanded')).toBe('true'));
     expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
   });
 
@@ -272,6 +275,31 @@ describe('ToolCard dispatch', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Execute Command' }));
 
     expect(screen.getByText('$')).toBeTruthy();
+  });
+
+  it('marks sandbox execution complete when a successful exit chunk arrives', () => {
+    renderToolCard(
+      baseProps({
+        toolName: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
+        input: { command: 'ls' },
+        output: undefined,
+        state: 'input-available',
+        dataParts: [
+          {
+            type: 'data',
+            name: 'workspace-metadata',
+            data: { toolCallId: 'call-1' },
+          },
+          {
+            type: 'data',
+            name: 'sandbox-exit',
+            data: { toolCallId: 'call-1', exitCode: 0, success: true },
+          },
+        ],
+      }),
+    );
+
+    expect(screen.getByTestId('sandbox-execution-badge').getAttribute('aria-busy')).toBe('false');
   });
 
   it.each([

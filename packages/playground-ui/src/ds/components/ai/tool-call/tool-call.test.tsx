@@ -102,7 +102,7 @@ describe('Tool', () => {
       expect(screen.getByRole('img', { name: 'Failed' })).toBeTruthy();
     });
 
-    it('renders a non-collapsible header without a disclosure button', () => {
+    it('renders non-collapsible content without a disclosure button', () => {
       renderToolCall(
         <Tool status="running" collapsible={false} aria-label="Loading agent">
           <ToolHeader>
@@ -111,11 +111,13 @@ describe('Tool', () => {
             </ToolIcon>
             Loading agent
           </ToolHeader>
+          <ToolContent>Loading details</ToolContent>
         </Tool>,
       );
 
       const tool = screen.getByRole('group', { name: 'Loading agent' });
       expect(within(tool).getByText('Loading agent')).toBeTruthy();
+      expect(within(tool).getByText('Loading details')).toBeTruthy();
       expect(within(tool).queryByRole('button')).toBeNull();
     });
 
@@ -196,12 +198,10 @@ describe('ToolCallListItem', () => {
 
       const rail = document.querySelector('[data-tool-call-rail]');
       const content = document.querySelector('[data-tool-call-list-item-content]');
-      const item = content?.parentElement;
 
-      expect(rail).not.toBeNull();
+      expect(rail?.getAttribute('aria-hidden')).toBe('true');
+      expect(content?.parentElement?.contains(rail)).toBe(true);
       expect(content?.contains(screen.getByRole('group', { name: 'First tool' }))).toBe(true);
-      expect(item?.classList.contains('-mx-1.5')).toBe(true);
-      expect(rail?.classList.contains('top-6')).toBe(true);
     });
   });
 
@@ -345,6 +345,22 @@ describe('ToolCall', () => {
       expect(diff.textContent).toContain('const a = 2;');
     });
 
+    it('shows an AST edit as a file diff', () => {
+      renderToolCall(
+        <ToolCall
+          toolName="ast_edit"
+          input={{ path: 'src/a.ts', old_string: 'const a = 1;', new_string: 'const a = 2;' }}
+          status="success"
+        />,
+      );
+
+      fireEvent.click(screen.getByRole('button'));
+
+      const diff = screen.getByRole('group', { name: 'File change' });
+      expect(diff.textContent).toContain('const a = 1;');
+      expect(diff.textContent).toContain('const a = 2;');
+    });
+
     it('shows a write as a named source-code block', () => {
       renderToolCall(
         <ToolCall
@@ -368,7 +384,11 @@ describe('ToolCall', () => {
 
       fireEvent.click(screen.getByRole('button'));
 
-      expect(screen.getByText('[object Object]')).toBeTruthy();
+      const input = screen.getByRole('group', { name: 'Input' });
+      expect(input.textContent).toContain('"enabled": false');
+      expect(input.textContent).toContain('"count": 0');
+      expect(input.textContent).toContain('"empty": ""');
+      expect(input.textContent).toContain('"self": "[Circular]"');
       expect(screen.getByText('null')).toBeTruthy();
     });
   });

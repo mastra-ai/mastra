@@ -13,12 +13,14 @@ import {
   SquareTerminal,
   Trash2,
 } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import type { ReactNode, SVGProps } from 'react';
 
 import { ToolsIcon } from '../../../icons/ToolsIcon';
 
+type ToolPresentationIcon = (props: SVGProps<SVGSVGElement>) => ReactNode;
+
 export interface ToolPresentation {
-  icon: LucideIcon | typeof ToolsIcon;
+  icon: ToolPresentationIcon;
   label: string;
   /** Salient argument shown next to the label: command, path, pattern… */
   detail?: string;
@@ -27,7 +29,7 @@ export interface ToolPresentation {
 }
 
 function hasProperty<K extends string>(value: object, key: K): value is object & Record<K, unknown> {
-  return key in value;
+  return Object.prototype.hasOwnProperty.call(value, key);
 }
 
 function stringArg(args: unknown, key: string): string | undefined {
@@ -46,7 +48,7 @@ function firstStringArg(args: unknown, keys: string[]): string | undefined {
 }
 
 interface ToolStyle {
-  icon: LucideIcon;
+  icon: ToolPresentationIcon;
   label: string;
   detailKeys?: string[];
   isCommand?: boolean;

@@ -1,35 +1,57 @@
 // @vitest-environment jsdom
 
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { MastraReactProvider } from '@mastra/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentBadge } from '../agent-badge';
+import { resolveToChildMessages } from '../resolve-child-messages';
+import { ChatAgentContext } from '@/lib/ai-ui/chat/chat-context';
 import { ToolCallProvider } from '@/services/tool-call-provider';
+import { server } from '@/test/msw-server';
 
-vi.mock('../../tool-card', () => ({
-  ToolCard: ({ toolName }: { toolName: string }) => <div data-testid="nested-tool-card">{toolName}</div>,
-}));
+const BASE_URL = 'http://localhost:4111';
 
-const renderWithProviders = (node: ReactNode) =>
-  render(
-    <TooltipProvider>
-      <ToolCallProvider
-        approveToolcall={vi.fn()}
-        declineToolcall={vi.fn()}
-        approveToolcallGenerate={vi.fn()}
-        declineToolcallGenerate={vi.fn()}
-        approveNetworkToolcall={vi.fn()}
-        declineNetworkToolcall={vi.fn()}
-        isRunning={false}
-        toolCallApprovals={{}}
-        networkToolCallApprovals={{}}
-      >
-        {node}
-      </ToolCallProvider>
-    </TooltipProvider>,
+const renderWithProviders = (node: ReactNode) => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+  return render(
+    <MastraReactProvider baseUrl={BASE_URL}>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <ChatAgentContext.Provider value={{ agentId: 'test-agent' }}>
+            <TooltipProvider>
+              <ToolCallProvider
+                approveToolcall={vi.fn()}
+                declineToolcall={vi.fn()}
+                approveToolcallGenerate={vi.fn()}
+                declineToolcallGenerate={vi.fn()}
+                approveNetworkToolcall={vi.fn()}
+                declineNetworkToolcall={vi.fn()}
+                isRunning={false}
+                toolCallApprovals={{}}
+                networkToolCallApprovals={{}}
+              >
+                {node}
+              </ToolCallProvider>
+            </TooltipProvider>
+          </ChatAgentContext.Provider>
+        </MemoryRouter>
+      </QueryClientProvider>
+    </MastraReactProvider>,
   );
+};
+
+beforeEach(() => {
+  server.use(http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })));
+});
 
 afterEach(() => cleanup());
 
@@ -64,6 +86,74 @@ describe('AgentBadge', () => {
       expect(response.classList.contains('text-neutral3')).toBe(true);
       expect(screen.getByTestId('agent-text-icon').classList.contains('lucide-type')).toBe(true);
       expect(response.closest('.pl-6')).not.toBeNull();
+    });
+  });
+
+  describe('when a persisted sub-agent transcript contains multiple assistant messages', () => {
+    it('renders tool calls from every assistant message', () => {
+      const persistedMessages: MastraDBMessage[] = [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          createdAt: new Date(),
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolName: 'lookup_weather',
+                  toolCallId: 'child-call-1',
+                  args: { location: 'Paris' },
+                  result: { temperature: 20 },
+                },
+              },
+              { type: 'text', text: 'Weather lookup complete' },
+            ],
+          },
+        },
+        {
+          id: 'assistant-2',
+          role: 'assistant',
+          createdAt: new Date(),
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolName: 'format_weather',
+                  toolCallId: 'child-call-2',
+                  args: { temperature: 20 },
+                  result: { summary: '20°C' },
+                },
+              },
+            ],
+          },
+        },
+      ];
+      const messages = resolveToChildMessages(toAISdkV5Messages(persistedMessages));
+
+      renderWithProviders(
+        <AgentBadge
+          agentId="weather-agent"
+          messages={messages}
+          toolCallId="call-agent-1"
+          toolName="agent-weather-agent"
+          toolApprovalMetadata={undefined}
+          isNetwork={false}
+          isComplete
+        />,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: /weather-agent/ }));
+
+      expect(screen.getAllByTestId('tool-badge')).toHaveLength(2);
+      expect(screen.getByRole('group', { name: 'Tool: lookup_weather' })).toBeTruthy();
+      expect(screen.getByText('Weather lookup complete')).toBeTruthy();
+      expect(screen.getByRole('group', { name: 'Tool: format_weather' })).toBeTruthy();
     });
   });
 
@@ -117,8 +207,10 @@ describe('AgentBadge', () => {
 
       fireEvent.click(screen.getByRole('button', { name: /weather-agent/ }));
 
-      const nestedTools = screen.getAllByTestId('nested-tool-card');
-      expect(nestedTools).toHaveLength(2);
+      const nestedTools = [
+        screen.getByRole('group', { name: 'Tool: lookup-weather' }),
+        screen.getByRole('group', { name: 'Tool: format-weather' }),
+      ];
       expect(nestedTools.every(tool => tool.closest('.pl-6') !== null)).toBe(true);
       expect(screen.getByTestId('agent-badge').querySelectorAll('[data-tool-call-rail]')).toHaveLength(1);
     });

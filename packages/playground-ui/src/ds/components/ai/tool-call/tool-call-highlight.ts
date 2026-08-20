@@ -2,7 +2,6 @@ import { createHighlighterCoreSync } from 'shiki/core';
 import { createJavaScriptRegexEngine } from 'shiki/engine/javascript';
 import bash from 'shiki/langs/bash.mjs';
 import css from 'shiki/langs/css.mjs';
-import diff from 'shiki/langs/diff.mjs';
 import html from 'shiki/langs/html.mjs';
 import javascript from 'shiki/langs/javascript.mjs';
 import json from 'shiki/langs/json.mjs';
@@ -20,7 +19,6 @@ import githubLight from 'shiki/themes/github-light.mjs';
 const LANGUAGES = new Set([
   'bash',
   'css',
-  'diff',
   'html',
   'javascript',
   'json',
@@ -36,7 +34,7 @@ const LANGUAGES = new Set([
 
 const highlighter = createHighlighterCoreSync({
   themes: [githubLight, githubDarkDefault],
-  langs: [bash, css, diff, html, javascript, json, jsx, markdown, python, sql, tsx, typescript, xml, yaml],
+  langs: [bash, css, html, javascript, json, jsx, markdown, python, sql, tsx, typescript, xml, yaml],
   engine: createJavaScriptRegexEngine(),
 });
 
@@ -47,8 +45,6 @@ const LANG_ALIASES: Record<string, string> = {
   zsh: 'bash',
   css: 'css',
   scss: 'css',
-  diff: 'diff',
-  patch: 'diff',
   html: 'html',
   htm: 'html',
   javascript: 'javascript',
@@ -106,16 +102,20 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
+function ownValue(values: Record<string, string>, key: string): string | undefined {
+  return Object.prototype.hasOwnProperty.call(values, key) ? values[key] : undefined;
+}
+
 function normalizeLanguage(language: string | undefined): string | undefined {
   if (!language) return undefined;
-  const normalized = LANG_ALIASES[language.toLowerCase()];
+  const normalized = ownValue(LANG_ALIASES, language.toLowerCase());
   return normalized && LANGUAGES.has(normalized) ? normalized : undefined;
 }
 
 export function languageForPath(path: string | undefined): string | undefined {
   if (!path) return undefined;
   const extension = path.split('.').pop()?.toLowerCase();
-  return extension ? EXT_LANG[extension] : undefined;
+  return extension ? ownValue(EXT_LANG, extension) : undefined;
 }
 
 function codeContent(value: string): string {
@@ -141,4 +141,10 @@ export function highlightCode(value: string, language: string | undefined): stri
     }
   }
   return escapeHtml(value);
+}
+
+export function highlightCodeLines(value: string, language: string | undefined): string[] {
+  return highlightCode(value, language)
+    .split('\n')
+    .map(line => line.match(/^<span class="line">(.*)<\/span>$/)?.[1] ?? line);
 }

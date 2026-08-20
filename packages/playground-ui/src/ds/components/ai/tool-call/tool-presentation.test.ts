@@ -60,4 +60,11 @@ describe('presentTool', () => {
   it('omits the detail when the salient argument has not streamed yet', () => {
     expect(presentTool('execute_command', undefined).detail).toBeUndefined();
   });
+
+  it('ignores salient arguments inherited from the prototype chain', () => {
+    const args = Object.create({ command: 'rm -rf /' });
+
+    expect(presentTool('execute_command', args)).toMatchObject({ label: 'Run' });
+    expect(presentTool('execute_command', args).detail).toBeUndefined();
+  });
 });

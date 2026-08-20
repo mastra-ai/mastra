@@ -206,7 +206,7 @@ export const SandboxExecutionBadge = ({
 
   const hasStarted = !!workspaceMetaPart; // metadata is emitted at tool start
   const isRunning = hasStarted && !isStreamingComplete;
-  const toolCalled = toolCalledProp ?? (isStreamingComplete || hasStarted);
+  const toolCalled = toolCalledProp ?? isStreamingComplete;
 
   // Get exit info from data chunks
   const exitCode = exitChunk?.data?.exitCode;
@@ -241,7 +241,7 @@ export const SandboxExecutionBadge = ({
     copyToClipboard(outputContent);
   };
 
-  const status = isRunning ? 'running' : exitSuccess === false ? 'error' : result === undefined ? 'running' : 'success';
+  const status = isRunning ? 'running' : exitSuccess === false ? 'error' : isStreamingComplete ? 'success' : 'running';
 
   return (
     <Tool

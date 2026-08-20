@@ -82,7 +82,7 @@ export const ToolBadge = ({
   const selectionReason =
     metadata?.mode === 'network' ? (routingDecision?.selectionReason ?? metadata.selectionReason) : undefined;
   const agentNetworkInput = metadata?.mode === 'network' ? (routingDecision ?? metadata.agentInput) : undefined;
-  const toolCalled = toolCalledProp ?? Boolean(result || toolOutput.length > 0);
+  const toolCalled = toolCalledProp ?? (result !== undefined || toolOutput.length > 0);
 
   const bgEntry =
     (metadata?.mode === 'stream' || metadata?.mode === 'generate') && metadata.backgroundTasks

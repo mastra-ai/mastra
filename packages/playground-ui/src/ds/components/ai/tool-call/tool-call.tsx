@@ -10,7 +10,7 @@ import { CopyButton } from '../../CopyButton';
 import { Shimmer } from '../../Shimmer';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../Tooltip';
 import { Txt } from '../../Txt';
-import { highlightCode, languageForPath } from './tool-call-highlight';
+import { highlightCodeLines, languageForPath } from './tool-call-highlight';
 import { presentTool } from './tool-presentation';
 import { cn } from '@/lib/utils';
 
@@ -162,15 +162,14 @@ export function ToolIcon({ className, tooltip, ...props }: ToolIconProps) {
 
 export function ToolContent({ className, children, ...props }: ToolContentProps) {
   const { collapsible } = useToolContext();
-  if (!collapsible) return null;
-
-  return (
-    <CollapsibleContent className="max-w-full min-w-0">
-      <div className={cn('flex w-full max-w-full min-w-0 flex-col gap-1.5 py-1.5 pr-1', className)} {...props}>
-        {children}
-      </div>
-    </CollapsibleContent>
+  const content = (
+    <div className={cn('flex w-full max-w-full min-w-0 flex-col gap-1.5 py-1.5 pr-1', className)} {...props}>
+      {children}
+    </div>
   );
+
+  if (!collapsible) return content;
+  return <CollapsibleContent className="max-w-full min-w-0">{content}</CollapsibleContent>;
 }
 
 /**
@@ -240,11 +239,21 @@ function displayPayload(value: unknown): DisplayPayload {
     return { isJson: false, text: cleanValue };
   }
 
+  const seen = new WeakSet<object>();
   try {
-    const formatted = JSON.stringify(value, null, 2);
+    const formatted = JSON.stringify(
+      value,
+      (_key, nestedValue: unknown) => {
+        if (!nestedValue || typeof nestedValue !== 'object') return nestedValue;
+        if (seen.has(nestedValue)) return '[Circular]';
+        seen.add(nestedValue);
+        return nestedValue;
+      },
+      2,
+    );
     if (formatted !== undefined) return { isJson: true, text: formatted };
   } catch {
-    // Circular and otherwise non-serializable values fall back to readable text.
+    // Values unsupported by JSON still fall back to readable text.
   }
 
   return { isJson: false, text: String(value) };
@@ -289,7 +298,7 @@ function MonoBlock({ copyText, className, children }: { copyText: string; classN
         content={copyText}
         size="sm"
         variant="ghost"
-        className="absolute top-1 right-1 opacity-0 transition-opacity group-hover/block:opacity-100"
+        className="absolute top-1 right-1 opacity-0 transition-opacity group-hover/block:opacity-100 focus-visible:opacity-100"
       />
     </div>
   );
@@ -303,15 +312,15 @@ function ToolPayloadSection({ label, value }: { label: 'Input' | 'Output'; value
       <Txt as="div" variant="ui-xs" className="bg-surface2 text-neutral4 px-3 py-2 font-medium">
         {label}
       </Txt>
-      <div className="group/payload relative min-w-0 bg-black">
+      <div className="group/payload bg-surface1 relative min-w-0">
         {payload.isJson ? (
           <Code
             code={payload.text}
             lang="json"
-            className="text-neutral5 m-0 max-h-60 min-w-0 overflow-auto bg-black px-3 py-2 font-mono text-xs leading-normal whitespace-pre"
+            className="bg-surface1 text-neutral5 m-0 max-h-60 min-w-0 overflow-auto px-3 py-2 font-mono text-xs leading-normal whitespace-pre"
           />
         ) : (
-          <pre className="text-neutral5 m-0 max-h-60 min-w-0 overflow-auto bg-black px-3 py-2 font-mono text-xs leading-normal break-words whitespace-pre-wrap">
+          <pre className="bg-surface1 text-neutral5 m-0 max-h-60 min-w-0 overflow-auto px-3 py-2 font-mono text-xs leading-normal break-words whitespace-pre-wrap">
             {payload.text}
           </pre>
         )}
@@ -319,7 +328,7 @@ function ToolPayloadSection({ label, value }: { label: 'Input' | 'Output'; value
           content={payload.text}
           size="sm"
           variant="ghost"
-          className="absolute top-1 right-1 opacity-0 transition-opacity group-hover/payload:opacity-100"
+          className="absolute top-1 right-1 opacity-0 transition-opacity group-hover/payload:opacity-100 focus-visible:opacity-100"
         />
       </div>
     </section>
@@ -338,7 +347,7 @@ function boundedLines(value: string): { lines: string[]; hidden: number } {
   return { lines: lines.slice(0, DIFF_MAX_LINES), hidden: Math.max(0, lines.length - DIFF_MAX_LINES) };
 }
 
-function DiffSide({ lines, side, lang }: { lines: string[]; side: keyof typeof DIFF_SIDES; lang: string | undefined }) {
+function DiffSide({ lines, side }: { lines: string[]; side: keyof typeof DIFF_SIDES }) {
   const { sign, row, gutter } = DIFF_SIDES[side];
   return (
     <>
@@ -347,7 +356,7 @@ function DiffSide({ lines, side, lang }: { lines: string[]; side: keyof typeof D
           <span className={cn('w-5 shrink-0 text-center opacity-70 select-none', gutter)}>{sign}</span>
           <span
             className="text-icon6 [&_span]:font-inherit [&_span]:leading-inherit flex-1 pr-2.5 [&_span]:text-inherit dark:[&_span]:![background-color:var(--shiki-dark-bg)] dark:[&_span]:![color:var(--shiki-dark)]"
-            dangerouslySetInnerHTML={{ __html: highlightCode(line, lang) || '&nbsp;' }}
+            dangerouslySetInnerHTML={{ __html: line || '&nbsp;' }}
           />
         </div>
       ))}
@@ -360,6 +369,8 @@ function DiffView({ oldText, newText, path }: { oldText: string; newText: string
   const removed = boundedLines(oldText);
   const added = boundedLines(newText);
   const hidden = removed.hidden + added.hidden;
+  const highlightedRemoved = highlightCodeLines(removed.lines.join('\n'), lang);
+  const highlightedAdded = highlightCodeLines(added.lines.join('\n'), lang);
 
   return (
     <div
@@ -367,8 +378,8 @@ function DiffView({ oldText, newText, path }: { oldText: string; newText: string
       role="group"
       aria-label="File change"
     >
-      <DiffSide lines={removed.lines} side="removed" lang={lang} />
-      <DiffSide lines={added.lines} side="added" lang={lang} />
+      <DiffSide lines={highlightedRemoved} side="removed" />
+      <DiffSide lines={highlightedAdded} side="added" />
       {hidden > 0 && <div className="text-icon3 px-2.5 py-1 select-none">… {hidden} more lines</div>}
     </div>
   );
@@ -382,7 +393,7 @@ interface EditInput {
 }
 
 function hasProperty<K extends string>(value: object, key: K): value is object & Record<K, unknown> {
-  return key in value;
+  return Object.prototype.hasOwnProperty.call(value, key);
 }
 
 function stringProperty(value: unknown, key: string): string | undefined {
@@ -397,7 +408,7 @@ function editInput(toolName: string, input: unknown): EditInput | undefined {
     new_string: stringProperty(input, 'new_string'),
     content: stringProperty(input, 'content'),
   };
-  const isReplace = /string_replace|str_replace|edit_file/i.test(toolName) && edit.new_string !== undefined;
+  const isReplace = /string_replace|str_replace|edit_file|ast_edit/i.test(toolName) && edit.new_string !== undefined;
   const isWrite = /write_file|create_file/i.test(toolName) && edit.content !== undefined;
   return isReplace || isWrite ? edit : undefined;
 }

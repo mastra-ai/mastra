@@ -82,6 +82,28 @@ describe('ToolBadge', () => {
     expect(screen.queryByLabelText('Code editor')).toBeNull();
   });
 
+  it('treats falsy results as completed', () => {
+    renderWithProviders(
+      <ToolBadge
+        toolName="check_feature"
+        args={{ feature: 'tools' }}
+        result={false}
+        toolOutput={[]}
+        toolCallId="call-1"
+        toolApprovalMetadata={{ toolCallId: 'call-1', toolName: 'check_feature', args: { feature: 'tools' } }}
+        isNetwork={false}
+        state="output-available"
+      />,
+    );
+
+    const tool = screen.getByRole('group', { name: 'Tool: check_feature' });
+    expect(tool.getAttribute('aria-busy')).toBe('false');
+    fireEvent.click(screen.getByRole('button', { name: /Check feature/ }));
+
+    expect(tool.textContent).toContain('false');
+    expect(screen.queryByRole('button', { name: /Approve/ })).toBeNull();
+  });
+
   it('maps failed calls to the Factory failure state', () => {
     renderWithProviders(
       <ToolBadge
