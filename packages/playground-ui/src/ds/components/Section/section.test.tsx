@@ -94,7 +94,7 @@ describe('Section', () => {
       'group-data-[variant=factory]/section:px-4',
     );
     expect(screen.getByText('Flat row').closest('[data-slot="section-row"]')?.className).toContain(
-      'group-data-[variant=flat]/section:px-4',
+      'group-data-[variant=flat]/section:p-4',
     );
   });
 
