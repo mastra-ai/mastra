@@ -77,7 +77,7 @@ Connects a Jira Cloud site (`https://<site>.atlassian.net`) with deployment-glob
 1. Create an API token at https://id.atlassian.com → Security → API tokens.
 2. Set `JIRA_BASE_URL` (the site origin), `JIRA_EMAIL` (the Atlassian account the token belongs to), and `JIRA_API_TOKEN` in `.env`.
 
-All three variables are required together. Jira projects then become selectable intake sources in Settings → Intake, selected projects' issues appear on the board, and agents get `jira_get_issue` / `jira_create_comment` tools. The token's Jira permissions govern what the integration can read and post.
+All three variables are required together. Jira projects then become selectable intake sources in Settings → Intake; route each selected project to a Factory and its active issues appear on that Factory's board. Agents get a read-only `jira_get_issue` tool for full issue context. Credentials are deployment-global, so treat this as a self-hosted/single-tenant setup: the token's Jira permissions govern what every signed-in organization on the deployment can read.
 
 ### Slack (optional)
 

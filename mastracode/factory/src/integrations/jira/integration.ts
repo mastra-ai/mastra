@@ -374,13 +374,14 @@ export class JiraIntegration implements FactoryIntegration {
       jira: this,
       auth: ctx.auth,
       intake: ctx.storage.intake,
+      projects: ctx.storage.projects,
     });
   }
 
   /**
-   * Org-scoped agent tools: issue detail + comment tools for sessions whose
+   * Org-scoped agent tools: the read-only issue-detail tool for sessions whose
    * resource is a factory project (Jira credentials are deployment-global,
-   * so no per-org connection gates apply).
+   * so no per-org connection gates apply). v1 exposes no mutating Jira tools.
    */
   async agentTools(args: { requestContext: RequestContext }): Promise<IntegrationTools> {
     return buildJiraAgentTools({ requestContext: args.requestContext, jira: this });

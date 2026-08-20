@@ -68,11 +68,12 @@ beforeEach(async () => {
 });
 
 describe('buildJiraAgentTools — exposure gating', () => {
-  it('exposes both Jira tools for org-owned factory projects', async () => {
+  it('exposes only the read-only jira_get_issue tool for org-owned factory projects', async () => {
     await seedProject();
     const tools = await buildJiraAgentTools({ jira, requestContext: requestContextFor(PROJECT_ID) });
-    expect(tools).toHaveProperty('jira_get_issue');
-    expect(tools).toHaveProperty('jira_create_comment');
+    // v1 is intake-only: no mutating Jira tool (comment/transition) may leak
+    // into the agent tool record.
+    expect(Object.keys(tools)).toEqual(['jira_get_issue']);
   });
 
   it('exposes nothing when the host runs without web auth', async () => {
@@ -98,7 +99,7 @@ describe('jira_get_issue', () => {
     await seedProject();
     fetchJiraIssueDetail.mockResolvedValueOnce(issueDetail);
     const tools = await buildJiraAgentTools({ jira, requestContext: requestContextFor(PROJECT_ID) });
-    const result = await tools.jira_get_issue!.execute!({ issue: ' ENG-42 ' } as never);
+    const result = await (tools.jira_get_issue!.execute as any)({ issue: ' ENG-42 ' });
     expect(result).toEqual(issueDetail);
     expect(fetchJiraIssueDetail).toHaveBeenCalledWith('ENG-42');
   });
@@ -107,7 +108,7 @@ describe('jira_get_issue', () => {
     await seedProject();
     fetchJiraIssueDetail.mockResolvedValueOnce(null);
     const tools = await buildJiraAgentTools({ jira, requestContext: requestContextFor(PROJECT_ID) });
-    const result = await tools.jira_get_issue!.execute!({ issue: 'ENG-404' } as never);
+    const result = await (tools.jira_get_issue!.execute as any)({ issue: 'ENG-404' });
     expect(result).toEqual({ error: 'Jira issue "ENG-404" was not found on this site.' });
   });
 
@@ -115,39 +116,31 @@ describe('jira_get_issue', () => {
     await seedProject();
     fetchJiraIssueDetail.mockRejectedValueOnce(new JiraApiError('Jira API request failed (401)', 401));
     const tools = await buildJiraAgentTools({ jira, requestContext: requestContextFor(PROJECT_ID) });
-    const result = await tools.jira_get_issue!.execute!({ issue: 'ENG-42' } as never);
+    const result = await (tools.jira_get_issue!.execute as any)({ issue: 'ENG-42' });
     expect(result).toEqual({
       error: 'Jira rejected the configured credentials. Ask the operator to check the Jira API token.',
     });
   });
-});
-
-describe('jira_create_comment', () => {
-  it('posts the comment and returns its URL', async () => {
-    await seedProject();
-    createJiraIssueComment.mockResolvedValueOnce({
-      id: 'c-9',
-      url: 'https://acme.atlassian.net/browse/ENG-42?focusedCommentId=c-9',
-    });
-    const tools = await buildJiraAgentTools({ jira, requestContext: requestContextFor(PROJECT_ID) });
-    const result = await tools.jira_create_comment!.execute!({ issue: 'ENG-42', body: 'Findings attached.' } as never);
-    expect(result).toEqual({ posted: true, url: 'https://acme.atlassian.net/browse/ENG-42?focusedCommentId=c-9' });
-    expect(createJiraIssueComment).toHaveBeenCalledWith('ENG-42', 'Findings attached.');
-  });
-
-  it('reports unknown issues as a tool error', async () => {
-    await seedProject();
-    createJiraIssueComment.mockResolvedValueOnce(null);
-    const tools = await buildJiraAgentTools({ jira, requestContext: requestContextFor(PROJECT_ID) });
-    const result = await tools.jira_create_comment!.execute!({ issue: 'ENG-404', body: 'Hello' } as never);
-    expect(result).toEqual({ error: 'Jira issue "ENG-404" was not found on this site.' });
-  });
 
   it('surfaces non-auth failures with the underlying message', async () => {
     await seedProject();
-    createJiraIssueComment.mockRejectedValueOnce(new JiraApiError('Jira API request failed (500)', 500));
+    fetchJiraIssueDetail.mockRejectedValueOnce(new JiraApiError('Jira API request failed (500)', 500));
     const tools = await buildJiraAgentTools({ jira, requestContext: requestContextFor(PROJECT_ID) });
-    const result = await tools.jira_create_comment!.execute!({ issue: 'ENG-42', body: 'Hello' } as never);
-    expect(result).toEqual({ error: 'Failed to post Jira comment: Jira API request failed (500)' });
+    const result = await (tools.jira_get_issue!.execute as any)({ issue: 'ENG-42' });
+    expect(result).toEqual({ error: 'Failed to fetch Jira issue: Jira API request failed (500)' });
+  });
+});
+
+describe('mutating tools stay internal in v1', () => {
+  it('never exposes a comment or transition tool, even for org-owned projects', async () => {
+    await seedProject();
+    const tools = await buildJiraAgentTools({ jira, requestContext: requestContextFor(PROJECT_ID) });
+    expect(tools).not.toHaveProperty('jira_create_comment');
+    expect(tools).not.toHaveProperty('jira_update_issue');
+    // The adapter still implements the full Intake contract internally — only
+    // the agent-facing record is narrowed.
+    expect(typeof jira.intake.createComment).toBe('function');
+    expect(typeof jira.intake.updateIssue).toBe('function');
+    expect(createJiraIssueComment).not.toHaveBeenCalled();
   });
 });
