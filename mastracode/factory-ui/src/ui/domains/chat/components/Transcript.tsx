@@ -507,11 +507,8 @@ interface PreparedTranscriptEntry {
 }
 
 function createHistoryRevealDelays(entries: PreparedTranscriptEntry[]): Record<string, number> {
-  const visibleEntries = entries.filter(({ content }) => content !== null);
-  const staggerStart = Math.max(visibleEntries.length - HISTORY_ENTRY_STAGGER_LIMIT, 0);
-  return Object.fromEntries(
-    visibleEntries.map(({ entry }, index) => [entry.id, Math.max(index - staggerStart, 0) * HISTORY_ENTRY_STAGGER_MS]),
-  );
+  const visibleEntries = entries.filter(({ content }) => content !== null).slice(-HISTORY_ENTRY_STAGGER_LIMIT);
+  return Object.fromEntries(visibleEntries.map(({ entry }, index) => [entry.id, index * HISTORY_ENTRY_STAGGER_MS]));
 }
 
 export function Transcript({ tail }: { tail?: ReactNode }) {
