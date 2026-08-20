@@ -1,10 +1,11 @@
 ---
 title: "SDK agents | Connections"
-description: "Use Claude Agent SDK, Cursor Agent SDK, and OpenAI Agents SDK agents from Mastra."
+description: "Use Claude Agent SDK, Cursor Agent SDK, OpenAI Agents SDK, and OpenCode SDK agents from Mastra."
 packages:
   - "@mastra/claude"
   - "@mastra/cursor"
   - "@mastra/openai"
+  - "@mastra/opencode"
   - "@mastra/core"
 ---
 
@@ -24,8 +25,9 @@ SDK agents let you use other agent SDK frameworks inside Mastra. Use them to reg
 - [Claude Agent SDK](#claude-agent-sdk): Use `@mastra/claude` to register a Claude SDK agent and call it with Mastra `generate()` and `stream()`.
 - [Cursor Agent SDK](#cursor-agent-sdk): Use `@mastra/cursor` to register a Cursor SDK agent and call it with Mastra `generate()` and `stream()`.
 - [OpenAI Agents SDK](#openai-agents-sdk): Use `@mastra/openai` to register an OpenAI SDK agent and call it with Mastra `generate()` and `stream()`.
+- [OpenCode SDK](#opencode-sdk): Use `@mastra/opencode` to register an OpenCode SDK agent and call it with Mastra `generate()` and `stream()`.
 
-Coding agents without a dedicated Mastra package, such as Cline and OpenCode, run through the [Agent Client Protocol](/docs/connections/acp) instead.
+Coding agents without a dedicated Mastra package, such as Cline, run through the [Agent Client Protocol](/docs/connections/acp). You can also use OpenCode through ACP when your app needs an ACP coding-agent process rather than the OpenCode SDK runtime.
 
 ## Claude Agent SDK
 

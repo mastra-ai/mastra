@@ -24,8 +24,8 @@ import {
   sumDefined,
   toFullOutput,
   toLanguageModelUsage,
-} from './utils';
-import type { SDKAgentRunOptions, SDKAgentTelemetry, SDKModelGenerateResult, V3Usage } from './utils';
+} from '@internal/agent-sdk-base';
+import type { SDKAgentRunOptions, SDKAgentTelemetry, SDKModelGenerateResult, V3Usage } from '@internal/agent-sdk-base';
 
 const PROVIDER = '@openai/agents';
 const MODEL_ID = 'openai-agents-sdk';
@@ -291,7 +291,7 @@ async function runOpenAIGenerate<OUTPUT>(
     itemCount: result.newItems.length,
     usage,
   });
-
+  //TODO : finishReason from openai Stop reason ? 
   return {
     content: [{ type: 'text', text }],
     finishReason: { unified: 'stop', raw: 'stop' },
@@ -400,7 +400,6 @@ function getRunOpenAIAgent<OUTPUT>(agent: OpenAIAgent, options?: SDKAgentRunOpti
   if (!outputType) {
     return agent;
   }
-
   return (agent as { clone(config: Record<string, unknown>): OpenAIAgent }).clone({ outputType });
 }
 
@@ -564,6 +563,7 @@ function getOpenAIProviderMetadata({
   });
 }
 
+//TODO : tool call chunks can have broader set of items ? 
 function recordOpenAIToolTelemetry(items: RunItem[], telemetry: OpenAIToolTelemetry): void {
   for (const item of items) {
     if (item.type === 'tool_call_item') {
@@ -582,7 +582,7 @@ function recordOpenAIToolTelemetry(items: RunItem[], telemetry: OpenAIToolTeleme
     }
   }
 }
-
+//TODO : similar can have more set of keys ?
 function recordOpenAIStreamToolTelemetry(event: RunStreamEvent, telemetry: OpenAIToolTelemetry): void {
   if (event.type !== 'run_item_stream_event') {
     return;
@@ -706,6 +706,8 @@ function parseJsonString(value: unknown): unknown {
   }
 }
 
+
+// codex: import the base package and cleanup
 function getNumber(value: unknown): number | undefined {
   return typeof value === 'number' ? value : undefined;
 }
@@ -718,6 +720,8 @@ function getString(record: Record<string, unknown> | undefined, key: string): st
 function getObjectValue(value: unknown, key: string): unknown {
   return toRecord(value)?.[key];
 }
+
+//TODO : move to utils /
 
 function toRecord(value: unknown): Record<string, unknown> | undefined {
   return isRecord(value) ? value : undefined;
