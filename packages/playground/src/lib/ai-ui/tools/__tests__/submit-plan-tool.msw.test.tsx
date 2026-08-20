@@ -139,14 +139,11 @@ describe('SubmitPlanTool', () => {
 
     it('offers expansion when a short plan overflows the collapsed height', async () => {
       stubContentHeight(221);
-      server.use(
-        http.get(`${BASE_URL}/api/agents/:agentId/plans/file`, () =>
-          HttpResponse.json({
-            path: submittedPlanPath,
-            content: '# Short plan\n\nA tall rendered block.',
-          }),
-        ),
-      );
+      const overflowingPlanFile = {
+        ...submittedPlanFile,
+        content: '# Short plan\n\nA tall rendered block.',
+      };
+      server.use(http.get(`${BASE_URL}/api/agents/:agentId/plans/file`, () => HttpResponse.json(overflowingPlanFile)));
 
       renderSubmitPlan(pendingProps);
 
