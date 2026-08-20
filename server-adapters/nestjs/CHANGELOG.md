@@ -1,5 +1,13 @@
 # @mastra/nestjs
 
+## 0.2.18-alpha.4
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/core@1.61.0-alpha.4
+  - @mastra/server@1.61.0-alpha.4
+
 ## 0.2.18-alpha.3
 
 ### Patch Changes

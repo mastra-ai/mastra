@@ -1,5 +1,15 @@
 # @mastra/deployer
 
+## 1.61.0-alpha.4
+
+### Patch Changes
+
+- Fix `ERR_INVALID_ARG_VALUE` during bundling when a bare import is resolved from a Rollup virtual module. `nodeModulesExtensionResolver` now skips NUL-prefixed importers (e.g. `\0virtual:#entry`) instead of treating them as filesystem paths. ([#21998](https://github.com/mastra-ai/mastra/pull/21998))
+
+- Updated dependencies:
+  - @mastra/core@1.61.0-alpha.4
+  - @mastra/server@1.61.0-alpha.4
+
 ## 1.61.0-alpha.3
 
 ### Minor Changes
