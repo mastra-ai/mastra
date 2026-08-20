@@ -68,6 +68,7 @@ export interface KnowledgeGraphNode {
   id: string;
   name: string;
   kind: string;
+  content?: string;
   scope: KnowledgeScope;
   /** Deepest rung of the record's scope: org | resource | thread. */
   rung: 'org' | 'resource' | 'thread';
@@ -513,6 +514,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               id: node.id,
               name: node.name,
               kind: node.kind,
+              ...(node.content !== undefined ? { content: node.content } : {}),
               scope: node.scope,
               rung: deepestRung(node.scope),
               pinned: accented.has(node.id),
