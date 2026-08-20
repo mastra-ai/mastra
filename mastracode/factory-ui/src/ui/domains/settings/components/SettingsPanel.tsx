@@ -30,7 +30,7 @@ import { RepositoriesSection } from './RepositoriesSection';
 import { SettingsCard } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
 import { OMSection } from './OMSection';
-import { ThinkingDefaultsSection } from './ThinkingDefaultsSection';
+import { BaseThinkingSection, ModeThinkingDefaultsSection } from './ThinkingDefaultsSection';
 import { ProviderAccessSection } from './ProviderAccessSection';
 import { BehaviorSettings, GeneralSettings, ModelSettings } from './SettingsPanel.parts';
 
@@ -120,6 +120,14 @@ export function SettingsPanel() {
                     <OMSection factoryId={factoryId} models={models} />
                   </SettingsCard>
                 </SettingsSubsection>
+                <SettingsSubsection
+                  title="Thinking"
+                  description="Base reasoning-effort applied to runs without a session or mode override — including automated Factory runs."
+                >
+                  <SettingsCard>
+                    <BaseThinkingSection />
+                  </SettingsCard>
+                </SettingsSubsection>
               </TabContent>
               <TabContent value="user" className="flex flex-col gap-8 pt-4">
                 <SettingsSubsection title="Session">
@@ -148,16 +156,16 @@ export function SettingsPanel() {
                     <OMSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
                   </SettingsCard>
                 </SettingsSubsection>
+                <SettingsSubsection
+                  title="Thinking defaults"
+                  description="Per-mode reasoning-effort defaults for interactive chats. Modes set to Global inherit the Factory tab's base thinking level; the session thinking level above takes precedence."
+                >
+                  <SettingsCard>
+                    <ModeThinkingDefaultsSection />
+                  </SettingsCard>
+                </SettingsSubsection>
               </TabContent>
             </Tabs>
-            <SettingsSubsection
-              title="Thinking defaults"
-              description="Reasoning-effort applied to runs without a session override — including automated Factory runs. The session thinking level above takes precedence."
-            >
-              <SettingsCard>
-                <ThinkingDefaultsSection />
-              </SettingsCard>
-            </SettingsSubsection>
             <SettingsSubsection title="Provider access">
               <SettingsCard className="p-4">
                 <ProviderAccessSection />
