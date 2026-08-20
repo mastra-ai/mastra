@@ -2,14 +2,10 @@ import { useCallback, useMemo } from 'react';
 
 const TAB_PARAM = 'tab';
 const VERSION_PARAM = 'version';
-const PANEL_PARAM = 'panel';
 const MODE_PARAM = 'mode';
 
 const TAB_VALUES = new Set(['items', 'experiments', 'review'] as const);
 export type DatasetTab = 'items' | 'experiments' | 'review';
-
-const PANEL_VALUES = new Set(['versions'] as const);
-export type DatasetPanel = 'versions';
 
 const NON_IDLE_SELECTION_MODES = new Set([
   'export',
@@ -36,21 +32,19 @@ export type SetURLSearchParamsLike = (
 export interface UseDatasetItemsUrlStateResult {
   tab: DatasetTab;
   activeVersion: number | null;
-  panel: DatasetPanel | null;
   selectionMode: DatasetSelectionMode;
 
   handleTabChange: (tab: DatasetTab) => void;
   handleVersionChange: (version: number | null) => void;
-  handlePanelChange: (panel: DatasetPanel | null) => void;
   handleSelectionModeChange: (mode: DatasetSelectionMode) => void;
 }
 
 /**
  * URL-derived state for the dataset detail view. Owns the `tab`, `version`,
- * `panel`, and `mode` search params plus the handlers that mutate them.
+ * and `mode` search params plus the handlers that mutate them.
  * Router-agnostic — pass `searchParams` and `setSearchParams` from the host router.
  *
- * Leaving the items tab clears `panel` and `mode` since both are items-tab concepts;
+ * Leaving the items tab clears `mode` since it is an items-tab concept;
  * `version` persists across tabs to match the prior in-memory behavior.
  */
 export function useDatasetItemsUrlState(
@@ -69,11 +63,6 @@ export function useDatasetItemsUrlState(
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
   }, [searchParams]);
 
-  const panel = useMemo<DatasetPanel | null>(() => {
-    const value = searchParams.get(PANEL_PARAM);
-    return value && PANEL_VALUES.has(value as DatasetPanel) ? (value as DatasetPanel) : null;
-  }, [searchParams]);
-
   const selectionMode = useMemo<DatasetSelectionMode>(() => {
     const value = searchParams.get(MODE_PARAM);
     return value && NON_IDLE_SELECTION_MODES.has(value as Exclude<DatasetSelectionMode, 'idle'>)
@@ -90,7 +79,6 @@ export function useDatasetItemsUrlState(
             params.delete(TAB_PARAM);
           } else {
             params.set(TAB_PARAM, next);
-            params.delete(PANEL_PARAM);
             params.delete(MODE_PARAM);
           }
           return params;
@@ -110,24 +98,6 @@ export function useDatasetItemsUrlState(
             params.delete(VERSION_PARAM);
           } else {
             params.set(VERSION_PARAM, String(next));
-          }
-          return params;
-        },
-        { replace: true },
-      );
-    },
-    [setSearchParams],
-  );
-
-  const handlePanelChange = useCallback(
-    (next: DatasetPanel | null) => {
-      setSearchParams(
-        prev => {
-          const params = new URLSearchParams(prev);
-          if (!next) {
-            params.delete(PANEL_PARAM);
-          } else {
-            params.set(PANEL_PARAM, next);
           }
           return params;
         },
@@ -158,11 +128,9 @@ export function useDatasetItemsUrlState(
   return {
     tab,
     activeVersion,
-    panel,
     selectionMode,
     handleTabChange,
     handleVersionChange,
-    handlePanelChange,
     handleSelectionModeChange,
   };
 }

@@ -16,7 +16,6 @@ import {
   Trash2,
   ChevronDownIcon,
   MoveRightIcon,
-  History,
   GitCompareIcon,
   AmpersandIcon,
 } from 'lucide-react';
@@ -102,10 +101,7 @@ export type DatasetItemsToolbarProps = {
   onCancelSelection: () => void;
   selectionMode: 'idle' | 'export' | 'export-json' | 'create-dataset' | 'add-to-dataset' | 'delete' | 'compare-items';
 
-  // Versions panel
-  onVersionsClick: () => void;
   isItemPanelOpen?: boolean;
-  isVersionsPanelOpen?: boolean;
   isViewingOldVersion?: boolean;
 };
 
@@ -127,9 +123,7 @@ export function DatasetItemsToolbar({
   onExecuteAction,
   onCancelSelection,
   selectionMode,
-  onVersionsClick,
   isItemPanelOpen,
-  isVersionsPanelOpen,
   isViewingOldVersion,
 }: DatasetItemsToolbarProps) {
   if (isSelectionActive) {
@@ -139,6 +133,7 @@ export function DatasetItemsToolbar({
           name="search-items"
           label="Search"
           labelIsHidden
+          size="md"
           placeholder="Search items..."
           value={searchQuery ?? ''}
           onChange={e => onSearchChange?.(e.target.value)}
@@ -200,6 +195,7 @@ export function DatasetItemsToolbar({
         name="search-items"
         label="Search"
         labelIsHidden
+        size="md"
         placeholder="Search items..."
         value={searchQuery ?? ''}
         onChange={e => onSearchChange?.(e.target.value)}
@@ -208,7 +204,7 @@ export function DatasetItemsToolbar({
       />
 
       <ButtonsGroup>
-        {!isItemPanelOpen && !isViewingOldVersion && (
+        {(hasItems || Boolean(searchQuery)) && !isItemPanelOpen && !isViewingOldVersion && (
           <ButtonsGroup spacing="close">
             <Button onClick={onAddClick}>
               <Plus /> Add Item
@@ -240,13 +236,6 @@ export function DatasetItemsToolbar({
             onDeleteClick={onDeleteClick}
             onCompareClick={onCompareClick}
           />
-        )}
-
-        {!isItemPanelOpen && !isVersionsPanelOpen && (
-          <Button onClick={onVersionsClick} aria-label="View versions">
-            <History className="h-4 w-4" />
-            Versions
-          </Button>
         )}
       </ButtonsGroup>
     </div>

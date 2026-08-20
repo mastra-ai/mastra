@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
@@ -21,6 +22,7 @@ import { useMastraClient } from '@mastra/react';
 import {
   CheckCircle,
   ChevronDown,
+  ClipboardCheck,
   FilterIcon,
   GaugeIcon,
   Sparkles,
@@ -578,7 +580,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
             <div className="flex items-center gap-3">
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
-                  <Button variant="outline" size="md">
+                  <Button>
                     <FilterIcon />
                     Filter
                     {activeFilterCount > 0 && (
@@ -683,8 +685,6 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
 
               {activeFilterCount > 0 && (
                 <Button
-                  variant="outline"
-                  size="md"
                   onClick={() => {
                     setActiveTagFilter(null);
                     setShowCompleted(false);
@@ -752,17 +752,16 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
               <Spinner className="h-6 w-6" />
             </div>
           ) : displayItems.length === 0 ? (
-            <div className="flex flex-1 items-center justify-center">
-              <div className="px-8 text-center">
-                <Txt variant="ui-sm" className="text-neutral3 block">
-                  {showCompleted ? 'No completed reviews yet' : 'No items to review'}
-                </Txt>
-                <Txt variant="ui-xs" className="text-neutral3 mt-2 block">
-                  {showCompleted
+            <div className="flex h-full items-center justify-center py-12">
+              <EmptyState
+                iconSlot={<ClipboardCheck className="text-neutral3 h-8 w-8" />}
+                titleSlot={showCompleted ? 'No completed reviews yet' : 'No items to review'}
+                descriptionSlot={
+                  showCompleted
                     ? 'Items marked as complete will appear here for auditing.'
-                    : 'When experiment results are flagged for review, they will appear here.'}
-                </Txt>
-              </div>
+                    : 'When experiment results are flagged for review, they will appear here.'
+                }
+              />
             </div>
           ) : (
             <DataList columns={gridColumns} className="min-w-0">

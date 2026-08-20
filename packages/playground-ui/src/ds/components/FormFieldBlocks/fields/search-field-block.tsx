@@ -86,15 +86,16 @@ export function SearchFieldBlock({
         </FieldBlock.Column>
       ) : null}
       <FieldBlock.Column>
-        {layout === 'vertical' && label ? (
+        {layout === 'vertical' && label && !labelIsHidden ? (
           <FieldBlock.Label name={name} required={required}>
-            {labelIsHidden ? <VisuallyHidden>{label}</VisuallyHidden> : label}
+            {label}
           </FieldBlock.Label>
         ) : null}
         <div className="group relative">
           <Input
             ref={inputRef}
             id={`input-${name}`}
+            aria-label={labelIsHidden ? label : undefined}
             name={name}
             disabled={disabled}
             value={value}

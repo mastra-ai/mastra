@@ -2,7 +2,10 @@ import type { DatasetItem } from '@mastra/client-js';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Chip } from '@mastra/playground-ui/components/Chip';
 import { Tabs, Tab, TabList, TabContent } from '@mastra/playground-ui/components/Tabs';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { ClipboardCheck, FlaskConical, List } from 'lucide-react';
 import { useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useDebounce } from 'use-debounce';
@@ -27,11 +30,12 @@ export interface DatasetPageTabsProps {
   datasetId: string;
   onAddItemClick?: () => void;
   onNavigateToDataset?: (datasetId: string) => void;
+  rightSlot?: React.ReactNode;
 }
 
 export type TabValue = 'items' | 'experiments' | 'review';
 
-export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset }: DatasetPageTabsProps) {
+export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset, rightSlot }: DatasetPageTabsProps) {
   const { navigate } = useLinkComponent();
   const [searchParams, setSearchParams] = useSearchParams();
   const {
@@ -165,21 +169,40 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
         onValueChange={handleTabChange}
         className="grid h-full grid-rows-[auto_1fr]"
       >
-        <TabList>
-          <Tab value="items">
-            Items <Chip color="gray">{itemsTabCount}</Chip>
-          </Tab>
-          <Tab value="experiments">
-            Experiments
-            <Chip color="gray">{experiments.length}</Chip>
-          </Tab>
-          <Tab value="review">
-            Review
-            {reviewCount > 0 && <Chip color="orange">{reviewCount}</Chip>}
-          </Tab>
-        </TabList>
+        <div className="flex items-center justify-between gap-4 px-6 py-3">
+          <TabList variant="pill-ghost">
+            <Tab value="items" className="px-3 py-2.5">
+              <Icon size="sm">
+                <List />
+              </Icon>
+              <Txt variant="ui-sm" className="text-inherit">
+                Items
+              </Txt>
+              <Chip color="gray">{itemsTabCount}</Chip>
+            </Tab>
+            <Tab value="experiments" className="px-3 py-2.5">
+              <Icon size="sm">
+                <FlaskConical />
+              </Icon>
+              <Txt variant="ui-sm" className="text-inherit">
+                Experiments
+              </Txt>
+              <Chip color="gray">{experiments.length}</Chip>
+            </Tab>
+            <Tab value="review" className="px-3 py-2.5">
+              <Icon size="sm">
+                <ClipboardCheck />
+              </Icon>
+              <Txt variant="ui-sm" className="text-inherit">
+                Review
+              </Txt>
+              {reviewCount > 0 && <Chip color="orange">{reviewCount}</Chip>}
+            </Tab>
+          </TabList>
+          {rightSlot && <div className="shrink-0 whitespace-nowrap">{rightSlot}</div>}
+        </div>
 
-        <TabContent value="items" className="mt-5 grid overflow-auto pb-0">
+        <TabContent value="items" className="border-border1 grid overflow-auto border-t py-0">
           <DatasetItems
             datasetId={datasetId}
             items={items}
@@ -207,7 +230,7 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
           />
         </TabContent>
 
-        <TabContent value="experiments" className="mt-5 grid overflow-auto pb-0">
+        <TabContent value="experiments" className="border-border1 grid overflow-auto border-t px-6 pt-3 pb-6">
           <DatasetExperiments
             experiments={experiments}
             allExperiments={allExperiments}
@@ -218,7 +241,7 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
           />
         </TabContent>
 
-        <TabContent value="review" className="mt-2 overflow-auto pb-0">
+        <TabContent value="review" className="border-border1 overflow-auto border-t px-6 pt-3 pb-6">
           <DatasetReview datasetId={datasetId} />
         </TabContent>
       </Tabs>
