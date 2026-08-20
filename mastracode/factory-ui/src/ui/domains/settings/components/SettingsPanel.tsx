@@ -110,6 +110,7 @@ export function SettingsPanel() {
                 >
                   <SettingsCard>
                     <FactoryDefaultModelSection models={models} />
+                    <BaseThinkingSection />
                   </SettingsCard>
                 </SettingsSubsection>
                 <SettingsSubsection
@@ -118,14 +119,6 @@ export function SettingsPanel() {
                 >
                   <SettingsCard className="p-4">
                     <OMSection factoryId={factoryId} models={models} />
-                  </SettingsCard>
-                </SettingsSubsection>
-                <SettingsSubsection
-                  title="Thinking"
-                  description="Base reasoning-effort applied to runs without a session or mode override — including automated Factory runs."
-                >
-                  <SettingsCard>
-                    <BaseThinkingSection />
                   </SettingsCard>
                 </SettingsSubsection>
               </TabContent>
@@ -137,6 +130,7 @@ export function SettingsPanel() {
                       updating={updateSettingsMutation.isPending}
                       onBehaviorChange={onBehaviorChange}
                     />
+                    <ModeThinkingDefaultsSection />
                   </SettingsCard>
                 </SettingsSubsection>
                 <SettingsSubsection
@@ -154,14 +148,6 @@ export function SettingsPanel() {
                 >
                   <SettingsCard className="p-4">
                     <OMSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
-                  </SettingsCard>
-                </SettingsSubsection>
-                <SettingsSubsection
-                  title="Thinking defaults"
-                  description="Per-mode reasoning-effort defaults for interactive chats. Modes set to Global inherit the Factory tab's base thinking level; the session thinking level above takes precedence."
-                >
-                  <SettingsCard>
-                    <ModeThinkingDefaultsSection />
                   </SettingsCard>
                 </SettingsSubsection>
               </TabContent>
