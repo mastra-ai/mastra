@@ -57,7 +57,7 @@ vi.mock('../handlers/restart-active-runs', () => ({
 }));
 
 vi.mock('../welcome', () => ({
-  html: '<html><body>Welcome to Mastra</body></html>',
+  welcomeHtml: vi.fn(() => '<html><body>Welcome to Mastra</body></html>'),
 }));
 
 async function flushMicrotasks() {
