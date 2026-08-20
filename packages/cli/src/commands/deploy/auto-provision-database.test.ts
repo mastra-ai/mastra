@@ -2,33 +2,28 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type * as DbPlatformApi from '../db/platform-api.js';
 import type { PreflightIssue } from '../deploy-preflight.js';
-import type * as EnvPlatformApi from '../env/platform-api.js';
 import type { AutoProvisionContext } from './auto-provision-database.js';
-import { maybeApplyPreflightAutofixes } from './auto-provision-database.js';
+import { maybeAutoProvisionDatabases } from './auto-provision-database.js';
 
 const {
   confirmMock,
   cancelMock,
   logErrorMock,
-  logInfoMock,
   logSuccessMock,
   logWarnMock,
   spinnerMock,
   attachDatabaseMock,
   pollDatabaseUntilReadyMock,
-  enableBackgroundWorkersMock,
   fetchDatabaseCatalogMock,
 } = vi.hoisted(() => ({
   confirmMock: vi.fn(),
   cancelMock: vi.fn(),
   logErrorMock: vi.fn(),
-  logInfoMock: vi.fn(),
   logSuccessMock: vi.fn(),
   logWarnMock: vi.fn(),
   spinnerMock: { start: vi.fn(), stop: vi.fn(), message: vi.fn() },
   attachDatabaseMock: vi.fn(),
   pollDatabaseUntilReadyMock: vi.fn(),
-  enableBackgroundWorkersMock: vi.fn(),
   fetchDatabaseCatalogMock: vi.fn(),
 }));
 
@@ -37,7 +32,7 @@ vi.mock('@clack/prompts', () => ({
   cancel: (args: unknown) => cancelMock(args),
   isCancel: (v: unknown) => v === Symbol.for('clack.cancel'),
   spinner: () => spinnerMock,
-  log: { error: logErrorMock, info: logInfoMock, success: logSuccessMock, warn: logWarnMock },
+  log: { error: logErrorMock, success: logSuccessMock, warn: logWarnMock },
 }));
 
 vi.mock('../db/platform-api.js', async () => {
@@ -47,14 +42,6 @@ vi.mock('../db/platform-api.js', async () => {
     attachDatabase: (...args: unknown[]) => attachDatabaseMock(...args),
     pollDatabaseUntilReady: (...args: unknown[]) => pollDatabaseUntilReadyMock(...args),
     fetchDatabaseCatalog: (...args: unknown[]) => fetchDatabaseCatalogMock(...args),
-  };
-});
-
-vi.mock('../env/platform-api.js', async () => {
-  const actual = await vi.importActual<typeof EnvPlatformApi>('../env/platform-api.js');
-  return {
-    ...actual,
-    enableBackgroundWorkers: (...args: unknown[]) => enableBackgroundWorkersMock(...args),
   };
 });
 
@@ -72,8 +59,7 @@ function makeCtx(overrides: Partial<AutoProvisionContext> = {}): AutoProvisionCo
     projectId: 'proj-1',
     projectName: 'My App',
     projectSlug: 'my-app',
-    environment: { id: 'env-prod', slug: 'my-app-production', name: 'production', type: 'production', envVars: null },
-    envVars: {},
+    environment: { id: 'env-prod', slug: 'my-app-production', name: 'production', type: 'production' },
     autoAccept: false,
     ...overrides,
   };
@@ -112,17 +98,6 @@ function redisIssue(overrides: Partial<PreflightIssue> = {}): PreflightIssue {
   };
 }
 
-function workerIssue(overrides: Partial<PreflightIssue> = {}): PreflightIssue {
-  return {
-    code: 'BACKGROUND_WORKERS_DISABLED',
-    severity: 'warning',
-    message: 'Background tasks are enabled but dedicated workers are disabled',
-    fix: 'Enable Background Workers',
-    autofix: { kind: 'enable-background-workers' },
-    ...overrides,
-  };
-}
-
 function unrelatedIssue(): PreflightIssue {
   return {
     code: 'MISSING_ENV_VAR',
@@ -132,7 +107,7 @@ function unrelatedIssue(): PreflightIssue {
   };
 }
 
-describe('maybeApplyPreflightAutofixes', () => {
+describe('maybeAutoProvisionDatabases', () => {
   const originalStdinTTY = process.stdin.isTTY;
   const originalStdoutTTY = process.stdout.isTTY;
   const originalCI = process.env.CI;
@@ -148,7 +123,6 @@ describe('maybeApplyPreflightAutofixes', () => {
     logWarnMock.mockReset();
     attachDatabaseMock.mockReset();
     pollDatabaseUntilReadyMock.mockReset();
-    enableBackgroundWorkersMock.mockReset();
     fetchDatabaseCatalogMock.mockReset();
     // Default: platform offers every provisionable kind.
     fetchDatabaseCatalogMock.mockResolvedValue(FULL_CATALOG);
@@ -170,7 +144,7 @@ describe('maybeApplyPreflightAutofixes', () => {
 
   it('returns the input untouched when there are no autofixable issues', async () => {
     const issues = [unrelatedIssue()];
-    const result = await maybeApplyPreflightAutofixes(issues, makeCtx());
+    const result = await maybeAutoProvisionDatabases(issues, makeCtx());
 
     expect(result.issues).toBe(issues);
     expect(result.provisioned).toEqual([]);
@@ -183,7 +157,7 @@ describe('maybeApplyPreflightAutofixes', () => {
     (process.stdin as unknown as { isTTY: boolean }).isTTY = false;
 
     const issues = [tursoIssue()];
-    const result = await maybeApplyPreflightAutofixes(issues, makeCtx());
+    const result = await maybeAutoProvisionDatabases(issues, makeCtx());
 
     expect(result.issues).toBe(issues);
     expect(confirmMock).not.toHaveBeenCalled();
@@ -192,7 +166,7 @@ describe('maybeApplyPreflightAutofixes', () => {
 
   it('does not prompt when autoAccept is set (no silent infra creation)', async () => {
     const issues = [tursoIssue()];
-    const result = await maybeApplyPreflightAutofixes(issues, makeCtx({ autoAccept: true }));
+    const result = await maybeAutoProvisionDatabases(issues, makeCtx({ autoAccept: true }));
 
     expect(result.issues).toBe(issues);
     expect(confirmMock).not.toHaveBeenCalled();
@@ -205,7 +179,7 @@ describe('maybeApplyPreflightAutofixes', () => {
     pollDatabaseUntilReadyMock.mockResolvedValue({ id: 'db-1', name: 'my-app-turso', kind: 'turso' });
 
     const issues = [tursoIssue(), unrelatedIssue()];
-    const result = await maybeApplyPreflightAutofixes(issues, makeCtx());
+    const result = await maybeAutoProvisionDatabases(issues, makeCtx());
 
     expect(attachDatabaseMock).toHaveBeenCalledWith('t', 'org-1', 'proj-1', {
       kind: 'turso',
@@ -224,7 +198,7 @@ describe('maybeApplyPreflightAutofixes', () => {
     pollDatabaseUntilReadyMock.mockResolvedValue({ id: 'db-redis-1', name: 'my-app-redis', kind: 'redis' });
 
     const issues = [redisIssue()];
-    const result = await maybeApplyPreflightAutofixes(issues, makeCtx());
+    const result = await maybeAutoProvisionDatabases(issues, makeCtx());
 
     expect(attachDatabaseMock).toHaveBeenCalledWith('t', 'org-1', 'proj-1', {
       kind: 'redis',
@@ -240,7 +214,7 @@ describe('maybeApplyPreflightAutofixes', () => {
     confirmMock.mockResolvedValue(false);
 
     const issues = [tursoIssue()];
-    const result = await maybeApplyPreflightAutofixes(issues, makeCtx());
+    const result = await maybeAutoProvisionDatabases(issues, makeCtx());
 
     expect(attachDatabaseMock).not.toHaveBeenCalled();
     expect(result.issues).toBe(issues);
@@ -249,14 +223,14 @@ describe('maybeApplyPreflightAutofixes', () => {
 
   it('deduplicates prompts to one per provider (turso needs both URL and TOKEN)', async () => {
     confirmMock.mockResolvedValue(true);
-    attachDatabaseMock.mockResolvedValue({ id: 'db-1', name: 'my-app-turso', kind: 'turso' });
-    pollDatabaseUntilReadyMock.mockResolvedValue({ id: 'db-1', name: 'my-app-turso', kind: 'turso' });
+    attachDatabaseMock.mockResolvedValue({ id: 'db-1', name: 'my-app-db', kind: 'turso' });
+    pollDatabaseUntilReadyMock.mockResolvedValue({ id: 'db-1', name: 'my-app-db', kind: 'turso' });
 
     const issues = [
       tursoIssue({ autofix: { kind: 'create-managed-database', provider: 'turso', envVarName: 'TURSO_DATABASE_URL' } }),
       tursoIssue({ autofix: { kind: 'create-managed-database', provider: 'turso', envVarName: 'TURSO_AUTH_TOKEN' } }),
     ];
-    const result = await maybeApplyPreflightAutofixes(issues, makeCtx());
+    const result = await maybeAutoProvisionDatabases(issues, makeCtx());
 
     expect(confirmMock).toHaveBeenCalledTimes(1);
     expect(attachDatabaseMock).toHaveBeenCalledTimes(1);
@@ -266,13 +240,13 @@ describe('maybeApplyPreflightAutofixes', () => {
   it('prompts once per distinct provider when multiple providers are missing', async () => {
     confirmMock.mockResolvedValue(true);
     attachDatabaseMock
-      .mockResolvedValueOnce({ id: 'db-1', name: 'my-app-turso', kind: 'turso' })
-      .mockResolvedValueOnce({ id: 'db-2', name: 'my-app-pg', kind: 'neon' });
+      .mockResolvedValueOnce({ id: 'db-1', name: 'my-app-db', kind: 'turso' })
+      .mockResolvedValueOnce({ id: 'db-2', name: 'my-app-db', kind: 'neon' });
     pollDatabaseUntilReadyMock
-      .mockResolvedValueOnce({ id: 'db-1', name: 'my-app-turso', kind: 'turso' })
-      .mockResolvedValueOnce({ id: 'db-2', name: 'my-app-pg', kind: 'neon' });
+      .mockResolvedValueOnce({ id: 'db-1', name: 'my-app-db', kind: 'turso' })
+      .mockResolvedValueOnce({ id: 'db-2', name: 'my-app-db', kind: 'neon' });
 
-    const result = await maybeApplyPreflightAutofixes([tursoIssue(), neonIssue()], makeCtx());
+    const result = await maybeAutoProvisionDatabases([tursoIssue(), neonIssue()], makeCtx());
 
     expect(confirmMock).toHaveBeenCalledTimes(2);
     expect(attachDatabaseMock).toHaveBeenCalledTimes(2);
@@ -286,7 +260,7 @@ describe('maybeApplyPreflightAutofixes', () => {
     attachDatabaseMock.mockRejectedValue(new Error('quota exceeded'));
 
     const issues = [tursoIssue()];
-    const result = await maybeApplyPreflightAutofixes(issues, makeCtx());
+    const result = await maybeAutoProvisionDatabases(issues, makeCtx());
 
     expect(logErrorMock).toHaveBeenCalled();
     expect(String(logErrorMock.mock.calls[0]![0])).toContain('quota exceeded');
@@ -299,12 +273,12 @@ describe('maybeApplyPreflightAutofixes', () => {
 
   it('attaches to the target environment (scoped, not project-shared)', async () => {
     confirmMock.mockResolvedValue(true);
-    attachDatabaseMock.mockResolvedValue({ id: 'db-1', name: 'my-app-turso', kind: 'turso' });
-    pollDatabaseUntilReadyMock.mockResolvedValue({ id: 'db-1', name: 'my-app-turso', kind: 'turso' });
+    attachDatabaseMock.mockResolvedValue({ id: 'db-1', name: 'my-app-db', kind: 'turso' });
+    pollDatabaseUntilReadyMock.mockResolvedValue({ id: 'db-1', name: 'my-app-db', kind: 'turso' });
 
-    await maybeApplyPreflightAutofixes(
+    await maybeAutoProvisionDatabases(
       [tursoIssue()],
-      makeCtx({ environment: { id: 'env-stg', slug: 'stg', name: 'staging', type: 'staging', envVars: null } }),
+      makeCtx({ environment: { id: 'env-stg', slug: 'stg', name: 'staging', type: 'staging' } }),
     );
 
     expect(attachDatabaseMock).toHaveBeenCalledWith(
@@ -325,58 +299,21 @@ describe('maybeApplyPreflightAutofixes', () => {
     pollDatabaseUntilReadyMock.mockResolvedValue({ id: 'db-1', name: 'my-app-turso', kind: 'turso' });
 
     const issues = [redisIssue(), tursoIssue()];
-    const result = await maybeApplyPreflightAutofixes(issues, makeCtx());
+    const result = await maybeAutoProvisionDatabases(issues, makeCtx());
 
     expect(confirmMock).toHaveBeenCalledTimes(1);
     expect(attachDatabaseMock).toHaveBeenCalledTimes(1);
     expect(attachDatabaseMock).toHaveBeenCalledWith('t', 'org-1', 'proj-1', expect.objectContaining({ kind: 'turso' }));
     // The redis issue survives untouched for the normal issue printer.
-    expect(result.issues).toEqual([issues[0]]);
+    expect(result.issues.map(i => i.autofix?.provider)).toEqual(['redis']);
     expect(result.newlyManagedEnvVarNames).toEqual(['TURSO_DATABASE_URL', 'TURSO_AUTH_TOKEN']);
-  });
-
-  it('does not offer background workers when they would need a feature-gated managed Redis', async () => {
-    // No managed or BYO Redis, and the org's catalog has no `redis` entry:
-    // enabling workers would require creating a gated database — skip the
-    // offer entirely, mirroring the dashboard.
-    fetchDatabaseCatalogMock.mockResolvedValue(FULL_CATALOG.filter(entry => entry.kind !== 'redis'));
-
-    const issues = [workerIssue()];
-    const result = await maybeApplyPreflightAutofixes(issues, makeCtx());
-
-    expect(confirmMock).not.toHaveBeenCalled();
-    expect(attachDatabaseMock).not.toHaveBeenCalled();
-    expect(enableBackgroundWorkersMock).not.toHaveBeenCalled();
-    expect(result.issues).toBe(issues);
-    expect(result.backgroundWorkersEnabled).toBe(false);
-  });
-
-  it('still offers background workers under a gated catalog when the env has BYO Redis', async () => {
-    fetchDatabaseCatalogMock.mockResolvedValue(FULL_CATALOG.filter(entry => entry.kind !== 'redis'));
-    confirmMock.mockResolvedValue(true);
-    enableBackgroundWorkersMock.mockResolvedValue(undefined);
-
-    const ctx = makeCtx({
-      environment: {
-        id: 'env-prod',
-        slug: 'my-app-production',
-        name: 'production',
-        type: 'production',
-        envVars: { REDIS_URL: 'redis://byo.example.com:6379' },
-      },
-    });
-    const result = await maybeApplyPreflightAutofixes([workerIssue()], ctx);
-
-    expect(attachDatabaseMock).not.toHaveBeenCalled();
-    expect(enableBackgroundWorkersMock).toHaveBeenCalledWith('t', 'org-1', 'proj-1', 'env-prod', 'byo');
-    expect(result.backgroundWorkersEnabled).toBe(true);
   });
 
   it('fails closed and skips all prompting when the catalog cannot be fetched', async () => {
     fetchDatabaseCatalogMock.mockRejectedValue(new Error('boom'));
 
     const issues = [tursoIssue()];
-    const result = await maybeApplyPreflightAutofixes(issues, makeCtx());
+    const result = await maybeAutoProvisionDatabases(issues, makeCtx());
 
     expect(result.issues).toBe(issues);
     expect(confirmMock).not.toHaveBeenCalled();
@@ -389,9 +326,9 @@ describe('maybeApplyPreflightAutofixes', () => {
     attachDatabaseMock.mockResolvedValue({ id: 'db-1', name: 'my-app-eu-turso', kind: 'turso' });
     pollDatabaseUntilReadyMock.mockResolvedValue({ id: 'db-1', name: 'my-app-eu-turso', kind: 'turso' });
 
-    await maybeApplyPreflightAutofixes(
+    await maybeAutoProvisionDatabases(
       [tursoIssue()],
-      makeCtx({ environment: { id: 'env-eu', slug: 'my-app--eu', name: 'eu', type: 'preview', envVars: null } }),
+      makeCtx({ environment: { id: 'env-eu', slug: 'my-app--eu', name: 'eu', type: 'preview' } }),
     );
 
     expect(attachDatabaseMock).toHaveBeenCalledWith(
@@ -407,11 +344,9 @@ describe('maybeApplyPreflightAutofixes', () => {
     attachDatabaseMock.mockResolvedValue({ id: 'db-1', name: 'my-app-turso', kind: 'turso' });
     pollDatabaseUntilReadyMock.mockResolvedValue({ id: 'db-1', name: 'my-app-turso', kind: 'turso' });
 
-    await maybeApplyPreflightAutofixes(
+    await maybeAutoProvisionDatabases(
       [tursoIssue()],
-      makeCtx({
-        environment: { id: 'env-prod', slug: 'my-app', name: 'production', type: 'production', envVars: null },
-      }),
+      makeCtx({ environment: { id: 'env-prod', slug: 'my-app', name: 'production', type: 'production' } }),
     );
 
     expect(attachDatabaseMock).toHaveBeenCalledWith(
@@ -420,140 +355,5 @@ describe('maybeApplyPreflightAutofixes', () => {
       'proj-1',
       expect.objectContaining({ name: 'my-app-turso' }),
     );
-  });
-
-  it('provisions missing managed Redis and enables background workers when the user confirms', async () => {
-    confirmMock.mockResolvedValue(true);
-    attachDatabaseMock.mockResolvedValue({ id: 'db-redis-1', name: 'my-app-redis', kind: 'redis' });
-    pollDatabaseUntilReadyMock.mockResolvedValue({ id: 'db-redis-1', name: 'my-app-redis', kind: 'redis' });
-    enableBackgroundWorkersMock.mockResolvedValue({});
-
-    const result = await maybeApplyPreflightAutofixes(
-      [workerIssue(), unrelatedIssue()],
-      makeCtx({ environment: { id: 'env-prod', slug: 'prod', name: 'production', type: 'production', envVars: null } }),
-    );
-
-    expect(attachDatabaseMock).toHaveBeenCalledWith('t', 'org-1', 'proj-1', {
-      kind: 'redis',
-      name: 'my-app-redis',
-      environmentId: 'env-prod',
-    });
-    expect(pollDatabaseUntilReadyMock.mock.invocationCallOrder[0]).toBeLessThan(
-      enableBackgroundWorkersMock.mock.invocationCallOrder[0]!,
-    );
-    expect(enableBackgroundWorkersMock).toHaveBeenCalledWith('t', 'org-1', 'proj-1', 'env-prod', 'managed');
-    expect(result.provisioned).toHaveLength(1);
-    expect(result.newlyManagedEnvVarNames).toEqual(['REDIS_URL']);
-    expect(result.backgroundWorkersEnabled).toBe(true);
-    expect(result.issues).toEqual([unrelatedIssue()]);
-  });
-
-  it('uses BYO Redis when REDIS_URL is stored on the environment and not managed', async () => {
-    confirmMock.mockResolvedValue(true);
-    enableBackgroundWorkersMock.mockResolvedValue({});
-
-    await maybeApplyPreflightAutofixes(
-      [workerIssue()],
-      makeCtx({
-        environment: {
-          id: 'env-prod',
-          slug: 'prod',
-          name: 'production',
-          type: 'production',
-          envVars: { REDIS_URL: 'redis://example.test' },
-        },
-        envVars: { REDIS_URL: 'redis://example.test' },
-      }),
-    );
-
-    expect(enableBackgroundWorkersMock).toHaveBeenCalledWith('t', 'org-1', 'proj-1', 'env-prod', 'byo');
-    expect(attachDatabaseMock).not.toHaveBeenCalled();
-  });
-
-  it('skips worker setup when REDIS_URL exists only locally (not stored on the platform yet)', async () => {
-    // The platform resolves BYO Redis from *stored* env vars; local .env vars
-    // are only uploaded with the deploy. Enabling now would 400, so the fix is
-    // skipped with guidance instead of prompting.
-    const issues = [workerIssue()];
-    const result = await maybeApplyPreflightAutofixes(
-      issues,
-      makeCtx({ envVars: { REDIS_URL: 'redis://local-only.test' } }),
-    );
-
-    expect(confirmMock).not.toHaveBeenCalled();
-    expect(enableBackgroundWorkersMock).not.toHaveBeenCalled();
-    expect(attachDatabaseMock).not.toHaveBeenCalled();
-    expect(result.issues).toBe(issues);
-    expect(result.backgroundWorkersEnabled).toBe(false);
-    expect(logInfoMock).toHaveBeenCalledWith(expect.stringContaining('re-run `mastra deploy`'));
-  });
-
-  it('cancels the deploy when the worker prompt is aborted', async () => {
-    confirmMock.mockResolvedValue(Symbol.for('clack.cancel'));
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
-      throw new Error('process.exit');
-    });
-
-    await expect(maybeApplyPreflightAutofixes([workerIssue()], makeCtx())).rejects.toThrow('process.exit');
-
-    expect(exitSpy).toHaveBeenCalledWith(0);
-    expect(enableBackgroundWorkersMock).not.toHaveBeenCalled();
-    exitSpy.mockRestore();
-  });
-
-  it('provisions managed Redis before enabling workers', async () => {
-    confirmMock.mockResolvedValue(true);
-    attachDatabaseMock.mockResolvedValue({ id: 'db-redis-1', name: 'my-app-redis', kind: 'redis' });
-    pollDatabaseUntilReadyMock.mockResolvedValue({ id: 'db-redis-1', name: 'my-app-redis', kind: 'redis' });
-    enableBackgroundWorkersMock.mockResolvedValue({});
-
-    const result = await maybeApplyPreflightAutofixes([workerIssue(), redisIssue()], makeCtx());
-
-    expect(pollDatabaseUntilReadyMock.mock.invocationCallOrder[0]).toBeLessThan(
-      enableBackgroundWorkersMock.mock.invocationCallOrder[0]!,
-    );
-    expect(enableBackgroundWorkersMock).toHaveBeenCalledWith('t', 'org-1', 'proj-1', 'env-prod', 'managed');
-    expect(result.issues).toEqual([]);
-    expect(result.newlyManagedEnvVarNames).toEqual(['REDIS_URL']);
-    expect(result.backgroundWorkersEnabled).toBe(true);
-  });
-
-  it('leaves the worker issue when enabling workers fails', async () => {
-    confirmMock.mockResolvedValue(true);
-    enableBackgroundWorkersMock.mockRejectedValue(new Error('Scalable Server add-on required'));
-
-    const issues = [workerIssue()];
-    const result = await maybeApplyPreflightAutofixes(
-      issues,
-      makeCtx({
-        environment: {
-          id: 'env-prod',
-          slug: 'prod',
-          name: 'production',
-          type: 'production',
-          envVars: { REDIS_URL: 'redis://example.test' },
-        },
-        envVars: { REDIS_URL: 'redis://example.test' },
-      }),
-    );
-
-    expect(result.issues).toBe(issues);
-    expect(result.backgroundWorkersEnabled).toBe(false);
-    expect(logErrorMock).toHaveBeenCalledWith(expect.stringContaining('Scalable Server add-on required'));
-  });
-
-  it('reports a provisioned Redis when worker enablement fails afterward', async () => {
-    confirmMock.mockResolvedValue(true);
-    attachDatabaseMock.mockResolvedValue({ id: 'db-redis-1', name: 'my-app-redis', kind: 'redis' });
-    pollDatabaseUntilReadyMock.mockResolvedValue({ id: 'db-redis-1', name: 'my-app-redis', kind: 'redis' });
-    enableBackgroundWorkersMock.mockRejectedValue(new Error('Scalable Server add-on required'));
-
-    const issues = [workerIssue()];
-    const result = await maybeApplyPreflightAutofixes(issues, makeCtx());
-
-    expect(result.issues).toEqual(issues);
-    expect(result.provisioned).toHaveLength(1);
-    expect(result.newlyManagedEnvVarNames).toEqual(['REDIS_URL']);
-    expect(result.backgroundWorkersEnabled).toBe(false);
   });
 });

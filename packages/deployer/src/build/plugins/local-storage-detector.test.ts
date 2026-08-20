@@ -19,6 +19,7 @@ function runPlugin(
 ): {
   metadata: PreflightMetadata;
   legacy: LocalStorageDetection[];
+  workersConfig: Record<string, unknown> | undefined;
   emitted: Array<{ fileName: string; source: string }>;
 } {
   const plugin = localStorageDetector(rootDir) as Plugin & { transform: Function; generateBundle: Function };
@@ -44,9 +45,11 @@ function runPlugin(
   const legacyFile = emitted.find(f => f.fileName === 'preflight-local-paths.json');
   if (!metadataFile || !legacyFile) throw new Error('expected both metadata assets to be emitted');
 
+  const workersFile = emitted.find(f => f.fileName === 'workers.json');
   return {
     metadata: JSON.parse(metadataFile.source),
     legacy: JSON.parse(legacyFile.source),
+    workersConfig: workersFile ? JSON.parse(workersFile.source) : undefined,
     emitted,
   };
 }
@@ -64,19 +67,38 @@ describe('localStorageDetector', () => {
     expect(legacy).toHaveLength(1);
   });
 
-  it('detects statically enabled background tasks in rendered user modules', () => {
-    const { metadata } = runPlugin([
+  it('emits statically extractable background task config for rendered user modules', () => {
+    const { metadata, workersConfig } = runPlugin([
       {
         id: '/project/src/mastra/index.ts',
-        code: `export const mastra = new Mastra({ backgroundTasks: { enabled: true } });`,
+        code: `export const mastra = new Mastra({
+          backgroundTasks: {
+            enabled: true,
+            mode: 'worker',
+            globalConcurrency: 20,
+            defaultRetries: { maxRetries: 3, retryableErrors: () => true },
+            cleanup: { completedTtlMs: 60_000 },
+            onTaskComplete: () => {},
+            dynamicSetting: process.env.DYNAMIC_SETTING,
+            futureSetting: 'preserved'
+          }
+        });`,
       },
     ]);
 
-    expect(metadata.backgroundTasksEnabled).toBe(true);
+    expect(metadata).not.toHaveProperty('backgroundTasksEnabled');
+    expect(workersConfig).toEqual({
+      enabled: true,
+      mode: 'worker',
+      globalConcurrency: 20,
+      defaultRetries: { maxRetries: 3 },
+      cleanup: { completedTtlMs: 60_000 },
+      futureSetting: 'preserved',
+    });
   });
 
-  it('does not report disabled, dynamic, or tree-shaken background task configs', () => {
-    const { metadata } = runPlugin([
+  it('does not emit a manifest for disabled, dynamic, or tree-shaken background task configs', () => {
+    const { workersConfig } = runPlugin([
       {
         id: '/project/src/mastra/index.ts',
         code: `export const mastra = new Mastra({ backgroundTasks: { enabled: false } });`,
@@ -84,6 +106,14 @@ describe('localStorageDetector', () => {
       {
         id: '/project/src/mastra/dynamic.ts',
         code: `const enabled = process.env.WORKERS === 'true'; export const mastra = new Mastra({ backgroundTasks: { enabled } });`,
+      },
+      {
+        id: '/project/src/mastra/spread.ts',
+        code: `const overrides = getWorkerOverrides(); export const mastra = new Mastra({ backgroundTasks: { enabled: true, ...overrides } });`,
+      },
+      {
+        id: '/project/src/mastra/overridden.ts',
+        code: `export const mastra = new Mastra({ backgroundTasks: { enabled: true, enabled: process.env.WORKERS === 'true' } });`,
       },
       {
         id: '/project/src/mastra/unrelated.ts',
@@ -96,7 +126,7 @@ describe('localStorageDetector', () => {
       },
     ]);
 
-    expect(metadata.backgroundTasksEnabled).toBeUndefined();
+    expect(workersConfig).toBeUndefined();
   });
 
   it('ignores modules from node_modules', () => {
