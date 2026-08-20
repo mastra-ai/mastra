@@ -1,6 +1,6 @@
 import type { PlanResume } from '@mastra/client-js';
 
-import { usePlanFile } from '../../../../hooks/use-fs';
+import { isPlanReadablePath, usePlanFile } from '../../../../hooks/use-fs';
 import { useRespondAgentControllerSuspensionMutation } from '../../../../hooks/useAgentControllerRunMutations';
 import { useThreadWorkspacePath } from '../../workspace-viewer/hooks/useThreadWorkspacePath';
 import { parsePlanMarkdown, resolveInlinePlan } from '../components/submit-plan-source';
@@ -23,7 +23,7 @@ export function usePendingPlanFeedback() {
   const prompt = pendingSubmitPlan(transcript.entries);
   const inline = resolveInlinePlan(prompt?.suspendPayload, undefined);
   const workspace = useThreadWorkspacePath();
-  const fetchable = inline.plan === undefined && Boolean(inline.path?.startsWith('.artifacts/'));
+  const fetchable = inline.plan === undefined && isPlanReadablePath(inline.path);
   const file = usePlanFile(workspace.workspacePath, inline.path, prompt?.toolCallId, {
     enabled: Boolean(prompt) && fetchable,
   });

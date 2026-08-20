@@ -33,11 +33,14 @@ function workspaceFileUrl(workspacePath: string | undefined, path: string | unde
   return `/web/workspace/file?${new URLSearchParams({ workspacePath, path, threadId })}`;
 }
 
+export function isPlanReadablePath(path: string | undefined): path is string {
+  return Boolean(path?.startsWith('.artifacts/'));
+}
+
 function planFileUrl(workspacePath: string | undefined, path: string | undefined) {
-  if (!workspacePath || !path) return undefined;
+  if (!workspacePath || !isPlanReadablePath(path)) return undefined;
   // The session file route only approves `.artifacts/*` reads without a thread
   // file listing; Factory plans always live under `.artifacts/plans/`.
-  if (!path.startsWith('.artifacts/')) return undefined;
   return `/web/workspace/file?${new URLSearchParams({ workspacePath, path })}`;
 }
 

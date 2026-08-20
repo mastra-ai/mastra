@@ -17,7 +17,7 @@ import {
   PlanTitle,
 } from '@mastra/playground-ui/components/ai/plan';
 
-import { usePlanFile } from '../../../../hooks/use-fs';
+import { isPlanReadablePath, usePlanFile } from '../../../../hooks/use-fs';
 import { useThreadWorkspacePath } from '../../workspace-viewer/hooks/useThreadWorkspacePath';
 import { parsePlanMarkdown, resolveInlinePlan } from './submit-plan-source';
 
@@ -44,8 +44,7 @@ export function SubmitPlanCard({ toolCallId, input, output, isSubmitting = false
   const path = inline.path;
 
   const workspace = useThreadWorkspacePath();
-  // The session file route only approves `.artifacts/*` reads; Factory plans always live there.
-  const fetchable = inline.plan === undefined && Boolean(path?.startsWith('.artifacts/'));
+  const fetchable = inline.plan === undefined && isPlanReadablePath(path);
   const file = usePlanFile(workspace.workspacePath, path, toolCallId, { enabled: fetchable });
   const fetched = fetchable && file.data?.content !== undefined ? parsePlanMarkdown(file.data.content) : undefined;
 
