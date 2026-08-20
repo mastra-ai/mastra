@@ -89,6 +89,14 @@ export interface ProviderInfo {
    * "shared with the org" apart from "only works for me".
    */
   orgKey?: boolean;
+  /**
+   * Tenant mode: the caller's personal credential for this provider, if any.
+   * Reported independently of `source` so the UI can manage each scope even
+   * when one shadows the other.
+   */
+  userCredential?: 'oauth' | 'api_key';
+  /** Tenant mode: the shared org credential for this provider, if any. */
+  orgCredential?: 'oauth' | 'api_key';
   /** Web OAuth sign-in capability, when the provider supports it. */
   oauth?: { supported: true; modes: LoginSessionKind[] };
 }
@@ -170,11 +178,15 @@ export async function listProviders({
     const authProviderId = getAuthProviderId(model.provider);
     let source: ProviderInfo['source'] = 'none';
     let orgKey: boolean | undefined;
+    let userCredential: ProviderInfo['userCredential'];
+    let orgCredential: ProviderInfo['orgCredential'];
     if (tenantCredentials) {
       const userRec = tenantCredentials.find(r => r.scope === 'user' && r.provider === authProviderId);
       const orgRec = tenantCredentials.find(r => r.scope === 'org' && r.provider === authProviderId);
       // Any shared org credential (API key or org-wide OAuth) counts.
       orgKey = orgRec !== undefined;
+      userCredential = userRec?.credential.type;
+      orgCredential = orgRec?.credential.type;
       if (userRec?.credential.type === 'oauth') {
         source = 'oauth-user';
       } else if (userRec?.credential.type === 'api_key') {
@@ -200,6 +212,8 @@ export async function listProviders({
       envVar: model.apiKeyEnvVar,
       source,
       ...(orgKey !== undefined ? { orgKey } : {}),
+      ...(userCredential ? { userCredential } : {}),
+      ...(orgCredential ? { orgCredential } : {}),
       ...(flowKind ? { oauth: { supported: true as const, modes: [flowKind] } } : {}),
     });
   }

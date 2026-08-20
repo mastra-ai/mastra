@@ -72,16 +72,16 @@ function mutationErrorMessage(error: unknown, fallback: string): string {
  * key, both badges render so it's clear a shared key also exists.
  */
 function SourceBadges({ provider }: { provider: ProviderInfo }) {
-  const shadowedOrgKey =
+  const shadowedOrg =
     provider.orgKey === true && (provider.source === 'stored-user' || provider.source === 'oauth-user');
   return (
     <span className="flex items-center gap-1">
       <Badge size="sm" variant={SOURCE_VARIANT[provider.source]}>
         {SOURCE_LABEL[provider.source]}
       </Badge>
-      {shadowedOrgKey && (
+      {shadowedOrg && (
         <Badge size="sm" variant="info">
-          Org key
+          {provider.orgCredential === 'oauth' ? 'Org sign-in' : 'Org key'}
         </Badge>
       )}
     </span>
@@ -95,15 +95,18 @@ function SourceBadges({ provider }: { provider: ProviderInfo }) {
  */
 function OAuthScopeDialog({
   provider,
+  signedInScopes,
   onSelect,
   onClose,
 }: {
   provider: ProviderInfo;
+  /** Scopes that already have an OAuth credential; disabled in the picker. */
+  signedInScopes: Array<'user' | 'org'>;
   onSelect: (scope: 'user' | 'org') => void;
   onClose: () => void;
 }) {
   const displayName = providerDisplayName(provider.provider);
-  const [scope, setScope] = useState<'user' | 'org'>('user');
+  const [scope, setScope] = useState<'user' | 'org'>(signedInScopes.includes('user') ? 'org' : 'user');
   return (
     <Dialog open onOpenChange={open => !open && onClose()}>
       <DialogContent>
@@ -122,17 +125,22 @@ function OAuthScopeDialog({
                   { value: 'user', label: 'Just me' },
                   { value: 'org', label: 'Everyone in org' },
                 ] as const
-              ).map(option => (
-                <Button
-                  key={option.value}
-                  variant={scope === option.value ? 'primary' : 'outline'}
-                  size="sm"
-                  aria-pressed={scope === option.value}
-                  onClick={() => setScope(option.value)}
-                >
-                  {option.label}
-                </Button>
-              ))}
+              ).map(option => {
+                const alreadySignedIn = signedInScopes.includes(option.value);
+                return (
+                  <Button
+                    key={option.value}
+                    variant={scope === option.value ? 'primary' : 'outline'}
+                    size="sm"
+                    aria-pressed={scope === option.value}
+                    disabled={alreadySignedIn}
+                    title={alreadySignedIn ? 'Already signed in at this scope' : undefined}
+                    onClick={() => setScope(option.value)}
+                  >
+                    {option.label}
+                  </Button>
+                );
+              })}
             </ButtonsGroup>
           </div>
           {scope === 'org' && (
@@ -189,6 +197,17 @@ export function ProviderAccessSection() {
 
   const canWriteOrgKey = !authEnabled || (orgKeyAdminQuery.data ?? true);
 
+  // Per-scope OAuth status. Falls back to the legacy `source` field so rows
+  // stay correct in local mode and while /auth/me is still loading.
+  const oauthScopes = (provider: ProviderInfo): Array<'user' | 'org'> => {
+    const scopes: Array<'user' | 'org'> = [];
+    if (provider.userCredential === 'oauth' || provider.source === 'oauth' || provider.source === 'oauth-user') {
+      scopes.push('user');
+    }
+    if (provider.orgCredential === 'oauth' || provider.source === 'oauth-org') scopes.push('org');
+    return scopes;
+  };
+
   const startOAuth = async (provider: ProviderInfo, scope: 'user' | 'org') => {
     const modes = provider.oauth?.modes ?? [];
     setScopeDialogProvider(undefined);
@@ -217,6 +236,14 @@ export function ProviderAccessSection() {
     void startOAuth(provider, 'user');
   };
 
+  // Sign in is offered whenever a scope the caller can write is still open:
+  // personal always, org only for admins.
+  const canSignIn = (provider: ProviderInfo) => {
+    const scopes = oauthScopes(provider);
+    if (!scopes.includes('user')) return true;
+    return authEnabled && canWriteOrgKey && !scopes.includes('org');
+  };
+
   const closeOAuth = () => {
     const flow = activeOAuth;
     setActiveOAuth(undefined);
@@ -225,11 +252,11 @@ export function ProviderAccessSection() {
     }
   };
 
-  const signOut = (provider: ProviderInfo) => {
+  const signOut = (provider: ProviderInfo, scope: 'user' | 'org') => {
     signOutMutation.mutate(
       {
         provider: provider.provider,
-        ...(authEnabled && provider.source === 'oauth-org' ? { scope: 'org' as const } : {}),
+        ...(authEnabled ? { scope } : {}),
       },
       { onError: error => toast.error(mutationErrorMessage(error, 'Failed to sign out')) },
     );
@@ -278,8 +305,8 @@ export function ProviderAccessSection() {
             <DataList aria-label="Sign in providers" variant="lined" columns={PROVIDER_LIST_COLUMNS}>
               {oauthProviders.map(provider => {
                 const displayName = providerDisplayName(provider.provider);
-                const signedIn =
-                  provider.source === 'oauth' || provider.source === 'oauth-user' || provider.source === 'oauth-org';
+                const scopes = oauthScopes(provider);
+                const showScopeLabels = scopes.length > 0 && authEnabled;
                 return (
                   <DataList.RowStatic key={provider.provider}>
                     <DataList.NameCell>{displayName}</DataList.NameCell>
@@ -287,27 +314,44 @@ export function ProviderAccessSection() {
                       <SourceBadges provider={provider} />
                     </DataList.Cell>
                     <DataList.Cell className="justify-end">
-                      {signedIn ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          aria-label={`Sign out of ${displayName}`}
-                          disabled={isSigningOut(provider)}
-                          onClick={() => signOut(provider)}
-                        >
-                          {isSigningOut(provider) ? 'Signing out…' : 'Sign out'}
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="primary"
-                          size="sm"
-                          aria-label={`Sign in to ${displayName}`}
-                          disabled={startOAuthMutation.isPending}
-                          onClick={() => requestSignIn(provider)}
-                        >
-                          {startingProvider === provider.provider ? 'Starting…' : 'Sign in'}
-                        </Button>
-                      )}
+                      <span className="flex items-center gap-2">
+                        {scopes.map(scope => {
+                          // Removing the shared org sign-in is admin-only.
+                          if (scope === 'org' && !canWriteOrgKey) return null;
+                          const label = showScopeLabels
+                            ? scope === 'org'
+                              ? 'Sign out org'
+                              : 'Sign out me'
+                            : 'Sign out';
+                          return (
+                            <Button
+                              key={scope}
+                              variant="outline"
+                              size="sm"
+                              aria-label={
+                                scope === 'org'
+                                  ? `Sign out of ${displayName} for the org`
+                                  : `Sign out of ${displayName}`
+                              }
+                              disabled={isSigningOut(provider)}
+                              onClick={() => signOut(provider, scope)}
+                            >
+                              {isSigningOut(provider) ? 'Signing out…' : label}
+                            </Button>
+                          );
+                        })}
+                        {canSignIn(provider) && (
+                          <Button
+                            variant={scopes.length === 0 ? 'primary' : 'outline'}
+                            size="sm"
+                            aria-label={`Sign in to ${displayName}`}
+                            disabled={startOAuthMutation.isPending}
+                            onClick={() => requestSignIn(provider)}
+                          >
+                            {startingProvider === provider.provider ? 'Starting…' : 'Sign in'}
+                          </Button>
+                        )}
+                      </span>
                     </DataList.Cell>
                   </DataList.RowStatic>
                 );
@@ -395,6 +439,7 @@ export function ProviderAccessSection() {
       {scopeDialogProvider && (
         <OAuthScopeDialog
           provider={scopeDialogProvider}
+          signedInScopes={oauthScopes(scopeDialogProvider)}
           onSelect={scope => void startOAuth(scopeDialogProvider, scope)}
           onClose={() => setScopeDialogProvider(undefined)}
         />
