@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { coreFeatures } from '@mastra/core/features';
-import { SpanType } from '@mastra/core/observability';
+import { EntityType, SpanType } from '@mastra/core/observability';
 import { Pool } from 'pg';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -948,7 +948,7 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
       }
     });
 
-    it('invalidates tag values and cursors when traces are deleted', async () => {
+    it('reconciles tag values without discarding cursors when traces are deleted', async () => {
       const harness = await createHarness({
         schemaPrefix: 'obs_vnext_discovery_tags_delete',
         discovery: { ttlSeconds: 0 },
@@ -959,20 +959,48 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
           span: makeSpan({
             traceId: 'deleted-tag-trace',
             spanId: 'deleted-tag-span',
-            tags: ['deleted-tag'],
+            entityType: EntityType.AGENT,
+            tags: ['deleted-tag', 'shared-tag'],
           }),
         });
-        expect(await harness.domain.getTags({})).toEqual({ tags: ['deleted-tag'] });
+        await harness.domain.batchCreateLogs({
+          logs: [makeLog({ logId: 'remaining-tag-log', entityType: EntityType.AGENT, tags: ['shared-tag'] })],
+        });
+        expect(await harness.domain.getTags({})).toEqual({ tags: ['deleted-tag', 'shared-tag'] });
+        expect(await harness.domain.getTags({ entityType: EntityType.AGENT })).toEqual({
+          tags: ['deleted-tag', 'shared-tag'],
+        });
+
+        const cursorsBefore = await harness.baseClient.manyOrNone<{ cacheKey: string; values: string[] }>(
+          `SELECT "cacheKey", "values"
+           FROM ${qualifiedTable(harness.schema, TABLE_DISCOVERY)}
+           WHERE "cacheKey" LIKE 'tags%:cursor:%'
+           ORDER BY "cacheKey"`,
+        );
+        expect(cursorsBefore).toHaveLength(6);
 
         await harness.domain.batchDeleteTraces({ traceIds: ['deleted-tag-trace'] });
 
-        const cacheRows = await harness.baseClient.one<{ count: string }>(
-          `SELECT COUNT(*)::text AS "count"
+        const valueRows = await harness.baseClient.manyOrNone<{ cacheKey: string; values: string[] }>(
+          `SELECT "cacheKey", "values"
            FROM ${qualifiedTable(harness.schema, TABLE_DISCOVERY)}
-           WHERE "cacheKey" = 'tags' OR "cacheKey" LIKE 'tags:%'`,
+           WHERE "cacheKey" = ANY($1::text[])
+           ORDER BY "cacheKey"`,
+          [['tags', `tags:${EntityType.AGENT}`]],
         );
-        expect(Number(cacheRows.count)).toBe(0);
-        expect(await harness.domain.getTags({})).toEqual({ tags: [] });
+        expect(valueRows).toEqual([
+          { cacheKey: 'tags', values: ['shared-tag'] },
+          { cacheKey: `tags:${EntityType.AGENT}`, values: ['shared-tag'] },
+        ]);
+        const cursorsAfter = await harness.baseClient.manyOrNone<{ cacheKey: string; values: string[] }>(
+          `SELECT "cacheKey", "values"
+           FROM ${qualifiedTable(harness.schema, TABLE_DISCOVERY)}
+           WHERE "cacheKey" LIKE 'tags%:cursor:%'
+           ORDER BY "cacheKey"`,
+        );
+        expect(cursorsAfter).toEqual(cursorsBefore);
+        expect(await harness.domain.getTags({})).toEqual({ tags: ['shared-tag'] });
+        expect(await harness.domain.getTags({ entityType: EntityType.AGENT })).toEqual({ tags: ['shared-tag'] });
       } finally {
         await harness.close();
       }

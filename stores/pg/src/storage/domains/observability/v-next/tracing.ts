@@ -10,6 +10,7 @@ import type {
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
   CreateSpanArgs,
+  EntityType,
   GetSpansArgs,
   GetSpansResponse,
   GetSpanArgs,
@@ -19,7 +20,7 @@ import type {
   GetTraceLightResponse,
 } from '@mastra/core/storage';
 
-import type { DbClient } from '../../../client';
+import type { DbClient, TxClient } from '../../../client';
 import { qualifiedTable, TABLE_SPAN_EVENTS } from './ddl';
 import { rowToLightSpanRecord, rowToSpanRecord, spanRecordToRow } from './helpers';
 import { buildInsert, SPAN_LIGHT_SELECT_COLUMNS, SPAN_SELECT_COLUMNS } from './sql';
@@ -114,11 +115,36 @@ export async function getTraceLight(
 // Deletes
 // ---------------------------------------------------------------------------
 
-export async function batchDeleteTraces(client: DbClient, schema: string, args: BatchDeleteTracesArgs): Promise<void> {
-  if (args.traceIds.length === 0) return;
+export interface DeletedTraceTagRow {
+  tags: string[];
+  entityType: EntityType | null;
+}
+
+/** Delete trace spans and return the tag context needed for cache repair. */
+export async function batchDeleteTraces(
+  client: Pick<TxClient, 'manyOrNone'>,
+  schema: string,
+  args: BatchDeleteTracesArgs,
+): Promise<DeletedTraceTagRow[]> {
+  if (args.traceIds.length === 0) return [];
   const span = qualifiedTable(schema, TABLE_SPAN_EVENTS);
-  const placeholders = args.traceIds.map((_, i) => `$${i + 1}`).join(', ');
-  await client.query(`DELETE FROM ${span} WHERE "traceId" IN (${placeholders})`, args.traceIds);
+  return client.manyOrNone<DeletedTraceTagRow>(
+    `WITH deleted AS (
+       DELETE FROM ${span}
+       WHERE "traceId" = ANY($1::text[])
+       RETURNING "tags", "entityType"
+     )
+     SELECT
+       deleted."entityType",
+       COALESCE(
+         ARRAY_AGG(DISTINCT expanded.tag) FILTER (WHERE expanded.tag IS NOT NULL AND expanded.tag <> ''),
+         '{}'::text[]
+       ) AS "tags"
+     FROM deleted
+     LEFT JOIN LATERAL UNNEST(deleted."tags") AS expanded(tag) ON TRUE
+     GROUP BY deleted."entityType"`,
+    [args.traceIds],
+  );
 }
 
 /** Truncate the span_events table. */

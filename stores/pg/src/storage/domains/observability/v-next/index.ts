@@ -607,10 +607,11 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
     await this.#run(
       'BATCH_DELETE_TRACES',
       async () => {
-        await tracingOps.batchDeleteTraces(this.#client, this.#schema, args);
-        if (args.traceIds.length > 0) {
-          await discoveryOps.invalidateTagDiscoveryCache(this.#client, this.#schema);
-        }
+        if (args.traceIds.length === 0) return;
+        await this.#client.tx(async tx => {
+          const deletedRows = await tracingOps.batchDeleteTraces(tx, this.#schema, args);
+          await discoveryOps.reconcileTagDiscoveryCacheAfterTraceDelete(tx, this.#schema, deletedRows);
+        });
       },
       { count: args.traceIds.length },
     );

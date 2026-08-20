@@ -49,6 +49,7 @@ import {
   TABLE_SPAN_EVENTS,
 } from './ddl';
 import { decodeDeltaCursor, encodeDeltaCursor, readSafeXactHorizon } from './polling';
+import type { DeletedTraceTagRow } from './tracing';
 
 const DEFAULT_TTL_SECONDS = 5 * 60; // 5 minutes
 
@@ -347,6 +348,93 @@ async function refreshTagsIncrementally(
     }
     return values;
   });
+}
+
+/** Return candidate tags that are still referenced by any discovery signal. */
+async function readSurvivingTags(
+  client: Pick<TxClient, 'manyOrNone'>,
+  schema: string,
+  candidates: string[],
+  entityType?: EntityType,
+): Promise<Set<string>> {
+  const entityFilter = entityType ? `AND "entityType" = $2` : '';
+  const params: unknown[] = [candidates];
+  if (entityType) params.push(entityType);
+  const references = ENTITY_DISCOVERY_TABLES.map(
+    table =>
+      `SELECT 1
+       FROM ${qualifiedTable(schema, table)}
+       WHERE "tags" @> ARRAY[candidate.tag]::text[] ${entityFilter}`,
+  ).join(' UNION ALL ');
+  const rows = await client.manyOrNone<{ value: string }>(
+    `SELECT candidate.tag AS value
+     FROM UNNEST($1::text[]) AS candidate(tag)
+     WHERE EXISTS (${references})
+     ORDER BY candidate.tag`,
+    params,
+  );
+  return new Set(rows.map(row => row.value));
+}
+
+/**
+ * Remove tags made obsolete by trace deletion without discarding incremental
+ * cursors. Candidate lookups use the existing GIN tag indexes, so deletion
+ * cost scales with tags on the deleted spans instead of retained history.
+ */
+export async function reconcileTagDiscoveryCacheAfterTraceDelete(
+  client: TxClient,
+  schema: string,
+  deletedRows: DeletedTraceTagRow[],
+): Promise<void> {
+  const candidatesByCacheKey = new Map<string, Set<string>>();
+  const addCandidates = (cacheKey: string, tags: string[]) => {
+    const candidates = candidatesByCacheKey.get(cacheKey) ?? new Set<string>();
+    for (const tag of tags) {
+      if (tag) candidates.add(tag);
+    }
+    if (candidates.size > 0) candidatesByCacheKey.set(cacheKey, candidates);
+  };
+
+  for (const row of deletedRows) {
+    addCandidates('tags', row.tags);
+    if (row.entityType) addCandidates(`tags:${row.entityType}`, row.tags);
+  }
+
+  const cacheKeys = [...candidatesByCacheKey.keys()].sort();
+  if (cacheKeys.length === 0) return;
+
+  // Coordinate with incremental refreshes for every affected cache key. The
+  // sorted order also makes concurrent multi-key repairs deadlock-safe.
+  for (const cacheKey of cacheKeys) {
+    await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [`${schema}:${cacheKey}`]);
+  }
+
+  const discoveryTable = qualifiedTable(schema, TABLE_DISCOVERY);
+  const cacheRows = await client.manyOrNone<{ cacheKey: string; values: string[] }>(
+    `SELECT "cacheKey", "values"
+     FROM ${discoveryTable}
+     WHERE "cacheKey" = ANY($1::text[])`,
+    [cacheKeys],
+  );
+  const valuesByCacheKey = new Map(cacheRows.map(row => [row.cacheKey, row.values]));
+
+  for (const cacheKey of cacheKeys) {
+    const currentValues = valuesByCacheKey.get(cacheKey);
+    if (!currentValues) continue;
+    const candidateSet = candidatesByCacheKey.get(cacheKey) ?? new Set<string>();
+    const candidates = [...candidateSet].sort();
+    const entityType = cacheKey === 'tags' ? undefined : (cacheKey.slice('tags:'.length) as EntityType);
+    const surviving = await readSurvivingTags(client, schema, candidates, entityType);
+    const nextValues = currentValues.filter(value => !candidateSet.has(value) || surviving.has(value));
+    if (nextValues.length === currentValues.length) continue;
+
+    // Keep refreshedAt and all cursor rows unchanged. The repair only removes
+    // values proven absent; subsequent refreshes continue from their cursors.
+    await client.query(`UPDATE ${discoveryTable} SET "values" = $2::jsonb WHERE "cacheKey" = $1`, [
+      cacheKey,
+      JSON.stringify(nextValues),
+    ]);
+  }
 }
 
 /** Remove tag values and cursor state after signal rows are deleted. */

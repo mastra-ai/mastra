@@ -1,8 +1,9 @@
+import { EntityType } from '@mastra/core/observability';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { DbClient, TxClient } from '../../../client';
 import { TABLE_LOG_EVENTS, TABLE_METRIC_EVENTS, TABLE_SPAN_EVENTS } from './ddl';
-import { getTags, invalidateTagDiscoveryCache } from './discovery';
+import { getTags, invalidateTagDiscoveryCache, reconcileTagDiscoveryCacheAfterTraceDelete } from './discovery';
 
 interface FakeTagClientOptions {
   outerCache?: { values: string[]; refreshedAt: Date } | null;
@@ -120,6 +121,43 @@ describe('Postgres observability tag discovery', () => {
   });
 
   describe('when signal rows are deleted', () => {
+    it('removes only unreferenced tags while preserving discovery cursors', async () => {
+      const query = vi.fn(async () => ({ rows: [], rowCount: 0 }));
+      const manyOrNone = vi.fn(async (sql: string, _params?: unknown[]) => {
+        if (sql.includes('SELECT "cacheKey", "values"')) {
+          return [
+            { cacheKey: 'tags', values: ['gone-tag', 'shared-tag', 'unaffected-tag'] },
+            { cacheKey: `tags:${EntityType.AGENT}`, values: ['gone-tag', 'shared-tag', 'unaffected-tag'] },
+          ];
+        }
+        if (sql.includes('FROM UNNEST')) return [{ value: 'shared-tag' }];
+        throw new Error(`Unexpected manyOrNone() query: ${sql}`);
+      });
+      const tx = { query, manyOrNone } as unknown as TxClient;
+
+      await reconcileTagDiscoveryCacheAfterTraceDelete(tx, 'test_schema', [
+        { tags: ['gone-tag', 'shared-tag'], entityType: EntityType.AGENT },
+      ]);
+
+      const locks = query.mock.calls.filter(([sql]) => sql.includes('pg_advisory_xact_lock'));
+      expect(locks.map(([, params]) => params?.[0])).toEqual([
+        'test_schema:tags',
+        `test_schema:tags:${EntityType.AGENT}`,
+      ]);
+      const survivalReads = manyOrNone.mock.calls.filter(([sql]) => sql.includes('FROM UNNEST'));
+      expect(survivalReads.map(([, params]) => params)).toEqual([
+        [['gone-tag', 'shared-tag']],
+        [['gone-tag', 'shared-tag'], EntityType.AGENT],
+      ]);
+      const updates = query.mock.calls.filter(([sql]) => sql.startsWith('UPDATE'));
+      expect(updates.map(([, params]) => params)).toEqual([
+        ['tags', JSON.stringify(['shared-tag', 'unaffected-tag'])],
+        [`tags:${EntityType.AGENT}`, JSON.stringify(['shared-tag', 'unaffected-tag'])],
+      ]);
+      expect(updates.every(([sql]) => !sql.includes('"refreshedAt"'))).toBe(true);
+      expect(query.mock.calls.some(([sql]) => sql.startsWith('DELETE'))).toBe(false);
+    });
+
     it('invalidates unscoped, scoped, and cursor tag cache keys', async () => {
       const { client } = createFakeTagClient();
 
