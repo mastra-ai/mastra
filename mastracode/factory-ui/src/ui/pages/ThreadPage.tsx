@@ -16,12 +16,12 @@ import { ChatHeader } from '../domains/chat/components/ChatHeader';
 import { FactorySessionHeader } from '../domains/factory/components/RelatedFactorySessions';
 import { ComposerPanel } from '../domains/chat/components/ComposerPanel';
 import { ActivityLine } from '../domains/chat/components/ActivityLine';
-import { ConnectionNotice } from '../domains/chat/components/ConnectionNotice';
 import { EmptyThreadState } from '../domains/chat/components/EmptyThreadState';
 import { GoalPanel } from '../domains/chat/components/GoalPanel';
 import { TaskPanel } from '../domains/chat/components/TaskPanel';
 import { PageTitle } from '../domains/chat/components/PageTitle';
 import { SessionFavicon } from '../domains/chat/components/SessionFavicon';
+import { SessionPrepareSteps } from '../domains/chat/components/SessionPrepareSteps';
 import { Transcript } from '../domains/chat/components/Transcript';
 import { TranscriptHistoryLoader } from '../domains/chat/components/TranscriptHistoryLoader';
 import { ThreadRailLayer } from '../domains/chat/components/ThreadRailLayer';
@@ -94,7 +94,7 @@ function ThreadPageMain({
   useRouteThreadSync();
   useHandoffPrompt();
   const railBoxRef = useRef<HTMLDivElement>(null);
-  const railFits = useWiderThan(railBoxRef, RAIL_MIN_REM);
+  const { wider: railFits } = useWiderThan(railBoxRef, RAIL_MIN_REM);
 
   return (
     <ThreadShell workspacePath={workspacePath} threadId={threadId}>
@@ -110,7 +110,6 @@ function ThreadPageMain({
             {railFits && <ThreadRailLayer />}
             <ChatShell.Content className="gap-0 pt-6">
               <ChatShell.Column className="flex-1">
-                <ConnectionNotice />
                 <ChatMessageBoundary>
                   <ThreadTranscript />
                 </ChatMessageBoundary>
@@ -164,7 +163,9 @@ function ThreadShell({
 }
 
 function ThreadTranscript() {
-  const { transcript } = useChatTranscript();
+  const { transcript, initialHistoryReady } = useChatTranscript();
+
+  if (!initialHistoryReady) return <SessionPrepareSteps />;
 
   return (
     <>

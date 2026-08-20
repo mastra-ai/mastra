@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
-import { useWorkspaceActivity } from '../useWorkspaceActivity';
+import { useActiveRunResources } from '../useActiveRunResources';
 import { useWorkspaceAttention } from '../useWorkspaceAttention';
 
 const controllerId = 'code';
@@ -13,10 +13,9 @@ const reviewSessionId = 'session-review';
 const workspaceIds = [workSessionId, reviewSessionId];
 
 function useActivityAttention({ workspaceIds }: { workspaceIds: string[] }) {
-  const runningByPath = useWorkspaceActivity({
+  const runningByPath = useActiveRunResources({
     agentControllerId: controllerId,
-    workspaceIds,
-    baseUrl: TEST_BASE_URL,
+    resourceIds: workspaceIds,
   });
   return { runningByPath, ...useWorkspaceAttention(runningByPath) };
 }

@@ -299,6 +299,12 @@ const sidebars = {
           },
         },
         {
+          type: 'link',
+          label: 'Mastra',
+          href: '/docs/mastra-platform/observability',
+          customProps: { icon: '/img/integrations/mastra.svg', customCSS: 'dark:invert' },
+        },
+        {
           type: 'doc',
           id: 'observability/opentelemetry',
           label: 'OpenTelemetry',
@@ -390,6 +396,12 @@ const sidebars = {
           customProps: { icon: '/img/integrations/lancedb.svg', customCSS: 'dark:invert' },
         },
         { type: 'doc', id: 'databases/libsql', label: 'libSQL', customProps: { icon: '/img/integrations/libsql.svg' } },
+        {
+          type: 'link',
+          label: 'Mastra',
+          href: '/docs/mastra-platform/database',
+          customProps: { icon: '/img/integrations/mastra.svg', customCSS: 'dark:invert' },
+        },
         {
           type: 'doc',
           id: 'databases/mongodb',

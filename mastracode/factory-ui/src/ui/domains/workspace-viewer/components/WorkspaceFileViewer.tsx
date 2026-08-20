@@ -1,11 +1,12 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, RefreshCw } from 'lucide-react';
 
-import type { WorkspaceFile } from '../../../../api/types';
-import { CopyIcon } from '../../../ui/icons';
-import { highlightCode, languageForPath } from '../../../ui/highlight';
+import type { WorkspaceFilePreview } from './workspace-file-preview';
 
 function formatBytes(size: number) {
   if (size < 1024) return `${size} B`;
@@ -14,21 +15,26 @@ function formatBytes(size: number) {
 }
 
 interface WorkspaceFileViewerProps {
-  filePath?: string;
-  file?: WorkspaceFile;
+  filePath: string;
+  file?: WorkspaceFilePreview;
   isLoading: boolean;
+  isRefreshing: boolean;
   error?: Error;
+  onRefresh: () => void;
   onBack: () => void;
 }
 
-export function WorkspaceFileViewer({ filePath, file, isLoading, error, onBack }: WorkspaceFileViewerProps) {
+export function WorkspaceFileViewer({
+  filePath,
+  file,
+  isLoading,
+  isRefreshing,
+  error,
+  onRefresh,
+  onBack,
+}: WorkspaceFileViewerProps) {
   const content = file?.content ?? '';
-  const language = languageForPath(file?.path ?? filePath);
-  const isMarkdown = language === 'markdown';
-
-  const copyFile = async () => {
-    if (content) await navigator.clipboard?.writeText(content);
-  };
+  const isMarkdown = file?.language === 'markdown';
 
   return (
     <section className="flex h-full min-w-0 flex-col" aria-label="Workspace file viewer">
@@ -42,20 +48,23 @@ export function WorkspaceFileViewer({ filePath, file, isLoading, error, onBack }
         >
           <ArrowLeft />
         </Button>
-        <Txt variant="ui-sm" className="text-icon6 min-w-0 truncate font-medium">
+        <Txt variant="ui-sm" className="text-icon6 min-w-0 flex-1 truncate font-medium">
           {file?.name ?? filePath}
         </Txt>
-        {file?.contentType === 'text' ? (
+        <div className="flex shrink-0 items-center gap-1">
+          {file?.contentType === 'text' ? (
+            <CopyButton content={content} size="icon-xs" variant="ghost" tooltip="Copy file contents" />
+          ) : null}
           <Button
-            size="icon-sm"
+            size="icon-xs"
             variant="ghost"
-            className="ml-auto shrink-0"
-            onClick={copyFile}
-            aria-label="Copy file contents"
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            aria-label={isRefreshing ? 'Refreshing file' : 'Refresh file'}
           >
-            <CopyIcon />
+            {isRefreshing ? <Spinner size="sm" /> : <RefreshCw />}
           </Button>
-        ) : null}
+        </div>
       </div>
 
       {file ? (
@@ -67,20 +76,33 @@ export function WorkspaceFileViewer({ filePath, file, isLoading, error, onBack }
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-auto p-3">
-        {!filePath ? <Txt className="text-icon3">Select a file to preview it here.</Txt> : null}
-        {filePath && isLoading ? <Txt className="text-icon3">Loading file…</Txt> : null}
-        {error ? <Txt className="text-icon4">Unable to load this file.</Txt> : null}
-        {file?.contentType === 'unsupported' ? (
-          <Txt className="text-icon3">This file type cannot be previewed as text.</Txt>
-        ) : null}
-        {file?.contentType === 'text' && isMarkdown ? <MarkdownRenderer>{content}</MarkdownRenderer> : null}
-        {file?.contentType === 'text' && !isMarkdown ? (
-          <pre className="border-border1 bg-surface2 text-icon6 m-0 overflow-x-auto rounded-md border p-3 font-mono text-xs leading-relaxed">
-            <code dangerouslySetInnerHTML={{ __html: highlightCode(content, language) }} />
-          </pre>
-        ) : null}
-      </div>
+      {isLoading ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center">
+          <Spinner size="sm" />
+        </div>
+      ) : null}
+      {error ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">
+          <Txt variant="ui-sm" className="text-error">
+            {error.message}
+          </Txt>
+        </div>
+      ) : null}
+      {!isLoading && !error ? (
+        <ScrollArea className="min-h-0 flex-1" orientation="both">
+          <div className="p-3">
+            {file?.contentType === 'unsupported' ? (
+              <Txt className="text-icon3">This file type cannot be previewed as text.</Txt>
+            ) : null}
+            {file?.contentType === 'text' && isMarkdown ? <MarkdownRenderer>{content}</MarkdownRenderer> : null}
+            {file?.contentType === 'text' && !isMarkdown ? (
+              <pre className="border-border1 bg-surface2 text-icon6 m-0 rounded-md border p-3 font-mono text-xs leading-relaxed">
+                <code dangerouslySetInnerHTML={{ __html: file.highlightedContent ?? '' }} />
+              </pre>
+            ) : null}
+          </div>
+        </ScrollArea>
+      ) : null}
     </section>
   );
 }

@@ -30,6 +30,7 @@ import {
   handleCustomProvidersCommand,
   handleSubagentsCommand,
   handleOMCommand,
+  handleKnowledgeCommand,
   handleSettingsCommand,
   handleLoginCommand,
   handleReviewCommand as handleReviewCmd,
@@ -47,6 +48,7 @@ import {
   handleGoalCommand,
   handleWorkflowsCommand,
   handlePruneCommand,
+  handleProfileCommand,
 } from './commands/index.js';
 import { isCurrentThreadActive, sendSlashCommandMessage } from './commands/send-slash-command-message.js';
 import type { SlashCommandContext } from './commands/types.js';
@@ -192,6 +194,9 @@ export async function dispatchSlashCommand(
     case 'om':
       await handleOMCommand(ctx);
       return true;
+    case 'knowledge':
+      await handleKnowledgeCommand(ctx);
+      return true;
     case 'think':
       await handleThinkCommand(ctx, args);
       return true;
@@ -218,6 +223,9 @@ export async function dispatchSlashCommand(
       return true;
     case 'prune':
       await handlePruneCommand(ctx, args);
+      return true;
+    case 'profile':
+      await handleProfileCommand(ctx, args);
       return true;
     case 'diff':
       await handleDiffCommand(ctx, args[0]);

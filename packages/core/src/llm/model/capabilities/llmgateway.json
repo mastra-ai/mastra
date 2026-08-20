@@ -1,7 +1,6 @@
 {
   "attachment": [
     "auto",
-    "claude-3-opus",
     "claude-fable-5",
     "claude-haiku-4-5",
     "claude-haiku-4-5-20251001",
@@ -124,7 +123,6 @@
   ],
   "temperature": [
     "auto",
-    "claude-3-opus",
     "claude-haiku-4-5",
     "claude-haiku-4-5-20251001",
     "claude-opus-4-1-20250805",
@@ -171,6 +169,8 @@
     "glm-5",
     "glm-5.1",
     "glm-5.2",
+    "glm-5.2-fast",
+    "glm-5.3",
     "gpt-3.5-turbo",
     "gpt-4",
     "gpt-4-turbo",
@@ -306,6 +306,8 @@
     "glm-4.6v-flashx",
     "glm-5.1",
     "glm-5.2",
+    "glm-5.2-fast",
+    "glm-5.3",
     "gpt-4.1",
     "gpt-4.1-mini",
     "gpt-4.1-nano",

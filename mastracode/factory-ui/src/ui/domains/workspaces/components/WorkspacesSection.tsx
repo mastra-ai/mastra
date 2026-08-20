@@ -9,7 +9,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../../../../api/keys';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
-import { useWorkspaceActivity } from '../../../../hooks/useWorkspaceActivity';
+import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
 import { useWorkspaceAttention } from '../../../../hooks/useWorkspaceAttention';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { useWorkspacePullRequestMerges } from '../../../../hooks/useWorkspacePullRequestMerges';
@@ -17,7 +17,8 @@ import { useDeleteWorkspaceMutation, useWorkspacesQuery } from '../../../../hook
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { githubNumberForItem } from '../../factory/boardItems';
-import { relatedWorkItems, relationshipLabel } from '../../factory/services/relationships';
+import { pullRequestCandidateIndex, relatedWorkItems, relationshipLabel } from '../../factory/services/relationships';
+import type { WorkItem } from '../../factory/services/workItems';
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
 import type { FactoryUserSession } from '../services/github';
 import { getFactorySessionKind } from '../services/sessionPresentation';
@@ -64,10 +65,9 @@ export function WorkspacesSection() {
   const workItems = useWorkItemsQuery(factoryId);
   const workspaceRows = workspaces.data?.workspaces ?? [];
   const workspaceIds = workspaceRows.map(workspace => workspace.sessionId);
-  const runningByPath = useWorkspaceActivity({
+  const runningByPath = useActiveRunResources({
     agentControllerId: AGENT_CONTROLLER_ID,
-    workspaceIds,
-    baseUrl,
+    resourceIds: workspaceIds,
   });
   const queryClient = useQueryClient();
   // The server re-derives session titles at the end of a run.
@@ -84,17 +84,18 @@ export function WorkspacesSection() {
       ),
     ),
   );
+  const pullRequestCandidates = pullRequestCandidateIndex(allWorkItems);
+  const latestPullRequestFor = (item: WorkItem) => {
+    if (item.source === 'github-pr') return item;
+    return [...relatedWorkItems(item, pullRequestCandidates(item))].sort((a, b) =>
+      b.updatedAt.localeCompare(a.updatedAt),
+    )[0];
+  };
+
   const rows = workspaceRows.flatMap(workspace => {
     const workItemSession = workItemByPath.get(workspace.sessionId);
     const item = workItemSession?.item;
-    const pullRequest =
-      item?.source === 'github-pr'
-        ? item
-        : item
-          ? [...relatedWorkItems(item, allWorkItems).filter(candidate => candidate.source === 'github-pr')].sort(
-              (a, b) => b.updatedAt.localeCompare(a.updatedAt),
-            )[0]
-          : undefined;
+    const pullRequest = item && latestPullRequestFor(item);
     const pullRequestNumber = pullRequest ? githubNumberForItem(pullRequest) : undefined;
     const active = workspace.sessionId === sessionId;
     const running = runningByPath[workspace.sessionId] === true;

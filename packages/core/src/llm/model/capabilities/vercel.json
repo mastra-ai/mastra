@@ -140,8 +140,6 @@
     "xiaomi/mimo-v2.5",
     "xiaomi/mimo-v2.5-pro",
     "zai/glm-4.5v",
-    "zai/glm-4.6v",
-    "zai/glm-4.6v-flash",
     "zai/glm-5.1",
     "zai/glm-5v-turbo"
   ],
@@ -437,8 +435,6 @@
     "zai/glm-4.5-air",
     "zai/glm-4.5v",
     "zai/glm-4.6",
-    "zai/glm-4.6v",
-    "zai/glm-4.6v-flash",
     "zai/glm-4.7",
     "zai/glm-4.7-flash",
     "zai/glm-4.7-flashx",
@@ -447,6 +443,7 @@
     "zai/glm-5.1",
     "zai/glm-5.2",
     "zai/glm-5.2-fast",
+    "zai/glm-5.3",
     "zai/glm-5v-turbo"
   ],
   "structuredOutput": [
@@ -540,6 +537,7 @@
     "zai/glm-5-turbo",
     "zai/glm-5.1",
     "zai/glm-5.2",
-    "zai/glm-5.2-fast"
+    "zai/glm-5.2-fast",
+    "zai/glm-5.3"
   ]
 }
