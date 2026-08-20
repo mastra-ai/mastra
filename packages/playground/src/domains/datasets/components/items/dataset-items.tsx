@@ -82,14 +82,11 @@ export function DatasetItems({
   const [searchParams, setSearchParams] = useSearchParams();
   const {
     activeVersion: activeDatasetVersion,
-    panel,
     selectionMode,
     handleVersionChange,
-    handlePanelChange,
     handleSelectionModeChange,
   } = useDatasetItemsUrlState(searchParams, setSearchParams);
 
-  const isVersionsPanelOpen = panel === 'versions';
   const selection = useItemSelection();
   const featuredItem = items.find(i => i.id === featuredItemId) ?? null;
 
@@ -186,9 +183,7 @@ export function DatasetItems({
         onExecuteAction={handleExecuteAction}
         onCancelSelection={handleCancelSelection}
         selectionMode={selectionMode}
-        onVersionsClick={() => handlePanelChange('versions')}
         isItemPanelOpen={!!featuredItem}
-        isVersionsPanelOpen={isVersionsPanelOpen}
         isViewingOldVersion={isViewingOldVersion}
       />
 
@@ -239,15 +234,14 @@ export function DatasetItems({
     />
   ) : null;
 
-  const versionsPanelSlot = isVersionsPanelOpen ? (
+  const versionsPanelSlot = (
     <DatasetVersionsPanel
       datasetId={datasetId}
-      onClose={() => handlePanelChange(null)}
       onVersionSelect={handleVersionSelect}
       onCompareVersionsClick={onCompareVersionsClick}
       activeVersion={activeDatasetVersion}
     />
-  ) : null;
+  );
 
   return (
     <DatasetItemsLayout listSlot={listSlot} detailPanelSlot={detailPanelSlot} versionsPanelSlot={versionsPanelSlot} />

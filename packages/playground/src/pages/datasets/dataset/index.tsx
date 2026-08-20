@@ -1,6 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
-import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
@@ -119,22 +118,17 @@ function DatasetPage() {
 
   return (
     <>
-      <PageLayout height="full">
-        <PageLayout.TopArea>
-          <PageLayout.Row>
-            <PageLayout.Column>
-              {dataset?.description && <p className="text-ui-smd text-neutral3 mb-1">{dataset.description}</p>}
-              <DataKeysAndValues numOfCol={2}>
-                <DataKeysAndValues.Key>Created at</DataKeysAndValues.Key>
-                <DataKeysAndValues.Value>
-                  {dataset?.createdAt ? format(new Date(dataset.createdAt), 'MMM d, yyyy') : ''}
-                </DataKeysAndValues.Value>
-                <DataKeysAndValues.Key>Latest version</DataKeysAndValues.Key>
-                <DataKeysAndValues.Value>v{dataset?.version ?? ''}</DataKeysAndValues.Value>
-              </DataKeysAndValues>
-            </PageLayout.Column>
-            <PageLayout.Column>
+      <PageLayout height="full" className="grid-rows-[1fr] p-0">
+        <PageLayout.MainArea>
+          <DatasetPageTabs
+            datasetId={datasetId}
+            onAddItemClick={() => setAddItemDialogOpen(true)}
+            rightSlot={
               <ButtonsGroup>
+                <span className="text-ui-sm text-neutral3 mr-3 whitespace-nowrap">
+                  {dataset?.createdAt ? `Created ${format(new Date(dataset.createdAt), 'MMM d')} — ` : ''}v
+                  {dataset?.version ?? ''}
+                </span>
                 {disableExperimentTrigger ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -177,12 +171,8 @@ function DatasetPage() {
                   </DropdownMenu.Content>
                 </DropdownMenu>
               </ButtonsGroup>
-            </PageLayout.Column>
-          </PageLayout.Row>
-        </PageLayout.TopArea>
-
-        <PageLayout.MainArea>
-          <DatasetPageTabs datasetId={datasetId} onAddItemClick={() => setAddItemDialogOpen(true)} />
+            }
+          />
         </PageLayout.MainArea>
       </PageLayout>
 

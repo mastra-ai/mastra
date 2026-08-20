@@ -22,27 +22,24 @@ describe('useDatasetItemsUrlState', () => {
       const { result } = renderHook(useHookUnderTest, { wrapper: wrapper('/datasets/d1') });
       expect(result.current.tab).toBe('items');
       expect(result.current.activeVersion).toBeNull();
-      expect(result.current.panel).toBeNull();
       expect(result.current.selectionMode).toBe('idle');
     });
 
-    it('parses tab, version, panel, and mode params', () => {
+    it('parses tab, version, and mode params', () => {
       const { result } = renderHook(useHookUnderTest, {
-        wrapper: wrapper('/datasets/d1?tab=experiments&version=3&panel=versions&mode=delete'),
+        wrapper: wrapper('/datasets/d1?tab=experiments&version=3&mode=delete'),
       });
       expect(result.current.tab).toBe('experiments');
       expect(result.current.activeVersion).toBe(3);
-      expect(result.current.panel).toBe('versions');
       expect(result.current.selectionMode).toBe('delete');
     });
 
     it('falls back to defaults when params are invalid', () => {
       const { result } = renderHook(useHookUnderTest, {
-        wrapper: wrapper('/datasets/d1?tab=bogus&version=-1&panel=junk&mode=invalid'),
+        wrapper: wrapper('/datasets/d1?tab=bogus&version=-1&mode=invalid'),
       });
       expect(result.current.tab).toBe('items');
       expect(result.current.activeVersion).toBeNull();
-      expect(result.current.panel).toBeNull();
       expect(result.current.selectionMode).toBe('idle');
     });
   });
@@ -54,13 +51,12 @@ describe('useDatasetItemsUrlState', () => {
       expect(result.current.tab).toBe('items');
     });
 
-    it('clears panel + mode when leaving the items tab, but preserves version', () => {
+    it('clears mode when leaving the items tab, but preserves version', () => {
       const { result } = renderHook(useHookUnderTest, {
-        wrapper: wrapper('/datasets/d1?panel=versions&mode=delete&version=2'),
+        wrapper: wrapper('/datasets/d1?mode=delete&version=2'),
       });
       act(() => result.current.handleTabChange('experiments'));
       expect(result.current.tab).toBe('experiments');
-      expect(result.current.panel).toBeNull();
       expect(result.current.selectionMode).toBe('idle');
       expect(result.current.activeVersion).toBe(2);
     });
@@ -81,16 +77,6 @@ describe('useDatasetItemsUrlState', () => {
       expect(result.current.activeVersion).toBe(7);
       expect(result.current.tab).toBe('review');
       expect(result.current.selectionMode).toBe('delete');
-    });
-  });
-
-  describe('handlePanelChange', () => {
-    it('opens and closes the versions panel', () => {
-      const { result } = renderHook(useHookUnderTest, { wrapper: wrapper('/datasets/d1') });
-      act(() => result.current.handlePanelChange('versions'));
-      expect(result.current.panel).toBe('versions');
-      act(() => result.current.handlePanelChange(null));
-      expect(result.current.panel).toBeNull();
     });
   });
 
