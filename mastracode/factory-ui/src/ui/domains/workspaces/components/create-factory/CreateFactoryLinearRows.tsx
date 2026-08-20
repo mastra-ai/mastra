@@ -40,14 +40,15 @@ export function CreateFactoryLinearRows({ query, onConnect, onSelectProject, onS
 
   if (!connected) {
     const connectable = status?.reason !== 'missing_config' && status?.reason !== 'organization_required';
+    const connectTitle = status?.reason === 'not_connected' ? 'Connect Linear' : 'Reconnect Linear';
     return (
       <CommandGroup heading="Linear">
         {skipRow}
         {connectable ? (
-          matches('Connect Linear') && (
+          matches(connectTitle) && (
             <CommandPaletteItem
               icon={<LinearIcon />}
-              title={status?.reason === 'not_connected' ? 'Connect Linear' : 'Reconnect Linear'}
+              title={connectTitle}
               subtitle="Import issues and priorities into the Factory board"
               value="connect-linear"
               onSelect={onConnect}

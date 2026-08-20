@@ -110,11 +110,11 @@ export function CreateFactoryWizard() {
             githubRedirecting={githubRedirecting}
             onConnect={() => {
               setGithubRedirecting(true);
-              flow.persistBeforeRedirect();
+              flow.persistBeforeRedirect(factoryId);
               connectGithub(baseUrl);
             }}
             onManageConnection={() => {
-              flow.persistBeforeRedirect();
+              flow.persistBeforeRedirect(factoryId);
               manageGithubConnection(baseUrl);
             }}
             onSelectRepository={repository => void flow.chooseRepository(repository)}
@@ -124,7 +124,7 @@ export function CreateFactoryWizard() {
           <CreateFactoryLinearRows
             query={value}
             onConnect={() => {
-              flow.persistBeforeRedirect();
+              flow.persistBeforeRedirect(factoryId);
               connectLinear(baseUrl);
             }}
             onSelectProject={projectId => void flow.chooseLinearProject(projectId)}

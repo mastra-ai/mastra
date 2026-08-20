@@ -13,7 +13,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { GithubStatus } from '../../services/github';
 import { CreateFactoryWizard } from '../create-factory/CreateFactoryWizard';
 
@@ -197,7 +197,7 @@ describe('Create Factory wizard', () => {
     );
     const user = userEvent.setup();
 
-    renderFlow();
+    const { client } = renderFlow();
 
     await user.click(await screen.findByRole('button', { name: 'Skip' }));
 
@@ -209,9 +209,10 @@ describe('Create Factory wizard', () => {
     await user.click(await screen.findByRole('option', { name: /Anthropic/ }));
     await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
 
-    await waitFor(() => expect(calls).toEqual(['create', 'connect', 'link']));
-    await waitFor(() => expect(patchedBodies).toEqual([{ defaultModelId: 'anthropic/claude-sonnet-4-5' }]));
-    await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1'));
+    await waitForMutationsIdle(client);
+    expect(calls).toEqual(['create', 'connect', 'link']);
+    expect(patchedBodies).toEqual([{ defaultModelId: 'anthropic/claude-sonnet-4-5' }]);
+    expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1');
     expect(sessionStorage.getItem(STEP_KEY)).toBeNull();
   });
 
@@ -229,7 +230,7 @@ describe('Create Factory wizard', () => {
     );
     const user = userEvent.setup();
 
-    renderFlow();
+    const { client } = renderFlow();
 
     await user.click(await screen.findByRole('option', { name: /Anthropic/ }));
     await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
@@ -240,7 +241,8 @@ describe('Create Factory wizard', () => {
     linkFails = false;
     await user.click(screen.getByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
 
-    await waitFor(() => expect(patchedBodies).toHaveLength(1));
+    await waitForMutationsIdle(client);
+    expect(patchedBodies).toHaveLength(1);
     // The Factory created by the first attempt is reused, not duplicated.
     expect(calls).toEqual(['create', 'connect', 'connect', 'link']);
   });
@@ -357,17 +359,16 @@ describe('Create Factory wizard', () => {
     );
     const user = userEvent.setup();
 
-    renderFlow();
+    const { client } = renderFlow();
 
     await user.click(await screen.findByRole('option', { name: /Mobile App/ }));
     await user.click(await screen.findByRole('option', { name: /Anthropic/ }));
     await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
 
-    await waitFor(() =>
-      expect(bindings).toEqual([{ integrationId: 'linear', sourceId: 'lin-1', factoryProjectId: 'fp-1' }]),
-    );
+    await waitForMutationsIdle(client);
+    expect(bindings).toEqual([{ integrationId: 'linear', sourceId: 'lin-1', factoryProjectId: 'fp-1' }]);
     // Its issues only reach the board once Linear intake is on.
-    await waitFor(() => expect(intakeConfigs).toHaveLength(1));
+    expect(intakeConfigs).toHaveLength(1);
     expect(intakeConfigs[0]).toMatchObject({ linear: { enabled: true, sourceIds: null } });
   });
 
@@ -385,13 +386,14 @@ describe('Create Factory wizard', () => {
     );
     const user = userEvent.setup();
 
-    renderFlow();
+    const { client } = renderFlow();
 
     await user.click(await screen.findByRole('button', { name: 'Skip' }));
     await user.click(await screen.findByRole('option', { name: /Anthropic/ }));
     await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
 
-    await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1'));
+    await waitForMutationsIdle(client);
+    expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1');
     expect(bindings).toEqual([]);
   });
 
