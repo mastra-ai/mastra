@@ -63,6 +63,7 @@ import type { Predicate } from './predicate';
 import type {
   ConditionFunction,
   ExecuteFunction,
+  ExecuteFunctionParams,
   InnerOutput,
   LoopConditionFunction,
   Step,
@@ -2063,39 +2064,51 @@ export class Workflow<
     });
   }
 
+  map<TMapOutput>(
+    mappingConfig: (
+      params: ExecuteFunctionParams<TState, TPrevSchema, any, any, any, TEngineType, TRequestContext>,
+    ) => Promise<TMapOutput | InnerOutput> | TMapOutput,
+    stepOptions?: { id?: string | null },
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TMapOutput, TRequestContext>;
   map(
+    mappingConfig: {
+      [k: string]:
+        | {
+            step:
+              | Step<string, any, any, any, any, any, TEngineType, any>
+              | Step<string, any, any, any, any, any, TEngineType, any>[];
+            path: string;
+          }
+        | { value: any; schema: PublicSchema<any> }
+        | {
+            initData: Workflow<TEngineType, any, any, any, any, any, any>;
+            path: string;
+          }
+        | {
+            requestContextPath: string;
+            schema: PublicSchema<any>;
+          }
+        /**
+         * String template with `${<scope>.<path>}` placeholders. Resolved at
+         * run time against the step's execution context.
+         *
+         * Scopes: `inputData`, `initData`, `state`, `requestContext`,
+         * `stepResults.<stepId>`. Paths are dotted (`a.b.c`). Whitespace
+         * inside placeholders is not allowed (`${ inputData.x }` errors at
+         * workflow-definition time). Renders `null`/`undefined` as `''`;
+         * throws on objects/arrays.
+         */
+        | { template: string }
+        | DynamicMapping<TPrevSchema, any>;
+    },
+    stepOptions?: { id?: string | null },
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any, TRequestContext>;
+  map<TMapOutput>(
     mappingConfig:
-      | {
-          [k: string]:
-            | {
-                step:
-                  | Step<string, any, any, any, any, any, TEngineType, any>
-                  | Step<string, any, any, any, any, any, TEngineType, any>[];
-                path: string;
-              }
-            | { value: any; schema: PublicSchema<any> }
-            | {
-                initData: Workflow<TEngineType, any, any, any, any, any, any>;
-                path: string;
-              }
-            | {
-                requestContextPath: string;
-                schema: PublicSchema<any>;
-              }
-            /**
-             * String template with `${<scope>.<path>}` placeholders. Resolved at
-             * run time against the step's execution context.
-             *
-             * Scopes: `inputData`, `initData`, `state`, `requestContext`,
-             * `stepResults.<stepId>`. Paths are dotted (`a.b.c`). Whitespace
-             * inside placeholders is not allowed (`${ inputData.x }` errors at
-             * workflow-definition time). Renders `null`/`undefined` as `''`;
-             * throws on objects/arrays.
-             */
-            | { template: string }
-            | DynamicMapping<TPrevSchema, any>;
-        }
-      | ExecuteFunction<TState, TPrevSchema, any, any, any, TEngineType>,
+      | Record<string, any>
+      | ((
+          params: ExecuteFunctionParams<TState, TPrevSchema, any, any, any, TEngineType, TRequestContext>,
+        ) => Promise<TMapOutput | InnerOutput> | TMapOutput),
     stepOptions?: { id?: string | null },
   ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any, TRequestContext> {
     // Build a declarative `{ type: 'mapping' }` graph entry; the mapping logic is
