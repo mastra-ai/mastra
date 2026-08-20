@@ -367,8 +367,9 @@ describe('ProviderAccessSection', () => {
       renderWithProviders(<ProviderAccessSection />);
 
       await screen.findByText('Anthropic');
-      await user.click(screen.getByRole('button', { name: 'Everyone in org' }));
       await user.click(within(rowFor('anthropic')).getByRole('button', { name: 'Sign in to Anthropic' }));
+      // Org admins pick the scope per provider in a dialog before the flow starts.
+      await user.click(await screen.findByRole('button', { name: 'Everyone in org' }));
 
       await waitFor(() => expect(startBody).toEqual({ mode: 'paste-code', scope: 'org' }));
 

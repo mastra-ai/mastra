@@ -2,7 +2,15 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DataList } from '@mastra/playground-ui/components/DataList';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@mastra/playground-ui/components/Dialog';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -80,6 +88,47 @@ function SourceBadges({ provider }: { provider: ProviderInfo }) {
 }
 
 /**
+ * Per-provider scope choice for org admins before starting an OAuth flow.
+ * Scope is fixed at flow start (the server stores it on the login session),
+ * so it has to be picked here rather than after authorization.
+ */
+function OAuthScopeDialog({
+  provider,
+  onSelect,
+  onClose,
+}: {
+  provider: ProviderInfo;
+  onSelect: (scope: 'user' | 'org') => void;
+  onClose: () => void;
+}) {
+  const displayName = providerDisplayName(provider.provider);
+  return (
+    <Dialog open onOpenChange={open => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Sign in to {displayName}</DialogTitle>
+          <DialogDescription>Who can use this sign-in?</DialogDescription>
+        </DialogHeader>
+        <DialogBody className="flex flex-col gap-2">
+          <Button variant="outline" onClick={() => onSelect('user')}>
+            Just me
+          </Button>
+          <Button variant="outline" onClick={() => onSelect('org')}>
+            Everyone in org
+          </Button>
+          <Txt as="p" variant="ui-sm" className="text-icon4">
+            Org-wide sign-ins share this account&apos;s access with everyone in your organization.
+          </Txt>
+        </DialogBody>
+        <DialogFooter>
+          <Button onClick={onClose}>Cancel</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
  * Provider credential management as a tabbed subsection of the Model settings
  * page: OAuth sign-in on one tab, API keys on the other.
  */
@@ -92,7 +141,7 @@ export function ProviderAccessSection() {
   const removeKeyMutation = useRemoveProviderKey();
   const orgKeyAdminQuery = useOrgKeyAdminQuery();
   const [search, setSearch] = useState('');
-  const [oauthScope, setOAuthScope] = useState<'user' | 'org'>('user');
+  const [scopeDialogProvider, setScopeDialogProvider] = useState<ProviderInfo>();
   const [startingProvider, setStartingProvider] = useState<string>();
   const [activeOAuth, setActiveOAuth] = useState<ActiveOAuthSession>();
   const [keyDialogProvider, setKeyDialogProvider] = useState<ProviderInfo>();
@@ -116,14 +165,15 @@ export function ProviderAccessSection() {
 
   const canWriteOrgKey = !authEnabled || (orgKeyAdminQuery.data ?? true);
 
-  const startOAuth = async (provider: ProviderInfo) => {
+  const startOAuth = async (provider: ProviderInfo, scope: 'user' | 'org') => {
     const modes = provider.oauth?.modes ?? [];
+    setScopeDialogProvider(undefined);
     setStartingProvider(provider.provider);
     try {
       const session = await startOAuthMutation.mutateAsync({
         provider: provider.provider,
         mode: modes.length === 1 ? modes[0] : undefined,
-        ...(authEnabled ? { scope: oauthScope } : {}),
+        ...(authEnabled ? { scope } : {}),
       });
       setActiveOAuth({ provider: provider.provider, session });
     } catch {
@@ -131,6 +181,16 @@ export function ProviderAccessSection() {
     } finally {
       setStartingProvider(undefined);
     }
+  };
+
+  // Org admins pick who the sign-in is for, per provider; everyone else signs
+  // in personally without an extra step.
+  const requestSignIn = (provider: ProviderInfo) => {
+    if (authEnabled && canWriteOrgKey) {
+      setScopeDialogProvider(provider);
+      return;
+    }
+    void startOAuth(provider, 'user');
   };
 
   const closeOAuth = () => {
@@ -184,37 +244,6 @@ export function ProviderAccessSection() {
         </TabList>
 
         <TabContent value="oauth" className="flex flex-col gap-3">
-          {authEnabled && (
-            <div className="flex items-center justify-between gap-4">
-              <Txt as="span" variant="ui-sm" className="text-icon4">
-                Who can use this sign-in
-              </Txt>
-              <ButtonsGroup spacing="close" role="group" aria-label="Sign-in access">
-                {(
-                  [
-                    { value: 'user', label: 'Just me' },
-                    { value: 'org', label: 'Everyone in org' },
-                  ] as const
-                ).map(option => (
-                  <Button
-                    key={option.value}
-                    variant={oauthScope === option.value ? 'primary' : 'outline'}
-                    size="sm"
-                    aria-pressed={oauthScope === option.value}
-                    disabled={option.value === 'org' && !canWriteOrgKey}
-                    title={
-                      option.value === 'org' && !canWriteOrgKey
-                        ? 'Only org admins can sign in for the whole org'
-                        : undefined
-                    }
-                    onClick={() => setOAuthScope(option.value)}
-                  >
-                    {option.label}
-                  </Button>
-                ))}
-              </ButtonsGroup>
-            </div>
-          )}
           {providersQuery.isPending ? (
             <SkeletonRows label="Loading providers" rows={3} rowClassName="h-9 w-full" />
           ) : oauthProviders.length === 0 ? (
@@ -250,7 +279,7 @@ export function ProviderAccessSection() {
                           size="sm"
                           aria-label={`Sign in to ${displayName}`}
                           disabled={startOAuthMutation.isPending}
-                          onClick={() => void startOAuth(provider)}
+                          onClick={() => requestSignIn(provider)}
                         >
                           {startingProvider === provider.provider ? 'Starting…' : 'Sign in'}
                         </Button>
@@ -336,6 +365,14 @@ export function ProviderAccessSection() {
           provider={keyDialogProvider}
           authEnabled={authEnabled}
           onClose={() => setKeyDialogProvider(undefined)}
+        />
+      )}
+
+      {scopeDialogProvider && (
+        <OAuthScopeDialog
+          provider={scopeDialogProvider}
+          onSelect={scope => void startOAuth(scopeDialogProvider, scope)}
+          onClose={() => setScopeDialogProvider(undefined)}
         />
       )}
 
