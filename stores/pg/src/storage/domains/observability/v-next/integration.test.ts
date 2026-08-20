@@ -898,8 +898,11 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
         schemaPrefix: 'obs_vnext_discovery_tags_xact',
         discovery: { ttlSeconds: 0 },
       });
-      const txA = await harness.baseClient.connect();
-      const txB = await harness.baseClient.connect();
+      // Keep the harness pool available for getTags() while both writer
+      // transactions remain open.
+      const writerPool = new Pool({ connectionString: defaultConnection.connectionString, max: 2 });
+      const txA = await writerPool.connect();
+      const txB = await writerPool.connect();
       let txAReleased = false;
       let txBReleased = false;
 
@@ -940,6 +943,7 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
           await txB.query('ROLLBACK').catch(() => undefined);
           txB.release();
         }
+        await writerPool.end();
         await harness.close();
       }
     });
