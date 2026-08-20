@@ -6,11 +6,13 @@
 // packages. For a ceiling no instruction can argue past, cap spending with `circle wallet limit
 // set`.
 //
-// Two lists, because "stop and ask" and "not yours to run" are different answers. Approval is for
-// a spend the user can weigh and allow. The second list is for commands that belong in the user's
-// own terminal — accepting Terms of Use, and anything Circle confirms with a one-time code — which
-// no approval can make safe or even workable here: the sandbox has no terminal to type a code
-// into, so an approved login would sit at a prompt until it timed out.
+// Three lists, because "stop and ask", "not yours to run" and "right idea, wrong destination" are
+// different answers. Approval is for a spend the user can weigh and allow. The second list is for
+// commands that belong in the user's own terminal — accepting Terms of Use, and anything Circle
+// confirms with a one-time code — which no approval can make safe or even workable here: the
+// sandbox has no terminal to type a code into, so an approved login would sit at a prompt until it
+// timed out. The third is for a command that would run perfectly well and leave the agent no
+// better off, because it writes its skills somewhere this agent never reads.
 
 /** Matched anywhere in a segment, so a pipe or a `$(…)` cannot slip one through. */
 const SPENDS: readonly RegExp[] = [
@@ -33,6 +35,17 @@ const USER_ONLY: readonly RegExp[] = [
   /\bcircle wallet login\b/,
   /\bcircle wallet limit (set|reset)\b/,
 ];
+
+/**
+ * Installs that put skills where this agent does not look.
+ *
+ * Circle's setup document asks for the command "matching the host", and this host is not on its
+ * list: `--tool claude-code` installs into an editor's plugin directory, and `--tool codex` writes
+ * `.agents/skills` relative to the working directory rather than the home one. The same document
+ * publishes a universal fallback that always writes the tool-neutral store, which is the only
+ * directory the agent reads, so the choice is taken away rather than left to a guess.
+ */
+const WRONG_SKILL_STORE: readonly RegExp[] = [/\bcircle skill install\b/];
 
 // `circle services pay --estimate` returns a price without signing, and `--help` prints text.
 // Prompting for either trains the user to approve payment dialogs without reading them.
@@ -86,4 +99,9 @@ export function requiresApproval(command: string): boolean {
 /** Whether `command` is one the user has to run themselves. */
 export function requiresUserTerminal(command: string): boolean {
   return matches(command, USER_ONLY);
+}
+
+/** Whether `command` installs skills somewhere this agent would never find them. */
+export function installsSkillsElsewhere(command: string): boolean {
+  return matches(command, WRONG_SKILL_STORE);
 }

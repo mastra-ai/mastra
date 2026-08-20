@@ -6,15 +6,21 @@ import { Agent } from '@mastra/core/agent';
 import { LocalFilesystem, LocalSandbox, WORKSPACE_TOOLS, Workspace } from '@mastra/core/workspace';
 import { Memory } from '@mastra/memory';
 
-import { requiresApproval, requiresUserTerminal } from '../approval';
+import { installsSkillsElsewhere, requiresApproval, requiresUserTerminal } from '../approval';
 
 // The skills registry's global install directory, which `~/.claude/skills` and its equivalents
 // symlink into. Mastra reads the same files Claude Code and Codex do, so a skill is installed once
 // and shared — and until the agent installs one, there are none.
 const SKILLS_DIR = join(homedir(), '.agents', 'skills');
 
+// The skill Circle's setup document installs first, and the one every wallet command reads. Asking
+// for it by name rather than for any skill at all matters on a machine that already has skills:
+// this directory is shared with every other agent on it, and an unrelated skill sitting there must
+// not read as a finished Circle setup and take the bootstrap away.
+const CIRCLE_SKILL = 'use-circle-cli';
+
 /**
- * Whether any skill is installed where this agent reads them.
+ * Whether Circle's skills are installed where this agent reads them.
  *
  * This is what "has setup already run?" reduces to, and it is deliberately a question about the
  * machine rather than the conversation: the answer has to survive a new thread, a cleared memory,
@@ -22,13 +28,9 @@ const SKILLS_DIR = join(homedir(), '.agents', 'skills');
  */
 async function hasSkills(): Promise<boolean> {
   try {
-    const entries = await readdir(SKILLS_DIR, { withFileTypes: true });
-    const candidates = entries.filter(entry => entry.isDirectory() || entry.isSymbolicLink());
-    const contents = await Promise.all(
-      candidates.map(entry => readdir(join(SKILLS_DIR, entry.name)).catch(() => [] as string[])),
-    );
-    // A stray file or an empty directory left by a failed install must not read as a finished setup.
-    return contents.some(files => files.includes('SKILL.md'));
+    const files = await readdir(join(SKILLS_DIR, CIRCLE_SKILL));
+    // An empty directory left behind by a failed install must not read as a finished setup.
+    return files.includes('SKILL.md');
   } catch {
     return false;
   }
@@ -83,22 +85,36 @@ const workspace = new Workspace({
   // because the sandbox already reaches the whole filesystem, so this grants nothing new.
   filesystem: new LocalFilesystem({ basePath: homedir(), contained: false }),
   tools: {
-    // Commands the user has to run themselves never reach the shell. Returning the refusal as the
-    // tool's own result — rather than suspending for an approval the user cannot usefully grant —
-    // tells the model what to do next in the place it is already reading.
+    // Commands the user has to run themselves never reach the shell, and neither does the install
+    // that would strand the skills off to one side. Returning the refusal as the tool's own result
+    // — rather than suspending for an approval the user cannot usefully grant — tells the model
+    // what to do next in the place it is already reading.
     hooks: {
       beforeToolCall: ({ workspaceToolName, input }) => {
         if (workspaceToolName !== WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND) return;
         const command = String((input as { command?: unknown })?.command ?? '');
-        if (!requiresUserTerminal(command)) return;
-        return {
-          proceed: false,
-          output:
-            `Blocked: \`${command}\` is the user's to run, not yours. It either accepts Circle's ` +
-            'Terms of Use or waits on a one-time code, and this shell has no terminal to type one ' +
-            'into. Give the user the exact command to paste into their own terminal, say what it ' +
-            'does, and continue once they confirm. Do not retry it here or work around it.',
-        };
+        if (requiresUserTerminal(command)) {
+          return {
+            proceed: false,
+            output:
+              `Blocked: \`${command}\` is the user's to run, not yours. It either accepts Circle's ` +
+              'Terms of Use or waits on a one-time code, and this shell has no terminal to type one ' +
+              'into. Give the user the exact command to paste into their own terminal, say what it ' +
+              'does, and continue once they confirm. Do not retry it here or work around it.',
+          };
+        }
+        if (installsSkillsElsewhere(command)) {
+          return {
+            proceed: false,
+            output:
+              `Blocked: \`${command}\` installs skills into an editor's own directory, and I read ` +
+              `mine from ${SKILLS_DIR}. Use the universal fallback from the same setup document ` +
+              'instead — `npx -y skills add circlefin/skills -g` — which is what writes there. It ' +
+              'installs into every editor store it knows of, so a long list of destinations in its ' +
+              'output is expected. Then carry on with the setup.',
+          };
+        }
+        return;
       },
     },
     // The shell, plus reading. Writing, editing and deleting stay off — the shell does those, under
