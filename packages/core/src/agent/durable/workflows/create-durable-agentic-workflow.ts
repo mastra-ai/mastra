@@ -561,16 +561,11 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
         // the non-durable agentic loop. The mutated state.messageId flows into
         // the next singleIterationWorkflow input via map-to-llm-input.
         if (!isFinal) {
-          try {
-            const boundaryList = createRunMessageList({ mastra: mastra as Mastra | undefined }).deserialize(
-              state.messageListState,
-            );
-            state.messageId = boundaryList.rotateResponseMessageId();
-            state.messageListState = boundaryList.serialize();
-          } catch {
-            // Keep the id when the state can't be sealed: an un-sealed merge is
-            // recoverable, a rotated id without its boundary duplicates on reload.
-          }
+          const boundaryList = createRunMessageList({ mastra: mastra as Mastra | undefined }).deserialize(
+            state.messageListState,
+          );
+          state.messageId = boundaryList.rotateResponseMessageId();
+          state.messageListState = boundaryList.serialize();
         }
 
         // Emit an iteration-complete event for observability. This fires after
