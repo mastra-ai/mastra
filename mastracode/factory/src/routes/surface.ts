@@ -17,6 +17,7 @@ import type { BaseCheckpointTriggers } from '../sandbox/base-checkpoint-triggers
 import type { SandboxFleet } from '../sandbox/fleet.js';
 import { ensureFactorySourceSession, resolveFactoryDefaultModelId } from '../session/factory-session.js';
 import { LiveSessions } from '../session/live-sessions.js';
+import type { FactorySkillCatalog } from '../skills/catalog.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
@@ -85,6 +86,8 @@ export interface FactoryApiRoutesDeps {
   knowledgeEnabled: boolean;
   /** Resolved Factory rule set, threaded from the host (no service locator). */
   rules: FactoryRules;
+  /** Bundled Factory skills loaded once during startup. */
+  factorySkills: FactorySkillCatalog;
   factoryTransitionService?: FactoryTransitionService;
   sessionRetirement?: import('../sandbox/session-retirement.js').SessionRetirementCoordinator;
   onFactoryRuntime?: (runtime: {
@@ -389,6 +392,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
     ? new FactoryStartCoordinator(
         deps.controller,
         deps.domains.workItems,
+        deps.factorySkills,
         transitionService,
         githubIntegration?.sourceControlStorage,
         deps.domains.memorySettings,
@@ -439,6 +443,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       auth: deps.auth,
       controllerId: deps.controllerId,
       controller: deps.controller,
+      factorySkills: deps.factorySkills,
       sourceControlStorage: githubStorage,
       ensureSourceControlReady: githubRegistration?.ensureReady,
     }).routes(),

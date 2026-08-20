@@ -72,6 +72,7 @@ import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
 import { hydrateSessionMemorySettings } from './session/memory-settings-hydration.js';
 import { hydrateSessionModelPack } from './session/model-pack-hydration.js';
+import { loadFactorySkillCatalog } from './skills/catalog.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
 import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
@@ -372,6 +373,7 @@ export class MastraFactory {
     }
     const rules = this.#config.rules ?? builtInFactoryRules();
     assertFactoryRules(rules);
+    const factorySkills = await loadFactorySkillCatalog();
 
     // FactoryStorage owns every app-table domain and initializes them through
     // the same lifecycle as the backend connection.
@@ -672,6 +674,7 @@ export class MastraFactory {
           fleet,
           workspaceRegistry,
         }),
+        skills: factorySkills.skills,
         disableGithubSignals: true,
         // Memory settings live in the factory's `memory-settings` app table (per
         // org/user), so the host machine's TUI settings.json must not seed them.
@@ -786,10 +789,12 @@ export class MastraFactory {
             factoryReady,
             knowledgeEnabled,
             rules,
+            factorySkills,
             factoryTransitionService: transitionService,
             onFactoryRuntime: ({ transitionService: runtimeTransitionService, prepareBinding }) => {
               this.#dispatcher ??= new FactoryDecisionDispatcher({
                 controller,
+                factorySkills,
                 transitionService: runtimeTransitionService,
                 storage: storage.getDomain<WorkItemsStorage>('work-items'),
                 maxInFlight: this.#config.dispatcher?.maxInFlight,

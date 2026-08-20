@@ -4,8 +4,8 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getDynamicWorkspace } from '@mastra/code-sdk/agents/workspace';
 import { RequestContext } from '@mastra/core/request-context';
+import { mergeWorkspaceSkills, resolveAgentSkills } from '@mastra/core/skills';
 import { LocalSandbox } from '@mastra/core/workspace';
-import type { LocalFilesystem } from '@mastra/core/workspace';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -66,6 +66,7 @@ vi.mock('./integrations/github/sandbox', async importOriginal => ({
 import { MaterializeError } from './integrations/github/sandbox.js';
 import { injectGithubToken } from './integrations/github/token-refresh.js';
 import { SandboxFleet } from './sandbox/fleet.js';
+import { loadFactorySkillCatalog } from './skills/catalog.js';
 import {
   checkpointNameForSession,
   createWorkspaceFactory,
@@ -264,7 +265,7 @@ describe('getFactoryWorkspace', () => {
     expect(checkpointNameForSession('session-a')).not.toBe(checkpointNameForSession('session-b'));
   });
 
-  it('keeps Factory and default workspace cache identities separate', async () => {
+  it('falls through to the plain dynamic workspace for non-session resolution', async () => {
     const projectPath = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-web-factory-cache-'));
     tempDirs.push(projectPath);
     const requestContext = createRequestContext(projectPath);
@@ -272,9 +273,11 @@ describe('getFactoryWorkspace', () => {
     const defaultWorkspace = await getDynamicWorkspace({ requestContext });
     const factoryWorkspace = await getFactoryWorkspace({ requestContext });
 
+    // Bundled Factory skills are agent-owned inline skills now, so the
+    // non-session Factory path no longer needs a synthetic skill identity —
+    // it resolves the same dynamic workspace as the default resolver.
     expect(defaultWorkspace.id).toBe(`mastra-code-workspace-${projectPath}`);
-    expect(factoryWorkspace.id).toBe(`mastra-code-workspace-${projectPath}-web-factory`);
-    expect(factoryWorkspace.id).not.toBe(defaultWorkspace.id);
+    expect(factoryWorkspace.id).toBe(defaultWorkspace.id);
   });
 
   it('keeps the reserved skill list aligned with packaged Factory assets', async () => {
@@ -530,7 +533,7 @@ describe('getFactoryWorkspace', () => {
     expect(phase3).toContain('env -u GH_TOKEN -u GITHUB_TOKEN pnpm --filter <pkg> test');
   });
 
-  it('adds read-only Web Factory skills and keeps them authoritative over project shadows', async () => {
+  it('keeps agent-owned Factory skills authoritative over project shadows through the real merge path', async () => {
     const projectPath = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-web-factory-skills-'));
     tempDirs.push(projectPath);
     const shadowDir = path.join(projectPath, '.mastracode', 'skills', 'factory-triage');
@@ -540,22 +543,25 @@ describe('getFactoryWorkspace', () => {
       '---\nname: factory-triage\ndescription: Project shadow\n---\n\n# Shadowed Project Skill',
     );
 
+    // Bundled skills are agent-owned inline skills; project checkouts can
+    // still ship a skill with a Factory name, but the agent/workspace merge
+    // (agent-level wins name collisions) keeps the bundled definition
+    // authoritative — no workspace-level source filtering involved.
+    const catalog = await loadFactorySkillCatalog();
+    const agentSkills = resolveAgentSkills([...catalog.skills]);
     const workspace = await getFactoryWorkspace({ requestContext: createRequestContext(projectPath) });
-    const configureRules = await workspace.skills?.get('configure-factory-rules');
-    const factoryTriage = await workspace.skills?.get('factory-triage');
-    const factoryReview = await workspace.skills?.get('factory-review');
-    const filesystem = workspace.filesystem as LocalFilesystem;
+    await workspace.skills?.maybeRefresh();
 
-    expect(workspace.id).toContain('-web-factory');
-    expect(configureRules?.instructions).toContain('# Configure Factory Rules');
-    expect(factoryTriage?.instructions).toContain('# Factory Triage');
-    expect(factoryTriage?.instructions).not.toContain('# Shadowed Project Skill');
-    expect(factoryReview?.instructions).toContain('# Factory Review');
-    expect(filesystem.allowedPaths).not.toContain('/__mastracode_factory_skills__');
-    await expect(filesystem.writeFile(path.join(factoryTriage!.path, 'SKILL.md'), 'mutated')).rejects.toMatchObject({
-      name: 'PermissionError',
-      code: 'EACCES',
-    });
+    // The project shadow is a real repository skill on the workspace side.
+    const workspaceTriage = await workspace.skills?.get('factory-triage');
+    expect(workspaceTriage?.instructions).toContain('# Shadowed Project Skill');
+
+    const { merged } = await mergeWorkspaceSkills(agentSkills, workspace.skills!);
+    const mergedTriage = await merged.get('factory-triage');
+    expect(mergedTriage?.instructions).toContain('# Factory Triage');
+    expect(mergedTriage?.instructions).not.toContain('# Shadowed Project Skill');
+    const mergedReview = await merged.get('factory-review');
+    expect(mergedReview?.instructions).toContain('# Factory Review');
   });
 });
 
@@ -655,42 +661,114 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.sessions.find(session => session.id === 'session-b')?.sandboxWorkdir).toBe(workdirB);
   });
 
-  it('resolves bundled Factory skills without waiting on sandbox materialization (kickoff path stays lazy)', async () => {
+  it('resolves an empty workspace skill catalog without waiting on sandbox materialization (kickoff stays lazy)', async () => {
     const { resolver } = await createLocalFactory();
     addProject();
     addSession({ id: 'session-a' });
     // Session start fires a background warm-up, so materialization *starts*;
-    // the guarantee under test is that kickoff skill resolution never awaits
-    // it. Make provisioning hang forever: skill resolution must still finish.
+    // the guarantee under test is that workspace skill discovery never awaits
+    // it. Make provisioning hang forever: discovery must still finish.
     mocks.ensureSandbox.mockImplementationOnce(() => new Promise(() => {}) as any);
 
     const workspace = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') }))!;
     await workspace.skills?.maybeRefresh();
-    const review = await workspace.skills?.get('factory-review');
+    const listed = await workspace.skills?.list();
 
-    expect(review?.instructions).toContain('# Factory Review');
-    // The repo checkout never happened, so project skill roots were guarded
-    // (reported empty) instead of forcing the sandbox to exist.
+    // Repository skill roots do not exist before the checkout does, so the
+    // dynamic path resolver reports none and discovery completes immediately
+    // with an empty catalog. Bundled Factory skills are agent-owned inline
+    // skills and are deliberately NOT part of the workspace catalog.
+    expect(listed).toEqual([]);
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
     expect(mocks.materializeRepo).not.toHaveBeenCalled();
   });
 
-  it('delegates project skill roots to the sandbox once it is materialized', async () => {
-    const { resolver } = await createLocalFactory();
+  /**
+   * Resolve a session workspace with the session workdir already pinned into
+   * controller state, so resolution does NOT fire the background sandbox
+   * warm-up. This gives the tests below deterministic control over when
+   * materialization happens (only their own sandbox operation triggers it).
+   */
+  async function resolveWithoutWarmup(resolver: (args: any) => Promise<any>, root: string, sessionId: string) {
+    const requestContext = createGithubRequestContext('project-1', sessionId);
+    await (requestContext.get('controller') as any).setState({
+      projectPath: path.join(root, 'github-sessions', 'octocat', 'hello', sessionId),
+    });
+    return (await resolver({ requestContext }))!;
+  }
+
+  it('exposes repository skill roots and rescans in the background after materialization', async () => {
+    const { root, resolver } = await createLocalFactory();
     addProject();
     addSession({ id: 'session-a' });
 
-    const workspace = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') }))!;
-    // Kickoff-order discovery: initialize skills first (project roots guarded),
+    const workspace = await resolveWithoutWarmup(resolver, root, 'session-a');
+    // Kickoff-order discovery: initialize skills first (no repository roots),
     // then materialize the sandbox the way a first real operation would.
     await workspace.skills?.maybeRefresh();
+    const maybeRefreshSpy = vi.spyOn(workspace.skills!, 'maybeRefresh');
     await (workspace as any).sandbox.getInfo();
     const sandbox = await mocks.ensureSandbox.mock.results[0]!.value;
-    sandbox.executeCommand.mockClear();
 
-    // With the sandbox live, the guarded fallback must pass skill discovery
-    // through to the checkout instead of reporting empty roots.
-    await workspace.skills?.refresh();
-    expect(sandbox.executeCommand).toHaveBeenCalled();
+    // Materialization triggers exactly one background maybeRefresh (never a
+    // blocking one); it re-resolves the dynamic paths, sees the transition to
+    // the repository roots, and scans them through the live sandbox.
+    await vi.waitFor(() => expect(maybeRefreshSpy).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(sandbox.executeCommand).toHaveBeenCalled());
+  });
+
+  it('logs a failed post-materialization rescan and lets a later refresh succeed', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const { root, resolver } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+
+      const workspace = await resolveWithoutWarmup(resolver, root, 'session-a');
+      const maybeRefreshSpy = vi
+        .spyOn(workspace.skills!, 'maybeRefresh')
+        .mockRejectedValueOnce(new Error('scan failed'));
+      await (workspace as any).sandbox.getInfo();
+
+      await vi.waitFor(() =>
+        expect(warn).toHaveBeenCalledWith(
+          '[Mastra Factory] Post-materialization skill refresh failed',
+          expect.objectContaining({ sessionId: 'session-a', error: expect.stringContaining('scan failed') }),
+        ),
+      );
+      // The failure is logged, never thrown, and the guaranteed retry path
+      // (the next maybeRefresh, e.g. SkillsProcessor step 0) still works.
+      expect(maybeRefreshSpy).toHaveBeenCalledTimes(1);
+      await expect(workspace.skills!.maybeRefresh()).resolves.toBeUndefined();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('keeps a discovery started before materialization on the pre-materialization path set', async () => {
+    const { root, resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    const workspace = await resolveWithoutWarmup(resolver, root, 'session-a');
+    // Start discovery while unmaterialized and kick off materialization
+    // concurrently. The discovery resolves its dynamic paths (empty) within a
+    // few microtasks, long before the materialization pipeline's many awaited
+    // steps complete, so the scan is pinned to the pre-materialization set.
+    const inFlight = workspace.skills!.maybeRefresh();
+    const materializing = (workspace as any).sandbox.getInfo();
+    await inFlight;
+
+    // The pinned scan completed against the empty set without waiting on (or
+    // being switched by) the concurrent materialization.
+    expect(await workspace.skills!.list()).toEqual([]);
+
+    await materializing;
+    // A fresh maybeRefresh re-resolves the dynamic paths and scans the
+    // repository roots through the now-live sandbox.
+    const sandbox = await mocks.ensureSandbox.mock.results[0]!.value;
+    await workspace.skills!.maybeRefresh();
+    await vi.waitFor(() => expect(sandbox.executeCommand).toHaveBeenCalled());
   });
 
   it('opens the session for a session-shaped auth user, whose org lives on the session half', async () => {
@@ -1353,7 +1431,7 @@ describe('GitHub session workspace preparation', () => {
       }),
     ).rejects.toThrow('runtime injection failed');
 
-    expect(removeWorkspace).toHaveBeenCalledWith('mfw-project-1-session-a-web-factory');
+    expect(removeWorkspace).toHaveBeenCalledWith('mfw-project-1-session-a');
     expect(destroy).toHaveBeenCalled();
     expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
   });
@@ -1693,7 +1771,7 @@ describe('GitHub session workspace preparation', () => {
 
     const result = await workspace({ requestContext: createRequestContext(projectPath) });
 
-    expect(result.id).toBe(`mastra-code-workspace-${projectPath}-web-factory`);
+    expect(result.id).toBe(`mastra-code-workspace-${projectPath}`);
     expect(mocks.ensureSandbox).not.toHaveBeenCalled();
   });
 
@@ -1705,7 +1783,7 @@ describe('GitHub session workspace preparation', () => {
 
     const result = await workspace({ requestContext: createUnscopedGithubRequestContext('project-1', projectPath) });
 
-    expect(result.id).toBe(`mastra-code-workspace-${projectPath}-web-factory`);
+    expect(result.id).toBe(`mastra-code-workspace-${projectPath}`);
     expect(mocks.ensureSandbox).not.toHaveBeenCalled();
     expect(mocks.materializeRepo).not.toHaveBeenCalled();
   });
@@ -1745,11 +1823,11 @@ describe('GitHub session workspace preparation', () => {
         mastra: mastra as any,
       });
 
-      expect(built.id).toBe('mfw-project-1-session-a-web-factory');
+      expect(built.id).toBe('mfw-project-1-session-a');
       expect(mastra.addWorkspace).toHaveBeenCalledTimes(1);
       expect(mastra.addWorkspace).toHaveBeenCalledWith(
         built,
-        'mfw-project-1-session-a-web-factory',
+        'mfw-project-1-session-a',
         expect.objectContaining({ source: 'mastra' }),
       );
     });
@@ -1765,7 +1843,7 @@ describe('GitHub session workspace preparation', () => {
         mastra: mastra as any,
       });
 
-      expect(mastra.getWorkspaceById('mfw-project-1-session-a-web-factory')).toBe(built);
+      expect(mastra.getWorkspaceById('mfw-project-1-session-a')).toBe(built);
     });
 
     it('short-circuits on the second call for the same session without re-registering', async () => {
@@ -1807,7 +1885,7 @@ describe('GitHub session workspace preparation', () => {
         mastra: mastra as any,
       });
 
-      expect(mastra.removeWorkspace).toHaveBeenCalledWith('mfw-project-1-session-a-web-factory');
+      expect(mastra.removeWorkspace).toHaveBeenCalledWith('mfw-project-1-session-a');
       expect(mocks.ensureSandbox).toHaveBeenCalledTimes(2);
       expect(mocks.runWorktreeSetup).toHaveBeenCalledTimes(2);
     });
@@ -1858,7 +1936,7 @@ describe('GitHub session workspace preparation', () => {
       finishMaterialization();
 
       await expect(opening).rejects.toThrow('retired during workspace materialization');
-      expect(mastra.removeWorkspace).toHaveBeenCalledWith('mfw-project-1-session-a-web-factory');
+      expect(mastra.removeWorkspace).toHaveBeenCalledWith('mfw-project-1-session-a');
       expect(mastra.workspaces.size).toBe(0);
       // Retirement mid-materialization must not leave a live sandbox binding
       // behind: the just-built sandbox is torn down (releasing the binding

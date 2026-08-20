@@ -2,10 +2,14 @@ import type { Skill } from '@mastra/core/workspace';
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createFactorySkillCatalog, loadFactorySkillCatalog } from '../skills/catalog.js';
 import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory.js';
 import { SkillRoutes } from './skills.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 import type { TestAuthUser } from './test-utils.js';
+
+const factorySkills = createFactorySkillCatalog([]);
+const bundledFactorySkills = await loadFactorySkillCatalog();
 
 const skill: Skill = {
   name: 'understand-pr',
@@ -70,6 +74,7 @@ function createHarness(
       auth: fakeRouteAuth(),
       controllerId: 'code',
       controller: { getSessionByResource } as never,
+      factorySkills,
       authorizeSessionAddress,
     }).routes(),
   );
@@ -304,6 +309,7 @@ describe('workspace skill invocation route', () => {
         auth: fakeRouteAuth(),
         controllerId: 'code',
         controller: { getSessionByResource } as never,
+        factorySkills,
         sourceControlStorage,
       }).routes(),
     );
@@ -440,6 +446,7 @@ describe('factory skills catalog route', () => {
         auth: fakeRouteAuth({ enabled: options.authEnabled ?? true }),
         controllerId: 'code',
         controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+        factorySkills: bundledFactorySkills,
       }).routes(),
     );
     return app;

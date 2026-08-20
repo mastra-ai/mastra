@@ -4,7 +4,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import { listFactorySkills } from '../skills/catalog.js';
+import type { FactorySkillCatalog } from '../skills/catalog.js';
 import { resolveSkillInvocation, SkillInvocationError } from '../skills/service.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { RouteDependencies } from './route.js';
@@ -34,6 +34,7 @@ interface SessionAuthorizationResult {
 export interface SkillRoutesDeps extends RouteDependencies {
   controllerId: string;
   controller: Pick<AgentController<MastraCodeState>, 'getSessionByResource'>;
+  factorySkills: FactorySkillCatalog;
   sourceControlStorage?: SourceControlStorageHandle;
   ensureSourceControlReady?: () => Promise<void>;
   authorizeSessionAddress?: (
@@ -135,7 +136,7 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
   }
 
   routes(): ApiRoute[] {
-    const { controllerId, controller, authorizeSessionAddress: customAuthorize } = this.deps;
+    const { controllerId, controller, factorySkills, authorizeSessionAddress: customAuthorize } = this.deps;
     const authorize =
       customAuthorize ??
       ((context: Context, address: { resourceId: string; projectRepositoryId?: string; scope?: string }) =>
@@ -167,7 +168,7 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
       }
 
       try {
-        const resolved = await resolveSkillInvocation(controller, body);
+        const resolved = await resolveSkillInvocation(controller, factorySkills, body);
         if (dispatch) {
           void resolved.session.sendMessage({ content: resolved.message }).catch((error: unknown) => {
             console.error('Workspace skill dispatch failed after acceptance', error);
@@ -191,7 +192,7 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
           return c.json({ error: 'unauthorized', message: 'Authentication required.' }, 401);
         }
       }
-      return c.json({ skills: await listFactorySkills() });
+      return c.json({ skills: factorySkills.list });
     };
 
     return [

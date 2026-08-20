@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { hostname } from 'node:os';
 import path from 'node:path';
 
-import type { Agent } from '@mastra/core/agent';
+import type { Agent, AgentConfig } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
 import type {
   IntervalHandler,
@@ -243,6 +243,8 @@ export interface MastraCodeConfig {
   modes?: AgentControllerMode[];
   /** Override or extend subagent definitions. Default: explore/plan/execute */
   subagents?: AgentControllerSubagent[];
+  /** Agent-owned skills available independently of the request-scoped workspace. */
+  skills?: AgentConfig['skills'];
   /** Extra tools merged into the dynamic tool set. Can be a static record or a (sync or async) function that receives requestContext. */
   extraTools?:
     | Record<string, ToolLike | undefined>
@@ -832,6 +834,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // workspace. An explicit `undefined` is required: the factory only builds a
     // default when the `workspace` key is absent.
     workspace: undefined,
+    skills: config?.skills,
     instructions: getDynamicInstructions,
     // `settingsPath` matches the source `createMastraCode()` reads from so the
     // per-mode thinking defaults resolve against the same config file.
@@ -858,7 +861,13 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         },
       },
     },
-    tools: createDynamicTools(mcpManager, config?.extraTools, config?.disabledTools, storage, pluginTools),
+    tools: createDynamicTools(
+      mcpManager,
+      config?.extraTools,
+      config?.disabledTools,
+      storage,
+      pluginTools,
+    ) as AgentConfig['tools'],
     hooks: createToolHooks(hookManager, config?.postToolObserver),
     scorers: {
       outcome: {

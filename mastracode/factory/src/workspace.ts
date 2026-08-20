@@ -1,14 +1,12 @@
 import { existsSync } from 'node:fs';
-import path, { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 import { SandboxFilesystem } from '@mastra/code-sdk/agents/sandbox-filesystem';
 import { MASTRACODE_WORKSPACE_TOOLS } from '@mastra/code-sdk/agents/tool-availability';
 import { getDynamicWorkspace } from '@mastra/code-sdk/agents/workspace';
-import type { WorkspaceSkillExtension } from '@mastra/code-sdk/agents/workspace';
 import { DEFAULT_CONFIG_DIR } from '@mastra/code-sdk/constants';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
-import { LocalSandbox, LocalSkillSource, Workspace } from '@mastra/core/workspace';
+import { LocalSandbox, Workspace } from '@mastra/core/workspace';
 import type { SkillSource, SkillSourceEntry, SkillSourceStat } from '@mastra/core/workspace';
 import { getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
 import type { MastraFactorySandboxConfig } from './factory.js';
@@ -79,84 +77,6 @@ export function isMissingWorkdirError(error: unknown, workdir: string | undefine
   return !existsSync(workdir);
 }
 
-const bundleDirectory = dirname(fileURLToPath(import.meta.url));
-const bundledFactorySkillsPath = join(bundleDirectory, 'factory-skills');
-export const FACTORY_SKILLS_SOURCE_PATH =
-  [
-    // Deploy bundle: the consumer copies `factory-skills/` next to the built
-    // server module (e.g. via its public/ dir).
-    bundledFactorySkillsPath,
-    // Package layout: `dist/../factory-skills` (also `src/../factory-skills`
-    // when running tests against sources).
-    join(bundleDirectory, '..', 'factory-skills'),
-    // Consumer repo running from its package root before a build.
-    join(process.cwd(), 'src', 'mastra', 'public', 'factory-skills'),
-  ].find(existsSync) ?? bundledFactorySkillsPath;
-const FACTORY_SKILLS_MOUNT = path.resolve(path.parse(process.cwd()).root, '__mastracode_factory_skills__');
-export const FACTORY_SKILL_NAMES = new Set([
-  'configure-factory-rules',
-  'factory-complete-issue',
-  'factory-plan',
-  'factory-rereview',
-  'factory-review',
-  'factory-triage',
-]);
-
-class FactorySkillSource implements SkillSource {
-  readonly #factorySource = new LocalSkillSource({ basePath: FACTORY_SKILLS_SOURCE_PATH });
-  readonly #fallbackSkillRoots: Set<string>;
-
-  constructor(
-    readonly fallback: SkillSource,
-    fallbackSkillRoots: string[],
-  ) {
-    this.#fallbackSkillRoots = new Set(fallbackSkillRoots.map(skillPath => path.normalize(skillPath)));
-  }
-
-  #isFactoryPath(skillPath: string): boolean {
-    const normalized = path.normalize(skillPath);
-    return normalized === FACTORY_SKILLS_MOUNT || normalized.startsWith(`${FACTORY_SKILLS_MOUNT}${path.sep}`);
-  }
-
-  #factoryPath(skillPath: string): string {
-    return path.relative(FACTORY_SKILLS_MOUNT, path.normalize(skillPath));
-  }
-
-  exists(skillPath: string): Promise<boolean> {
-    return this.#isFactoryPath(skillPath)
-      ? this.#factorySource.exists(this.#factoryPath(skillPath))
-      : this.fallback.exists(skillPath);
-  }
-
-  stat(skillPath: string): Promise<SkillSourceStat> {
-    return this.#isFactoryPath(skillPath)
-      ? this.#factorySource.stat(this.#factoryPath(skillPath))
-      : this.fallback.stat(skillPath);
-  }
-
-  readFile(skillPath: string): Promise<string | Buffer> {
-    return this.#isFactoryPath(skillPath)
-      ? this.#factorySource.readFile(this.#factoryPath(skillPath))
-      : this.fallback.readFile(skillPath);
-  }
-
-  async readdir(skillPath: string): Promise<SkillSourceEntry[]> {
-    if (this.#isFactoryPath(skillPath)) {
-      return this.#factorySource.readdir(this.#factoryPath(skillPath));
-    }
-    const entries = await this.fallback.readdir(skillPath);
-    if (this.#fallbackSkillRoots.has(path.normalize(skillPath))) {
-      return entries.filter(entry => !FACTORY_SKILL_NAMES.has(entry.name));
-    }
-    return entries;
-  }
-
-  realpath(skillPath: string): Promise<string> {
-    if (this.#isFactoryPath(skillPath)) return Promise.resolve(path.normalize(skillPath));
-    return this.fallback.realpath ? this.fallback.realpath(skillPath) : Promise.resolve(skillPath);
-  }
-}
-
 function skillSourceEnoent(skillPath: string): Error {
   const error = new Error(`ENOENT: no such file or directory, '${skillPath}'`) as Error & { code: string };
   error.code = 'ENOENT';
@@ -170,8 +90,8 @@ function skillSourceEnoent(skillPath: string): Error {
  * responds); without this guard the first project-root read would hit the lazy
  * sandbox handle and force full provisioning + repo materialization. While the
  * sandbox is unmaterialized, project skill roots simply appear empty — bundled
- * Factory skills resolve from local disk via `FactorySkillSource`. Once the
- * sandbox exists, every call delegates straight through.
+ * Factory skills are agent-owned inline skills and never touch this source.
+ * Once the sandbox exists, every call delegates straight through.
  */
 class UnmaterializedAwareSkillSource implements SkillSource {
   constructor(
@@ -202,12 +122,6 @@ class UnmaterializedAwareSkillSource implements SkillSource {
     return this.fallback.realpath ? this.fallback.realpath(skillPath) : Promise.resolve(skillPath);
   }
 }
-
-const factorySkillExtension: WorkspaceSkillExtension = {
-  id: 'web-factory',
-  paths: [FACTORY_SKILLS_MOUNT],
-  createSource: (fallback, fallbackSkillRoots) => new FactorySkillSource(fallback, fallbackSkillRoots),
-};
 
 type DynamicWorkspaceContext = Parameters<typeof getDynamicWorkspace>[0];
 
@@ -292,7 +206,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   const constructedWorkspaces = new Map<string, Workspace>();
 
   return async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
-    const effectiveSkillExtension = skillExtension ?? factorySkillExtension;
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
     const session =
       ctx?.resourceId && github ? await github.sourceControlStorage.sessions.getBySessionId(ctx.resourceId) : null;
@@ -306,7 +219,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         // every message.
         return undefined;
       }
-      return getDynamicWorkspace({ requestContext, mastra, skillExtension: effectiveSkillExtension });
+      return getDynamicWorkspace({ requestContext, mastra, skillExtension });
     }
 
     const user = getFactoryAuthUserFromContext(requestContext);
@@ -382,8 +295,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       },
     };
 
-    const extensionId = effectiveSkillExtension ? `-${effectiveSkillExtension.id}` : '';
-    const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectRepository.id}-${session.id}${extensionId}`;
+    const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectRepository.id}-${session.id}`;
     const workspaceGeneration = workspaceRegistry.generation(session.sessionId);
     const configDir = sandboxConfig.workdir ?? DEFAULT_CONFIG_DIR;
 
@@ -700,11 +612,20 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         inflight.then(
           sb => {
             materializedSandboxes.set(workspaceId, sb);
-            // Project skill roots (.claude/skills etc.) were reported empty by
-            // the unmaterialized-source guard during discovery; rescan now that
-            // the checkout exists so repo-local skills become visible without
-            // waiting for the maybeRefresh cooldown. Fire-and-forget.
-            void workspace.skills?.refresh().catch(() => {});
+            // The dynamic path resolver returned no repository roots while the
+            // sandbox was unmaterialized; `maybeRefresh()` re-resolves the
+            // dynamic paths, sees the transition to the repository roots, and
+            // rescans in the background. `refresh()` alone would reuse the old
+            // (empty) resolved path set. Failures are logged — the guaranteed
+            // retry is the SkillsProcessor step-0 `maybeRefresh()` on the next
+            // agent turn.
+            void workspace.skills?.maybeRefresh().catch(error => {
+              console.warn('[Mastra Factory] Post-materialization skill refresh failed', {
+                workspaceId,
+                sessionId: session.sessionId,
+                error: error instanceof Error ? error.message.slice(-2000) : String(error),
+              });
+            });
           },
           () => {},
         );
@@ -801,19 +722,21 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const guardedSkillFallback = new UnmaterializedAwareSkillSource(filesystem, () =>
       materializedSandboxes.has(workspaceId),
     );
-    const skillPaths = [...(effectiveSkillExtension?.paths ?? []), ...projectSkillPaths];
     const workspace = new Workspace({
       id: workspaceId,
       name: 'Mastra Code Factory Session Workspace',
       filesystem,
       sandbox: lazySandbox as unknown as ConstructorParameters<typeof Workspace>[0]['sandbox'],
       tools: MASTRACODE_WORKSPACE_TOOLS,
-      skills: skillPaths,
-      // Project skill roots live in the sandbox checkout; guard them so skill
-      // discovery before materialization (e.g. kickoff skill resolution in the
-      // start coordinator) never forces sandbox provisioning.
-      skillSource:
-        effectiveSkillExtension?.createSource(guardedSkillFallback, projectSkillPaths) ?? guardedSkillFallback,
+      // Repository skill roots live in the sandbox checkout; before the
+      // sandbox materializes they do not exist, so the dynamic resolver
+      // reports no paths at all. Discovery on an unmaterialized workspace
+      // therefore completes immediately with an empty catalog — bundled
+      // Factory skills are agent-owned inline skills and never depend on
+      // this workspace. After materialization the resolver exposes the
+      // repository roots and `maybeRefresh()` picks up the transition.
+      skills: () => (materializedSandboxes.has(workspaceId) ? projectSkillPaths : []),
+      skillSource: guardedSkillFallback,
     });
     // Register with the Mastra instance so sync HTTP handlers that resolve
     // the workspace via `mastra.getWorkspaceById(id)` (file tree, permissions

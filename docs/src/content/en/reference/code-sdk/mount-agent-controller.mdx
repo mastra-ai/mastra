@@ -80,6 +80,13 @@ const { controller } = await mountAgentControllerOnMastra({ mastra })
     defaultValue: 'explore/plan/execute',
   },
   {
+    name: 'skills',
+    type: 'AgentConfig["skills"]',
+    description:
+      'Agent-owned skills available independently of the request-scoped workspace. Accepts static or resolver-based skill inputs.',
+    isOptional: true,
+  },
+  {
     name: 'extraTools',
     type: 'Record<string, ToolAction> | (ctx) => Record<string, ToolAction>',
     description: 'Extra tools merged into the dynamic tool set.',

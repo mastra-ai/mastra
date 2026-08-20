@@ -470,6 +470,41 @@ describe('createMastraCode', () => {
     expect(agentControllerConfig?.subagents).toEqual([subagent]);
   }, 10_000);
 
+  it('forwards static agent skills without replacing request-scoped workspace wiring', async () => {
+    const { createMastraCode } = await import('../index.js');
+    const skills = ['./skills/review'];
+
+    await createMastraCode({ skills });
+
+    const codeAgentConfig = agentConstructorMock.mock.calls[0]?.[0] as
+      | { skills?: unknown; workspace?: unknown }
+      | undefined;
+    expect(codeAgentConfig?.skills).toBe(skills);
+    expect(codeAgentConfig?.workspace).toBeUndefined();
+  });
+
+  it('forwards a resolver-based agent skills input unchanged', async () => {
+    const { createMastraCode } = await import('../index.js');
+    const skills = vi.fn(() => ['./skills/review']);
+
+    await createMastraCode({ skills });
+
+    const codeAgentConfig = agentConstructorMock.mock.calls[0]?.[0] as { skills?: unknown } | undefined;
+    expect(codeAgentConfig?.skills).toBe(skills);
+  });
+
+  it('leaves agent skills undefined when omitted', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    const codeAgentConfig = agentConstructorMock.mock.calls[0]?.[0] as
+      | { skills?: unknown; workspace?: unknown }
+      | undefined;
+    expect(codeAgentConfig?.skills).toBeUndefined();
+    expect(codeAgentConfig?.workspace).toBeUndefined();
+  });
+
   it('uses configured mastra gateway settings when creating the MastraCode gateway', async () => {
     const settings = createMockSettings();
     settings.memoryGateway = { baseUrl: 'https://gateway.example.com/v1' };
