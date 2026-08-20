@@ -885,11 +885,17 @@ export const mastra = new Mastra({
   },
 })
 
-process.once('SIGTERM', async () => {
+let shuttingDown = false
+const shutdown = async () => {
+  if (shuttingDown) return
+  shuttingDown = true
   // custom shutdown coordination
   await mastra.shutdown()
   process.exit(0)
-})
+}
+
+process.once('SIGINT', shutdown)
+process.once('SIGTERM', shutdown)
 ```
 
 Be aware of these caveats:
