@@ -1,8 +1,8 @@
 ---
-title: "Filesystem"
+title: 'Filesystem'
 description: Give agents access to local or remote files and persistent sandbox storage.
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 import { IntegrationGrid } from '@site/src/components/integrations/grid';
@@ -13,10 +13,26 @@ A filesystem gives an agent tools for reading, writing, listing, and [searching]
 
 Configure files in two ways:
 
-- `filesystem` accepts one filesystem provider or a `CompositeFilesystem` that you create yourself.
-- `mounts` creates a `CompositeFilesystem` from path-prefixed providers. When the workspace also has a static sandbox, Mastra attempts to mount each provider at its configured path inside the sandbox so commands can access the same files. Remote sandbox mounts typically use Filesystem in Userspace (FUSE).
+- [Direct filesystem access](#direct-filesystem-access) uses `filesystem` with one filesystem provider or a [`CompositeFilesystem`](#manual-composition) that you create yourself.
+- [Mounts](#mounts) uses `mounts` to create a `CompositeFilesystem` from path-prefixed providers. When the workspace also has a static sandbox, Mastra attempts to mount each provider at its configured path inside the sandbox so commands can access the same files. Remote sandbox mounts typically use Filesystem in Userspace (FUSE).
 
-Both configurations give the agent file tools. Sandbox commands can only see a provider when the sandbox can mount it successfully. Configure either `filesystem` or `mounts`, not both. Configuring both throws a `WorkspaceError` with the code `INVALID_CONFIG`.
+Configure either `filesystem` or `mounts`, not both. Configuring both throws a `WorkspaceError` with the code `INVALID_CONFIG`.
+
+Both configurations give the agent file tools. Sandbox commands can only see a provider when the sandbox can mount it successfully.
+
+Configuring a filesystem gives the agent these tools:
+
+| Tool | Does |
+| - | - |
+| `read_file` | Reads all or part of a file. |
+| `write_file` | Creates or overwrites a file. |
+| `edit_file` | Replaces matching text in an existing file. |
+| `list_files` | Lists files and directories. |
+| `delete` | Deletes a file or directory. |
+| `file_stat` | Returns metadata about a file or directory. |
+| `mkdir` | Creates a directory and any missing parent directories. |
+| `grep` | Searches file contents with a regular expression. |
+| `ast_edit` | Applies structural code edits. Available when `@ast-grep/napi` is installed. |
 
 ## Supported filesystems
 

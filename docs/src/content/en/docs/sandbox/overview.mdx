@@ -1,8 +1,8 @@
 ---
-title: "Sandboxes"
+title: 'Sandboxes'
 description: Give agents an isolated environment for working with files and running commands.
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 import { IntegrationGrid } from '@site/src/components/integrations/grid';
@@ -11,11 +11,11 @@ import { IntegrationGrid } from '@site/src/components/integrations/grid';
 
 {/* vale ai-tells.VerbTricolon = NO */}
 
-A sandbox gives an agent an execution environment where it can run commands, execute code, install dependencies, and manage processes. Isolating that environment limits what agent-run code can access on your host, including files, credentials, and the network.
+A sandbox gives your agent an environment where it can run commands, execute code, install dependencies, and manage processes. Sandboxes can isolate potentially risky agent-run code from your host, and they can also provide a place to run longer-lived or more resource-intensive work outside your application process.
 
 {/* vale ai-tells.VerbTricolon = YES */}
 
-[Filesystems](/docs/sandbox/filesystem) give the agent files it can read, write, and search. They can provide a knowledge base for the agent, or be shared with a sandbox so commands can work with the same files and keep data beyond the sandbox's lifetime.
+[Filesystems](/docs/sandbox/filesystem) give the agent files it can read, write, and [search](/docs/sandbox/search). They can provide a knowledge base for your agent, or be shared with a sandbox so commands can work with the same files and keep data beyond the sandbox's lifetime.
 
 ## When to use sandboxes
 
@@ -95,7 +95,7 @@ See the [sandbox tools reference](/reference/workspace/workspace-class#sandbox-t
 
 {/* vale ai-tells.VerbTricolon = NO */}
 
-Authored tools can resolve the live sandbox from their execution context. Use it to execute commands, install dependencies, process files, or spawn a long-running process.
+Authored runtime functions, including tools and workflow steps, can get the live sandbox from their execution context. Use it to execute commands, install dependencies, process files, or spawn a long-running process.
 
 {/* vale ai-tells.VerbTricolon = YES */}
 
@@ -251,7 +251,17 @@ Resolvers are incompatible with `mounts` and [`lsp: true`](/docs/sandbox/lsp), b
 
 ### Tool availability
 
-With a static sandbox, Mastra knows which capabilities the backend supports and only gives the agent the corresponding tools. With a [resolver-backed sandbox](#multi-tenant-sandboxes), the backend isn't known until a request runs, so Mastra initially makes all sandbox tools available. If the resolved backend doesn't support the tool the agent calls, the call fails with `SandboxFeatureNotSupportedError`.
+With a static sandbox, Mastra knows which capabilities the backend supports and only gives the agent the corresponding tools. Application code should also check that an optional capability is available before using it:
+
+```typescript
+const processManager = workspace.sandbox?.processes
+
+if (processManager) {
+  await processManager.spawn('pnpm dev')
+}
+```
+
+With a [resolver-backed sandbox](#multi-tenant-sandboxes), the backend isn't known until a request runs, so Mastra initially makes all sandbox tools available. If the resolved backend doesn't support the tool the agent calls, the call fails with `SandboxFeatureNotSupportedError`.
 
 ## Background processes
 
@@ -286,7 +296,7 @@ Who shares a sandbox depends on where you configure it and whether you use a res
 
 | Configuration | Who shares the sandbox |
 | - | - |
-| Mastra-level configuration | Agents that inherit the configuration from the Mastra instance use the same sandbox. |
+| Mastra-level configuration | Agents that inherit the configuration from the [`Mastra`](/reference/configuration) instance use the same sandbox. |
 | Agent-level configuration | Every request handled by that agent instance uses the same sandbox. |
 | Resource-scoped resolver | The resolver caches one sandbox for each resource ID. |
 | Thread-scoped resolver | A memory thread keeps its sandbox across requests in that thread. |
