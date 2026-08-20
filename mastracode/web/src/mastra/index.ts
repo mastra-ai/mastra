@@ -20,14 +20,14 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
-import { LocalSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
-import { InProcessSandboxAddressRegistry, PlatformSandbox } from '@mastra/platform-workspace';
+import { InProcessSandboxAddressRegistry } from '@mastra/platform-workspace';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
+import { hasPlatformSandboxEnv, selectSandboxConfig } from './sandbox-selection';
 import { MastraFactory } from '@mastra/factory';
 import { defaultFactoryRules } from '@mastra/factory/rules/defaults';
 import type { FactoryStageRuleContext } from '@mastra/factory/rules/types';
@@ -181,8 +181,7 @@ function localSandboxEnv(): Record<string, string> {
   return env;
 }
 
-const PLATFORM_SANDBOX_ENV_KEYS = ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID', 'MASTRA_PLATFORM_SECRET_KEY'] as const;
-const hasPlatformSandboxEnv = PLATFORM_SANDBOX_ENV_KEYS.every(key => Boolean(process.env[key]?.trim()));
+const platformSandboxConfigured = hasPlatformSandboxEnv(process.env);
 
 // Private-network exec: the workspace-proxy discovers each sandbox's private
 // IPv6 during `POST /v1/projects/:pid/sandbox` and returns it as an
@@ -192,17 +191,15 @@ const hasPlatformSandboxEnv = PLATFORM_SANDBOX_ENV_KEYS.every(key => Boolean(pro
 // network, falling back to the lease path when no address is registered or
 // a dial fails. Only constructed when `PlatformSandbox` is in play; a
 // `LocalSandbox` dev run has no sidecar and no need for the registry.
-const sandboxAddressRegistry = hasPlatformSandboxEnv ? new InProcessSandboxAddressRegistry() : undefined;
+const sandboxAddressRegistry = platformSandboxConfigured ? new InProcessSandboxAddressRegistry() : undefined;
 
-// Use PlatformSandbox only when its complete identity is configured. Otherwise
-// fall back to LocalSandbox for single-user development.
-const sandbox = hasPlatformSandboxEnv
-  ? new PlatformSandbox({ addressRegistry: sandboxAddressRegistry })
-  : new LocalSandbox({
-      workingDirectory:
-        process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
-      env: localSandboxEnv(),
-    });
+// Sandbox selection (Platform → E2B → Local) lives in sandbox-selection.ts.
+const sandboxConfig = selectSandboxConfig({
+  env: process.env,
+  localRoot: process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
+  localEnv: localSandboxEnv,
+  addressRegistry: sandboxAddressRegistry,
+});
 
 // One FactoryStorage backend powers agent storage, the factory app tables,
 // the distributed project lock, and better-auth. `DATABASE_URL` set →
@@ -287,14 +284,7 @@ export const factory = new MastraFactory({
   auth,
   integrations,
   rules: factoryRules,
-  sandbox: {
-    machine: sandbox,
-    // Remote checkout base (nested `owner/name` per repo). LocalSandbox ignores
-    // this in-sandbox path and uses its host workingDirectory instead.
-    workdir: process.env.MASTRACODE_SANDBOX_WORKDIR,
-    // Per-replica cap on concurrently provisioned sandboxes. Unset → unlimited.
-    maxSandboxes: positiveInt(process.env.MASTRACODE_MAX_SANDBOXES),
-  },
+  sandbox: sandboxConfig,
   // Per-replica cap on concurrent Factory background dispatches. Unset means
   // the dispatcher default; invalid and non-positive values are ignored.
   dispatcher: {
