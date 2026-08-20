@@ -506,3 +506,238 @@ describe('MastraSandbox Base Class', () => {
     });
   });
 });
+
+// =============================================================================
+// Start lifecycle wrap: coalescing, SandboxStartResult, bootstrap
+// =============================================================================
+
+/**
+ * Sandbox with a controllable start() impl and a fake in-VM filesystem for
+ * bootstrap sentinel probes. Records every executeCommand invocation.
+ */
+class LifecycleSandbox extends MastraSandbox {
+  readonly id = 'lifecycle-sandbox';
+  readonly name = 'LifecycleSandbox';
+  readonly provider = 'test';
+  status: ProviderStatus = 'pending';
+
+  implCalls = 0;
+  /** Sequence of executeCommand command strings. */
+  commands: Array<{ command: string; env?: Record<string, string> }> = [];
+  /** Fake VM files (sentinel storage). */
+  files = new Set<string>();
+  /** Exit code for the bootstrap command. */
+  bootstrapExitCode = 0;
+
+  startResult: { created: boolean } | undefined;
+  startError: Error | undefined;
+  startGate: Promise<void> | undefined;
+  statusDuringImpl: ProviderStatus | undefined;
+
+  constructor(options?: MastraSandboxOptions) {
+    super({ ...options, name: 'LifecycleSandbox' });
+  }
+
+  async start(): Promise<{ created: boolean } | void> {
+    this.implCalls += 1;
+    this.statusDuringImpl = this.status;
+    if (this.startGate) await this.startGate;
+    if (this.startError) throw this.startError;
+    return this.startResult;
+  }
+
+  async executeCommand(
+    command: string,
+    _args?: string[],
+    options?: { env?: NodeJS.ProcessEnv },
+  ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+    this.commands.push({ command, env: options?.env as Record<string, string> | undefined });
+    const sentinel = '$HOME/.mastra-bootstrapped';
+    if (command === `test -f "${sentinel}"`) {
+      return { exitCode: this.files.has(sentinel) ? 0 : 1, stdout: '', stderr: '' };
+    }
+    if (command === `touch "${sentinel}"`) {
+      this.files.add(sentinel);
+      return { exitCode: 0, stdout: '', stderr: '' };
+    }
+    // Anything else is treated as the bootstrap command.
+    return { exitCode: this.bootstrapExitCode, stdout: '', stderr: this.bootstrapExitCode === 0 ? '' : 'boom' };
+  }
+}
+
+describe('MastraSandbox start lifecycle wrap', () => {
+  it('routes direct start() through the wrapper (status transitions applied, result returned)', async () => {
+    const sandbox = new LifecycleSandbox();
+    sandbox.startResult = { created: true };
+
+    const result = await sandbox.start();
+
+    expect(result).toEqual({ created: true });
+    expect(sandbox.implCalls).toBe(1);
+    expect(sandbox.statusDuringImpl).toBe('starting');
+    expect(sandbox.status).toBe('running');
+  });
+
+  it('coalesces concurrent direct start() and _start() calls onto one attempt', async () => {
+    const sandbox = new LifecycleSandbox();
+    sandbox.startResult = { created: true };
+    let release!: () => void;
+    sandbox.startGate = new Promise<void>(resolve => (release = resolve));
+
+    const p1 = sandbox.start();
+    const p2 = sandbox.start();
+    const p3 = sandbox._start();
+    release();
+    const [r1, r2, r3] = await Promise.all([p1, p2, p3]);
+
+    expect(sandbox.implCalls).toBe(1);
+    // Joined callers share the attempt's result.
+    expect(r1).toEqual({ created: true });
+    expect(r2).toEqual({ created: true });
+    expect(r3).toEqual({ created: true });
+  });
+
+  it('does not latch failures: a failed start can be retried', async () => {
+    const sandbox = new LifecycleSandbox();
+    sandbox.startError = new Error('provider down');
+
+    await expect(sandbox.start()).rejects.toThrow('provider down');
+    expect(sandbox.status).toBe('error');
+
+    sandbox.startError = undefined;
+    sandbox.startResult = { created: false };
+    await sandbox.start();
+
+    expect(sandbox.implCalls).toBe(2);
+    expect(sandbox.status).toBe('running');
+  });
+
+  describe('bootstrap', () => {
+    const bootstrap = { command: 'echo bootstrap', env: { GIT_TOKEN: 'shhh' } };
+
+    it('created: true → runs bootstrap without a sentinel probe, writes sentinel after success', async () => {
+      const sandbox = new LifecycleSandbox({ bootstrap });
+      sandbox.startResult = { created: true };
+
+      await sandbox.start();
+
+      const cmds = sandbox.commands.map(c => c.command);
+      expect(cmds).toEqual(['echo bootstrap', 'touch "$HOME/.mastra-bootstrapped"']);
+      expect(sandbox.files.has('$HOME/.mastra-bootstrapped')).toBe(true);
+    });
+
+    it('created: false with sentinel present → bootstrap skipped', async () => {
+      const sandbox = new LifecycleSandbox({ bootstrap });
+      sandbox.startResult = { created: false };
+      sandbox.files.add('$HOME/.mastra-bootstrapped');
+
+      await sandbox.start();
+
+      expect(sandbox.commands.map(c => c.command)).toEqual(['test -f "$HOME/.mastra-bootstrapped"']);
+    });
+
+    it('created: false with sentinel ABSENT → bootstrap runs (failed-first-bootstrap reconnect case)', async () => {
+      const sandbox = new LifecycleSandbox({ bootstrap });
+      sandbox.startResult = { created: false };
+
+      await sandbox.start();
+
+      expect(sandbox.commands.map(c => c.command)).toEqual([
+        'test -f "$HOME/.mastra-bootstrapped"',
+        'echo bootstrap',
+        'touch "$HOME/.mastra-bootstrapped"',
+      ]);
+    });
+
+    it('void start result → sentinel probed; present → skipped', async () => {
+      const sandbox = new LifecycleSandbox({ bootstrap });
+      sandbox.files.add('$HOME/.mastra-bootstrapped');
+
+      await sandbox.start();
+
+      expect(sandbox.commands.map(c => c.command)).toEqual(['test -f "$HOME/.mastra-bootstrapped"']);
+    });
+
+    it('bootstrap failure → start() rejects, status error, sentinel not written, retry re-attempts', async () => {
+      const sandbox = new LifecycleSandbox({ bootstrap });
+      sandbox.startResult = { created: true };
+      sandbox.bootstrapExitCode = 1;
+
+      await expect(sandbox.start()).rejects.toThrow(/bootstrap command failed \(exit 1\)/);
+      expect(sandbox.status).toBe('error');
+      expect(sandbox.files.has('$HOME/.mastra-bootstrapped')).toBe(false);
+
+      // Reconnect after the failed attempt: provider reports created: false,
+      // sentinel is absent → bootstrap runs again and succeeds this time.
+      sandbox.startResult = { created: false };
+      sandbox.bootstrapExitCode = 0;
+      await sandbox.start();
+
+      expect(sandbox.status).toBe('running');
+      expect(sandbox.files.has('$HOME/.mastra-bootstrapped')).toBe(true);
+    });
+
+    it('bootstrap env reaches the command execution options only', async () => {
+      const sandbox = new LifecycleSandbox({ bootstrap });
+      sandbox.startResult = { created: true };
+
+      await sandbox.start();
+
+      const bootstrapCall = sandbox.commands.find(c => c.command === 'echo bootstrap');
+      expect(bootstrapCall?.env).toEqual({ GIT_TOKEN: 'shhh' });
+      // Sentinel write does not carry the env.
+      const touchCall = sandbox.commands.find(c => c.command.startsWith('touch'));
+      expect(touchCall?.env).toBeUndefined();
+    });
+
+    it('does not deadlock when bootstrap runs through the auto-created executeCommand (pm.spawn → ensureRunning)', async () => {
+      // No own executeCommand: the base auto-creates one from the process
+      // manager, whose spawn wrapper calls sandbox.ensureRunning(). Before the
+      // status-before-bootstrap ordering this would await its own start.
+      class PmLifecycleSandbox extends MastraSandbox {
+        readonly id = 'pm-lifecycle-sandbox';
+        readonly name = 'PmLifecycleSandbox';
+        readonly provider = 'test';
+        status: ProviderStatus = 'pending';
+        constructor() {
+          super({
+            name: 'PmLifecycleSandbox',
+            processes: new ExecuteCommandProcessManager('ok'),
+            bootstrap: { command: 'echo bootstrap' },
+          });
+        }
+        async start(): Promise<{ created: boolean }> {
+          return { created: true };
+        }
+      }
+
+      const sandbox = new PmLifecycleSandbox();
+      await expect(
+        Promise.race([
+          sandbox.start(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('deadlock: start() never resolved')), 2000)),
+        ]),
+      ).resolves.toEqual({ created: true });
+      expect(sandbox.status).toBe('running');
+    });
+  });
+
+  it('forwards created to the onStart hook', async () => {
+    const onStart = vi.fn();
+    const sandbox = new LifecycleSandbox({ onStart });
+    sandbox.startResult = { created: false };
+
+    await sandbox.start();
+
+    expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ created: false }));
+  });
+
+  it('onStart receives created: undefined when the provider does not report', async () => {
+    const onStart = vi.fn();
+    const sandbox = new LifecycleSandbox({ onStart });
+
+    await sandbox.start();
+
+    expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ created: undefined }));
+  });
+});

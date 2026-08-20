@@ -29,6 +29,8 @@ import type { WorkspaceFilesystem } from '../filesystem/filesystem';
 import type { MountResult } from '../filesystem/mount';
 import type { SandboxLifecycle } from '../lifecycle';
 
+export type { SandboxStartResult } from '../lifecycle';
+
 import type { MountManager } from './mount-manager';
 import type { SandboxProcessManager } from './process-manager';
 import type { CommandResult, ExecuteCommandOptions, SandboxInfo } from './types';

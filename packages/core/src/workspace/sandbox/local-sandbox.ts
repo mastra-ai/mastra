@@ -24,7 +24,7 @@ import type { InstructionsOption } from '../types';
 import { resolveInstructions } from '../utils';
 import { IsolationUnavailableError } from './errors';
 import { LocalProcessManager } from './local-process-manager';
-import { MastraSandbox } from './mastra-sandbox';
+import { MastraSandbox, SANDBOX_BOOTSTRAP_SENTINEL_BASENAME } from './mastra-sandbox';
 import type { MastraSandboxOptions } from './mastra-sandbox';
 import type { MountManager } from './mount-manager';
 import type { IsolationBackend, NativeSandboxConfig } from './native-sandbox';
@@ -289,6 +289,15 @@ export class LocalSandbox extends MastraSandbox {
   // ---------------------------------------------------------------------------
   // Lifecycle
   // ---------------------------------------------------------------------------
+
+  /**
+   * Bootstrap sentinel lives inside the working directory: local sandboxes
+   * share the host `$HOME`, so the base default would collide across
+   * sandboxes. An absolute path keeps it correct regardless of command cwd.
+   */
+  protected override get bootstrapSentinelPath(): string {
+    return path.join(this.workingDirectory, SANDBOX_BOOTSTRAP_SENTINEL_BASENAME);
+  }
 
   /**
    * Start the local sandbox.

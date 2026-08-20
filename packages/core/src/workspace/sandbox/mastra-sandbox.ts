@@ -27,7 +27,7 @@ import type { IMastraLogger } from '../../logger';
 import { RegisteredLogger } from '../../logger/constants';
 import type { WorkspaceFilesystem } from '../filesystem/filesystem';
 import type { MountResult } from '../filesystem/mount';
-import type { ProviderStatus } from '../lifecycle';
+import type { ProviderStatus, SandboxStartResult } from '../lifecycle';
 import { SandboxNotReadyError } from './errors';
 import { MountManager } from './mount-manager';
 import type { SandboxProcessManager } from './process-manager';
@@ -38,8 +38,20 @@ import { shellQuote } from './utils';
 /**
  * Lifecycle hook that fires during sandbox state transitions.
  * Receives the sandbox instance so users can call `executeCommand`, read files, etc.
+ *
+ * For `onStart`, `created` carries the provider's {@link SandboxStartResult}:
+ * `true` = this start provisioned a fresh VM, `false` = reconnected/resumed,
+ * `undefined` = the provider doesn't report (not yet migrated).
  */
-export type SandboxLifecycleHook = (args: { sandbox: WorkspaceSandbox }) => void | Promise<void>;
+export type SandboxLifecycleHook = (args: { sandbox: WorkspaceSandbox; created?: boolean }) => void | Promise<void>;
+
+/**
+ * Basename of the bootstrap sentinel file. The default remote location is
+ * `$HOME/<basename>`; LocalSandbox keeps it relative to its working directory.
+ * Exported so hosts running a sentinel-guarded bootstrap themselves (e.g. the
+ * factory fallback) guard the exact same path as {@link MastraSandbox}.
+ */
+export const SANDBOX_BOOTSTRAP_SENTINEL_BASENAME = '.mastra-bootstrapped';
 
 /**
  * Options for the MastraSandbox base class constructor.
@@ -52,6 +64,21 @@ export interface MastraSandboxOptions {
   onStop?: SandboxLifecycleHook;
   /** Called before the sandbox is destroyed */
   onDestroy?: SandboxLifecycleHook;
+
+  /**
+   * Command run once per VM lifetime, after the first successful start of a
+   * freshly created sandbox. Survives pause/resume (not re-run); re-runs on a
+   * replacement VM. `env` is merged into the command's execution env only —
+   * never baked into the VM (this is the channel for short-lived tokens).
+   *
+   * When the provider's `start()` reports `created: true` the sentinel probe
+   * is skipped; in every other case (`false` or unknown) a sentinel file
+   * guards idempotency — `created: false` still probes, because a VM whose
+   * bootstrap previously failed reconnects as `created: false` and must get
+   * another attempt. The sentinel is written only after the command succeeds;
+   * a bootstrap failure rejects `start()` and marks the sandbox errored.
+   */
+  bootstrap?: { command: string; env?: Record<string, string>; timeoutMs?: number };
 
   /**
    * Process manager for this sandbox.
@@ -184,7 +211,16 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
   // ---------------------------------------------------------------------------
 
   /** Promise for _start() to prevent race conditions from concurrent calls */
-  protected _startPromise?: Promise<void>;
+  protected _startPromise?: Promise<SandboxStartResult | void>;
+
+  /**
+   * The subclass's own `start()` implementation, captured in the constructor
+   * before `start` is shadowed with the lifecycle wrapper. See constructor.
+   */
+  private readonly _implStart: () => void | Promise<SandboxStartResult | void>;
+
+  /** Once-per-VM bootstrap command. See {@link MastraSandboxOptions.bootstrap}. */
+  private readonly _bootstrap?: MastraSandboxOptions['bootstrap'];
 
   /** Promise for _stop() to prevent race conditions from concurrent calls */
   protected _stopPromise?: Promise<void>;
@@ -203,6 +239,17 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
     this._onStart = options.onStart;
     this._onStop = options.onStop;
     this._onDestroy = options.onDestroy;
+    this._bootstrap = options.bootstrap;
+
+    // Wrap start() with the lifecycle path (same pattern as
+    // SandboxProcessManager): capture the subclass's prototype `start()` and
+    // shadow it with an instance property delegating to `_start()`, so DIRECT
+    // `start()` calls get the same coalescing/status/bootstrap safety as
+    // `_start()`/`ensureRunning()`. Subclasses keep their natural method name.
+    // Requires method syntax in subclasses — a `start` class FIELD initializer
+    // would overwrite this wrapper (same constraint as `executeCommand` above).
+    this._implStart = this.start.bind(this);
+    this.start = () => this._start();
 
     // Automatically create MountManager if subclass implements mount()
     if (this.mount) {
@@ -259,7 +306,7 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
    *
    * Subclasses override `start()` to provide their startup logic.
    */
-  async _start(): Promise<void> {
+  async _start(): Promise<SandboxStartResult | void> {
     // Already running
     if (this.status === 'running') {
       return;
@@ -276,7 +323,10 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
       throw new Error('Cannot start a destroyed sandbox');
     }
 
-    // Start already in progress - return existing promise
+    // Start already in progress - return existing promise. Joined callers
+    // share the attempt's SandboxStartResult (all observe `created: true`
+    // when the shared attempt created). The slot is cleared on settle, so a
+    // failed attempt is never latched.
     if (this._startPromise) {
       return this._startPromise;
     }
@@ -285,32 +335,53 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
     this._startPromise = this._executeStart();
 
     try {
-      await this._startPromise;
+      return await this._startPromise;
     } finally {
       this._startPromise = undefined;
     }
   }
 
   /**
-   * Internal start execution - handles status and mount processing.
+   * Internal start execution - handles status, bootstrap, and mount processing.
    */
-  private async _executeStart(): Promise<void> {
+  private async _executeStart(): Promise<SandboxStartResult | void> {
     this.status = 'starting';
 
+    let result: SandboxStartResult | void;
     try {
-      await this.start();
+      result = await this._implStart();
+      // Status must flip to 'running' BEFORE the bootstrap runs: the bootstrap
+      // executes through `executeCommand` → `pm.spawn` → `ensureRunning()`,
+      // which would otherwise join the in-flight `_startPromise` and deadlock
+      // awaiting its own start. This opens a (new, accepted) window where
+      // commands fired concurrently with start() — without awaiting it — can
+      // run during bootstrap; callers that `await start()` always observe a
+      // fully bootstrapped VM.
       this.status = 'running';
-
-      // Fire onStart callback after sandbox is running — treat failure as non-fatal
-      // so that a bad callback doesn't kill an otherwise healthy sandbox
-      try {
-        await this._onStart?.({ sandbox: this });
-      } catch (error) {
-        this.logger.warn('onStart callback failed', { error });
-      }
     } catch (error) {
       this.status = 'error';
       throw error;
+    }
+
+    const created = result?.created;
+
+    if (this._bootstrap) {
+      try {
+        await this._runBootstrapOnce({ skipSentinel: created === true });
+      } catch (error) {
+        // A half-bootstrapped VM must not report running; no sentinel was
+        // written, so the next start() re-attempts the bootstrap.
+        this.status = 'error';
+        throw error;
+      }
+    }
+
+    // Fire onStart callback after sandbox is running — treat failure as non-fatal
+    // so that a bad callback doesn't kill an otherwise healthy sandbox
+    try {
+      await this._onStart?.({ sandbox: this, created });
+    } catch (error) {
+      this.logger.warn('onStart callback failed', { error });
     }
 
     // Process any pending mounts after successful start
@@ -322,22 +393,90 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
       // Mount failures are tracked in MountManager — log but don't affect sandbox status
       this.logger.warn('Unexpected error processing pending mounts', { error });
     }
+
+    return result;
+  }
+
+  /**
+   * Sentinel file marking a VM as bootstrapped. Quoted into shell commands,
+   * so `$HOME` expands in the remote shell. LocalSandbox overrides this to a
+   * working-directory-relative path — host `$HOME` is shared across local
+   * sandboxes and would collide.
+   */
+  protected get bootstrapSentinelPath(): string {
+    return `$HOME/${SANDBOX_BOOTSTRAP_SENTINEL_BASENAME}`;
+  }
+
+  /**
+   * Run the configured bootstrap command once per VM lifetime.
+   *
+   * When `skipSentinel` (the provider reported `created: true`) the probe is
+   * skipped — the VM is definitely fresh. In every other case the sentinel is
+   * probed first, so reconnects (`created: false`) after a failed bootstrap
+   * still get another attempt. The sentinel is written only after success.
+   */
+  private async _runBootstrapOnce({ skipSentinel }: { skipSentinel: boolean }): Promise<void> {
+    const bootstrap = this._bootstrap;
+    if (!bootstrap) return;
+    if (!this.executeCommand) {
+      throw new Error(`Sandbox '${this.id}' has a bootstrap command but no executeCommand implementation`);
+    }
+
+    const sentinel = this.bootstrapSentinelPath;
+
+    if (!skipSentinel) {
+      const probe = await this.executeCommand(`test -f "${sentinel}"`);
+      if (probe.exitCode === 0) {
+        this.logger.debug('Bootstrap sentinel present — skipping bootstrap', { sandbox: this.name });
+        return;
+      }
+    }
+
+    this.logger.debug('Running sandbox bootstrap command', { sandbox: this.name });
+    const result = await this.executeCommand(bootstrap.command, undefined, {
+      ...(bootstrap.env && { env: bootstrap.env }),
+      ...(bootstrap.timeoutMs !== undefined && { timeout: bootstrap.timeoutMs }),
+    });
+    if (result.exitCode !== 0) {
+      const stderr = (result.stderr ?? '').slice(-2000);
+      throw new Error(`Sandbox bootstrap command failed (exit ${result.exitCode}): ${stderr}`);
+    }
+
+    const touch = await this.executeCommand(`touch "${sentinel}"`);
+    if (touch.exitCode !== 0) {
+      // Non-fatal: bootstrap succeeded; a missing sentinel only means the
+      // (idempotent) bootstrap may re-run on a future reconnect.
+      this.logger.warn('Failed to write bootstrap sentinel', { sandbox: this.name, exitCode: touch.exitCode });
+    }
   }
 
   /**
    * Override this method to implement sandbox startup logic.
    *
-   * Called by `_start()` after status is set to 'starting'.
-   * Status will be set to 'running' on success, 'error' on failure.
+   * The base constructor wraps `start()` so direct calls are routed through
+   * `_start()` (coalescing, status management, once-per-VM bootstrap, mount
+   * processing). Use METHOD syntax when overriding — a class-field `start`
+   * initializer would overwrite the wrapper.
+   *
+   * Id-keyed getOrCreate contract: a sandbox constructed with a known `id`
+   * resolves that id on start — reconnect/resume when the provider finds an
+   * existing VM for it, create otherwise — and reports which via
+   * {@link SandboxStartResult}. Returning `void` means "unknown". Note:
+   * E2B/Daytona/Local resolve logical ids natively; PlatformSandbox and
+   * RailwaySandbox currently reattach only via an explicit provider
+   * `sandboxId` hint (their logical-id lookup is a follow-up).
    *
    * @example
    * ```typescript
-   * async start(): Promise<void> {
+   * async start(): Promise<SandboxStartResult> {
+   *   const existing = await this.findExisting();
+   *   if (existing) { this._sandbox = existing; return { created: false }; }
    *   this._sandbox = await Sandbox.create({ ... });
+   *   return { created: true };
    * }
    * ```
    */
-  async start(): Promise<void> {
+  async start(): Promise<SandboxStartResult | void> {
     // Default no-op - subclasses override
   }
 
@@ -346,6 +485,10 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
    *
    * Calls `_start()` if status is not 'running'. Useful for lazy initialization
    * where operations should automatically start the sandbox if needed.
+   *
+   * With the id-keyed getOrCreate contract (see {@link start}), this is the
+   * "resolve my id to a runnable VM" entry point: reconnect/resume when the
+   * provider finds an existing VM for this sandbox's id, create otherwise.
    *
    * @throws {SandboxNotReadyError} if the sandbox fails to reach 'running' status
    *
