@@ -57,6 +57,7 @@ type AddToolMetadataOptions = {
   parentArgs?: unknown;
   resumeSchema: string;
   suspendedToolRunId?: string;
+  suspendState?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 } & (
   | {
@@ -68,6 +69,24 @@ type AddToolMetadataOptions = {
       suspendPayload: unknown;
     }
 );
+
+const SUSPEND_OPTIONS_CONTROL_KEYS = new Set([
+  'resumeLabel',
+  'resumeSchema',
+  'requireToolApproval',
+  'isAgentSuspend',
+  'runId',
+]);
+
+function extractSuspendState(options?: SuspendOptions): Record<string, unknown> | undefined {
+  if (!options) return undefined;
+
+  const state = Object.fromEntries(
+    Object.entries(options).filter(([key, value]) => !SUSPEND_OPTIONS_CONTROL_KEYS.has(key) && value !== undefined),
+  );
+
+  return Object.keys(state).length > 0 ? state : undefined;
+}
 
 export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   tools,
@@ -165,6 +184,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         resumeSchema,
         type,
         suspendedToolRunId,
+        suspendState,
         metadata: toolStateTransformMetadata,
       }: AddToolMetadataOptions) => {
         const metadataKey = type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
@@ -205,6 +225,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           runId,
           ...(suspendedToolRunId && suspendedToolRunId !== runId ? { delegatedRunId: suspendedToolRunId } : {}),
           ...(type === 'suspension' ? { suspendPayload: transformedSuspendPayload } : {}),
+          ...(suspendState ? { suspendState } : {}),
           resumeSchema,
           ...(toolStateTransformMetadata ? { metadata: toolStateTransformMetadata } : {}),
         };
@@ -750,6 +771,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   : {}),
                 type: 'approval',
                 suspendedToolRunId: options.runId,
+                suspendState: extractSuspendState(options),
                 resumeSchema: JSON.stringify(
                   standardSchemaToJSONSchema(
                     toStandardSchema(
@@ -783,6 +805,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   // same id as delegatedRunId for cold reloads, while the snapshot remains the
                   // runtime source for routing this targeted resume.
                   suspendedToolRunId: options.runId,
+                  ...extractSuspendState(options),
                 },
                 {
                   resumeLabel: inputData.toolCallId,
@@ -814,6 +837,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 args,
                 suspendPayload,
                 suspendedToolRunId: options?.runId,
+                suspendState: extractSuspendState(options),
                 type: 'suspension',
                 resumeSchema: options?.resumeSchema,
                 metadata: suspensionChunk.metadata,
@@ -831,6 +855,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   toolName: inputData.toolName,
                   resumeLabel: options?.resumeLabel,
                   suspendedToolRunId: options?.runId,
+                  ...extractSuspendState(options),
                 },
                 {
                   resumeLabel: inputData.toolCallId,
@@ -858,6 +883,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           // metadata / data parts remain as a fallback for page-refresh resumes where the
           // workflow snapshot is unavailable.
           let suspendedToolRunId = (suspendData as any)?.suspendedToolRunId || '';
+          let suspendState = extractSuspendState(suspendData as SuspendOptions | undefined);
           const shouldUsePartsFallback = !isResumeToolCall || !args.suspendedToolRunId;
           const messages = messageList.get.all.db();
           const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
@@ -883,6 +909,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 // must resume. `entry.runId` is the outer resumable run; older persisted entries
                 // stored the inner run there, so it remains the fallback.
                 suspendedToolRunId = entry.delegatedRunId ?? entry.runId;
+                suspendState = entry.suspendState ?? suspendState;
                 break;
               }
             }
@@ -909,6 +936,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
           if (suspendedToolRunId) {
             args.suspendedToolRunId = suspendedToolRunId;
+          }
+          if (suspendState) {
+            Object.assign(args, suspendState);
           }
         }
 

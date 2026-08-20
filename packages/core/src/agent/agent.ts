@@ -296,6 +296,8 @@ type SubAgentToolSchemas = {
 
 type SubAgentToolInput = Omit<z.infer<ReturnType<typeof createSubAgentInputSchema>>, 'maxSteps'> & {
   maxSteps?: number | null;
+  subAgentThreadId?: string;
+  subAgentResourceId?: string;
 };
 type SubAgentToolOutput = z.infer<ReturnType<typeof createSubAgentOutputSchema>>;
 
@@ -4908,22 +4910,26 @@ export class Agent<
 
             // Generate sub-agent thread and resource IDs early (before any rejection)
             // These are needed for both successful execution and rejection cases
-            const subAgentThreadId = inputData.threadId
-              ? `${inputData.threadId}-${randomUUID()}`
-              : context?.mastra?.generateId({
-                  idType: 'thread',
-                  source: 'agent',
-                  entityId: agentName,
-                  resourceId,
-                }) || randomUUID();
+            const subAgentThreadId =
+              inputData.subAgentThreadId ||
+              (inputData.threadId
+                ? `${inputData.threadId}-${randomUUID()}`
+                : context?.mastra?.generateId({
+                    idType: 'thread',
+                    source: 'agent',
+                    entityId: agentName,
+                    resourceId,
+                  }) || randomUUID());
 
-            const subAgentResourceId = inputData.resourceId
-              ? `${inputData.resourceId}-${agentName}`
-              : context?.mastra?.generateId({
-                  idType: 'generic',
-                  source: 'agent',
-                  entityId: agentName,
-                }) || `${slugify(this.id)}-${agentName}`;
+            const subAgentResourceId =
+              inputData.subAgentResourceId ||
+              (inputData.resourceId
+                ? `${inputData.resourceId}-${agentName}`
+                : context?.mastra?.generateId({
+                    idType: 'generic',
+                    source: 'agent',
+                    entityId: agentName,
+                  }) || `${slugify(this.id)}-${agentName}`);
 
             // Record a throwing delegation hook on the run's request context so
             // callers can detect "delegation ran but the hook failed" without
@@ -5372,6 +5378,8 @@ export class Agent<
                     resumeSchema: generateResult.resumeSchema,
                     runId: generateResult.runId,
                     isAgentSuspend: true,
+                    subAgentThreadId,
+                    subAgentResourceId,
                   });
                 }
 
@@ -5498,6 +5506,8 @@ export class Agent<
                     requireToolApproval,
                     runId: streamResult.runId,
                     isAgentSuspend: true,
+                    subAgentThreadId,
+                    subAgentResourceId,
                   });
                 }
 
