@@ -73,7 +73,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
     },
     shellPassthrough: { mode: 'default' },
     voice: { enabled: false, engine: 'cloud', provider: 'openai', model: 'whisper-1' },
-    signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
+    signals: { unixSocketPubSub: false, experimentalGithubSignals: false, experimentalPeers: false },
     mcp: { claudeCodeGlobal: false, codexGlobal: false },
     observability: { resources: {}, localTracing: false },
     ...overrides,

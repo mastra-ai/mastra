@@ -30,6 +30,7 @@ let authStorage: Awaited<ReturnType<typeof createMastraCode>>['authStorage'];
 let signalsPubSub: Awaited<ReturnType<typeof createMastraCode>>['signalsPubSub'];
 let storageMaintenance: Awaited<ReturnType<typeof createMastraCode>>['storageMaintenance'];
 let stopPluginSignalProviders: Awaited<ReturnType<typeof createMastraCode>>['stopPluginSignalProviders'] | undefined;
+let stopPeerSignals: Awaited<ReturnType<typeof createMastraCode>>['stopPeerSignals'] | undefined;
 let analytics: ReturnType<typeof createMastraCodeAnalytics> | undefined;
 let tui: MastraTUI | undefined;
 let processMemoryDiagnostics: ProcessMemoryDiagnostics | undefined;
@@ -86,6 +87,7 @@ async function tuiMain(pipedInput?: string | null) {
   signalsPubSub = result.signalsPubSub;
   storageMaintenance = result.storageMaintenance;
   stopPluginSignalProviders = result.stopPluginSignalProviders;
+  stopPeerSignals = result.stopPeerSignals;
 
   if (result.storageWarning) {
     console.info(`⚠ ${result.storageWarning}`);
@@ -181,6 +183,8 @@ const asyncCleanup = (): Promise<void> => {
       ? stopProcessMemoryDiagnosticsWithTimeout(processMemoryDiagnostics, message => console.warn(message))
       : undefined;
     const closeSignalsPubSub = (signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
+    // Peer goodbye must go out before the pubsub closes or the `bye` has no transport.
+    await stopPeerSignals?.().catch(() => {});
     await Promise.allSettled([mcpManager?.disconnect(), controller?.stopIntervals(), closeSignalsPubSub?.()]);
     // Mastra owns the workspaces and must destroy them to stop retained language
     // servers before storage is closed.

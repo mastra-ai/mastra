@@ -330,6 +330,8 @@ export interface SignalSettings {
   unixSocketPubSub: boolean;
   /** Experimental: enable GitHub PR subscription signals backed by gitcrawl. */
   experimentalGithubSignals: boolean;
+  /** Experimental: enable peer-to-peer messaging between Mastra Code instances on the same repo. */
+  experimentalPeers: boolean;
 }
 
 export interface ObservabilityResourceConfig {
@@ -408,7 +410,7 @@ const DEFAULTS: GlobalSettings = {
   },
   shellPassthrough: { mode: 'default' },
   voice: { enabled: false, engine: defaultVoiceEngine(), provider: DEFAULT_STT_PROVIDER },
-  signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
+  signals: { unixSocketPubSub: false, experimentalGithubSignals: false, experimentalPeers: true },
   mcp: { claudeCodeGlobal: false, codexGlobal: false },
   observability: { resources: {}, localTracing: false },
 };
@@ -429,7 +431,8 @@ function rememberLoadedSettings(settings: GlobalSettings): GlobalSettings {
 function signalSettingsEqual(left: SignalSettings, right: SignalSettings): boolean {
   return (
     left.unixSocketPubSub === right.unixSocketPubSub &&
-    left.experimentalGithubSignals === right.experimentalGithubSignals
+    left.experimentalGithubSignals === right.experimentalGithubSignals &&
+    left.experimentalPeers === right.experimentalPeers
   );
 }
 
@@ -480,6 +483,8 @@ function parseSignalSettings(rawSignals: unknown): SignalSettings {
       typeof raw.experimentalGithubSignals === 'boolean'
         ? raw.experimentalGithubSignals
         : DEFAULTS.signals.experimentalGithubSignals,
+    experimentalPeers:
+      typeof raw.experimentalPeers === 'boolean' ? raw.experimentalPeers : DEFAULTS.signals.experimentalPeers,
   };
 }
 

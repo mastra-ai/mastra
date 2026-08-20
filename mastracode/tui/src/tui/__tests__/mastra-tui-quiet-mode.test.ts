@@ -76,7 +76,7 @@ function createSettings(overrides: Partial<GlobalSettings> = {}): GlobalSettings
     observability: { resources: {}, localTracing: false },
     shellPassthrough: { mode: 'default' },
     voice: { enabled: false, engine: 'cloud', provider: 'openai' },
-    signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
+    signals: { unixSocketPubSub: false, experimentalGithubSignals: false, experimentalPeers: false },
     ...overrides,
   };
 }

@@ -100,6 +100,8 @@ import type { MastraCodeState } from './schema.js';
 
 import { mastraBrand } from './theme-palette.js';
 import { syncGateways } from './utils/gateway-sync.js';
+import { PeerBus } from './utils/peer-bus.js';
+import { PeerSignalProvider } from './utils/peer-signal-provider.js';
 import {
   detectProject,
   getObservabilityDatabasePath,
@@ -319,6 +321,15 @@ export interface MastraCodeConfig {
   unixSocketPubSub?: boolean;
   /** Marks the configured PubSub as cross-process-safe, allowing Mastra Code to skip file thread locks. */
   crossProcessPubSub?: boolean;
+  /**
+   * Experimental: peer-to-peer messaging between Mastra Code instances on the
+   * same repo (sibling worktrees share a resourceId and socket namespace).
+   * Requires a pubsub instance (`unixSocketPubSub` or an injected `pubsub`)
+   * and is on by default when one exists. Opt out with `experimentalPeers:
+   * false`, the `signals.experimentalPeers` global setting, or
+   * `MASTRACODE_EXPERIMENTAL_PEERS=0`.
+   */
+  experimentalPeers?: boolean;
 }
 
 export function createAuthStorage() {
@@ -503,6 +514,16 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   if (crossProcessPubSub && !signalsPubSub) {
     throw new Error('crossProcessPubSub requires a pubsub instance');
   }
+
+  // Experimental peer-to-peer messaging between mc instances (inter-mc-comms
+  // design). Rides the existing pubsub — in the TUI that's the per-repo Unix
+  // socket namespace, which sibling worktrees of the same remote already
+  // share — so peers only exist when a pubsub exists. On by default; opt out
+  // via config, the signals.experimentalPeers setting, or
+  // MASTRACODE_EXPERIMENTAL_PEERS=0.
+  const peersEnabled =
+    config?.experimentalPeers ??
+    (globalSettings.signals?.experimentalPeers !== false && process.env.MASTRACODE_EXPERIMENTAL_PEERS !== '0');
 
   // Storage. An injected instance is used as-is — no connection test, no
   // LibSQL fallback: if the injected store fails, that's a hard error.
@@ -787,6 +808,35 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // `signals` array below); named here so the plugin lane can reserve its id.
   const taskSignalProvider = new TaskSignalProvider();
 
+  // Peer messaging provider (see `peersEnabled` above). Inbound peer messages
+  // are delivered as peer-origin notification signals into the active thread —
+  // never as user messages. The Agent constructor connects and starts providers
+  // in its `signals` array, which starts the bus (presence hello + heartbeat).
+  const peerSignalProvider =
+    peersEnabled && signalsPubSub
+      ? new PeerSignalProvider({
+          bus: new PeerBus({
+            pubsub: signalsPubSub,
+            self: {
+              instanceId: `${project.name}-${process.pid}`,
+              pid: process.pid,
+              cwd: project.rootPath,
+              ...(project.gitBranch ? { branch: project.gitBranch } : {}),
+              label: path.basename(project.rootPath),
+            },
+          }),
+          // Deliver into whatever thread the local session currently has open.
+          // No session or no thread yet → drop (notification storage already
+          // covers offline delivery for targeted sends; presence is live-only).
+          getTarget: () => {
+            const session = activeSession;
+            const threadId = session?.thread.getId();
+            if (!session || !threadId) return undefined;
+            return { resourceId: session.identity.getResourceId(), threadId };
+          },
+        })
+      : undefined;
+
   const NO_PLUGIN_PROCESSORS: PluginProcessorEntries = { input: [], output: [] };
   let pluginProcessorReadWarned = false;
 
@@ -798,7 +848,11 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // through the constructor and are therefore invisible to the lane.
   const pluginSignalLane = pluginManager
     ? new PluginSignalLane({
-        reservedProviderIds: [taskSignalProvider.id, ...(githubSignals ? [githubSignals.id] : [])],
+        reservedProviderIds: [
+          taskSignalProvider.id,
+          ...(githubSignals ? [githubSignals.id] : []),
+          ...(peerSignalProvider ? [peerSignalProvider.id] : []),
+        ],
       })
     : undefined;
   let unsubscribePluginReload: (() => void) | undefined;
@@ -873,7 +927,11 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // TaskSignalProvider bundles the task tools + TaskStateProcessor: it merges
     // the tools into the toolset and registers the task state-signal processor,
     // so the task list persists across turns and survives OM truncation.
-    signals: [taskSignalProvider, ...(githubSignals ? [githubSignals] : [])],
+    signals: [
+      taskSignalProvider,
+      ...(githubSignals ? [githubSignals] : []),
+      ...(peerSignalProvider ? [peerSignalProvider] : []),
+    ],
     // Native goal mechanism: the in-loop goal step judges the thread's active
     // objective each qualifying iteration. The judge model is required for any
     // gating to occur; when unset the goal step is a complete no-op. A6 auto-wires
@@ -1200,6 +1258,16 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     builtinOmPacks,
     effectiveDefaults,
     githubSignals,
+    peerSignalProvider,
+    /**
+     * Graceful peer-bus goodbye for shutdown paths: unsubscribes and publishes
+     * a `bye` so live peers drop this instance immediately instead of waiting
+     * out the staleness window. Best-effort — a crashed instance is expired by
+     * peers via heartbeat staleness anyway.
+     */
+    stopPeerSignals: async () => {
+      await peerSignalProvider?.stop().catch(() => {});
+    },
     // Identity for the single local session (Case 3). Servers ignore these and
     // mint per-request sessions with client-supplied resourceIds instead.
     sessionId,

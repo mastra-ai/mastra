@@ -141,7 +141,7 @@ function createMockSettings() {
       stagehand: { env: 'LOCAL' },
     },
     observability: { resources: {}, localTracing: false },
-    signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
+    signals: { unixSocketPubSub: false, experimentalGithubSignals: false, experimentalPeers: true },
     mcp: { claudeCodeGlobal: false, codexGlobal: false },
   };
 }
@@ -1211,7 +1211,7 @@ describe('createMastraCode', () => {
   it('does not configure the polling GitHub provider when the embedding disables it', async () => {
     loadSettingsMock.mockReturnValue({
       ...createMockSettings(),
-      signals: { unixSocketPubSub: false, experimentalGithubSignals: true },
+      signals: { unixSocketPubSub: false, experimentalGithubSignals: true, experimentalPeers: false },
     });
     const { createMastraCode } = await import('../index.js');
 
@@ -1224,10 +1224,55 @@ describe('createMastraCode', () => {
     expect(hasGithub).toBe(false);
   });
 
+  function makeFakePubSub() {
+    return {
+      publish: vi.fn(),
+      subscribe: vi.fn(),
+      unsubscribe: vi.fn(),
+      flush: vi.fn(),
+    };
+  }
+
+  function peerProviderConfigured() {
+    const agentConfigs = agentConstructorMock.mock.calls.map(
+      call => call[0] as { signals?: Array<{ id?: string }> } | undefined,
+    );
+    return agentConfigs.some(config => config?.signals?.some(signal => signal.id === 'peer-signals'));
+  }
+
+  it('does not configure the peer signal provider when no pubsub exists', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    expect(peerProviderConfigured()).toBe(false);
+  });
+
+  it('configures the peer signal provider by default when a pubsub exists', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ pubsub: makeFakePubSub() as never });
+
+    expect(agentConstructorMock).toHaveBeenCalled();
+    expect(peerProviderConfigured()).toBe(true);
+  });
+
+  it('does not configure the peer signal provider when signals.experimentalPeers is disabled', async () => {
+    loadSettingsMock.mockReturnValue({
+      ...createMockSettings(),
+      signals: { unixSocketPubSub: false, experimentalGithubSignals: false, experimentalPeers: false },
+    });
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ pubsub: makeFakePubSub() as never });
+
+    expect(peerProviderConfigured()).toBe(false);
+  });
+
   it('configures GitHubSignals as a signal provider for local PR subscriptions', async () => {
     loadSettingsMock.mockReturnValue({
       ...createMockSettings(),
-      signals: { unixSocketPubSub: false, experimentalGithubSignals: true },
+      signals: { unixSocketPubSub: false, experimentalGithubSignals: true, experimentalPeers: false },
     });
     controllerGetCurrentThreadIdMock.mockReturnValue('thread-1');
     controllerListThreadsMock.mockResolvedValue([{ id: 'thread-1', resourceId: 'thread-resource', metadata: {} }]);
