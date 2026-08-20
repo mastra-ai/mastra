@@ -178,18 +178,32 @@ describe('TranscriptEntries turn groups', () => {
       steer: true,
     });
     const { rerender } = renderWithProviders(
-      <TranscriptEntries entries={state.entries} onApprove={() => {}} onRespond={() => {}} running />,
+      <TranscriptEntries
+        entries={state.entries}
+        onApprove={() => {}}
+        onRespond={() => {}}
+        running
+        tail={<div data-testid="steering-tail" />}
+      />,
     );
-    const room = screen.getByText('change direction').closest(ROOM_SELECTOR);
+    const room = screen.getByTestId('steering-tail').parentElement;
     expect(room).toBeInstanceOf(HTMLElement);
 
     state = transcriptReducer(state, {
       type: 'event',
       event: { type: 'message_start', message: steerSignal('signal-steer', 'change direction') },
     });
-    rerender(<TranscriptEntries entries={state.entries} onApprove={() => {}} onRespond={() => {}} running />);
+    rerender(
+      <TranscriptEntries
+        entries={state.entries}
+        onApprove={() => {}}
+        onRespond={() => {}}
+        running
+        tail={<div data-testid="steering-tail" />}
+      />,
+    );
 
-    expect(screen.getByText('change direction').closest(ROOM_SELECTOR)).toBe(room);
+    expect(screen.getByTestId('steering-tail').parentElement).toBe(room);
     expect(state.entries[0]).toMatchObject({ message: { id: 'signal-steer' } });
   });
 
