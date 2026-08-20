@@ -4,7 +4,7 @@
  * mounted with a centered spinner in the main slot only — clicking around the
  * sidebar must never blank the whole shell (the old early-return behavior).
  */
-import type { AgentControllerThreadInfo } from '@mastra/client-js';
+import type { AgentControllerThreadInfo, MastraDBMessage } from '@mastra/client-js';
 import { screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -13,6 +13,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
 import { createAppRoutes } from '../../router';
+import { assistantOnlyThreadMessages, threadRailMessages } from './fixtures/thread-rail';
 
 const FACTORY_ID = 'fp-1';
 const REPO_ID = 'ghp-1';
@@ -51,9 +52,11 @@ function deferred() {
 function stubThreadRoute({
   initialThreadId = SESSION_ID,
   threads = [],
+  messages = [],
 }: {
   initialThreadId?: string;
   threads?: AgentControllerThreadInfo[];
+  messages?: MastraDBMessage[];
 } = {}) {
   const sessionGate = deferred();
   const messagesGate = deferred();
@@ -63,6 +66,9 @@ function stubThreadRoute({
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/config/model-packs`, () =>
+      HttpResponse.json({ packs: [], activePackId: null, sessionPackId: null }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
@@ -132,7 +138,7 @@ function stubThreadRoute({
     http.get(`${AC}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads })),
     http.get(`${AC}/sessions/:resourceId/threads/:threadId/messages`, async () => {
       await messagesGate.promise;
-      return HttpResponse.json({ messages: [] });
+      return HttpResponse.json({ messages });
     }),
     http.get(`${AC}/modes`, () => HttpResponse.json({ modes: [] })),
     // Right workspace-files panel, which appears once workspacePath resolves.
@@ -189,6 +195,41 @@ describe('ThreadPage loading shell', () => {
     messagesGate.resolve();
     await waitFor(() => expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument());
     expect(screen.getByRole('region', { name: 'Factory session' })).toBeInTheDocument();
+  });
+
+  it('reveals loaded history without briefly rendering the empty thread state', async () => {
+    const { sessionGate, messagesGate } = stubThreadRoute({ messages: assistantOnlyThreadMessages });
+    renderThreadRoute();
+    sessionGate.resolve();
+    await screen.findByRole('status', { name: 'Preparing session' });
+
+    let renderedEmptyState = false;
+    const observer = new MutationObserver(records => {
+      renderedEmptyState ||= records.some(record =>
+        Array.from(record.addedNodes).some(node => node.textContent?.includes('What can I help you build?')),
+      );
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    messagesGate.resolve();
+    await screen.findByText('There are no user turns in this thread.');
+    observer.disconnect();
+
+    expect(renderedEmptyState).toBe(false);
+  });
+
+  it('stagger-reveals loaded transcript entries in order', async () => {
+    const { sessionGate, messagesGate } = stubThreadRoute({ messages: threadRailMessages });
+    renderThreadRoute();
+    sessionGate.resolve();
+    await screen.findByRole('status', { name: 'Preparing session' });
+
+    messagesGate.resolve();
+    await screen.findByText('Run the focused checks');
+
+    const entries = Array.from(document.querySelectorAll<HTMLElement>('[data-transcript-history-entry]'));
+    expect(entries.map(entry => entry.style.animationDelay)).toEqual(['0ms', '55ms', '110ms']);
+    expect(entries.every(entry => entry.classList.contains('transcript-history-enter'))).toBe(true);
   });
 
   it('waits for sandbox readiness before synchronizing an existing route thread', async () => {

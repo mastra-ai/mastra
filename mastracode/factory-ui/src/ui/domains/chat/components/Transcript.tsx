@@ -14,7 +14,7 @@ import { MessageFactory } from '@mastra/react/ui';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
 import { Bell, CircleDot, ExternalLink, Info, Layers, Slack } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import { useChatSessionContext } from '../context/useChatSessionContext';
@@ -498,10 +498,30 @@ function SignalRow({ kind, label, message }: { kind: string; label: string; mess
 // ---------------------------------------------------------------------------
 // Transcript
 // ---------------------------------------------------------------------------
+const HISTORY_ENTRY_STAGGER_MS = 55;
+const HISTORY_ENTRY_STAGGER_LIMIT = 10;
 
 export function Transcript({ tail }: { tail?: ReactNode }) {
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { transcript, resolvePrompt, busy } = useChatTranscript();
+  const historyRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const entries = historyRef.current?.querySelectorAll<HTMLElement>('[data-transcript-history-entry]');
+    if (!entries?.length) return;
+
+    const staggerStart = Math.max(entries.length - HISTORY_ENTRY_STAGGER_LIMIT, 0);
+    entries.forEach((entry, index) => {
+      entry.style.animationDelay = `${Math.max(index - staggerStart, 0) * HISTORY_ENTRY_STAGGER_MS}ms`;
+      entry.classList.add('transcript-history-enter');
+    });
+
+    return () => {
+      entries.forEach(entry => {
+        entry.style.removeProperty('animation-delay');
+        entry.classList.remove('transcript-history-enter');
+      });
+    };
+  }, []);
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
@@ -522,14 +542,16 @@ export function Transcript({ tail }: { tail?: ReactNode }) {
   };
 
   return (
-    <TranscriptEntries
-      entries={transcript.entries}
-      isSubmitting={approveMutation.isPending || respondMutation.isPending}
-      onApprove={onApprove}
-      onRespond={onRespond}
-      running={busy}
-      tail={tail}
-    />
+    <div ref={historyRef} className="contents">
+      <TranscriptEntries
+        entries={transcript.entries}
+        isSubmitting={approveMutation.isPending || respondMutation.isPending}
+        onApprove={onApprove}
+        onRespond={onRespond}
+        running={busy}
+        tail={tail}
+      />
+    </div>
   );
 }
 
@@ -626,6 +648,7 @@ export function TranscriptEntries({
 
               return (
                 <MessageScrollerItem
+                  data-transcript-history-entry=""
                   key={entry.id}
                   messageId={entry.id}
                   scrollAnchor={opensTurn(entry)}
