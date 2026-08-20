@@ -144,7 +144,7 @@ describe('User sessions sidebar activity', () => {
     materialized = true;
     active.delete('sess-4');
     await client.invalidateQueries({
-      queryKey: queryKeys.agentControllerSessionActivity(AGENT_CONTROLLER_ID, 'sess-4'),
+      queryKey: queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, TEST_BASE_URL),
     });
     await waitForMutationsIdle(client);
 
