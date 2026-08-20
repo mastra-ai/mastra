@@ -5,12 +5,12 @@ description: "Run distributed Mastra agent pipelines with Render Workflows"
 
 # Render
 
-Deploy Mastra applications on [Render](https://render.com/?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra). Host the Mastra API as a [web service](https://render.com/docs/web-services?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra), or use [Render Workflows](https://render.com/docs/workflows?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra) for long-running tasks with independent retry policies.
+Deploy Mastra applications on [Render](https://render.com/). Host the Mastra API as a [web service](https://render.com/docs/web-services), or use [Render Workflows](https://render.com/docs/workflows) for long-running tasks with independent retry policies.
 
 Choose the deployment path that fits your application:
 
-- **Mastra API**: Deploy Mastra's [server](/docs/server/overview) as a web service with a public endpoint. The [Web Services guide](https://render.com/docs/web-services?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra) explains how to deploy custom code or a supported [server adapter](/docs/server/server-adapters).
-- **Mastra workflow**: Run an entire Mastra workflow within one task. Render controls the outer run, while Mastra manages its steps and state. See [Defining Workflow Tasks](https://render.com/docs/workflows-defining?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra) for configuration details.
+- **Mastra API**: Deploy Mastra's [server](/docs/server/overview) as a web service with a public endpoint. The [Web Services guide](https://render.com/docs/web-services) explains how to deploy custom code or a supported [server adapter](/docs/server/server-adapters).
+- **Mastra workflow**: Run an entire Mastra workflow within one task. Render controls the outer run, while Mastra manages its steps and state. See [Defining Workflow Tasks](https://render.com/docs/workflows-defining) for configuration details.
 - **Distributed agent operations**: Give each operation its own compute plan, timeout, and retry policy. Render Workflows handles the execution queue and provides run observability.
 
 This guide builds an editorial pipeline that reviews a draft from three perspectives in parallel, then passes the feedback to an editor agent. Use the links above if you want to deploy a Mastra API or execute an entire Mastra workflow as one task.
@@ -20,8 +20,8 @@ This guide builds an editorial pipeline that reviews a draft from three perspect
 Mastra supplies the agents and application logic, while Render Workflows defines the execution boundaries. A typical pipeline has three layers:
 
 1. A parent Render task coordinates the run.
-2. Child Render tasks invoke Mastra agents for focused work.
-3. A final Render task combines the results.
+1. Child Render tasks invoke Mastra agents for focused work.
+1. A final Render task combines the results.
 
 Calling one Render task from another creates a chained task run. Each chained run executes in its own instance. You can set compute, timeout, and retries on that task alone.
 
@@ -39,7 +39,7 @@ render login
 ```
 
 :::note
-Requires Render CLI `v2.12.0` or later. For other installation methods, see the [Render CLI docs](https://render.com/docs/cli?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra).
+Requires Render CLI `v2.12.0` or later. For other installation methods, see the [Render CLI docs](https://render.com/docs/cli).
 :::
 
 Create an empty Mastra project named `render-workflows`:
@@ -273,7 +273,7 @@ Add these scripts next to the ones `create mastra` already added. `create mastra
 
 Relative imports in the examples above end in `.js` because Node resolves the compiled output as ES modules. Keep those extensions so the built entry point resolves its imports.
 
-Those files are the complete pipeline. [render-examples/render-workflows-mastra](https://github.com/render-examples/render-workflows-mastra) mirrors this `src/` layout and adds a web UI that starts the parent task. Its agents use `openai/gpt-5.6-sol` instead of `__GATEWAY_OPENAI_MODEL__`, which only works in Mastra's docs site. Clone it to skip copying the snippets before you run it.
+Those files are the complete pipeline. [render-examples/render-workflows-mastra](https://github.com/render-examples/render-workflows-mastra) mirrors this `src/` layout and adds a web UI that starts the parent task. Its agents use the provider-specific model ID `__GATEWAY_OPENAI_MODEL__`. In this page's source, that value is represented by a documentation token that is replaced during the docs build. Clone it to skip copying the snippets before you run it.
 
 ## Running the pipeline
 
@@ -303,7 +303,7 @@ The local server keeps runs and their logs in memory, so you can inspect them af
 
 ### Running in production
 
-Running the pipeline on Render requires a *workflow service*. This is the Render service that holds your task definitions: it builds your repository, registers every task it finds, and provisions an instance for each run.
+Running the pipeline on Render requires a _workflow service_. This is the Render service that holds your task definitions: it builds your repository, registers every task it finds, and provisions an instance for each run.
 
 #### 1. Push the project to a Git repository
 
@@ -311,10 +311,10 @@ Render builds workflow services from a repository on GitHub, GitLab, or Bitbucke
 
 #### 2. Create the workflow service
 
-In the [Render Dashboard](https://dashboard.render.com?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra), click **New > Workflow** and link the repository from the previous step. Then complete the creation form:
+In the [Render Dashboard](https://dashboard.render.com), click **New > Workflow** and link the repository from the previous step. Then complete the creation form:
 
 | Field | Value |
-| --- | --- |
+| - | - |
 | **Language** | Node |
 | **Region** | The region of any other Render services your tasks connect to |
 | **Build Command** | `npm install && npm run build` |
@@ -354,7 +354,7 @@ Open the workflow in the Render Dashboard to inspect each task run, attempt, res
 
 You can trigger the pipeline asynchronously from a Mastra application, web service, or script with the Render SDK.
 
-Triggering runs from code requires a Render API key, which you create in your [Render account settings](https://render.com/docs/api?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra#1-create-an-api-key). Set it in the calling service:
+Triggering runs from code requires a Render API key, which you create in your [Render account settings](https://render.com/docs/api#1-create-an-api-key). Set it in the calling service:
 
 ```text title=".env"
 RENDER_API_KEY=rnd_your_api_key
@@ -370,10 +370,7 @@ import { Render } from '@renderinc/sdk'
 const render = new Render()
 
 export async function startEditorialPipeline(draft: string) {
-  const run = await render.workflows.startTask(
-    'mastra-workflows/editorial_pipeline',
-    [draft],
-  )
+  const run = await render.workflows.startTask('mastra-workflows/editorial_pipeline', [draft])
 
   return {
     taskRunId: run.taskRunId,
@@ -389,19 +386,18 @@ Returning the task run ID from a request handler lets the application respond wi
 
 These limits live in Render's docs and can change. Prefer those pages over this list:
 
-- Task arguments and return values must be JSON serializable. Arguments to a single run cannot exceed 4 MB. See [defining tasks](https://render.com/docs/workflows-defining?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra#task-arguments) and [Workflows limits](https://render.com/docs/workflows-limits?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra).
-- A task can run for up to 24 hours. The default timeout is two hours. See [timeouts](https://render.com/docs/workflows-defining?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra#timeout).
-- A workflow service can register up to 500 task definitions. See [Workflows limits](https://render.com/docs/workflows-limits?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra).
-- Render Workflows currently supports TypeScript and Python task definitions. See [defining tasks](https://render.com/docs/workflows-defining?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra).
+- Task arguments and return values must be JSON serializable. Arguments to a single run cannot exceed 4 MB. See [defining tasks](https://render.com/docs/workflows-defining#task-arguments) and [Workflows limits](https://render.com/docs/workflows-limits).
+- A task can run for up to 24 hours. The default timeout is two hours. See [timeouts](https://render.com/docs/workflows-defining#timeout).
+- A workflow service can register up to 500 task definitions. See [Workflows limits](https://render.com/docs/workflows-limits).
+- Render Workflows currently supports TypeScript and Python task definitions. See [defining tasks](https://render.com/docs/workflows-defining).
 
-To run the pipeline on a schedule, create a [Render cron job](https://render.com/docs/cronjobs?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra) whose command calls `render workflows tasks start` or `startTask()`.
+To run the pipeline on a schedule, create a [Render cron job](https://render.com/docs/cronjobs) whose command calls `render workflows tasks start` or `startTask()`.
 
 ## Related
 
 - [Live demo](https://render-workflows-mastra.onrender.com)
-- [Render Workflows documentation](https://render.com/docs/workflows?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra)
-- [Defining Render workflow tasks](https://render.com/docs/workflows-defining?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra)
-- [Triggering task runs](https://render.com/docs/workflows-running?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra)
-- [Render Workflows TypeScript SDK](https://render.com/docs/workflows-sdk-typescript?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra)
-- [Render Workflows limits and pricing](https://render.com/docs/workflows-limits?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra)
-
+- [Render Workflows documentation](https://render.com/docs/workflows)
+- [Defining Render workflow tasks](https://render.com/docs/workflows-defining)
+- [Triggering task runs](https://render.com/docs/workflows-running)
+- [Render Workflows TypeScript SDK](https://render.com/docs/workflows-sdk-typescript)
+- [Render Workflows limits and pricing](https://render.com/docs/workflows-limits)
