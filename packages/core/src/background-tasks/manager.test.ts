@@ -848,6 +848,89 @@ describe('BackgroundTaskManager', () => {
       expect(cancelled?.status).toBe('cancelled');
     });
 
+    // Delegating tools (agent-as-tool, workflow-as-tool) suspend an inner run
+    // and hand its id back via `suspendOptions.runId`. `task.args` is frozen at
+    // dispatch time and the workflow runtime drops every `suspendOptions` field
+    // except `resumeLabel`, so without an explicit carry the inner run id is
+    // lost and the resumed delegation cannot find its snapshot.
+    it('carries the delegated run id from suspend back into args on resume', async () => {
+      const seenArgs: Array<Record<string, unknown>> = [];
+      const executeFn = vi.fn(async (args: any, opts: any) => {
+        seenArgs.push(args);
+        if (!opts.resumeData) {
+          await opts.suspend({ awaiting: 'approval' }, { runId: 'inner-run-123' });
+          return undefined;
+        }
+        return { resumedWith: args.suspendedToolRunId };
+      });
+
+      const { task } = await manager.enqueue(
+        { toolName: 't', toolCallId: 'cdeleg1', args: { prompt: 'go' }, agentId: 'a1', runId: 'outer-run' },
+        ctx(executeFn),
+      );
+      await tick(200);
+      expect((await manager.getTask(task.id))?.status).toBe('suspended');
+
+      await manager.resume(task.id, { approved: true });
+      await tick(200);
+
+      const completed = await manager.getTask(task.id);
+      expect(completed?.status).toBe('completed');
+      expect(completed?.result).toEqual({ resumedWith: 'inner-run-123' });
+
+      // First attempt sees the original args; the resumed attempt gets the
+      // inner run id merged in alongside them.
+      expect(seenArgs[0]).toEqual({ prompt: 'go' });
+      expect(seenArgs[1]).toEqual({ prompt: 'go', suspendedToolRunId: 'inner-run-123' });
+    });
+
+    // The task row's suspendPayload is published on `task.suspended` lifecycle
+    // events and is user-facing, so the internal run id must not leak into it.
+    it('keeps the delegated run id out of the persisted suspendPayload', async () => {
+      const executeFn = vi.fn(async (_args: any, opts: any) => {
+        if (!opts.resumeData) {
+          await opts.suspend({ awaiting: 'approval' }, { runId: 'inner-run-456' });
+          return undefined;
+        }
+        return 'ok';
+      });
+
+      const { task } = await manager.enqueue(
+        { toolName: 't', toolCallId: 'cdeleg2', args: {}, agentId: 'a1', runId: 'outer-run-2' },
+        ctx(executeFn),
+      );
+      await tick(200);
+
+      const suspended = await manager.getTask(task.id);
+      expect(suspended?.suspendPayload).toEqual({ awaiting: 'approval' });
+    });
+
+    // Plain (non-delegating) tools never pass a runId. They must keep working
+    // untouched — their state lives entirely in args + resumeData.
+    it('leaves args untouched when the tool suspends without a runId', async () => {
+      const seenArgs: Array<Record<string, unknown>> = [];
+      const executeFn = vi.fn(async (args: any, opts: any) => {
+        seenArgs.push(args);
+        if (!opts.resumeData) {
+          await opts.suspend({ ask: 'domain' });
+          return undefined;
+        }
+        return 'ok';
+      });
+
+      const { task } = await manager.enqueue(
+        { toolName: 't', toolCallId: 'cdeleg3', args: { name: 'dero' }, agentId: 'a1', runId: 'outer-run-3' },
+        ctx(executeFn),
+      );
+      await tick(200);
+      await manager.resume(task.id, { domain: 'example.com' });
+      await tick(200);
+
+      expect((await manager.getTask(task.id))?.status).toBe('completed');
+      expect(seenArgs[1]).toEqual({ name: 'dero' });
+      expect(seenArgs[1]).not.toHaveProperty('suspendedToolRunId');
+    });
+
     it('throws when resuming a task that is not suspended', async () => {
       const executeFn = vi.fn().mockResolvedValue('done');
       const { task } = await manager.enqueue(
