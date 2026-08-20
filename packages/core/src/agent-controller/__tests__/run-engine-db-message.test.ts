@@ -283,7 +283,74 @@ describe('SessionRunEngine — MastraDBMessage contract', () => {
     expect(messageEnds[1].message.createdAt.toISOString()).toBe('2026-01-02T03:04:05.000Z');
   });
 
-  it('Given an emitted snapshot, When later chunks mutate the message in place, Then the snapshot is unchanged', async () => {
+  it('Given streamed message events, When later deltas arrive, Then the same live message reflects the latest state', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't1' } }), ctx);
+    const started = lastMessageEvent(events);
+
+    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't1', text: 'Hello' } }), ctx);
+    const firstUpdate = lastMessageEvent(events);
+    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't1', text: ' world' } }), ctx);
+    const secondUpdate = lastMessageEvent(events);
+    await engine.processStreamChunk(
+      state,
+      chunk({
+        type: 'data-user-message',
+        data: { id: 'user-signal-1', message: 'next input', createdAt: '2026-01-02T03:04:05.000Z' },
+      }),
+      ctx,
+    );
+    const ended = events.find(event => event.type === 'message_end' && event.message.role === 'assistant');
+    if (!ended || ended.type !== 'message_end') throw new Error('no assistant message_end event');
+
+    expect(firstUpdate).toBe(started);
+    expect(secondUpdate).toBe(started);
+    expect(ended.message).toBe(started);
+    expect(started.content).toEqual({
+      format: 2,
+      parts: [{ type: 'text', text: 'Hello world' }],
+      metadata: { stopReason: 'complete' },
+    });
+  });
+
+  /**
+   * These three tests preserve the superseded point-in-time snapshot contract as
+   * executable documentation. They are intentionally skipped—not deleted—so a
+   * future change cannot quietly reintroduce per-delta copying without confronting
+   * the allocation and ownership tradeoff.
+   *
+   * `SessionRunEngine` now emits one live accumulated message for a streamed turn.
+   * Later text/reasoning/tool updates therefore mutate objects observed by earlier
+   * events, and consecutive events intentionally share the same parts and tool
+   * invocation identities. Each assertion below must fail under that contract.
+   *
+   * This is a large tradeoff, not a micro-optimization. The former deep clone copied
+   * all accumulated content, including completed multi-megabyte tool results, on every
+   * token. For D similarly sized deltas, copying a message that grows throughout the
+   * stream makes total copied content grow quadratically with D. Nik Aiyer's PR #20314
+   * significantly improved this with selective shallow snapshots, but it still creates
+   * a complete message/parts shell per delta and allows delayed listeners to retain
+   * every intermediate shape.
+   *
+   * In the dogfood profile that motivated this change, the
+   * `structuredClone -> cloneMessage -> processStreamChunk` path accounted for 583.9 MiB
+   * of sampled allocation, including 343.7 MiB directly in `structuredClone`; the
+   * process finished near 1.9 GiB heap and 1.7 GiB old space without meaningful major-GC
+   * recovery. That profile does not prove every retained byte belonged to cloning, but
+   * it establishes that snapshot production was a material allocation source. The
+   * retained-listener reproduction cited by #20314 was even starker: retaining roughly
+   * 2,000 deltas with multi-megabyte tool results exhausted the heap under deep cloning,
+   * while selective snapshots reduced growth to roughly 5 MiB. Live messages remove the
+   * remaining producer-owned per-delta shells as well as the deep copies.
+   *
+   * Point-in-time consumers must now copy or serialize at their own async/storage
+   * boundary. Do not unskip these tests by restoring producer-side snapshots; replace
+   * them only if the event contract changes again with equivalent long-session proof.
+   */
+  it.skip('Given an emitted snapshot, When later chunks mutate the message in place, Then the snapshot is unchanged', async () => {
     const { engine, events } = createHarness();
     const state = engine.createStreamState();
     const ctx = requestContext();
@@ -312,6 +379,59 @@ describe('SessionRunEngine — MastraDBMessage contract', () => {
     if (!callPart || callPart.type !== 'tool-invocation') throw new Error('no tool invocation part in snapshot');
     expect(callPart.toolInvocation.state).toBe('call');
     expect(callPart.toolInvocation).not.toHaveProperty('result');
+  });
+
+  it.skip('Given an emitted snapshot, When later chunks mutate reasoning and metadata in place, Then the snapshot is unchanged', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+
+    await engine.processStreamChunk(state, chunk({ type: 'reasoning-start', payload: { id: 'r1' } }), ctx);
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'reasoning-delta', payload: { id: 'r1', text: 'first' } }),
+      ctx,
+    );
+    const snapshot = lastMessageEvent(events);
+
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'reasoning-delta', payload: { id: 'r1', text: ' second' } }),
+      ctx,
+    );
+    await engine.processStreamChunk(state, chunk({ type: 'data-user-message', data: { id: 'sig-1' } }), ctx);
+
+    expect(snapshot.content.parts).toEqual([
+      { type: 'reasoning', reasoning: 'first', details: [{ type: 'text', text: 'first' }] },
+    ]);
+    expect(snapshot.content.metadata?.stopReason).toBeUndefined();
+  });
+
+  it.skip('Given the former shallow-snapshot contract, When emitted, Then mutable part shells are isolated', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+    const args = { path: 'a.ts' };
+
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'tool-call', payload: { toolCallId: 'tc1', toolName: 'read', args } }),
+      ctx,
+    );
+    const first = lastMessageEvent(events);
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't1', text: 'hi' } }), ctx);
+    const second = lastMessageEvent(events);
+
+    const firstTool = first.content.parts.find(part => part.type === 'tool-invocation');
+    const secondTool = second.content.parts.find(part => part.type === 'tool-invocation');
+    if (firstTool?.type !== 'tool-invocation' || secondTool?.type !== 'tool-invocation') {
+      throw new Error('missing tool invocation parts');
+    }
+    expect(secondTool).not.toBe(firstTool);
+    expect(secondTool.toolInvocation).not.toBe(firstTool.toolInvocation);
+    expect(secondTool.toolInvocation.args).toBe(firstTool.toolInvocation.args);
+    expect(secondTool.toolInvocation.args).toBe(args);
   });
 
   it('Given a step-start carrying the response message id, When the turn streams, Then emitted messages adopt that id', async () => {

@@ -1,5 +1,53 @@
 # @mastra/factory
 
+## 0.9.0-alpha.2
+
+### Patch Changes
+
+- Improved loaded Factory conversations with a smooth staggered reveal. ([#21937](https://github.com/mastra-ai/mastra/pull/21937))
+
+- Creating a new Factory no longer takes over the whole screen once you already have one. The flow now runs inline at `/factories/:factoryId/new-factory`, so the sidebar stays in place and you keep the context of the Factory you were in. The full-screen version is still what you get on first run, when no Factory exists yet. ([#21932](https://github.com/mastra-ai/mastra/pull/21932))
+
+  Each step is now a searchable list you type into instead of a form: name the Factory, pick a repository, pick the Linear project that feeds its board (or skip Linear entirely), then choose the provider and model your runs start on. Picking a Linear project routes it to the new Factory and turns its issue sync on, so the board fills up without a detour through Settings. Repository search hits GitHub directly, so large accounts are usable, and keyboard navigation works throughout (arrows to move, Enter to select, Esc to leave).
+
+  Nothing is written to the server until the last step: the name, the repository and the Linear choice stay in the draft, and the Factory is created with all of them at once when you pick its model. Quitting the wizard halfway leaves nothing behind. Back walks the steps in reverse and only leaves the wizard from the first one.
+
+- Updated dependencies [[`480e491`](https://github.com/mastra-ai/mastra/commit/480e491588bd6a7a1c9ee4407590ad625dd33952), [`3bb88dd`](https://github.com/mastra-ai/mastra/commit/3bb88ddf07fb98f3cd16d3bff94e51cd3b45d011), [`d378d75`](https://github.com/mastra-ai/mastra/commit/d378d7511f71309ed61a8f6b93cd0361dc6cb70f), [`cad4208`](https://github.com/mastra-ai/mastra/commit/cad42082e6aa1776168a94914f523334be45d929), [`d378d75`](https://github.com/mastra-ai/mastra/commit/d378d7511f71309ed61a8f6b93cd0361dc6cb70f)]:
+  - @mastra/core@1.61.0-alpha.2
+  - @mastra/code-sdk@1.4.0-alpha.2
+
+## 0.9.0-alpha.1
+
+### Minor Changes
+
+- Added a `/login` command to the web chat composer. Credential errors used to name a command the web UI did not have, leaving no way to act on them from the browser. Typing `/login` now opens Settings → Models, where providers are connected. ([#21860](https://github.com/mastra-ai/mastra/pull/21860))
+
+### Patch Changes
+
+- Improved model selection in Factory chats. The status line now shows one combined picker with the effective model for the current mode. ([#21871](https://github.com/mastra-ai/mastra/pull/21871))
+
+  The picker offers:
+
+  - Model packs as presets, with your personal default marked.
+  - Models grouped by provider, to override the model for the current mode.
+  - A reset action that returns the chat to your default pack.
+  - A link to pack management in settings.
+  - Search across packs and models.
+
+  The picker works in draft chats and in active user chats. A pack chosen in a draft applies before the first prompt runs. Live user chats can now switch models directly from the status line.
+
+- Trimmed what the Factory sidebar fetches while it polls. ([#21862](https://github.com/mastra-ai/mastra/pull/21862))
+
+  The activity dots used to cost one request per user session every five seconds. They now share a single request whatever the sidebar holds, so ten sessions poll once instead of eleven times.
+
+  Work item responses also stop carrying `factoryRuleMaterializationKey`, an internal field no client reads and the heaviest one on a large board.
+
+- Fixed pull request cards that stayed marked as open after an approving review. A card that an approving review moved to `done` was dropped from the GitHub reconcile sweep, so a merge landing afterwards never reached it — the board card kept saying `open` and the merged marker never appeared on its review session in the sidebar. Cards now stay in the sweep until their pull request is actually closed. ([#21870](https://github.com/mastra-ai/mastra/pull/21870))
+
+- Updated dependencies [[`d23e75d`](https://github.com/mastra-ai/mastra/commit/d23e75d57cc7cf5b9bfdbee896bf5a6a2484fed7), [`c8faa4e`](https://github.com/mastra-ai/mastra/commit/c8faa4e1cfebaec56b65e754e90b9fe46d153359), [`10de311`](https://github.com/mastra-ai/mastra/commit/10de311e93baea36468463d25bf0f97046239d5e), [`f2031a4`](https://github.com/mastra-ai/mastra/commit/f2031a47445e8f67a89ba1309036816f97ab7a65), [`4c2b973`](https://github.com/mastra-ai/mastra/commit/4c2b97396066e97c95c3d0429b2f63a92e6af127), [`8e529d4`](https://github.com/mastra-ai/mastra/commit/8e529d4ac754efef04b225841349e0da9edf89a6)]:
+  - @mastra/core@1.61.0-alpha.1
+  - @mastra/code-sdk@1.4.0-alpha.1
+
 ## 0.8.1-alpha.0
 
 ### Patch Changes

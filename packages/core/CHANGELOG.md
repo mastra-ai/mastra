@@ -1,5 +1,89 @@
 # @mastra/core
 
+## 1.61.0-alpha.2
+
+### Patch Changes
+
+- Fixed the coding agent's instructions for a message that arrives while it is already working. They described that message as `<user-message delivery="…">`, a tag the runtime never emits, so the rule and the wrapper the agent actually receives (`<user delivery="…">`) never matched by name. ([#21879](https://github.com/mastra-ai/mastra/pull/21879))
+
+  No API change, and no change to how a message is delivered: one that lands mid-work is still marked `while-active` and still meant as context for the work in flight. The instructions now name it the way it arrives.
+
+- Fixed Code Mode instructions to reference custom tool IDs. ([#21920](https://github.com/mastra-ai/mastra/pull/21920))
+
+- Removed a catch that hid a broken durable run. When a durable run's state could not be read between iterations, the loop kept going and crashed one step later with an error that pointed at the wrong place. It now fails where the unreadable state is found, carrying the real cause. ([#21889](https://github.com/mastra-ai/mastra/pull/21889))
+
+- Fixed Code Mode sandbox resolution for resolver-backed workspaces. ([#21922](https://github.com/mastra-ai/mastra/pull/21922))
+
+- Removed a catch that hid a broken durable run. When a durable run's state could not be read between iterations, the loop kept going and crashed one step later with an error that pointed at the wrong place. It now fails where the unreadable state is found, carrying the real cause. ([#21889](https://github.com/mastra-ai/mastra/pull/21889))
+
+## 1.61.0-alpha.1
+
+### Minor Changes
+
+- The session now marks a message you send while the agent is working, and every client gets it for free. Any user message submitted with a run in flight — including the one `session.steer()` sends after interrupting a run — carries `delivery: 'while-active'`, so the agent reads it as context for the work in progress and a reloaded transcript can still tell a steer apart from a normal message. A message that opens a new turn is unmarked, as before. ([#21842](https://github.com/mastra-ai/mastra/pull/21842))
+
+  The attribute used to be resolved from the run state at dispatch time, which reads idle for a steer (a steer aborts its own run before sending), so each client had to describe both delivery routes itself.
+
+  ```ts
+  // before
+  session.sendSignal({
+    content,
+    ifActive: { attributes: { delivery: 'while-active' } },
+    ifIdle: { attributes: { delivery: 'message' } },
+  });
+
+  // now
+  session.sendSignal({ content });
+  ```
+
+  A `delivery` the caller sets on the signal still wins.
+
+### Patch Changes
+
+- Reduced agent-controller memory usage during long streamed responses by reusing the live accumulated message across `message_start`, `message_update`, and `message_end` events, including events queued for server-sent event delivery. `display_state_changed.currentMessage` references the same live message. Consumers that require point-in-time values should copy or serialize before deferring event processing. ([#21813](https://github.com/mastra-ai/mastra/pull/21813))
+
+- Fixed a reply coming back duplicated after an interrupted turn. When an error-retry processor or the durable loop moved the response message id without sealing the stored response, the streamed message split where the stored one did not, so the second half reappeared under its own id on reload. Rotating a response message id now seals the response it leaves behind, so the two can no longer drift apart. ([#21868](https://github.com/mastra-ai/mastra/pull/21868))
+
+  Durable runs now honour the same error-retry hooks as regular runs: `processAPIError` receives `messageId` and a working `rotateResponseMessageId`, so a processor can close the failed response and answer the retry in a message of its own instead of appending to it. The same handler was also working on a throwaway copy of the conversation, so anything it added there was dropped: a signal sent from `processAPIError` never reached the retried request. It does now.
+
+  ```ts
+  const agent = new Agent({
+    name: 'support',
+    model: 'openai/gpt-5-nano',
+    maxProcessorRetries: 1,
+    errorProcessors: [
+      {
+        id: 'retry-in-a-new-message',
+        processAPIError: async ({ rotateResponseMessageId }) => {
+          rotateResponseMessageId?.();
+          return { retry: true };
+        },
+      },
+    ],
+  });
+  ```
+
+  Message ids minted during a durable run also honour a custom `generateId` configured on `Mastra`, which some paths silently ignored.
+
+- Improved Agent Controller session startup by initializing workspaces only when used. ([#21874](https://github.com/mastra-ai/mastra/pull/21874))
+
+  Agent Controller no longer initializes configured workspaces during controller or session creation.
+
+  Before, session creation implicitly initialized the configured workspace:
+
+  ```ts
+  const session = await controller.createSession({ id: 'session-id' });
+  ```
+
+  After, applications that require eager initialization must request it explicitly:
+
+  ```ts
+  const session = await controller.createSession({ id: 'session-id' });
+  await session.getWorkspace()?.init();
+  ```
+
+  Workspace operations otherwise initialize their resources lazily.
+
 ## 1.60.1-alpha.0
 
 ### Patch Changes
