@@ -69,6 +69,38 @@ Package status uses these values:
 
 A partial package is never reported as fully compatible. Unsupported registrations and actions are diagnosed rather than ignored.
 
+## Characterized package examples
+
+Mastra Code verifies its compatibility boundary against pinned package releases. These results apply to the exact versions shown and target Pi API `0.84.2`. They don't predict compatibility for later releases.
+
+| Package | Characterized status | Notable boundary |
+| - | - | - |
+| `pi-mcp-adapter@2.26.1` | `pi-compatible` | Commands, flags, tools, and mapped lifecycle events |
+| `pi-ds-web-search@0.1.0` | `pi-compatible` | Declarative provider, request event, command, and tool |
+| `pi-web-access@0.24.0` | `pi-partial` | Session-tree behavior and shortcut registration aren't available |
+| `pi-subagents@0.52.1` | `pi-partial` | Session switch, fork, and compaction boundaries are reported |
+| `pi-multiagent@0.9.8` | `pi-partial` | Renderer, flag, tool, and event behavior is adapted; other surfaces are reported |
+| `pi-memory@0.4.2` | `pi-partial` | Compaction behavior isn't equivalent to Pi's session manager |
+| `context-mode@1.0.169` | `pi-partial` | Context and lifecycle hooks are adapted with reported unsupported surfaces |
+| `@braintrust/pi-extension@1.0.0` | `pi-incompatible` | The package's provider-response and compaction surfaces don't provide a usable supported contribution |
+
+Other characterized packages may be rejected during inspection or factory loading. `/plugins` reports the package-attributed reason instead of enabling a partial generation.
+
+## Author portable Pi extensions
+
+A dual-target package can use the portable subset when it:
+
+- Declares extensions, skills, prompts, and themes in `package.json#pi` with paths contained by the package root.
+- Registers tools, commands, flags, declarative providers, supported events, and bounded text UI through the Pi extension API.
+- Treats the provided context as a scoped facade. It doesn't retain action closures after reload or expect access to Pi's `SessionManager`, transcript tree, raw model registry, or terminal.
+- Uses extension-owned cleanup on `session_shutdown` and handles stale-context errors after reload, disable, uninstall, or session replacement.
+- Keeps tool names collision-safe and accepts Mastra Code's tool approval, permission, active-tool, and precedence policies.
+- Checks the capability report before relying on version-gated behavior and remains useful when an unsupported renderer or UI contribution falls back to text.
+
+Use a native Mastra Code plugin instead when the package requires request context, workspace or Mastra access, first-class input/output processors, signal providers, tool suspension, native render configuration, or direct AgentController listeners. Native plugins remain the richer host API. A package may include separate native and Pi entries, but the Pi entry must not import native runtime internals or assume both entries run together.
+
+Both native and Pi packages use the same PluginManager ownership model. Every contribution is generation-owned, native and built-in tools retain precedence, failed replacement generations leave the current generation active, and disable or uninstall retires owned runtime state before package files are removed.
+
 ## Release contract: Registration and resources
 
 | Pi surface | Status | Mastra Code behavior |

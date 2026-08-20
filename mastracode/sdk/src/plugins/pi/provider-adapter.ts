@@ -17,6 +17,7 @@ export interface PiProviderContribution {
 export interface PiProviderHost {
   register(provider: PiProviderContribution): Promise<(() => void | Promise<void>) | void>;
   refresh(): Promise<void>;
+  resolveApiKeyEnvVar?(name: string): string | undefined;
 }
 
 function normalizeModels(value: unknown): string[] {
@@ -58,8 +59,8 @@ export class PiProviderAdapter {
       typeof value.baseUrl === 'string' ? value.baseUrl : typeof value.url === 'string' ? value.url : undefined;
     if (!url) throw new Error(`Pi provider "${name}" requires baseUrl`);
     const configuredApiKey = typeof value.apiKey === 'string' ? value.apiKey : undefined;
-    const apiKeyEnvVar = configuredApiKey?.startsWith('$') ? configuredApiKey.slice(1) : undefined;
-    if (configuredApiKey && (!apiKeyEnvVar || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(apiKeyEnvVar))) {
+    const configuredApiKeyEnvVar = configuredApiKey?.startsWith('$') ? configuredApiKey.slice(1) : undefined;
+    if (configuredApiKey && (!configuredApiKeyEnvVar || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(configuredApiKeyEnvVar))) {
       generation.addDiagnostic(
         'error',
         `Pi provider "${name}" supplied a raw credential that cannot be retained; use an environment-backed credential.`,
@@ -93,7 +94,7 @@ export class PiProviderAdapter {
       cleanup = await this.host.register({
         name,
         url,
-        apiKeyEnvVar,
+        apiKeyEnvVar: configuredApiKeyEnvVar ?? this.host.resolveApiKeyEnvVar?.(name),
         models: normalizeModels(value.models),
         pluginId: generation.pluginId,
         extensionId: generation.extensionId,

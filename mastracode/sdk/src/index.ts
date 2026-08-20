@@ -686,6 +686,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     refresh: async () => {
       if (pluginRuntimeController) await syncGateways(true);
     },
+    resolveApiKeyEnvVar: providerName => {
+      const envVars = (PROVIDER_REGISTRY as Record<string, ProviderConfig>)[providerName]?.apiKeyEnvVar;
+      return Array.isArray(envVars) ? envVars[0] : envVars;
+    },
   });
   pluginManager?.setPiRuntimeActions(generation =>
     createPiRuntimeActions({

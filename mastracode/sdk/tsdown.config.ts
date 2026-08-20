@@ -11,7 +11,7 @@ import { defineConfig } from 'tsdown';
  * global with `typeof` and the published tui build injects it.
  */
 export default defineConfig({
-  entry: ['src/**/*.ts', '!src/**/*.test.ts', '!src/**/__tests__/**'],
+  entry: ['src/**/*.ts', '!src/**/*.test.ts', '!src/**/__tests__/**', '!src/**/compatibility-fixtures/**'],
   format: ['esm'],
   fixedExtension: false,
   nodeProtocol: 'strip',

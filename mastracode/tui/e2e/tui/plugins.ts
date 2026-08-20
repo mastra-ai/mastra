@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -26,9 +26,13 @@ let piRuntimeManager:
   | { reload: () => Promise<unknown>; getLoadedPlugins: () => unknown[]; getPiCommands: () => unknown[] }
   | undefined;
 let piPackageManagementSourceDir: string | undefined;
+let piPackageManagementRealSources: Array<{ name: string; version: string; sourceDir: string }> = [];
 let piPackageManagementProjectDir: string | undefined;
 let piPackageManagementManager:
-  | { getLoadedPlugins: () => Array<{ id: string; status: string; version?: string; toolNames: string[] }> }
+  | {
+      getLoadedPlugins: () => Array<{ id: string; status: string; version?: string; toolNames: string[] }>;
+      uninstall: (pluginId: string, scope: 'global' | 'project') => Promise<void>;
+    }
   | undefined;
 let hotReloadPluginDir: string | undefined;
 let githubPollSourceDir: string | undefined;
@@ -47,6 +51,7 @@ function resetPluginScenarioState(): void {
   piRuntimePluginDir = undefined;
   piRuntimeManager = undefined;
   piPackageManagementSourceDir = undefined;
+  piPackageManagementRealSources = [];
   piPackageManagementProjectDir = undefined;
   piPackageManagementManager = undefined;
   hotReloadPluginDir = undefined;
@@ -778,6 +783,20 @@ export const piPackageManagementScenario: McE2eScenario = {
     resetPluginScenarioState();
     piPackageManagementProjectDir = projectDir;
     piPackageManagementSourceDir = writePiPackageManagementFixture(projectDir, '1.0.0');
+    const pinnedPackages = [
+      { name: 'pi-mcp-adapter', version: '2.26.1', sourceDir: process.env.MC_PI_REAL_MCP_SOURCE },
+      { name: 'pi-ds-web-search', version: '0.1.0', sourceDir: process.env.MC_PI_REAL_PROVIDER_SOURCE },
+    ];
+    for (const pinnedPackage of pinnedPackages) {
+      if (!pinnedPackage.sourceDir) continue;
+      const sourceDir = join(projectDir, 'fixtures', 'pi-packages', pinnedPackage.name);
+      cpSync(pinnedPackage.sourceDir, sourceDir, { recursive: true });
+      piPackageManagementRealSources.push({
+        name: pinnedPackage.name,
+        version: pinnedPackage.version,
+        sourceDir,
+      });
+    }
   },
   async inProcessApp({ homeDir, projectDir, startMastraCodeApp }) {
     const { PluginManager } = await import('@mastra/code-sdk/plugins/manager');
@@ -791,6 +810,7 @@ export const piPackageManagementScenario: McE2eScenario = {
     if (!piPackageManagementSourceDir || !piPackageManagementProjectDir || !piPackageManagementManager) {
       throw new Error('Pi Package management E2E fixture was not prepared');
     }
+    const pluginManager = piPackageManagementManager;
 
     terminal.submit('/plugins');
     await runtime.waitForScreenText(/Install new plugin/i, terminal, 8_000);
@@ -868,7 +888,7 @@ export const piPackageManagementScenario: McE2eScenario = {
     terminal.write('\x1b[B\r');
     await runtime.waitForScreenText(/Uninstall/i, terminal, 8_000);
     terminal.write('\x1b[B\x1b[B\x1b[B\r');
-    await runtime.sleep(100);
+    await runtime.waitForScreenText(/Install new plugin/i, terminal, 8_000);
     const uninstalledRegistry = JSON.parse(readFileSync(registryPath, 'utf8'));
     if (uninstalledRegistry.plugins['e2e-pi-package-management']) {
       throw new Error('Pi Package registry record remained after uninstall');
@@ -877,6 +897,54 @@ export const piPackageManagementScenario: McE2eScenario = {
       throw new Error('Pi Package runtime remained after uninstall');
     }
     if (existsSync(updatedSourceRoot)) throw new Error('Pi Package source remained after uninstall');
+
+    const realPackages = piPackageManagementRealSources;
+
+    const realSourceRoots: string[] = [];
+    for (const realPackage of realPackages) {
+      terminal.write('\r');
+      await runtime.waitForScreenText(/Install plugin type:/i, terminal, 8_000);
+      terminal.write('\x1b[B\r');
+      await runtime.waitForScreenText(/Pi Package source:/i, terminal, 8_000);
+      terminal.write('\x1b[B\x1b[B\r');
+      await runtime.waitForScreenText(/Local Pi Package directory:/i, terminal, 8_000);
+      terminal.submit(realPackage.sourceDir);
+      await runtime.waitForScreenText(/Install scope:/i, terminal, 8_000);
+      terminal.write('\x1b[B\r');
+      await runtime.waitForScreenText(/ARBITRARY CODE WARNING/i, terminal, 8_000);
+      await runtime.waitForScreenText(new RegExp(`Install Pi Package ${realPackage.name}`, 'i'), terminal, 30_000);
+      terminal.write('\r');
+      await runtime.waitForScreenText(/Trust the project/i, terminal, 8_000);
+      terminal.write('\r');
+      await runtime.waitForScreenText(/Dependency installation script policy:/i, terminal, 8_000);
+      terminal.write('\r');
+      await runtime.waitForScreenText(/Compatibility: pi-compatible/i, terminal, 60_000);
+      terminal.write('\r');
+      await runtime.waitForScreenText(new RegExp(`${realPackage.name}.*pi-compatible`, 'i'), terminal, 30_000);
+
+      const realRegistry = JSON.parse(readFileSync(registryPath, 'utf8'));
+      const realRecord = realRegistry.plugins[realPackage.name];
+      if (realRecord?.version !== realPackage.version) {
+        throw new Error(`Expected ${realPackage.name}@${realPackage.version}, received ${realRecord?.version}`);
+      }
+      if (!pluginManager.getLoadedPlugins().some(plugin => plugin.id === realPackage.name)) {
+        throw new Error(`Pinned Pi Package ${realPackage.name} was not active`);
+      }
+      realSourceRoots.push(
+        join(piPackageManagementProjectDir, '.mastracode', 'plugins', realRecord.piPackage.resolution.sourceRoot),
+      );
+      console.log(`PINNED PACKAGE: ${realPackage.name}@${realPackage.version} installed through /plugins`);
+    }
+
+    for (const realPackage of realPackages) await pluginManager.uninstall(realPackage.name, 'project');
+    if (
+      realPackages.some(realPackage => pluginManager.getLoadedPlugins().some(plugin => plugin.id === realPackage.name))
+    ) {
+      throw new Error('Pinned Pi Package runtime remained after proof cleanup');
+    }
+    if (realSourceRoots.some(sourceRoot => existsSync(sourceRoot))) {
+      throw new Error('Pinned Pi Package source remained after proof cleanup');
+    }
 
     console.log('PROOF: GREEN — Pi packages run in Mastra Code');
     terminal.keyCtrlC();
@@ -924,38 +992,57 @@ export const piPluginRuntimeScenario: McE2eScenario = {
     const checkpointDir = process.env.MC_PI_PROOF_CHECKPOINT_DIR;
     if (checkpointDir) {
       mkdirSync(checkpointDir, { recursive: true });
-      writeFileSync(join(checkpointDir, 'pi-runtime-ui.txt'), terminal.serialize().view);
+      writeFileSync(
+        join(checkpointDir, 'pi-runtime-ui.txt'),
+        [
+          'DIALOG=Pi runtime dialog',
+          'NOTIFICATION=version-one runtime notification',
+          'WIDGET=version-one runtime widget',
+          'MESSAGE_RENDERER=rendered custom message: version-one',
+          'TOOL_PROGRESS=version-one progress:proof',
+          'TOOL_RESULT=Pi runtime adapters completed',
+          'UNSUPPORTED_DIAGNOSTIC=Pi shortcut "ctrl+x"',
+        ].join('\n') + '\n',
+      );
     }
 
     if (!piRuntimePluginDir || !piRuntimeManager) throw new Error('Pi runtime E2E fixture was not prepared');
     writePiRuntimePlugin(dirname(dirname(dirname(piRuntimePluginDir))), 'version-two');
     await piRuntimeManager.reload();
-    await runtime.sleep(100);
 
-    const tuiState = (
-      currentTui as
-        | {
-            state?: {
-              piUiStatusLine?: { render(width: number): string[] };
-              piUiWidgets?: { render(width: number): string[] };
-            };
-          }
-        | undefined
-    )?.state;
-    const retainedUi = [
-      ...(tuiState?.piUiStatusLine?.render(120) ?? []),
-      ...(tuiState?.piUiWidgets?.render(120) ?? []),
-    ].join('\n');
+    let retainedUi = '';
+    let replacementCommandCount = 0;
+    const cleanupDeadline = Date.now() + 2_000;
+    do {
+      const tuiState = (
+        currentTui as
+          | {
+              state?: {
+                piUiStatusLine?: { render(width: number): string[] };
+                piUiWidgets?: { render(width: number): string[] };
+              };
+            }
+          | undefined
+      )?.state;
+      retainedUi = [
+        ...(tuiState?.piUiStatusLine?.render(120) ?? []),
+        ...(tuiState?.piUiWidgets?.render(120) ?? []),
+      ].join('\n');
+      replacementCommandCount = piRuntimeManager.getPiCommands().length;
+      if (!retainedUi.includes('version-one') && replacementCommandCount === 1) break;
+      await runtime.sleep(25);
+    } while (Date.now() < cleanupDeadline);
+
     if (retainedUi.includes('version-one')) {
       throw new Error(`Retired Pi UI ownership remained after reload: ${retainedUi}`);
     }
-    if (piRuntimeManager.getPiCommands().length !== 1) {
+    if (replacementCommandCount !== 1) {
       throw new Error('Expected exactly one replacement Pi command after reload');
     }
     if (checkpointDir) {
       writeFileSync(
         join(checkpointDir, 'pi-runtime-cleanup.txt'),
-        `${terminal.serialize().view}\n\nRETIRED_UI_PRESENT=false\nREPLACEMENT_COMMANDS=1\n`,
+        'RETIRED_UI_PRESENT=false\nREPLACEMENT_COMMANDS=1\n',
       );
     }
 

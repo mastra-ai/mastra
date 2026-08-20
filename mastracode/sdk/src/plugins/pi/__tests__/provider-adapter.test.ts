@@ -43,6 +43,26 @@ describe('Pi provider adapter', () => {
     expect(host.refresh).toHaveBeenCalledTimes(2);
   });
 
+  it('inherits an existing provider environment credential when the Pi config omits auth', async () => {
+    const host = {
+      register: vi.fn().mockResolvedValue(undefined),
+      refresh: vi.fn().mockResolvedValue(undefined),
+      resolveApiKeyEnvVar: vi.fn().mockReturnValue('DEEPSEEK_API_KEY'),
+    };
+    const adapter = new PiProviderAdapter(host);
+    const generation = new MastraPiExtensionGeneration('plugin', 'extension', '/tmp/entry.ts');
+
+    await adapter.register(generation, 'deepseek', {
+      baseUrl: 'https://api.deepseek.com',
+      models: ['deepseek-v4-flash'],
+    });
+
+    expect(host.resolveApiKeyEnvVar).toHaveBeenCalledWith('deepseek');
+    expect(host.register).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'deepseek', apiKeyEnvVar: 'DEEPSEEK_API_KEY' }),
+    );
+  });
+
   it('awaits and cleans up in-flight provider registration during invalidation', async () => {
     let release!: () => void;
     const teardown = vi.fn().mockResolvedValue(undefined);
