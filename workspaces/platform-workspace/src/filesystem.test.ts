@@ -1,5 +1,5 @@
 import { FileNotFoundError } from '@mastra/core/workspace';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PlatformFilesystem } from './filesystem.js';
 
 function response(body?: BodyInit | null, init?: ResponseInit) {
@@ -7,6 +7,10 @@ function response(body?: BodyInit | null, init?: ResponseInit) {
 }
 
 describe('PlatformFilesystem', () => {
+  beforeEach(() => {
+    vi.stubEnv('SANDBOX_PROVIDER', 'railway');
+  });
+
   afterEach(() => {
     vi.unstubAllEnvs();
   });

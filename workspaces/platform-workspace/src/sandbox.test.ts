@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DirectExecWebSocket, DirectExecWebSocketFactory } from './direct-exec.js';
 import { PlatformSandbox, type SandboxAddressRegistry } from './sandbox.js';
 
@@ -94,6 +94,10 @@ class FakeSocket implements DirectExecWebSocket {
 }
 
 describe('PlatformSandbox', () => {
+  beforeEach(() => {
+    vi.stubEnv('SANDBOX_PROVIDER', 'railway');
+  });
+
   afterEach(() => {
     vi.unstubAllEnvs();
   });

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PlatformApiError } from './client.js';
 import { PlatformClient, resolvePlatformOptions } from './client.js';
 
@@ -7,6 +7,10 @@ function response(body: string, init?: ResponseInit) {
 }
 
 describe('PlatformClient', () => {
+  beforeEach(() => {
+    vi.stubEnv('SANDBOX_PROVIDER', 'railway');
+  });
+
   afterEach(() => {
     vi.unstubAllEnvs();
   });
