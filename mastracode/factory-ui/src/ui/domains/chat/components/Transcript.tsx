@@ -690,6 +690,12 @@ export function ChannelOriginBadge({ origin }: { origin: { platform: string; aut
   );
 }
 
+function steeringLabel(entry: MessageEntry): string | undefined {
+  if (!entry.steer) return undefined;
+  if (entry.deliveryStatus === 'pending') return 'Steering…';
+  if (entry.deliveryStatus === 'failed') return 'Not sent';
+  return 'Steered message';
+}
 function renderMessageBubble({
   entry,
   suspensions,
@@ -702,6 +708,7 @@ function renderMessageBubble({
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {
   const messageParts = entry.message.content.parts ?? [];
+
   const parts = messageParts.filter(part => isRenderablePart(part, suspensions, entry.runtimeTools));
   const message =
     parts.length === messageParts.length
@@ -712,17 +719,28 @@ function renderMessageBubble({
   const toolGroups = collectToolGroups(parts, suspensions, entry.runtimeTools);
   const origin = channelOrigin(entry);
   const prose = messageText(parts);
+  const steeringStatus = steeringLabel(entry);
+  const steeringPending = entry.deliveryStatus === 'pending';
+  const steeringFailed = entry.deliveryStatus === 'failed';
   const roles: MessageRoleRenderers = {
     User: ({ children }) => (
       <div className={cn(MESSAGE_HOVER, 'my-3 ml-auto flex w-fit max-w-[70%] flex-col items-end')}>
         <div
           className={cn(
-            'text-text1 rounded-xl px-4 py-2 break-words',
-            entry.steer ? 'bg-warning1/10' : 'bg-neutral6/5',
+            'text-text1 bg-neutral6/5 rounded-xl border border-transparent px-4 py-2 break-words',
+            steeringPending && 'border-border1 border-dashed',
           )}
         >
           {children}
         </div>
+        {steeringStatus && (
+          <span
+            className={cn('text-ui-xs text-icon3 mt-1', steeringFailed && 'text-notice-destructive-fg')}
+            aria-live="polite"
+          >
+            {steeringStatus}
+          </span>
+        )}
         {origin && <ChannelOriginBadge origin={origin} />}
         {prose ? <MessageMeta text={prose} createdAt={entry.message.createdAt} align="end" /> : null}
       </div>

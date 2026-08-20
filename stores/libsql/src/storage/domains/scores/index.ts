@@ -281,8 +281,18 @@ export class ScoresLibSQL extends ScoresStorage {
     }
 
     try {
-      const id = crypto.randomUUID();
+      // Caller-supplied ids give scores a stable identity: retried writes for
+      // the same id replace the previous row (latest wins).
+      const suppliedId = parsedScore.id;
+      const id = suppliedId ?? crypto.randomUUID();
       const now = new Date();
+
+      if (suppliedId) {
+        await this.#client.execute({
+          sql: `DELETE FROM ${TABLE_SCORERS} WHERE id = ?`,
+          args: [suppliedId],
+        });
+      }
 
       await this.#db.insert({
         tableName: TABLE_SCORERS,

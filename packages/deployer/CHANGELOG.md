@@ -1,5 +1,27 @@
 # @mastra/deployer
 
+## 1.61.0-alpha.4
+
+### Patch Changes
+
+- Fix `ERR_INVALID_ARG_VALUE` during bundling when a bare import is resolved from a Rollup virtual module. `nodeModulesExtensionResolver` now skips NUL-prefixed importers (e.g. `\0virtual:#entry`) instead of treating them as filesystem paths. ([#21998](https://github.com/mastra-ai/mastra/pull/21998))
+
+- Updated dependencies:
+  - @mastra/core@1.61.0-alpha.4
+  - @mastra/server@1.61.0-alpha.4
+
+## 1.61.0-alpha.3
+
+### Minor Changes
+
+- Improved generated server shutdown to drain in-flight HTTP requests before closing Mastra resources ([#20678](https://github.com/mastra-ai/mastra/issues/20678)). Refresh streams now close during shutdown, drain failures no longer skip resource cleanup, and a second shutdown signal exits immediately. ([#21990](https://github.com/mastra-ai/mastra/pull/21990))
+
+### Patch Changes
+
+- Updated dependencies [[`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`acc3471`](https://github.com/mastra-ai/mastra/commit/acc3471de5f3fde8027ee4e355af292b2bc1bc30), [`b6a771e`](https://github.com/mastra-ai/mastra/commit/b6a771ef23d203ddb348efca8065eff65def8191), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`26d4016`](https://github.com/mastra-ai/mastra/commit/26d40160ff7f7d8bf95fee2039a52cbc83863533), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`57c5103`](https://github.com/mastra-ai/mastra/commit/57c51035a2a36e3df3c4f32f46bb789a66ed5946)]:
+  - @mastra/server@1.61.0-alpha.3
+  - @mastra/core@1.61.0-alpha.3
+
 ## 1.61.0-alpha.2
 
 ### Patch Changes
