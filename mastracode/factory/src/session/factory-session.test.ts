@@ -1,3 +1,4 @@
+import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -8,6 +9,7 @@ import {
   resolveFactoryProjectForSession,
   resolveFactorySourceRepository,
 } from './factory-session.js';
+import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from './memory-settings-hydration.js';
 
 type FactorySessionHandle = Parameters<typeof hydrateFactorySession>[0];
 
@@ -177,7 +179,19 @@ describe('hydrateFactorySession', () => {
     await hydrateFactorySession(session, { orgId: 'org-1', userId: 'user-1' });
 
     expect(double.model.switch).not.toHaveBeenCalled();
-    expect(double.state.set).not.toHaveBeenCalled();
+  });
+
+  it('resets to the built-in memory defaults when memory settings are omitted', async () => {
+    const { session, double } = createSessionDouble();
+
+    await hydrateFactorySession(session, { orgId: 'org-1', userId: 'user-1' });
+
+    expect(double.om.observer.switchModel).toHaveBeenCalledWith({ modelId: DEFAULT_OM_MODEL_ID });
+    expect(double.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: DEFAULT_OM_MODEL_ID });
+    expect(double.state.set).toHaveBeenCalledWith({
+      observationThreshold: DEFAULT_OBSERVATION_THRESHOLD,
+      reflectionThreshold: DEFAULT_REFLECTION_THRESHOLD,
+    });
   });
 
   it('keeps going when the default model is unknown', async () => {

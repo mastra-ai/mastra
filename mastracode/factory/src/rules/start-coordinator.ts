@@ -4,7 +4,6 @@ import { RequestContext } from '@mastra/core/request-context';
 import { formatSkillActivation } from '@mastra/core/workspace';
 
 import { hydrateFactorySession } from '../session/factory-session.js';
-import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { CreateWorkItemInput, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactoryTransitionService } from './transition-service.js';
@@ -111,20 +110,17 @@ export class FactoryStartCoordinator {
   readonly #storage: WorkItemsStorage;
   readonly #transitionService?: Pick<FactoryTransitionService, 'transition'>;
   readonly #sourceControl?: SourceControlStorageHandle;
-  readonly #memorySettings?: MemorySettingsStorage;
 
   constructor(
     controller: FactoryController,
     storage: WorkItemsStorage,
     transitionService?: Pick<FactoryTransitionService, 'transition'>,
     sourceControl?: SourceControlStorageHandle,
-    memorySettings?: MemorySettingsStorage,
   ) {
     this.#controller = controller;
     this.#storage = storage;
     this.#transitionService = transitionService;
     this.#sourceControl = sourceControl;
-    this.#memorySettings = memorySettings;
   }
 
   async prepare(request: FactoryStartRequest): Promise<FactoryStartPreparedResult> {
@@ -177,11 +173,13 @@ export class FactoryStartCoordinator {
       factoryOrgId: request.orgId,
       ...(untrustedCheckout ? { untrustedCheckout: true, ...(baseRef ? { baseRef } : {}) } : {}),
     });
+    // Board runs are org-shared: hydrate with the factory's default model and
+    // built-in memory defaults, never any individual user's stored settings
+    // (`memorySettings` deliberately omitted — see hydrateFactorySession).
     await hydrateFactorySession(session, {
       orgId: request.orgId,
       userId: request.userId,
       defaultModelId: request.defaultModelId,
-      memorySettings: this.#memorySettings,
     });
     const threadId = await configureThread(session, request);
     const kickoffMessage = await resolveKickoffMessage(session, request.invocation);

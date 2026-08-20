@@ -1,6 +1,8 @@
+import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
+import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { defaultFactoryRules } from './defaults.js';
 import { FactoryStartCoordinator } from './start-coordinator.js';
@@ -209,7 +211,9 @@ describe('FactoryStartCoordinator', () => {
     expect(session.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-fable-5' });
   });
 
-  it('applies persisted observational-memory settings before preparing a board run', async () => {
+  it('hydrates board runs with built-in memory defaults, never per-user settings', async () => {
+    // The connection owner ("user-1") has personal OM settings stored — a
+    // board run must not inherit them: it hydrates with the built-in defaults.
     const storage = await createFactoryStorageForTests();
     await storage.memorySettings.patch({
       orgId: 'org-1',
@@ -228,17 +232,15 @@ describe('FactoryStartCoordinator', () => {
       storage.workItems,
       undefined,
       makeSourceControl() as never,
-      storage.memorySettings,
     );
 
     await coordinator.prepare(startRequest());
 
-    expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
-    expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
+    expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: DEFAULT_OM_MODEL_ID });
+    expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: DEFAULT_OM_MODEL_ID });
     expect(session.state.set).toHaveBeenCalledWith({
-      observationThreshold: 12_000,
-      reflectionThreshold: 23_000,
-      observeAttachments: false,
+      observationThreshold: DEFAULT_OBSERVATION_THRESHOLD,
+      reflectionThreshold: DEFAULT_REFLECTION_THRESHOLD,
     });
   });
 

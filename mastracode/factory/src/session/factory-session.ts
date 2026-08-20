@@ -202,7 +202,12 @@ export interface HydrateFactorySessionArgs {
   userId: string;
   /** The factory project's default model. Without it the session keeps the SDK's built-in mode default. */
   defaultModelId?: string;
-  /** Omitted when the storage domain is unavailable, in which case the session runs on memory defaults. */
+  /**
+   * When provided, the user's stored memory-settings row is applied — the path
+   * for user-facing sessions (e.g. channel threads). When omitted the session
+   * is reset to the built-in memory defaults: autonomous board runs must never
+   * inherit an individual user's personal model configuration.
+   */
   memorySettings?: MemorySettingsStorage;
 }
 
@@ -215,15 +220,15 @@ export interface HydrateFactorySessionArgs {
  * default it was created with, and the reason is logged.
  */
 export async function hydrateFactorySession(session: FactorySession, args: HydrateFactorySessionArgs): Promise<void> {
-  if (args.memorySettings) {
-    try {
-      const record = await args.memorySettings.get({ orgId: args.orgId, userId: args.userId });
-      await applyStoredMemorySettings(session, record);
-    } catch (error) {
-      console.warn('[Factory Start] Failed to apply observational-memory settings', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+  try {
+    const record = args.memorySettings
+      ? await args.memorySettings.get({ orgId: args.orgId, userId: args.userId })
+      : null;
+    await applyStoredMemorySettings(session, record);
+  } catch (error) {
+    console.warn('[Factory Start] Failed to apply observational-memory settings', {
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
   if (args.defaultModelId) {
     try {
