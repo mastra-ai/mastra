@@ -283,6 +283,11 @@ type AgentThreadPeerDiscoveryEvent =
   | { type: 'thread-peer-request'; requestId: string; replyTopic: string; sourceId: string }
   | { type: 'thread-peer-response'; requestId: string; peer: AgentThreadPeerInfo; sourceId: string };
 
+function toPublicThreadPeer(peer: AdvertisedThreadPeer): Omit<AdvertisedThreadPeer, 'unsubscribe'> {
+  const { unsubscribe: _unsubscribe, ...publicPeer } = peer;
+  return publicPeer;
+}
+
 function createRuntimeState(): AgentThreadRuntimeState {
   return {
     threadRunsById: new Map(),
@@ -708,7 +713,7 @@ export class AgentThreadStreamRuntime {
       void resolvedPubSub.publish(data.replyTopic, {
         type: 'thread-peer-response',
         runId: data.requestId,
-        data: { type: 'thread-peer-response', requestId: data.requestId, peer, sourceId },
+        data: { type: 'thread-peer-response', requestId: data.requestId, peer: toPublicThreadPeer(peer), sourceId },
       });
     };
 
@@ -761,7 +766,7 @@ export class AgentThreadStreamRuntime {
     const discoveredAt = new Date();
 
     for (const peer of state.advertisedThreadPeers.values()) {
-      peers.set(peer.id, { ...peer, discoveredAt });
+      peers.set(peer.id, { ...toPublicThreadPeer(peer), discoveredAt });
     }
 
     await new Promise<void>(resolve => {
@@ -3252,7 +3257,7 @@ export class AgentThreadStreamRuntime {
         value => {
           return value;
         },
-        error => {
+        () => {
           return { acquired: true as boolean, owner: reservedRunId as string | undefined };
         },
       );

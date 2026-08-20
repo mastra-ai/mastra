@@ -38,7 +38,12 @@ export const agentConnectionsNotificationSignalScenario = {
     await runtime.waitForScreenText(/agent_connect .*✓/i, terminal, 20_000);
     await runtime.waitForScreenText(/agent_signal_send .*✓/i, terminal, 20_000);
     await runtime.waitForScreenText(/Agent notification signal flow completed/i, terminal, 20_000);
-    await expect(terminal.getByText(/agent_connections_list ✗|agent_connect .*✗|agent_signal_send .*✗|Failed to list agent connections|Unknown agent peer id/i, { full: true, strict: false })).not.toBeVisible();
+    await expect(
+      terminal.getByText(
+        /agent_connections_list ✗|agent_connect .*✗|agent_signal_send .*✗|Failed to list agent connections|Unknown agent peer id/i,
+        { full: true, strict: false },
+      ),
+    ).not.toBeVisible();
     runtime.printScreen('after agent notification signal flow', terminal);
     terminal.keyCtrlC();
   },

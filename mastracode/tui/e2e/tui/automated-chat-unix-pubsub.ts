@@ -6,7 +6,8 @@ export const automatedChatUnixPubSubScenario: McE2eScenario = {
   name: 'automated-chat-unix-pubsub',
   description: 'Submit one prompt with Unix socket pubsub enabled to catch thread ownership registration regressions.',
   testName: 'submits an automated chat prompt with Unix socket pubsub enabled',
-  env: () => ({
-    MASTRACODE_DISABLE_UNIX_SOCKET_PUBSUB: null,
-  }) as unknown as Record<string, string>,
+  env: () =>
+    ({
+      MASTRACODE_DISABLE_UNIX_SOCKET_PUBSUB: null,
+    }) as unknown as Record<string, string>,
 };
