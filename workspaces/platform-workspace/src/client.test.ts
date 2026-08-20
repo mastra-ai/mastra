@@ -34,6 +34,17 @@ describe('PlatformClient', () => {
     expect(init.method).toBe('POST');
   });
 
+  it('defaults to Railway provider routes when SANDBOX_PROVIDER is unset', () => {
+    vi.stubEnv('SANDBOX_PROVIDER', undefined);
+
+    expect(
+      resolvePlatformOptions({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+      }).sandboxProvider,
+    ).toBe('railway');
+  });
+
   it('uses E2B provider routes when SANDBOX_PROVIDER is e2b', async () => {
     vi.stubEnv('SANDBOX_PROVIDER', 'e2b');
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
