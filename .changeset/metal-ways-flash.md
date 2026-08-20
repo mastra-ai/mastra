@@ -1,16 +1,16 @@
 ---
-'@mastra/playground-ui': patch
+'@mastra/playground-ui': minor
 ---
 
-Added aligned `flat` and `factory` layouts to `Section`, including standard, view-only, and destructive row compositions.
+Added `flat` and `factory` variants to `Section`, including standard, view-only, and destructive row compositions.
 
 ```tsx
 <Section variant="factory">
   <Section.Header>
-    <Section.HeaderText>
+    <div>
       <Section.Heading>Security</Section.Heading>
       <Section.Description>Manage sign-in requirements.</Section.Description>
-    </Section.HeaderText>
+    </div>
   </Section.Header>
   <Section.Content>
     <Section.Row label="Two-factor authentication">
