@@ -94,7 +94,7 @@ function ThreadPageMain({
   useRouteThreadSync();
   useHandoffPrompt();
   const railBoxRef = useRef<HTMLDivElement>(null);
-  const railFits = useWiderThan(railBoxRef, RAIL_MIN_REM);
+  const { wider: railFits } = useWiderThan(railBoxRef, RAIL_MIN_REM);
 
   return (
     <ThreadShell workspacePath={workspacePath} threadId={threadId}>
