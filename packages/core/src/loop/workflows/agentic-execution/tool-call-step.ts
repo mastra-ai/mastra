@@ -39,6 +39,7 @@ import {
   RESOURCE_ID_KEY,
   SAVE_QUEUE_MANAGER_KEY,
   STEP_ACTIVE_TOOLS_KEY,
+  STEP_MODEL_MESSAGES_KEY,
   STEP_TOOLS_KEY,
   STEP_WORKSPACE_KEY,
   THREAD_EXISTS_KEY,
@@ -680,10 +681,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const toolOptions: MastraToolInvocationOptions = {
           abortSignal: options?.abortSignal,
           toolCallId: inputData.toolCallId,
-          // Pass all messages (input + response + memory) so sub-agents (agent-* tools) receive
-          // the full conversation context and can make better decisions. Each sub-agent invocation
-          // uses a fresh unique thread, so storing this context in that thread is scoped and safe.
-          messages: isAgentTool ? messageList.get.all.aiV5.model() : messageList.get.input.aiV5.model(),
+          // Agent tools receive the exact processor-adjusted prompt visible to the parent model.
+          // Regular tools retain the input-only context expected by the AI SDK tool contract.
+          messages: isAgentTool
+            ? (readScoped(scopeCtx, STEP_MODEL_MESSAGES_KEY, 'stepModelMessages') ?? messageList.get.all.aiV5.model())
+            : messageList.get.input.aiV5.model(),
           outputWriter,
           observe: noopObserve,
           // Pass current step span as parent for tool call spans
