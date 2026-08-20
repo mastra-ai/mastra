@@ -11,6 +11,7 @@ export const SOURCE_LABELS: Record<WorkItemSource, string> = {
   'github-issue': 'Issue',
   'github-pr': 'PR Review',
   'linear-issue': 'Linear',
+  'jira-issue': 'Jira',
   'slack-thread': 'Slack',
   manual: 'Manual',
 };
@@ -35,6 +36,11 @@ export function githubNumberForItem(item: Pick<WorkItem, 'source' | 'metadata'>)
 /** The human issue key a Linear card carries (`ENG-123`), when it has one. */
 export function linearIdentifierForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
   if (item.source !== 'linear-issue' || typeof item.metadata.identifier !== 'string') return;
+  return item.metadata.identifier;
+}
+
+function jiraIdentifierForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
+  if (item.source !== 'jira-issue' || typeof item.metadata.identifier !== 'string') return;
   return item.metadata.identifier;
 }
 
@@ -67,6 +73,7 @@ export function candidateSourceKeyForItem(item: WorkItem): string | undefined {
 /** Aria label for the icon-only external link next to a card title. */
 export function externalLinkLabel(source: WorkItemSource): string {
   if (source === 'linear-issue') return 'Open in Linear';
+  if (source === 'jira-issue') return 'Open in Jira';
   if (source === 'slack-thread') return 'Open in Slack';
   if (source === 'manual') return 'Open link';
   return 'Open in GitHub';
@@ -83,8 +90,8 @@ export function workItemMeta(item: WorkItem): string {
   const age = relativeTime(sourceCreatedAt ?? item.createdAt);
   const githubNumber = githubNumberForItem(item);
   if (githubNumber !== undefined) return `#${githubNumber}${author ? ` · ${author}` : ''} · ${age}`;
-  const linearIdentifier = linearIdentifierForItem(item);
-  if (linearIdentifier !== undefined) return `${linearIdentifier}${author ? ` · ${author}` : ''} · ${age}`;
+  const issueIdentifier = linearIdentifierForItem(item) ?? jiraIdentifierForItem(item);
+  if (issueIdentifier !== undefined) return `${issueIdentifier}${author ? ` · ${author}` : ''} · ${age}`;
   return `${SOURCE_LABELS[item.source]} · ${age}`;
 }
 
@@ -93,7 +100,7 @@ export function cardMatchesSearch(card: Pick<WorkItem, 'source' | 'metadata' | '
   const needle = query.trim().toLowerCase();
   if (needle === '') return true;
   const number = githubNumberForItem(card);
-  const identifier = linearIdentifierForItem(card);
+  const identifier = linearIdentifierForItem(card) ?? jiraIdentifierForItem(card);
   const named = [card.title, number === undefined ? '' : `#${number}`, identifier ?? ''];
   return named.some(text => text.toLowerCase().includes(needle));
 }

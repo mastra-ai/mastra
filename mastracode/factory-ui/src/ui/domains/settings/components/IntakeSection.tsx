@@ -187,7 +187,7 @@ function JiraIntakeSection({
     ? 'Jira is not configured on this server. Set JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN to enable it.'
     : authError
       ? 'Jira rejected the configured credentials. Ask the operator to check the Jira API token.'
-      : `Connected to ${status?.site ?? 'a Jira site'}.`;
+      : `Connected to ${status?.site ?? 'a Jira site'}`;
 
   return (
     <SettingsSubsection title="Jira issues" description={description}>

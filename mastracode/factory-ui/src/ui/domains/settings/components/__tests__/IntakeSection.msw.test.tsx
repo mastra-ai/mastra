@@ -116,7 +116,11 @@ function useJiraHandlers({
     http.get(JIRA_PROJECTS_URL, () => HttpResponse.json({ projects: jiraProjects })),
     http.get(BINDINGS_URL, () => HttpResponse.json({ bindings })),
     http.put(BINDINGS_URL, async ({ request }) => {
-      const body = (await request.json()) as { integrationId: string; sourceId: string; factoryProjectId: string | null };
+      const body = (await request.json()) as {
+        integrationId: string;
+        sourceId: string;
+        factoryProjectId: string | null;
+      };
       savedBindings.push(body);
       const next = body.factoryProjectId === null ? [] : [body as IntakeSourceBinding];
       return HttpResponse.json({ bindings: next });
@@ -409,8 +413,7 @@ describe('IntakeSection', () => {
 
       expect(await screen.findByText('Connected to acme.atlassian.net')).toBeInTheDocument();
 
-      const projects = await screen.findByRole('group', { name: 'Projects' });
-      await userEvent.click(within(projects).getByRole('button', { name: 'Projects' }));
+      const projects = await screen.findByRole('group', { name: 'Jira projects' });
       await userEvent.click(within(projects).getByRole('checkbox', { name: 'ENG · Engineering' }));
 
       await waitFor(() => expect(saved).toHaveLength(1));
@@ -466,9 +469,11 @@ describe('IntakeSection', () => {
       renderIntakeSection();
 
       expect(
-        await screen.findByText('Jira rejected the configured credentials. Ask the operator to check the Jira API token.'),
+        await screen.findByText(
+          'Jira rejected the configured credentials. Ask the operator to check the Jira API token.',
+        ),
       ).toBeInTheDocument();
-      expect(screen.queryByRole('group', { name: 'Projects' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('group', { name: 'Jira projects' })).not.toBeInTheDocument();
     });
   });
 
