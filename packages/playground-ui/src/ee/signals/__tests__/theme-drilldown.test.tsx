@@ -2,6 +2,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
+import { useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -63,16 +64,34 @@ function expectExactQuery(url: URL, expected: Record<string, string>) {
   expect(Object.fromEntries(url.searchParams)).toEqual(expected);
 }
 
+function ControlledSankeySignals({
+  selectedThemeId: initialSelectedThemeId,
+  onSelectedThemeIdChange,
+  ...props
+}: Partial<ComponentProps<typeof SankeySignals>>) {
+  const [selectedThemeId, setSelectedThemeId] = useState(initialSelectedThemeId);
+  const handleSelectedThemeIdChange = (themeId: string | undefined) => {
+    setSelectedThemeId(themeId);
+    onSelectedThemeIdChange?.(themeId);
+  };
+
+  return (
+    <SankeySignals
+      entityId="support-agent"
+      entityType="agent"
+      signalNames={['goal', 'outcome', 'behavior']}
+      {...props}
+      selectedThemeId={selectedThemeId}
+      onSelectedThemeIdChange={handleSelectedThemeIdChange}
+    />
+  );
+}
+
 function renderSignals(props: Partial<ComponentProps<typeof SankeySignals>> = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <SankeySignals
-        entityId="support-agent"
-        entityType="agent"
-        signalNames={['goal', 'outcome', 'behavior']}
-        {...props}
-      />
+      <ControlledSankeySignals {...props} />
     </QueryClientProvider>,
   );
 }
@@ -599,12 +618,7 @@ describe('SankeySignals drill-in', () => {
       const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
       const result = render(
         <QueryClientProvider client={queryClient}>
-          <SankeySignals
-            key="support-agent"
-            entityId="support-agent"
-            entityType="agent"
-            signalNames={['goal', 'outcome', 'behavior']}
-          />
+          <ControlledSankeySignals key="support-agent" entityId="support-agent" />
         </QueryClientProvider>,
       );
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
@@ -612,12 +626,7 @@ describe('SankeySignals drill-in', () => {
 
       result.rerender(
         <QueryClientProvider client={queryClient}>
-          <SankeySignals
-            key="replacement-agent"
-            entityId="replacement-agent"
-            entityType="agent"
-            signalNames={['goal', 'outcome', 'behavior']}
-          />
+          <ControlledSankeySignals key="replacement-agent" entityId="replacement-agent" />
         </QueryClientProvider>,
       );
 
@@ -660,6 +669,7 @@ describe('SankeySignals drill-in', () => {
             entityId="support-agent"
             entityType="agent"
             signalNames={['goal', 'outcome', 'behavior']}
+            selectedThemeId={undefined}
             onSelectedThemeIdChange={onSelectedThemeIdChange}
           />
         </QueryClientProvider>,

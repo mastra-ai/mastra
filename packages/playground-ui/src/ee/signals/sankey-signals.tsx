@@ -49,8 +49,8 @@ export interface SankeySignalsProps {
   dateFrom?: Date;
   dateTo?: Date;
   height?: number;
-  selectedThemeId?: string;
-  onSelectedThemeIdChange?: (themeId: string | undefined) => void;
+  selectedThemeId: string | undefined;
+  onSelectedThemeIdChange: (themeId: string | undefined) => void;
   /** Date range control rendered in line with the view mode tabs. */
   dateRangePicker?: React.ReactNode;
 }
@@ -65,14 +65,9 @@ const VIEW_DESCRIPTIONS: Record<SignalsViewMode, string> = {
   lifelines: "Each theme's share of traces across the whole selected range.",
 };
 
-function resolveControlledThemeSelection(
-  flow: ThemeFlowResponse | undefined,
-  selectedThemeId: string | undefined,
-  cachedSelection: SelectedTheme | undefined,
-) {
-  if (!selectedThemeId) return undefined;
-  if (cachedSelection?.themeId === selectedThemeId) return cachedSelection;
-  return flow ? findThemeSelectionById(flow, selectedThemeId) : undefined;
+function resolveControlledThemeSelection(flow: ThemeFlowResponse | undefined, selectedThemeId: string | undefined) {
+  if (!flow || !selectedThemeId) return undefined;
+  return findThemeSelectionById(flow, selectedThemeId);
 }
 
 export function SankeySignals({
@@ -96,10 +91,7 @@ export function SankeySignals({
   const [isPlaying, setIsPlaying] = useState(false);
   const [viewMode, setViewMode] = useState<SignalsViewMode>('flow');
   const [drillStack, setDrillStack] = useState<ThemeSelection[]>([]);
-  const [uncontrolledDetailSelection, setUncontrolledDetailSelection] = useState<SelectedTheme>();
-  const [controlledDetailSelection, setControlledDetailSelection] = useState<SelectedTheme>();
   const [noiseSignalName, setNoiseSignalName] = useState<TraceSignalName>();
-  const isThemeSelectionControlled = onSelectedThemeIdChange !== undefined;
   const matchedSnapshotIndex = snapshots.findIndex(snapshot => snapshot.ordinal === selectedSnapshotOrdinal);
   const selectedSnapshotIndex = matchedSnapshotIndex >= 0 ? matchedSnapshotIndex : 0;
   const snapshot = snapshots[selectedSnapshotIndex];
@@ -115,12 +107,7 @@ export function SankeySignals({
     setIsPlaying(nextIsPlaying);
   };
   const setThemeDetails = (selection: SelectedTheme | undefined) => {
-    if (isThemeSelectionControlled) {
-      setControlledDetailSelection(selection);
-      onSelectedThemeIdChange(selection?.themeId);
-      return;
-    }
-    setUncontrolledDetailSelection(selection);
+    onSelectedThemeIdChange(selection?.themeId);
   };
   // Compare cards and lifeline points open details for the theme at the
   // landmark they were clicked on, so the panel's snapshot follows the click.
@@ -164,9 +151,7 @@ export function SankeySignals({
     return stabilizeThemeFlow(drilledFlow, [stableUnfilteredFlow, drilledFlow]);
   }, [drillStack, pathsQuery.data, stableUnfilteredFlow]);
   const graphSummary = useMemo(() => (flow ? buildSignalGraphSummary(flow) : undefined), [flow]);
-  const detailSelection = isThemeSelectionControlled
-    ? resolveControlledThemeSelection(flow, selectedThemeId, controlledDetailSelection)
-    : uncontrolledDetailSelection;
+  const detailSelection = resolveControlledThemeSelection(stableUnfilteredFlow, selectedThemeId);
   const populatedStageCount = currentFlow?.stages.filter(stage => stage.nodes.length > 0).length ?? 0;
   const shouldLoadProgress =
     snapshotsQuery.isSuccess &&
