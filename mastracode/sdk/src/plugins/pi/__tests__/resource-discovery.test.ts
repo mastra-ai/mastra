@@ -68,6 +68,21 @@ describe('discoverPiPackageResources', () => {
     });
   });
 
+  it('resolves extension directories to entry points without loading implementation files', () => {
+    const root = makePackage({ pi: { extensions: ['./extensions', './root-extension'] } });
+    write(root, 'extensions/one/index.ts');
+    write(root, 'extensions/one/helper.ts');
+    write(root, 'extensions/two.ts');
+    write(root, 'root-extension/index.js');
+    write(root, 'root-extension/helper.js');
+
+    expect(discoverPiPackageResources(inspectPiPackageManifest(root)).extensions).toEqual([
+      'extensions/one/index.ts',
+      'extensions/two.ts',
+      'root-extension/index.js',
+    ]);
+  });
+
   it('rejects manifest escapes and resource symlinks', () => {
     const root = makePackage({ pi: { extensions: ['../outside.ts'] } });
     expect(() => discoverPiPackageResources(inspectPiPackageManifest(root))).toThrow('must stay inside');

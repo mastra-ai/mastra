@@ -83,6 +83,10 @@ function collectResourcePath(
     return;
   }
   if (!stat.isDirectory()) return;
+  if (resourceType === 'extensions') {
+    collectExtensionDirectory(packageRoot, realCandidate, output);
+    return;
+  }
 
   for (const entry of fs
     .readdirSync(realCandidate, { withFileTypes: true })
@@ -97,6 +101,38 @@ function collectResourcePath(
       output.add(entryPath);
     }
   }
+}
+
+function collectExtensionDirectory(packageRoot: string, directory: string, output: Set<string>): void {
+  const index = findExtensionIndex(directory);
+  if (index) {
+    output.add(index);
+    return;
+  }
+
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    if (entry.name === 'node_modules' || entry.name === '.git' || entry.name.startsWith('.')) continue;
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isSymbolicLink()) throw new Error(`Pi Package extensions resource cannot be a symlink: ${entryPath}`);
+    if (entry.isFile() && EXTENSION_PATTERN.test(entry.name)) {
+      output.add(entryPath);
+      continue;
+    }
+    if (!entry.isDirectory()) continue;
+    const nestedIndex = findExtensionIndex(entryPath);
+    if (nestedIndex) {
+      assertContained(nestedIndex, fs.realpathSync(packageRoot), 'Pi Package extensions resource escapes package root');
+      output.add(nestedIndex);
+    }
+  }
+}
+
+function findExtensionIndex(directory: string): string | undefined {
+  for (const indexName of ['index.ts', 'index.js', 'index.mts', 'index.mjs', 'index.cts', 'index.cjs']) {
+    const candidate = path.join(directory, indexName);
+    if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) return fs.realpathSync(candidate);
+  }
+  return undefined;
 }
 
 function isResourceFile(
