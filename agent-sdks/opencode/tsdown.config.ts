@@ -8,7 +8,7 @@ export default defineConfig({
   nodeProtocol: 'strip',
   deps: {
     alwaysBundle: ['@internal/agent-sdk-base'],
-    neverBundle: ['@cursor/sdk'],
+    neverBundle: ['@opencode-ai/sdk'],
   },
   clean: true,
   dts: false,
