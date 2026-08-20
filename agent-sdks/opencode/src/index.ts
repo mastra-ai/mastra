@@ -50,17 +50,9 @@ export const MODEL_ID = 'opencode-sdk';
 type OpenCodeStructuredOutputOption<OUTPUT> = OUTPUT extends {} ? StructuredOutputOptions<OUTPUT> : never;
 
 type OpenCodeSDKAgentBaseOptions = {
-  /**
-   * Mastra agent id used when registering this wrapper with Mastra.
-   */
   id: string;
-  /**
-   * Optional display name for the Mastra agent. Defaults to `id`.
-   */
+  /** Defaults to `id`. */
   name?: string;
-  /**
-   * Description surfaced by Mastra when listing or selecting agents.
-   */
   description: string;
 };
 
@@ -88,39 +80,18 @@ export type OpenCodeSDKAgentOptions = OpenCodeSDKAgentBaseOptions &
       }
   );
 
-/**
- * `client.session.promptAsync`'s own parameter object (the v2 `OpencodeClient`
- * takes flat parameters, not a `{path, body, query}` envelope). `parts` is
- * always derived from `messages`; `sessionID` is optional here (rather than
- * required, as the SDK itself requires) because `runOpenCodeSession` fills
- * it in — either by reusing `sessionID` when set, or by creating a new
- * session and using its id.
- */
+// `sessionID` is optional (the SDK requires it); runOpenCodeSession fills it in.
 type OpenCodePromptAsyncOptions = Omit<Parameters<OpencodeClient['session']['promptAsync']>[0], 'parts' | 'sessionID'> & {
   sessionID?: string;
 };
 
 export type OpenCodeSDKAgentRunOptions<OUTPUT = unknown> = SDKAgentRunOptions<OUTPUT> & {
-  /**
-   * Additional OpenCode session-prompt options forwarded as-is to
-   * `client.session.promptAsync` (e.g. `model`, `system`, `tools`, `agent`,
-   * `noReply`, `variant`, `directory`, `workspace`). Set `format` to request
-   * schema-constrained output directly — when omitted, `format` is derived
-   * automatically from `structuredOutput`. Set `sessionID` to reuse an
-   * existing OpenCode session instead of creating a new one — this is what
-   * `resumeGenerate`/`resumeStream` set from `OpenCodeSDKAgentResumeData`.
-   */
+  /** Forwarded to `client.session.promptAsync`. Set `sessionID` to resume a session. */
   promptOptions?: OpenCodePromptAsyncOptions;
 };
 
 export type OpenCodeSDKAgentResumeData = {
-  /**
-   * Message to send while resuming the OpenCode SDK session.
-   */
   message: MessageListInput;
-  /**
-   * OpenCode session id to resume.
-   */
   sessionId: string;
 };
 
@@ -133,6 +104,10 @@ export class OpenCodeSDKAgent extends Agent {
   #mastra?: Mastra;
   #clientPromise?: Promise<OpencodeClient>;
   #streamManagerPromise?: Promise<OpenCodeStreamManager>;
+  #serverHandle?: { url: string; close(): void };
+  // Bumped by close() so a resolveClient() already in flight can detect it's
+  // stale once it resolves, instead of silently repopulating #serverHandle.
+  #clientGeneration = 0;
 
   constructor(options: OpenCodeSDKAgentOptions) {
     super({
@@ -158,13 +133,34 @@ export class OpenCodeSDKAgent extends Agent {
   }
 
   private resolveClient(): Promise<OpencodeClient> {
-    this.#clientPromise ??= createOpenCodeClientFor(this.options);
+    const generation = this.#clientGeneration;
+    this.#clientPromise ??= createOpenCodeClientFor(this.options).then(({ client, serverHandle }) => {
+      if (generation === this.#clientGeneration) {
+        this.#serverHandle = serverHandle;
+      } else {
+        // close() ran while this was spawning — never became active, so shut it down.
+        serverHandle?.close();
+      }
+      return client;
+    });
     return this.#clientPromise;
   }
 
   private async resolveStreamManager(): Promise<OpenCodeStreamManager> {
     this.#streamManagerPromise ??= this.resolveClient().then(client => new OpenCodeStreamManager(client));
     return this.#streamManagerPromise;
+  }
+
+  // Stops the server spawned via `serverOptions` (no-op otherwise) and
+  // drops memoized client/stream-manager. Racing an unawaited generate()'s
+  // still-spawning server isn't guaranteed to kill it — that process kill
+  // goes through the SDK's stop(), which we can't override or escalate.
+  close(): void {
+    this.#clientGeneration++;
+    this.#serverHandle?.close();
+    this.#serverHandle = undefined;
+    this.#clientPromise = undefined;
+    this.#streamManagerPromise = undefined;
   }
 
   async generate<OUTPUT = undefined>(
@@ -285,15 +281,17 @@ function getStructuredOutputOption<OUTPUT>(
   return options?.structuredOutput as OpenCodeStructuredOutputOption<OUTPUT> | undefined;
 }
 
-async function createOpenCodeClientFor(options: OpenCodeSDKAgentOptions): Promise<OpencodeClient> {
+async function createOpenCodeClientFor(
+  options: OpenCodeSDKAgentOptions,
+): Promise<{ client: OpencodeClient; serverHandle?: { url: string; close(): void } }> {
   if (options.client) {
-    return options.client;
+    return { client: options.client };
   }
   if (options.serverOptions) {
-    const { client } = await createOpencode(options.serverOptions);
-    return client;
+    const { client, server } = await createOpencode(options.serverOptions);
+    return { client, serverHandle: server };
   }
-  return createOpencodeClient(options.config);
+  return { client: createOpencodeClient(options.config) };
 }
 
 async function createOpenCodeSession(
@@ -321,12 +319,7 @@ async function promptOpenCodeSessionAsync(
   }
 }
 
-/**
- * Resolves the OpenCode `format` field for schema-constrained output: an
- * explicit `promptOptions.format` wins, otherwise it's derived from
- * `structuredOutput`. Native `format` support (v2) replaces the previous
- * text-prompt-injection workaround.
- */
+// Explicit promptOptions.format wins; otherwise derived from structuredOutput.
 function getOpenCodeOutputFormat<OUTPUT>(
   runOptions: OpenCodeSDKAgentRunOptions<OUTPUT> | undefined,
 ): OutputFormat | undefined {
@@ -347,14 +340,7 @@ type OpenCodeSessionRunResult = {
   lastInfo: AssistantMessage | undefined;
 };
 
-/**
- * Drives one OpenCode session turn through the shared event bus — open the
- * connection, register a per-session listener, fire the prompt, and consume
- * events until `session.idle`/`session.error` ends the generator. Shared by
- * `runOpenCodeGenerate` and `runOpenCodeAsMastraStream` so both the blocking
- * and streaming paths see the same tool/command/todo/permission telemetry;
- * only whether `onTextDelta` also forwards to a `ReadableStream` differs.
- */
+// Drives one session turn; shared by generate/stream so both see the same telemetry.
 async function runOpenCodeSession<OUTPUT>(
   client: OpencodeClient,
   streamManager: OpenCodeStreamManager,
@@ -701,11 +687,7 @@ function recordOpenCodePermissionAsked<OUTPUT>(
   });
 }
 
-/**
- * `permission.v2.*` is a newer, parallel permission workflow introduced
- * alongside `permission.asked`/`permission.replied` — tracked the same way
- * (start on asked, end on replied) so neither flow drops telemetry.
- */
+// Parallel to permission.asked/replied; tracked the same way.
 function recordOpenCodePermissionV2Asked<OUTPUT>(
   permission: Extract<Event, { type: typeof OpenCodeEventType.PermissionV2Asked }>['properties'],
   telemetry: SDKAgentTelemetry<OUTPUT>,

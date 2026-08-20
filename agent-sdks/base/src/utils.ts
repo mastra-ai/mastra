@@ -976,8 +976,23 @@ export function toRecord(value: unknown): Record<string, unknown> | undefined {
   return value as Record<string, unknown>;
 }
 
+/** Returns true for non-null objects, including arrays. */
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object';
+}
+
 /** Reads a string property from an unknown record without coercion. */
 export function getString(record: Record<string, unknown> | undefined, key: string): string | undefined {
   const value = record?.[key];
   return typeof value === 'string' ? value : undefined;
+}
+
+/** Reads a number property from an unknown value without coercion. */
+export function getNumber(value: unknown): number | undefined {
+  return typeof value === 'number' ? value : undefined;
+}
+
+/** Reads a property from an unknown value as a string-keyed record entry. */
+export function getObjectValue(value: unknown, key: string): unknown {
+  return toRecord(value)?.[key];
 }

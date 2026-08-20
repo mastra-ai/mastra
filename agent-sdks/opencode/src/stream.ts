@@ -52,8 +52,10 @@ function sessionIdOf(event: Event): SessionId | undefined {
   }
 }
 
+// Bridges push-based dispatch into the pull-based AsyncGenerator interface.
 class SessionEventChannel implements StreamListener, AsyncGenerator<Event, void, void> {
   readonly sessionId: SessionId;
+  // Mutually exclusive with #waiters.
   #buffer: Event[] = [];
   #waiters: Array<{ resolve: (result: IteratorResult<Event, void>) => void; reject: (error: unknown) => void }> = [];
   #ended = false;
@@ -66,7 +68,7 @@ class SessionEventChannel implements StreamListener, AsyncGenerator<Event, void,
   }
 
   push(event: Event): void {
-    if (this.#ended) return;
+    if (this.#ended) return; // no consumer left to deliver to
     const waiter = this.#waiters.shift();
     if (waiter) {
       waiter.resolve({ value: event, done: false });
@@ -96,9 +98,7 @@ class SessionEventChannel implements StreamListener, AsyncGenerator<Event, void,
     return new Promise((resolve, reject) => this.#waiters.push({ resolve, reject }));
   }
 
-  // Only fires on a consumer-driven `break`/`return` out of `for await` — a
-  // manager-driven `end()` (terminal event or disconnect) already removes the
-  // listener itself, so it must not also invoke this callback.
+  // Only fires on consumer-driven break/return; end() already unregisters otherwise.
   async return(): Promise<IteratorResult<Event, void>> {
     this.end();
     this.#onEarlyExit();
@@ -116,6 +116,8 @@ class SessionEventChannel implements StreamListener, AsyncGenerator<Event, void,
   }
 }
 
+// OpenCodeStreamManager abstracts subscription to session updates.
+// OpenCode events are fired at a global handler, so this gives sessions a pub-sub model.
 export class OpenCodeStreamManager implements OpenCodeStreamGate {
   #client: OpencodeClient;
   #refs = new Set<CallId>();
