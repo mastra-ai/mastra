@@ -948,8 +948,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   /**
-   * List the org's work items for a project, newest first. Ordered on `created_at`, not
-   * `updated_at`: every write bumps `updated_at` and the board polls, so cards would jump under the reader.
+   * List the org's work items for a project, newest first. Ordered on `created_at` with an id
+   * tiebreak so the order is stable: `updated_at` moves under every write, which makes it useless
+   * as a cursor and non-deterministic for the callers that iterate this list.
    */
   async list({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }): Promise<WorkItemRow[]> {
     return this.#listWithOps(this.#db, orgId, factoryProjectId);
