@@ -452,7 +452,9 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
 
       expect(remaining).toBe('finished\n');
       await expect(proc).resolves.toMatchObject({ exitCode: 0 });
-    });
+      // Full shutdown includes the drain window plus core teardown; the vitest
+      // default 5s timeout is tighter than the server's own worst-case bounds.
+    }, timeout);
   });
 
   describe.sequential('build without externals', async () => {
