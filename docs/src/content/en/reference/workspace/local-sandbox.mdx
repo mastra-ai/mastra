@@ -95,8 +95,17 @@ const response = await agent.generate('Run npm install')
     description: 'Configuration for native sandboxing (see NativeSandboxConfig below).',
     isOptional: true,
   },
+  {
+    name: 'bootstrap',
+    type: '{ command: string; env?: NodeJS.ProcessEnv; timeoutMs?: number }',
+    description:
+      'Command run once per sandbox lifetime after start(). For LocalSandbox the guard sentinel (.mastra-bootstrapped) lives inside the working directory. See the WorkspaceSandbox reference for full semantics.',
+    isOptional: true,
+  },
 ]}
 />
+
+`start()` reports `{ created: true }` when the working directory did not exist yet and `{ created: false }` when it reattaches to an existing directory. See [`start()`](/reference/workspace/sandbox#start) for the shared contract.
 
 ## `NativeSandboxConfig`
 

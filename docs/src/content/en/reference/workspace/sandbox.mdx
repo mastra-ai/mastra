@@ -32,10 +32,77 @@ The `WorkspaceSandbox` interface defines how workspaces execute commands and man
 Starts the sandbox and is called automatically by `workspace.init()` or the first `executeCommand()` call.
 
 ```typescript
-await sandbox.start()
+const result = await sandbox.start()
+// { created: true } — a fresh VM was created
+// { created: false } — reconnected to an existing VM
+// undefined — the provider does not report
 ```
 
-This method prepares the sandbox for command execution.
+**Returns:** `void | Promise<SandboxStartResult | void>`
+
+A sandbox constructed with a known `id` resolves that id on `start()`: reconnect or resume the sandbox if it exists, create it if not (get-or-create). Providers that support this report a `SandboxStartResult`:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'created',
+    type: 'boolean',
+    description:
+      'true when a brand-new sandbox VM (or working directory) was created; false when the call reconnected to or resumed an existing one.',
+  },
+]}
+/>
+
+Providers that predate the contract return `void`, which the base class treats as unknown.
+
+Concurrent `start()` calls on one instance coalesce onto a single in-flight attempt: joined callers share the attempt's result (all observe `created: true` when the shared attempt created), and the in-flight slot is cleared when the attempt settles, so a failed start can be retried. While the sandbox is already `running`, `start()` returns without re-invoking the provider.
+
+The result is also forwarded to the `onStart` lifecycle hook as `{ sandbox, created }`.
+
+### `bootstrap` (constructor option)
+
+Sandboxes built on the `MastraSandbox` base class accept a `bootstrap` option: a command that runs once per VM lifetime, immediately after a successful `start()`.
+
+```typescript
+new E2BSandbox({
+  id: sessionId,
+  bootstrap: {
+    command: 'git -C ~/repo fetch origin && git -C ~/repo checkout my-branch',
+    env: { GIT_TOKEN: token },
+  },
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'command',
+    type: 'string',
+    description:
+      'Shell command to run once per VM. Keep it idempotent — a checkpoint-recovered fresh VM reports created: true and re-runs it.',
+  },
+  {
+    name: 'env',
+    type: 'NodeJS.ProcessEnv',
+    description:
+      'Environment variables passed only to the bootstrap command execution. Use this for credentials instead of interpolating them into the command string.',
+    isOptional: true,
+  },
+  {
+    name: 'timeoutMs',
+    type: 'number',
+    description: 'Timeout for the bootstrap command in milliseconds.',
+    isOptional: true,
+  },
+]}
+/>
+
+Semantics:
+
+- When `start()` reports `created: true`, the bootstrap runs without any probe.
+- Otherwise the base class probes a sentinel file (`~/.mastra-bootstrapped` in the VM filesystem; inside the working directory for `LocalSandbox`) and runs the bootstrap only when the sentinel is absent. The sentinel survives pause/resume and disappears with VM replacement.
+- The sentinel is written only after the command succeeds. A failed bootstrap fails `start()` and leaves the sandbox in `error` status, so a half-bootstrapped VM is never marked running; the next `start()` retries.
+- The sandbox status flips to `running` before the bootstrap executes (the bootstrap runs through the sandbox's own command path), so commands issued concurrently through `ensureRunning()` can interleave with the bootstrap.
 
 ### `stop()`
 
