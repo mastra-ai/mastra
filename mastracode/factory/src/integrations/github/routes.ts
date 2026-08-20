@@ -50,7 +50,7 @@ import {
   pushBranch,
   teardownProjectSandbox,
   WorktreeError,
-} from './sandbox.js';
+ projectSandboxKey,} from './sandbox.js';
 import type { GitIdentity } from './sandbox.js';
 
 const sessionOperationLocks = new Map<string, Promise<unknown>>();
@@ -1566,18 +1566,18 @@ function buildProjectGitRoutes({
         if ('response' in owned) return owned.response;
         const { sandboxRow } = owned;
 
-        if (!sandboxRow.sandboxId) {
-          // Nothing provisioned for this user — idempotent success.
-          return c.json({ tornDown: false });
-        }
-
+        // Teardown is unconditional and idempotent: it destroys whatever this
+        // process holds in the memo and clears the binding row. The persisted
+        // sandboxId is observability-only and must not gate the decision (its
+        // write is best-effort, so it can be absent for a live sandbox).
+        const hadLiveSandbox = peekSessionSandbox(projectSandboxKey(sandboxRow)) !== undefined;
         try {
           return await withSessionOperationLock(`sandbox:${sandboxRow.id}`, async () => {
             await teardownProjectSandbox({
               row: sandboxRow,
               storage: github.sourceControlStorage.sandboxes,
             });
-            return c.json({ tornDown: true });
+            return c.json({ tornDown: hadLiveSandbox });
           });
         } catch (err) {
           return gitErrorResponse(loose(c), err);

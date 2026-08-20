@@ -47,6 +47,7 @@ export interface MaterializationSandbox {
  * user-facing copy.
  */
 export interface PrepareProgress {
+  /** `'reattaching'` is retained wire vocabulary for UI phase maps; the server no longer emits it. */
   phase: 'reattaching' | 'provisioning' | 'preparing-workspace' | 'cloning' | 'pulling' | 'finalizing' | 'done';
   message: string;
 }

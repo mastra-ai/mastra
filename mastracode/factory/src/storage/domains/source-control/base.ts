@@ -332,33 +332,6 @@ export interface ProjectRepositorySandbox {
   createdAt: Date;
 }
 
-/**
- * A provider sandbox that is no longer bound to any session and can be handed
- * to the next session for the same project-repository link instead of
- * provisioning a fresh VM. Pooling is per-repository, not per-user: no
- * credentials are baked into the VM (tokens are injected per command), so any
- * user's session can safely claim it. `userId` records who released it,
- * purely as provenance.
- */
-export interface PooledSandbox {
-  id: string;
-  orgId: string;
-  projectRepositoryId: string;
-  /** User whose session released this sandbox (provenance, not a claim key). */
-  userId: string;
-  sandboxId: string;
-  sandboxWorkdir: string;
-  releasedAt: Date;
-}
-
-export interface ReleasePooledSandboxInput {
-  orgId: string;
-  projectRepositoryId: string;
-  userId: string;
-  sandboxId: string;
-  sandboxWorkdir: string;
-}
-
 export interface SourceControlWorktree {
   id: string;
   projectRepositoryId: string;
@@ -488,20 +461,6 @@ export interface SourceControlStorageHandle {
     setSandboxId(args: { id: string; sandboxId: string }): Promise<void>;
     clearBinding(args: { id: string }): Promise<void>;
     markMaterialized(args: { id: string }): Promise<void>;
-  };
-  readonly sandboxPool: {
-    /**
-     * Return a sandbox to the reuse pool. Idempotent per provider sandbox ID —
-     * releasing the same sandbox twice keeps one pool row.
-     */
-    release(args: ReleasePooledSandboxInput): Promise<void>;
-    /**
-     * Atomically take one pooled sandbox for the given project-repository
-     * link, preferring the most recently released (warmest) VM. Returns
-     * `null` when the pool is empty. Each pooled sandbox is handed to exactly
-     * one claimer even under concurrent claims.
-     */
-    claim(args: { projectRepositoryId: string }): Promise<PooledSandbox | null>;
   };
   readonly worktrees: {
     upsert(args: UpsertSourceControlWorktreeInput): Promise<void>;
@@ -732,18 +691,6 @@ function toSandbox(row: SandboxDbRow): ProjectRepositorySandbox {
     sandboxWorkdir: row.sandbox_workdir,
     materializedAt: row.materialized_at,
     createdAt: row.created_at,
-  };
-}
-
-function toPooledSandbox(row: SandboxPoolDbRow): PooledSandbox {
-  return {
-    id: row.id,
-    orgId: row.org_id,
-    projectRepositoryId: row.project_repository_id,
-    userId: row.user_id,
-    sandboxId: row.sandbox_id,
-    sandboxWorkdir: row.sandbox_workdir,
-    releasedAt: row.released_at,
   };
 }
 
@@ -1244,39 +1191,6 @@ export class SourceControlStorage extends FactoryStorageDomain {
         markMaterialized: async ({ id }) => {
           await requireSandbox(id);
           await db().updateMany(SANDBOXES, { id }, { materialized_at: new Date() });
-        },
-      },
-      sandboxPool: {
-        release: async input => {
-          // Mirror claim(): a concurrently unlinked project repository makes
-          // the release a silent no-op (the unlink cascade drops pool rows
-          // anyway) — callers treat release as best-effort and must not throw.
-          if (!(await getProjectRepositoryById(input.projectRepositoryId))) return;
-          try {
-            await db().insertOne<SandboxPoolDbRow>(SANDBOX_POOL, {
-              org_id: input.orgId,
-              project_repository_id: input.projectRepositoryId,
-              user_id: input.userId,
-              sandbox_id: input.sandboxId,
-              sandbox_workdir: input.sandboxWorkdir,
-              released_at: new Date(),
-            });
-          } catch (error) {
-            if (!(error instanceof UniqueViolationError)) throw error;
-            // The provider sandbox is already pooled — keep the existing row.
-          }
-        },
-        claim: async ({ projectRepositoryId }) => {
-          if (!(await getProjectRepositoryById(projectRepositoryId))) return null;
-          const rows = await db().findMany<SandboxPoolDbRow>(SANDBOX_POOL, {
-            project_repository_id: projectRepositoryId,
-          });
-          rows.sort((left, right) => right.released_at.getTime() - left.released_at.getTime());
-          for (const row of rows) {
-            // Delete-by-id succeeds for exactly one concurrent claimer.
-            if ((await db().deleteMany(SANDBOX_POOL, { id: row.id })) === 1) return toPooledSandbox(row);
-          }
-          return null;
         },
       },
       worktrees: {

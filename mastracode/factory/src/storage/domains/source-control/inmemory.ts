@@ -7,12 +7,10 @@ import type {
   CreateSourceControlSessionInput,
   ExternalRepositoryProjectTarget,
   LinkProjectRepositoryInput,
-  PooledSandbox,
   ProjectRepository,
   ProjectRepositoryBaseCheckpoint,
   ProjectRepositorySandbox,
   ProjectSourceControlConnection,
-  ReleasePooledSandboxInput,
   SourceControlInstallation,
   SourceControlRepository,
   SourceControlSession,
@@ -32,7 +30,6 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
   connectionsRows: ProjectSourceControlConnection[] = [];
   projectRepositoriesRows: ProjectRepository[] = [];
   sandboxesRows: ProjectRepositorySandbox[] = [];
-  sandboxPoolRows: PooledSandbox[] = [];
   worktreesRows: SourceControlWorktree[] = [];
   sessionsRows: SourceControlSession[] = [];
 
@@ -389,25 +386,6 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
     markMaterialized: async ({ id }: { id: string }): Promise<void> => {
       const row = this.sandboxesRows.find(candidate => candidate.id === id);
       if (row) row.materializedAt = new Date();
-    },
-  };
-
-  readonly sandboxPool = {
-    release: async (input: ReleasePooledSandboxInput): Promise<void> => {
-      // Mirror the SQL implementation: a missing project-repository link
-      // makes the release a silent no-op.
-      if (!this.projectRepositoriesRows.some(row => row.id === input.projectRepositoryId)) return;
-      if (this.sandboxPoolRows.some(row => row.sandboxId === input.sandboxId)) return;
-      this.sandboxPoolRows.push({ id: randomUUID(), releasedAt: new Date(), ...input });
-    },
-    claim: async ({ projectRepositoryId }: { projectRepositoryId: string }): Promise<PooledSandbox | null> => {
-      const candidates = this.sandboxPoolRows
-        .filter(row => row.projectRepositoryId === projectRepositoryId)
-        .sort((left, right) => right.releasedAt.getTime() - left.releasedAt.getTime());
-      const claimed = candidates[0];
-      if (!claimed) return null;
-      this.sandboxPoolRows.splice(this.sandboxPoolRows.indexOf(claimed), 1);
-      return claimed;
     },
   };
 

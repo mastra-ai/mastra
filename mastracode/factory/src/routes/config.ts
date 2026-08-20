@@ -14,6 +14,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 
 import type { Context } from 'hono';
+import { peekSessionSandbox } from '../sandbox/session-sandbox.js';
 import {
   applyStoredMemorySettings,
   DEFAULT_OBSERVATION_THRESHOLD,
@@ -419,11 +420,15 @@ async function authorizePackSession({
   if (!sessions) return c.json({ error: 'session_authorization_unavailable' }, 503);
 
   const sourceSession = await sessions.getBySessionId(resourceId);
+  // Scope matches against the live memoized workdir (the deterministic
+  // truth); the persisted column is an observability fallback for sessions
+  // materialized before this process started.
+  const liveWorkdir = peekSessionSandbox(sourceSession?.id ?? '')?.workdir;
   if (
     !sourceSession ||
     sourceSession.orgId !== packContext.orgId ||
     sourceSession.userId !== packContext.userId ||
-    (scope !== undefined && sourceSession.sandboxWorkdir !== scope)
+    (scope !== undefined && scope !== liveWorkdir && scope !== sourceSession.sandboxWorkdir)
   ) {
     return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
   }

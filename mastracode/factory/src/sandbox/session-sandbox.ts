@@ -8,11 +8,21 @@ import type { SandboxLifecycleHook, WorkspaceSandbox } from '@mastra/core/worksp
 export interface FactorySandboxContext {
   /** Stable session id — the sandbox identity. */
   sessionId: string;
-  /** Deterministic in-sandbox working directory for the session's checkout. */
+  /**
+   * Deterministic in-sandbox working directory for the session's checkout.
+   * Local providers should root the sandbox's `workingDirectory` at the
+   * PARENT of this path (the per-session directory) — the setup marker is
+   * written beside the checkout, not inside it, so it never shows up in
+   * `git status` or gets committed.
+   */
   workdir: string;
   /** owner/name of the repository, when the session is repo-backed. */
   repoFullName?: string;
-  /** Default-branch head sha, when factory knows it — for template keying. */
+  /**
+   * Default-branch head sha, when factory knows it — for provider template
+   * keying (e.g. E2B sha-aliased templates). Not yet populated; the E2B
+   * wiring segment threads it from source-control storage.
+   */
   repoSha?: string;
   /** Configured repo setup command, when present — for template keying. */
   setupCommand?: string;
@@ -47,6 +57,8 @@ export interface FactorySandboxRuntime {
   /** Host root for local sandbox checkouts, when the deploy is local. */
   localRoot?: string;
   create?: (ctx: FactorySandboxContext) => WorkspaceSandbox;
+  /** Advisory idle window forwarded as `ctx.idleTimeoutMinutes`. Default: 30. */
+  idleTimeoutMinutes?: number;
   instructions?: string;
 }
 
@@ -115,8 +127,18 @@ function markerShellPath(sandbox: Pick<WorkspaceSandbox, 'provider'>): string {
   return sandbox.provider === 'local' ? `./${SESSION_SETUP_MARKER}` : `$HOME/${SESSION_SETUP_MARKER}`;
 }
 
-async function markerPresent(sandbox: WorkspaceSandbox): Promise<boolean> {
-  const probe = await sandbox.executeCommand!(`test -f "${markerShellPath(sandbox)}"`);
+/** Shell-expandable form of a workdir: `~/a/b` → `$HOME/a/b` (tilde does not expand inside quotes). */
+function workdirShellPath(workdir: string): string {
+  return workdir.startsWith('~/') ? `$HOME/${workdir.slice(2)}` : workdir;
+}
+
+async function markerPresent(sandbox: WorkspaceSandbox, workdir: string): Promise<boolean> {
+  // The marker is a skip cache — it sits beside the checkout, not inside it,
+  // so it can outlive a removed checkout (e.g. a wiped local session dir or
+  // a recovered VM). Trust it only when the checkout it describes exists.
+  const probe = await sandbox.executeCommand!(
+    `test -f "${markerShellPath(sandbox)}" && test -d "${workdirShellPath(workdir)}/.git"`,
+  );
   return probe.exitCode === 0;
 }
 
@@ -134,12 +156,12 @@ async function writeMarker(sandbox: WorkspaceSandbox): Promise<void> {
 async function runGuardedSetup(
   sandbox: WorkspaceSandbox,
   run: SessionSetupRun,
-  { skipMarkerProbe }: { skipMarkerProbe: boolean },
+  { skipMarkerProbe, workdir }: { skipMarkerProbe: boolean; workdir: string },
 ): Promise<void> {
   if (!sandbox.executeCommand) {
     throw new Error(`Sandbox '${sandbox.id}' cannot run the session setup: no executeCommand implementation`);
   }
-  if (!skipMarkerProbe && (await markerPresent(sandbox))) return;
+  if (!skipMarkerProbe && (await markerPresent(sandbox, workdir))) return;
   await run(sandbox);
   await writeMarker(sandbox);
 }
@@ -151,9 +173,9 @@ async function runGuardedSetup(
  * crash-interrupted attempt. Throwing fails `start()` loudly — core treats
  * onStart errors as fatal.
  */
-export function createSessionSetupHook(run: SessionSetupRun): SandboxLifecycleHook {
+export function createSessionSetupHook(run: SessionSetupRun, workdir: string): SandboxLifecycleHook {
   return async ({ sandbox, outcome }) => {
-    await runGuardedSetup(sandbox, run, { skipMarkerProbe: outcome === 'created' });
+    await runGuardedSetup(sandbox, run, { skipMarkerProbe: outcome === 'created', workdir });
   };
 }
 
@@ -165,6 +187,23 @@ export function createSessionSetupHook(run: SessionSetupRun): SandboxLifecycleHo
  * the caller: a session whose repo never materialized must fail preparation
  * loudly.
  */
-export async function runSessionSetupFallback(sandbox: WorkspaceSandbox, run: SessionSetupRun): Promise<void> {
-  await runGuardedSetup(sandbox, run, { skipMarkerProbe: false });
+const inflightFallbackSetups = new Map<string, Promise<void>>();
+
+export async function runSessionSetupFallback(
+  sandbox: WorkspaceSandbox,
+  run: SessionSetupRun,
+  workdir: string,
+): Promise<void> {
+  // Single-flight per sandbox id: two workspace variants of one session (the
+  // memo is workspace-keyed upstream) must not race the marker probe and both
+  // run the destructive materialize. Cleared on settle; failures never latch.
+  const key = sandbox.id;
+  let inflight = inflightFallbackSetups.get(key);
+  if (!inflight) {
+    inflight = runGuardedSetup(sandbox, run, { skipMarkerProbe: false, workdir }).finally(() => {
+      inflightFallbackSetups.delete(key);
+    });
+    inflightFallbackSetups.set(key, inflight);
+  }
+  await inflight;
 }

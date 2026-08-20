@@ -23,7 +23,6 @@ import {
   materializeRepo as materializeRepoWithStorage,
   MaterializeError,
   pushBranch,
-  recycleClaimedWorkdir,
   resolveGitIdentity,
   runWorktreeSetup,
   runWorktreeTeardown,
@@ -135,9 +134,8 @@ function materializeRepo(
   repoInfo: RepoMaterializeInfo,
   sandbox: MaterializationSandbox,
   token: string,
-  skipPullOnExistingCheckout?: boolean,
 ) {
-  return materializeRepoWithStorage({ row, repoInfo, sandbox, token, storage, skipPullOnExistingCheckout });
+  return materializeRepoWithStorage({ row, repoInfo, sandbox, token, storage });
 }
 
 beforeEach(() => {
@@ -239,25 +237,6 @@ describe('materializeRepo', () => {
     expect(joined).toContain('pull --ff-only');
     expect(sandbox.calls.some(c => c.includes('git clone'))).toBe(false);
     expect(joined).toContain('https://x-access-token:tok-xyz@github.com/octocat/hello.git');
-  });
-
-  it('skips the pull on an existing checkout when seeded from a fresh base checkpoint', async () => {
-    const sandbox = new FakeSandbox(script => {
-      if (script.includes('remote get-url origin')) {
-        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
-      }
-      return OK;
-    });
-    await materializeRepo(makeRow({ materializedAt: null }), makeRepoInfo(), sandbox, 'tok-xyz', true);
-
-    const joined = sandbox.calls.join('\n');
-    expect(sandbox.calls.some(c => c.includes('git clone'))).toBe(false);
-    expect(sandbox.calls.some(c => c.includes('pull --ff-only'))).toBe(false);
-    // origin still repointed at the token URL (for the session-branch fetch)…
-    expect(joined).toContain('https://x-access-token:tok-xyz@github.com/octocat/hello.git');
-    // …and scrubbed back afterwards.
-    expect(joined).toContain('https://github.com/octocat/hello.git');
-    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
   });
 
   it('re-clones when the DB says materialized but the sandbox disk was wiped', async () => {
@@ -871,82 +850,6 @@ describe('checkoutSessionBranch', () => {
   });
 });
 
-describe('recycleClaimedWorkdir', () => {
-  it('is a no-op when the claimed workdir has no checkout yet', async () => {
-    const sandbox = new FakeSandbox(script =>
-      script.includes('rev-parse') ? { exitCode: 128, stdout: '', stderr: 'not a git repository' } : OK,
-    );
-
-    await recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main');
-
-    expect(sandbox.calls).toHaveLength(1);
-    expect(sandbox.calls[0]).toContain('rev-parse --is-inside-work-tree');
-  });
-
-  it('resets the previous session state back to the default branch', async () => {
-    const sandbox = new FakeSandbox();
-
-    await recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main');
-
-    const recycle = sandbox.calls[1]!;
-    expect(recycle).toContain("checkout -f 'main'");
-    expect(recycle).toContain('reset --hard');
-    // `-x` included: gitignored files (.env, caches) must not leak between sessions.
-    expect(recycle).toContain('clean -fdx');
-    expect(sandbox.calls.some(call => call.startsWith('rm -rf'))).toBe(false);
-  });
-
-  it('deletes every non-default local branch left by the previous session', async () => {
-    const sandbox = new FakeSandbox();
-
-    await recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main');
-
-    const sweep = sandbox.calls[2]!;
-    expect(sweep).toContain('for-each-ref');
-    // `--no-deref`: a stale symbolic ref pointing at the default branch must
-    // delete the symref itself, never follow it onto the default branch.
-    expect(sweep).toContain('update-ref --no-deref -d');
-    // The default branch itself survives the sweep.
-    expect(sweep).toContain("'refs/heads/main'");
-  });
-
-  it('wipes the workdir when the branch sweep fails', async () => {
-    const sandbox = new FakeSandbox(script =>
-      script.includes('for-each-ref') ? { exitCode: 1, stdout: '', stderr: 'cannot lock ref' } : OK,
-    );
-
-    await recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main');
-
-    expect(sandbox.calls.at(-1)).toBe("rm -rf '/workspace/hello'");
-  });
-
-  it('wipes a wedged checkout so materialization re-clones inside the same VM', async () => {
-    const sandbox = new FakeSandbox(script =>
-      script.includes('checkout -f') ? { exitCode: 1, stdout: '', stderr: 'index locked' } : OK,
-    );
-
-    await recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main');
-
-    expect(sandbox.calls.at(-1)).toBe("rm -rf '/workspace/hello'");
-  });
-
-  it('throws when the wedged checkout cannot even be wiped', async () => {
-    const sandbox = new FakeSandbox(script =>
-      script.includes('rev-parse') ? OK : { exitCode: 1, stdout: '', stderr: 'device busy' },
-    );
-
-    await expect(recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main')).rejects.toBeInstanceOf(MaterializeError);
-  });
-
-  it('refuses shell-hostile default branch names', async () => {
-    const sandbox = new FakeSandbox();
-
-    await expect(recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main; rm -rf /')).rejects.toBeInstanceOf(
-      MaterializeError,
-    );
-    expect(sandbox.calls).toHaveLength(0);
-  });
-});
 
 describe('isValidGitRef', () => {
   it('accepts normal branch names', () => {

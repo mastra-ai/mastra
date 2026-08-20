@@ -413,12 +413,11 @@ const ensureProjectSandbox = vi.fn(
   },
 );
 const materializeRepo = vi.fn(
-  async (opts: { onProgress?: (e: any) => void; skipPullOnExistingCheckout?: boolean }) => {
+  async (opts: { onProgress?: (e: any) => void }) => {
     opts.onProgress?.({ phase: 'cloning', message: 'Cloning octo/hello…' });
   },
 );
 const reattachSandbox = vi.fn(async (_id: string, _options?: { actingUserId?: string }) => ({ id: 'sb' }));
-const recycleClaimedWorkdir = vi.fn(async (_sb: any, _workdir: string, _defaultBranch: string) => {});
 const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: string; baseBranch: string }) => ({
   worktreePath: `/workspace/hello/../worktrees/${opts.branch}`,
   branch: opts.branch,
@@ -470,8 +469,6 @@ vi.mock('./sandbox', () => {
     runWorktreeSetup: (sb: any, worktreePath: string, command: string) => runWorktreeSetup(sb, worktreePath, command),
     runWorktreeTeardown: (sb: any, worktreePath: string, command: string, options?: { timeoutMs?: number }) =>
       runWorktreeTeardown(sb, worktreePath, command, options),
-    recycleClaimedWorkdir: (sb: any, workdir: string, defaultBranch: string) =>
-      recycleClaimedWorkdir(sb, workdir, defaultBranch),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
     teardownProjectSandbox: (opts: any) => teardownProjectSandbox(opts),
@@ -689,7 +686,6 @@ beforeEach(() => {
   ensureProjectSandbox.mockClear();
   materializeRepo.mockClear();
   reattachSandbox.mockClear();
-  recycleClaimedWorkdir.mockClear();
   ensureWorktree.mockClear();
   removeWorktree.mockClear();
   runWorktreeSetup.mockClear();
@@ -2161,6 +2157,11 @@ describe('sandbox teardown route', () => {
       }),
     );
 
+    // A live memo entry for the caller's binding marks the teardown as real.
+    getSessionSandbox(`project-sbrow-1`, '/workspace/hello', () =>
+      ({ id: 'sb-1', provider: 'stub', executeCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }) }) as never,
+    );
+
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/sandbox', { method: 'DELETE' });
 
     expect(res.status).toBe(200);
@@ -2171,7 +2172,10 @@ describe('sandbox teardown route', () => {
     );
   });
 
-  it('is an idempotent no-op when the caller has nothing provisioned', async () => {
+  it('still runs the idempotent teardown when nothing is live in this process', async () => {
+    // The persisted sandboxId is observability-only and must not gate the
+    // decision: teardown always runs (it no-ops on an empty memo and clears
+    // the binding), and `tornDown` reports whether a live VM was destroyed.
     seedMaterializedProject();
     tables.sandboxes.length = 0;
 
@@ -2179,7 +2183,7 @@ describe('sandbox teardown route', () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ tornDown: false });
-    expect(teardownProjectSandbox).not.toHaveBeenCalled();
+    expect(teardownProjectSandbox).toHaveBeenCalledOnce();
   });
 });
 

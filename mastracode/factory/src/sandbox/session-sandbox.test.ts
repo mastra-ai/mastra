@@ -72,42 +72,83 @@ describe('session setup hook + fallback', () => {
   it('runs setup inside start() via the hook, and the fallback no-ops on the shared marker', async () => {
     // The callback forwarded ctx.onStart: setup runs during _start() on the
     // create branch (fresh directory → outcome: 'created').
-    const hook = createSessionSetupHook(async sb => void (await sb.executeCommand!('touch hook-ran.txt')));
     const boot = path.join(dir, 'fresh');
+    const workdir = path.join(boot, 'repo');
+    const hook = createSessionSetupHook(
+      async sb => void (await sb.executeCommand!('mkdir -p repo/.git && touch hook-ran.txt')),
+      workdir,
+    );
     const sandbox = new LocalSandbox({ workingDirectory: boot, onStart: hook });
     await sandbox._start();
     await expect(fs.stat(path.join(boot, 'hook-ran.txt'))).resolves.toBeDefined();
     await expect(fs.stat(path.join(boot, '.mastra-bootstrapped'))).resolves.toBeDefined();
 
     // The factory fallback guards the exact same marker → no re-run.
-    await runSessionSetupFallback(sandbox, async sb => void (await sb.executeCommand!('touch fallback-ran.txt')));
+    await runSessionSetupFallback(
+      sandbox,
+      async sb => void (await sb.executeCommand!('touch fallback-ran.txt')),
+      workdir,
+    );
     await expect(fs.stat(path.join(boot, 'fallback-ran.txt'))).rejects.toThrow();
   });
 
-  it('the hook skips setup on reconnect when the marker is present', async () => {
+  it('the hook skips setup on reconnect when the marker and checkout are present', async () => {
     const boot = path.join(dir, 'reconnect');
+    const workdir = path.join(boot, 'repo');
     const first = new LocalSandbox({
       workingDirectory: boot,
-      onStart: createSessionSetupHook(async sb => void (await sb.executeCommand!('touch first.txt'))),
+      onStart: createSessionSetupHook(
+        async sb => void (await sb.executeCommand!('mkdir -p repo/.git && touch first.txt')),
+        workdir,
+      ),
     });
     await first._start();
 
     // Second instance reattaches (outcome: 'connected') → marker probe skips setup.
     const second = new LocalSandbox({
       workingDirectory: boot,
-      onStart: createSessionSetupHook(async sb => void (await sb.executeCommand!('touch second.txt'))),
+      onStart: createSessionSetupHook(async sb => void (await sb.executeCommand!('touch second.txt')), workdir),
     });
     await second._start();
     await expect(fs.stat(path.join(boot, 'second.txt'))).rejects.toThrow();
+  });
+
+  it('a marker without its checkout does not skip setup (removed checkout heals)', async () => {
+    const boot = path.join(dir, 'wiped');
+    const workdir = path.join(boot, 'repo');
+    const first = new LocalSandbox({
+      workingDirectory: boot,
+      onStart: createSessionSetupHook(
+        async sb => void (await sb.executeCommand!('mkdir -p repo/.git && touch first.txt')),
+        workdir,
+      ),
+    });
+    await first._start();
+
+    // The checkout is removed but the marker (beside it) survives — a stale
+    // skip cache must not defeat disk truth.
+    await fs.rm(workdir, { recursive: true, force: true });
+    const second = new LocalSandbox({
+      workingDirectory: boot,
+      onStart: createSessionSetupHook(
+        async sb => void (await sb.executeCommand!('mkdir -p repo/.git && touch rebuilt.txt')),
+        workdir,
+      ),
+    });
+    await second._start();
+    await expect(fs.stat(path.join(boot, 'rebuilt.txt'))).resolves.toBeDefined();
   });
 
   it('a failed setup fails start() loudly, writes no marker, and the next start self-heals', async () => {
     const boot = path.join(dir, 'fail');
     const failing = new LocalSandbox({
       workingDirectory: boot,
-      onStart: createSessionSetupHook(async () => {
-        throw new Error('Session setup failed (exit 7)');
-      }),
+      onStart: createSessionSetupHook(
+        async () => {
+          throw new Error('Session setup failed (exit 7)');
+        },
+        path.join(boot, 'repo'),
+      ),
     });
 
     await expect(failing._start()).rejects.toThrow(/Session setup failed \(exit 7\)/);
@@ -116,7 +157,10 @@ describe('session setup hook + fallback', () => {
     // Reconnect (outcome: 'connected'), marker absent → setup re-runs and heals.
     const healed = new LocalSandbox({
       workingDirectory: boot,
-      onStart: createSessionSetupHook(async sb => void (await sb.executeCommand!('touch healed.txt'))),
+      onStart: createSessionSetupHook(
+        async sb => void (await sb.executeCommand!('mkdir -p repo/.git && touch healed.txt')),
+        path.join(boot, 'repo'),
+      ),
     });
     await healed._start();
     await expect(fs.stat(path.join(boot, 'healed.txt'))).resolves.toBeDefined();
@@ -124,27 +168,50 @@ describe('session setup hook + fallback', () => {
   });
 
   it('the fallback runs setup once for callbacks that ignored ctx.onStart', async () => {
+    const workdir = path.join(dir, 'repo');
     const sandbox = new LocalSandbox({ workingDirectory: dir });
     await sandbox._start();
 
-    await runSessionSetupFallback(sandbox, async sb => void (await sb.executeCommand!('touch fallback-ran.txt')));
+    await runSessionSetupFallback(
+      sandbox,
+      async sb => void (await sb.executeCommand!('mkdir -p repo/.git && touch fallback-ran.txt')),
+      workdir,
+    );
     await expect(fs.stat(path.join(dir, 'fallback-ran.txt'))).resolves.toBeDefined();
 
-    // Second call: marker present, no re-run.
-    await runSessionSetupFallback(sandbox, async sb => void (await sb.executeCommand!('touch second.txt')));
+    // Second call: marker + checkout present, no re-run.
+    await runSessionSetupFallback(sandbox, async sb => void (await sb.executeCommand!('touch second.txt')), workdir);
     await expect(fs.stat(path.join(dir, 'second.txt'))).rejects.toThrow();
+
+    // Concurrent fallbacks single-flight: one setup run for both callers.
+    await fs.rm(path.join(dir, '.mastra-bootstrapped'), { force: true });
+    let runs = 0;
+    const run = async (sb: typeof sandbox) => {
+      runs += 1;
+      await sb.executeCommand!('mkdir -p repo/.git');
+    };
+    await Promise.all([
+      runSessionSetupFallback(sandbox, run as never, workdir),
+      runSessionSetupFallback(sandbox, run as never, workdir),
+    ]);
+    expect(runs).toBe(1);
   });
 
   it('the fallback surfaces failures with the exit code and writes no marker', async () => {
     const sandbox = new LocalSandbox({ workingDirectory: dir });
     await sandbox._start();
 
+    const workdir = path.join(dir, 'repo');
     await expect(
-      runSessionSetupFallback(sandbox, async () => {
-        throw new Error('Session setup failed (exit 7)');
-      }),
+      runSessionSetupFallback(
+        sandbox,
+        async () => {
+          throw new Error('Session setup failed (exit 7)');
+        },
+        workdir,
+      ),
     ).rejects.toThrow(/Session setup failed \(exit 7\)/);
-    await runSessionSetupFallback(sandbox, async sb => void (await sb.executeCommand!('touch retried.txt')));
+    await runSessionSetupFallback(sandbox, async sb => void (await sb.executeCommand!('touch retried.txt')), workdir);
     await expect(fs.stat(path.join(dir, 'retried.txt'))).resolves.toBeDefined();
   });
 });

@@ -1,5 +1,6 @@
 import type { SessionBeforeAgentEndListener } from '@mastra/core/agent-controller';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
+import { peekSessionSandbox } from '../sandbox/session-sandbox.js';
 
 import type { FilesystemFile, FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
@@ -52,9 +53,14 @@ export async function captureSessionFilesystem(
     const sourceSession = await sourceControl.sessions.getBySessionId(resourceId);
     // Chat-only sessions run without a workspace; there is nothing to capture.
     const sandbox = session.getWorkspace()?.sandbox;
-    if (!sourceSession?.sandboxWorkdir || !sandbox?.executeCommand) return;
+    if (!sourceSession || !sandbox?.executeCommand) return;
+    // The live workdir comes from the per-process memo (the deterministic
+    // truth), not the persisted observability column — a row written under a
+    // previous provider can point at a workdir that no longer exists.
+    const workdir = peekSessionSandbox(sourceSession.id)?.workdir ?? sourceSession.sandboxWorkdir;
+    if (!workdir) return;
 
-    const result = await sandbox.executeCommand('git', ['-C', sourceSession.sandboxWorkdir, ...GIT_STATUS_ARGS], {
+    const result = await sandbox.executeCommand('git', ['-C', workdir, ...GIT_STATUS_ARGS], {
       timeout: 30_000,
     });
     if (result.exitCode !== 0) {
@@ -62,11 +68,9 @@ export async function captureSessionFilesystem(
       return;
     }
 
-    const artifacts = await sandbox.executeCommand(
-      'sh',
-      ['-c', ARTIFACTS_LIST_COMMAND, 'sh', sourceSession.sandboxWorkdir],
-      { timeout: 30_000 },
-    );
+    const artifacts = await sandbox.executeCommand('sh', ['-c', ARTIFACTS_LIST_COMMAND, 'sh', workdir], {
+      timeout: 30_000,
+    });
     if (artifacts.exitCode !== 0) {
       console.warn('[Factory filesystem capture] Unable to list workspace artifacts.', artifacts.stderr);
       return;

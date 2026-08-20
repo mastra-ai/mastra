@@ -35,12 +35,6 @@ import { computeLocalWorkdir, computeRemoteWorkdir } from './sandbox/workdir.js'
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 
 const WORKSPACE_ID_PREFIX = 'mfw';
-const SESSION_CHECKPOINT_PREFIX = 'mastracode-session';
-
-export function checkpointNameForSession(sessionId: string): string {
-  return `${SESSION_CHECKPOINT_PREFIX}-${sessionId}`;
-}
-
 /**
  * Whether a command failure means the sandbox itself is gone (destroyed by
  * idle GC or provider teardown) AND the command provably never started, so
@@ -518,6 +512,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // gets fresh credentials, not ones captured at workspace construction.
     const runSessionSetup = async (target: SessionSandbox): Promise<void> => {
       const token = await getRepositoryToken();
+      // The configured setup command may shell out to `gh`/https fetches, so
+      // GH_TOKEN must exist before setup runs — not only after start settles.
+      target.setEnvironmentVariable?.('GH_TOKEN', token);
       await materializeRepo({
         row: { id: session.id, sandboxWorkdir: workdir, materializedAt: session.materializedAt },
         repoInfo: { repoFullName: repoFullName, defaultBranch: repository.defaultBranch },
@@ -587,7 +584,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // helpers take the narrower MaterializationSandbox surface. Same
       // object either way.
       const runSetupOn = (target: unknown) => runSessionSetup(target as SessionSandbox);
-      const setupHook = createSessionSetupHook(runSetupOn);
+      const setupHook = createSessionSetupHook(runSetupOn, workdir);
       const sandbox = asSessionSandbox(
         getSessionSandbox(session.id, workdir, () =>
           createSessionSandboxInstance({
@@ -604,7 +601,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       await sandbox.start();
       // Covers callbacks that did not forward ctx.onStart: probes the same
       // completion marker the hook writes, so this no-ops when the hook ran.
-      await runSessionSetupFallback(sandbox as unknown as Parameters<typeof runSessionSetupFallback>[0], runSetupOn);
+      await runSessionSetupFallback(
+        sandbox as unknown as Parameters<typeof runSessionSetupFallback>[0],
+        runSetupOn,
+        workdir,
+      );
       // GH_TOKEN for the `gh` CLI. Injected post-start rather than baked into
       // the VM's creation env, so the credential never outlives its rotation.
       sandbox.setEnvironmentVariable?.('GH_TOKEN', ghCliToken);
@@ -632,8 +633,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // the workspace down — stop the just-built sandbox and surface the
       // retirement instead of handing back a sandbox for a dead session.
       if (workspaceRegistry.generation(session.sessionId) !== workspaceGeneration) {
+        // The retirement callback ran before this instance was memoized, so
+        // its eviction missed it — evict here or a later re-open of a
+        // non-deleted session would reuse a stopped handle.
+        evictSessionSandbox(session.id);
         try {
-          await (sandbox as unknown as { stop?: () => Promise<void> }).stop?.();
+          const stoppable = sandbox as unknown as { _stop?: () => Promise<void>; stop?: () => Promise<void> };
+          await (stoppable._stop ?? stoppable.stop)?.call(stoppable);
         } catch (teardownError) {
           console.warn('[Mastra Factory] Sandbox stop after mid-materialization retirement failed', {
             orgId: session.orgId,
@@ -734,6 +740,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           if (materializedSandboxes.get(workspaceId) === sandbox) {
             materializedSandboxes.delete(workspaceId);
           }
+          // Evict the session memo too: the memoized instance already reports
+          // `running`, so its `start()` would early-return without
+          // re-acquiring. A fresh instance re-resolves the session id at the
+          // provider (reconnect, or provision a replacement VM).
+          evictSessionSandbox(session.id);
           const revived = await ensureMaterialized();
           return revived.executeCommand(command, args, options);
         }

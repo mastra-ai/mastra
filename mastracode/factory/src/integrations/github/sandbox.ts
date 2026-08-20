@@ -2,19 +2,19 @@
  * Repo materialization for GitHub-backed repositories.
  *
  * A GitHub repo is never cloned onto the server host. Instead each project gets
- * its own isolated sandbox (provisioned by the fleet in `../sandbox/fleet`) and
- * the repo is cloned *inside* that sandbox. The agent's file tools and command
- * tools then operate entirely against the remote checkout.
+ * its own isolated sandbox (constructed through the deploy's `sandbox.create`
+ * callback with id-keyed getOrCreate) and the repo is cloned *inside* that
+ * sandbox. The agent's file tools and command tools then operate entirely
+ * against the remote checkout.
  *
- * - `ensureProjectSandbox(row)` / `teardownProjectSandbox(row)` bind the fleet's
- *   provision/reattach/teardown lifecycle to the per-(project,user) sandbox row.
+ * - `ensureProjectSandbox(row)` / `teardownProjectSandbox(row)` construct,
+ *   start, and destroy the per-(project,user) sandbox via the session memo.
  * - `materializeRepo(row, token)` runs `git clone` (first open) or `git pull`
  *   (re-open) inside the sandbox, using a short-lived installation token that is
  *   scrubbed from the git remote afterwards so it never persists in the VM.
  *
  * This module owns everything git/GitHub: clone/pull, commit/push, worktrees,
- * and `gh pr create`. Sandbox provisioning, budgets, and workdir layout live in
- * the fleet module.
+ * and `gh pr create`. Workdir layout lives in `../sandbox/workdir`.
  */
 
 import { createHash } from 'node:crypto';
@@ -73,7 +73,7 @@ export async function ensureProjectSandbox(options: {
       sessionId: key,
       workdir,
       repoFullName,
-      idleTimeoutMinutes: 30,
+      idleTimeoutMinutes: runtime.idleTimeoutMinutes ?? 30,
       actingUserId: row.userId,
     }),
   ) as unknown as MaterializationSandbox;
@@ -303,7 +303,6 @@ export interface MaterializeRepoOptions {
    * redundant network cost: session work happens on a branch that
    * `checkoutSessionBranch` fetches fresh regardless.
    */
-  skipPullOnExistingCheckout?: boolean;
 }
 
 /**
@@ -317,7 +316,7 @@ export async function materializeRepo(options: MaterializeRepoOptions): Promise<
 }
 
 async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<void> {
-  const { row: sandboxRow, repoInfo, sandbox, token, storage, onProgress, skipPullOnExistingCheckout } = options;
+  const { row: sandboxRow, repoInfo, sandbox, token, storage, onProgress } = options;
   const workdir = sandboxRow.sandboxWorkdir;
   const repo = repoInfo.repoFullName;
 
@@ -405,17 +404,6 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
         throw classifyGitFailure(clone, 'clone-failed');
       }
       tokenInRemote = true;
-    } else if (skipPullOnExistingCheckout) {
-      // 2b'. Checkpoint-seeded checkout: the base checkpoint is rebuilt on
-      // every default-branch push, so the seeded default branch is already at
-      // (or minutes behind) HEAD. Skip the network pull — the session branch
-      // is fetched fresh by `checkoutSessionBranch` right after — but still
-      // point origin at the token URL so that fetch can authenticate.
-      const setUrl = await sh(sandbox, `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(authUrl)}`);
-      if (setUrl.exitCode !== 0) {
-        throw new MaterializeError(`Failed to set git remote: ${setUrl.stderr}`, 'pull-failed');
-      }
-      tokenInRemote = true;
     } else {
       // 2b. Re-open: refresh remote to the token URL and fast-forward pull.
       reportProgress(onProgress, { phase: 'pulling', message: `Updating ${repo} to the latest changes…` });
@@ -465,59 +453,6 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
   // 4. Mark materialized.
   reportProgress(onProgress, { phase: 'finalizing', message: 'Finalizing workspace…' });
   await storage.markMaterialized({ id: sandboxRow.id });
-}
-
-/**
- * Reset a pooled workdir that a new session just claimed: the previous
- * session's branch and dirty state must not leak into the new session, so
- * force-checkout the default branch, drop all local modifications, and delete
- * every other local branch (a surviving branch would otherwise hand the next
- * session for the same branch the previous session's stale tip instead of a
- * fresh fork from the base branch). When the claimed VM was reaped and
- * re-provisioned there is no checkout yet and this is a no-op (the clone path
- * handles it). A wedged checkout falls back to wiping the workdir so
- * `materializeRepo` re-clones inside the same VM instead of permanently
- * failing the session.
- */
-export async function recycleClaimedWorkdir(
-  sandbox: MaterializationSandbox,
-  workdir: string,
-  defaultBranch: string,
-): Promise<void> {
-  if (!/^[A-Za-z0-9_./-]+$/.test(defaultBranch)) {
-    throw new MaterializeError(`Refusing to recycle: invalid default branch '${defaultBranch}'.`, 'clone-failed');
-  }
-  const w = shellQuote(workdir);
-  const inspect = await sh(sandbox, `git -C ${w} rev-parse --is-inside-work-tree`);
-  if (inspect.exitCode !== 0) return;
-  const recycle = await sh(
-    sandbox,
-    // `-x` also drops gitignored files (.env, build caches) so no session
-    // state survives into the next claim.
-    `git -C ${w} checkout -f ${shellQuote(defaultBranch)} && git -C ${w} reset --hard && git -C ${w} clean -fdx`,
-    { phase: 'claimed workdir recycle' },
-  );
-  let failure = recycle;
-  if (recycle.exitCode === 0) {
-    // Ref names cannot contain spaces or shell metacharacters (git rejects
-    // them), so word-splitting the for-each-ref output is safe. `update-ref -d`
-    // instead of `branch -D` so deletion never trips over "not fully merged"
-    // checks; `--no-deref` so a symbolic ref pointing at the default branch
-    // deletes the symref itself rather than following it and deleting the
-    // default branch. Broken loose refs are skipped by for-each-ref and
-    // handled by the collision fallback in `checkoutSessionBranch`.
-    const sweep = await sh(
-      sandbox,
-      `set -e; for ref in $(git -C ${w} for-each-ref --format='%(refname)' refs/heads); do [ "$ref" = ${shellQuote(`refs/heads/${defaultBranch}`)} ] || git -C ${w} update-ref --no-deref -d "$ref"; done`,
-      { phase: 'claimed workdir branch sweep' },
-    );
-    if (sweep.exitCode === 0) return;
-    failure = sweep;
-  }
-  const wipe = await sh(sandbox, `rm -rf ${w}`);
-  if (wipe.exitCode !== 0) {
-    throw new MaterializeError(`Failed to recycle claimed sandbox workdir: ${failure.stderr}`, 'clone-failed');
-  }
 }
 
 /** Check out a session's branch inside its isolated repository clone. */

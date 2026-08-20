@@ -36,16 +36,9 @@ const mocks = vi.hoisted(() => ({
   ),
   materializeRepo: vi.fn(async (_input: unknown) => {}),
   checkoutSessionBranch: vi.fn(async () => {}),
-  recycleClaimedWorkdir: vi.fn(async () => {}),
   runWorktreeSetup: vi.fn(async () => {}),
   runWorktreeTeardown: vi.fn(async () => {}),
   /** Released sandboxes claimable by new sessions; claim() consumes matches. */
-  pooledSandboxes: [] as Array<{
-    projectRepositoryId: string;
-    userId: string;
-    sandboxId: string;
-    sandboxWorkdir: string;
-  }>,
   getRepositoryAccess: vi.fn(async ({ repositoryId }: { repositoryId: string }) => ({
     cloneUrl: 'https://github.com/octocat/hello.git',
     authorization: { scheme: 'bearer' as const, token: `repo-token-${repositoryId}` },
@@ -70,7 +63,6 @@ vi.mock('./integrations/github/sandbox', async importOriginal => ({
   MaterializeError: (await importOriginal<typeof import('./integrations/github/sandbox.js')>()).MaterializeError,
   materializeRepo: (...args: unknown[]) => (mocks.materializeRepo as any)(...args),
   checkoutSessionBranch: (...args: unknown[]) => (mocks.checkoutSessionBranch as any)(...args),
-  recycleClaimedWorkdir: (...args: unknown[]) => (mocks.recycleClaimedWorkdir as any)(...args),
   runWorktreeSetup: (...args: unknown[]) => (mocks.runWorktreeSetup as any)(...args),
   runWorktreeTeardown: (...args: unknown[]) => (mocks.runWorktreeTeardown as any)(...args),
 }));
@@ -78,12 +70,7 @@ vi.mock('./integrations/github/sandbox', async importOriginal => ({
 import { MaterializeError } from './integrations/github/sandbox.js';
 import { injectGithubToken } from './integrations/github/token-refresh.js';
 import { __clearSessionSandboxesForTests } from './sandbox/session-sandbox.js';
-import {
-  checkpointNameForSession,
-  createWorkspaceFactory,
-  FactoryWorkspaceRegistry,
-  getFactoryWorkspace,
-} from './workspace.js';
+import { createWorkspaceFactory, FactoryWorkspaceRegistry, getFactoryWorkspace } from './workspace.js';
 
 const tempDirs: string[] = [];
 
@@ -96,10 +83,8 @@ afterEach(async () => {
   __clearSessionSandboxesForTests();
   mocks.materializeRepo.mockClear();
   mocks.checkoutSessionBranch.mockClear();
-  mocks.recycleClaimedWorkdir.mockClear();
   mocks.runWorktreeSetup.mockClear();
   mocks.runWorktreeTeardown.mockClear();
-  mocks.pooledSandboxes.splice(0);
   mocks.getRepositoryAccess.mockClear();
   mocks.mintInstallationToken.mockClear();
   mocks.setEnvironmentVariable.mockClear();
@@ -234,12 +219,6 @@ function fakeGithubIntegration() {
         setSandbox,
         markMaterialized: vi.fn(async () => {}),
       },
-      sandboxPool: {
-        claim: vi.fn(async ({ projectRepositoryId }: { projectRepositoryId: string }) => {
-          const index = mocks.pooledSandboxes.findIndex(row => row.projectRepositoryId === projectRepositoryId);
-          return index === -1 ? null : mocks.pooledSandboxes.splice(index, 1)[0];
-        }),
-      },
       projectRepositories: {
         get: vi.fn(async ({ orgId, id }) => {
           const project = mocks.projects.find(candidate => candidate.orgId === orgId && candidate.id === id);
@@ -271,12 +250,6 @@ function fakeGithubIntegration() {
 }
 
 describe('getFactoryWorkspace', () => {
-  it('derives unique stable checkpoint names from session ids', () => {
-    expect(checkpointNameForSession('session-a')).toBe('mastracode-session-session-a');
-    expect(checkpointNameForSession('session-b')).toBe('mastracode-session-session-b');
-    expect(checkpointNameForSession('session-a')).not.toBe(checkpointNameForSession('session-b'));
-  });
-
   it('keeps Factory and default workspace cache identities separate', async () => {
     const projectPath = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-web-factory-cache-'));
     tempDirs.push(projectPath);
@@ -849,14 +822,17 @@ describe('GitHub session workspace preparation', () => {
     const result = await (resolved as any).sandbox.executeCommand('echo', ['hi']);
 
     expect(result.exitCode).toBe(0);
-    // The dead handle was dropped and the pipeline re-ran on the session's
-    // memoized sandbox: the provider's id-keyed start resolves the session id
-    // again and the setup hook re-materializes — then the command retried.
-    expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
-    expect(first.start).toHaveBeenCalledTimes(2);
+    // The dead handle was dropped AND the session memo evicted: the memoized
+    // instance already reported `running`, so its start() would early-return
+    // without re-acquiring. A fresh instance re-resolves the session id at
+    // the provider and the setup hook re-materializes — then the command
+    // retried on the replacement.
+    expect(mocks.createSandbox).toHaveBeenCalledTimes(2);
+    const second = await mocks.createSandbox.mock.results[1]!.value;
+    expect(second.start).toHaveBeenCalledTimes(1);
     expect(mocks.materializeRepo).toHaveBeenCalledTimes(2);
     expect(mocks.checkoutSessionBranch).toHaveBeenCalledTimes(2);
-    expect(first.executeCommand).toHaveBeenCalledWith('echo', ['hi'], undefined);
+    expect(second.executeCommand).toHaveBeenCalledWith('echo', ['hi'], undefined);
   });
 
   it('revives a live local session whose checkout was removed from under a running turn', async () => {
@@ -883,10 +859,11 @@ describe('GitHub session workspace preparation', () => {
     const result = await (resolved as any).sandbox.executeCommand('echo', ['hi']);
 
     expect(result.exitCode).toBe(0);
-    expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
-    expect(first.start).toHaveBeenCalledTimes(2);
+    expect(mocks.createSandbox).toHaveBeenCalledTimes(2);
+    const secondLocal = await mocks.createSandbox.mock.results[1]!.value;
+    expect(secondLocal.start).toHaveBeenCalledTimes(1);
     expect(mocks.materializeRepo).toHaveBeenCalledTimes(2);
-    expect(first.executeCommand).toHaveBeenCalledWith('echo', ['hi'], undefined);
+    expect(secondLocal.executeCommand).toHaveBeenCalledWith('echo', ['hi'], undefined);
   });
 
   it('fails a held run with a clear retirement error instead of resurrecting a retired checkout', async () => {
@@ -937,8 +914,9 @@ describe('GitHub session workspace preparation', () => {
     const result = await (resolved as any).sandbox.executeCommand('echo', ['hi']);
 
     expect(result.exitCode).toBe(0);
-    expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
-    expect(first.start).toHaveBeenCalledTimes(2);
+    expect(mocks.createSandbox).toHaveBeenCalledTimes(2);
+    const replayed = await mocks.createSandbox.mock.results[1]!.value;
+    expect(replayed.start).toHaveBeenCalledTimes(1);
   });
 
   it('surfaces a transport error whose command may have started instead of replaying it', async () => {

@@ -489,6 +489,9 @@ export class MastraFactory {
       provider:
         machine?.provider ?? (effectiveSandboxConfig?.create ? (sandboxLocalRoot ? 'local' : 'custom') : 'none'),
       ...(sandboxLocalRoot ? { localRoot: sandboxLocalRoot } : {}),
+      ...(effectiveSandboxConfig?.idleTimeoutMinutes !== undefined
+        ? { idleTimeoutMinutes: effectiveSandboxConfig.idleTimeoutMinutes }
+        : {}),
       ...(effectiveSandboxConfig?.create ? { create: effectiveSandboxConfig.create } : {}),
       ...(effectiveSandboxConfig?.instructions ? { instructions: effectiveSandboxConfig.instructions } : {}),
     };
