@@ -28,6 +28,7 @@ function renderActivity(status: ChatConnectionApi['status'], busy: boolean) {
   const transcript: ChatTranscriptApi = {
     transcript: initialTranscript,
     busy,
+    initialHistoryReady: true,
     localUser: vi.fn(),
     reset: vi.fn(),
     resolvePrompt: vi.fn(),
