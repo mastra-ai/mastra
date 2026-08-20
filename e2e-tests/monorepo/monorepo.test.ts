@@ -614,6 +614,95 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     );
   });
 
+  describe.sequential('Studio control route authentication', () => {
+    it(
+      'keeps Studio control routes public during development when server auth is configured',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-studio-auth-test-${pkgManager}-`));
+        const port = await getPort();
+        const controller = new AbortController();
+        let proc: ReturnType<typeof execa> | undefined;
+
+        try {
+          await setupMonorepo(isolatedFixturePath, pkgManager);
+
+          const corePath = join(isolatedFixturePath, 'apps', 'custom', 'node_modules', '@mastra', 'core', 'dist');
+          await mkdir(join(corePath, 'runtime-context'), { recursive: true });
+          await writeFile(
+            join(corePath, 'runtime-context', 'index.js'),
+            `export { RequestContext as RuntimeContext } from '../request-context/index.js';`,
+          );
+
+          const mastraConfigPath = join(isolatedFixturePath, 'apps', 'custom', 'src', 'mastra', 'index.ts');
+          const originalMastraConfig = await readFile(mastraConfigPath, 'utf-8');
+          const authenticatedMastraConfig = originalMastraConfig
+            .replace(
+              "import { ConsoleLogger } from '@mastra/core/logger';",
+              "import { ConsoleLogger } from '@mastra/core/logger';\nimport { SimpleAuth } from '@mastra/core/server';",
+            )
+            .replace(
+              'server: {',
+              "server: {\n    auth: new SimpleAuth({ tokens: { 'test-token': { sub: 'test-user' } } }),",
+            );
+          await writeFile(mastraConfigPath, authenticatedMastraConfig);
+
+          proc = execa('npm', ['run', 'dev'], {
+            cwd: join(isolatedFixturePath, 'apps', 'custom'),
+            cancelSignal: controller.signal,
+            gracefulCancel: true,
+            env: {
+              OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+              MASTRA_PORT: port.toString(),
+            },
+          });
+          activeProcesses.push({ controller, proc });
+
+          await new Promise<void>((resolve, reject) => {
+            proc!.stderr?.on('data', data => {
+              const errMsg = data?.toString();
+              if (errMsg?.includes('punycode') || errMsg?.includes('falling back to an in-memory store')) {
+                return;
+              }
+              reject(new Error('failed to start authenticated Studio dev server: ' + errMsg));
+            });
+            proc!.stdout?.on('data', data => {
+              console.log(data?.toString());
+              if (data?.toString()?.includes(`http://localhost:${port}`)) {
+                resolve();
+              }
+            });
+          });
+
+          for (const [path, method] of [
+            ['/refresh-events', 'GET'],
+            ['/__refresh', 'POST'],
+            ['/__hot-reload-status', 'GET'],
+          ] as const) {
+            const response = await fetch(`http://localhost:${port}${path}`, { method });
+            expect(response.status).toBe(200);
+            await response.body?.cancel();
+          }
+        } finally {
+          if (proc) {
+            try {
+              proc.kill('SIGKILL');
+              await Promise.race([proc.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
+            } catch (err) {
+              // @ts-expect-error - killed is not typed
+              if (!err.killed) {
+                console.log('failed to kill authenticated Studio dev proc', err);
+              }
+            }
+          }
+          await new Promise(resolve => setTimeout(resolve, 1_000));
+          await removeOutputDir(isolatedFixturePath);
+          await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+  });
+
   describe.sequential('pnpm build approvals', () => {
     it(
       'reports blocked native build scripts as a user configuration error',

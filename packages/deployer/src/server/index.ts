@@ -12,7 +12,8 @@ import { MastraServer, setupBrowserStream, skipIfFrameworkPublic } from '@mastra
 import type { HonoBindings, HonoVariables } from '@mastra/hono';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { findMatchingCustomRoute } from '@mastra/server/auth';
-import type { Context, MiddlewareHandler as HonoMiddlewareHandler } from 'hono';
+import type { ServerRoute } from '@mastra/server/server-adapter';
+import type { MiddlewareHandler as HonoMiddlewareHandler } from 'hono';
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 import { cors } from 'hono/cors';
@@ -22,7 +23,7 @@ import { describeRoute } from 'hono-openapi';
 import type { DescribeRouteOptions } from 'hono-openapi';
 import { escapeStudioHtmlValue, injectStudioHtmlConfig, normalizeStudioBase } from '../build/utils';
 import { agentLearningProxyHandler } from './handlers/agent-learning';
-import { handleClientsRefresh, handleTriggerClientsRefresh, isHotReloadDisabled } from './handlers/client';
+import { getTriggerClientsRefreshPayload, handleClientsRefreshRequest, isHotReloadDisabled } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { healthHandler } from './handlers/health';
 import { restartAllActiveWorkflowRunsHandler } from './handlers/restart-active-runs';
@@ -389,37 +390,34 @@ export async function createHonoServer(
   const studioBasePath = normalizeStudioBase(serverOptions?.studioBase ?? '/');
 
   if (options?.studio) {
-    // SSE endpoint for refresh notifications
-    app.get(
-      `${studioBasePath}/refresh-events`,
-      describeRoute({
-        hide: true,
-      }),
-      handleClientsRefresh,
-    );
-
-    // Trigger refresh for all clients
-    app.post(
-      `${studioBasePath}/__refresh`,
-      describeRoute({
-        hide: true,
-      }),
-      handleTriggerClientsRefresh,
-    );
-
-    // Check hot reload status
-    app.get(
-      `${studioBasePath}/__hot-reload-status`,
-      describeRoute({
-        hide: true,
-      }),
-      (c: Context) => {
-        return c.json({
+    const studioControlRoutes: ServerRoute[] = [
+      {
+        method: 'GET',
+        path: '/refresh-events',
+        responseType: 'datastream-response',
+        handler: async ({ abortSignal }) => handleClientsRefreshRequest(abortSignal),
+      },
+      {
+        method: 'POST',
+        path: '/__refresh',
+        responseType: 'json',
+        handler: async () => getTriggerClientsRefreshPayload(),
+      },
+      {
+        method: 'GET',
+        path: '/__hot-reload-status',
+        responseType: 'json',
+        handler: async () => ({
           disabled: isHotReloadDisabled(),
           timestamp: new Date().toISOString(),
-        });
+        }),
       },
-    );
+    ];
+
+    for (const route of studioControlRoutes) {
+      customRouteAuthConfig.set(`${route.method}:${studioBasePath}${route.path}`, !options.isDev);
+      await honoServerAdapter.registerRoute(app, route, { prefix: studioBasePath });
+    }
 
     // Enable gzip/deflate compression for studio static assets only
     app.use(`${studioBasePath}/assets/*`, compress());
