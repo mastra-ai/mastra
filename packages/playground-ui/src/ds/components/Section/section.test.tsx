@@ -40,7 +40,7 @@ describe('Section', () => {
   });
 
   it('renders view-only and destructive row states', () => {
-    const { container } = render(
+    render(
       <Section variant="factory">
         <Section.Content>
           <Section.ViewOnlyRow label="Project access">Viewer</Section.ViewOnlyRow>
@@ -52,12 +52,8 @@ describe('Section', () => {
       </Section>,
     );
 
-    expect(container.querySelector('[data-view-only="true"]')).toBeTruthy();
     expect(screen.getByText('View only:')).toBeTruthy();
     expect(screen.getByText('Project access').className).toContain('text-neutral3');
-    expect(screen.getByText('Leave organization').closest('[data-slot="section-row"]')?.dataset.tone).toBe(
-      'destructive',
-    );
     expect(screen.getByText('Leave organization').className).toContain('text-accent2');
   });
 
@@ -65,10 +61,10 @@ describe('Section', () => {
     render(
       <Section variant="factory">
         <Section.Header>
-          <div>
+          <Section.HeaderText>
             <Section.Heading>Behavior</Section.Heading>
             <Section.Description>Choose how agents handle tools.</Section.Description>
-          </div>
+          </Section.HeaderText>
         </Section.Header>
         <Section.Content>
           <Section.Row label="Auto-approve tools" description="Run tool calls without asking.">

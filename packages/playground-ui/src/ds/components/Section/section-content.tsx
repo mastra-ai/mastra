@@ -1,16 +1,16 @@
-import type { ComponentPropsWithoutRef } from 'react';
-import { useSectionVariant } from './section-context';
+import type { ComponentProps } from 'react';
 import { cn } from '@/lib/utils';
 
-export type SectionContentProps = ComponentPropsWithoutRef<'div'>;
+export type SectionContentProps = ComponentProps<'div'>;
 
 export function SectionContent({ className, ...props }: SectionContentProps) {
-  const variant = useSectionVariant();
-
   return (
     <div
       data-slot="section-content"
-      className={cn(variant === 'factory' && 'overflow-hidden rounded-xl border border-border1 bg-surface3', className)}
+      className={cn(
+        'group-data-[variant=factory]/section:overflow-hidden group-data-[variant=factory]/section:rounded-xl group-data-[variant=factory]/section:border group-data-[variant=factory]/section:border-border1 group-data-[variant=factory]/section:bg-surface3',
+        className,
+      )}
       {...props}
     />
   );

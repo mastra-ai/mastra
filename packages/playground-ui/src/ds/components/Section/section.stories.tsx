@@ -75,12 +75,12 @@ export const ConfigurationSection: Story = {
 
 export const Flat: Story = {
   render: () => (
-    <Section variant="flat" className="w-150">
+    <Section variant="flat" className="w-full max-w-150">
       <Section.Header>
-        <div>
+        <Section.HeaderText>
           <Section.Heading>Security</Section.Heading>
           <Section.Description>Manage sign-in requirements for your account.</Section.Description>
-        </div>
+        </Section.HeaderText>
       </Section.Header>
       <Section.Content>
         <Section.Row label="Two-factor authentication" description="Require a verification code when signing in.">
@@ -111,12 +111,12 @@ export const Flat: Story = {
 
 export const Factory: Story = {
   render: () => (
-    <Section variant="factory" className="w-150">
+    <Section variant="factory" className="w-full max-w-150">
       <Section.Header>
-        <div>
+        <Section.HeaderText>
           <Section.Heading>Behavior</Section.Heading>
           <Section.Description>Choose how agents handle tools and completion alerts.</Section.Description>
-        </div>
+        </Section.HeaderText>
       </Section.Header>
       <Section.Content>
         <Section.Row label="Auto-approve tools" description="Run tool calls without asking.">
@@ -151,12 +151,12 @@ export const Factory: Story = {
 
 export const PermissionAndDestructiveRows: Story = {
   render: () => (
-    <Section variant="factory" className="w-150">
+    <Section variant="factory" className="w-full max-w-150">
       <Section.Header>
-        <div>
+        <Section.HeaderText>
           <Section.Heading>Organization access</Section.Heading>
           <Section.Description>Review inherited permissions and organization actions.</Section.Description>
-        </div>
+        </Section.HeaderText>
       </Section.Header>
       <Section.Content>
         <Section.ViewOnlyRow
