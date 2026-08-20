@@ -1,5 +1,21 @@
 # @mastra/factory
 
+## 0.9.0-alpha.2
+
+### Patch Changes
+
+- Improved loaded Factory conversations with a smooth staggered reveal. ([#21937](https://github.com/mastra-ai/mastra/pull/21937))
+
+- Creating a new Factory no longer takes over the whole screen once you already have one. The flow now runs inline at `/factories/:factoryId/new-factory`, so the sidebar stays in place and you keep the context of the Factory you were in. The full-screen version is still what you get on first run, when no Factory exists yet. ([#21932](https://github.com/mastra-ai/mastra/pull/21932))
+
+  Each step is now a searchable list you type into instead of a form: name the Factory, pick a repository, pick the Linear project that feeds its board (or skip Linear entirely), then choose the provider and model your runs start on. Picking a Linear project routes it to the new Factory and turns its issue sync on, so the board fills up without a detour through Settings. Repository search hits GitHub directly, so large accounts are usable, and keyboard navigation works throughout (arrows to move, Enter to select, Esc to leave).
+
+  Nothing is written to the server until the last step: the name, the repository and the Linear choice stay in the draft, and the Factory is created with all of them at once when you pick its model. Quitting the wizard halfway leaves nothing behind. Back walks the steps in reverse and only leaves the wizard from the first one.
+
+- Updated dependencies [[`480e491`](https://github.com/mastra-ai/mastra/commit/480e491588bd6a7a1c9ee4407590ad625dd33952), [`3bb88dd`](https://github.com/mastra-ai/mastra/commit/3bb88ddf07fb98f3cd16d3bff94e51cd3b45d011), [`d378d75`](https://github.com/mastra-ai/mastra/commit/d378d7511f71309ed61a8f6b93cd0361dc6cb70f), [`cad4208`](https://github.com/mastra-ai/mastra/commit/cad42082e6aa1776168a94914f523334be45d929), [`d378d75`](https://github.com/mastra-ai/mastra/commit/d378d7511f71309ed61a8f6b93cd0361dc6cb70f)]:
+  - @mastra/core@1.61.0-alpha.2
+  - @mastra/code-sdk@1.4.0-alpha.2
+
 ## 0.9.0-alpha.1
 
 ### Minor Changes

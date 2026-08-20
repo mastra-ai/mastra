@@ -1,5 +1,21 @@
 # @mastra/core
 
+## 1.61.0-alpha.2
+
+### Patch Changes
+
+- Fixed the coding agent's instructions for a message that arrives while it is already working. They described that message as `<user-message delivery="…">`, a tag the runtime never emits, so the rule and the wrapper the agent actually receives (`<user delivery="…">`) never matched by name. ([#21879](https://github.com/mastra-ai/mastra/pull/21879))
+
+  No API change, and no change to how a message is delivered: one that lands mid-work is still marked `while-active` and still meant as context for the work in flight. The instructions now name it the way it arrives.
+
+- Fixed Code Mode instructions to reference custom tool IDs. ([#21920](https://github.com/mastra-ai/mastra/pull/21920))
+
+- Removed a catch that hid a broken durable run. When a durable run's state could not be read between iterations, the loop kept going and crashed one step later with an error that pointed at the wrong place. It now fails where the unreadable state is found, carrying the real cause. ([#21889](https://github.com/mastra-ai/mastra/pull/21889))
+
+- Fixed Code Mode sandbox resolution for resolver-backed workspaces. ([#21922](https://github.com/mastra-ai/mastra/pull/21922))
+
+- Removed a catch that hid a broken durable run. When a durable run's state could not be read between iterations, the loop kept going and crashed one step later with an error that pointed at the wrong place. It now fails where the unreadable state is found, carrying the real cause. ([#21889](https://github.com/mastra-ai/mastra/pull/21889))
+
 ## 1.61.0-alpha.1
 
 ### Minor Changes

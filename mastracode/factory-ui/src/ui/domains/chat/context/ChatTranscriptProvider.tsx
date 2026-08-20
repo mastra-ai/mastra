@@ -43,9 +43,8 @@ export function ChatTranscriptProvider({
   // post-navigation revalidation all fold in through the same path.
   const mergeWindow = useEffectEvent((messages: MastraDBMessage[]) => transcriptApi.mergeWindow(messages));
   useEffect(() => {
-    if (initialMessages && initialMessages.length > 0) {
-      mergeWindow(initialMessages);
-    }
+    if (initialMessages === undefined) return;
+    mergeWindow(initialMessages);
   }, [initialMessages]);
 
   const loadMore: LoadMoreHistory = {
@@ -121,7 +120,7 @@ function ChatTranscriptValueProvider({
   const { sessionError, sandboxPreparing } = useChatSessionContext();
   const messagesInitializing = useChatMessagesInitializing();
   const messagesError = useChatMessagesError();
-  const { transcript, reset, localUser, resolvePrompt, clearPending, pushNotice } = transcriptApi;
+  const { transcript, initialHistoryReady, reset, localUser, resolvePrompt, clearPending, pushNotice } = transcriptApi;
   const effectiveThreadId = transcript.threadId ?? threadId ?? connection.createdThreadId;
 
   const effectiveTranscript: TranscriptState = {
@@ -135,6 +134,7 @@ function ChatTranscriptValueProvider({
   const transcriptValue: ChatTranscriptApi = {
     transcript: effectiveTranscript,
     busy,
+    initialHistoryReady,
     localUser,
     reset,
     resolvePrompt,

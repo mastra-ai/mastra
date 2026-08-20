@@ -76,8 +76,13 @@ export const queryKeys = {
     ['workspace-rendered-list', workspacePath ?? null, renderedRoot ?? null] as const,
   workspaceFiles: (workspacePath: string | undefined, threadId: string | undefined) =>
     ['workspace-files', workspacePath ?? null, threadId ?? null] as const,
+  workspaceFileScope: (workspacePath: string | undefined) => ['workspace-file', workspacePath ?? null] as const,
   workspaceFile: (workspacePath: string | undefined, filePath: string | undefined, threadId?: string) =>
     ['workspace-file', workspacePath ?? null, filePath ?? null, threadId ?? null] as const,
+  // Keyed by toolCallId so each plan (re)submission fetches the file fresh
+  // instead of reusing the previous submission's cached content.
+  planFile: (workspacePath: string | undefined, filePath: string | undefined, toolCallId: string | undefined) =>
+    ['plan-file', workspacePath ?? null, filePath ?? null, toolCallId ?? null] as const,
   workspaceChanges: (workspacePath: string | undefined) => ['workspace-changes', workspacePath ?? null] as const,
   workspaceDiff: (
     workspacePath: string | undefined,

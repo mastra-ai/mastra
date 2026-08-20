@@ -1,5 +1,36 @@
 # @mastra/playground-ui
 
+## 50.1.0-alpha.2
+
+### Minor Changes
+
+- Added `flat` and `factory` variants to `Section`, including standard, view-only, and destructive row compositions. ([#21939](https://github.com/mastra-ai/mastra/pull/21939))
+
+  ```tsx
+  <Section variant="factory">
+    <Section.Header>
+      <div>
+        <Section.Heading>Security</Section.Heading>
+        <Section.Description>Manage sign-in requirements.</Section.Description>
+      </div>
+    </Section.Header>
+    <Section.Content>
+      <Section.Row label="Two-factor authentication">
+        <Switch />
+      </Section.Row>
+    </Section.Content>
+  </Section>
+  ```
+
+### Patch Changes
+
+- Fixed hidden search field labels taking up layout space. ([#21918](https://github.com/mastra-ai/mastra/pull/21918))
+
+- Updated dependencies [[`480e491`](https://github.com/mastra-ai/mastra/commit/480e491588bd6a7a1c9ee4407590ad625dd33952), [`3bb88dd`](https://github.com/mastra-ai/mastra/commit/3bb88ddf07fb98f3cd16d3bff94e51cd3b45d011), [`d378d75`](https://github.com/mastra-ai/mastra/commit/d378d7511f71309ed61a8f6b93cd0361dc6cb70f), [`cad4208`](https://github.com/mastra-ai/mastra/commit/cad42082e6aa1776168a94914f523334be45d929), [`d378d75`](https://github.com/mastra-ai/mastra/commit/d378d7511f71309ed61a8f6b93cd0361dc6cb70f)]:
+  - @mastra/core@1.61.0-alpha.2
+  - @mastra/client-js@1.41.1-alpha.2
+  - @mastra/react@1.4.5-alpha.2
+
 ## 50.0.1-alpha.1
 
 ### Patch Changes

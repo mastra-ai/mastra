@@ -185,7 +185,7 @@ export default function TracePage() {
 
   const traceTopAreaSharedContent = rootSpan ? (
     <PageLayout.Row>
-      <PageLayout.Column>
+      <PageLayout.Column className="w-full">
         <TraceKeysAndValues rootSpan={rootSpan} usage={traceUsage.data?.get(traceId)} numOfCol={3} />
       </PageLayout.Column>
     </PageLayout.Row>

@@ -1,5 +1,18 @@
 # @internal/playground
 
+## 1.25.2-alpha.2
+
+### Patch Changes
+
+- Fixed the trace detail page in Studio so the trace summary fills the page again. Entity, Status, Duration and the timestamps were collapsing into a narrow column and getting cut to a few characters, leaving most of the row empty. ([#21928](https://github.com/mastra-ai/mastra/pull/21928))
+
+- Updated dependencies [[`28b604b`](https://github.com/mastra-ai/mastra/commit/28b604b7023be3f3312ae0b0e2a97ab7b3795809), [`480e491`](https://github.com/mastra-ai/mastra/commit/480e491588bd6a7a1c9ee4407590ad625dd33952), [`3bb88dd`](https://github.com/mastra-ai/mastra/commit/3bb88ddf07fb98f3cd16d3bff94e51cd3b45d011), [`d378d75`](https://github.com/mastra-ai/mastra/commit/d378d7511f71309ed61a8f6b93cd0361dc6cb70f), [`8494dc1`](https://github.com/mastra-ai/mastra/commit/8494dc1365689536ab4b5c7ad011d0874c621ab5), [`cad4208`](https://github.com/mastra-ai/mastra/commit/cad42082e6aa1776168a94914f523334be45d929), [`7264d4e`](https://github.com/mastra-ai/mastra/commit/7264d4ececece0ee907999e21b8a81e689df98d7), [`d378d75`](https://github.com/mastra-ai/mastra/commit/d378d7511f71309ed61a8f6b93cd0361dc6cb70f)]:
+  - @mastra/ai-sdk@1.9.1-alpha.0
+  - @mastra/core@1.61.0-alpha.2
+  - @mastra/playground-ui@50.1.0-alpha.2
+  - @mastra/client-js@1.41.1-alpha.2
+  - @mastra/react@1.4.5-alpha.2
+
 ## 1.25.2-alpha.1
 
 ### Patch Changes

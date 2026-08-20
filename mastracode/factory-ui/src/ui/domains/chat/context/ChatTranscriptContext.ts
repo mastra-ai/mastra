@@ -16,6 +16,7 @@ export interface LoadMoreHistory {
 export interface ChatTranscriptApi {
   transcript: TranscriptState;
   busy: boolean;
+  initialHistoryReady: boolean;
   localUser: (text: string, steer?: boolean, files?: OutgoingFile[]) => void;
   reset: (threadId?: string, state?: SessionStateSnapshot) => void;
   resolvePrompt: (id: string) => void;

@@ -24,6 +24,7 @@ import type { TracingContext, TracingOptions } from '../observability';
 import type { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
+import type { SubmitPlanResumeData } from '../tools/builtin/submit-plan';
 import { safeStringify } from '../utils';
 import { Workspace } from '../workspace';
 
@@ -3659,7 +3660,7 @@ export class Session<TState = unknown> {
       if (suspension?.toolName === 'submit_plan') {
         await this.handlePlanApprovalResume({
           toolCallId: resolvedToolCallId,
-          response: resumeData as { action: 'approved' | 'rejected'; feedback?: string },
+          response: resumeData as SubmitPlanResumeData,
           requestContext,
         });
         return;
@@ -3689,7 +3690,7 @@ export class Session<TState = unknown> {
     requestContext,
   }: {
     toolCallId: string;
-    response: { action: 'approved' | 'rejected'; feedback?: string };
+    response: SubmitPlanResumeData;
     requestContext?: RequestContext;
   }): Promise<void> {
     if (response.action === 'rejected') {
