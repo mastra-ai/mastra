@@ -698,14 +698,25 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
           server.close(() => resolve());
         });
         closeRefreshStreams();
-        (server as Partial<HttpServer>).closeIdleConnections?.();
-        if ((await race(drained, drainTimeoutMs)) === timedOut) {
-          logger.warn('Mastra server drain timed out; closing remaining HTTP connections', {
-            timeoutMs: drainTimeoutMs,
-          });
-          // Node does not include upgraded protocols such as WebSocket here;
-          // those sockets are terminated when the process exits below.
-          (server as Partial<HttpServer>).closeAllConnections?.();
+        const closeIdleConnections = () => (server as Partial<HttpServer>).closeIdleConnections?.();
+        closeIdleConnections();
+        // A keep-alive socket that goes idle only after its in-flight response
+        // finishes is not caught by the initial sweep above — the client keeps
+        // it open and the drain would stall until the full timeout. Sweep
+        // periodically so the server exits as soon as work actually finishes.
+        const idleSweep = setInterval(closeIdleConnections, 100);
+        idleSweep.unref?.();
+        try {
+          if ((await race(drained, drainTimeoutMs)) === timedOut) {
+            logger.warn('Mastra server drain timed out; closing remaining HTTP connections', {
+              timeoutMs: drainTimeoutMs,
+            });
+            // Node does not include upgraded protocols such as WebSocket here;
+            // those sockets are terminated when the process exits below.
+            (server as Partial<HttpServer>).closeAllConnections?.();
+          }
+        } finally {
+          clearInterval(idleSweep);
         }
       } catch (error) {
         logger.error('Error while draining Mastra server', { error });
