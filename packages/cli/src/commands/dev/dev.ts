@@ -26,12 +26,14 @@ import { resolveFactoryUIDevDist } from '../build/factory-ui-build.js';
 
 import { acquireDevLock, releaseDevLock, updateDevLock } from './dev-lock';
 import { DevBundler } from './DevBundler';
+import { createEnvironmentState } from './env-state.js';
 
 let currentServerProcess: ChildProcess | undefined;
 let isRestarting = false;
 let serverStartTime: number | undefined;
 let requestContextPresetsJson: string | undefined;
 const ON_ERROR_MAX_RESTARTS = 3;
+const environmentState = createEnvironmentState();
 
 function waitForProcessExit(child: ChildProcess, timeoutMs = 2000): Promise<void> {
   if (child.exitCode !== null) {
@@ -155,8 +157,8 @@ const startServer = async (
     currentServerProcess = execa(process.execPath, commands, {
       cwd: publicDir,
       env: {
+        ...environmentState.getChildEnvironment(env),
         NODE_ENV: 'production',
-        ...Object.fromEntries(env),
         MASTRA_DEV: 'true',
         PORT: port.toString(),
         MASTRA_PACKAGES_FILE: packagesFilePath,
@@ -403,10 +405,7 @@ async function rebundleAndRestart(
       env.set('MASTRA_REQUEST_CONTEXT_PRESETS', requestContextPresetsJson);
     }
 
-    // spread env into process.env
-    for (const [key, value] of env.entries()) {
-      process.env[key] = value;
-    }
+    environmentState.sync(env);
 
     await startServer(
       join(dotMastraPath, 'output'),
@@ -479,12 +478,7 @@ export async function dev({
   // Clear any prior presets to avoid cross-run leakage
   requestContextPresetsJson = undefined;
   loadedEnv.delete('MASTRA_REQUEST_CONTEXT_PRESETS');
-  delete process.env.MASTRA_REQUEST_CONTEXT_PRESETS;
-
-  // spread loadedEnv into process.env
-  for (const [key, value] of loadedEnv.entries()) {
-    process.env[key] = value;
-  }
+  environmentState.allowLoadedOverride('MASTRA_REQUEST_CONTEXT_PRESETS');
 
   // Load and validate request context presets if provided
   if (requestContextPresets) {
@@ -497,6 +491,8 @@ export async function dev({
       process.exit(1);
     }
   }
+
+  environmentState.sync(loadedEnv);
 
   const serverOptions = userEntryFile ? await getServerOptions(userEntryFile, join(dotMastraPath, 'output')) : null;
   let portToUse = serverOptions?.port ?? process.env.PORT;
