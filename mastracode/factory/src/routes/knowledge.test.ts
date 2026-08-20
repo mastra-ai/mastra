@@ -61,8 +61,9 @@ async function node(
   name: string,
   scope: KnowledgeScope,
   kind = 'concept',
+  content?: string,
 ): Promise<KnowledgeNode> {
-  return store.createNode({ name, kind, scope });
+  return store.createNode({ name, kind, scope, ...(content !== undefined ? { content } : {}) });
 }
 
 async function record(
@@ -123,6 +124,39 @@ describe('KnowledgeRoutes', () => {
     expect(body.edges[0]).toMatchObject({ source: service.id, target: runbook.id, type: 'wikilink' });
     expect(body.nodes.find(node => node.id === service.id)?.recordCount).toBe(1);
     expect(body.truncated).toBe(false);
+  });
+
+  it('projects node content into graph snapshots without normalizing contract values', async () => {
+    const h = await createHarness();
+    const longContent =
+      'Payments coordinates settlement and reconciliation. '.repeat(20) +
+      'Repository: https://github.com/mastra-ai/mastra/tree/main/mastracode/factory';
+    const described = await node(h.knowledge, 'Described', h.projectScope, 'service', longContent);
+    const absent = await node(h.knowledge, 'Absent', h.projectScope);
+    const empty = await node(h.knowledge, 'Empty', h.projectScope, 'concept', '');
+    const whitespace = await node(h.knowledge, 'Whitespace', h.projectScope, 'concept', '   \n  ');
+
+    const { status, body } = await graph(h);
+    expect(status).toBe(200);
+    expect(body.nodes.find(node => node.id === described.id)?.content).toBe(longContent);
+    expect(body.nodes.find(node => node.id === absent.id)).not.toHaveProperty('content');
+    expect(body.nodes.find(node => node.id === empty.id)?.content).toBe('');
+    expect(body.nodes.find(node => node.id === whitespace.id)?.content).toBe('   \n  ');
+    expect(body.nodes).toHaveLength(4);
+    expect(body.records).toHaveLength(0);
+    expect(body.truncated).toBe(false);
+
+    const withContent = JSON.stringify(body);
+    const withoutContent = JSON.stringify({
+      ...body,
+      nodes: body.nodes.map(({ content: _content, ...node }) => node),
+    });
+    const delta = Buffer.byteLength(withContent) - Buffer.byteLength(withoutContent);
+    console.log(
+      `PAYLOAD_BYTES withoutContent=${Buffer.byteLength(withoutContent)} withContent=${Buffer.byteLength(withContent)} delta=${delta}`,
+    );
+    expect(delta).toBeGreaterThan(0);
+    expect(delta).toBe(Buffer.byteLength(withContent) - Buffer.byteLength(withoutContent));
   });
 
   // 2
