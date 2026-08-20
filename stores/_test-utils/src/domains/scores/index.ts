@@ -53,7 +53,11 @@ export function createScoresTest({
       await scoresStorage.dangerouslyClearAll();
     });
 
-    it('saveScore with a caller-supplied id upserts (latest score wins)', async () => {
+    // Upsert-by-id is only required by adapters that support caller-driven
+    // experiments (deterministic score ids); gate like the experiments suite.
+    const itIfExperiments = storage.stores?.experiments ? it : it.skip;
+
+    itIfExperiments('saveScore with a caller-supplied id upserts (latest score wins)', async () => {
       const scorerId = `scorer-${randomUUID()}`;
       const id = `expscore-${randomUUID()}`;
 
