@@ -39,6 +39,7 @@ function createSession(
     endRunAfterDroppedSignal?: boolean;
     /** Once the session is free, a redelivered signal wakes it and lands. */
     acceptRedeliveredSignal?: boolean;
+    initialDeliveredSignalIds?: string[];
   },
 ) {
   let threadId = 'thread-1';
@@ -52,7 +53,7 @@ function createSession(
   };
   let signalSends = 0;
   const deliveredKeys = new Set<string>();
-  const deliveredSignals = new Set<string>();
+  const deliveredSignals = new Set(options?.initialDeliveredSignalIds ?? []);
   const delivered: string[] = [];
   const sendNotificationSignal = vi.fn(
     async (input: { dedupeKey?: string }, _options?: { requestContext?: { get(key: string): unknown } }) => {
@@ -398,6 +399,78 @@ describe('FactoryDecisionDispatcher', () => {
         secondNow,
       ),
     ).resolves.toBeNull();
+  });
+
+  it('advances the delivery generation when a deferred decision is retried', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await queueDecision(storage, {
+      type: 'sendMessage',
+      role: 'work',
+      message: 'Review completion.',
+      idempotencyKey: 'message-1',
+    });
+    const firstNow = new Date('2030-01-01T00:00:00Z');
+    const [first] = await storage.claimDeferredDecisions({
+      ownerId: 'first',
+      now: firstNow,
+      leaseExpiresAt: new Date(firstNow.getTime() + 30_000),
+      limit: 1,
+    });
+    expect(first).toMatchObject({ deliveryGeneration: 0 });
+
+    await storage.failDeferredDecision(
+      {
+        id: first!.id,
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        ownerId: 'first',
+        error: 'retry me',
+        terminal: false,
+        availableAt: firstNow,
+      },
+      firstNow,
+    );
+    const [retried] = await storage.claimDeferredDecisions({
+      ownerId: 'second',
+      now: firstNow,
+      leaseExpiresAt: new Date(firstNow.getTime() + 30_000),
+      limit: 1,
+    });
+
+    expect(retried).toMatchObject({ id: first!.id, deliveryGeneration: 1 });
+  });
+
+  it('advances the delivery generation when a failed deferred decision is manually retried', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await queueDecision(storage, {
+      type: 'sendMessage',
+      role: 'work',
+      message: 'Review completion.',
+      idempotencyKey: 'message-1',
+    });
+    const now = new Date('2030-01-01T00:00:00Z');
+    const [claimed] = await storage.claimDeferredDecisions({
+      ownerId: 'first',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 30_000),
+      limit: 1,
+    });
+    await storage.failDeferredDecision(
+      {
+        id: claimed!.id,
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        ownerId: 'first',
+        error: 'failed',
+        terminal: true,
+        availableAt: now,
+      },
+      now,
+    );
+
+    const retried = await storage.retryDeferredDecision('org-1', PROJECT_ID, claimed!.id, now);
+
+    expect(retried).toMatchObject({ status: 'retry', attempts: 0, deliveryGeneration: 1 });
   });
 
   it('dispatches a bound session message through notification dedupe and marks the effect succeeded', async () => {
@@ -1168,7 +1241,7 @@ describe('FactoryDecisionDispatcher', () => {
       kickoffKey: 'kickoff-null',
       kickoffMessage: null,
     });
-    const { controller, getAgentEndListenerCount } = createSession(undefined, {
+    const { controller, session, getAgentEndListenerCount } = createSession(undefined, {
       signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
       emitAgentEndDuringSignal: true,
       agentEndReason: reason,
@@ -1188,6 +1261,17 @@ describe('FactoryDecisionDispatcher', () => {
     expect(decision?.lastError).toContain(message);
     // `retry` only helps if the row can actually be picked up again.
     expect(decision?.availableAt).toBeTruthy();
+    expect(decision?.deliveryGeneration).toBe(1);
+    expect(getAgentEndListenerCount()).toBe(0);
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+    expect(session.sendSignal).toHaveBeenCalledTimes(2);
+    expect(session.sendSignal.mock.calls.map(call => call[0].id)).toEqual([decision!.id, `${decision!.id}:retry:1`]);
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'retry',
+      deliveryGeneration: 2,
+    });
     expect(getAgentEndListenerCount()).toBe(0);
   });
 

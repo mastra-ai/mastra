@@ -156,6 +156,7 @@ export interface FactoryDeferredDecisionRecord {
   decision: Record<string, unknown>;
   status: FactoryDispatchStatus;
   attempts: number;
+  deliveryGeneration: number;
   availableAt: Date;
   leaseOwner: string | null;
   leaseExpiresAt: Date | null;
@@ -257,6 +258,7 @@ export interface FactoryDispatchFailureInput extends FactoryLeaseIdentity {
   availableAt: Date;
   lastError: string;
   terminal: boolean;
+  advanceDeliveryGeneration?: boolean;
 }
 
 export interface CommitFactoryTransitionInput {
@@ -635,6 +637,7 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       decision: { type: 'json' },
       status: { type: 'text' },
       attempts: { type: 'integer' },
+      delivery_generation: { type: 'integer', nullable: true },
       available_at: { type: 'timestamp' },
       lease_owner: { type: 'text', nullable: true },
       lease_expires_at: { type: 'timestamp', nullable: true },
@@ -758,6 +761,7 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
     decision: row.decision as Record<string, unknown>,
     status: row.status as FactoryDispatchStatus,
     attempts: Number(row.attempts),
+    deliveryGeneration: Number(row.delivery_generation ?? 0),
     availableAt: row.available_at as Date,
     leaseOwner: (row.lease_owner as string | null) ?? null,
     leaseExpiresAt: (row.lease_expires_at as Date | null) ?? null,
@@ -921,6 +925,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         failed = true;
         return {
           status: input.terminal ? 'failed' : 'retry',
+          ...(table === 'factory_deferred_decisions' && !input.terminal && input.advanceDeliveryGeneration !== false
+            ? { delivery_generation: Number(current.delivery_generation ?? 0) + 1 }
+            : {}),
           available_at: input.availableAt,
           lease_owner: null,
           lease_expires_at: null,
@@ -1090,6 +1097,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 decision,
                 status: 'pending',
                 attempts: 0,
+                delivery_generation: 0,
                 available_at: now,
                 lease_owner: null,
                 lease_expires_at: null,
@@ -1225,6 +1233,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             decision,
             status: 'pending',
             attempts: 0,
+            delivery_generation: 0,
             available_at: input.now,
             lease_owner: null,
             lease_expires_at: null,
@@ -1468,6 +1477,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         return {
           status: 'retry',
           attempts: 0,
+          delivery_generation: Number(current.delivery_generation ?? 0) + 1,
           available_at: now,
           lease_owner: null,
           lease_expires_at: null,
