@@ -83,6 +83,7 @@ class FakeSocket implements DirectExecWebSocket {
 
 describe('PlatformSandbox', () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllEnvs();
   });
 
@@ -655,6 +656,118 @@ describe('PlatformSandbox', () => {
       expect(sockets).toHaveLength(2);
       expect(sockets[0]!.subprotocols[1]).toBe('jwt.first');
       expect(sockets[1]!.subprotocols[1]).toBe('jwt.second');
+    });
+
+    it('waits for a CREATING sandbox and retries until direct exec succeeds', async () => {
+      vi.useFakeTimers();
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(leaseResponse({ jwt: 'jwt.first' }))
+        .mockResolvedValueOnce(leaseResponse({ jwt: 'jwt.second' }))
+        .mockResolvedValueOnce(leaseResponse({ jwt: 'jwt.third' }));
+      const sockets: FakeSocket[] = [];
+      const factory: DirectExecWebSocketFactory = (endpoint, subprotocols) => {
+        const socket = new FakeSocket(endpoint, subprotocols);
+        sockets.push(socket);
+        queueMicrotask(() => {
+          socket.onopen?.({});
+          if (sockets.length < 3) {
+            socket.onclose?.({ code: 1008, reason: 'Sandbox is not running (status: CREATING).' });
+          } else {
+            socket.fireBinary(1, 'ready');
+            socket.onmessage?.({ data: JSON.stringify({ type: 'exit', data: { exit_code: 0 } }) });
+          }
+        });
+        return socket;
+      };
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        webSocketFactory: factory,
+      });
+
+      await sandbox._start();
+      const promise = sandbox.executeCommand('echo ready');
+      await vi.advanceTimersByTimeAsync(3_000);
+      await expect(promise).resolves.toMatchObject({ success: true, exitCode: 0, stdout: 'ready' });
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+      expect(sockets).toHaveLength(3);
+    });
+
+    it('bounds retries when a sandbox remains CREATING', async () => {
+      vi.useFakeTimers();
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockImplementation(() => Promise.resolve(leaseResponse()));
+      const sockets: FakeSocket[] = [];
+      const factory: DirectExecWebSocketFactory = (endpoint, subprotocols) => {
+        const socket = new FakeSocket(endpoint, subprotocols);
+        sockets.push(socket);
+        queueMicrotask(() => {
+          socket.onopen?.({});
+          socket.onclose?.({ code: 1008, reason: 'Sandbox is not running (status: CREATING).' });
+        });
+        return socket;
+      };
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        webSocketFactory: factory,
+      });
+
+      await sandbox._start();
+      const { SandboxExecTransportError } = await import('./sandbox.js');
+      const errorPromise = sandbox.executeCommand('echo ready').catch(cause => cause);
+      await vi.advanceTimersByTimeAsync(120_000);
+      const error = (await errorPromise) as InstanceType<typeof SandboxExecTransportError>;
+      expect(error).toBeInstanceOf(SandboxExecTransportError);
+      expect(error).toMatchObject({
+        sandboxId: 'sbx_1',
+        closeCode: 1008,
+        closeReason: 'Sandbox is not running (status: CREATING).',
+      });
+      expect(error.attempts).toBeGreaterThan(2);
+      expect(sockets.length).toBe(error.attempts);
+    });
+
+    it('maps a DESTROYED provider close to SandboxDestroyedError', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(leaseResponse());
+      const factory: DirectExecWebSocketFactory = (endpoint, subprotocols) => {
+        const socket = new FakeSocket(endpoint, subprotocols);
+        queueMicrotask(() => {
+          socket.onopen?.({});
+          socket.onclose?.({ code: 1008, reason: 'Sandbox is not running (status: DESTROYED).' });
+        });
+        return socket;
+      };
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        webSocketFactory: factory,
+      });
+
+      await sandbox._start();
+      const { SandboxDestroyedError } = await import('./sandbox.js');
+      await expect(sandbox.executeCommand('echo ready')).rejects.toBeInstanceOf(SandboxDestroyedError);
+      expect((sandbox as unknown as { _sandboxId: unknown })._sandboxId).toBeUndefined();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
     it('throws SandboxDestroyedError when a transport failure is followed by 410 on the retry mint', async () => {

@@ -150,6 +150,17 @@ const SIDECAR_PROBE_INTERVAL_MS = 250;
  * later execs will use private-net once it succeeds.
  */
 const TRANSPORT_READY_WAIT_MS = 5_000;
+/** Maximum time to wait when Railway accepts exec connections but reports the sandbox is still creating. */
+const SANDBOX_CREATING_RETRY_TIMEOUT_MS = 120_000;
+/** Initial delay between direct-exec retries while the provider reports `CREATING`. */
+const SANDBOX_CREATING_RETRY_BASE_DELAY_MS = 1_000;
+/** Cap the readiness retry delay so a newly ready sandbox is picked up promptly. */
+const SANDBOX_CREATING_RETRY_MAX_DELAY_MS = 5_000;
+
+function getUnavailableSandboxStatus(result: Awaited<ReturnType<typeof execViaLease>>): string | undefined {
+  if (result.closeCode !== 1008 || !result.closeReason) return undefined;
+  return /Sandbox is not running \(status:\s*([A-Z_]+)\)/i.exec(result.closeReason)?.[1]?.toUpperCase();
+}
 
 /**
  * Diagnostic error thrown when the direct-exec WebSocket transport fails
@@ -1098,10 +1109,10 @@ export class PlatformSandbox extends MastraSandbox {
   }
 
   /**
-   * Run a single exec against the direct-exec transport, with one in-flight
-   * retry on WebSocket transport failure (socket closed without an `exit`
-   * frame and the exec did not time out). The retry mints a fresh lease
-   * — the failure could be a stale JWT — and reopens a new WebSocket.
+   * Run a single exec against the direct-exec transport. Generic WebSocket
+   * transport failures get one retry with a fresh lease. A provider close
+   * that explicitly reports `CREATING` gets bounded readiness retries because
+   * the control plane can return before Railway accepts commands.
    *
    * Error taxonomy:
    * - **410 on `/exec-lease`** (either attempt) → the sandbox is gone.
@@ -1135,14 +1146,11 @@ export class PlatformSandbox extends MastraSandbox {
     let lastResult: Awaited<ReturnType<typeof execViaLease>> | undefined;
     let lastLease: (ExecLease & { expiresAtMs: number | null }) | undefined;
     let attemptsMade = 0;
-    // Two attempts: initial + one retry. On the second attempt we drop the
-    // cached lease so we don't reuse a JWT that may itself be the cause of
-    // the transport failure — but only if the cache still holds the same
-    // lease we just failed against. A concurrent exec sharing this instance
-    // may have already cached a fresh, unrelated lease in between, and we
-    // must not discard that.
-    for (let attempt = 0; attempt < 2; attempt++) {
-      if (attempt > 0 && lastLease && this._lease === lastLease) this._lease = null;
+    let transportFailures = 0;
+    const creatingDeadline = Date.now() + SANDBOX_CREATING_RETRY_TIMEOUT_MS;
+
+    while (transportFailures < 2) {
+      if (lastLease && this._lease === lastLease) this._lease = null;
       let lease: ExecLease & { expiresAtMs: number | null };
       try {
         lease = await this._ensureLease();
@@ -1161,14 +1169,14 @@ export class PlatformSandbox extends MastraSandbox {
             {
               ...(priorSandboxId && { sandboxId: priorSandboxId }),
               command: fullCommand,
-              attempts: attempt + 1,
+              attempts: attemptsMade + 1,
             },
           );
         }
         throw error;
       }
       lastLease = lease;
-      attemptsMade = attempt + 1;
+      attemptsMade++;
       const result = await execViaLease(lease, {
         command: fullCommand,
         ...(options?.cwd !== undefined && { cwd: options.cwd }),
@@ -1182,12 +1190,41 @@ export class PlatformSandbox extends MastraSandbox {
       // mid-stream drop, expired token). Any other outcome (real exit code
       // or timed-out) is a valid result and we return it.
       if (result.exitCode !== null || result.timedOut) return result;
+
+      const unavailableStatus = getUnavailableSandboxStatus(result);
+      if (unavailableStatus === 'DESTROYED') {
+        this._lease = null;
+        const priorSandboxId = this._sandboxId;
+        this._sandboxId = undefined;
+        throw new SandboxDestroyedError(
+          `Sandbox ${priorSandboxId ?? '(unknown)'} was destroyed while opening direct exec`,
+          {
+            ...(priorSandboxId && { sandboxId: priorSandboxId }),
+            command: fullCommand,
+            attempts: attemptsMade,
+          },
+        );
+      }
+
+      if (unavailableStatus === 'CREATING') {
+        const remainingMs = creatingDeadline - Date.now();
+        if (remainingMs <= 0) break;
+        const delayMs = Math.min(
+          SANDBOX_CREATING_RETRY_BASE_DELAY_MS * 2 ** Math.min(attemptsMade - 1, 3),
+          SANDBOX_CREATING_RETRY_MAX_DELAY_MS,
+          remainingMs,
+        );
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        continue;
+      }
+
+      transportFailures++;
     }
 
-    // Both attempts failed at the transport layer against a live sandbox.
-    // Surface a loud, typed error with close diagnostics so callers can
-    // distinguish "your command failed" from "the sandbox transport is
-    // broken."
+    // The bounded CREATING wait expired, or both generic transport attempts
+    // failed against a live sandbox. Surface a loud, typed error with close
+    // diagnostics so callers can distinguish command failure from a broken
+    // sandbox transport.
     const result = lastResult!;
     const lease = lastLease!;
     // The lease from the failed second attempt is still cached; drop it so
