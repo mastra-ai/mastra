@@ -2,6 +2,7 @@ import { AvailableHooks, executeHook } from '../hooks';
 import { setScorerHookOwner } from '../hooks/scorer-owner';
 import type { Mastra } from '../mastra';
 import type { ObservabilityContext } from '../observability';
+import { MASTRA_AUTH_TOKEN_KEY } from '../request-context';
 import type { MastraScorerEntry } from './base';
 import type { ScoringEntityType, ScoringHookInput, ScoringSource } from './types';
 
@@ -74,6 +75,8 @@ export function runScorer({
         typeof (obj as any).entries === 'function' ? (obj as any).entries() : Object.entries(obj);
       for (const [key, value] of entries) {
         const flatKey = prefix ? `${prefix}.${key}` : key;
+        // Never persist the framework-managed bearer token in score rows.
+        if (flatKey === MASTRA_AUTH_TOKEN_KEY) continue;
         if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
           safeContext[flatKey] = value;
         } else if (value && typeof value === 'object' && !Array.isArray(value)) {

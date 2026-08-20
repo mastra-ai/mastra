@@ -434,25 +434,31 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
 
     runApiTests(port);
 
-    it('drains an in-flight response before the generated server exits on SIGTERM', async () => {
-      const response = await fetch(`http://localhost:${port}/shutdown-drain`);
-      const reader = response.body!.getReader();
-      const decoder = new TextDecoder();
-      const firstChunk = await reader.read();
-      expect(decoder.decode(firstChunk.value)).toBe('started\n');
+    it(
+      'drains an in-flight response before the generated server exits on SIGTERM',
+      async () => {
+        const response = await fetch(`http://localhost:${port}/shutdown-drain`);
+        const reader = response.body!.getReader();
+        const decoder = new TextDecoder();
+        const firstChunk = await reader.read();
+        expect(decoder.decode(firstChunk.value)).toBe('started\n');
 
-      proc!.kill('SIGTERM');
+        proc!.kill('SIGTERM');
 
-      let remaining = '';
-      while (true) {
-        const chunk = await reader.read();
-        if (chunk.done) break;
-        remaining += decoder.decode(chunk.value, { stream: true });
-      }
+        let remaining = '';
+        while (true) {
+          const chunk = await reader.read();
+          if (chunk.done) break;
+          remaining += decoder.decode(chunk.value, { stream: true });
+        }
 
-      expect(remaining).toBe('finished\n');
-      await expect(proc).resolves.toMatchObject({ exitCode: 0 });
-    });
+        expect(remaining).toBe('finished\n');
+        await expect(proc).resolves.toMatchObject({ exitCode: 0 });
+        // Full shutdown includes the drain window plus core teardown; the vitest
+        // default 5s timeout is tighter than the server's own worst-case bounds.
+      },
+      timeout,
+    );
   });
 
   describe.sequential('build without externals', async () => {

@@ -1,5 +1,42 @@
 # @mastra/playground-ui
 
+## 51.0.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`7c60df5`](https://github.com/mastra-ai/mastra/commit/7c60df5c7872343fbac5c3e5b1175c8076a5abfd)]:
+  - @mastra/core@1.61.0-alpha.5
+  - @mastra/client-js@1.42.0-alpha.5
+  - @mastra/react@1.4.5-alpha.5
+
+## 51.0.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/core@1.61.0-alpha.4
+  - @mastra/client-js@1.42.0-alpha.4
+  - @mastra/react@1.4.5-alpha.4
+
+## 51.0.0-alpha.3
+
+### Minor Changes
+
+- Added controlled theme selection to Sankey signals so host applications can persist and restore the open theme panel. ([#21968](https://github.com/mastra-ai/mastra/pull/21968))
+
+### Patch Changes
+
+- Improved floating surfaces with softer, consistent elevation. ([#21980](https://github.com/mastra-ai/mastra/pull/21980))
+
+- Improved plan cards to show expansion controls only when content is clipped and keep approval actions readable. ([#21891](https://github.com/mastra-ai/mastra/pull/21891))
+
+- Aligned the `flat` and `factory` Section layouts so their headings, row content, and actions share consistent horizontal edges. ([#21970](https://github.com/mastra-ai/mastra/pull/21970))
+
+- Updated dependencies [[`26d4016`](https://github.com/mastra-ai/mastra/commit/26d40160ff7f7d8bf95fee2039a52cbc83863533), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`acc3471`](https://github.com/mastra-ai/mastra/commit/acc3471de5f3fde8027ee4e355af292b2bc1bc30), [`b6a771e`](https://github.com/mastra-ai/mastra/commit/b6a771ef23d203ddb348efca8065eff65def8191), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`26d4016`](https://github.com/mastra-ai/mastra/commit/26d40160ff7f7d8bf95fee2039a52cbc83863533), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`57c5103`](https://github.com/mastra-ai/mastra/commit/57c51035a2a36e3df3c4f32f46bb789a66ed5946)]:
+  - @mastra/client-js@1.42.0-alpha.3
+  - @mastra/core@1.61.0-alpha.3
+  - @mastra/react@1.4.5-alpha.3
+
 ## 50.1.0-alpha.2
 
 ### Minor Changes
