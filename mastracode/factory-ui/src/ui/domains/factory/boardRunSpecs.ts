@@ -102,6 +102,8 @@ export function reviewRunAction(ref: string, checkout: string): RunAction {
 
 export const LINEAR_FETCH_HINT = `Start by fetching the issue's full details (description and comments) with the linear_get_issue tool.`;
 
+export const JIRA_FETCH_HINT = `Start by fetching the issue's full details (description and comments) with the jira_get_issue tool.`;
+
 /**
  * The runs a persisted card can start, derived from its source + metadata.
  * Issues can be investigated (→ Planning) or built (→ Building); PRs get a
@@ -126,6 +128,14 @@ export function itemRunSpec(item: WorkItem): ItemRunSpec | undefined {
       branch: `factory/linear-${meta.identifier.toLowerCase()}`,
       threadTitle: `${meta.identifier}: ${item.title}`,
       actions: issueRunActions(ref, { context: LINEAR_FETCH_HINT }),
+    };
+  }
+  if (item.source === 'jira-issue' && typeof meta.identifier === 'string') {
+    const ref = `Jira issue ${meta.identifier}${item.url ? ` (${item.url})` : ''}`;
+    return {
+      branch: `factory/jira-${meta.identifier.toLowerCase()}`,
+      threadTitle: `${meta.identifier}: ${item.title}`,
+      actions: issueRunActions(ref, { context: JIRA_FETCH_HINT }),
     };
   }
   if (item.source === 'github-pr' && githubNumber !== undefined) {

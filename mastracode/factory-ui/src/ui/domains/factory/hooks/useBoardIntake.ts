@@ -3,9 +3,10 @@ import { useMemo, useState } from 'react';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useProjectIssuesQuery, useProjectPullRequestsQuery } from '../../../../hooks/useFactoryData';
 import { useIntakeBindingsQuery, useIntakeConfigQuery } from '../../../../hooks/useIntakeConfig';
+import { useJiraIssuesQuery, useJiraStatusQuery } from '../../../../hooks/useJiraData';
 import { useLinearIssuesQuery, useLinearStatusQuery } from '../../../../hooks/useLinearData';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
-import { issueCandidate, linearCandidate, pullRequestCandidate } from '../boardCandidates';
+import { issueCandidate, jiraCandidate, linearCandidate, pullRequestCandidate } from '../boardCandidates';
 import type { BoardCandidate, IntakeSource } from '../boardCandidates';
 import { AUTO_TRIAGED_LABEL, hasLabel } from '../boardItems';
 import type { BoardKind } from '../boardStages';
@@ -33,26 +34,38 @@ export function useBoardIntake({
   const projectRepositoryId = repository.projectRepositoryId;
   const configQuery = useIntakeConfigQuery();
   const linearStatusQuery = useLinearStatusQuery();
+  const jiraStatusQuery = useJiraStatusQuery();
 
   const config = configQuery.data;
   const githubEnabled = config?.github.enabled ?? true;
   const githubSelected = config ? (config.github.sourceIds?.includes(repository.slug) ?? false) : true;
   const linearFeature = linearStatusQuery.data?.enabled ?? false;
   const linearConnected = Boolean(linearFeature && linearStatusQuery.data?.connected);
-  // Linear sources route to one Factory project. Once any routing exists, a board
-  // only offers the Linear feed when a source points at the project being viewed —
-  // otherwise every board would list (and ingest) every selected Linear project.
-  // With no routing at all the server still serves single-Factory orgs, where the
-  // destination is unambiguous; mirror that here so the feed is never offered empty.
+  // Provider sources route to one Factory project. Once any routing exists for a
+  // provider, a board only offers its feed when a source points at the project
+  // being viewed — otherwise every board would list (and ingest) every selected
+  // project. With no routing at all the server still serves single-Factory orgs,
+  // where the destination is unambiguous; mirror that here so a feed is never
+  // offered empty.
   const bindingsQuery = useIntakeBindingsQuery();
   const factoriesQuery = useFactoriesQuery();
-  const linearBindings = (bindingsQuery.data ?? []).filter(binding => binding.integrationId === 'linear');
-  const linearRouted =
-    linearBindings.length === 0
+  const routedToViewedFactory = (integrationId: string) => {
+    const providerBindings = (bindingsQuery.data ?? []).filter(binding => binding.integrationId === integrationId);
+    return providerBindings.length === 0
       ? (factoriesQuery.data?.length ?? 0) <= 1
-      : linearBindings.some(binding => binding.factoryProjectId === factoryProjectId);
+      : providerBindings.some(binding => binding.factoryProjectId === factoryProjectId);
+  };
   const linearReady =
-    (config?.linear.enabled ?? false) && linearConnected && (config?.linear.sourceIds?.length ?? 0) > 0 && linearRouted;
+    (config?.linear.enabled ?? false) &&
+    linearConnected &&
+    (config?.linear.sourceIds?.length ?? 0) > 0 &&
+    routedToViewedFactory('linear');
+  const jiraConfigured = jiraStatusQuery.data?.enabled ?? false;
+  const jiraReady =
+    (config?.jira.enabled ?? false) &&
+    jiraConfigured &&
+    (config?.jira.sourceIds?.length ?? 0) > 0 &&
+    routedToViewedFactory('jira');
 
   // Work intake owns issues; Review intake owns pull requests. Keeping the
   // feeds on separate routes prevents review-producing PR work from being
@@ -60,7 +73,11 @@ export function useBoardIntake({
   const githubIntakeActive = githubEnabled && githubSelected;
   const available: IntakeSource[] = review
     ? ['github-prs']
-    : [...(githubIntakeActive ? (['github'] as const) : []), ...(linearReady ? (['linear'] as const) : [])];
+    : [
+        ...(githubIntakeActive ? (['github'] as const) : []),
+        ...(linearReady ? (['linear'] as const) : []),
+        ...(jiraReady ? (['jira'] as const) : []),
+      ];
   const [selected, setSelected] = useState<IntakeSource>(review ? 'github-prs' : 'github');
   const active: IntakeSource | undefined = available.includes(selected) ? selected : available[0];
 
@@ -70,6 +87,7 @@ export function useBoardIntake({
   const triageIssues = useProjectIssuesQuery(active === 'github' ? projectRepositoryId : undefined, AUTO_TRIAGED_LABEL);
   const pulls = useProjectPullRequestsQuery(review ? projectRepositoryId : undefined);
   const linearIssues = useLinearIssuesQuery(!review && linearReady ? factoryProjectId : undefined);
+  const jiraIssues = useJiraIssuesQuery(!review && jiraReady ? factoryProjectId : undefined);
 
   const intakeIssues = useMemo(
     () => (issues.data ?? []).filter(issue => !hasLabel(issue.labels, AUTO_TRIAGED_LABEL)),
@@ -79,19 +97,34 @@ export function useBoardIntake({
     () =>
       review
         ? (pulls.data ?? []).map(pullRequestCandidate)
-        : [...(issues.data ?? []).map(issueCandidate), ...(linearIssues.data ?? []).map(linearCandidate)],
-    [issues.data, pulls.data, linearIssues.data, review],
+        : [
+            ...(issues.data ?? []).map(issueCandidate),
+            ...(linearIssues.data ?? []).map(linearCandidate),
+            ...(jiraIssues.data ?? []).map(jiraCandidate),
+          ],
+    [issues.data, pulls.data, linearIssues.data, jiraIssues.data, review],
   );
   const candidates = useMemo(() => {
     const all: BoardCandidate[] = review
       ? participantCandidates
       : active === 'linear'
         ? (linearIssues.data ?? []).map(linearCandidate)
-        : active === 'github'
-          ? [...intakeIssues.map(issueCandidate), ...(triageIssues.data ?? []).map(issueCandidate)]
-          : [];
+        : active === 'jira'
+          ? (jiraIssues.data ?? []).map(jiraCandidate)
+          : active === 'github'
+            ? [...intakeIssues.map(issueCandidate), ...(triageIssues.data ?? []).map(issueCandidate)]
+            : [];
     return all.filter(candidate => !knownSourceKeys.has(candidate.sourceKey));
-  }, [knownSourceKeys, participantCandidates, intakeIssues, triageIssues.data, linearIssues.data, active, review]);
+  }, [
+    knownSourceKeys,
+    participantCandidates,
+    intakeIssues,
+    triageIssues.data,
+    linearIssues.data,
+    jiraIssues.data,
+    active,
+    review,
+  ]);
 
   return {
     available,
@@ -103,11 +136,16 @@ export function useBoardIntake({
     issues,
     pulls,
     linearIssues,
+    jiraIssues,
     isPending:
-      (!review && (configQuery.isPending || ((config?.linear.enabled ?? false) && linearStatusQuery.isPending))) ||
+      (!review &&
+        (configQuery.isPending ||
+          ((config?.linear.enabled ?? false) && linearStatusQuery.isPending) ||
+          ((config?.jira.enabled ?? false) && jiraStatusQuery.isPending))) ||
       (active === 'github' && issues.isPending) ||
       (active === 'github-prs' && pulls.isPending) ||
-      (active === 'linear' && linearIssues.isPending),
+      (active === 'linear' && linearIssues.isPending) ||
+      (active === 'jira' && jiraIssues.isPending),
     isTriagePending: !review && active === 'github' && triageIssues.isPending,
   };
 }

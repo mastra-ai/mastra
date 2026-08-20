@@ -10,7 +10,7 @@ import type { FactoryRuleStage } from '@mastra/factory/rules/types';
 
 import { requestJson } from './request';
 
-export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'slack-thread' | 'manual';
+export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'jira-issue' | 'slack-thread' | 'manual';
 
 export interface WorkItemSessionRef {
   sessionId: string;
@@ -87,6 +87,7 @@ function sourceFromExternalSource(source: ExternalWorkItemSource | null): WorkIt
   if (source.integrationId === 'github' && source.type === 'issue') return 'github-issue';
   if (source.integrationId === 'github' && source.type === 'pull-request') return 'github-pr';
   if (source.integrationId === 'linear' && source.type === 'issue') return 'linear-issue';
+  if (source.integrationId === 'jira' && source.type === 'issue') return 'jira-issue';
   if (source.integrationId === 'slack' && source.type === 'slack-thread') return 'slack-thread';
   return 'manual';
 }
@@ -101,6 +102,8 @@ function externalSourceTarget(
       return { integrationId: 'github', type: 'pull-request' };
     case 'linear-issue':
       return { integrationId: 'linear', type: 'issue' };
+    case 'jira-issue':
+      return { integrationId: 'jira', type: 'issue' };
     case 'slack-thread':
       return { integrationId: 'slack', type: 'slack-thread' };
   }

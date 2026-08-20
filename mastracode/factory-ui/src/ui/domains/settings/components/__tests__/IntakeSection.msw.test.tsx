@@ -6,18 +6,26 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
-import type { IntakeConfig } from '../../../factory/services/intake';
+import type { IntakeConfig, IntakeSourceBinding } from '../../../factory/services/intake';
+import type { JiraProject, JiraStatus } from '../../../factory/services/jira';
 import type { LinearProject, LinearStatus } from '../../../factory/services/linear';
 import { IntakeSection } from '../IntakeSection';
 
 const CONFIG_URL = `${TEST_BASE_URL}/web/intake/config`;
+const BINDINGS_URL = `${TEST_BASE_URL}/web/intake/bindings`;
 const LINEAR_STATUS_URL = `${TEST_BASE_URL}/web/linear/status`;
 const LINEAR_PROJECTS_URL = `${TEST_BASE_URL}/web/linear/projects`;
+const JIRA_STATUS_URL = `${TEST_BASE_URL}/web/jira/status`;
+const JIRA_PROJECTS_URL = `${TEST_BASE_URL}/web/jira/projects`;
+
+const FACTORY_A = '11111111-1111-4111-8111-111111111111';
+const FACTORY_B = '22222222-2222-4222-8222-222222222222';
 
 function baseConfig(): IntakeConfig {
   return {
     github: { enabled: true, sourceIds: null },
     linear: { enabled: true, sourceIds: null },
+    jira: { enabled: false, sourceIds: null },
   };
 }
 
@@ -78,6 +86,56 @@ function useIntakeHandlers({
     http.get(LINEAR_PROJECTS_URL, () => HttpResponse.json({ projects: linearProjects })),
   );
   return saved;
+}
+
+const jiraReadyStatus: JiraStatus = {
+  enabled: true,
+  configured: true,
+  site: 'acme.atlassian.net',
+  reason: 'ready',
+};
+
+const jiraProjects: JiraProject[] = [
+  { id: '10001', key: 'ENG', name: 'Engineering' },
+  { id: '10002', key: 'OPS', name: 'Operations' },
+];
+
+/**
+ * Layer a configured Jira deployment on top of the base intake handlers. The
+ * ambient MSW handlers answer `/web/jira/*` with 404 (a server without the
+ * `JIRA_*` env group), so unconfigured-deployment specs skip this helper.
+ */
+function useJiraHandlers({
+  config = baseConfig(),
+  bindings = [],
+}: { config?: IntakeConfig; bindings?: IntakeSourceBinding[] } = {}) {
+  const saved = useIntakeHandlers({ config });
+  const savedBindings: Array<{ integrationId: string; sourceId: string; factoryProjectId: string | null }> = [];
+  server.use(
+    http.get(JIRA_STATUS_URL, () => HttpResponse.json(jiraReadyStatus)),
+    http.get(JIRA_PROJECTS_URL, () => HttpResponse.json({ projects: jiraProjects })),
+    http.get(BINDINGS_URL, () => HttpResponse.json({ bindings })),
+    http.put(BINDINGS_URL, async ({ request }) => {
+      const body = (await request.json()) as { integrationId: string; sourceId: string; factoryProjectId: string | null };
+      savedBindings.push(body);
+      const next = body.factoryProjectId === null ? [] : [body as IntakeSourceBinding];
+      return HttpResponse.json({ bindings: next });
+    }),
+  );
+  return { saved, savedBindings };
+}
+
+function seedFactories() {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+      HttpResponse.json({
+        projects: [
+          { id: FACTORY_A, name: 'Acme Web' },
+          { id: FACTORY_B, name: 'Acme API' },
+        ],
+      }),
+    ),
+  );
 }
 
 function renderIntakeSection() {
@@ -149,6 +207,7 @@ describe('IntakeSection', () => {
         config: {
           github: { enabled: true, sourceIds: ['mastra'] },
           linear: { enabled: true, sourceIds: ['lproj-1'] },
+          jira: { enabled: false, sourceIds: null },
         },
       });
 
@@ -357,6 +416,114 @@ describe('IntakeSection', () => {
 
       expect(await screen.findByText('Linear is not configured on this server.')).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Connect Linear' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('given Jira is not configured on the server', () => {
+    it('explains the env-only setup with a disabled toggle and no connect button', async () => {
+      // Only the base handlers — the ambient `/web/jira/*` 404s stand in for a
+      // server without the JIRA_* env group.
+      useIntakeHandlers();
+
+      renderIntakeSection();
+
+      expect(
+        await screen.findByText(
+          'Jira is not configured on this server. Set JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN to enable it.',
+        ),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('switch', { name: 'Sync Jira issues' })).toBeDisabled();
+      expect(screen.getByRole('switch', { name: 'Sync Jira issues' })).not.toBeChecked();
+      expect(screen.queryByRole('button', { name: /Connect Jira/ })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('given Jira is configured on the server', () => {
+    it('enables the toggle and persists switching Jira on', async () => {
+      const { saved } = useJiraHandlers();
+
+      renderIntakeSection();
+
+      const toggle = await screen.findByRole('switch', { name: 'Sync Jira issues' });
+      expect(toggle).toBeEnabled();
+      expect(toggle).not.toBeChecked();
+
+      await userEvent.click(toggle);
+
+      await waitFor(() => expect(saved).toHaveLength(1));
+      expect(saved[0]!.jira.enabled).toBe(true);
+      expect(saved[0]!.github.enabled).toBe(true);
+    });
+
+    it('shows the site and persists an explicit project selection', async () => {
+      const { saved } = useJiraHandlers({
+        config: { ...baseConfig(), jira: { enabled: true, sourceIds: null } },
+      });
+
+      renderIntakeSection();
+
+      expect(await screen.findByText('Connected to acme.atlassian.net')).toBeInTheDocument();
+
+      const projects = await screen.findByRole('group', { name: 'Projects' });
+      await userEvent.click(within(projects).getByRole('button', { name: 'Projects' }));
+      await userEvent.click(within(projects).getByRole('checkbox', { name: 'ENG · Engineering' }));
+
+      await waitFor(() => expect(saved).toHaveLength(1));
+      expect(saved[0]!.jira.sourceIds).toEqual(['10001']);
+    });
+
+    it('routes a selected Jira project to a Factory through the generic bindings', async () => {
+      seedFactories();
+      const { savedBindings } = useJiraHandlers({
+        config: { ...baseConfig(), jira: { enabled: true, sourceIds: ['10001'] } },
+      });
+
+      renderIntakeSection();
+
+      // Unrouted projects warn that no board picks them up.
+      expect(await screen.findByText(/Not routed — this project's issues won't be picked up\./)).toBeInTheDocument();
+
+      await userEvent.click(await screen.findByLabelText('Factory for ENG · Engineering'));
+      await userEvent.click(await screen.findByRole('option', { name: 'Acme Web' }));
+
+      await waitFor(() => expect(savedBindings).toHaveLength(1));
+      expect(savedBindings[0]).toEqual({ integrationId: 'jira', sourceId: '10001', factoryProjectId: FACTORY_A });
+      expect(await screen.findByText('Jira routing updated')).toBeInTheDocument();
+    });
+
+    it('clears a Jira routing back to not routed', async () => {
+      seedFactories();
+      const { savedBindings } = useJiraHandlers({
+        config: { ...baseConfig(), jira: { enabled: true, sourceIds: ['10001'] } },
+        bindings: [{ integrationId: 'jira', sourceId: '10001', factoryProjectId: FACTORY_A }],
+      });
+
+      renderIntakeSection();
+
+      const trigger = await screen.findByLabelText('Factory for ENG · Engineering');
+      await waitFor(() => expect(trigger).toHaveTextContent('Acme Web'));
+
+      await userEvent.click(trigger);
+      await userEvent.click(await screen.findByRole('option', { name: 'Not routed' }));
+
+      await waitFor(() => expect(savedBindings).toHaveLength(1));
+      expect(savedBindings[0]).toEqual({ integrationId: 'jira', sourceId: '10001', factoryProjectId: null });
+    });
+
+    it('surfaces rejected credentials as operator guidance instead of an empty picker', async () => {
+      useJiraHandlers({ config: { ...baseConfig(), jira: { enabled: true, sourceIds: null } } });
+      server.use(
+        http.get(JIRA_PROJECTS_URL, () =>
+          HttpResponse.json({ error: 'jira_auth_failed', message: 'Jira rejected the credentials' }, { status: 409 }),
+        ),
+      );
+
+      renderIntakeSection();
+
+      expect(
+        await screen.findByText('Jira rejected the configured credentials. Ask the operator to check the Jira API token.'),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole('group', { name: 'Projects' })).not.toBeInTheDocument();
     });
   });
 
