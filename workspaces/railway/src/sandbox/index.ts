@@ -673,20 +673,25 @@ export class RailwaySandbox extends MastraSandbox {
         throw new SandboxNotReadyError(this.id);
       }
 
-      // If a start attempt is already in flight, this executeCommand may be
-      // running INSIDE it (e.g. the base-class bootstrap command) — calling
-      // start() here would join that in-flight promise and await itself
-      // forever. Fail loudly instead of hanging.
       if (this._startPromise) {
-        throw new SandboxNotReadyError(this.id);
+        if (this.status === 'running') {
+          // status flips to 'running' before the base class runs the
+          // bootstrap/onStart phase of the CURRENT start attempt — an
+          // executeCommand arriving here is running inside that attempt, and
+          // joining the in-flight promise would await itself forever. Fail
+          // loudly instead of hanging.
+          throw new SandboxNotReadyError(this.id);
+        }
+        // Concurrent with someone else's in-flight start — join it.
+        await this.start();
+      } else {
+        // The VM is provably down — reset local state so the base-class start
+        // wrapper (which early-returns while status is 'running') actually
+        // re-runs the reconnect/provision logic.
+        this._sandbox = null;
+        this.status = 'stopped';
+        await this.start();
       }
-
-      // The VM is provably down — reset local state so the base-class start
-      // wrapper (which early-returns while status is 'running') actually
-      // re-runs the reconnect/provision logic.
-      this._sandbox = null;
-      this.status = 'stopped';
-      await this.start();
     }
 
     const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;

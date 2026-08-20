@@ -358,8 +358,11 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
       // which would otherwise join the in-flight `_startPromise` and deadlock
       // awaiting its own start. This opens a (new, accepted) window where
       // commands fired concurrently with start() — without awaiting it — can
-      // run during bootstrap; callers that `await start()` always observe a
-      // fully bootstrapped VM.
+      // run during bootstrap, and where a start() call arriving DURING the
+      // bootstrap hits the already-running early return (which must precede
+      // the join check: an onStart hook calling start() would deadlock
+      // otherwise) and resolves before the bootstrap completes. Callers that
+      // await the ORIGINAL start() always observe a fully bootstrapped VM.
       this.status = 'running';
     } catch (error) {
       this.status = 'error';

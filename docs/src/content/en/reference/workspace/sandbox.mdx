@@ -55,7 +55,7 @@ A sandbox constructed with a known `id` resolves that id on `start()`: reconnect
 
 Providers that predate the contract return `void`, which the base class treats as unknown.
 
-Concurrent `start()` calls on one instance coalesce onto a single in-flight attempt: joined callers share the attempt's result (all observe `created: true` when the shared attempt created), and the in-flight slot is cleared when the attempt settles, so a failed start can be retried. While the sandbox is already `running`, `start()` returns without re-invoking the provider.
+Concurrent `start()` calls on one instance coalesce onto a single in-flight attempt: joined callers share the attempt's result (all observe `created: true` when the shared attempt created), and the in-flight slot is cleared when the attempt settles, so a failed start can be retried. While the sandbox is already `running`, `start()` resolves `{ created: false }` without re-invoking the provider.
 
 The result is also forwarded to the `onStart` lifecycle hook as `{ sandbox, created }`.
 

@@ -628,6 +628,32 @@ describe('RailwaySandbox', () => {
       expect(sandbox.status).toBe('running');
     });
 
+    it('joins an in-flight start instead of throwing when executed concurrently', async () => {
+      let releaseCreate!: (value: unknown) => void;
+      mockCreate.mockReturnValueOnce(new Promise(resolve => (releaseCreate = resolve)));
+
+      const sandbox = new RailwaySandbox({ token: 't', checkpointName: 'checkpoint' });
+      const starting = sandbox._start();
+      const executing = sandbox.executeCommand!('echo hello');
+
+      releaseCreate(mockSandbox);
+      await starting;
+      const result = await executing;
+
+      expect(result.exitCode).toBe(0);
+      expect(mockCreate).toHaveBeenCalledTimes(1);
+    });
+
+    it('throws instead of self-joining when executed inside the in-flight start (bootstrap reentrancy)', async () => {
+      const sandbox = new RailwaySandbox({ token: 't', checkpointName: 'checkpoint' });
+      // Simulate the base-class bootstrap window: status already 'running'
+      // while the start attempt's promise is still in flight.
+      (sandbox as any)._startPromise = new Promise(() => {});
+      sandbox.status = 'running';
+
+      await expect(sandbox.executeCommand!('echo hello')).rejects.toThrow(SandboxNotReadyError);
+    });
+
     it('works without checkpointing after an explicit start', async () => {
       vi.useFakeTimers();
       const sandbox = new RailwaySandbox({ token: 't' });
