@@ -964,6 +964,27 @@ describe('Datasets Handlers', () => {
     });
   });
 
+  describe('GET_ITEM_VERSION_ROUTE', () => {
+    it('returns an unchanged item visible in a later dataset snapshot', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Versioned Item DS' });
+      const itemA = await dataset.addItem({ input: { value: 'first' } });
+      const itemB = await dataset.addItem({ input: { value: 'second' } });
+
+      const fetched = (await GET_ITEM_VERSION_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        itemId: itemA.id,
+        datasetVersion: itemB.datasetVersion,
+      } as any)) as any;
+
+      expect(fetched).toMatchObject({
+        id: itemA.id,
+        datasetVersion: itemA.datasetVersion,
+        input: { value: 'first' },
+      });
+    });
+  });
+
   describe('item tool mocks', () => {
     it('round-trips toolMocks and unmockedToolPolicy through add, get, and update', async () => {
       const dataset = await mastra.datasets.create({ name: 'Mocks DS' });

@@ -39,6 +39,17 @@ export interface MemorySettingsFillIfUnset {
   reflectorModelId?: string;
 }
 
+/**
+ * Sentinel `user_id` for a factory project's shared memory settings. Factory
+ * runs are org-shared, so their OM configuration lives on the project — this
+ * key reuses the same `(org, user)` table without a schema change. Real user
+ * ids are WorkOS ids (`user_…`) or the `local` sentinel, so the prefix cannot
+ * collide.
+ */
+export function factoryMemorySettingsUserId(factoryProjectId: string): string {
+  return `factory-project:${factoryProjectId}`;
+}
+
 export const MEMORY_SETTINGS_SCHEMA: CollectionSchema = {
   name: 'memory_settings',
   columns: {

@@ -47,10 +47,11 @@ export interface OMConfigurableSession {
 export async function applyStoredMemorySettings(
   session: OMConfigurableSession,
   record: MemorySettingsRecord | null,
+  fallbackOmModelId?: string,
 ): Promise<void> {
   for (const role of ['observer', 'reflector'] as const) {
     const stored = role === 'observer' ? record?.observerModelId : record?.reflectorModelId;
-    const target = stored ?? DEFAULT_OM_MODEL_ID;
+    const target = stored ?? fallbackOmModelId ?? DEFAULT_OM_MODEL_ID;
     if (session.om[role].modelId() !== target) {
       await session.om[role].switchModel({ modelId: target });
     }

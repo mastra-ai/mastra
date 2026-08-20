@@ -275,7 +275,7 @@ test.describe('Contextual sidebar', () => {
     await page.goto('/docs', { waitUntil: 'domcontentloaded' })
     const rootPane = visibleSidebarPane(page, 'root')
     const standardLink = rootPane.getByRole('link', { name: 'Subagents', exact: true })
-    const contextualLink = rootPane.getByRole('link', { name: 'Sandbox', exact: true })
+    const contextualLink = rootPane.getByRole('link', { name: 'Sandboxes', exact: true })
 
     await standardLink.hover()
     const standardHover = await standardLink.evaluate(link => ({
