@@ -74,10 +74,29 @@ describe('supportsComputer', () => {
     expect(supportsComputer(sandbox)).toBe(false);
   });
 
-  it('returns false when computer is present but screenshot is not a function', () => {
+  it.each([
+    'screenshot',
+    'leftClick',
+    'rightClick',
+    'doubleClick',
+    'moveMouse',
+    'drag',
+    'scroll',
+    'type',
+    'press',
+    'getScreenSize',
+    'getCursorPosition',
+  ] satisfies Array<keyof SandboxComputer>)('returns false when computer.%s is not a function', method => {
     const sandbox = new PlainSandbox() as WorkspaceSandbox & { computer?: unknown };
-    (sandbox as { computer?: unknown }).computer = {};
+    const computer = { ...createComputer(), [method]: undefined };
+    (sandbox as { computer?: unknown }).computer = computer;
     expect(supportsComputer(sandbox as WorkspaceSandbox)).toBe(false);
+  });
+
+  it('does not require the optional streamUrl method', () => {
+    const sandbox: WorkspaceSandbox = new DesktopSandbox();
+    expect(sandbox.computer?.streamUrl).toBeUndefined();
+    expect(supportsComputer(sandbox)).toBe(true);
   });
 
   it('narrows the type so computer is non-optional', async () => {
