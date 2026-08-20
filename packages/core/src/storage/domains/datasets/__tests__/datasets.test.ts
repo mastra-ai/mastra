@@ -646,6 +646,38 @@ describe('DatasetsInMemory', () => {
       expect(items).toHaveLength(0);
     });
 
+    it('getItemAtVersion returns the row visible at the pinned version (SCD-2 range)', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const item = await storage.addItem({ datasetId: dataset.id, input: { n: 1 } });
+      await storage.updateItem({ id: item.id, datasetId: dataset.id, input: { n: 2 } });
+
+      const v1 = await storage.getItemAtVersion({ datasetId: dataset.id, itemId: item.id, version: 1 });
+      expect(v1?.input).toEqual({ n: 1 });
+
+      const v2 = await storage.getItemAtVersion({ datasetId: dataset.id, itemId: item.id, version: 2 });
+      expect(v2?.input).toEqual({ n: 2 });
+
+      // Range semantics: still visible at a later pinned version
+      const v9 = await storage.getItemAtVersion({ datasetId: dataset.id, itemId: item.id, version: 9 });
+      expect(v9?.input).toEqual({ n: 2 });
+
+      const v0 = await storage.getItemAtVersion({ datasetId: dataset.id, itemId: item.id, version: 0 });
+      expect(v0).toBeNull();
+    });
+
+    it('getItemAtVersion scopes by dataset and hides deleted items', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const other = await storage.createDataset({ name: 'other' });
+      const item = await storage.addItem({ datasetId: dataset.id, input: { n: 1 } });
+
+      const wrongDs = await storage.getItemAtVersion({ datasetId: other.id, itemId: item.id, version: 1 });
+      expect(wrongDs).toBeNull();
+
+      await storage.deleteItem({ id: item.id, datasetId: dataset.id });
+      const afterDelete = await storage.getItemAtVersion({ datasetId: dataset.id, itemId: item.id, version: 2 });
+      expect(afterDelete).toBeNull();
+    });
+
     it('getItemHistory returns all rows including tombstones (T3.15)', async () => {
       const dataset = await storage.createDataset({ name: 'test' });
       const item = await storage.addItem({ datasetId: dataset.id, input: { n: 1 } });

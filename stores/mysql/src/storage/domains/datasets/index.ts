@@ -986,6 +986,28 @@ export class DatasetsMySQL extends DatasetsStorage {
     }
   }
 
+  async getItemAtVersion(args: { datasetId: string; itemId: string; version: number }): Promise<DatasetItem | null> {
+    try {
+      const tableItemsName = formatTableName(TABLE_DATASET_ITEMS);
+      const [rows] = await this.pool.execute<RowDataPacket[]>(
+        `SELECT * FROM ${tableItemsName} WHERE \`id\` = ? AND \`datasetId\` = ? AND \`datasetVersion\` <= ? AND (\`validTo\` IS NULL OR \`validTo\` > ?) AND \`isDeleted\` = 0 LIMIT 1`,
+        [args.itemId, args.datasetId, args.version, args.version],
+      );
+
+      const row = (rows as any[])[0];
+      return row ? this.mapItem(row) : null;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MYSQL_GET_ITEM_AT_VERSION_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
   async getItemHistory(itemId: string): Promise<DatasetItemRow[]> {
     try {
       const tableItemsName = formatTableName(TABLE_DATASET_ITEMS);

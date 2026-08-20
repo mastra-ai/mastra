@@ -1032,6 +1032,35 @@ export class DatasetsSpanner extends DatasetsStorage {
     }
   }
 
+  async getItemAtVersion(args: { datasetId: string; itemId: string; version: number }): Promise<DatasetItem | null> {
+    try {
+      const tableName = quoteIdent(TABLE_DATASET_ITEMS, 'table name');
+      const [rows] = await this.database.run({
+        sql: `SELECT * FROM ${tableName}
+              WHERE ${quoteIdent('id', 'column name')} = @itemId
+                AND ${quoteIdent('datasetId', 'column name')} = @datasetId
+                AND ${quoteIdent('datasetVersion', 'column name')} <= @version
+                AND (${quoteIdent('validTo', 'column name')} IS NULL OR ${quoteIdent('validTo', 'column name')} > @version)
+                AND ${quoteIdent('isDeleted', 'column name')} = FALSE
+              LIMIT 1`,
+        params: { itemId: args.itemId, datasetId: args.datasetId, version: args.version },
+        json: true,
+      });
+      const row = (rows as Array<Record<string, any>>)[0];
+      return row ? rowToItem(row) : null;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('SPANNER', 'GET_ITEM_AT_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { datasetId: args.datasetId, itemId: args.itemId, version: args.version },
+        },
+        error,
+      );
+    }
+  }
+
   async getItemHistory(itemId: string): Promise<DatasetItemRow[]> {
     try {
       const tableName = quoteIdent(TABLE_DATASET_ITEMS, 'table name');

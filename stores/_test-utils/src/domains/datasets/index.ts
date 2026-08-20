@@ -953,6 +953,54 @@ export function createDatasetsTests({
         expect(v3Items).toHaveLength(2);
       });
 
+      it('getItemAtVersion returns the row visible at the pinned version (SCD-2 range)', async () => {
+        // At version 1: original row is visible even though a later version exists
+        const v1 = await datasetsStorage.getItemAtVersion({ datasetId: ds.id, itemId: item1.id, version: 1 });
+        expect(v1!.input).toEqual({ q: 'original' });
+
+        // At version 2: the updated row is visible
+        const v2 = await datasetsStorage.getItemAtVersion({ datasetId: ds.id, itemId: item1.id, version: 2 });
+        expect(v2!.input).toEqual({ q: 'updated' });
+
+        // A row created at version 1 remains visible at a later pinned version (range, not exact match)
+        const v9 = await datasetsStorage.getItemAtVersion({ datasetId: ds.id, itemId: item1.id, version: 9 });
+        expect(v9!.input).toEqual({ q: 'updated' });
+
+        // Before the item existed: not visible
+        const v0 = await datasetsStorage.getItemAtVersion({ datasetId: ds.id, itemId: item1.id, version: 0 });
+        expect(v0).toBeNull();
+      });
+
+      it('getItemAtVersion scopes to the dataset and excludes items added after the pinned version', async () => {
+        // Wrong dataset: null
+        const other = await datasetsStorage.createDataset({ name: 'scd2-queries-other' });
+        const wrongDs = await datasetsStorage.getItemAtVersion({ datasetId: other.id, itemId: item1.id, version: 2 });
+        expect(wrongDs).toBeNull();
+
+        // Item added at version 3 is not visible at version 2
+        const late = await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'late' } });
+        const notYet = await datasetsStorage.getItemAtVersion({ datasetId: ds.id, itemId: late.id, version: 2 });
+        expect(notYet).toBeNull();
+        const visible = await datasetsStorage.getItemAtVersion({ datasetId: ds.id, itemId: late.id, version: 3 });
+        expect(visible!.input).toEqual({ q: 'late' });
+      });
+
+      it('getItemAtVersion returns null for deleted items at versions after the delete', async () => {
+        const doomed = await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'doomed' } });
+        // version is now 3
+        await datasetsStorage.deleteItem({ id: doomed.id, datasetId: ds.id });
+        // version is now 4
+        const afterDelete = await datasetsStorage.getItemAtVersion({ datasetId: ds.id, itemId: doomed.id, version: 4 });
+        expect(afterDelete).toBeNull();
+        // Still visible at the pre-delete version
+        const beforeDelete = await datasetsStorage.getItemAtVersion({
+          datasetId: ds.id,
+          itemId: doomed.id,
+          version: 3,
+        });
+        expect(beforeDelete!.input).toEqual({ q: 'doomed' });
+      });
+
       it('getItemHistory returns all rows ordered by datasetVersion DESC', async () => {
         const history = await datasetsStorage.getItemHistory(item1.id);
         expect(history.length).toBeGreaterThanOrEqual(2);

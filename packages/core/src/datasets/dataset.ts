@@ -843,9 +843,11 @@ export class Dataset {
     // SCD-2 range lookup at the experiment's pinned dataset version.
     const item =
       experiment.datasetVersion !== null
-        ? (await datasetsStore.getItemsByVersion({ datasetId: this.id, version: experiment.datasetVersion })).find(
-            candidate => candidate.id === args.itemId,
-          )
+        ? await datasetsStore.getItemAtVersion({
+            datasetId: this.id,
+            itemId: args.itemId,
+            version: experiment.datasetVersion,
+          })
         : await datasetsStore.getItemById({ id: args.itemId });
     if (!item || item.datasetId !== this.id) {
       throw new MastraError({
@@ -938,9 +940,11 @@ export class Dataset {
     // earlier version that are still current).
     const item =
       experiment.datasetVersion !== null
-        ? (await datasetsStore.getItemsByVersion({ datasetId: this.id, version: experiment.datasetVersion })).find(
-            candidate => candidate.id === args.itemId,
-          )
+        ? await datasetsStore.getItemAtVersion({
+            datasetId: this.id,
+            itemId: args.itemId,
+            version: experiment.datasetVersion,
+          })
         : await datasetsStore.getItemById({ id: args.itemId });
     if (!item || item.datasetId !== this.id) {
       throw new MastraError({

@@ -879,6 +879,27 @@ export class DatasetsLibSQL extends DatasetsStorage {
     }
   }
 
+  async getItemAtVersion(args: { datasetId: string; itemId: string; version: number }): Promise<DatasetItem | null> {
+    try {
+      const result = await this.#client.execute({
+        sql: `SELECT ${buildSelectColumns(TABLE_DATASET_ITEMS)} FROM ${TABLE_DATASET_ITEMS} WHERE id = ? AND datasetId = ? AND datasetVersion <= ? AND (validTo IS NULL OR validTo > ?) AND isDeleted = 0 LIMIT 1`,
+        args: [args.itemId, args.datasetId, args.version, args.version],
+      });
+
+      const row = result.rows?.[0];
+      return row ? this.transformItemRow(row) : null;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'GET_ITEM_AT_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
   async getItemHistory(itemId: string): Promise<DatasetItemRow[]> {
     try {
       // ALL rows including tombstones, ordered by datasetVersion DESC (newest first)

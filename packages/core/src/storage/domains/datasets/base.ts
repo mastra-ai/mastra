@@ -220,6 +220,21 @@ export abstract class DatasetsStorage extends StorageDomain {
 
   // SCD-2 queries
   abstract getItemsByVersion(args: { datasetId: string; version: number }): Promise<DatasetItem[]>;
+
+  /**
+   * Point lookup for a single item visible at a pinned dataset version (SCD-2 range
+   * semantics: `datasetVersion <= version AND (validTo IS NULL OR validTo > version)`
+   * excluding deleted rows). Returns `null` when the item is not visible at that version
+   * or belongs to a different dataset.
+   *
+   * The default implementation filters `getItemsByVersion`; adapters should override
+   * with an indexed point query so per-item callers avoid materializing the whole version.
+   */
+  async getItemAtVersion(args: { datasetId: string; itemId: string; version: number }): Promise<DatasetItem | null> {
+    const items = await this.getItemsByVersion({ datasetId: args.datasetId, version: args.version });
+    return items.find(item => item.id === args.itemId) ?? null;
+  }
+
   abstract getItemHistory(itemId: string): Promise<DatasetItemRow[]>;
 
   // Dataset version methods

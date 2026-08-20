@@ -432,6 +432,16 @@ export class DatasetsInMemory extends DatasetsStorage {
     return items;
   }
 
+  async getItemAtVersion(args: { datasetId: string; itemId: string; version: number }): Promise<DatasetItem | null> {
+    const rows = this.db.datasetItems.get(args.itemId);
+    if (!rows || rows.length === 0 || rows[0]!.datasetId !== args.datasetId) return null;
+
+    const visible = rows.find(
+      r => r.datasetVersion <= args.version && (r.validTo === null || r.validTo > args.version) && !r.isDeleted,
+    );
+    return visible ? toDatasetItem(visible) : null;
+  }
+
   async getItemHistory(itemId: string): Promise<DatasetItemRow[]> {
     // ALL rows including tombstones, ordered by datasetVersion DESC (newest first)
     const rows = this.db.datasetItems.get(itemId);

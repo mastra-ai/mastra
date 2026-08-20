@@ -1179,6 +1179,26 @@ export class DatasetsPG extends DatasetsStorage {
     }
   }
 
+  async getItemAtVersion(args: { datasetId: string; itemId: string; version: number }): Promise<DatasetItem | null> {
+    try {
+      const tableName = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
+      const row = await this.#db.client.oneOrNone(
+        `SELECT * FROM ${tableName} WHERE "id" = $1 AND "datasetId" = $2 AND "datasetVersion" <= $3 AND ("validTo" IS NULL OR "validTo" > $3) AND "isDeleted" = false LIMIT 1`,
+        [args.itemId, args.datasetId, args.version],
+      );
+      return row ? this.transformItemRow(row) : null;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'GET_ITEM_AT_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
   async getItemHistory(itemId: string): Promise<DatasetItemRow[]> {
     try {
       const tableName = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });

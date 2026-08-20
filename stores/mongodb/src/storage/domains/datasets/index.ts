@@ -1095,6 +1095,29 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
     }
   }
 
+  async getItemAtVersion(args: { datasetId: string; itemId: string; version: number }): Promise<DatasetItem | null> {
+    try {
+      const collection = await this.getCollection(TABLE_DATASET_ITEMS);
+      const row = await collection.findOne({
+        id: args.itemId,
+        datasetId: args.datasetId,
+        datasetVersion: { $lte: args.version },
+        $or: [{ validTo: null }, { validTo: { $gt: args.version } }],
+        isDeleted: false,
+      });
+      return row ? this.transformItemRow(row) : null;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'GET_ITEM_AT_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
   async getItemHistory(itemId: string): Promise<DatasetItemRow[]> {
     try {
       const collection = await this.getCollection(TABLE_DATASET_ITEMS);
