@@ -24,6 +24,7 @@ describe('inspectPiPackageManifest', () => {
     const root = writeManifest({
       name: 'pi-fixture',
       version: '1.2.3',
+      packageManager: 'pnpm@11.1.2',
       pi: { extensions: ['./extensions'], skills: ['./skills/**', '!./skills/private/**'] },
       peerDependencies: { '@earendil-works/pi-ai': '^0.84.1' },
       dependencies: { dep: '1.0.0' },
@@ -34,6 +35,7 @@ describe('inspectPiPackageManifest', () => {
       name: 'pi-fixture',
       version: '1.2.3',
       packageRoot: fs.realpathSync(root),
+      packageManager: 'pnpm@11.1.2',
       resourcePatterns: {
         extensions: ['./extensions'],
         skills: ['./skills/**', '!./skills/private/**'],
@@ -48,5 +50,11 @@ describe('inspectPiPackageManifest', () => {
     const root = writeManifest({ name: 'bad', pi: { extensions: '../escape.ts' }, scripts: { install: 12 } });
 
     expect(() => inspectPiPackageManifest(root)).toThrow('pi.extensions must be an array');
+  });
+
+  it('rejects package-manager ranges and non-pnpm installers', () => {
+    const root = writeManifest({ name: 'bad', packageManager: 'pnpm@^11.1.2' });
+
+    expect(() => inspectPiPackageManifest(root)).toThrow('packageManager must pin an exact pnpm version');
   });
 });

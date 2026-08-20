@@ -17,7 +17,7 @@ afterEach(() => {
   tempDir = undefined;
 });
 
-function makeFixture(options: { lifecycleScript?: boolean; piApiRange?: string } = {}) {
+function makeFixture(options: { lifecycleScript?: boolean; packageManager?: string; piApiRange?: string } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-pi-intake-'));
   tempDir = root;
   const projectRoot = path.join(root, 'project');
@@ -28,6 +28,7 @@ function makeFixture(options: { lifecycleScript?: boolean; piApiRange?: string }
     JSON.stringify({
       name: 'pi-intake-fixture',
       version: '1.0.0',
+      ...(options.packageManager ? { packageManager: options.packageManager } : {}),
       pi: { extensions: ['./index.js'] },
       peerDependencies: { '@earendil-works/pi-agent-core': options.piApiRange ?? '^0.84.0' },
       ...(options.lifecycleScript ? { scripts: { postinstall: 'node postinstall.js' } } : {}),
@@ -86,6 +87,24 @@ describe('Pi Package intake trust boundary', () => {
     const installArgs = execaMock.mock.calls[0]?.[1] as string[];
     expect(installArgs).not.toContain('--ignore-scripts');
     expect(characterized.trust.installScripts).toBe('allow');
+  });
+
+  it('uses a package-pinned pnpm version for dependency installation', async () => {
+    const fixture = makeFixture({ lifecycleScript: true, packageManager: 'pnpm@11.1.2' });
+    execaMock.mockResolvedValue({ stdout: '' });
+    const prepared = await preparePiPackage('./fixture', 'project', fixture);
+
+    await characterizePiPackage(prepared, {
+      trustCodeExecution: true,
+      projectTrust: true,
+      installScripts: 'deny',
+    });
+
+    expect(execaMock).toHaveBeenCalledWith(
+      'corepack',
+      expect.arrayContaining(['pnpm@11.1.2', 'install', '--ignore-scripts']),
+      expect.any(Object),
+    );
   });
 
   it('requires explicit trust through the non-interactive manager API and cleans cancelled candidates', async () => {

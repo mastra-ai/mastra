@@ -16,6 +16,7 @@ export interface PiPackageManifest {
   name: string;
   version?: string;
   packageRoot: string;
+  packageManager?: string;
   resourcePatterns?: Partial<Record<PiPackageResourceType, string[]>>;
   observedApiVersion?: string;
   lifecycleScripts: Partial<Record<(typeof PI_PACKAGE_LIFECYCLE_SCRIPT_NAMES)[number], string>>;
@@ -45,11 +46,20 @@ export function inspectPiPackageManifest(packageRoot: string): PiPackageManifest
     name: raw.name,
     ...(typeof raw.version === 'string' ? { version: raw.version } : {}),
     packageRoot: resolvedRoot,
+    ...getPackageManager(raw.packageManager, manifestPath),
     ...(raw.pi === undefined ? {} : { resourcePatterns: parseResourcePatterns(raw.pi, manifestPath) }),
     ...getObservedApiVersion(raw),
     lifecycleScripts: getLifecycleScripts(raw.scripts, manifestPath),
     hasDependencies: hasEntries(raw.dependencies) || hasEntries(raw.optionalDependencies),
   };
+}
+
+function getPackageManager(value: unknown, manifestPath: string): { packageManager?: string } {
+  if (value === undefined) return {};
+  if (typeof value !== 'string' || !/^pnpm@\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(value)) {
+    throw new Error(`Pi Package packageManager must pin an exact pnpm version: ${manifestPath}`);
+  }
+  return { packageManager: value };
 }
 
 function parseResourcePatterns(value: unknown, manifestPath: string): Partial<Record<PiPackageResourceType, string[]>> {

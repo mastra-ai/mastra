@@ -238,7 +238,7 @@ async function installPiPackageDependencies(
 ): Promise<void> {
   if (!prepared.manifest.hasDependencies && Object.keys(prepared.manifest.lifecycleScripts).length === 0) return;
   const args = [
-    'pnpm@10.24.0',
+    prepared.manifest.packageManager ?? 'pnpm@10.24.0',
     'install',
     '--prod',
     '--ignore-workspace',
