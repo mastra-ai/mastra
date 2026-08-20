@@ -301,6 +301,7 @@ async function refreshTagsIncrementally(
     // The in-memory map only dedupes callers in this process. A transaction
     // advisory lock serializes refreshes across server instances that share
     // the same schema and cache key.
+    await tx.query(`SET LOCAL lock_timeout = '5s'`);
     await tx.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [`${schema}:${cacheKey}`]);
 
     const current = await tx.oneOrNone<{ values: string[]; refreshedAt: Date }>(

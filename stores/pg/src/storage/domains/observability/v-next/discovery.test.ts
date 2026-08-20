@@ -1,3 +1,4 @@
+import type { IMastraLogger } from '@mastra/core/logger';
 import { EntityType } from '@mastra/core/observability';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -10,10 +11,14 @@ interface FakeTagClientOptions {
   lockedCache?: { values: string[]; refreshedAt: Date } | null;
   cursors?: Record<string, string>;
   tagsByTable?: Record<string, { values: string[]; xactId: string | null; cursorId: string | null }>;
+  advisoryLockError?: Error;
 }
 
 function createFakeTagClient(options: FakeTagClientOptions = {}) {
-  const query = vi.fn(async () => ({ rows: [], rowCount: 0 }));
+  const query = vi.fn(async (sql: string) => {
+    if (sql.includes('pg_advisory_xact_lock') && options.advisoryLockError) throw options.advisoryLockError;
+    return { rows: [], rowCount: 0 };
+  });
   const one = vi.fn(async (sql: string) => {
     if (sql.includes('pg_snapshot_xmin')) return { xactId: '100' };
 
@@ -85,8 +90,31 @@ describe('Postgres observability tag discovery', () => {
       await vi.waitFor(() => {
         expect(tx.query).toHaveBeenCalledWith(expect.stringContaining('pg_advisory_xact_lock'), ['test_schema:tags']);
       });
+      expect(tx.query.mock.calls.slice(0, 2)).toEqual([
+        [`SET LOCAL lock_timeout = '5s'`],
+        [expect.stringContaining('pg_advisory_xact_lock'), ['test_schema:tags']],
+      ]);
       expect(tx.one).not.toHaveBeenCalled();
       expect(tx.manyOrNone).not.toHaveBeenCalled();
+    });
+
+    it('falls back to cached values when the advisory lock times out', async () => {
+      const staleCache = { values: ['stale-tag'], refreshedAt: new Date(0) };
+      const lockError = new Error('canceling statement due to lock timeout');
+      const warn = vi.fn();
+      const logger = { warn } as unknown as IMastraLogger;
+      const { client } = createFakeTagClient({
+        outerCache: staleCache,
+        advisoryLockError: lockError,
+      });
+
+      await expect(getTags(client, 'test_schema', {}, { ttlSeconds: 0, logger })).resolves.toEqual({
+        tags: ['stale-tag'],
+      });
+      expect(warn).toHaveBeenCalledWith(
+        '[observability/v-next] background refresh failed for discovery cache key "tags"',
+        { error: lockError },
+      );
     });
   });
 
