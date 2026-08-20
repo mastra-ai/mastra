@@ -381,6 +381,25 @@ describe('MastraFactory.prepare', () => {
     expect(ctx.fleet.provider).toBe('none');
   });
 
+  it('boots with a sandbox create callback without provisioning anything', async () => {
+    const create = vi.fn(() => new LocalSandbox({ workingDirectory: '/tmp/mc-factory-test' }));
+    const factory = new MastraFactory({
+      storage: fakeStorage(),
+      sandbox: { create, instructions: 'runs in an isolated VM' },
+    });
+    await factory.prepare();
+    // Boot validation is shape-only — the callback must never be probed.
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a non-function sandbox create callback', async () => {
+    const factory = new MastraFactory({
+      storage: fakeStorage(),
+      sandbox: { create: 'nope' as unknown as () => never },
+    });
+    await expect(factory.prepare()).rejects.toThrow(/sandbox\.create.*must be a function/);
+  });
+
   it('rejects a sandbox that does not implement clone()', async () => {
     const uncloneable = {
       id: 'sb-1',

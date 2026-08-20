@@ -65,6 +65,7 @@ import { BaseCheckpointBuilder } from './sandbox/base-checkpoint.js';
 import { SandboxFleet } from './sandbox/fleet.js';
 import { registerSandboxReattach } from './sandbox/reattach.js';
 import { SessionRetirementCoordinator } from './sandbox/session-retirement.js';
+import type { FactorySandboxContext } from './sandbox/session-sandbox.js';
 import { handleServerError } from './server-error.js';
 import { observeSessionCheckpoint } from './session/checkpoint-capture.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
@@ -187,22 +188,50 @@ export interface MastraFactoryConfig {
 
 export interface MastraFactorySandboxConfig {
   /**
+   * Construct a session's sandbox from intent. The sandbox identity is the
+   * session id; the provider must honor id-keyed getOrCreate on `start()`
+   * (reconnect/resume an existing VM for the id, create otherwise).
+   * Callbacks SHOULD forward `ctx.onStart` to the provider's `onStart`
+   * option so session setup runs inside the start lifecycle.
+   *
+   * @example
+   * ```typescript
+   * sandbox: {
+   *   create: ({ sessionId, onStart }) => new E2BSandbox({ id: sessionId, onStart }),
+   * }
+   * ```
+   */
+  create?: (ctx: FactorySandboxContext) => WorkspaceSandbox;
+  /** Host root for local-provider session checkouts (drives workdir + containment). */
+  localRoot?: string;
+  /** Advisory idle window passed to the callback as `ctx.idleTimeoutMinutes`. Default: 30. */
+  idleTimeoutMinutes?: number;
+  /** Optional provider instructions surfaced in tool descriptions pre-materialization. */
+  instructions?: string;
+  /**
    * Template machine — `RailwaySandbox` (`@mastra/railway`), core
    * `LocalSandbox` (`@mastra/core/workspace`), or any `WorkspaceSandbox` that
    * implements `clone()`. Each project-repository execution environment gets
    * its own sandbox cloned from this machine; the machine itself is never
    * started. `prepare()` fails fast when the instance lacks `clone()`.
+   *
+   * @deprecated Use `create` — the fleet-machine model is being removed.
    */
-  machine: WorkspaceSandbox;
+  machine?: WorkspaceSandbox;
   /**
    * In-sandbox base directory repos check out under (nested `owner/name` per
    * repo). Default: the machine's own `workingDirectory` when it exposes one
    * (core `LocalSandbox` does), else `/workspace`.
+   *
+   * @deprecated Only read by the fleet-machine model. Session workdirs are
+   * computed deterministically from intent.
    */
   workdir?: string;
   /**
    * Per-replica cap on concurrently provisioned sandboxes. `0`/omitted means
    * unlimited. A lightweight per-process budget, not a cross-replica scheduler.
+   *
+   * @deprecated Only read by the fleet-machine model.
    */
   maxSandboxes?: number;
 }
@@ -425,6 +454,13 @@ export class MastraFactory {
     // cloned from the configured machine. A machine without `clone()` would
     // only fail on first use, so fail fast at boot instead.
     const sandboxConfig = this.#config.sandbox;
+    // Shape-only validation for the callback config: probing `create` with a
+    // synthetic ctx at boot would provision a VM, so only the type is checked.
+    if (sandboxConfig?.create !== undefined && typeof sandboxConfig.create !== 'function') {
+      throw new Error(
+        `MastraFactory: 'sandbox.create' must be a function constructing a WorkspaceSandbox from a FactorySandboxContext.`,
+      );
+    }
     const machine = sandboxConfig?.machine;
     if (machine && typeof machine.clone !== 'function') {
       throw new Error(
