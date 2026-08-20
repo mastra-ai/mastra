@@ -61,14 +61,14 @@ function renderSubmitPlan(props: SubmitPlanToolProps) {
   return { approveToolcall };
 }
 
-function usePlanFileHandler() {
+function usePlanFileHandler(planFile = submittedPlanFile) {
   server.use(
     http.get(`${BASE_URL}/api/agents/:agentId/plans/file`, ({ params, request }) => {
       const path = new URL(request.url).searchParams.get('path');
       if (params.agentId !== 'plan-agent' || path !== submittedPlanPath) {
         return HttpResponse.json({ message: 'Plan not found' }, { status: 404 });
       }
-      return HttpResponse.json(submittedPlanFile);
+      return HttpResponse.json(planFile);
     }),
   );
 }
@@ -143,7 +143,7 @@ describe('SubmitPlanTool', () => {
         ...submittedPlanFile,
         content: '# Short plan\n\nA tall rendered block.',
       };
-      server.use(http.get(`${BASE_URL}/api/agents/:agentId/plans/file`, () => HttpResponse.json(overflowingPlanFile)));
+      usePlanFileHandler(overflowingPlanFile);
 
       renderSubmitPlan(pendingProps);
 
