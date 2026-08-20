@@ -1,19 +1,64 @@
-import { screen } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { WorkspaceFilesProvider } from '../../context/WorkspaceFilesProvider';
+import { useWorkspacePanel } from '../../context/useWorkspacePanel';
 import { WorkspaceFilesSurface } from '../WorkspaceFilesSurface';
 import { WorkspaceFilesToggle } from '../WorkspaceFilesToggle';
 
 const LIST_URL = `${TEST_BASE_URL}/web/workspace/files`;
+const CHANGES_URL = `${TEST_BASE_URL}/web/workspace/changes`;
 const WORKSPACE = 'session-1';
 
 const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+const originalResizeObserver = globalThis.ResizeObserver;
+
+class PanelResizeObserver implements ResizeObserver {
+  static instances: PanelResizeObserver[] = [];
+  readonly observed = new Set<Element>();
+
+  constructor(private readonly callback: ResizeObserverCallback) {
+    PanelResizeObserver.instances.push(this);
+  }
+
+  observe = (element: Element) => {
+    this.observed.add(element);
+  };
+  unobserve = (element: Element) => {
+    this.observed.delete(element);
+  };
+  disconnect = () => {
+    this.observed.clear();
+  };
+  takeRecords = (): ResizeObserverEntry[] => [];
+
+  resize(target: Element, width: number) {
+    const size = { blockSize: 800, inlineSize: width };
+    const entry = {
+      target,
+      contentRect: new DOMRect(0, 0, width, 800),
+      borderBoxSize: [size],
+      contentBoxSize: [size],
+      devicePixelContentBoxSize: [size],
+    } satisfies ResizeObserverEntry;
+    this.callback([entry], this);
+  }
+}
+
+function ExpansionProbe() {
+  const { expanded } = useWorkspacePanel();
+  return <output data-testid="workspace-panel-size">{expanded ? 'expanded' : 'compact'}</output>;
+}
+
+beforeEach(() => {
+  PanelResizeObserver.instances = [];
+  vi.stubGlobal('ResizeObserver', PanelResizeObserver);
+});
 
 /** jsdom reports every box as 0×0, so the dock threshold needs a width to measure against. */
 function stubContainerWidth(width: number) {
@@ -32,6 +77,7 @@ function stubContainerWidth(width: number) {
 
 afterEach(() => {
   HTMLElement.prototype.getBoundingClientRect = originalGetBoundingClientRect;
+  vi.stubGlobal('ResizeObserver', originalResizeObserver);
 });
 
 function renderPanel() {
@@ -49,6 +95,9 @@ function renderPanel() {
         files: [],
       });
     }),
+    http.get(CHANGES_URL, () =>
+      HttpResponse.json({ workspacePath: WORKSPACE, available: true, additions: 0, deletions: 0, changes: [] }),
+    ),
   );
 
   const { client } = renderWithProviders(
@@ -60,6 +109,7 @@ function renderPanel() {
             <WorkspaceFilesProvider>
               <WorkspaceFilesToggle />
               <WorkspaceFilesSurface />
+              <ExpansionProbe />
             </WorkspaceFilesProvider>
           }
         />
@@ -86,9 +136,35 @@ describe('WorkspaceFiles', () => {
       await user.click(toggle);
 
       expect(card).not.toHaveAttribute('inert');
-      expect(await screen.findByRole('tab', { name: 'Files' })).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: /^Files No files/ })).toBeInTheDocument();
       await waitForMutationsIdle(client);
       expect(listRequests).toEqual([{ workspacePath: WORKSPACE, threadId: 'thread-1' }]);
+    });
+  });
+
+  describe('when the chat crosses the dock threshold', () => {
+    it('resets the popover to the compact overview', async () => {
+      stubContainerWidth(1200);
+      const user = userEvent.setup();
+      renderPanel();
+
+      await user.click(screen.getByRole('button', { name: 'Workspace files' }));
+      await user.click(await screen.findByRole('button', { name: /^Changes/ }));
+      expect(screen.getByTestId('workspace-panel-size')).toHaveTextContent('expanded');
+
+      const observer = PanelResizeObserver.instances.find(instance => instance.observed.size > 0);
+      const container = observer ? Array.from(observer.observed).at(0) : undefined;
+      if (!observer || !container) throw new Error('Workspace panel container was not observed');
+
+      act(() => observer.resize(container, 900));
+
+      expect(screen.getByTestId('workspace-panel-size')).toHaveTextContent('compact');
+      expect(screen.getByRole('button', { name: 'Workspace files' })).toHaveAttribute('aria-pressed', 'false');
+
+      await user.click(screen.getByRole('button', { name: 'Workspace files' }));
+
+      expect(await screen.findByRole('button', { name: /^Changes No changes/ })).toBeInTheDocument();
+      expect(screen.getByTestId('workspace-panel-size')).toHaveTextContent('compact');
     });
   });
 
@@ -99,11 +175,11 @@ describe('WorkspaceFiles', () => {
       renderPanel();
 
       expect(screen.queryByTestId('workspace-files-card')).not.toBeInTheDocument();
-      expect(screen.queryByRole('tab', { name: 'Files' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Files/ })).not.toBeInTheDocument();
 
       await user.click(screen.getByRole('button', { name: 'Workspace files' }));
 
-      expect(await screen.findByRole('tab', { name: 'Files' })).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: /^Files No files/ })).toBeInTheDocument();
     });
   });
 });

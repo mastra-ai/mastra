@@ -104,18 +104,19 @@ export function useWorkspaceFiles(
   });
 }
 
-export function useWorkspaceFile(
+export function useWorkspaceFile<TData = WorkspaceFile>(
   workspacePath: string | undefined,
   filePath: string | undefined,
   threadId: string | undefined,
-  { enabled = true }: { enabled?: boolean } = {},
+  { enabled = true, select }: { enabled?: boolean; select?: (file: WorkspaceFile) => TData } = {},
 ) {
   const { client } = useApiConfig();
   const url = workspaceFileUrl(workspacePath, filePath, threadId);
-  return useQuery<WorkspaceFile>({
+  return useQuery<WorkspaceFile, Error, TData>({
     queryKey: queryKeys.workspaceFile(workspacePath, filePath, threadId),
     enabled,
     queryFn: url ? () => client.get<WorkspaceFile>(url) : skipToken,
+    select,
   });
 }
 
