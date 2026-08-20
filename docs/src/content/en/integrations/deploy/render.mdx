@@ -17,9 +17,7 @@ This guide builds an editorial pipeline that reviews a draft from three perspect
 
 ## How Render Workflows works with Mastra
 
-Mastra supplies the agents. Render Workflows is the execution boundary around them.
-
-A typical pipeline has three layers:
+Mastra supplies the agents and application logic, while Render Workflows defines the execution boundaries. A typical pipeline has three layers:
 
 1. A parent Render task coordinates the run.
 2. Child Render tasks invoke Mastra agents for focused work.
