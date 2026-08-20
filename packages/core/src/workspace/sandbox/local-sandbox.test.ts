@@ -228,6 +228,24 @@ describe('LocalSandbox', () => {
 
       await expect(fs.stat(path.join(dir, 'second-run.txt'))).rejects.toThrow();
     });
+
+    it('probes and writes the bootstrap sentinel via the host filesystem, not shell commands', async () => {
+      const dir = path.join(tempDir, 'boot-fs');
+      const first = new LocalSandbox({ workingDirectory: dir, bootstrap: { command: 'touch first-run.txt' } });
+      const execSpy = vi.spyOn(first, 'executeCommand');
+      await first._start();
+
+      // Only the bootstrap command itself goes through exec — no `test -f` probe, no `touch <sentinel>`.
+      const commands = execSpy.mock.calls.map(call => call[0]);
+      expect(commands).toEqual(['touch first-run.txt']);
+      await expect(fs.stat(path.join(dir, '.mastra-bootstrapped'))).resolves.toBeDefined();
+
+      // Reattach: the sentinel probe answers from the filesystem with zero exec calls.
+      const second = new LocalSandbox({ workingDirectory: dir, bootstrap: { command: 'touch second-run.txt' } });
+      const secondSpy = vi.spyOn(second, 'executeCommand');
+      await second._start();
+      expect(secondSpy).not.toHaveBeenCalled();
+    });
   });
 
   // ===========================================================================

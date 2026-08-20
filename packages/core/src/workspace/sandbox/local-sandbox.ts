@@ -300,6 +300,25 @@ export class LocalSandbox extends MastraSandbox {
   }
 
   /**
+   * Local sandboxes probe/write the sentinel through the host filesystem
+   * instead of shell commands: it avoids a process spawn and works on any
+   * host OS (the base shell implementation assumes a POSIX shell, which a
+   * Windows host does not have).
+   */
+  protected override async probeBootstrapSentinel(): Promise<boolean> {
+    try {
+      await fs.stat(this.bootstrapSentinelPath);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  protected override async writeBootstrapSentinel(): Promise<void> {
+    await fs.writeFile(this.bootstrapSentinelPath, '');
+  }
+
+  /**
    * Start the local sandbox.
    * Creates working directory and sets up seatbelt profile if using macOS isolation.
    * Status management is handled by the base class.

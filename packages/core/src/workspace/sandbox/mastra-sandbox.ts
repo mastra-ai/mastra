@@ -414,6 +414,34 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
   }
 
   /**
+   * Probe whether the bootstrap sentinel exists. The base implementation runs
+   * a POSIX `test -f` over the sandbox exec path, which is correct for the
+   * Linux VMs remote providers manage. Providers with a native files API (or
+   * host-filesystem access, like LocalSandbox) can override this to skip the
+   * shell round-trip and stay OS-independent. A failed probe reads as
+   * "absent" — worst case the (idempotent) bootstrap re-runs.
+   */
+  protected async probeBootstrapSentinel(): Promise<boolean> {
+    if (!this.executeCommand) return false;
+    const probe = await this.executeCommand(`test -f "${this.bootstrapSentinelPath}"`);
+    return probe.exitCode === 0;
+  }
+
+  /**
+   * Write the bootstrap sentinel after a successful bootstrap. Base
+   * implementation is a shell `touch`; same override seam as
+   * {@link probeBootstrapSentinel}. Failures are non-fatal to the caller —
+   * throw freely, `_runBootstrapOnce` downgrades it to a warning.
+   */
+  protected async writeBootstrapSentinel(): Promise<void> {
+    if (!this.executeCommand) return;
+    const touch = await this.executeCommand(`touch "${this.bootstrapSentinelPath}"`);
+    if (touch.exitCode !== 0) {
+      throw new Error(`touch exited with ${touch.exitCode}`);
+    }
+  }
+
+  /**
    * Run the configured bootstrap command once per VM lifetime.
    *
    * When `skipSentinel` (the provider reported `created: true`) the probe is
@@ -428,14 +456,9 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
       throw new Error(`Sandbox '${this.id}' has a bootstrap command but no executeCommand implementation`);
     }
 
-    const sentinel = this.bootstrapSentinelPath;
-
-    if (!skipSentinel) {
-      const probe = await this.executeCommand(`test -f "${sentinel}"`);
-      if (probe.exitCode === 0) {
-        this.logger.debug('Bootstrap sentinel present — skipping bootstrap', { sandbox: this.name });
-        return;
-      }
+    if (!skipSentinel && (await this.probeBootstrapSentinel())) {
+      this.logger.debug('Bootstrap sentinel present — skipping bootstrap', { sandbox: this.name });
+      return;
     }
 
     this.logger.debug('Running sandbox bootstrap command', { sandbox: this.name });
@@ -448,11 +471,12 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
       throw new Error(`Sandbox bootstrap command failed (exit ${result.exitCode}): ${stderr}`);
     }
 
-    const touch = await this.executeCommand(`touch "${sentinel}"`);
-    if (touch.exitCode !== 0) {
+    try {
+      await this.writeBootstrapSentinel();
+    } catch (error) {
       // Non-fatal: bootstrap succeeded; a missing sentinel only means the
       // (idempotent) bootstrap may re-run on a future reconnect.
-      this.logger.warn('Failed to write bootstrap sentinel', { sandbox: this.name, exitCode: touch.exitCode });
+      this.logger.warn('Failed to write bootstrap sentinel', { sandbox: this.name, error });
     }
   }
 
