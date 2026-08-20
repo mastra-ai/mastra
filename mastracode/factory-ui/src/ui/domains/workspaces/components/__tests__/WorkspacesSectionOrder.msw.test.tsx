@@ -37,7 +37,9 @@ function reviewSession(pullRequestNumber: number, createdAt: string): FactoryUse
   };
 }
 
-function reviewCard(session: FactoryUserSession, pullRequestNumber: number, merged: boolean, updatedAt: string) {
+/** A review card for a session; `mergedAt` both merges it and stamps the write that merged it. */
+function reviewCard(session: FactoryUserSession, pullRequestNumber: number, mergedAt?: string) {
+  const merged = mergedAt !== undefined;
   return {
     id: `item-${pullRequestNumber}`,
     orgId: 'org-1',
@@ -63,26 +65,25 @@ function reviewCard(session: FactoryUserSession, pullRequestNumber: number, merg
     metadata: { githubPullRequestNumber: pullRequestNumber, state: merged ? 'closed' : 'open', merged },
     revision: 1,
     createdAt: session.createdAt,
-    updatedAt,
+    updatedAt: mergedAt ?? session.createdAt,
   };
 }
 
 const oldestOpen = reviewSession(101, '2026-07-23T09:00:00.000Z');
 const newestOpen = reviewSession(102, '2026-07-23T11:00:00.000Z');
-const merged = reviewSession(103, '2026-07-23T10:00:00.000Z');
+const mergedSession = reviewSession(103, '2026-07-23T10:00:00.000Z');
 
 function renderSection() {
   server.use(
     http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
-      HttpResponse.json({ sessions: [oldestOpen, newestOpen, merged] }),
+      HttpResponse.json({ sessions: [oldestOpen, newestOpen, mergedSession] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryProjectId}/work-items`, () =>
       HttpResponse.json({
         workItems: [
-          reviewCard(oldestOpen, 101, false, '2026-07-23T09:00:00.000Z'),
-          reviewCard(newestOpen, 102, false, '2026-07-23T11:00:00.000Z'),
-          // The merge is the freshest activity on the board.
-          reviewCard(merged, 103, true, '2026-07-23T23:00:00.000Z'),
+          reviewCard(oldestOpen, 101),
+          reviewCard(newestOpen, 102),
+          reviewCard(mergedSession, 103, '2026-07-23T23:00:00.000Z'),
         ],
       }),
     ),
