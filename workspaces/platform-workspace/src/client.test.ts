@@ -30,6 +30,36 @@ describe('PlatformClient', () => {
     expect(init.method).toBe('POST');
   });
 
+  it('uses v2 routes when WORKSPACES_V2 is true', async () => {
+    vi.stubEnv('WORKSPACES_V2', 'true');
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi.fn().mockResolvedValue(response('{}', { status: 200 }));
+    const client = new PlatformClient({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      fetch: fetchMock,
+    });
+
+    await client.request('/fs/bucket/path');
+
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v2/projects/proj_123/fs/bucket/path');
+  });
+
+  it('does not enable v2 routes for other WORKSPACES_V2 values', async () => {
+    vi.stubEnv('WORKSPACES_V2', '1');
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi.fn().mockResolvedValue(response('{}', { status: 200 }));
+    const client = new PlatformClient({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      fetch: fetchMock,
+    });
+
+    await client.request('/sandbox');
+
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox');
+  });
+
   it('sends an opaque acting-user subject on every request', async () => {
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const fetchMock = vi.fn().mockResolvedValue(response('{}', { status: 200 }));

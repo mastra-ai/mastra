@@ -22,6 +22,8 @@ export interface PlatformRequestOptions extends RequestInit {
   query?: Record<string, string | number | boolean | undefined>;
 }
 
+export type WorkspaceApiVersion = 'v1' | 'v2';
+
 const DEFAULT_PROXY_URL = 'https://workspaces.mastra.ai';
 
 /**
@@ -42,6 +44,7 @@ export function resolvePlatformOptions(options: PlatformClientOptions) {
     projectId: requireOption(options.projectId ?? process.env.MASTRA_PROJECT_ID, 'projectId'),
     actingUserId: options.actingUserId?.trim() || undefined,
     proxyUrl: (process.env.MASTRA_WORKSPACE_PROXY_URL ?? DEFAULT_PROXY_URL).replace(/\/$/, ''),
+    apiVersion: (process.env.WORKSPACES_V2 === 'true' ? 'v2' : 'v1') as WorkspaceApiVersion,
     sessionId: options.sessionId,
     threadId: options.threadId,
     fetch: options.fetch ?? fetch,
@@ -101,6 +104,7 @@ export class PlatformClient {
   readonly projectId: string;
   readonly actingUserId: string | undefined;
   readonly proxyUrl: string;
+  readonly apiVersion: WorkspaceApiVersion;
   /** Advisory session correlation id — see {@link PlatformClientOptions.sessionId}. */
   readonly sessionId: string | undefined;
   /** Advisory thread correlation id — see {@link PlatformClientOptions.threadId}. */
@@ -113,13 +117,14 @@ export class PlatformClient {
     this.projectId = resolved.projectId;
     this.actingUserId = resolved.actingUserId;
     this.proxyUrl = resolved.proxyUrl;
+    this.apiVersion = resolved.apiVersion;
     this.sessionId = resolved.sessionId;
     this.threadId = resolved.threadId;
     this.fetch = resolved.fetch;
   }
 
   async request(path: string, options: PlatformRequestOptions = {}): Promise<Response> {
-    const url = new URL(`${this.proxyUrl}/v1/projects/${encodeURIComponent(this.projectId)}${path}`);
+    const url = new URL(`${this.proxyUrl}/${this.apiVersion}/projects/${encodeURIComponent(this.projectId)}${path}`);
     for (const [key, value] of Object.entries(options.query ?? {})) {
       if (value !== undefined) url.searchParams.set(key, String(value));
     }

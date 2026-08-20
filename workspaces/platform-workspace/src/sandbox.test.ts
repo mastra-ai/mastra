@@ -24,6 +24,18 @@ function leaseResponse(overrides: { jwt?: string; expiresAt?: string | null } = 
   });
 }
 
+function e2bLeaseResponse() {
+  return json({
+    provider: 'e2b',
+    sandboxId: 'sbx_1',
+    providerResourceId: 'e2b_sbx_1',
+    jwt: 'envd-access-token',
+    wsEndpoint: 'https://49983-e2b-sbx-1.e2b.app',
+    subprotocol: 'e2b-access-token',
+    expiresAt: '2030-01-01T00:00:00.000Z',
+  });
+}
+
 /**
  * Build a WebSocket factory that immediately drives an exec to completion
  * with the given exit code and stdout, so tests can exercise `executeCommand`
@@ -121,6 +133,95 @@ describe('PlatformSandbox', () => {
     // init_exec frame carries command + cwd + env.
     const init = JSON.parse(sockets[0]!.sent[0]!) as { data: Record<string, unknown> };
     expect(init.data).toEqual({ command: 'echo ok', cwd: '/workspace', env: { A: '1' } });
+  });
+
+  it('uses E2B direct exec for v2 leases instead of the Railway WebSocket protocol', async () => {
+    vi.stubEnv('WORKSPACES_V2', 'true');
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+      .mockResolvedValueOnce(e2bLeaseResponse());
+    const e2bExecRunner = vi.fn().mockResolvedValue({
+      exitCode: 0,
+      stdout: 'ok',
+      stderr: '',
+      truncated: false,
+      timedOut: false,
+      opened: true,
+    });
+    const webSocketFactory = vi.fn(() => {
+      throw new Error('Railway WebSocket transport should not be used for E2B');
+    });
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+      e2bExecRunner,
+      webSocketFactory,
+    });
+
+    await sandbox._start();
+    const result = await sandbox.executeCommand('echo', ['ok'], { cwd: '/workspace', env: { A: '1' } });
+
+    expect(result).toMatchObject({ success: true, exitCode: 0, stdout: 'ok' });
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v2/projects/proj_123/sandbox');
+    expect(String(fetchMock.mock.calls[1]![0])).toBe(
+      'https://proxy.test/v2/projects/proj_123/sandbox/sbx_1/exec-lease',
+    );
+    expect(e2bExecRunner).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'e2b',
+        sandboxId: 'sbx_1',
+        jwt: 'envd-access-token',
+        wsEndpoint: 'https://49983-e2b-sbx-1.e2b.app',
+      }),
+      expect.objectContaining({ command: 'echo ok', cwd: '/workspace', env: { A: '1' } }),
+    );
+    expect(webSocketFactory).not.toHaveBeenCalled();
+  });
+
+  it('restores v2 clones from the concrete E2B snapshot id', async () => {
+    vi.stubEnv('WORKSPACES_V2', 'true');
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_clone' }));
+    const parent = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+    });
+
+    const clone = parent.clone({ checkpointName: 'snap_123' });
+    await clone._start();
+
+    const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
+    expect(body).toMatchObject({ id: 'snap_123', seedCheckpointName: 'snap_123' });
+  });
+
+  it('captures v2 checkpoints even without a caller-supplied recovery id', async () => {
+    vi.stubEnv('WORKSPACES_V2', 'true');
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1' }))
+      .mockResolvedValueOnce(json({ checkpointName: 'snap_123', status: 'captured' }));
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+    });
+
+    await sandbox._start();
+    await expect(sandbox.captureCheckpoint()).resolves.toEqual({ status: 'captured', checkpointName: 'snap_123' });
+
+    expect(String(fetchMock.mock.calls[1]![0])).toBe(
+      'https://proxy.test/v2/projects/proj_123/sandbox/sbx_1/checkpoint',
+    );
+    const body = JSON.parse(fetchMock.mock.calls[1]![1].body as string);
+    expect(body.id).toMatch(/^platform-sandbox-/);
   });
 
   it('does not send a template field on the create wire body', async () => {
