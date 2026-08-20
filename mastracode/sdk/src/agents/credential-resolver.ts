@@ -86,6 +86,23 @@ interface RequestContextSession {
 }
 
 /**
+ * Whether the request context belongs to a run on a factory-owned session.
+ *
+ * The agent controller stamps the session's state onto the request context
+ * under `controller`, and only trusted factory server code ever writes
+ * `factoryProjectId` into session state (board-run creation) — interactive
+ * chat sessions never carry it. Runs on such sessions resolve credentials
+ * org > user regardless of who sent the message: a board run continued
+ * interactively, or a model switch inside it, is still org work.
+ */
+function isFactorySessionContext(requestContext?: RequestContext): boolean {
+  const controller = requestContext?.get('controller') as { state?: { factoryProjectId?: unknown } } | undefined;
+  if (!controller || typeof controller !== 'object') return false;
+  const factoryProjectId = controller.state?.factoryProjectId;
+  return typeof factoryProjectId === 'string' && factoryProjectId.length > 0;
+}
+
+/**
  * Derive the calling tenant from a request context, if an authenticated web
  * user was stashed on it. Mirrors the web layer's stable-id resolution
  * (`workosId` falling back to the provider `id`).
@@ -115,7 +132,8 @@ export function resolveTenantFromRequestContext(requestContext?: RequestContext)
   // Only an exact `true` flips precedence — anything else keeps user > org.
   // Server code stamps the flag on the stashed value itself, so read it from
   // the top level as well as the unwrapped user (better-auth wrapper shape).
-  const orgFirst = raw.orgFirstCredentials === true || user.orgFirstCredentials === true;
+  const orgFirst =
+    raw.orgFirstCredentials === true || user.orgFirstCredentials === true || isFactorySessionContext(requestContext);
   return { orgId, userId, ...(orgFirst ? { orgFirst } : {}) };
 }
 
