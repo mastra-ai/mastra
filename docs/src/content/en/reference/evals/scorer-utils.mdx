@@ -41,7 +41,7 @@ import {
 
 ### `getAssistantMessageFromRunOutput`
 
-Extracts the text content from the first assistant message in the run output.
+Extracts the text content of a single assistant message from the run output: the last one that carries text, so a trailing tool-call-only message doesn't win. In a [multi-turn eval](/docs/evals/multi-turn), that means the last turn's response rather than the whole conversation. Use `extractAgentResponseMessages` to read every turn.
 
 ```typescript
 const scorer = createScorer({
@@ -69,7 +69,7 @@ const scorer = createScorer({
 ]}
 />
 
-**Returns:** `string | undefined` - The assistant message text, or undefined if no assistant message is found.
+**Returns:** `string | undefined` - The assistant message text, or undefined if no assistant message with text is found.
 
 ### `getUserMessageFromRunInput`
 

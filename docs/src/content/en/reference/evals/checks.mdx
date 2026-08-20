@@ -11,6 +11,12 @@ Quick Checks are zero-LLM, composable micro-scorers for common assertions. They 
 
 Internally they're standard `createScorer()` instances, so they have the same observability, storage, and pipeline integration as any other scorer.
 
+:::note[Register checks to persist their scores]
+
+A check's score is only written to the scores store when the check is registered on the Mastra instance, alongside `storage`. Each check has a fixed id (`checks.includes()` is `check-includes`, `checks.calledTool()` is `check-called-tool`, and so on), so one registered instance covers every use of that check regardless of its arguments. See [Score persistence](/reference/evals/run-evals#score-persistence).
+
+:::
+
 ## Usage example
 
 ```typescript title="src/evals/weather-checks.ts"
@@ -313,6 +319,10 @@ const result = await runEvals({
   ],
 })
 ```
+
+## Multi-turn behavior
+
+Checks read the accumulated `run.output`, so in a [multi-turn eval](/docs/evals/multi-turn) they see every turn. `checks.calledTool('get_weather', { times: 2 })` counts calls across the whole conversation, and `checks.includes()` searches all assistant text. Use per-turn `turns[].scorers` when a specific turn has to satisfy the check.
 
 ## Related
 
