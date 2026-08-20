@@ -841,13 +841,10 @@ export class Dataset {
 
     const datasetsStore = await this.#getDatasetsStore();
     const dataset = await datasetsStore.getDatasetById({ id: this.id, filters: this.#scope });
-    // SCD-2 range lookup at the experiment's pinned dataset version.
-    const item =
-      experiment.datasetVersion !== null
-        ? (await datasetsStore.getItemsByVersion({ datasetId: this.id, version: experiment.datasetVersion })).find(
-            candidate => candidate.id === args.itemId,
-          )
-        : await datasetsStore.getItemById({ id: args.itemId });
+    const item = await datasetsStore.getItemById({
+      id: args.itemId,
+      datasetVersion: experiment.datasetVersion ?? undefined,
+    });
     if (!item || item.datasetId !== this.id) {
       throw new MastraError({
         id: 'DATASET_ITEM_NOT_FOUND',
@@ -934,15 +931,10 @@ export class Dataset {
     }
 
     const datasetsStore = await this.#getDatasetsStore();
-    // SCD-2 range lookup: the item must be visible at the experiment's pinned
-    // dataset version (an exact-version match would miss items created at an
-    // earlier version that are still current).
-    const item =
-      experiment.datasetVersion !== null
-        ? (await datasetsStore.getItemsByVersion({ datasetId: this.id, version: experiment.datasetVersion })).find(
-            candidate => candidate.id === args.itemId,
-          )
-        : await datasetsStore.getItemById({ id: args.itemId });
+    const item = await datasetsStore.getItemById({
+      id: args.itemId,
+      datasetVersion: experiment.datasetVersion ?? undefined,
+    });
     if (!item || item.datasetId !== this.id) {
       throw new MastraError({
         id: 'DATASET_ITEM_NOT_FOUND',
