@@ -135,7 +135,7 @@ export function SettingsPanel() {
             </SettingsSubsection>
             <SettingsSubsection
               title="Observational memory"
-              description="Choose the models and token thresholds used to summarize and retain conversation context."
+              description="Your personal models and token thresholds used to summarize and retain conversation context in interactive chats. Factory runs always use the built-in defaults."
             >
               <SettingsCard className="p-4">
                 <OMSection resourceId={sessionResourceId} scope={sessionScope} models={models} />

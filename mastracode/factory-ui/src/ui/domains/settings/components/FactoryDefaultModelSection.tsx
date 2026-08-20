@@ -29,7 +29,10 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
       label="Factory default model"
       hint={
         <>
-          <span>Factory runs (triage, board work items) start on this model</span>
+          <span>
+            Factory runs (triage, board work items) start on this model and use the built-in observational-memory
+            defaults — personal memory settings below don&apos;t apply to them.
+          </span>
           {error && (
             <Txt as="span" variant="ui-xs" className="text-notice-destructive-fg">
               {error instanceof Error ? error.message : String(error)}
