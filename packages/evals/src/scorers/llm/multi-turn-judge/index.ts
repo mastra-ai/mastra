@@ -1,9 +1,8 @@
 import { compileSchema } from '@internal/types-builder/compile-zod';
 import { createScorer } from '@mastra/core/evals';
-import type { ScorerRunOutputForAgent } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { z } from 'zod/v4';
-import { extractAgentResponseMessages } from '../../utils';
+import { extractAgentResponseMessages, isScorerRunOutputForAgent } from '../../utils';
 import type { ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge } from '../../utils';
 import { MULTI_TURN_JUDGE_INSTRUCTIONS, createAnalyzePrompt, formatMultiTurnJudgeReason } from './prompts';
 import type { AssistantTurn, MultiTurnJudgeAnalysisResult } from './prompts';
@@ -24,11 +23,12 @@ const analyzeOutputSchema = compileSchema(
  * Collect every assistant turn from the run output, in order. Multi-turn `runEvals` accumulates the
  * output messages of every turn into `run.output`, so this is the whole conversation the agent
  * produced. Empty assistant messages (for example, a turn that only carried tool calls) are dropped
- * so they do not show up as blank turns in the prompt.
+ * so they do not show up as blank turns in the prompt. Output that is neither a message array nor a
+ * string yields no turns, so the judge grades an empty transcript instead of throwing.
  */
 function getAssistantTurns(output: ScorerRunOutputForLLMJudge): AssistantTurn[] {
-  if (Array.isArray(output)) {
-    return extractAgentResponseMessages(output as ScorerRunOutputForAgent)
+  if (isScorerRunOutputForAgent(output)) {
+    return extractAgentResponseMessages(output)
       .map(text => text.trim())
       .filter(text => text.length > 0)
       .map(text => ({ text }));
