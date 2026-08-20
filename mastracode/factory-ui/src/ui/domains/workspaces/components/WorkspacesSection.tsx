@@ -29,14 +29,18 @@ import type { SessionPreviewDetails } from './SessionPreviewCard';
 
 const COLLAPSED_ROW_COUNT = 5;
 
-const isBusy = (row: FactoryWorkspaceRow) => row.initializing || row.running || row.attention;
-
 /** Nothing left to watch: the card is done or canceled, or its pull request is merged or closed. */
 function isSettled(item: WorkItem | undefined, pullRequest: WorkItem | undefined): boolean {
   if (item?.stages.some(isTerminalStage)) return true;
   if (!pullRequest) return false;
   const status = pullRequestStatusForItem(pullRequest);
   return status === 'merged' || status === 'closed';
+}
+
+/** Unread or moving, then open, then finished — a card the agent is still in is never finished. */
+function watchRank(row: FactoryWorkspaceRow): number {
+  if (row.initializing || row.running || row.attention) return 0;
+  return row.settled ? 2 : 1;
 }
 
 /**
@@ -49,8 +53,7 @@ function isSettled(item: WorkItem | undefined, pullRequest: WorkItem | undefined
 const bySessionPriority = (a: FactoryWorkspaceRow, b: FactoryWorkspaceRow) =>
   Number(b.pinned) - Number(a.pinned) ||
   Number(b.active) - Number(a.active) ||
-  Number(a.settled) - Number(b.settled) ||
-  Number(isBusy(b)) - Number(isBusy(a)) ||
+  watchRank(a) - watchRank(b) ||
   b.createdAt.localeCompare(a.createdAt) ||
   b.workspace.sessionId.localeCompare(a.workspace.sessionId);
 

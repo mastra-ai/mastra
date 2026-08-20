@@ -70,13 +70,26 @@ function reviewCard(session: FactoryUserSession, pullRequestNumber: number, merg
   };
 }
 
-function stubSidebar(sessions: FactoryUserSession[], workItems: ReturnType<typeof reviewCard>[]) {
+function stubSidebar(
+  sessions: FactoryUserSession[],
+  workItems: ReturnType<typeof reviewCard>[],
+  runningSessionIds: string[] = [],
+) {
   server.use(
     http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
       HttpResponse.json({ sessions }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryProjectId}/work-items`, () =>
       HttpResponse.json({ workItems }),
+    ),
+    http.get(`${TEST_BASE_URL}/api/agent-controller/code/active-runs`, () =>
+      HttpResponse.json({
+        runs: runningSessionIds.map(sessionId => ({
+          runId: `run-${sessionId}`,
+          resourceId: sessionId,
+          threadId: `${sessionId}-thread`,
+        })),
+      }),
     ),
   );
 }
@@ -132,6 +145,21 @@ describe('Workspaces sidebar order', () => {
     const { client } = renderSection();
 
     expect(await reviewRowLabels(client)).toEqual(['factory/pr-102', 'factory/pr-101', 'factory/pr-103']);
+  });
+
+  it('keeps a merged session up top while its agent is still running', async () => {
+    const openSession = reviewSession(301, '2026-07-23T11:00:00.000Z');
+    const mergedButRunning = reviewSession(302, '2026-07-23T09:00:00.000Z');
+
+    stubSidebar(
+      [openSession, mergedButRunning],
+      [reviewCard(openSession, 301), reviewCard(mergedButRunning, 302, '2026-07-23T23:00:00.000Z')],
+      [mergedButRunning.sessionId],
+    );
+
+    const { client } = renderSection();
+
+    expect(await reviewRowLabels(client)).toEqual(['factory/pr-302', 'factory/pr-301']);
   });
 
   it('holds one order for sessions created at the same instant, whichever way the endpoint returns them', async () => {
