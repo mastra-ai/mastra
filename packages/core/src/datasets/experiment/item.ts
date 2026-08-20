@@ -4,7 +4,6 @@ import type { Mastra } from '../../mastra';
 import type { Experiment, ExperimentResult } from '../../storage/types';
 import { executeTarget } from './executor';
 import type { ExecutionResult } from './executor';
-import { resolveTarget } from './index';
 import {
   createItemScorerResolver,
   EXPERIMENT_ITEM_SCORER_NOT_FOUND,
@@ -12,6 +11,7 @@ import {
   runScorersForItem,
 } from './scorer';
 import type { ScorerResult } from './types';
+import { resolveTarget } from './index';
 
 /** Item shape consumed by {@link executeExperimentItem}. */
 export interface ExperimentItemInput {

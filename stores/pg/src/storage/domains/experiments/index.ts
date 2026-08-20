@@ -227,8 +227,15 @@ export class ExperimentsPG extends ExperimentsStorage {
   async createDefaultIndexes(): Promise<void> {
     if (this.#skipDefaultIndexes) return;
     // Legacy unique index without `attempt` — superseded by idx_experiment_results_exp_item_attempt.
+    // Probe first so converged inits stay DDL-free (the schema-snapshot contract).
     try {
-      await this.#db.client.none(`DROP INDEX IF EXISTS "idx_experiment_results_exp_item"`);
+      const legacyIndex = await this.#db.client.oneOrNone(
+        `SELECT 1 FROM pg_indexes WHERE indexname = 'idx_experiment_results_exp_item' AND schemaname = $1`,
+        [this.#schema],
+      );
+      if (legacyIndex) {
+        await this.#db.client.none(`DROP INDEX IF EXISTS "${this.#schema}"."idx_experiment_results_exp_item"`);
+      }
     } catch (error) {
       this.logger?.warn?.('Failed to drop legacy index idx_experiment_results_exp_item:', error);
     }
