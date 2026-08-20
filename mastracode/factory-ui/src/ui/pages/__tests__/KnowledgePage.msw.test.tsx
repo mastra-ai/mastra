@@ -97,7 +97,10 @@ const graphFixture: KnowledgeGraphPayload = {
   version: '01TESTVERSION',
 };
 
-function stubKnowledgeRoute(graph: KnowledgeGraphPayload | { status: number; message: string } = graphFixture) {
+function stubKnowledgeRoute(
+  graph: KnowledgeGraphPayload | { status: number; message: string } = graphFixture,
+  nodePayload = nodeFixture,
+) {
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
@@ -153,7 +156,7 @@ function stubKnowledgeRoute(graph: KnowledgeGraphPayload | { status: number; mes
       return HttpResponse.json(graph);
     }),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/nodes/:nodeId`, () =>
-      HttpResponse.json(nodeFixture),
+      HttpResponse.json(nodePayload),
     ),
   );
 }
@@ -275,10 +278,27 @@ describe('KnowledgePage', () => {
 
     const nodes = await screen.findAllByTestId('knowledge-node');
     fireEvent.mouseEnter(nodes[0]!, { clientX: 120, clientY: 80 });
+    expect(screen.getByTestId('knowledge-hover-card')).toBeInTheDocument();
     expect(screen.queryByTestId('knowledge-hover-description')).not.toBeInTheDocument();
     fireEvent.mouseLeave(nodes[0]!);
     fireEvent.mouseEnter(nodes[1]!, { clientX: 140, clientY: 100 });
+    expect(screen.getByTestId('knowledge-hover-card')).toBeInTheDocument();
     expect(screen.queryByTestId('knowledge-hover-description')).not.toBeInTheDocument();
+  });
+
+  it('omits flyout content chrome for whitespace-only content', async () => {
+    stubKnowledgeRoute(undefined, {
+      ...nodeFixture,
+      node: { ...nodeFixture.node, content: '   \n  ' },
+    });
+    renderRoute();
+
+    const nodes = await screen.findAllByTestId('knowledge-node');
+    fireEvent.click(nodes[0]);
+
+    const flyout = await screen.findByTestId('knowledge-flyout');
+    expect(await within(flyout).findByText('Knowledge node')).toBeInTheDocument();
+    expect(within(flyout).queryByText('Content')).not.toBeInTheDocument();
   });
 
   it('opens the flyout on node click with knowledge records and reasoning drill-in', async () => {

@@ -156,7 +156,6 @@ describe('KnowledgeRoutes', () => {
       `PAYLOAD_BYTES withoutContent=${Buffer.byteLength(withoutContent)} withContent=${Buffer.byteLength(withContent)} delta=${delta}`,
     );
     expect(delta).toBeGreaterThan(0);
-    expect(delta).toBe(Buffer.byteLength(withContent) - Buffer.byteLength(withoutContent));
   });
 
   // 2
