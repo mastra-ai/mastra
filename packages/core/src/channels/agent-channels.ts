@@ -1003,6 +1003,12 @@ export class AgentChannels {
               ...(actorMention !== undefined ? { mention: actorMention } : {}),
               ...(actor.isBot !== undefined ? { isBot: actor.isBot } : {}),
             },
+            // Message text addresses the bot by id (`<@U123>`); a reader needs this to name it.
+            ...(botUserId !== undefined
+              ? {
+                  bot: { userId: botUserId, ...(adapter.userName !== undefined ? { userName: adapter.userName } : {}) },
+                }
+              : {}),
           },
         },
       },

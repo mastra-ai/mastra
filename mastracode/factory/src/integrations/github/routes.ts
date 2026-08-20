@@ -33,6 +33,8 @@ import type {
   SourceControlInstallation,
   SourceControlRepository,
 } from '../../storage/domains/source-control/base.js';
+import { resolveUserProfiles } from '../../users.js';
+import type { UserDirectory, UserProfile } from '../../users.js';
 import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config.js';
 import type { GithubIntegration } from './integration.js';
 import { clearGithubPat, getGithubPat, getGithubPatStatus, setGithubPat } from './pat.js';
@@ -130,6 +132,8 @@ export interface MountGithubRoutesOptions {
   emitAudit?: AuditEmitter['emit'];
   /** Factory projects domain — resolves a project's default triage model. */
   projects?: FactoryProjectsStorage;
+  /** Names the org members who own the sessions a project lists. */
+  users?: UserDirectory;
   sessionRetirement?: import('../../sandbox/session-retirement.js').SessionRetirementCoordinator;
   /** Authoritative Factory rule ingress for normalized, signature-verified GitHub deliveries. */
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
@@ -359,7 +363,7 @@ async function ingestPolledEvents(
  */
 export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[] {
   const routes: ApiRoute[] = [];
-  const { auth, fleet, storage, github, stateSigner, controller, emitAudit, sessionRetirement } = options;
+  const { auth, fleet, storage, github, stateSigner, controller, emitAudit, sessionRetirement, users } = options;
   const diagnostics = () =>
     getGithubFeatureDiagnostics({ github, auth, appDbConfigured: storage !== undefined, stateSigner, fleet });
 
@@ -961,7 +965,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   );
 
   // ── Sessions / commit / push / PR ────────────────────────────────────────
-  routes.push(...buildProjectGitRoutes({ github, auth, fleet, controller, emitAudit, sessionRetirement }));
+  routes.push(...buildProjectGitRoutes({ github, auth, fleet, controller, emitAudit, sessionRetirement, users }));
 
   return routes;
 }
@@ -1191,6 +1195,18 @@ async function loadOwnedProject(options: {
   return { orgId, userId, project, sandboxRow };
 }
 
+/** Sessions carrying the person who started them, so a list can name its owners. */
+async function withOwners<TSession extends { userId: string }>(
+  sessions: TSession[],
+  users: UserDirectory | undefined,
+): Promise<Array<TSession & { owner?: UserProfile }>> {
+  const profiles = await resolveUserProfiles(users, [...new Set(sessions.map(session => session.userId))]);
+  return sessions.map(session => {
+    const owner = profiles.get(session.userId);
+    return owner ? { ...session, owner } : session;
+  });
+}
+
 function buildProjectGitRoutes({
   github,
   auth,
@@ -1198,6 +1214,7 @@ function buildProjectGitRoutes({
   controller,
   emitAudit,
   sessionRetirement,
+  users,
 }: {
   github: GithubIntegration;
   auth: RouteAuth;
@@ -1205,6 +1222,7 @@ function buildProjectGitRoutes({
   controller?: MountedMastraCode['controller'];
   emitAudit?: AuditEmitter['emit'];
   sessionRetirement?: MountGithubRoutesOptions['sessionRetirement'];
+  users?: UserDirectory;
 }): ApiRoute[] {
   return [
     // ── Create / list Factory sessions ──────────────────────────────────────
@@ -1224,7 +1242,7 @@ function buildProjectGitRoutes({
           projectRepositoryId: project.id,
           viewerUserId: userId,
         });
-        return c.json({ sessions });
+        return c.json({ sessions: await withOwners(sessions, users) });
       },
     }),
     registerApiRoute('/web/github/projects/:id/sessions', {

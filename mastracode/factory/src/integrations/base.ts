@@ -41,6 +41,7 @@ import type { MemorySettingsStorage } from '../storage/domains/memory-settings/b
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { UserDirectory } from '../users.js';
 
 /** Factory-owned hooks integrations may invoke. */
 export interface IntegrationHooks {
@@ -69,6 +70,8 @@ export interface IntegrationPostToolContext {
 export interface IntegrationContext {
   /** Host auth seam — integration routes resolve callers through this. */
   auth: RouteAuth;
+  /** Names user ids, when the auth provider can resolve arbitrary users. */
+  users?: UserDirectory;
   /**
    * Sandbox fleet for per-project sandboxes. Always constructed at boot; a
    * fleet built without a machine config reports `enabled: false` and

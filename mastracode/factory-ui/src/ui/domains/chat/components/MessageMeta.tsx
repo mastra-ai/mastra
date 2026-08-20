@@ -3,7 +3,8 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 
 export const MESSAGE_HOVER = 'group/message';
 
-const clock = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
+/** One clock across the transcript: message times and quoted channel history read the same. */
+export const messageClock = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
 const calendar = new Intl.DateTimeFormat(undefined, { dateStyle: 'full', timeStyle: 'short' });
 
 export function MessageMeta({ text, createdAt, align }: { text: string; createdAt: Date; align: 'start' | 'end' }) {
@@ -19,7 +20,7 @@ export function MessageMeta({ text, createdAt, align }: { text: string; createdA
     >
       <CopyButton content={text} size="icon-xs" variant="ghost" tooltip="Copy message" showToast={false} />
       <time className="text-ui-xs text-icon3" dateTime={time.toISOString()} title={calendar.format(time)}>
-        {clock.format(time)}
+        {messageClock.format(time)}
       </time>
     </div>
   );

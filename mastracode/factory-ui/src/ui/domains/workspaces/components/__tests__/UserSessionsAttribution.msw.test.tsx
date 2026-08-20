@@ -78,7 +78,13 @@ describe('user session attribution', () => {
     // viewer's own; the sidebar must re-order and attribute it.
     stubSessions(
       [
-        userSession({ id: 'row-other', sessionId: 'sess-other', userId: 'user-owner-1', branch: 'user/alpha' }),
+        userSession({
+          id: 'row-other',
+          sessionId: 'sess-other',
+          userId: 'user-owner-1',
+          owner: { id: 'user-owner-1', name: 'Ada Lovelace' },
+          branch: 'user/alpha',
+        }),
         userSession({ id: 'row-mine', sessionId: 'sess-mine', userId: 'user-viewer-9', branch: 'user/mine' }),
       ],
       'user-viewer-9',
@@ -90,19 +96,32 @@ describe('user session attribution', () => {
     // The non-owned session carries its owner in the accessible name; the
     // viewer's own does not.
     const mine = await screen.findByRole('button', { name: 'mine' });
-    const other = screen.getByRole('button', { name: 'alpha, started by user-owner-1' });
+    const other = screen.getByRole('button', { name: 'alpha, started by Ada Lovelace' });
     expect(mine).toBeInTheDocument();
     expect(other).toBeInTheDocument();
 
     const labels = screen
       .getAllByRole('button')
       .map(button => button.getAttribute('aria-label'))
-      .filter(label => label === 'mine' || label === 'alpha, started by user-owner-1');
-    expect(labels).toEqual(['mine', 'alpha, started by user-owner-1']);
+      .filter(label => label === 'mine' || label === 'alpha, started by Ada Lovelace');
+    expect(labels).toEqual(['mine', 'alpha, started by Ada Lovelace']);
 
-    // The owner is still shown as visible text on the non-owned row only.
-    expect(screen.getByText('user-owner-1')).toBeInTheDocument();
-    expect(screen.queryByText('user-viewer-9')).not.toBeInTheDocument();
+    // The owner reads as a person, never as the raw user id.
+    expect(screen.getByText('Ada Lovelace')).toBeInTheDocument();
+    expect(screen.queryByText(/user-owner-1|user-viewer-9/)).not.toBeInTheDocument();
+  });
+
+  it('leaves a session unattributed when the auth provider cannot name its owner', async () => {
+    stubSessions(
+      [userSession({ id: 'row-other', sessionId: 'sess-other', userId: 'user-owner-1', branch: 'user/alpha' })],
+      'user-viewer-9',
+    );
+
+    const { client } = renderSection();
+    await waitForMutationsIdle(client);
+
+    expect(await screen.findByRole('button', { name: 'alpha' })).toBeInTheDocument();
+    expect(screen.queryByText('user-owner-1')).not.toBeInTheDocument();
   });
 
   it('offers delete only on the viewer-owned session', async () => {
