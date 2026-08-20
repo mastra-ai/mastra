@@ -210,9 +210,13 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
       // persists it in the workflow snapshot and hands it back here as
       // `suspendData`. Re-inject it under the `suspendedToolRunId` key the
       // delegating tools read.
+      //
+      // Not gated on `resumeData`: it is optional on `manager.resume()`, and a
+      // resume without it must still reach the nested run rather than silently
+      // starting a second one. On the initial attempt there is no prior
+      // suspension, so `suspendData` is undefined and nothing is injected.
       const delegatedRunId = readDelegatedRunId(suspendData);
-      const execArgs =
-        resumeData !== undefined && delegatedRunId ? { ...task.args, suspendedToolRunId: delegatedRunId } : task.args;
+      const execArgs = delegatedRunId ? { ...task.args, suspendedToolRunId: delegatedRunId } : task.args;
 
       try {
         const result = await executor.execute(execArgs, {

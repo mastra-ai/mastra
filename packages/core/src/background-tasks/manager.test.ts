@@ -884,6 +884,38 @@ describe('BackgroundTaskManager', () => {
       expect(seenArgs[1]).toEqual({ prompt: 'go', suspendedToolRunId: 'inner-run-123' });
     });
 
+    // `resumeData` is optional on `manager.resume()`. A resume without it must
+    // still reach the nested run — otherwise the delegation silently starts a
+    // second run and the first one is stranded.
+    it('carries the delegated run id even when resumed without resumeData', async () => {
+      const seenArgs: Array<Record<string, unknown>> = [];
+      let attempts = 0;
+      const executeFn = vi.fn(async (args: any, _opts: any) => {
+        seenArgs.push(args);
+        attempts += 1;
+        if (attempts === 1) {
+          await _opts.suspend({ awaiting: 'approval' }, { runId: 'inner-run-789' });
+          return undefined;
+        }
+        return { resumedWith: args.suspendedToolRunId };
+      });
+
+      const { task } = await manager.enqueue(
+        { toolName: 't', toolCallId: 'cdeleg4', args: { prompt: 'go' }, agentId: 'a1', runId: 'outer-run-4' },
+        ctx(executeFn),
+      );
+      await tick(200);
+      expect((await manager.getTask(task.id))?.status).toBe('suspended');
+
+      await manager.resume(task.id);
+      await tick(200);
+
+      const completed = await manager.getTask(task.id);
+      expect(completed?.status).toBe('completed');
+      expect(completed?.result).toEqual({ resumedWith: 'inner-run-789' });
+      expect(seenArgs[1]).toEqual({ prompt: 'go', suspendedToolRunId: 'inner-run-789' });
+    });
+
     // The task row's suspendPayload is published on `task.suspended` lifecycle
     // events and is user-facing, so the internal run id must not leak into it.
     it('keeps the delegated run id out of the persisted suspendPayload', async () => {
