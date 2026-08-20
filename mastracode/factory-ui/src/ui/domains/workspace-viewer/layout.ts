@@ -1,26 +1,26 @@
-// Docks only where chat column + card + gutters all fit, so revealing it never narrows the chat.
-const CHAT_COLUMN_REM = 44;
-const CARD_REM = 21;
-const GUTTER_REM = 1.5;
-const RAIL_LANE_REM = 7;
+// JS gates mounts at the two container thresholds; CSS below owns the panel geometry.
+export const DOCK_MIN_REM = 68;
+export const RAIL_MIN_REM = 58;
 
-export const DOCK_MIN_REM = CHAT_COLUMN_REM + CARD_REM + GUTTER_REM * 2;
+export const threadGeometryClass = '[--thread-column:44rem] [--thread-gutter:1.5rem] [--workspace-card-width:21rem]';
+export const chatColumnClass = '[--chat-column:var(--thread-column)]';
 
-// Measured on the padded scroller, not the shell: the docked card's inset is room the rail
-// cannot use, and below this the ticks land on the messages.
-export const RAIL_MIN_REM = CHAT_COLUMN_REM + RAIL_LANE_REM * 2;
-
-// Tailwind scans literals, so the rem values below can't interpolate the constants — keep in sync.
-export const chatColumnClass = '[--chat-column:44rem]';
-
-// Viewing grows into leftover room only (47rem = column + gutters) — never flips the dock decision.
 export const cardWidthClass = {
-  browsing: '[--workspace-files-card:21rem]',
-  viewing: '[--workspace-files-card:min(34rem,calc(100%-47rem))]',
+  compact: '[--workspace-files-card:var(--workspace-card-width)]',
+  expanded:
+    '[--workspace-files-card:min(34rem,calc(100%-var(--thread-column)-var(--thread-gutter)-var(--thread-gutter)))]',
 };
+
+export const compactHeightClass = 'h-auto';
+export const popoverSizeClass = {
+  compact: `${compactHeightClass} w-[min(21rem,calc(100vw-1.5rem))]`,
+  expanded: 'h-[min(40rem,80vh)] w-[min(34rem,calc(100vw-1.5rem))]',
+};
+
+export const treeRowContainmentClass = '[content-visibility:auto] [contain-intrinsic-size:auto_1.75rem]';
 
 /** The chat shell maps this onto `--chat-inset-end`, which pads its scroller. */
 export const reservedSpaceClass = {
   none: '[--workspace-files-inset:0px]',
-  docked: '[--workspace-files-inset:calc(var(--workspace-files-card)+3rem)]',
+  docked: '[--workspace-files-inset:calc(var(--workspace-files-card)+var(--thread-gutter)+var(--thread-gutter))]',
 };

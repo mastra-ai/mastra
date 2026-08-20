@@ -49,7 +49,7 @@ export function useFactoryModelChoice({
       try {
         await Promise.all([
           setDefaultModel.mutateAsync(chosenModelId),
-          applyOMDefaults.mutateAsync({ providerId, factoryModelId: chosenModelId }),
+          applyOMDefaults.mutateAsync({ providerId, factoryModelId: chosenModelId, factoryId }),
         ]);
         onSaved();
       } catch (cause) {

@@ -31,7 +31,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "esbuild": "^0.28.0",
-    "isolated-vm": "^6.1.2"
+    "isolated-vm": "^6.2.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
