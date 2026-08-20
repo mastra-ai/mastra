@@ -1288,6 +1288,28 @@ describe('live user-signal events render the same as their persisted copy', () =
     });
   });
 
+  it('preserves optimistic content when a data-only signal confirms through a server window', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    state = transcriptReducer(state, {
+      type: 'localUser',
+      text: 'hello from the composer',
+      steer: true,
+    });
+
+    state = transcriptReducer(state, {
+      type: 'mergeWindow',
+      messages: [liveComposerSignal({ delivery: 'while-active' })],
+    });
+
+    expect(state.entries).toHaveLength(1);
+    expect(state.entries[0]).toMatchObject({
+      id: 'sig-web',
+      steer: true,
+      deliveryStatus: 'delivered',
+      message: { role: 'user', content: { parts: [{ type: 'text', text: 'hello from the composer' }] } },
+    });
+  });
+
   it('keeps non-user signals alone', () => {
     const reminder = signalMessage({ id: 'sig-2', type: 'system-reminder', tagName: 'reminder', text: 'stay on task' });
     let state = createInitialTranscript({ messages: [], threadId: 't1' });

@@ -46,7 +46,7 @@ export interface MessageEntry {
   streaming?: boolean;
   /** A steer (interjection) vs a normal message. */
   steer?: boolean;
-  deliveryStatus?: 'pending' | 'delivered';
+  deliveryStatus?: 'pending' | 'delivered' | 'failed';
 }
 
 export interface NoticeEntry {
@@ -176,6 +176,9 @@ export const initialTranscript: TranscriptState = {
 };
 
 let noticeSeq = 0;
+export function createLocalMessageId(): string {
+  return `local-${Date.now()}-${noticeSeq++}`;
+}
 
 /** A file attached to an outgoing message (base64-encoded, mirrors the client-js `sendMessage` files option). */
 export interface OutgoingFile {
@@ -186,7 +189,8 @@ export interface OutgoingFile {
 
 type Action =
   | { type: 'event'; event: AgentControllerEvent }
-  | { type: 'localUser'; text: string; steer?: boolean; files?: OutgoingFile[] }
+  | { type: 'localUser'; id?: string; text: string; steer?: boolean; files?: OutgoingFile[] }
+  | { type: 'failLocalUser'; id: string }
   | { type: 'clearPending' }
   | { type: 'localNotice'; text: string; level: 'info' | 'error' }
   | { type: 'resolvePrompt'; id: string }
@@ -232,7 +236,7 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
           ...state.entries,
           toMessageEntry(
             {
-              id: `local-${Date.now()}-${noticeSeq++}`,
+              id: action.id ?? createLocalMessageId(),
               role: 'user',
               createdAt: new Date(),
               content: {
@@ -248,6 +252,15 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
       return mergeServerWindow(state, action.messages);
     case 'clearPending':
       return { ...state, pending: false };
+    case 'failLocalUser':
+      return {
+        ...state,
+        entries: state.entries.map(entry =>
+          entry.kind === 'message' && entry.id === action.id && entry.deliveryStatus === 'pending'
+            ? { ...entry, deliveryStatus: 'failed' }
+            : entry,
+        ),
+      };
     case 'localNotice':
       return pushNotice(state, action.level, action.text);
     case 'resolvePrompt':
@@ -682,7 +695,7 @@ function confirmPendingUserMessages(state: TranscriptState, anchors: Map<MastraD
   for (const [message, index] of anchors) {
     const current = state.entries[index];
     if (current?.kind !== 'message' || current.deliveryStatus !== 'pending') continue;
-    const canonical = toMessageEntry(message, {
+    const canonical = toMessageEntry(preserveOptimisticUserContent(message, current.message), {
       streaming: current.streaming,
       runtimeTools: current.runtimeTools,
     });

@@ -120,7 +120,8 @@ function ChatTranscriptValueProvider({
   const { sessionError, sandboxPreparing } = useChatSessionContext();
   const messagesInitializing = useChatMessagesInitializing();
   const messagesError = useChatMessagesError();
-  const { transcript, initialHistoryReady, reset, localUser, resolvePrompt, clearPending, pushNotice } = transcriptApi;
+  const { transcript, initialHistoryReady, reset, localUser, failLocalUser, resolvePrompt, clearPending, pushNotice } =
+    transcriptApi;
   const effectiveThreadId = transcript.threadId ?? threadId ?? connection.createdThreadId;
 
   const effectiveTranscript: TranscriptState = {
@@ -136,6 +137,7 @@ function ChatTranscriptValueProvider({
     busy,
     initialHistoryReady,
     localUser,
+    failLocalUser,
     reset,
     resolvePrompt,
     clearPending,

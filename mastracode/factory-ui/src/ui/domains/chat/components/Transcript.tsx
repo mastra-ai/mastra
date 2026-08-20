@@ -690,6 +690,12 @@ export function ChannelOriginBadge({ origin }: { origin: { platform: string; aut
   );
 }
 
+function steeringLabel(entry: MessageEntry): string | undefined {
+  if (!entry.steer) return undefined;
+  if (entry.deliveryStatus === 'pending') return 'Steering…';
+  if (entry.deliveryStatus === 'failed') return 'Not sent';
+  return 'Steered message';
+}
 function renderMessageBubble({
   entry,
   suspensions,
@@ -702,6 +708,7 @@ function renderMessageBubble({
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {
   const messageParts = entry.message.content.parts ?? [];
+
   const parts = messageParts.filter(part => isRenderablePart(part, suspensions, entry.runtimeTools));
   const message =
     parts.length === messageParts.length
@@ -712,7 +719,9 @@ function renderMessageBubble({
   const toolGroups = collectToolGroups(parts, suspensions, entry.runtimeTools);
   const origin = channelOrigin(entry);
   const prose = messageText(parts);
-  const steeringPending = entry.steer === true && entry.deliveryStatus === 'pending';
+  const steeringStatus = steeringLabel(entry);
+  const steeringPending = entry.deliveryStatus === 'pending';
+  const steeringFailed = entry.deliveryStatus === 'failed';
   const roles: MessageRoleRenderers = {
     User: ({ children }) => (
       <div className={cn(MESSAGE_HOVER, 'my-3 ml-auto flex w-fit max-w-[70%] flex-col items-end')}>
@@ -724,9 +733,12 @@ function renderMessageBubble({
         >
           {children}
         </div>
-        {entry.steer && (
-          <span className="text-ui-xs text-icon3 mt-1" aria-live="polite">
-            {steeringPending ? 'Steering…' : 'Steered message'}
+        {steeringStatus && (
+          <span
+            className={cn('text-ui-xs text-icon3 mt-1', steeringFailed && 'text-notice-destructive-fg')}
+            aria-live="polite"
+          >
+            {steeringStatus}
           </span>
         )}
         {origin && <ChannelOriginBadge origin={origin} />}

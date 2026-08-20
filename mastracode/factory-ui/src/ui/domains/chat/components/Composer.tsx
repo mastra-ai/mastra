@@ -68,7 +68,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
-  const { busy, localUser, reset, clearPending, pushNotice } = useChatTranscript();
+  const { busy, localUser, failLocalUser, reset, clearPending, pushNotice } = useChatTranscript();
   const { modes, activeModeId, isLoading: modesLoading, error: modesError, setMode } = useChatModes();
   const { activeModelId, isLoading: modelLoading, error: modelError } = useChatModels();
   const { composerDraft: draft, composerInputRef: inputRef, setComposerDraft, runComposerCommand } = useChatCommands();
@@ -165,8 +165,13 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   const steer = async (text: string) => {
     if (!text.trim()) return;
-    localUser(text, true);
-    await sendMutation.mutateAsync({ text });
+    const localId = localUser(text, true);
+    try {
+      await sendMutation.mutateAsync({ text });
+    } catch (error) {
+      failLocalUser(localId);
+      throw error;
+    }
   };
 
   const onSubmit = (e: { preventDefault: () => void }) => {

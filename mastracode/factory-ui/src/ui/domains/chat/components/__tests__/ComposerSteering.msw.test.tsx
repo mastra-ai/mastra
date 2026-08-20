@@ -54,4 +54,25 @@ describe('Composer steering', () => {
     expect(screen.queryByText('Steering…')).not.toBeInTheDocument();
     expect(screen.getAllByText(MESSAGE)).toHaveLength(1);
   });
+
+  it('marks a rejected steering message as not sent', async () => {
+    const session = stubPreparingSession({ autoAgentEnd: false, failDispatch: true });
+    const user = userEvent.setup();
+    const { client } = renderThread();
+    await releaseSession(session.finishWorkspace, client);
+    await session.emit({ type: 'agent_start' });
+
+    const composer = await screen.findByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(composer).toHaveAttribute('placeholder', 'Steer the agent…'));
+    await user.type(composer, MESSAGE);
+    await user.keyboard('{Enter}');
+
+    expect(await screen.findByText('Not sent')).toBeInTheDocument();
+    await waitForMutationsIdle(client);
+    expect(screen.queryByText('Steering…')).not.toBeInTheDocument();
+    expect(screen.getAllByText(MESSAGE)).toHaveLength(1);
+    expect(screen.getByText(/Sandbox is gone/)).toBeInTheDocument();
+    expect(session.delivered).toEqual([]);
+    expect(session.steerAttempts).toBe(0);
+  });
 });
