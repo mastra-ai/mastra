@@ -247,6 +247,46 @@ describe('Create Factory wizard', () => {
     expect(calls).toEqual(['create', 'connect', 'connect', 'link']);
   });
 
+  it('freezes the picks a failed commit already wrote to the server', async () => {
+    const calls: string[] = [];
+    seedDraft('model-provider');
+    stubModelStepEndpoints(calls);
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections/conn-1/repositories`, () =>
+        HttpResponse.json({ error: 'nope' }, { status: 500 }),
+      ),
+    );
+    const user = userEvent.setup();
+
+    renderFlow();
+
+    await user.click(await screen.findByRole('option', { name: /Anthropic/ }));
+    await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(sessionStorage.getItem(FACTORY_KEY)).toBe('fp-1');
+    // The Factory exists: no walking back to rename it or swap the repository it will link.
+    expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument();
+  });
+
+  it('cannot be left while the Factory is being created', async () => {
+    const calls: string[] = [];
+    seedDraft('model-provider');
+    stubModelStepEndpoints(calls);
+    server.use(http.post(`${TEST_BASE_URL}/web/factory/projects`, () => new Promise<never>(() => {})));
+    const user = userEvent.setup();
+
+    renderFlow();
+
+    await user.click(await screen.findByRole('option', { name: /Anthropic/ }));
+    await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
+
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument());
+    await user.keyboard('{Escape}');
+
+    expect(screen.getByTestId('pathname')).toHaveTextContent(WIZARD_PATH);
+  });
+
   it('offers to connect GitHub when no installation is reachable', async () => {
     seedDraft('vcs');
     server.use(

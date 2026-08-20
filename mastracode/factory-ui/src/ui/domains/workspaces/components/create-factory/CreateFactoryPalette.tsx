@@ -18,7 +18,8 @@ export interface CreateFactoryPaletteProps {
   searchable?: boolean;
   value: string;
   onValueChange: (value: string) => void;
-  onBack: () => void;
+  /** Absent once the commit started: what the earlier steps picked is already on the server. */
+  onBack?: () => void;
   /** Steps that can be left out show it as chrome, so it never scrolls away with the rows. */
   onSkip?: () => void;
   children: ReactNode;
@@ -51,13 +52,21 @@ export function CreateFactoryPalette({
       label="Create Factory"
       className="mx-auto flex h-[min(34rem,100%)] w-full max-w-2xl flex-col gap-2 overflow-visible bg-transparent"
     >
-      <div className="flex shrink-0 items-center justify-between">
-        <Button variant="ghost" size="sm" onMouseDown={event => event.preventDefault()} onClick={onBack}>
-          <ArrowLeft aria-hidden="true" />
-          Back
-        </Button>
+      <div className="flex min-h-8 shrink-0 items-center">
+        {onBack && (
+          <Button variant="ghost" size="sm" onMouseDown={event => event.preventDefault()} onClick={onBack}>
+            <ArrowLeft aria-hidden="true" />
+            Back
+          </Button>
+        )}
         {onSkip && (
-          <Button variant="ghost" size="sm" onMouseDown={event => event.preventDefault()} onClick={onSkip}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-auto"
+            onMouseDown={event => event.preventDefault()}
+            onClick={onSkip}
+          >
             Skip
             <ArrowRight aria-hidden="true" />
           </Button>

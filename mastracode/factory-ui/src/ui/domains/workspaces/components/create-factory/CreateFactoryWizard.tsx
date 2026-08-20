@@ -80,14 +80,21 @@ export function CreateFactoryWizard() {
     },
   });
 
+  // The commit is one move: while it runs, and once one of its stages landed on
+  // the server, the picks behind it are settled — no step back to edit them.
+  const committing = createFactory.isPending;
+  const picksSettled = committing || Boolean(draft?.factoryId);
+
   const leave = () => {
     if (location.key === 'default') void navigate(factoryId ? `/factories/${factoryId}` : '/');
     else void navigate(-1);
   };
-  useKeyDown({ escape: leave });
+  useKeyDown({ escape: leave }, { enabled: !committing });
 
   const step = draft?.step;
   if (!step) return null;
+
+  const goBack = step === 'name' ? leave : () => void flow.back();
 
   // Each step starts from its own field value — the name step from the name already given.
   const typedOnThisStep = typed?.step === step ? typed.value : undefined;
@@ -100,7 +107,7 @@ export function CreateFactoryWizard() {
         step={step}
         value={value}
         onValueChange={nextValue => setTyped({ step, value: nextValue })}
-        onBack={step === 'name' ? leave : () => void flow.back()}
+        onBack={picksSettled ? undefined : goBack}
         onSkip={step === 'project-management' ? () => void flow.skipLinear() : undefined}
       >
         {step === 'name' && <CreateFactoryNameRows name={value} onSubmit={flow.startVcs} />}
