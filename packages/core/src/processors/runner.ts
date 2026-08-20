@@ -21,7 +21,7 @@ import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { LanguageModelUsage, ProviderMetadata } from '../stream/types';
 import { isProcessorWorkflow } from './is-processor-workflow';
-import { isMaybeAnthropic } from './provider-history-compat';
+import { isMaybeAnthropicWithoutAssistantPrefill } from './provider-history-compat';
 import { createProcessorSendSignal } from './send-signal';
 import {
   summarizeActiveToolsForSpan,
@@ -1383,9 +1383,9 @@ export class ProcessorRunner {
       retryCount: args.retryCount ?? 0,
     };
 
-    // Append the trailing assistant guard when the resolved model uses Anthropic
+    // Append the trailing assistant guard when the resolved model does not support assistant prefill
     const processors =
-      stepInput.model && isMaybeAnthropic(stepInput.model)
+      stepInput.model && isMaybeAnthropicWithoutAssistantPrefill(stepInput.model)
         ? [...this.inputProcessors, new TrailingAssistantGuard()]
         : this.inputProcessors;
 

@@ -7,6 +7,7 @@ import {
   azureSystemReminderTransform,
   cerebrasStripReasoningContent,
   isMaybeAnthropic,
+  isMaybeAnthropicWithoutAssistantPrefill,
   isMaybeAzure,
   isMaybeCerebras,
   ProviderHistoryCompat,
@@ -322,6 +323,41 @@ describe('isMaybeAnthropic', () => {
     ).toBe(true);
     expect(isMaybeAnthropic({ provider: 'openai.chat', modelId: 'gpt-4o' })).toBe(false);
     expect(isMaybeAnthropic('anthropic-foo')).toBe(false);
+  });
+});
+
+describe('isMaybeAnthropicWithoutAssistantPrefill', () => {
+  it('matches Claude 4.6 and later Anthropic models', () => {
+    expect(isMaybeAnthropicWithoutAssistantPrefill('anthropic/claude-opus-4-6')).toBe(true);
+    expect(isMaybeAnthropicWithoutAssistantPrefill('anthropic/claude-opus-5')).toBe(true);
+    expect(
+      isMaybeAnthropicWithoutAssistantPrefill({ provider: 'anthropic.messages', modelId: 'claude-sonnet-4.6' }),
+    ).toBe(true);
+    expect(
+      isMaybeAnthropicWithoutAssistantPrefill({
+        provider: 'openai-compatible.chat',
+        modelId: 'anthropic/claude-opus-5',
+      }),
+    ).toBe(true);
+  });
+
+  it('does not match older Claude models or non-Anthropic models', () => {
+    expect(isMaybeAnthropicWithoutAssistantPrefill('anthropic/claude-haiku-4-5-20251001')).toBe(false);
+    expect(
+      isMaybeAnthropicWithoutAssistantPrefill({ provider: 'anthropic.messages', modelId: 'claude-sonnet-4.5' }),
+    ).toBe(false);
+    expect(isMaybeAnthropicWithoutAssistantPrefill('openai/gpt-5')).toBe(false);
+  });
+
+  it('uses a conservative result for unresolved Anthropic model versions and fallback arrays', () => {
+    expect(isMaybeAnthropicWithoutAssistantPrefill({ provider: 'anthropic.messages' })).toBe(true);
+    expect(isMaybeAnthropicWithoutAssistantPrefill(() => 'anthropic/claude-opus-5')).toBe(true);
+    expect(
+      isMaybeAnthropicWithoutAssistantPrefill([
+        { model: 'anthropic/claude-haiku-4-5-20251001' },
+        { model: 'anthropic/claude-opus-5' },
+      ]),
+    ).toBe(true);
   });
 });
 
