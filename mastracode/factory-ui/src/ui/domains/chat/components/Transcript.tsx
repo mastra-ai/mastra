@@ -712,17 +712,23 @@ function renderMessageBubble({
   const toolGroups = collectToolGroups(parts, suspensions, entry.runtimeTools);
   const origin = channelOrigin(entry);
   const prose = messageText(parts);
+  const steeringPending = entry.steer === true && entry.deliveryStatus === 'pending';
   const roles: MessageRoleRenderers = {
     User: ({ children }) => (
       <div className={cn(MESSAGE_HOVER, 'my-3 ml-auto flex w-fit max-w-[70%] flex-col items-end')}>
         <div
           className={cn(
-            'text-text1 rounded-xl px-4 py-2 break-words',
-            entry.steer ? 'bg-warning1/10' : 'bg-neutral6/5',
+            'text-text1 bg-neutral6/5 rounded-xl border border-transparent px-4 py-2 break-words',
+            steeringPending && 'border-border1 border-dashed',
           )}
         >
           {children}
         </div>
+        {entry.steer && (
+          <span className="text-ui-xs text-icon3 mt-1" aria-live="polite">
+            {steeringPending ? 'Steering…' : 'Steered message'}
+          </span>
+        )}
         {origin && <ChannelOriginBadge origin={origin} />}
         {prose ? <MessageMeta text={prose} createdAt={entry.message.createdAt} align="end" /> : null}
       </div>

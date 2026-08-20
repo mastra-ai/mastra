@@ -26,7 +26,6 @@ import { useChatTranscript } from '../context/useChatTranscript';
 import {
   useAbortAgentControllerMutation,
   useSendAgentControllerMessageMutation,
-  useSteerAgentControllerMutation,
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { useCreateAgentControllerThreadMutation } from '../../../../hooks/useAgentControllerThreadMutations';
 import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
@@ -84,7 +83,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
   const createThreadMutation = useCreateAgentControllerThreadMutation(hookArgs);
   const sendMutation = useSendAgentControllerMessageMutation(hookArgs);
-  const steerMutation = useSteerAgentControllerMutation(hookArgs);
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
   const planFeedback = usePendingPlanFeedback();
 
@@ -168,7 +166,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const steer = async (text: string) => {
     if (!text.trim()) return;
     localUser(text, true);
-    await steerMutation.mutateAsync(text);
+    await sendMutation.mutateAsync({ text });
   };
 
   const onSubmit = (e: { preventDefault: () => void }) => {

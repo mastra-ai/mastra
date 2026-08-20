@@ -1019,11 +1019,19 @@ describe('transcript reducer mergeWindow', () => {
 
     const next = transcriptReducer(state, {
       type: 'mergeWindow',
-      messages: [signalMessage({ id: 'sig-1', type: 'user', tagName: 'user', text: 'stop and read the file' })],
+      messages: [
+        signalMessage({
+          id: 'sig-1',
+          type: 'user',
+          tagName: 'user',
+          text: 'stop and read the file',
+          attributes: { delivery: 'while-active' },
+        }),
+      ],
     });
 
     expect(next.entries).toHaveLength(1);
-    expect(next.entries[0]).toMatchObject({ steer: true });
+    expect(next.entries[0]).toMatchObject({ id: 'sig-1', steer: true, deliveryStatus: 'delivered' });
   });
 
   it('does not redraw a turn whose persisted copy carries tool calls the stream never delivered', () => {
@@ -1164,14 +1172,14 @@ describe('live user-signal events render the same as their persisted copy', () =
     };
   }
 
-  /** The same live shape for a message typed into the web composer: no channel provenance. */
-  function liveComposerSignal(): MastraDBMessage {
+  function liveComposerSignal(attributes?: Record<string, unknown>): MastraDBMessage {
     const composerPayload = {
       id: 'sig-web',
       type: 'user',
       tagName: 'user',
       contents: 'hello from the composer',
       createdAt: '2026-07-27T16:00:00.000Z',
+      attributes,
     };
     return {
       id: 'sig-web',
@@ -1216,31 +1224,68 @@ describe('live user-signal events render the same as their persisted copy', () =
 
     expect(firstEntryParts(state)).toEqual([{ type: 'text', text: 'hello from slack' }]);
   });
-
-  /**
-   * Regression: the composer already renders an optimistic local echo under a
-   * `local-…` id. The streamed signal event carries the signal's own id, so the
-   * two cannot dedupe — drawing both showed the message twice. Only channel
-   * messages get the drawable-text projection.
-   */
-  it('leaves a composer-origin live event undrawable so the local echo stays the only bubble', () => {
+  it('keeps a normal composer signal hidden behind its optimistic message', () => {
     let state = createInitialTranscript({ messages: [], threadId: 't1' });
     state = transcriptReducer(state, { type: 'localUser', text: 'hello from the composer' });
     state = transcriptReducer(state, {
       type: 'event',
       event: { type: 'message_start', message: liveComposerSignal() },
     });
-    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: liveComposerSignal() } });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'message_end', message: liveComposerSignal() },
+    });
 
     const drawable = state.entries.filter(
       entry =>
         entry.kind === 'message' &&
-        (entry.message.content.parts ?? []).some(
-          part => part.type === 'text' && part.text.includes('hello from the composer'),
-        ),
+        entry.message.content.parts.some(part => part.type === 'text' && part.text.includes('hello from the composer')),
     );
     expect(drawable).toHaveLength(1);
-    expect(drawable[0] && 'id' in drawable[0] ? drawable[0].id : '').toMatch(/^local-/);
+    expect(drawable[0]?.id).toMatch(/^local-/);
+  });
+
+  it('confirms the optimistic composer message with the streamed signal', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    state = transcriptReducer(state, {
+      type: 'localUser',
+      text: 'hello from the composer',
+      steer: true,
+    });
+    expect(state.entries[0]).toMatchObject({ steer: true, deliveryStatus: 'pending' });
+
+    const delivered = liveComposerSignal({ delivery: 'while-active' });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: delivered } });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: delivered } });
+
+    expect(state.entries).toHaveLength(1);
+    expect(state.entries[0]).toMatchObject({
+      id: 'sig-web',
+      steer: true,
+      deliveryStatus: 'delivered',
+      message: { role: 'user', content: { parts: [{ type: 'text', text: 'hello from the composer' }] } },
+    });
+  });
+
+  it('turns an optimistic steer into a normal message when the run ended before delivery', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    state = transcriptReducer(state, {
+      type: 'localUser',
+      text: 'hello from the composer',
+      steer: true,
+    });
+
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'message_start', message: liveComposerSignal() },
+    });
+
+    expect(state.entries).toHaveLength(1);
+    expect(state.entries[0]).toMatchObject({
+      id: 'sig-web',
+      steer: false,
+      deliveryStatus: undefined,
+    });
   });
 
   it('keeps non-user signals alone', () => {

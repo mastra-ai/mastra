@@ -46,6 +46,7 @@ export interface MessageEntry {
   streaming?: boolean;
   /** A steer (interjection) vs a normal message. */
   steer?: boolean;
+  deliveryStatus?: 'pending' | 'delivered';
 }
 
 export interface NoticeEntry {
@@ -239,7 +240,7 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
                 parts: [{ type: 'text', text: action.text }, ...(action.files ?? []).map(toOutgoingFilePart)],
               },
             },
-            { steer: action.steer },
+            { steer: action.steer, deliveryStatus: action.steer ? 'pending' : undefined },
           ),
         ],
       };
@@ -601,7 +602,8 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
   if (messages.length === 0) return state;
 
   const onScreenIndex = claimOnScreenEntries(state.entries, messages);
-  const reconciled = reconcileToolResults(adoptCoveringWindowCopies(state, onScreenIndex), messages);
+  const confirmed = confirmPendingUserMessages(state, onScreenIndex);
+  const reconciled = reconcileToolResults(adoptCoveringWindowCopies(confirmed, onScreenIndex), messages);
 
   if (messages.every(message => onScreenIndex.has(message))) return reconciled;
 
@@ -639,7 +641,11 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
  * is consumed once per entry, so sending the same words twice still draws two
  * bubbles.
  */
-function claimOnScreenEntries(entries: TimelineEntry[], messages: MastraDBMessage[]): Map<MastraDBMessage, number> {
+function claimOnScreenEntries(
+  entries: TimelineEntry[],
+  messages: MastraDBMessage[],
+  eligible?: (entry: MessageEntry) => boolean,
+): Map<MastraDBMessage, number> {
   const onScreen = entries.map(indexMessageEntry);
   const anchors = new Map<MastraDBMessage, number>();
   const claimedEntries = new Set<number>();
@@ -648,11 +654,11 @@ function claimOnScreenEntries(entries: TimelineEntry[], messages: MastraDBMessag
   for (const message of messages) {
     const displayed = toMessageEntry(message).message;
     const toolCallIds = toolCallIdsOf(displayed.content.parts);
-    const texts = drawableTexts(displayed);
+    const texts = drawableTexts(message);
     const textClaim = (index: number) => `${index} ${texts.join('\n')}`;
 
     for (const [index, candidate] of onScreen.entries()) {
-      if (!candidate) continue;
+      if (!candidate || (eligible && !eligible(candidate.entry))) continue;
       const sameMessage =
         candidate.entry.id === message.id || toolCallIds.some(toolCallId => candidate.toolCallIds.has(toolCallId));
       const alreadyDrawn = redrawsEntry(candidate, displayed, texts, toolCallIds);
@@ -669,6 +675,25 @@ function claimOnScreenEntries(entries: TimelineEntry[], messages: MastraDBMessag
   }
 
   return anchors;
+}
+
+function confirmPendingUserMessages(state: TranscriptState, anchors: Map<MastraDBMessage, number>): TranscriptState {
+  const confirmed = new Map<number, MessageEntry>();
+  for (const [message, index] of anchors) {
+    const current = state.entries[index];
+    if (current?.kind !== 'message' || current.deliveryStatus !== 'pending') continue;
+    const canonical = toMessageEntry(message, {
+      streaming: current.streaming,
+      runtimeTools: current.runtimeTools,
+    });
+    if (canonical.message.role === 'user') confirmed.set(index, canonical);
+  }
+  if (confirmed.size === 0) return state;
+
+  return {
+    ...state,
+    entries: state.entries.map((entry, index) => confirmed.get(index) ?? entry),
+  };
 }
 
 /**
@@ -705,9 +730,16 @@ function indexMessageEntry(entry: TimelineEntry): OnScreenMessage | undefined {
 }
 
 function drawableTexts(message: MastraDBMessage): string[] {
-  return message.content.parts.flatMap(part =>
+  const textParts = message.content.parts.flatMap(part =>
     part.type === 'text' && part.text.trim().length > 0 ? [part.text.trim()] : [],
   );
+  if (textParts.length > 0 || message.role !== 'signal') return textParts;
+
+  return message.content.parts.flatMap(part => {
+    if (part.type !== 'data-user-message' || !('data' in part)) return [];
+    const text = signalContentsToText(part.data).trim();
+    return text ? [text] : [];
+  });
 }
 
 function toolCallIdsOf(parts: MastraMessagePart[]): string[] {
@@ -893,7 +925,12 @@ function signalContentsToText(data: unknown): string {
 
 function toMessageEntry(
   message: MastraDBMessage,
-  options: { streaming?: boolean; steer?: boolean; runtimeTools?: Record<string, ToolCall> } = {},
+  options: {
+    streaming?: boolean;
+    steer?: boolean;
+    deliveryStatus?: MessageEntry['deliveryStatus'];
+    runtimeTools?: Record<string, ToolCall>;
+  } = {},
 ): MessageEntry {
   const signalMetadata = message.role === 'signal' ? message.content.metadata?.signal : undefined;
   const signal =
@@ -907,6 +944,7 @@ function toMessageEntry(
       : undefined;
   const normalized = isUserSignal && isChannelOriginSignal(message) ? withRenderableSignalText(message) : message;
   const displayMessage = isUserSignal ? { ...normalized, role: 'user' as const } : normalized;
+  const steer = options.steer ?? (isUserSignal ? attributes?.delivery === 'while-active' : undefined);
 
   return {
     kind: 'message',
@@ -914,7 +952,8 @@ function toMessageEntry(
     message: displayMessage,
     runtimeTools: options.runtimeTools,
     streaming: options.streaming,
-    steer: options.steer ?? (isUserSignal ? attributes?.delivery === 'while-active' : undefined),
+    steer,
+    deliveryStatus: options.deliveryStatus ?? (steer ? 'delivered' : undefined),
   };
 }
 
@@ -937,9 +976,15 @@ function upsertMessage(state: TranscriptState, message: MastraDBMessage, streami
   const entries = [...state.entries];
   let idx = entries.findIndex(e => e.kind === 'message' && e.id === message.id);
   if (message.role === 'assistant' && idx === -1) idx = indexOfSameTurn(entries, message);
+  if (message.role === 'signal' && idx === -1 && !isChannelOriginSignal(message)) {
+    idx = claimOnScreenEntries(entries, [message], entry => entry.deliveryStatus === 'pending').get(message) ?? -1;
+  }
   const prev = idx !== -1 ? entries[idx] : undefined;
   const prevEntry = prev?.kind === 'message' ? prev : undefined;
-  const nextMessage = message.role === 'assistant' ? preserveRuntimeToolParts(message, prevEntry?.message) : message;
+  const nextMessage =
+    message.role === 'assistant'
+      ? preserveRuntimeToolParts(message, prevEntry?.message)
+      : preserveOptimisticUserContent(message, prevEntry?.message);
   const entry = toMessageEntry(nextMessage, { streaming, runtimeTools: prevEntry?.runtimeTools });
 
   if (message.role === 'assistant') {
@@ -968,6 +1013,20 @@ function upsertMessage(state: TranscriptState, message: MastraDBMessage, streami
   if (idx === -1) entries.push(entry);
   else entries[idx] = entry;
   return { ...state, entries };
+}
+
+function preserveOptimisticUserContent(message: MastraDBMessage, previous?: MastraDBMessage): MastraDBMessage {
+  if (!previous || previous.role !== 'user' || message.role !== 'signal' || isChannelOriginSignal(message)) {
+    return message;
+  }
+  const hasDrawablePart = message.content.parts.some(part => part.type === 'text' || part.type === 'file');
+  const hasUserDataPart = message.content.parts.some(part => part.type === 'data-user-message');
+  if (hasDrawablePart || !hasUserDataPart) return message;
+
+  return {
+    ...message,
+    content: { ...message.content, parts: previous.content.parts },
+  };
 }
 
 function preserveRuntimeToolParts(message: MastraDBMessage, previous?: MastraDBMessage): MastraDBMessage {
