@@ -12,6 +12,9 @@ import { useChatSessionContext } from '../../chat/context/useChatSessionContext'
 import { useSettingsSection } from '../hooks/useSettingsSection';
 import { useAgentControllerSettings } from '../../../../hooks/useAgentControllerSettings';
 import { useAvailableModelsQuery } from '../../../../hooks/useAvailableModels';
+import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
+import { useProvidersQuery } from '../../../../hooks/use-providers';
+import { useCustomProvidersQuery } from '../../../../hooks/use-custom-providers';
 import {
   SettingsUpdateVerificationError,
   useUpdateAgentControllerSettingsMutation,
@@ -97,70 +100,16 @@ export function SettingsPanel() {
         {section === 'repositories' && <RepositoriesSection />}
         {section === 'intake' && <IntakeSection />}
         {section === 'models' && (
-          <div className="flex flex-col gap-8">
-            <SettingsSubsection
-              id="model-packs"
-              title="Default models"
-              description="Factory defaults apply to Factory runs (triage, board work items) and channel sessions. User defaults apply to your interactive chats."
-            >
-              <Tabs defaultTab={hash === '#model-packs' ? 'user' : 'factory'}>
-                <TabList variant="pill">
-                  <Tab value="factory">Factory</Tab>
-                  <Tab value="user">User</Tab>
-                </TabList>
-                <TabContent value="factory" className="pt-4">
-                  <SettingsCard>
-                    <FactoryDefaultModelSection models={models} />
-                    <BaseThinkingSection />
-                  </SettingsCard>
-                </TabContent>
-                <TabContent value="user" className="flex flex-col gap-4 pt-4">
-                  <SettingsCard className="p-4">
-                    <ModelPacksSection models={models} />
-                  </SettingsCard>
-                  <SettingsCard>
-                    <ModelSettings
-                      settings={settings}
-                      updating={updateSettingsMutation.isPending}
-                      onBehaviorChange={onBehaviorChange}
-                    />
-                    <ModeThinkingDefaultsSection />
-                  </SettingsCard>
-                </TabContent>
-              </Tabs>
-            </SettingsSubsection>
-            <SettingsSubsection
-              title="Observational memory"
-              description="Models and token thresholds used to summarize and retain context. Factory applies to Factory runs; User applies to your interactive chats."
-            >
-              <Tabs defaultTab="factory">
-                <TabList variant="pill">
-                  <Tab value="factory">Factory</Tab>
-                  <Tab value="user">User</Tab>
-                </TabList>
-                <TabContent value="factory" className="pt-4">
-                  <SettingsCard className="p-4">
-                    <OMSection factoryId={factoryId} models={models} />
-                  </SettingsCard>
-                </TabContent>
-                <TabContent value="user" className="pt-4">
-                  <SettingsCard className="p-4">
-                    <OMSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
-                  </SettingsCard>
-                </TabContent>
-              </Tabs>
-            </SettingsSubsection>
-            <SettingsSubsection title="Provider access">
-              <SettingsCard className="p-4">
-                <ProviderAccessSection />
-              </SettingsCard>
-            </SettingsSubsection>
-            <SettingsSubsection title="Custom providers">
-              <SettingsCard className="p-4">
-                <CustomProvidersSection />
-              </SettingsCard>
-            </SettingsSubsection>
-          </div>
+          <ModelsSettingsSection
+            hash={hash}
+            factoryId={factoryId}
+            models={models}
+            settings={settings}
+            updating={updateSettingsMutation.isPending}
+            onBehaviorChange={onBehaviorChange}
+            sessionResourceId={sessionResourceId}
+            sessionScope={sessionScope}
+          />
         )}
         {section === 'skills' && <FactorySkillsSection />}
         {section === 'behavior' && (
@@ -175,5 +124,118 @@ export function SettingsPanel() {
         )}
       </div>
     </section>
+  );
+}
+
+interface ModelsSettingsSectionProps {
+  hash: string;
+  factoryId: string | undefined;
+  models: AvailableModelOption[];
+  settings: AgentControllerSessionSettings | null;
+  updating: boolean;
+  onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => void;
+  sessionResourceId: string | undefined;
+  sessionScope: string | undefined;
+}
+
+/**
+ * Layered setup: until at least one provider credential is usable, model and
+ * OM pickers are pointless, so the page leads with the connect step alone.
+ * Once connected, model selection moves to the top and provider management
+ * drops to the bottom.
+ */
+function ModelsSettingsSection({
+  hash,
+  factoryId,
+  models,
+  settings,
+  updating,
+  onBehaviorChange,
+  sessionResourceId,
+  sessionScope,
+}: ModelsSettingsSectionProps) {
+  const providersQuery = useProvidersQuery();
+  const customProvidersQuery = useCustomProvidersQuery();
+  const anyConnected =
+    (providersQuery.data ?? []).some(p => p.source !== 'none') || (customProvidersQuery.data ?? []).length > 0;
+  const providersKnown = providersQuery.isSuccess && customProvidersQuery.isSuccess;
+
+  const providerSubsections = (
+    <>
+      <SettingsSubsection
+        title="Provider access"
+        description={
+          anyConnected ? undefined : 'Connect a provider to unlock model selection and observational-memory settings.'
+        }
+      >
+        <SettingsCard className="p-4">
+          <ProviderAccessSection />
+        </SettingsCard>
+      </SettingsSubsection>
+      <SettingsSubsection title="Custom providers">
+        <SettingsCard className="p-4">
+          <CustomProvidersSection />
+        </SettingsCard>
+      </SettingsSubsection>
+    </>
+  );
+
+  // Nothing connected yet: show only the connect step.
+  if (providersKnown && !anyConnected) {
+    return <div className="flex flex-col gap-8">{providerSubsections}</div>;
+  }
+
+  return (
+    <div className="flex flex-col gap-8">
+      <SettingsSubsection
+        id="model-packs"
+        title="Default models"
+        description="Factory defaults apply to Factory runs (triage, board work items) and channel sessions. User defaults apply to your interactive chats."
+      >
+        <Tabs defaultTab={hash === '#model-packs' ? 'user' : 'factory'}>
+          <TabList variant="pill">
+            <Tab value="factory">Factory</Tab>
+            <Tab value="user">User</Tab>
+          </TabList>
+          <TabContent value="factory" className="pt-4">
+            <SettingsCard>
+              <FactoryDefaultModelSection models={models} />
+              <BaseThinkingSection />
+            </SettingsCard>
+          </TabContent>
+          <TabContent value="user" className="flex flex-col gap-4 pt-4">
+            <SettingsCard className="p-4">
+              <ModelPacksSection models={models} />
+            </SettingsCard>
+            <SettingsCard>
+              <ModelSettings settings={settings} updating={updating} onBehaviorChange={onBehaviorChange} />
+              <ModeThinkingDefaultsSection />
+            </SettingsCard>
+          </TabContent>
+        </Tabs>
+      </SettingsSubsection>
+      <SettingsSubsection
+        title="Observational memory"
+        description="Models and token thresholds used to summarize and retain context. Factory applies to Factory runs; User applies to your interactive chats."
+      >
+        <Tabs defaultTab="factory">
+          <TabList variant="pill">
+            <Tab value="factory">Factory</Tab>
+            <Tab value="user">User</Tab>
+          </TabList>
+          <TabContent value="factory" className="pt-4">
+            <SettingsCard className="p-4">
+              <OMSection factoryId={factoryId} models={models} />
+            </SettingsCard>
+          </TabContent>
+          <TabContent value="user" className="pt-4">
+            <SettingsCard className="p-4">
+              <OMSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
+            </SettingsCard>
+          </TabContent>
+        </Tabs>
+      </SettingsSubsection>
+      {providerSubsections}
+    </div>
   );
 }
