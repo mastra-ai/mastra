@@ -160,6 +160,14 @@ export function createStreamFromGenerateResult(result: {
               providerMetadata: source.providerMetadata,
             });
           }
+        } else {
+          // Content parts that need no expansion ('reasoning-file', 'custom' and
+          // 'tool-approval-request') are themselves valid stream parts: the spec's
+          // stream-part union reuses the same content types verbatim. doStream()
+          // hands them to consumers untouched, so forward them unchanged here to
+          // keep doGenerate() lossless. Without this branch they are silently
+          // dropped and never reach stream consumers, processors or persistence.
+          controller.enqueue(message);
         }
       }
 
