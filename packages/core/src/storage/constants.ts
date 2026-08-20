@@ -618,8 +618,11 @@ export const EXPERIMENTS_SCHEMA: Record<string, StorageColumn> = {
   trialIndex: { type: 'integer', nullable: true },
   datasetId: { type: 'text', nullable: true, references: { table: 'mastra_datasets', column: 'id' } },
   datasetVersion: { type: 'integer', nullable: true },
-  targetType: { type: 'text', nullable: false },
-  targetId: { type: 'text', nullable: false },
+  // Nullable: caller-driven ingestion experiments have no registered target.
+  targetType: { type: 'text', nullable: true },
+  targetId: { type: 'text', nullable: true },
+  // Run-level scorer IDs pinned at create time for caller-driven experiments.
+  scorerIds: { type: 'jsonb', nullable: true },
   status: { type: 'text', nullable: false },
   totalItems: { type: 'integer', nullable: false },
   succeededCount: { type: 'integer', nullable: false },

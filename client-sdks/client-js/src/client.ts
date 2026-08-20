@@ -191,8 +191,10 @@ import type {
   GenerateDatasetItemsParams,
   GeneratedItem,
   TriggerDatasetExperimentParams,
-  CreateExternalExperimentParams,
-  CreateExternalExperimentResponse,
+  CreateDatasetExperimentParams,
+  CreateDatasetExperimentResponse,
+  RunExperimentItemParams,
+  RunExperimentItemResponse,
   SubmitExperimentResultParams,
   FinalizeExperimentParams,
   UpdateExperimentResultParams,
@@ -2215,19 +2217,37 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Creates an external experiment whose execution is owned by the caller (e.g. a Temporal workflow).
-   * Idempotent when a caller-supplied `id` is provided.
+   * Creates an experiment without starting the in-process runner, so the caller
+   * drives the loop (e.g. a Temporal workflow). With a target, execute items
+   * server-side via `runExperimentItem`; without one, ingest results via
+   * `submitExperimentResult`. Idempotent when a caller-supplied `id` is provided.
    */
-  public createExternalExperiment(params: CreateExternalExperimentParams): Promise<CreateExternalExperimentResponse> {
+  public createDatasetExperiment(params: CreateDatasetExperimentParams): Promise<CreateDatasetExperimentResponse> {
     const { datasetId, ...body } = params;
-    return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments/external`, {
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments`, {
       method: 'POST',
-      body,
+      body: { ...body, start: false },
     });
   }
 
   /**
-   * Submits (or re-submits) one item result for an external experiment.
+   * Executes the experiment's target against one dataset item server-side,
+   * runs the resolved scorers, and upserts the result row keyed by
+   * (experimentId, itemId, attempt) — safe to retry.
+   */
+  public runExperimentItem(params: RunExperimentItemParams): Promise<RunExperimentItemResponse> {
+    const { datasetId, experimentId, itemId, ...body } = params;
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/items/${encodeURIComponent(itemId)}/run`,
+      {
+        method: 'POST',
+        body,
+      },
+    );
+  }
+
+  /**
+   * Submits (or re-submits) one item result for a target-less (ingestion) experiment.
    * Upsert semantics on (experimentId, itemId, attempt) — safe to retry.
    */
   public submitExperimentResult(params: SubmitExperimentResultParams): Promise<DatasetExperimentResult> {

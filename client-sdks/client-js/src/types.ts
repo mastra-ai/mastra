@@ -2776,8 +2776,11 @@ export interface DatasetExperiment {
   datasetId: string | null;
   datasetVersion: number | null;
   agentVersion: string | null;
-  targetType: 'agent' | 'workflow' | 'scorer' | 'processor' | 'external';
-  targetId: string;
+  /** `null` for caller-driven ingestion experiments (the caller executes items itself). */
+  targetType: 'agent' | 'workflow' | 'scorer' | 'processor' | null;
+  targetId: string | null;
+  /** Run-level scorer IDs pinned at create time for caller-driven experiments. */
+  scorerIds?: string[] | null;
   /** Human-readable name used as the primary label wherever the experiment is displayed. */
   name?: string;
   /** Longer description shown as secondary detail (e.g. in a tooltip). */
@@ -2944,10 +2947,15 @@ export interface TriggerDatasetExperimentParams {
   requestContext?: Record<string, unknown>;
 }
 
-export interface CreateExternalExperimentParams {
+export interface CreateDatasetExperimentParams {
   datasetId: string;
   /** Caller-supplied experiment id (e.g. a workflow run id) for idempotent creates. */
   id?: string;
+  /** Target executed per item via `runExperimentItem`. Both or neither of targetType/targetId. Omit for pure ingestion. */
+  targetType?: 'agent' | 'workflow' | 'scorer';
+  targetId?: string;
+  /** Run-level scorer IDs resolved server-side by `runExperimentItem`. Requires a target. */
+  scorerIds?: string[];
   name?: string;
   description?: string;
   metadata?: Record<string, unknown>;
@@ -2957,11 +2965,32 @@ export interface CreateExternalExperimentParams {
   grouping?: ExperimentGrouping;
 }
 
-export interface CreateExternalExperimentResponse {
+export interface CreateDatasetExperimentResponse {
   experimentId: string;
   status: 'pending' | 'running' | 'completed' | 'failed';
   totalItems: number;
   datasetVersion: number;
+}
+
+export interface RunExperimentItemParams {
+  datasetId: string;
+  experimentId: string;
+  itemId: string;
+  /** Zero-based repetition index. Defaults to 0. Retried calls with the same (experimentId, itemId, attempt) converge on one row. */
+  attempt?: number;
+  /** Request context merged with the item's own request context (item wins). */
+  requestContext?: Record<string, unknown>;
+}
+
+export interface RunExperimentItemResponse {
+  result: Omit<DatasetExperimentResult, 'scores'>;
+  scores: Array<{
+    scorerId: string;
+    scorerName: string;
+    score: number | null;
+    reason: string | null;
+    error: string | null;
+  }>;
 }
 
 export interface SubmitExperimentResultParams {

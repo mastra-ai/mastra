@@ -1,6 +1,6 @@
 ---
 title: 'Reference: dataset.finalizeExperiment() | Datasets'
-description: 'Documentation for the `dataset.finalizeExperiment()` method, which computes final counts for an external experiment and marks it completed.'
+description: 'Documentation for the `dataset.finalizeExperiment()` method, which computes final counts for a caller-driven experiment and marks it completed.'
 packages:
   - '@mastra/core'
 ---
@@ -9,7 +9,7 @@ packages:
 
 **Added in:** `@mastra/core@1.61.0`
 
-Finalizes an external experiment created with [`createExternalExperiment()`](/reference/datasets/createExternalExperiment). Mastra computes the final counts server-side from the persisted result rows and marks the experiment `'completed'`, so the caller never tracks completion bookkeeping.
+Finalizes a caller-driven experiment created with [`createExperiment()`](/reference/datasets/createExperiment), with or without a target. Mastra computes the final counts server-side from the persisted result rows and marks the experiment `'completed'`, so the caller never tracks completion bookkeeping.
 
 Counts are per item, so `succeededCount + failedCount + skippedCount === totalItems` even when items have multiple attempts:
 
@@ -39,7 +39,7 @@ console.log(experiment.skippedCount)
   {
     name: 'experimentId',
     type: 'string',
-    description: 'ID of the external experiment to finalize.',
+    description: 'ID of the experiment to finalize.',
   },
 ]}
 />
@@ -50,6 +50,7 @@ Returns a `Promise<Experiment>`, the updated experiment record with final status
 
 ## Related
 
-- [dataset.createExternalExperiment()](/reference/datasets/createExternalExperiment)
+- [dataset.createExperiment()](/reference/datasets/createExperiment)
+- [dataset.runExperimentItem()](/reference/datasets/runExperimentItem)
 - [dataset.submitExperimentResult()](/reference/datasets/submitExperimentResult)
-- [Running experiments](/docs/datasets/running-experiments#external-experiments)
+- [Running experiments](/docs/datasets/running-experiments#caller-driven-experiments)

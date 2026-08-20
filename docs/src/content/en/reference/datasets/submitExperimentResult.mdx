@@ -1,6 +1,6 @@
 ---
 title: 'Reference: dataset.submitExperimentResult() | Datasets'
-description: 'Documentation for the `dataset.submitExperimentResult()` method, which submits one item result for an external experiment with upsert semantics.'
+description: 'Documentation for the `dataset.submitExperimentResult()` method, which ingests one externally computed item result with upsert semantics.'
 packages:
   - '@mastra/core'
 ---
@@ -9,7 +9,7 @@ packages:
 
 **Added in:** `@mastra/core@1.61.0`
 
-Submits (or re-submits) one item result for an external experiment created with [`createExternalExperiment()`](/reference/datasets/createExternalExperiment).
+Submits (or re-submits) one externally computed item result for a target-less experiment created with [`createExperiment()`](/reference/datasets/createExperiment).
 
 Submissions are upserts keyed by `(experimentId, itemId, attempt)`: a retried worker that submits the same key converges on a single row instead of duplicating results. Use a different `attempt` value to record repeated trials as separate rows.
 
@@ -24,7 +24,7 @@ const result = await dataset.submitExperimentResult({
 })
 ```
 
-The item must be visible at the experiment's pinned dataset version. Submissions to a non-external experiment throw `EXPERIMENT_NOT_EXTERNAL`. Submissions after finalization throw `EXPERIMENT_ALREADY_FINALIZED`.
+The item must be visible at the experiment's pinned dataset version. Submissions to an experiment that has a target throw `EXPERIMENT_HAS_TARGET`, which prevents two writers from racing on the same rows. Submissions after finalization throw `EXPERIMENT_ALREADY_FINALIZED`.
 
 ## Parameters
 
@@ -33,7 +33,7 @@ The item must be visible at the experiment's pinned dataset version. Submissions
   {
     name: 'experimentId',
     type: 'string',
-    description: 'ID of the external experiment.',
+    description: 'ID of the target-less experiment.',
   },
   {
     name: 'itemId',
@@ -105,6 +105,6 @@ Returns a `Promise<ExperimentResult>`, the persisted result row, including its `
 
 ## Related
 
-- [dataset.createExternalExperiment()](/reference/datasets/createExternalExperiment)
+- [dataset.createExperiment()](/reference/datasets/createExperiment)
 - [dataset.finalizeExperiment()](/reference/datasets/finalizeExperiment)
-- [Running experiments](/docs/datasets/running-experiments#external-experiments)
+- [Running experiments](/docs/datasets/running-experiments#caller-driven-experiments)

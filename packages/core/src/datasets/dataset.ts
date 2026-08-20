@@ -26,7 +26,7 @@ import type {
   UpdateDatasetItemInput,
   UpdateExperimentResultInput,
 } from '../storage/types.js';
-import { runExperiment } from './experiment/index.js';
+import { runExperiment, resolveTarget, executeExperimentItem } from './experiment/index.js';
 import type { ExperimentConfig, StartExperimentConfig, ExperimentSummary } from './experiment/types.js';
 
 /**
@@ -577,15 +577,15 @@ export class Dataset {
   }
 
   // ---------------------------------------------------------------------------
-  // External experiments (bring-your-own-runner)
+  // Caller-driven experiments (caller owns the loop)
   // ---------------------------------------------------------------------------
 
   /**
-   * Load an experiment owned by this dataset and assert it is external
-   * (`targetType: 'external'`). Used by the external ingestion methods so a
-   * caller cannot mutate a runner-owned experiment through the external API.
+   * Load an experiment owned by this dataset (tenancy + dataset ownership).
+   * Used by the caller-driven methods so a caller cannot mutate another
+   * dataset's (or tenant's) experiment.
    */
-  async #getExternalExperiment(experimentId: string): Promise<Experiment> {
+  async #getOwnedExperiment(experimentId: string): Promise<Experiment> {
     await this.#assertScope();
     const experimentsStore = await this.#getExperimentsStore();
     const experiment = await experimentsStore.getExperimentById({
@@ -600,30 +600,36 @@ export class Dataset {
         category: 'USER',
       });
     }
-    if (experiment.targetType !== 'external') {
-      throw new MastraError({
-        id: 'EXPERIMENT_NOT_EXTERNAL',
-        text: `Experiment ${experimentId} is not an external experiment (targetType: ${experiment.targetType})`,
-        domain: 'STORAGE',
-        category: 'USER',
-      });
-    }
     return experiment;
   }
 
   /**
-   * Create an experiment whose execution is owned by an external system
-   * (e.g. a Temporal workflow). No runner is spawned: the caller submits
-   * per-item results via {@link Dataset.submitExperimentResult} and closes
-   * the run with {@link Dataset.finalizeExperiment}.
+   * Create an experiment whose execution loop is owned by the caller
+   * (e.g. a Temporal workflow). No runner is spawned. Two shapes:
+   *
+   * - With `targetType`/`targetId`: the caller drives the loop and Mastra
+   *   executes each item on demand via {@link Dataset.runExperimentItem}.
+   *   Optional `scorers` are pinned on the experiment as the run-level
+   *   scorer source.
+   * - Without a target: pure ingestion — the caller executes and scores
+   *   everything itself and upserts rows via
+   *   {@link Dataset.submitExperimentResult}.
+   *
+   * Either way the caller closes the run with
+   * {@link Dataset.finalizeExperiment}.
    *
    * Idempotent on `id`: passing a caller-supplied id (e.g. a workflow run id)
    * and retrying the create converges on the same experiment instead of
    * creating duplicates.
    */
-  async createExternalExperiment(args?: {
+  async createExperiment(args?: {
     /** Caller-supplied experiment id (e.g. a workflow run id) for idempotent creates. */
     id?: string;
+    /** Target to execute per item via {@link Dataset.runExperimentItem}. Both or neither of targetType/targetId. */
+    targetType?: TargetType;
+    targetId?: string;
+    /** Run-level scorer IDs, resolved server-side by {@link Dataset.runExperimentItem}. Requires a target. */
+    scorers?: string[];
     name?: string;
     description?: string;
     metadata?: Record<string, unknown>;
@@ -634,6 +640,38 @@ export class Dataset {
   }): Promise<{ experimentId: string; status: ExperimentStatus; totalItems: number; datasetVersion: number }> {
     const experimentsStore = await this.#getExperimentsStore();
     const datasetsStore = await this.#getDatasetsStore();
+
+    const hasTargetType = args?.targetType !== undefined;
+    const hasTargetId = args?.targetId !== undefined;
+    if (hasTargetType !== hasTargetId) {
+      throw new MastraError({
+        id: 'EXPERIMENT_INVALID_TARGET',
+        text: `targetType and targetId must be provided together (got targetType: ${args?.targetType ?? 'none'}, targetId: ${args?.targetId ?? 'none'})`,
+        domain: 'STORAGE',
+        category: 'USER',
+      });
+    }
+    if (args?.scorers?.length && !hasTargetType) {
+      throw new MastraError({
+        id: 'EXPERIMENT_INVALID_TARGET',
+        text: 'scorers require a target: without a target Mastra never executes or scores items; submit flat scores via submitExperimentResult instead',
+        domain: 'STORAGE',
+        category: 'USER',
+      });
+    }
+    // Validate the target exists in this Mastra registry at create time so a
+    // typo fails fast instead of failing on the first runExperimentItem call.
+    if (hasTargetType) {
+      const resolved = await resolveTarget(this.#mastra, args!.targetType!, args!.targetId!);
+      if (!resolved) {
+        throw new MastraError({
+          id: 'EXPERIMENT_TARGET_NOT_FOUND',
+          text: `Target not found: ${args!.targetType} "${args!.targetId}"`,
+          domain: 'STORAGE',
+          category: 'USER',
+        });
+      }
+    }
 
     const dataset = await datasetsStore.getDatasetById({ id: this.id, filters: this.#scope });
     if (!dataset) {
@@ -650,10 +688,14 @@ export class Dataset {
     if (args?.id) {
       const existing = await experimentsStore.getExperimentById({ id: args.id, filters: this.#scope });
       if (existing) {
-        if (existing.datasetId !== this.id || existing.targetType !== 'external') {
+        const sameShape =
+          existing.datasetId === this.id &&
+          existing.targetType === (args.targetType ?? null) &&
+          existing.targetId === (args.targetId ?? null);
+        if (!sameShape) {
           throw new MastraError({
             id: 'EXPERIMENT_ID_CONFLICT',
-            text: `Experiment id ${args.id} already exists and does not match this external experiment`,
+            text: `Experiment id ${args.id} already exists and does not match this experiment's dataset or target`,
             domain: 'STORAGE',
             category: 'USER',
           });
@@ -684,8 +726,9 @@ export class Dataset {
       id: experimentId,
       datasetId: this.id,
       datasetVersion: targetVersion,
-      targetType: 'external',
-      targetId: 'external',
+      targetType: args?.targetType ?? null,
+      targetId: args?.targetId ?? null,
+      scorerIds: args?.scorers?.length ? args.scorers : null,
       totalItems: items.length,
       name: args?.name,
       description: args?.description,
@@ -699,15 +742,93 @@ export class Dataset {
       projectId: dataset.projectId ?? null,
     });
 
-    // External experiments are "running" from creation: the external system
-    // owns execution and there is no queued/pending phase inside Mastra.
+    // Caller-driven experiments are "running" from creation: the caller
+    // owns the loop and there is no queued/pending phase inside Mastra.
     await experimentsStore.updateExperiment({ id: experimentId, status: 'running', startedAt: new Date() });
 
     return { experimentId, status: 'running', totalItems: items.length, datasetVersion: targetVersion };
   }
 
   /**
-   * Submit (or re-submit) one item result for an external experiment.
+   * Execute one experiment item server-side: run the experiment's target
+   * against the item, run the resolved scorers, and upsert the result row
+   * keyed by `(experimentId, itemId, attempt)`.
+   *
+   * Built for caller-driven loops (mode 2): a durable orchestrator (e.g. a
+   * Temporal workflow) fans out one call per item and owns retries/timeouts —
+   * a retried call converges on the same row. Requires an experiment created
+   * with a target via {@link Dataset.createExperiment}.
+   *
+   * Scorer precedence: experiment `scorers` → item `scorerIds` → dataset
+   * `scorerIds` → none.
+   */
+  async runExperimentItem(args: {
+    experimentId: string;
+    itemId: string;
+    /** Zero-based repetition index for repeated trials. Defaults to `0`. */
+    attempt?: number;
+    /** Request context merged with the item's own request context (item wins). */
+    requestContext?: Record<string, unknown>;
+  }): Promise<{ result: ExperimentResult; scores: Awaited<ReturnType<typeof executeExperimentItem>>['scores'] }> {
+    const experiment = await this.#getOwnedExperiment(args.experimentId);
+    if (experiment.targetType === null) {
+      throw new MastraError({
+        id: 'EXPERIMENT_HAS_NO_TARGET',
+        text: `Experiment ${args.experimentId} has no target; ingest results via submitExperimentResult instead`,
+        domain: 'STORAGE',
+        category: 'USER',
+      });
+    }
+    if (experiment.status === 'completed' || experiment.status === 'failed') {
+      throw new MastraError({
+        id: 'EXPERIMENT_ALREADY_FINALIZED',
+        text: `Experiment ${args.experimentId} is already ${experiment.status}; no further items can be run`,
+        domain: 'STORAGE',
+        category: 'USER',
+      });
+    }
+
+    const datasetsStore = await this.#getDatasetsStore();
+    const dataset = await datasetsStore.getDatasetById({ id: this.id, filters: this.#scope });
+    // SCD-2 range lookup at the experiment's pinned dataset version.
+    const item =
+      experiment.datasetVersion !== null
+        ? (await datasetsStore.getItemsByVersion({ datasetId: this.id, version: experiment.datasetVersion })).find(
+            candidate => candidate.id === args.itemId,
+          )
+        : await datasetsStore.getItemById({ id: args.itemId });
+    if (!item || item.datasetId !== this.id) {
+      throw new MastraError({
+        id: 'DATASET_ITEM_NOT_FOUND',
+        text: `Item ${args.itemId} not found in dataset ${this.id} at version ${experiment.datasetVersion}`,
+        domain: 'STORAGE',
+        category: 'USER',
+      });
+    }
+
+    return executeExperimentItem({
+      mastra: this.#mastra,
+      experiment,
+      item: {
+        id: item.id,
+        datasetVersion: item.datasetVersion,
+        input: item.input,
+        groundTruth: item.groundTruth,
+        requestContext: item.requestContext,
+        metadata: item.metadata,
+        scorerIds: item.scorerIds,
+      },
+      datasetScorerIds: dataset?.scorerIds ?? null,
+      attempt: args.attempt ?? 0,
+      requestContext: args.requestContext,
+      organizationId: experiment.organizationId ?? dataset?.organizationId ?? null,
+      projectId: experiment.projectId ?? dataset?.projectId ?? null,
+    });
+  }
+
+  /**
+   * Submit (or re-submit) one item result for a target-less (pure-ingestion)
+   * experiment created with {@link Dataset.createExperiment}.
    *
    * Upsert semantics: the row is identified by the natural key
    * `(experimentId, itemId, attempt)`, so a retried submission (e.g. a
@@ -743,7 +864,15 @@ export class Dataset {
       metadata?: Record<string, unknown>;
     }[];
   }): Promise<ExperimentResult> {
-    const experiment = await this.#getExternalExperiment(args.experimentId);
+    const experiment = await this.#getOwnedExperiment(args.experimentId);
+    if (experiment.targetType !== null) {
+      throw new MastraError({
+        id: 'EXPERIMENT_HAS_TARGET',
+        text: `Experiment ${args.experimentId} has a target (${experiment.targetType} "${experiment.targetId}"); results are produced by Mastra, not ingested. Use runExperimentItem instead.`,
+        domain: 'STORAGE',
+        category: 'USER',
+      });
+    }
     if (experiment.status === 'completed' || experiment.status === 'failed') {
       throw new MastraError({
         id: 'EXPERIMENT_ALREADY_FINALIZED',
@@ -827,15 +956,17 @@ export class Dataset {
   }
 
   /**
-   * Finalize an external experiment: compute per-item succeeded/failed/skipped
-   * counts from the persisted result rows and mark the experiment completed.
-   * The caller sends no bookkeeping — the server is the source of truth.
+   * Finalize a caller-driven experiment: compute per-item
+   * succeeded/failed/skipped counts from the persisted result rows and mark
+   * the experiment completed. The caller sends no bookkeeping — the server is
+   * the source of truth. Works for both targeted (runExperimentItem) and
+   * target-less (submitExperimentResult) experiments.
    *
    * Idempotent: finalizing an already-completed experiment recomputes nothing
    * and returns the stored record.
    */
   async finalizeExperiment(args: { experimentId: string }): Promise<Experiment> {
-    const experiment = await this.#getExternalExperiment(args.experimentId);
+    const experiment = await this.#getOwnedExperiment(args.experimentId);
     if (experiment.status === 'completed' || experiment.status === 'failed') {
       return experiment;
     }

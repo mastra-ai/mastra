@@ -1031,7 +1031,7 @@ describe('MastraClient', () => {
     });
   });
 
-  describe('External Experiments', () => {
+  describe('Caller-driven Experiments', () => {
     let client: MastraClient;
 
     beforeEach(() => {
@@ -1039,25 +1039,60 @@ describe('MastraClient', () => {
       client = new MastraClient({ baseUrl: 'http://localhost:4111', retries: 0 });
     });
 
-    it('createExternalExperiment posts to /experiments/external with the caller-supplied id', async () => {
+    it('createDatasetExperiment posts to /experiments with start: false and the caller-supplied id', async () => {
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
         headers: { get: () => 'application/json' },
         json: async () => ({ experimentId: 'wf-run-42', status: 'running', totalItems: 3, datasetVersion: 1 }),
       });
 
-      const result = await client.createExternalExperiment({
+      const result = await client.createDatasetExperiment({
         datasetId: 'ds-1',
         id: 'wf-run-42',
-        name: 'external-eval',
+        name: 'caller-driven-eval',
+        targetType: 'agent',
+        targetId: 'my-agent',
+        scorerIds: ['accuracy'],
       });
 
       const [url, init] = (global.fetch as any).mock.calls[0];
-      expect(url).toBe('http://localhost:4111/api/datasets/ds-1/experiments/external');
+      expect(url).toBe('http://localhost:4111/api/datasets/ds-1/experiments');
       expect(init.method).toBe('POST');
-      expect(JSON.parse(init.body)).toMatchObject({ id: 'wf-run-42', name: 'external-eval' });
+      expect(JSON.parse(init.body)).toMatchObject({
+        id: 'wf-run-42',
+        name: 'caller-driven-eval',
+        start: false,
+        targetType: 'agent',
+        targetId: 'my-agent',
+        scorerIds: ['accuracy'],
+      });
       expect(result.experimentId).toBe('wf-run-42');
       expect(result.totalItems).toBe(3);
+    });
+
+    it('runExperimentItem posts to the run route with the attempt', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({
+          result: { id: 'res-1', experimentId: 'exp-1', itemId: 'item-1', attempt: 0, output: { text: 'hi' } },
+          scores: [{ scorerId: 'accuracy', scorerName: 'accuracy', score: 0.9, reason: null, error: null }],
+        }),
+      });
+
+      const { result, scores } = await client.runExperimentItem({
+        datasetId: 'ds-1',
+        experimentId: 'exp-1',
+        itemId: 'item-1',
+        attempt: 0,
+      });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe('http://localhost:4111/api/datasets/ds-1/experiments/exp-1/items/item-1/run');
+      expect(init.method).toBe('POST');
+      expect(JSON.parse(init.body)).toMatchObject({ attempt: 0 });
+      expect(result.id).toBe('res-1');
+      expect(scores[0]?.score).toBe(0.9);
     });
 
     it('submitExperimentResult posts itemId, attempt, output, and scores to the results route', async () => {

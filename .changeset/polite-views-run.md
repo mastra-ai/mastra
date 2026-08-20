@@ -9,4 +9,4 @@
 '@mastra/pg': patch
 ---
 
-Added `upsertExperimentResult()` to the experiments storage domain and an `attempt` column on experiment results, enabling retry-safe result submission for external experiments (retried submissions with the same `(experimentId, itemId, attempt)` key converge on a single row).
+Added `upsertExperimentResult()` to the experiments storage domain plus an `attempt` column on experiment results and a nullable target with an optional `scorerIds` column on experiments, enabling retry-safe result writes for caller-driven experiments (retried submissions with the same `(experimentId, itemId, attempt)` key converge on a single row).

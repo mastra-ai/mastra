@@ -386,23 +386,29 @@ On authenticated servers, the read routes require the `stored-workflows:read` pe
 | `POST` | `/api/datasets/:datasetId/items` | Add a dataset item |
 | `GET` | `/api/experiments` | List experiments across datasets |
 | `GET` | `/api/datasets/:datasetId/experiments` | List experiments for a dataset |
-| `POST` | `/api/datasets/:datasetId/experiments` | Trigger an experiment against a registered target |
-| `POST` | `/api/datasets/:datasetId/experiments/external` | Create an external experiment (no runner spawned) |
-| `POST` | `/api/datasets/:datasetId/experiments/:experimentId/results` | Submit an item result for an external experiment |
-| `POST` | `/api/datasets/:datasetId/experiments/:experimentId/finalize` | Finalize an external experiment |
+| `POST` | `/api/datasets/:datasetId/experiments` | Trigger an experiment, or create one without starting it (`start: false`) |
+| `POST` | `/api/datasets/:datasetId/experiments/:experimentId/items/:itemId/run` | Execute one experiment item server-side |
+| `POST` | `/api/datasets/:datasetId/experiments/:experimentId/results` | Submit an externally computed item result |
+| `POST` | `/api/datasets/:datasetId/experiments/:experimentId/finalize` | Finalize a caller-driven experiment |
 | `GET` | `/api/datasets/:datasetId/experiments/:experimentId` | Get experiment by ID |
 | `GET` | `/api/datasets/:datasetId/experiments/:experimentId/results` | List experiment results |
 | `POST` | `/api/datasets/:datasetId/compare` | Compare two experiments |
 
-### External experiment routes
+### Caller-driven experiment routes
 
-Use these routes when an external system (for example a Temporal workflow) owns experiment execution and Mastra acts as the system of record. All three are safe to retry. Create is idempotent on the caller-supplied `id`. Result submission upserts on `(experimentId, itemId, attempt)`. Finalize returns the stored record if the experiment is already completed.
+Use these routes when your own orchestrator (for example a Temporal workflow) owns the experiment loop and Mastra acts as the system of record. All of them are safe to retry. Create is idempotent on the caller-supplied `id`. Item runs and result submissions upsert on `(experimentId, itemId, attempt)`. Finalize returns the stored record if the experiment is already completed.
 
-#### Create external experiment request body
+#### Create experiment request body
+
+Post to `/api/datasets/:datasetId/experiments` with `start: false` to create the experiment without running it. Include `targetType` and `targetId` when Mastra should execute items via the run-item route. Omit both for pure ingestion via the results route.
 
 ```typescript prettier:false
 {
+  start?: boolean;              // false creates the experiment without running it. Defaults to true.
   id?: string;                  // Caller-supplied experiment id (e.g. a workflow run id) for idempotent creates
+  targetType?: 'agent' | 'workflow' | 'scorer'; // Provide with targetId, or omit both
+  targetId?: string;
+  scorerIds?: string[];         // Run-level scorer ids, resolved server-side. Requires a target when start is false.
   name?: string;
   description?: string;
   metadata?: Record<string, unknown>;
@@ -422,7 +428,20 @@ Use these routes when an external system (for example a Temporal workflow) owns 
 }
 ```
 
-Returns `{ experimentId, status, totalItems, datasetVersion }`.
+Returns `{ experimentId, status, totalItems, datasetVersion }` when `start` is `false`.
+
+#### Run experiment item request body
+
+`POST /api/datasets/:datasetId/experiments/:experimentId/items/:itemId/run` executes the experiment's target against one item and runs the resolved scorers, then upserts the result. Requires an experiment created with a target.
+
+```typescript prettier:false
+{
+  attempt?: number;             // Zero-based repetition index. Defaults to 0.
+  requestContext?: Record<string, unknown>; // Merged with the item's own request context (item wins)
+}
+```
+
+Returns `{ result, scores }` with the persisted result row and the scores produced for the item.
 
 #### Submit experiment result request body
 
@@ -457,13 +476,13 @@ Returns the persisted experiment result row.
 
 `POST /api/datasets/:datasetId/experiments/:experimentId/finalize` takes no body. The server computes per-item counts from the persisted result rows and marks the experiment `completed`: `succeededCount` (at least one attempt without an error), `failedCount` (every attempt errored), and `skippedCount` (never submitted). Returns the updated experiment record.
 
-#### External experiment error responses
+#### Caller-driven experiment error responses
 
 | Status | Condition |
 | - | - |
-| `400` | Experiment isn't external (`EXPERIMENT_NOT_EXTERNAL`), or the dataset has no items at the pinned version (`EXPERIMENT_NO_ITEMS`) |
-| `404` | Dataset, experiment, or dataset item not found |
-| `409` | Caller-supplied experiment `id` already exists for a different dataset or a non-external experiment (`EXPERIMENT_ID_CONFLICT`), or a result was submitted after finalization (`EXPERIMENT_ALREADY_FINALIZED`) |
+| `400` | Result submitted to an experiment that has a target (`EXPERIMENT_HAS_TARGET`), item run requested on a target-less experiment (`EXPERIMENT_HAS_NO_TARGET`), `targetType` and `targetId` weren't provided together (`EXPERIMENT_INVALID_TARGET`), or the dataset has no items at the pinned version (`EXPERIMENT_NO_ITEMS`) |
+| `404` | Dataset, experiment, dataset item, or target not found (`EXPERIMENT_TARGET_NOT_FOUND`) |
+| `409` | Caller-supplied experiment `id` already exists for a different dataset or target (`EXPERIMENT_ID_CONFLICT`), or a call arrived after finalization (`EXPERIMENT_ALREADY_FINALIZED`) |
 
 ## MCP
 

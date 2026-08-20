@@ -2460,7 +2460,7 @@ export type StorageBrowserRef = { type: 'inline'; config: StorageBrowserConfig }
 // Dataset Types
 // ============================================
 
-export type TargetType = 'agent' | 'workflow' | 'scorer' | 'processor' | 'external';
+export type TargetType = 'agent' | 'workflow' | 'scorer' | 'processor';
 
 export interface DatasetRecord {
   id: string;
@@ -2894,13 +2894,19 @@ export interface Experiment {
   /**
    * The kind of executor this experiment runs against (agent / workflow / scorer / processor).
    *
-   * Required: an experiment by definition replays inputs against a specific target, so the runner
-   * always needs a target type to resolve the executor. This differs from
-   * {@link CreateDatasetInput.targetType} (optional) — a dataset can exist without a designated
-   * target, but a dataset without one is not experiment-eligible.
+   * `null` for caller-driven ingestion experiments: the caller executes items
+   * itself and submits results, so there is no registered target to resolve.
+   * Runner-owned and item-run experiments always carry a non-null target.
    */
-  targetType: TargetType;
-  targetId: string;
+  targetType: TargetType | null;
+  targetId: string | null;
+  /**
+   * Run-level scorer IDs pinned at create time for caller-driven experiments.
+   * Acts as the highest-priority scorer source when Mastra executes items
+   * (`runExperimentItem`), mirroring the runner's `scorers` option. `null`
+   * falls through to item-level then dataset-level scorer IDs.
+   */
+  scorerIds?: string[] | null;
   status: ExperimentStatus;
   totalItems: number;
   succeededCount: number;
@@ -2975,13 +2981,15 @@ export interface CreateExperimentInput {
   datasetVersion: number | null;
   agentVersion?: string;
   /**
-   * Discriminator for the target this experiment runs against. Required because
-   * an experiment by definition replays inputs through a specific target; the
-   * runner uses this to resolve the correct executor. Datasets whose
-   * {@link CreateDatasetInput.targetType} is absent are not experiment-eligible.
+   * Discriminator for the target this experiment runs against. `null` for
+   * caller-driven ingestion experiments where the caller owns execution and
+   * submits results; non-null whenever Mastra executes items (runner loop or
+   * per-item `runExperimentItem`).
    */
-  targetType: TargetType;
-  targetId: string;
+  targetType: TargetType | null;
+  targetId: string | null;
+  /** Run-level scorer IDs pinned at create time. See {@link Experiment.scorerIds}. */
+  scorerIds?: string[] | null;
   totalItems: number;
   /**
    * Multi-tenant organization/account scope. Should be hydrated from the parent

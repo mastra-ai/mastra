@@ -53,8 +53,9 @@ interface ExperimentRow {
   agentVersion: string | null;
   organizationId: string | null;
   projectId: string | null;
-  targetType: string;
-  targetId: string;
+  targetType: string | null;
+  targetId: string | null;
+  scorerIds: string | null;
   name: string | null;
   description: string | null;
   metadata: string | null;
@@ -204,6 +205,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         'comparisonId',
         'variantId',
         'trialIndex',
+        'scorerIds',
       ],
     });
     await this.operations.alterTable({
@@ -228,8 +230,9 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       agentVersion: row.agentVersion ?? null,
       organizationId: row.organizationId ?? null,
       projectId: row.projectId ?? null,
-      targetType: row.targetType as Experiment['targetType'],
-      targetId: row.targetId,
+      targetType: (row.targetType as Experiment['targetType']) ?? null,
+      targetId: row.targetId ?? null,
+      scorerIds: parseJSON<string[]>(row.scorerIds) ?? null,
       name: row.name ?? undefined,
       description: row.description ?? undefined,
       metadata: parseJSON<Record<string, unknown>>(row.metadata),
@@ -289,8 +292,9 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           agentVersion: input.agentVersion ?? null,
           organizationId: input.organizationId ?? null,
           projectId: input.projectId ?? null,
-          targetType: input.targetType,
-          targetId: input.targetId,
+          targetType: input.targetType ?? null,
+          targetId: input.targetId ?? null,
+          scorerIds: input.scorerIds ? JSON.stringify(input.scorerIds) : null,
           name: input.name ?? null,
           description: input.description ?? null,
           metadata: input.metadata ? JSON.stringify(input.metadata) : null,
@@ -319,8 +323,9 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         agentVersion: input.agentVersion ?? null,
         organizationId: input.organizationId ?? null,
         projectId: input.projectId ?? null,
-        targetType: input.targetType,
-        targetId: input.targetId,
+        targetType: input.targetType ?? null,
+        targetId: input.targetId ?? null,
+        scorerIds: input.scorerIds ?? null,
         name: input.name,
         description: input.description,
         metadata: input.metadata,

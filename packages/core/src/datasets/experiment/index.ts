@@ -83,6 +83,14 @@ export {
 // Re-export analytics
 export * from './analytics';
 
+// Per-item execution primitive (caller-driven experiments)
+export {
+  executeExperimentItem,
+  type ExecuteExperimentItemArgs,
+  type ExecuteExperimentItemOutput,
+  type ExperimentItemInput,
+} from './item';
+
 /**
  * Run a dataset experiment against a target with optional scoring.
  *
@@ -891,7 +899,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
  * it, which hangs forever since the builder `.then` never invokes its
  * callbacks. Wrapping in a plain object avoids the unwrap.
  */
-async function resolveTarget(
+export async function resolveTarget(
   mastra: Mastra,
   targetType: string,
   targetId: string,

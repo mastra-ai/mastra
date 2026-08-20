@@ -12,6 +12,7 @@ import { successResponseSchema } from '../schemas/common';
 import {
   datasetIdPathParams,
   datasetAndExperimentIdPathParams,
+  datasetExperimentAndItemIdPathParams,
   experimentResultIdPathParams,
   datasetAndItemIdPathParams,
   datasetItemVersionPathParams,
@@ -47,8 +48,8 @@ import {
   batchDeleteItemsResponseSchema,
   updateExperimentResultBodySchema,
   reviewSummaryResponseSchema,
-  createExternalExperimentBodySchema,
-  externalExperimentResponseSchema,
+  runExperimentItemBodySchema,
+  runExperimentItemResponseSchema,
   submitExperimentResultBodySchema,
 } from '../schemas/datasets';
 import { createRoute } from '../server-adapter/routes/route-builder';
@@ -119,8 +120,12 @@ function getHttpStatusForMastraError(errorId: string): number {
       return 400;
     case 'DATASET_ITEM_NOT_FOUND':
       return 404;
-    case 'EXPERIMENT_NOT_EXTERNAL':
+    case 'EXPERIMENT_HAS_TARGET':
+    case 'EXPERIMENT_HAS_NO_TARGET':
+    case 'EXPERIMENT_INVALID_TARGET':
       return 400;
+    case 'EXPERIMENT_TARGET_NOT_FOUND':
+      return 404;
     case 'DATASET_ITEM_IDENTITY_CONFLICT':
     case 'EXPERIMENT_ID_CONFLICT':
     case 'EXPERIMENT_ALREADY_FINALIZED':
@@ -706,15 +711,17 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
   pathParamSchema: datasetIdPathParams,
   bodySchema: triggerExperimentBodySchema,
   responseSchema: experimentSummaryResponseSchema,
-  summary: 'Trigger a new experiment',
+  summary: 'Trigger or create an experiment',
   description:
-    'Triggers a new experiment on the dataset against the specified target. Returns immediately with pending status; execution happens in background.',
+    'By default triggers a new experiment on the dataset against the specified target: returns immediately with pending status and execution happens in background. With start: false, creates the experiment without running it so the caller can drive the loop (run-item for targeted experiments, result submission for target-less ones). Create-only requests are idempotent on a caller-supplied id.',
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
       const {
+        start,
+        id,
         targetType,
         targetId,
         name,
@@ -729,8 +736,10 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         requestContext: rawRequestContext,
         versions,
       } = params as {
-        targetType: 'agent' | 'workflow' | 'scorer';
-        targetId: string;
+        start?: boolean;
+        id?: string;
+        targetType?: 'agent' | 'workflow' | 'scorer';
+        targetId?: string;
         name?: string;
         description?: string;
         metadata?: Record<string, unknown>;
@@ -757,6 +766,34 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
       // startExperimentAsync expects a plain Record, so convert it.
       const requestContext = rawRequestContext instanceof RequestContext ? rawRequestContext.all : rawRequestContext;
       const ds = await mastra.datasets.get({ id: datasetId });
+      if (start === false) {
+        const created = await ds.createExperiment({
+          id,
+          targetType,
+          targetId,
+          scorers: scorerIds,
+          name,
+          description,
+          metadata,
+          version,
+          provenance,
+          grouping,
+        });
+        return {
+          experimentId: created.experimentId,
+          status: created.status,
+          totalItems: created.totalItems,
+          datasetVersion: created.datasetVersion,
+          succeededCount: 0,
+          failedCount: 0,
+          startedAt: new Date(),
+          completedAt: null,
+          results: [],
+        };
+      }
+      if (!targetType || !targetId) {
+        throw new HTTPException(400, { message: 'targetType and targetId are required to start an experiment' });
+      }
       const result = await ds.startExperimentAsync({
         targetType,
         targetId,
@@ -792,42 +829,33 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
   },
 });
 
-export const CREATE_EXTERNAL_EXPERIMENT_ROUTE = createRoute({
+export const RUN_EXPERIMENT_ITEM_ROUTE = createRoute({
   method: 'POST',
-  path: '/datasets/:datasetId/experiments/external',
+  path: '/datasets/:datasetId/experiments/:experimentId/items/:itemId/run',
   responseType: 'json',
-  pathParamSchema: datasetIdPathParams,
-  bodySchema: createExternalExperimentBodySchema,
-  responseSchema: externalExperimentResponseSchema,
-  summary: 'Create an external experiment',
+  pathParamSchema: datasetExperimentAndItemIdPathParams,
+  bodySchema: runExperimentItemBodySchema,
+  responseSchema: runExperimentItemResponseSchema,
+  summary: 'Run one experiment item',
   description:
-    'Creates an experiment whose execution is owned by an external system. No runner is spawned; the caller submits per-item results and finalizes the experiment. Idempotent on the caller-supplied id.',
+    "Executes the experiment's target against one dataset item server-side, runs the resolved scorers, and upserts the result row keyed by (experimentId, itemId, attempt). Built for caller-driven loops: a retried call converges on the same row. Requires an experiment created with a target.",
   tags: ['Datasets'],
   requiresAuth: true,
-  handler: async ({ mastra, datasetId, ...params }) => {
+  handler: async ({ mastra, datasetId, experimentId, itemId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { id, name, description, metadata, version, provenance, grouping } = params as {
-        id?: string;
-        name?: string;
-        description?: string;
-        metadata?: Record<string, unknown>;
-        version?: number;
-        provenance?: {
-          source?: string;
-          sourceId?: string;
-          sourceVersion?: string;
-          metadata?: Record<string, unknown>;
-        };
-        grouping?: { experimentSetId?: string; comparisonId?: string; variantId?: string; trialIndex?: number };
+      const { attempt, requestContext: rawRequestContext } = params as {
+        attempt?: number;
+        requestContext?: Record<string, unknown> | RequestContext;
       };
+      const requestContext = rawRequestContext instanceof RequestContext ? rawRequestContext.all : rawRequestContext;
       const ds = await mastra.datasets.get({ id: datasetId });
-      return await ds.createExternalExperiment({ id, name, description, metadata, version, provenance, grouping });
+      return await ds.runExperimentItem({ experimentId, itemId, attempt, requestContext });
     } catch (error) {
       if (error instanceof MastraError) {
         throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
       }
-      return handleError(error, 'Error creating external experiment');
+      return handleError(error, 'Error running experiment item');
     }
   },
 });

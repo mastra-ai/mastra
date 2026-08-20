@@ -339,8 +339,8 @@ const sidebars = {
             { type: 'doc', id: 'datasets/create', label: '.create()' },
             {
               type: 'doc',
-              id: 'datasets/createExternalExperiment',
-              label: '.createExternalExperiment()',
+              id: 'datasets/createExperiment',
+              label: '.createExperiment()',
             },
             { type: 'doc', id: 'datasets/delete', label: '.delete()' },
             { type: 'doc', id: 'datasets/deleteExperiment', label: '.deleteExperiment()' },
@@ -361,6 +361,7 @@ const sidebars = {
             { type: 'doc', id: 'datasets/listExperiments', label: '.listExperiments()' },
             { type: 'doc', id: 'datasets/listItems', label: '.listItems()' },
             { type: 'doc', id: 'datasets/listVersions', label: '.listVersions()' },
+            { type: 'doc', id: 'datasets/runExperimentItem', label: '.runExperimentItem()' },
             { type: 'doc', id: 'datasets/startExperiment', label: '.startExperiment()' },
             { type: 'doc', id: 'datasets/startExperimentAsync', label: '.startExperimentAsync()' },
             {

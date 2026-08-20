@@ -1,18 +1,18 @@
 ---
 title: "Reference: Datasets API | Client SDK"
-description: API reference for the client-js dataset and experiment methods, including external experiment ingestion for caller-owned runners.
+description: API reference for the client-js dataset and experiment methods, including caller-driven experiment execution and result ingestion.
 packages:
   - "@mastra/client-js"
 ---
 
 # Datasets API
 
-The Datasets API exposes Mastra's dataset and experiment routes from `MastraClient`. This page covers the external experiment methods, which let a runner you own (for example a Temporal workflow) use Mastra as the experiment system of record. Your runner creates an experiment and submits per-item results over HTTP, then calls finalize when the run is done.
+The Datasets API exposes Mastra's dataset and experiment routes from `MastraClient`. This page covers the caller-driven experiment methods, which let an orchestrator you own (for example a Temporal workflow) drive the experiment loop while Mastra acts as the system of record. Create the experiment, then either have Mastra execute each item server-side with `runExperimentItem` or ingest results you computed yourself with `submitExperimentResult`, and call finalize when the run is done.
 
-All three methods are safe to retry:
+All of the methods are safe to retry:
 
-- `createExternalExperiment` is idempotent on a caller-supplied `id`
-- `submitExperimentResult` upserts on `(experimentId, itemId, attempt)`
+- `createDatasetExperiment` is idempotent on a caller-supplied `id`
+- `runExperimentItem` and `submitExperimentResult` upsert on `(experimentId, itemId, attempt)`
 - `finalizeExperiment` returns the stored record if the experiment is already completed
 
 ## Usage example
@@ -26,20 +26,21 @@ const client = new MastraClient({
 
 // 1. Create the experiment. Pass your orchestrator's run ID so a
 //    retried workflow converges on the same experiment.
-const { experimentId, totalItems, datasetVersion } = await client.createExternalExperiment({
+const { experimentId, totalItems, datasetVersion } = await client.createDatasetExperiment({
   datasetId: 'clinical-triage-evals',
   id: 'temporal-wf-run-42',
-  name: 'nightly-eval',
+  targetType: 'agent',
+  targetId: 'triage-agent',
+  scorerIds: ['clinical-judge'],
 })
 
-// 2. Submit one result per item from your workers. Retried activities
-//    converge on a single row per (experimentId, itemId, attempt).
-await client.submitExperimentResult({
+// 2. Run one item per activity. Mastra executes the agent, runs the
+//    scorers, and upserts the result. Retried activities converge on
+//    a single row per (experimentId, itemId, attempt).
+const { result, scores } = await client.runExperimentItem({
   datasetId: 'clinical-triage-evals',
   experimentId,
   itemId: 'item-1',
-  output: { triage: 'urgent' },
-  scores: [{ scorerId: 'clinical-judge', score: 0.92, reason: 'Correct triage level' }],
 })
 
 // 3. Finalize. The server computes succeeded/failed/skipped counts
@@ -50,9 +51,11 @@ const experiment = await client.finalizeExperiment({
 })
 ```
 
-## createExternalExperiment()
+For pure ingestion, create the experiment without `targetType`/`targetId` and replace step 2 with `submitExperimentResult`.
 
-Creates an experiment with `targetType: 'external'`. No runner is spawned, and the dataset version is pinned at creation time.
+## createDatasetExperiment()
+
+Creates an experiment without starting a run. No runner is spawned, and the dataset version is pinned at creation time. Include a target when Mastra should execute items via `runExperimentItem`. Omit the target for pure ingestion via `submitExperimentResult`.
 
 <PropertiesTable
   content={[
@@ -67,6 +70,24 @@ Creates an experiment with `targetType: 'external'`. No runner is spawned, and t
     isOptional: true,
     description:
       'Caller-supplied experiment ID (for example a workflow run ID). Makes creation idempotent on retry. Conflicting reuse of an ID returns a 409.',
+  },
+  {
+    name: 'targetType',
+    type: "'agent' | 'workflow' | 'scorer'",
+    isOptional: true,
+    description: 'Type of target that runExperimentItem executes. Provide together with targetId, or omit both.',
+  },
+  {
+    name: 'targetId',
+    type: 'string',
+    isOptional: true,
+    description: 'ID of the registered target. Provide together with targetType.',
+  },
+  {
+    name: 'scorerIds',
+    type: 'string[]',
+    isOptional: true,
+    description: 'Run-level scorer IDs resolved server-side by runExperimentItem. Requires a target.',
   },
   {
     name: 'name',
@@ -110,9 +131,9 @@ Creates an experiment with `targetType: 'external'`. No runner is spawned, and t
 
 Returns `Promise<{ experimentId, status, totalItems, datasetVersion }>`.
 
-## submitExperimentResult()
+## runExperimentItem()
 
-Submits (or re-submits) one item result for an external experiment. Submitting the same `(experimentId, itemId, attempt)` key again updates the existing row instead of creating a duplicate. Use a different `attempt` value to record deliberate repeated trials as separate rows.
+Executes one experiment item server-side: Mastra runs the experiment's target against the item, runs the resolved scorers, and upserts the result keyed by `(experimentId, itemId, attempt)`. Requires an experiment created with a target. Scorers resolve with the same precedence as native runs: experiment `scorerIds` win over item `scorerIds`, which win over dataset `scorerIds`.
 
 <PropertiesTable
   content={[
@@ -124,7 +145,48 @@ Submits (or re-submits) one item result for an external experiment. Submitting t
   {
     name: 'experimentId',
     type: 'string',
-    description: 'ID of the external experiment.',
+    description: 'ID of an experiment created with a target.',
+  },
+  {
+    name: 'itemId',
+    type: 'string',
+    description: 'Dataset item to execute. Must exist at the pinned dataset version.',
+  },
+  {
+    name: 'attempt',
+    type: 'number',
+    isOptional: true,
+    description:
+      'Zero-based repetition index for repeated trials. Defaults to 0. Retries of the same attempt converge on one row.',
+  },
+  {
+    name: 'requestContext',
+    type: 'Record<string, unknown>',
+    isOptional: true,
+    description: "Request context merged with the item's own request context (item values win).",
+  },
+]}
+/>
+
+Returns `Promise<{ result, scores }>` with the persisted result row and the scores produced for the item.
+
+Calling it on a target-less experiment returns a `400`. Calling it after finalization returns a `409`.
+
+## submitExperimentResult()
+
+Submits (or re-submits) one externally computed item result for a target-less experiment. Submitting the same `(experimentId, itemId, attempt)` key again updates the existing row instead of creating a duplicate. Use a different `attempt` value to record deliberate repeated trials as separate rows.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'datasetId',
+    type: 'string',
+    description: 'ID of the dataset the experiment runs against.',
+  },
+  {
+    name: 'experimentId',
+    type: 'string',
+    description: 'ID of the target-less experiment.',
   },
   {
     name: 'itemId',
@@ -192,11 +254,11 @@ Submits (or re-submits) one item result for an external experiment. Submitting t
 
 Returns `Promise<DatasetExperimentResult>`, the persisted result row.
 
-Submitting to a non-external experiment returns a `400`. Submitting after finalization returns a `409`.
+Submitting to an experiment that has a target returns a `400`. Submitting after finalization returns a `409`.
 
 ## finalizeExperiment()
 
-Marks an external experiment completed. The server computes per-item counts from the persisted result rows, so the caller keeps no bookkeeping: `succeededCount` (at least one attempt without an error), `failedCount` (every attempt errored), and `skippedCount` (never submitted). Idempotent: finalizing an already-completed experiment returns the stored record.
+Marks a caller-driven experiment completed. The server computes per-item counts from the persisted result rows, so the caller keeps no bookkeeping: `succeededCount` (at least one attempt without an error), `failedCount` (every attempt errored), and `skippedCount` (never submitted). Idempotent: finalizing an already-completed experiment returns the stored record.
 
 <PropertiesTable
   content={[
@@ -208,7 +270,7 @@ Marks an external experiment completed. The server computes per-item counts from
   {
     name: 'experimentId',
     type: 'string',
-    description: 'ID of the external experiment to finalize.',
+    description: 'ID of the experiment to finalize.',
   },
 ]}
 />
@@ -217,8 +279,9 @@ Returns `Promise<DatasetExperiment>`, the updated experiment record.
 
 ## Related
 
-- [Running experiments](/docs/datasets/running-experiments#external-experiments)
-- [dataset.createExternalExperiment()](/reference/datasets/createExternalExperiment)
+- [Running experiments](/docs/datasets/running-experiments#caller-driven-experiments)
+- [dataset.createExperiment()](/reference/datasets/createExperiment)
+- [dataset.runExperimentItem()](/reference/datasets/runExperimentItem)
 - [dataset.submitExperimentResult()](/reference/datasets/submitExperimentResult)
 - [dataset.finalizeExperiment()](/reference/datasets/finalizeExperiment)
 - [Server routes](/reference/server/routes)

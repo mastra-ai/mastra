@@ -71,6 +71,41 @@ export function createExperimentsTests({
         expect(exp.id).toBe(customId);
       });
 
+      it('createExperiment round-trips a null target and scorerIds', async () => {
+        const exp = await experimentsStorage.createExperiment({
+          name: 'caller-driven-exp',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: null,
+          targetId: null,
+          scorerIds: null,
+          totalItems: 3,
+        });
+
+        expect(exp.targetType).toBeNull();
+        expect(exp.targetId).toBeNull();
+
+        const fetched = await experimentsStorage.getExperimentById({ id: exp.id });
+        expect(fetched?.targetType).toBeNull();
+        expect(fetched?.targetId).toBeNull();
+        expect(fetched?.scorerIds ?? null).toBeNull();
+      });
+
+      it('createExperiment round-trips scorerIds', async () => {
+        const exp = await experimentsStorage.createExperiment({
+          name: 'scorer-ids-exp',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          scorerIds: ['accuracy', 'fluency'],
+          totalItems: 3,
+        });
+
+        const fetched = await experimentsStorage.getExperimentById({ id: exp.id });
+        expect(fetched?.scorerIds).toEqual(['accuracy', 'fluency']);
+      });
+
       it('persists provenance, runner attestation, and grouping identity', async () => {
         const exp = await experimentsStorage.createExperiment({
           name: 'provenance-exp',

@@ -247,6 +247,12 @@ export const experimentResultIdPathParams = z.object({
   resultId: z.string().describe('Unique identifier for the experiment result'),
 });
 
+export const datasetExperimentAndItemIdPathParams = z.object({
+  datasetId: z.string().describe('Unique identifier for the dataset'),
+  experimentId: z.string().describe('Unique identifier for the experiment'),
+  itemId: z.string().describe('Unique identifier for the dataset item'),
+});
+
 export const datasetAndItemIdPathParams = z.object({
   datasetId: z.string().describe('Unique identifier for the dataset'),
   itemId: z.string().describe('Unique identifier for the dataset item'),
@@ -335,8 +341,23 @@ export const updateItemBodySchema = z.object({
 });
 
 export const triggerExperimentBodySchema = z.object({
-  targetType: z.enum(['agent', 'workflow', 'scorer']).describe('Type of target to run against'),
-  targetId: z.string().describe('ID of the target'),
+  start: z
+    .boolean()
+    .optional()
+    .describe(
+      'When true (default), spawns the in-process runner. When false, creates the experiment without running it: the caller drives the loop via run-item (targeted) or result submission (target-less).',
+    ),
+  targetType: z
+    .enum(['agent', 'workflow', 'scorer'])
+    .optional()
+    .describe('Type of target to run against. Required when start is true. Optional for create-only experiments.'),
+  targetId: z.string().optional().describe('ID of the target. Required when targetType is set.'),
+  id: z
+    .string()
+    .optional()
+    .describe(
+      'Caller-supplied experiment id (e.g. a workflow run id) for idempotent create-only requests. Ignored when start is true.',
+    ),
   name: z.string().optional().describe('Name of the experiment'),
   description: z.string().optional().describe('Description of the experiment'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
@@ -377,37 +398,12 @@ export const triggerExperimentBodySchema = z.object({
     .describe('Version overrides for sub-agent delegation during experiment execution'),
 });
 
-export const createExternalExperimentBodySchema = z.object({
-  id: z.string().optional().describe('Caller-supplied experiment id (e.g. a workflow run id) for idempotent creates'),
-  name: z.string().optional().describe('Name of the experiment'),
-  description: z.string().optional().describe('Description of the experiment'),
-  metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
-  version: z.coerce.number().int().optional().describe('Pin to specific dataset version'),
-  provenance: z
-    .object({
-      source: z.string().optional(),
-      sourceId: z.string().optional(),
-      sourceVersion: z.string().optional(),
-      metadata: z.record(z.string(), z.unknown()).optional(),
-    })
+export const runExperimentItemBodySchema = z.object({
+  attempt: z.number().int().min(0).optional().describe('Zero-based repetition index. Defaults to 0.'),
+  requestContext: z
+    .record(z.string(), z.unknown())
     .optional()
-    .describe('Caller-provided provenance claims for the experiment execution'),
-  grouping: z
-    .object({
-      experimentSetId: z.string().optional(),
-      comparisonId: z.string().optional(),
-      variantId: z.string().optional(),
-      trialIndex: z.number().int().min(0).optional(),
-    })
-    .optional()
-    .describe('Stable grouping dimensions for comparisons and repeated trials'),
-});
-
-export const externalExperimentResponseSchema = z.object({
-  experimentId: z.string(),
-  status: z.enum(['pending', 'running', 'completed', 'failed']),
-  totalItems: z.number(),
-  datasetVersion: z.number().int(),
+    .describe("Request context merged with the item's own request context (item wins)"),
 });
 
 export const submitExperimentResultBodySchema = z.object({
@@ -494,8 +490,9 @@ export const experimentResponseSchema = z.object({
   datasetId: z.string().nullable(),
   datasetVersion: z.number().int().nullable(),
   agentVersion: z.string().nullable().optional(),
-  targetType: z.enum(['agent', 'workflow', 'scorer', 'processor', 'external']),
-  targetId: z.string(),
+  targetType: z.enum(['agent', 'workflow', 'scorer', 'processor']).nullable(),
+  targetId: z.string().nullable(),
+  scorerIds: z.array(z.string()).nullable().optional(),
   name: z.string().optional(),
   description: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
@@ -569,6 +566,24 @@ export const experimentResultResponseSchema = z.object({
   createdAt: z.coerce.date(),
 });
 
+// Returned by the run-item route: the upserted result row plus the scorer runs.
+export const runExperimentItemResponseSchema = z.object({
+  result: experimentResultResponseSchema,
+  scores: z.array(
+    z.object({
+      scorerId: z.string(),
+      scorerName: z.string(),
+      score: z.number().nullable(),
+      reason: z.string().nullable(),
+      error: z.string().nullable(),
+      failedStep: z.string().optional(),
+      completedSteps: z.array(z.string()).optional(),
+      targetScope: z.enum(['span', 'trajectory']).optional(),
+      stepId: z.string().optional(),
+    }),
+  ),
+});
+
 export const updateExperimentResultBodySchema = z.object({
   status: z.enum(['needs-review', 'reviewed', 'complete']).nullable().optional(),
   tags: z.array(z.string()).optional(),
@@ -605,6 +620,7 @@ export const experimentSummaryResponseSchema = z.object({
   totalItems: z.number(),
   succeededCount: z.number(),
   failedCount: z.number(),
+  datasetVersion: z.number().int().optional().describe('Dataset version pinned on the experiment (create-only)'),
   startedAt: z.coerce.date(),
   completedAt: z.coerce.date().nullable(),
   results: z.array(

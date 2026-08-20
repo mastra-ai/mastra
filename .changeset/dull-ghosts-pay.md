@@ -9,4 +9,4 @@
 '@mastra/pg': patch
 ---
 
-Added `createExternalExperiment()`, `submitExperimentResult()`, and `finalizeExperiment()` methods so externally executed evaluation runs (for example on Temporal) can report results into a Mastra experiment.
+Added `createDatasetExperiment()`, `runExperimentItem()`, `submitExperimentResult()`, and `finalizeExperiment()` methods so a caller-owned orchestrator (for example Temporal) can drive an experiment loop while Mastra either executes each item server-side or ingests externally computed results.
