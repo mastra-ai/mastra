@@ -34,6 +34,7 @@ import type {
   MemorySettingsStorage,
 } from '../storage/domains/memory-settings/base.js';
 import type { ModelPackRecord, ModelPacksStorage } from '../storage/domains/model-packs/base.js';
+import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import {
   getAuthProviderId,
@@ -543,10 +544,11 @@ export function readOMConfig(session: OMSession): OMConfigInfo {
   };
 }
 
-function readStoredOMConfig(record: MemorySettingsRecord | null): OMConfigInfo {
+function readStoredOMConfig(record: MemorySettingsRecord | null, fallbackOmModelId?: string): OMConfigInfo {
+  const fallback = fallbackOmModelId ?? DEFAULT_OM_MODEL_ID;
   return {
-    observerModelId: record?.observerModelId ?? DEFAULT_OM_MODEL_ID,
-    reflectorModelId: record?.reflectorModelId ?? DEFAULT_OM_MODEL_ID,
+    observerModelId: record?.observerModelId ?? fallback,
+    reflectorModelId: record?.reflectorModelId ?? fallback,
     observationThreshold: record?.observationThreshold ?? DEFAULT_OBSERVATION_THRESHOLD,
     reflectionThreshold: record?.reflectionThreshold ?? DEFAULT_REFLECTION_THRESHOLD,
     observeAttachments: record?.observeAttachments ?? 'auto',
@@ -630,6 +632,8 @@ export interface ConfigRoutesDeps extends RouteDependencies {
   sourceControlSessions?: Pick<SourceControlStorageHandle['sessions'], 'getBySessionId'>;
   /** Tenant memory-settings domain handle; absent in local (no-DB) mode. */
   memorySettings?: MemorySettingsStorage;
+  /** Factory projects domain, used to derive OM fallbacks from a factory's default model. */
+  factoryProjects?: FactoryProjectsStorage;
   /** Custom-providers domain handle; absent when the app database is missing. */
   customProviders?: CustomProvidersStorage;
   /** Notifies the host after tenant credentials change so caches can be dropped. */
@@ -666,6 +670,21 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
     const { controller, authStorage, auth } = options;
     const onCredentialsChanged = options.onCredentialsChanged ?? (() => {});
     const onCustomProvidersChanged = options.onCustomProvidersChanged ?? (() => {});
+
+    // Factory-scoped OM reads without a stored row fall back to the low-cost
+    // OM model of the factory default model's provider — not the global
+    // built-in default, whose provider may have no credential here.
+    const factoryOmFallback = async (factoryProjectId: string | undefined): Promise<string | undefined> => {
+      if (!factoryProjectId || !options.factoryProjects) return undefined;
+      try {
+        const project = await options.factoryProjects.getById({ id: factoryProjectId });
+        const defaultModelId = project?.defaultModelId ?? undefined;
+        const provider = defaultModelId?.split('/')[0];
+        return provider ? resolveProviderOMDefault(provider, defaultModelId).modelId : undefined;
+      } catch {
+        return undefined;
+      }
+    };
 
     return [
       registerApiRoute('/web/config/features', {
@@ -1226,7 +1245,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         method: 'POST',
         requiresAuth: false,
         handler: async c => {
-          let body: { providerId?: unknown; factoryModelId?: unknown };
+          let body: { providerId?: unknown; factoryModelId?: unknown; factoryId?: unknown };
           try {
             body = await c.req.json();
           } catch {
@@ -1234,12 +1253,14 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           }
           const providerId = typeof body.providerId === 'string' ? body.providerId.trim() : '';
           const factoryModelId = typeof body.factoryModelId === 'string' ? body.factoryModelId.trim() : '';
+          const factoryProjectId = typeof body.factoryId === 'string' && body.factoryId ? body.factoryId : undefined;
           if (!providerId) return c.json({ error: 'Missing required field: providerId' }, 400);
 
           const context = await resolveMemorySettingsContext({
             c: loose(c),
             auth,
             memorySettings: options.memorySettings,
+            factoryProjectId,
           });
           if ('response' in context) return context.response;
 
@@ -1291,15 +1312,16 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           if ('response' in context) return context.response;
           try {
             const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
-            if (!resourceId) return c.json({ config: readStoredOMConfig(record) });
+            const fallback = await factoryOmFallback(factoryProjectId);
+            if (!resourceId) return c.json({ config: readStoredOMConfig(record, fallback) });
 
             // Session sync is best-effort: the stored row is authoritative and
             // new sessions hydrate from it, so a resourceId without a live
             // session (e.g. settings page after a restart) still reads the
             // stored config instead of failing.
             const session = await controller.getSessionByResource?.(resourceId, scope);
-            if (!session) return c.json({ config: readStoredOMConfig(record) });
-            await applyStoredMemorySettings(session, record);
+            if (!session) return c.json({ config: readStoredOMConfig(record, fallback) });
+            await applyStoredMemorySettings(session, record, fallback);
             return c.json({ config: readOMConfig(session) });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
@@ -1353,7 +1375,10 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             );
             const config = session
               ? readOMConfig(session)
-              : readStoredOMConfig(await context.storage.get({ orgId: context.orgId, userId: context.userId }));
+              : readStoredOMConfig(
+                  await context.storage.get({ orgId: context.orgId, userId: context.userId }),
+                  await factoryOmFallback(factoryProjectId),
+                );
             return c.json({ ok: true, config });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
@@ -1416,7 +1441,10 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             });
             const config = session
               ? readOMConfig(session)
-              : readStoredOMConfig(await context.storage.get({ orgId: context.orgId, userId: context.userId }));
+              : readStoredOMConfig(
+                  await context.storage.get({ orgId: context.orgId, userId: context.userId }),
+                  await factoryOmFallback(factoryProjectId),
+                );
             return c.json({ ok: true, config });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
@@ -1460,7 +1488,10 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             await persistMemorySettings(context, { observeAttachments: value });
             const config = session
               ? readOMConfig(session)
-              : readStoredOMConfig(await context.storage.get({ orgId: context.orgId, userId: context.userId }));
+              : readStoredOMConfig(
+                  await context.storage.get({ orgId: context.orgId, userId: context.userId }),
+                  await factoryOmFallback(factoryProjectId),
+                );
             return c.json({ ok: true, config });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);

@@ -424,6 +424,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       modelPacks: deps.domains.modelPacks,
       sourceControlSessions: deps.sourceControlStorage.forIntegration('github').sessions,
       memorySettings: deps.domains.memorySettings,
+      factoryProjects: deps.domains.projects,
       customProviders: deps.domains.customProviders,
       features: { knowledge: deps.knowledgeEnabled },
       onCredentialsChanged: invalidateTenantCredentialSnapshots,

@@ -7,6 +7,7 @@ import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
@@ -926,6 +927,28 @@ describe('OM routes with a tenant', () => {
       observerModelId: 'anthropic/claude-haiku-4-5',
       reflectorModelId: 'anthropic/claude-haiku-4-5',
     });
+  });
+
+  it('seeds provider-specific OM defaults into the factory-scoped row when factoryId is given', async () => {
+    const res = await postJson(buildApp(makeOmSession()), '/web/config/om/provider-defaults', {
+      providerId: 'anthropic',
+      factoryModelId: 'anthropic/claude-fable-5',
+      factoryId: 'factory-1',
+    });
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).config).toMatchObject({
+      observerModelId: 'anthropic/claude-haiku-4-5',
+      reflectorModelId: 'anthropic/claude-haiku-4-5',
+    });
+    await expect(
+      seed.memorySettings.get({ orgId: 'org1', userId: factoryMemorySettingsUserId('factory-1') }),
+    ).resolves.toMatchObject({
+      observerModelId: 'anthropic/claude-haiku-4-5',
+      reflectorModelId: 'anthropic/claude-haiku-4-5',
+    });
+    // The personal row must remain untouched.
+    await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toBeNull();
   });
 
   it('reads the OpenAI OM default through a Codex credential', async () => {

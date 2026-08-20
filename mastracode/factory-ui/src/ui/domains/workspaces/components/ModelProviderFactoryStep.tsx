@@ -128,7 +128,7 @@ export function ModelProviderFactoryStep({ factoryId, completionError, onComplet
     try {
       await Promise.all([
         setDefaultModel.mutateAsync(modelId),
-        applyOMDefaults.mutateAsync({ providerId, factoryModelId: modelId }),
+        applyOMDefaults.mutateAsync({ providerId, factoryModelId: modelId, factoryId }),
       ]);
       onComplete();
     } catch (cause) {

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import { resolveProviderOMDefault } from '@mastra/code-sdk/onboarding/packs';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 
@@ -233,7 +234,12 @@ export async function hydrateFactorySession(session: FactorySession, args: Hydra
             userId: factoryMemorySettingsUserId(args.factoryProjectId),
           })
         : null;
-    await applyStoredMemorySettings(session, record);
+    // Without a stored row, fall back to the low-cost OM model of the factory
+    // default model's provider — a factory connected only to Anthropic should
+    // not observe with the (uncredentialed) built-in Google default.
+    const provider = args.defaultModelId?.split('/')[0];
+    const fallbackOmModelId = provider ? resolveProviderOMDefault(provider, args.defaultModelId).modelId : undefined;
+    await applyStoredMemorySettings(session, record, fallbackOmModelId);
   } catch (error) {
     console.warn('[Factory Start] Failed to apply observational-memory settings', {
       error: error instanceof Error ? error.message : String(error),
